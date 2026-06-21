@@ -1,36 +1,36 @@
-//! Docker 部署与容器管理的数据契约。
+//! Docker 部署与容器管理的数据契约
 //!
 //! 这一层只放强类型 serde 结构和纯枚举,给 ncd-deploy 的 DockerCli 和前端
-//! 共用。容器不进 bot 列表,所以这里的类型独立于 BotConfig / BotActor 那套,
-//! 自成一个"Docker 管理面"的数据模型。
+//! 共用容器不进 bot 列表,所以这里的类型独立于 BotConfig / BotActor 那套,
+//! 自成一个"Docker 管理面"的数据模型
 //!
-//! 端口 / 卷 / 环境变量都用强类型表达,避免在命令层拼裸 dict。WebUI 地址
-//! 等回读结果走 DeployedContainer,前端拿来直接渲染可点链接。
+//! 端口 / 卷 / 环境变量都用强类型表达,避免在命令层拼裸 dictWebUI 地址
+//! 等回读结果走 DeployedContainer,前端拿来直接渲染可点链接
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// 目标主机上 Docker 的探测结果。
+/// 目标主机上 Docker 的探测结果
 ///
 /// installed=false 时其余字段无意义(version 为空,两个 bool 为 false),前端
-/// 据此显示"安装 Docker"按钮。compose_available 单独拎出来是因为老系统可能
-/// 有 docker 但没有 compose v2 插件。
+/// 据此显示"安装 Docker"按钮compose_available 单独拎出来是因为老系统可能
+/// 有 docker 但没有 compose v2 插件
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct DockerStatus {
-    /// docker 二进制是否存在且能跑 docker version。
+    /// docker 二进制是否存在且能跑 docker version
     pub installed: bool,
-    /// docker 客户端版本号(如 "27.3.1");探测不到留空。
+    /// docker 客户端版本号(如 "27.3.1");探测不到留空
     pub version: String,
-    /// docker compose version 是否可用(compose v2 插件)。
+    /// docker compose version 是否可用(compose v2 插件)
     pub compose_available: bool,
-    /// docker daemon 是否在跑(docker info 成功)。装了但没起 daemon 时为 false。
+    /// docker daemon 是否在跑(docker info 成功)装了但没起 daemon 时为 false
     pub daemon_running: bool,
 }
 
 impl DockerStatus {
-    /// 一个"什么都没有"的状态,探测彻底失败时返回。
+    /// 一个"什么都没有"的状态,探测彻底失败时返回
     pub fn absent() -> Self {
         Self {
             installed: false,
@@ -40,33 +40,33 @@ impl DockerStatus {
         }
     }
 
-    /// 是否可以直接部署:装了 + daemon 在跑 + compose 可用。
+    /// 是否可以直接部署:装了 + daemon 在跑 + compose 可用
     pub fn ready_to_deploy(&self) -> bool {
         self.installed && self.daemon_running && self.compose_available
     }
 }
 
-/// 容器运行状态。对齐 docker ps 的 State 字段语义。
+/// 容器运行状态对齐 docker ps 的 State 字段语义
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum ContainerState {
-    /// 正在运行。
+    /// 正在运行
     Running,
-    /// 已创建未启动。
+    /// 已创建未启动
     Created,
-    /// 重启中。
+    /// 重启中
     Restarting,
-    /// 已暂停。
+    /// 已暂停
     Paused,
-    /// 已退出(停止)。
+    /// 已退出(停止)
     Exited,
-    /// dead / removing 等其它状态,统一归到这里。
+    /// dead / removing 等其它状态,统一归到这里
     Other,
 }
 
 impl ContainerState {
-    /// 从 docker ps 的 State 字符串解析。未知值落到 Other。
+    /// 从 docker ps 的 State 字符串解析未知值落到 Other
     pub fn parse(raw: &str) -> Self {
         match raw.trim().to_ascii_lowercase().as_str() {
             "running" => Self::Running,
@@ -90,53 +90,53 @@ impl ContainerState {
     }
 }
 
-/// 一个已存在容器的概要信息。来自 docker ps -a 逐行 JSON 解析。
+/// 一个已存在容器的概要信息来自 docker ps -a 逐行 JSON 解析
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ContainerInfo {
-    /// 容器短 id(12 位)。
+    /// 容器短 id(12 位)
     pub id: String,
-    /// 容器名。
+    /// 容器名
     pub name: String,
-    /// 镜像名(含 tag)。
+    /// 镜像名(含 tag)
     pub image: String,
-    /// 解析后的运行状态。
+    /// 解析后的运行状态
     pub state: ContainerState,
-    /// docker 原始 status 文案(如 "Up 3 hours" / "Exited (0) 2 minutes ago")。
+    /// docker 原始 status 文案(如 "Up 3 hours" / "Exited (0) 2 minutes ago")
     pub status: String,
-    /// 端口映射文案(如 "0.0.0.0:6099->6099/tcp"),逐条拆好给 UI。
+    /// 端口映射文案(如 "0.0.0.0:6099->6099/tcp"),逐条拆好给 UI
     pub ports: Vec<String>,
 }
 
-/// 本地镜像概要。来自 docker images --format '{{json .}}' 逐行解析。
+/// 本地镜像概要来自 docker images --format '{{json .}}' 逐行解析
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ImageInfo {
-    /// 镜像 id 短码(12 位)。
+    /// 镜像 id 短码(12 位)
     pub id: String,
-    /// 仓库名;<none> 表示悬空层。
+    /// 仓库名;<none> 表示悬空层
     pub repository: String,
-    /// 标签;<none> 常见于悬空镜像。
+    /// 标签;<none> 常见于悬空镜像
     pub tag: String,
-    /// 人类可读大小(如 1.2GB),与 docker CLI 一致。
+    /// 人类可读大小(如 1.2GB),与 docker CLI 一致
     pub size: String,
-    /// 创建时间文案(如 2 weeks ago)。
+    /// 创建时间文案(如 2 weeks ago)
     pub created_since: String,
 }
 
-/// 删除本地镜像时的可选参数。
+/// 删除本地镜像时的可选参数
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ImageRemoveOptions {
-    /// 为 true 时加 docker rmi -f,用于仍有容器引用时强制删。
+    /// 为 true 时加 docker rmi -f,用于仍有容器引用时强制删
     #[serde(default)]
     pub force: bool,
 }
 
-/// Desktop 认识的 Docker 部署口味。只有 NapCat / SnowLuma 两种有官方镜像。
+/// Desktop 认识的 Docker 部署口味只有 NapCat / SnowLuma 两种有官方镜像
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -153,8 +153,8 @@ impl DockerFlavor {
         }
     }
 
-    /// 官方镜像引用(含 tag)。compose.yml 永远写这个标准名;拉取时若走了镜像站
-    /// 前缀,会 retag 回这个名字让 compose 命中本地缓存。
+    /// 官方镜像引用(含 tag)compose.yml 永远写这个标准名;拉取时若走了镜像站
+    /// 前缀,会 retag 回这个名字让 compose 命中本地缓存
     pub const fn default_image(self) -> &'static str {
         match self {
             Self::NapCat => "mlikiowa/napcat-docker:latest",
@@ -162,14 +162,14 @@ impl DockerFlavor {
         }
     }
 
-    /// SnowLuma 镜像在 Hub 上的压缩体积约值（MB），用于任务提示；与 Hub tags 页一致。
+    /// SnowLuma 镜像在 Hub 上的压缩体积约值(MB),用于任务提示;与 Hub tags 页一致
     pub const SNOWLUMA_COMPRESSED_MB_APPROX: u32 = 933;
 
-    /// 拉镜像时按优先级尝试的镜像引用列表。
+    /// 拉镜像时按优先级尝试的镜像引用列表
     ///
-    /// Hub 官方名优先（走 daemon registry-mirrors）；SnowLuma 在 Hub 500 时尽早试
-    /// docker.1ms.run（用户实测可拉满 ~933MB），再 GHCR，其余 Hub 反代；不试 GHCR
-    /// 加速前缀（not found/403 居多）。
+    /// Hub 官方名优先(走 daemon registry-mirrors);SnowLuma 在 Hub 500 时尽早试
+    /// docker.1ms.run(用户实测可拉满 ~933MB),再 GHCR,其余 Hub 反代;不试 GHCR
+    /// 加速前缀(not found/403 居多)
     pub fn pull_candidates(self) -> Vec<String> {
         let official = self.default_image();
         let mut refs = vec![official.to_string()];
@@ -195,11 +195,11 @@ impl DockerFlavor {
     }
 }
 
-/// Docker Hub 国内反代镜像站主机名(按优先级)。拉取时拼成 <host>/<官方镜像路径>,
-/// 无需改远端 daemon.json。公共站存活期不稳定,故多站 + 官方直连兜底;换站只改这里。
+/// Docker Hub 国内反代镜像站主机名(按优先级)拉取时拼成 <host>/<官方镜像路径>,
+/// 无需改远端 daemon.json公共站存活期不稳定,故多站 + 官方直连兜底;换站只改这里
 ///
-/// 含社区常用站与用户提供的 2026 可用源(毫秒/轩辕/渡渡鸟等)。1ms.run 与
-/// docker.1ms.run 同属毫秒镜像,文档写法不一,两条都试。
+/// 含社区常用站与用户提供的 2026 可用源(毫秒/轩辕/渡渡鸟等)1ms.run 与
+/// docker.1ms.run 同属毫秒镜像,文档写法不一,两条都试
 pub const DOCKER_HUB_MIRRORS: &[&str] = &[
     "docker.1ms.run",
     "1ms.run",
@@ -210,18 +210,18 @@ pub const DOCKER_HUB_MIRRORS: &[&str] = &[
     "dockerproxy.net",
 ];
 
-/// GHCR 国内加速前缀（拼在 ghcr.io/... 路径前，见各站 ghcr 文档）。
-/// 仅 SnowLuma 拉取候选使用；NapCat 镜像在 Docker Hub。
+/// GHCR 国内加速前缀(拼在 ghcr.io/... 路径前,见各站 ghcr 文档)
+/// 仅 SnowLuma 拉取候选使用;NapCat 镜像在 Docker Hub
 pub const GHCR_MIRROR_PREFIXES: &[&str] = &["ghcr.1ms.run", "ghcr.m.daocloud.io"];
 
-/// 一条端口映射:宿主机端口 → 容器端口。
+/// 一条端口映射:宿主机端口 → 容器端口
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct PortMapping {
-    /// 宿主机监听端口。
+    /// 宿主机监听端口
     pub host: u16,
-    /// 容器内端口。
+    /// 容器内端口
     pub container: u16,
 }
 
@@ -231,7 +231,7 @@ impl PortMapping {
     }
 }
 
-/// 组件页「拉镜像」请求。只选框架口味;不创建容器,端口与容器名由 Bot 启动时决定。
+/// 组件页「拉镜像」请求只选框架口味;不创建容器,端口与容器名由 Bot 启动时决定
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -239,25 +239,25 @@ pub struct DockerPullSpec {
     pub flavor: DockerFlavor,
 }
 
-/// Bot 启动 / compose 渲染用的完整部署参数(容器名、端口、可选 QQ)。
+/// Bot 启动 / compose 渲染用的完整部署参数(容器名,端口,可选 QQ)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct DockerDeploySpec {
-    /// 部署口味。
+    /// 部署口味
     pub flavor: DockerFlavor,
-    /// 容器名(也用作 compose project 名 + 子目录名)。必须是合法的 docker
-    /// 名字符集 [a-zA-Z0-9][a-zA-Z0-9_.-]*。
+    /// 容器名(也用作 compose project 名 + 子目录名)必须是合法的 docker
+    /// 名字符集 [a-zA-Z0-9][a-zA-Z0-9_.-]*
     pub container_name: String,
-    /// 端口映射列表。前端给默认值,高级用户可改宿主机端口避免冲突。
+    /// 端口映射列表前端给默认值,高级用户可改宿主机端口避免冲突
     pub ports: Vec<PortMapping>,
-    /// 可选:绑定登录的 QQ 号(NapCat 的 ACCOUNT env)。0 / None 表示不预绑。
+    /// 可选:绑定登录的 QQ 号(NapCat 的 ACCOUNT env)0 / None 表示不预绑
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub qq_id: Option<u64>,
 }
 
 impl DockerDeploySpec {
-    /// NapCat 默认 spec:端口 3000/3001/6099,容器名 napcat。
+    /// NapCat 默认 spec:端口 3000/3001/6099,容器名 napcat
     pub fn napcat_default() -> Self {
         Self {
             flavor: DockerFlavor::NapCat,
@@ -271,13 +271,13 @@ impl DockerDeploySpec {
         }
     }
 
-    /// 同一远端多 Bot 时给宿主机端口加偏移，避免 compose 绑定冲突。
-    /// 用 qq_id 取模，偏移量落在 [0, 499]。
+    /// 同一远端多 Bot 时给宿主机端口加偏移,避免 compose 绑定冲突
+    /// 用 qq_id 取模,偏移量落在 [0, 499]
     pub fn host_port_offset_for_qq(qq_id: u64) -> u16 {
         (qq_id % 500) as u16
     }
 
-    /// 把默认 spec 的宿主机侧端口整体加上 per-bot 偏移；容器内端口不变。
+    /// 把默认 spec 的宿主机侧端口整体加上 per-bot 偏移;容器内端口不变
     pub fn with_host_port_offset(mut self, qq_id: u64) -> Self {
         let off = Self::host_port_offset_for_qq(qq_id);
         if off == 0 {
@@ -289,7 +289,7 @@ impl DockerDeploySpec {
         self
     }
 
-    /// SnowLuma 默认 spec:端口 5900/6081/5099/3000/3001,容器名 snowluma。
+    /// SnowLuma 默认 spec:端口 5900/6081/5099/3000/3001,容器名 snowluma
     pub fn snowluma_default() -> Self {
         Self {
             flavor: DockerFlavor::SnowLuma,
@@ -305,7 +305,7 @@ impl DockerDeploySpec {
         }
     }
 
-    /// 查 compose 里某容器端口对应的宿主机绑定端口。
+    /// 查 compose 里某容器端口对应的宿主机绑定端口
     pub fn host_port_for_container(&self, container_port: u16) -> Option<u16> {
         self.ports
             .iter()
@@ -313,7 +313,7 @@ impl DockerDeploySpec {
             .map(|p| p.host)
     }
 
-    /// 容器名合法性校验。docker 要求首字符是字母数字,其余可含 _.- 。
+    /// 容器名合法性校验docker 要求首字符是字母数字,其余可含 _.- 
     pub fn validate(&self) -> Result<(), DockerSpecError> {
         let name = self.container_name.trim();
         if name.is_empty() {
@@ -340,7 +340,7 @@ impl DockerDeploySpec {
     }
 }
 
-/// DockerDeploySpec 校验错误。
+/// DockerDeploySpec 校验错误
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DockerSpecError {
     #[error("container name cannot be empty")]
@@ -351,37 +351,37 @@ pub enum DockerSpecError {
     NoPorts,
 }
 
-/// 组件页「拉镜像」完成后的回读结果。不创建容器;Bot 启动时再按配置起 ncbot-<qq>。
+/// 组件页「拉镜像」完成后的回读结果不创建容器;Bot 启动时再按配置起 ncbot-<qq>
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct DockerImageReady {
-    /// 部署口味。
+    /// 部署口味
     pub flavor: DockerFlavor,
-    /// 已就绪的镜像引用(与 compose 使用的官方名一致,如 mlikiowa/napcat-docker:latest)。
+    /// 已就绪的镜像引用(与 compose 使用的官方名一致,如 mlikiowa/napcat-docker:latest)
     pub image: String,
 }
 
-/// 历史 IPC 名保留别名,语义同 [DockerImageReady]。
+/// 历史 IPC 名保留别名,语义同 [DockerImageReady]
 pub type DeployedContainer = DockerImageReady;
 
-/// docker pull 单层进度快照,随 StepProgress 推到前端任务队列。
+/// docker pull 单层进度快照,随 StepProgress 推到前端任务队列
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct DockerPullLayerSnapshot {
-    /// 层 id 短码(与 docker 输出一致,通常 12 位 hex)。
+    /// 层 id 短码(与 docker 输出一致,通常 12 位 hex)
     pub id: String,
-    /// 阶段文案:等待 / 下载中 / 校验 / 解压中 / 完成 等。
+    /// 阶段文案:等待 / 下载中 / 校验 / 解压中 / 完成 等
     pub phase: String,
-    /// 下载进度后缀,如 [====>    ] 12.5MB/50MB;无则 None。
+    /// 下载进度后缀,如 [====>    ] 12.5MB/50MB;无则 None
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
-    /// 该层是否已计入整体 completed 计数。
+    /// 该层是否已计入整体 completed 计数
     pub done: bool,
 }
 
-/// 容器生命周期操作。
+/// 容器生命周期操作
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -403,40 +403,40 @@ impl ContainerAction {
     }
 }
 
-/// docker_install 命令回给前端的结构化结果。
+/// docker_install 命令回给前端的结构化结果
 ///
 /// 不再裸返回一句 String:前端要靠 status 区分"装好了弹绿条""需要 sudo 密码弹
-/// 输入框""彻底装不了弹红条",光凭文案没法可靠分流。message 是给用户看的人话,
-/// download_url 仅 Windows/macOS 引导手动装时给下载入口。
+/// 输入框""彻底装不了弹红条",光凭文案没法可靠分流message 是给用户看的人话,
+/// download_url 仅 Windows/macOS 引导手动装时给下载入口
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct DockerInstallReport {
-    /// 本次安装尝试的结果分类。
+    /// 本次安装尝试的结果分类
     pub status: DockerInstallStatus,
-    /// 给用户展示的人话文案(成功提示 / 失败原因 / 需要密码的说明)。
+    /// 给用户展示的人话文案(成功提示 / 失败原因 / 需要密码的说明)
     pub message: String,
-    /// 可选下载入口(Windows/macOS 不能静默装时给 Docker Desktop 链接)。
+    /// 可选下载入口(Windows/macOS 不能静默装时给 Docker Desktop 链接)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub download_url: Option<String>,
-    /// 安装流程结束时的探测快照，供前端立刻刷新 Docker 行，无需等下一轮 probe 或重启应用。
+    /// 安装流程结束时的探测快照,供前端立刻刷新 Docker 行,无需等下一轮 probe 或重启应用
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub probed_status: Option<DockerStatus>,
 }
 
-/// docker_install 的结果分类。
+/// docker_install 的结果分类
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum DockerInstallStatus {
-    /// 早就装好且 daemon 在跑,这次没动手。
+    /// 早就装好且 daemon 在跑,这次没动手
     AlreadyInstalled,
-    /// 这次成功装上了。
+    /// 这次成功装上了
     Installed,
-    /// 远端是密钥登录、keyring 里也没缓存密码,sudo 又要密码:需要前端弹框
-    /// 向用户要 sudo 密码后带着重试。这是唯一一个前端要弹输入框的分支。
+    /// 远端是密钥登录,keyring 里也没缓存密码,sudo 又要密码:需要前端弹框
+    /// 向用户要 sudo 密码后带着重试这是唯一一个前端要弹输入框的分支
     NeedSudoPassword,
-    /// 装不了,需要用户去远端手动处理(非 Linux 平台、脚本跑完仍探不到等)。
+    /// 装不了,需要用户去远端手动处理(非 Linux 平台,脚本跑完仍探不到等)
     ManualRequired,
 }
 
@@ -550,8 +550,8 @@ mod tests {
 
     #[test]
     fn docker_flavor_wire_format_is_lowercase() {
-        // 与 BotFlavor 一致用 lowercase（napcat / snowluma），不走 snake_case
-        // （否则会变成 nap_cat / snow_luma，跟前端 BotFlavor 漂移）。
+        // 与 BotFlavor 一致用 lowercase(napcat / snowluma),不走 snake_case
+        // (否则会变成 nap_cat / snow_luma,跟前端 BotFlavor 漂移)
         assert_eq!(
             serde_json::to_string(&DockerFlavor::NapCat).unwrap(),
             "\"napcat\""

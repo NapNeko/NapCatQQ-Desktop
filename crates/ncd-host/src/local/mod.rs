@@ -1,4 +1,4 @@
-//! 本地主机实装(LocalWindowsHost / 未来的 LocalLinuxHost / LocalMacOsHost)。
+//! 本地主机实装(LocalWindowsHost / 未来的 LocalLinuxHost / LocalMacOsHost)
 //!
 //! 实装与预留矩阵:
 //! - LocalWindowsHost(本节)

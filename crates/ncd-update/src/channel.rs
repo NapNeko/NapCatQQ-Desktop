@@ -1,6 +1,6 @@
-//! 发布通道(stable / beta / nightly)。
+//! 发布通道(stable / beta / nightly)
 //!
-//! 多通道复用同一 endpoint URL 模板,通过 {channel} 占位符替换。
+//! 多通道复用同一 endpoint URL 模板,通过 {channel} 占位符替换
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -23,7 +23,7 @@ impl UpdateChannel {
         }
     }
 
-    /// 默认通道(stable)。
+    /// 默认通道(stable)
     pub fn default_stable() -> Self {
         Self::Stable
     }

@@ -1,7 +1,7 @@
-//! UpdateProvider:更新源抽象。
+//! UpdateProvider:更新源抽象
 //!
 //! 实际的 tauri-plugin-updater 集成由 src-tauri 实装,本 trait 让
-//! ncd-update 自己也能用 mock provider 测试,不依赖 Tauri runtime。
+//! ncd-update 自己也能用 mock provider 测试,不依赖 Tauri runtime
 
 use async_trait::async_trait;
 use std::sync::Mutex;
@@ -10,18 +10,18 @@ use crate::channel::UpdateChannel;
 use crate::error::UpdateError;
 use crate::types::AvailableUpdate;
 
-/// 更新源抽象。
+/// 更新源抽象
 #[async_trait]
 pub trait UpdateProvider: Send + Sync {
-    /// 检查指定通道是否有更新。Ok(None) 表示没有更新。
+    /// 检查指定通道是否有更新Ok(None) 表示没有更新
     async fn check(&self, channel: UpdateChannel) -> Result<Option<AvailableUpdate>, UpdateError>;
 
-    /// 下载 + 验签 + 安装。安装成功后调用方应主动 quit 当前进程
-    /// (Tauri plugin 在 Windows 会自动 quit,所以这里可能不返回)。
+    /// 下载 + 验签 + 安装安装成功后调用方应主动 quit 当前进程
+    /// (Tauri plugin 在 Windows 会自动 quit,所以这里可能不返回)
     async fn download_and_install(&self, update: &AvailableUpdate) -> Result<(), UpdateError>;
 }
 
-/// MockUpdateProvider:测试用 provider。
+/// MockUpdateProvider:测试用 provider
 pub struct MockUpdateProvider {
     /// 下次 check 返回的结果(成功 / 失败可注入)
     next_check: Mutex<Option<Result<Option<AvailableUpdate>, UpdateError>>>,

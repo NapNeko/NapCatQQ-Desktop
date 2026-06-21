@@ -37,9 +37,9 @@ impl<'a> MigrationOrchestrator<'a> {
                 report.into()
             }
             Err(error) => {
-                // 失败也尽力把报告落盘:保留首次失败证据,重启后仍能查到原因。否则
-                // 失败信息只在内存,重启即丢,旧用户升级踩坑没有任何排障线索。落盘
-                // 本身再失败就只能放弃(best-effort),不掩盖原始迁移错误。
+                // 失败也尽力把报告落盘:保留首次失败证据,重启后仍能查到原因否则
+                // 失败信息只在内存,重启即丢,旧用户升级踩坑没有任何排障线索落盘
+                // 本身再失败就只能放弃(best-effort),不掩盖原始迁移错误
                 warn!(
                     target: "ncd_runtime::migration",
                     err = %error,
@@ -98,8 +98,8 @@ impl<'a> MigrationOrchestrator<'a> {
                 rules.extend(app.rules_applied);
                 tx = tx.write(self.store.config_dir().join("config.json"), app.payload);
             } else {
-                // 误选的无关 / 非对象 config.json:跳过不写,留 warning。绝不强转空对象
-                // 写 Info.ConfigVersion 当"成功迁移",否则垃圾文件会污染生产配置根。
+                // 误选的无关 / 非对象 config.json:跳过不写,留 warning绝不强转空对象
+                // 写 Info.ConfigVersion 当"成功迁移",否则垃圾文件会污染生产配置根
                 warnings.push(MigrationWarning::new(
                     "app_config_skipped",
                     format!(

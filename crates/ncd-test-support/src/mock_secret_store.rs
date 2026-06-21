@@ -181,7 +181,7 @@ mod tests {
 use ncd_domain::errors::SecretError;
 use ncd_traits::SecretStore;
 
-/// 把 MockSecretStoreError 映射成 SecretError(注入失败 = 模拟存储不可用)。
+/// 把 MockSecretStoreError 映射成 SecretError(注入失败 = 模拟存储不可用)
 impl From<MockSecretStoreError> for SecretError {
     fn from(_value: MockSecretStoreError) -> Self {
         SecretError::Unavailable

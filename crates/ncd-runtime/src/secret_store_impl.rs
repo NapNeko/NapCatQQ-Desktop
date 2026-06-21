@@ -172,11 +172,11 @@ impl SecretStore for SecretStoreImpl {
             Ok(entry) => match entry.get_password() {
                 Ok(pwd) => Ok(Some(pwd)),
                 Err(keyring::Error::NoEntry) => {
-                    // keyring 查找不到，安全降级在 fallback 中查找（可能旧数据存在降级存储中）
+                    // keyring 查找不到,安全降级在 fallback 中查找(可能旧数据存在降级存储中)
                     self.get_fallback(key)
                 }
                 Err(_) => {
-                    // 底层平台报错，自愈降级在 fallback 中查找
+                    // 底层平台报错,自愈降级在 fallback 中查找
                     self.get_fallback(key)
                 }
             },
@@ -192,7 +192,7 @@ impl SecretStore for SecretStoreImpl {
         match Entry::new(&self.service, key) {
             Ok(entry) => {
                 if entry.set_password(value).is_err() {
-                    // keyring 设置密码报错，说明平台存储不可用，自愈降级本地加密文件
+                    // keyring 设置密码报错,说明平台存储不可用,自愈降级本地加密文件
                     self.put_fallback(key, value)
                 } else {
                     Ok(())
@@ -260,7 +260,7 @@ mod tests {
         store.delete("ssh_password").unwrap();
         assert_eq!(store.get("ssh_password").unwrap(), None);
 
-        // 6. 再次删除不存在的，应当 NotFound
+        // 6. 再次删除不存在的,应当 NotFound
         assert!(matches!(
             store.delete("ssh_password"),
             Err(SecretError::NotFound)

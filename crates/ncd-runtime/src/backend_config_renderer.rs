@@ -13,12 +13,12 @@ use crate::traits::config_store::JsonTransaction;
 
 // ==================== Deep merge helper ====================
 //
-// 把 existing 中 known_keys 之外的字段保留下来合进 rendered。两层都按 JSON
-// object merge 处理，不递归更深的层级——内层结构（network、bypass）由 schema 完全
-// 拥有，用户在子层加字段不在保留范围内（避免破坏 NapCat 反序列化）。
+// 把 existing 中 known_keys 之外的字段保留下来合进 rendered两层都按 JSON
+// object merge 处理,不递归更深的层级——内层结构(network,bypass)由 schema 完全
+// 拥有,用户在子层加字段不在保留范围内(避免破坏 NapCat 反序列化)
 //
-// 我们关心的"未知字段保留"边界仅限**顶层**：用户最常见的需求是给 onebot11 加
-// imageDownloadProxy、给 napcat 加 autoTimeSync 这种顶层扩展字段。
+// 我们关心的"未知字段保留"边界仅限**顶层**:用户最常见的需求是给 onebot11 加
+// imageDownloadProxy,给 napcat 加 autoTimeSync 这种顶层扩展字段
 fn merge_unknown_top_level(
     rendered: Value,
     existing: Option<&Value>,
@@ -39,7 +39,7 @@ fn merge_unknown_top_level(
     Value::Object(rendered_obj)
 }
 
-/// NapCat WebUI / TypeBox 落盘形态：与 BotConfig 直连 serde 的字段集合不同。
+/// NapCat WebUI / TypeBox 落盘形态:与 BotConfig 直连 serde 的字段集合不同
 fn napcat_normalize_connect(connect: &ConnectConfig) -> Value {
     json!({
         "httpServers": connect.http_servers.iter().map(napcat_http_server).collect::<Vec<_>>(),
@@ -160,9 +160,9 @@ fn napcat_build_napcat_payload(config: &BotConfig) -> Value {
 
 // ==================== NapCat Renderer ====================
 
-/// onebot11_<qq>.json 顶层"已知" key 集合（renderer 输出范围）。
-/// 用户在派生文件里加这个集合之外的字段（如 imageDownloadProxy）会在
-/// render_with_existing 里被保留下来，每次启动重新渲染时不会丢。
+/// onebot11_<qq>.json 顶层"已知" key 集合(renderer 输出范围)
+/// 用户在派生文件里加这个集合之外的字段(如 imageDownloadProxy)会在
+/// render_with_existing 里被保留下来,每次启动重新渲染时不会丢
 const NAPCAT_ONEBOT_KNOWN_KEYS: &[&str] = &[
     "network",
     "musicSignUrl",
@@ -170,7 +170,7 @@ const NAPCAT_ONEBOT_KNOWN_KEYS: &[&str] = &[
     "parseMultMsg",
 ];
 
-/// napcat_<qq>.json 顶层"已知" key 集合。
+/// napcat_<qq>.json 顶层"已知" key 集合
 const NAPCAT_NAPCAT_KNOWN_KEYS: &[&str] = &[
     "fileLog",
     "consoleLog",
@@ -261,18 +261,18 @@ impl BackendConfigRenderer for NapCatConfigRenderer {
     }
 }
 
-/// Docker bot 在远端 project_dir/napcat/config 下写入的 NapCat 派生配置。
-/// file_name 不带目录，调用方负责按 Host 的路径语义拼接目标目录。
+/// Docker bot 在远端 project_dir/napcat/config 下写入的 NapCat 派生配置
+/// file_name 不带目录,调用方负责按 Host 的路径语义拼接目标目录
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DockerConfigPayload {
     pub file_name: String,
     pub payload: Value,
 }
 
-/// 渲染 Docker NapCat 容器挂载目录需要的配置文件。
+/// 渲染 Docker NapCat 容器挂载目录需要的配置文件
 ///
-/// existing 的 key 使用文件名（如 onebot11_10001.json），方便远端 Host 调用方
-/// 用 POSIX 目标目录读取后直接合并，不必把远端路径塞进本机 PathBuf。
+/// existing 的 key 使用文件名(如 onebot11_10001.json),方便远端 Host 调用方
+/// 用 POSIX 目标目录读取后直接合并,不必把远端路径塞进本机 PathBuf
 pub fn render_napcat_docker_config_payloads(
     bot_id: &BotId,
     config: &BotConfig,
@@ -302,7 +302,7 @@ pub fn render_napcat_docker_config_payloads(
     ]
 }
 
-/// SnowLuma 容器 named volume /app/snowluma-data/config 下的 onebot 配置。
+/// SnowLuma 容器 named volume /app/snowluma-data/config 下的 onebot 配置
 pub fn render_snowluma_docker_config_payloads(
     bot_id: &BotId,
     config: &BotConfig,
@@ -322,7 +322,7 @@ pub fn render_snowluma_docker_config_payloads(
 
 // ==================== SnowLuma Renderer ====================
 
-/// SnowLuma onebot_<qq>.json 顶层"已知" key 集合。
+/// SnowLuma onebot_<qq>.json 顶层"已知" key 集合
 const SNOWLUMA_ONEBOT_KNOWN_KEYS: &[&str] = &["networks", "musicSignUrl", "statusCommand"];
 
 fn snowluma_message_format(fmt: MessagePostFormat) -> &'static str {
@@ -489,7 +489,7 @@ impl SnowLumaConfigRenderer {
         }
     }
 
-    /// 供 Docker SnowLuma 卷内 config 写入复用。
+    /// 供 Docker SnowLuma 卷内 config 写入复用
     pub fn build_onebot_payload(config: &BotConfig) -> Value {
         let mut obj = serde_json::Map::new();
         obj.insert("networks".into(), Self::build_networks(&config.connect));
@@ -531,7 +531,7 @@ impl BackendConfigRenderer for SnowLumaConfigRenderer {
 
     // render_for_drift 用 trait 默认实现(== render):空连接时 render 注入
     // http-default/ws-default 兜底 listener,drift 基线必须用同一套,否则 Desktop
-    // 自己写出去的兜底 listener 会被当成外部新增,造成"自写自漂移"反复误报。
+    // 自己写出去的兜底 listener 会被当成外部新增,造成"自写自漂移"反复误报
 }
 
 // ==================== Factory ====================
@@ -922,9 +922,9 @@ mod tests {
     #[tokio::test]
     async fn snowluma_render_output_is_drift_clean_for_empty_connect() {
         // 自写自漂移回归:空连接时 render 注入 http-default/ws-default 兜底 listener,
-        // 把它写到盘上后立刻跑 drift 检测必须判定 clean。render 与 render_for_drift
+        // 把它写到盘上后立刻跑 drift 检测必须判定 cleanrender 与 render_for_drift
         // 同源(都用 build_onebot_payload)才能保证这点;若 drift 基线退回空数组,这些
-        // 兜底 listener 会被当成外部新增反复误报、打断一键启动。
+        // 兜底 listener 会被当成外部新增反复误报,打断一键启动
         let dir = tempfile::tempdir().unwrap();
         let renderer = SnowLumaConfigRenderer::new(dir.path());
         let bot_id = make_bot_id();

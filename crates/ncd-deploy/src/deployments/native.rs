@@ -1,24 +1,24 @@
-//! 原生部署：在宿主机上跑 NapCat / SnowLuma 进程。
+//! 原生部署:在宿主机上跑 NapCat / SnowLuma 进程
 //!
-//! 实现路径：
+//! 实现路径:
 //!
 //! 1. launch 用 [NativeLaunchTranslator] 把 BotConfig 翻译成
-//!    [NativeLaunchCommand]（程序 + 参数 + 工作目录 + 环境变量）。
-//! 2. 通过 [Host::spawn] 启子进程，拿到 [HostProcess]。
-//! 3. take_stdout / take_stderr 启异步 reader 任务，把每行解码 + 清 ANSI 后
-//!    写进内存缓冲（10000 行环形）+ 同步追加到 <log_dir>/<bot_id>.log，
-//!    再通过 [NativeRuntimeEventSink] 广播 BotLogAppended / NapCatWebuiAvailable。
-//! 4. 启 exit watcher：进程退出时清 processes / logs 记录，广播
-//!    BotProcessExited。
-//! 5. stop 走平台 kill 命令（Windows taskkill /F /T、其它 kill -9 进程组），
-//!    保证 NapCatWinBootMain → QQ.exe 注入链能整个清掉。
+//!    [NativeLaunchCommand](程序 + 参数 + 工作目录 + 环境变量)
+//! 2. 通过 [Host::spawn] 启子进程,拿到 [HostProcess]
+//! 3. take_stdout / take_stderr 启异步 reader 任务,把每行解码 + 清 ANSI 后
+//!    写进内存缓冲(10000 行环形)+ 同步追加到 <log_dir>/<bot_id>.log,
+//!    再通过 [NativeRuntimeEventSink] 广播 BotLogAppended / NapCatWebuiAvailable
+//! 4. 启 exit watcher:进程退出时清 processes / logs 记录,广播
+//!    BotProcessExited
+//! 5. stop 走平台 kill 命令(Windows taskkill /F /T,其它 kill -9 进程组),
+//!    保证 NapCatWinBootMain → QQ.exe 注入链能整个清掉
 //!
-//! install / uninstall 继续留 Unsupported；那是组件层（ncd-component）的
-//! 职责，后续把 component 接进来再做。
+//! install / uninstall 继续留 Unsupported;那是组件层(ncd-component)的
+//! 职责,后续把 component 接进来再做
 //!
-//! 事件桥接：调用方注入 [NativeRuntimeEventSink]，把日志/退出/WebUI 事件
-//! 转发到自己的事件总线。ncd-deploy 不直接依赖 events 模块，避免
-//! 循环依赖。
+//! 事件桥接:调用方注入 [NativeRuntimeEventSink],把日志/退出/WebUI 事件
+//! 转发到自己的事件总线ncd-deploy 不直接依赖 events 模块,避免
+//! 循环依赖
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -41,23 +41,23 @@ use crate::deployment::{
     NativeLaunchTranslator,
 };
 
-/// 原生部署的运行时事件桥接。
+/// 原生部署的运行时事件桥接
 ///
-/// 调用方实装本 trait 把日志 / 退出 / WebUI 端点等事件转发到自己的事件总线。
-/// NativeDeployment 持有 Arc<dyn>，在 launch / log reader / exit watcher
-/// 中调用对应方法。
+/// 调用方实装本 trait 把日志 / 退出 / WebUI 端点等事件转发到自己的事件总线
+/// NativeDeployment 持有 Arc<dyn>,在 launch / log reader / exit watcher
+/// 中调用对应方法
 ///
-/// 走 trait 而不是直接 import 上游事件模块：避免 ncd-deploy 反向依赖上游 crate，
-/// trait 让两边解耦，调用方在装配时桥接。
+/// 走 trait 而不是直接 import 上游事件模块:避免 ncd-deploy 反向依赖上游 crate,
+/// trait 让两边解耦,调用方在装配时桥接
 pub trait NativeRuntimeEventSink: Send + Sync {
-    /// 发布一行 bot 日志。
-    /// channel 取 "stdout" / "stderr"。
+    /// 发布一行 bot 日志
+    /// channel 取 "stdout" / "stderr"
     fn publish_log_line(&self, bot_id: &BotId, line: &str, channel: &str);
 
-    /// 发布 NapCat WebUI 可用事件（从 stdout 解析出端口 + token）。
+    /// 发布 NapCat WebUI 可用事件(从 stdout 解析出端口 + token)
     fn publish_napcat_webui_available(&self, bot_id: &BotId, port: u16, token: String);
 
-    /// 发布 bot 进程退出事件。
+    /// 发布 bot 进程退出事件
     fn publish_bot_process_exited(
         &self,
         bot_id: &BotId,
@@ -66,7 +66,7 @@ pub trait NativeRuntimeEventSink: Send + Sync {
     );
 }
 
-/// 不发布任何事件的占位 sink，供测试 / 不关心事件的调用方使用。
+/// 不发布任何事件的占位 sink,供测试 / 不关心事件的调用方使用
 pub struct NullRuntimeEventSink;
 
 impl NativeRuntimeEventSink for NullRuntimeEventSink {
@@ -81,7 +81,7 @@ impl NativeRuntimeEventSink for NullRuntimeEventSink {
     }
 }
 
-/// 单个 bot 进程的运行时档案。
+/// 单个 bot 进程的运行时档案
 #[derive(Debug)]
 struct ManagedProcess {
     pid: u32,
@@ -90,7 +90,7 @@ struct ManagedProcess {
     stop_requested: bool,
 }
 
-/// 内存日志环形缓冲，上限 10_000 行。
+/// 内存日志环形缓冲,上限 10_000 行
 #[derive(Debug, Default)]
 struct RuntimeLogBuffer {
     lines: VecDeque<String>,
@@ -112,34 +112,34 @@ impl RuntimeLogBuffer {
     }
 }
 
-/// 原生部署：装二进制 + spawn 进程。
+/// 原生部署:装二进制 + spawn 进程
 ///
-/// 支持的 flavor：NapCat、SnowLuma。
-/// 支持的 host：所有 Host trait 实装；本地 Windows 是首要目标，远端 Linux
-/// 在 Host trait 抽象就绪后会跟上（spawn / take_stdout 已留好接口）。
+/// 支持的 flavor:NapCat,SnowLuma
+/// 支持的 host:所有 Host trait 实装;本地 Windows 是首要目标,远端 Linux
+/// 在 Host trait 抽象就绪后会跟上(spawn / take_stdout 已留好接口)
 pub struct NativeDeployment {
     id: &'static str,
     flavors: &'static [BotFlavor],
-    /// 把 BotConfig 翻译成进程命令行。
+    /// 把 BotConfig 翻译成进程命令行
     translator: Arc<dyn NativeLaunchTranslator>,
-    /// 事件桥接：把运行时事件转发到调用方的事件总线。
+    /// 事件桥接:把运行时事件转发到调用方的事件总线
     event_sink: Arc<dyn NativeRuntimeEventSink>,
-    /// 日志根目录。每个 bot 的日志写到 <log_root>/bots/<bot_id>.log。
-    /// 为 None 时只走内存缓冲不落盘。
+    /// 日志根目录每个 bot 的日志写到 <log_root>/bots/<bot_id>.log
+    /// 为 None 时只走内存缓冲不落盘
     log_root: Option<PathBuf>,
-    /// 当前在跑的进程档案：bot_id -> ManagedProcess。
+    /// 当前在跑的进程档案:bot_id -> ManagedProcess
     processes: Arc<Mutex<HashMap<BotId, ManagedProcess>>>,
-    /// 进程启动代次，避免旧 watcher 清掉新一轮启动。
+    /// 进程启动代次,避免旧 watcher 清掉新一轮启动
     generation: Arc<AtomicU64>,
-    /// 内存日志缓冲：bot_id -> RuntimeLogBuffer。
+    /// 内存日志缓冲:bot_id -> RuntimeLogBuffer
     logs: Arc<Mutex<HashMap<BotId, RuntimeLogBuffer>>>,
 }
 
 impl NativeDeployment {
-    /// 构造一个原生部署实例。
+    /// 构造一个原生部署实例
     ///
-    /// translator 把 BotConfig 翻译成进程命令行；event_sink 桥接事件总线；
-    /// log_root 为 None 时不落盘日志（仅供单测）。
+    /// translator 把 BotConfig 翻译成进程命令行;event_sink 桥接事件总线;
+    /// log_root 为 None 时不落盘日志(仅供单测)
     pub fn new(
         translator: Arc<dyn NativeLaunchTranslator>,
         event_sink: Arc<dyn NativeRuntimeEventSink>,
@@ -163,7 +163,7 @@ impl NativeDeployment {
             .map(|root| root.join("bots").join(format!("{}.log", bot_id.as_str())))
     }
 
-    /// 把 BotConfig 推导成 BotId。BotId 取 qq_id 字符串。
+    /// 把 BotConfig 推导成 BotIdBotId 取 qq_id 字符串
     fn derive_bot_id(config: &BotConfig) -> BotId {
         BotId::new(config.bot.qq_id.to_string())
     }
@@ -182,17 +182,17 @@ impl std::fmt::Debug for NativeDeployment {
 // ============================================================
 // 日志解码 + ANSI 清洗 + NapCat WebUI 解析
 //
-// 这几段 helper 行为与上游 runtime_backend 中的同名函数一致。
-// 之所以再写一份不复用：
-// - ncd-deploy 不能反向依赖上游 crate；
-// - 后续再考虑下沉到 ncd-host 公共 utils。
+// 这几段 helper 行为与上游 runtime_backend 中的同名函数一致
+// 之所以再写一份不复用:
+// - ncd-deploy 不能反向依赖上游 crate;
+// - 后续再考虑下沉到 ncd-host 公共 utils
 // ============================================================
 
-/// 按 GBK / UTF-8 解码 NapCat 子进程的一行原始字节，并清洗 ANSI 转义。
+/// 按 GBK / UTF-8 解码 NapCat 子进程的一行原始字节,并清洗 ANSI 转义
 ///
-/// NapCatWinBootMain.exe 在中文 Windows 上输出 GBK；其它平台默认 UTF-8。
-/// Linux 上 NapCat 通过 logger 输出会带颜色转义（如 \x1b[32m），
-/// 直接渲染会在 UI 上残留 tofu 字符并干扰日志高亮。
+/// NapCatWinBootMain.exe 在中文 Windows 上输出 GBK;其它平台默认 UTF-8
+/// Linux 上 NapCat 通过 logger 输出会带颜色转义(如 \x1b[32m),
+/// 直接渲染会在 UI 上残留 tofu 字符并干扰日志高亮
 fn decode_log_line(raw: &[u8]) -> String {
     let decoded = if let Ok(s) = std::str::from_utf8(raw) {
         s.to_string()
@@ -214,8 +214,8 @@ fn decode_log_line(raw: &[u8]) -> String {
     strip_ansi_escapes(&decoded)
 }
 
-/// 移除字符串中的 ANSI 转义序列（CSI、OSC、单字符 ESC 命令）。
-/// 实现走 byte 级状态机，不引入 regex 依赖。
+/// 移除字符串中的 ANSI 转义序列(CSI,OSC,单字符 ESC 命令)
+/// 实现走 byte 级状态机,不引入 regex 依赖
 pub fn strip_ansi_escapes(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
@@ -233,7 +233,7 @@ pub fn strip_ansi_escapes(input: &str) -> String {
         }
         match bytes[i] {
             b'[' => {
-                // CSI: 跳过参数 + intermediate + final。
+                // CSI: 跳过参数 + intermediate + final
                 i += 1;
                 while i < bytes.len() && (0x30..=0x3F).contains(&bytes[i]) {
                     i += 1;
@@ -246,7 +246,7 @@ pub fn strip_ansi_escapes(input: &str) -> String {
                 }
             }
             b']' | b'P' | b'X' | b'^' | b'_' => {
-                // string-context: OSC/DCS/SOS/PM/APC，吞到 BEL 或 ESC \\。
+                // string-context: OSC/DCS/SOS/PM/APC,吞到 BEL 或 ESC \\
                 i += 1;
                 while i < bytes.len() {
                     if bytes[i] == 0x07 {
@@ -269,8 +269,8 @@ pub fn strip_ansi_escapes(input: &str) -> String {
         .unwrap_or_else(|err| String::from_utf8_lossy(err.as_bytes()).into_owned())
 }
 
-/// 从一行 NapCat stdout 解析出 WebUI 登录入口的 (port, token)。
-/// 远端 nohup 日志可能带 ANSI、或仅含 /webui?token= 片段（对齐 legacy launcher grep）。
+/// 从一行 NapCat stdout 解析出 WebUI 登录入口的 (port, token)
+/// 远端 nohup 日志可能带 ANSI,或仅含 /webui?token= 片段(对齐 legacy launcher grep)
 pub fn parse_napcat_webui_line(line: &str) -> Option<(u16, String)> {
     let cleaned = strip_ansi_escapes(line);
     if let Some(p) = parse_napcat_webui_line_strict(&cleaned) {
@@ -295,7 +295,7 @@ fn parse_napcat_webui_line_strict(line: &str) -> Option<(u16, String)> {
     Some((port, token))
 }
 
-/// 日志行未带完整 [info] [NapCat] 前缀时，按 /webui?token= 宽松解析（远端文件 tail 常见）。
+/// 日志行未带完整 [info] [NapCat] 前缀时,按 /webui?token= 宽松解析(远端文件 tail 常见)
 fn parse_napcat_webui_line_loose(line: &str) -> Option<(u16, String)> {
     let marker = "/webui?token=";
     let idx = line.find(marker)?;
@@ -1154,7 +1154,7 @@ mod tests {
         assert_eq!(parsed.1, "abc123");
     }
 
-    /// 全链路测试：launch 一个快速退出的命令，验证：
+    /// 全链路测试:launch 一个快速退出的命令,验证:
     /// 1. launch 返回 Native handle 含 pid != 0
     /// 2. observe 从 Running → 进程退出后 → Stopped
     /// 3. exit watcher 广播 BotProcessExited
@@ -1164,7 +1164,7 @@ mod tests {
         let (exit_tx, exit_rx) = oneshot::channel::<()>();
         let sink = Arc::new(CapturingEventSink::with_exit_signal(exit_tx));
 
-        // 用一个打印特定行后退出的命令。
+        // 用一个打印特定行后退出的命令
         #[cfg(windows)]
         let plan = NativeLaunchCommand {
             program: "cmd".into(),
@@ -1196,25 +1196,25 @@ mod tests {
         let config = make_bot_config(10001);
         let handle = dep.launch(&host, &config).await.expect("launch");
 
-        // launch 返回 Native handle。
+        // launch 返回 Native handle
         match &handle {
             DeploymentHandle::Native { pid, .. } => assert_ne!(*pid, 0),
             _ => panic!("expected Native handle"),
         }
 
-        // 等 exit watcher 广播。
+        // 等 exit watcher 广播
         let _ = tokio::time::timeout(std::time::Duration::from_secs(5), exit_rx)
             .await
             .expect("exit watcher should fire within 5s");
 
-        // observe 应该变成 Stopped（exit watcher 已清理 processes）。
+        // observe 应该变成 Stopped(exit watcher 已清理 processes)
         let state = dep
             .observe(&host, &BotId::new("10001"))
             .await
             .expect("observe");
         assert_eq!(state, DeploymentState::Stopped);
 
-        // sink 应该收到 log 行 + webui 事件 + exit 事件。
+        // sink 应该收到 log 行 + webui 事件 + exit 事件
         let log_lines = sink.log_lines.lock().unwrap();
         assert!(
             log_lines.iter().any(|(_, line, _)| line.contains("testTK")),
@@ -1399,7 +1399,7 @@ mod tests {
         assert!(sink.exited.lock().unwrap().is_empty());
     }
 
-    /// stop 对不存在的 bot 应该幂等返回 Ok。
+    /// stop 对不存在的 bot 应该幂等返回 Ok
     #[tokio::test]
     async fn stop_is_idempotent_when_not_running() {
         let dep = NativeDeployment::new(

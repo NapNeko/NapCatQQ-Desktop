@@ -1,4 +1,4 @@
-//! 远端主机实装(SSH / SFTP 抽象)。
+//! 远端主机实装(SSH / SFTP 抽象)
 //!
 //! 实装与预留矩阵:
 //! - RemoteLinuxHost:基于 russh / russh-sftp 的中档实装
@@ -12,7 +12,7 @@
 //! - 端口转发 / 隧道(open_tunnel)
 //! - 连接复用 + Keepalive
 //!
-//! 暂未覆盖:跳板机 / Agent forwarding。
+//! 暂未覆盖:跳板机 / Agent forwarding
 
 pub mod connection;
 pub mod credentials;

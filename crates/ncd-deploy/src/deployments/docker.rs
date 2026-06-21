@@ -1,21 +1,21 @@
-//! Docker 部署：用 docker compose 在某台 Host（本机 Docker Desktop / 远端 SSH）
-//! 上把 bot 跑成容器。
+//! Docker 部署:用 docker compose 在某台 Host(本机 Docker Desktop / 远端 SSH)
+//! 上把 bot 跑成容器
 //!
 //! 与组件页「拉镜像」(commands/docker.rs docker_deploy)的关系:组件页只预拉
 //! NapCat/SnowLuma 官方镜像,不创建 napcat/snowluma 演示容器;这里是 bot 生命周期
 //! 部署形态(deployment_type=docker),由 BotManager 在 start_bot 时按 bot 配置驱动,
-//! 容器纳入 bot 状态机。两者共用底层 DockerCli + compose 渲染,但入口和归属不同。
+//! 容器纳入 bot 状态机两者共用底层 DockerCli + compose 渲染,但入口和归属不同
 //!
-//! 容器命名:ncbot-<qq> / slbot-<qq>（按口味），区别于组件页 napcat/snowluma 演示容器。
-//! compose 项目目录:远端 $HOME/.napcat-bots/<name>。探不到 HOME 直接失败,
-//! 避免把生产数据静默落到 /tmp。
+//! 容器命名:ncbot-<qq> / slbot-<qq>(按口味),区别于组件页 napcat/snowluma 演示容器
+//! compose 项目目录:远端 $HOME/.napcat-bots/<name>探不到 HOME 直接失败,
+//! 避免把生产数据静默落到 /tmp
 //!
-//! 镜像须在「组件」页预拉；Bot 启动 install 只检查本地是否存在官方镜像,不现场 pull。
+//! 镜像须在「组件」页预拉;Bot 启动 install 只检查本地是否存在官方镜像,不现场 pull
 //!
-//! NapCat / SnowLuma 均走官方 compose 语义(见 docker/compose.rs 与 SnowLuma.Docker.Framework)。
-//! NapCat 可预写 onebot/napcat 到 bind 目录; SnowLuma 写 onebot_<qq>.json 到 named volume。
-//! 容器命名：NapCat ncbot-<qq>，SnowLuma slbot-<qq>。
-//! compose 项目目录:远端 $HOME/.napcat-bots/<name>。
+//! NapCat / SnowLuma 均走官方 compose 语义(见 docker/compose.rs 与 SnowLuma.Docker.Framework)
+//! NapCat 可预写 onebot/napcat 到 bind 目录; SnowLuma 写 onebot_<qq>.json 到 named volume
+//! 容器命名:NapCat ncbot-<qq>,SnowLuma slbot-<qq>
+//! compose 项目目录:远端 $HOME/.napcat-bots/<name>
 
 use async_trait::async_trait;
 use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, DockerDeploySpec, DockerFlavor, StopMode};
@@ -30,13 +30,13 @@ use crate::docker::{
     compose::{render_compose_with_env, render_snowluma_compose_with_env},
 };
 
-/// Docker 部署实装。
+/// Docker 部署实装
 pub struct DockerDeployment {
     id: &'static str,
     flavors: &'static [BotFlavor],
-    /// NapCat: WEBUI_TOKEN; SnowLuma: VNC_PASSWD(compose 环境变量)。
+    /// NapCat: WEBUI_TOKEN; SnowLuma: VNC_PASSWD(compose 环境变量)
     compose_secret: Option<String>,
-    /// SnowLuma: 写入 SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD（WebUI 登录，非 VNC）。
+    /// SnowLuma: 写入 SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD(WebUI 登录,非 VNC)
     sl_webui_bootstrap: Option<String>,
     allow_test_default_token: bool,
 }
@@ -52,7 +52,7 @@ impl DockerDeployment {
         }
     }
 
-    /// NapCat Docker: WEBUI_TOKEN。ncd-deploy 不从 QQ 号派生凭据。
+    /// NapCat Docker: WEBUI_TOKENncd-deploy 不从 QQ 号派生凭据
     pub fn with_webui_token(token: impl Into<String>) -> Self {
         Self {
             compose_secret: Some(token.into()),
@@ -60,7 +60,7 @@ impl DockerDeployment {
         }
     }
 
-    /// SnowLuma Docker: VNC_PASSWD + SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD。
+    /// SnowLuma Docker: VNC_PASSWD + SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD
     pub fn with_sl_secrets(vnc_passwd: impl Into<String>, webui_bootstrap: impl Into<String>) -> Self {
         Self {
             compose_secret: Some(vnc_passwd.into()),
@@ -69,7 +69,7 @@ impl DockerDeployment {
         }
     }
 
-    /// SnowLuma Docker: VNC_PASSWD(noVNC 入口密码)。
+    /// SnowLuma Docker: VNC_PASSWD(noVNC 入口密码)
     pub fn with_vnc_passwd(passwd: impl Into<String>) -> Self {
         Self {
             compose_secret: Some(passwd.into()),
@@ -85,12 +85,12 @@ impl DockerDeployment {
         }
     }
 
-    /// bot 容器名：NapCat ncbot-<qq>，SnowLuma slbot-<qq>。
+    /// bot 容器名:NapCat ncbot-<qq>,SnowLuma slbot-<qq>
     pub fn container_name(config: &BotConfig) -> String {
         bot_docker_container_name(config.bot.backend_type, config.bot.qq_id)
     }
 
-    /// compose 项目目录(host 侧 POSIX 路径)。远端 HOME 探测失败时 hard fail。
+    /// compose 项目目录(host 侧 POSIX 路径)远端 HOME 探测失败时 hard fail
     async fn project_dir(host: &dyn Host, name: &str) -> Result<String, DeploymentError> {
         let home = probe_home(host).await.ok_or_else(|| {
             DeploymentError::ConfigInvalid(
@@ -130,7 +130,7 @@ impl DockerDeployment {
         }
     }
 
-    /// 从 BotConfig 构造 DockerDeploySpec:容器名按口味,端口默认 + per-qq 宿主机偏移。
+    /// 从 BotConfig 构造 DockerDeploySpec:容器名按口味,端口默认 + per-qq 宿主机偏移
     pub fn build_spec(config: &BotConfig) -> DockerDeploySpec {
         let qq = config.bot.qq_id;
         let mut spec = match config.bot.backend_type {
@@ -152,7 +152,7 @@ impl Default for DockerDeployment {
     }
 }
 
-/// docker compose .env 行：含空格、#、: 等时加双引号并转义。
+/// docker compose .env 行:含空格,#,: 等时加双引号并转义
 fn dotenv_value(raw: &str) -> String {
     let needs_quote = raw.is_empty()
         || raw.bytes().any(|b| b.is_ascii_whitespace())

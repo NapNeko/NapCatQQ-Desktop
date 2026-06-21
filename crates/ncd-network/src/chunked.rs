@@ -1,9 +1,9 @@
-//! 切片并行下载：≥16MB 文件切 4 片，每片独立 byte range + idle timeout。
+//! 切片并行下载:≥16MB 文件切 4 片,每片独立 byte range + idle timeout
 //!
-//! 不支持 Range 或文件 < CHUNKED_THRESHOLD 时 fallback 到 race 单流。支持时切
-//! DEFAULT_CHUNK_PARTS 片，每片轮询选一个 mirror（切片已并行，多 racer 抢字节
-//! 没意义）。片硬错自动切下个 mirror 重试（最多 3 次），全失败 fallback race。
-//! 进度聚合到 AggregatedProgress，ticker 每 250ms 推 sink 避免 UI 数字回退。
+//! 不支持 Range 或文件 < CHUNKED_THRESHOLD 时 fallback 到 race 单流支持时切
+//! DEFAULT_CHUNK_PARTS 片,每片轮询选一个 mirror(切片已并行,多 racer 抢字节
+//! 没意义)片硬错自动切下个 mirror 重试(最多 3 次),全失败 fallback race
+//! 进度聚合到 AggregatedProgress,ticker 每 250ms 推 sink 避免 UI 数字回退
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -24,13 +24,13 @@ use crate::progress::{DownloadProgressSink, DownloadStage, ProgressUpdate};
 use crate::race::{download_with_mirror_race, MirrorRaceConfig};
 use crate::verify::verify_sha256_if_needed;
 
-/// 切片下载阈值：< 16MB 不切片（启动开销 > 收益）。
+/// 切片下载阈值:< 16MB 不切片(启动开销 > 收益)
 pub const CHUNKED_THRESHOLD: u64 = 16 * 1024 * 1024;
-/// 默认切片数。aria2 默认 5，我们取 4：连接太多容易触发镜像 rate limit。
+/// 默认切片数aria2 默认 5,我们取 4:连接太多容易触发镜像 rate limit
 pub const DEFAULT_CHUNK_PARTS: usize = 4;
-/// 单片最多换几次 mirror。
+/// 单片最多换几次 mirror
 const PER_CHUNK_MAX_RETRIES: usize = 3;
-/// 进度聚合 ticker 间隔。
+/// 进度聚合 ticker 间隔
 const AGGREGATE_TICK_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone)]
@@ -38,13 +38,13 @@ pub struct ChunkedConfig {
     pub parts: usize,
     pub threshold: u64,
     pub idle_timeout: Duration,
-    /// 不切片时（小文件 / 不支持 Range），fallback 到 race 模式的配置。
+    /// 不切片时(小文件 / 不支持 Range),fallback 到 race 模式的配置
     pub race_cfg: MirrorRaceConfig,
-    /// 期望 SHA256（64-hex 小写）。Some 时切片 merge 完整体之后立即校验，
-    /// mismatch 视为该 primary mirror 投毒（返完整字节数但内容是另一份缓存
-    /// 对象），删 dest 切回 race 让其它 mirror 接力。None 跳过校验。
+    /// 期望 SHA256(64-hex 小写)Some 时切片 merge 完整体之后立即校验,
+    /// mismatch 视为该 primary mirror 投毒(返完整字节数但内容是另一份缓存
+    /// 对象),删 dest 切回 race 让其它 mirror 接力None 跳过校验
     /// 注意 ChunkedConfig 与 race_cfg.expected_sha256 在外层调用入口由
-    /// 同一个值同步设置；任一为空都会跳过对应阶段的校验。
+    /// 同一个值同步设置;任一为空都会跳过对应阶段的校验
     pub expected_sha256: Option<String>,
 }
 
@@ -60,7 +60,7 @@ impl Default for ChunkedConfig {
     }
 }
 
-/// 智能下载入口：先决定要不要切片，再分派到对应实现。
+/// 智能下载入口:先决定要不要切片,再分派到对应实现
 pub async fn download_smart(
     mirrors: &[String],
     dest: &Path,
@@ -77,11 +77,11 @@ pub async fn download_smart(
 
     let client = shared_client();
 
-    // 找到第一个能用的 mirror 来切片：probe 通过且返回 total + accept_ranges。
-    // 切片必须**所有片用同一个 mirror**，否则代理之间缓存差异 / Range
-    // 实现差异会导致拼出来的字节错位（zip "Could not find EOCD" 的根因）。
-    // 任何 mirror probe 失败 → 试下一个；全部失败或都不支持 Range / 总大小不
-    // 够阈值 → fallback 到 race 单流（race 自己也会按需切 mirror，不切片）。
+    // 找到第一个能用的 mirror 来切片:probe 通过且返回 total + accept_ranges
+    // 切片必须**所有片用同一个 mirror**,否则代理之间缓存差异 / Range
+    // 实现差异会导致拼出来的字节错位(zip "Could not find EOCD" 的根因)
+    // 任何 mirror probe 失败 → 试下一个;全部失败或都不支持 Range / 总大小不
+    // 够阈值 → fallback 到 race 单流(race 自己也会按需切 mirror,不切片)
     let mut chunk_mirror_idx: Option<usize> = None;
     let mut chunk_total: Option<u64> = None;
     for (i, m) in mirrors.iter().enumerate() {
@@ -118,8 +118,8 @@ pub async fn download_smart(
         }
     };
 
-    // 主选 mirror 切片下载；如果整个切片失败，fallback 到 race 用剩下 mirror
-    // 走单流。race 内部还会再做整文件级别的 mirror 切换 + 续传。
+    // 主选 mirror 切片下载;如果整个切片失败,fallback 到 race 用剩下 mirror
+    // 走单流race 内部还会再做整文件级别的 mirror 切换 + 续传
     let primary_mirror = &mirrors[chunk_mirror_idx];
     match download_chunked_inner(
         primary_mirror,
@@ -135,10 +135,10 @@ pub async fn download_smart(
             Ok(_) => Ok(n),
             Err(NetworkError::Cancelled) => Err(NetworkError::Cancelled),
             Err(e) => {
-                // 切片完成、字节数对，但 sha256 不一致：primary mirror 的缓存被
-                // 投毒（"长度对、Content-Range 对、流不截断" 都骗过去了）。
-                // 删 dest + .part 切回 race，让其它 mirror 接力，同时把 sha256
-                // 透给 race 让它继续校验（race_cfg.expected_sha256 已含）。
+                // 切片完成,字节数对,但 sha256 不一致:primary mirror 的缓存被
+                // 投毒("长度对,Content-Range 对,流不截断" 都骗过去了)
+                // 删 dest + .part 切回 race,让其它 mirror 接力,同时把 sha256
+                // 透给 race 让它继续校验(race_cfg.expected_sha256 已含)
                 warn!(
                     target: "ncd_network::chunked",
                     primary=%primary_mirror, err=%e,
@@ -285,11 +285,11 @@ async fn download_chunk_with_retry(
     let mut attempts = 0;
     let mut last_err: Option<NetworkError> = None;
 
-    // 切片现在固定走单一 mirror（probe winner）。这里的 retry 主要是给临时
-    // 抖动（短暂网络故障 / 服务端 429）兜底；如果是 mirror 真的坏了，外层
-    // download_smart 会接住整片失败后 fallback 到 race 走其它 mirror。
+    // 切片现在固定走单一 mirror(probe winner)这里的 retry 主要是给临时
+    // 抖动(短暂网络故障 / 服务端 429)兜底;如果是 mirror 真的坏了,外层
+    // download_smart 会接住整片失败后 fallback 到 race 走其它 mirror
     while attempts < PER_CHUNK_MAX_RETRIES {
-        // 每次重试前清掉残片，下次 download_byte_range 重新开 file
+        // 每次重试前清掉残片,下次 download_byte_range 重新开 file
         let _ = fs::remove_file(dest_chunk).await;
 
         match download_byte_range(

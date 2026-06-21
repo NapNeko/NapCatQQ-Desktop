@@ -12,7 +12,7 @@ use ncd_runtime::{
 use ncd_runtime::BotId;
 
 // ============================================================
-// 前端 IPC contract 数据结构（保留——前端 remote.service.ts 依赖这些 shape）
+// 前端 IPC contract 数据结构(保留——前端 remote.service.ts 依赖这些 shape)
 // ============================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,7 +80,7 @@ fn default_remote_port() -> u16 {
 }
 
 // ============================================================
-// AppRuntime：本地运行时状态轮询（non-remote）
+// AppRuntime:本地运行时状态轮询(non-remote)
 // ============================================================
 
 #[derive(Debug, Clone)]
@@ -158,7 +158,7 @@ impl AppRuntime {
     }
 
     pub async fn shutdown(&self) {
-        // 无远端连接需要清理了——连接缓存已搬到 ServerManager。
+        // 无远端连接需要清理了——连接缓存已搬到 ServerManager
     }
 
     async fn has_running_bot(&self) -> bool {

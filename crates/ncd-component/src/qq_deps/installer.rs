@@ -1,6 +1,6 @@
-//! QQ 系统依赖安装器。
+//! QQ 系统依赖安装器
 //!
-//! 处理提权、重试、进度上报等逻辑。
+//! 处理提权,重试,进度上报等逻辑
 
 use ncd_domain::{FailedPackage, InstallDependenciesResult};
 use ncd_host::{Host, HostCommand, HostError};
@@ -17,15 +17,15 @@ enum PackageManagerType {
     Unknown,
 }
 
-/// QQ 依赖安装器。
+/// QQ 依赖安装器
 pub struct QqDependencyInstaller;
 
 impl QqDependencyInstaller {
-    /// 自动安装缺失依赖。
+    /// 自动安装缺失依赖
     ///
-    /// 会检查 sudo 权限；sudo_password 对齐 Docker 安装流程——前端弹窗收集到的密码
-    /// 直接传入，先注入 Host 再继续安装。None 时 probe 到 PasswordRequired 就返回
-    /// elevation_required 标志让上层弹窗。
+    /// 会检查 sudo 权限;sudo_password 对齐 Docker 安装流程——前端弹窗收集到的密码
+    /// 直接传入,先注入 Host 再继续安装None 时 probe 到 PasswordRequired 就返回
+    /// elevation_required 标志让上层弹窗
     pub async fn install(
         &self,
         host: &dyn Host,
@@ -42,12 +42,12 @@ impl QqDependencyInstaller {
             });
         }
 
-        // 探测提权能力（SudoAccess），上层按结果决定注入密码还是弹窗
+        // 探测提权能力(SudoAccess),上层按结果决定注入密码还是弹窗
         let sudo_access = self.check_sudo_access(host).await?;
 
-        // host 已注入的提权密码也算可用:deploy path（ensure_dependencies）不再传
-        // sudo_password，但 ServerManager 在建连时已从 keyring 注入了密码到 host，
-        // 这份密码足够让 elevated apt 命令走 sudo -S。只看参数会漏掉这条路径。
+        // host 已注入的提权密码也算可用:deploy path(ensure_dependencies)不再传
+        // sudo_password,但 ServerManager 在建连时已从 keyring 注入了密码到 host,
+        // 这份密码足够让 elevated apt 命令走 sudo -S只看参数会漏掉这条路径
         let host_has_password = host.has_elevation_password().await;
 
         tracing::info!(
@@ -57,7 +57,7 @@ impl QqDependencyInstaller {
             host_has_password
         );
 
-        // 需要密码时：显式参数优先注入；host 已有密码直接复用；都没有才返回标志让上层弹窗
+        // 需要密码时:显式参数优先注入;host 已有密码直接复用;都没有才返回标志让上层弹窗
         if matches!(sudo_access, SudoAccess::PasswordRequired) {
             match sudo_password {
                 Some(pw) => {
@@ -80,7 +80,7 @@ impl QqDependencyInstaller {
             }
         }
 
-        // 探测一次包管理器类型，后续每个包安装复用，避免重复 command -v
+        // 探测一次包管理器类型,后续每个包安装复用,避免重复 command -v
         let pkg_mgr = self.detect_package_manager(host).await;
 
         // 刷新包索引
@@ -91,7 +91,7 @@ impl QqDependencyInstaller {
         let mut installed = Vec::new();
         let mut failed = Vec::new();
 
-        // 逐个安装，单个失败记入 failed 不中断其余包
+        // 逐个安装,单个失败记入 failed 不中断其余包
         for (idx, pkg) in missing.iter().enumerate() {
             ctx.emit(crate::context::ProgressKind::StepProgress {
                 step: 0,
@@ -124,12 +124,12 @@ impl QqDependencyInstaller {
         })
     }
 
-    /// 检查 sudo 访问（使用 ncd_host 的 probe_sudo）。
+    /// 检查 sudo 访问(使用 ncd_host 的 probe_sudo)
     async fn check_sudo_access(&self, host: &dyn Host) -> Result<SudoAccess, ActionError> {
         Ok(ncd_host::remote::probe_sudo(host).await)
     }
 
-    /// 探测包管理器类型（一次性探测，避免重复）。
+    /// 探测包管理器类型(一次性探测,避免重复)
     async fn detect_package_manager(&self, host: &dyn Host) -> PackageManagerType {
         let cmd_check_apt = HostCommand::new("command").arg("-v").arg("apt-get");
         if host.run_to_string(cmd_check_apt).await.is_ok_and(|o| o.success()) {
@@ -144,7 +144,7 @@ impl QqDependencyInstaller {
         PackageManagerType::Unknown
     }
 
-    /// 刷新包索引。
+    /// 刷新包索引
     async fn refresh_package_index(&self, host: &dyn Host, pkg_mgr: PackageManagerType) -> Result<(), HostError> {
         match pkg_mgr {
             PackageManagerType::Apt => {
@@ -173,7 +173,7 @@ impl QqDependencyInstaller {
         Ok(())
     }
 
-    /// 安装单个包（带网络重试，指数退避 5s → 10s → 20s）。
+    /// 安装单个包(带网络重试,指数退避 5s → 10s → 20s)
     async fn install_package_with_retry(
         &self,
         host: &dyn Host,
@@ -191,7 +191,7 @@ impl QqDependencyInstaller {
                     let is_network = is_network_error(&e);
                     last_err = Some(e);
 
-                    // 只对网络错误重试，其他错误立即返回
+                    // 只对网络错误重试,其他错误立即返回
                     if !is_network || attempt == MAX_RETRIES - 1 {
                         break;
                     }
@@ -214,7 +214,7 @@ impl QqDependencyInstaller {
         }))
     }
 
-    /// 安装单个包。
+    /// 安装单个包
     async fn install_package(&self, host: &dyn Host, package: &str, pkg_mgr: PackageManagerType) -> Result<(), HostError> {
         match pkg_mgr {
             PackageManagerType::Apt => {
@@ -260,7 +260,7 @@ impl QqDependencyInstaller {
     }
 }
 
-/// 判断错误是否为网络相关（用于决定是否重试）。
+/// 判断错误是否为网络相关(用于决定是否重试)
 fn is_network_error(err: &HostError) -> bool {
     let msg = err.to_string().to_lowercase();
     msg.contains("could not resolve")

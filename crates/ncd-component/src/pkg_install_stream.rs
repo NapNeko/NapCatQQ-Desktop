@@ -1,4 +1,4 @@
-//! 在主机上执行包管理器命令并流式解析 stdout/stderr，上报 [ActionCtx] 进度。
+//! 在主机上执行包管理器命令并流式解析 stdout/stderr,上报 [ActionCtx] 进度
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -22,8 +22,8 @@ enum StreamMsg {
     },
 }
 
-/// 执行 cmd（通常为 sh -c "apt-get …" / dnf …），按行解析 apt/dnf 输出并
-/// 向 ctx 发送 Log + StepProgress（百分比单调递增，封顶 percent_cap）。
+/// 执行 cmd(通常为 sh -c "apt-get …" / dnf …),按行解析 apt/dnf 输出并
+/// 向 ctx 发送 Log + StepProgress(百分比单调递增,封顶 percent_cap)
 pub async fn run_pkg_command_with_progress(
     host: &dyn Host,
     ctx: &mut ActionCtx,

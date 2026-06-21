@@ -1,11 +1,11 @@
-//! 适配层：把 ncd-deploy 的 NativeDeployment 接入当前 BotManager 体系。
+//! 适配层:把 ncd-deploy 的 NativeDeployment 接入当前 BotManager 体系
 //!
-//! 三个适配器：
-//! - RuntimeLaunchPlannerAdapter：实装 NativeLaunchTranslator trait，包装现有
-//!   FileSystemRuntimeLaunchPlanner。
-//! - EventBusSink：实装 NativeRuntimeEventSink trait，桥接 BroadcastEventBus。
-//! - NativeDeploymentBackend：把 NativeDeployment 包成 BotBackend trait object，
-//!   让 BotManager 无需修改结构体即可切到新实装。后续删 BotBackend 时一起删。
+//! 三个适配器:
+//! - RuntimeLaunchPlannerAdapter:实装 NativeLaunchTranslator trait,包装现有
+//!   FileSystemRuntimeLaunchPlanner
+//! - EventBusSink:实装 NativeRuntimeEventSink trait,桥接 BroadcastEventBus
+//! - NativeDeploymentBackend:把 NativeDeployment 包成 BotBackend trait object,
+//!   让 BotManager 无需修改结构体即可切到新实装后续删 BotBackend 时一起删
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -42,12 +42,12 @@ use crate::remote_native_launch::{
 // RuntimeLaunchPlannerAdapter
 // ============================================================
 
-/// 把 FileSystemRuntimeLaunchPlanner 包装成 NativeLaunchTranslator。
+/// 把 FileSystemRuntimeLaunchPlanner 包装成 NativeLaunchTranslator
 ///
-/// NativeLaunchTranslator::translate 收 &BotConfig，输出 NativeLaunchCommand。
-/// 内部先调 build_plan 拿到 RuntimeLaunchPlan，再取出 NapCat 分支的
-/// program / args / working_dir / environment。SnowLuma 分支的 launch_command
-/// 为空（由 SnowLumaDaemon 另走），适配器对空命令返回错误。
+/// NativeLaunchTranslator::translate 收 &BotConfig,输出 NativeLaunchCommand
+/// 内部先调 build_plan 拿到 RuntimeLaunchPlan,再取出 NapCat 分支的
+/// program / args / working_dir / environmentSnowLuma 分支的 launch_command
+/// 为空(由 SnowLumaDaemon 另走),适配器对空命令返回错误
 pub struct RuntimeLaunchPlannerAdapter {
     planner: Arc<dyn RuntimeLaunchPlanner>,
 }
@@ -68,7 +68,7 @@ impl NativeLaunchTranslator for RuntimeLaunchPlannerAdapter {
             .await
             .map_err(|err| DeploymentError::LaunchFailed(err.to_string()))?;
 
-        // 把 RuntimeLaunchPlan 转成 BotRuntimeConfig 再抽出 launch 字段。
+        // 把 RuntimeLaunchPlan 转成 BotRuntimeConfig 再抽出 launch 字段
         let cfg = BotRuntimeConfig::default_path("/tmp", bot_id);
         let cfg = plan.into_runtime_config(cfg);
 
@@ -90,7 +90,7 @@ impl NativeLaunchTranslator for RuntimeLaunchPlannerAdapter {
 // EventBusSink
 // ============================================================
 
-/// 把 NativeDeployment 的运行时事件桥接到 BroadcastEventBus。
+/// 把 NativeDeployment 的运行时事件桥接到 BroadcastEventBus
 pub struct EventBusSink {
     bus: Arc<BroadcastEventBus>,
 }
@@ -133,15 +133,15 @@ impl NativeRuntimeEventSink for EventBusSink {
 }
 
 // ============================================================
-// NativeDeploymentBackend：过渡壳
+// NativeDeploymentBackend:过渡壳
 //
-// 让 BotManager 在不改结构体的情况下就能用 NativeDeployment。
-// BotBackend 要求 start/stop/status/tail_log/read_config/write_config，
-// 这里把前三个转发给 NativeDeployment，后三个保留原来的文件 IO 逻辑。
-// 后续删 BotBackend trait 时整个文件一起扬掉。
+// 让 BotManager 在不改结构体的情况下就能用 NativeDeployment
+// BotBackend 要求 start/stop/status/tail_log/read_config/write_config,
+// 这里把前三个转发给 NativeDeployment,后三个保留原来的文件 IO 逻辑
+// 后续删 BotBackend trait 时整个文件一起扬掉
 // ============================================================
 
-/// 过渡壳：让 NativeDeployment 穿上 BotBackend trait 的外套。
+/// 过渡壳:让 NativeDeployment 穿上 BotBackend trait 的外套
 pub struct NativeDeploymentBackend {
     deployment: Arc<NativeDeployment>,
     host: Arc<dyn Host>,
@@ -213,8 +213,8 @@ impl BotBackend for NativeDeploymentBackend {
             .map_err(|err| BotBackendError::Io(err.to_string()))?;
         match state {
             ncd_deploy::DeploymentState::Running => {
-                // 从 deployment 拿不到精确 pid/started_at，返回 running 用 0 占位。
-                // BotManager 只看 state 字段做决策，pid 在 start 时已经拿到了。
+                // 从 deployment 拿不到精确 pid/started_at,返回 running 用 0 占位
+                // BotManager 只看 state 字段做决策,pid 在 start 时已经拿到了
                 Ok(BotStatus::running(bot_id, 0, 0))
             }
             _ => Ok(BotStatus::stopped(bot_id)),
@@ -222,7 +222,7 @@ impl BotBackend for NativeDeploymentBackend {
     }
 
     async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
-        // 过渡期不支持，BotManager 不从 backend 读 config（用 repo 读）。
+        // 过渡期不支持,BotManager 不从 backend 读 config(用 repo 读)
         Err(BotBackendError::ConfigNotFound(bot_id))
     }
 
@@ -231,7 +231,7 @@ impl BotBackend for NativeDeploymentBackend {
         _bot_id: BotId,
         _cfg: &BotRuntimeConfig,
     ) -> Result<(), BotBackendError> {
-        // 过渡期：config 落盘已由 BotManager 自己做，backend 不需要管。
+        // 过渡期:config 落盘已由 BotManager 自己做,backend 不需要管
         Ok(())
     }
 
@@ -249,20 +249,20 @@ impl BotBackend for NativeDeploymentBackend {
 }
 
 // ============================================================
-// RemoteNativeDeploymentBackend：远端 SSH + NativeDeployment
+// RemoteNativeDeploymentBackend:远端 SSH + NativeDeployment
 // ============================================================
 
-/// 远端「直接运行」：每 Bot 绑定一台 Host + 独立 NativeDeployment（translator 写远端路径）。
+/// 远端「直接运行」:每 Bot 绑定一台 Host + 独立 NativeDeployment(translator 写远端路径)
 ///
-/// 按远程 SSH 稳定性计划（P0-6）：不再常驻一个固定的 host 引用，而是持有 resolver + target，
-/// 在 start/status/stop/tail_log 等边界按需通过 resolver 取“当前应活”的 host，并在检测到
-/// 传输层断连错误时触发 resolver.refresh 后重试一次。持久失败时不在此层把 bot 标 Crashed
-/// （由上层 BotManager 区分 transport_error 后决定是否仅发 bot_error 事件）。
+/// 按远程 SSH 稳定性计划(P0-6):不再常驻一个固定的 host 引用,而是持有 resolver + target,
+/// 在 start/status/stop/tail_log 等边界按需通过 resolver 取“当前应活”的 host,并在检测到
+/// 传输层断连错误时触发 resolver.refresh 后重试一次持久失败时不在此层把 bot 标 Crashed
+/// (由上层 BotManager 区分 transport_error 后决定是否仅发 bot_error 事件)
 pub struct RemoteNativeDeploymentBackend {
     deployment: Arc<NativeDeployment>,
-    /// 用于在操作边界按需获取/刷新远端 host。ServerManager 通过 TauriHostResolver 注入。
+    /// 用于在操作边界按需获取/刷新远端 hostServerManager 通过 TauriHostResolver 注入
     resolver: Arc<dyn crate::HostResolver>,
-    /// 目标运行宿主（应为 RuntimeTarget::Server(...)）。
+    /// 目标运行宿主(应为 RuntimeTarget::Server(...))
     target: RuntimeTarget,
     backend_id: BotId,
     flavor: BotFlavor,
@@ -285,7 +285,7 @@ impl RemoteNativeDeploymentBackend {
         }
     }
 
-    /// 便捷方法：通过 resolver 取得当前应活的 host（不触发自愈刷新）。
+    /// 便捷方法:通过 resolver 取得当前应活的 host(不触发自愈刷新)
     async fn current_host(&self) -> Result<Arc<dyn Host>, BotBackendError> {
         self.resolver
             .resolve(&self.target)
@@ -293,7 +293,7 @@ impl RemoteNativeDeploymentBackend {
             .map_err(BotBackendError::RemoteHostTransport)
     }
 
-    /// 通过 resolver 取得一个“新鲜”host（会触发底层刷新/重连）。
+    /// 通过 resolver 取得一个“新鲜”host(会触发底层刷新/重连)
     async fn refreshed_host(&self) -> Result<Arc<dyn Host>, BotBackendError> {
         self.resolver
             .refresh(&self.target)
@@ -301,12 +301,12 @@ impl RemoteNativeDeploymentBackend {
             .map_err(BotBackendError::RemoteHostTransport)
     }
 
-    /// 在操作边界使用：先拿一个 host，执行 op；若 op 失败，则刷新一次 host 再重试一次。
-    /// 第二次仍失败则把错误向上透传（由调用方或上层决定是否仅报信息性错误、不推 Crashed）。
+    /// 在操作边界使用:先拿一个 host,执行 op;若 op 失败,则刷新一次 host 再重试一次
+    /// 第二次仍失败则把错误向上透传(由调用方或上层决定是否仅报信息性错误,不推 Crashed)
     ///
-    /// 注意（P0 简化）：当前对任意错误（包括 DeploymentError）都做一次刷新重试（宽松策略），
-    /// 因为远端 Native 场景下 launch/stop/observe 失败很大概率与底层 SSH 传输有关；
-    /// 精确的“仅 transport 错误才刷新”可后续在错误类型里携带分类信息后再收紧。
+    /// 注意(P0 简化):当前对任意错误(包括 DeploymentError)都做一次刷新重试(宽松策略),
+    /// 因为远端 Native 场景下 launch/stop/observe 失败很大概率与底层 SSH 传输有关;
+    /// 精确的“仅 transport 错误才刷新”可后续在错误类型里携带分类信息后再收紧
     async fn with_host_refresh<F, Fut, T, E>(&self, op: F) -> Result<T, BotBackendError>
     where
         F: FnOnce(Arc<dyn Host>) -> Fut + Clone + Send,
@@ -327,7 +327,7 @@ impl RemoteNativeDeploymentBackend {
     }
 
     async fn napcat_install_base(&self) -> Result<HostPath, BotBackendError> {
-        // 拿一次当前 host 做探测（install base 通常在启动前调用，不长期持有）
+        // 拿一次当前 host 做探测(install base 通常在启动前调用,不长期持有)
         let host = self.current_host().await?;
         let (home, layout) = probe_remote_napcat_layout(host.as_ref())
             .await
@@ -355,7 +355,7 @@ impl BotBackend for RemoteNativeDeploymentBackend {
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
         let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
-        // 用刷新包装：传输断连时会尝试 refresh 后重试一次
+        // 用刷新包装:传输断连时会尝试 refresh 后重试一次
         let handle = self
             .with_host_refresh(|h| async move {
                 self.deployment.launch(h.as_ref(), &bot_config).await
@@ -378,7 +378,7 @@ impl BotBackend for RemoteNativeDeploymentBackend {
                 .as_str()
                 .parse()
                 .map_err(|_| BotBackendError::InvalidConfig(format!("invalid bot id: {bot_id}")))?;
-            // stop_remote_napcat_on_host 直接用 host 做 pgrep/kill，也需要刷新保护
+            // stop_remote_napcat_on_host 直接用 host 做 pgrep/kill,也需要刷新保护
             let host = self.current_host().await?;
             stop_remote_napcat_on_host(host.as_ref(), qq_id).await?;
         }
@@ -398,14 +398,14 @@ impl BotBackend for RemoteNativeDeploymentBackend {
                 .as_str()
                 .parse()
                 .map_err(|_| BotBackendError::InvalidConfig(format!("invalid bot id: {bot_id}")))?;
-            // remote_napcat_running_pid 做 pgrep，也需要活连接
+            // remote_napcat_running_pid 做 pgrep,也需要活连接
             let host = self.current_host().await?;
             if let Some(pid) = remote_napcat_running_pid(host.as_ref(), qq_id).await? {
                 return Ok(BotStatus::running(bot_id, pid, 0));
             }
             return Ok(BotStatus::stopped(bot_id));
         }
-        // 通用 observe 走刷新包装；持久失败时上层可根据错误形状决定不推 Crashed
+        // 通用 observe 走刷新包装;持久失败时上层可根据错误形状决定不推 Crashed
         let state = self
             .with_host_refresh(|h| {
                 let bid = bot_id.clone();
@@ -434,7 +434,7 @@ impl BotBackend for RemoteNativeDeploymentBackend {
         opts: TailOpts,
     ) -> Result<LogSnapshot, BotBackendError> {
         if self.flavor != BotFlavor::NapCat {
-            // 非 NapCat：deployment.tail_log 不直接依赖远端 host 句柄，保持原直连调用
+            // 非 NapCat:deployment.tail_log 不直接依赖远端 host 句柄,保持原直连调用
             let snap = self.deployment.tail_log(&bot_id, opts.lines).await;
             return Ok(LogSnapshot {
                 lines: snap.lines,
@@ -449,7 +449,7 @@ impl BotBackend for RemoteNativeDeploymentBackend {
         let log_path = napcat_remote_log_path(&install_base, qq_id);
         let path = HostPath::from_posix(&log_path);
 
-        // 读日志文件走刷新包装：失败（含 transport 类）时刷新 host 后重试一次
+        // 读日志文件走刷新包装:失败(含 transport 类)时刷新 host 后重试一次
         let bytes = self
             .with_host_refresh(|h| {
                 let p = path.clone();
@@ -767,17 +767,17 @@ fn deployment_status(
 }
 
 // ============================================================
-// DockerDeploymentBackend：把 DockerDeployment 包成 BotBackend
+// DockerDeploymentBackend:把 DockerDeployment 包成 BotBackend
 //
 // 与 NativeDeploymentBackend 平行:让 BotManager 用统一的 BotBackend 接口起
-// docker 容器形态的 bot。start 走 install(拉镜像/写 compose)+ launch(compose up);
-// status 走 observe(docker ps);stop 走 docker stop;tail_log 走 docker logs。
-// host 在构造时注入(由 BotManager 按 runtime_target 解析后传入)。
+// docker 容器形态的 botstart 走 install(拉镜像/写 compose)+ launch(compose up);
+// status 走 observe(docker ps);stop 走 docker stop;tail_log 走 docker logs
+// host 在构造时注入(由 BotManager 按 runtime_target 解析后传入)
 // ============================================================
 
 use ncd_deploy::{DeploymentHandle, DeploymentState, NullProgressSink};
 
-/// 过渡壳:让 DockerDeployment 穿上 BotBackend trait 外套。
+/// 过渡壳:让 DockerDeployment 穿上 BotBackend trait 外套
 pub struct DockerDeploymentBackend {
     deployment: Arc<DockerDeployment>,
     host: Arc<dyn Host>,
@@ -809,7 +809,7 @@ impl BotBackend for DockerDeploymentBackend {
 
     fn kind(&self) -> BackendKind {
         // docker 容器跑在 host 上;host 是本机还是远端由注入的 host 决定,
-        // 这里 kind 表达"部署形态来源",docker 统一归 Local 语义(非 SSH backend 抽象)。
+        // 这里 kind 表达"部署形态来源",docker 统一归 Local 语义(非 SSH backend 抽象)
         BackendKind::Local
     }
 
@@ -821,14 +821,14 @@ impl BotBackend for DockerDeploymentBackend {
         let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
         render_docker_config_on_host(self.host.as_ref(), &ctx.config.bot_id, &bot_config).await?;
 
-        // install:探 docker + 写 compose + 拉镜像。
+        // install:探 docker + 写 compose + 拉镜像
         let sink = NullProgressSink;
         self.deployment
             .install(self.host.as_ref(), &bot_config, &sink)
             .await
             .map_err(|err| BotBackendError::Io(err.to_string()))?;
 
-        // launch:compose up。
+        // launch:compose up
         let handle = self
             .deployment
             .launch(self.host.as_ref(), &bot_config)
@@ -837,7 +837,7 @@ impl BotBackend for DockerDeploymentBackend {
 
         match handle {
             DeploymentHandle::Docker { started_at, .. } => {
-                // 容器没有宿主机 pid,用 0 占位;BotManager 只看 state 做决策。
+                // 容器没有宿主机 pid,用 0 占位;BotManager 只看 state 做决策
                 Ok(BotStatus::running(ctx.config.bot_id.clone(), 0, started_at))
             }
             _ => Err(BotBackendError::Io("unexpected handle variant".into())),

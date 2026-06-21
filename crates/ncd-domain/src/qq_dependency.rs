@@ -1,47 +1,47 @@
-//! QQ 系统依赖管理的领域模型。
+//! QQ 系统依赖管理的领域模型
 //!
-//! 定义了跨发行版的依赖项、检测报告、安装结果等核心类型。
-//! 遵守 Layer 1 原则：零运行时依赖，纯数据结构。
+//! 定义了跨发行版的依赖项,检测报告,安装结果等核心类型
+//! 遵守 Layer 1 原则:零运行时依赖,纯数据结构
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// QQ 依赖项分类。
+/// QQ 依赖项分类
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/qq/")]
 #[serde(rename_all = "snake_case")]
 pub enum DependencyCategory {
-    /// 核心运行时库（NSS, GBM, GTK, ALSA 等）
+    /// 核心运行时库(NSS, GBM, GTK, ALSA 等)
     Runtime,
-    /// X11 图形栈（Xvfb, x11vnc, openbox）
+    /// X11 图形栈(Xvfb, x11vnc, openbox)
     Graphics,
-    /// 工具链（curl, jq, unzip, screen）
+    /// 工具链(curl, jq, unzip, screen)
     Toolchain,
 }
 
-/// 跨发行版依赖项定义。
+/// 跨发行版依赖项定义
 ///
-/// 用通用名（canonical_name）作为主键，映射到各发行版的具体包名。
-/// t64 变体通过运行时检测选择。
+/// 用通用名(canonical_name)作为主键,映射到各发行版的具体包名
+/// t64 变体通过运行时检测选择
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/qq/")]
 #[serde(rename_all = "camelCase")]
 pub struct SystemDependency {
-    /// 通用名（人类可读的语义标识）。
+    /// 通用名(人类可读的语义标识)
     pub canonical_name: String,
-    /// Debian/Ubuntu 包名。
+    /// Debian/Ubuntu 包名
     pub debian_package: String,
-    /// RHEL/CentOS/Fedora 包名。
+    /// RHEL/CentOS/Fedora 包名
     pub rhel_package: String,
-    /// 是否支持 t64 变体（仅 Debian/Ubuntu）。
+    /// 是否支持 t64 变体(仅 Debian/Ubuntu)
     pub has_t64_variant: bool,
-    /// 依赖分类。
+    /// 依赖分类
     pub category: DependencyCategory,
-    /// 人类可读描述。
+    /// 人类可读描述
     pub description: String,
 }
 
-/// 发行版信息。
+/// 发行版信息
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/qq/")]
 #[serde(rename_all = "camelCase")]
@@ -51,7 +51,7 @@ pub struct DistroInfo {
     pub version: String,
 }
 
-/// 发行版族。
+/// 发行版族
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/qq/")]
 #[serde(rename_all = "snake_case")]
@@ -62,7 +62,7 @@ pub enum DistroFamily {
     Unknown,
 }
 
-/// 包状态。
+/// 包状态
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/qq/")]
 #[serde(rename_all = "camelCase")]
@@ -72,7 +72,7 @@ pub struct PackageStatus {
     pub detection_method: DetectionMethod,
 }
 
-/// 检测方式。
+/// 检测方式
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/qq/")]
 #[serde(rename_all = "snake_case")]
@@ -85,7 +85,7 @@ pub enum DetectionMethod {
     Binary,
 }
 
-/// QQ 依赖检测报告。
+/// QQ 依赖检测报告
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/qq/")]
 #[serde(rename_all = "camelCase")]
@@ -96,11 +96,11 @@ pub struct QqDependencyReport {
     pub missing: Vec<PackageStatus>,
     /// 发行版信息
     pub distro_info: DistroInfo,
-    /// 用户可执行的安装命令（用于复制粘贴）
+    /// 用户可执行的安装命令(用于复制粘贴)
     pub install_command: Option<String>,
 }
 
-/// 依赖安装结果。
+/// 依赖安装结果
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/qq/")]
 #[serde(rename_all = "camelCase")]
@@ -114,7 +114,7 @@ pub struct InstallDependenciesResult {
     pub elevation_required: bool,
 }
 
-/// 失败的包详情。
+/// 失败的包详情
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/qq/")]
 #[serde(rename_all = "camelCase")]
@@ -123,18 +123,18 @@ pub struct FailedPackage {
     pub reason: String,
 }
 
-/// 依赖安装错误（前端用于决策 UI 交互）。
+/// 依赖安装错误(前端用于决策 UI 交互)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/qq/")]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum DependencyInstallError {
-    /// 权限不足（sudo 失败 / 密码错误）
+    /// 权限不足(sudo 失败 / 密码错误)
     PermissionDenied {
         /// 是否可以重试输入密码
         can_retry_password: bool,
         detail: String,
     },
-    /// 网络问题（仓库不可达 / 超时）
+    /// 网络问题(仓库不可达 / 超时)
     NetworkFailure {
         /// 是否建议用户切换镜像源
         suggest_mirror: bool,
@@ -142,9 +142,9 @@ pub enum DependencyInstallError {
     },
     /// 包管理器锁定
     PackageManagerLocked {
-        /// 锁定者进程名（如 "unattended-upgrades"）
+        /// 锁定者进程名(如 "unattended-upgrades")
         locked_by: Option<String>,
-        /// 建议等待时间（秒）
+        /// 建议等待时间(秒)
         suggest_wait_seconds: u32,
     },
     /// 磁盘空间不足
@@ -152,7 +152,7 @@ pub enum DependencyInstallError {
         required_mb: u32,
         available_mb: u32,
     },
-    /// 包不存在（仓库中找不到）
+    /// 包不存在(仓库中找不到)
     PackageNotFound {
         package_name: String,
         /// 是否需要先刷新包索引

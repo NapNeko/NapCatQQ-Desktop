@@ -1,17 +1,17 @@
-//! PackageManager:包管理器抽象。
+//! PackageManager:包管理器抽象
 //!
 //! 设计要点:
 //! - 不是所有 Host 都有 PackageManager(LocalWindows 默认 None,可选启用 winget)
-//! - 各 PackageManager 自己知道怎么探测包是否已装、怎么 install
+//! - 各 PackageManager 自己知道怎么探测包是否已装,怎么 install
 //! - 上层 Component(如 QQComponent)只问 host.pkg_manager() 拿一个,然后调用 trait
 //!
-//! 当前 trait 已定义、stub 实装为空,具体行为后续逐步落地。
+//! 当前 trait 已定义,stub 实装为空,具体行为后续逐步落地
 
 use async_trait::async_trait;
 
 use crate::error::HostError;
 
-/// PackageManager 类型枚举。
+/// PackageManager 类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PackageManagerKind {
     Apt,
@@ -21,7 +21,7 @@ pub enum PackageManagerKind {
     Choco,
 }
 
-/// 包查询结果。
+/// 包查询结果
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageInfo {
     pub name: String,
@@ -29,21 +29,21 @@ pub struct PackageInfo {
     pub installed: bool,
 }
 
-/// 包管理器统一接口。
+/// 包管理器统一接口
 #[async_trait]
 pub trait PackageManager: Send + Sync {
     fn kind(&self) -> PackageManagerKind;
 
-    /// 查询包是否已安装,以及版本号。
+    /// 查询包是否已安装,以及版本号
     async fn query(&self, name: &str) -> Result<PackageInfo, HostError>;
 
-    /// 安装包(可能触发 sudo / UAC,取决于 Host 实装)。
+    /// 安装包(可能触发 sudo / UAC,取决于 Host 实装)
     async fn install(&self, name: &str) -> Result<(), HostError>;
 
-    /// 卸载包。
+    /// 卸载包
     async fn uninstall(&self, name: &str) -> Result<(), HostError>;
 
-    /// 刷新包索引(apt update / dnf check-update / winget source update)。
+    /// 刷新包索引(apt update / dnf check-update / winget source update)
     async fn refresh(&self) -> Result<(), HostError>;
 }
 

@@ -1,12 +1,12 @@
-//! ServerManager：远端主机档案管理 + 凭据存储 + 连接测试。
+//! ServerManager:远端主机档案管理 + 凭据存储 + 连接测试
 //!
-//! 这个模块负责：
-//! 1. ServerProfile CRUD（JSON 持久化到 <data_root>/config/servers.json）
-//! 2. 凭据（密码 / 私钥密码）走 keyring 系统凭据库，不落盘
-//! 3. 连接测试（SSH 握手 + 基本信息探测）
+//! 这个模块负责:
+//! 1. ServerProfile CRUD(JSON 持久化到 <data_root>/config/servers.json)
+//! 2. 凭据(密码 / 私钥密码)走 keyring 系统凭据库,不落盘
+//! 3. 连接测试(SSH 握手 + 基本信息探测)
 //! 4. 活跃 Host 连接缓存
 //!
-//! 不负责部署编排（那是 Deployment trait 的事）。
+//! 不负责部署编排(那是 Deployment trait 的事)
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -32,93 +32,93 @@ use crate::events::EventBus;
 // 数据结构
 // ============================================================
 
-/// 远端主机档案。不含密码——凭据走 keyring。
+/// 远端主机档案不含密码——凭据走 keyring
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ServerProfile {
-    /// 内部 id，创建时生成的短 UUID。
+    /// 内部 id,创建时生成的短 UUID
     pub id: String,
-    /// 用户给的显示名称。
+    /// 用户给的显示名称
     pub name: String,
-    /// 主机地址（IP 或域名）。
+    /// 主机地址(IP 或域名)
     pub host: String,
-    /// SSH 端口，默认 22。
+    /// SSH 端口,默认 22
     #[serde(default = "default_port")]
     pub port: u16,
-    /// 登录用户名。
+    /// 登录用户名
     pub username: String,
-    /// 认证方式。
+    /// 认证方式
     #[serde(default)]
     pub auth_method: AuthMethod,
-    /// 私钥文件路径（仅 Key 方式使用）。
+    /// 私钥文件路径(仅 Key 方式使用)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub private_key_path: Option<String>,
-    /// 用户是否选择了"记住密码"。
+    /// 用户是否选择了"记住密码"
     #[serde(default)]
     pub remember_credential: bool,
-    /// 最近一次连接测试结果。
+    /// 最近一次连接测试结果
     #[serde(default)]
     pub state: ServerState,
-	    /// 连接健康度细粒度信息（最近成功时间、连续失败计数等）。
-	    /// 可选 + 默认 + 序列化时 None 省略，保证向后兼容。
+	    /// 连接健康度细粒度信息(最近成功时间,连续失败计数等)
+	    /// 可选 + 默认 + 序列化时 None 省略,保证向后兼容
 	    #[serde(default, skip_serializing_if = "Option::is_none")]
 	    pub health: Option<ConnectionHealth>,
-    /// WebUI 端点 URL（用户手填的远端 NapCat WebUI 地址）。
+    /// WebUI 端点 URL(用户手填的远端 NapCat WebUI 地址)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webui_url: Option<String>,
 }
 
-/// 认证方式。
+/// 认证方式
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum AuthMethod {
-    /// 私钥认证（推荐）。
+    /// 私钥认证(推荐)
     #[default]
     Key,
-    /// 密码认证。
+    /// 密码认证
     Password,
 }
 
-/// 主机连接状态。
+/// 主机连接状态
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum ServerState {
-    /// 未连接 / 未测试过。
+    /// 未连接 / 未测试过
     #[default]
     Disconnected,
-    /// 连接中。
+    /// 连接中
     Connecting,
-    /// 连接成功。
+    /// 连接成功
     Connected,
-    /// 连接失败。
+    /// 连接失败
     Failed,
 }
 
-	/// 连接健康度细粒度信息（可选，向后兼容）。
-	/// 与 ServerState（粗状态）正交：state 仍表示 Connected/Disconnected/Failed 等，
-	/// health 提供最近成功时间、连续失败计数、最近失败原因等，用于前端展示和抑制策略。
+	/// 连接健康度细粒度信息(可选,向后兼容)
+	/// 与 ServerState(粗状态)正交:state 仍表示 Connected/Disconnected/Failed 等,
+	/// health 提供最近成功时间,连续失败计数,最近失败原因等,用于前端展示和抑制策略
 	#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 	#[serde(rename_all = "camelCase")]
 	#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 	pub struct ConnectionHealth {
-	    /// 最近一次成功连接/探测的时间（ISO8601 或毫秒时间戳字符串）。
+	    /// 最近一次成功连接/探测的时间(ISO8601 或毫秒时间戳字符串)
 	    #[serde(default, skip_serializing_if = "Option::is_none")]
 	    pub last_success_at: Option<String>,
-	    /// 连续失败次数（成功后归零）。
+	    /// 连续失败次数(成功后归零)
 	    #[serde(default)]
 	    pub consecutive_failures: u32,
-	    /// 最近一次失败的原因（简短人话）。
+	    /// 最近一次失败的原因(简短人话)
 	    #[serde(default, skip_serializing_if = "Option::is_none")]
 	    pub last_failure_reason: Option<String>,
-	    /// 最近一次失败的时间。
+	    /// 最近一次失败的时间
 	    #[serde(default, skip_serializing_if = "Option::is_none")]
 	    pub last_failure_at: Option<String>,
 	}
 
-/// test_connection 返回的探测报告。
+/// test_connection 返回的探测报告
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -130,29 +130,29 @@ pub struct ProbeReport {
     pub error: Option<String>,
     pub latency_ms: u64,
     /// 首次连接遇到未记录的 host key:连接已被阻断,前端应展示指纹让用户确认,
-    /// 确认后调 confirm_host_key 写入 known_hosts 再重试。非 None 不代表认证失败。
+    /// 确认后调 confirm_host_key 写入 known_hosts 再重试非 None 不代表认证失败
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_key_prompt: Option<HostKeyPrompt>,
-    /// 该主机已有 known_hosts 记录但本次 key 不一致(疑似中间人)。前端必须按危险
-    /// 提示阻断,不得提供"一键信任",需用户人工核实。
+    /// 该主机已有 known_hosts 记录但本次 key 不一致(疑似中间人)前端必须按危险
+    /// 提示阻断,不得提供"一键信任",需用户人工核实
     #[serde(default)]
     pub host_key_mismatch: bool,
 }
 
-/// 待用户确认的远端 host key 指纹。host key 校验走 TOFU:首次连接把指纹摆给
-/// 用户,确认后才写入 known_hosts。绝不在未校验的通道上写 authorized_keys 或
-/// 缓存连接,避免首次连接被中间人窃取凭据。
+/// 待用户确认的远端 host key 指纹host key 校验走 TOFU:首次连接把指纹摆给
+/// 用户,确认后才写入 known_hosts绝不在未校验的通道上写 authorized_keys 或
+/// 缓存连接,避免首次连接被中间人窃取凭据
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct HostKeyPrompt {
     pub host: String,
     pub port: u16,
-    /// key 算法名,如 ssh-ed25519 / rsa-sha2-512。
+    /// key 算法名,如 ssh-ed25519 / rsa-sha2-512
     pub key_kind: String,
-    /// base64 编码的原始公钥(写 known_hosts 用,前端原样回传 confirm_host_key)。
+    /// base64 编码的原始公钥(写 known_hosts 用,前端原样回传 confirm_host_key)
     pub key_b64: String,
-    /// 供用户核对的指纹,OpenSSH 风格 SHA256:<base64-no-pad>。
+    /// 供用户核对的指纹,OpenSSH 风格 SHA256:<base64-no-pad>
     pub fingerprint: String,
 }
 
@@ -166,11 +166,11 @@ fn default_port() -> u16 {
 
 const KEYRING_SERVICE: &str = "napcatqq-desktop";
 
-/// 系统凭据库操作。测试时可 mock。
+/// 系统凭据库操作测试时可 mock
 ///
 /// 两类凭据分开存:SSH 登录密码(account ssh:<id>)与 sudo 提权密码
-/// (account sudo:<id>)。多数云主机两者相同,但密钥登录的机器只有后者,
-/// 分开存才能各自独立增删。
+/// (account sudo:<id>)多数云主机两者相同,但密钥登录的机器只有后者,
+/// 分开存才能各自独立增删
 pub trait ServerCredentialStore: Send + Sync {
     fn get_password(&self, server_id: &str) -> Option<String>;
     fn set_password(&self, server_id: &str, password: &str) -> Result<(), String>;
@@ -181,11 +181,11 @@ pub trait ServerCredentialStore: Send + Sync {
     fn delete_sudo_password(&self, server_id: &str) -> Result<(), String>;
 }
 
-/// 基于 keyring crate 的生产实装（Windows wincred / macOS Keychain / Linux secret-service）。
+/// 基于 keyring crate 的生产实装(Windows wincred / macOS Keychain / Linux secret-service)
 pub struct KeyringCredentialStore;
 
 /// keyring 读/写/删的公共逻辑,account 由 "<prefix>:<id>" 拼成,避免 ssh / sudo
-/// 两套各写一遍(DRY)。
+/// 两套各写一遍(DRY)
 fn keyring_get(prefix: &str, server_id: &str) -> Option<String> {
     let account = format!("{prefix}:{server_id}");
     keyring::Entry::new(KEYRING_SERVICE, &account)
@@ -238,7 +238,7 @@ impl ServerCredentialStore for KeyringCredentialStore {
     }
 }
 
-/// 内存 mock（测试用）。ssh / sudo 用同一张表,key 带前缀区分。
+/// 内存 mock(测试用)ssh / sudo 用同一张表,key 带前缀区分
 #[derive(Default)]
 pub struct InMemoryCredentialStore {
     store: std::sync::Mutex<HashMap<String, String>>,
@@ -281,10 +281,10 @@ impl ServerCredentialStore for InMemoryCredentialStore {
 }
 
 // ============================================================
-// ServerProfileRepo：JSON 持久化
+// ServerProfileRepo:JSON 持久化
 // ============================================================
 
-/// servers.json 路径固定在 <data_root>/config/servers.json。
+/// servers.json 路径固定在 <data_root>/config/servers.json
 struct ServerProfileRepo {
     path: PathBuf,
 }
@@ -324,24 +324,24 @@ impl ServerProfileRepo {
 pub struct ServerManager {
     repo: ServerProfileRepo,
     sync: CredentialSyncLayer,
-    /// 生成的免密私钥落盘目录：<data_root>/ssh_keys/。
+    /// 生成的免密私钥落盘目录:<data_root>/ssh_keys/
     key_dir: PathBuf,
-    /// TOFU host key 数据库路径:<data_root>/secrets/known_hosts。生产 SSH 连接
-    /// 用 AcceptOnFirstUse 策略校验 host key,未知主机要用户确认后写到这里。
+    /// TOFU host key 数据库路径:<data_root>/secrets/known_hosts生产 SSH 连接
+    /// 用 AcceptOnFirstUse 策略校验 host key,未知主机要用户确认后写到这里
     known_hosts_path: PathBuf,
-    /// 活跃 SSH 连接缓存：server_id → Arc<dyn Host>。
+    /// 活跃 SSH 连接缓存:server_id → Arc<dyn Host>
     hosts: Arc<RwLock<HashMap<String, Arc<dyn Host>>>>,
-    /// 每服务器的连接单飞锁：server_id → Mutex。
+    /// 每服务器的连接单飞锁:server_id → Mutex
     ///
-    /// 组件页进来时会并发触发 5+ 个 detect，每个都可能在冷缓存下尝试自动连接
-    /// 同一台远端。没有这把锁的话就是 5 个 SSH 握手同时砸过去，服务端
-    /// MaxStartups 很容易拒掉一部分（表现为时好时坏的探测失败）。ensure_connected
-    /// 抢这把锁后会二次检查缓存，等锁期间别人连上了就直接复用，真连接只发生一次。
+    /// 组件页进来时会并发触发 5+ 个 detect,每个都可能在冷缓存下尝试自动连接
+    /// 同一台远端没有这把锁的话就是 5 个 SSH 握手同时砸过去,服务端
+    /// MaxStartups 很容易拒掉一部分(表现为时好时坏的探测失败)ensure_connected
+    /// 抢这把锁后会二次检查缓存,等锁期间别人连上了就直接复用,真连接只发生一次
     connect_locks: Arc<RwLock<HashMap<String, Arc<Mutex<()>>>>>,
-    /// 自动连接失败后冷却，避免 detect 轮询刷 SSH 失败日志。
+    /// 自动连接失败后冷却,避免 detect 轮询刷 SSH 失败日志
     auto_connect_cooldown_until: Arc<RwLock<HashMap<String, std::time::Instant>>>,
-    /// 可选的事件总线，用于发布 HostConnectionLost / HostConnectionRecovered。
-    /// 由 Tauri 侧 wiring 时通过 set_event_bus 注入；未注入时不发事件（向后兼容）。
+    /// 可选的事件总线,用于发布 HostConnectionLost / HostConnectionRecovered
+    /// 由 Tauri 侧 wiring 时通过 set_event_bus 注入;未注入时不发事件(向后兼容)
     event_sink: Option<Arc<dyn EventBus>>,
 }
 
@@ -362,10 +362,10 @@ impl ServerManager {
         }
     }
 
-    /// 生产 SSH 连接的 host key 策略:TOFU(AcceptOnFirstUse)。首次未知主机返回
+    /// 生产 SSH 连接的 host key 策略:TOFU(AcceptOnFirstUse)首次未知主机返回
     /// HostKeyUnknown(连接被阻断,等用户确认指纹后写 known_hosts);已记录但 key
-    /// 变了返回 HostKeyMismatch 直接阻断。永不使用 Insecure——那会让首次连接的
-    /// 中间人窃取登录密码、并把攻击者公钥写进远端 authorized_keys。
+    /// 变了返回 HostKeyMismatch 直接阻断永不使用 Insecure——那会让首次连接的
+    /// 中间人窃取登录密码,并把攻击者公钥写进远端 authorized_keys
     fn host_key_policy(&self) -> HostKeyPolicy {
         HostKeyPolicy::AcceptOnFirstUse {
             known_hosts_path: self.known_hosts_path.clone(),
@@ -419,7 +419,7 @@ impl ServerManager {
         let changed_slot = if let Some(pw) = &password {
             if profile.remember_credential {
                 self.sync.credentials().set_password(&profile.id, pw)?;
-                // 关键修复：同时更新 sudo 槽，确保提权操作可用
+                // 关键修复:同时更新 sudo 槽,确保提权操作可用
                 let _ = self.sync.credentials().set_sudo_password(&profile.id, pw);
                 Some(PasswordSlot::Ssh)
             } else {
@@ -434,24 +434,24 @@ impl ServerManager {
         all[pos] = profile.clone();
         self.repo.save(&all).await?;
 
-        // 关键改进：SSH 密码变了必须清缓存，sudo 密码变了可以热更新
+        // 关键改进:SSH 密码变了必须清缓存,sudo 密码变了可以热更新
         if let Some(slot) = changed_slot {
             if self.sync.on_password_changed(&profile.id, slot) {
                 self.hosts.write().await.remove(&profile.id);
                 self.update_state(&profile.id, ServerState::Disconnected).await;
 
-                // 立即尝试静默重连（利用新凭据）
+                // 立即尝试静默重连(利用新凭据)
                 if profile.remember_credential {
                     let _ = self.ensure_connected(&profile.id).await;
                 }
             } else {
-                // sudo 密码变更：热更新缓存连接
+                // sudo 密码变更:热更新缓存连接
                 if let Some(cached) = self.hosts.read().await.get(&profile.id) {
                     self.sync.sync_elevation_to_host(&profile.id, cached.as_ref()).await;
                 }
             }
         } else {
-            // 连接信息可能已改（host/port/认证），丢弃缓存的旧连接
+            // 连接信息可能已改(host/port/认证),丢弃缓存的旧连接
             self.hosts.write().await.remove(&profile.id);
             self.update_state(&profile.id, ServerState::Disconnected).await;
         }
@@ -459,14 +459,14 @@ impl ServerManager {
         Ok(profile)
     }
 
-    /// 密码登录 → 自动配置免密。
+    /// 密码登录 → 自动配置免密
     ///
-    /// 流程：用密码连一次远端 → 本地生成 ed25519 密钥对 → 把公钥追加进远端
-    /// ~/.ssh/authorized_keys（去重，已存在则不重复加）→ 私钥落盘到
-    /// <data_root>/ssh_keys/<id> → 档案切到 Key 认证、指向该私钥。之后连接
-    /// 走密钥免密，不再需要密码。
+    /// 流程:用密码连一次远端 → 本地生成 ed25519 密钥对 → 把公钥追加进远端
+    /// ~/.ssh/authorized_keys(去重,已存在则不重复加)→ 私钥落盘到
+    /// <data_root>/ssh_keys/<id> → 档案切到 Key 认证,指向该私钥之后连接
+    /// 走密钥免密,不再需要密码
     ///
-    /// 失败保持档案原样（仍是密码认证），返回人话错误。
+    /// 失败保持档案原样(仍是密码认证),返回人话错误
     pub async fn setup_key_auth(&self, id: &str, password: &str) -> Result<ServerProfile, String> {
         let all = self.repo.load().await;
         let profile = all
@@ -475,10 +475,10 @@ impl ServerManager {
             .ok_or_else(|| format!("server not found: {id}"))?
             .clone();
 
-        // 1. 用密码连一次（不复用缓存，确保是密码通道）。
+        // 1. 用密码连一次(不复用缓存,确保是密码通道)
         //    host key 走 TOFU:首次未知主机会被阻断,提示用户先在该服务器点「测试
         //    连接」确认指纹(写进 known_hosts)后再配免密——绝不在未校验通道上把公钥
-        //    写进远端 authorized_keys,否则首次连接中间人能窃取密码并植入自己的 key。
+        //    写进远端 authorized_keys,否则首次连接中间人能窃取密码并植入自己的 key
         let credentials = SshCredentials::password(&profile.username, password);
         let config = ConnectionConfig::new(
             &profile.host,
@@ -500,11 +500,11 @@ impl ServerManager {
                 _ => format!("密码连接失败: {e}（请检查用户名 / 密码 / 网络）"),
             })?;
 
-        // 2. 本地生成密钥对。
+        // 2. 本地生成密钥对
         let comment = format!("napcatqq-desktop@{}", profile.id);
         let pair = crate::ssh_keygen::generate_ed25519(&comment)?;
 
-        // 3. 公钥追加进远端 authorized_keys。公钥从 stdin 传入,避免把 key 文本拼进 shell。
+        // 3. 公钥追加进远端 authorized_keys公钥从 stdin 传入,避免把 key 文本拼进 shell
         let pub_line = pair.public_line.trim();
         let script = "set -eu\n\
             umask 077\n\
@@ -532,7 +532,7 @@ impl ServerManager {
             ));
         }
 
-        // 4. 私钥落盘到 <data_root>/ssh_keys/<id>，权限 600（best-effort）。
+        // 4. 私钥落盘到 <data_root>/ssh_keys/<id>,权限 600(best-effort)
         tokio::fs::create_dir_all(&self.key_dir)
             .await
             .map_err(|e| format!("创建密钥目录失败: {e}"))?;
@@ -542,16 +542,16 @@ impl ServerManager {
             .map_err(|e| format!("写入私钥失败: {e}"))?;
         set_key_file_permissions(&key_path).await;
 
-        // 5. 档案切到 Key 认证；SSH 登录不再需要密码,清掉 ssh 凭据避免残留。
+        // 5. 档案切到 Key 认证;SSH 登录不再需要密码,清掉 ssh 凭据避免残留
         //    但把这个登录密码挪存到 sudo 槽:绝大多数云主机 sudo 密码就是登录密码,
-        //    切成密钥登录后若不留着,远端装 docker 等提权操作就只能再弹框问一次。
-        //    这正是"密码登录 -> 自动配密钥后仍能找到密码"的来源。
+        //    切成密钥登录后若不留着,远端装 docker 等提权操作就只能再弹框问一次
+        //    这正是"密码登录 -> 自动配密钥后仍能找到密码"的来源
         let key_path_str = key_path.to_string_lossy().into_owned();
         let mut updated = profile.clone();
         updated.auth_method = AuthMethod::Key;
         updated.private_key_path = Some(key_path_str);
 
-        // 关键改进：使用 sync 层的迁移方法（显式语义）
+        // 关键改进:使用 sync 层的迁移方法(显式语义)
         self.sync.migrate_ssh_to_sudo(&profile.id)?;
         let _ = self.sync.credentials().delete_password(&profile.id);
 
@@ -561,9 +561,9 @@ impl ServerManager {
             self.repo.save(&persisted).await?;
         }
 
-        // 6. 缓存这次连接(密码通道已建立,可直接复用),状态置已连接。
+        // 6. 缓存这次连接(密码通道已建立,可直接复用),状态置已连接
         //    顺手把这次的登录密码注入 host 当提权密码——刚挪存到 sudo 槽的就是它,
-        //    省得密钥登录后第一次 elevated 操作还得回 keyring 取。
+        //    省得密钥登录后第一次 elevated 操作还得回 keyring 取
         let host: Arc<dyn Host> = Arc::new(host);
         host.set_elevation_password(Some(password.to_string())).await;
         self.hosts
@@ -590,14 +590,14 @@ impl ServerManager {
         Ok(())
     }
 
-    /// 档案删除时清 SSH 缓存、单飞锁与自动连冷却表，避免 Map 只增不减。
+    /// 档案删除时清 SSH 缓存,单飞锁与自动连冷却表,避免 Map 只增不减
     async fn purge_server_runtime_maps(&self, id: &str) {
         self.hosts.write().await.remove(id);
         self.connect_locks.write().await.remove(id);
         self.auto_connect_cooldown_until.write().await.remove(id);
     }
 
-    /// 冷却条目到期后仍留在 HashMap 里会造成慢泄漏；读路径顺手删掉已过期的键。
+    /// 冷却条目到期后仍留在 HashMap 里会造成慢泄漏;读路径顺手删掉已过期的键
     async fn prune_expired_auto_connect_cooldowns(&self) {
         let now = std::time::Instant::now();
         self.auto_connect_cooldown_until
@@ -606,12 +606,12 @@ impl ServerManager {
             .retain(|_, until| *until > now);
     }
 
-    /// 为长操作（Docker 安装、组件安装等）创建隔离的 SSH 连接。
+    /// 为长操作(Docker 安装,组件安装等)创建隔离的 SSH 连接
     ///
-    /// 银弹设计：长操作可能污染 SSH 会话环境（sudo 缓存、环境变量、shell 状态），
-    /// 用独立连接隔离，操作完成后连接自动丢弃，不影响缓存池。
+    /// 银弹设计:长操作可能污染 SSH 会话环境(sudo 缓存,环境变量,shell 状态),
+    /// 用独立连接隔离,操作完成后连接自动丢弃,不影响缓存池
     ///
-    /// 短操作（探测、列文件）仍使用 ensure_connected 的缓存连接，保持性能。
+    /// 短操作(探测,列文件)仍使用 ensure_connected 的缓存连接,保持性能
     pub async fn with_isolated_connection<F, T>(&self, id: &str, f: F) -> Result<T, String>
     where
         F: FnOnce(Arc<dyn Host>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, String>> + Send>>,
@@ -644,7 +644,7 @@ impl ServerManager {
 
         let host: Arc<dyn Host> = Arc::new(host);
 
-        // 关键改进：立即同步最新密码（解决缓存过期问题）
+        // 关键改进:立即同步最新密码(解决缓存过期问题)
         self.sync.sync_elevation_to_host(id, host.as_ref()).await;
 
         let result = f(host.clone()).await;
@@ -658,29 +658,29 @@ impl ServerManager {
         result
     }
 
-    /// 取某服务器可用于 sudo 提权的密码,给 docker 安装等提权操作用。
+    /// 取某服务器可用于 sudo 提权的密码,给 docker 安装等提权操作用
     /// 优先专门的 sudo 槽(密钥登录机器在这);没有就退回 SSH 登录密码(密码
-    /// 登录机器 sudo 密码通常与登录密码相同)。两个都没有返回 None。
+    /// 登录机器 sudo 密码通常与登录密码相同)两个都没有返回 None
     pub fn sudo_password(&self, id: &str) -> Option<String> {
         self.sync.elevation_password(id)
     }
 
-    /// 记住某服务器的 sudo 密码(用户在弹框勾了"记住密码"时调用)。下次该服务器
-    /// 连接(或重连)时 inject_elevation_password 会把它注入 host。
+    /// 记住某服务器的 sudo 密码(用户在弹框勾了"记住密码"时调用)下次该服务器
+    /// 连接(或重连)时 inject_elevation_password 会把它注入 host
     pub fn remember_sudo_password(&self, id: &str, password: &str) -> Result<(), String> {
         self.sync.remember_sudo(id, password)
     }
 
-    /// 把 keyring 里这台服务器的提权密码注入一条已建立的 host 连接。没有任何缓存
-    /// 密码时注入 None(host 退回 sudo -n,免密/root 仍能跑)。test_connection
-    /// 缓存连接后调用,让这条 host 后续所有 elevated 操作自动带上密码。
+    /// 把 keyring 里这台服务器的提权密码注入一条已建立的 host 连接没有任何缓存
+    /// 密码时注入 None(host 退回 sudo -n,免密/root 仍能跑)test_connection
+    /// 缓存连接后调用,让这条 host 后续所有 elevated 操作自动带上密码
     async fn inject_elevation_password(&self, id: &str, host: &dyn Host) {
         self.sync.sync_elevation_to_host(id, host).await;
     }
 
-    /// 测试 SSH 连接：握手 + 认证 + 执行 uname -a 拿 OS 信息。
+    /// 测试 SSH 连接:握手 + 认证 + 执行 uname -a 拿 OS 信息
     ///
-    /// log_probe：为 false 时不写「正在测试 SSH」类 INFO（ensure_connected 自动重试用）。
+    /// log_probe:为 false 时不写「正在测试 SSH」类 INFO(ensure_connected 自动重试用)
     pub async fn test_connection(
         &self,
         id: &str,
@@ -751,7 +751,7 @@ impl ServerManager {
             }
         };
 
-        // 拿 OS 信息。
+        // 拿 OS 信息
         let os_info = match host
             .run_to_string(ncd_host::HostCommand::new("uname").arg("-a"))
             .await
@@ -763,10 +763,10 @@ impl ServerManager {
         let latency_ms = start.elapsed().as_millis() as u64;
 
         // 缓存连接,并把 keyring 里的提权密码注入这条 host:之后任何 elevated 操作
-        // (装 unzip、写 /opt/QQ、apt 装包、装 docker)都自动用上,不必每条命令各传。
+        // (装 unzip,写 /opt/QQ,apt 装包,装 docker)都自动用上,不必每条命令各传
         let host: Arc<dyn Host> = Arc::new(host);
 
-        // 关键改进：自动同步 ssh 密码到 sudo 槽（setup_key_auth 之前的平滑迁移）
+        // 关键改进:自动同步 ssh 密码到 sudo 槽(setup_key_auth 之前的平滑迁移)
         if let Err(e) = self.sync.migrate_ssh_to_sudo(id) {
             tracing::warn!(
                 target: "ncd_runtime::server_manager",
@@ -812,11 +812,11 @@ impl ServerManager {
     }
 
     /// 用户在指纹确认弹窗点"信任"后调用:把这条 host key 写进 known_hosts,之后该
-    /// 主机的连接(test / 配免密 / 自动重连)即可通过 TOFU 校验。
+    /// 主机的连接(test / 配免密 / 自动重连)即可通过 TOFU 校验
     ///
-    /// 安全约束:只在该主机当前"未知"时才追加。若 known_hosts 里已有同主机但 key
+    /// 安全约束:只在该主机当前"未知"时才追加若 known_hosts 里已有同主机但 key
     /// 不同(mismatch),拒绝写入并报错——这种情况是疑似中间人或服务端换了 key,必须
-    /// 用户人工核实后手动清理 known_hosts,不能在产品里一键覆盖。
+    /// 用户人工核实后手动清理 known_hosts,不能在产品里一键覆盖
     pub async fn confirm_host_key(
         &self,
         id: &str,
@@ -848,15 +848,15 @@ impl ServerManager {
         }
     }
 
-    /// 获取已缓存的 Host 连接（test_connection 成功后可用）。
+    /// 获取已缓存的 Host 连接(test_connection 成功后可用)
     pub async fn get_host(&self, id: &str) -> Option<Arc<dyn Host>> {
         self.hosts.read().await.get(id).cloned()
     }
 
-    /// 丢弃缓存中的 SSH 连接（会话已断或不可信时调用）。
-    /// 下次 ensure_connected 会重新握手，避免继续复用死连接。
+    /// 丢弃缓存中的 SSH 连接(会话已断或不可信时调用)
+    /// 下次 ensure_connected 会重新握手,避免继续复用死连接
     ///
-    /// P0-10: 同时更新 health（递增失败计数 + 记原因），并发布 HostConnectionLost 事件。
+    /// P0-10: 同时更新 health(递增失败计数 + 记原因),并发布 HostConnectionLost 事件
     pub async fn disconnect_cached_host(&self, id: &str) {
         if self.hosts.write().await.remove(id).is_some() {
             self.update_state(id, ServerState::Disconnected).await;
@@ -880,14 +880,14 @@ impl ServerManager {
         }
     }
 
-    /// 确保某服务器已连接，返回缓存的 Host。
+    /// 确保某服务器已连接,返回缓存的 Host
     ///
-    /// 单飞语义：先查缓存命中直接返回；未命中时抢该服务器的连接锁，再查一次
-    /// 缓存（等锁期间别的并发请求可能已经连上），仍没有才用 keyring 缓存凭据
-    /// 真连一次。这样组件页并发触发的 N 个 detect 只会产生一次实际 SSH 握手，
-    /// 其余复用同一条连接，避免把远端 SSH 的 MaxStartups 打爆。
+    /// 单飞语义:先查缓存命中直接返回;未命中时抢该服务器的连接锁,再查一次
+    /// 缓存(等锁期间别的并发请求可能已经连上),仍没有才用 keyring 缓存凭据
+    /// 真连一次这样组件页并发触发的 N 个 detect 只会产生一次实际 SSH 握手,
+    /// 其余复用同一条连接,避免把远端 SSH 的 MaxStartups 打爆
     ///
-    /// 失败返回人话错误，调用方把它显示在对应 host 那行。
+    /// 失败返回人话错误,调用方把它显示在对应 host 那行
     pub async fn ensure_connected(&self, id: &str) -> Result<Arc<dyn Host>, String> {
         if let Some(host) = self.get_host(id).await {
             return Ok(host);
@@ -913,7 +913,7 @@ impl ServerManager {
         let lock = self.connect_lock_for(id).await;
         let _guard = lock.lock().await;
 
-        // 二次检查：等锁期间可能已有并发请求把连接建好并缓存。
+        // 二次检查:等锁期间可能已有并发请求把连接建好并缓存
         if let Some(host) = self.get_host(id).await {
             return Ok(host);
         }
@@ -957,7 +957,7 @@ impl ServerManager {
         }
     }
 
-    /// 取（或惰性创建）某服务器的连接单飞锁。
+    /// 取(或惰性创建)某服务器的连接单飞锁
     async fn connect_lock_for(&self, id: &str) -> Arc<Mutex<()>> {
         if let Some(lock) = self.connect_locks.read().await.get(id) {
             return Arc::clone(lock);
@@ -967,53 +967,53 @@ impl ServerManager {
     }
 
     // ============================================================
-    // P0-10: 自愈闭环新增 API（get_live_host / refresh_host / mark_unhealthy）
+    // P0-10: 自愈闭环新增 API(get_live_host / refresh_host / mark_unhealthy)
     // ============================================================
 
-    /// 取"当前应存活"的 host。
+    /// 取"当前应存活"的 host
     ///
-    /// - 缓存未命中 → 走 ensure_connected（含单飞 + 自动连 + 冷却）。
-    /// - 缓存命中 → 先做廉价活性探测（is_healthy），成功则返回；失败则 mark_unhealthy + 驱逐 + 走 ensure_connected 重连。
-    /// - 全程受单飞保护（复用/扩展 connect_locks）。
+    /// - 缓存未命中 → 走 ensure_connected(含单飞 + 自动连 + 冷却)
+    /// - 缓存命中 → 先做廉价活性探测(is_healthy),成功则返回;失败则 mark_unhealthy + 驱逐 + 走 ensure_connected 重连
+    /// - 全程受单飞保护(复用/扩展 connect_locks)
     ///
-    /// 语义：调用方可信返回的连接在本方法返回时刻是可达的（探测通过）。
-    /// 失败时返回人话错误（与 ensure_connected 一致）。
+    /// 语义:调用方可信返回的连接在本方法返回时刻是可达的(探测通过)
+    /// 失败时返回人话错误(与 ensure_connected 一致)
     pub async fn get_live_host(&self, id: &str) -> Result<Arc<dyn Host>, String> {
         // 1. 先查缓存
         if let Some(_host) = self.get_host(id).await {
-            // 2. 命中缓存 → 做廉价活性探测（带单飞）
+            // 2. 命中缓存 → 做廉价活性探测(带单飞)
             let lock = self.connect_lock_for(id).await;
             let _guard = lock.lock().await;
 
-            // 二次检查：等锁期间可能已被别人刷新/驱逐
+            // 二次检查:等锁期间可能已被别人刷新/驱逐
             if let Some(host2) = self.get_host(id).await {
-                // 3. 执行 is_healthy（带短超时保护已在 RemoteLinuxHost 内实现）
+                // 3. 执行 is_healthy(带短超时保护已在 RemoteLinuxHost 内实现)
                 let start = std::time::Instant::now();
                 let healthy = host2.is_healthy().await;
                 let latency = start.elapsed().as_millis() as u64;
 
                 if healthy {
-                    // 探测成功 → 更新 health 成功时间 + 归零失败计数 + 发布恢复事件（若刚恢复）
+                    // 探测成功 → 更新 health 成功时间 + 归零失败计数 + 发布恢复事件(若刚恢复)
                     self.update_health_success(id, latency).await;
                     return Ok(host2);
                 } else {
-                    // 探测失败 → 标记不健康、驱逐、发 lost 事件，然后走 ensure 重连
+                    // 探测失败 → 标记不健康,驱逐,发 lost 事件,然后走 ensure 重连
                     self.mark_unhealthy_internal(id, Some("活性探测失败".to_string())).await;
                     // 继续走到 ensure_connected 分支
                 }
             }
         }
 
-        // 缓存未命中或探测失败后已驱逐 → 走标准 ensure 路径（含单飞 + 冷却）
+        // 缓存未命中或探测失败后已驱逐 → 走标准 ensure 路径(含单飞 + 冷却)
         self.ensure_connected(id).await
     }
 
-    /// 强制刷新：无条件驱逐该 server 的缓存连接（若有），然后 ensure_connected。
-    /// 用于 Holder 明确知道当前 host 已死、或用户手动"重新测试连接"后的路径。
+    /// 强制刷新:无条件驱逐该 server 的缓存连接(若有),然后 ensure_connected
+    /// 用于 Holder 明确知道当前 host 已死,或用户手动"重新测试连接"后的路径
     ///
-    /// 刷新成功后会更新 health 并发布 Recovered 事件。
+    /// 刷新成功后会更新 health 并发布 Recovered 事件
     pub async fn refresh_host(&self, id: &str) -> Result<Arc<dyn Host>, String> {
-        // 1. 驱逐旧缓存（若有）
+        // 1. 驱逐旧缓存(若有)
         if self.hosts.write().await.remove(id).is_some() {
             info!(
                 target: "ncd_runtime::server_manager",
@@ -1025,29 +1025,29 @@ impl ServerManager {
         // 2. 走 ensure 建立新连接
         let host = self.ensure_connected(id).await?;
 
-        // 3. 成功后补一个轻量健康标记（ensure 内部已更新 state，这里只补 health 成功时间）
+        // 3. 成功后补一个轻量健康标记(ensure 内部已更新 state,这里只补 health 成功时间)
         let now = chrono::Utc::now().to_rfc3339();
         self.update_health_fields(id, |h| {
             h.last_success_at = Some(now.clone());
             h.consecutive_failures = 0;
-            // last_failure_* 保留上次失败信息，供前端诊断
+            // last_failure_* 保留上次失败信息,供前端诊断
         }).await;
 
-        // 4. 发布恢复事件（刷新成功即视为一次恢复）
+        // 4. 发布恢复事件(刷新成功即视为一次恢复)
         self.publish_host_recovered(id, 0);
 
         Ok(host)
     }
 
-    /// 显式标记该 server 的缓存连接不可用。立即从 hosts 表移除，并把状态置 Disconnected。
-    /// Holder 在观测到可识别的 disconnect 错误后可调用，加速下一次访问触发重连。幂等。
+    /// 显式标记该 server 的缓存连接不可用立即从 hosts 表移除,并把状态置 Disconnected
+    /// Holder 在观测到可识别的 disconnect 错误后可调用,加速下一次访问触发重连幂等
     ///
-    /// 内部会更新 health（递增连续失败计数 + 记失败原因/时间），并发布 HostConnectionLost 事件。
+    /// 内部会更新 health(递增连续失败计数 + 记失败原因/时间),并发布 HostConnectionLost 事件
     pub async fn mark_unhealthy(&self, id: &str) {
         self.mark_unhealthy_internal(id, None).await;
     }
 
-    /// mark_unhealthy 的内部实现，reason 为 None 时使用默认文案。
+    /// mark_unhealthy 的内部实现,reason 为 None 时使用默认文案
     async fn mark_unhealthy_internal(&self, id: &str, reason: Option<String>) {
         // 1. 驱逐缓存
         let removed = self.hosts.write().await.remove(id).is_some();
@@ -1055,7 +1055,7 @@ impl ServerManager {
         // 2. 更新 ServerProfile.state
         self.update_state(id, ServerState::Disconnected).await;
 
-        // 3. 更新 health（递增失败计数 + 记原因/时间）
+        // 3. 更新 health(递增失败计数 + 记原因/时间)
         let reason_text = reason.clone().unwrap_or_else(|| "显式标记不健康".to_string());
         let now = chrono::Utc::now().to_rfc3339();
         let mut consecutive = 0u32;
@@ -1067,7 +1067,7 @@ impl ServerManager {
             consecutive = h.consecutive_failures;
         }).await;
 
-        // 4. 发布 lost 事件（仅在确实发生驱逐或状态变更时发，避免重复刷）
+        // 4. 发布 lost 事件(仅在确实发生驱逐或状态变更时发,避免重复刷)
         if removed {
             self.publish_host_lost(id, Some(reason_text), consecutive);
         }
@@ -1081,7 +1081,7 @@ impl ServerManager {
         }
     }
 
-    /// 更新某 server 的 health 成功分支：记 last_success_at + 归零 consecutive_failures。
+    /// 更新某 server 的 health 成功分支:记 last_success_at + 归零 consecutive_failures
     async fn update_health_success(&self, id: &str, _latency_ms: u64) {
         let now = chrono::Utc::now().to_rfc3339();
         self.update_health_fields(id, |h| {
@@ -1090,11 +1090,11 @@ impl ServerManager {
             if h.consecutive_failures > 0 {
                 h.consecutive_failures = 0;
             }
-            // 不清 last_failure_*，留作诊断
+            // 不清 last_failure_*,留作诊断
         }).await;
     }
 
-    /// 通用 health 字段更新器：若 profile 不存在则静默跳过；若 health 为 None 则先初始化。
+    /// 通用 health 字段更新器:若 profile 不存在则静默跳过;若 health 为 None 则先初始化
     async fn update_health_fields<F>(&self, id: &str, mutator: F)
     where
         F: FnOnce(&mut ConnectionHealth),
@@ -1148,13 +1148,13 @@ impl ServerManager {
         }
     }
 
-    /// 注入事件总线（Tauri 侧 wiring 时调用）。注入后 ServerManager 会在关键路径
-    /// 发布 HostConnectionLost / HostConnectionRecovered 事件。
+    /// 注入事件总线(Tauri 侧 wiring 时调用)注入后 ServerManager 会在关键路径
+    /// 发布 HostConnectionLost / HostConnectionRecovered 事件
     pub fn set_event_bus(&mut self, bus: Arc<dyn EventBus>) {
         self.event_sink = Some(bus);
     }
 
-    /// 发布 HostConnectionLost 事件（若已注入 sink）。
+    /// 发布 HostConnectionLost 事件(若已注入 sink)
     fn publish_host_lost(&self, server_id: &str, reason: Option<String>, consecutive: u32) {
         if let Some(sink) = &self.event_sink {
             sink.publish(crate::events::DomainEvent::HostConnectionLost {
@@ -1165,7 +1165,7 @@ impl ServerManager {
         }
     }
 
-    /// 发布 HostConnectionRecovered 事件（若已注入 sink）。
+    /// 发布 HostConnectionRecovered 事件(若已注入 sink)
     fn publish_host_recovered(&self, server_id: &str, latency_ms: u64) {
         if let Some(sink) = &self.event_sink {
             sink.publish(crate::events::DomainEvent::HostConnectionRecovered {
@@ -1176,24 +1176,24 @@ impl ServerManager {
     }
 
     // ============================================================
-    // P1 主动探活：后台低频健康 walker（用户可开关）
+    // P1 主动探活:后台低频健康 walker(用户可开关)
     // ============================================================
 
-    /// 后台健康探活主循环。
+    /// 后台健康探活主循环
     ///
-    /// 每轮读取 settings 的 remote_host_health_probe_enabled 和 remote_host_health_probe_interval_ms。
-    /// - enabled == false 时跳过本轮探测，仅 sleep interval 后继续。
-    /// - 只对落盘状态为 Connected 且当前 hosts 缓存命中的主机执行廉价 is_healthy。
-    /// - 探测失败时调用 mark_unhealthy_internal（会驱逐缓存、更新 state/health、发布 HostConnectionLost）。
+    /// 每轮读取 settings 的 remote_host_health_probe_enabled 和 remote_host_health_probe_interval_ms
+    /// - enabled == false 时跳过本轮探测,仅 sleep interval 后继续
+    /// - 只对落盘状态为 Connected 且当前 hosts 缓存命中的主机执行廉价 is_healthy
+    /// - 探测失败时调用 mark_unhealthy_internal(会驱逐缓存,更新 state/health,发布 HostConnectionLost)
     ///
-    /// 使用 MissedTickBehavior::Skip 避免堆积；支持通过 cancel 取消。
-    /// 由 Tauri 侧根据 AppSettings 条件 spawn / cancel + restart。
+    /// 使用 MissedTickBehavior::Skip 避免堆积;支持通过 cancel 取消
+    /// 由 Tauri 侧根据 AppSettings 条件 spawn / cancel + restart
     pub async fn run_health_probe_loop(
         &self,
         settings: Arc<RwLock<AppSettings>>,
         cancel: CancellationToken,
     ) {
-        // 初始间隔（会被每轮动态读设置覆盖）
+        // 初始间隔(会被每轮动态读设置覆盖)
         let mut ticker = interval(std::time::Duration::from_millis(30_000));
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
@@ -1207,7 +1207,7 @@ impl ServerManager {
                     break;
                 }
                 _ = ticker.tick() => {
-                    // 每轮动态读取设置，决定是否工作 + 当前间隔
+                    // 每轮动态读取设置,决定是否工作 + 当前间隔
                     let (enabled, interval_ms) = {
                         let cfg = settings.read().await;
                         (
@@ -1221,17 +1221,17 @@ impl ServerManager {
                             target: "ncd_runtime::server_manager",
                             "health probe disabled by settings; skip this tick"
                         );
-                        // 仍需尊重当前 interval（下轮再判断），避免 CPU 空转
+                        // 仍需尊重当前 interval(下轮再判断),避免 CPU 空转
                         ticker = interval(std::time::Duration::from_millis(interval_ms));
                         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
                         continue;
                     }
 
-                    // 应用当前 interval（若设置变化）
+                    // 应用当前 interval(若设置变化)
                     ticker = interval(std::time::Duration::from_millis(interval_ms));
                     ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
-                    // 枚举所有 profiles，筛选 state == Connected
+                    // 枚举所有 profiles,筛选 state == Connected
                     let profiles = self.repo.load().await;
                     let connected_ids: Vec<String> = profiles
                         .into_iter()
@@ -1243,12 +1243,12 @@ impl ServerManager {
                         continue;
                     }
 
-                    // 对每个 connected id：若缓存命中则做廉价 is_healthy；失败则 mark_unhealthy
+                    // 对每个 connected id:若缓存命中则做廉价 is_healthy;失败则 mark_unhealthy
                     for id in connected_ids {
                         // 快速检查缓存
                         let host_opt = self.hosts.read().await.get(&id).cloned();
                         let Some(host) = host_opt else {
-                            // 缓存已无，说明已断开或被其他路径驱逐，跳过
+                            // 缓存已无,说明已断开或被其他路径驱逐,跳过
                             continue;
                         };
 
@@ -1257,7 +1257,7 @@ impl ServerManager {
                         let _latency = start.elapsed().as_millis() as u64;
 
                         if !healthy {
-                            // 失败：走内部路径（会驱逐、更新 state/health、发 lost 事件）
+                            // 失败:走内部路径(会驱逐,更新 state/health,发 lost 事件)
                             self.mark_unhealthy_internal(&id, Some("后台探活失败".to_string()))
                                 .await;
                         }
@@ -1268,8 +1268,8 @@ impl ServerManager {
     }
 }
 
-/// 给落盘的私钥文件设权限。Unix 设 600（仅属主可读写，否则 ssh 会拒用）；
-/// Windows 上文件权限模型不同，依赖 NTFS ACL 继承用户目录权限，这里 no-op。
+/// 给落盘的私钥文件设权限Unix 设 600(仅属主可读写,否则 ssh 会拒用);
+/// Windows 上文件权限模型不同,依赖 NTFS ACL 继承用户目录权限,这里 no-op
 async fn set_key_file_permissions(path: &Path) {
     #[cfg(unix)]
     {
@@ -1293,9 +1293,9 @@ fn short_uuid() -> String {
     hex::encode(bytes)
 }
 
-/// 把连接错误分类成 (人话错误, 待确认 host key, 是否 mismatch)。
+/// 把连接错误分类成 (人话错误, 待确认 host key, 是否 mismatch)
 /// host key 未知 / 不一致不是认证失败,要让前端走指纹确认 / 中间人告警分支,
-/// 而不是当成普通"连接失败"红条。
+/// 而不是当成普通"连接失败"红条
 fn classify_connect_error(err: &HostError) -> (String, Option<HostKeyPrompt>, bool) {
     match err {
         HostError::HostKeyUnknown {
@@ -1334,8 +1334,8 @@ fn classify_connect_error(err: &HostError) -> (String, Option<HostKeyPrompt>, bo
     }
 }
 
-/// 算 OpenSSH 风格公钥指纹 SHA256:<base64-no-pad(sha256(raw_key))>。
-/// 入参是 known_hosts 那段 base64 公钥;解码失败退回带原串的占位(仅展示用,不致命)。
+/// 算 OpenSSH 风格公钥指纹 SHA256:<base64-no-pad(sha256(raw_key))>
+/// 入参是 known_hosts 那段 base64 公钥;解码失败退回带原串的占位(仅展示用,不致命)
 fn ssh_key_fingerprint(key_b64: &str) -> String {
     use base64::Engine;
     use sha2::{Digest, Sha256};
@@ -1541,7 +1541,7 @@ mod tests {
         let json = serde_json::to_string(&report).unwrap();
         assert!(json.contains("latencyMs"));
         assert!(json.contains("osInfo"));
-        // 无 host key 待确认时 prompt 字段应被 skip,不污染常规报告。
+        // 无 host key 待确认时 prompt 字段应被 skip,不污染常规报告
         assert!(!json.contains("hostKeyPrompt"));
     }
 
@@ -1563,7 +1563,7 @@ mod tests {
         let (mgr, _) = make_mgr(root.path());
         mgr.add_server(make_profile("s1", "A"), None).await.unwrap();
 
-        // 首次确认:未知 -> 追加到 known_hosts。
+        // 首次确认:未知 -> 追加到 known_hosts
         mgr.confirm_host_key("s1", "ssh-ed25519", "AAAAkeyfirst")
             .await
             .unwrap();
@@ -1572,7 +1572,7 @@ mod tests {
             .unwrap();
         assert!(known.contains("192.168.1.100 ssh-ed25519 AAAAkeyfirst"));
 
-        // 再确认同一把 key:已 Match,幂等成功。
+        // 再确认同一把 key:已 Match,幂等成功
         mgr.confirm_host_key("s1", "ssh-ed25519", "AAAAkeyfirst")
             .await
             .unwrap();
@@ -1588,7 +1588,7 @@ mod tests {
             .await
             .unwrap();
 
-        // 同主机但换了 key:疑似中间人,必须拒绝,且不得覆盖原条目。
+        // 同主机但换了 key:疑似中间人,必须拒绝,且不得覆盖原条目
         let err = mgr
             .confirm_host_key("s1", "ssh-ed25519", "AAAAattacker")
             .await
@@ -1604,7 +1604,7 @@ mod tests {
 
     #[test]
     fn ssh_key_fingerprint_is_sha256_prefixed() {
-        // base64("hi") = "aGk=";算得出固定的 SHA256 指纹格式。
+        // base64("hi") = "aGk=";算得出固定的 SHA256 指纹格式
         let fp = ssh_key_fingerprint("aGk=");
         assert!(fp.starts_with("SHA256:"));
         assert!(!fp.contains('='), "OpenSSH 指纹不带 base64 padding");

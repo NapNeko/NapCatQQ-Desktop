@@ -1,4 +1,4 @@
-//! 远端 SnowLuma daemon / bot 启停：编排委托 [remote_snowluma_stack]，Bot 用 QQComponent + 短 detach。
+//! 远端 SnowLuma daemon / bot 启停:编排委托 [remote_snowluma_stack],Bot 用 QQComponent + 短 detach
 
 use std::time::Duration;
 
@@ -43,7 +43,7 @@ pub async fn wait_webui_tcp(host: &dyn Host, port: i32, timeout: Duration) -> Re
 }
 
 async fn prepare_bot_launch_env(host: &dyn Host) -> Result<Option<String>, BotBackendError> {
-    // 1. libgcc_s.so.1 LD_PRELOAD 修复（非特权）
+    // 1. libgcc_s.so.1 LD_PRELOAD 修复(非特权)
     let script = r#"libgcc_path=$(ldconfig -p 2>/dev/null | grep -m1 'libgcc_s.so.1' | awk '{print $NF}') || true
 	if [ -n "$libgcc_path" ] && [ -L "$libgcc_path" ]; then
 	  real_path=$(readlink -f "$libgcc_path")
@@ -56,23 +56,23 @@ async fn prepare_bot_launch_env(host: &dyn Host) -> Result<Option<String>, BotBa
     let line = out.lines().last().unwrap_or("").trim();
     let ld_preload = if line.is_empty() { None } else { Some(line.to_string()) };
 
-    // 2. 关键：放宽 ptrace_scope。
-    //    旧脚本里用 sudo -n 静默尝试，这里改用 Host 的 elevation 机制（会喂已缓存的 sudo 密码）。
-    //    失败则给出清晰、可执行的错误提示。
+    // 2. 关键:放宽 ptrace_scope
+    //    旧脚本里用 sudo -n 静默尝试,这里改用 Host 的 elevation 机制(会喂已缓存的 sudo 密码)
+    //    失败则给出清晰,可执行的错误提示
     relax_ptrace_scope(host).await?;
 
     Ok(ld_preload)
 }
 
-/// 读取当前 ptrace_scope，若不为 0 则尝试用已缓存的 sudo 密码（elevation）将其设为 0。
-/// 设完后再次校验；仍不为 0 则返回带明确操作指引的错误（不再静默失败导致后续 PTRACE_ATTACH 报 Operation not permitted）。
+/// 读取当前 ptrace_scope,若不为 0 则尝试用已缓存的 sudo 密码(elevation)将其设为 0
+/// 设完后再次校验;仍不为 0 则返回带明确操作指引的错误(不再静默失败导致后续 PTRACE_ATTACH 报 Operation not permitted)
 ///
-/// 改进：
-/// - 初始读失败或非 0 都尝试设置（不只看初始读）。
-/// - 同时尝试 sysctl -w 和直接 echo 写 proc（某些系统一个可行另一个不行）。
-/// - 捕获设置命令的完整输出（stdout/stderr/exit），失败时一并带进错误消息，便于诊断 elevation 是否真的生效。
+/// 改进:
+/// - 初始读失败或非 0 都尝试设置(不只看初始读)
+/// - 同时尝试 sysctl -w 和直接 echo 写 proc(某些系统一个可行另一个不行)
+/// - 捕获设置命令的完整输出(stdout/stderr/exit),失败时一并带进错误消息,便于诊断 elevation 是否真的生效
 async fn relax_ptrace_scope(host: &dyn Host) -> Result<(), BotBackendError> {
-    // 读当前值（非特权读即可）
+    // 读当前值(非特权读即可)
     let read_scope = || async {
         let cmd = HostCommand::new("cat").arg("/proc/sys/kernel/yama/ptrace_scope");
         host.run_to_string(cmd)
@@ -88,20 +88,20 @@ async fn relax_ptrace_scope(host: &dyn Host) -> Result<(), BotBackendError> {
         return Ok(());
     }
 
-    // 准备两套设置命令，都走 elevated（会用已缓存的 sudo 密码喂 sudo -S）。
+    // 准备两套设置命令,都走 elevated(会用已缓存的 sudo 密码喂 sudo -S)
     // 1) sysctl -w
     let set_sysctl = HostCommand::new("sysctl")
         .arg("-w")
         .arg("kernel.yama.ptrace_scope=0")
         .elevated();
 
-    // 2) 直接写 proc（fallback）
+    // 2) 直接写 proc(fallback)
     let set_proc = HostCommand::new("sh")
         .arg("-c")
         .arg("echo 0 > /proc/sys/kernel/yama/ptrace_scope")
         .elevated();
 
-    // 执行设置，记录输出
+    // 执行设置,记录输出
     let mut set_attempts: Vec<String> = Vec::new();
 
     for (label, cmd) in [("sysctl -w", set_sysctl), ("echo > proc", set_proc)] {

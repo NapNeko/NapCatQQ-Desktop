@@ -1,4 +1,4 @@
-// 任务栏 / Alt+Tab / 窗口标题区图标（与通知区托盘无关）。
+// 任务栏 / Alt+Tab / 窗口标题区图标(与通知区托盘无关)
 
 use std::path::PathBuf;
 
@@ -38,7 +38,7 @@ fn embed(name: &str) -> Option<Image<'static>> {
     Image::from_bytes(bytes).ok().map(|i| i.to_owned())
 }
 
-/// 供主窗口与轻量模式重建窗口使用；优先高分辨率图标，避免高 DPI 显示器模糊。
+/// 供主窗口与轻量模式重建窗口使用;优先高分辨率图标,避免高 DPI 显示器模糊
 pub fn main_window_icon(app: &AppHandle) -> Result<Image<'static>, String> {
     load_png("256x256.png", app)
         .or_else(|| load_png("128x128.png", app))

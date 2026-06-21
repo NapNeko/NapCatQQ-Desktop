@@ -1,4 +1,4 @@
-// 托盘右键菜单：原生控件内做层次（抬头 / 状态 / 分组），操作项纯文字。
+// 托盘右键菜单:原生控件内做层次(抬头 / 状态 / 分组),操作项纯文字
 
 use std::sync::Mutex;
 
@@ -16,7 +16,7 @@ struct TrayMenuHandles {
 
 static TRAY_MENU: Mutex<Option<TrayMenuHandles>> = Mutex::new(None);
 
-/// 菜单内状态行（比 tooltip 短，不重复产品名）。
+/// 菜单内状态行(比 tooltip 短,不重复产品名)
 pub async fn tray_menu_status_line(app: &AppHandle) -> String {
     let state = app.state::<crate::AppState>();
     let running = state.bot_manager.active_count().await;

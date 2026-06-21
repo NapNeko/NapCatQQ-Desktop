@@ -1,6 +1,6 @@
-//! 远端 SnowLuma：按 SSH 主机共享 daemon.log 增量 → snowluma_daemon_log。
+//! 远端 SnowLuma:按 SSH 主机共享 daemon.log 增量 → snowluma_daemon_log
 //!
-//! 与 [RemoteBotLogFollowRegistry]（per-bot bot_{qq}.log）分工，避免在 bot_manager 里重复轮询逻辑。
+//! 与 [RemoteBotLogFollowRegistry](per-bot bot_{qq}.log)分工,避免在 bot_manager 里重复轮询逻辑
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -62,7 +62,7 @@ impl RemoteSnowLumaLogRegistry {
         }
     }
 
-    /// 同一 server_id 只保留一个 follow（多 Bot 共用远端 daemon）。
+    /// 同一 server_id 只保留一个 follow(多 Bot 共用远端 daemon)
     pub async fn start_daemon_follow_for_server(
         &self,
         server_id: &str,

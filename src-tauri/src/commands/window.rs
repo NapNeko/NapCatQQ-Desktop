@@ -1,12 +1,12 @@
-// 主窗口几何：对齐 legacy MainWindow._set_window（最小尺寸 + 工作区居中）。
+// 主窗口几何:对齐 legacy MainWindow._set_window(最小尺寸 + 工作区居中)
 
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager};
 
-/// legacy-python MainWindow._set_window: setMinimumSize(1148, 720) + availableGeometry 居中。
+/// legacy-python MainWindow._set_window: setMinimumSize(1148, 720) + availableGeometry 居中
 const MAIN_MIN_WIDTH: f64 = 1148.0;
 const MAIN_MIN_HEIGHT: f64 = 720.0;
 
-/// 在 setup 中调用一次：限制最小尺寸，并按当前显示器工作区居中（排除任务栏）。
+/// 在 setup 中调用一次:限制最小尺寸,并按当前显示器工作区居中(排除任务栏)
 pub fn apply_main_window_startup_geometry(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
@@ -20,7 +20,7 @@ pub fn apply_main_window_startup_geometry(app: &AppHandle) -> Result<(), String>
     Ok(())
 }
 
-/// 前端就绪后调用：显示主窗口（避免透明窗口启动闪烁）。
+/// 前端就绪后调用:显示主窗口(避免透明窗口启动闪烁)
 #[tauri::command]
 pub fn show_main_window(app: AppHandle) -> Result<(), String> {
     let window = app

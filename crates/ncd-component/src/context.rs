@@ -1,9 +1,9 @@
-//! ActionCtx:Action 执行上下文(进度上报 + 取消 + 日志注入)。
+//! ActionCtx:Action 执行上下文(进度上报 + 取消 + 日志注入)
 //!
-//! 统一进度反馈,杜绝 legacy 的 Qt Signal vs LogLineCallback 双套。
+//! 统一进度反馈,杜绝 legacy 的 Qt Signal vs LogLineCallback 双套
 //!
 //! 上层(ncd-deploy / Tauri Command)通过 ActionCtx 拿到 ProgressEvent 流,
-//! 转发到 BroadcastEventBus,前端订阅。
+//! 转发到 BroadcastEventBus,前端订阅
 
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -15,7 +15,7 @@ use ts_rs::TS;
 
 type LoggerFn = Arc<dyn Fn(&str) + Send + Sync>;
 
-/// 进度事件类型。
+/// 进度事件类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -29,21 +29,21 @@ pub enum ProgressKind {
         step: u32,
         percent: u8,
         message: String,
-        /// 瞬时下载速度（字节/秒）。仅下载步骤填充，其他步骤为 None。
-        /// 前端据此显示 "已下载 12.3 MB / 28.0 MB · 850 KB/s"。
+        /// 瞬时下载速度(字节/秒)仅下载步骤填充,其他步骤为 None
+        /// 前端据此显示 "已下载 12.3 MB / 28.0 MB · 850 KB/s"
         #[serde(default, skip_serializing_if = "Option::is_none")]
         speed_bps: Option<u64>,
-        /// 已下载字节。前端用于格式化与 ETA 计算。仅下载步骤填充。
+        /// 已下载字节前端用于格式化与 ETA 计算仅下载步骤填充
         #[serde(default, skip_serializing_if = "Option::is_none")]
         downloaded_bytes: Option<u64>,
-        /// 总字节数（服务端返 Content-Length 时有）。仅下载步骤填充。
+        /// 总字节数(服务端返 Content-Length 时有)仅下载步骤填充
         #[serde(default, skip_serializing_if = "Option::is_none")]
         total_bytes: Option<u64>,
-        /// 下载阶段："racing" / "streaming" / "switching_mirror" / "resuming"。
-        /// 仅下载步骤填充；前端按阶段切话术（"正在选择镜像" vs "下载中"）。
+        /// 下载阶段:"racing" / "streaming" / "switching_mirror" / "resuming"
+        /// 仅下载步骤填充;前端按阶段切话术("正在选择镜像" vs "下载中")
         #[serde(default, skip_serializing_if = "Option::is_none")]
         download_stage: Option<String>,
-        /// docker pull 各层进度快照；仅拉镜像步骤填充。
+        /// docker pull 各层进度快照;仅拉镜像步骤填充
         #[serde(default, skip_serializing_if = "Option::is_none")]
         docker_layers: Option<Vec<ncd_domain::DockerPullLayerSnapshot>>,
     },
@@ -58,14 +58,14 @@ pub enum ProgressKind {
     },
 }
 
-/// 日志级别(对齐 tracing 风格)。
+/// 日志级别(对齐 tracing 风格)
 ///
-/// 命名说明：本 enum 跟 [ncd_domain::bot_config::LogLevel] 不同——后者是
-/// "bot 配置文件里写要 console_log_level 用 info" 的选项语义；本 enum 是
-/// "ProgressEvent 里这条日志的级别" 的事件语义。两者跨边界场景不同，2026-05-29
+/// 命名说明:本 enum 跟 [ncd_domain::bot_config::LogLevel] 不同——后者是
+/// "bot 配置文件里写要 console_log_level 用 info" 的选项语义;本 enum 是
+/// "ProgressEvent 里这条日志的级别" 的事件语义两者跨边界场景不同,2026-05-29
 /// 远端架构重构 P1.a fix 改名 ProgressLogLevel 解决 ts-rs 派生时同名互相覆盖
-/// 的问题，避免前端 LogLevel.ts 被静默缩成 3 档（debug/info/error）丢掉
-/// trace/warn。
+/// 的问题,避免前端 LogLevel.ts 被静默缩成 3 档(debug/info/error)丢掉
+/// trace/warn
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -77,7 +77,7 @@ pub enum ProgressLogLevel {
     Error,
 }
 
-/// 进度事件(envelope)。跨边界事件必须带版本号,便于增量演进。
+/// 进度事件(envelope)跨边界事件必须带版本号,便于增量演进
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ProgressEvent {
@@ -96,7 +96,7 @@ fn default_version() -> u32 {
 }
 
 impl ProgressEvent {
-    /// 创建一个新事件,自动填时间戳与 v=1。
+    /// 创建一个新事件,自动填时间戳与 v=1
     pub fn new(kind: ProgressKind) -> Self {
         Self {
             v: 1,
@@ -109,9 +109,9 @@ impl ProgressEvent {
     }
 }
 
-/// ActionCtx:Action 执行期间的辅助上下文。
+/// ActionCtx:Action 执行期间的辅助上下文
 ///
-/// 字段全部 Arc<...> 让 ActionCtx 可以低成本 clone 给子任务。
+/// 字段全部 Arc<...> 让 ActionCtx 可以低成本 clone 给子任务
 #[derive(Clone)]
 pub struct ActionCtx {
     /// 进度事件发送端(满后会阻塞 push 端,保证 UI 不丢消息)
@@ -123,12 +123,12 @@ pub struct ActionCtx {
 }
 
 impl ActionCtx {
-    /// 创建一个新 ActionCtx,返回 (ctx, progress_rx)。
+    /// 创建一个新 ActionCtx,返回 (ctx, progress_rx)
     pub fn new() -> (Self, mpsc::Receiver<ProgressEvent>) {
         Self::with_capacity(64)
     }
 
-    /// 自定义 channel 容量。
+    /// 自定义 channel 容量
     pub fn with_capacity(cap: usize) -> (Self, mpsc::Receiver<ProgressEvent>) {
         let (tx, rx) = mpsc::channel(cap);
         let ctx = Self {
@@ -139,7 +139,7 @@ impl ActionCtx {
         (ctx, rx)
     }
 
-    /// 派生子 ctx,保持同一进度通道但创建独立取消子节点(parent 取消会传播到 child)。
+    /// 派生子 ctx,保持同一进度通道但创建独立取消子节点(parent 取消会传播到 child)
     pub fn child(&self) -> Self {
         Self {
             progress: self.progress.clone(),
@@ -148,12 +148,12 @@ impl ActionCtx {
         }
     }
 
-    /// 主动取消(整个 ActionCtx 树)。
+    /// 主动取消(整个 ActionCtx 树)
     pub fn cancel(&self) {
         self.cancel.cancel();
     }
 
-    /// 是否已取消。
+    /// 是否已取消
     pub fn is_cancelled(&self) -> bool {
         self.cancel.is_cancelled()
     }
@@ -162,12 +162,12 @@ impl ActionCtx {
         self.cancel.clone()
     }
 
-    /// 上报进度。channel 满会异步等待,保证 UI 不丢消息。
+    /// 上报进度channel 满会异步等待,保证 UI 不丢消息
     pub async fn emit(&self, kind: ProgressKind) {
         let _ = self.progress.send(ProgressEvent::new(kind)).await;
     }
 
-    /// 便捷 helper:发 Log 事件。
+    /// 便捷 helper:发 Log 事件
     pub async fn log(&self, level: ProgressLogLevel, message: impl Into<String>) {
         let msg = message.into();
         // 同时写 tracing
@@ -188,12 +188,12 @@ impl ActionCtx {
         .await;
     }
 
-    /// 便捷 helper:Info 级别日志。
+    /// 便捷 helper:Info 级别日志
     pub async fn info(&self, message: impl Into<String>) {
         self.log(ProgressLogLevel::Info, message).await;
     }
 
-    /// 便捷 helper:Warn 级别日志。
+    /// 便捷 helper:Warn 级别日志
     pub async fn warn(&self, message: impl Into<String>) {
         self.log(ProgressLogLevel::Warn, message).await;
     }

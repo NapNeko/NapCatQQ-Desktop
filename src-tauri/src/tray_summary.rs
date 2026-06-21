@@ -1,4 +1,4 @@
-// 托盘 tooltip：Bot 运行摘要（不依赖 WebView）。
+// 托盘 tooltip:Bot 运行摘要(不依赖 WebView)
 
 use tauri::{AppHandle, Manager};
 

@@ -1,4 +1,4 @@
-//! 桌面会话日志：tracing 落盘（对齐 legacy <data_root>/log/*.log）。
+//! 桌面会话日志:tracing 落盘(对齐 legacy <data_root>/log/*.log)
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -64,7 +64,7 @@ fn write_line_to_session(session: &DesktopLogSession, line: &str) {
     }
 }
 
-/// 直接写一行（无 tracing 订阅时也可用，例如启动横幅、panic、CRIT）。
+/// 直接写一行(无 tracing 订阅时也可用,例如启动横幅,panic,CRIT)
 pub fn write_session_line(level: &str, position: &str, message: &str) {
     let Some(session) = SESSION.get() else {
         return;

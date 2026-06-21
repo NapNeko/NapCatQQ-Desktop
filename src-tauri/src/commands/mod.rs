@@ -45,7 +45,7 @@ pub async fn connect_remote_host(
     state: State<'_, AppState>,
     request: ConnectRemoteHostRequest,
 ) -> Result<RemoteHostConnectionInfo, String> {
-    // 兼容旧前端 contract：把 connect 请求翻译成 ServerManager add + test。
+    // 兼容旧前端 contract:把 connect 请求翻译成 ServerManager add + test
     let profile = ncd_runtime::ServerProfile {
         id: request.remote_id.clone(),
         name: request.remote_id.clone(),
@@ -64,7 +64,7 @@ pub async fn connect_remote_host(
         webui_url: request.webui_url.clone(),
     };
 
-    // 如果已存在就 update，不存在就 add。
+    // 如果已存在就 update,不存在就 add
     let existing = state.server_manager.list_servers().await;
     if existing.iter().any(|p| p.id == request.remote_id) {
         state
@@ -78,7 +78,7 @@ pub async fn connect_remote_host(
             .await?;
     }
 
-    // test_connection 会真正建立 SSH 连接并缓存。
+    // test_connection 会真正建立 SSH 连接并缓存
     let _report = state
         .server_manager
         .test_connection(&request.remote_id, request.password, true)
@@ -98,9 +98,9 @@ pub async fn list_remote_files(
     state: State<'_, AppState>,
     request: ListRemoteFilesRequest,
 ) -> Result<Vec<ncd_host::DirEntry>, String> {
-    // 改用 ensure_connected：未命中会自动尝试建立/恢复连接（单飞 + 冷却）。
-    // 这样能避免拿到一个已死的缓存 host 导致后续 list_dir 立即失败。
-    // 失败时仍返回高层文案“远端主机未连接”，不泄露底层 SSH 细节。
+    // 改用 ensure_connected:未命中会自动尝试建立/恢复连接(单飞 + 冷却)
+    // 这样能避免拿到一个已死的缓存 host 导致后续 list_dir 立即失败
+    // 失败时仍返回高层文案“远端主机未连接”,不泄露底层 SSH 细节
     let host = state
         .server_manager
         .ensure_connected(&request.remote_id)
@@ -115,10 +115,10 @@ pub async fn get_remote_runtime_status(
     state: State<'_, AppState>,
     request: GetRemoteRuntimeStatusRequest,
 ) -> Result<RemoteRuntimeStatusResponse, String> {
-    // 改用 ensure_connected 而非 get_host：
-    // - 保证返回的 host 在此刻是可达的（死缓存会被 ensure 内部自动重连或报错）。
-    // - 失败时仍用“远端主机未连接”文案对齐旧行为。
-    // - 成功后 pgrep 失败只说明 bot 进程不在，不应被误判为“主机未连接”。
+    // 改用 ensure_connected 而非 get_host:
+    // - 保证返回的 host 在此刻是可达的(死缓存会被 ensure 内部自动重连或报错)
+    // - 失败时仍用“远端主机未连接”文案对齐旧行为
+    // - 成功后 pgrep 失败只说明 bot 进程不在,不应被误判为“主机未连接”
     let host = state
         .server_manager
         .ensure_connected(&request.remote_id)
@@ -158,7 +158,7 @@ pub async fn get_remote_webui_endpoint(
     state: State<'_, AppState>,
     request: GetRemoteWebuiEndpointRequest,
 ) -> Result<RemoteWebuiEndpointResponse, String> {
-    // 从 ServerProfile 读 webui_url。
+    // 从 ServerProfile 读 webui_url
     let servers = state.server_manager.list_servers().await;
     let webui_url = servers
         .iter()

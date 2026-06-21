@@ -1,18 +1,18 @@
-//! HostError:跨主机操作的统一错误枚举。
+//! HostError:跨主机操作的统一错误枚举
 //!
 //! 设计原则:
 //! - 错误必须能在 LocalHost / RemoteHost / 未来的 DockerHost 之间通用
 //! - 错误不包含 SSH / Windows API 的低层细节,只暴露语义类别
-//! - 每个 variant 提供足够上下文(路径、命令、退出码)用于诊断,但不泄漏密钥
+//! - 每个 variant 提供足够上下文(路径,命令,退出码)用于诊断,但不泄漏密钥
 
 use std::io;
 
 use crate::path::HostPath;
 
-/// HostError:[Host](crate::Host) trait 所有方法的统一错误类型。
+/// HostError:[Host](crate::Host) trait 所有方法的统一错误类型
 #[derive(Debug, thiserror::Error)]
 pub enum HostError {
-    /// IO 错误(本地文件系统、SSH 通道字节流、SFTP 等)
+    /// IO 错误(本地文件系统,SSH 通道字节流,SFTP 等)
     #[error("io error: {0}")]
     Io(#[from] io::Error),
 
@@ -71,7 +71,7 @@ pub enum HostError {
     #[error("remote connection failed: {reason}")]
     RemoteConnection { reason: String },
 
-    /// known_hosts 中没有这台主机的 host key。上层需要让用户确认后再写入。
+    /// known_hosts 中没有这台主机的 host key上层需要让用户确认后再写入
     #[error("unknown ssh host key for {host}:{port} ({key_kind} {key_b64})")]
     HostKeyUnknown {
         host: String,
@@ -80,7 +80,7 @@ pub enum HostError {
         key_b64: String,
     },
 
-    /// known_hosts 中已有同主机条目但 key 不一致，必须阻断连接。
+    /// known_hosts 中已有同主机条目但 key 不一致,必须阻断连接
     #[error("ssh host key mismatch for {host}:{port} ({key_kind} {key_b64})")]
     HostKeyMismatch {
         host: String,
@@ -111,16 +111,16 @@ pub enum HostError {
 }
 
 impl HostError {
-    /// 把 SSH / 远端操作产生的 io::Error 标记为远端会话中断。
-    /// 各 RemoteHost 实装在 transport 层捕获后调用本辅助。
+    /// 把 SSH / 远端操作产生的 io::Error 标记为远端会话中断
+    /// 各 RemoteHost 实装在 transport 层捕获后调用本辅助
     pub fn remote_disconnected(reason: impl Into<String>) -> Self {
         Self::RemoteDisconnected {
             reason: reason.into(),
         }
     }
 
-    /// 该错误是否意味着远端连接 / 会话已不可用。
-    /// 远端 SFTP 复用会话时用它判断要不要丢弃缓存的 session 重开。
+    /// 该错误是否意味着远端连接 / 会话已不可用
+    /// 远端 SFTP 复用会话时用它判断要不要丢弃缓存的 session 重开
     pub fn is_disconnect(&self) -> bool {
         matches!(
             self,
@@ -128,7 +128,7 @@ impl HostError {
         )
     }
 
-    /// 命令失败的便捷构造器。
+    /// 命令失败的便捷构造器
     pub fn command_failed(
         program: impl Into<String>,
         exit_code: Option<i32>,

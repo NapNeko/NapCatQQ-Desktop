@@ -1,4 +1,4 @@
-//! 远端 Linux QQ 进程树探测：UIN 锁定只需主进程 PID 在候选集合内。
+//! 远端 Linux QQ 进程树探测:UIN 锁定只需主进程 PID 在候选集合内
 
 use std::collections::BTreeSet;
 
@@ -6,7 +6,7 @@ use async_trait::async_trait;
 
 use crate::snowluma::status_poller::ProcessTreeProbe;
 
-/// 远端 SnowLuma：无 Windows 式子进程枚举，仅把 bot 主 PID 当作候选集。
+/// 远端 SnowLuma:无 Windows 式子进程枚举,仅把 bot 主 PID 当作候选集
 #[derive(Debug, Clone, Copy)]
 pub struct LinuxSinglePidProbe {
     pid: u32,

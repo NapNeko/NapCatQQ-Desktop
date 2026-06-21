@@ -1,28 +1,28 @@
-//! 包管理器互斥锁：防止同一主机的 apt/dnf 并发冲突。
+//! 包管理器互斥锁:防止同一主机的 apt/dnf 并发冲突
 //!
-//! apt/dnf 使用文件锁，并发执行会导致 dpkg lock 冲突。
-//! 本模块提供全局锁，确保同一主机的包管理器操作串行执行。
+//! apt/dnf 使用文件锁,并发执行会导致 dpkg lock 冲突
+//! 本模块提供全局锁,确保同一主机的包管理器操作串行执行
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-/// 包管理器全局锁。单例，跨组件共享。
+/// 包管理器全局锁单例,跨组件共享
 #[derive(Clone)]
 pub struct PackageManagerLock {
-    /// 每个主机一个独立的锁。key: host_id
+    /// 每个主机一个独立的锁key: host_id
     locks: Arc<RwLock<HashMap<String, Arc<Mutex<()>>>>>,
 }
 
 impl PackageManagerLock {
-    /// 创建锁实例（单例模式由调用方保证）。
+    /// 创建锁实例(单例模式由调用方保证)
     pub fn new() -> Self {
         Self {
             locks: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    /// 获取指定主机的包管理器锁。返回的 guard 在 drop 时自动释放。
+    /// 获取指定主机的包管理器锁返回的 guard 在 drop 时自动释放
     pub async fn acquire(&self, host_id: &str) -> PackageManagerGuard {
         let lock = {
             let mut map = self.locks.write().await;
@@ -41,7 +41,7 @@ impl Default for PackageManagerLock {
     }
 }
 
-/// 锁的 RAII guard。drop 时自动释放。
+/// 锁的 RAII guarddrop 时自动释放
 pub struct PackageManagerGuard {
     _guard: tokio::sync::OwnedMutexGuard<()>,
 }
@@ -75,7 +75,7 @@ mod tests {
             results.push(h.await.unwrap());
         }
 
-        // 串行执行，counter 应该是 0, 1, 2
+        // 串行执行,counter 应该是 0, 1, 2
         assert_eq!(results, vec![0, 1, 2]);
     }
 
@@ -103,7 +103,7 @@ mod tests {
         h1.await.unwrap();
         h2.await.unwrap();
 
-        // 并行执行，总时间应接近 50ms 而非 100ms
+        // 并行执行,总时间应接近 50ms 而非 100ms
         assert!(start.elapsed().as_millis() < 80);
     }
 }

@@ -1,11 +1,11 @@
-//! Mirror Race：多镜像并发探测，谁先吐第一字节用谁。
+//! Mirror Race:多镜像并发探测,谁先吐第一字节用谁
 //!
-//! Top-2 阶梯加码：启动前 2 个 probe（不写盘），每 stagger 加 1 个 racer。第一个
-//! 收到 chunk 的为 winner，cancel 其他。winner 走 download_with_resume 正式下载，
-//! 中途 idle timeout/硬错切下个 mirror 从 .part 续传，全挂返 AllMirrorsFailed。
+//! Top-2 阶梯加码:启动前 2 个 probe(不写盘),每 stagger 加 1 个 racer第一个
+//! 收到 chunk 的为 winner,cancel 其他winner 走 download_with_resume 正式下载,
+//! 中途 idle timeout/硬错切下个 mirror 从 .part 续传,全挂返 AllMirrorsFailed
 //!
-//! 不复用 probe stream：winner 重新发 GET，代价是每 mirror 多收几十 KB，但避免
-//! 多 racer 抢写同一 .part 的并发问题。
+//! 不复用 probe stream:winner 重新发 GET,代价是每 mirror 多收几十 KB,但避免
+//! 多 racer 抢写同一 .part 的并发问题
 
 use std::path::Path;
 use std::sync::Arc;
@@ -27,17 +27,17 @@ use crate::verify::verify_sha256_if_needed;
 
 #[derive(Debug, Clone)]
 pub struct MirrorRaceConfig {
-    /// 初始并发探测的镜像数。默认 2。
+    /// 初始并发探测的镜像数默认 2
     pub initial_parallel: usize,
-    /// 阶梯加码间隔：每 stagger 加 1 个 racer。默认 3s。
+    /// 阶梯加码间隔:每 stagger 加 1 个 racer默认 3s
     pub stagger: Duration,
-    /// 单 mirror 等首字节最长时间。默认 30s。
+    /// 单 mirror 等首字节最长时间默认 30s
     pub probe_first_chunk_timeout: Duration,
-    /// 正式下载阶段每 chunk 的 idle timeout。默认 20s。
+    /// 正式下载阶段每 chunk 的 idle timeout默认 20s
     pub idle_timeout: Duration,
-    /// 期望 SHA256（64-hex 小写）。Some 时每个 mirror 下完后立即校验，
-    /// mismatch 视为该镜像投毒（返完整长度的垃圾字节，所有字节级防御失效），
-    /// truncate .part 切下一家。None 时跳过校验。
+    /// 期望 SHA256(64-hex 小写)Some 时每个 mirror 下完后立即校验,
+    /// mismatch 视为该镜像投毒(返完整长度的垃圾字节,所有字节级防御失效),
+    /// truncate .part 切下一家None 时跳过校验
     pub expected_sha256: Option<String>,
 }
 
@@ -59,7 +59,7 @@ enum RacerOutcome {
     Failed { idx: usize, url: String, err: String },
 }
 
-/// Mirror race 主入口。mirrors 顺序即偏好顺序，前 initial_parallel 个先并发，之后按 stagger 依次加入。
+/// Mirror race 主入口mirrors 顺序即偏好顺序,前 initial_parallel 个先并发,之后按 stagger 依次加入
 pub async fn download_with_mirror_race(
     mirrors: &[String],
     dest: &Path,
@@ -102,9 +102,9 @@ pub async fn download_with_mirror_race(
             Ok(n) => return Ok(n),
             Err(NetworkError::Cancelled) => return Err(NetworkError::Cancelled),
             Err(e) => {
-                // 完整长度的垃圾字节是国内代理常见 case：长度对、Content-Range 对、
-                // 流不截断，但 body 是另一份缓存对象。这里把它当作"该镜像投毒"，
-                // 删掉 .part + dest 切下家。
+                // 完整长度的垃圾字节是国内代理常见 case:长度对,Content-Range 对,
+                // 流不截断,但 body 是另一份缓存对象这里把它当作"该镜像投毒",
+                // 删掉 .part + dest 切下家
                 warn!(
                     target: "ncd_network::race",
                     url = %primary, err = %e,
@@ -127,10 +127,10 @@ pub async fn download_with_mirror_race(
             continue;
         }
         tried.push(idx);
-        // 切 mirror 时丢掉 .part：不同 mirror（尤其是国内代理）缓存的 release
-        // 资产可能与上游不严格一致（缓存截断 / 旧版本 / 反代解压），跨 mirror
-        // 续传 offset 会在 .part 里拼出错位字节，下游 zip 解压报 "Could not
-        // find EOCD"。宁可全文件重下，也不能拼错。
+        // 切 mirror 时丢掉 .part:不同 mirror(尤其是国内代理)缓存的 release
+        // 资产可能与上游不严格一致(缓存截断 / 旧版本 / 反代解压),跨 mirror
+        // 续传 offset 会在 .part 里拼出错位字节,下游 zip 解压报 "Could not
+        // find EOCD"宁可全文件重下,也不能拼错
         let _ = tokio::fs::remove_file(&part_path(dest)).await;
         push_stage(&sink, DownloadStage::SwitchingMirror, url, "switch").await;
         let dl_cfg = DownloadConfig {
@@ -175,7 +175,7 @@ async fn run_race(
     cfg: &MirrorRaceConfig,
 ) -> Result<Option<usize>, NetworkError> {
     let race_cancel = cancel.child_token();
-    // capacity 留余量：每个 mirror 最多发 1 条 outcome
+    // capacity 留余量:每个 mirror 最多发 1 条 outcome
     let (tx, mut rx) = mpsc::channel::<RacerOutcome>(mirrors.len().max(1) + 4);
     let mut tasks: JoinSet<()> = JoinSet::new();
     let mut next_idx: usize = 0;
@@ -293,9 +293,9 @@ fn spawn_racer(
     });
 }
 
-/// 单 racer：发 GET，等第一个 chunk 到达就成功返回。
+/// 单 racer:发 GET,等第一个 chunk 到达就成功返回
 ///
-/// 不写盘、不消费后续字节：拿到首字节立刻 drop stream 释放连接。
+/// 不写盘,不消费后续字节:拿到首字节立刻 drop stream 释放连接
 async fn probe_first_chunk(
     url: &str,
     cancel: &CancellationToken,

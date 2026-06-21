@@ -1,16 +1,16 @@
-//! 端口转发 / 隧道。
+//! 端口转发 / 隧道
 //!
 //! 把远端 host:port 暴露为本地 127.0.0.1:local_port,用于 SnowLuma 远端
-//! WebUI / VNC 访问。
+//! WebUI / VNC 访问
 //!
 //! 实装在 linux.rs 中走 russh 的 direct-tcpip channel +
-//! tokio::io::copy_bidirectional 双向泵。本节只放数据类型。
+//! tokio::io::copy_bidirectional 双向泵本节只放数据类型
 
 use std::sync::Arc;
 
 use tokio::sync::Notify;
 
-/// 隧道规格(描述一条要建立的隧道)。
+/// 隧道规格(描述一条要建立的隧道)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TunnelSpec {
     /// 本地绑定地址(默认 127.0.0.1)
@@ -24,7 +24,7 @@ pub struct TunnelSpec {
 }
 
 impl TunnelSpec {
-    /// 把远端 127.0.0.1:remote_port 暴露为本地 127.0.0.1:local_port。
+    /// 把远端 127.0.0.1:remote_port 暴露为本地 127.0.0.1:local_port
     pub fn local_to_remote(local_port: u16, remote_port: u16) -> Self {
         Self {
             local_host: "127.0.0.1".to_string(),
@@ -35,7 +35,7 @@ impl TunnelSpec {
     }
 }
 
-/// 隧道句柄。Drop 时关闭隧道。
+/// 隧道句柄Drop 时关闭隧道
 pub struct TunnelHandle {
     /// 实际绑定的本地端口(若 spec.local_port==0,这里是 OS 分配的真实端口)
     pub local_port: u16,
@@ -50,7 +50,7 @@ impl TunnelHandle {
         self.local_port
     }
 
-    /// 主动关闭隧道(也可以直接 drop)。
+    /// 主动关闭隧道(也可以直接 drop)
     pub fn close(&self) {
         self.shutdown.notify_waiters();
     }

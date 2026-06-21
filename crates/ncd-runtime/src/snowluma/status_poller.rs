@@ -1,10 +1,10 @@
 // 本文件只写 SnowLumaLoginState enum + ProcessTreeProbe async trait 占位
-// SnowLumaStatusPoller 主体（构造、主循环、UIN 锁定、状态合成、dispose）
-// 由 写。
+// SnowLumaStatusPoller 主体(构造,主循环,UIN 锁定,状态合成,dispose)
+// 由 写
 //
-// 严格红线：SnowLumaLoginState 跨 Tauri 边界（DomainEvent::SnowLumaLoginStateChanged
-// 的 state 字段）必须 ts-rs 派生 + 导出，避免前后端类型漂移
-// 。
+// 严格红线:SnowLumaLoginState 跨 Tauri 边界(DomainEvent::SnowLumaLoginStateChanged
+// 的 state 字段)必须 ts-rs 派生 + 导出,避免前后端类型漂移
+// 
 
 use std::collections::BTreeSet;
 
@@ -12,16 +12,16 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 // ---------------------------------------------------------------------------
-// 跨边界（Tauri / 前端）类型 —— ts-rs 派生 + 导出
+// 跨边界(Tauri / 前端)类型 —— ts-rs 派生 + 导出
 // ---------------------------------------------------------------------------
 
-/// SnowLuma 单个 Bot 在 status poller 视角下合成出来的登录状态。
-/// 4 档语义（与 状态合成表对齐，通过 snake_case 序列化跨 Tauri 边界）：
-/// - Starting：QQ 进程已起，processes 还未出现自身候选 PID 的条目（注入未生效）。
-/// - WaitingForQrScan：processes 命中且 status == Loaded，等待用户扫码 / 输密码。
-/// - LoggedIn：processes 命中且 status == Online，OneBot pipe 已连。
-/// - Disconnected：processes 命中但 status ∈ {Disconnected, Error}
-///   或 dispose / 连续探测失败兜底。
+/// SnowLuma 单个 Bot 在 status poller 视角下合成出来的登录状态
+/// 4 档语义(与 状态合成表对齐,通过 snake_case 序列化跨 Tauri 边界):
+/// - Starting:QQ 进程已起,processes 还未出现自身候选 PID 的条目(注入未生效)
+/// - WaitingForQrScan:processes 命中且 status == Loaded,等待用户扫码 / 输密码
+/// - LoggedIn:processes 命中且 status == Online,OneBot pipe 已连
+/// - Disconnected:processes 命中但 status ∈ {Disconnected, Error}
+///   或 dispose / 连续探测失败兜底
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
@@ -36,20 +36,20 @@ pub enum SnowLumaLoginState {
 // 进程树枚举抽象 —— async trait + Mock 边界
 // ---------------------------------------------------------------------------
 
-/// 给定起始 PID，返回该进程及其所有后代 PID 的集合（含自身）。
-/// 设计目的：把 sysinfo / Windows 进程枚举从 SnowLumaStatusPoller 内剥离
-/// 让 poller 单测可以注入 MockProcessTreeProbe，避免真实系统调用。
-/// 实现合约（SysinfoProcessTreeProbe 落地时复核）：
-/// - 失败（PID 不存在 / 权限不足）必须返回 BTreeSet::from([initial_pid])
-/// 不得 panic。
-/// - 非 Windows 平台亦须返回 BTreeSet::from([initial_pid])，保持类型签名一致。
+/// 给定起始 PID,返回该进程及其所有后代 PID 的集合(含自身)
+/// 设计目的:把 sysinfo / Windows 进程枚举从 SnowLumaStatusPoller 内剥离
+/// 让 poller 单测可以注入 MockProcessTreeProbe,避免真实系统调用
+/// 实现合约(SysinfoProcessTreeProbe 落地时复核):
+/// - 失败(PID 不存在 / 权限不足)必须返回 BTreeSet::from([initial_pid])
+/// 不得 panic
+/// - 非 Windows 平台亦须返回 BTreeSet::from([initial_pid]),保持类型签名一致
 #[async_trait::async_trait]
 pub trait ProcessTreeProbe: Send + Sync {
     async fn collect_descendants(&self, initial_pid: u32) -> BTreeSet<u32>;
 }
 
 // ===========================================================================
-// ：实装主循环 + UIN 锁定 + 状态合成
+// :实装主循环 + UIN 锁定 + 状态合成
 // ===========================================================================
 
 use std::sync::Arc;
@@ -64,28 +64,28 @@ use crate::snowluma::webui_client::{
     HookProcessInfo, HookProcessStatus, OneBotInstanceInfo, SnowLumaWebUiClient,
 };
 
-/// 启动延迟：让 daemon 完成首启注入再开始 poll，避免抢在 daemon Ready 之前
-/// 打到没就绪的 WebUI。
+/// 启动延迟:让 daemon 完成首启注入再开始 poll,避免抢在 daemon Ready 之前
+/// 打到没就绪的 WebUI
 const START_DELAY: Duration = Duration::from_millis(500);
 
-/// 主循环 tick 周期。
+/// 主循环 tick 周期
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 
-/// 连续 HTTP 失败门限：达到时最多发一次
-/// Disconnected，恢复前不再发新状态。
+/// 连续 HTTP 失败门限:达到时最多发一次
+/// Disconnected,恢复前不再发新状态
 const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
-/// per-Bot 主循环依赖（注入边界，便于单测换 mock）。
+/// per-Bot 主循环依赖(注入边界,便于单测换 mock)
 pub struct PollerDeps {
     pub event_bus: Arc<BroadcastEventBus>,
     pub http: Arc<dyn SnowLumaWebUiClient>,
     pub proc_tree: Arc<dyn ProcessTreeProbe>,
 }
 
-/// per-Bot 状态轮询组件句柄。
-/// spawn 启动后台 task 驱动主循环；dispose 取消其 CancellationToken
-/// 主循环当轮 select 结束后退出。Drop 兜底——任何路径忘掉显式 dispose
-/// 也不会泄漏 task。
+/// per-Bot 状态轮询组件句柄
+/// spawn 启动后台 task 驱动主循环;dispose 取消其 CancellationToken
+/// 主循环当轮 select 结束后退出Drop 兜底——任何路径忘掉显式 dispose
+/// 也不会泄漏 task
 #[allow(dead_code)]
 pub struct SnowLumaStatusPoller {
     bot_id: BotId,
@@ -93,7 +93,7 @@ pub struct SnowLumaStatusPoller {
 }
 
 impl SnowLumaStatusPoller {
-    /// 启动后台 task。
+    /// 启动后台 task
     pub fn spawn(bot_id: BotId, initial_qq_pid: u32, deps: PollerDeps) -> Self {
         let cancel = CancellationToken::new();
         let cancel_for_task = cancel.clone();
@@ -104,14 +104,14 @@ impl SnowLumaStatusPoller {
         Self { bot_id, cancel }
     }
 
-    /// 请求主循环退出；多次调用幂等。退出前主循环若 last_state ≠ Disconnected
+    /// 请求主循环退出;多次调用幂等退出前主循环若 last_state ≠ Disconnected
     /// 会补发一次终止性 SnowLumaLoginStateChanged{Disconnected}
-    /// 。
+    /// 
     pub fn dispose(&self) {
         self.cancel.cancel();
     }
 
-    /// 当前 Poller 关联的 BotId。
+    /// 当前 Poller 关联的 BotId
     pub fn bot_id(&self) -> &BotId {
         &self.bot_id
     }
@@ -119,12 +119,12 @@ impl SnowLumaStatusPoller {
 
 impl Drop for SnowLumaStatusPoller {
     fn drop(&mut self) {
-        // 兜底：忘记显式 dispose 时仍取消后台 task。
+        // 兜底:忘记显式 dispose 时仍取消后台 task
         self.cancel.cancel();
     }
 }
 
-/// 主循环私有可变状态。
+/// 主循环私有可变状态
 #[derive(Debug, Default)]
 struct PollerState {
     initial_qq_pid: u32,
@@ -155,7 +155,7 @@ async fn run_poller(
 ) {
     let mut state = PollerState::new(initial_qq_pid);
 
-    // 启动延迟：避免抢在 daemon Ready 之前发请求。期间允许 cancel 直接退出。
+    // 启动延迟:避免抢在 daemon Ready 之前发请求期间允许 cancel 直接退出
     tokio::select! {
     biased;
     _ = cancel.cancelled() => {
@@ -165,7 +165,7 @@ async fn run_poller(
     _ = sleep(START_DELAY) => {}
     }
 
-    // ticker：第一轮在 START_DELAY 之后立刻触发，与 legacy QTimer 对齐。
+    // ticker:第一轮在 START_DELAY 之后立刻触发,与 legacy QTimer 对齐
     let mut ticker = interval_at(Instant::now(), POLL_INTERVAL);
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
@@ -183,7 +183,7 @@ async fn run_poller(
     }
 }
 
-/// 退出前补发一次终止性 Disconnected（仅当 last_state ≠ Disconnected）。
+/// 退出前补发一次终止性 Disconnected(仅当 last_state ≠ Disconnected)
 fn emit_terminal_disconnected_if_needed(
     bot_id: &BotId,
     deps: &PollerDeps,
@@ -199,8 +199,8 @@ fn emit_terminal_disconnected_if_needed(
     }
 }
 
-/// 单轮 tick：并发拉 /api/processes + /api/qq-list → UIN 锁定 → 状态合成 →
-/// PID 集合变化通知。
+/// 单轮 tick:并发拉 /api/processes + /api/qq-list → UIN 锁定 → 状态合成 →
+/// PID 集合变化通知
 async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
     let (proc_res, qq_res) =
         tokio::join!(deps.http.list_processes(), deps.http.list_qq_instances());
@@ -208,7 +208,7 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
     let (processes, qq_instances) = match (proc_res, qq_res) {
         (Ok(p), Ok(q)) => (p, q),
         _ => {
-            // 任一失败：累计失败，达到门限发一次 Disconnected（仅一次）
+            // 任一失败:累计失败,达到门限发一次 Disconnected(仅一次)
             state.consecutive_failures = state.consecutive_failures.saturating_add(1);
             if state.consecutive_failures >= MAX_CONSECUTIVE_FAILURES
                 && state.last_state != Some(SnowLumaLoginState::Disconnected)
@@ -224,10 +224,10 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
         }
     };
 
-    // 全部成功：恢复失败计数。
+    // 全部成功:恢复失败计数
     state.consecutive_failures = 0;
 
-    // === UIN 锁定（仅 uin == None 时尝试）===
+    // === UIN 锁定(仅 uin == None 时尝试)===
     if state.uin.is_none() {
         let candidates = deps
             .proc_tree
@@ -242,7 +242,7 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
         }
     }
 
-    // 还没锁定 → 本轮不发布状态 / PID 集合事件。
+    // 还没锁定 → 本轮不发布状态 / PID 集合事件
     let Some(ref locked_uin) = state.uin else {
         return;
     };
@@ -275,21 +275,21 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
 }
 
 // ---------------------------------------------------------------------------
-// 纯函数：UIN 锁定 + 状态合成 + 真实性校验
+// 纯函数:UIN 锁定 + 状态合成 + 真实性校验
 // ---------------------------------------------------------------------------
 
-/// is_real_uin：非空 + 非 "0" + 全 ASCII 数字 + 长度 ≥ 5。
+/// is_real_uin:非空 + 非 "0" + 全 ASCII 数字 + 长度 ≥ 5
 fn is_real_uin(s: &str) -> bool {
     !s.is_empty() && s != "0" && s.len() >= 5 && s.bytes().all(|b| b.is_ascii_digit())
 }
 
-/// 严格 UIN 锁定策略：
-/// - 策略 A：任一 process.pid ∈ candidate set 且 is_real_uin(process.uin)
-///   → 锁该 uin。
-/// - 策略 B（fallback，仅当 processes 完全空时）：qq_instances 恰好 1 条 +
-///   is_real_uin(qq_instances[0].uin) → 锁该 uin。
-/// - 否则：返回 None，等下一轮重试。
-///   多 instance（≥ 2）显式拒绝，避免 cross-Bot 误匹配（legacy 复现过）。
+/// 严格 UIN 锁定策略:
+/// - 策略 A:任一 process.pid ∈ candidate set 且 is_real_uin(process.uin)
+///   → 锁该 uin
+/// - 策略 B(fallback,仅当 processes 完全空时):qq_instances 恰好 1 条 +
+///   is_real_uin(qq_instances[0].uin) → 锁该 uin
+/// - 否则:返回 None,等下一轮重试
+///   多 instance(≥ 2)显式拒绝,避免 cross-Bot 误匹配(legacy 复现过)
 fn try_lock_uin(
     processes: &[HookProcessInfo],
     qq_instances: &[OneBotInstanceInfo],
@@ -301,21 +301,21 @@ fn try_lock_uin(
             return Some(p.uin.clone());
         }
     }
-    // 策略 B：仅当 processes 完全空 + qq_instances 恰好 1 条
+    // 策略 B:仅当 processes 完全空 + qq_instances 恰好 1 条
     if processes.is_empty() && qq_instances.len() == 1 && is_real_uin(&qq_instances[0].uin) {
         return Some(qq_instances[0].uin.clone());
     }
     None
 }
 
-/// 状态合成：
+/// 状态合成:
 /// 1. 任一 matched.status == Online → LoggedIn
 /// 2. 否则任一 matched.status == Loaded → WaitingForQrScan
 /// 3. 否则任一 matched.status ∈ {Available, Loading, Connecting} → Starting
 /// 4. 否则 matched 非空 + 全部 ∈ {Error, Disconnected} → Disconnected
 /// 5. 否则 matched 空 + qq_instances 含已锁 uin → fallback LoggedIn
-///    （Windows getAllMainProcess bug 兜底）
-/// 6. 否则 → None，本轮不发布
+///    (Windows getAllMainProcess bug 兜底)
+/// 6. 否则 → None,本轮不发布
 fn synthesize_state(matched: &[&HookProcessInfo], qq_has_uin: bool) -> Option<SnowLumaLoginState> {
     if matched
         .iter()
@@ -356,7 +356,7 @@ fn synthesize_state(matched: &[&HookProcessInfo], qq_has_uin: bool) -> Option<Sn
 }
 
 // ===========================================================================
-// ：单元测试 + 属性测试
+// :单元测试 + 属性测试
 // ===========================================================================
 
 #[cfg(test)]
@@ -538,9 +538,9 @@ mod tests {
         }
     }
 
-    // 占位：后续追加测试用例
+    // 占位:后续追加测试用例
 
-    // ----- UIN 锁定行为（纯函数 + tick_once 集成） -----
+    // ----- UIN 锁定行为(纯函数 + tick_once 集成) -----
 
     #[test]
     fn try_lock_uin_strategy_a_proc_tree_match() {
@@ -666,7 +666,7 @@ mod tests {
         assert_eq!(synthesize_state(&matched, false), None);
     }
 
-    // ----- 主循环 tick_once 行为：用 deps 注入 mock 直接触发单轮 -----
+    // ----- 主循环 tick_once 行为:用 deps 注入 mock 直接触发单轮 -----
 
     fn build_test_deps(
         client: Arc<dyn SnowLumaWebUiClient>,
@@ -705,7 +705,7 @@ mod tests {
         assert_eq!(state.uin.as_deref(), Some("100200"));
         assert_eq!(state.last_state, Some(SnowLumaLoginState::LoggedIn));
 
-        // 收事件：UinDetected → LoginStateChanged{LoggedIn} → PidSetChanged
+        // 收事件:UinDetected → LoginStateChanged{LoggedIn} → PidSetChanged
         let mut got_uin = false;
         let mut got_state = false;
         let mut got_pids = false;
@@ -738,7 +738,7 @@ mod tests {
         let (client, behavior) = MockClient::new();
         {
             let mut b = behavior.lock().await;
-            // 让两端都失败，复用最后一条
+            // 让两端都失败,复用最后一条
             b.processes_responses
                 .push_back(Err(SnowLumaWebUiError::Timeout {
                     endpoint: "/api/processes".into(),
@@ -756,13 +756,13 @@ mod tests {
         ));
         let mut state = PollerState::new(12345);
 
-        // 两次失败：未达门限，不应发任何事件。
+        // 两次失败:未达门限,不应发任何事件
         tick_once(&bot_id, &deps, &mut state).await;
         tick_once(&bot_id, &deps, &mut state).await;
         let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
         assert!(r.is_err(), "no event before threshold");
 
-        // 第 3 次失败：达到门限，发一次 Disconnected。
+        // 第 3 次失败:达到门限,发一次 Disconnected
         tick_once(&bot_id, &deps, &mut state).await;
         let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
             .await
@@ -775,7 +775,7 @@ mod tests {
             other => panic!("expected LoginStateChanged, got {other:?}"),
         }
 
-        // 第 4 / 5 次失败：last_state == Disconnected，不应再发。
+        // 第 4 / 5 次失败:last_state == Disconnected,不应再发
         tick_once(&bot_id, &deps, &mut state).await;
         tick_once(&bot_id, &deps, &mut state).await;
         let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
@@ -793,7 +793,7 @@ mod tests {
         let mut sub = bus.subscribe(EventFilter::kind(DomainEventKind::SnowLumaPidSetChanged));
         let mut state = PollerState::new(12345);
 
-        // 第 1 轮：matched 集合 {12346}
+        // 第 1 轮:matched 集合 {12346}
         {
             let mut b = behavior.lock().await;
             b.processes_responses.push_back(Ok(vec![proc(
@@ -815,7 +815,7 @@ mod tests {
             o => panic!("{o:?}"),
         }
 
-        // 第 2 轮：matched 集合变成 {12346, 12347}
+        // 第 2 轮:matched 集合变成 {12346, 12347}
         {
             let mut b = behavior.lock().await;
             b.processes_responses.push_back(Ok(vec![
@@ -865,7 +865,7 @@ mod tests {
             o => panic!("{o:?}"),
         }
 
-        // 再调一次：last_state == Disconnected，不应重复发。
+        // 再调一次:last_state == Disconnected,不应重复发
         emit_terminal_disconnected_if_needed(&bot_id, &deps, &mut state);
         let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
         assert!(r.is_err());

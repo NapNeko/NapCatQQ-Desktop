@@ -1,4 +1,4 @@
-//! SSH 连接配置。
+//! SSH 连接配置
 //!
 //! 默认值:
 //! - 默认端口 22
@@ -11,7 +11,7 @@ use std::time::Duration;
 use crate::remote::credentials::SshCredentials;
 use crate::remote::host_key::HostKeyPolicy;
 
-/// SSH 连接参数。
+/// SSH 连接参数
 #[derive(Debug, Clone)]
 pub struct ConnectionConfig {
     pub host: String,
@@ -23,7 +23,7 @@ pub struct ConnectionConfig {
 }
 
 impl ConnectionConfig {
-    /// 创建一个使用默认超时 / keepalive 的连接配置。
+    /// 创建一个使用默认超时 / keepalive 的连接配置
     pub fn new(
         host: impl Into<String>,
         port: u16,

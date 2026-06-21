@@ -272,7 +272,7 @@ fn log_actor_result(
 ) {
     match result {
         Ok(true) => {
-            // 状态已推进，last_transition 在 snapshot 里；此处只记命令名避免与 manager 重复刷屏。
+            // 状态已推进,last_transition 在 snapshot 里;此处只记命令名避免与 manager 重复刷屏
             info!(
                 target: "ncd_runtime::bot_actor",
                 bot_id = %bot_id,

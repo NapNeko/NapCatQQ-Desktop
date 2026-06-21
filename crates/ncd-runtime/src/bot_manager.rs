@@ -50,7 +50,7 @@ use ncd_host::{Host, HostPath};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
 
-/// Desktop 单机上限：最多同时托管 4 个 Bot。
+/// Desktop 单机上限:最多同时托管 4 个 Bot
 const MAX_BOTS: usize = 4;
 
 // ─── Error ─────────────────────────────────────────────────────────────────────
@@ -253,14 +253,14 @@ impl RemoteQqEntryCoordinator {
 
 // ─── BotManager ────────────────────────────────────────────────────────────────
 
-/// 编排层：统一管理所有 Bot 的生命周期。
-/// - 每个 Bot 对应一个 BotActorHandle（状态机）。
-/// - BotConfigRepo 负责持久化配置。
-/// - BackendConfigRenderer 负责生成后端运行时配置文件。
-/// - BroadcastEventBus 负责事件广播给前端。
+/// 编排层:统一管理所有 Bot 的生命周期
+/// - 每个 Bot 对应一个 BotActorHandle(状态机)
+/// - BotConfigRepo 负责持久化配置
+/// - BackendConfigRenderer 负责生成后端运行时配置文件
+/// - BroadcastEventBus 负责事件广播给前端
 ///
-/// BotManager 自身不持有可变业务状态，所有可变状态都封装在
-/// actors map（由 RwLock 保护）和各 BotActorHandle 内部。
+/// BotManager 自身不持有可变业务状态,所有可变状态都封装在
+/// actors map(由 RwLock 保护)和各 BotActorHandle 内部
 pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     repo: Arc<R>,
     store: Arc<S>,
@@ -269,42 +269,42 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     launch_planner: Arc<dyn RuntimeLaunchPlanner>,
     event_bus: Arc<BroadcastEventBus>,
     actors: Arc<RwLock<HashMap<BotId, BotActorHandle>>>,
-    /// per-Bot WebUI 登录轮询组件，由 run_napcat_login_listener 在收到
-    /// NapCatWebuiAvailable 事件时插入；BotProcessExited / delete_bot
-    /// / shutdown_all 时移除并 dispose。
+    /// per-Bot WebUI 登录轮询组件,由 run_napcat_login_listener 在收到
+    /// NapCatWebuiAvailable 事件时插入;BotProcessExited / delete_bot
+    /// / shutdown_all 时移除并 dispose
     login_pollers: Arc<RwLock<HashMap<BotId, NapCatLoginPoller>>>,
-    /// per-Bot NapCat WebUI 端点 (port + token) 的内存表。
-    /// NapCat 多 bot 启动时端口会自动 +1，webui.json 不能区分，必须从每个 bot
-    /// 自己的 stdout 抓 WebUi User Panel Url。本表的写/删时机与 login_pollers
-    /// 完全对齐，供配置热推送在保存配置时反查 (port, token)。
+    /// per-Bot NapCat WebUI 端点 (port + token) 的内存表
+    /// NapCat 多 bot 启动时端口会自动 +1,webui.json 不能区分,必须从每个 bot
+    /// 自己的 stdout 抓 WebUi User Panel Url本表的写/删时机与 login_pollers
+    /// 完全对齐,供配置热推送在保存配置时反查 (port, token)
     napcat_endpoints: NapCatEndpointTable,
-    /// NapCat WebUI HTTP 客户端依赖，可注入 mock 用于测试。
+    /// NapCat WebUI HTTP 客户端依赖,可注入 mock 用于测试
     webui_client: Arc<dyn NapCatWebUiClient>,
-    /// 离线通知通道依赖，可注入 mock；默认 wiring 走 NoopOfflineNotifier。
+    /// 离线通知通道依赖,可注入 mock;默认 wiring 走 NoopOfflineNotifier
     offline_notifier: Arc<dyn OfflineNotifier>,
-    /// App 级 Poller 设置，热更新通过 poller_settings.write() 即可生效
-    /// 下次 handle_webui_available 创建 Poller 时读取最新值。
+    /// App 级 Poller 设置,热更新通过 poller_settings.write() 即可生效
+    /// 下次 handle_webui_available 创建 Poller 时读取最新值
     poller_settings: Arc<RwLock<WebUiPollerSettings>>,
-    /// 桌面 Toast 开关（与 app-settings.json 同步）。
+    /// 桌面 Toast 开关(与 app-settings.json 同步)
     desktop_notify: Arc<RwLock<DesktopNotifySettings>>,
-    /// SnowLuma flavor backend（可选）。None 时所有 bot 走 backend（NapCat 路径）。
-    /// 由 wiring 阶段构造并通过 with_snowluma_backend 注入。
+    /// SnowLuma flavor backend(可选)None 时所有 bot 走 backend(NapCat 路径)
+    /// 由 wiring 阶段构造并通过 with_snowluma_backend 注入
     snowluma_backend: Option<Arc<dyn BotBackend>>,
-    /// SnowLuma 全局 daemon 句柄（可选），用于 shutdown_all 关闭 daemon、
-    /// run_snowluma_listener 监听 daemon Crashed 级联级 actor。
+    /// SnowLuma 全局 daemon 句柄(可选),用于 shutdown_all 关闭 daemon,
+    /// run_snowluma_listener 监听 daemon Crashed 级联级 actor
     snowluma_daemon: Option<Arc<crate::snowluma::SnowLumaDaemon>>,
-    /// 把 BotConfig 的 runtime_target 解析成 host（本机 / 远端 SSH）。
-    /// None 时走旧路径（backend 自带的本机 host，行为同历史版本）；生产侧由
-    /// with_host_resolver 注入 TauriHostResolver 后,启动时按 target 取 host。
+    /// 把 BotConfig 的 runtime_target 解析成 host(本机 / 远端 SSH)
+    /// None 时走旧路径(backend 自带的本机 host,行为同历史版本);生产侧由
+    /// with_host_resolver 注入 TauriHostResolver 后,启动时按 target 取 host
     host_resolver: Option<Arc<dyn crate::host_resolver::HostResolver>>,
-    /// Docker NapCat WebUI token 的凭据存储。DockerDeployment 要求上层显式传入
-    /// token，不能从 QQ 号或容器名派生；这里按 Bot 持久化，保证重启后 token 稳定。
+    /// Docker NapCat WebUI token 的凭据存储DockerDeployment 要求上层显式传入
+    /// token,不能从 QQ 号或容器名派生;这里按 Bot 持久化,保证重启后 token 稳定
     docker_webui_secret_store: Option<Arc<dyn SecretStore + Send + Sync>>,
     docker_sessions: Arc<DockerBotSessionRegistry>,
     remote_native_napcat_sessions: Arc<RemoteNativeNapcatSessionRegistry>,
     remote_bot_log_follow: Arc<RemoteBotLogFollowRegistry>,
     remote_sl_daemon_log: Arc<RemoteSnowLumaLogRegistry>,
-    /// 远端 SnowLuma：按 server_id 共享 daemon（多 Bot 同一 SSH 主机）。
+    /// 远端 SnowLuma:按 server_id 共享 daemon(多 Bot 同一 SSH 主机)
     remote_snowluma_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
     remote_snowluma_tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     /// Per-remote-host coordination for flipping the shared ~/Napcat/opt/QQ tree's
@@ -386,8 +386,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 注入 HostResolver（wiring 阶段调用），让启动时按 runtime_target 选本机/远端 host。
-    /// 不注入时走旧路径（全本机）。链式 builder 风格。
+    /// 注入 HostResolver(wiring 阶段调用),让启动时按 runtime_target 选本机/远端 host
+    /// 不注入时走旧路径(全本机)链式 builder 风格
     pub fn with_host_resolver(
         mut self,
         resolver: Arc<dyn crate::host_resolver::HostResolver>,
@@ -396,8 +396,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self
     }
 
-    /// 注入 Docker WebUI token 的 SecretStore。DockerDeployment 不生成生产默认 token，
-    /// runtime 层负责按 Bot 持久化后显式传入 deploy 层。
+    /// 注入 Docker WebUI token 的 SecretStoreDockerDeployment 不生成生产默认 token,
+    /// runtime 层负责按 Bot 持久化后显式传入 deploy 层
     pub fn with_docker_webui_secret_store(
         mut self,
         store: Arc<dyn SecretStore + Send + Sync>,
@@ -406,8 +406,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self
     }
 
-    /// 注入 SnowLuma flavor 路由依赖（ wiring 阶段调用）。
-    /// 链式 builder 风格，便于 setup 代码组装。
+    /// 注入 SnowLuma flavor 路由依赖( wiring 阶段调用)
+    /// 链式 builder 风格,便于 setup 代码组装
     pub fn with_snowluma(
         mut self,
         backend: Arc<dyn BotBackend>,
@@ -418,9 +418,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self
     }
 
-    /// 热更新 App 级轮询设置。运行中的 Poller 在下次创建（启动 / 重启）时
-    /// 从 poller_settings 读最新值；已在跑的 Poller 不强制重建，避免抖动。
-    /// 设置页 set_app_settings 写盘后调用此方法让内存值同步。
+    /// 热更新 App 级轮询设置运行中的 Poller 在下次创建(启动 / 重启)时
+    /// 从 poller_settings 读最新值;已在跑的 Poller 不强制重建,避免抖动
+    /// 设置页 set_app_settings 写盘后调用此方法让内存值同步
     pub async fn update_poller_settings(&self, settings: WebUiPollerSettings) {
         *self.poller_settings.write().await = settings;
     }
@@ -429,8 +429,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         *self.desktop_notify.write().await = settings;
     }
 
-    /// 按 flavor 选择 backend：SnowLuma 时优先用注入的 SL backend，否则
-    /// 回落到默认 backend（向后兼容：未注入 SL 时与历史行为一致）。
+    /// 按 flavor 选择 backend:SnowLuma 时优先用注入的 SL backend,否则
+    /// 回落到默认 backend(向后兼容:未注入 SL 时与历史行为一致)
     fn backend_for(&self, flavor: BotFlavor) -> Arc<dyn BotBackend> {
         match flavor {
             BotFlavor::SnowLuma => self
@@ -493,13 +493,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         crate::snowluma::session::generate_strong_password(16)
     }
 
-    /// SnowLuma WebUI 首启 bootstrap（对齐 auth.ts envBootstrapPassword，≥8 位）。
+    /// SnowLuma WebUI 首启 bootstrap(对齐 auth.ts envBootstrapPassword,≥8 位)
     fn generate_docker_sl_webui_bootstrap_password() -> String {
         crate::snowluma::session::generate_strong_password(16)
     }
 
-    /// stop / restart / delete 必须按完整 BotConfig 路由 backend；backend_for_config
-    /// 失败时不得静默回落本机 baked backend，否则远端 Docker 会假停/假删。
+    /// stop / restart / delete 必须按完整 BotConfig 路由 backend;backend_for_config
+    /// 失败时不得静默回落本机 baked backend,否则远端 Docker 会假停/假删
     async fn backend_for_lifecycle(
         &self,
         config: &BotConfig,
@@ -546,16 +546,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         )
     }
 
-    /// 按 BotConfig 的 deployment_type + runtime_target 选/造 backend。
+    /// 按 BotConfig 的 deployment_type + runtime_target 选/造 backend
     ///
     /// 路由矩阵:
     /// - Docker: 按 runtime_target 解析 host(本机 Docker Desktop / 远端 SSH),
-    ///   现造 DockerDeploymentBackend。这是远端 + 容器化的真正可用路径。
-    /// - Native + Local: 走现有 baked backend(零行为变化,最低风险)。
-    /// - Native + Server(id): 远端 Linux SSH + NativeDeployment（组件路径 + xvfb-run，无 napcat.sh）。
-    /// - Native + Server + SnowLuma: 远端 launcher（daemon + bot）路径。
+    ///   现造 DockerDeploymentBackend这是远端 + 容器化的真正可用路径
+    /// - Native + Local: 走现有 baked backend(零行为变化,最低风险)
+    /// - Native + Server(id): 远端 Linux SSH + NativeDeployment(组件路径 + xvfb-run,无 napcat.sh)
+    /// - Native + Server + SnowLuma: 远端 launcher(daemon + bot)路径
     ///
-    /// 无 host_resolver 注入时(过渡期/测试)一律回落 baked backend,行为同历史。
+    /// 无 host_resolver 注入时(过渡期/测试)一律回落 baked backend,行为同历史
     async fn backend_for_config(
         &self,
         config: &BotConfig,
@@ -563,7 +563,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let flavor = map_backend_flavor(config.bot.backend_type);
         let resolver = match &self.host_resolver {
             Some(r) => r,
-            // 没注入 resolver:维持历史行为(全本机 native)。
+            // 没注入 resolver:维持历史行为(全本机 native)
             None => return Ok(self.backend_for(flavor)),
         };
 
@@ -664,7 +664,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 远端 SL：remote_snowluma_daemons 按 server_id 单例 daemon；多 Bot 共用图形栈，按 qq_id 冷/热注入。
+    /// 远端 SL:remote_snowluma_daemons 按 server_id 单例 daemon;多 Bot 共用图形栈,按 qq_id 冷/热注入
     async fn remote_snowluma_daemon_for_server(
         &self,
         server_id: &str,
@@ -691,7 +691,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     // ─── bootstrap ─────────────────────────────────────────────────────────
 
-    /// 冷启动：远端 Docker / 远端 Native SnowLuma 若仍在跑，则 attach 并把 Actor 标为 Running。
+    /// 冷启动:远端 Docker / 远端 Native SnowLuma 若仍在跑,则 attach 并把 Actor 标为 Running
     async fn reconcile_bootstrap_bots(
         &self,
         configs: &[BotConfig],
@@ -1084,8 +1084,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 启动时从持久化配置恢复所有 Bot Actor，并自动启动标记了 auto_start 的 Bot。
-    /// 返回 BootstrapResult，其中 skipped 包含超出 4 开上限而未注册的 Bot ID。
+    /// 启动时从持久化配置恢复所有 Bot Actor,并自动启动标记了 auto_start 的 Bot
+    /// 返回 BootstrapResult,其中 skipped 包含超出 4 开上限而未注册的 Bot ID
     pub async fn bootstrap(&self) -> Result<BootstrapResult, BotManagerError> {
         let configs = self.repo.list().await?;
         info!(
@@ -1096,7 +1096,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         let mut skipped: Vec<BotId> = Vec::new();
 
-        // 恢复 Actor（不超过 MAX_BOTS），超出的记入 skipped
+        // 恢复 Actor(不超过 MAX_BOTS),超出的记入 skipped
         {
             let mut actors = self.actors.write().await;
             for config in &configs {
@@ -1111,10 +1111,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
-        // 远端 Docker：桌面退出后容器可能仍在跑，先 reconcile attach，避免 auto_start 误 remove。
+        // 远端 Docker:桌面退出后容器可能仍在跑,先 reconcile attach,避免 auto_start 误 remove
         let reconciled = self.reconcile_bootstrap_bots(&configs, &skipped).await;
 
-        // 自动启动（只针对已注册的 actor，skipped / 已 reconcile 的不会被启动）
+        // 自动启动(只针对已注册的 actor,skipped / 已 reconcile 的不会被启动)
         let auto_start_ids: Vec<BotId> = configs
             .iter()
             .filter(|c| c.advanced.auto_start)
@@ -1150,10 +1150,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(BootstrapResult { started, skipped })
     }
 
-    /// 启动前检测派生配置文件 drift。
+    /// 启动前检测派生配置文件 drift
     ///
-    /// 返回 None：派生文件不存在或跟 BotConfig 完全一致,可以直接启动。
-    /// 返回 Some(drift)：有差异,前端应弹 ConfigDriftDialog 让用户抉择。
+    /// 返回 None:派生文件不存在或跟 BotConfig 完全一致,可以直接启动
+    /// 返回 Some(drift):有差异,前端应弹 ConfigDriftDialog 让用户抉择
     pub async fn detect_config_drift(
         &self,
         bot_id: &BotId,
@@ -1169,12 +1169,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 带用户决议启动 Bot。
+    /// 带用户决议启动 Bot
     ///
-    /// decisions 来自前端 ConfigDriftDialog,包含：
-    /// - AcceptExternal { file, path, value }：渲染输出时把对应 path 覆盖为外部值
-    /// - DropAdded { file, path }：不保留新增字段（覆盖时这些字段不出现在 existing 里即可）
-    /// - KeepAdded / UseInternal：无需特别处理(默认行为)
+    /// decisions 来自前端 ConfigDriftDialog,包含:
+    /// - AcceptExternal { file, path, value }:渲染输出时把对应 path 覆盖为外部值
+    /// - DropAdded { file, path }:不保留新增字段(覆盖时这些字段不出现在 existing 里即可)
+    /// - KeepAdded / UseInternal:无需特别处理(默认行为)
     pub async fn start_bot_with_decisions(
         &self,
         bot_id: &BotId,
@@ -1194,14 +1194,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
-        // DropAdded 的决议：从 existing 文件里删掉对应 key 再渲染。这里不做
+        // DropAdded 的决议:从 existing 文件里删掉对应 key 再渲染这里不做
         // 额外处理——因为 render_with_existing 只合并 existing 里在 known_keys
-        // **之外**的顶层字段。如果要 drop 某个顶层扩展字段,需要从 existing map
-        // 里主动 remove。但当前 render_backend_config 是从磁盘现读的 existing,
-        // 要 drop 的字段仍然在磁盘文件里。
+        // **之外**的顶层字段如果要 drop 某个顶层扩展字段,需要从 existing map
+        // 里主动 remove但当前 render_backend_config 是从磁盘现读的 existing,
+        // 要 drop 的字段仍然在磁盘文件里
         //
-        // 处理方式：把 DropAdded 转成"用 null 覆盖"→ set_value_at_dot_path 遇到
-        // null 会 remove 该 key,效果等价于"用户选择丢弃"。
+        // 处理方式:把 DropAdded 转成"用 null 覆盖"→ set_value_at_dot_path 遇到
+        // null 会 remove 该 key,效果等价于"用户选择丢弃"
         for d in decisions {
             if let DriftDecision::DropAdded { file, path } = d {
                 overrides
@@ -1234,8 +1234,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .await
     }
 
-    /// 启动指定 Bot（无 drift 决议版本,等价于全部 UseInternal）。
-    /// 前置条件：Actor 已存在且处于可启动状态（Stopped / Crashed）。
+    /// 启动指定 Bot(无 drift 决议版本,等价于全部 UseInternal)
+    /// 前置条件:Actor 已存在且处于可启动状态(Stopped / Crashed)
     pub async fn start_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到启动 Bot 请求");
         let handle = self.get_actor(bot_id).await?;
@@ -1261,7 +1261,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .await
     }
 
-    /// 停止指定 Bot。
+    /// 停止指定 Bot
     pub async fn stop_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到停止 Bot 请求");
         self.docker_sessions.stop_expected(bot_id).await;
@@ -1269,7 +1269,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let stopping = handle.request_stop().await?;
         self.publish_state_change(&stopping, "stop_requested");
 
-        // 按 deployment_type + runtime_target 选 backend；路由失败必须向上报错。
+        // 按 deployment_type + runtime_target 选 backend;路由失败必须向上报错
         let cfg = self.get_required_bot_config(bot_id).await?;
         let backend = self.backend_for_lifecycle(&cfg).await?;
 
@@ -1318,20 +1318,20 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     "停止 Bot 失败（后端 stop 报错）"
                 );
 
-                // 传输类错误（远端 SSH 断连、host 刷新失败等）：只发信息性 bot_error，
-                // 不 mark_crashed，actor 状态保持原样（Running/Stopping）。
-                // 这样前端看到的是“远端主机临时不可达”，而不是“bot 崩溃”。
+                // 传输类错误(远端 SSH 断连,host 刷新失败等):只发信息性 bot_error,
+                // 不 mark_crashed,actor 状态保持原样(Running/Stopping)
+                // 这样前端看到的是“远端主机临时不可达”,而不是“bot 崩溃”
                 if is_remote_transport_error(&err) {
                     self.event_bus.publish(DomainEvent::bot_error(
                         bot_id.clone(),
                         message,
                         Some("远端主机连接中断，停止操作未完成；连接恢复后可重试".to_string()),
                     ));
-                    // 不改变 actor 状态，直接返回错误
+                    // 不改变 actor 状态,直接返回错误
                     return Err(err.into());
                 }
 
-                // 非传输类错误：按原有逻辑标记崩溃
+                // 非传输类错误:按原有逻辑标记崩溃
                 let crashed = handle.mark_crashed(message.clone()).await?;
                 self.publish_state_change(&crashed, "stop_failed");
                 self.event_bus.publish(DomainEvent::bot_error(
@@ -1344,17 +1344,17 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 重启指定 Bot。
-    /// 6 状态分支语义：
-    /// - Running | Starting：actor.request_restart()（标记 pending_restart 并转 Stopping）
+    /// 重启指定 Bot
+    /// 6 状态分支语义:
+    /// - Running | Starting:actor.request_restart()(标记 pending_restart 并转 Stopping)
     ///   → backend.stop(Force) → 等 actor 经 confirm_stopped 转入 Starting → start_bot
-    /// - Stopped | Crashed：直接 start_bot
-    /// - Stopping：actor.request_restart() 标 pending_restart → 等 actor 转入 Starting → start_bot
-    /// - Repairing：返回 BotManagerError::InvalidState
+    /// - Stopped | Crashed:直接 start_bot
+    /// - Stopping:actor.request_restart() 标 pending_restart → 等 actor 转入 Starting → start_bot
+    /// - Repairing:返回 BotManagerError::InvalidState
     ///
-    /// 设计：复用 BotActor 现有的 pending_restart 机制，不新增状态机分支。
-    /// 错误返回给调用方；RestartHandle::restart_bot impl 会把
-    /// 错误转为 DomainEvent::bot_error 发布给前端。
+    /// 设计:复用 BotActor 现有的 pending_restart 机制,不新增状态机分支
+    /// 错误返回给调用方;RestartHandle::restart_bot impl 会把
+    /// 错误转为 DomainEvent::bot_error 发布给前端
     pub async fn restart_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到重启 Bot 请求");
         let handle = self.get_actor(bot_id).await?;
@@ -1397,13 +1397,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 监听 actor 的 watch::Receiver 直到进入指定 target 状态或超时。
-    /// 用 watch::Receiver::borrow_and_update 先消化已有快照，再 changed
-    /// 等下次更新；超时返回 BotManagerError::Render，邮箱关闭则返回
-    /// BotManagerError::Actor(MailboxClosed)。
+    /// 监听 actor 的 watch::Receiver 直到进入指定 target 状态或超时
+    /// 用 watch::Receiver::borrow_and_update 先消化已有快照,再 changed
+    /// 等下次更新;超时返回 BotManagerError::Render,邮箱关闭则返回
+    /// BotManagerError::Actor(MailboxClosed)
     ///
-    /// 当前 restart 路径全部走 fast-path（confirm_stopped 直接推进），不再
-    /// 用这个 helper；保留是为了将来真正需要等异步状态转移时可以复用。
+    /// 当前 restart 路径全部走 fast-path(confirm_stopped 直接推进),不再
+    /// 用这个 helper;保留是为了将来真正需要等异步状态转移时可以复用
     #[allow(dead_code)]
     async fn wait_until_state(
         &self,
@@ -1429,7 +1429,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     // ─── 批量操作 ─────────────────────────────────────────────────────────
 
-    /// 批量启动。并发调度所有目标 Bot，收集成功/失败。
+    /// 批量启动并发调度所有目标 Bot,收集成功/失败
     pub async fn batch_start(&self, bot_ids: &[BotId]) -> Result<BatchResult, BotManagerError> {
         let mut result = BatchResult {
             succeeded: Vec::new(),
@@ -1466,7 +1466,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(result)
     }
 
-    /// 批量停止。
+    /// 批量停止
     pub async fn batch_stop(&self, bot_ids: &[BotId]) -> Result<BatchResult, BotManagerError> {
         let mut result = BatchResult {
             succeeded: Vec::new(),
@@ -1499,7 +1499,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(result)
     }
 
-    /// 批量删除：先停止运行中的 Bot，再 shutdown Actor，最后删除持久化配置。
+    /// 批量删除:先停止运行中的 Bot,再 shutdown Actor,最后删除持久化配置
     pub async fn batch_delete(&self, bot_ids: &[BotId]) -> Result<BatchResult, BotManagerError> {
         let mut result = BatchResult {
             succeeded: Vec::new(),
@@ -1518,15 +1518,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     // ─── 配置管理 ─────────────────────────────────────────────────────────
 
-    /// 新增或更新 Bot 配置。
-    /// 策略：先持久化 bot.json（source of truth），再写派生文件。
-    /// - 如果 bot.json 写入失败，派生文件不会被写入，状态完全未变。
-    /// - 如果派生文件写入失败，bot.json 已是最新，派生文件可在下次启动时重新生成
-    ///   不会造成不可恢复的不一致。
-    /// - 新增时：检查 4 开上限，持久化，写派生文件，创建 Actor。
-    /// - 更新时：持久化，写派生文件，热推送（通过 restart 通知 Actor 重新加载）。
-    /// - 如果 backend_type 发生切换（NapCat ↔ SnowLuma），必须用旧 backend
-    ///   停掉运行中的进程，再用**新** backend 启动，避免老进程留尸。
+    /// 新增或更新 Bot 配置
+    /// 策略:先持久化 bot.json(source of truth),再写派生文件
+    /// - 如果 bot.json 写入失败,派生文件不会被写入,状态完全未变
+    /// - 如果派生文件写入失败,bot.json 已是最新,派生文件可在下次启动时重新生成
+    ///   不会造成不可恢复的不一致
+    /// - 新增时:检查 4 开上限,持久化,写派生文件,创建 Actor
+    /// - 更新时:持久化,写派生文件,热推送(通过 restart 通知 Actor 重新加载)
+    /// - 如果 backend_type 发生切换(NapCat ↔ SnowLuma),必须用旧 backend
+    ///   停掉运行中的进程,再用**新** backend 启动,避免老进程留尸
     pub async fn upsert_bot_config(
         &self,
         config: BotConfig,
@@ -1535,8 +1535,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .await
     }
 
-    /// 带 drift overrides 的 upsert。前端保存时如果检测到 drift 并确认了决议,
-    /// 把 overrides 带进来;无 drift 时传空 map。
+    /// 带 drift overrides 的 upsert前端保存时如果检测到 drift 并确认了决议,
+    /// 把 overrides 带进来;无 drift 时传空 map
     pub async fn upsert_bot_config_with_overrides(
         &self,
         config: BotConfig,
@@ -1566,8 +1566,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
-        // 0. 读旧 config 拿原 backend_type，用于检测 backend 切换走特殊路径。
-        //    新建 bot 没有旧 config，这步返回 None。
+        // 0. 读旧 config 拿原 backend_type,用于检测 backend 切换走特殊路径
+        //    新建 bot 没有旧 config,这步返回 None
         let previous_backend_type: Option<BackendType> = if is_new {
             None
         } else {
@@ -1579,13 +1579,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 .map(|c| c.bot.backend_type)
         };
 
-        // 1. 先持久化 bot.json（source of truth）
+        // 1. 先持久化 bot.json(source of truth)
         self.repo.upsert(config.clone()).await?;
 
-        // 2. 渲染派生配置文件（走 render_backend_config：读 existing + merge unknown + apply overrides）
+        // 2. 渲染派生配置文件(走 render_backend_config:读 existing + merge unknown + apply overrides)
         self.render_backend_config(&bot_id, &config, overrides)
             .await?;
-        // 清理不再需要的旧 backend 派生文件（例如 NapCat→SL 时删除 onebot11/napcat 文件）
+        // 清理不再需要的旧 backend 派生文件(例如 NapCat→SL 时删除 onebot11/napcat 文件)
         let target_backend = config.bot.backend_type;
         let current_paths =
             output_paths_for_backend(target_backend, self.store.config_dir(), &bot_id);
@@ -1634,10 +1634,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     self.publish_state_change(&snapshot, "config_hot_reload");
                     Ok(snapshot)
                 } else {
-                    // 同 backend 运行中:派生文件已写盘(step 2),尝试通过 WebUI 热推送。
+                    // 同 backend 运行中:派生文件已写盘(step 2),尝试通过 WebUI 热推送
                     // NapCat: POST /api/OB11Config/SetConfig (需要 port + auth,当前实装延后)
                     // SnowLuma: POST /api/config/:uin (用 daemon 共享 client)
-                    // 热推送失败不阻塞保存流程,只给前端一个 warning;下次重启生效。
+                    // 热推送失败不阻塞保存流程,只给前端一个 warning;下次重启生效
                     if target_backend == BackendType::SnowLuma {
                         if let Some(daemon) = &self.snowluma_daemon {
                             if let Ok(client) = daemon.current_client().await {
@@ -1673,11 +1673,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                             }
                         }
                     } else {
-                        // NapCat 热推送：endpoint 表里有 (port, token) 才能继续
-                        // （bot 已经把 WebUI 端点报到 stdout 上）。没有就只写盘
-                        // 等下次启动生效。配置 payload 直接复用 renderer 写入
+                        // NapCat 热推送:endpoint 表里有 (port, token) 才能继续
+                        // (bot 已经把 WebUI 端点报到 stdout 上)没有就只写盘
+                        // 等下次启动生效配置 payload 直接复用 renderer 写入
                         // onebot11_{bot}.json 的内容——NapCat WebUI
-                        // /api/OB11Config/SetConfig 期望的 schema 与该文件一致。
+                        // /api/OB11Config/SetConfig 期望的 schema 与该文件一致
                         let endpoint = self.napcat_endpoints.snapshot(&bot_id).await;
                         let onebot_payload =
                             self.renderer.render(&bot_id, &config).ok().and_then(|txn| {
@@ -1699,8 +1699,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                                     reason,
                                 ));
                             }
-                            // 端点没拿到（bot 还没 ready）或者渲染异常 → 配置已落盘，
-                            // 等下次重启再生效。
+                            // 端点没拿到(bot 还没 ready)或者渲染异常 → 配置已落盘,
+                            // 等下次重启再生效
                             _ => {
                                 self.event_bus.publish(DomainEvent::bot_state_changed(
                                     current.clone(),
@@ -1721,18 +1721,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 切换 backend_type 时的专用 restart：用 previous_flavor 对应的 backend
-    /// 停掉老进程，再用 start_bot（自动按新 config 选 backend）启动新进程。
+    /// 切换 backend_type 时的专用 restart:用 previous_flavor 对应的 backend
+    /// 停掉老进程,再用 start_bot(自动按新 config 选 backend)启动新进程
     ///
-    /// 与普通 restart_bot 的关键差异：
-    /// - stop 阶段不再用 self.backend（写死 NapCat backend），而是用
-    ///   backend_for(previous_flavor)，避免切换 NapCat → SnowLuma 时老进程留尸。
-    /// - stop 返回后**直接** confirm_stopped 推进 actor 到 Starting，不依赖
-    ///   异步 BotProcessExited 事件链。原因：
-    ///   1. backend.stop 是同步 await 的，返回时进程树已被 force kill
+    /// 与普通 restart_bot 的关键差异:
+    /// - stop 阶段不再用 self.backend(写死 NapCat backend),而是用
+    ///   backend_for(previous_flavor),避免切换 NapCat → SnowLuma 时老进程留尸
+    /// - stop 返回后**直接** confirm_stopped 推进 actor 到 Starting,不依赖
+    ///   异步 BotProcessExited 事件链原因:
+    ///   1. backend.stop 是同步 await 的,返回时进程树已被 force kill
     ///   2. 切换 backend 时 actor 上层不一定能立刻收到旧 backend 的 exit 事件
-    ///      （例如旧 backend processes map 已被 stop 主动 remove，spawn_exit_watcher
-    ///      持有的 child handle 还在等 wait 完成，wait_until_state 会 10s 超时）
+    ///      (例如旧 backend processes map 已被 stop 主动 remove,spawn_exit_watcher
+    ///      持有的 child handle 还在等 wait 完成,wait_until_state 会 10s 超时)
     async fn restart_bot_with_backend_switch(
         &self,
         bot_id: &BotId,
@@ -1751,30 +1751,30 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             Err(crate::bot_actor::BotActorError::InvalidTransition { .. }) => {}
             Err(e) => return Err(e.into()),
         }
-        // start_bot 内部按当前 config 重新选 backend，自动用新 flavor 启动。
+        // start_bot 内部按当前 config 重新选 backend,自动用新 flavor 启动
         self.start_bot(bot_id).await
     }
 
-    /// 删除 Bot 配置及其 Actor。如果 Bot 正在运行，先停止。
+    /// 删除 Bot 配置及其 Actor如果 Bot 正在运行,先停止
     pub async fn delete_bot_config(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
         self.delete_bot_internal(bot_id).await
     }
 
     // ─── 查询 ─────────────────────────────────────────────────────────────
 
-    /// 获取所有 Bot 的当前快照。
+    /// 获取所有 Bot 的当前快照
     pub async fn list_snapshots(&self) -> Vec<BotActorSnapshot> {
         let actors = self.actors.read().await;
         actors.values().map(|h| h.snapshot()).collect()
     }
 
-    /// 获取指定 Bot 的当前快照。
+    /// 获取指定 Bot 的当前快照
     pub async fn get_snapshot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         let handle = self.get_actor(bot_id).await?;
         Ok(handle.snapshot())
     }
 
-    /// 获取指定 Bot 的当前配置。
+    /// 获取指定 Bot 的当前配置
     pub async fn get_bot_config(
         &self,
         bot_id: &BotId,
@@ -1786,9 +1786,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.repo.get(qq_id).await.map_err(BotManagerError::from)
     }
 
-    /// 批量返回所有 Bot 的 backend_type，用于 UI 列表页一次性拿 flavor map。
-    /// 避免 BotListPage 对每个 bot 单独调 get_bot_config 造成 N+1。
-    /// key 为 BotId.to_string()（即 QQID 数字字符串）。
+    /// 批量返回所有 Bot 的 backend_type,用于 UI 列表页一次性拿 flavor map
+    /// 避免 BotListPage 对每个 bot 单独调 get_bot_config 造成 N+1
+    /// key 为 BotId.to_string()(即 QQID 数字字符串)
     pub async fn list_bot_flavors(
         &self,
     ) -> Result<
@@ -1803,12 +1803,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(out)
     }
 
-    /// 当前托管的 Bot 数量。
+    /// 当前托管的 Bot 数量
     pub async fn bot_count(&self) -> usize {
         self.actors.read().await.len()
     }
 
-    /// 当前活跃（Starting / Running / Stopping）的 Bot 数量。
+    /// 当前活跃(Starting / Running / Stopping)的 Bot 数量
     pub async fn active_count(&self) -> usize {
         let actors = self.actors.read().await;
         actors
@@ -1817,12 +1817,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .count()
     }
 
-    /// 本机 runtime_target 且处于活跃态的 Bot 数量（退出拦截用）。
+    /// 本机 runtime_target 且处于活跃态的 Bot 数量(退出拦截用)
     pub async fn count_local_active_bots(&self) -> Result<usize, BotManagerError> {
         self.count_active_bots_by_host(|t| t.is_local()).await
     }
 
-    /// 远端 runtime_target 且处于活跃态的 Bot 数量（退出提示用，不拦截退出）。
+    /// 远端 runtime_target 且处于活跃态的 Bot 数量(退出提示用,不拦截退出)
     pub async fn count_remote_active_bots(&self) -> Result<usize, BotManagerError> {
         self.count_active_bots_by_host(|t| !t.is_local()).await
     }
@@ -1846,7 +1846,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .count())
     }
 
-    /// 桌面进程退出：仅停止本机 Bot；远端（Docker / 直接运行）不停远端进程，只拆掉本机隧道/日志会话。
+    /// 桌面进程退出:仅停止本机 Bot;远端(Docker / 直接运行)不停远端进程,只拆掉本机隧道/日志会话
     pub async fn exit_desktop(&self) -> BatchResult {
         info!(
             target: "ncd_runtime::bot_manager",
@@ -1903,7 +1903,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         result
     }
 
-    /// 单测 / 集成测试：把 Actor 标为 Running，不经过 backend start。
+    /// 单测 / 集成测试:把 Actor 标为 Running,不经过 backend start
     #[doc(hidden)]
     pub async fn test_confirm_actor_running(
         &self,
@@ -1920,21 +1920,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .map_err(BotManagerError::Actor)
     }
 
-    /// 拉取指定 Bot 的最近 lines 行日志快照。
-    /// 返回 [LogSnapshot]，包含已截尾的日志行 + 总行数。供 UI 在 BotLogPage
-    /// 初次开页时一次性加载历史，再叠加 bot_log_appended / snowluma_daemon_log
-    /// 实时事件。对齐 legacy NapCatQQProcessLog.get_log_content 行为：本地是
-    /// 内存 deque 快照（进程存活期间累计的全量），进程被 stop / 重启时缓冲清零。
+    /// 拉取指定 Bot 的最近 lines 行日志快照
+    /// 返回 [LogSnapshot],包含已截尾的日志行 + 总行数供 UI 在 BotLogPage
+    /// 初次开页时一次性加载历史,再叠加 bot_log_appended / snowluma_daemon_log
+    /// 实时事件对齐 legacy NapCatQQProcessLog.get_log_content 行为:本地是
+    /// 内存 deque 快照(进程存活期间累计的全量),进程被 stop / 重启时缓冲清零
     ///
-    /// 必须按 bot 当前配置的 backend 路由，不能写死走默认 NapCat backend：
-    /// 否则 SnowLuma flavor 的 bot 会去 NapCat backend 拉历史，拿到的是磁盘
-    /// 归档里 NC 旧日志，配置切换 NC → SL 后用户看到的依然是 NC 的内容。
+    /// 必须按 bot 当前配置的 backend 路由,不能写死走默认 NapCat backend:
+    /// 否则 SnowLuma flavor 的 bot 会去 NapCat backend 拉历史,拿到的是磁盘
+    /// 归档里 NC 旧日志,配置切换 NC → SL 后用户看到的依然是 NC 的内容
     pub async fn tail_log(
         &self,
         bot_id: &BotId,
         lines: usize,
     ) -> Result<crate::runtime_backend::LogSnapshot, BotManagerError> {
-        // Actor 不存在直接返回空，UI 不需要为此报错。
+        // Actor 不存在直接返回空,UI 不需要为此报错
         if !self.actors.read().await.contains_key(bot_id) {
             return Ok(crate::runtime_backend::LogSnapshot {
                 lines: Vec::new(),
@@ -1978,22 +1978,22 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .ok_or_else(|| BotManagerError::BotNotFound(bot_id.clone()))
     }
 
-    /// 渲染派生配置文件。
+    /// 渲染派生配置文件
     ///
-    /// 调用 renderer.render_with_existing 而不是 render，让 NapCat / SnowLuma
-    /// renderer 把磁盘上派生文件里**用户加的扩展字段**（如 imageDownloadProxy、
-    /// autoTimeSync）合并进新输出，避免每次启动覆盖时丢掉用户的手改。
+    /// 调用 renderer.render_with_existing 而不是 render,让 NapCat / SnowLuma
+    /// renderer 把磁盘上派生文件里**用户加的扩展字段**(如 imageDownloadProxy,
+    /// autoTimeSync)合并进新输出,避免每次启动覆盖时丢掉用户的手改
     ///
-    /// overrides 来自前端 ConfigDriftDialog 的 AcceptExternal 决议：先按
-    /// 默认 BotConfig 渲染输出，再用 overrides 把对应 JSON path 的值换成外部值。
-    /// 没有决议时传空 map。
+    /// overrides 来自前端 ConfigDriftDialog 的 AcceptExternal 决议:先按
+    /// 默认 BotConfig 渲染输出,再用 overrides 把对应 JSON path 的值换成外部值
+    /// 没有决议时传空 map
     async fn render_backend_config(
         &self,
         bot_id: &BotId,
         config: &BotConfig,
         overrides: &std::collections::HashMap<String, Vec<(String, serde_json::Value)>>,
     ) -> Result<(), BotManagerError> {
-        // 1. 把现有派生文件读进来（不存在的跳过）
+        // 1. 把现有派生文件读进来(不存在的跳过)
         let mut existing: std::collections::HashMap<std::path::PathBuf, serde_json::Value> =
             std::collections::HashMap::new();
         for path in self.renderer.output_paths(bot_id) {
@@ -2003,8 +2003,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         existing.insert(path, value);
                     }
                     Err(_) => {
-                        // 派生文件被人改坏了，无法 parse；当作"不存在"处理，下面
-                        // render_with_existing 会写一份干净的覆盖。
+                        // 派生文件被人改坏了,无法 parse;当作"不存在"处理,下面
+                        // render_with_existing 会写一份干净的覆盖
                     }
                 },
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -2017,7 +2017,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
-        // 2. 渲染（合并 unknown 顶层字段）
+        // 2. 渲染(合并 unknown 顶层字段)
         let mut txn = self
             .renderer
             .render_with_existing(bot_id, config, &existing)?;
@@ -2025,7 +2025,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             return Ok(());
         }
 
-        // 3. 应用 overrides：按文件名找 write 项，按 dot-path 替换值
+        // 3. 应用 overrides:按文件名找 write 项,按 dot-path 替换值
         if !overrides.is_empty() {
             for write in txn.writes.iter_mut() {
                 let Some(file_name) = write
@@ -2082,7 +2082,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         handle: &BotActorHandle,
         config: &BotConfig,
     ) -> Result<BotActorSnapshot, BotManagerError> {
-        // 取消令牌：stop_bot 在 Starting 阶段会 cancel，检测到后静默退出，避免重复报错。
+        // 取消令牌:stop_bot 在 Starting 阶段会 cancel,检测到后静默退出,避免重复报错
         let cancel = handle.cancellation_token();
 
         let runtime_config = if config.bot.deployment_type == DeploymentType::Docker
@@ -2151,12 +2151,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 self.event_bus
                     .publish(DomainEvent::bot_status_changed(status, "runtime_start"));
                 // 防快速退出竞态:backend.start Ok 只代表 spawn / compose up 成功,
-                // 进程可能在 confirm_running 之前就崩了。Starting 阶段的
+                // 进程可能在 confirm_running 之前就崩了Starting 阶段的
                 // BotProcessExited 被 handle_process_exited 有意忽略(无法区分本轮新
                 // 进程退出与 restart fast-path 旧进程退出),所以这里启动后立即复查一次
                 // backend.status:若已落到 Stopped / Crashed,直接按崩溃收口,避免 actor
-                // 与 UI 停在假 Running。复查本身报错时不阻断(查不到不代表没起来)。
-                // 远端 SL / 本机 SL：启动后立刻 status 复查易误判（远端 status 文件、本机 processes 写入竞态）。
+                // 与 UI 停在假 Running复查本身报错时不阻断(查不到不代表没起来)
+                // 远端 SL / 本机 SL:启动后立刻 status 复查易误判(远端 status 文件,本机 processes 写入竞态)
                 if !Self::skip_post_start_status_recheck(config) {
                     let mut fail_detail = None;
                     for pass in 0..2u8 {
@@ -2266,12 +2266,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .publish(DomainEvent::bot_state_changed(snapshot.clone(), reason));
     }
 
-    /// 应用退出收口：尝试停止所有运行中的 Bot 并 shutdown 它们的 Actor。
-    /// 用法：Tauri WindowEvent::CloseRequested 时调用，避免 QQ.exe 残留。
-    /// 行为：
-    /// - 对所有处于 active 状态的 Bot 调用 stop_bot（内部走 kill_process_tree）。
-    /// - 不论 stop 是否成功，都会 shutdown 对应的 actor 释放邮箱。
-    /// - 任何错误只记录到返回值，不会阻塞其它 Bot 的清理。
+    /// 应用退出收口:尝试停止所有运行中的 Bot 并 shutdown 它们的 Actor
+    /// 用法:Tauri WindowEvent::CloseRequested 时调用,避免 QQ.exe 残留
+    /// 行为:
+    /// - 对所有处于 active 状态的 Bot 调用 stop_bot(内部走 kill_process_tree)
+    /// - 不论 stop 是否成功,都会 shutdown 对应的 actor 释放邮箱
+    /// - 任何错误只记录到返回值,不会阻塞其它 Bot 的清理
     pub async fn shutdown_all(&self) -> BatchResult {
         info!(target: "ncd_runtime::bot_manager", "应用退出：正在停止所有运行中的 Bot");
         let snapshots: Vec<BotActorSnapshot> = {
@@ -2297,7 +2297,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
-        // 关闭所有 actor 邮箱，释放后台任务。
+        // 关闭所有 actor 邮箱,释放后台任务
         let handles: Vec<BotActorHandle> = {
             let actors = self.actors.read().await;
             actors.values().cloned().collect()
@@ -2310,7 +2310,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             actors.clear();
         }
 
-        // dispose 所有 NapCatLoginPoller，取消其后台轮询任务。
+        // dispose 所有 NapCatLoginPoller,取消其后台轮询任务
         {
             let mut pollers = self.login_pollers.write().await;
             for (_, poller) in pollers.drain() {
@@ -2318,7 +2318,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
-        // SnowLuma daemon 优雅关闭。
+        // SnowLuma daemon 优雅关闭
         if let Some(daemon) = self.snowluma_daemon.as_ref() {
             daemon.shutdown().await;
         }
@@ -2331,7 +2331,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         result
     }
 
-    /// 远端 SnowLuma Docker 隧道端口（供 Tauri open_snowluma_webui）。
+    /// 远端 SnowLuma Docker 隧道端口(供 Tauri open_snowluma_webui)
     pub async fn snowluma_docker_endpoints(
         &self,
         bot_id: &BotId,
@@ -2339,7 +2339,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.docker_sessions.snowluma_endpoints(bot_id).await
     }
 
-    /// 远端 SnowLuma Native：按 SSH server_id 查本机隧道端口（多 Bot 同机共享）。
+    /// 远端 SnowLuma Native:按 SSH server_id 查本机隧道端口(多 Bot 同机共享)
     pub async fn snowluma_native_endpoints_for_server(
         &self,
         server_id: &str,
@@ -2349,10 +2349,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .await
     }
 
-    /// 长任务：监听 SnowLumaDaemonStateChanged 事件，daemon 转 Crashed 时
-    /// 把所有 SnowLuma flavor 且 active 的 actor 级联转 Crashed，并各发一次
-    /// BotError。
-    /// 调用方应在 setup 阶段 tokio::spawn(manager.clone().run_snowluma_listener)。
+    /// 长任务:监听 SnowLumaDaemonStateChanged 事件,daemon 转 Crashed 时
+    /// 把所有 SnowLuma flavor 且 active 的 actor 级联转 Crashed,并各发一次
+    /// BotError
+    /// 调用方应在 setup 阶段 tokio::spawn(manager.clone().run_snowluma_listener)
     pub async fn run_snowluma_listener(self: Arc<Self>) {
         use crate::snowluma::DaemonState;
 
@@ -2415,13 +2415,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 订阅运行时事件总线，将 BotProcessExited 转换为 actor 状态机转移：
+    /// 订阅运行时事件总线,将 BotProcessExited 转换为 actor 状态机转移:
     /// - 进程正常或异常退出 → 调用 confirm_stopped / mark_crashed
-    ///   防止 UI 残留假 Running。
-    ///   返回的 future 由调用方在合适的运行时上 spawn（例如
-    ///   tauri::async_runtime::spawn）。它不依赖 tokio current handle
-    ///   因此可以在 Tauri setup 回调里安全启动；用 tokio::spawn 在
-    ///   没有 tokio 运行时上下文的位置直接跑会 panic。
+    ///   防止 UI 残留假 Running
+    ///   返回的 future 由调用方在合适的运行时上 spawn(例如
+    ///   tauri::async_runtime::spawn)它不依赖 tokio current handle
+    ///   因此可以在 Tauri setup 回调里安全启动;用 tokio::spawn 在
+    ///   没有 tokio 运行时上下文的位置直接跑会 panic
     pub async fn run_runtime_event_listener(self) {
         let mut subscription = self.event_bus.subscribe(EventFilter::kind(
             crate::events::DomainEventKind::BotProcessExited,
@@ -2438,10 +2438,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 在当前 tokio 运行时上 spawn 事件监听任务。
-    /// 仅在调用方已处于 tokio 运行时上下文（#[tokio::test] 或被
-    /// tauri::async_runtime::spawn 包过的 future）中使用；在 Tauri
-    /// setup 这种无 tokio handle 的位置请改用：
+    /// 在当前 tokio 运行时上 spawn 事件监听任务
+    /// 仅在调用方已处于 tokio 运行时上下文(#[tokio::test] 或被
+    /// tauri::async_runtime::spawn 包过的 future)中使用;在 Tauri
+    /// setup 这种无 tokio handle 的位置请改用:
     /// ignore
     /// let manager = bot_manager.clone()
     /// tauri::async_runtime::spawn(async move {
@@ -2469,13 +2469,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         let snapshot = handle.snapshot();
         match snapshot.state {
-            // 主动停止流程：进程退出意味着 stop 完成。
+            // 主动停止流程:进程退出意味着 stop 完成
             BotActorState::Stopping => {
                 if let Ok(updated) = handle.confirm_stopped().await {
                     self.publish_state_change(&updated, "process_exited");
                 }
             }
-            // 已运行中却收到退出事件：进程被外部 kill 或自身崩溃。
+            // 已运行中却收到退出事件:进程被外部 kill 或自身崩溃
             BotActorState::Running => {
                 let detail = match (exit_code, reason.as_deref()) {
                     (Some(0), _) => "process exited with code 0".to_string(),
@@ -2492,20 +2492,20 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     ));
                 }
             }
-            // Starting：可能是 restart 路径里 fast-path confirm_stopped 后转过来的，
-            // 旧 backend 的 spawn_exit_watcher 还在 wait 旧 child handle，wait 返回时
-            // 发出来的 exit 事件其实指向的是上一轮已被 force kill 的进程。如果在这里
-            // mark_crashed 会把刚 Starting 的新进程误标崩溃。直接忽略最稳。
-            // 真正"启动失败"的情况由 start_bot 里 backend.start 的 Err 分支处理。
+            // Starting:可能是 restart 路径里 fast-path confirm_stopped 后转过来的,
+            // 旧 backend 的 spawn_exit_watcher 还在 wait 旧 child handle,wait 返回时
+            // 发出来的 exit 事件其实指向的是上一轮已被 force kill 的进程如果在这里
+            // mark_crashed 会把刚 Starting 的新进程误标崩溃直接忽略最稳
+            // 真正"启动失败"的情况由 start_bot 里 backend.start 的 Err 分支处理
             BotActorState::Starting => {}
-            // 已是 Stopped / Crashed / Repairing：不再做转移，避免无效转移报错。
+            // 已是 Stopped / Crashed / Repairing:不再做转移,避免无效转移报错
             _ => {}
         }
     }
 
-    /// 内部删除流程：停止旧 runtime → 持久化删除 → shutdown → 移除内存 Actor。
-    /// 停止运行中 Bot 必须发生在 repo.delete 前；否则旧 config/backend identity
-    /// 丢失后只能按新默认路由停进程，远端或 Docker 场景会留下真实 runtime。
+    /// 内部删除流程:停止旧 runtime → 持久化删除 → shutdown → 移除内存 Actor
+    /// 停止运行中 Bot 必须发生在 repo.delete 前;否则旧 config/backend identity
+    /// 丢失后只能按新默认路由停进程,远端或 Docker 场景会留下真实 runtime
     async fn delete_bot_internal(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "删除 Bot 配置与 Actor");
         let qq_id: u64 = bot_id
@@ -2585,27 +2585,27 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(())
     }
 
-    /// 处理 NapCatWebuiAvailable 事件：为给定 Bot 创建/替换 NapCatLoginPoller。
-    /// 行为：
-    /// - repo.get(bot_id) 不到对应配置时直接 return（不报错），避免在
-    ///   配置删除后还接到延迟的 WebuiAvailable 事件时崩溃。
-    /// - 从 poller_settings.read().await 取最新值组装 PollerConfig：
+    /// 处理 NapCatWebuiAvailable 事件:为给定 Bot 创建/替换 NapCatLoginPoller
+    /// 行为:
+    /// - repo.get(bot_id) 不到对应配置时直接 return(不报错),避免在
+    ///   配置删除后还接到延迟的 WebuiAvailable 事件时崩溃
+    /// - 从 poller_settings.read().await 取最新值组装 PollerConfig:
     /// - login_check_interval ← settings.bot_login_check_interval_ms
     /// - unlogged_interval 固定 1s
-    /// - auth_refresh_period 30 min；auth_refresh_throttle 5s；http_timeout 5s
+    /// - auth_refresh_period 30 min;auth_refresh_throttle 5s;http_timeout 5s
     /// - offline_auto_restart ← bot_cfg.bot.offline_auto_restart
     /// - offline_notice_enabled = bot_cfg.advanced.offline_notice
     ///   && (settings.offline_webhook_notice || settings.offline_email_notice)
-    /// - 旧 Poller 先 dispose（取消其 CancellationToken 并触发 Drop 兜底）
-    ///   再插入新实例，保证不会同时存在两个 Poller 抢同一 BotId 的事件。
+    /// - 旧 Poller 先 dispose(取消其 CancellationToken 并触发 Drop 兜底)
+    ///   再插入新实例,保证不会同时存在两个 Poller 抢同一 BotId 的事件
     ///   restart_handle 通过 Arc::clone(self) as Arc<dyn RestartHandle> 注入
-    ///   利用本类型的 impl RestartHandle for BotManager（见文件末尾）。
+    ///   利用本类型的 impl RestartHandle for BotManager(见文件末尾)
     pub async fn handle_webui_available(self: &Arc<Self>, bot_id: BotId, port: u16, token: String) {
-        // 0. 先把 (port, token) 落进 endpoint 表，让保存配置时的热推送可查。
-        //    NapCat 多 bot 时 6099 会被先到的占住，后到的自动 +1，token 也是
-        //    每进程随机的，必须按 bot 隔离记忆。本步在 BotConfig 解析之前做：
-        //    即便 BotConfig 不再存在（事件晚到 / 配置已删），表里多一条孤儿
-        //    记录也无害——dispose_poller 会清掉，最坏情况是占一个 BotId 槽位。
+        // 0. 先把 (port, token) 落进 endpoint 表,让保存配置时的热推送可查
+        //    NapCat 多 bot 时 6099 会被先到的占住,后到的自动 +1,token 也是
+        //    每进程随机的,必须按 bot 隔离记忆本步在 BotConfig 解析之前做:
+        //    即便 BotConfig 不再存在(事件晚到 / 配置已删),表里多一条孤儿
+        //    记录也无害——dispose_poller 会清掉,最坏情况是占一个 BotId 槽位
         self.napcat_endpoints
             .insert(
                 bot_id.clone(),
@@ -2616,7 +2616,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             )
             .await;
 
-        // 1. 取 BotConfig；解析失败或不存在时静默 return（事件可能晚到）。
+        // 1. 取 BotConfig;解析失败或不存在时静默 return(事件可能晚到)
         let qq_id: u64 = match bot_id.as_str().parse() {
             Ok(v) => v,
             Err(_) => return,
@@ -2627,7 +2627,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         };
 
         let settings = self.poller_settings.read().await.clone();
-        // 离线通知开关：Bot 高级「掉线时下发桌面通知」；Poller 据此调用 OfflineNotifier。
+        // 离线通知开关:Bot 高级「掉线时下发桌面通知」;Poller 据此调用 OfflineNotifier
         let cfg = PollerConfig {
             login_check_interval: Duration::from_millis(settings.bot_login_check_interval_ms),
             unlogged_interval: Duration::from_secs(1),
@@ -2638,7 +2638,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             offline_notice_enabled: bot_cfg.advanced.offline_notice,
         };
 
-        // 3. 注入依赖。restart_handle 把 BotManager 自身作为 RestartHandle。
+        // 3. 注入依赖restart_handle 把 BotManager 自身作为 RestartHandle
         let deps = PollerDeps {
             event_bus: Arc::clone(&self.event_bus),
             http: Arc::clone(&self.webui_client),
@@ -2646,7 +2646,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             restart_handle: Arc::clone(self) as Arc<dyn RestartHandle>,
         };
 
-        // 4. 替换旧 Poller，再插入新实例。
+        // 4. 替换旧 Poller,再插入新实例
         let mut pollers = self.login_pollers.write().await;
         if let Some(old) = pollers.remove(&bot_id) {
             old.dispose();
@@ -2655,14 +2655,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         pollers.insert(bot_id, poller);
     }
 
-    /// 把一份 OneBot 配置 payload 通过 NapCat WebUI 热推送给运行中的 bot。
+    /// 把一份 OneBot 配置 payload 通过 NapCat WebUI 热推送给运行中的 bot
     ///
-    /// 调用链：login（fetch_credential）→ check_login_status → set_ob11_config。
-    /// 任何一步失败都不阻塞保存——已经写盘了，最差就是等下次重启生效。返回
-    /// 一个 BotStateChanged 的 reason 字符串，让前端区分提示：
-    /// - config_hot_reloaded：推送成功，配置已生效。
-    /// - config_saved_pending_login：QQ 还没扫码，待登录后下次启动生效。
-    /// - config_saved_pending_reload：网络 / 401 / 业务错误，等下次重启生效。
+    /// 调用链:login(fetch_credential)→ check_login_status → set_ob11_config
+    /// 任何一步失败都不阻塞保存——已经写盘了,最差就是等下次重启生效返回
+    /// 一个 BotStateChanged 的 reason 字符串,让前端区分提示:
+    /// - config_hot_reloaded:推送成功,配置已生效
+    /// - config_saved_pending_login:QQ 还没扫码,待登录后下次启动生效
+    /// - config_saved_pending_reload:网络 / 401 / 业务错误,等下次重启生效
     async fn push_napcat_hot_reload(
         &self,
         endpoint: NapCatEndpoint,
@@ -2680,8 +2680,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 return "config_saved_pending_reload";
             }
         };
-        // QQ 未登录时 set_ob11_config 会返回 NotLogin；提前查一把可以让
-        // 前端拿到更准确的语义（避免把"等扫码"误显示成"推送失败"）。
+        // QQ 未登录时 set_ob11_config 会返回 NotLogin;提前查一把可以让
+        // 前端拿到更准确的语义(避免把"等扫码"误显示成"推送失败")
         match self
             .webui_client
             .check_login_status(port, &credential)
@@ -2720,30 +2720,30 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 移除并取消指定 Bot 的 NapCatLoginPoller。多次调用幂等。
+    /// 移除并取消指定 Bot 的 NapCatLoginPoller多次调用幂等
     /// 由 run_napcat_login_listener 在 BotProcessExited 事件到达时调用
-    /// 也由 delete_bot_internal / shutdown_all 在生命周期收尾时调用。
-    /// 同步清理 napcat_endpoints 中对应记录，避免后续保存配置查到陈旧端口。
+    /// 也由 delete_bot_internal / shutdown_all 在生命周期收尾时调用
+    /// 同步清理 napcat_endpoints 中对应记录,避免后续保存配置查到陈旧端口
     pub async fn dispose_poller(&self, bot_id: &BotId) {
         let mut pollers = self.login_pollers.write().await;
         if let Some(poller) = pollers.remove(bot_id) {
             poller.dispose();
         }
         drop(pollers);
-        // endpoint 表与 poller 生命周期严格对齐：bot 进程一旦退出，原来的
-        // (port, token) 立即作废（NapCat 重启时 token 会换、端口也可能换），
-        // 必须立刻清掉，避免后续 upsert 查到陈旧值打到一个已经死亡的端口。
+        // endpoint 表与 poller 生命周期严格对齐:bot 进程一旦退出,原来的
+        // (port, token) 立即作废(NapCat 重启时 token 会换,端口也可能换),
+        // 必须立刻清掉,避免后续 upsert 查到陈旧值打到一个已经死亡的端口
         self.napcat_endpoints.remove(bot_id).await;
     }
 
-    /// 监听 NapCatWebuiAvailable 与 BotProcessExited 两路事件，分别驱动
-    /// Poller 的创建与回收。
-    /// - Arc<Self> 作为 receiver：handle_webui_available 需要把
-    ///   Arc<BotManager<R, S>> 转成 Arc<dyn RestartHandle> 注入 PollerDeps。
-    /// - tokio::select! 同时消费两路 subscription；任一路关闭都会让 else =>
-    ///   分支退出循环，避免半挂死。
-    /// - 调用方（Tauri setup 或测试）通过 tauri::async_runtime::spawn /
-    ///   tokio::spawn 启动；与 run_runtime_event_listener 风格一致。
+    /// 监听 NapCatWebuiAvailable 与 BotProcessExited 两路事件,分别驱动
+    /// Poller 的创建与回收
+    /// - Arc<Self> 作为 receiver:handle_webui_available 需要把
+    ///   Arc<BotManager<R, S>> 转成 Arc<dyn RestartHandle> 注入 PollerDeps
+    /// - tokio::select! 同时消费两路 subscription;任一路关闭都会让 else =>
+    ///   分支退出循环,避免半挂死
+    /// - 调用方(Tauri setup 或测试)通过 tauri::async_runtime::spawn /
+    ///   tokio::spawn 启动;与 run_runtime_event_listener 风格一致
     pub async fn run_napcat_login_listener(self: Arc<Self>) {
         let mut webui_sub = self
             .event_bus
@@ -2774,11 +2774,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 }
 // ─── RestartHandle 实现 ────────────────────────────────────────────────────────
 
-/// BotManager 实现 RestartHandle，让 NapCatLoginPoller 可以在踢线 +
+/// BotManager 实现 RestartHandle,让 NapCatLoginPoller 可以在踢线 +
 /// offline_auto_restart=true 分支调用 restart_bot 而不直接持有
-/// BotManager 引用（避免循环依赖）。
-/// 失败处理：把错误转成 DomainEvent::bot_error 发布到事件总线，附中文
-/// 提示「自动重启失败，请手动启动 Bot」。Poller 不感知失败。
+/// BotManager 引用(避免循环依赖)
+/// 失败处理:把错误转成 DomainEvent::bot_error 发布到事件总线,附中文
+/// 提示「自动重启失败,请手动启动 Bot」Poller 不感知失败
 #[async_trait]
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> RestartHandle for BotManager<R, S> {
     async fn restart_bot(&self, bot_id: &BotId) {
@@ -2792,7 +2792,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> RestartHandle for Bot
     }
 }
 
-/// 把 BackendType 映射到 BotFlavor。
+/// 把 BackendType 映射到 BotFlavor
 fn map_backend_flavor(backend: BackendType) -> BotFlavor {
     match backend {
         BackendType::NapCat => BotFlavor::NapCat,
@@ -2800,16 +2800,16 @@ fn map_backend_flavor(backend: BackendType) -> BotFlavor {
     }
 }
 
-/// 按 dot-path（如 network.httpServers）在 JSON Value 树里设值。
-/// 路径不存在的中间节点自动创建为 object。用于应用前端 ConfigDriftDialog
-/// 的 AcceptExternal 决议到渲染输出。
-/// 把 value 写到 root 的 dot-path 位置;value 为 null 表示删除该位置(DropAdded)。
+/// 按 dot-path(如 network.httpServers)在 JSON Value 树里设值
+/// 路径不存在的中间节点自动创建为 object用于应用前端 ConfigDriftDialog
+/// 的 AcceptExternal 决议到渲染输出
+/// 把 value 写到 root 的 dot-path 位置;value 为 null 表示删除该位置(DropAdded)
 ///
 /// 支持 object key 与 array index(纯数字段)混合,如 network.httpClients.0.token:
-/// ConfigDrift 对连接数组里的字段就是这种路径。中间 object 缺失自动建;遇到数组时
+/// ConfigDrift 对连接数组里的字段就是这种路径中间 object 缺失自动建;遇到数组时
 /// 按下标定位现有元素,越界 / 段非数字 / 落到非容器值上一律返回错误,而不是像旧实现
 /// 那样静默 return——否则用户在 ConfigDriftDialog 里对 token/url 的 AcceptExternal /
-/// DropAdded 决议会"看起来点了却没生效"。
+/// DropAdded 决议会"看起来点了却没生效"
 fn set_value_at_dot_path(
     root: &mut serde_json::Value,
     dot_path: &str,
@@ -2853,7 +2853,7 @@ fn set_value_at_dot_path(
                 .parse()
                 .map_err(|_| format!("数组路径段 '{last}' 不是合法下标"))?;
             if value.is_null() {
-                // DropAdded 整个数组元素:越界视作已不存在(已达成),不报错。
+                // DropAdded 整个数组元素:越界视作已不存在(已达成),不报错
                 if idx < arr.len() {
                     arr.remove(idx);
                 }
@@ -2871,9 +2871,9 @@ fn set_value_at_dot_path(
     }
 }
 
-/// 判断 BotBackendError 是否属于“远端主机传输层问题”。
-/// 优先匹配显式的 RemoteHostTransport 变体；
-/// 对 Io 变体做字符串启发式（包含 disconnected / remote_disconnected / ssh / connection / poisoned / broken pipe 等）。
+/// 判断 BotBackendError 是否属于“远端主机传输层问题”
+/// 优先匹配显式的 RemoteHostTransport 变体;
+/// 对 Io 变体做字符串启发式(包含 disconnected / remote_disconnected / ssh / connection / poisoned / broken pipe 等)
 fn is_remote_transport_error(err: &BotBackendError) -> bool {
     match err {
         BotBackendError::RemoteHostTransport(_) => true,
@@ -2954,7 +2954,7 @@ mod tests {
 
     #[test]
     fn dot_path_sets_field_inside_array_element() {
-        // ConfigDrift 的连接数组路径:network.httpClients.0.token。
+        // ConfigDrift 的连接数组路径:network.httpClients.0.token
         let mut root = serde_json::json!({
             "network": { "httpClients": [ { "token": "old" }, { "token": "keep" } ] }
         });

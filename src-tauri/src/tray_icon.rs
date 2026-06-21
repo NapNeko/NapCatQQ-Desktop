@@ -1,4 +1,4 @@
-// 托盘图标：任务栏小尺寸专用资源，与窗口 ICO 区分；运行中 Bot 时换带状态点的变体。
+// 托盘图标:任务栏小尺寸专用资源,与窗口 ICO 区分;运行中 Bot 时换带状态点的变体
 
 use std::path::PathBuf;
 
@@ -59,7 +59,7 @@ fn embed_tray_png(name: &str) -> Option<Image<'static>> {
     Image::from_bytes(bytes).ok().map(|img| img.to_owned())
 }
 
-/// 主托盘图标（无运行中 Bot、非轻量）。优先 32/16 原生尺寸，避免 48→16 二次缩放发糊。
+/// 主托盘图标(无运行中 Bot,非轻量)优先 32/16 原生尺寸,避免 48→16 二次缩放发糊
 pub fn idle_tray_icon(app: &AppHandle) -> Result<Image<'static>, String> {
     load_png(app, "tray-32.png")
         .or_else(|| load_png(app, "tray-16.png"))
@@ -74,7 +74,7 @@ pub fn idle_tray_icon(app: &AppHandle) -> Result<Image<'static>, String> {
         })
 }
 
-/// 有 Bot 运行中：带暖色状态点，与主题 brand 色一致。
+/// 有 Bot 运行中:带暖色状态点,与主题 brand 色一致
 pub fn active_tray_icon(app: &AppHandle) -> Image<'static> {
     load_png(app, "tray-active-32.png")
         .or_else(|| load_png(app, "tray-active-16.png"))
@@ -89,7 +89,7 @@ pub fn active_tray_icon(app: &AppHandle) -> Image<'static> {
         })
 }
 
-/// 轻量模式：略降饱和，与 tooltip「轻量」一致。
+/// 轻量模式:略降饱和,与 tooltip「轻量」一致
 pub fn lightweight_tray_icon(app: &AppHandle) -> Image<'static> {
     load_png(app, "tray-light-32.png")
         .or_else(|| load_png(app, "tray-light-16.png"))
@@ -98,7 +98,7 @@ pub fn lightweight_tray_icon(app: &AppHandle) -> Image<'static> {
         .unwrap_or_else(|| active_tray_icon(app))
 }
 
-/// 按当前 Bot / 轻量状态选择托盘图。
+/// 按当前 Bot / 轻量状态选择托盘图
 pub async fn icon_for_state(
     app: &AppHandle,
     running_bots: usize,
@@ -113,7 +113,7 @@ pub async fn icon_for_state(
     idle_tray_icon(app).unwrap_or_else(|_| active_tray_icon(app))
 }
 
-/// 刷新托盘图标（与 tooltip 同周期调用即可）。
+/// 刷新托盘图标(与 tooltip 同周期调用即可)
 pub async fn refresh_tray_icon(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<crate::AppState>();
     let running = state.bot_manager.active_count().await;

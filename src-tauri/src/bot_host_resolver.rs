@@ -1,10 +1,10 @@
 //! TauriHostResolver:把 BotConfig 的 RuntimeTarget 解析成 Arc<dyn Host>,
-//! 供 BotManager 在启动 bot 时按"在哪台机器跑"取 host。
+//! 供 BotManager 在启动 bot 时按"在哪台机器跑"取 host
 //!
 //! Local -> 本机 LocalWindowsHost;Server(id) -> ServerManager 已连接/现连的
-//! RemoteLinuxHost(单飞 + keyring 凭据自动连)。与组件页/Docker 页的
+//! RemoteLinuxHost(单飞 + keyring 凭据自动连)与组件页/Docker 页的
 //! host_resolve::resolve_host_with_autoconnect 同源,只是入口是 RuntimeTarget
-//! 而非 host_id 字符串。
+//! 而非 host_id 字符串
 
 use std::sync::Arc;
 

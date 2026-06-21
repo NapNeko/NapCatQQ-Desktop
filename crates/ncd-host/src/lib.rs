@@ -1,15 +1,15 @@
-//! ncd-host:NapCatQQ-Desktop 的"主机"抽象层。
+//! ncd-host:NapCatQQ-Desktop 的"主机"抽象层
 //!
 //! Host trait 把"一台机器"(本地 Windows / 远端 Linux / 远端 Windows stub /
 //! 未来的 macOS / Docker / Agent)抽成统一接口,所有"装组件 / 跑命令 / 传文件 /
-//! 开隧道 / 提权"操作都通过它完成。
+//! 开隧道 / 提权"操作都通过它完成
 //!
 //! 设计意图是消除 legacy "本地"和"远端"两套完全独立实装(installation/ vs remote/)
 //! 同段逻辑写两遍的问题:Host trait 让上层代码(ncd-component 中的
-//! NapCatComponent::install 等)只关心"我要做什么",不关心"在哪台机器上"。
+//! NapCatComponent::install 等)只关心"我要做什么",不关心"在哪台机器上"
 //!
-//! 与 ncd-component(Component 维度)、ncd-deploy(编排 Action)合起来构成
-//! Component × Host × Action 三维模型。
+//! 与 ncd-component(Component 维度),ncd-deploy(编排 Action)合起来构成
+//! Component × Host × Action 三维模型
 //!
 //! 实装清单:
 //! - Host / HostShell / PackageManager trait 定义

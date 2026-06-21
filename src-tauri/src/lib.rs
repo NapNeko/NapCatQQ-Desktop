@@ -40,21 +40,21 @@ pub struct AppState {
     pub(crate) runtime: runtime::AppRuntime,
     pub(crate) bot_manager: Arc<AppBotManager>,
     pub(crate) server_manager: Arc<ncd_runtime::ServerManager>,
-    /// 包管理器全局锁，防止同一主机的 apt/dnf 并发冲突。
+    /// 包管理器全局锁,防止同一主机的 apt/dnf 并发冲突
     pub(crate) package_lock: ncd_runtime::package_lock::PackageManagerLock,
-    /// Components 页活跃 task 注册表，task_id → CancellationToken。
-    /// run_component_action 启动时插入；plan 完成 / 取消时移除。
+    /// Components 页活跃 task 注册表,task_id → CancellationToken
+    /// run_component_action 启动时插入;plan 完成 / 取消时移除
     pub(crate) active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
-    /// 远端主机布局探测缓存：host_id → (home, layout)。
-    /// detect_component 对同一台机器的 home/layout 探测结果是稳定的，缓存后
-    /// 5 个并发组件 detect 只探一次，不再各跑一遍 echo $HOME + layout 检查。
-    /// run_component_action 会清掉对应条目，因为安装可能改变布局。
+    /// 远端主机布局探测缓存:host_id → (home, layout)
+    /// detect_component 对同一台机器的 home/layout 探测结果是稳定的,缓存后
+    /// 5 个并发组件 detect 只探一次,不再各跑一遍 echo $HOME + layout 检查
+    /// run_component_action 会清掉对应条目,因为安装可能改变布局
     pub(crate) host_probe_cache: Arc<Mutex<HashMap<String, commands::components::RemoteHostProbe>>>,
     pub(crate) desktop_notify: Arc<RwLock<DesktopNotifySettings>>,
     pub(crate) app_settings: Arc<RwLock<ncd_domain::AppSettings>>,
     pub(crate) lightweight_scheduler: Arc<lightweight_scheduler::LightweightScheduler>,
-    /// 远程主机健康探活 walker 的取消令牌（P1 主动探活）。
-    /// 由启动 wiring 和 set_app_settings 根据 enabled 变化来条件 spawn / cancel + restart。
+    /// 远程主机健康探活 walker 的取消令牌(P1 主动探活)
+    /// 由启动 wiring 和 set_app_settings 根据 enabled 变化来条件 spawn / cancel + restart
     pub(crate) health_probe_cancel: Arc<Mutex<Option<CancellationToken>>>,
 }
 
@@ -93,7 +93,7 @@ pub fn run() {
             .with_snowluma_runtime_root(data_root.join("runtime").join("SnowLuma"))
             .with_snowluma_data_root(data_root.join("snowluma")),
     );
-    // NativeDeployment 替代旧 LocalRuntimeBackend：通过适配器壳对外仍是 BotBackend。
+    // NativeDeployment 替代旧 LocalRuntimeBackend:通过适配器壳对外仍是 BotBackend
     let local_host: Arc<dyn ncd_host::Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
     let event_sink: Arc<dyn ncd_deploy::NativeRuntimeEventSink> =
         Arc::new(ncd_runtime::EventBusSink::new(Arc::new(event_bus.clone())));
@@ -113,10 +113,10 @@ pub fn run() {
             "bot-manager-local",
             ncd_runtime::BotFlavor::NapCat,
         ));
-    // NapCat WebUI 登录轮询所需依赖（design.md §15.1）。
-    // - ReqwestNapCatWebUiClient 走 rustls-tls，仅访问 127.0.0.1。
-    // - NoopOfflineNotifier 是占位实现，真实通道由后续 Spec 接入。
-    // - WebUiPollerSettings 默认轮询 5s + 关闭离线通知，调用方可热更新。
+    // NapCat WebUI 登录轮询所需依赖(design.md §15.1)
+    // - ReqwestNapCatWebUiClient 走 rustls-tls,仅访问 127.0.0.1
+    // - NoopOfflineNotifier 是占位实现,真实通道由后续 Spec 接入
+    // - WebUiPollerSettings 默认轮询 5s + 关闭离线通知,调用方可热更新
     let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> = Arc::new(
         ReqwestNapCatWebUiClient::new()
             .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
@@ -132,8 +132,8 @@ pub fn run() {
     let tauri_notifier = desktop_notify::TauriOfflineNotifier::new();
     let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> = tauri_notifier.clone();
     // ServerManager 提前构造,既给下面 AppState 用,也给 HostResolver 用(让
-    // BotManager 能按 runtime_target 把 bot 启到本机 / 远端)。
-    // P0-10: 注入 event_bus，用于发布 HostConnectionLost / Recovered。
+    // BotManager 能按 runtime_target 把 bot 启到本机 / 远端)
+    // P0-10: 注入 event_bus,用于发布 HostConnectionLost / Recovered
     let mut server_mgr = ncd_runtime::ServerManager::new(
         &data_root,
         Arc::new(ncd_runtime::KeyringCredentialStore),
@@ -162,13 +162,13 @@ pub fn run() {
         .with_docker_webui_secret_store(Arc::clone(&secrets)),
     );
 
-    // SnowLuma daemon + backend wiring。
+    // SnowLuma daemon + backend wiring
     //
-    // 路径起源严格来自 bootstrap::resolve_data_root()：
-    // - SnowLuma 持久化数据根：<data_root>/snowluma/
-    // - SnowLuma 安装根：<data_root>/runtime/snowluma（与 runtime_launch_plan
-    // 建图时使用的 runtime_root 同源；后续如果 PathProbe 暴露 SnowLuma
-    // 单独路径，再切到 PathProbe 输出）。
+    // 路径起源严格来自 bootstrap::resolve_data_root():
+    // - SnowLuma 持久化数据根:<data_root>/snowluma/
+    // - SnowLuma 安装根:<data_root>/runtime/snowluma(与 runtime_launch_plan
+    // 建图时使用的 runtime_root 同源;后续如果 PathProbe 暴露 SnowLuma
+    // 单独路径,再切到 PathProbe 输出)
     let snowluma_data_root = data_root.join("snowluma");
     let snowluma_runtime_root = data_root.join("runtime").join("SnowLuma");
     let snowluma_factory: Arc<dyn ncd_runtime::SnowLumaWebUiClientFactory> =
@@ -203,10 +203,10 @@ pub fn run() {
         builder = builder.plugin(single_instance::plugin());
     }
     builder
-        // 用系统默认浏览器打开外部 URL（例如 NapCat WebUI）
-        // webview 自身不支持 target=_blank。
+        // 用系统默认浏览器打开外部 URL(例如 NapCat WebUI)
+        // webview 自身不支持 target=_blank
         .plugin(tauri_plugin_opener::init())
-        // 配置导入导出用原生文件 / 目录选择对话框（webview 无法拿真实文件系统路径）。
+        // 配置导入导出用原生文件 / 目录选择对话框(webview 无法拿真实文件系统路径)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .manage(AppState {
@@ -247,7 +247,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = subscription.next().await {
                     let event_name = event.tauri_event_name();
-                    // 带顶层 v envelope 序列化(R14):payload 形如 {"v":1,"kind":...}。
+                    // 带顶层 v envelope 序列化(R14):payload 形如 {"v":1,"kind":...}
                     if let Ok(payload) = event.to_envelope_json() {
                         let emit_result = handle.emit(event_name, payload);
                         if let Err(err) = emit_result {
@@ -306,24 +306,24 @@ pub fn run() {
                     }
                 }
             });
-            // 订阅运行时事件总线，把 BotProcessExited 转成 actor 状态机转移
-            // 防止 UI 残留假 Running。必须用 tauri::async_runtime::spawn
-            // setup 回调本身没有 tokio current handle，直接 tokio::spawn 会 panic。
+            // 订阅运行时事件总线,把 BotProcessExited 转成 actor 状态机转移
+            // 防止 UI 残留假 Running必须用 tauri::async_runtime::spawn
+            // setup 回调本身没有 tokio current handle,直接 tokio::spawn 会 panic
             tauri::async_runtime::spawn(async move {
                 (*bot_manager_listener)
                     .clone()
                     .run_runtime_event_listener()
                     .await;
             });
-            // NapCat WebUI 登录轮询监听（design.md §15.3 / §15.4）：
-            // 同时订阅 NapCatWebuiAvailable / BotProcessExited 两路事件，分别
-            // 驱动 NapCatLoginPoller 的创建与回收。run_napcat_login_listener
-            // 需要 Arc<Self> 作为接收者（用于 cast 到 Arc<dyn RestartHandle>）。
+            // NapCat WebUI 登录轮询监听(design.md §15.3 / §15.4):
+            // 同时订阅 NapCatWebuiAvailable / BotProcessExited 两路事件,分别
+            // 驱动 NapCatLoginPoller 的创建与回收run_napcat_login_listener
+            // 需要 Arc<Self> 作为接收者(用于 cast 到 Arc<dyn RestartHandle>)
             tauri::async_runtime::spawn(async move {
                 bot_manager_login_listener.run_napcat_login_listener().await;
             });
 
-            // SnowLuma daemon Crashed 级联级 actor。
+            // SnowLuma daemon Crashed 级联级 actor
             tauri::async_runtime::spawn(async move {
                 bot_manager_snowluma_listener.run_snowluma_listener().await;
             });
@@ -352,8 +352,8 @@ pub fn run() {
                 );
             }
 
-            // P1 主动探活：启动期根据初始 AppSettings 决定是否 spawn 后台健康 walker。
-            // 由于 .setup 闭包是 sync 的，这里 spawn 一个一次性 async 任务来做条件判断 + spawn walker。
+            // P1 主动探活:启动期根据初始 AppSettings 决定是否 spawn 后台健康 walker
+            // 由于 .setup 闭包是 sync 的,这里 spawn 一个一次性 async 任务来做条件判断 + spawn walker
             {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -368,7 +368,7 @@ pub fn run() {
                             }
                             let sm = Arc::clone(&state.server_manager);
                             let settings = Arc::clone(&state.app_settings);
-                            // 注意：这里 spawn 的 walker 任务会一直跑，直到 cancel
+                            // 注意:这里 spawn 的 walker 任务会一直跑,直到 cancel
                             tauri::async_runtime::spawn(async move {
                                 sm.run_health_probe_loop(settings, child).await;
                             });

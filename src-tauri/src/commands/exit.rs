@@ -1,4 +1,4 @@
-// 桌面退出闸门：本机 Bot 须先停；允许退出时只停本机、远端 Docker 保持运行。
+// 桌面退出闸门:本机 Bot 须先停;允许退出时只停本机,远端 Docker 保持运行
 
 use serde::Serialize;
 use tauri::AppHandle;
@@ -33,7 +33,7 @@ pub async fn prepare_exit_desktop(
     })
 }
 
-/// 本机已无活跃 Bot 时退出进程；远端 Bot 不 stop，仅 detach 本机会话。
+/// 本机已无活跃 Bot 时退出进程;远端 Bot 不 stop,仅 detach 本机会话
 #[tauri::command]
 pub async fn request_exit_app(
     app: AppHandle,

@@ -1,9 +1,9 @@
-//! QQ Linux 运行时依赖清单定义。
+//! QQ Linux 运行时依赖清单定义
 
 use ncd_domain::{DependencyCategory, SystemDependency};
 use std::collections::HashMap;
 
-/// QQ Linux 运行时完整依赖清单。
+/// QQ Linux 运行时完整依赖清单
 pub struct QQDependencyManifest {
     pub schema_version: u32,
     pub for_qq_version: String,
@@ -20,7 +20,7 @@ impl QQDependencyManifest {
     }
 }
 
-/// 获取 QQ 3.2.25 的官方依赖清单。
+/// 获取 QQ 3.2.25 的官方依赖清单
 pub fn qq_qqnt_dependencies_v3_2_25() -> QQDependencyManifest {
     QQDependencyManifest {
         schema_version: 1,
@@ -123,7 +123,7 @@ pub fn qq_qqnt_dependencies_v3_2_25() -> QQDependencyManifest {
                 category: DependencyCategory::Toolchain,
                 description: "CPIO archiver".to_string(),
             },
-            // install.sh 静态包补齐（jq/curl/xvfb/xauth/cpio/libnss3/libgbm1 已在上方）
+            // install.sh 静态包补齐(jq/curl/xvfb/xauth/cpio/libnss3/libgbm1 已在上方)
             SystemDependency {
                 canonical_name: "zip".to_string(),
                 debian_package: "zip".to_string(),

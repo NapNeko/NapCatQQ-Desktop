@@ -1,7 +1,7 @@
-//! SHA256 校验：下载完成后比对期望哈希，mismatch 让上层切镜像。
+//! SHA256 校验:下载完成后比对期望哈希,mismatch 让上层切镜像
 //!
-//! race / chunked 都在下载结束后调一次。提取到一处避免两份副本漂移
-//! （国内代理"长度对、内容是另一份缓存"的投毒 case 全靠这层兜底）。
+//! race / chunked 都在下载结束后调一次提取到一处避免两份副本漂移
+//! (国内代理"长度对,内容是另一份缓存"的投毒 case 全靠这层兜底)
 
 use std::path::Path;
 
@@ -11,8 +11,8 @@ use tokio::io::AsyncReadExt;
 
 use crate::error::NetworkError;
 
-/// 算 dest 文件的 SHA256（64-hex 小写），与 expected 严格比对。expected 为 None/空串
-/// 视为无 hash 数据跳过，直接返回字节数。mismatch 返 ChecksumMismatch 让上层切镜像。
+/// 算 dest 文件的 SHA256(64-hex 小写),与 expected 严格比对expected 为 None/空串
+/// 视为无 hash 数据跳过,直接返回字节数mismatch 返 ChecksumMismatch 让上层切镜像
 pub(crate) async fn verify_sha256_if_needed(
     dest: &Path,
     expected: Option<&str>,

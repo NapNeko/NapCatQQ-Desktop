@@ -1,8 +1,8 @@
-//! 远端 SnowLuma 路径布局与可执行文件探测。
+//! 远端 SnowLuma 路径布局与可执行文件探测
 //!
-//! 与 src-tauri/commands/components.rs 远端 Linux 分支一致：
-//! workspace = $HOME/snowluma-remote/workspace，framework 在 workspace/snowluma/；
-//! QQ 与 NapCat 组件页相同，装在 $HOME/Napcat/opt/QQ/qq。
+//! 与 src-tauri/commands/components.rs 远端 Linux 分支一致:
+//! workspace = $HOME/snowluma-remote/workspace,framework 在 workspace/snowluma/;
+//! QQ 与 NapCat 组件页相同,装在 $HOME/Napcat/opt/QQ/qq
 
 use ncd_host::{Host, HostCommand};
 
@@ -13,7 +13,7 @@ pub const DEFAULT_VNC_PORT: i32 = 5900;
 pub const DEFAULT_NOVNC_PORT: i32 = 6081;
 pub const DEFAULT_WEBUI_PORT: i32 = 5099;
 
-/// 远端 SnowLuma 目录布局（对齐 legacy SnowLumaRemotePaths.from_base）。
+/// 远端 SnowLuma 目录布局(对齐 legacy SnowLumaRemotePaths.from_base)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnowLumaRemotePaths {
     pub workspace_dir: String,
@@ -66,7 +66,7 @@ impl SnowLumaRemotePaths {
     }
 }
 
-/// NapCat/QQ 组件页 rootless 安装路径。
+/// NapCat/QQ 组件页 rootless 安装路径
 pub fn napcat_layout_qq_executable(home: &str) -> String {
     format!("{home}/Napcat/opt/QQ/qq")
 }
@@ -128,7 +128,7 @@ async fn resolve_node_bin(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Resul
     ))
 }
 
-/// 一次探测 home + 路径 + node/qq 可执行文件。
+/// 一次探测 home + 路径 + node/qq 可执行文件
 pub async fn probe_remote_snowluma_layout(host: &dyn Host) -> Result<RemoteSnowLumaLayout, BotBackendError> {
     let home = probe_remote_home(host).await?;
     let paths = SnowLumaRemotePaths::from_remote_home(&home);

@@ -1,4 +1,4 @@
-//! 远端 Docker Bot 运行时会话：SSH 隧道、日志 follow、WebUI 事件、容器退出检测。
+//! 远端 Docker Bot 运行时会话:SSH 隧道,日志 follow,WebUI 事件,容器退出检测
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -19,14 +19,14 @@ use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
 use crate::ids::BotId;
 use crate::native_deployment_adapter::EventBusSink;
 
-/// SnowLuma Docker：本机隧道上的 WebUI / noVNC 端口。
+/// SnowLuma Docker:本机隧道上的 WebUI / noVNC 端口
 #[derive(Debug, Clone)]
 pub struct SnowLumaDockerEndpoints {
     pub webui_local_port: u16,
     pub novnc_local_port: u16,
-    /// noVNC / VNC（compose VNC_PASSWD）
+    /// noVNC / VNC(compose VNC_PASSWD)
     pub vnc_password: String,
-    /// SnowLuma WebUI 登录（SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD）
+    /// SnowLuma WebUI 登录(SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD)
     pub webui_password: String,
 }
 
@@ -263,7 +263,7 @@ pub fn is_remote_docker_config(config: &BotConfig) -> bool {
         && matches!(config.bot.runtime_target, RuntimeTarget::Server(_))
 }
 
-/// 远端 SSH +「直接运行」+ NapCat（非 Docker、非本机 SnowLuma daemon）。
+/// 远端 SSH +「直接运行」+ NapCat(非 Docker,非本机 SnowLuma daemon)
 pub fn is_remote_native_napcat_config(config: &BotConfig) -> bool {
     config.bot.deployment_type == DeploymentType::Native
         && config.bot.backend_type == BackendType::NapCat

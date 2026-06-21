@@ -1,10 +1,10 @@
-//! Deploy 执行结果数据。
+//! Deploy 执行结果数据
 
 use serde::{Deserialize, Serialize};
 
 use crate::plan::StepKind;
 
-/// 单步执行结果。
+/// 单步执行结果
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StepOutcome {
     pub name: String,
@@ -71,7 +71,7 @@ impl StepOutcome {
     }
 }
 
-/// 整个 plan 的执行结果。
+/// 整个 plan 的执行结果
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DeployOutcome {
     pub ok: bool,

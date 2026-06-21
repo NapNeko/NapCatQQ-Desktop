@@ -1,8 +1,8 @@
-//! 中转代理客户端：HMAC-SHA256 签名 + 服务器时间漂移自愈。
+//! 中转代理客户端:HMAC-SHA256 签名 + 服务器时间漂移自愈
 //!
-//! 403 时读响应头 X-Server-Time 校正本地时钟 offset 并重试一次；offset 持久化到
-//! config_dir/.proxy_clock_offset。构建期注入 secret（build.rs），仓库 clone 拿不到
-//! 真实 secret 时 is_configured() 返 false，release 拉取走 GitHub 直连。
+//! 403 时读响应头 X-Server-Time 校正本地时钟 offset 并重试一次;offset 持久化到
+//! config_dir/.proxy_clock_offset构建期注入 secret(build.rs),仓库 clone 拿不到
+//! 真实 secret 时 is_configured() 返 false,release 拉取走 GitHub 直连
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -18,10 +18,10 @@ type HmacSha256 = Hmac<Sha256>;
 
 const PLACEHOLDER_MARKER: &str = "PLACEHOLDER";
 const OFFSET_FILENAME: &str = ".proxy_clock_offset";
-/// 抖动小于 2 秒不写盘，避免频繁 IO。
+/// 抖动小于 2 秒不写盘,避免频繁 IO
 const OFFSET_PERSIST_THRESHOLD_SECS: i64 = 2;
 
-/// 中转代理的仓库别名，出现在 URL 路径 /v1/release/{alias}。
+/// 中转代理的仓库别名,出现在 URL 路径 /v1/release/{alias}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReleaseAlias {
     Napcat,
@@ -38,18 +38,18 @@ impl ReleaseAlias {
         }
     }
 
-    /// 返回 /v1/release/{alias} 供签名。
+    /// 返回 /v1/release/{alias} 供签名
     pub fn path(self) -> String {
         format!("/v1/release/{}", self.as_str())
     }
 }
 
-/// 中转代理是否已注入真实常量。未配置时 release 拉取走 GitHub 直连。
+/// 中转代理是否已注入真实常量未配置时 release 拉取走 GitHub 直连
 pub fn is_proxy_configured() -> bool {
     !PROXY_BASE_URL.is_empty() && !PROXY_SHARED_SECRET.contains(PLACEHOLDER_MARKER)
 }
 
-/// 拼中转 URL（{base}/v1/release/{alias}），未配置返 None。
+/// 拼中转 URL({base}/v1/release/{alias}),未配置返 None
 pub fn proxy_release_url(alias: ReleaseAlias) -> Option<String> {
     if !is_proxy_configured() {
         return None;
@@ -58,13 +58,13 @@ pub fn proxy_release_url(alias: ReleaseAlias) -> Option<String> {
     Some(format!("{base}/v1/release/{}", alias.as_str()))
 }
 
-/// 单例 ProxySigner，首次构造从磁盘加载 offset。config_dir 定位持久化文件，None 不持久化（测试用）。
+/// 单例 ProxySigner,首次构造从磁盘加载 offsetconfig_dir 定位持久化文件,None 不持久化(测试用)
 pub fn proxy_signer(config_dir: Option<PathBuf>) -> &'static ProxySigner {
     static SIGNER: OnceLock<ProxySigner> = OnceLock::new();
     SIGNER.get_or_init(|| ProxySigner::new(config_dir))
 }
 
-/// 中转代理签名器。只维护本地与服务器时钟 offset（秒，可负）；secret 是编译期常量不持有副本。
+/// 中转代理签名器只维护本地与服务器时钟 offset(秒,可负);secret 是编译期常量不持有副本
 pub struct ProxySigner {
     config_dir: Option<PathBuf>,
     offset: std::sync::Mutex<i64>,
@@ -87,7 +87,7 @@ impl ProxySigner {
         signer
     }
 
-    /// 生成签名头。message = {timestamp}.{path}，HMAC-SHA256(secret, message) → hex。
+    /// 生成签名头message = {timestamp}.{path},HMAC-SHA256(secret, message) → hex
     pub fn sign_headers(&self, path: &str) -> HashMap<&'static str, String> {
         let ts = {
             let offset = *self.offset.lock().unwrap_or_else(|e| e.into_inner());
@@ -111,8 +111,8 @@ impl ProxySigner {
         headers
     }
 
-    /// 读响应头 X-Server-Time 校正 offset，返回是否更新成功（更新了调用方可重试一次）。
-    /// 缺失/解析失败或抖动 < OFFSET_PERSIST_THRESHOLD_SECS 时不更新。
+    /// 读响应头 X-Server-Time 校正 offset,返回是否更新成功(更新了调用方可重试一次)
+    /// 缺失/解析失败或抖动 < OFFSET_PERSIST_THRESHOLD_SECS 时不更新
     pub fn update_offset_from_response(&self, headers: &reqwest::header::HeaderMap) -> bool {
         let Some(server_time) = header_server_time(headers) else {
             return false;
@@ -170,12 +170,12 @@ impl ProxySigner {
     }
 }
 
-/// 把已生成的 ProxySigner 偏移文件删除（测试 / dev 用）。
+/// 把已生成的 ProxySigner 偏移文件删除(测试 / dev 用)
 pub fn _clear_offset_file(config_dir: &Path) {
     let _ = std::fs::remove_file(config_dir.join(OFFSET_FILENAME));
 }
 
-/// 从 HeaderMap 抽 X-Server-Time（大小写不敏感）。
+/// 从 HeaderMap 抽 X-Server-Time(大小写不敏感)
 fn header_server_time(headers: &reqwest::header::HeaderMap) -> Option<u64> {
     headers
         .get("X-Server-Time")
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn proxy_url_contains_base_and_alias() {
-        // 仅在已注入时拼 URL；本仓库默认占位 → None。
+        // 仅在已注入时拼 URL;本仓库默认占位 → None
         if !is_proxy_configured() {
             assert_eq!(proxy_release_url(ReleaseAlias::Napcat), None);
             return;
@@ -261,20 +261,20 @@ mod tests {
         assert!(!signer.update_offset_from_response(&headers));
     }
 
-    /// 签名确定性：同一 secret + 同一 timestamp + 同一 path → 同一签名。
+    /// 签名确定性:同一 secret + 同一 timestamp + 同一 path → 同一签名
     #[test]
     fn signature_is_deterministic_for_same_inputs() {
         let tmp = tempfile::tempdir().unwrap();
         let signer = ProxySigner::new(Some(tmp.path().to_path_buf()));
 
-        // 固定 offset=0，确保 timestamp 来自系统时钟但同一瞬间内一致。
+        // 固定 offset=0,确保 timestamp 来自系统时钟但同一瞬间内一致
         let h1 = signer.sign_headers("/v1/release/napcat");
         let h2 = signer.sign_headers("/v1/release/napcat");
-        // 同一秒内（测试运行很快）：timestamp 应相等，签名也相等。
+        // 同一秒内(测试运行很快):timestamp 应相等,签名也相等
         if h1["X-Timestamp"] == h2["X-Timestamp"] {
             assert_eq!(h1["X-Signature"], h2["X-Signature"]);
         }
-        // 不同 path 一定不同签名（只要 timestamp 相同）。
+        // 不同 path 一定不同签名(只要 timestamp 相同)
         let h3 = signer.sign_headers("/v1/release/ncd");
         if h1["X-Timestamp"] == h3["X-Timestamp"] {
             assert_ne!(h1["X-Signature"], h3["X-Signature"]);

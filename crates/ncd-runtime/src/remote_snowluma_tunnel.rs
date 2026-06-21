@@ -1,6 +1,6 @@
-//! 远端 SnowLuma Native：SSH 本地转发 WebUI(5099) / noVNC(6081)。
+//! 远端 SnowLuma Native:SSH 本地转发 WebUI(5099) / noVNC(6081)
 //!
-//! 对齐 legacy SnowLumaTunnelManager：多 Bot 同 server_id 共享隧道，引用计数归零后关闭。
+//! 对齐 legacy SnowLumaTunnelManager:多 Bot 同 server_id 共享隧道,引用计数归零后关闭
 
 use std::collections::HashMap;
 
@@ -56,7 +56,7 @@ impl RemoteSnowLumaTunnelRegistry {
         })
     }
 
-    /// 隧道 +1；首次建立双隧道。密码由调用方在 daemon 就绪后从远端 secret 读出传入。
+    /// 隧道 +1;首次建立双隧道密码由调用方在 daemon 就绪后从远端 secret 读出传入
     pub async fn acquire(
         &self,
         server_id: &str,

@@ -1,4 +1,4 @@
-//! Docker 页 Tauri 命令薄壳层。
+//! Docker 页 Tauri 命令薄壳层
 //!
 //! 暴露给前端的命令:
 //! - docker_probe:探测某主机的 docker 状态
@@ -11,8 +11,8 @@
 //! - docker_deploy:在目标主机拉取 NapCat/SnowLuma 镜像(不创建容器;Bot 启动时再起)
 //! - docker_compose_down:停并清理一个 compose 部署
 //!
-//! 所有命令走 host_resolve 选主机(local 或 remote:<id>),错误统一转 String。
-//! 业务编排尽量薄;真正的 docker 操作在 ncd_deploy::docker::DockerCli。
+//! 所有命令走 host_resolve 选主机(local 或 remote:<id>),错误统一转 String
+//! 业务编排尽量薄;真正的 docker 操作在 ncd_deploy::docker::DockerCli
 
 use ncd_component::{ProgressEvent, ProgressKind, ProgressLogLevel};
 use ncd_deploy::docker::{
@@ -30,7 +30,7 @@ use tracing::{error, info, warn};
 use crate::AppState;
 use crate::commands::host_resolve::resolve_host_with_autoconnect;
 
-/// 部署进度写入 Desktop 会话日志（设置页）。不记录 docker pull 逐行 stdout，避免刷屏。
+/// 部署进度写入 Desktop 会话日志(设置页)不记录 docker pull 逐行 stdout,避免刷屏
 fn session_log_deploy_progress(
     kind: &ProgressKind,
     host_id: &str,
@@ -79,7 +79,7 @@ fn session_log_deploy_progress(
         }
         ProgressKind::Finished { ok } => {
             if *ok {
-                // 成功详情见同次拉取末尾的「镜像拉取完成」日志（含实际源与耗时）
+                // 成功详情见同次拉取末尾的「镜像拉取完成」日志(含实际源与耗时)
             } else {
                 error!(
                     target: "ncd_tauri::docker",
@@ -138,14 +138,14 @@ pub async fn docker_probe(
     Ok(DockerCli::new(host.as_ref()).probe().await)
 }
 
-/// 安装 docker。返回结构化 report 让前端按 status 分流:installed/alreadyInstalled
-/// 弹绿条;needSudoPassword 弹密码输入框;manualRequired 弹红条带手动指引。
+/// 安装 docker返回结构化 report 让前端按 status 分流:installed/alreadyInstalled
+/// 弹绿条;needSudoPassword 弹密码输入框;manualRequired 弹红条带手动指引
 ///
-/// sudo_password:前端弹框收集到的 sudo 密码。None 时后端自动从 keyring 找该服务器
-/// 的缓存密码(密码登录机器有,或密码登录后转密钥登录时保留下来的)。两边都没有
-/// 且远端确实需要密码时,返回 needSudoPassword 让前端弹框。
-/// remember_sudo:用户在弹框勾了"记住密码"。仅当本次显式传了 sudo_password 且安装
-/// 成功时,才把它写进 keyring(sudo 槽)。
+/// sudo_password:前端弹框收集到的 sudo 密码None 时后端自动从 keyring 找该服务器
+/// 的缓存密码(密码登录机器有,或密码登录后转密钥登录时保留下来的)两边都没有
+/// 且远端确实需要密码时,返回 needSudoPassword 让前端弹框
+/// remember_sudo:用户在弹框勾了"记住密码"仅当本次显式传了 sudo_password 且安装
+/// 成功时,才把它写进 keyring(sudo 槽)
 #[tauri::command]
 pub async fn docker_install(
     host_id: String,
@@ -154,7 +154,7 @@ pub async fn docker_install(
     remember_sudo: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<DockerInstallReport, String> {
-    // 检查主机类型（本地不支持 Docker 安装，由前端过滤）
+    // 检查主机类型(本地不支持 Docker 安装,由前端过滤)
     let server_id = host_id.strip_prefix("remote:");
     let effective_password = sudo_password.clone().or_else(|| {
         server_id.and_then(|id| state.server_manager.sudo_password(id))
@@ -167,7 +167,7 @@ pub async fn docker_install(
         "开始安装 Docker（远端 Linux 将执行仓库配置与 apt/dnf 安装，约 3–10 分钟）"
     );
 
-    // 获取包管理器锁，防止同一主机的 apt/dnf 并发冲突
+    // 获取包管理器锁,防止同一主机的 apt/dnf 并发冲突
     let _pkg_lock = state.package_lock.acquire(&host_id).await;
 
     let event_bus = state.event_bus.clone();
@@ -191,7 +191,7 @@ pub async fn docker_install(
         None
     };
 
-    // Docker 安装是长操作，使用隔离连接避免污染缓存连接
+    // Docker 安装是长操作,使用隔离连接避免污染缓存连接
     let report = if let Some(id) = server_id {
         let effective_password_clone = effective_password.clone();
         let ssh_user_clone = ssh_user.clone();
@@ -249,11 +249,11 @@ pub async fn docker_install(
         }
     }
 
-    // 用户勾了"记住密码"就存,只要这次密码被验证有效。判据是 status != NeedSudoPassword:
+    // 用户勾了"记住密码"就存,只要这次密码被验证有效判据是 status != NeedSudoPassword:
     // 能走过提权脚本(没返回 NeedSudoPassword)就说明 sudo 密码是对的——密码有效性
-    // 与 docker daemon 起没起来是两回事。早先用 == Installed 太严:脚本跑通但 daemon
-    // 没立刻就绪会返回 ManualRequired,导致有效密码没被存下,下次安装又弹框。
-    // 只存用户这次亲手输入的(sudo_password),不把 keyring 里已有的回写一遍。
+    // 与 docker daemon 起没起来是两回事早先用 == Installed 太严:脚本跑通但 daemon
+    // 没立刻就绪会返回 ManualRequired,导致有效密码没被存下,下次安装又弹框
+    // 只存用户这次亲手输入的(sudo_password),不把 keyring 里已有的回写一遍
     if report.status != DockerInstallStatus::NeedSudoPassword && remember_sudo == Some(true) {
         if let (Some(id), Some(pw)) = (server_id, sudo_password.as_deref()) {
             let _ = state.server_manager.remember_sudo_password(id, pw);
@@ -271,7 +271,7 @@ pub async fn docker_list_containers(
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let cli = DockerCli::new(host.as_ref());
     // 先 probe 定夺提权:远端没进 docker 组时裸 docker 会 permission denied,
-    // ensure_daemon_ready 探一次让后续命令一致地走 sudo。
+    // ensure_daemon_ready 探一次让后续命令一致地走 sudo
     cli.ensure_daemon_ready()
         .await
         .map_err(|e| format!("Docker 未就绪: {e}"))?;
@@ -629,7 +629,7 @@ pub async fn docker_compose_down(
     let host_ref: &dyn Host = host.as_ref();
     let project_dir = resolve_project_dir(&host_id, host_ref, &state, &name).await?;
     let cli = DockerCli::new(host_ref);
-    // compose down 要用 compose 插件,走 ensure_ready(probe 定夺提权 + 要求 compose)。
+    // compose down 要用 compose 插件,走 ensure_ready(probe 定夺提权 + 要求 compose)
     cli.ensure_ready()
         .await
         .map_err(|e| format!("Docker 未就绪: {e}"))?;
@@ -647,9 +647,9 @@ pub async fn docker_compose_down(
         })
 }
 
-/// 解析 compose project 目录(放 docker-compose.yml 的地方)。
-/// 本机:<data_root>/docker/<name>(POSIX 化路径,LocalWindowsHost 内部转盘符)。
-/// 远端:<$HOME>/.napcat-docker/<name>;探不到 $HOME 时返回错误(不回退 /root)。
+/// 解析 compose project 目录(放 docker-compose.yml 的地方)
+/// 本机:<data_root>/docker/<name>(POSIX 化路径,LocalWindowsHost 内部转盘符)
+/// 远端:<$HOME>/.napcat-docker/<name>;探不到 $HOME 时返回错误(不回退 /root)
 async fn resolve_project_dir(
     host_id: &str,
     host: &dyn Host,
@@ -658,11 +658,11 @@ async fn resolve_project_dir(
 ) -> Result<String, String> {
     if host_id == "local" {
         let base = state.data_root.join("docker").join(name);
-        // HostPath::from_windows 把 C:\... 规范成 /c/...,LocalWindowsHost 能还原。
+        // HostPath::from_windows 把 C:\... 规范成 /c/...,LocalWindowsHost 能还原
         return Ok(HostPath::from_windows(&base.to_string_lossy()).as_posix().to_string());
     }
-    // 远端:探 $HOME。探不到就 fail-fast,不回退 /root——路径落盘红线:宁可报错让
-    // 用户处理,也不把生产数据静默落到错误目录(/root 通常无权限,或污染 root 家目录)。
+    // 远端:探 $HOME探不到就 fail-fast,不回退 /root——路径落盘红线:宁可报错让
+    // 用户处理,也不把生产数据静默落到错误目录(/root 通常无权限,或污染 root 家目录)
     let home = probe_remote_home(host).await.ok_or_else(|| {
         "无法探测远端 $HOME,已拒绝回退到 /root 部署 Docker(避免把数据落到错误目录)。\
          请确认远端 SSH 用户有正常的家目录后重试。"
@@ -678,7 +678,7 @@ fn now_epoch_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// 远端探 $HOME。失败返回 None;调用方须 fail-fast,不得回退 /root。
+/// 远端探 $HOME失败返回 None;调用方须 fail-fast,不得回退 /root
 async fn probe_remote_home(host: &dyn Host) -> Option<String> {
     let cmd = HostCommand::new("sh").arg("-c").arg("echo $HOME");
     match host.run_to_string(cmd).await {

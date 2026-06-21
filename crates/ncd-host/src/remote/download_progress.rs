@@ -1,4 +1,4 @@
-//! 解析 wget / curl 的进度输出。
+//! 解析 wget / curl 的进度输出
 
 use std::time::{Duration, Instant};
 
@@ -9,7 +9,7 @@ pub struct DownloadProgress {
     pub speed_bps: u64,
 }
 
-/// wget --progress=dot:mega 每行形如 "2048K ........  5% 2.45M 3s"。
+/// wget --progress=dot:mega 每行形如 "2048K ........  5% 2.45M 3s"
 pub struct WgetProgressParser {
     last_update: Option<Instant>,
     update_interval: Duration,
@@ -23,7 +23,7 @@ impl WgetProgressParser {
         }
     }
 
-    /// 每秒最多返回一次，避免刷爆 IPC。
+    /// 每秒最多返回一次,避免刷爆 IPC
     pub fn parse_line(&mut self, line: &str) -> Option<DownloadProgress> {
         if let Some(last) = self.last_update {
             if last.elapsed() < self.update_interval {
@@ -60,7 +60,7 @@ impl WgetProgressParser {
     }
 }
 
-/// curl --progress-bar 进度行形如 "######  10.5%"，只含百分比。
+/// curl --progress-bar 进度行形如 "######  10.5%",只含百分比
 pub struct CurlProgressParser {
     last_update: Option<Instant>,
     update_interval: Duration,
@@ -101,7 +101,7 @@ impl CurlProgressParser {
 }
 
 fn parse_speed_from_line(line: &str) -> Option<u64> {
-    // wget 行里已下载量在 % 之前、速度在 % 之后，靠 % 定界才不会把已下载量当速度。
+    // wget 行里已下载量在 % 之前,速度在 % 之后,靠 % 定界才不会把已下载量当速度
     let after_percent = line.split('%').nth(1)?;
     for token in after_percent.split_whitespace() {
         if let Some(num_part) = token.strip_suffix('M') {
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn test_parse_speed() {
-        // 2048K 是已下载量（% 前），2.5M 是速度（% 后），应取后者。
+        // 2048K 是已下载量(% 前),2.5M 是速度(% 后),应取后者
         assert_eq!(
             parse_speed_from_line("2048K ........  5% 2.5M 3s"),
             Some(2_621_440)

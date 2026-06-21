@@ -1,11 +1,11 @@
-//! UpdateOrchestrator:Desktop 自更新业务编排器。
+//! UpdateOrchestrator:Desktop 自更新业务编排器
 //!
 //! 提供 5 个核心方法 check / precheck / resume_after_update /
-//! record_failure / detect_pending_failures。
+//! record_failure / detect_pending_failures
 //!
 //! install_with_graceful_shutdown 当前只保存 resume snapshot 然后调
 //! provider.download_and_install;待 BotManager 重构完成后再接入"先 graceful
-//! stop 在跑 bot / SnowLuma daemon 再调用 provider"的完整链路。
+//! stop 在跑 bot / SnowLuma daemon 再调用 provider"的完整链路
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ use crate::provider::UpdateProvider;
 use crate::resume::{ResumeStore, UpdateResumePoint};
 use crate::types::{AvailableUpdate, PrecheckReport, RecordedFailure};
 
-/// UpdateOrchestrator:协调自更新流程。
+/// UpdateOrchestrator:协调自更新流程
 pub struct UpdateOrchestrator {
     provider: Arc<dyn UpdateProvider>,
     resume_store: ResumeStore,
@@ -35,7 +35,7 @@ pub struct UpdateOrchestrator {
 }
 
 impl UpdateOrchestrator {
-    /// 创建 orchestrator。
+    /// 创建 orchestrator
     /// - provider:更新源(实装为 tauri-plugin-updater wrapper / Mock)
     /// - data_root:数据根目录(<data_root>/update-resume.json 与 update-failures.jsonl)
     pub fn new(
@@ -55,7 +55,7 @@ impl UpdateOrchestrator {
 
     // ===== 1. check =====
 
-    /// 检查更新,验签由 provider 完成。
+    /// 检查更新,验签由 provider 完成
     pub async fn check(&self, channel: UpdateChannel) -> Result<Option<AvailableUpdate>, UpdateError> {
         info!(target: "ncd_update", ?channel, "check for updates");
         match self.provider.check(channel).await {
@@ -73,7 +73,7 @@ impl UpdateOrchestrator {
 
     // ===== 2. precheck =====
 
-    /// schema 兼容预检。
+    /// schema 兼容预检
     pub async fn precheck(&self, update: &AvailableUpdate) -> Result<PrecheckReport, UpdateError> {
         let current = self.current_schema;
         let target = update.schema_version;
@@ -110,9 +110,9 @@ impl UpdateOrchestrator {
 
     // ===== 3. install_with_graceful_shutdown =====
 
-    /// 当前只保存 resume snapshot 然后调 provider.download_and_install。
+    /// 当前只保存 resume snapshot 然后调 provider.download_and_install
     /// BotManager 重构完成后会在此处加上"先 graceful stop 在跑 bot / SnowLuma
-    /// daemon"的完整链路。
+    /// daemon"的完整链路
     pub async fn install_with_graceful_shutdown(
         &self,
         update: AvailableUpdate,
@@ -151,20 +151,20 @@ impl UpdateOrchestrator {
 
     // ===== 4. resume_after_update =====
 
-    /// 新版进程启动时调用。读取 resume snapshot,返回 Some 表示刚升级,
-    /// 上层(BotManager / SnowLumaDaemon)按 snapshot 还原状态后调 [Self::clear_resume]。
+    /// 新版进程启动时调用读取 resume snapshot,返回 Some 表示刚升级,
+    /// 上层(BotManager / SnowLumaDaemon)按 snapshot 还原状态后调 [Self::clear_resume]
     pub async fn resume_after_update(&self) -> Result<Option<UpdateResumePoint>, UpdateError> {
         self.resume_store.load().await
     }
 
-    /// 还原完成后清理 snapshot。
+    /// 还原完成后清理 snapshot
     pub async fn clear_resume(&self) -> Result<(), UpdateError> {
         self.resume_store.clear().await
     }
 
     // ===== 5. record_failure / detect_pending_failures =====
 
-    /// 记录一次失败,追加到 update-failures.jsonl。
+    /// 记录一次失败,追加到 update-failures.jsonl
     pub async fn record_failure(
         &self,
         phase: impl Into<String>,
@@ -185,7 +185,7 @@ impl UpdateOrchestrator {
         }
     }
 
-    /// 启动时检测是否有未上报的失败记录。
+    /// 启动时检测是否有未上报的失败记录
     pub async fn detect_pending_failures(&self) -> Result<Vec<RecordedFailure>, UpdateError> {
         match fs::read_to_string(&self.failures_path).await {
             Ok(content) => {

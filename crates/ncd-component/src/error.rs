@@ -1,4 +1,4 @@
-//! ActionError:Component / Action 操作的统一错误。
+//! ActionError:Component / Action 操作的统一错误
 //!
 //! 设计原则:
 //! - 所有 Component 操作的错误都映射到本枚举,避免每个 component 一套自己的 error

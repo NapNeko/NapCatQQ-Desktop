@@ -1,4 +1,4 @@
-//! 崩溃诊断包（对齐 legacy crash_bundle.py 最小子集）。
+//! 崩溃诊断包(对齐 legacy crash_bundle.py 最小子集)
 
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -18,7 +18,7 @@ pub struct CrashBundleInput {
     pub app_version: String,
 }
 
-/// 将诊断包写入 <data_root>/output/crash_<timestamp>.zip。
+/// 将诊断包写入 <data_root>/output/crash_<timestamp>.zip
 pub fn write_crash_bundle(input: &CrashBundleInput) -> std::io::Result<PathBuf> {
     let out_dir = input.data_root.join("output");
     fs::create_dir_all(&out_dir)?;
@@ -59,7 +59,7 @@ pub fn write_crash_bundle(input: &CrashBundleInput) -> std::io::Result<PathBuf> 
     Ok(zip_path)
 }
 
-/// 解析桌面可写输出目录（优先 data_root/output）。
+/// 解析桌面可写输出目录(优先 data_root/output)
 pub fn desktop_output_dir(data_root: &Path) -> PathBuf {
     data_root.join("output")
 }

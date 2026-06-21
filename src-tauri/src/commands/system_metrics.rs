@@ -1,7 +1,7 @@
-//! 读取本机 CPU / 内存占用百分比，供概览性能监控曲线使用。
+//! 读取本机 CPU / 内存占用百分比,供概览性能监控曲线使用
 //!
-//! sysinfo 的 cpu_usage() 是「自上次 refresh 以来的增量」，必须在**同一 System
-//! 实例**上按间隔连续 refresh_cpu_usage()，每次 IPC 新建 System 会得到 0 或乱跳。
+//! sysinfo 的 cpu_usage() 是「自上次 refresh 以来的增量」,必须在**同一 System
+//! 实例**上按间隔连续 refresh_cpu_usage(),每次 IPC 新建 System 会得到 0 或乱跳
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -31,7 +31,7 @@ impl MetricsSampler {
         }
     }
 
-    /// force_cpu_ready：首屏 bootstrap 采样为 true，跳过 200ms 等待与暖机 sleep。
+    /// force_cpu_ready:首屏 bootstrap 采样为 true,跳过 200ms 等待与暖机 sleep
     fn sample(&mut self, force_cpu_ready: bool) -> SystemResourceSnapshot {
         if !force_cpu_ready {
             let elapsed = self.last_cpu_refresh.elapsed();

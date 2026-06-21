@@ -1,5 +1,5 @@
 //! 嵌入 Windows manifest 显式声明 asInvoker,
-//! 防止 Windows installer detection heuristic 因 binary 名含 "update" 触发 UAC。
+//! 防止 Windows installer detection heuristic 因 binary 名含 "update" 触发 UAC
 //!
 //! 见 https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests
 

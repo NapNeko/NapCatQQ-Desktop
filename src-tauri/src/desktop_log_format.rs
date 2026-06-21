@@ -1,4 +1,4 @@
-//! 将 tracing 事件格式化为桌面会话行（供 Tauri layer 使用）。
+//! 将 tracing 事件格式化为桌面会话行(供 Tauri layer 使用)
 
 use std::collections::HashMap;
 use std::sync::Mutex;

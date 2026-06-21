@@ -1,4 +1,4 @@
-// 桌面 Toast：OfflineNotifier + DomainEvent 监听（无 WebView 时仍提醒）。
+// 桌面 Toast:OfflineNotifier + DomainEvent 监听(无 WebView 时仍提醒)
 
 use std::sync::{Arc, OnceLock};
 

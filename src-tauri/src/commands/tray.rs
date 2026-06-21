@@ -1,5 +1,5 @@
-// 系统托盘与主窗口显隐/退出收口。
-// 对齐旧版 SystemTrayIcon：左键显示主窗口，右键菜单「显示主窗口」「退出程序」。
+// 系统托盘与主窗口显隐/退出收口
+// 对齐旧版 SystemTrayIcon:左键显示主窗口,右键菜单「显示主窗口」「退出程序」
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -22,7 +22,7 @@ fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
         .ok_or_else(|| "主窗口未找到".to_string())
 }
 
-/// 显示并前置主窗口（从托盘或隐藏状态恢复；轻量模式下重建 WebView）。
+/// 显示并前置主窗口(从托盘或隐藏状态恢复;轻量模式下重建 WebView)
 #[tauri::command]
 pub async fn window_show(app: AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
@@ -37,7 +37,7 @@ pub async fn window_show(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 隐藏主窗口到托盘，并在 close_action=tray 时按设置启动延迟/立即轻量计时。
+/// 隐藏主窗口到托盘,并在 close_action=tray 时按设置启动延迟/立即轻量计时
 pub async fn hide_main_window_to_tray(app: AppHandle) -> Result<(), String> {
     let window = main_window(&app)?;
     window.hide().map_err(|e| e.to_string())?;
@@ -53,13 +53,13 @@ pub async fn hide_main_window_to_tray(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 隐藏主窗口（最小化到托盘，进程继续运行）。
+/// 隐藏主窗口(最小化到托盘,进程继续运行)
 #[tauri::command]
 pub async fn window_hide_to_tray(app: AppHandle) -> Result<(), String> {
     hide_main_window_to_tray(app).await
 }
 
-/// 本机 Bot 是否处于活跃态，用于退出前拦截（与旧版 has_running_local_bot 对齐）。
+/// 本机 Bot 是否处于活跃态,用于退出前拦截(与旧版 has_running_local_bot 对齐)
 #[tauri::command]
 pub async fn count_local_active_bots(state: tauri::State<'_, AppState>) -> Result<usize, String> {
     state
@@ -69,7 +69,7 @@ pub async fn count_local_active_bots(state: tauri::State<'_, AppState>) -> Resul
         .map_err(|e| e.to_string())
 }
 
-/// 在 setup 中注册托盘（幂等）。菜单在阻塞线程构建，避免 async setup 里缺 runtime。
+/// 在 setup 中注册托盘(幂等)菜单在阻塞线程构建,避免 async setup 里缺 runtime
 pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
     if TRAY_ATTACHED.swap(true, Ordering::SeqCst) {
         return Ok(());

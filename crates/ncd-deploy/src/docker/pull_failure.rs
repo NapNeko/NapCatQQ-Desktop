@@ -1,4 +1,4 @@
-//! 将 docker pull / Host 错误归类为用户可读的失败原因（超时 vs 连不上 vs 其它）。
+//! 将 docker pull / Host 错误归类为用户可读的失败原因(超时 vs 连不上 vs 其它)
 
 use ncd_host::HostError;
 

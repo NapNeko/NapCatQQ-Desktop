@@ -1,6 +1,6 @@
-//! DeployPlan::run 编排执行 + 失败回滚 + 进度上报。
+//! DeployPlan::run 编排执行 + 失败回滚 + 进度上报
 //!
-//! 把 plan 跑起来,emit 进度,失败时按需回滚已 install 的 step。
+//! 把 plan 跑起来,emit 进度,失败时按需回滚已 install 的 step
 
 use std::time::Instant;
 
@@ -14,10 +14,10 @@ use crate::plan::{DeployPlan, DeployStep, StepKind};
 use crate::result::{DeployOutcome, StepOutcome};
 
 impl DeployPlan {
-    /// 执行 plan。
+    /// 执行 plan
     ///
     /// ctx:进度上报通道(子任务用 ctx.child() 派生取消子节点)
-    /// 返回 [DeployOutcome],含每步状态 + 总耗时。
+    /// 返回 [DeployOutcome],含每步状态 + 总耗时
     pub async fn run(
         &self,
         host: &dyn Host,
@@ -129,7 +129,7 @@ impl DeployPlan {
     }
 }
 
-/// 跑单个 step。返回 Ok(true) 表示被 skip,Ok(false) 表示真的跑了。
+/// 跑单个 step返回 Ok(true) 表示被 skip,Ok(false) 表示真的跑了
 async fn run_single_step(
     step: &DeployStep,
     host: &dyn Host,
@@ -178,7 +178,7 @@ async fn run_single_step(
     }
 }
 
-/// 对所有 rollback_on_failure=true 的已完成 step 倒序跑 uninstall。
+/// 对所有 rollback_on_failure=true 的已完成 step 倒序跑 uninstall
 async fn rollback(
     host: &dyn Host,
     ctx: &mut ActionCtx,

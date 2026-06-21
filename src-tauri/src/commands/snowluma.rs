@@ -1,6 +1,6 @@
-//! SnowLuma Tauri commands。
-//! 薄壳层：仅做参数转换 + 错误转 String + 调 BotManager / 实用工具
-//! 。
+//! SnowLuma Tauri commands
+//! 薄壳层:仅做参数转换 + 错误转 String + 调 BotManager / 实用工具
+//! 
 
 use std::time::Duration;
 
@@ -61,7 +61,7 @@ pub async fn set_snowluma_app_config(
     write_snowluma_app_config(&state.data_root, &config)
 }
 
-/// 前端用来填 HOT 模式 attach_pid 时的 QQ 进程信息。
+/// 前端用来填 HOT 模式 attach_pid 时的 QQ 进程信息
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
 pub struct QQProcessInfo {
@@ -71,27 +71,27 @@ pub struct QQProcessInfo {
     pub command_line: String,
 }
 
-/// 列出当前系统中所有"主"QQ.exe 进程（HOT 模式选 attach_pid 用）。
+/// 列出当前系统中所有"主"QQ.exe 进程(HOT 模式选 attach_pid 用)
 ///
-/// QQ NT 基于 Electron / Chromium，单次启动一个登录账号会派生十几个 QQ.exe
-/// 子进程（renderer / GPU / utility / crash-handler …），如果把它们全列出
-/// 同一个 uin 会出现 4-5 次重复条目。这里复用 legacy Python
+/// QQ NT 基于 Electron / Chromium,单次启动一个登录账号会派生十几个 QQ.exe
+/// 子进程(renderer / GPU / utility / crash-handler …),如果把它们全列出
+/// 同一个 uin 会出现 4-5 次重复条目这里复用 legacy Python
 /// (legacy-python/src/core/runtime/q_port_probe.py) 的两条 Chromium 子进程
-/// 识别规则做过滤：
+/// 识别规则做过滤:
 ///
 /// 1. parent name 也是 QQ.exe → Chromium fork 的子进程
 /// 2. cmdline 含 --type= → Chromium 用此参数标 renderer / GPU / utility 等
-///    子进程；也覆盖少数 parent 探测不到（权限不足等）的情形
+///    子进程;也覆盖少数 parent 探测不到(权限不足等)的情形
 #[tauri::command]
 pub async fn list_qq_processes(state: State<'_, AppState>) -> Result<Vec<QQProcessInfo>, String> {
-    let _ = state; // app state 当前未参与；未来若 backend 提供更精确视图再接入。
+    let _ = state; // app state 当前未参与;未来若 backend 提供更精确视图再接入
     let result = tokio::task::spawn_blocking(|| {
         let mut sys = sysinfo::System::new_all();
         sys.refresh_all();
 
-        // 第一遍收集所有 QQ.exe 的 PID，第二遍据此判断 parent 是不是子进程
-        // 中转。两遍扫描而不是一遍 + lookup，因为 sysinfo 的 process(parent_pid)
-        // 在某些系统上对已退出 / 权限不足的 PID 返回 None，第一遍存集合最稳。
+        // 第一遍收集所有 QQ.exe 的 PID,第二遍据此判断 parent 是不是子进程
+        // 中转两遍扫描而不是一遍 + lookup,因为 sysinfo 的 process(parent_pid)
+        // 在某些系统上对已退出 / 权限不足的 PID 返回 None,第一遍存集合最稳
         let mut qq_pids: std::collections::HashSet<sysinfo::Pid> =
             std::collections::HashSet::new();
         for (pid, process) in sys.processes().iter() {
@@ -107,7 +107,7 @@ pub async fn list_qq_processes(state: State<'_, AppState>) -> Result<Vec<QQProce
                 continue;
             }
 
-            // 规则 1：parent 也是 QQ.exe → Chromium 子进程
+            // 规则 1:parent 也是 QQ.exe → Chromium 子进程
             if let Some(ppid) = process.parent() {
                 if qq_pids.contains(&ppid) {
                     continue;
@@ -120,7 +120,7 @@ pub async fn list_qq_processes(state: State<'_, AppState>) -> Result<Vec<QQProce
                 .map(|s| s.to_string_lossy().to_string())
                 .collect();
 
-            // 规则 2：cmdline 含 --type= → Chromium 子进程
+            // 规则 2:cmdline 含 --type= → Chromium 子进程
             if cmd.iter().any(|arg| arg.contains("--type=")) {
                 continue;
             }
@@ -132,7 +132,7 @@ pub async fn list_qq_processes(state: State<'_, AppState>) -> Result<Vec<QQProce
                 command_line: cmd.join(" "),
             });
         }
-        // 按 PID 升序，让 UI 列表稳定
+        // 按 PID 升序,让 UI 列表稳定
         out.sort_by_key(|p| p.pid);
         out
     })
@@ -141,10 +141,10 @@ pub async fn list_qq_processes(state: State<'_, AppState>) -> Result<Vec<QQProce
     Ok(result)
 }
 
-/// 更新 App 级 SnowLuma WebUI 密码 override。
-/// MVP：当前仅原子写 <data_root>/snowluma/app-config.json，下次 daemon 启动时
-/// 由 render_daemon_globals 读取该 override。配置层热更新未来
-/// 可通过 BotManager 内的 Arc<RwLock<SnowLumaAppConfig>> 接入。
+/// 更新 App 级 SnowLuma WebUI 密码 override
+/// MVP:当前仅原子写 <data_root>/snowluma/app-config.json,下次 daemon 启动时
+/// 由 render_daemon_globals 读取该 override配置层热更新未来
+/// 可通过 BotManager 内的 Arc<RwLock<SnowLumaAppConfig>> 接入
 #[tauri::command]
 pub async fn set_snowluma_password_override(
     state: State<'_, AppState>,
@@ -155,11 +155,11 @@ pub async fn set_snowluma_password_override(
     write_snowluma_app_config(&state.data_root, &cfg)
 }
 
-/// SnowLuma WebUI 登录端点。
-/// SnowLuma WebUI 走**表单登录**，不接受 ?token= query 参数。前端拿到这个
-/// payload 后：
-/// 1. 把 password 写入剪贴板，提示「已复制到剪贴板，粘贴即可登录」
-/// 2. 用系统默认浏览器打开 url。
+/// SnowLuma WebUI 登录端点
+/// SnowLuma WebUI 走**表单登录**,不接受 ?token= query 参数前端拿到这个
+/// payload 后:
+/// 1. 把 password 写入剪贴板,提示「已复制到剪贴板,粘贴即可登录」
+/// 2. 用系统默认浏览器打开 url
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
 pub struct SnowLumaWebuiEndpoint {
@@ -167,13 +167,13 @@ pub struct SnowLumaWebuiEndpoint {
     pub password: String,
 }
 
-/// 打开 SnowLuma WebUI：解析 endpoint URL + 当前生效的 password。
-/// 优先级（与 daemon render_daemon_globals 对齐）：
-/// 1. App 级 override（<data_root>/snowluma/app-config.json 的
-/// snowlumaWebuiPasswordOverride，非空）。
-/// 2. session.json 中的强随机密码。
-/// bot_id 当前未使用——SnowLuma daemon 是全局单例，所有 SL bot 共享同一个
-/// WebUI 端点。保留参数是为了未来支持每 Bot 隔离时改造方便。
+/// 打开 SnowLuma WebUI:解析 endpoint URL + 当前生效的 password
+/// 优先级(与 daemon render_daemon_globals 对齐):
+/// 1. App 级 override(<data_root>/snowluma/app-config.json 的
+/// snowlumaWebuiPasswordOverride,非空)
+/// 2. session.json 中的强随机密码
+/// bot_id 当前未使用——SnowLuma daemon 是全局单例,所有 SL bot 共享同一个
+/// WebUI 端点保留参数是为了未来支持每 Bot 隔离时改造方便
 #[tauri::command]
 pub async fn open_snowluma_webui(
     state: State<'_, AppState>,
@@ -218,7 +218,7 @@ pub async fn open_snowluma_webui(
 
     let data_root = state.data_root.clone();
 
-    // 端口：daemon 写入的 runtime.json 优先；否则读 app-config.json；再默认 5099。
+    // 端口:daemon 写入的 runtime.json 优先;否则读 app-config.json;再默认 5099
     let runtime_json_path = data_root
         .join("runtime")
         .join("SnowLuma")
@@ -235,7 +235,7 @@ pub async fn open_snowluma_webui(
         ncd_runtime::load_snowluma_app_config(&data_root.join("snowluma")).webui_port
     });
 
-    // 密码：先看 App-level override，否则读 session.json。
+    // 密码:先看 App-level override,否则读 session.json
     let app_cfg_path = data_root.join("snowluma").join("app-config.json");
     let override_pwd: Option<String> = (|| -> Option<String> {
         let text = std::fs::read_to_string(&app_cfg_path).ok()?;
@@ -251,8 +251,8 @@ pub async fn open_snowluma_webui(
     let password = match override_pwd {
         Some(p) => p,
         None => {
-            // session.json 由 daemon 启动时写入；如果文件还没生成（用户没启动过
-            // SL bot），返回明确错误让前端提示。
+            // session.json 由 daemon 启动时写入;如果文件还没生成(用户没启动过
+            // SL bot),返回明确错误让前端提示
             let session_path = data_root.join("snowluma").join("session.json");
             let text = std::fs::read_to_string(&session_path).map_err(|e| {
                 format!("SnowLuma session 未就绪（请先启动至少一个 SnowLuma Bot）：{e}")
@@ -273,7 +273,7 @@ pub async fn open_snowluma_webui(
     })
 }
 
-/// 打开 SnowLuma Docker noVNC 扫码页（对齐 legacy build_snowluma_novnc_url）。
+/// 打开 SnowLuma Docker noVNC 扫码页(对齐 legacy build_snowluma_novnc_url)
 #[tauri::command]
 pub async fn open_snowluma_novnc(
     state: State<'_, AppState>,
@@ -341,27 +341,27 @@ pub async fn open_snowluma_novnc(
 
 
 // =============================================================================
-// QQ 登录账号探测（QQ NT tencent:// HTTP 端点 9210-9219）
+// QQ 登录账号探测(QQ NT tencent:// HTTP 端点 9210-9219)
 // =============================================================================
 //
-// QQ NT 启动后会在 127.0.0.1:9210-9219 任一端口监听一个迷你 HTTP 服务，处理
-// tencent:// 深链接（浏览器点 QQ 群聊链接的回调）。POST /tencent body=tencent://
-// 会返回一段 JWT，base64url decode payload 后得到当前登录的 uin / nickName。
+// QQ NT 启动后会在 127.0.0.1:9210-9219 任一端口监听一个迷你 HTTP 服务,处理
+// tencent:// 深链接(浏览器点 QQ 群聊链接的回调)POST /tencent body=tencent://
+// 会返回一段 JWT,base64url decode payload 后得到当前登录的 uin / nickName
 //
 // 协议信息来源:
-//   - SnowLuma packages/core/src/hook/qq-port-probe.ts （参考实装）
+//   - SnowLuma packages/core/src/hook/qq-port-probe.ts (参考实装)
 //   - legacy Python legacy-python/src/core/runtime/q_port_probe.py
 //
-// body 用 tencent://snowluma-probe-noop 而不是裸 tencent://：legacy 注释里
-// 实测有些 QQ NT 版本把空 action 解析成"打开主窗口"会把 QQ 拉到前台，用一个
-// QQ 没注册的伪 action 让 deeplink dispatcher 静默丢弃，HTTP 层照常返回 JWT。
+// body 用 tencent://snowluma-probe-noop 而不是裸 tencent://:legacy 注释里
+// 实测有些 QQ NT 版本把空 action 解析成"打开主窗口"会把 QQ 拉到前台,用一个
+// QQ 没注册的伪 action 让 deeplink dispatcher 静默丢弃,HTTP 层照常返回 JWT
 
 const QQ_PROBE_PORT_START: u16 = 9210;
 const QQ_PROBE_PORT_END: u16 = 9219;
 const QQ_PROBE_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 const QQ_PROBE_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
-/// 单条 QQ 登录探测结果。logged_in == false 表示端口响应了但当前未登录。
+/// 单条 QQ 登录探测结果logged_in == false 表示端口响应了但当前未登录
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
 pub struct QqLoginInfo {
@@ -372,19 +372,19 @@ pub struct QqLoginInfo {
     pub logged_in: bool,
 }
 
-/// 探测指定 PID 当前登录的 QQ 账号。
+/// 探测指定 PID 当前登录的 QQ 账号
 ///
-/// 关键路径：先用 OS TCP 表查 PID 实际监听的端口（缩小到该 QQ NT 实例自己的
-/// 端口，避免跨实例串号），再对该端口发 tencent:// 探测。如果 TCP 表查不到
-/// （权限不足 / 进程刚退出），fallback 到全端口扫——这种 fallback 拿到的可能
-/// 是别的 QQ NT 实例的 uin，UI 层应当容忍并由用户确认。
+/// 关键路径:先用 OS TCP 表查 PID 实际监听的端口(缩小到该 QQ NT 实例自己的
+/// 端口,避免跨实例串号),再对该端口发 tencent:// 探测如果 TCP 表查不到
+/// (权限不足 / 进程刚退出),fallback 到全端口扫——这种 fallback 拿到的可能
+/// 是别的 QQ NT 实例的 uin,UI 层应当容忍并由用户确认
 ///
-/// 失败原因（任意一种都返回 None）：
+/// 失败原因(任意一种都返回 None):
 /// - 进程已退出 / 端口未开放
 /// - 9210-9219 全部不响应
 /// - JWT 解码失败 / payload errCode != 0
 ///
-/// 阻塞操作（TCP connect / read），但跑在 tokio 异步任务里，不卡主循环。
+/// 阻塞操作(TCP connect / read),但跑在 tokio 异步任务里,不卡主循环
 #[tauri::command]
 pub async fn probe_qq_login_info(
     state: State<'_, AppState>,
@@ -395,7 +395,7 @@ pub async fn probe_qq_login_info(
         return Ok(None);
     }
 
-    // 1. 优先扫 PID 实际监听的 9210-9219 范围内端口（精确路径，不会串号）
+    // 1. 优先扫 PID 实际监听的 9210-9219 范围内端口(精确路径,不会串号)
     let pid_ports = tokio::task::spawn_blocking(move || listening_ports_for_pid(pid))
         .await
         .unwrap_or_default();
@@ -405,8 +405,8 @@ pub async fn probe_qq_login_info(
         }
     }
 
-    // 2. fallback：PID 端口拿不到时退到全端口扫描
-    //    （legacy Python / SnowLuma 都保留了这条 fallback；权限不足时常见）
+    // 2. fallback:PID 端口拿不到时退到全端口扫描
+    //    (legacy Python / SnowLuma 都保留了这条 fallback;权限不足时常见)
     if pid_ports.is_empty() {
         for port in QQ_PROBE_PORT_START..=QQ_PROBE_PORT_END {
             if let Some(info) = probe_one_port(port).await {
@@ -417,8 +417,8 @@ pub async fn probe_qq_login_info(
     Ok(None)
 }
 
-/// 通过 OS TCP 表查 PID 监听的端口，过滤到 9210-9219 范围内。
-/// 失败返回空向量，让上层走全端口 fallback。
+/// 通过 OS TCP 表查 PID 监听的端口,过滤到 9210-9219 范围内
+/// 失败返回空向量,让上层走全端口 fallback
 fn listening_ports_for_pid(pid: u32) -> Vec<u16> {
     use netstat2::{get_sockets_info, AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo};
 
@@ -437,8 +437,8 @@ fn listening_ports_for_pid(pid: u32) -> Vec<u16> {
         let ProtocolSocketInfo::Tcp(tcp) = socket.protocol_socket_info else {
             continue;
         };
-        // listening 状态：netstat2 在 Windows 给 LISTENING；Linux 给 LISTEN。
-        // 用字符串包含判断比 enum 匹配更稳（不同平台变体名差异大）。
+        // listening 状态:netstat2 在 Windows 给 LISTENING;Linux 给 LISTEN
+        // 用字符串包含判断比 enum 匹配更稳(不同平台变体名差异大)
         let state_str = format!("{:?}", tcp.state).to_uppercase();
         if !state_str.contains("LISTEN") {
             continue;
@@ -473,7 +473,7 @@ async fn probe_one_port(port: u16) -> Option<QqLoginInfo> {
         return None;
     }
     if stream.shutdown().await.is_err() {
-        // shutdown 失败不影响读取，继续。
+        // shutdown 失败不影响读取,继续
     }
 
     let mut buf = Vec::with_capacity(2048);
@@ -499,10 +499,10 @@ async fn probe_one_port(port: u16) -> Option<QqLoginInfo> {
     })
 }
 
-/// 在响应文本里搜第一段 JWT（三段式 base64url + 点分隔）。
+/// 在响应文本里搜第一段 JWT(三段式 base64url + 点分隔)
 fn extract_jwt(text: &str) -> Option<&str> {
-    // 不引入 regex，手写扫描：找以 eyJ 开头的 token，到第二个 . 后的非
-    // base64url 字符停下。base64url 字符集：A-Z a-z 0-9 - _
+    // 不引入 regex,手写扫描:找以 eyJ 开头的 token,到第二个 . 后的非
+    // base64url 字符停下base64url 字符集:A-Z a-z 0-9 - _
     let bytes = text.as_bytes();
     let mut i = 0;
     while i + 3 <= bytes.len() {
@@ -521,7 +521,7 @@ fn extract_jwt(text: &str) -> Option<&str> {
                     dots += 1;
                     j += 1;
                     if dots == 3 {
-                        // 走过了第三段；跑到 4 个 . 实际不存在，这分支保留鲁棒。
+                        // 走过了第三段;跑到 4 个 . 实际不存在,这分支保留鲁棒
                         break;
                     }
                     continue;
@@ -564,7 +564,7 @@ struct JwtPayloadData {
 
 fn decode_jwt_payload(token: &str) -> Option<JwtPayload> {
     let segment = token.split('.').nth(1)?;
-    // JWT 通常省略 base64url 尾部 = padding，手动补齐。
+    // JWT 通常省略 base64url 尾部 = padding,手动补齐
     let mut padded = segment.to_string();
     while padded.len() % 4 != 0 {
         padded.push('=');

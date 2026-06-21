@@ -1,6 +1,6 @@
-//! SnowLuma backend runtime 子模块根。
+//! SnowLuma backend runtime 子模块根
 //!
-//! 模块声明 + 已落地类型 / trait / 函数的 re-export 清单。
+//! 模块声明 + 已落地类型 / trait / 函数的 re-export 清单
 
 pub mod daemon;
 pub mod error;
@@ -18,9 +18,9 @@ pub use error::{SnowLumaDaemonError, SnowLumaWebUiError};
 
 // ---- webui_client.rs ----
 //
-// 跨边界类型（ts-rs 已导出）：HookProcessInfo / HookProcessStatus /
-// OneBotInstanceInfo / AuthState。
-// trait + 默认实装：SnowLumaWebUiClient / ReqwestSnowLumaWebUiClient。
+// 跨边界类型(ts-rs 已导出):HookProcessInfo / HookProcessStatus /
+// OneBotInstanceInfo / AuthState
+// trait + 默认实装:SnowLumaWebUiClient / ReqwestSnowLumaWebUiClient
 pub use webui_client::{
     AuthState, HookProcessInfo, HookProcessStatus, OneBotInstanceInfo, ReqwestSnowLumaWebUiClient,
     ReqwestSnowLumaWebUiClientFactory, SnowLumaWebUiClient,
@@ -45,13 +45,13 @@ pub use log_sanitize::sanitize_log_line;
 
 // ---- proc_tree.rs ----
 //
-// MockProcessTreeProbe 为单元测试 helper，但被声明为 pub 以便 ncd-runtime
-// 之外的下游 crate（譬如 ncd-tauri 集成测试）复用。
+// MockProcessTreeProbe 为单元测试 helper,但被声明为 pub 以便 ncd-runtime
+// 之外的下游 crate(譬如 ncd-tauri 集成测试)复用
 pub use linux_proc_probe::LinuxSinglePidProbe;
 pub use proc_tree::{MockProcessTreeProbe, SysinfoProcessTreeProbe};
 
 // ---- runtime_backend.rs ----
 pub use runtime_backend::SnowLumaRuntimeBackend;
 
-// ---- status_poller.rs（追加导出） ----
+// ---- status_poller.rs(追加导出) ----
 pub use status_poller::{PollerDeps, SnowLumaStatusPoller};

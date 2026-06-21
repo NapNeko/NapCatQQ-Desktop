@@ -1,8 +1,8 @@
-//! 配置导入导出命令。
+//! 配置导入导出命令
 //!
-//! 导出：将应用配置 / Bot 配置 / 远端档案（不含密钥）打成 ZIP，含 export_meta.json。
-//! 导入：从 ZIP 或扁平目录读取 config.json / bot.json / servers.json，校验后原子写回。
-//! 预览：preview_config_import 只扫描来源，不写盘，供导入向导展示。
+//! 导出:将应用配置 / Bot 配置 / 远端档案(不含密钥)打成 ZIP,含 export_meta.json
+//! 导入:从 ZIP 或扁平目录读取 config.json / bot.json / servers.json,校验后原子写回
+//! 预览:preview_config_import 只扫描来源,不写盘,供导入向导展示
 
 use std::fs::{self, File};
 use std::io::Write;
@@ -20,7 +20,7 @@ use crate::AppState;
 
 const EXPORT_FORMAT_VERSION: &str = "v1";
 
-/// 参与导入导出的配置文件，相对 data_root 的路径 + 用途描述。
+/// 参与导入导出的配置文件,相对 data_root 的路径 + 用途描述
 const TRANSFER_FILES: &[(&str, &str, &str)] = &[
     ("runtime/config/config.json", "config.json", "应用配置"),
     ("runtime/config/bot.json", "bot.json", "Bot 配置"),
@@ -30,9 +30,9 @@ const TRANSFER_FILES: &[(&str, &str, &str)] = &[
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
 pub struct ConfigExportResult {
-    /// 写出的 ZIP 绝对路径。
+    /// 写出的 ZIP 绝对路径
     pub export_path: String,
-    /// 成功打入包内的人类可读名。
+    /// 成功打入包内的人类可读名
     pub files: Vec<String>,
 }
 
@@ -83,7 +83,7 @@ fn add_json_to_zip<W: Write + std::io::Seek>(
     Ok(())
 }
 
-/// 导出当前配置为 ZIP。dest_path 为完整 .zip 路径；父目录不存在则创建。
+/// 导出当前配置为 ZIPdest_path 为完整 .zip 路径;父目录不存在则创建
 #[tauri::command]
 pub async fn export_config(
     state: State<'_, AppState>,
@@ -197,7 +197,7 @@ fn scan_staging(staging: &Path) -> (Vec<String>, Vec<String>) {
     (found, skipped)
 }
 
-/// 扫描导入来源（ZIP 或目录），不写盘。
+/// 扫描导入来源(ZIP 或目录),不写盘
 #[tauri::command]
 pub async fn preview_config_import(source_path: String) -> Result<ConfigImportPreview, String> {
     let source = PathBuf::from(&source_path);
@@ -221,8 +221,8 @@ pub async fn preview_config_import(source_path: String) -> Result<ConfigImportPr
     })
 }
 
-/// 校验并归一化 app config(config.json)。非对象 / 不像应用配置直接拒,绝不覆盖
-/// 生产配置;通过则走 migrate_app_config 归一化到当前版本。
+/// 校验并归一化 app config(config.json)非对象 / 不像应用配置直接拒,绝不覆盖
+/// 生产配置;通过则走 migrate_app_config 归一化到当前版本
 fn normalize_app_config_import(value: serde_json::Value) -> Result<serde_json::Value, String> {
     if !ncd_runtime::app_config_migration::looks_like_app_config(&value) {
         return Err("config.json 不像应用配置(非对象或缺少已知配置段),已中止导入".to_string());
@@ -231,7 +231,7 @@ fn normalize_app_config_import(value: serde_json::Value) -> Result<serde_json::V
 }
 
 /// 校验并归一化 bot config(bot.json):迁移 → 反序列化 Vec<BotConfig> → 逐个
-/// validate + QQ 去重。任一非法即中止,返回迁移后的强类型化 payload(而非原样透传)。
+/// validate + QQ 去重任一非法即中止,返回迁移后的强类型化 payload(而非原样透传)
 fn normalize_bot_config_import(
     value: serde_json::Value,
     secrets: &dyn ncd_runtime::SecretStore,
@@ -259,7 +259,7 @@ fn normalize_bot_config_import(
     Ok(migrated.payload)
 }
 
-/// 校验并归一化 servers.json:必须是 ServerProfile 数组。重新序列化,丢弃多余字段。
+/// 校验并归一化 servers.json:必须是 ServerProfile 数组重新序列化,丢弃多余字段
 fn normalize_servers_import(value: serde_json::Value) -> Result<serde_json::Value, String> {
     let servers: Vec<ncd_runtime::ServerProfile> = serde_json::from_value(value)
         .map_err(|e| format!("servers.json 不是合法服务器档案数组,已中止导入: {e}"))?;
@@ -267,8 +267,8 @@ fn normalize_servers_import(value: serde_json::Value) -> Result<serde_json::Valu
 }
 
 /// 读 staging 里的配置文件,全量强类型反序列化 + 迁移 + validate,通过后构造一个
-/// 一次性 JsonTransaction。任一文件语义非法即整体中止(返回 Err),绝不半导入;调用方
-/// 对返回的 transaction 走 ConfigStore::apply_transaction 原子提交(失败自动回滚)。
+/// 一次性 JsonTransaction任一文件语义非法即整体中止(返回 Err),绝不半导入;调用方
+/// 对返回的 transaction 走 ConfigStore::apply_transaction 原子提交(失败自动回滚)
 fn build_import_transaction(
     staging: &Path,
     data_root: &Path,
@@ -306,9 +306,9 @@ fn build_import_transaction(
     Ok((txn, files, skipped))
 }
 
-/// 从 ZIP 或目录导入配置:全量强类型校验通过后,一次性事务原子写回当前数据根。
+/// 从 ZIP 或目录导入配置:全量强类型校验通过后,一次性事务原子写回当前数据根
 /// 任一文件语义非法即整体中止,绝不发生"改了一半"的半导入漂移(旧实现逐文件
-/// write_json_atomic 会半成功);apply_transaction 自带备份,写失败整体回滚。
+/// write_json_atomic 会半成功);apply_transaction 自带备份,写失败整体回滚
 #[tauri::command]
 pub async fn import_config(
     state: State<'_, AppState>,
@@ -360,7 +360,7 @@ mod tests {
 
         let (txn, files, skipped) =
             build_import_transaction(staging.path(), data_root.path(), &secrets).unwrap();
-        // 三个文件一次性进同一个 transaction,而非逐文件落盘。
+        // 三个文件一次性进同一个 transaction,而非逐文件落盘
         assert_eq!(txn.writes.len(), 3);
         assert_eq!(files.len(), 3);
         assert!(skipped.is_empty());
@@ -369,7 +369,7 @@ mod tests {
     #[test]
     fn build_import_transaction_aborts_when_any_file_is_semantically_invalid() {
         let staging = tempfile::tempdir().unwrap();
-        // config 合法,但 servers.json 语义非法(不是数组):整体必须中止,不构造事务。
+        // config 合法,但 servers.json 语义非法(不是数组):整体必须中止,不构造事务
         write_file(staging.path(), "config.json", VALID_CONFIG);
         write_file(staging.path(), "servers.json", r#"{"not":"an array"}"#);
         let (_d, secrets) = force_fallback_secrets();

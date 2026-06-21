@@ -1,4 +1,4 @@
-//! 远端 SnowLuma「直接运行」：内联 shell 编排 + SSH 隧道 WebUI 注入（无上传 launcher 文件）。
+//! 远端 SnowLuma「直接运行」:内联 shell 编排 + SSH 隧道 WebUI 注入(无上传 launcher 文件)
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -61,7 +61,7 @@ async fn read_remote_log_tail(host: &dyn Host, path: &str, max_lines: usize) -> 
     Ok(lines[start..].join("\n"))
 }
 
-/// daemon 启动前：全局 config、VNC/WebUI 明文密钥、图形栈探测。
+/// daemon 启动前:全局 config,VNC/WebUI 明文密钥,图形栈探测
 async fn ensure_remote_daemon_prereqs(
     host: &dyn Host,
     home: &str,
@@ -194,7 +194,7 @@ fn resolve_start_mode(config: &BotConfig) -> SnowLumaStartMode {
         .unwrap_or(SnowLumaStartMode::ColdStart)
 }
 
-/// 远端 Native + SnowLuma + SSH 主机。
+/// 远端 Native + SnowLuma + SSH 主机
 pub fn is_remote_native_snowluma_config(config: &BotConfig) -> bool {
     config.bot.backend_type == BackendType::SnowLuma
         && config.bot.deployment_type == DeploymentType::Native
@@ -204,7 +204,7 @@ pub fn is_remote_native_snowluma_config(config: &BotConfig) -> bool {
         )
 }
 
-/// 远端是否已有匹配 qq_id 的 qq 进程（热启动 attach / bootstrap reconcile 用）。
+/// 远端是否已有匹配 qq_id 的 qq 进程(热启动 attach / bootstrap reconcile 用)
 pub async fn remote_qq_running_pid(host: &dyn Host, qq_id: u64) -> Result<Option<u32>, BotBackendError> {
     let script = format!(
         r#"pgrep -f "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1"#
@@ -241,36 +241,36 @@ async fn inject_via_tunnel(
         .await
         .map_err(|e| BotBackendError::Io(format!("SnowLuma WebUI login: {e}")))?;
 
-    // 关键修复：冷启动刚 spawn QQ 后，SnowLuma daemon 侧的扫描器需要时间把该 PID 识别为 Available。
-    // 立即 load_process 极大概率拿到 "server rejected"（success=false，error 常为空）。
-    // 这里 best-effort 等到列表里出现该 PID 且状态不是 Error/Disconnected 再去 load；超时也不阻塞，
-    // 由 load_process 自己失败 + 事后 list_processes 快照一起给出带上下文的错误，便于诊断。
+    // 关键修复:冷启动刚 spawn QQ 后,SnowLuma daemon 侧的扫描器需要时间把该 PID 识别为 Available
+    // 立即 load_process 极大概率拿到 "server rejected"(success=false,error 常为空)
+    // 这里 best-effort 等到列表里出现该 PID 且状态不是 Error/Disconnected 再去 load;超时也不阻塞,
+    // 由 load_process 自己失败 + 事后 list_processes 快照一起给出带上下文的错误,便于诊断
     wait_process_available(&client, qq_pid, Duration::from_secs(25)).await;
 
-    // 尝试 load。SnowLuma 对已注入的进程返回 success=false + "already loaded" 类消息；
-    // 对刚 spawn 尚未被扫描到的返回 success=false + 空 error。
-    // 我们把 "already" 当成注入成功（调用方后续会建 poller 并依赖状态轮询推进到 Online）。
-    // 其它拒绝场景：若 error 为空则抓一次当前快照，把该 pid 的真实状态（Available / Error / 不存在）带进错误。
+    // 尝试 loadSnowLuma 对已注入的进程返回 success=false + "already loaded" 类消息;
+    // 对刚 spawn 尚未被扫描到的返回 success=false + 空 error
+    // 我们把 "already" 当成注入成功(调用方后续会建 poller 并依赖状态轮询推进到 Online)
+    // 其它拒绝场景:若 error 为空则抓一次当前快照,把该 pid 的真实状态(Available / Error / 不存在)带进错误
     let load_res = client.load_process(qq_pid).await;
     match load_res {
         Ok(_) => {
-            // 成功注入（或 daemon 确认可注入）。
+            // 成功注入(或 daemon 确认可注入)
         }
         Err(SnowLumaWebUiError::ServerRejected { ref message, .. }) => {
             let m = message.to_lowercase();
             if m.contains("already") {
-                // 视为已注入成功。继续用这个已登录的 client 建 poller 即可。
-                // 为了诊断友好，记录一条 info 级别的观察（不作为错误返回）。
+                // 视为已注入成功继续用这个已登录的 client 建 poller 即可
+                // 为了诊断友好,记录一条 info 级别的观察(不作为错误返回)
                 tracing::info!(
                     target: "ncd_runtime::remote_snowluma",
                     pid = qq_pid,
                     "load_process reported already loaded/injected; proceeding with existing client"
                 );
             } else {
-                // 非 "already" 的拒绝：丰富错误上下文。
+                // 非 "already" 的拒绝:丰富错误上下文
                 let mut msg = format!("SnowLuma load_process: {load_res:?}");
-                // 上面 load_res 已被消费，这里重新构造可读消息；实际上我们用原始 e。
-                // 重新取一次 e 的 Display 更准：
+                // 上面 load_res 已被消费,这里重新构造可读消息;实际上我们用原始 e
+                // 重新取一次 e 的 Display 更准:
                 let e = SnowLumaWebUiError::ServerRejected {
                     endpoint: format!("/api/processes/{qq_pid}/load"),
                     message: message.clone(),
@@ -297,7 +297,7 @@ async fn inject_via_tunnel(
             }
         }
         Err(e) => {
-            // 其它 WebUI 错误（超时、网络、decode 等），同样尝试补快照（仅对 ServerRejected 空消息有意义，这里只透传）。
+            // 其它 WebUI 错误(超时,网络,decode 等),同样尝试补快照(仅对 ServerRejected 空消息有意义,这里只透传)
             return Err(BotBackendError::Io(format!("SnowLuma load_process: {e}")));
         }
     }
@@ -305,17 +305,17 @@ async fn inject_via_tunnel(
     Ok(Arc::new(client) as Arc<dyn SnowLumaWebUiClient>)
 }
 
-/// 等待 SnowLuma 的 /api/processes 列表出现指定 pid。
+/// 等待 SnowLuma 的 /api/processes 列表出现指定 pid
 ///
-/// 冷启动时我们在远端 DISPLAY 下用 nohup 刚 spawn 了 QQ 进程，SnowLuma daemon
-/// 内部的扫描器（很可能按固定周期遍历 /proc 或遍历 DISPLAY 下的窗口/进程）需要时间
-/// 才能把这个 pid 标记为 "Available"（可注入）。直接在 spawn 后立刻 load_process
-/// 很容易遇到 "server rejected"（success=false，error 常为空）。
+/// 冷启动时我们在远端 DISPLAY 下用 nohup 刚 spawn 了 QQ 进程,SnowLuma daemon
+/// 内部的扫描器(很可能按固定周期遍历 /proc 或遍历 DISPLAY 下的窗口/进程)需要时间
+/// 才能把这个 pid 标记为 "Available"(可注入)直接在 spawn 后立刻 load_process
+/// 很容易遇到 "server rejected"(success=false,error 常为空)
 ///
-/// 本函数只做 best-effort 等待：
-/// - 出现 Available / Loaded / Online / Connecting / Loading 就返回（上层会尝试 load 或容忍已注入）。
-/// - 明确看到 Error / Disconnected 立即返回（上层会把错误状态一起报出来）。
-/// - 超时不抛错，让上层 load + 事后 list 快照统一产生带上下文的错误，便于用户/日志诊断。
+/// 本函数只做 best-effort 等待:
+/// - 出现 Available / Loaded / Online / Connecting / Loading 就返回(上层会尝试 load 或容忍已注入)
+/// - 明确看到 Error / Disconnected 立即返回(上层会把错误状态一起报出来)
+/// - 超时不抛错,让上层 load + 事后 list 快照统一产生带上下文的错误,便于用户/日志诊断
 async fn wait_process_available(client: &dyn SnowLumaWebUiClient, pid: u32, timeout: Duration) {
     let deadline = Instant::now() + timeout;
     loop {
@@ -338,13 +338,13 @@ async fn wait_process_available(client: &dyn SnowLumaWebUiClient, pid: u32, time
     }
 }
 
-/// 单台远端主机共享的 SL daemon（单例图形栈 + node）；多 Bot 共用，按 qq_id 分别启停 QQ。
+/// 单台远端主机共享的 SL daemon(单例图形栈 + node);多 Bot 共用,按 qq_id 分别启停 QQ
 pub struct RemoteSnowLumaDaemon {
     host: Arc<dyn Host>,
     layout: RemoteSnowLumaLayout,
     server_id: String,
     refcount: Mutex<u32>,
-    /// 同一 SSH 主机上多 Bot 并发 start 时，整段启栈（Xvfb/x11vnc/node）单飞，避免抢 5900 等端口。
+    /// 同一 SSH 主机上多 Bot 并发 start 时,整段启栈(Xvfb/x11vnc/node)单飞,避免抢 5900 等端口
     stack_bootstrap: Mutex<()>,
     tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     event_bus: Arc<BroadcastEventBus>,
@@ -487,13 +487,13 @@ impl RemoteSnowLumaDaemon {
         self.tunnel_eps.lock().await.clone()
     }
 
-    /// 桌面退出：只拆掉本机 SSH 隧道，不 stop 远端 daemon / QQ。
+    /// 桌面退出:只拆掉本机 SSH 隧道,不 stop 远端 daemon / QQ
     pub async fn detach_local_sessions(&self) {
         *self.tunnel_eps.lock().await = None;
         self.tunnels.release(&self.server_id).await;
     }
 
-    /// 冷启动 reconcile：远端进程已在跑时只补隧道与状态文件，不重复 daemon start shell。
+    /// 冷启动 reconcile:远端进程已在跑时只补隧道与状态文件,不重复 daemon start shell
     pub async fn ensure_running_for_reconcile(&self) -> Result<(), BotBackendError> {
         ensure_remote_daemon_prereqs(
             self.host.as_ref(),
@@ -553,7 +553,7 @@ impl RemoteSnowLumaDaemon {
     }
 }
 
-/// 远端 SnowLuma BotBackend（内联编排，非本机 SnowLumaDaemon）。
+/// 远端 SnowLuma BotBackend(内联编排,非本机 SnowLumaDaemon)
 pub struct RemoteSnowLumaBackend {
     backend_id: BotId,
     daemon: Arc<RemoteSnowLumaDaemon>,
@@ -569,14 +569,14 @@ pub struct RemoteSnowLumaBackend {
 }
 
 impl RemoteSnowLumaBackend {
-    /// 内部构造器。
+    /// 内部构造器
     ///
-    /// 只应由同 crate 内的 BotManager 调用。
-    /// 使用 pub(crate) 而非 pub，以避免把 pub(crate) 的 RemoteQqEntryCoordinator
-    /// 通过公开 API 泄露出去（这正是编译器 private_interfaces 警告的来源）。
+    /// 只应由同 crate 内的 BotManager 调用
+    /// 使用 pub(crate) 而非 pub,以避免把 pub(crate) 的 RemoteQqEntryCoordinator
+    /// 通过公开 API 泄露出去(这正是编译器 private_interfaces 警告的来源)
     ///
-    /// 外部 crate 不应直接构造此类型，所有 backend 都应由 BotManager::backend_for_config
-    /// 统一创建。
+    /// 外部 crate 不应直接构造此类型,所有 backend 都应由 BotManager::backend_for_config
+    /// 统一创建
     pub(crate) fn new(
         backend_id: impl Into<BotId>,
         daemon: Arc<RemoteSnowLumaDaemon>,
@@ -595,7 +595,7 @@ impl RemoteSnowLumaBackend {
         }
     }
 
-    /// 冷启动后再开桌面：远端 QQ 仍在跑时恢复隧道注入与 status poller。
+    /// 冷启动后再开桌面:远端 QQ 仍在跑时恢复隧道注入与 status poller
     pub async fn attach_reconciled_running(
         &self,
         bot_id: BotId,
@@ -725,7 +725,7 @@ impl BotBackend for RemoteSnowLumaBackend {
             Err(e) => {
                 if start_mode.is_cold() {
                     let _ = bot_stop(host, paths, &qq_id_str).await;
-                    // 失败时带上 bot 启动日志尾部，便于诊断 "QQ 进程立即退出 / 缺库 / ptrace / DISPLAY 问题"。
+                    // 失败时带上 bot 启动日志尾部,便于诊断 "QQ 进程立即退出 / 缺库 / ptrace / DISPLAY 问题"
                     if let Ok(tail) = read_remote_log_tail(host, &paths.log_bot_path(&qq_id_str), 40).await {
                         if !tail.trim().is_empty() {
                             return Err(BotBackendError::Io(format!(

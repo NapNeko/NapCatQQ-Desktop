@@ -1,7 +1,7 @@
-//! 远端 SnowLuma 图形栈：Rust 分步编排 + 短 bash -c detach（无内联 mega-script）。
+//! 远端 SnowLuma 图形栈:Rust 分步编排 + 短 bash -c detach(无内联 mega-script)
 //!
-//! SSH Host::spawn 的 exec channel 关闭后长驻进程会随 channel 结束（ProcessId.native == 0），
-//! 因此 daemon 各角色用 run_to_string 投递 nohup setsid … & + pid 文件，不用单次 spawn。
+//! SSH Host::spawn 的 exec channel 关闭后长驻进程会随 channel 结束(ProcessId.native == 0),
+//! 因此 daemon 各角色用 run_to_string 投递 nohup setsid … & + pid 文件,不用单次 spawn
 
 use std::time::Duration;
 
@@ -17,7 +17,7 @@ fn display_str(num: i32) -> String {
     format!(":{num}")
 }
 
-/// 远端内联脚本依赖 bash（flock、nohup 数组等）；/bin/sh 为 dash 时会失败。
+/// 远端内联脚本依赖 bash(flock,nohup 数组等);/bin/sh 为 dash 时会失败
 pub async fn resolve_remote_bash(host: &dyn Host) -> Result<String, BotBackendError> {
     let cmd = HostCommand::new("sh").arg("-c").arg("command -v bash");
     let out = host
@@ -43,7 +43,7 @@ pub async fn resolve_remote_bash(host: &dyn Host) -> Result<String, BotBackendEr
     ))
 }
 
-/// 执行短 bash 脚本（单条 detach 或 flock），禁止拼接百行 heredoc。
+/// 执行短 bash 脚本(单条 detach 或 flock),禁止拼接百行 heredoc
 pub async fn run_remote_bash(host: &dyn Host, script: &str) -> Result<String, BotBackendError> {
     let bash = resolve_remote_bash(host).await?;
     let cmd = HostCommand::new(bash).arg("-c").arg(script);
@@ -62,7 +62,7 @@ pub async fn run_remote_bash(host: &dyn Host, script: &str) -> Result<String, Bo
     Ok(out.stdout)
 }
 
-/// dash-safe 单行（pgrep、test -x、kill -0）。
+/// dash-safe 单行(pgrep,test -x,kill -0)
 pub async fn run_sh_dash(host: &dyn Host, script: &str) -> Result<String, BotBackendError> {
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
     let out = host
@@ -108,7 +108,7 @@ async fn read_pid_file(host: &dyn Host, path: &str) -> Result<Option<u32>, BotBa
     }
 }
 
-/// 清理可能占用 VNC 端口的残留 x11vnc（半残留栈场景）。
+/// 清理可能占用 VNC 端口的残留 x11vnc(半残留栈场景)
 async fn cleanup_stale_x11vnc(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
     let paths = &layout.paths;
     let vnc = DEFAULT_VNC_PORT;
@@ -127,7 +127,7 @@ if [ -n "$pids" ]; then kill $pids 2>/dev/null || true; sleep 0.3; fi
     Ok(())
 }
 
-/// 清理可能占用 noVNC 端口的残留 websockify（半残留栈场景）。
+/// 清理可能占用 noVNC 端口的残留 websockify(半残留栈场景)
 async fn cleanup_stale_websockify(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
     let paths = &layout.paths;
     let novnc = DEFAULT_NOVNC_PORT;
@@ -290,7 +290,7 @@ fn parse_last_u32(out: &str, label: &str) -> Result<u32, BotBackendError> {
     })
 }
 
-/// WebUI 端口就绪（bash /dev/tcp，短脚本）。
+/// WebUI 端口就绪(bash /dev/tcp,短脚本)
 pub async fn wait_webui_tcp(host: &dyn Host, port: i32, timeout: Duration) -> Result<(), BotBackendError> {
     let secs = timeout.as_secs().max(1);
     let script = format!(
@@ -309,7 +309,7 @@ exit 1
     Ok(())
 }
 
-/// daemon 是否已在远端就绪（pid + WebUI），dash-safe 探测。
+/// daemon 是否已在远端就绪(pid + WebUI),dash-safe 探测
 pub async fn is_stack_ready(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Result<bool, BotBackendError> {
     let pid_path = shell_single_quote(&paths.pid_daemon);
     let port = DEFAULT_WEBUI_PORT;
@@ -359,7 +359,7 @@ echo '{{"running":false,"ready":false}}' > {status}
     Ok(())
 }
 
-/// 启动完整图形栈 + node（RemoteSnowlumaStackOrchestrator 入口）。
+/// 启动完整图形栈 + node(RemoteSnowlumaStackOrchestrator 入口)
 pub async fn ensure_stack_running(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
     let paths = &layout.paths;
     if is_stack_ready(host, paths).await? {
@@ -386,7 +386,7 @@ fi
     ensure_dbus_env(host, paths).await?;
     start_xvfb(host, layout).await?;
     start_wm(host, layout).await?;
-    // 给 WM 一点时间再抓屏，减轻 noVNC 全黑（QQ 尚未启动时属正常，冷启 QQ 后应能看到界面）。
+    // 给 WM 一点时间再抓屏,减轻 noVNC 全黑(QQ 尚未启动时属正常,冷启 QQ 后应能看到界面)
     tokio::time::sleep(Duration::from_millis(800)).await;
     cleanup_stale_x11vnc(host, layout).await?;
     start_x11vnc(host, layout).await?;

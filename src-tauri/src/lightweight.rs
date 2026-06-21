@@ -1,4 +1,4 @@
-// 轻量模式：销毁主 WebView 释放 WebView2，Bot 与托盘进程继续运行。
+// 轻量模式:销毁主 WebView 释放 WebView2,Bot 与托盘进程继续运行
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -12,7 +12,7 @@ pub fn is_lightweight_mode() -> bool {
     LIGHTWEIGHT_MODE.load(Ordering::SeqCst)
 }
 
-/// 主窗口 label，与 capabilities/main.json 一致。
+/// 主窗口 label,与 capabilities/main.json 一致
 pub const MAIN_WINDOW_LABEL: &str = "main";
 
 fn main_window_config(app: &AppHandle) -> Result<tauri::utils::config::WindowConfig, String> {
@@ -27,7 +27,7 @@ fn main_window_config(app: &AppHandle) -> Result<tauri::utils::config::WindowCon
     Ok(conf)
 }
 
-/// 释放主界面 WebView2；调用前若窗口可见可先 hide。
+/// 释放主界面 WebView2;调用前若窗口可见可先 hide
 pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     if is_lightweight_mode() {
         return Ok(());
@@ -48,7 +48,7 @@ pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 轻量模式下重建主 WebView；已有窗口则仅 show/focus。
+/// 轻量模式下重建主 WebView;已有窗口则仅 show/focus
 pub fn exit_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         LIGHTWEIGHT_MODE.store(false, Ordering::SeqCst);

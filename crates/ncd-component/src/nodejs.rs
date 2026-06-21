@@ -1,7 +1,7 @@
-//! NodeJsComponent:Node.js runtime 组件。
+//! NodeJsComponent:Node.js runtime 组件
 //!
 //! 作为第一个完整 Component 实装,跑通 Component trait 的全套能力,后续
-//! component 照本模板扩展。
+//! component 照本模板扩展
 //!
 //! 支持矩阵:
 //! - (Linux, Local) / (Linux, Remote):从 nodejs.org 下载 tar.xz 解压
@@ -14,7 +14,7 @@
 //!
 //! 默认下载源:
 //! https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz
-//! 可通过 NodeJsComponent::with_url(...) 覆盖镜像。
+//! 可通过 NodeJsComponent::with_url(...) 覆盖镜像
 
 use std::sync::Arc;
 
@@ -30,7 +30,7 @@ use crate::error::ActionError;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
-/// Node.js component 配置。
+/// Node.js component 配置
 #[derive(Debug, Clone)]
 pub struct NodeJsComponent {
     /// 期望版本(无 v 前缀,如 "20.10.0")
@@ -46,7 +46,7 @@ pub struct NodeJsComponent {
 }
 
 impl NodeJsComponent {
-    /// 创建一个 Node.js component 描述。
+    /// 创建一个 Node.js component 描述
     pub fn new(version: impl Into<String>, install_dir: HostPath) -> Self {
         Self {
             version: version.into(),
@@ -72,7 +72,7 @@ impl NodeJsComponent {
         self
     }
 
-    /// 推算下载 URL(根据 host 的 OS / arch)。
+    /// 推算下载 URL(根据 host 的 OS / arch)
     fn build_download_url(&self, host: &dyn Host) -> Result<String, ActionError> {
         let template = self.download_url_template.clone().unwrap_or_else(|| {
             format!(
@@ -126,7 +126,7 @@ impl NodeJsComponent {
         format!("node-v{}-{platform}-{arch}", self.version)
     }
 
-    /// 组件元数据，给 list_components Tauri command 使用。
+    /// 组件元数据,给 list_components Tauri command 使用
     pub fn info() -> crate::types::ComponentInfo {
         crate::types::ComponentInfo {
             id: ComponentId::NodeJs,
@@ -150,7 +150,7 @@ impl Component for NodeJsComponent {
     }
 
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
-        // 当前实装:Linux 本地 / 远端,macOS 本地。Windows 上 tar.xz 解压尚未支持。
+        // 当前实装:Linux 本地 / 远端,macOS 本地Windows 上 tar.xz 解压尚未支持
         &[
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),
@@ -177,7 +177,7 @@ impl Component for NodeJsComponent {
             }
         }
 
-        // 优先级 2:回退 PATH 中的 node，但必须 >= v22.5.0（支持 node:sqlite）
+        // 优先级 2:回退 PATH 中的 node,但必须 >= v22.5.0(支持 node:sqlite)
         let path_cmd = HostCommand::new("node").arg("--version");
         match host.run_to_string(path_cmd).await {
             Ok(out) if out.success() => {
@@ -186,22 +186,22 @@ impl Component for NodeJsComponent {
                     return Ok(None);
                 }
 
-                // 解析版本号，检查是否 >= 22.5.0
+                // 解析版本号,检查是否 >= 22.5.0
                 if let Some((major, _)) = ver_str.split_once('.') {
                     if let Ok(major_num) = major.parse::<u32>() {
                         if major_num >= 22 {
-                            // 系统 node >= 22，可以使用
+                            // 系统 node >= 22,可以使用
                             return Ok(Some(DetectedVersion {
                                 version: ver_str.to_string(),
                                 source: "$PATH/node".into(),
                             }));
                         }
-                        // 系统 node < 22，视为未安装（需要安装到指定目录）
+                        // 系统 node < 22,视为未安装(需要安装到指定目录)
                         return Ok(None);
                     }
                 }
 
-                // 无法解析版本号，保守处理视为未安装
+                // 无法解析版本号,保守处理视为未安装
                 Ok(None)
             }
             // 找不到 node 命令视作未安装,不算 detect 失败
@@ -314,7 +314,7 @@ impl Component for NodeJsComponent {
             message: format!("remove {}", self.install_dir.as_posix()),
         })
         .await;
-        // install_dir 不存在视为已卸载，幂等成功。
+        // install_dir 不存在视为已卸载,幂等成功
         if host.exists(&self.install_dir).await? {
             host.remove_dir_all(&self.install_dir).await?;
         }

@@ -1,4 +1,4 @@
-// Windows Toast：显式 AppUserModelID，避免 notify-rust 在 target 目录下回退 PowerShell。
+// Windows Toast:显式 AppUserModelID,避免 notify-rust 在 target 目录下回退 PowerShell
 
 use std::path::Path;
 

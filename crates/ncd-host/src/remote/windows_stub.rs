@@ -1,10 +1,10 @@
-//! RemoteWindowsHost:接口预留 stub。
+//! RemoteWindowsHost:接口预留 stub
 //!
 //! 把"远端 Windows 主机"接口预留出来,所有方法返回 [HostError::Unsupported],
-//! 真实实装留给未来(走 OpenSSH Server + PowerShell session)。
+//! 真实实装留给未来(走 OpenSSH Server + PowerShell session)
 //!
 //! 当前状态:
-//! - 类型定义、Host trait 实装框架已就位
+//! - 类型定义,Host trait 实装框架已就位
 //! - 所有方法返回 HostError::Unsupported { operation: "RemoteWindowsHost: ..." }
 //! - 集成测试用 #[ignore = "RemoteWindowsHost real impl pending"] 占位
 //!
@@ -28,7 +28,7 @@ use crate::shell::{HostShell, PowerShellShell};
 
 use super::connection::ConnectionConfig;
 
-/// 远端 Windows 主机(stub)。
+/// 远端 Windows 主机(stub)
 pub struct RemoteWindowsHost {
     id: String,
     shell: PowerShellShell,
@@ -37,8 +37,8 @@ pub struct RemoteWindowsHost {
 }
 
 impl RemoteWindowsHost {
-    /// 创建 stub,不实际建立任何 SSH 连接。
-    /// 实装时本方法会换成 connect() 走 SSH 握手。
+    /// 创建 stub,不实际建立任何 SSH 连接
+    /// 实装时本方法会换成 connect() 走 SSH 握手
     pub fn new_stub(id: impl Into<String>, config: ConnectionConfig) -> Self {
         Self {
             id: id.into(),

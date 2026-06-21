@@ -1,13 +1,13 @@
-//! Ubuntu/Debian 上 apt 与 unattended-upgrades 争用 dpkg 锁时的公共处理。
+//! Ubuntu/Debian 上 apt 与 unattended-upgrades 争用 dpkg 锁时的公共处理
 //!
-//! Desktop 侧 [PackageManagerLock] 只能串行本应用的 apt；无法阻止系统里的
-//! unattended-upgr 占锁。装完 Docker 后立刻装 noVNC 时常见此冲突。
+//! Desktop 侧 [PackageManagerLock] 只能串行本应用的 apt;无法阻止系统里的
+//! unattended-upgr 占锁装完 Docker 后立刻装 noVNC 时常见此冲突
 
 use std::time::Duration;
 
 use crate::command::{CommandOutput, HostCommand};
 
-/// 若 sh -c 脚本含 apt/apt-get，自动加上 dpkg 锁等待前导。
+/// 若 sh -c 脚本含 apt/apt-get,自动加上 dpkg 锁等待前导
 pub fn host_command_wrap_dpkg_wait_for_apt(mut cmd: HostCommand) -> HostCommand {
     if cmd.program != "sh" || cmd.args.len() < 2 {
         return cmd;
@@ -26,7 +26,7 @@ pub fn host_command_wrap_dpkg_wait_for_apt(mut cmd: HostCommand) -> HostCommand 
     cmd
 }
 
-/// 输出是否像「dpkg 前端锁被占用」（含 unattended-upgr）。
+/// 输出是否像「dpkg 前端锁被占用」(含 unattended-upgr)
 pub fn output_indicates_dpkg_lock_hold(output: &CommandOutput) -> bool {
     let combined = format!("{}\n{}", output.stderr, output.stdout);
     let lower = combined.to_ascii_lowercase();
@@ -36,8 +36,8 @@ pub fn output_indicates_dpkg_lock_hold(output: &CommandOutput) -> bool {
         || lower.contains("is another process using it")
 }
 
-/// 在 POSIX sh 脚本开头插入：轮询等待 dpkg 锁释放（最长约 15 分钟）。
-/// 等待期间向 stdout 打 NCD: 前缀行，便于 UI/日志看到并非卡死。
+/// 在 POSIX sh 脚本开头插入:轮询等待 dpkg 锁释放(最长约 15 分钟)
+/// 等待期间向 stdout 打 NCD: 前缀行,便于 UI/日志看到并非卡死
 pub fn dpkg_lock_wait_preamble_sh() -> &'static str {
     r#"
 wait_ncd_dpkg_lock() {
@@ -69,7 +69,7 @@ wait_ncd_dpkg_lock
 "#
 }
 
-/// 将内层 set -e 脚本包上锁等待前导。
+/// 将内层 set -e 脚本包上锁等待前导
 pub fn wrap_sh_script_with_dpkg_wait(inner: &str) -> String {
     let inner = inner.trim_start();
     format!("{}\n{}", dpkg_lock_wait_preamble_sh(), inner)

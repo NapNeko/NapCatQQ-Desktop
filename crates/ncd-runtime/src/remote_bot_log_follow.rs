@@ -1,4 +1,4 @@
-//! 远端 Bot 磁盘日志增量 tail → bot_log_appended（SnowLuma bot_{qq}.log 等）。
+//! 远端 Bot 磁盘日志增量 tail → bot_log_appended(SnowLuma bot_{qq}.log 等)
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -49,9 +49,9 @@ pub fn build_snapshot_for_data_root(data_root: &Path) -> BootstrapSnapshot {
     snapshot
 }
 
-/// 探测 data_root 下已安装的 NapCat / SnowLuma 版本号。任何错误（IO /
-/// 解析）一律返回 None：UI 把 None 显示为"未安装"，不需要把错误细节
-/// 暴露给用户。
+/// 探测 data_root 下已安装的 NapCat / SnowLuma 版本号任何错误(IO /
+/// 解析)一律返回 None:UI 把 None 显示为"未安装",不需要把错误细节
+/// 暴露给用户
 fn detect_local_versions(data_root: &Path) -> LocalVersionSnapshot {
     LocalVersionSnapshot {
         napcat: detect_napcat_version(data_root),
@@ -59,8 +59,8 @@ fn detect_local_versions(data_root: &Path) -> LocalVersionSnapshot {
     }
 }
 
-/// 复用 ncd_component::napcat::parse_napcat_version，从
-/// <data_root>/runtime/NapCatQQ/napcat.mjs grep 版本号。
+/// 复用 ncd_component::napcat::parse_napcat_version,从
+/// <data_root>/runtime/NapCatQQ/napcat.mjs grep 版本号
 fn detect_napcat_version(data_root: &Path) -> Option<String> {
     let mjs_path = data_root
         .join("runtime")
@@ -70,9 +70,9 @@ fn detect_napcat_version(data_root: &Path) -> Option<String> {
     ncd_component::napcat::parse_napcat_version(&content)
 }
 
-/// 从 SnowLuma daemon 安装根的 package.json 读 version 字段。
-/// 路径与 lib.rs::run 中 SnowLuma daemon 的安装根保持一致：
-/// <data_root>/runtime/SnowLuma/package.json。
+/// 从 SnowLuma daemon 安装根的 package.json 读 version 字段
+/// 路径与 lib.rs::run 中 SnowLuma daemon 的安装根保持一致:
+/// <data_root>/runtime/SnowLuma/package.json
 fn detect_snowluma_version(data_root: &Path) -> Option<String> {
     let pkg_path = data_root
         .join("runtime")
@@ -231,8 +231,8 @@ mod tests {
         assert_eq!(resolved, local_data.join(APP_DATA_DIR_NAME));
     }
 
-    /// data_root 字段必须装到 BootstrapSnapshot 上：UI StatusBar 直接消费
-    /// 这个字符串，是 Home 页 v1 的强契约。
+    /// data_root 字段必须装到 BootstrapSnapshot 上:UI StatusBar 直接消费
+    /// 这个字符串,是 Home 页 v1 的强契约
     #[test]
     fn data_root_field_is_populated() {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
@@ -241,8 +241,8 @@ mod tests {
         assert_eq!(snapshot.data_root, temp.path().to_string_lossy());
     }
 
-    /// 没装过 NapCat / SnowLuma 时 local_versions 全为 None；UI 显示
-    /// "未安装"，不抛错。
+    /// 没装过 NapCat / SnowLuma 时 local_versions 全为 None;UI 显示
+    /// "未安装",不抛错
     #[test]
     fn local_versions_default_when_files_missing() {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
@@ -252,8 +252,8 @@ mod tests {
         assert_eq!(snapshot.local_versions.snowluma, None);
     }
 
-    /// 装好 NapCat（有 napcat.mjs）时应当解析出版本号；锁定本地版本探测
-    /// 与 ncd_component::napcat::parse_napcat_version 是同一条链路。
+    /// 装好 NapCat(有 napcat.mjs)时应当解析出版本号;锁定本地版本探测
+    /// 与 ncd_component::napcat::parse_napcat_version 是同一条链路
     #[test]
     fn local_versions_parses_napcat_when_mjs_exists() {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
@@ -274,7 +274,7 @@ mod tests {
         assert_eq!(snapshot.local_versions.napcat.as_deref(), Some("4.18.1"));
     }
 
-    /// SnowLuma 路径下有合法 package.json 时应当解析 version 字段。
+    /// SnowLuma 路径下有合法 package.json 时应当解析 version 字段
     #[test]
     fn local_versions_parses_snowluma_when_package_json_exists() {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
@@ -295,7 +295,7 @@ mod tests {
         assert_eq!(snapshot.local_versions.snowluma.as_deref(), Some("0.3.2"));
     }
 
-    /// SnowLuma package.json 损坏（非合法 JSON）应当回落到 None，不 panic。
+    /// SnowLuma package.json 损坏(非合法 JSON)应当回落到 None,不 panic
     #[test]
     fn local_versions_snowluma_falls_back_on_malformed_json() {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();

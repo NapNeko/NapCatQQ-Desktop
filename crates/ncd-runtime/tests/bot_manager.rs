@@ -23,7 +23,7 @@ struct FakeBackend {
     fail_start: Mutex<HashSet<BotId>>,
     fail_stop: Mutex<HashSet<BotId>>,
     /// start 返回 Ok 但不登记 running,模拟进程 spawn 成功后立即退出:
-    /// 随后的 status() 复查会看到 Stopped。
+    /// 随后的 status() 复查会看到 Stopped
     exit_after_start: Mutex<HashSet<BotId>>,
     start_count: Mutex<std::collections::HashMap<BotId, usize>>,
     stop_count: Mutex<std::collections::HashMap<BotId, usize>>,
@@ -100,7 +100,7 @@ impl BotBackend for FakeBackend {
         }
         if self.exit_after_start.lock().await.remove(&ctx.config.bot_id) {
             // 模拟快速退出:start 报告成功,但进程没真正存活,不登记 running,
-            // 让 BotManager 的启动后 status 复查抓到 Stopped。
+            // 让 BotManager 的启动后 status 复查抓到 Stopped
             return Ok(BotStatus::running(ctx.config.bot_id.clone(), 42, 1));
         }
         self.running.lock().await.insert(ctx.config.bot_id.clone());
@@ -659,9 +659,9 @@ async fn start_backend_failure_marks_crashed() {
 
 #[tokio::test]
 async fn start_fast_exit_is_marked_crashed_not_running() {
-    // 进程 spawn 成功(start 返回 Ok)但随即退出。Starting 阶段的退出事件被有意
-    // 忽略,若不做启动后 status 复查,actor 会停在假 Running。这里断言 BotManager
-    // 复查后把它收口为 Crashed 并返回错误。
+    // 进程 spawn 成功(start 返回 Ok)但随即退出Starting 阶段的退出事件被有意
+    // 忽略,若不做启动后 status 复查,actor 会停在假 Running这里断言 BotManager
+    // 复查后把它收口为 Crashed 并返回错误
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, backend, manager) = make_manager(temp.path());
     let bot_id = BotId::new("10013");
@@ -689,10 +689,10 @@ async fn snowluma_start_returns_not_implemented_without_running() {
 
     manager.upsert_bot_config(config).await.unwrap();
 
-    // Test planner 在 SnowLuma 分支显式返回 SnowLumaInvalidStartMode，
-    // 模拟"SnowLuma 启动链路尚未在 BotManager wiring 内打通"的场景。
-    // 在 RuntimeLaunchPlanError 的 SnowLumaNotImplemented 被移除之后，本测试
-    // 仅锁定"start_bot 应当因为启动计划构造失败而把 actor 转 Crashed"这一行为。
+    // Test planner 在 SnowLuma 分支显式返回 SnowLumaInvalidStartMode,
+    // 模拟"SnowLuma 启动链路尚未在 BotManager wiring 内打通"的场景
+    // 在 RuntimeLaunchPlanError 的 SnowLumaNotImplemented 被移除之后,本测试
+    // 仅锁定"start_bot 应当因为启动计划构造失败而把 actor 转 Crashed"这一行为
     let err = manager.start_bot(&bot_id).await.unwrap_err();
     let err_message = err.to_string();
     assert!(
@@ -920,10 +920,10 @@ async fn batch_stop_reports_join_error_for_panicking_task() {
 
 #[tokio::test]
 async fn upsert_running_bot_keeps_running_and_writes_config() {
-    // M6.5 行为变更：同 backend 同 flavor 的运行中保存配置不再重启 bot，
-    // 改走 WebUI 热推送。本测试用 FakeBackend 跑流程，napcat_endpoints 表里
-    // 不会有任何条目（端点表只在收到 NapCatWebuiAvailable 事件时才填），
-    // 因此热推送分支会落到 "config_saved_pending_reload"，bot 状态保持 Running。
+    // M6.5 行为变更:同 backend 同 flavor 的运行中保存配置不再重启 bot,
+    // 改走 WebUI 热推送本测试用 FakeBackend 跑流程,napcat_endpoints 表里
+    // 不会有任何条目(端点表只在收到 NapCatWebuiAvailable 事件时才填),
+    // 因此热推送分支会落到 "config_saved_pending_reload",bot 状态保持 Running
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, _, manager) = make_manager(temp.path());
 
@@ -943,7 +943,7 @@ async fn upsert_running_bot_keeps_running_and_writes_config() {
         .await
         .unwrap();
 
-    // bot 仍在跑，没有触发重启
+    // bot 仍在跑,没有触发重启
     assert_eq!(snap.state, BotActorState::Running);
     assert!(!snap.pending_restart);
 
@@ -966,7 +966,7 @@ async fn upsert_stopped_bot_does_not_restart() {
         .await
         .unwrap();
 
-    // Bot 是 Stopped，更新配置不应触发 restart
+    // Bot 是 Stopped,更新配置不应触发 restart
     let snap = manager
         .upsert_bot_config(bot_config(10001, "bot-updated"))
         .await
@@ -981,7 +981,7 @@ async fn bootstrap_auto_starts_marked_bots() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
-    // 先通过 repo 直接写入配置（模拟已有持久化数据）
+    // 先通过 repo 直接写入配置(模拟已有持久化数据)
     repo.upsert(bot_config_auto_start(10001, "auto-bot"))
         .await
         .unwrap();
@@ -1086,7 +1086,7 @@ async fn lifecycle_stop_does_not_fallback_when_docker_local_blocked() {
     let (store, _, backend, manager) = make_manager_with_local_resolver(temp.path());
     let bot_id = BotId::new("10120");
 
-    // 直接写 repo 绕过 upsert 矩阵校验,测试运行时路由健壮性。
+    // 直接写 repo 绕过 upsert 矩阵校验,测试运行时路由健壮性
     let config = docker_local_blocked_config(10120, "bot");
     let payload = serde_json::json!({
         "info": {"configVersion": 999},
@@ -1096,7 +1096,7 @@ async fn lifecycle_stop_does_not_fallback_when_docker_local_blocked() {
 
     let err = manager.stop_bot(&bot_id).await.unwrap_err();
     // 直接写 repo 不走 manager.upsert,actor map 无此 bot 会报 not found,这也算通过:
-    // 重点是验证没有错误回退本地 backend(stop_count=0)。
+    // 重点是验证没有错误回退本地 backend(stop_count=0)
     assert!(err.to_string().contains("not found") || err.to_string().contains("Docker"));
     assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
 }
@@ -1113,7 +1113,7 @@ async fn lifecycle_delete_does_not_fallback_when_docker_local_blocked() {
         .unwrap();
     manager.start_bot(&bot_id).await.unwrap();
 
-    // 直接写 repo 绕过 upsert 矩阵校验,测试运行时路由健壮性。
+    // 直接写 repo 绕过 upsert 矩阵校验,测试运行时路由健壮性
     let config = docker_local_blocked_config(10121, "bot");
     let payload = serde_json::json!({
         "info": {"configVersion": 999},
@@ -1294,7 +1294,7 @@ async fn start_bot_publishes_state_change_event() {
     let backend = Arc::new(FakeBackend::default());
     let event_bus = Arc::new(BroadcastEventBus::default());
 
-    // 先订阅，再操作
+    // 先订阅,再操作
     let mut sub = event_bus.subscribe(EventFilter::bot("10001"));
 
     let manager = BotManager::new(
@@ -1325,7 +1325,7 @@ async fn start_bot_publishes_state_change_event() {
     assert_eq!(event2.bot_id().unwrap().as_str(), "10001");
 }
 
-// ─── 桌面退出闸门（本机 active / exit_desktop）────────────────────────────────
+// ─── 桌面退出闸门(本机 active / exit_desktop)────────────────────────────────
 
 fn bot_config_remote_docker_server(qq_id: u64, name: &str) -> BotConfig {
     let mut config = bot_config(qq_id, name);
@@ -1501,8 +1501,8 @@ async fn list_snapshots_returns_all_actors() {
 
 #[tokio::test]
 async fn upsert_persists_before_creating_actor() {
-    // 回归测试：upsert 先写 bot.json 再创建 Actor。
-    // 验证：upsert 成功后，repo 里已有数据。
+    // 回归测试:upsert 先写 bot.json 再创建 Actor
+    // 验证:upsert 成功后,repo 里已有数据
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
@@ -1519,8 +1519,8 @@ async fn upsert_persists_before_creating_actor() {
 
 #[tokio::test]
 async fn delete_persists_before_removing_actor() {
-    // 回归测试：delete 先删 bot.json 再清理 Actor。
-    // 验证：即使 Actor 还在（假设 shutdown 慢），repo 里已无数据。
+    // 回归测试:delete 先删 bot.json 再清理 Actor
+    // 验证:即使 Actor 还在(假设 shutdown 慢),repo 里已无数据
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
@@ -1541,11 +1541,11 @@ async fn delete_persists_before_removing_actor() {
 
 #[tokio::test]
 async fn bootstrap_skipped_bots_are_not_auto_started() {
-    // 回归测试：超出上限且标记 auto_start 的 bot 不会被启动。
+    // 回归测试:超出上限且标记 auto_start 的 bot 不会被启动
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
 
-    // 前 4 个不自动启动，第 5 个标记 auto_start
+    // 前 4 个不自动启动,第 5 个标记 auto_start
     for i in 1..=4u64 {
         repo.upsert(bot_config(10000 + i, &format!("bot-{i}")))
             .await
@@ -1561,14 +1561,14 @@ async fn bootstrap_skipped_bots_are_not_auto_started() {
     assert_eq!(result.skipped.len(), 1);
     assert_eq!(result.skipped[0], BotId::new("10005"));
 
-    // 没有 bot 被自动启动（前 4 个不是 auto_start，第 5 个被 skip）
+    // 没有 bot 被自动启动(前 4 个不是 auto_start,第 5 个被 skip)
     assert_eq!(result.started.succeeded.len(), 0);
     assert_eq!(manager.bot_count().await, 4);
 }
 
 #[tokio::test]
 async fn shutdown_all_stops_running_bots_and_clears_actors() {
-    // shutdown_all 应该把 active 的 Bot 停掉并清空 actor map。
+    // shutdown_all 应该把 active 的 Bot 停掉并清空 actor map
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, backend, manager) = make_manager(temp.path());
     prepare_napcat_runtime(temp.path());
@@ -1590,10 +1590,10 @@ async fn shutdown_all_stops_running_bots_and_clears_actors() {
     assert_eq!(result.succeeded.len(), 2);
     assert!(result.failed.is_empty());
 
-    // FakeBackend 内部 running set 应被清空。
+    // FakeBackend 内部 running set 应被清空
     assert!(backend.status(BotId::new("10001")).await.unwrap().state == BotActorState::Stopped);
     assert!(backend.status(BotId::new("10002")).await.unwrap().state == BotActorState::Stopped);
-    // Actor map 已清空。
+    // Actor map 已清空
     assert_eq!(manager.bot_count().await, 0);
 }
 
@@ -1601,7 +1601,7 @@ async fn shutdown_all_stops_running_bots_and_clears_actors() {
 async fn process_exit_event_transitions_running_actor_to_crashed() {
     use ncd_runtime::{DomainEvent, DomainEventKind};
 
-    // 当 Running 状态的 Bot 收到非 0 退出，actor 应转为 Crashed。
+    // 当 Running 状态的 Bot 收到非 0 退出,actor 应转为 Crashed
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
 
     let store = Arc::new(LocalConfigStore::new(temp.path()));
@@ -1644,17 +1644,17 @@ async fn process_exit_event_transitions_running_actor_to_crashed() {
     );
 
     manager.spawn_runtime_event_listener();
-    // 给后台 listener 时间完成 subscribe，否则下面的 publish 会丢。
+    // 给后台 listener 时间完成 subscribe,否则下面的 publish 会丢
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    // 模拟运行时上报：进程崩溃退出，码 1。
+    // 模拟运行时上报:进程崩溃退出,码 1
     event_bus.publish(DomainEvent::bot_process_exited(
         BotId::new("10010"),
         Some(1),
         None,
     ));
 
-    // 等待 listener 处理事件，最多 2s。
+    // 等待 listener 处理事件,最多 2s
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
     let mut got_crashed = false;
     while std::time::Instant::now() < deadline {

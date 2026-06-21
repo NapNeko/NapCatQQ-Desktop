@@ -1,23 +1,23 @@
-//! QQComponent：QQ runtime 组件。
+//! QQComponent:QQ runtime 组件
 //!
-//! 跨平台：
-//! - Linux 本地/远端：rootless 安装，对齐 NapCat-Installer 官方一键脚本。
-//!   下载 linuxqq_<ver>_<arch>.{deb,rpm} 解压到 <install_base_dir>/opt/QQ/。
-//! - Windows 本地：detect 走注册表
-//!   HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT\Install 拿安装根。新版 QQNT
-//!   按版本分目录，版本号在 versions/config.json 的 curVersion；旧版是
-//!   扁平的 resources/app/package.json。安装走官方 pcConfig.json 拿 NSIS
-//!   安装包跑 installer.exe /s 静默安装。
+//! 跨平台:
+//! - Linux 本地/远端:rootless 安装,对齐 NapCat-Installer 官方一键脚本
+//!   下载 linuxqq_<ver>_<arch>.{deb,rpm} 解压到 <install_base_dir>/opt/QQ/
+//! - Windows 本地:detect 走注册表
+//!   HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT\Install 拿安装根新版 QQNT
+//!   按版本分目录,版本号在 versions/config.json 的 curVersion;旧版是
+//!   扁平的 resources/app/package.json安装走官方 pcConfig.json 拿 NSIS
+//!   安装包跑 installer.exe /s 静默安装
 //!
 //! Linux 安装路径(rootless):
-//! - $INSTALL_BASE_DIR/opt/QQ/：QQ 解压根
-//! - $INSTALL_BASE_DIR/opt/QQ/qq：QQ 可执行
-//! - $INSTALL_BASE_DIR/opt/QQ/resources/app/package.json：版本探测点
+//! - $INSTALL_BASE_DIR/opt/QQ/:QQ 解压根
+//! - $INSTALL_BASE_DIR/opt/QQ/qq:QQ 可执行
+//! - $INSTALL_BASE_DIR/opt/QQ/resources/app/package.json:版本探测点
 //!
-//! 版本号说明：腾讯 Linux QQ 没有 "latest" 端点，版本号 + hash segment 都是
-//! 硬编码，改版时手动同步。当前(2026-05)锁定 3.2.25-45758(hash 7516007c)。
+//! 版本号说明:腾讯 Linux QQ 没有 "latest" 端点,版本号 + hash segment 都是
+//! 硬编码,改版时手动同步当前(2026-05)锁定 3.2.25-45758(hash 7516007c)
 //!
-//! Windows 版本号通过 pcConfig.json 实时拉取，不固化。
+//! Windows 版本号通过 pcConfig.json 实时拉取,不固化
 //!
 //! Linux 安装流程(rootless):
 //! 1. 探测 dpkg-deb 或 rpm2cpio 哪个可用(用 which 或 command -v)
@@ -25,10 +25,10 @@
 //! 3. dpkg-deb -x 或 rpm2cpio | cpio -idm 解压到 <install_base_dir>
 //! 4. 删除安装包,清理临时文件
 //!
-//! Windows 安装流程：
+//! Windows 安装流程:
 //! 1. HTTP GET https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json
 //! 2. 取 Windows.ntDownloadX64Url → 下载 NSIS 安装包到本地临时目录
-//! 3. 跑 installer.exe /s 静默安装，等待退出码 0
+//! 3. 跑 installer.exe /s 静默安装,等待退出码 0
 //! 4. 删除本地临时安装包
 
 use async_trait::async_trait;
@@ -41,21 +41,21 @@ use crate::error::ActionError;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
-/// 腾讯 QQ Windows 版实时版本 / 下载地址清单(legacy Urls.QQ_Version)。
+/// 腾讯 QQ Windows 版实时版本 / 下载地址清单(legacy Urls.QQ_Version)
 const QQ_PCCONFIG_URL: &str =
     "https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json";
 
-/// Windows QQNT 安装信息所在注册表子键(legacy PathFunc.get_qq_path)。
+/// Windows QQNT 安装信息所在注册表子键(legacy PathFunc.get_qq_path)
 const QQ_REGISTRY_SUBKEY: &str = r"SOFTWARE\WOW6432Node\Tencent\QQNT";
 
-/// 包格式(rootless 模式只需要 dpkg / rpm 两种)。
+/// 包格式(rootless 模式只需要 dpkg / rpm 两种)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PackageFormat {
     Deb,
     Rpm,
 }
 
-/// QQ component 配置。
+/// QQ component 配置
 #[derive(Debug, Clone)]
 pub struct QQComponent {
     /// 版本号(如 "3.2.25-45758")
@@ -71,7 +71,7 @@ pub struct QQComponent {
 }
 
 impl QQComponent {
-    /// 创建一个 QQ component 描述(自定义所有字段)。
+    /// 创建一个 QQ component 描述(自定义所有字段)
     pub fn new(
         version: impl Into<String>,
         url_hash_segment: impl Into<String>,
@@ -86,8 +86,8 @@ impl QQComponent {
         }
     }
 
-    /// 默认配置:锁定已知版本 v3.2.25-45758,安装到 $HOME/Napcat。
-    /// 腾讯改版后通过更新本默认值即可,业务代码不改。
+    /// 默认配置:锁定已知版本 v3.2.25-45758,安装到 $HOME/Napcat
+    /// 腾讯改版后通过更新本默认值即可,业务代码不改
     pub fn default_v3_2_25(install_base_dir: HostPath) -> Self {
         Self::new("3.2.25-45758", "7516007c", install_base_dir)
     }
@@ -134,7 +134,7 @@ impl QQComponent {
         ))
     }
 
-    /// 探测远端有 dpkg-deb 还是 rpm2cpio。dpkg 优先(deb 更普遍)。
+    /// 探测远端有 dpkg-deb 还是 rpm2cpiodpkg 优先(deb 更普遍)
     async fn detect_package_format(&self, host: &dyn Host) -> Result<PackageFormat, ActionError> {
         // 用 sh -c "command -v X" 探测,退出码 0 = 存在
         for (binary, fmt) in &[
@@ -162,7 +162,7 @@ impl QQComponent {
         ))
     }
 
-    /// 确保 Linux QQ 系统依赖已安装（仅 Linux）。
+    /// 确保 Linux QQ 系统依赖已安装(仅 Linux)
     pub async fn ensure_linux_dependencies(
         &self,
         host: &dyn Host,
@@ -189,9 +189,9 @@ impl QQComponent {
 
         let installer = crate::qq_deps::QqDependencyInstaller;
         let missing_names: Vec<String> = report.missing.iter().map(|p| p.name.clone()).collect();
-        // sudo_password None：期望 Host 连接建立时已从 keyring 注入密码；
-        // 如果 probe 到 PasswordRequired 且 Host 也没有密码则返回 elevation_required，
-        // 但 deploy path 无前端可弹窗，只能记日志让用户看到安装失败。
+        // sudo_password None:期望 Host 连接建立时已从 keyring 注入密码;
+        // 如果 probe 到 PasswordRequired 且 Host 也没有密码则返回 elevation_required,
+        // 但 deploy path 无前端可弹窗,只能记日志让用户看到安装失败
         let result = installer.install(host, missing_names, None, ctx).await?;
 
         if result.elevation_required {
@@ -237,7 +237,7 @@ impl QQComponent {
         self.qq_base_path().join("resources/app/package.json")
     }
 
-    /// 组件元数据，给 list_components Tauri command 使用。
+    /// 组件元数据,给 list_components Tauri command 使用
     pub fn info() -> crate::types::ComponentInfo {
         crate::types::ComponentInfo {
             id: ComponentId::Qq,
@@ -261,8 +261,8 @@ impl Component for QQComponent {
     }
 
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
-        // Windows 本机 + Linux 本地 / 远端。Windows 远端由 backend 的 SSH 逻辑
-        // 处理,不走本 component。
+        // Windows 本机 + Linux 本地 / 远端Windows 远端由 backend 的 SSH 逻辑
+        // 处理,不走本 component
         &[
             (Os::Windows, Locality::Local),
             (Os::Linux, Locality::Local),
@@ -339,7 +339,7 @@ impl Component for QQComponent {
         args: &LaunchArgs,
     ) -> Result<HostCommand, ActionError> {
         // QQ 启动命令:<install_base>/opt/QQ/qq <extra_args>,backend 再拼
-        // --no-sandbox -q <qqid> 等参数,不在 Component 这层。
+        // --no-sandbox -q <qqid> 等参数,不在 Component 这层
         let mut cmd = HostCommand::new(self.qq_executable().as_posix());
         for a in &args.extra_args {
             cmd = cmd.arg(a);
@@ -354,11 +354,11 @@ impl Component for QQComponent {
     }
 }
 
-// 平台分发实装：Linux rootless 解包 + Windows 官方静默安装
+// 平台分发实装:Linux rootless 解包 + Windows 官方静默安装
 
 impl QQComponent {
-    /// Linux detect：读 <install_base>/opt/QQ/resources/app/package.json
-    /// 的 version 字段。
+    /// Linux detect:读 <install_base>/opt/QQ/resources/app/package.json
+    /// 的 version 字段
     async fn detect_linux(
         &self,
         host: &dyn Host,
@@ -391,7 +391,7 @@ impl QQComponent {
         }))
     }
 
-    /// Linux install：rootless 下载 deb/rpm → 上传 → dpkg-deb -x / rpm2cpio 解包。
+    /// Linux install:rootless 下载 deb/rpm → 上传 → dpkg-deb -x / rpm2cpio 解包
     async fn install_linux(
         &self,
         host: &dyn Host,
@@ -520,10 +520,10 @@ impl QQComponent {
         host: &dyn Host,
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
-        // rootless 卸载：删 <install_base>/opt/QQ 整棵子树。
-        // System 布局（/opt/QQ）需要 sudo，但 rootless 是当前默认布局；
-        // 如果 install_base = "/" 删 /opt/QQ 会因权限失败，那时让用户用
-        // 系统包管理器（dpkg -P linuxqq / apt remove linuxqq）卸载。
+        // rootless 卸载:删 <install_base>/opt/QQ 整棵子树
+        // System 布局(/opt/QQ)需要 sudo,但 rootless 是当前默认布局;
+        // 如果 install_base = "/" 删 /opt/QQ 会因权限失败,那时让用户用
+        // 系统包管理器(dpkg -P linuxqq / apt remove linuxqq)卸载
         let qq_root = self.qq_base_path();
         ctx.emit(ProgressKind::Started { total_steps: 1 }).await;
         ctx.emit(ProgressKind::StepBegin {
@@ -584,11 +584,11 @@ impl QQComponent {
 
     // Windows 本机实装
 
-    /// Windows detect：注册表 HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT 的
-    /// Install 值拿安装根。新版 QQNT 把客户端按版本分目录放在
-    /// versions/<curVersion>/ 下，版本号写在 versions/config.json 的
-    /// curVersion。旧版 QQ 是扁平的 resources/app/package.json。两种布局
-    /// 都试一遍。
+    /// Windows detect:注册表 HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT 的
+    /// Install 值拿安装根新版 QQNT 把客户端按版本分目录放在
+    /// versions/<curVersion>/ 下,版本号写在 versions/config.json 的
+    /// curVersion旧版 QQ 是扁平的 resources/app/package.json两种布局
+    /// 都试一遍
     async fn detect_windows(
         &self,
         host: &dyn Host,
@@ -598,7 +598,7 @@ impl QQComponent {
             None => return Ok(None),
         };
 
-        // 新布局优先：versions/config.json 的 curVersion 就是版本号。
+        // 新布局优先:versions/config.json 的 curVersion 就是版本号
         let config_json = install_root.join("versions/config.json");
         if host.exists(&config_json).await? {
             if let Ok(bytes) = host.read_file(&config_json).await {
@@ -611,7 +611,7 @@ impl QQComponent {
             }
         }
 
-        // 回退旧布局：扁平 resources/app/package.json。
+        // 回退旧布局:扁平 resources/app/package.json
         let pkg_json = install_root.join("resources/app/package.json");
         if host.exists(&pkg_json).await? {
             if let Ok(bytes) = host.read_file(&pkg_json).await {
@@ -624,16 +624,16 @@ impl QQComponent {
             }
         }
 
-        // 注册表有 Install 但两种布局都没拿到版本号：QQ 装过但结构不认识，
-        // 标 unknown 让 UI 显示"已安装"而不是"未安装"。
+        // 注册表有 Install 但两种布局都没拿到版本号:QQ 装过但结构不认识,
+        // 标 unknown 让 UI 显示"已安装"而不是"未安装"
         Ok(Some(DetectedVersion {
             version: "unknown".to_string(),
             source: format!("{install_root} (no recognizable version source)"),
         }))
     }
 
-    /// 跑 reg query 拿 QQNT 的 Install 值，转成 HostPath。注册表项不存在
-    /// （未装 QQ）时返回 Ok(None)。
+    /// 跑 reg query 拿 QQNT 的 Install 值,转成 HostPath注册表项不存在
+    /// (未装 QQ)时返回 Ok(None)
     async fn query_windows_install_root(
         &self,
         host: &dyn Host,
@@ -645,8 +645,8 @@ impl QQComponent {
             .arg("Install");
         let out = match host.run_to_string(cmd).await {
             Ok(o) => o,
-            // reg query 在键不存在时退出码非 0；run_to_string 不会因非 0 报
-            // Err，但若 reg 自身起不来（PATH 缺失等）才会到这里，按未装处理。
+            // reg query 在键不存在时退出码非 0;run_to_string 不会因非 0 报
+            // Err,但若 reg 自身起不来(PATH 缺失等)才会到这里,按未装处理
             Err(_) => return Ok(None),
         };
         if !out.success() {
@@ -658,8 +658,8 @@ impl QQComponent {
         }
     }
 
-    /// Windows install：拉 pcConfig.json 拿 NSIS 安装包地址 → 下载 → 跑
-    /// installer.exe /s 静默安装（对齐 legacy QQInstall）。
+    /// Windows install:拉 pcConfig.json 拿 NSIS 安装包地址 → 下载 → 跑
+    /// installer.exe /s 静默安装(对齐 legacy QQInstall)
     async fn install_windows(
         &self,
         host: &dyn Host,
@@ -707,7 +707,7 @@ impl QQComponent {
             .arg("/s")
             .timeout(std::time::Duration::from_secs(600));
         let run_result = host.run_to_string(cmd).await;
-        // 不管装成功与否都尽量清掉安装包，避免占 %TEMP%。
+        // 不管装成功与否都尽量清掉安装包,避免占 %TEMP%
         let _ = tokio::fs::remove_file(&local_exe).await;
         let out = run_result?;
         if !out.success() {
@@ -725,8 +725,8 @@ impl QQComponent {
         Ok(())
     }
 
-    /// Windows uninstall：QQ 官方安装包没有可靠的静默卸载入口，让用户走
-    /// 系统“应用和功能”卸载，这里直接拒绝而不是装作成功。
+    /// Windows uninstall:QQ 官方安装包没有可靠的静默卸载入口,让用户走
+    /// 系统“应用和功能”卸载,这里直接拒绝而不是装作成功
     async fn uninstall_windows(
         &self,
         _host: &dyn Host,
@@ -737,8 +737,8 @@ impl QQComponent {
         ))
     }
 
-    /// Windows verify：注册表能查到 Install，且 detect 能解析出真实版本号
-    /// （新布局 versions/config.json 或旧布局 package.json 任一命中）。
+    /// Windows verify:注册表能查到 Install,且 detect 能解析出真实版本号
+    /// (新布局 versions/config.json 或旧布局 package.json 任一命中)
     async fn verify_windows(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
         let install_root = self.query_windows_install_root(host).await?;
         let mut report = VerifyReport::ok().with_check(
@@ -757,7 +757,7 @@ impl QQComponent {
     }
 }
 
-/// 从 QQNT 新布局 versions/config.json 解析 curVersion 字段。
+/// 从 QQNT 新布局 versions/config.json 解析 curVersion 字段
 fn parse_qqnt_cur_version(bytes: &[u8]) -> Option<String> {
     let json: serde_json::Value = serde_json::from_slice(bytes).ok()?;
     let v = json.get("curVersion").and_then(|v| v.as_str())?;
@@ -769,7 +769,7 @@ fn parse_qqnt_cur_version(bytes: &[u8]) -> Option<String> {
     }
 }
 
-/// 从旧布局 resources/app/package.json 解析 version 字段。
+/// 从旧布局 resources/app/package.json 解析 version 字段
 fn parse_qq_package_version(bytes: &[u8]) -> Option<String> {
     let json: serde_json::Value = serde_json::from_slice(bytes).ok()?;
     let v = json.get("version").and_then(|v| v.as_str())?;
@@ -781,8 +781,8 @@ fn parse_qq_package_version(bytes: &[u8]) -> Option<String> {
     }
 }
 
-/// 解析 reg query ... /v Install 的 stdout，抽出 Install REG_SZ <path>
-/// 里的 path。stdout 形如（第二行带前导缩进）：
+/// 解析 reg query ... /v Install 的 stdout,抽出 Install REG_SZ <path>
+/// 里的 pathstdout 形如(第二行带前导缩进):
 ///     HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Tencent\QQNT
 ///         Install    REG_SZ    C:\Program Files\Tencent\QQNT
 fn parse_reg_install_value(stdout: &str) -> Option<String> {
@@ -791,7 +791,7 @@ fn parse_reg_install_value(stdout: &str) -> Option<String> {
         if !trimmed.starts_with("Install") {
             continue;
         }
-        // 值类型固定 REG_SZ；按它切分，右侧即注册表里的路径字符串。
+        // 值类型固定 REG_SZ;按它切分,右侧即注册表里的路径字符串
         if let Some((_, rest)) = trimmed.split_once("REG_SZ") {
             let path = rest.trim();
             if !path.is_empty() {
@@ -802,7 +802,7 @@ fn parse_reg_install_value(stdout: &str) -> Option<String> {
     None
 }
 
-/// 拉 pcConfig.json 解析 Windows 段的 (version, ntDownloadX64Url)。
+/// 拉 pcConfig.json 解析 Windows 段的 (version, ntDownloadX64Url)
 async fn fetch_windows_qq_release() -> Result<(String, String), ActionError> {
     let resp = ncd_network::shared_client()
         .get(QQ_PCCONFIG_URL)
@@ -822,7 +822,7 @@ async fn fetch_windows_qq_release() -> Result<(String, String), ActionError> {
     parse_windows_qq_release(&body)
 }
 
-/// 从 pcConfig.json 文本解析 Windows 段的 version 与 x64 NSIS 安装包地址。
+/// 从 pcConfig.json 文本解析 Windows 段的 version 与 x64 NSIS 安装包地址
 fn parse_windows_qq_release(body: &str) -> Result<(String, String), ActionError> {
     let json: serde_json::Value = serde_json::from_str(body).map_err(|e| {
         ActionError::install_step("parse_pcconfig", format!("invalid json: {e}"))
@@ -970,7 +970,7 @@ mod tests {
 
     #[test]
     fn parse_windows_qq_release_picks_x64_url() {
-        // 截取自真实 pcConfig.json 结构（Windows 段）。
+        // 截取自真实 pcConfig.json 结构(Windows 段)
         let body = r#"{"Windows":{"version":"9.9.31","ntDownloadX64Url":"https://qqdl.gtimg.cn/qqfile/QQNT/9.9.31/release/092069d7/QQ_9.9.31_260528_x64_01.exe"},"Linux":{"version":"3.2.29"}}"#;
         let (ver, url) = parse_windows_qq_release(body).unwrap();
         assert_eq!(ver, "9.9.31");
@@ -985,7 +985,7 @@ mod tests {
 
     #[test]
     fn parse_qqnt_cur_version_reads_config_json() {
-        // 真实 versions/config.json 结构。
+        // 真实 versions/config.json 结构
         let body = br#"{"baseVersion":"9.9.26-44343","curVersion":"9.9.26-44343","buildId":"44343"}"#;
         assert_eq!(
             parse_qqnt_cur_version(body),

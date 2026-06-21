@@ -1,4 +1,4 @@
-//! Deploy 错误类型。
+//! Deploy 错误类型
 
 use ncd_component::ActionError;
 

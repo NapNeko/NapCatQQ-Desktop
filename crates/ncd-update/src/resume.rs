@@ -1,7 +1,7 @@
-//! Resume snapshot:自更新前持久化的 bot/daemon 状态,新版启动时还原。
+//! Resume snapshot:自更新前持久化的 bot/daemon 状态,新版启动时还原
 //!
 //! 由 [UpdateOrchestrator::resume_after_update](crate::UpdateOrchestrator::resume_after_update)
-//! 读取消费。
+//! 读取消费
 
 use std::path::PathBuf;
 
@@ -11,7 +11,7 @@ use tokio::fs;
 
 use crate::error::UpdateError;
 
-/// 自更新 resume snapshot。
+/// 自更新 resume snapshot
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UpdateResumePoint {
     /// 协议版本(envelope,与前端契约同步)
@@ -64,13 +64,13 @@ impl UpdateResumePoint {
     }
 }
 
-/// Resume 持久化抽象。
+/// Resume 持久化抽象
 pub struct ResumeStore {
     snapshot_path: PathBuf,
 }
 
 impl ResumeStore {
-    /// 默认路径:<data_root>/update-resume.json。
+    /// 默认路径:<data_root>/update-resume.json
     pub fn new(data_root: &std::path::Path) -> Self {
         Self {
             snapshot_path: data_root.join("update-resume.json"),
@@ -83,7 +83,7 @@ impl ResumeStore {
         }
     }
 
-    /// 保存 resume snapshot。
+    /// 保存 resume snapshot
     pub async fn save(&self, point: &UpdateResumePoint) -> Result<(), UpdateError> {
         let bytes = serde_json::to_vec_pretty(point)?;
         if let Some(parent) = self.snapshot_path.parent() {
@@ -95,7 +95,7 @@ impl ResumeStore {
         Ok(())
     }
 
-    /// 读取 resume snapshot。文件不存在返回 Ok(None)。
+    /// 读取 resume snapshot文件不存在返回 Ok(None)
     pub async fn load(&self) -> Result<Option<UpdateResumePoint>, UpdateError> {
         match fs::read(&self.snapshot_path).await {
             Ok(bytes) => {
@@ -107,7 +107,7 @@ impl ResumeStore {
         }
     }
 
-    /// 清理 resume snapshot(在 resume_after_update 完成后调用)。
+    /// 清理 resume snapshot(在 resume_after_update 完成后调用)
     pub async fn clear(&self) -> Result<(), UpdateError> {
         match fs::remove_file(&self.snapshot_path).await {
             Ok(()) => Ok(()),

@@ -1,4 +1,4 @@
-// 关窗后延迟/立即进入轻量模式的计时与取消。
+// 关窗后延迟/立即进入轻量模式的计时与取消
 
 use std::sync::Arc;
 
@@ -30,7 +30,7 @@ impl LightweightScheduler {
         }
     }
 
-    /// 主窗口已隐藏到托盘后调用（close_action=tray 且非 exit）。
+    /// 主窗口已隐藏到托盘后调用(close_action=tray 且非 exit)
     pub async fn on_main_window_hidden(&self, app: tauri::AppHandle) {
         if has_active_component_tasks(&app).await {
             tracing::debug!("skip auto lightweight: component tasks running");

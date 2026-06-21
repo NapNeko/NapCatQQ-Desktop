@@ -1,6 +1,6 @@
-//! LocalWindowsHost:本地 Windows 实装。
+//! LocalWindowsHost:本地 Windows 实装
 //!
-//! 把 [Host](crate::Host) trait 在本地 Windows 上跑通。
+//! 把 [Host](crate::Host) trait 在本地 Windows 上跑通
 //!
 //! 实装映射:
 //! - 文件 IO:tokio::fs
@@ -10,7 +10,7 @@
 //! - 解压 tar.xz:HostError::Unsupported(暂不实装,后续按需补)
 //! - 解压 msi:走 msiexec /a 静默提取(简化版)
 //! - 提权:HostCommand::elevated 走 ShellExecuteW("runas") —— 暂返回
-//!   Unsupported,完整提权链留给 ncd-update crate 的 DesktopSelfComponent::SelfUpdate。
+//!   Unsupported,完整提权链留给 ncd-update crate 的 DesktopSelfComponent::SelfUpdate
 //!
 //! 注意:
 //! - 本实装只在 target_os = "windows" 下编译(由 local/mod.rs 的 #[cfg(windows)] 控制)
@@ -35,16 +35,16 @@ use crate::process::{ExitStatus, HostProcess, ProcessId};
 use crate::shell::{HostShell, PowerShellShell};
 use crate::subprocess::hide_console_window;
 
-/// 本地 Windows 主机。
+/// 本地 Windows 主机
 ///
-/// 调用 [LocalWindowsHost::new] 拿到一个零状态实例。
+/// 调用 [LocalWindowsHost::new] 拿到一个零状态实例
 pub struct LocalWindowsHost {
     id: String,
     shell: PowerShellShell,
 }
 
 impl LocalWindowsHost {
-    /// 创建新实例。id 默认为 "local",跨 Host 区分日志用。
+    /// 创建新实例id 默认为 "local",跨 Host 区分日志用
     pub fn new() -> Self {
         Self {
             id: "local".to_string(),
@@ -52,13 +52,13 @@ impl LocalWindowsHost {
         }
     }
 
-    /// 自定义 id(多本地 Host 协同时用,正常单实例不需要)。
+    /// 自定义 id(多本地 Host 协同时用,正常单实例不需要)
     pub fn with_id(mut self, id: impl Into<String>) -> Self {
         self.id = id.into();
         self
     }
 
-    /// 当前进程架构(用编译期常量,没必要运行时探测)。
+    /// 当前进程架构(用编译期常量,没必要运行时探测)
     fn detect_arch() -> Arch {
         #[cfg(target_arch = "x86_64")]
         return Arch::X86_64;
@@ -446,8 +446,8 @@ impl Host for LocalWindowsHost {
             }
         }
 
-        // on_line 是 FnMut，不能跨 task 共享。用 mpsc channel：两个 reader task
-        // 各自发 (StreamSource, String)，主循环收到后调 on_line。
+        // on_line 是 FnMut,不能跨 task 共享用 mpsc channel:两个 reader task
+        // 各自发 (StreamSource, String),主循环收到后调 on_line
         let (tx, mut rx) = mpsc::channel::<(StreamSource, String)>(256);
 
         let stdout_pipe = child.stdout.take();
@@ -505,7 +505,7 @@ impl Host for LocalWindowsHost {
             }
         });
 
-        // tx 本体 drop 掉，让 rx 在两个 reader task 都结束后自然关闭。
+        // tx 本体 drop 掉,让 rx 在两个 reader task 都结束后自然关闭
         drop(tx);
 
         let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
@@ -514,8 +514,8 @@ impl Host for LocalWindowsHost {
         let mut stdout_lines: Vec<String> = Vec::new();
         let mut stderr_lines: Vec<String> = Vec::new();
 
-        // 收行循环：回调收 owned String（trait 签名如此，避开 async_trait 下
-        // &str 生命周期被 box 固定的问题）。行很小，clone 进缓冲可忽略。
+        // 收行循环:回调收 owned String(trait 签名如此,避开 async_trait 下
+        // &str 生命周期被 box 固定的问题)行很小,clone 进缓冲可忽略
         loop {
             match tokio::time::timeout_at(deadline, rx.recv()).await {
                 Ok(Some((src, line))) => match src {
@@ -528,7 +528,7 @@ impl Host for LocalWindowsHost {
                         stderr_lines.push(line);
                     }
                 },
-                Ok(None) => break, // channel 关闭，两个 reader task 都结束了
+                Ok(None) => break, // channel 关闭,两个 reader task 都结束了
                 Err(_) => {
                     return Err(HostError::Timeout {
                         operation: "run_streaming",
@@ -537,7 +537,7 @@ impl Host for LocalWindowsHost {
             }
         }
 
-        // reader task 结束后等进程退出拿 exit code。
+        // reader task 结束后等进程退出拿 exit code
         let _ = stdout_task.await;
         let _ = stderr_task.await;
         let status = child.wait().await.map_err(HostError::Io)?;
@@ -677,8 +677,8 @@ impl HostProcess for ChildHostProcess {
 
     fn take_stdout(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Send + Unpin>> {
         let child = self.child.as_mut()?;
-        // 注意：take_stdout 只能调一次。spawn 时已经 .stdout(Stdio::piped())，
-        // 这里 take 走 ChildStdout，wait 阶段 wait_with_output 自然只读 stderr。
+        // 注意:take_stdout 只能调一次spawn 时已经 .stdout(Stdio::piped()),
+        // 这里 take 走 ChildStdout,wait 阶段 wait_with_output 自然只读 stderr
         child
             .stdout
             .take()

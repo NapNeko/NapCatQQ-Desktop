@@ -1,10 +1,10 @@
-//! NoVncComponent:noVNC + 图形栈组件(SnowLuma 远端 VNC 接入用)。
+//! NoVncComponent:noVNC + 图形栈组件(SnowLuma 远端 VNC 接入用)
 //!
 //! 对齐 legacy install_snowluma.sh.j2 的"图形栈"安装步骤,装一整套:
-//! Xvfb / fluxbox / x11vnc / novnc / websockify + dbus-x11。
+//! Xvfb / fluxbox / x11vnc / novnc / websockify + dbus-x11
 //!
 //! 安装策略:不下载二进制,走 apt / dnf 装系统包(legacy 验证过的策略,
-//! SnowLuma 远端 VNC 接入必备)。
+//! SnowLuma 远端 VNC 接入必备)
 //!
 //! 包列表
 //!
@@ -20,8 +20,8 @@
 //! - dbus-x11 fluxbox openbox xorg-x11-server-Xvfb x11vnc
 //! - novnc python3-websockify(在 EPEL)
 //!
-//! 探测:检查 command -v websockify && command -v x11vnc 是否同时存在。
-//! noVNC 是 web 资源不是 binary,但 websockify 是 noVNC 的运行时依赖,所以用它代理探测。
+//! 探测:检查 command -v websockify && command -v x11vnc 是否同时存在
+//! noVNC 是 web 资源不是 binary,但 websockify 是 noVNC 的运行时依赖,所以用它代理探测
 
 use async_trait::async_trait;
 
@@ -35,14 +35,14 @@ use crate::pkg_install_stream::run_pkg_command_with_progress;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
-/// Linux 包管理器枚举(本 component 内部用,后续接 PackageManager trait 落地后可替换)。
+/// Linux 包管理器枚举(本 component 内部用,后续接 PackageManager trait 落地后可替换)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PkgMgr {
     Apt,
     Dnf,
 }
 
-/// noVNC + 图形栈 component。
+/// noVNC + 图形栈 component
 #[derive(Debug, Clone)]
 pub struct NoVncComponent {
     /// 是否走 sudo 提权(默认 true,因为 apt/dnf install 必须 root;
@@ -60,7 +60,7 @@ impl NoVncComponent {
         self
     }
 
-    /// 探测远端的包管理器。
+    /// 探测远端的包管理器
     async fn detect_pkg_manager(&self, host: &dyn Host) -> Result<PkgMgr, ActionError> {
         for (binary, mgr) in &[
             ("apt-get", PkgMgr::Apt),
@@ -81,9 +81,9 @@ impl NoVncComponent {
         ))
     }
 
-    /// 拼接 apt / dnf install 命令。提权交给 Host:use_sudo 时打 .elevated() 标,
-    /// Host 层按注入的提权密码决定 sudo -S(有密码)还是 sudo -n(免密)。命令体本身
-    /// 不含 sudo,不再写死 sudo -n——那在无免密 sudo 的机器上必败。
+    /// 拼接 apt / dnf install 命令提权交给 Host:use_sudo 时打 .elevated() 标,
+    /// Host 层按注入的提权密码决定 sudo -S(有密码)还是 sudo -n(免密)命令体本身
+    /// 不含 sudo,不再写死 sudo -n——那在无免密 sudo 的机器上必败
     fn build_install_command(&self, mgr: PkgMgr) -> HostCommand {
         let pkgs_apt = "dbus-x11 fluxbox xvfb x11vnc novnc websockify";
         let pkgs_dnf =
@@ -104,7 +104,7 @@ impl NoVncComponent {
             .timeout(Duration::from_secs(600))
     }
 
-    /// 拼接 apt update / dnf check-update 刷新索引的命令。
+    /// 拼接 apt update / dnf check-update 刷新索引的命令
     fn build_refresh_command(&self, mgr: PkgMgr) -> HostCommand {
         let cmd = match mgr {
             PkgMgr::Apt => self.maybe_elevated(
@@ -116,7 +116,7 @@ impl NoVncComponent {
     }
 
     /// use_sudo 时给命令打 .elevated() 标(提权细节由 Host 注入的密码决定),否则
-    /// 原样返回。Component 不自己拼 sudo,提权逻辑收敛到 Host 层。
+    /// 原样返回Component 不自己拼 sudo,提权逻辑收敛到 Host 层
     fn maybe_elevated(&self, cmd: HostCommand) -> HostCommand {
         if self.use_sudo {
             cmd.elevated()
@@ -125,7 +125,7 @@ impl NoVncComponent {
         }
     }
 
-    /// 组件元数据，给 list_components Tauri command 使用。
+    /// 组件元数据,给 list_components Tauri command 使用
     pub fn info() -> crate::types::ComponentInfo {
         crate::types::ComponentInfo {
             id: ComponentId::NoVnc,
@@ -279,7 +279,7 @@ impl Component for NoVncComponent {
         let cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(cmd_str));
         let out = host.run_to_string(cmd).await?;
         if !out.success() {
-            // 卸载失败一般是某个包未安装；不视为致命错误，只记录。
+            // 卸载失败一般是某个包未安装;不视为致命错误,只记录
             ctx.log(
                 ProgressLogLevel::Warn,
                 format!(
@@ -339,7 +339,7 @@ impl Component for NoVncComponent {
     }
 }
 
-/// 尝试通过 dpkg / rpm 拿到 novnc 包版本号。失败返回 None。
+/// 尝试通过 dpkg / rpm 拿到 novnc 包版本号失败返回 None
 async fn detect_package_version(host: &dyn Host) -> Option<String> {
     // dpkg
     let cmd = HostCommand::new("sh")
@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn install_command_uses_sudo_by_default() {
-        // 提权改走 .elevated() 标志,命令体本身不含 sudo(由 Host 层注入 sudo -S/-n)。
+        // 提权改走 .elevated() 标志,命令体本身不含 sudo(由 Host 层注入 sudo -S/-n)
         let comp = NoVncComponent::new();
         let cmd = comp.build_install_command(PkgMgr::Apt);
         assert!(cmd.elevated, "默认 use_sudo 时必须打 elevated 标");

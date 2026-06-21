@@ -1,14 +1,14 @@
-//! 帮用户装 docker(如果没有)。
+//! 帮用户装 docker(如果没有)
 //!
 //! Linux:不走官方 get.docker.com 一键脚本——get.docker.com / download.docker.com
 //! 这两个官方域名在国内被墙(实测 curl 直接 Connection reset),连脚本本身都拉不下来,
-//! 脚本里的 --mirror 参数根本没机会生效。改成在远端直接配阿里云 docker-ce 仓库走原生
-//! apt/dnf 安装:全程只打 mirrors.aliyun.com(实测 HTTP 200),不碰任何 docker 官方域名。
+//! 脚本里的 --mirror 参数根本没机会生效改成在远端直接配阿里云 docker-ce 仓库走原生
+//! apt/dnf 安装:全程只打 mirrors.aliyun.com(实测 HTTP 200),不碰任何 docker 官方域名
 //!
-//! 安装按阶段拆成多段 shell,每段单独跑并上报 apt/dnf 行级进度(见 install_progress)。
-//! apt 不用 -qq,保证 Get:/Fetched/Setting up 能进 parse_pkg_mgr_line。
+//! 安装按阶段拆成多段 shell,每段单独跑并上报 apt/dnf 行级进度(见 install_progress)
+//! apt 不用 -qq,保证 Get:/Fetched/Setting up 能进 parse_pkg_mgr_line
 //!
-//! Windows:不能静默装 Docker Desktop,只回一个引导结果让前端弹"去下载"。
+//! Windows:不能静默装 Docker Desktop,只回一个引导结果让前端弹"去下载"
 
 use ncd_domain::DockerInstallReport;
 use ncd_host::Host;
@@ -16,16 +16,16 @@ use ncd_host::Host;
 use super::cli::DockerCliError;
 use super::install_progress::InstallProgressEmit;
 
-/// 兼容旧调用方的别名。结构化结果统一用 [DockerInstallReport]。
+/// 兼容旧调用方的别名结构化结果统一用 [DockerInstallReport]
 pub type DockerInstallOutcome = DockerInstallReport;
 
-/// Docker Desktop for Windows 下载页。
+/// Docker Desktop for Windows 下载页
 pub(crate) const DOCKER_DESKTOP_URL: &str = "https://www.docker.com/products/docker-desktop/";
 
-/// 阿里云 docker-ce 镜像根。apt 的 gpg/仓库、dnf 的 .repo 都从这里派生。
+/// 阿里云 docker-ce 镜像根apt 的 gpg/仓库,dnf 的 .repo 都从这里派生
 const ALIYUN_DOCKER_CE: &str = "https://mirrors.aliyun.com/docker-ce";
 
-/// 装 Docker 时分阶段执行的脚本（按顺序）。每段独立超时,失败即停。
+/// 装 Docker 时分阶段执行的脚本(按顺序)每段独立超时,失败即停
 pub(crate) fn docker_install_phases() -> Vec<(&'static str, String)> {
     let base = ALIYUN_DOCKER_CE;
     let mut phases: Vec<(&'static str, String)> = Vec::new();
@@ -119,7 +119,7 @@ exit 1
     phases
 }
 
-/// 安装成功后写入 registry 加速（非交互）。仅当尚无 daemon.json 或备份后覆盖。
+/// 安装成功后写入 registry 加速(非交互)仅当尚无 daemon.json 或备份后覆盖
 pub(crate) fn write_registry_mirrors_script() -> String {
     r#"set -e
 mkdir -p /etc/docker

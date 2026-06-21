@@ -1,12 +1,12 @@
-//! SSH 凭证类型。
+//! SSH 凭证类型
 //!
-//! 红线:凭证不进版本库,只在内存或受保护的 SecretStore 中流转。SshKey
-//! 提供从文件路径或字节加载,但禁止 Display / Debug 暴露密钥内容。
+//! 红线:凭证不进版本库,只在内存或受保护的 SecretStore 中流转SshKey
+//! 提供从文件路径或字节加载,但禁止 Display / Debug 暴露密钥内容
 
 use std::fmt;
 use std::path::PathBuf;
 
-/// SSH 私钥来源。
+/// SSH 私钥来源
 #[derive(Clone)]
 pub enum SshKey {
     /// 从文件路径加载(运行时延迟读取,避免长期持有内存中)
@@ -33,7 +33,7 @@ impl fmt::Debug for SshKey {
     }
 }
 
-/// SSH 认证凭证。
+/// SSH 认证凭证
 #[derive(Debug, Clone)]
 pub enum SshCredentials {
     /// 密码认证(简单场景或测试,生产推荐用 Key)
@@ -50,7 +50,7 @@ impl SshCredentials {
         }
     }
 
-    /// 用密码连接的便捷构造器。
+    /// 用密码连接的便捷构造器
     pub fn password(username: impl Into<String>, password: impl Into<String>) -> Self {
         Self::Password {
             username: username.into(),
@@ -58,7 +58,7 @@ impl SshCredentials {
         }
     }
 
-    /// 用私钥文件连接的便捷构造器。
+    /// 用私钥文件连接的便捷构造器
     pub fn key_file(
         username: impl Into<String>,
         path: impl Into<PathBuf>,

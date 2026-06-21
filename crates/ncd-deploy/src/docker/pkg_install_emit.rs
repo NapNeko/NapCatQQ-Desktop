@@ -1,6 +1,6 @@
-//! 在 [super::install_progress::InstallProgressEmit] 上跑包管理器流式安装，
-//! 与 [ncd_component::pkg_install_stream] 同源解析（parse_pkg_mgr_line），
-//! 供 Docker 安装复用组件页的 apt/dnf 进度体验。
+//! 在 [super::install_progress::InstallProgressEmit] 上跑包管理器流式安装,
+//! 与 [ncd_component::pkg_install_stream] 同源解析(parse_pkg_mgr_line),
+//! 供 Docker 安装复用组件页的 apt/dnf 进度体验
 
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
@@ -35,8 +35,8 @@ enum StreamMsg {
     },
 }
 
-/// 执行 elevated 包管理命令：按行解析 apt/dnf 输出，单调递增 percent（映射到 [floor, cap]）。
-/// 长时间无输出时发心跳，避免 UI 像卡死。
+/// 执行 elevated 包管理命令:按行解析 apt/dnf 输出,单调递增 percent(映射到 [floor, cap])
+/// 长时间无输出时发心跳,避免 UI 像卡死
 pub async fn run_pkg_with_emit(
     host: &dyn Host,
     emit: &InstallProgressEmit,

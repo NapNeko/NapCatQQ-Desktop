@@ -1,6 +1,6 @@
-//! 对齐 legacy log_enum.LogType / LogSource 的展示段（非强类型业务枚举）。
+//! 对齐 legacy log_enum.LogType / LogSource 的展示段(非强类型业务枚举)
 
-/// 日志类型段，写入文件第 3 段。
+/// 日志类型段,写入文件第 3 段
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogType {
     NoneType,
@@ -22,7 +22,7 @@ impl LogType {
     }
 }
 
-/// 日志来源段，写入文件第 4 段。
+/// 日志来源段,写入文件第 4 段
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogSource {
     None,

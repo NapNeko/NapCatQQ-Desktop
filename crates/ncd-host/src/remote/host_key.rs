@@ -1,4 +1,4 @@
-//! Host key 校验策略。
+//! Host key 校验策略
 //!
 //! 首次连接未知主机的处理由 HostKeyPolicy 控制:
 //! - Strict { known_hosts_path }:严格模式,不在 known_hosts 里就拒
@@ -10,14 +10,14 @@ use tokio::fs;
 
 use crate::error::HostError;
 
-/// Host key 校验策略。
+/// Host key 校验策略
 #[derive(Debug, Clone)]
 pub enum HostKeyPolicy {
     /// 严格模式:必须在 known_hosts 中找到匹配
     Strict { known_hosts_path: PathBuf },
     /// 不校验(测试 / 受信网络专用,生产禁用)
     Insecure,
-    /// 首次接受 + 持久化。未知主机会返回 HostKeyUnknown，等待 UI 确认后写入。
+    /// 首次接受 + 持久化未知主机会返回 HostKeyUnknown,等待 UI 确认后写入
     AcceptOnFirstUse { known_hosts_path: PathBuf },
 }
 
@@ -34,7 +34,7 @@ impl HostKeyPolicy {
             known_hosts_path: data_root.join("secrets").join("known_hosts"),
         }
     }
-    /// TOFU 模式的用户级 known_hosts(<data_root>/secrets/known_hosts)。
+    /// TOFU 模式的用户级 known_hosts(<data_root>/secrets/known_hosts)
     pub fn accept_on_first_use_in(data_root: &std::path::Path) -> Self {
         Self::AcceptOnFirstUse {
             known_hosts_path: data_root.join("secrets").join("known_hosts"),
@@ -42,7 +42,7 @@ impl HostKeyPolicy {
     }
 }
 
-/// known_hosts 查询结果。未知与不匹配必须拆开:未知可走 TOFU 确认,不匹配应阻断。
+/// known_hosts 查询结果未知与不匹配必须拆开:未知可走 TOFU 确认,不匹配应阻断
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostKeyCheck {
     Match,
@@ -50,11 +50,11 @@ pub enum HostKeyCheck {
     Mismatch,
 }
 
-/// 解析 OpenSSH 风格 known_hosts 文件。
+/// 解析 OpenSSH 风格 known_hosts 文件
 ///
 /// 简化版只支持精确 host:port 匹配,不支持 hostname hash(|1|...|...)
-/// 与 wildcard。生产场景 known_hosts 由 ncd-update 派生写入,不复用 OpenSSH 的
-/// 历史文件,故无需兼容旧风格。
+/// 与 wildcard生产场景 known_hosts 由 ncd-update 派生写入,不复用 OpenSSH 的
+/// 历史文件,故无需兼容旧风格
 pub struct KnownHostsStore {
     path: PathBuf,
 }
@@ -64,8 +64,8 @@ impl KnownHostsStore {
         Self { path: path.into() }
     }
 
-    /// 检查 host:port 是否有匹配条目,并区分未知主机与同主机 key 不一致。
-    /// 文件不存在视作未知主机。
+    /// 检查 host:port 是否有匹配条目,并区分未知主机与同主机 key 不一致
+    /// 文件不存在视作未知主机
     pub async fn check(
         &self,
         host: &str,
@@ -111,7 +111,7 @@ impl KnownHostsStore {
         }
     }
 
-    /// 兼容旧调用:只有完全匹配才返回 true。
+    /// 兼容旧调用:只有完全匹配才返回 true
     pub async fn matches(
         &self,
         host: &str,
@@ -125,7 +125,7 @@ impl KnownHostsStore {
         ))
     }
 
-    /// 把新条目追加到 known_hosts(AcceptOnFirstUse 用,实装时调用)。
+    /// 把新条目追加到 known_hosts(AcceptOnFirstUse 用,实装时调用)
     pub async fn append(
         &self,
         host: &str,

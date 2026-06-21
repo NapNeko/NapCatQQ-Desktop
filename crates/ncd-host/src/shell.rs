@@ -1,4 +1,4 @@
-//! HostShell:shell escape 与命令拼接抽象。
+//! HostShell:shell escape 与命令拼接抽象
 //!
 //! 设计要点:
 //! - 本地 Host 把 [HostCommand](crate::HostCommand) 直接传给 tokio::process::Command,
@@ -9,11 +9,11 @@
 //! - 各 shell 的 escape 规则不同,本 trait 抽象单一接口
 //!
 //! HostShell::escape 输出必须是单个 shell token,调用方拼接
-//! program + " " + args.join(" ") 时直接安全。
+//! program + " " + args.join(" ") 时直接安全
 
 use crate::command::HostCommand;
 
-/// Shell 种类,用于 PackageManager / Host 决策时分发。
+/// Shell 种类,用于 PackageManager / Host 决策时分发
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShellKind {
     Bash,
@@ -21,20 +21,20 @@ pub enum ShellKind {
     Cmd,
 }
 
-/// HostShell:shell 能力抽象。
+/// HostShell:shell 能力抽象
 pub trait HostShell: Send + Sync {
     fn kind(&self) -> ShellKind;
 
-    /// 把单个参数 escape 成安全的 shell token。
+    /// 把单个参数 escape 成安全的 shell token
     /// - Bash:用单引号包裹,内部 ' 替换成 '\''
     /// - PowerShell:用单引号包裹,内部 ' 替换成 ''
     /// - Cmd:用 " 包裹,内部 " 替换成 "",部分元字符 ^ 转义
     fn escape(&self, arg: &str) -> String;
 
-    /// 行分隔符。
+    /// 行分隔符
     fn line_separator(&self) -> &'static str;
 
-    /// 把 [HostCommand] 拼成完整的 shell 命令字符串(供 SSH 通道直接执行)。
+    /// 把 [HostCommand] 拼成完整的 shell 命令字符串(供 SSH 通道直接执行)
     fn build_command_line(&self, cmd: &HostCommand) -> String {
         let mut parts = Vec::with_capacity(cmd.args.len() + 1);
 

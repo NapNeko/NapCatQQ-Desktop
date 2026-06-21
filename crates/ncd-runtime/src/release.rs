@@ -1,20 +1,20 @@
-//! GitHub releases API 拉取 + 本地缓存。
+//! GitHub releases API 拉取 + 本地缓存
 //!
-//! 缓存策略：
-//! - 缓存文件：<data_root>/cache/release-snapshot.json
-//! - TTL：1 小时；快照内 fetched_at + 3600 还在 future 就直接返回缓存
-//! - 拉取失败：返回上次缓存（带老 fetched_at）；都没有就返回 Default
-//! - 永远不向 caller 抛错（fetch_release_snapshot 返回 ReleaseSnapshot，
-//!   不是 Result）
+//! 缓存策略:
+//! - 缓存文件:<data_root>/cache/release-snapshot.json
+//! - TTL:1 小时;快照内 fetched_at + 3600 还在 future 就直接返回缓存
+//! - 拉取失败:返回上次缓存(带老 fetched_at);都没有就返回 Default
+//! - 永远不向 caller 抛错(fetch_release_snapshot 返回 ReleaseSnapshot,
+//!   不是 Result)
 //!
-//! 本模块只做 IO + JSON 解析，不参与 UI 派生（"是否需要更新"由前端
-//! 比对本地版本和远端版本派生）。
+//! 本模块只做 IO + JSON 解析,不参与 UI 派生("是否需要更新"由前端
+//! 比对本地版本和远端版本派生)
 //!
-//! 拉取源（迁移自 legacy Python versioning/service.py）：
-//! 1. 优先走自建 HMAC 签名中转代理（国内可达、自带 PAT 限速保护）；
-//!    中转返回 403 时读响应头 X-Server-Time 校正本地时钟，重试一次
-//! 2. 中转失败 / 未配置 → fallback 直连 GitHub 官方 API（可带用户 PAT）
-//! 3. 任何 IO / 网络错误一律降级到 None 字段或老缓存，不向 caller 抛错
+//! 拉取源(迁移自 legacy Python versioning/service.py):
+//! 1. 优先走自建 HMAC 签名中转代理(国内可达,自带 PAT 限速保护);
+//!    中转返回 403 时读响应头 X-Server-Time 校正本地时钟,重试一次
+//! 2. 中转失败 / 未配置 → fallback 直连 GitHub 官方 API(可带用户 PAT)
+//! 3. 任何 IO / 网络错误一律降级到 None 字段或老缓存,不向 caller 抛错
 
 use std::path::Path;
 use std::time::Duration;
@@ -30,34 +30,34 @@ use tracing::{info, warn};
 const CACHE_TTL_SECS: u64 = 3600;
 const CACHE_FILE_NAME: &str = "release-snapshot.json";
 const CACHE_DIR_NAME: &str = "cache";
-/// 单次 HTTP 请求超时。中转代理国内通常 <2s，GitHub 直连兜底需要更宽裕的余量
-/// （DNS + TLS + 收完整 JSON）。legacy Python 各调用点为 5/10/15/20s，取中位偏上。
+/// 单次 HTTP 请求超时中转代理国内通常 <2s,GitHub 直连兜底需要更宽裕的余量
+/// (DNS + TLS + 收完整 JSON)legacy Python 各调用点为 5/10/15/20s,取中位偏上
 const HTTP_TIMEOUT_SECS: u64 = 15;
 
 const NAPCAT_RELEASES_URL: &str =
     "https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest";
-// SnowLuma 上游 owner/repo（用户确认）。仓库尚未正式 release 时返回 404 走 None
-// 回落，不影响整体 snapshot 返回。
+// SnowLuma 上游 owner/repo(用户确认)仓库尚未正式 release 时返回 404 走 None
+// 回落,不影响整体 snapshot 返回
 const SNOWLUMA_RELEASES_URL: &str =
     "https://api.github.com/repos/SnowLuma/SnowLuma/releases/latest";
 const DESKTOP_RELEASES_URL: &str =
     "https://api.github.com/repos/NapNeko/NapCatQQ-Desktop/releases/latest";
 
-/// 拉取一次远端 releases 快照。
+/// 拉取一次远端 releases 快照
 ///
-/// token：可选 GitHub PAT。非 None 时给直连 GitHub 的 fallback 请求加
-/// Authorization: Bearer <token>，把匿名速率限制（60 次/小时/IP）提升到
-/// 认证额度（5000 次/小时）。token 不参与缓存 key——缓存只按 TTL，认证与否
-/// 拿到的 release 数据一致。中转代理请求不带 PAT（中转用自己的 HMAC 签名）。
+/// token:可选 GitHub PAT非 None 时给直连 GitHub 的 fallback 请求加
+/// Authorization: Bearer <token>,把匿名速率限制(60 次/小时/IP)提升到
+/// 认证额度(5000 次/小时)token 不参与缓存 key——缓存只按 TTL,认证与否
+/// 拿到的 release 数据一致中转代理请求不带 PAT(中转用自己的 HMAC 签名)
 ///
-/// 流程：
-/// 1. 尝试读 <data_root>/cache/release-snapshot.json；如果缓存还在 TTL 内
-///    直接返回；
-/// 2. 并发拉三个仓库的 latest release（每个先中转后 fallback GitHub）；
-/// 3. 写缓存（失败仅 warn，不阻断返回）；
-/// 4. 返回新快照。
+/// 流程:
+/// 1. 尝试读 <data_root>/cache/release-snapshot.json;如果缓存还在 TTL 内
+///    直接返回;
+/// 2. 并发拉三个仓库的 latest release(每个先中转后 fallback GitHub);
+/// 3. 写缓存(失败仅 warn,不阻断返回);
+/// 4. 返回新快照
 ///
-/// 任何 IO / 网络错误一律降级到 None 字段或老缓存，不向 caller 抛错。
+/// 任何 IO / 网络错误一律降级到 None 字段或老缓存,不向 caller 抛错
 pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> ReleaseSnapshot {
     if let Some(cached) = read_cache(data_root) {
         if !is_stale(&cached) {
@@ -74,10 +74,10 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
     }
 
     let client = shared_client();
-    // ProxySigner 单例：offset 持久化到 data_root/runtime/config（与 LocalConfigStore 一致）。
+    // ProxySigner 单例:offset 持久化到 data_root/runtime/config(与 LocalConfigStore 一致)
     let config_dir = data_root.join("runtime").join("config");
-    // 触发单例初始化（首次拿取时从磁盘加载 offset）。即使中转未配置也初始化，
-    // 保持与 Python ProxySigner.instance() 一致的「always init + 日志诊断」语义。
+    // 触发单例初始化(首次拿取时从磁盘加载 offset)即使中转未配置也初始化,
+    // 保持与 Python ProxySigner.instance() 一致的「always init + 日志诊断」语义
     let _ = proxy_signer(Some(config_dir));
 
     let proxy_configured = is_proxy_configured();
@@ -129,7 +129,7 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
     snapshot
 }
 
-/// 判断快照是否过 TTL：fetched_at 缺失（从未成功拉过）也视为 stale。
+/// 判断快照是否过 TTL:fetched_at 缺失(从未成功拉过)也视为 stale
 pub(crate) fn is_stale(snap: &ReleaseSnapshot) -> bool {
     let Some(at) = snap.fetched_at else {
         return true;
@@ -144,16 +144,16 @@ fn current_unix_ts() -> u64 {
         .unwrap_or(0)
 }
 
-/// GitHub releases API 单条记录子集。
+/// GitHub releases API 单条记录子集
 ///
-/// 仅取本模块需要的字段，其它字段（author / draft 等）显式忽略。assets
+/// 仅取本模块需要的字段,其它字段(author / draft 等)显式忽略assets
 /// 字段是 release 完整性校验的关键来源——每个 asset 的 digest 形如
-/// "sha256:<64-hex>"，安装层用它在下载完后做 SHA256 校验，防止国内代理
-/// CDN 投毒（"长度对、Content-Range 对、流不截断、字节是垃圾" 这一类）。
+/// "sha256:<64-hex>",安装层用它在下载完后做 SHA256 校验,防止国内代理
+/// CDN 投毒("长度对,Content-Range 对,流不截断,字节是垃圾" 这一类)
 #[derive(Debug, Clone, Deserialize)]
 struct GhReleaseDto {
     tag_name: String,
-    /// ISO8601 字符串，例：2023-11-14T12:34:56Z。GitHub 始终给 UTC + Z。
+    /// ISO8601 字符串,例:2023-11-14T12:34:56ZGitHub 始终给 UTC + Z
     published_at: Option<String>,
     html_url: Option<String>,
     body: Option<String>,
@@ -161,8 +161,8 @@ struct GhReleaseDto {
     assets: Vec<GhAssetDto>,
 }
 
-/// release 单 asset。digest 是 GitHub 2024-Q4 上线的字段，老 release 没有；
-/// 缺失或前缀非 sha256: 时安装层退化到"无 hash"分支。
+/// release 单 assetdigest 是 GitHub 2024-Q4 上线的字段,老 release 没有;
+/// 缺失或前缀非 sha256: 时安装层退化到"无 hash"分支
 #[derive(Debug, Clone, Deserialize)]
 struct GhAssetDto {
     name: String,
@@ -176,7 +176,7 @@ async fn fetch_one(
     github_url: &str,
     token: Option<&str>,
 ) -> Option<ReleaseInfo> {
-    // 1. 中转代理优先（已配置时）
+    // 1. 中转代理优先(已配置时)
     if is_proxy_configured() {
         if let Some(proxy_url) = proxy_release_url(alias) {
             info!(
@@ -231,7 +231,7 @@ async fn fetch_one(
             Some(info)
         }
         Err(err) => {
-            // GitHub 匿名限流返 403（不是 429）；这里只记日志，不再重试（限流时重试无意义）。
+            // GitHub 匿名限流返 403(不是 429);这里只记日志,不再重试(限流时重试无意义)
             let hint = match &err {
                 NetworkError::Status(403) => "（可能是 GitHub 匿名限流，建议配置 PAT）",
                 NetworkError::Status(404) => "（仓库尚未发布 release 或 owner/repo 错误）",
@@ -253,17 +253,17 @@ async fn fetch_one(
     }
 }
 
-/// 中转拉取结果。
+/// 中转拉取结果
 enum ProxyOutcome {
-    /// 成功。
+    /// 成功
     Ok(ReleaseInfo),
-    /// 失败（含校时重试后仍失败）。错误已含具体类型。
+    /// 失败(含校时重试后仍失败)错误已含具体类型
     Failed(NetworkError),
 }
 
-/// 中转代理拉取：带 HMAC 签名，403 时读响应头校时后重试一次。
+/// 中转代理拉取:带 HMAC 签名,403 时读响应头校时后重试一次
 ///
-/// 返回的 JSON 与 GitHub releases/latest 同结构（中转透传），复用 GhReleaseDto 解析。
+/// 返回的 JSON 与 GitHub releases/latest 同结构(中转透传),复用 GhReleaseDto 解析
 async fn try_proxy(
     client: &reqwest::Client,
     proxy_url: &str,
@@ -272,11 +272,11 @@ async fn try_proxy(
     let signer = proxy_signer(None);
     let path = alias.path();
 
-    // 首次尝试。
+    // 首次尝试
     match proxy_fetch_attempt(client, proxy_url, signer.sign_headers(&path)).await {
         Ok(info) => ProxyOutcome::Ok(info),
         Err((err, resp_headers)) => {
-            // 403：读 X-Server-Time 校正时钟后重试一次（对齐 legacy Python）。
+            // 403:读 X-Server-Time 校正时钟后重试一次(对齐 legacy Python)
             if matches!(err, NetworkError::Status(403)) {
                 info!(
                     target: "ncd_runtime::release",
@@ -322,7 +322,7 @@ async fn try_proxy(
     }
 }
 
-/// 中转单次请求。返回 (结果, 可选的响应头)——失败时把响应头带回给上层做校时。
+/// 中转单次请求返回 (结果, 可选的响应头)——失败时把响应头带回给上层做校时
 async fn proxy_fetch_attempt(
     client: &reqwest::Client,
     url: &str,
@@ -336,7 +336,7 @@ async fn proxy_fetch_attempt(
     );
     let mut req = client.get(url).timeout(Duration::from_secs(HTTP_TIMEOUT_SECS));
     for (k, v) in headers {
-        // sign_headers 只产出 ASCII 安全的 header 名/值（X-Timestamp / X-Signature / User-Agent）。
+        // sign_headers 只产出 ASCII 安全的 header 名/值(X-Timestamp / X-Signature / User-Agent)
         let name = reqwest::header::HeaderName::from_bytes(k.as_bytes())
             .map_err(|e| (NetworkError::InvalidArgument(e.to_string()), None))?;
         let value = reqwest::header::HeaderValue::from_str(&v)
@@ -354,7 +354,7 @@ async fn proxy_fetch_attempt(
     tracing::debug!(target: "ncd_runtime::release", url, status, "proxy_fetch_attempt: 收到响应");
 
     if !response.status().is_success() {
-        // 失败响应也带 headers 回去（可能含 X-Server-Time 供校时）。
+        // 失败响应也带 headers 回去(可能含 X-Server-Time 供校时)
         let headers = response.headers().clone();
         return Err((NetworkError::Status(status), Some(headers)));
     }
@@ -367,7 +367,7 @@ async fn proxy_fetch_attempt(
     Ok(dto_to_release_info(dto))
 }
 
-/// GitHub 官方 API 直连（可带 PAT）。带有限重试（瞬时网络错误）。
+/// GitHub 官方 API 直连(可带 PAT)带有限重试(瞬时网络错误)
 async fn try_github(
     client: &reqwest::Client,
     url: &str,
@@ -419,7 +419,7 @@ async fn github_fetch_attempt(
     Ok(dto_to_release_info(dto))
 }
 
-/// 把 GitHub releases DTO 转成 domain ReleaseInfo。
+/// 把 GitHub releases DTO 转成 domain ReleaseInfo
 fn dto_to_release_info(dto: GhReleaseDto) -> ReleaseInfo {
     ReleaseInfo {
         version: strip_v_prefix(&dto.tag_name).to_string(),
@@ -449,10 +449,10 @@ fn dto_to_release_info(dto: GhReleaseDto) -> ReleaseInfo {
     }
 }
 
-/// 从 GitHub digest 字段（"sha256:<64-hex>"）抽出 64-hex SHA256。
+/// 从 GitHub digest 字段("sha256:<64-hex>")抽出 64-hex SHA256
 ///
-/// 缺失 / 非 sha256: 前缀 / hex 不合法时返回 None。GitHub 当前只用 sha256
-/// 算法，未来可能扩展（sha512 等），届时按前缀分派。
+/// 缺失 / 非 sha256: 前缀 / hex 不合法时返回 NoneGitHub 当前只用 sha256
+/// 算法,未来可能扩展(sha512 等),届时按前缀分派
 pub(crate) fn parse_sha256_digest(digest: Option<&str>) -> Option<String> {
     let raw = digest?.trim();
     let hex = raw.strip_prefix("sha256:")?;
@@ -465,19 +465,19 @@ pub(crate) fn parse_sha256_digest(digest: Option<&str>) -> Option<String> {
     Some(hex.to_ascii_lowercase())
 }
 
-/// v4.18.1 → 4.18.1；其它形式原样返回。
+/// v4.18.1 → 4.18.1;其它形式原样返回
 fn strip_v_prefix(tag: &str) -> &str {
     tag.strip_prefix('v').unwrap_or(tag)
 }
 
-/// 解析 GitHub 风格的 ISO8601 UTC 时间戳到 Unix epoch 秒。
+/// 解析 GitHub 风格的 ISO8601 UTC 时间戳到 Unix epoch 秒
 ///
-/// 仅支持形如 YYYY-MM-DDTHH:MM:SSZ 的格式（GitHub API 实测形态）。
-/// 其它分隔符 / 时区写法（例如带毫秒、带 +08:00）一律返回 None；
-/// caller 把 None 当作"时间戳缺失"处理，不影响其它字段。
+/// 仅支持形如 YYYY-MM-DDTHH:MM:SSZ 的格式(GitHub API 实测形态)
+/// 其它分隔符 / 时区写法(例如带毫秒,带 +08:00)一律返回 None;
+/// caller 把 None 当作"时间戳缺失"处理,不影响其它字段
 ///
-/// 不依赖 chrono 是为了避免给 ncd-runtime 引入新依赖；本函数语义足够
-/// 覆盖 GitHub API 的真实输出。
+/// 不依赖 chrono 是为了避免给 ncd-runtime 引入新依赖;本函数语义足够
+/// 覆盖 GitHub API 的真实输出
 pub(crate) fn parse_iso8601_to_unix(s: &str) -> Option<u64> {
     // YYYY-MM-DDTHH:MM:SSZ → 长度 20
     if s.len() != 20 || !s.ends_with('Z') {
@@ -500,7 +500,7 @@ pub(crate) fn parse_iso8601_to_unix(s: &str) -> Option<u64> {
         || !(1..=31).contains(&day)
         || hour > 23
         || minute > 59
-        || second > 60  // GitHub 不会给闰秒，但宽松处理
+        || second > 60  // GitHub 不会给闰秒,但宽松处理
     {
         return None;
     }
@@ -511,8 +511,8 @@ pub(crate) fn parse_iso8601_to_unix(s: &str) -> Option<u64> {
     })
 }
 
-/// Howard Hinnant days_from_civil 算法：1970-01-01 到 (year-month-day) 的
-/// 天数。仅支持 year ≥ 1970（GitHub 时间戳不会早于此），早于则返回 None。
+/// Howard Hinnant days_from_civil 算法:1970-01-01 到 (year-month-day) 的
+/// 天数仅支持 year ≥ 1970(GitHub 时间戳不会早于此),早于则返回 None
 fn days_from_civil(year: i32, month: u32, day: u32) -> Option<u64> {
     if year < 1970 {
         return None;
@@ -540,14 +540,14 @@ fn read_cache(data_root: &Path) -> Option<ReleaseSnapshot> {
     serde_json::from_str(&content).ok()
 }
 
-/// 仅读磁盘缓存的快照，不发起网络请求。
+/// 仅读磁盘缓存的快照,不发起网络请求
 ///
-/// 给 Tauri command 同步路径使用：run_component_action 在 build component
-/// 阶段必须立刻拿到 sha256 才能注入 with_sha256，等不起一次完整 GitHub
-/// 拉取（且每次安装都拉 = 速率限制）。缓存由 fetch_release_snapshot 在
-/// 启动 / 前端轮询时维护，本函数只消费。缓存缺失返 None；上层应当当作
-/// "无 hash 数据"分支，跳过校验或弹二次确认（对齐 legacy
-/// run_napcat_archive_hash_check 行为）。
+/// 给 Tauri command 同步路径使用:run_component_action 在 build component
+/// 阶段必须立刻拿到 sha256 才能注入 with_sha256,等不起一次完整 GitHub
+/// 拉取(且每次安装都拉 = 速率限制)缓存由 fetch_release_snapshot 在
+/// 启动 / 前端轮询时维护,本函数只消费缓存缺失返 None;上层应当当作
+/// "无 hash 数据"分支,跳过校验或弹二次确认(对齐 legacy
+/// run_napcat_archive_hash_check 行为)
 pub fn read_cached_release_snapshot(data_root: &Path) -> Option<ReleaseSnapshot> {
     read_cache(data_root)
 }
@@ -586,8 +586,8 @@ mod tests {
         }
     }
 
-    /// fetched_at 为 None（从未拉过）必须视为 stale：保证首次启动一定走真
-    /// 网络拉取路径，不会被假快照锁住。
+    /// fetched_at 为 None(从未拉过)必须视为 stale:保证首次启动一定走真
+    /// 网络拉取路径,不会被假快照锁住
     #[test]
     fn is_stale_returns_true_for_snapshot_without_fetched_at() {
         let mut snap = fresh_snapshot();
@@ -598,7 +598,7 @@ mod tests {
     #[test]
     fn is_stale_returns_true_for_old_snapshot() {
         let mut snap = fresh_snapshot();
-        // 把 fetched_at 调到 2 小时前，超过 TTL。
+        // 把 fetched_at 调到 2 小时前,超过 TTL
         snap.fetched_at = Some(current_unix_ts().saturating_sub(CACHE_TTL_SECS + 100));
         assert!(is_stale(&snap));
     }
@@ -609,7 +609,7 @@ mod tests {
         assert!(!is_stale(&snap));
     }
 
-    /// 缓存文件不存在时 read_cache 必须回 None：保证首次启动会触发真拉取。
+    /// 缓存文件不存在时 read_cache 必须回 None:保证首次启动会触发真拉取
     #[test]
     fn read_cache_returns_none_when_file_missing() {
         let temp = tempdir().unwrap();
@@ -631,14 +631,14 @@ mod tests {
     #[test]
     fn write_cache_creates_parent_directory() {
         let temp = tempdir().unwrap();
-        // cache dir 不存在；write_cache 应该自己 mkdir -p。
+        // cache dir 不存在;write_cache 应该自己 mkdir -p
         let snap = ReleaseSnapshot::default();
         write_cache(temp.path(), &snap).expect("write_cache ok");
         assert!(cache_path(temp.path()).exists());
     }
 
-    /// stale 缓存能被反序列化回来；fetch_release_snapshot 上层会决定是否
-    /// 仍然把它返回给前端（拉取失败时是的）。
+    /// stale 缓存能被反序列化回来;fetch_release_snapshot 上层会决定是否
+    /// 仍然把它返回给前端(拉取失败时是的)
     #[test]
     fn read_cache_returns_stale_snapshot_intact() {
         let temp = tempdir().unwrap();
@@ -696,7 +696,7 @@ mod tests {
         assert_eq!(parse_sha256_digest(Some("")), None);
     }
 
-    /// GitHub 实测形态：2023-11-14T12:34:56Z。Unix epoch 验证基准日期。
+    /// GitHub 实测形态:2023-11-14T12:34:56ZUnix epoch 验证基准日期
     #[test]
     fn parse_iso8601_unix_epoch_is_zero() {
         assert_eq!(parse_iso8601_to_unix("1970-01-01T00:00:00Z"), Some(0));
@@ -713,7 +713,7 @@ mod tests {
 
     #[test]
     fn parse_iso8601_year_2000_leap_day() {
-        // 2000 是闰年（被 400 整除）；2 月 29 号合法。
+        // 2000 是闰年(被 400 整除);2 月 29 号合法
         // 2000-02-29T00:00:00Z = 951782400
         assert_eq!(
             parse_iso8601_to_unix("2000-02-29T00:00:00Z"),
@@ -735,15 +735,15 @@ mod tests {
         assert_eq!(parse_iso8601_to_unix("1969-12-31T23:59:59Z"), None);
     }
 
-    /// 实际网络拉取测试：默认 ignore，避免 CI 依赖外网。
-    /// 本地手动跑：cargo test -p ncd-runtime release::tests::live -- --ignored。
+    /// 实际网络拉取测试:默认 ignore,避免 CI 依赖外网
+    /// 本地手动跑:cargo test -p ncd-runtime release::tests::live -- --ignored
     #[ignore]
     #[tokio::test]
     async fn live_fetch_release_snapshot_smoke() {
         let temp = tempdir().unwrap();
         let snap = fetch_release_snapshot(temp.path(), None).await;
-        // 能拉到任意一个仓库的 release 即视为通；网络抖动时全 None 也算
-        // 通（只要不 panic / 不抛错）。
+        // 能拉到任意一个仓库的 release 即视为通;网络抖动时全 None 也算
+        // 通(只要不 panic / 不抛错)
         assert!(snap.fetched_at.is_some());
     }
 }

@@ -1,6 +1,6 @@
-//! QQ 系统依赖检测器。
+//! QQ 系统依赖检测器
 //!
-//! 混合策略：QQ 已装时用 ldd 检测动态库，未装时用包管理器预检。
+//! 混合策略:QQ 已装时用 ldd 检测动态库,未装时用包管理器预检
 
 use ncd_domain::{
     DetectionMethod, DistroFamily, DistroInfo, PackageStatus, QqDependencyReport,
@@ -10,7 +10,7 @@ use ncd_host::{Host, HostCommand, HostPath};
 use crate::error::ActionError;
 use crate::qq_deps::QQDependencyManifest;
 
-/// QQ 依赖检测器。
+/// QQ 依赖检测器
 pub struct QqDependencyDetector {
     manifest: QQDependencyManifest,
 }
@@ -20,11 +20,11 @@ impl QqDependencyDetector {
         Self { manifest }
     }
 
-    /// 检测 QQ 依赖状态。
+    /// 检测 QQ 依赖状态
     ///
-    /// 策略：
-    /// - 若 qq_binary 为 Some：用 ldd 检测动态库加载（最准确）
-    /// - 若 qq_binary 为 None：用包管理器查询预定义清单
+    /// 策略:
+    /// - 若 qq_binary 为 Some:用 ldd 检测动态库加载(最准确)
+    /// - 若 qq_binary 为 None:用包管理器查询预定义清单
     pub async fn detect(
         &self,
         host: &dyn Host,
@@ -48,7 +48,7 @@ impl QqDependencyDetector {
         })
     }
 
-    /// 探测发行版信息（读 /etc/os-release）。
+    /// 探测发行版信息(读 /etc/os-release)
     async fn detect_distro(&self, host: &dyn Host) -> Result<DistroInfo, ActionError> {
         let os_release = HostPath::from_posix("/etc/os-release");
         let content = host
@@ -82,7 +82,7 @@ impl QqDependencyDetector {
         })
     }
 
-    /// 方案 A：ldd 检测（已装 QQ 时最准确）。
+    /// 方案 A:ldd 检测(已装 QQ 时最准确)
     async fn detect_via_ldd(
         &self,
         host: &dyn Host,
@@ -101,7 +101,7 @@ impl QqDependencyDetector {
             )));
         }
 
-        // 解析 ldd 输出，找 "not found" 的库
+        // 解析 ldd 输出,找 "not found" 的库
         let missing_libs: Vec<String> = output
             .stdout
             .lines()
@@ -118,13 +118,13 @@ impl QqDependencyDetector {
             });
         }
 
-        // ldd 只报缺失库，其余视为已满足（不逐一枚举已装项）
+        // ldd 只报缺失库,其余视为已满足(不逐一枚举已装项)
         let satisfied = vec![];
 
         Ok((satisfied, missing))
     }
 
-    /// 方案 B：包管理器批量查询（未装 QQ 时预检）。
+    /// 方案 B:包管理器批量查询(未装 QQ 时预检)
     async fn detect_via_package_manager(
         &self,
         host: &dyn Host,
@@ -160,7 +160,7 @@ impl QqDependencyDetector {
         Ok((satisfied, missing))
     }
 
-    /// 检查 Debian/Ubuntu 包是否已安装。
+    /// 检查 Debian/Ubuntu 包是否已安装
     async fn check_deb_package(&self, host: &dyn Host, package: &str) -> bool {
         let cmd = HostCommand::new("dpkg-query")
             .arg("-W")
@@ -174,7 +174,7 @@ impl QqDependencyDetector {
         }
     }
 
-    /// 检查 RHEL/CentOS 包是否已安装。
+    /// 检查 RHEL/CentOS 包是否已安装
     async fn check_rpm_package(&self, host: &dyn Host, package: &str) -> bool {
         let cmd = HostCommand::new("rpm").arg("-q").arg(package);
 
@@ -185,12 +185,12 @@ impl QqDependencyDetector {
         }
     }
 
-    /// 根据发行版解析实际要查询 / 安装的包名清单。
+    /// 根据发行版解析实际要查询 / 安装的包名清单
     ///
-    /// Debian 系：对标记 has_t64_variant 的包逐个 apt-cache show <pkg>t64 探测，
-    /// 存在 t64 变体就用 t64 名，否则回退原名。这跟官方 install.sh 一致，比按
-    /// 版本号一刀切加后缀稳健——某个小众包若在当前发行版没 t64 变体，强制加后缀
-    /// 会让 dpkg/apt 报 "unable to locate package"。
+    /// Debian 系:对标记 has_t64_variant 的包逐个 apt-cache show <pkg>t64 探测,
+    /// 存在 t64 变体就用 t64 名,否则回退原名这跟官方 install.sh 一致,比按
+    /// 版本号一刀切加后缀稳健——某个小众包若在当前发行版没 t64 变体,强制加后缀
+    /// 会让 dpkg/apt 报 "unable to locate package"
     async fn resolve_package_names(
         &self,
         host: &dyn Host,
@@ -220,7 +220,7 @@ impl QqDependencyDetector {
         }
     }
 
-    /// apt-cache show <pkg>t64 退出码 0 表示该 t64 变体在仓库里存在。
+    /// apt-cache show <pkg>t64 退出码 0 表示该 t64 变体在仓库里存在
     async fn t64_variant_available(&self, host: &dyn Host, debian_package: &str) -> bool {
         let t64_name = format!("{debian_package}t64");
         let cmd = HostCommand::new("apt-cache").arg("show").arg(&t64_name);
@@ -230,7 +230,7 @@ impl QqDependencyDetector {
         )
     }
 
-    /// 构建安装命令（用于用户复制粘贴）。
+    /// 构建安装命令(用于用户复制粘贴)
     fn build_install_command(&self, distro: &DistroInfo, missing: &[PackageStatus]) -> Option<String> {
         if missing.is_empty() {
             return None;

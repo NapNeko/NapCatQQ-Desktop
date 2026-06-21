@@ -1,8 +1,8 @@
-//! 单 URL 下载：HTTP Range 续传 + chunk-level idle timeout + 进度节流。
+//! 单 URL 下载:HTTP Range 续传 + chunk-level idle timeout + 进度节流
 //!
-//! 与 race / chunked 解耦，只做"给定 URL，把字节灌到 .part，写完 rename 到 dest"。
-//! idle timeout 超时报 IdleTimeout，caller（race）据此切镜像。dest 已有 .part 时
-//! 取其大小作 Range offset；200 表示不支持续传则 truncate 重下，206 直接 append。
+//! 与 race / chunked 解耦,只做"给定 URL,把字节灌到 .part,写完 rename 到 dest"
+//! idle timeout 超时报 IdleTimeout,caller(race)据此切镜像dest 已有 .part 时
+//! 取其大小作 Range offset;200 表示不支持续传则 truncate 重下,206 直接 append
 
 use std::path::Path;
 use std::sync::Arc;
@@ -47,8 +47,8 @@ impl Default for DownloadConfig {
     }
 }
 
-/// 单 URL 下载主入口。.part 已存在则发 Range 续传；206 append / 200 truncate 重下；
-/// 写完 rename .part → dest。
+/// 单 URL 下载主入口.part 已存在则发 Range 续传;206 append / 200 truncate 重下;
+/// 写完 rename .part → dest
 pub async fn download_with_resume(
     url: &str,
     dest: &Path,
@@ -183,17 +183,17 @@ pub async fn download_with_client(
     )
     .await;
 
-    // 流自然结束 ≠ 下完。服务端 / 中间代理可能在没发完 Content-Length 字节
-    // 的情况下 EOF（连接被掐断、反代上游超时、CDN 缓存只缓了一部分）。
-    // 不校验就 finalize，会留下残缺的 .part 改名成 dest，下游 zip / tar
-    // 解压立刻 "Could not find EOCD"。这里强制对齐 total，差一个字节也
-    // 算失败，把 .part 留着让上层切 mirror 时清掉重下（mirror 间内容可能
-    // 不一致，续传 offset 是危险操作，所以 race 切 mirror 时也会主动
-    // truncate）。
+    // 流自然结束 ≠ 下完服务端 / 中间代理可能在没发完 Content-Length 字节
+    // 的情况下 EOF(连接被掐断,反代上游超时,CDN 缓存只缓了一部分)
+    // 不校验就 finalize,会留下残缺的 .part 改名成 dest,下游 zip / tar
+    // 解压立刻 "Could not find EOCD"这里强制对齐 total,差一个字节也
+    // 算失败,把 .part 留着让上层切 mirror 时清掉重下(mirror 间内容可能
+    // 不一致,续传 offset 是危险操作,所以 race 切 mirror 时也会主动
+    // truncate)
     if let Some(t) = total {
         if downloaded < t {
-            // .part 仍保留在磁盘上以便观察/调试；finalize() 没被调用，
-            // 不会污染 dest。
+            // .part 仍保留在磁盘上以便观察/调试;finalize() 没被调用,
+            // 不会污染 dest
             return Err(NetworkError::Truncated {
                 downloaded,
                 total: t,
@@ -225,8 +225,8 @@ async fn push_update(
     .await;
 }
 
-/// 共享进度状态：chunked 多片并发聚合到同一 sink。每片往 add_bytes 累加，独立
-/// 任务定时读 snapshot 推 sink，避免每片各推导致 UI 闪烁与数字回退。
+/// 共享进度状态:chunked 多片并发聚合到同一 sink每片往 add_bytes 累加,独立
+/// 任务定时读 snapshot 推 sink,避免每片各推导致 UI 闪烁与数字回退
 #[derive(Clone, Default)]
 pub struct AggregatedProgress {
     inner: Arc<Mutex<AggregatedInner>>,
@@ -263,9 +263,9 @@ impl AggregatedProgress {
     }
 }
 
-/// 固定 byte range 下载到指定文件（不走 .part 续传），chunked 切片用。
-/// dest 是切片临时路径（如 <final-dest>.chunk-0），range inclusive 双闭。
-/// aggregated 传 Some 时把每个 chunk bytes 加进聚合进度。
+/// 固定 byte range 下载到指定文件(不走 .part 续传),chunked 切片用
+/// dest 是切片临时路径(如 <final-dest>.chunk-0),range inclusive 双闭
+/// aggregated 传 Some 时把每个 chunk bytes 加进聚合进度
 pub(crate) async fn download_byte_range(
     client: &Client,
     url: &str,
@@ -297,11 +297,11 @@ pub(crate) async fn download_byte_range(
         return Err(NetworkError::Status(status.as_u16()));
     }
 
-    // 服务器声称 206，但代理 / 反代不一定真切了 byte range；有些镜像会
-    // 拿一份缓存的"前 N 字节"副本贴 206 头返回，等于 byte range mismatch。
-    // 这种情况下盲信会写出错位字节，merge 时拼出无法解析的 zip / tar，
-    // EOCD 找不到错的根因。强制比对 Content-Range，不一致直接拒掉，让
-    // chunked 上层重试下个 mirror。
+    // 服务器声称 206,但代理 / 反代不一定真切了 byte range;有些镜像会
+    // 拿一份缓存的"前 N 字节"副本贴 206 头返回,等于 byte range mismatch
+    // 这种情况下盲信会写出错位字节,merge 时拼出无法解析的 zip / tar,
+    // EOCD 找不到错的根因强制比对 Content-Range,不一致直接拒掉,让
+    // chunked 上层重试下个 mirror
     match parse_content_range_bounds(&resp) {
         Some((start, end)) if start == range.0 && end == range.1 => {}
         Some((start, end)) => {
@@ -369,8 +369,8 @@ pub(crate) async fn download_byte_range(
     Ok(downloaded)
 }
 
-/// 探测远端文件大小 + 是否支持 Range。用 GET + Range: bytes=0-0（HEAD 在
-/// GitHub releases / objects 上有镜像不支持）。返回 (total_bytes, accept_ranges)。
+/// 探测远端文件大小 + 是否支持 Range用 GET + Range: bytes=0-0(HEAD 在
+/// GitHub releases / objects 上有镜像不支持)返回 (total_bytes, accept_ranges)
 pub(crate) async fn probe_size_and_range(
     client: &Client,
     url: &str,
@@ -400,7 +400,7 @@ pub(crate) async fn probe_size_and_range(
         resp.content_length()
     };
 
-    // 立即丢弃 stream，释放连接
+    // 立即丢弃 stream,释放连接
     drop(resp);
     Ok((total, accept_ranges))
 }

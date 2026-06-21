@@ -1,4 +1,4 @@
-//! DeployPlan:多 Component 部署计划。
+//! DeployPlan:多 Component 部署计划
 //!
 //! 设计要点:
 //! - 顺序执行:plan 内的 step 按 push 顺序执行(调用方负责依赖排序)
@@ -15,7 +15,7 @@ use ts_rs::TS;
 
 use crate::error::DeployError;
 
-/// Step 操作类型(StepKind)。
+/// Step 操作类型(StepKind)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -30,7 +30,7 @@ pub enum StepKind {
     Uninstall,
     /// verify only(不改任何文件)
     Verify,
-    /// 仅安装系统依赖（QQ Linux 运行时库等），不装组件本体
+    /// 仅安装系统依赖(QQ Linux 运行时库等),不装组件本体
     EnsureDependencies,
 }
 
@@ -47,7 +47,7 @@ impl StepKind {
     }
 }
 
-/// 单个部署步骤。
+/// 单个部署步骤
 pub struct DeployStep {
     /// 步骤名称(用于日志 / 进度上报)
     pub name: String,
@@ -58,7 +58,7 @@ pub struct DeployStep {
     /// 失败时是否中断 plan(默认 true,某些"可选"step 可设 false 让 plan 继续)
     pub fail_fast: bool,
     /// 是否在 plan 失败回滚时跑 uninstall(默认 false:不主动卸载已 install 的 component,
-    /// 因为可能产生环境破坏)。
+    /// 因为可能产生环境破坏)
     pub rollback_on_failure: bool,
 }
 
@@ -74,18 +74,18 @@ impl std::fmt::Debug for DeployStep {
     }
 }
 
-/// 部署计划。
+/// 部署计划
 pub struct DeployPlan {
     pub steps: Vec<DeployStep>,
 }
 
 impl DeployPlan {
-    /// 创建空 plan。
+    /// 创建空 plan
     pub fn new() -> Self {
         Self { steps: Vec::new() }
     }
 
-    /// 创建一个 builder。
+    /// 创建一个 builder
     pub fn builder() -> DeployBuilder {
         DeployBuilder { steps: Vec::new() }
     }
@@ -132,38 +132,38 @@ impl std::fmt::Debug for DeployPlan {
     }
 }
 
-/// Builder:链式 API 构建 plan。
+/// Builder:链式 API 构建 plan
 pub struct DeployBuilder {
     steps: Vec<DeployStep>,
 }
 
 impl DeployBuilder {
-    /// 追加一个 ensure_installed step(component 还没装才装)。
+    /// 追加一个 ensure_installed step(component 还没装才装)
     pub fn ensure_installed(self, name: impl Into<String>, component: Arc<dyn Component>) -> Self {
         self.step(name, StepKind::EnsureInstalled, component)
     }
 
-    /// 追加一个 force_install step。
+    /// 追加一个 force_install step
     pub fn force_install(self, name: impl Into<String>, component: Arc<dyn Component>) -> Self {
         self.step(name, StepKind::ForceInstall, component)
     }
 
-    /// 追加一个 update step。
+    /// 追加一个 update step
     pub fn update(self, name: impl Into<String>, component: Arc<dyn Component>) -> Self {
         self.step(name, StepKind::Update, component)
     }
 
-    /// 追加一个 verify step。
+    /// 追加一个 verify step
     pub fn verify(self, name: impl Into<String>, component: Arc<dyn Component>) -> Self {
         self.step(name, StepKind::Verify, component)
     }
 
-    /// 追加 ensure_dependencies step（仅 QQ 等实现了该能力的组件有效）。
+    /// 追加 ensure_dependencies step(仅 QQ 等实现了该能力的组件有效)
     pub fn ensure_dependencies(self, name: impl Into<String>, component: Arc<dyn Component>) -> Self {
         self.step(name, StepKind::EnsureDependencies, component)
     }
 
-    /// 追加一个自定义 step。
+    /// 追加一个自定义 step
     pub fn step(
         mut self,
         name: impl Into<String>,
@@ -180,7 +180,7 @@ impl DeployBuilder {
         self
     }
 
-    /// 修改最后一个 step 的 fail_fast 标志。
+    /// 修改最后一个 step 的 fail_fast 标志
     pub fn last_fail_fast(mut self, fail_fast: bool) -> Self {
         if let Some(last) = self.steps.last_mut() {
             last.fail_fast = fail_fast;
@@ -188,7 +188,7 @@ impl DeployBuilder {
         self
     }
 
-    /// 修改最后一个 step 的 rollback_on_failure 标志。
+    /// 修改最后一个 step 的 rollback_on_failure 标志
     pub fn last_rollback_on_failure(mut self, rb: bool) -> Self {
         if let Some(last) = self.steps.last_mut() {
             last.rollback_on_failure = rb;
@@ -320,8 +320,8 @@ mod tests {
         assert_eq!(StepKind::EnsureDependencies.as_str(), "ensure_dependencies");
     }
 
-    /// serde 序列化必须与 as_str() 字面量保持一致：前端拿到的是
-    /// 同一份 snake_case 字符串。任何漂移会破坏 Tauri command 入参解析。
+    /// serde 序列化必须与 as_str() 字面量保持一致:前端拿到的是
+    /// 同一份 snake_case 字符串任何漂移会破坏 Tauri command 入参解析
     #[test]
     fn step_kind_serde_aligns_with_as_str() {
         for kind in [

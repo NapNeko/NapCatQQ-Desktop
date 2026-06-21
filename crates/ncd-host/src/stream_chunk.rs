@@ -1,12 +1,12 @@
-//! 流式命令输出按「逻辑行」切分。
+//! 流式命令输出按「逻辑行」切分
 //!
-//! docker pull 在非 TTY 下常用 \r 在同一物理行上刷新进度，只有 \n 切行会
-//! 长时间收不到更新。本模块在 \n 与 \r 处都产出完整片段供回调消费。
+//! docker pull 在非 TTY 下常用 \r 在同一物理行上刷新进度,只有 \n 切行会
+//! 长时间收不到更新本模块在 \n 与 \r 处都产出完整片段供回调消费
 
-/// 将一段字节追加到缓冲，对每个完整逻辑行调用 on_line。
+/// 将一段字节追加到缓冲,对每个完整逻辑行调用 on_line
 ///
-/// 规则：遇到 \n 或 \r 时，若缓冲非空则产出一条（去掉行尾 \r/\n），
-/// 然后清空缓冲。\r 单独出现时也会 flush（覆盖式进度行的常见形态）。
+/// 规则:遇到 \n 或 \r 时,若缓冲非空则产出一条(去掉行尾 \r/\n),
+/// 然后清空缓冲\r 单独出现时也会 flush(覆盖式进度行的常见形态)
 pub fn feed_stream_chunk(buf: &mut Vec<u8>, data: &[u8], mut on_line: impl FnMut(String)) {
     buf.extend_from_slice(data);
     loop {
@@ -23,14 +23,14 @@ pub fn feed_stream_chunk(buf: &mut Vec<u8>, data: &[u8], mut on_line: impl FnMut
         if !s.is_empty() {
             on_line(s);
         }
-        // 连续 \r\n：若 drain 后下一个仍是分隔符，继续循环
+        // 连续 \r\n:若 drain 后下一个仍是分隔符,继续循环
         if delim == b'\r' && buf.first() == Some(&b'\n') {
             buf.drain(..1);
         }
     }
 }
 
-/// 命令结束前 flush 缓冲里未以分隔符结尾的残行。
+/// 命令结束前 flush 缓冲里未以分隔符结尾的残行
 pub fn flush_stream_remainder(buf: &mut Vec<u8>, mut on_line: impl FnMut(String)) {
     if buf.is_empty() {
         return;

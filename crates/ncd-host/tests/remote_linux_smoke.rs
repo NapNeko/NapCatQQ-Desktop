@@ -1,4 +1,4 @@
-//! 真机 SSH 端到端 smoke test。
+//! 真机 SSH 端到端 smoke test
 //!
 //! 这些测试默认 #[ignore],需要环境变量 + 真机配合:
 //!
@@ -11,7 +11,7 @@
 //!
 //! 安全约束:
 //! - 所有测试只在 /tmp/ncd-host-test-<pid>-<rand>/ 内操作,Drop 时清理
-//! - 禁止触碰 ~/Napcat、/etc/、/var/、~/.ssh 等任何业务目录
+//! - 禁止触碰 ~/Napcat,/etc/,/var/,~/.ssh 等任何业务目录
 //! - 禁止杀任何已有进程(只测自己 spawn 出来的 sleep)
 
 use std::path::PathBuf;

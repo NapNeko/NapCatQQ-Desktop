@@ -22,16 +22,16 @@ pub trait RuntimeLaunchPlanner: Send + Sync {
 pub struct FileSystemRuntimeLaunchPlanner {
     runtime_root: PathBuf,
     snowluma_data_root: Option<PathBuf>,
-    /// SnowLuma daemon 安装根（含 node.exe 与 entry 脚本）。
-    /// None 时回落到 <runtime_root>/snowluma。注意：这与 NapCat 的
-    /// runtime_root 不同——NapCat 直接装在 runtime 根，SnowLuma 装在子目录。
+    /// SnowLuma daemon 安装根(含 node.exe 与 entry 脚本)
+    /// None 时回落到 <runtime_root>/snowluma注意:这与 NapCat 的
+    /// runtime_root 不同——NapCat 直接装在 runtime 根,SnowLuma 装在子目录
     snowluma_runtime_root: Option<PathBuf>,
 }
 
 impl FileSystemRuntimeLaunchPlanner {
-    /// 仅 NapCat 路径所需的最小构造（保留向后兼容）。SnowLuma 路径未注入
-    /// snowluma_data_root / snowluma_runtime_root，调用 SnowLuma 分支会
-    /// 回落到 <runtime_root>/snowluma。
+    /// 仅 NapCat 路径所需的最小构造(保留向后兼容)SnowLuma 路径未注入
+    /// snowluma_data_root / snowluma_runtime_root,调用 SnowLuma 分支会
+    /// 回落到 <runtime_root>/snowluma
     pub fn new(runtime_root: impl Into<PathBuf>) -> Self {
         Self {
             runtime_root: runtime_root.into(),
@@ -40,15 +40,15 @@ impl FileSystemRuntimeLaunchPlanner {
         }
     }
 
-    /// 注入 SnowLuma 持久化数据根目录（对齐红线 4.1：由 bootstrap::resolve_data_root
-    /// 单一权威派生，本结构体只是消费者）。
+    /// 注入 SnowLuma 持久化数据根目录(对齐红线 4.1:由 bootstrap::resolve_data_root
+    /// 单一权威派生,本结构体只是消费者)
     pub fn with_snowluma_data_root(mut self, data_root: impl Into<PathBuf>) -> Self {
         self.snowluma_data_root = Some(data_root.into());
         self
     }
 
-    /// 注入 SnowLuma daemon 安装根（含 node.exe）。
-    /// 与 NapCat runtime_root 严格分离。
+    /// 注入 SnowLuma daemon 安装根(含 node.exe)
+    /// 与 NapCat runtime_root 严格分离
     pub fn with_snowluma_runtime_root(mut self, runtime_root: impl Into<PathBuf>) -> Self {
         self.snowluma_runtime_root = Some(runtime_root.into());
         self
@@ -98,18 +98,18 @@ pub struct NapCatLaunchPlan {
     pub load_script_path: PathBuf,
 }
 
-/// SnowLuma 启动计划。
-/// 路径来源：所有路径都必须由调用方（最终来自
-/// bootstrap::resolve_data_root 与 PathProbe）传入；本 struct 不在
-/// 业务模块内硬编码 %ProgramData% / %LocalAppData%。
-/// 字段语义：
-/// - runtime_root：SnowLuma 安装根，含 node.exe 与 daemon entry 脚本。
-/// - snowluma_data_root：SnowLuma 持久化数据根（<data_root>/snowluma）
-///   存放 app-config.json / session.json / per-Bot onebot_<uin>.json 等。
-/// - start_mode：本次启动是 ColdStart（backend spawn QQ.exe）还是 HotStart
-///   （attach 到用户已开的 QQ.exe）。
-/// - qq_install_path：仅 ColdStart 路径需要；HotStart 留 None。
-/// - bot_qq_id：渲染 per-Bot OneBot 配置文件名时使用。
+/// SnowLuma 启动计划
+/// 路径来源:所有路径都必须由调用方(最终来自
+/// bootstrap::resolve_data_root 与 PathProbe)传入;本 struct 不在
+/// 业务模块内硬编码 %ProgramData% / %LocalAppData%
+/// 字段语义:
+/// - runtime_root:SnowLuma 安装根,含 node.exe 与 daemon entry 脚本
+/// - snowluma_data_root:SnowLuma 持久化数据根(<data_root>/snowluma)
+///   存放 app-config.json / session.json / per-Bot onebot_<uin>.json 等
+/// - start_mode:本次启动是 ColdStart(backend spawn QQ.exe)还是 HotStart
+///   (attach 到用户已开的 QQ.exe)
+/// - qq_install_path:仅 ColdStart 路径需要;HotStart 留 None
+/// - bot_qq_id:渲染 per-Bot OneBot 配置文件名时使用
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnowLumaLaunchPlan {
     pub runtime_root: PathBuf,
@@ -149,23 +149,23 @@ impl RuntimeLaunchPlan {
                 cfg.environment = plan.environment;
             }
             RuntimeLaunchPlan::SnowLuma(plan) => {
-                // SnowLuma 启动语义由 SnowLumaRuntimeBackend 自己处理（spawn QQ.exe +
-                // daemon load_process），不通过 BotRuntimeConfig.launch_command 触发外部
-                // 进程。working_dir 设为 snowluma_data_root，便于运行时调试与日志关联。
+                // SnowLuma 启动语义由 SnowLumaRuntimeBackend 自己处理(spawn QQ.exe +
+                // daemon load_process),不通过 BotRuntimeConfig.launch_command 触发外部
+                // 进程working_dir 设为 snowluma_data_root,便于运行时调试与日志关联
                 cfg.launch_command = Vec::new();
                 cfg.working_dir = Some(plan.snowluma_data_root);
                 // SnowLumaRuntimeBackend.start 通过 environment 渠道拿 QQ.exe 路径
-                // / start_mode（避免给 BotRuntimeConfig 加新字段）。
-                // HotStart 不再透传 attach_pid，由 backend 在 Phase A 自动按 qq_id
-                // 扫一遍系统进程 + tencent:// 探测匹配出真实 PID。
+                // / start_mode(避免给 BotRuntimeConfig 加新字段)
+                // HotStart 不再透传 attach_pid,由 backend 在 Phase A 自动按 qq_id
+                // 扫一遍系统进程 + tencent:// 探测匹配出真实 PID
                 if let Some(qq_install) = plan.qq_install_path {
                     cfg.environment.insert(
                         "SNOWLUMA_QQ_EXE".to_string(),
                         qq_install.join("QQ.exe").to_string_lossy().into_owned(),
                     );
                 }
-                // 把 qq_id 也注入环境变量，让 backend 在 HotStart 时自动匹配；
-                // ColdStart 也用得到（落盘配置文件名等）。
+                // 把 qq_id 也注入环境变量,让 backend 在 HotStart 时自动匹配;
+                // ColdStart 也用得到(落盘配置文件名等)
                 cfg.environment
                     .insert("SNOWLUMA_QQ_ID".to_string(), plan.bot_qq_id.to_string());
                 let mode_str = match plan.start_mode {
@@ -202,12 +202,12 @@ pub async fn build_runtime_launch_plan(
     }
 }
 
-/// 构造 SnowLuma 启动计划（COLD / HOT 两路）。
-/// 决策流程：
-/// 1. 从 BotConfig.bot.snowluma_start_mode 读出 start_mode；缺省（None）
-///    回退到 SnowLumaStartMode::ColdStart（设计文档约定的默认行为）。
-/// 2. 任何模式都校验 <runtime_root>/node.exe 是常规文件存在。
-/// 3. ColdStart 解析 QQ install path（Windows 注册表）；HotStart 跳过。
+/// 构造 SnowLuma 启动计划(COLD / HOT 两路)
+/// 决策流程:
+/// 1. 从 BotConfig.bot.snowluma_start_mode 读出 start_mode;缺省(None)
+///    回退到 SnowLumaStartMode::ColdStart(设计文档约定的默认行为)
+/// 2. 任何模式都校验 <runtime_root>/node.exe 是常规文件存在
+/// 3. ColdStart 解析 QQ install path(Windows 注册表);HotStart 跳过
 async fn build_snowluma_launch_plan(
     config: &BotConfig,
     snowluma_runtime_root: &Path,
@@ -218,9 +218,9 @@ async fn build_snowluma_launch_plan(
         .snowluma_start_mode
         .unwrap_or(SnowLumaStartMode::ColdStart);
 
-    // node.exe 是 daemon 的二进制入口，任何模式下都必须存在。
-    // 注意：这里读的是 SnowLuma 自己的安装根（<data_root>/runtime/snowluma）
-    // 与 NapCat 的 runtime_root 严格分离。
+    // node.exe 是 daemon 的二进制入口,任何模式下都必须存在
+    // 注意:这里读的是 SnowLuma 自己的安装根(<data_root>/runtime/snowluma)
+    // 与 NapCat 的 runtime_root 严格分离
     let node_path = snowluma_runtime_root.join("node.exe");
     if !is_regular_file(&node_path).await {
         return Err(RuntimeLaunchPlanError::SnowLumaNodeMissing(node_path));
@@ -229,8 +229,8 @@ async fn build_snowluma_launch_plan(
     let qq_install_path = match start_mode {
         SnowLumaStartMode::ColdStart => Some(resolve_qq_install_path()?),
         SnowLumaStartMode::HotStart => {
-            // HotStart 自带 PID 自动匹配语义（backend Phase A 按 qq_id 扫进程），
-            // 这里不需要 QQ install path：用户手动启动了 QQ，QQ 路径已经定了。
+            // HotStart 自带 PID 自动匹配语义(backend Phase A 按 qq_id 扫进程),
+            // 这里不需要 QQ install path:用户手动启动了 QQ,QQ 路径已经定了
             None
         }
     };
@@ -394,15 +394,15 @@ fn resolve_qq_install_path() -> Result<PathBuf, RuntimeLaunchPlanError> {
 
 #[cfg(test)]
 mod snowluma_plan_tests {
-    //! SnowLumaLaunchPlan 字段扩展锁定测试。
-    //! 覆盖：
-    //! 1. node.exe 缺失立即返回 SnowLumaNodeMissing。
-    //! 2. ColdStart（含 None 默认）携带 qq_install_path = Some(_)（仅
-    //!    Windows 平台能解析 QQ install path；非 Windows 退化为 UnsupportedPlatform）。
-    //! 3. HotStart 跳过 QQ install 解析，qq_install_path = None，PID 由
-    //!    backend Phase A 自动按 qq_id 匹配，落盘配置不再持久化 PID。
+    //! SnowLumaLaunchPlan 字段扩展锁定测试
+    //! 覆盖:
+    //! 1. node.exe 缺失立即返回 SnowLumaNodeMissing
+    //! 2. ColdStart(含 None 默认)携带 qq_install_path = Some(_)(仅
+    //!    Windows 平台能解析 QQ install path;非 Windows 退化为 UnsupportedPlatform)
+    //! 3. HotStart 跳过 QQ install 解析,qq_install_path = None,PID 由
+    //!    backend Phase A 自动按 qq_id 匹配,落盘配置不再持久化 PID
     //! 4. into_runtime_config 把 SnowLuma working_dir 设到 snowluma_data_root
-    //!    且 launch_command 为空。
+    //!    且 launch_command 为空
 
     use super::*;
     use crate::bot_config::{
@@ -433,8 +433,8 @@ mod snowluma_plan_tests {
         }
     }
 
-    /// node.exe 缺失（runtime_root 是空目录）：必须立即返回 SnowLumaNodeMissing
-    /// 携带的路径精确指向缺失的 <runtime_root>/node.exe。
+    /// node.exe 缺失(runtime_root 是空目录):必须立即返回 SnowLumaNodeMissing
+    /// 携带的路径精确指向缺失的 <runtime_root>/node.exe
     #[tokio::test]
     async fn snowluma_plan_rejects_missing_node_exe() {
         let runtime_root_dir = tempdir().unwrap();
@@ -456,9 +456,9 @@ mod snowluma_plan_tests {
         }
     }
 
-    /// HotStart 路径：跳过 QQ install path 解析（即便 Windows 注册表查询失败也应该 OK）。
-    /// qq_install_path = None，bot_qq_id 与 snowluma_data_root 透传。
-    /// PID 不再持久化，由 backend 在 Phase A 按 qq_id 自动匹配。
+    /// HotStart 路径:跳过 QQ install path 解析(即便 Windows 注册表查询失败也应该 OK)
+    /// qq_install_path = None,bot_qq_id 与 snowluma_data_root 透传
+    /// PID 不再持久化,由 backend 在 Phase A 按 qq_id 自动匹配
     #[tokio::test]
     async fn snowluma_plan_hot_start_skips_qq_install_resolution() {
         let runtime_root_dir = tempdir().unwrap();
@@ -488,9 +488,9 @@ mod snowluma_plan_tests {
     }
 
     /// 在非 Windows 平台 ColdStart 路径会因 QQ install 注册表查询失败返回
-    /// UnsupportedPlatform；Windows 平台才走真实分支。本测试仅断言"非 Windows
-    /// 上确实在 ColdStart 时调用了注册表解析（因此返回 UnsupportedPlatform）"
-    /// 用以验证 ColdStart 与 HotStart 的分支差异。
+    /// UnsupportedPlatform;Windows 平台才走真实分支本测试仅断言"非 Windows
+    /// 上确实在 ColdStart 时调用了注册表解析(因此返回 UnsupportedPlatform)"
+    /// 用以验证 ColdStart 与 HotStart 的分支差异
     #[cfg(not(windows))]
     #[tokio::test]
     async fn snowluma_plan_cold_start_attempts_qq_install_lookup() {
@@ -515,9 +515,9 @@ mod snowluma_plan_tests {
         }
     }
 
-    /// None start_mode 走 ColdStart 默认行为：与显式 ColdStart 走同一分支。
-    /// 本测试只验证默认 fallback 触发了 ColdStart 的 QQ install 解析（在非 Windows
-    /// 上会失败为 UnsupportedPlatform，与显式 ColdStart 行为一致）。
+    /// None start_mode 走 ColdStart 默认行为:与显式 ColdStart 走同一分支
+    /// 本测试只验证默认 fallback 触发了 ColdStart 的 QQ install 解析(在非 Windows
+    /// 上会失败为 UnsupportedPlatform,与显式 ColdStart 行为一致)
     #[cfg(not(windows))]
     #[tokio::test]
     async fn snowluma_plan_defaults_to_cold_start_when_unset() {
@@ -544,8 +544,8 @@ mod snowluma_plan_tests {
         }
     }
 
-    /// into_runtime_config SnowLuma 分支：launch_command 必须清空
-    /// working_dir 必须设为 snowluma_data_root（不是 runtime_root）。
+    /// into_runtime_config SnowLuma 分支:launch_command 必须清空
+    /// working_dir 必须设为 snowluma_data_root(不是 runtime_root)
     #[test]
     fn snowluma_into_runtime_config_uses_data_root_as_working_dir() {
         let runtime_root = PathBuf::from("C:/SnowLumaRuntime");

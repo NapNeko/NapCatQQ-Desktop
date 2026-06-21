@@ -83,8 +83,8 @@ pub async fn get_bot_config(
         .map_err(map_err)
 }
 
-/// 批量拉所有 Bot 的 backend_type，避免列表页对每个 bot 调 get_bot_config 的 N+1。
-/// 返回的 key 是 BotId 字符串（数字 QQID）。
+/// 批量拉所有 Bot 的 backend_type,避免列表页对每个 bot 调 get_bot_config 的 N+1
+/// 返回的 key 是 BotId 字符串(数字 QQID)
 #[tauri::command]
 pub async fn list_bot_flavors(
     state: State<'_, AppState>,
@@ -125,7 +125,7 @@ pub async fn start_bot(
         .map_err(map_err)
 }
 
-/// 启动前检测派生配置文件是否被外部修改。返回 None 表示无差异可直接启动。
+/// 启动前检测派生配置文件是否被外部修改返回 None 表示无差异可直接启动
 #[tauri::command]
 pub async fn detect_bot_config_drift(
     state: State<'_, AppState>,
@@ -138,7 +138,7 @@ pub async fn detect_bot_config_drift(
         .map_err(map_err)
 }
 
-/// 带用户决议启动 Bot。前端在 ConfigDriftDialog 确认后调此命令。
+/// 带用户决议启动 Bot前端在 ConfigDriftDialog 确认后调此命令
 #[tauri::command]
 pub async fn start_bot_with_drift_decisions(
     state: State<'_, AppState>,
@@ -152,7 +152,7 @@ pub async fn start_bot_with_drift_decisions(
         .map_err(map_err)
 }
 
-/// 带用户决议保存配置。前端保存时如果检测到 drift 并确认了决议后调此命令。
+/// 带用户决议保存配置前端保存时如果检测到 drift 并确认了决议后调此命令
 #[tauri::command]
 pub async fn upsert_bot_config_with_decisions(
     state: State<'_, AppState>,
@@ -239,10 +239,10 @@ pub async fn active_bot_count(state: State<'_, AppState>) -> Result<usize, Strin
     Ok(state.bot_manager.active_count().await)
 }
 
-/// 拉取指定 Bot 的最近 lines 行日志快照（默认 1000 行）。
+/// 拉取指定 Bot 的最近 lines 行日志快照(默认 1000 行)
 ///
-/// 用于 BotLogPage 开页时一次性加载历史；后续增量靠订阅 log_appended Tauri
-/// 事件即可。对齐 legacy NapCatQQProcessLog.get_log_content 行为。
+/// 用于 BotLogPage 开页时一次性加载历史;后续增量靠订阅 log_appended Tauri
+/// 事件即可对齐 legacy NapCatQQProcessLog.get_log_content 行为
 #[tauri::command]
 pub async fn tail_bot_log(
     state: State<'_, AppState>,

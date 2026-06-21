@@ -1,8 +1,8 @@
-//! 远端 Linux「直接运行」启动规划（无 napcat.sh 脚本）。
+//! 远端 Linux「直接运行」启动规划(无 napcat.sh 脚本)
 //!
-//! 对齐组件页 RemoteLayout + NapCatComponent::launch_command，在 SSH Host 上
-//! spawn 进程；启动前把 onebot/napcat 配置写到远端
-//! $HOME/Napcat/opt/QQ/.../napcat/config/（或 system 布局 /opt/QQ/...）。
+//! 对齐组件页 RemoteLayout + NapCatComponent::launch_command,在 SSH Host 上
+//! spawn 进程;启动前把 onebot/napcat 配置写到远端
+//! $HOME/Napcat/opt/QQ/.../napcat/config/(或 system 布局 /opt/QQ/...)
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -17,14 +17,14 @@ use ncd_host::{Host, HostCommand, HostPath};
 use crate::backend_config_renderer::render_napcat_docker_config_payloads;
 use crate::runtime_backend::BotBackendError;
 
-/// 与 src-tauri/commands/components.rs::RemoteLayout 同语义。
+/// 与 src-tauri/commands/components.rs::RemoteLayout 同语义
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RemoteNapcatLayout {
     System,
     Rootless,
 }
 
-/// 探测远端 $HOME 与 NapCat 安装布局（一次 shell 往返）。
+/// 探测远端 $HOME 与 NapCat 安装布局(一次 shell 往返)
 pub async fn probe_remote_napcat_layout(
     host: &dyn Host,
 ) -> Result<(String, RemoteNapcatLayout), String> {
@@ -76,7 +76,7 @@ pub fn napcat_remote_log_path(install_base: &HostPath, qq_id: u64) -> String {
     format!("{}/log/napcat_{qq_id}.log", install_base.as_posix())
 }
 
-/// 把 NapCat 派生配置写到远端 config 目录（与 Python write_bot_runtime_config 同路径语义）。
+/// 把 NapCat 派生配置写到远端 config 目录(与 Python write_bot_runtime_config 同路径语义)
 pub async fn render_native_napcat_config_on_host(
     host: &dyn Host,
     bot_id: &BotId,
@@ -130,7 +130,7 @@ async fn read_existing_napcat_config(
     Ok(existing)
 }
 
-/// xvfb-run -a <qq> --no-sandbox -q <qq_id>，与 legacy launcher 核心一致（无 bash 脚本）。
+/// xvfb-run -a <qq> --no-sandbox -q <qq_id>,与 legacy launcher 核心一致(无 bash 脚本)
 async fn build_napcat_remote_launch(
     host: &dyn Host,
     config: &BotConfig,
@@ -196,7 +196,7 @@ fn shell_single_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\"'\"'"))
 }
 
-/// 按 runtime_target 在远端 Host 上翻译 Native 启动命令。
+/// 按 runtime_target 在远端 Host 上翻译 Native 启动命令
 pub struct RemoteNativeLaunchTranslator {
     host: Arc<dyn Host>,
     flavor: BotFlavor,
@@ -209,14 +209,14 @@ pub struct RemoteNativeLaunchTranslator {
 }
 
 impl RemoteNativeLaunchTranslator {
-    /// 内部构造器。
+    /// 内部构造器
     ///
-    /// 只应由同 crate 内的 BotManager 调用。
-    /// 使用 pub(crate) 而非 pub，以避免把 pub(crate) 的 RemoteQqEntryCoordinator
-    /// 通过公开 API 泄露出去（这正是编译器 private_interfaces 警告的来源）。
+    /// 只应由同 crate 内的 BotManager 调用
+    /// 使用 pub(crate) 而非 pub,以避免把 pub(crate) 的 RemoteQqEntryCoordinator
+    /// 通过公开 API 泄露出去(这正是编译器 private_interfaces 警告的来源)
     ///
-    /// 外部 crate（例如 src-tauri）不应直接构造此类型，所有 backend 都应由
-    /// BotManager::backend_for_config 统一创建。
+    /// 外部 crate(例如 src-tauri)不应直接构造此类型,所有 backend 都应由
+    /// BotManager::backend_for_config 统一创建
     pub(crate) fn new(
         host: Arc<dyn Host>,
         flavor: BotFlavor,
@@ -285,7 +285,7 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
     }
 }
 
-/// 停止远端 NapCat QQ 进程（pgrep + SIGTERM/SIGKILL，对齐 legacy launcher stop 语义）。
+/// 停止远端 NapCat QQ 进程(pgrep + SIGTERM/SIGKILL,对齐 legacy launcher stop 语义)
 pub async fn stop_remote_napcat_on_host(
     host: &dyn Host,
     qq_id: u64,
@@ -323,7 +323,7 @@ fi
     Ok(())
 }
 
-/// pgrep 探测远端 NapCat 是否在跑。
+/// pgrep 探测远端 NapCat 是否在跑
 pub async fn remote_napcat_running_pid(host: &dyn Host, qq_id: u64) -> Result<Option<u32>, BotBackendError> {
     let script = format!(
         r#"pgrep -f "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1"#

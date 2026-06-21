@@ -1,7 +1,7 @@
-//! 有限次数的瞬时网络错误重试（指数退避）。
+//! 有限次数的瞬时网络错误重试(指数退避)
 //!
-//! 只给短请求（GitHub API、探测）用；大文件流式下载靠 mirror race + idle
-//! timeout，不走本模块。
+//! 只给短请求(GitHub API,探测)用;大文件流式下载靠 mirror race + idle
+//! timeout,不走本模块
 
 use std::future::Future;
 use std::time::Duration;
@@ -10,7 +10,7 @@ use tokio::time::sleep;
 
 use crate::error::NetworkError;
 
-/// 重试策略：次数含首次尝试（max_attempts=3 表示最多 3 次调用）。
+/// 重试策略:次数含首次尝试(max_attempts=3 表示最多 3 次调用)
 #[derive(Debug, Clone)]
 pub struct RetryPolicy {
     pub max_attempts: u32,
@@ -28,7 +28,7 @@ impl Default for RetryPolicy {
     }
 }
 
-/// 是否值得再试一次。
+/// 是否值得再试一次
 pub fn is_retryable(err: &NetworkError) -> bool {
     match err {
         NetworkError::Http(_) => true,
@@ -43,7 +43,7 @@ pub fn is_retryable(err: &NetworkError) -> bool {
     }
 }
 
-/// 对异步操作执行重试；operation 每次失败应返回可重试的 NetworkError。
+/// 对异步操作执行重试;operation 每次失败应返回可重试的 NetworkError
 pub async fn retry_with_backoff<T, F, Fut>(
     policy: &RetryPolicy,
     mut operation: F,

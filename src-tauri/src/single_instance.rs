@@ -1,4 +1,4 @@
-// 二次启动时唤起已有实例（须为 Builder 上第一个 plugin）。
+// 二次启动时唤起已有实例(须为 Builder 上第一个 plugin)
 
 #[cfg(desktop)]
 pub fn plugin(

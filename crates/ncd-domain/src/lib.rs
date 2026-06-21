@@ -1,8 +1,8 @@
-//! ncd-domain:NapCatQQ-Desktop 的 Layer 1 数据契约。
+//! ncd-domain:NapCatQQ-Desktop 的 Layer 1 数据契约
 //!
 //! 依赖白名单:serde / serde_json / thiserror / ts-rs,禁止引入 tokio /
-//! reqwest 等运行时库。所有跨边界数据结构(BotConfig / AppConfig / errors /
-//! ids / kinds 等)都在本 crate,前后端通过 ts-rs 派生保证类型一致。
+//! reqwest 等运行时库所有跨边界数据结构(BotConfig / AppConfig / errors /
+//! ids / kinds 等)都在本 crate,前后端通过 ts-rs 派生保证类型一致
 
 pub mod app_config;
 pub mod bootstrap;

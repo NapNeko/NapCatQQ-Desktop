@@ -1,4 +1,4 @@
-//! 远端 NapCat Native：SSH 隧道 6099 + 远端 napcat_{qq}.log tail（WebUI 仅从日志解析 token）。
+//! 远端 NapCat Native:SSH 隧道 6099 + 远端 napcat_{qq}.log tail(WebUI 仅从日志解析 token)
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -71,7 +71,7 @@ impl RemoteNativeNapcatSessionRegistry {
         }
     }
 
-    /// fallback_token 已废弃：勿用 Docker secret 冒充 NapCat 进程 token。
+    /// fallback_token 已废弃:勿用 Docker secret 冒充 NapCat 进程 token
     pub async fn start_session(
         &self,
         bot_id: BotId,

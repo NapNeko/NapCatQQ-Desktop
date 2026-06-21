@@ -1,8 +1,8 @@
-//! 凭据同步层：统一管理 keyring ↔ Host 的密码同步
+//! 凭据同步层:统一管理 keyring ↔ Host 的密码同步
 //!
-//! 职责：
-//! 1. 统一读取密码（ssh + sudo 优先级）
-//! 2. 同步密码到 Host（缓存 + 隔离连接）
+//! 职责:
+//! 1. 统一读取密码(ssh + sudo 优先级)
+//! 2. 同步密码到 Host(缓存 + 隔离连接)
 //! 3. 密码变更时触发缓存失效
 
 use crate::server_manager::{AuthMethod, ServerCredentialStore, ServerProfile};
@@ -10,7 +10,7 @@ use ncd_host::Host;
 use ncd_host::remote::SshCredentials;
 use std::sync::Arc;
 
-/// 凭据同步层：桥接 keyring 持久化与 Host 内存缓存
+/// 凭据同步层:桥接 keyring 持久化与 Host 内存缓存
 pub struct CredentialSyncLayer {
     credentials: Arc<dyn ServerCredentialStore>,
 }
@@ -20,7 +20,7 @@ impl CredentialSyncLayer {
         Self { credentials }
     }
 
-    /// 获取 SSH 认证凭据（登录用）
+    /// 获取 SSH 认证凭据(登录用)
     pub fn ssh_credentials(&self, profile: &ServerProfile) -> Result<SshCredentials, String> {
         match profile.auth_method {
             AuthMethod::Password => {
@@ -45,9 +45,9 @@ impl CredentialSyncLayer {
         }
     }
 
-    /// 获取提权密码（sudo 用）
+    /// 获取提权密码(sudo 用)
     ///
-    /// 优先级：sudo 专用槽 > ssh 登录密码
+    /// 优先级:sudo 专用槽 > ssh 登录密码
     pub fn elevation_password(&self, server_id: &str) -> Option<String> {
         self.credentials
             .get_sudo_password(server_id)
@@ -60,14 +60,14 @@ impl CredentialSyncLayer {
             .await;
     }
 
-    /// 记住 sudo 密码（弹框勾选"记住"时调用）
+    /// 记住 sudo 密码(弹框勾选"记住"时调用)
     pub fn remember_sudo(&self, server_id: &str, password: &str) -> Result<(), String> {
         self.credentials.set_sudo_password(server_id, password)
     }
 
-    /// 同步 SSH 密码到 sudo 槽（setup_key_auth 自动迁移）
+    /// 同步 SSH 密码到 sudo 槽(setup_key_auth 自动迁移)
     ///
-    /// 逻辑：如果 ssh 槽有密码但 sudo 槽为空，则复制到 sudo 槽
+    /// 逻辑:如果 ssh 槽有密码但 sudo 槽为空,则复制到 sudo 槽
     pub fn migrate_ssh_to_sudo(&self, server_id: &str) -> Result<(), String> {
         if let Some(ssh_pwd) = self.credentials.get_password(server_id) {
             if self.credentials.get_sudo_password(server_id).is_none() {
@@ -77,13 +77,13 @@ impl CredentialSyncLayer {
         Ok(())
     }
 
-    /// 密码变更后的缓存失效钩子（返回是否需要重连）
+    /// 密码变更后的缓存失效钩子(返回是否需要重连)
     pub fn on_password_changed(&self, _server_id: &str, changed_slot: PasswordSlot) -> bool {
-        // SSH 密码变更必须重连，sudo 密码变更可以热更新
+        // SSH 密码变更必须重连,sudo 密码变更可以热更新
         matches!(changed_slot, PasswordSlot::Ssh)
     }
 
-    /// 获取底层凭据存储（给 ServerManager 暴露，用于 remember_sudo_password）
+    /// 获取底层凭据存储(给 ServerManager 暴露,用于 remember_sudo_password)
     pub fn credentials(&self) -> &Arc<dyn ServerCredentialStore> {
         &self.credentials
     }

@@ -1,4 +1,4 @@
-//! Update 错误类型。
+//! Update 错误类型
 
 use ncd_domain::SchemaVersion;
 

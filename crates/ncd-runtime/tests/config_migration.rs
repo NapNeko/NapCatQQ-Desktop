@@ -334,7 +334,7 @@ fn target_write_failure_reports_failed_without_localappdata_fork() {
 #[test]
 fn bootstrap_persists_failure_report_to_writable_store() {
     // run() 在读取坏掉的 bot.json 时报错,但 target store 可写:bootstrap 的 Err
-    // 分支应尽力把失败报告落盘,保留首次失败证据,重启后仍可读。
+    // 分支应尽力把失败报告落盘,保留首次失败证据,重启后仍可读
     let legacy_root = TempWorkspace::new().unwrap();
     let target_root = TempWorkspace::new().unwrap();
 
@@ -345,7 +345,7 @@ fn bootstrap_persists_failure_report_to_writable_store() {
         serde_json::to_vec(&serde_json::json!({"Info": {"main_window": true}})).unwrap(),
     )
     .unwrap();
-    // 坏 JSON:迁移在 read_source_json 解析阶段失败。
+    // 坏 JSON:迁移在 read_source_json 解析阶段失败
     std::fs::write(legacy_config.join("bot.json"), b"{ not valid json :::").unwrap();
 
     let store = LocalConfigStore::new(target_root.path());
