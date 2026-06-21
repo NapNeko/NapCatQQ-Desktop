@@ -35,6 +35,25 @@ enum StreamMsg {
     },
 }
 
+/// 把一行包管理器输出归类为 (summary, suggest_percent, level),无法解析返回 None
+fn classify_pkg_line(
+    source: StreamSource,
+    t: &str,
+) -> Option<(String, Option<u8>, ProgressLogLevel)> {
+    if let Some(p) = parse_pkg_mgr_line(t) {
+        let lvl = if matches!(p.phase, ncd_host::PkgPhase::Error) {
+            ProgressLogLevel::Warn
+        } else {
+            ProgressLogLevel::Info
+        };
+        Some((p.summary, p.suggest_percent, lvl))
+    } else if source == StreamSource::Stderr && (t.contains("WARNING") || t.contains("warning")) {
+        Some((truncate_pkg_line(t, 200), None, ProgressLogLevel::Warn))
+    } else {
+        None
+    }
+}
+
 /// 执行 elevated 包管理命令:按行解析 apt/dnf 输出,单调递增 percent(映射到 [floor, cap])
 /// 长时间无输出时发心跳,避免 UI 像卡死
 pub async fn run_pkg_with_emit(
@@ -135,32 +154,16 @@ pub async fn run_pkg_with_emit(
                 if t.is_empty() {
                     return;
                 }
-
-                let parsed = parse_pkg_mgr_line(t);
-                let (summary, suggest, level) = if let Some(p) = parsed {
-                    let lvl = if matches!(p.phase, ncd_host::PkgPhase::Error) {
-                        ProgressLogLevel::Warn
-                    } else {
-                        ProgressLogLevel::Info
-                    };
-                    (p.summary, p.suggest_percent, lvl)
-                } else if source == StreamSource::Stderr
-                    && (t.contains("WARNING") || t.contains("warning"))
-                {
-                    (truncate_pkg_line(t, 200), None, ProgressLogLevel::Warn)
-                } else {
+                let Some((summary, suggest, level)) = classify_pkg_line(source, t) else {
                     return;
                 };
-
                 let _ = tx_cb.send(StreamMsg::Log {
                     level,
                     text: summary.clone(),
                 });
-
-                if let Some(mut pct) = suggest {
-                    pct = pct.clamp(floor, cap);
-                    let prev = last_cb.load(Ordering::Relaxed);
-                    if pct > prev {
+                if let Some(pct) = suggest {
+                    let pct = pct.clamp(floor, cap);
+                    if pct > last_cb.load(Ordering::Relaxed) {
                         let _ = tx_cb.send(StreamMsg::Progress {
                             percent: pct,
                             message: summary,
