@@ -13,8 +13,7 @@ use tracing::{error, info, warn};
 
 use super::cli::{DockerCli, DockerCliError};
 use super::install::{
-    DOCKER_DESKTOP_URL, docker_install_phases, looks_like_bad_sudo_password,
-    write_registry_mirrors_script,
+    docker_install_phases, looks_like_bad_sudo_password, write_registry_mirrors_script,
 };
 use super::pkg_install_emit::run_pkg_with_emit;
 
@@ -105,28 +104,17 @@ pub async fn install_docker_with_progress(
         Os::Linux => {
             install_docker_linux_with_progress(host, sudo_password, ssh_linux_username, emit).await
         }
-        Os::Windows => {
+        // docker 只在 Linux 部署:Windows/macOS 不引导装 Docker Desktop,直接返回不支持
+        _ => {
             emit_log(
                 &emit,
                 ProgressLogLevel::Warn,
-                "Windows 需手动安装 Docker Desktop",
+                "Windows/macOS 不支持 docker 部署,请在 Linux 主机操作",
             );
             finish_install(&emit, false);
             Ok(DockerInstallReport::manual_required(
-                "Windows 请安装 Docker Desktop 后重试（需要 WSL2 后端）",
-                Some(DOCKER_DESKTOP_URL.to_string()),
-            ))
-        }
-        Os::MacOs => {
-            emit_log(
-                &emit,
-                ProgressLogLevel::Warn,
-                "macOS 需手动安装 Docker Desktop",
-            );
-            finish_install(&emit, false);
-            Ok(DockerInstallReport::manual_required(
-                "macOS 请安装 Docker Desktop 后重试",
-                Some(DOCKER_DESKTOP_URL.to_string()),
+                "Windows/macOS 不支持 docker 部署,请在 Linux 主机操作",
+                None,
             ))
         }
     }

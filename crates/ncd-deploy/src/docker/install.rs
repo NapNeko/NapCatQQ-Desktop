@@ -8,7 +8,7 @@
 //! 安装按阶段拆成多段 shell,每段单独跑并上报 apt/dnf 行级进度(见 install_progress)
 //! apt 不用 -qq,保证 Get:/Fetched/Setting up 能进 parse_pkg_mgr_line
 //!
-//! Windows:不能静默装 Docker Desktop,只回一个引导结果让前端弹"去下载"
+//! 仅支持 Linux:Windows/macOS 不做 docker 部署
 
 use ncd_domain::DockerInstallReport;
 use ncd_host::Host;
@@ -19,15 +19,10 @@ use super::install_progress::InstallProgressEmit;
 /// 兼容旧调用方的别名,结构化结果统一用 [DockerInstallReport]
 pub type DockerInstallOutcome = DockerInstallReport;
 
-/// Docker Desktop for Windows 下载页
-pub(crate) const DOCKER_DESKTOP_URL: &str = "https://www.docker.com/products/docker-desktop/";
-
-/// 阿里云 docker-ce 镜像根,apt 的 gpg/仓库,dnf 的 .repo 都从这里派生
-const ALIYUN_DOCKER_CE: &str = "https://mirrors.aliyun.com/docker-ce";
-
 /// 装 Docker 时分阶段执行的脚本(按顺序),每段独立超时,失败即停
+// 6 个多行 shell 脚本用 push 块比 vec![] 元素更可读
+#[allow(clippy::vec_init_then_push)]
 pub(crate) fn docker_install_phases() -> Vec<(&'static str, String)> {
-    let base = ALIYUN_DOCKER_CE;
     let mut phases: Vec<(&'static str, String)> = Vec::new();
 
     phases.push((
@@ -43,10 +38,9 @@ apt-get install -y ca-certificates curl gnupg
 
     phases.push((
         "apt_repo",
-        format!(
-            r#"set -e
+        r#"set -e
 if ! command -v apt-get >/dev/null 2>&1; then exit 0; fi
-ALI="{base}"
+ALI="https://mirrors.aliyun.com/docker-ce"
 install -m 0755 -d /etc/apt/keyrings
 . /etc/os-release
 DISTRO="$ID"
@@ -57,7 +51,7 @@ CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
 ARCH="$(dpkg --print-architecture)"
 echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] $ALI/linux/$DISTRO $CODENAME stable" > /etc/apt/sources.list.d/docker.list
 "#
-        ),
+        .to_string(),
     ));
 
     phases.push((
@@ -73,33 +67,31 @@ apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin do
 
     phases.push((
         "dnf_install",
-        format!(
-            r#"set -e
+        r#"set -e
 if command -v apt-get >/dev/null 2>&1; then exit 0; fi
 if ! command -v dnf >/dev/null 2>&1; then exit 0; fi
-ALI="{base}"
+ALI="https://mirrors.aliyun.com/docker-ce"
 dnf install -y dnf-plugins-core
 dnf config-manager --add-repo "$ALI/linux/centos/docker-ce.repo"
 sed -i "s#download.docker.com#mirrors.aliyun.com/docker-ce#g" /etc/yum.repos.d/docker-ce.repo
 dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 "#
-        ),
+        .to_string(),
     ));
 
     phases.push((
         "yum_install",
-        format!(
-            r#"set -e
+        r#"set -e
 if command -v apt-get >/dev/null 2>&1; then exit 0; fi
 if command -v dnf >/dev/null 2>&1; then exit 0; fi
 if ! command -v yum >/dev/null 2>&1; then exit 0; fi
-ALI="{base}"
+ALI="https://mirrors.aliyun.com/docker-ce"
 yum install -y yum-utils
 yum-config-manager --add-repo "$ALI/linux/centos/docker-ce.repo"
 sed -i "s#download.docker.com#mirrors.aliyun.com/docker-ce#g" /etc/yum.repos.d/docker-ce.repo
 yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 "#
-        ),
+        .to_string(),
     ));
 
     phases.push((

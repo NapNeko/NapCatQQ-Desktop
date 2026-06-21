@@ -1,4 +1,4 @@
-//! DockerCli:docker 命令封装,跑在任意 Host 上(本地 Windows / 远端 Linux)
+//! DockerCli:docker 命令封装,跑在任意 Host 上(Linux)
 //!
 //! 设计:只持有 &dyn Host,每个方法拼一条 docker 命令交给 host.run_to_string
 //! 命令参数全部走 HostCommand::arg 分开传,由 shell 层做转义,杜绝把用户输入
@@ -42,8 +42,8 @@ pub enum DockerCliError {
 /// 提权:远端用户常不在 docker 组(装完没重登 / usermod 没生效),裸 docker
 /// 命令会 permission denied 连不上 /var/run/docker.sock,probe() 会探一次
 /// 「裸 docker 行不行,不行但 sudo 行」,把结果记在 elevated 里;之后所有命令
-/// 按它决定要不要 .elevated()(提权密码由 Host 层注入),本机 Windows 用不到,
-/// elevated 恒 false,用 AtomicBool 是因为操作方法都是 &self,且要跨 await 保持 Send
+/// 按它决定要不要 .elevated()(提权密码由 Host 层注入);
+/// 用 AtomicBool 是因为操作方法都是 &self,且要跨 await 保持 Send
 pub struct DockerCli<'h> {
     host: &'h dyn Host,
     elevated: std::sync::atomic::AtomicBool,

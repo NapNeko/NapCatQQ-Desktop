@@ -6,7 +6,7 @@
 //!
 //! 三个子模块:
 //! - cli:DockerCli 原语,所有 docker 命令收敛在这里
-//! - install:缺 docker 时帮装(Linux 跑官方脚本,Windows 只引导)
+//! - install:缺 docker 时帮装(仅 Linux,走阿里云 docker-ce 源)
 //! - compose:把 DockerDeploySpec 渲染成 docker-compose.yml
 
 pub mod cli;

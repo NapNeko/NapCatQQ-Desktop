@@ -518,12 +518,9 @@ async fn find_container_id(cli: &DockerCli<'_>, name: &str) -> Option<String> {
         .map(|c| c.id)
 }
 
-/// 默认文件属主,远端 Linux 普通用户一般 1000;本机 Windows 不在意给 0
-fn default_uid_gid(host: &dyn Host) -> (u32, u32) {
-    match host.os() {
-        ncd_host::Os::Linux => (1000, 1000),
-        _ => (0, 0),
-    }
+/// 默认文件属主,docker 只在 Linux 部署,远端普通用户一般 1000
+fn default_uid_gid(_host: &dyn Host) -> (u32, u32) {
+    (1000, 1000)
 }
 
 fn now_secs() -> u64 {
@@ -857,11 +854,15 @@ mod tests {
                 .iter()
                 .any(|a| a == &["image", "inspect", "mlikiowa/napcat-docker:latest"])
         );
-        assert!(
-            docker_args
-                .iter()
-                .any(|a| a == &["compose", "up", "-d", "--remove-orphans", "--pull", "missing"])
-        );
+        assert!(docker_args.iter().any(|a| a
+            == &[
+                "compose",
+                "up",
+                "-d",
+                "--remove-orphans",
+                "--pull",
+                "missing"
+            ]));
         assert!(
             docker_args
                 .iter()
@@ -956,11 +957,16 @@ mod tests {
                     && c.args.get(1).map(String::as_str) == Some("inspect")
                     && c.elevated)
         );
-        assert!(
-            docker
-                .iter()
-                .any(|c| c.args == ["compose", "up", "-d", "--remove-orphans", "--pull", "missing"] && c.elevated)
-        );
+        assert!(docker.iter().any(|c| c.args
+            == [
+                "compose",
+                "up",
+                "-d",
+                "--remove-orphans",
+                "--pull",
+                "missing"
+            ]
+            && c.elevated));
         assert!(
             docker
                 .iter()
