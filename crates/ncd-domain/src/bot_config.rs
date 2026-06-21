@@ -16,13 +16,10 @@ pub enum BackendType {
     SnowLuma,
 }
 
-/// Bot 的启动方式:直接在主机上跑原生进程,还是用 Docker 容器跑
+/// Bot 启动方式: 原生进程或 Docker 容器.
 ///
-/// 与 RuntimeTarget(在哪台主机)正交:Native/Docker 决定"怎么跑",
-/// runtime_target 决定"在哪跑"两者组合,比如 Server(id)+Docker =
-/// 用 SSH 在远端跑 docker compose
-///
-/// 默认 Native 保证旧配置(无此字段)反序列化后行为不变
+/// 与 RuntimeTarget 正交: DeploymentType 决定"怎么跑", runtime_target 决定"在哪跑".
+/// 例如 Docker + Server(id) 表示通过 SSH 在远端跑 docker compose.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -498,14 +495,10 @@ impl BotConfig {
         Ok(())
     }
 
-    /// 校验 backend_type × deployment_type × runtime_target 运行矩阵是否当前支持
+    /// 校验运行矩阵是否支持
     ///
-    /// 与 validate() 分开:validate() 管"配置本身是否自洽",这里管"这套运行组合当前
-    /// 能不能跑"放在保存 / 导入边界调用,把不支持的组合在入口就拒掉,而不是留到
-    /// 启动阶段才报错不放进 validate() 是因为有些链路(如生命周期路由健壮性测试)
-    /// 需要存下"会被运行期拒绝"的配置当前矩阵限制:
-    /// - Docker + 本机:不支持(Docker Desktop 安装链路太麻烦,本机只走直接运行)
-    /// - 直接运行 + 远端 SSH:已支持(NapCat / SnowLuma Native,见 remote_native_launch / remote_snowluma)
+    /// 当前限制: 本机不支持 Docker(Docker Desktop 安装复杂, 本机只走原生进程);
+    /// 远端 SSH 支持原生进程和 Docker.
     pub fn validate_runtime_matrix(&self) -> Result<(), BotConfigError> {
         let is_docker = matches!(self.bot.deployment_type, DeploymentType::Docker);
         let is_local = self.bot.runtime_target.is_local();
@@ -625,17 +618,7 @@ fn default_o3_hook_mode() -> O3HookMode {
 
 #[cfg(test)]
 mod snowluma_start_mode_tests {
-    //! BotBasicConfig.snowluma_start_mode 字节级 round-trip 锁定
-    //! 字段约定( / / ):
-    //! - JSON key 必须是驼峰 snowlumaStartMode(与 legacy autoRestartSchedule
-    //! 等已有字段保持驼峰一致)
-    //! - 字段 Option<SnowLumaStartMode> 默认值为 None,缺省时禁止出现
-    //! 在序列化输出中(skip_serializing_if = "Option::is_none"),保证
-    //! 纯 NapCat 用户的配置不会引入新字段
-    //! - SnowLumaStartMode 复用 snowluma::launch_plan 已有 enum,通过
-    //! #[serde(tag = "mode", rename_all = "snake_case")] 序列化
-    //! 三个用例分别覆盖 None / ColdStart / HotStart,任一字段 / 字面量漂移
-    //! 都会让对应测试失败
+    //! BotBasicConfig.snowluma_start_mode 字节级 round-trip 测试
     use super::*;
 
     fn make_basic_config(start_mode: Option<SnowLumaStartMode>) -> BotBasicConfig {
@@ -652,8 +635,7 @@ mod snowluma_start_mode_tests {
         }
     }
 
-    /// 缺省(None)时序列化不得出现 snowlumaStartMode key
-    /// 反序列化忽略缺省字段后字段值仍为 None
+    /// 缺省时序列化不出现 snowlumaStartMode key
     #[test]
     fn snowluma_start_mode_none_is_omitted_in_serialization() {
         let config = make_basic_config(None);
@@ -669,7 +651,7 @@ mod snowluma_start_mode_tests {
         assert_eq!(decoded.snowluma_start_mode, None);
     }
 
-    /// Some(ColdStart) 序列化形态:{"snowlumaStartMode":{"mode":"cold_start"}, ...}
+    /// ColdStart 字节稳定性
     #[test]
     fn snowluma_start_mode_cold_start_is_byte_stable() {
         let config = make_basic_config(Some(SnowLumaStartMode::ColdStart));
@@ -692,9 +674,7 @@ mod snowluma_start_mode_tests {
         assert_eq!(json.as_bytes(), json_again.as_bytes());
     }
 
-    /// Some(HotStart) 序列化形态:
-    /// {"snowlumaStartMode":{"mode":"hot_start"}, ...}
-    /// HotStart 不再带 attach_pid 字段,PID 由 backend 在 start 时自动按 qq_id 匹配
+    /// HotStart 字节稳定性
     #[test]
     fn snowluma_start_mode_hot_start_is_byte_stable() {
         let config = make_basic_config(Some(SnowLumaStartMode::HotStart));
@@ -713,7 +693,7 @@ mod snowluma_start_mode_tests {
         assert_eq!(json.as_bytes(), json_again.as_bytes());
     }
 
-    /// deployment_type 序列化为 camelCase key + lowercase 值,默认 Native
+    /// deployment_type 序列化为 camelCase key + lowercase 值
     #[test]
     fn deployment_type_serializes_camel_lowercase() {
         let mut config = make_basic_config(None);
@@ -727,10 +707,9 @@ mod snowluma_start_mode_tests {
         assert_eq!(decoded.deployment_type, DeploymentType::Docker);
     }
 
-    /// 旧配置(无 deploymentType key)反序列化后默认 Native,保证 0 成本升级
+    /// 旧配置缺失 deploymentType 时默认 Native
     #[test]
     fn deployment_type_absent_defaults_to_native() {
-        // 一份不含 deploymentType 的最小 BotBasicConfig JSON
         let legacy = r#"{
             "name": "old-bot",
             "QQID": 10001,
@@ -740,8 +719,7 @@ mod snowluma_start_mode_tests {
             "runtime_target": "local",
             "backend_type": "napcat"
         }"#;
-        let decoded: BotBasicConfig =
-            serde_json::from_str(legacy).expect("旧配置应可反序列化");
+        let decoded: BotBasicConfig = serde_json::from_str(legacy).unwrap();
         assert_eq!(decoded.deployment_type, DeploymentType::Native);
     }
 }
@@ -775,15 +753,14 @@ mod runtime_matrix_tests {
 
     #[test]
     fn supported_matrices_pass() {
-        // 直接运行 + 本机 + NapCat:历史默认
+        // 原生 + 本机
         cfg(BackendType::NapCat, DeploymentType::Native, RuntimeTarget::Local)
             .validate_runtime_matrix()
             .unwrap();
-        // 直接运行 + 本机 + SnowLuma
         cfg(BackendType::SnowLuma, DeploymentType::Native, RuntimeTarget::Local)
             .validate_runtime_matrix()
             .unwrap();
-        // Docker + 远端 + NapCat:远端容器化主路径
+        // Docker + 远端
         cfg(
             BackendType::NapCat,
             DeploymentType::Docker,
@@ -791,7 +768,6 @@ mod runtime_matrix_tests {
         )
         .validate_runtime_matrix()
         .unwrap();
-        // Docker + 远端 + SnowLuma
         cfg(
             BackendType::SnowLuma,
             DeploymentType::Docker,
@@ -799,7 +775,7 @@ mod runtime_matrix_tests {
         )
         .validate_runtime_matrix()
         .unwrap();
-        // 直接运行 + 远端 + NapCat / SnowLuma(SSH Native)
+        // 原生 + 远端
         cfg(
             BackendType::NapCat,
             DeploymentType::Native,
