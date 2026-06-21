@@ -176,7 +176,7 @@ fn dotenv_value(raw: &str) -> String {
     out
 }
 
-/// 远端探 $HOME。失败返回 None。
+/// 远端探 $HOME失败返回 None
 async fn probe_home(host: &dyn Host) -> Option<String> {
     let cmd = HostCommand::new("sh").arg("-c").arg("echo $HOME");
     match host.run_to_string(cmd).await {
@@ -199,9 +199,9 @@ impl Deployment for DockerDeployment {
     }
 
     fn supports(&self, host: &dyn Host) -> bool {
-        // 仅 Linux 主机(一般是远端 SSH)。本机 Windows 不支持 Docker bot 部署:
-        // Docker Desktop 安装链路太麻烦,产品上不在本机做容器化。daemon 是否真在
-        // 跑留给 install 阶段动态探测。
+        // 仅 Linux 主机(一般是远端 SSH)本机 Windows 不支持 Docker bot 部署:
+        // Docker Desktop 安装链路太麻烦,产品上不在本机做容器化daemon 是否真在
+        // 跑留给 install 阶段动态探测
         use ncd_host::Os;
         matches!(host.os(), Os::Linux)
     }
@@ -352,7 +352,7 @@ impl Deployment for DockerDeployment {
 
         let project_dir = Self::project_dir(host, &name).await?;
 
-        // 上次失败/改口味可能留下同名容器；compose orphan 也可能是旧服务名。
+        // 上次失败/改口味可能留下同名容器;compose orphan 也可能是旧服务名
         let _ = cli.remove(&name).await;
         let legacy_nc = format!("ncbot-{}", config.bot.qq_id);
         let legacy_sl = format!("slbot-{}", config.bot.qq_id);
@@ -376,7 +376,7 @@ impl Deployment for DockerDeployment {
                 DeploymentError::LaunchFailed(format!("启动容器失败: {e}"))
             })?;
 
-        // 回读容器 id + 启动时间。找不到也不致命:容器已起,observe 后续能纠正。
+        // 回读容器 id + 启动时间找不到也不致命:容器已起,observe 后续能纠正
         let started_at = now_secs();
         let container_id = find_container_id(&cli, &name).await.unwrap_or_default();
         info!(
@@ -405,7 +405,7 @@ impl Deployment for DockerDeployment {
         let name = resolve_bot_container_name(&cli, bot_id).await.unwrap_or_else(|_| {
             format!("ncbot-{}", bot_id.as_str())
         });
-        // 归到 Failed 状态(带原因)让上层显示,而不是抛错中断轮询。
+        // 归到 Failed 状态(带原因)让上层显示,而不是抛错中断轮询
         match cli.list_containers().await {
             Ok(containers) => Ok(containers
                 .iter()
@@ -468,7 +468,7 @@ impl Deployment for DockerDeployment {
         let project_dir = Self::project_dir(host, &name)
             .await
             .map_err(|e| DeploymentError::UninstallFailed(e.to_string()))?;
-        // compose down -v 清容器 + 卷。目录不存在时 down 会报错,忽略(幂等)。
+        // compose down -v 清容器 + 卷目录不存在时 down 会报错,忽略(幂等)
         let _ = cli.compose_down(&project_dir, true).await;
         let _ = host
             .remove_dir_all(&HostPath::from_posix(&project_dir))
@@ -477,7 +477,7 @@ impl Deployment for DockerDeployment {
     }
 }
 
-/// NapCat ncbot-<qq>，SnowLuma slbot-<qq>。
+/// NapCat ncbot-<qq>,SnowLuma slbot-<qq>
 pub fn bot_docker_container_name(backend: BackendType, qq_id: u64) -> String {
     match backend {
         BackendType::SnowLuma => format!("slbot-{qq_id}"),
@@ -485,7 +485,7 @@ pub fn bot_docker_container_name(backend: BackendType, qq_id: u64) -> String {
     }
 }
 
-/// 按 qq 在远端查找实际在跑的 bot 容器名（兼容历史 ncbot 命名跑 SL 的残留）。
+/// 按 qq 在远端查找实际在跑的 bot 容器名(兼容历史 ncbot 命名跑 SL 的残留)
 async fn resolve_bot_container_name(
     cli: &DockerCli<'_>,
     bot_id: &BotId,
@@ -504,7 +504,7 @@ async fn resolve_bot_container_name(
     Ok(candidates[0].clone())
 }
 
-/// 容器 state 字符串 -> DeploymentState。
+/// 容器 state 字符串 -> DeploymentState
 fn map_state(state: &ncd_domain::ContainerState) -> DeploymentState {
     use ncd_domain::ContainerState;
     match state {
@@ -517,7 +517,7 @@ fn map_state(state: &ncd_domain::ContainerState) -> DeploymentState {
     }
 }
 
-/// 找指定名字容器的短 id。
+/// 找指定名字容器的短 id
 async fn find_container_id(cli: &DockerCli<'_>, name: &str) -> Option<String> {
     let containers = cli.list_containers().await.ok()?;
     containers
@@ -526,7 +526,7 @@ async fn find_container_id(cli: &DockerCli<'_>, name: &str) -> Option<String> {
         .map(|c| c.id)
 }
 
-/// 默认文件属主。远端 Linux 普通用户一般 1000;本机 Windows 不在意给 0。
+/// 默认文件属主远端 Linux 普通用户一般 1000;本机 Windows 不在意给 0
 fn default_uid_gid(host: &dyn Host) -> (u32, u32) {
     match host.os() {
         ncd_host::Os::Linux => (1000, 1000),
@@ -583,7 +583,7 @@ mod tests {
     struct MockHost {
         home: Option<String>,
         require_elevated: bool,
-        /// launch 幂等测试：docker ps 在 compose up 之前返回空，之后返回 running 容器。
+        /// launch 幂等测试:docker ps 在 compose up 之前返回空,之后返回 running 容器
         compose_up_done: Arc<Mutex<bool>>,
         commands: Arc<Mutex<Vec<HostCommand>>>,
         writes: Arc<Mutex<Vec<RecordedWrite>>>,

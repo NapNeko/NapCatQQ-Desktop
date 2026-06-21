@@ -63,8 +63,8 @@ fn main() {
     let base_url = escape_rust_str(base_url.as_deref().unwrap_or("").trim());
     let secret = escape_rust_str(secret.as_deref().unwrap_or("").trim());
     let generated = format!(
-        "// 由 build.rs 在编译期生成。请勿手工编辑；改动请改 build.rs / 模板。\n\
-         // 真实中转代理常量已通过 NCD_PROXY_BASE_URL / NCD_PROXY_SECRET 注入。\n\
+        "// 由 build.rs 在编译期生成,请勿手工编辑;改动请改 build.rs / 模板\n\
+         // 真实中转代理常量已通过 NCD_PROXY_BASE_URL / NCD_PROXY_SECRET 注入\n\
          \n\
          pub const PROXY_BASE_URL: &str = {base_url};\n\
          pub const PROXY_SHARED_SECRET: &str = {secret};\n"

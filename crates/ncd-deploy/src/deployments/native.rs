@@ -315,10 +315,10 @@ fn parse_napcat_webui_line_loose(line: &str) -> Option<(u16, String)> {
 }
 
 // ============================================================
-// 后台任务：日志 reader / exit watcher
+// 后台任务:日志 reader / exit watcher
 // ============================================================
 
-/// reader 任务参数包，省得 spawn_log_reader 函数签名长得没法看。
+/// reader 任务参数包,省得 spawn_log_reader 函数签名长得没法看
 struct LogReaderCtx {
     bot_id: BotId,
     channel: &'static str,
@@ -327,8 +327,8 @@ struct LogReaderCtx {
     event_sink: Arc<dyn NativeRuntimeEventSink>,
 }
 
-/// 异步读取子进程的 stdout 或 stderr，按行解码后写内存缓冲、磁盘日志，
-/// 并通过事件 sink 广播 BotLogAppended / NapCatWebuiAvailable。
+/// 异步读取子进程的 stdout 或 stderr,按行解码后写内存缓冲,磁盘日志,
+/// 并通过事件 sink 广播 BotLogAppended / NapCatWebuiAvailable
 fn spawn_log_reader(stream: Box<dyn tokio::io::AsyncRead + Send + Unpin>, ctx: LogReaderCtx) {
     tokio::spawn(async move {
         let mut reader = BufReader::new(stream);
@@ -340,7 +340,7 @@ fn spawn_log_reader(stream: Box<dyn tokio::io::AsyncRead + Send + Unpin>, ctx: L
                 Ok(_) => {}
                 Err(_) => break,
             }
-            // 去除尾部换行符。
+            // 去除尾部换行符
             while matches!(buf.last(), Some(b'\n' | b'\r')) {
                 buf.pop();
             }
@@ -360,7 +360,7 @@ fn spawn_log_reader(stream: Box<dyn tokio::io::AsyncRead + Send + Unpin>, ctx: L
                     .push_line(&line);
             }
 
-            // 写文件失败不致命。
+            // 写文件失败不致命
             if let Some(path) = ctx.log_path.as_ref() {
                 if let Some(parent) = path.parent() {
                     let _ = tokio::fs::create_dir_all(parent).await;
@@ -387,8 +387,8 @@ fn spawn_log_reader(stream: Box<dyn tokio::io::AsyncRead + Send + Unpin>, ctx: L
     });
 }
 
-/// 监听子进程退出。退出后从 processes 中移除记录、清空日志缓冲，
-/// 通过 sink 广播 BotProcessExited。
+/// 监听子进程退出退出后从 processes 中移除记录,清空日志缓冲,
+/// 通过 sink 广播 BotProcessExited
 fn spawn_exit_watcher(
     bot_id: BotId,
     pid: u32,
@@ -419,8 +419,8 @@ fn spawn_exit_watcher(
             return;
         }
 
-        // 进程退出后清内存日志缓冲，避免下一轮启动残留旧行。磁盘 .log 不动，
-        // 给用户保留崩溃前归档。
+        // 进程退出后清内存日志缓冲,避免下一轮启动残留旧行磁盘 .log 不动,
+        // 给用户保留崩溃前归档
         {
             let mut guard = logs.lock().await;
             guard.remove(&bot_id);
@@ -433,8 +433,8 @@ fn spawn_exit_watcher(
     });
 }
 
-/// 平台无关地递归 kill 进程树。NapCat 是注入器：
-/// NapCatWinBootMain.exe → QQ.exe → renderer 子进程，必须整树清掉。
+/// 平台无关地递归 kill 进程树NapCat 是注入器:
+/// NapCatWinBootMain.exe → QQ.exe → renderer 子进程,必须整树清掉
 async fn kill_process_tree(host: &dyn Host, pid: u32) -> Result<(), DeploymentError> {
     if pid == 0 {
         return Ok(());
@@ -454,11 +454,11 @@ async fn kill_process_tree(host: &dyn Host, pid: u32) -> Result<(), DeploymentEr
     if output.success() {
         return Ok(());
     }
-    // taskkill 退出码 128 = 进程已退出，按幂等处理。
+    // taskkill 退出码 128 = 进程已退出,按幂等处理
     if matches!(host.os(), Os::Windows) && output.exit_code == Some(128) {
         return Ok(());
     }
-    // Unix 上若进程组 kill 失败（pid 不是 leader），回退按单 PID 杀一次。
+    // Unix 上若进程组 kill 失败(pid 不是 leader),回退按单 PID 杀一次
     if matches!(host.os(), Os::Linux | Os::MacOs) {
         let fallback = HostCommand::new("kill").arg("-KILL").arg(pid.to_string());
         let fb = host
@@ -495,7 +495,7 @@ impl Deployment for NativeDeployment {
     }
 
     fn supports(&self, _host: &dyn Host) -> bool {
-        // 原生部署对 host 没有静态限制：任何 Host 实装都能跑。
+        // 原生部署对 host 没有静态限制:任何 Host 实装都能跑
         true
     }
 
@@ -505,7 +505,7 @@ impl Deployment for NativeDeployment {
         _config: &BotConfig,
         _progress: &dyn DeploymentProgressSink,
     ) -> Result<(), DeploymentError> {
-        // 组件层的安装链还没接进来，暂留占位。
+        // 组件层的安装链还没接进来,暂留占位
         Err(DeploymentError::Unsupported(
             "NativeDeployment::install not yet implemented",
         ))
@@ -518,7 +518,7 @@ impl Deployment for NativeDeployment {
     ) -> Result<DeploymentHandle, DeploymentError> {
         let bot_id = Self::derive_bot_id(config);
 
-        // 1. 翻译用户配置为进程命令。
+        // 1. 翻译用户配置为进程命令
         let plan = self.translator.translate(config).await?;
         if plan.program.is_empty() {
             return Err(DeploymentError::LaunchFailed(
@@ -526,7 +526,7 @@ impl Deployment for NativeDeployment {
             ));
         }
 
-        // 2. 拼 HostCommand。working_dir 走 HostPath；环境变量整张表透传。
+        // 2. 拼 HostCommandworking_dir 走 HostPath;环境变量整张表透传
         let mut cmd = HostCommand::new(plan.program.clone()).args(plan.args.clone());
         if let Some(dir) = plan.working_dir.as_ref() {
             cmd = cmd.working_dir(host_path_from_native(dir, host.os()));
@@ -535,13 +535,13 @@ impl Deployment for NativeDeployment {
             .envs(plan.environment.clone().into_iter())
             .long_running();
 
-        // 3. 启动新进程前清掉这个 bot 旧的内存日志缓冲。
+        // 3. 启动新进程前清掉这个 bot 旧的内存日志缓冲
         {
             let mut guard = self.logs.lock().await;
             guard.remove(&bot_id);
         }
 
-        // 4. spawn 进程，拿 stdout / stderr 给 reader 任务。
+        // 4. spawn 进程,拿 stdout / stderr 给 reader 任务
         let mut process = host
             .spawn(cmd)
             .await
@@ -553,7 +553,7 @@ impl Deployment for NativeDeployment {
             .as_secs();
         let generation = self.generation.fetch_add(1, Ordering::Relaxed);
 
-        // 先落档再启动 watcher，避免快速退出时 watcher 先 remove，launch 后 insert stale running。
+        // 先落档再启动 watcher,避免快速退出时 watcher 先 remove,launch 后 insert stale running
         {
             let mut guard = self.processes.lock().await;
             guard.insert(
@@ -624,7 +624,7 @@ impl Deployment for NativeDeployment {
         bot_id: &BotId,
         _mode: StopMode,
     ) -> Result<(), DeploymentError> {
-        // 标记 stop_requested 后释放锁，避免 kill 等待期间堵其它 observe / launch。
+        // 标记 stop_requested 后释放锁,避免 kill 等待期间堵其它 observe / launch
         let pid = {
             let mut guard = self.processes.lock().await;
             let Some(record) = guard.get_mut(bot_id) else {
@@ -661,11 +661,11 @@ impl Deployment for NativeDeployment {
     }
 }
 
-/// 把宿主上原生 PathBuf 转成 HostPath。
+/// 把宿主上原生 PathBuf 转成 HostPath
 ///
-/// - 远端 host 拿到这个 PathBuf 一般是没意义的（路径属于本机文件系统，
-///   远端结构可能完全不同）；调用方应在翻译阶段就保证路径属于目标 host。
-/// - 这里的转换只是把 \ / 规范成 HostPath 内部的 POSIX 表达。
+/// - 远端 host 拿到这个 PathBuf 一般是没意义的(路径属于本机文件系统,
+///   远端结构可能完全不同);调用方应在翻译阶段就保证路径属于目标 host
+/// - 这里的转换只是把 \ / 规范成 HostPath 内部的 POSIX 表达
 fn host_path_from_native(path: &Path, os: Os) -> HostPath {
     let s = path.to_string_lossy();
     match os {
@@ -674,7 +674,7 @@ fn host_path_from_native(path: &Path, os: Os) -> HostPath {
     }
 }
 
-/// 把 HostError 转成可读的错误消息字符串。
+/// 把 HostError 转成可读的错误消息字符串
 fn host_err_msg(err: HostError) -> String {
     err.to_string()
 }
@@ -683,7 +683,7 @@ fn host_err_msg(err: HostError) -> String {
 // 给 BotManager / 日志页用的辅助方法
 // ============================================================
 
-/// tail_log 返回的快照：最近 N 行 + 累计总行数。
+/// tail_log 返回的快照:最近 N 行 + 累计总行数
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeLogSnapshot {
     pub lines: Vec<String>,
@@ -691,7 +691,7 @@ pub struct NativeLogSnapshot {
 }
 
 impl NativeDeployment {
-    /// 取当前内存里的日志快照。limit > 0 时只返回末尾 limit 行。
+    /// 取当前内存里的日志快照limit > 0 时只返回末尾 limit 行
     pub async fn tail_log(&self, bot_id: &BotId, limit: usize) -> NativeLogSnapshot {
         let guard = self.logs.lock().await;
         let Some(buffer) = guard.get(bot_id) else {
@@ -710,15 +710,15 @@ impl NativeDeployment {
         }
     }
 
-    /// 主动追加一行日志（外部驱动测试用 / 远端 host 没有 stdout pipe 时由
-    /// 调用方手动 push）。落盘失败不致命。
+    /// 主动追加一行日志(外部驱动测试用 / 远端 host 没有 stdout pipe 时由
+    /// 调用方手动 push)落盘失败不致命
     #[doc(hidden)]
     pub async fn append_log_line_for_test(&self, bot_id: &BotId, line: &str) {
         let mut guard = self.logs.lock().await;
         guard.entry(bot_id.clone()).or_default().push_line(line);
     }
 
-    /// 当前在跑的 bot 列表（observe 的批量版本）。
+    /// 当前在跑的 bot 列表(observe 的批量版本)
     pub async fn list_running(&self) -> Vec<(BotId, u32, u64)> {
         let guard = self.processes.lock().await;
         guard
@@ -728,7 +728,7 @@ impl NativeDeployment {
     }
 }
 
-// 兼容环境变量 BTreeMap 类型导出。
+// 兼容环境变量 BTreeMap 类型导出
 #[doc(hidden)]
 pub type NativeEnv = BTreeMap<String, String>;
 
@@ -744,15 +744,15 @@ mod tests {
     use tokio::sync::oneshot;
 
     // ============================================================
-    // FakeHost：spawn 走真实 tokio::process::Command，run_to_string 仅记录调用
+    // FakeHost:spawn 走真实 tokio::process::Command,run_to_string 仅记录调用
     //
-    // 这套 fake 的目的：
-    // - launch 路径用真子进程（echo 类命令）走通 take_stdout / exit watcher 链路
-    // - stop 路径只校验调用了正确 kill 命令，不真杀进程（进程已自然退出）
-    // - 不依赖 LocalWindowsHost / RemoteLinuxHost，跨平台都能跑
+    // 这套 fake 的目的:
+    // - launch 路径用真子进程(echo 类命令)走通 take_stdout / exit watcher 链路
+    // - stop 路径只校验调用了正确 kill 命令,不真杀进程(进程已自然退出)
+    // - 不依赖 LocalWindowsHost / RemoteLinuxHost,跨平台都能跑
     // ============================================================
 
-    /// 极简 BashShell stub，只是占位 —— Host trait 要求 shell() 返回 &dyn HostShell。
+    /// 极简 BashShell stub,只是占位 —— Host trait 要求 shell() 返回 &dyn HostShell
     struct NoopShell;
 
     impl HostShell for NoopShell {
@@ -883,7 +883,7 @@ mod tests {
         }
 
         async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
-            // 录到 kill_calls 列表里供测试断言。返回 success，让 stop 走幂等路径。
+            // 录到 kill_calls 列表里供测试断言返回 success,让 stop 走幂等路径
             self.kill_calls.lock().unwrap().push(cmd);
             Ok(CommandOutput {
                 exit_code: Some(0),
@@ -893,8 +893,8 @@ mod tests {
         }
     }
 
-    /// FakeProcess：包 tokio::process::Child，实装 take_stdout / take_stderr，
-    /// wait 返回正常 exit。
+    /// FakeProcess:包 tokio::process::Child,实装 take_stdout / take_stderr,
+    /// wait 返回正常 exit
     struct FakeProcess {
         child: Option<tokio::process::Child>,
         id: ProcessId,
@@ -1040,7 +1040,7 @@ mod tests {
         }
     }
 
-    /// FakeTranslator：不真翻译，按测试参数直接返回固定 NativeLaunchCommand。
+    /// FakeTranslator:不真翻译,按测试参数直接返回固定 NativeLaunchCommand
     struct FakeTranslator {
         plan: NativeLaunchCommand,
     }
@@ -1055,8 +1055,8 @@ mod tests {
         }
     }
 
-    /// CapturingEventSink：把所有事件录进 Vec，测试用断言。
-    /// 进程退出事件还会发给 oneshot，让测试方便等"watcher 跑完"。
+    /// CapturingEventSink:把所有事件录进 Vec,测试用断言
+    /// 进程退出事件还会发给 oneshot,让测试方便等"watcher 跑完"
     #[derive(Default)]
     struct CapturingEventSink {
         log_lines: StdMutex<Vec<(BotId, String, String)>>,

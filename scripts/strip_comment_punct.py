@@ -75,6 +75,29 @@ def strip(text: str) -> str:
                 in_str = True
                 out.append(c)
                 i += 1
+            elif c == "'":
+                # char 'x' / '\x' vs lifetime 'a。char 里的 " 不当字符串开始。
+                c1 = text[i + 1] if i + 1 < n else ''
+                c2 = text[i + 2] if i + 2 < n else ''
+                if c1 == '\\' and c2:
+                    # char 转义 '\x'，含 closing '
+                    out.append("'")
+                    out.append(c1)
+                    out.append(c2)
+                    i += 3
+                    if i < n and text[i] == "'":
+                        out.append("'")
+                        i += 1
+                elif c2 == "'":
+                    # char 'x'
+                    out.append("'")
+                    out.append(c1)
+                    out.append("'")
+                    i += 3
+                else:
+                    # lifetime 'a，普通字符
+                    out.append("'")
+                    i += 1
             else:
                 out.append(c)
                 i += 1

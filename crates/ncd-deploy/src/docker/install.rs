@@ -142,7 +142,7 @@ fi
     .to_string()
 }
 
-/// 在 host 上确保 docker 可用,没有就尝试装（无进度回调，供测试/旧调用方）。
+/// 在 host 上确保 docker 可用,没有就尝试装(无进度回调,供测试/旧调用方)
 pub async fn install_docker(
     host: &dyn Host,
     sudo_password: Option<&str>,
@@ -153,7 +153,7 @@ pub async fn install_docker(
     super::install_progress::install_docker_with_progress(host, sudo_password, None, noop).await
 }
 
-/// 兼容单测：合并脚本文本（逻辑与分阶段一致）。
+/// 兼容单测:合并脚本文本(逻辑与分阶段一致)
 #[cfg(test)]
 pub(crate) fn aliyun_install_script() -> String {
     docker_install_phases()
@@ -163,7 +163,7 @@ pub(crate) fn aliyun_install_script() -> String {
         .join("\n")
 }
 
-/// 从 sudo/stderr 粗判是不是密码错误。
+/// 从 sudo/stderr 粗判是不是密码错误
 pub(crate) fn looks_like_bad_sudo_password(stderr: &str) -> bool {
     let s = stderr.to_ascii_lowercase();
     s.contains("incorrect password")
