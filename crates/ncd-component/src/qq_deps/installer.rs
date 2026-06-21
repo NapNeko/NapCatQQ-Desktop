@@ -8,14 +8,7 @@ use ncd_host::remote::SudoAccess;
 
 use crate::context::ActionCtx;
 use crate::error::ActionError;
-
-/// 包管理器类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PackageManagerType {
-    Apt,
-    Dnf,
-    Unknown,
-}
+use crate::PkgMgr;
 
 /// QQ 依赖安装器
 pub struct QqDependencyInstaller;
@@ -24,7 +17,7 @@ impl QqDependencyInstaller {
     /// 自动安装缺失依赖
     ///
     /// 会检查 sudo 权限;sudo_password 对齐 Docker 安装流程——前端弹窗收集到的密码
-    /// 直接传入,先注入 Host 再继续安装None 时 probe 到 PasswordRequired 就返回
+    /// 直接传入,先注入 Host 再继续安装,None 时 probe 到 PasswordRequired 就返回
     /// elevation_required 标志让上层弹窗
     pub async fn install(
         &self,
@@ -47,7 +40,7 @@ impl QqDependencyInstaller {
 
         // host 已注入的提权密码也算可用:deploy path(ensure_dependencies)不再传
         // sudo_password,但 ServerManager 在建连时已从 keyring 注入了密码到 host,
-        // 这份密码足够让 elevated apt 命令走 sudo -S只看参数会漏掉这条路径
+        // 这份密码足够让 elevated apt 命令走 sudo -S,只看参数会漏掉这条路径
         let host_has_password = host.has_elevation_password().await;
 
         tracing::info!(
@@ -81,7 +74,7 @@ impl QqDependencyInstaller {
         }
 
         // 探测一次包管理器类型,后续每个包安装复用,避免重复 command -v
-        let pkg_mgr = self.detect_package_manager(host).await;
+        let pkg_mgr = self.detect_package_manager(host).await?;
 
         // 刷新包索引
         if let Err(e) = self.refresh_package_index(host, pkg_mgr).await {
@@ -130,24 +123,27 @@ impl QqDependencyInstaller {
     }
 
     /// 探测包管理器类型(一次性探测,避免重复)
-    async fn detect_package_manager(&self, host: &dyn Host) -> PackageManagerType {
+    async fn detect_package_manager(&self, host: &dyn Host) -> Result<PkgMgr, ActionError> {
         let cmd_check_apt = HostCommand::new("command").arg("-v").arg("apt-get");
         if host.run_to_string(cmd_check_apt).await.is_ok_and(|o| o.success()) {
-            return PackageManagerType::Apt;
+            return Ok(PkgMgr::Apt);
         }
 
         let cmd_check_dnf = HostCommand::new("command").arg("-v").arg("dnf");
         if host.run_to_string(cmd_check_dnf).await.is_ok_and(|o| o.success()) {
-            return PackageManagerType::Dnf;
+            return Ok(PkgMgr::Dnf);
         }
 
-        PackageManagerType::Unknown
+        Err(ActionError::install_step(
+            "detect_package_manager",
+            "neither apt-get nor dnf found on host",
+        ))
     }
 
     /// 刷新包索引
-    async fn refresh_package_index(&self, host: &dyn Host, pkg_mgr: PackageManagerType) -> Result<(), HostError> {
+    async fn refresh_package_index(&self, host: &dyn Host, pkg_mgr: PkgMgr) -> Result<(), HostError> {
         match pkg_mgr {
-            PackageManagerType::Apt => {
+            PkgMgr::Apt => {
                 let cmd = HostCommand::new("apt-get")
                     .arg("update")
                     .arg("-y")
@@ -155,19 +151,12 @@ impl QqDependencyInstaller {
                     .elevated();
                 host.run_to_string(cmd).await?;
             }
-            PackageManagerType::Dnf => {
+            PkgMgr::Dnf => {
                 let cmd = HostCommand::new("dnf")
                     .arg("makecache")
                     .arg("--refresh")
                     .elevated();
                 host.run_to_string(cmd).await?;
-            }
-            PackageManagerType::Unknown => {
-                return Err(HostError::CommandFailed {
-                    program: "package_manager".to_string(),
-                    exit_code: None,
-                    stderr: "未知的包管理器".to_string(),
-                });
             }
         }
         Ok(())
@@ -178,7 +167,7 @@ impl QqDependencyInstaller {
         &self,
         host: &dyn Host,
         package: &str,
-        pkg_mgr: PackageManagerType,
+        pkg_mgr: PkgMgr,
         ctx: &mut ActionCtx,
     ) -> Result<(), HostError> {
         const MAX_RETRIES: u32 = 3;
@@ -215,9 +204,9 @@ impl QqDependencyInstaller {
     }
 
     /// 安装单个包
-    async fn install_package(&self, host: &dyn Host, package: &str, pkg_mgr: PackageManagerType) -> Result<(), HostError> {
+    async fn install_package(&self, host: &dyn Host, package: &str, pkg_mgr: PkgMgr) -> Result<(), HostError> {
         match pkg_mgr {
-            PackageManagerType::Apt => {
+            PkgMgr::Apt => {
                 let cmd = HostCommand::new("apt-get")
                     .arg("install")
                     .arg("-y")
@@ -233,7 +222,7 @@ impl QqDependencyInstaller {
                     });
                 }
             }
-            PackageManagerType::Dnf => {
+            PkgMgr::Dnf => {
                 let cmd = HostCommand::new("dnf")
                     .arg("install")
                     .arg("-y")
@@ -247,13 +236,6 @@ impl QqDependencyInstaller {
                         stderr: output.stderr,
                     });
                 }
-            }
-            PackageManagerType::Unknown => {
-                return Err(HostError::CommandFailed {
-                    program: "package_manager".to_string(),
-                    exit_code: None,
-                    stderr: "未知的包管理器，无法安装依赖".to_string(),
-                });
             }
         }
         Ok(())

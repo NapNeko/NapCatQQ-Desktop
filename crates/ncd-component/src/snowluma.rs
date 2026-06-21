@@ -19,7 +19,7 @@
 
 use async_trait::async_trait;
 
-use ncd_host::{ArchiveKind, Host, HostCommand, HostError, HostPath, Locality, Os};
+use ncd_host::{Host, HostCommand, HostError, HostPath, Locality, Os};
 
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
@@ -69,7 +69,7 @@ pub struct SnowLumaComponent {
     /// 平台模式,决定 detect / install / verify 走 Linux tarball 还是
     /// Windows zip 路径
     mode: PlatformMode,
-    /// Windows 模式下的 release tag(如 v1.7.5)Linux 模式下为 None
+    /// Windows 模式下的 release tag(如 v1.7.5),Linux 模式下为 None
     /// 用于:1) 探测 install_dir 下的 .installed_tag 是否一致;
     /// 2) install 完成后写回 .installed_tag(对齐 legacy
     /// SnowLumaInstall.write_installed_tag)
@@ -110,7 +110,7 @@ impl SnowLumaComponent {
     ///      legacy 同款
     ///
     /// 调用方应该传入与 release service 一致的 tag(例如从 GitHub releases
-    /// 拉到的最新版),不要自己拼接如果只是想 detect 已装版本,
+    /// 拉到的最新版),不要自己拼接,如果只是想 detect 已装版本,
     /// 给个空 tag 也能跑(只会让 install 路径不可用,detect 不影响)
     pub fn for_windows(install_dir: HostPath, tag: impl Into<String>) -> Self {
         let tag_str = tag.into();
@@ -223,7 +223,7 @@ impl Component for SnowLumaComponent {
 
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
         // SnowLuma 在 Linux 走 lite tarball 注入,Windows 走扁平 zip 解压
-        // (legacy SnowLumaInstall)Windows 远端不支持(没有用例)
+        // (legacy SnowLumaInstall),Windows 远端不支持(没有用例)
         &[
             (Os::Windows, Locality::Local),
             (Os::Linux, Locality::Local),
@@ -412,8 +412,8 @@ impl SnowLumaComponent {
                     1,
                 )
                 .await?;
-            // 上传前验本地文件确实是 gzip(magic 1f 8b)没传 sha256 时(release 快照
-            // 缺失)这是唯一的内容闸:URL 拼错 / 镜像代理返回 404 HTML 页时,这里直接
+            // 上传前验本地文件确实是 gzip(magic 1f 8b)
+            // 没传 sha256 时(release 快照缺失),这是唯一的内容闸:URL 拼错 / 镜像代理返回 404 HTML 页时,这里直接
             // 报人话错误,而不是把 HTML 当 tar.gz 传上去让远端 tar 报 "not in gzip format"
             verify_gzip_magic(&local_tmp).await.map_err(|reason| {
                 ActionError::install_step("verify_download", reason)
@@ -436,7 +436,6 @@ impl SnowLumaComponent {
             .arg("-C")
             .arg(self.snowluma_dir.as_posix())
             .arg("--strip-components=1");
-        let _ = ArchiveKind::TarGz; // 防止 import unused 警告(本 component 故意不走 host.extract_archive)
         let out = host.run_to_string(cmd).await?;
         if !out.success() {
             return Err(ActionError::install_step(
@@ -472,7 +471,7 @@ impl SnowLumaComponent {
 
     /// Windows detect:扁平 zip 部署优先读 .installed_tag(legacy
     /// SnowLumaInstall.write_installed_tag 写的),fallback 读
-    /// package.json 的 version 字段entry / node.exe / package.json
+    /// package.json 的 version 字段,entry / node.exe / package.json
     /// 任一缺失都视为未安装
     async fn detect_windows(
         &self,
@@ -497,7 +496,7 @@ impl SnowLumaComponent {
                 if !tag.is_empty() {
                     // 与 release_snapshot::ReleaseInfo.version(strip_v_prefix)
                     // 对齐:UI 直接拿来跟 latest 字符串相等比较时不会因为 v
-                    // 前缀差异误报 "有更新".installed_tag 文件本身保留
+                    // 前缀差异误报 "有更新",.installed_tag 文件本身保留
                     // 原样 tag(含 v),兼容 legacy SnowLumaInstall
                     let normalized = tag.strip_prefix('v').unwrap_or(&tag).to_string();
                     return Ok(Some(DetectedVersion {
@@ -690,7 +689,7 @@ impl SnowLumaComponent {
     }
 
     /// 探测解压根下是否存在唯一一层包装目录(SnowLuma-vX-win-x64/),是则返回
-    /// 该子目录,否则返回 extract_root 自身等价于 legacy
+    /// 该子目录,否则返回 extract_root 自身,等价于 legacy
     /// _detect_wrapper_prefix 的纯文件系统版
     async fn resolve_extracted_payload_root(
         &self,
@@ -759,16 +758,10 @@ impl SnowLumaComponent {
         &self,
         args: &LaunchArgs,
     ) -> HostCommand {
-        let mut cmd = HostCommand::new("node").arg(self.entry_path().as_posix());
-        for a in &args.extra_args {
-            cmd = cmd.arg(a);
-        }
-        for (k, v) in &args.extra_env {
-            cmd = cmd.env(k, v);
-        }
-        if let Some(wd) = &args.working_dir {
-            cmd = cmd.working_dir(wd.clone());
-        } else {
+        let cmd = HostCommand::new("node").arg(self.entry_path().as_posix());
+        let mut cmd = args.apply_to(cmd);
+        // apply_to 只在 args.working_dir 为 Some 时设;snowluma 需 fallback 到 snowluma_dir
+        if args.working_dir.is_none() {
             cmd = cmd.working_dir(self.snowluma_dir.clone());
         }
         cmd
@@ -813,8 +806,8 @@ async fn copy_tree(
     Ok(())
 }
 
-/// 校验本地文件确实是 gzip(开头 magic 1f 8b)下载层没传 sha256 时这是唯一能
-/// 拦住"假 tar.gz"(404 HTML 页 / 损坏文件 / 镜像代理错误页)的内容闸读不到文件
+/// 校验本地文件确实是 gzip(开头 magic 1f 8b),下载层没传 sha256 时这是唯一能
+/// 拦住"假 tar.gz"(404 HTML 页 / 损坏文件 / 镜像代理错误页)的内容闸,读不到文件
 /// 或开头不对都返回人话错误,让上层在上传前就拦下,而不是把垃圾传到远端让 tar 报
 /// "not in gzip format" 这种天书
 async fn verify_gzip_magic(path: &std::path::Path) -> Result<(), String> {
@@ -1071,7 +1064,7 @@ mod tests {
             let ws = tempfile::tempdir().unwrap();
             let install = windows_path(&ws, "snowluma");
             // .installed_tag 写 v1.7.5,package.json 写 1.7.4(不一致),
-            // detect 必须取 .installed_tag返回值的 v 前缀已剥(UI 直接跟
+            // detect 必须取 .installed_tag,返回值的 v 前缀已剥(UI 直接跟
             // ReleaseInfo.version 比较)
             lay_out_release(&host, &install, Some("v1.7.5"), "1.7.4").await;
 

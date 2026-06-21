@@ -4,9 +4,9 @@
 //! - Linux 本地/远端:rootless 安装,对齐 NapCat-Installer 官方一键脚本
 //!   下载 linuxqq_<ver>_<arch>.{deb,rpm} 解压到 <install_base_dir>/opt/QQ/
 //! - Windows 本地:detect 走注册表
-//!   HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT\Install 拿安装根新版 QQNT
+//!   HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT\Install 拿安装根,新版 QQNT
 //!   按版本分目录,版本号在 versions/config.json 的 curVersion;旧版是
-//!   扁平的 resources/app/package.json安装走官方 pcConfig.json 拿 NSIS
+//!   扁平的 resources/app/package.json,安装走官方 pcConfig.json 拿 NSIS
 //!   安装包跑 installer.exe /s 静默安装
 //!
 //! Linux 安装路径(rootless):
@@ -38,6 +38,7 @@ use ncd_host::{Arch, Host, HostCommand, HostError, HostPath, Locality, Os};
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
+use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
@@ -134,7 +135,7 @@ impl QQComponent {
         ))
     }
 
-    /// 探测远端有 dpkg-deb 还是 rpm2cpiodpkg 优先(deb 更普遍)
+    /// 探测远端有 dpkg-deb 还是 rpm2cpio,dpkg 优先(deb 更普遍)
     async fn detect_package_format(&self, host: &dyn Host) -> Result<PackageFormat, ActionError> {
         // 用 sh -c "command -v X" 探测,退出码 0 = 存在
         for (binary, fmt) in &[
@@ -261,7 +262,7 @@ impl Component for QQComponent {
     }
 
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
-        // Windows 本机 + Linux 本地 / 远端Windows 远端由 backend 的 SSH 逻辑
+        // Windows 本机 + Linux 本地 / 远端,Windows 远端由 backend 的 SSH 逻辑
         // 处理,不走本 component
         &[
             (Os::Windows, Locality::Local),
@@ -340,17 +341,7 @@ impl Component for QQComponent {
     ) -> Result<HostCommand, ActionError> {
         // QQ 启动命令:<install_base>/opt/QQ/qq <extra_args>,backend 再拼
         // --no-sandbox -q <qqid> 等参数,不在 Component 这层
-        let mut cmd = HostCommand::new(self.qq_executable().as_posix());
-        for a in &args.extra_args {
-            cmd = cmd.arg(a);
-        }
-        for (k, v) in &args.extra_env {
-            cmd = cmd.env(k, v);
-        }
-        if let Some(wd) = &args.working_dir {
-            cmd = cmd.working_dir(wd.clone());
-        }
-        Ok(cmd)
+        Ok(args.apply_to(HostCommand::new(self.qq_executable().as_posix())))
     }
 }
 
@@ -493,7 +484,7 @@ impl QQComponent {
                 // rpm2cpio <pkg> | (cd <install_base> && cpio -idm)
                 HostCommand::new("sh").arg("-c").arg(format!(
                     "rpm2cpio {} | (cd {} && cpio -idm)",
-                    pkg_path, install_base
+                    shell_quote(pkg_path), shell_quote(install_base)
                 ))
             }
         };
@@ -585,9 +576,9 @@ impl QQComponent {
     // Windows 本机实装
 
     /// Windows detect:注册表 HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT 的
-    /// Install 值拿安装根新版 QQNT 把客户端按版本分目录放在
+    /// Install 值拿安装根,新版 QQNT 把客户端按版本分目录放在
     /// versions/<curVersion>/ 下,版本号写在 versions/config.json 的
-    /// curVersion旧版 QQ 是扁平的 resources/app/package.json两种布局
+    /// curVersion,旧版 QQ 是扁平的 resources/app/package.json,两种布局
     /// 都试一遍
     async fn detect_windows(
         &self,
@@ -602,7 +593,7 @@ impl QQComponent {
         let config_json = install_root.join("versions/config.json");
         if host.exists(&config_json).await? {
             if let Ok(bytes) = host.read_file(&config_json).await {
-                if let Some(ver) = parse_qqnt_cur_version(&bytes) {
+                if let Some(ver) = parse_json_string_field(&bytes, "curVersion") {
                     return Ok(Some(DetectedVersion {
                         version: ver,
                         source: format!("{config_json}"),
@@ -615,7 +606,7 @@ impl QQComponent {
         let pkg_json = install_root.join("resources/app/package.json");
         if host.exists(&pkg_json).await? {
             if let Ok(bytes) = host.read_file(&pkg_json).await {
-                if let Some(ver) = parse_qq_package_version(&bytes) {
+                if let Some(ver) = parse_json_string_field(&bytes, "version") {
                     return Ok(Some(DetectedVersion {
                         version: ver,
                         source: format!("{pkg_json}"),
@@ -632,8 +623,8 @@ impl QQComponent {
         }))
     }
 
-    /// 跑 reg query 拿 QQNT 的 Install 值,转成 HostPath注册表项不存在
-    /// (未装 QQ)时返回 Ok(None)
+    /// 跑 reg query 拿 QQNT 的 Install 值,转成 HostPath
+    /// 注册表项不存在(未装 QQ)时返回 Ok(None)
     async fn query_windows_install_root(
         &self,
         host: &dyn Host,
@@ -757,22 +748,11 @@ impl QQComponent {
     }
 }
 
-/// 从 QQNT 新布局 versions/config.json 解析 curVersion 字段
-fn parse_qqnt_cur_version(bytes: &[u8]) -> Option<String> {
+// 从 JSON 对象取指定字段,trim 后空串视为缺失
+// QQ 新布局 versions/config.json 用 "curVersion",旧布局 package.json 用 "version"
+fn parse_json_string_field(bytes: &[u8], field: &str) -> Option<String> {
     let json: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-    let v = json.get("curVersion").and_then(|v| v.as_str())?;
-    let v = v.trim();
-    if v.is_empty() {
-        None
-    } else {
-        Some(v.to_string())
-    }
-}
-
-/// 从旧布局 resources/app/package.json 解析 version 字段
-fn parse_qq_package_version(bytes: &[u8]) -> Option<String> {
-    let json: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-    let v = json.get("version").and_then(|v| v.as_str())?;
+    let v = json.get(field).and_then(|v| v.as_str())?;
     let v = v.trim();
     if v.is_empty() {
         None
@@ -782,7 +762,8 @@ fn parse_qq_package_version(bytes: &[u8]) -> Option<String> {
 }
 
 /// 解析 reg query ... /v Install 的 stdout,抽出 Install REG_SZ <path>
-/// 里的 pathstdout 形如(第二行带前导缩进):
+/// 里的 path
+/// stdout 形如(第二行带前导缩进):
 ///     HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Tencent\QQNT
 ///         Install    REG_SZ    C:\Program Files\Tencent\QQNT
 fn parse_reg_install_value(stdout: &str) -> Option<String> {
@@ -988,23 +969,23 @@ mod tests {
         // 真实 versions/config.json 结构
         let body = br#"{"baseVersion":"9.9.26-44343","curVersion":"9.9.26-44343","buildId":"44343"}"#;
         assert_eq!(
-            parse_qqnt_cur_version(body),
+            parse_json_string_field(body, "curVersion"),
             Some("9.9.26-44343".to_string())
         );
     }
 
     #[test]
     fn parse_qqnt_cur_version_none_when_empty_or_missing() {
-        assert_eq!(parse_qqnt_cur_version(br#"{"curVersion":""}"#), None);
-        assert_eq!(parse_qqnt_cur_version(br#"{"baseVersion":"x"}"#), None);
-        assert_eq!(parse_qqnt_cur_version(b"not json"), None);
+        assert_eq!(parse_json_string_field(br#"{"curVersion":""}"#, "curVersion"), None);
+        assert_eq!(parse_json_string_field(br#"{"baseVersion":"x"}"#, "curVersion"), None);
+        assert_eq!(parse_json_string_field(b"not json", "curVersion"), None);
     }
 
     #[test]
     fn parse_qq_package_version_reads_old_layout() {
         let body = br#"{"name":"qq","version":"9.9.15-32869"}"#;
         assert_eq!(
-            parse_qq_package_version(body),
+            parse_json_string_field(body, "version"),
             Some("9.9.15-32869".to_string())
         );
     }

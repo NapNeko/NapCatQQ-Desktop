@@ -2,7 +2,7 @@
 //!
 //! 单 URL 路径走 ncd_network::download_with_resume(idle timeout + Range
 //! 续传);调用 [DownloadHelper::download_with_mirrors] 走 ncd_network 的
-//! mirror race + ≥16MB 切片并行下载SHA256 在所有路径下载完成后做
+//! mirror race + ≥16MB 切片并行下载,SHA256 在所有路径下载完成后做
 //!
 //! 设计:
 //! - 进度桥接:实现一个 CtxSink,把 ncd_network::ProgressUpdate 翻成
@@ -26,7 +26,7 @@ use tokio::io::AsyncReadExt;
 use crate::context::{ActionCtx, ProgressKind};
 use crate::error::ActionError;
 
-/// 下载辅助保留 stateful 接口以兼容旧调用点;内部不再持有 reqwest::Client,
+/// 下载辅助,保留 stateful 接口以兼容旧调用点;内部不再持有 reqwest::Client,
 /// 走 ncd_network::shared_client() 共享连接池
 pub struct DownloadHelper;
 
@@ -83,13 +83,13 @@ impl DownloadHelper {
 
     /// 多镜像下载:自动 race 选 winner,stall 时切镜像,≥16MB 自动切片
     ///
-    /// mirrors:候选 URL 列表(一般用 ncd_network::build_mirror_urls(原始 URL)
-    /// 生成)第一个 URL 用作进度上报里的 "primary" 标识
+    /// mirrors:候选 URL 列表(一般用 ncd_network::build_mirror_urls(原始 URL) 生成)
+    /// 第一个 URL 用作进度上报里的 "primary" 标识
     ///
     /// expected_sha256:Some 时下载完成后立即在 ncd-network 内部校验 sha256;
     /// mismatch 会切下家而不是直接报 ChecksumMismatch(堵代理"返完整长度
-    /// 的垃圾字节"投毒洞,前 4 轮字节级防御都防不住)所有镜像都失败才返
-    /// AllMirrorsFailedNone 跳过校验(兼容上游 release 还没 digest 的老仓库)
+    /// 的垃圾字节"投毒洞,前 4 轮字节级防御都防不住)
+    /// 所有镜像都失败才返 AllMirrorsFailed,None 跳过校验(兼容上游 release 还没 digest 的老仓库)
     pub async fn download_with_mirrors(
         &self,
         mirrors: &[String],

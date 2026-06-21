@@ -27,6 +27,7 @@ use ncd_host::{
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
+use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
@@ -150,7 +151,8 @@ impl Component for NodeJsComponent {
     }
 
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
-        // 当前实装:Linux 本地 / 远端,macOS 本地Windows 上 tar.xz 解压尚未支持
+        // 当前实装:Linux 本地 / 远端,macOS 本地
+        // Windows 上 tar.xz 解压尚未支持
         &[
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),
@@ -281,12 +283,10 @@ impl Component for NodeJsComponent {
         host.create_dir_all(&self.install_dir).await?;
         let root_subdir = stage_dir.join(self.extract_root_subdir(host));
         // 用 shell 把内容 mv 过去:mv stage/root_subdir/* install_dir/
+        let root = shell_quote(root_subdir.as_posix());
+        let dest = shell_quote(self.install_dir.as_posix());
         let mv_cmd = HostCommand::new("sh").arg("-c").arg(format!(
-            "mv {}/* {}/ && mv {}/.* {}/ 2>/dev/null; true",
-            root_subdir.as_posix(),
-            self.install_dir.as_posix(),
-            root_subdir.as_posix(),
-            self.install_dir.as_posix(),
+            "mv {root}/* {dest}/ && mv {root}/.* {dest}/ 2>/dev/null; true",
         ));
         let mv_out = host.run_to_string(mv_cmd).await?;
         if !mv_out.success() {
@@ -372,17 +372,7 @@ impl Component for NodeJsComponent {
         args: &LaunchArgs,
     ) -> Result<HostCommand, ActionError> {
         let binary = self.node_binary_path();
-        let mut cmd = HostCommand::new(binary.as_posix());
-        for a in &args.extra_args {
-            cmd = cmd.arg(a);
-        }
-        for (k, v) in &args.extra_env {
-            cmd = cmd.env(k, v);
-        }
-        if let Some(wd) = &args.working_dir {
-            cmd = cmd.working_dir(wd.clone());
-        }
-        Ok(cmd)
+        Ok(args.apply_to(HostCommand::new(binary.as_posix())))
     }
 }
 

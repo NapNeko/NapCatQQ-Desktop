@@ -44,3 +44,16 @@ pub use types::{
     ComponentCategory, ComponentDetectResult, ComponentId, ComponentInfo, DetectedVersion,
     LaunchArgs, SupportedTarget, VerifyReport,
 };
+
+// Linux 包管理器,novnc / qq_deps 共用
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PkgMgr {
+    Apt,
+    Dnf,
+}
+
+// sh -c 命令手动拼路径时用,委托 ncd_host::BashShell 的单引号转义
+pub(crate) fn shell_quote(s: &str) -> String {
+    use ncd_host::HostShell;
+    ncd_host::shell::BashShell.escape(s)
+}

@@ -139,17 +139,7 @@ impl Component for DesktopSelfComponent {
         args: &LaunchArgs,
     ) -> Result<HostCommand, ActionError> {
         // 拼出"重启 desktop"的命令(供 ncd-update 在自更新完成后调用)
-        let mut cmd = HostCommand::new(self.exe_path.as_posix());
-        for a in &args.extra_args {
-            cmd = cmd.arg(a);
-        }
-        for (k, v) in &args.extra_env {
-            cmd = cmd.env(k, v);
-        }
-        if let Some(wd) = &args.working_dir {
-            cmd = cmd.working_dir(wd.clone());
-        }
-        Ok(cmd)
+        Ok(args.apply_to(HostCommand::new(self.exe_path.as_posix())))
     }
 }
 

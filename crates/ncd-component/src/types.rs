@@ -103,6 +103,23 @@ pub struct LaunchArgs {
     pub working_dir: Option<ncd_host::HostPath>,
 }
 
+impl LaunchArgs {
+    // 把 extra_args / extra_env / working_dir 追加到 cmd,各 component 的
+    // launch_command 复用,避免 6 处抄同一片 for 循环
+    pub fn apply_to(&self, mut cmd: ncd_host::HostCommand) -> ncd_host::HostCommand {
+        for a in &self.extra_args {
+            cmd = cmd.arg(a);
+        }
+        for (k, v) in &self.extra_env {
+            cmd = cmd.env(k, v);
+        }
+        if let Some(wd) = &self.working_dir {
+            cmd = cmd.working_dir(wd.clone());
+        }
+        cmd
+    }
+}
+
 /// 组件分类
 ///
 /// - Framework:用户主动选择安装的 Bot 框架(NapCat / SnowLuma)
@@ -140,7 +157,7 @@ impl From<(ncd_host::Os, ncd_host::Locality)> for SupportedTarget {
     }
 }
 
-/// 组件元数据Components 页直接消费的清单数据
+/// 组件元数据,Components 页直接消费的清单数据
 ///
 /// 字段都由各 Component 实装的 info() 静态方法写死;前端不做任何派生
 /// (比如 i18n 文案就由后端写死中文 + 简短描述)

@@ -13,7 +13,7 @@
 //! 7. 改 QQ package.json 的 main 字段为 ./loadNapCat.js
 //!
 //! 探测:检查 <install_base>/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs
-//! 是否存在版本号从 napcat.mjs 内容里 grep napCatVersion = ... "<x.y.z>" 拿
+//! 是否存在,版本号从 napcat.mjs 内容里 grep napCatVersion = ... "<x.y.z>" 拿
 //! (legacy 的做法,见 legacy-python/src/core/remote/deployment.py
 //! _NAPCAT_VERSION_PATTERN)
 
@@ -25,6 +25,7 @@ use ncd_network::build_mirror_urls;
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
+use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
@@ -60,7 +61,7 @@ pub struct NapCatComponent {
     pub expected_sha256: Option<String>,
     /// 临时目录(下载/解压用)
     pub tmp_dir: HostPath,
-    /// 平台模式Linux 走注入式,Windows 走扁平 zip 解压
+    /// 平台模式,Linux 走注入式,Windows 走扁平 zip 解压
     mode: PlatformMode,
     /// install/uninstall 是否需要 sudo(仅 Linux 模式生效)
     /// System 布局(install_base_dir = "/")写 /opt/QQ 必须 sudo;
@@ -87,7 +88,7 @@ impl NapCatComponent {
     /// 创建一个 Windows 扁平 zip 部署的 NapCat component
     ///
     /// install_dir 是扁平解压根(典型 <data_root>/napcat/),napcat.mjs
-    /// 直接落在该目录之下Windows 没有 LinuxQQ 注入这层语义,所以 install
+    /// 直接落在该目录之下,Windows 没有 LinuxQQ 注入这层语义,所以 install
     /// 不写 loadNapCat.js / 不 patch QQ package.json,只做"下载 → 清旧 →
     /// 解压"三步
     ///
@@ -179,7 +180,7 @@ impl NapCatComponent {
     /// 组件元数据,给 list_components Tauri command 使用
     ///
     /// supported_targets 必须与 Component::supported_targets 返回值一致;
-    /// 单测里有断言锁定Windows 走扁平 zip 解压(与 legacy NapCatInstall
+    /// 单测里有断言锁定,Windows 走扁平 zip 解压(与 legacy NapCatInstall
     /// 同款),Linux 走 NapCat 注入 LinuxQQ resources/app 的官方一键脚本路径
     pub fn info() -> crate::types::ComponentInfo {
         crate::types::ComponentInfo {
@@ -374,17 +375,7 @@ impl Component for NapCatComponent {
     ) -> Result<HostCommand, ActionError> {
         // NapCat 通过 LinuxQQ 启动:<install_base>/opt/QQ/qq <extra_args>
         // backend 一般会再加 --no-sandbox -q <qqid> 等参数,这里只给基础命令
-        let mut cmd = HostCommand::new(self.qq_base_path().join("qq").as_posix());
-        for a in &args.extra_args {
-            cmd = cmd.arg(a);
-        }
-        for (k, v) in &args.extra_env {
-            cmd = cmd.env(k, v);
-        }
-        if let Some(wd) = &args.working_dir {
-            cmd = cmd.working_dir(wd.clone());
-        }
-        Ok(cmd)
+        Ok(args.apply_to(HostCommand::new(self.qq_base_path().join("qq").as_posix())))
     }
 }
 
@@ -685,7 +676,7 @@ impl NapCatComponent {
 
     /// System 布局(requires_sudo)下给命令打 .elevated() 标,提权细节(用 sudo -S
     /// 喂密码还是 sudo -n 免密)由 Host 层按它注入的提权密码统一决定;Rootless 布局
-    /// 不需要提权,原样返回Component 不再自己拼 sudo -n——那样在无免密 sudo 的
+    /// 不需要提权,原样返回,Component 不再自己拼 sudo -n——那样在无免密 sudo 的
     /// 机器上必败,且把提权逻辑泄漏到了组件层
     fn maybe_elevated(&self, cmd: HostCommand) -> HostCommand {
         if self.requires_sudo {
@@ -704,7 +695,7 @@ impl NapCatComponent {
     /// 5) 删临时 zip
     ///
     /// 与 Linux 路径的区别:不写 loadNapCat.js,不 patch QQ package.json,
-    /// 不 chmodWindows NapCat 由 NapCatWinBootMain.exe 注入,启动注入是
+    /// 不 chmod,Windows NapCat 由 NapCatWinBootMain.exe 注入,启动注入是
     /// backend 的事,本 component 只负责"把 zip 摊到目录里"
     async fn install_windows(
         &self,
@@ -781,7 +772,7 @@ impl NapCatComponent {
 
     /// 对齐 legacy NapCatInstall.remove_old_file:遍历 install_base_dir,
     /// 子目录里只放过 config 和 log 的保留(用户运行期改的配置 / 日志),
-    /// 其余文件和子目录全删tmp_dir 名单保留(本次 install 流程刚把 zip
+    /// 其余文件和子目录全删,tmp_dir 名单保留(本次 install 流程刚把 zip
     /// 落在那里,如果它就是 install_base_dir 下的 _tmp 子目录)
     async fn remove_old_files_windows(&self, host: &dyn Host) -> Result<(), ActionError> {
         let entries = match host.list_dir(&self.install_base_dir).await {
@@ -830,7 +821,7 @@ impl NapCatComponent {
         let load_script = self.load_script_path();
         let pkg_json = self.qq_package_json();
 
-        // Step 1: 删 napcat_dirrootless 走 SFTP;system 走 elevated rm -rf
+        // Step 1: 删 napcat_dir,rootless 走 SFTP;system 走 elevated rm -rf
         if host.exists(&napcat_dir).await? {
             if self.requires_sudo {
                 let cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
@@ -863,13 +854,13 @@ impl NapCatComponent {
             }
         }
 
-        // Step 3: 还原 package.json::main如果 package.json 不存在或读不到,
+        // Step 3: 还原 package.json::main,如果 package.json 不存在或读不到,
         // 跳过——QQ 本体可能已经被卸载了,没必要再 patch
         if host.exists(&pkg_json).await? {
             if let Ok(bytes) = host.read_file(&pkg_json).await {
                 if let Ok(mut json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                     if let Some(obj) = json.as_object_mut() {
-                        // 恢复 QQ 自带默认值官方 QQ Linux 的 main 是 ./app_launcher/index.js
+                        // 恢复 QQ 自带默认值,官方 QQ Linux 的 main 是 ./app_launcher/index.js
                         obj.insert(
                             "main".to_string(),
                             serde_json::Value::String("./app_launcher/index.js".to_string()),
@@ -896,7 +887,7 @@ impl NapCatComponent {
     }
 
     /// Windows uninstall:对齐 legacy 行为,删 install_base_dir 下除 config/
-    /// log/ 外的所有文件和目录不删 install_base_dir 自身,允许下次 install
+    /// log/ 外的所有文件和目录,不删 install_base_dir 自身,允许下次 install
     /// 复用同一目录
     async fn uninstall_windows(&self, host: &dyn Host) -> Result<(), ActionError> {
         if !host.exists(&self.install_base_dir).await? {
@@ -904,13 +895,6 @@ impl NapCatComponent {
         }
         self.remove_old_files_windows(host).await
     }
-}
-
-/// 把 POSIX 路径包成单引号字面量,避免空格 / $ / ' 等元字符注入
-/// Bash 单引号内除 ' 外所有字符按字面量;内部 ' 替换成 '\''
-fn shell_quote(s: &str) -> String {
-    let escaped = s.replace('\'', r"'\''");
-    format!("'{escaped}'")
 }
 
 /// 当前 unix 毫秒(用于临时文件名),失败返回 0

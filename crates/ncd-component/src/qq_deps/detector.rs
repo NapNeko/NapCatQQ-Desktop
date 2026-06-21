@@ -188,7 +188,7 @@ impl QqDependencyDetector {
     /// 根据发行版解析实际要查询 / 安装的包名清单
     ///
     /// Debian 系:对标记 has_t64_variant 的包逐个 apt-cache show <pkg>t64 探测,
-    /// 存在 t64 变体就用 t64 名,否则回退原名这跟官方 install.sh 一致,比按
+    /// 存在 t64 变体就用 t64 名,否则回退原名,这跟官方 install.sh 一致,比按
     /// 版本号一刀切加后缀稳健——某个小众包若在当前发行版没 t64 变体,强制加后缀
     /// 会让 dpkg/apt 报 "unable to locate package"
     async fn resolve_package_names(

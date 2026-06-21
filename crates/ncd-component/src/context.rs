@@ -77,7 +77,7 @@ pub enum ProgressLogLevel {
     Error,
 }
 
-/// 进度事件(envelope)跨边界事件必须带版本号,便于增量演进
+/// 进度事件 envelope,跨边界事件必须带版本号便于增量演进
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct ProgressEvent {
@@ -162,7 +162,7 @@ impl ActionCtx {
         self.cancel.clone()
     }
 
-    /// 上报进度channel 满会异步等待,保证 UI 不丢消息
+    /// 上报进度,channel 满时异步等待,保证 UI 不丢消息
     pub async fn emit(&self, kind: ProgressKind) {
         let _ = self.progress.send(ProgressEvent::new(kind)).await;
     }

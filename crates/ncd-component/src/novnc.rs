@@ -34,13 +34,7 @@ use crate::error::ActionError;
 use crate::pkg_install_stream::run_pkg_command_with_progress;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
-
-/// Linux 包管理器枚举(本 component 内部用,后续接 PackageManager trait 落地后可替换)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PkgMgr {
-    Apt,
-    Dnf,
-}
+use crate::PkgMgr;
 
 /// noVNC + 图形栈 component
 #[derive(Debug, Clone)]
@@ -82,7 +76,7 @@ impl NoVncComponent {
     }
 
     /// 拼接 apt / dnf install 命令提权交给 Host:use_sudo 时打 .elevated() 标,
-    /// Host 层按注入的提权密码决定 sudo -S(有密码)还是 sudo -n(免密)命令体本身
+    /// Host 层按注入的提权密码决定 sudo -S(有密码)还是 sudo -n(免密),命令体本身
     /// 不含 sudo,不再写死 sudo -n——那在无免密 sudo 的机器上必败
     fn build_install_command(&self, mgr: PkgMgr) -> HostCommand {
         let pkgs_apt = "dbus-x11 fluxbox xvfb x11vnc novnc websockify";
@@ -116,7 +110,7 @@ impl NoVncComponent {
     }
 
     /// use_sudo 时给命令打 .elevated() 标(提权细节由 Host 注入的密码决定),否则
-    /// 原样返回Component 不自己拼 sudo,提权逻辑收敛到 Host 层
+    /// 原样返回,Component 不自己拼 sudo,提权逻辑收敛到 Host 层
     fn maybe_elevated(&self, cmd: HostCommand) -> HostCommand {
         if self.use_sudo {
             cmd.elevated()
@@ -325,21 +319,11 @@ impl Component for NoVncComponent {
     ) -> Result<HostCommand, ActionError> {
         // noVNC 没有"统一启动命令",一般由 SnowLuma daemon 自己拼装
         // 这里返回 websockify 的占位命令(供调用方拼装时复用)
-        let mut cmd = HostCommand::new("websockify");
-        for a in &args.extra_args {
-            cmd = cmd.arg(a);
-        }
-        for (k, v) in &args.extra_env {
-            cmd = cmd.env(k, v);
-        }
-        if let Some(wd) = &args.working_dir {
-            cmd = cmd.working_dir(wd.clone());
-        }
-        Ok(cmd)
+        Ok(args.apply_to(HostCommand::new("websockify")))
     }
 }
 
-/// 尝试通过 dpkg / rpm 拿到 novnc 包版本号失败返回 None
+/// 尝试通过 dpkg / rpm 拿到 novnc 包版本号,失败返回 None
 async fn detect_package_version(host: &dyn Host) -> Option<String> {
     // dpkg
     let cmd = HostCommand::new("sh")
