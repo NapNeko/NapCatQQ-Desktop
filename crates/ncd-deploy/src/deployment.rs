@@ -7,7 +7,8 @@
 //! - Deployment:NativeDeployment / DockerDeployment / ExternalDeployment
 //!
 //! 两者两两组合,比如 RemoteLinuxHost + DockerDeployment = "用 SSH 在远端跑
-//! docker compose"组合不合法时由 [Deployment::supports] 静态判定,让 UI
+//! docker compose"
+//! 组合不合法时由 [Deployment::supports] 静态判定,让 UI
 //! 在用户连进去之前就能区分能不能选
 //!
 //! 详见仓库内远端架构重构开发文档
@@ -18,7 +19,7 @@ use ncd_host::{Host, HostError};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// 部署形态错误所有 Deployment 实装的失败模式都收敛到这里
+/// 部署形态错误,所有 Deployment 实装的失败模式都收敛到这里
 #[derive(Debug, thiserror::Error)]
 pub enum DeploymentError {
     /// host trait 调用失败:SSH 中断 / 文件 IO / 命令执行错误等
@@ -70,15 +71,15 @@ pub enum DeploymentState {
     Stopped,
     /// 启动中
     Starting,
-    /// 正在运行Native:进程活着;Docker:container running;External:endpoint reachable
+    /// 正在运行,Native:进程活着;Docker:container running;External:endpoint reachable
     Running,
     /// 停止中
     Stopping,
-    /// 异常状态reason 给 UI / 日志展示用
+    /// 异常状态,reason 给 UI / 日志展示用
     Failed { reason: String },
 }
 
-/// launch 返回的部署句柄形态特定的 metadata 通过 enum 表达
+/// launch 返回的部署句柄,形态特定的 metadata 通过 enum 表达
 ///
 /// 用 enum 而非 trait object:BotActor 状态机层只关心"是否在跑 + PID-like
 /// 信息",三种形态都能塌缩到 [crate::result::DeployOutcome] 类似的简单结构
@@ -115,12 +116,12 @@ pub enum DeploymentHandle {
 /// event_bus.publish(DomainEvent::DeploymentProgress { ... }),测试时给 mock
 /// sink 收集进度断言
 pub trait DeploymentProgressSink: Send + Sync {
-    /// 报告一次进度stage 标识当前在哪个阶段("download" / "extract" /
+    /// 报告一次进度,stage 标识当前在哪个阶段("download" / "extract" /
     /// "render-config" / "launch" 等),message 是给用户看的文案,
     /// percent 0-100
     fn report(&self, stage: &str, message: &str, percent: u8);
 
-    /// 一行原始日志用户看 console 时实时上报
+    /// 一行原始日志,用户看 console 时实时上报
     fn log(&self, line: &str);
 }
 
@@ -132,10 +133,6 @@ impl DeploymentProgressSink for NullProgressSink {
     fn log(&self, _line: &str) {}
 }
 
-// ============================================================
-// NativeLaunchTranslator:把 BotConfig 翻译成原生进程启动命令
-// ============================================================
-
 /// 原生进程启动命令——NativeDeployment 真正用得上的字段
 ///
 /// 调用方把 BotConfig 喂给 NativeLaunchTranslator,
@@ -143,7 +140,7 @@ impl DeploymentProgressSink for NullProgressSink {
 ///
 /// 字段刻意比 BotRuntimeConfig 简化:丢掉 config_path / log_path / runtime_target
 /// 这些 spawn 不直接消费的元数据,只保留"起进程要敲的命令 + 工作目录 + 环境变量"
-/// 三件套这样:
+/// 三件套:
 /// - 跟 BotRuntimeConfig 解耦
 /// - Docker / External 部署不需要这个结构
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,10 +160,7 @@ pub struct NativeLaunchCommand {
 #[async_trait]
 pub trait NativeLaunchTranslator: Send + Sync {
     /// 把用户配置翻译成原生进程启动命令
-    async fn translate(
-        &self,
-        config: &BotConfig,
-    ) -> Result<NativeLaunchCommand, DeploymentError>;
+    async fn translate(&self, config: &BotConfig) -> Result<NativeLaunchCommand, DeploymentError>;
 }
 
 /// 部署形态的统一接口
@@ -206,7 +200,7 @@ pub trait Deployment: Send + Sync {
         progress: &dyn DeploymentProgressSink,
     ) -> Result<(), DeploymentError>;
 
-    /// 启动 bot返回的句柄给 BotActor 用来观察状态
+    /// 启动 bot,返回的句柄给 BotActor 用来观察状态
     ///
     /// - Native: spawn 进程
     /// - Docker: docker compose up -d <service>
@@ -217,14 +211,14 @@ pub trait Deployment: Send + Sync {
         config: &BotConfig,
     ) -> Result<DeploymentHandle, DeploymentError>;
 
-    /// 观察 bot 当前状态高频轮询入口
+    /// 观察 bot 当前状态,高频轮询入口
     async fn observe(
         &self,
         host: &dyn Host,
         bot_id: &BotId,
     ) -> Result<DeploymentState, DeploymentError>;
 
-    /// 停止 bot可重入幂等
+    /// 停止 bot,可重入幂等
     async fn stop(
         &self,
         host: &dyn Host,
@@ -234,11 +228,7 @@ pub trait Deployment: Send + Sync {
 
     /// 完全卸载:清进程树 / 容器 / 配置文件
     /// External 实装应该是 no-op(user 自己管)
-    async fn uninstall(
-        &self,
-        host: &dyn Host,
-        config: &BotConfig,
-    ) -> Result<(), DeploymentError>;
+    async fn uninstall(&self, host: &dyn Host, config: &BotConfig) -> Result<(), DeploymentError>;
 }
 
 #[cfg(test)]

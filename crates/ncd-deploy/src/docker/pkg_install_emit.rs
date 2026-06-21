@@ -2,14 +2,14 @@
 //! 与 [ncd_component::pkg_install_stream] 同源解析(parse_pkg_mgr_line),
 //! 供 Docker 安装复用组件页的 apt/dnf 进度体验
 
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ncd_component::{ProgressKind, ProgressLogLevel};
 use ncd_host::{
-    host_command_wrap_dpkg_wait_for_apt, parse_pkg_mgr_line, truncate_pkg_line, CommandOutput, Host,
-    HostCommand, StreamSource,
+    CommandOutput, Host, HostCommand, StreamSource, host_command_wrap_dpkg_wait_for_apt,
+    parse_pkg_mgr_line, truncate_pkg_line,
 };
 
 use super::install_progress::InstallProgressEmit;
@@ -68,7 +68,10 @@ pub async fn run_pkg_with_emit(
         while let Some(msg) = rx.recv().await {
             match msg {
                 StreamMsg::Log { level, text } => {
-                    emit_drain(ProgressKind::Log { level, message: text });
+                    emit_drain(ProgressKind::Log {
+                        level,
+                        message: text,
+                    });
                 }
                 StreamMsg::Progress { percent, message } => {
                     let prev = last_drain.load(Ordering::Relaxed);
@@ -82,7 +85,7 @@ pub async fn run_pkg_with_emit(
                             downloaded_bytes: None,
                             total_bytes: None,
                             download_stage: None,
-        docker_layers: None,
+                            docker_layers: None,
                         });
                     }
                 }
@@ -110,7 +113,7 @@ pub async fn run_pkg_with_emit(
                 downloaded_bytes: None,
                 total_bytes: None,
                 download_stage: None,
-        docker_layers: None,
+                docker_layers: None,
             });
             last_hb_activity.store(now_ms(), Ordering::Relaxed);
         }

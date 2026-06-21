@@ -17,7 +17,7 @@
 //! 职责,后续把 component 接进来再做
 //!
 //! 事件桥接:调用方注入 [NativeRuntimeEventSink],把日志/退出/WebUI 事件
-//! 转发到自己的事件总线ncd-deploy 不直接依赖 events 模块,避免
+//! 转发到自己的事件总线,ncd-deploy 不直接依赖 events 模块,避免
 //! 循环依赖
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
@@ -124,7 +124,7 @@ pub struct NativeDeployment {
     translator: Arc<dyn NativeLaunchTranslator>,
     /// 事件桥接:把运行时事件转发到调用方的事件总线
     event_sink: Arc<dyn NativeRuntimeEventSink>,
-    /// 日志根目录每个 bot 的日志写到 <log_root>/bots/<bot_id>.log
+    /// 日志根目录,每个 bot 的日志写到 <log_root>/bots/<bot_id>.log
     /// 为 None 时只走内存缓冲不落盘
     log_root: Option<PathBuf>,
     /// 当前在跑的进程档案:bot_id -> ManagedProcess
@@ -163,7 +163,7 @@ impl NativeDeployment {
             .map(|root| root.join("bots").join(format!("{}.log", bot_id.as_str())))
     }
 
-    /// 把 BotConfig 推导成 BotIdBotId 取 qq_id 字符串
+    /// 把 BotConfig 推导成 BotId,BotId 取 qq_id 字符串
     fn derive_bot_id(config: &BotConfig) -> BotId {
         BotId::new(config.bot.qq_id.to_string())
     }
@@ -179,14 +179,12 @@ impl std::fmt::Debug for NativeDeployment {
     }
 }
 
-// ============================================================
 // 日志解码 + ANSI 清洗 + NapCat WebUI 解析
 //
 // 这几段 helper 行为与上游 runtime_backend 中的同名函数一致
 // 之所以再写一份不复用:
 // - ncd-deploy 不能反向依赖上游 crate;
 // - 后续再考虑下沉到 ncd-host 公共 utils
-// ============================================================
 
 /// 按 GBK / UTF-8 解码 NapCat 子进程的一行原始字节,并清洗 ANSI 转义
 ///
@@ -314,9 +312,7 @@ fn parse_napcat_webui_line_loose(line: &str) -> Option<(u16, String)> {
     Some((port, token))
 }
 
-// ============================================================
 // 后台任务:日志 reader / exit watcher
-// ============================================================
 
 /// reader 任务参数包,省得 spawn_log_reader 函数签名长得没法看
 struct LogReaderCtx {
@@ -387,7 +383,7 @@ fn spawn_log_reader(stream: Box<dyn tokio::io::AsyncRead + Send + Unpin>, ctx: L
     });
 }
 
-/// 监听子进程退出退出后从 processes 中移除记录,清空日志缓冲,
+/// 监听子进程退出后,从 processes 中移除记录,清空日志缓冲,
 /// 通过 sink 广播 BotProcessExited
 fn spawn_exit_watcher(
     bot_id: BotId,
@@ -433,7 +429,7 @@ fn spawn_exit_watcher(
     });
 }
 
-/// 平台无关地递归 kill 进程树NapCat 是注入器:
+/// 平台无关地递归 kill 进程树,NapCat 是注入器:
 /// NapCatWinBootMain.exe → QQ.exe → renderer 子进程,必须整树清掉
 async fn kill_process_tree(host: &dyn Host, pid: u32) -> Result<(), DeploymentError> {
     if pid == 0 {
@@ -480,9 +476,7 @@ async fn kill_process_tree(host: &dyn Host, pid: u32) -> Result<(), DeploymentEr
     )))
 }
 
-// ============================================================
 // Deployment trait 实装
-// ============================================================
 
 #[async_trait]
 impl Deployment for NativeDeployment {
@@ -526,14 +520,12 @@ impl Deployment for NativeDeployment {
             ));
         }
 
-        // 2. 拼 HostCommandworking_dir 走 HostPath;环境变量整张表透传
+        // 2. 拼 HostCommand,working_dir 走 HostPath;环境变量整张表透传
         let mut cmd = HostCommand::new(plan.program.clone()).args(plan.args.clone());
         if let Some(dir) = plan.working_dir.as_ref() {
             cmd = cmd.working_dir(host_path_from_native(dir, host.os()));
         }
-        cmd = cmd
-            .envs(plan.environment.clone().into_iter())
-            .long_running();
+        cmd = cmd.envs(plan.environment.clone()).long_running();
 
         // 3. 启动新进程前清掉这个 bot 旧的内存日志缓冲
         {
@@ -679,9 +671,7 @@ fn host_err_msg(err: HostError) -> String {
     err.to_string()
 }
 
-// ============================================================
 // 给 BotManager / 日志页用的辅助方法
-// ============================================================
 
 /// tail_log 返回的快照:最近 N 行 + 累计总行数
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -691,7 +681,7 @@ pub struct NativeLogSnapshot {
 }
 
 impl NativeDeployment {
-    /// 取当前内存里的日志快照limit > 0 时只返回末尾 limit 行
+    /// 取当前内存里的日志快照,limit > 0 时只返回末尾 limit 行
     pub async fn tail_log(&self, bot_id: &BotId, limit: usize) -> NativeLogSnapshot {
         let guard = self.logs.lock().await;
         let Some(buffer) = guard.get(bot_id) else {
@@ -711,7 +701,7 @@ impl NativeDeployment {
     }
 
     /// 主动追加一行日志(外部驱动测试用 / 远端 host 没有 stdout pipe 时由
-    /// 调用方手动 push)落盘失败不致命
+    /// 调用方手动 push),落盘失败不致命
     #[doc(hidden)]
     pub async fn append_log_line_for_test(&self, bot_id: &BotId, line: &str) {
         let mut guard = self.logs.lock().await;
@@ -738,19 +728,19 @@ mod tests {
     use bytes::Bytes;
     use ncd_host::command::HostProcessWaitPolicy;
     use ncd_host::process::{ExitStatus, ProcessId};
-    use ncd_host::{Arch, ArchiveKind, CommandOutput, DirEntry, HostShell, Locality, PackageManager};
+    use ncd_host::{
+        Arch, ArchiveKind, CommandOutput, DirEntry, HostShell, Locality, PackageManager,
+    };
     use std::process::Stdio;
     use std::sync::Mutex as StdMutex;
     use tokio::sync::oneshot;
 
-    // ============================================================
     // FakeHost:spawn 走真实 tokio::process::Command,run_to_string 仅记录调用
     //
     // 这套 fake 的目的:
     // - launch 路径用真子进程(echo 类命令)走通 take_stdout / exit watcher 链路
     // - stop 路径只校验调用了正确 kill 命令,不真杀进程(进程已自然退出)
     // - 不依赖 LocalWindowsHost / RemoteLinuxHost,跨平台都能跑
-    // ============================================================
 
     /// 极简 BashShell stub,只是占位 —— Host trait 要求 shell() 返回 &dyn HostShell
     struct NoopShell;

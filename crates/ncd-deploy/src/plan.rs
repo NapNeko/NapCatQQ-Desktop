@@ -159,7 +159,11 @@ impl DeployBuilder {
     }
 
     /// 追加 ensure_dependencies step(仅 QQ 等实现了该能力的组件有效)
-    pub fn ensure_dependencies(self, name: impl Into<String>, component: Arc<dyn Component>) -> Self {
+    pub fn ensure_dependencies(
+        self,
+        name: impl Into<String>,
+        component: Arc<dyn Component>,
+    ) -> Self {
         self.step(name, StepKind::EnsureDependencies, component)
     }
 
@@ -225,11 +229,7 @@ mod tests {
         async fn detect(&self, _host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
             Ok(None)
         }
-        async fn install(
-            &self,
-            _host: &dyn Host,
-            _ctx: &mut ActionCtx,
-        ) -> Result<(), ActionError> {
+        async fn install(&self, _host: &dyn Host, _ctx: &mut ActionCtx) -> Result<(), ActionError> {
             Ok(())
         }
         async fn verify(&self, _host: &dyn Host) -> Result<VerifyReport, ActionError> {
@@ -321,7 +321,7 @@ mod tests {
     }
 
     /// serde 序列化必须与 as_str() 字面量保持一致:前端拿到的是
-    /// 同一份 snake_case 字符串任何漂移会破坏 Tauri command 入参解析
+    /// 同一份 snake_case 字符串,任何漂移会破坏 Tauri command 入参解析
     #[test]
     fn step_kind_serde_aligns_with_as_str() {
         for kind in [

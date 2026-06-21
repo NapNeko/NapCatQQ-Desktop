@@ -129,7 +129,7 @@ impl DeployPlan {
     }
 }
 
-/// 跑单个 step返回 Ok(true) 表示被 skip,Ok(false) 表示真的跑了
+/// 跑单个 step,返回 Ok(true) 表示被 skip,Ok(false) 表示真的跑了
 async fn run_single_step(
     step: &DeployStep,
     host: &dyn Host,
@@ -139,11 +139,8 @@ async fn run_single_step(
         StepKind::EnsureInstalled => {
             let detected = step.component.detect(host).await?;
             if detected.is_some() {
-                ctx.info(format!(
-                    "step '{}' skipped: already installed",
-                    step.name
-                ))
-                .await;
+                ctx.info(format!("step '{}' skipped: already installed", step.name))
+                    .await;
                 return Ok(true);
             }
             step.component.install(host, ctx).await?;
@@ -224,12 +221,24 @@ mod tests {
 
     #[async_trait]
     impl Host for StubHost {
-        fn os(&self) -> Os { Os::Linux }
-        fn arch(&self) -> Arch { Arch::X86_64 }
-        fn locality(&self) -> Locality { Locality::Local }
-        fn id(&self) -> &str { "stub" }
-        fn shell(&self) -> &dyn ncd_host::HostShell { &ncd_host::shell::BashShell }
-        fn pkg_manager(&self) -> Option<&dyn ncd_host::PackageManager> { None }
+        fn os(&self) -> Os {
+            Os::Linux
+        }
+        fn arch(&self) -> Arch {
+            Arch::X86_64
+        }
+        fn locality(&self) -> Locality {
+            Locality::Local
+        }
+        fn id(&self) -> &str {
+            "stub"
+        }
+        fn shell(&self) -> &dyn ncd_host::HostShell {
+            &ncd_host::shell::BashShell
+        }
+        fn pkg_manager(&self) -> Option<&dyn ncd_host::PackageManager> {
+            None
+        }
         async fn read_file(&self, _: &HostPath) -> Result<bytes::Bytes, HostError> {
             Err(HostError::Unsupported { operation: "stub" })
         }
@@ -265,10 +274,7 @@ mod tests {
         ) -> Result<(), HostError> {
             Err(HostError::Unsupported { operation: "stub" })
         }
-        async fn spawn(
-            &self,
-            _: HostCommand,
-        ) -> Result<Box<dyn ncd_host::HostProcess>, HostError> {
+        async fn spawn(&self, _: HostCommand) -> Result<Box<dyn ncd_host::HostProcess>, HostError> {
             Err(HostError::Unsupported { operation: "stub" })
         }
         async fn run_to_string(
@@ -290,7 +296,9 @@ mod tests {
 
     #[async_trait]
     impl Component for CountedComponent {
-        fn id(&self) -> ComponentId { self.id_value }
+        fn id(&self) -> ComponentId {
+            self.id_value
+        }
         fn supported_targets(&self) -> &'static [(Os, Locality)] {
             &[(Os::Linux, Locality::Local)]
         }
@@ -304,11 +312,7 @@ mod tests {
                 Ok(None)
             }
         }
-        async fn install(
-            &self,
-            _: &dyn Host,
-            _: &mut ActionCtx,
-        ) -> Result<(), ActionError> {
+        async fn install(&self, _: &dyn Host, _: &mut ActionCtx) -> Result<(), ActionError> {
             self.install_calls.fetch_add(1, Ordering::SeqCst);
             if self.install_should_fail {
                 Err(ActionError::other("simulated install failure"))
@@ -316,22 +320,14 @@ mod tests {
                 Ok(())
             }
         }
-        async fn uninstall(
-            &self,
-            _: &dyn Host,
-            _: &mut ActionCtx,
-        ) -> Result<(), ActionError> {
+        async fn uninstall(&self, _: &dyn Host, _: &mut ActionCtx) -> Result<(), ActionError> {
             self.uninstall_calls.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
         async fn verify(&self, _: &dyn Host) -> Result<VerifyReport, ActionError> {
             Ok(VerifyReport::ok())
         }
-        fn launch_command(
-            &self,
-            _: &dyn Host,
-            _: &LaunchArgs,
-        ) -> Result<HostCommand, ActionError> {
+        fn launch_command(&self, _: &dyn Host, _: &LaunchArgs) -> Result<HostCommand, ActionError> {
             Ok(HostCommand::new("echo"))
         }
     }
@@ -340,11 +336,7 @@ mod tests {
         id: ComponentId,
         already_installed: bool,
         install_fails: bool,
-    ) -> (
-        Arc<dyn Component>,
-        Arc<AtomicU32>,
-        Arc<AtomicU32>,
-    ) {
+    ) -> (Arc<dyn Component>, Arc<AtomicU32>, Arc<AtomicU32>) {
         let install_calls = Arc::new(AtomicU32::new(0));
         let uninstall_calls = Arc::new(AtomicU32::new(0));
         let c = Arc::new(CountedComponent {
@@ -377,9 +369,7 @@ mod tests {
     #[tokio::test]
     async fn ensure_installed_skips_when_already_installed() {
         let (a, a_install, _) = comp(ComponentId::NodeJs, true, false);
-        let plan = DeployPlan::builder()
-            .ensure_installed("a", a)
-            .build();
+        let plan = DeployPlan::builder().ensure_installed("a", a).build();
         let host = StubHost;
         let (mut ctx, _rx) = ActionCtx::new();
         let outcome = plan.run(&host, &mut ctx).await.unwrap();
@@ -391,9 +381,7 @@ mod tests {
     #[tokio::test]
     async fn force_install_runs_even_when_detected() {
         let (a, a_install, _) = comp(ComponentId::NodeJs, true, false);
-        let plan = DeployPlan::builder()
-            .force_install("a", a)
-            .build();
+        let plan = DeployPlan::builder().force_install("a", a).build();
         let host = StubHost;
         let (mut ctx, _rx) = ActionCtx::new();
         let outcome = plan.run(&host, &mut ctx).await.unwrap();
@@ -447,9 +435,12 @@ mod tests {
         let (b, _, b_un) = comp(ComponentId::Qq, false, false);
         let (c, _, c_un) = comp(ComponentId::NapCat, false, true); // 第三步 fails
         let plan = DeployPlan::builder()
-            .ensure_installed("a", a).last_rollback_on_failure(true)
-            .ensure_installed("b", b).last_rollback_on_failure(true)
-            .ensure_installed("c", c).last_rollback_on_failure(true)
+            .ensure_installed("a", a)
+            .last_rollback_on_failure(true)
+            .ensure_installed("b", b)
+            .last_rollback_on_failure(true)
+            .ensure_installed("c", c)
+            .last_rollback_on_failure(true)
             .build();
         let host = StubHost;
         let (mut ctx, _rx) = ActionCtx::new();

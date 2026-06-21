@@ -7,14 +7,14 @@ use std::sync::Arc;
 
 use ncd_component::{ProgressEvent, ProgressKind, ProgressLogLevel};
 use ncd_domain::DockerInstallReport;
-use ncd_host::remote::{probe_sudo, SudoAccess};
-use ncd_host::{host_command_wrap_dpkg_wait_for_apt, truncate_pkg_line, Host, HostCommand, Os};
+use ncd_host::remote::{SudoAccess, probe_sudo};
+use ncd_host::{Host, HostCommand, Os, host_command_wrap_dpkg_wait_for_apt, truncate_pkg_line};
 use tracing::{error, info, warn};
 
 use super::cli::{DockerCli, DockerCliError};
 use super::install::{
-    docker_install_phases, looks_like_bad_sudo_password, write_registry_mirrors_script,
-    DOCKER_DESKTOP_URL,
+    DOCKER_DESKTOP_URL, docker_install_phases, looks_like_bad_sudo_password,
+    write_registry_mirrors_script,
 };
 use super::pkg_install_emit::run_pkg_with_emit;
 
@@ -40,7 +40,12 @@ fn emit_step_end(emit: &InstallProgressEmit, step: u32, ok: bool) {
     emit(ProgressKind::StepEnd { step, ok });
 }
 
-fn emit_step_progress(emit: &InstallProgressEmit, step: u32, percent: u8, message: impl Into<String>) {
+fn emit_step_progress(
+    emit: &InstallProgressEmit,
+    step: u32,
+    percent: u8,
+    message: impl Into<String>,
+) {
     emit(ProgressKind::StepProgress {
         step,
         percent,
@@ -57,7 +62,7 @@ fn finish_install(emit: &InstallProgressEmit, ok: bool) {
     emit(ProgressKind::Finished { ok });
 }
 
-/// 带进度回调的安装入口emit 由 Tauri 层接到 EventBus
+/// 带进度回调的安装入口,emit 由 Tauri 层接到 EventBus
 pub async fn install_docker_with_progress(
     host: &dyn Host,
     sudo_password: Option<&str>,
@@ -91,7 +96,7 @@ pub async fn install_docker_with_progress(
             "Docker 已就绪，跳过安装"
         );
         return Ok(
-            DockerInstallReport::already_installed(&status.version).with_probed_status(status),
+            DockerInstallReport::already_installed(&status.version).with_probed_status(status)
         );
     }
     emit_step_end(&emit, 1, true);
@@ -113,7 +118,11 @@ pub async fn install_docker_with_progress(
             ))
         }
         Os::MacOs => {
-            emit_log(&emit, ProgressLogLevel::Warn, "macOS 需手动安装 Docker Desktop");
+            emit_log(
+                &emit,
+                ProgressLogLevel::Warn,
+                "macOS 需手动安装 Docker Desktop",
+            );
             finish_install(&emit, false);
             Ok(DockerInstallReport::manual_required(
                 "macOS 请安装 Docker Desktop 后重试",
@@ -227,11 +236,7 @@ async fn install_docker_linux_with_progress(
 
     for (phase_name, script) in docker_install_phases() {
         let spec = phase_spec(phase_name);
-        emit_log(
-            &emit,
-            ProgressLogLevel::Info,
-            format!("→ {}", spec.idle),
-        );
+        emit_log(&emit, ProgressLogLevel::Info, format!("→ {}", spec.idle));
 
         let cmd = HostCommand::new("sh")
             .arg("-c")
@@ -239,16 +244,7 @@ async fn install_docker_linux_with_progress(
             .elevated()
             .timeout(std::time::Duration::from_secs(spec.timeout_secs));
 
-        let out = run_pkg_with_emit(
-            host,
-            &emit,
-            cmd,
-            3,
-            spec.floor,
-            spec.cap,
-            spec.idle,
-        )
-        .await?;
+        let out = run_pkg_with_emit(host, &emit, cmd, 3, spec.floor, spec.cap, spec.idle).await?;
 
         if !out.success() {
             emit_step_end(&emit, 3, false);
@@ -341,10 +337,7 @@ async fn install_docker_linux_with_progress(
         ProgressLogLevel::Info,
         format!(
             "探测：installed={} daemon={} compose={} version={}",
-            status.installed,
-            status.daemon_running,
-            status.compose_available,
-            status.version
+            status.installed, status.daemon_running, status.compose_available, status.version
         ),
     );
 
@@ -359,9 +352,7 @@ async fn install_docker_linux_with_progress(
         };
         emit_log(&emit, ProgressLogLevel::Warn, &msg);
         finish_install(&emit, false);
-        return Ok(
-            DockerInstallReport::manual_required(msg, None).with_probed_status(status),
-        );
+        return Ok(DockerInstallReport::manual_required(msg, None).with_probed_status(status));
     }
 
     emit_step_end(&emit, 6, true);
@@ -389,11 +380,7 @@ async fn install_docker_linux_with_progress(
             emit_step_end(&emit, 7, true);
         }
         Err(e) => {
-            emit_log(
-                &emit,
-                ProgressLogLevel::Warn,
-                format!("镜像加速跳过：{e}"),
-            );
+            emit_log(&emit, ProgressLogLevel::Warn, format!("镜像加速跳过：{e}"));
             emit_step_end(&emit, 7, true);
         }
     }

@@ -4,10 +4,10 @@
 //! 与组件页「拉镜像」(commands/docker.rs docker_deploy)的关系:组件页只预拉
 //! NapCat/SnowLuma 官方镜像,不创建 napcat/snowluma 演示容器;这里是 bot 生命周期
 //! 部署形态(deployment_type=docker),由 BotManager 在 start_bot 时按 bot 配置驱动,
-//! 容器纳入 bot 状态机两者共用底层 DockerCli + compose 渲染,但入口和归属不同
+//! 容器纳入 bot 状态机,两者共用底层 DockerCli + compose 渲染,但入口和归属不同
 //!
 //! 容器命名:ncbot-<qq> / slbot-<qq>(按口味),区别于组件页 napcat/snowluma 演示容器
-//! compose 项目目录:远端 $HOME/.napcat-bots/<name>探不到 HOME 直接失败,
+//! compose 项目目录:远端 $HOME/.napcat-bots/<name>,探不到 HOME 直接失败,
 //! 避免把生产数据静默落到 /tmp
 //!
 //! 镜像须在「组件」页预拉;Bot 启动 install 只检查本地是否存在官方镜像,不现场 pull
@@ -18,7 +18,9 @@
 //! compose 项目目录:远端 $HOME/.napcat-bots/<name>
 
 use async_trait::async_trait;
-use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, DockerDeploySpec, DockerFlavor, StopMode};
+use ncd_domain::{
+    BackendType, BotConfig, BotFlavor, BotId, DockerDeploySpec, DockerFlavor, StopMode,
+};
 use ncd_host::{Host, HostCommand, HostPath};
 use tracing::{error, info};
 
@@ -52,7 +54,7 @@ impl DockerDeployment {
         }
     }
 
-    /// NapCat Docker: WEBUI_TOKENncd-deploy 不从 QQ 号派生凭据
+    /// NapCat Docker: WEBUI_TOKEN,ncd-deploy 不从 QQ 号派生凭据
     pub fn with_webui_token(token: impl Into<String>) -> Self {
         Self {
             compose_secret: Some(token.into()),
@@ -61,7 +63,10 @@ impl DockerDeployment {
     }
 
     /// SnowLuma Docker: VNC_PASSWD + SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD
-    pub fn with_sl_secrets(vnc_passwd: impl Into<String>, webui_bootstrap: impl Into<String>) -> Self {
+    pub fn with_sl_secrets(
+        vnc_passwd: impl Into<String>,
+        webui_bootstrap: impl Into<String>,
+    ) -> Self {
         Self {
             compose_secret: Some(vnc_passwd.into()),
             sl_webui_bootstrap: Some(webui_bootstrap.into()),
@@ -90,7 +95,7 @@ impl DockerDeployment {
         bot_docker_container_name(config.bot.backend_type, config.bot.qq_id)
     }
 
-    /// compose 项目目录(host 侧 POSIX 路径)远端 HOME 探测失败时 hard fail
+    /// compose 项目目录(host 侧 POSIX 路径),远端 HOME 探测失败时 hard fail
     async fn project_dir(host: &dyn Host, name: &str) -> Result<String, DeploymentError> {
         let home = probe_home(host).await.ok_or_else(|| {
             DeploymentError::ConfigInvalid(
@@ -116,9 +121,7 @@ impl DockerDeployment {
             });
         }
         Err(DeploymentError::ConfigInvalid(match backend {
-            BackendType::SnowLuma => {
-                "DockerDeployment 需要上层显式传入 VNC 密码 (SnowLuma)".into()
-            }
+            BackendType::SnowLuma => "DockerDeployment 需要上层显式传入 VNC 密码 (SnowLuma)".into(),
             BackendType::NapCat => "DockerDeployment 需要上层显式传入 WebUI token".into(),
         }))
     }
@@ -176,7 +179,7 @@ fn dotenv_value(raw: &str) -> String {
     out
 }
 
-/// 远端探 $HOME失败返回 None
+/// 远端探 $HOME,失败返回 None
 async fn probe_home(host: &dyn Host) -> Option<String> {
     let cmd = HostCommand::new("sh").arg("-c").arg("echo $HOME");
     match host.run_to_string(cmd).await {
@@ -199,8 +202,8 @@ impl Deployment for DockerDeployment {
     }
 
     fn supports(&self, host: &dyn Host) -> bool {
-        // 仅 Linux 主机(一般是远端 SSH)本机 Windows 不支持 Docker bot 部署:
-        // Docker Desktop 安装链路太麻烦,产品上不在本机做容器化daemon 是否真在
+        // 仅 Linux 主机(一般是远端 SSH),本机 Windows 不支持 Docker bot 部署:
+        // Docker Desktop 安装链路太麻烦,产品上不在本机做容器化,daemon 是否真在
         // 跑留给 install 阶段动态探测
         use ncd_host::Os;
         matches!(host.os(), Os::Linux)
@@ -221,17 +224,15 @@ impl Deployment for DockerDeployment {
 
         let cli = DockerCli::new(host);
         progress.report("docker", "探测 Docker 状态", 5);
-        cli.ensure_ready()
-            .await
-            .map_err(|e| {
-                error!(
-                    target: "ncd_deploy::docker_bot",
-                    qq_id = config.bot.qq_id,
-                    err = %e,
-                    "Bot Docker 部署: Docker 未就绪"
-                );
-                DeploymentError::RuntimeUnavailable { kind: "docker" }
-            })?;
+        cli.ensure_ready().await.map_err(|e| {
+            error!(
+                target: "ncd_deploy::docker_bot",
+                qq_id = config.bot.qq_id,
+                err = %e,
+                "Bot Docker 部署: Docker 未就绪"
+            );
+            DeploymentError::RuntimeUnavailable { kind: "docker" }
+        })?;
 
         let spec = Self::build_spec(config);
         let name = Self::container_name(config);
@@ -318,24 +319,19 @@ impl Deployment for DockerDeployment {
         config: &BotConfig,
     ) -> Result<DeploymentHandle, DeploymentError> {
         let cli = DockerCli::new(host);
-        cli.ensure_ready()
-            .await
-            .map_err(|e| {
-                error!(
-                    target: "ncd_deploy::docker_bot",
-                    qq_id = config.bot.qq_id,
-                    err = %e,
-                    "Bot Docker 部署: Docker 未就绪"
-                );
-                DeploymentError::RuntimeUnavailable { kind: "docker" }
-            })?;
+        cli.ensure_ready().await.map_err(|e| {
+            error!(
+                target: "ncd_deploy::docker_bot",
+                qq_id = config.bot.qq_id,
+                err = %e,
+                "Bot Docker 部署: Docker 未就绪"
+            );
+            DeploymentError::RuntimeUnavailable { kind: "docker" }
+        })?;
         let name = Self::container_name(config);
         let bot_id = BotId::new(config.bot.qq_id.to_string());
 
-        if matches!(
-            self.observe(host, &bot_id).await?,
-            DeploymentState::Running
-        ) {
+        if matches!(self.observe(host, &bot_id).await?, DeploymentState::Running) {
             let started_at = now_secs();
             let container_id = find_container_id(&cli, &name).await.unwrap_or_default();
             info!(
@@ -363,20 +359,18 @@ impl Deployment for DockerDeployment {
             let _ = cli.remove(&legacy_sl).await;
         }
 
-        cli.compose_up(&project_dir)
-            .await
-            .map_err(|e| {
-                error!(
-                    target: "ncd_deploy::docker_bot",
-                    qq_id = config.bot.qq_id,
-                    container = %name,
-                    err = %e,
-                    "Bot Docker 部署: 启动容器失败"
-                );
-                DeploymentError::LaunchFailed(format!("启动容器失败: {e}"))
-            })?;
+        cli.compose_up(&project_dir).await.map_err(|e| {
+            error!(
+                target: "ncd_deploy::docker_bot",
+                qq_id = config.bot.qq_id,
+                container = %name,
+                err = %e,
+                "Bot Docker 部署: 启动容器失败"
+            );
+            DeploymentError::LaunchFailed(format!("启动容器失败: {e}"))
+        })?;
 
-        // 回读容器 id + 启动时间找不到也不致命:容器已起,observe 后续能纠正
+        // 回读容器 id + 启动时间,找不到也不致命:容器已起,observe 后续能纠正
         let started_at = now_secs();
         let container_id = find_container_id(&cli, &name).await.unwrap_or_default();
         info!(
@@ -402,9 +396,9 @@ impl Deployment for DockerDeployment {
                 reason: format!("Docker 未就绪: {e}"),
             });
         }
-        let name = resolve_bot_container_name(&cli, bot_id).await.unwrap_or_else(|_| {
-            format!("ncbot-{}", bot_id.as_str())
-        });
+        let name = resolve_bot_container_name(&cli, bot_id)
+            .await
+            .unwrap_or_else(|_| format!("ncbot-{}", bot_id.as_str()));
         // 归到 Failed 状态(带原因)让上层显示,而不是抛错中断轮询
         match cli.list_containers().await {
             Ok(containers) => Ok(containers
@@ -441,18 +435,16 @@ impl Deployment for DockerDeployment {
         if !containers.iter().any(|c| c.name == name) {
             return Ok(());
         }
-        cli.lifecycle("stop", &name)
-            .await
-            .map_err(|e| {
-                error!(
-                    target: "ncd_deploy::docker_bot",
-                    bot_id = %bot_id,
-                    container = %name,
-                    err = %e,
-                    "Bot Docker 停止容器失败"
-                );
-                DeploymentError::StopFailed(format!("停止容器失败: {e}"))
-            })?;
+        cli.lifecycle("stop", &name).await.map_err(|e| {
+            error!(
+                target: "ncd_deploy::docker_bot",
+                bot_id = %bot_id,
+                container = %name,
+                err = %e,
+                "Bot Docker 停止容器失败"
+            );
+            DeploymentError::StopFailed(format!("停止容器失败: {e}"))
+        })?;
         info!(
             target: "ncd_deploy::docker_bot",
             bot_id = %bot_id,
@@ -468,7 +460,7 @@ impl Deployment for DockerDeployment {
         let project_dir = Self::project_dir(host, &name)
             .await
             .map_err(|e| DeploymentError::UninstallFailed(e.to_string()))?;
-        // compose down -v 清容器 + 卷目录不存在时 down 会报错,忽略(幂等)
+        // compose down -v 清容器 + 卷,目录不存在时 down 会报错,忽略(幂等)
         let _ = cli.compose_down(&project_dir, true).await;
         let _ = host
             .remove_dir_all(&HostPath::from_posix(&project_dir))
@@ -526,7 +518,7 @@ async fn find_container_id(cli: &DockerCli<'_>, name: &str) -> Option<String> {
         .map(|c| c.id)
 }
 
-/// 默认文件属主远端 Linux 普通用户一般 1000;本机 Windows 不在意给 0
+/// 默认文件属主,远端 Linux 普通用户一般 1000;本机 Windows 不在意给 0
 fn default_uid_gid(host: &dyn Host) -> (u32, u32) {
     match host.os() {
         ncd_host::Os::Linux => (1000, 1000),
@@ -853,7 +845,8 @@ mod tests {
                 .text
                 .contains("WEBUI_TOKEN: \"${WEBUI_TOKEN:?WEBUI_TOKEN is required}\"")
         );
-        assert!(compose.text.contains("\"6099:6099\""));
+        // qq=10001 经 host_port_offset_for_qq 偏移 1,host 端口 6099→6100
+        assert!(compose.text.contains("\"6100:6099\""));
         assert!(compose.text.contains("./napcat/config:/app/napcat/config"));
         assert!(compose.text.contains("./ntqq:/app/.config/QQ"));
 
@@ -862,12 +855,12 @@ mod tests {
         assert!(
             docker_args
                 .iter()
-                .any(|a| a == &["pull", "docker.1ms.run/mlikiowa/napcat-docker:latest"])
+                .any(|a| a == &["image", "inspect", "mlikiowa/napcat-docker:latest"])
         );
         assert!(
             docker_args
                 .iter()
-                .any(|a| a == &["compose", "up", "-d", "--pull", "missing"])
+                .any(|a| a == &["compose", "up", "-d", "--remove-orphans", "--pull", "missing"])
         );
         assert!(
             docker_args
@@ -912,7 +905,9 @@ mod tests {
         let docker_args: Vec<Vec<String>> =
             host.docker_commands().into_iter().map(|c| c.args).collect();
         assert!(
-            !docker_args.iter().any(|a| a.first().map(String::as_str) == Some("rm")),
+            !docker_args
+                .iter()
+                .any(|a| a.first().map(String::as_str) == Some("rm")),
             "Running 时 launch 不应 docker rm: {docker_args:?}"
         );
         assert!(
@@ -943,8 +938,9 @@ mod tests {
             .unwrap();
 
         let docker = host.docker_commands();
+        // elevated_docker 场景:probe 先 sudo info 成功,不会 fallback 到 non-elevated info
         assert!(
-            docker
+            !docker
                 .iter()
                 .any(|c| c.args.first().map(String::as_str) == Some("info") && !c.elevated)
         );
@@ -956,12 +952,14 @@ mod tests {
         assert!(
             docker
                 .iter()
-                .any(|c| c.args.first().map(String::as_str) == Some("pull") && c.elevated)
+                .any(|c| c.args.first().map(String::as_str) == Some("image")
+                    && c.args.get(1).map(String::as_str) == Some("inspect")
+                    && c.elevated)
         );
         assert!(
             docker
                 .iter()
-                .any(|c| c.args == ["compose", "up", "-d", "--pull", "missing"] && c.elevated)
+                .any(|c| c.args == ["compose", "up", "-d", "--remove-orphans", "--pull", "missing"] && c.elevated)
         );
         assert!(
             docker
@@ -972,7 +970,11 @@ mod tests {
 
     #[test]
     fn test_only_default_secret_is_not_production_default() {
-        assert!(DockerDeployment::new().compose_secret_for(BackendType::NapCat).is_err());
+        assert!(
+            DockerDeployment::new()
+                .compose_secret_for(BackendType::NapCat)
+                .is_err()
+        );
         assert_eq!(
             DockerDeployment::with_test_default_token()
                 .compose_secret_for(BackendType::NapCat)

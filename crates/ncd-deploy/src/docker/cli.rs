@@ -20,7 +20,7 @@ pub enum DockerCliError {
     #[error("host error: {0}")]
     Host(#[from] HostError),
 
-    /// docker 命令跑了但退出码非 0stderr 给上层拼错误文案
+    /// docker 命令跑了但退出码非 0,stderr 给上层拼错误文案
     #[error("docker command failed: {command}: exit={exit_code:?}: {stderr}")]
     CommandFailed {
         command: String,
@@ -40,10 +40,10 @@ pub enum DockerCliError {
 /// docker CLI 封装轻量,每个操作拼一条命令交给 host
 ///
 /// 提权:远端用户常不在 docker 组(装完没重登 / usermod 没生效),裸 docker
-/// 命令会 permission denied 连不上 /var/run/docker.sockprobe() 会探一次
+/// 命令会 permission denied 连不上 /var/run/docker.sock,probe() 会探一次
 /// 「裸 docker 行不行,不行但 sudo 行」,把结果记在 elevated 里;之后所有命令
-/// 按它决定要不要 .elevated()(提权密码由 Host 层注入)本机 Windows 用不到,
-/// elevated 恒 false用 AtomicBool 是因为操作方法都是 &self,且要跨 await 保持 Send
+/// 按它决定要不要 .elevated()(提权密码由 Host 层注入),本机 Windows 用不到,
+/// elevated 恒 false,用 AtomicBool 是因为操作方法都是 &self,且要跨 await 保持 Send
 pub struct DockerCli<'h> {
     host: &'h dyn Host,
     elevated: std::sync::atomic::AtomicBool,
@@ -57,9 +57,9 @@ impl<'h> DockerCli<'h> {
         }
     }
 
-    /// 按当前提权标志构造一条 docker 命令elevated=true 时打 .elevated() 标,
-    /// Host 层用注入的 sudo 密码走 sudo -S/-n;否则裸 docker所有 docker 操作
-    /// 都经这里,保证「探测判定要 sudo」后续操作就一致地 sudo,不会探测过了部署却挂
+    /// 按当前提权标志构造一条 docker 命令,elevated=true 时打 .elevated() 标,
+    /// Host 层用注入的 sudo 密码走 sudo -S/-n;否则裸 docker,所有 docker 操作
+    /// 都经这里,保证「探测判定要 sudo」,后续操作就一致地 sudo,不会探测过了部署却挂
     fn docker_cmd(&self) -> HostCommand {
         let cmd = HostCommand::new("docker");
         if self.elevated.load(std::sync::atomic::Ordering::Relaxed) {
@@ -69,18 +69,18 @@ impl<'h> DockerCli<'h> {
         }
     }
 
-    /// 探测 docker 是否可用任何一步失败都退化成"未装/未就绪",不报错——
+    /// 探测 docker 是否可用,任何一步失败都退化成"未装/未就绪",不报错——
     /// 探测本身不该把"没装 docker"当异常
     pub async fn probe(&self) -> DockerStatus {
-        // docker 客户端版本(不连 daemon,普通用户就能跑)拿不到直接判定未装
+        // docker 客户端版本(不连 daemon,普通用户就能跑),拿不到直接判定未装
         let version = match self.docker_client_version().await {
             Some(v) => v,
             None => return DockerStatus::absent(),
         };
 
-        // 探 daemon裸 docker info 能过最好(用户已在 docker 组);permission denied
+        // 探 daemon,裸 docker info 能过最好(用户已在 docker 组);permission denied
         // 但 sudo 能过 → daemon 其实在跑,只是当前会话没 socket 权限(没重登/没进组),
-        // 记下 elevated 让后续命令都走 sudo两者都不过才是 daemon 真没起
+        // 记下 elevated 让后续命令都走 sudo,两者都不过才是 daemon 真没起
         let daemon_running = self.probe_daemon_with_elevation().await;
 
         // compose v2 插件(按已定的 elevated 标志跑)
@@ -96,7 +96,7 @@ impl<'h> DockerCli<'h> {
 
     /// 确保当前 Host 上 docker + daemon + compose 都可用,并刷新提权决策
     ///
-    /// Deployment 的 install / launch / observe / stop 各自会新建 DockerCli每个
+    /// Deployment 的 install / launch / observe / stop 各自会新建 DockerCli,每个
     /// operation 入口先调用这里,就算上一次 probe 的 elevated 标志没有跨对象保存,
     /// 本次命令也会重新定夺 sudo 路径
     pub async fn ensure_ready(&self) -> Result<DockerStatus, DockerCliError> {
@@ -108,12 +108,12 @@ impl<'h> DockerCli<'h> {
         }
     }
 
-    /// 确保 docker daemon 可用并刷新提权决策,但**不要求 compose 插件**
+    /// 确保 docker daemon 可用并刷新提权决策,但不要求 compose 插件
     ///
     /// 容器管理面(list / start / stop / restart / remove / logs)只需要 daemon,
     /// 不需要 compose;它们必须先走这里 probe 一次,否则后续裸 docker 命令在"装了
     /// docker 但当前会话没 socket 权限(没重登 / 没进 docker 组)"的远端会 permission
-    /// denied 而不会自动 sudo部署 / compose down 仍用 ensure_ready(额外要 compose)
+    /// denied 而不会自动 sudo,部署 / compose down 仍用 ensure_ready(额外要 compose)
     pub async fn ensure_daemon_ready(&self) -> Result<DockerStatus, DockerCliError> {
         let status = self.probe().await;
         if status.daemon_running {
@@ -158,9 +158,9 @@ impl<'h> DockerCli<'h> {
         }
     }
 
-    /// 探 daemon 是否在跑,顺带定夺后续是否需要提权:先裸 docker info,过了说明
-    /// 用户有 socket 权限(elevated 保持 false);不过就用 sudo 再探一次,sudo 能过
-    /// 说明 daemon 就绪只是缺组权限,置 elevated=true 让后续命令都走 sudo
+    /// 探 daemon 是否在跑,顺带定夺后续是否需要提权:先 sudo docker info(刚装完
+    /// docker 组未刷新的情况),过了置 elevated=true;不过再裸 docker info,过了
+    /// 说明用户已在 docker 组且会话已刷新,置 elevated=false;两者都不过才是 daemon 真没起
     async fn probe_daemon_with_elevation(&self) -> bool {
         use std::sync::atomic::Ordering;
 
@@ -192,7 +192,7 @@ impl<'h> DockerCli<'h> {
         matches!(self.host.run_to_string(cmd).await, Ok(out) if out.success())
     }
 
-    /// docker compose version,compose v2 插件存在时退出码 0按 elevated 标志跑
+    /// docker compose version,compose v2 插件存在时退出码 0,按 elevated 标志跑
     async fn docker_compose_ok(&self) -> bool {
         let cmd = self.docker_cmd().arg("compose").arg("version");
         matches!(self.host.run_to_string(cmd).await, Ok(out) if out.success())
@@ -200,7 +200,7 @@ impl<'h> DockerCli<'h> {
 }
 
 impl<'h> DockerCli<'h> {
-    /// 列所有容器(含已停止)docker ps -a --format '{{json .}}' 逐行 JSON
+    /// 列所有容器(含已停止),docker ps -a --format '{{json .}}' 逐行 JSON
     pub async fn list_containers(&self) -> Result<Vec<ContainerInfo>, DockerCliError> {
         let cmd = self
             .docker_cmd()
@@ -219,7 +219,7 @@ impl<'h> DockerCli<'h> {
         parse_ps_json(&out.stdout)
     }
 
-    /// 列本地镜像(含悬空)docker images --format '{{json .}}' 逐行 JSON
+    /// 列本地镜像(含悬空),docker images --format '{{json .}}' 逐行 JSON
     pub async fn list_images(&self) -> Result<Vec<ImageInfo>, DockerCliError> {
         let cmd = self
             .docker_cmd()
@@ -237,7 +237,7 @@ impl<'h> DockerCli<'h> {
         parse_images_json(&out.stdout)
     }
 
-    /// 删除本地镜像image_ref 可为 repo:tag 或 id;force 时加 -f
+    /// 删除本地镜像,image_ref 可为 repo:tag 或 id;force 时加 -f
     pub async fn remove_image(&self, image_ref: &str, force: bool) -> Result<(), DockerCliError> {
         let mut cmd = self.docker_cmd().arg("rmi");
         if force {
@@ -255,7 +255,7 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
-    /// 对单个容器执行 start / stop / restart命令名固定,容器名走 arg 转义
+    /// 对单个容器执行 start / stop / restart,命令名固定,容器名走 arg 转义
     pub async fn lifecycle(&self, action: &str, container: &str) -> Result<(), DockerCliError> {
         let cmd = self.docker_cmd().arg(action).arg(container);
         let out = self.host.run_to_string(cmd).await?;
@@ -283,7 +283,7 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
-    /// 取容器最近 tail 行日志stdout + stderr 合并返回(docker logs 两路都吐)
+    /// 取容器最近 tail 行日志,stdout + stderr 合并返回(docker logs 两路都吐)
     pub async fn logs(&self, container: &str, tail: u32) -> Result<String, DockerCliError> {
         let cmd = self
             .docker_cmd()
@@ -310,12 +310,8 @@ impl<'h> DockerCli<'h> {
         Ok(combined)
     }
 
-    /// 跟随容器日志直到命令结束(容器停或 SSH 断)每行回调一次
-    pub async fn logs_follow<F>(
-        &self,
-        container: &str,
-        on_line: F,
-    ) -> Result<(), DockerCliError>
+    /// 跟随容器日志直到命令结束(容器停或 SSH 断),每行回调一次
+    pub async fn logs_follow<F>(&self, container: &str, on_line: F) -> Result<(), DockerCliError>
     where
         F: FnMut(StreamSource, String) + Send + 'static,
     {
@@ -344,7 +340,7 @@ impl<'h> DockerCli<'h> {
 
 impl<'h> DockerCli<'h> {
     /// docker compose up -d,在 project_dir 下跑(compose 会读那里的
-    /// docker-compose.yml)pull 由 compose 自己按需做;这里加 --pull missing
+    /// docker-compose.yml),pull 由 compose 自己按需做;这里加 --pull missing
     /// 让首次部署自动拉镜像
     pub async fn compose_up(&self, project_dir: &str) -> Result<(), DockerCliError> {
         let cmd = self
@@ -394,12 +390,12 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
-    /// docker pull <image> 流式版本on_line 每收到一行就被调用,调用方
-    /// 可在回调里更新 PullProgress 并推进度事件命令结束后返回 CommandOutput
+    /// docker pull <image> 流式版本,on_line 每收到一行就被调用,调用方
+    /// 可在回调里更新 PullProgress 并推进度事件,命令结束后返回 CommandOutput
     /// 失败(exit code 非 0)时返回 DockerCliError::CommandFailed
     ///
     /// 不加 --progress=plain:部分远端(apt 装的老版 docker/cli)会直接 exit 125
-    /// unknown flag非 TTY 下 pull 仍会按行输出 layer 进度,PullProgress 可解析
+    /// unknown flag,非 TTY 下 pull 仍会按行输出 layer 进度,PullProgress 可解析
     pub async fn pull_streaming(
         &self,
         image: &str,
@@ -424,10 +420,10 @@ impl<'h> DockerCli<'h> {
     /// 带镜像站 fallback 的拉取:按 candidates 顺序逐个 docker pull,第一个
     /// 成功的即采用;若它不是 official_image(走了镜像站前缀),再 docker tag
     /// 回官方名,这样后续 docker compose up(compose.yml 写的是官方名)能命中
-    /// 本地缓存,不会再去 Docker Hub 直连全部候选都失败才返回最后一次的错误
+    /// 本地缓存,不会再去 Docker Hub 直连,全部候选都失败才返回最后一次的错误
     ///
     /// new_line_cb 是回调工厂:每开始尝试一个候选就调一次,参数是候选的
-    /// 0-based 序号和镜像引用,返回该次拉取专用的逐行回调每个候选独立计数,
+    /// 0-based 序号和镜像引用,返回该次拉取专用的逐行回调,每个候选独立计数,
     /// 避免上一个站失败的 layer 状态串进下一个站
     pub async fn pull_with_fallback<F, L, M>(
         &self,
@@ -484,16 +480,12 @@ impl<'h> DockerCli<'h> {
 
     /// 本地是否已有指定镜像引用(docker image inspect 成功即视为存在)
     pub async fn image_exists(&self, image_ref: &str) -> Result<bool, DockerCliError> {
-        let cmd = self
-            .docker_cmd()
-            .arg("image")
-            .arg("inspect")
-            .arg(image_ref);
+        let cmd = self.docker_cmd().arg("image").arg("inspect").arg(image_ref);
         let out = self.host.run_to_string(cmd).await?;
         Ok(out.success())
     }
 
-    /// docker tag <src> <dst>给镜像打一个别名引用,不重新拉取
+    /// docker tag <src> <dst>,给镜像打一个别名引用,不重新拉取
     async fn retag(&self, src: &str, dst: &str) -> Result<(), DockerCliError> {
         let cmd = self.docker_cmd().arg("tag").arg(src).arg(dst);
         let out = self.host.run_to_string(cmd).await?;
@@ -678,17 +670,16 @@ impl PullProgress {
 
     /// 按层 id 排序的稳定快照,供 IPC 推到前端
     pub fn layer_snapshots(&self) -> Vec<DockerPullLayerSnapshot> {
-        let mut ids: Vec<&String> = self.layers.keys().collect();
-        ids.sort();
-        ids.into_iter()
-            .map(|id| {
-                let (phase, detail) = self.layers.get(id).expect("layer key");
-                DockerPullLayerSnapshot {
-                    id: id.clone(),
-                    phase: phase.user_label(),
-                    detail: detail.clone(),
-                    done: phase.counts_toward_progress_complete(),
-                }
+        let mut entries: Vec<(&String, &(LayerPhase, Option<String>))> =
+            self.layers.iter().collect();
+        entries.sort_by_key(|(id, _)| *id);
+        entries
+            .into_iter()
+            .map(|(id, (phase, detail))| DockerPullLayerSnapshot {
+                id: id.clone(),
+                phase: phase.user_label(),
+                detail: detail.clone(),
+                done: phase.counts_toward_progress_complete(),
             })
             .collect()
     }
@@ -703,7 +694,11 @@ impl PullProgress {
 fn normalize_pull_layer_id(id_raw: &str) -> String {
     let s = id_raw.trim();
     if let Some(rest) = s.strip_prefix("sha256:") {
-        let hex: String = rest.chars().take(64).filter(|c| c.is_ascii_hexdigit()).collect();
+        let hex: String = rest
+            .chars()
+            .take(64)
+            .filter(|c| c.is_ascii_hexdigit())
+            .collect();
         if hex.len() >= 6 {
             return hex.chars().take(12).collect();
         }
@@ -737,7 +732,7 @@ fn parse_ps_json(stdout: &str) -> Result<Vec<ContainerInfo>, DockerCliError> {
     Ok(out)
 }
 
-/// docker ps --format '{{json .}}' 单行的字段子集docker 这个格式的字段名
+/// docker ps --format '{{json .}}' 单行的字段子集,docker 这个格式的字段名
 /// 是固定的(ID / Names / Image / State / Status / Ports)
 #[derive(serde::Deserialize)]
 struct PsLine {
@@ -758,7 +753,7 @@ struct PsLine {
 impl PsLine {
     fn into_info(self) -> ContainerInfo {
         // Ports 形如 "0.0.0.0:6099->6099/tcp, :::6099->6099/tcp";按逗号拆开,
-        // 去重空白Names 多名时 docker 用逗号分隔,取第一个作主名
+        // 去重空白,Names 多名时 docker 用逗号分隔,取第一个作主名
         let ports: Vec<String> = self
             .ports
             .split(',')

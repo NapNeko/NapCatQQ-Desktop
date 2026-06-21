@@ -1,6 +1,6 @@
 //! 外接部署:对接用户已经在跑的 OneBot 服务(Lagrange / NapCat-CLI / 其它实装)
 //!
-//! P1.a 占位supports 当前一律返回 false(让 UI 在 P5 实装前不暴露这个
+//! P1.a 占位,supports 当前一律返回 false(让 UI 在 P5 实装前不暴露这个
 //! 选项),所有方法返回 Unsupported
 //!
 //! P5 阶段计划:
@@ -25,7 +25,7 @@ pub struct ExternalDeployment {
 }
 
 impl ExternalDeployment {
-    /// 构造占位实例P5 阶段会扩展为携带 endpoint URL / auth token / 协议类型
+    /// 构造占位实例,P5 阶段会扩展为携带 endpoint URL / auth token / 协议类型
     pub fn new() -> Self {
         Self {
             id: "external",

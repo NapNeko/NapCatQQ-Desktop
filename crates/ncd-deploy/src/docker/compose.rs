@@ -31,14 +31,14 @@ impl<'a> ComposeSecret<'a> {
     fn snowluma_vnc_passwd(&self) -> String {
         match self {
             Self::Literal(passwd) => format!("\"{}\"", escape_yaml_double_quoted(passwd)),
-            Self::EnvRef { variable } => format!("\"${{{variable}}}\"")
+            Self::EnvRef { variable } => format!("\"${{{variable}}}\""),
         }
     }
 
     fn snowluma_webui_bootstrap(&self) -> String {
         match self {
             Self::Literal(passwd) => format!("\"{}\"", escape_yaml_double_quoted(passwd)),
-            Self::EnvRef { variable } => format!("\"${{{variable}}}\"")
+            Self::EnvRef { variable } => format!("\"${{{variable}}}\""),
         }
     }
 }
@@ -160,7 +160,12 @@ fn render_snowluma(
     let ports = render_ports(spec);
     let vnc_passwd = vnc_secret.snowluma_vnc_passwd();
     let webui_env = webui_bootstrap
-        .map(|s| format!("      SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: {}\n", s.snowluma_webui_bootstrap()))
+        .map(|s| {
+            format!(
+                "      SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: {}\n",
+                s.snowluma_webui_bootstrap()
+            )
+        })
         .unwrap_or_default();
     // SnowLuma 必须的安全选项 + named volume,照官方 docker-compose.yml
     format!(
@@ -293,7 +298,9 @@ mod tests {
                 break;
             }
         }
-        assert!(yaml.contains("SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: \"${SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD}\""));
+        assert!(yaml.contains(
+            "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: \"${SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD}\""
+        ));
     }
 
     #[test]

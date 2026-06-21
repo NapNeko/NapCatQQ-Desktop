@@ -82,9 +82,9 @@ pub struct DeployOutcome {
 
 impl DeployOutcome {
     pub fn new(steps: Vec<StepOutcome>, total_duration_ms: u64) -> Self {
-        let ok = steps.iter().all(|s| {
-            matches!(s.status, StepStatus::Ok | StepStatus::Skipped)
-        });
+        let ok = steps
+            .iter()
+            .all(|s| matches!(s.status, StepStatus::Ok | StepStatus::Skipped));
         Self {
             ok,
             steps,
@@ -114,12 +114,7 @@ mod tests {
 
     #[test]
     fn failed_outcome_carries_error() {
-        let s = StepOutcome::failed(
-            "qq",
-            StepKind::ForceInstall,
-            500,
-            "download failed",
-        );
+        let s = StepOutcome::failed("qq", StepKind::ForceInstall, 500, "download failed");
         assert_eq!(s.status, StepStatus::Failed);
         assert_eq!(s.error.as_deref(), Some("download failed"));
     }

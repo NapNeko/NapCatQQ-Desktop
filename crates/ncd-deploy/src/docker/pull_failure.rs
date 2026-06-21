@@ -43,9 +43,7 @@ fn classify_text_blob(blob: &str) -> Option<PullFailureKind> {
     if b.contains("429 too many requests") || b.contains("status: 429") {
         return Some(PullFailureKind::MirrorUnreachable);
     }
-    if b.contains("unknown flag")
-        && (b.contains("progress") || b.contains("--progress"))
-    {
+    if b.contains("unknown flag") && (b.contains("progress") || b.contains("--progress")) {
         return Some(PullFailureKind::Other);
     }
     if b.contains("i/o timeout")
@@ -121,15 +119,11 @@ pub fn classify_pull_failure(err: &DockerCliError) -> (PullFailureKind, String) 
             } else {
                 tail.to_string()
             };
-            (
-                kind,
-                format!("{}：{}", kind.user_title(), detail),
-            )
+            (kind, format!("{}：{}", kind.user_title(), detail))
         }
-        DockerCliError::RuntimeUnavailable { .. } | DockerCliError::ParseFailed(_) => (
-            PullFailureKind::Other,
-            err.to_string(),
-        ),
+        DockerCliError::RuntimeUnavailable { .. } | DockerCliError::ParseFailed(_) => {
+            (PullFailureKind::Other, err.to_string())
+        }
     }
 }
 

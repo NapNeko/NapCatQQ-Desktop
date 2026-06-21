@@ -2,7 +2,7 @@
 //!
 //! Linux:不走官方 get.docker.com 一键脚本——get.docker.com / download.docker.com
 //! 这两个官方域名在国内被墙(实测 curl 直接 Connection reset),连脚本本身都拉不下来,
-//! 脚本里的 --mirror 参数根本没机会生效改成在远端直接配阿里云 docker-ce 仓库走原生
+//! 脚本里的 --mirror 参数根本没机会生效,改成在远端直接配阿里云 docker-ce 仓库走原生
 //! apt/dnf 安装:全程只打 mirrors.aliyun.com(实测 HTTP 200),不碰任何 docker 官方域名
 //!
 //! 安装按阶段拆成多段 shell,每段单独跑并上报 apt/dnf 行级进度(见 install_progress)
@@ -16,30 +16,29 @@ use ncd_host::Host;
 use super::cli::DockerCliError;
 use super::install_progress::InstallProgressEmit;
 
-/// 兼容旧调用方的别名结构化结果统一用 [DockerInstallReport]
+/// 兼容旧调用方的别名,结构化结果统一用 [DockerInstallReport]
 pub type DockerInstallOutcome = DockerInstallReport;
 
 /// Docker Desktop for Windows 下载页
 pub(crate) const DOCKER_DESKTOP_URL: &str = "https://www.docker.com/products/docker-desktop/";
 
-/// 阿里云 docker-ce 镜像根apt 的 gpg/仓库,dnf 的 .repo 都从这里派生
+/// 阿里云 docker-ce 镜像根,apt 的 gpg/仓库,dnf 的 .repo 都从这里派生
 const ALIYUN_DOCKER_CE: &str = "https://mirrors.aliyun.com/docker-ce";
 
-/// 装 Docker 时分阶段执行的脚本(按顺序)每段独立超时,失败即停
+/// 装 Docker 时分阶段执行的脚本(按顺序),每段独立超时,失败即停
 pub(crate) fn docker_install_phases() -> Vec<(&'static str, String)> {
     let base = ALIYUN_DOCKER_CE;
     let mut phases: Vec<(&'static str, String)> = Vec::new();
 
     phases.push((
         "apt_prep",
-        format!(
-            r#"set -e
+        r#"set -e
 export DEBIAN_FRONTEND=noninteractive
 if ! command -v apt-get >/dev/null 2>&1; then exit 0; fi
 apt-get update
 apt-get install -y ca-certificates curl gnupg
 "#
-        ),
+        .to_string(),
     ));
 
     phases.push((
@@ -63,14 +62,13 @@ echo "deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.gpg] $ALI/linux/$DISTRO
 
     phases.push((
         "apt_install",
-        format!(
-            r#"set -e
+        r#"set -e
 if ! command -v apt-get >/dev/null 2>&1; then exit 0; fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 "#
-        ),
+        .to_string(),
     ));
 
     phases.push((
@@ -119,7 +117,7 @@ exit 1
     phases
 }
 
-/// 安装成功后写入 registry 加速(非交互)仅当尚无 daemon.json 或备份后覆盖
+/// 安装成功后写入 registry 加速(非交互),仅当尚无 daemon.json 或备份后覆盖
 pub(crate) fn write_registry_mirrors_script() -> String {
     r#"set -e
 mkdir -p /etc/docker
@@ -180,11 +178,15 @@ mod tests {
 
     #[test]
     fn bad_password_detection_matches_common_phrasings() {
-        assert!(looks_like_bad_sudo_password("sudo: 1 incorrect password attempt"));
+        assert!(looks_like_bad_sudo_password(
+            "sudo: 1 incorrect password attempt"
+        ));
         assert!(looks_like_bad_sudo_password("Sorry, try again."));
         assert!(looks_like_bad_sudo_password("sudo: a password is required"));
         assert!(looks_like_bad_sudo_password("密码不正确"));
-        assert!(!looks_like_bad_sudo_password("curl: (6) could not resolve host"));
+        assert!(!looks_like_bad_sudo_password(
+            "curl: (6) could not resolve host"
+        ));
         assert!(!looks_like_bad_sudo_password(""));
     }
 
@@ -207,8 +209,14 @@ mod tests {
     #[test]
     fn install_script_uses_aliyun_not_official_docker_domain() {
         let s = aliyun_install_script();
-        assert!(!s.contains("get.docker.com"), "不该再依赖 get.docker.com: {s}");
-        assert!(s.contains("mirrors.aliyun.com/docker-ce"), "必须走阿里云镜像");
+        assert!(
+            !s.contains("get.docker.com"),
+            "不该再依赖 get.docker.com: {s}"
+        );
+        assert!(
+            s.contains("mirrors.aliyun.com/docker-ce"),
+            "必须走阿里云镜像"
+        );
         for line in s.lines().filter(|l| l.contains("download.docker.com")) {
             assert!(
                 line.trim_start().starts_with("sed"),
@@ -230,8 +238,14 @@ mod tests {
     fn install_script_installs_docker_ce_and_compose_plugin() {
         let s = aliyun_install_script();
         assert!(s.contains("docker-ce"), "必须装 docker-ce");
-        assert!(s.contains("docker-compose-plugin"), "必须装 compose v2 插件");
-        assert!(s.contains("DEBIAN_FRONTEND=noninteractive"), "apt 必须非交互");
+        assert!(
+            s.contains("docker-compose-plugin"),
+            "必须装 compose v2 插件"
+        );
+        assert!(
+            s.contains("DEBIAN_FRONTEND=noninteractive"),
+            "apt 必须非交互"
+        );
         assert!(s.contains("set -e"), "出错即停,避免半装状态");
     }
 
