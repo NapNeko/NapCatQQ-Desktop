@@ -4,29 +4,29 @@ import type { ComponentId } from "./ComponentId";
 import type { SupportedTarget } from "./SupportedTarget";
 
 /**
- * 组件元数据。Components 页直接消费的清单数据。
+ * 组件元数据,Components 页直接消费的清单数据
  *
- * 字段都由各 Component 实装的 info() 静态方法写死；前端不做任何派生
- * （比如 i18n 文案就由后端写死中文 + 简短描述）。
+ * 字段都由各 Component 实装的 info() 静态方法写死;前端不做任何派生
+ * (比如 i18n 文案就由后端写死中文 + 简短描述)
  */
 export type ComponentInfo = { id: ComponentId, 
 /**
- * UI 显示名（"NapCat" / "SnowLuma" / "Node.js" / "QQ" 等）。
+ * UI 显示名("NapCat" / "SnowLuma" / "Node.js" / "QQ" 等)
  */
 display_name: string, 
 /**
- * 一行简介，2-30 字。
+ * 一行简介,2-30 字
  */
 description: string, 
 /**
- * GitHub / 官网链接（None 表示无对应外链）。
+ * GitHub / 官网链接(None 表示无对应外链)
  */
 repo_url?: string | null, 
 /**
- * 支持的 (Os, Locality) 组合，前端用来判断"在某主机上能不能装"。
+ * 支持的 (Os, Locality) 组合,前端用来判断"在某主机上能不能装"
  */
 supported_targets: Array<SupportedTarget>, 
 /**
- * 分类。
+ * 分类
  */
 category: ComponentCategory, };
