@@ -1,11 +1,11 @@
-//! UpdateOrchestrator:Desktop 自更新业务编排器
+//! UpdateOrchestrator: 自更新流水线编排器
 //!
-//! 提供 5 个核心方法 check / precheck / resume_after_update /
-//! record_failure / detect_pending_failures
+//! 五个核心操作: check / precheck / install_with_graceful_shutdown /
+//! resume_after_update / record_failure / detect_pending_failures
 //!
-//! install_with_graceful_shutdown 当前只保存 resume snapshot 然后调
-//! provider.download_and_install;待 BotManager 重构完成后再接入"先 graceful
-//! stop 在跑 bot / SnowLuma daemon 再调用 provider"的完整链路
+//! TODO: install_with_graceful_shutdown 目前只保存 resume snapshot
+//! 然后调 provider.download_and_install; 等 BotManager 重构完成后,
+//! 在此处加"先 graceful stop 在跑 bot / SnowLuma daemon 再安装"
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -20,24 +20,20 @@ use crate::channel::UpdateChannel;
 use crate::error::UpdateError;
 use crate::provider::UpdateProvider;
 use crate::resume::{ResumeStore, UpdateResumePoint};
-use crate::types::{AvailableUpdate, PrecheckReport, RecordedFailure};
+use crate::types::{AvailableUpdate, PrecheckReport, RecordedFailure, UpdatePhase};
 
-/// UpdateOrchestrator:协调自更新流程
 pub struct UpdateOrchestrator {
     provider: Arc<dyn UpdateProvider>,
     resume_store: ResumeStore,
-    /// 失败记录文件(JSONL),在 data_root/update-failures.jsonl
+    /// failure 日志路径: data_root/update-failures.jsonl
     failures_path: PathBuf,
-    /// 当前 desktop schema 版本(注入,用于 precheck 比较)
     current_schema: SchemaVersion,
-    /// 当前 desktop 版本号(注入)
     current_version: Version,
 }
 
 impl UpdateOrchestrator {
-    /// 创建 orchestrator
-    /// - provider:更新源(实装为 tauri-plugin-updater wrapper / Mock)
-    /// - data_root:数据根目录(<data_root>/update-resume.json 与 update-failures.jsonl)
+    /// - provider: 更新源(tauri-plugin-updater wrapper / Mock)
+    /// - data_root: 数据根目录(<data_root>/update-resume.json + update-failures.jsonl)
     pub fn new(
         provider: Arc<dyn UpdateProvider>,
         data_root: &std::path::Path,
@@ -55,12 +51,15 @@ impl UpdateOrchestrator {
 
     // ===== 1. check =====
 
-    /// 检查更新,验签由 provider 完成
-    pub async fn check(&self, channel: UpdateChannel) -> Result<Option<AvailableUpdate>, UpdateError> {
+    /// 向 provider 请求更新; 过滤掉"伪更新"(版本 <= 当前版本)
+    pub async fn check(
+        &self,
+        channel: UpdateChannel,
+    ) -> Result<Option<AvailableUpdate>, UpdateError> {
         info!(target: "ncd_update", ?channel, "check for updates");
         match self.provider.check(channel).await {
             Ok(Some(u)) => {
-                // 拦截"伪更新":server 返回比当前版本还低/相同的版本号
+                // server 可能返回相同或更低版本, 直接过滤
                 if u.version <= self.current_version {
                     return Ok(None);
                 }
@@ -78,69 +77,62 @@ impl UpdateOrchestrator {
         let current = self.current_schema;
         let target = update.schema_version;
 
-        // 同 schema 直接 ok
         if current == target {
             return Ok(PrecheckReport::ok());
         }
 
-        // 仅允许 forward(降级 schema 为 blocking)
+        // 不允许降级 schema
         if target.get() < current.get() {
             return Ok(PrecheckReport::blocked(format!(
                 "target schema {target:?} is lower than current {current:?}: cannot downgrade",
             )));
         }
 
-        // 跨度 ≥ 3 视为 too large(用户应该先升级到中间版本)
+        // 跨度 >= 3: 太大, 用户应该逐版本升级
         let gap = target.get().saturating_sub(current.get());
         if gap >= 3 {
-            return Ok(PrecheckReport::ok()
-                .add_blocking(format!(
-                    "schema gap too large: {current:?} → {target:?} (gap={gap}); upgrade incrementally"
-                )));
+            return Ok(PrecheckReport::ok().add_blocking(format!(
+                "schema gap too large: {current:?} to {target:?} (gap={gap}); upgrade incrementally"
+            )));
         }
 
-        // 跨度 1-2 加 warning(数据需要迁移,但可以走)
+        // 跨度 1-2: 数据需要迁移但可行
         let mut report = PrecheckReport::ok().add_warning(format!(
             "schema upgrade from {current:?} to {target:?}: data will be migrated automatically"
         ));
-        // 估算迁移耗时:每 schema gap 假设 200ms(经验值)
+        // 经验估算: 每 schema gap 200ms
         report.estimated_migration_time_ms = gap as u64 * 200;
         Ok(report)
     }
 
     // ===== 3. install_with_graceful_shutdown =====
 
-    /// 当前只保存 resume snapshot 然后调 provider.download_and_install
-    /// BotManager 重构完成后会在此处加上"先 graceful stop 在跑 bot / SnowLuma
-    /// daemon"的完整链路
+    /// TODO: 等 BotManager 重构完成, 在此处加 graceful stop 在跑 bot / SnowLuma daemon
     pub async fn install_with_graceful_shutdown(
         &self,
         update: AvailableUpdate,
         running_bots: Vec<String>,
         snowluma_daemon_running: bool,
     ) -> Result<(), UpdateError> {
-        // 保存 resume snapshot
-        let resume_point = UpdateResumePoint::new(
-            self.current_version.to_string(),
-            update.version.to_string(),
-        )
-        .with_running_bots(running_bots)
-        .with_snowluma_daemon(snowluma_daemon_running);
-        self.resume_store.save(&resume_point).await.map_err(|e| {
-            UpdateError::ResumeError {
+        let resume_point =
+            UpdateResumePoint::new(self.current_version.to_string(), update.version.to_string())
+                .with_running_bots(running_bots)
+                .with_snowluma_daemon(snowluma_daemon_running);
+        self.resume_store
+            .save(&resume_point)
+            .await
+            .map_err(|e| UpdateError::ResumeError {
                 reason: format!("save snapshot: {e}"),
-            }
-        })?;
+            })?;
 
-        // 调用 provider 完成下载 + 验签 + 安装
         match self.provider.download_and_install(&update).await {
             Ok(()) => Ok(()),
             Err(e) => {
-                // 失败时清理 snapshot,避免下次启动误判"刚升级"
+                // 失败时清理 snapshot, 避免下次启动误判"刚升级"
                 let _ = self.resume_store.clear().await;
                 self.record_failure(
-                    "install",
-                    &format!("{e}"),
+                    UpdatePhase::Install,
+                    format!("{e}"),
                     Some(update.version.to_string()),
                 )
                 .await;
@@ -151,7 +143,7 @@ impl UpdateOrchestrator {
 
     // ===== 4. resume_after_update =====
 
-    /// 新版进程启动时调用读取 resume snapshot,返回 Some 表示刚升级,
+    /// 新版进程启动时调用; 返回 Some 表示刚升级,
     /// 上层(BotManager / SnowLumaDaemon)按 snapshot 还原状态后调 [Self::clear_resume]
     pub async fn resume_after_update(&self) -> Result<Option<UpdateResumePoint>, UpdateError> {
         self.resume_store.load().await
@@ -164,10 +156,10 @@ impl UpdateOrchestrator {
 
     // ===== 5. record_failure / detect_pending_failures =====
 
-    /// 记录一次失败,追加到 update-failures.jsonl
+    /// 追加一条失败记录到 update-failures.jsonl; 写入失败只 warn 不传播
     pub async fn record_failure(
         &self,
-        phase: impl Into<String>,
+        phase: UpdatePhase,
         error: impl Into<String>,
         target_version: Option<String>,
     ) {
@@ -176,7 +168,6 @@ impl UpdateOrchestrator {
             failure = failure.with_target_version(v);
         }
 
-        // 写失败也忽略,不影响主流程
         if let Err(e) = self.append_failure_line(&failure).await {
             tracing::warn!(
                 target: "ncd_update",
@@ -185,7 +176,7 @@ impl UpdateOrchestrator {
         }
     }
 
-    /// 启动时检测是否有未上报的失败记录
+    /// 启动时检查是否有未上报的失败记录
     pub async fn detect_pending_failures(&self) -> Result<Vec<RecordedFailure>, UpdateError> {
         match fs::read_to_string(&self.failures_path).await {
             Ok(content) => {
@@ -269,7 +260,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let orch = make_orch(provider, dir.path());
         let r = orch.check(UpdateChannel::Stable).await.unwrap();
-        assert!(r.is_none()); // 0.0.5 < 0.1.0,被过滤
+        assert!(r.is_none()); // 0.0.5 < 0.1.0, 被过滤
     }
 
     #[tokio::test]
@@ -315,10 +306,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let orch = make_orch(provider, dir.path());
         let target = SchemaVersion::new(6);
-        let report = orch
-            .precheck(&fake_update("1.0.0", target))
-            .await
-            .unwrap();
+        let report = orch.precheck(&fake_update("1.0.0", target)).await.unwrap();
         assert!(!report.can_upgrade);
         assert!(report.blocking.iter().any(|b| b.contains("gap")));
     }
@@ -330,10 +318,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let orch = make_orch(provider, dir.path());
         let target = SchemaVersion::new(4);
-        let report = orch
-            .precheck(&fake_update("1.0.0", target))
-            .await
-            .unwrap();
+        let report = orch.precheck(&fake_update("1.0.0", target)).await.unwrap();
         assert!(report.can_upgrade);
         assert_eq!(report.warnings.len(), 1);
         assert_eq!(report.estimated_migration_time_ms, 200);
@@ -385,7 +370,7 @@ mod tests {
         // 失败应记录
         let pending = orch.detect_pending_failures().await.unwrap();
         assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].phase, "install");
+        assert_eq!(pending[0].phase, UpdatePhase::Install);
         assert!(pending[0].error.contains("simulated"));
         assert_eq!(pending[0].target_version.as_deref(), Some("0.2.0"));
     }
@@ -412,12 +397,13 @@ mod tests {
         let provider = Arc::new(MockUpdateProvider::new());
         let dir = tempdir().unwrap();
         let orch = make_orch(provider, dir.path());
-        orch.record_failure("check", "404", None).await;
-        orch.record_failure("install", "msi 1603", Some("0.2.0".into())).await;
+        orch.record_failure(UpdatePhase::Check, "404", None).await;
+        orch.record_failure(UpdatePhase::Install, "msi 1603", Some("0.2.0".into()))
+            .await;
         let pending = orch.detect_pending_failures().await.unwrap();
         assert_eq!(pending.len(), 2);
-        assert_eq!(pending[0].phase, "check");
-        assert_eq!(pending[1].phase, "install");
+        assert_eq!(pending[0].phase, UpdatePhase::Check);
+        assert_eq!(pending[1].phase, UpdatePhase::Install);
     }
 
     #[tokio::test]
@@ -438,6 +424,6 @@ mod tests {
         );
         let pending = orch.detect_pending_failures().await.unwrap();
         assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].phase, "check");
+        assert_eq!(pending[0].phase, UpdatePhase::Check);
     }
 }

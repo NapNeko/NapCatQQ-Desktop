@@ -1,7 +1,6 @@
-//! Resume snapshot:自更新前持久化的 bot/daemon 状态,新版启动时还原
+//! Resume snapshot: 自更新前持久化的 bot/daemon 状态, 新版启动时还原
 //!
-//! 由 [UpdateOrchestrator::resume_after_update](crate::UpdateOrchestrator::resume_after_update)
-//! 读取消费
+//! 消费方: [UpdateOrchestrator::resume_after_update](crate::UpdateOrchestrator::resume_after_update)
 
 use std::path::PathBuf;
 
@@ -14,20 +13,18 @@ use crate::error::UpdateError;
 /// 自更新 resume snapshot
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UpdateResumePoint {
-    /// 协议版本(envelope,与前端契约同步)
+    /// R14 IPC envelope 版本号
     #[serde(default = "default_v")]
     pub v: u32,
     /// 升级前 desktop 版本
     pub from_version: String,
     /// 升级目标版本
     pub to_version: String,
-    /// 升级时间戳
     pub initiated_at: DateTime<Utc>,
-    /// 升级前在跑的 bot id 列表(用于新版启动时自动重启)
+    /// 升级前在跑的 bot id 列表(新版启动时自动重启)
     pub running_bots: Vec<String>,
     /// 升级前 SnowLuma daemon 是否在跑
     pub snowluma_daemon_running: bool,
-    /// 自定义注释
     pub note: Option<String>,
 }
 
@@ -64,13 +61,13 @@ impl UpdateResumePoint {
     }
 }
 
-/// Resume 持久化抽象
+/// Resume 持久化
 pub struct ResumeStore {
     snapshot_path: PathBuf,
 }
 
 impl ResumeStore {
-    /// 默认路径:<data_root>/update-resume.json
+    /// 默认路径: <data_root>/update-resume.json
     pub fn new(data_root: &std::path::Path) -> Self {
         Self {
             snapshot_path: data_root.join("update-resume.json"),
@@ -83,7 +80,7 @@ impl ResumeStore {
         }
     }
 
-    /// 保存 resume snapshot
+    /// 保存 resume snapshot 到磁盘
     pub async fn save(&self, point: &UpdateResumePoint) -> Result<(), UpdateError> {
         let bytes = serde_json::to_vec_pretty(point)?;
         if let Some(parent) = self.snapshot_path.parent() {
@@ -95,7 +92,7 @@ impl ResumeStore {
         Ok(())
     }
 
-    /// 读取 resume snapshot文件不存在返回 Ok(None)
+    /// 读取 resume snapshot, 文件不存在返回 Ok(None)
     pub async fn load(&self) -> Result<Option<UpdateResumePoint>, UpdateError> {
         match fs::read(&self.snapshot_path).await {
             Ok(bytes) => {

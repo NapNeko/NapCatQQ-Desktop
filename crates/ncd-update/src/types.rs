@@ -1,50 +1,47 @@
-//! Update 共享数据类型
-
 use chrono::{DateTime, Utc};
 use ncd_domain::SchemaVersion;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// 一次可用的更新信息(由 [UpdateProvider::check] 返回)
+/// IPC envelope 版本, 跨 update 类型共享, 满足 R14 契约
+pub const UPDATE_PROTOCOL_VERSION: u32 = 1;
+
+pub(crate) fn default_v() -> u32 {
+    UPDATE_PROTOCOL_VERSION
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/update/")]
 pub struct AvailableUpdate {
-    /// 协议版本(envelope,与前端契约同步)
+    /// R14 IPC envelope 版本号
     #[serde(default = "default_v")]
     pub v: u32,
-    /// 新版本号(SemVer)
     #[ts(type = "string")]
     pub version: Version,
-    /// 新版要求的最低数据 schema(用于预检)
+    /// 新版要求的最低数据 schema, precheck 用这个比较
     #[ts(type = "number")]
     pub schema_version: SchemaVersion,
     /// 发行说明(Markdown)
     pub notes: String,
-    /// 发布时间
     #[ts(type = "string")]
     pub pub_date: DateTime<Utc>,
-    /// 下载 URL(交给 tauri-plugin-updater 处理签名验证 + 下载)
+    /// tauri-plugin-updater 从这个 URL 下载并验签
     pub download_url: String,
-    /// 签名(base64),由 tauri-plugin-updater 自动验证 Ed25519
+    /// base64 Ed25519 签名, 由 tauri-plugin-updater 自动验证
     pub signature: String,
 }
 
-fn default_v() -> u32 {
-    1
-}
-
-/// schema 兼容预检报告
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/update/")]
 pub struct PrecheckReport {
-    /// 协议版本(envelope,与前端契约同步)
+    /// R14 IPC envelope 版本号
     #[serde(default = "default_v")]
     pub v: u32,
     pub can_upgrade: bool,
-    /// 阻塞性问题(数据 schema 跨度太大 / 不兼容字段等)
+    /// 阻塞性问题(schema 跨度太大 / 不兼容字段等)
     pub blocking: Vec<String>,
-    /// 警告(某些字段会被丢弃 / 行为变化)
+    /// 非阻塞警告(某些字段会被丢弃 / 行为变化)
     pub warnings: Vec<String>,
     /// 估算迁移耗时(毫秒)
     pub estimated_migration_time_ms: u64,
@@ -83,25 +80,45 @@ impl PrecheckReport {
     }
 }
 
-/// 更新失败 telemetry 记录(写到 data_root/update-failures.jsonl)
+/// 更新流水线的失败阶段
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdatePhase {
+    Check,
+    Precheck,
+    Shutdown,
+    Install,
+    Resume,
+}
+
+impl std::fmt::Display for UpdatePhase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Check => f.write_str("check"),
+            Self::Precheck => f.write_str("precheck"),
+            Self::Shutdown => f.write_str("shutdown"),
+            Self::Install => f.write_str("install"),
+            Self::Resume => f.write_str("resume"),
+        }
+    }
+}
+
+/// 失败 telemetry 记录, 追加到 data_root/update-failures.jsonl
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordedFailure {
-    /// 时间戳
     pub timestamp: DateTime<Utc>,
-    /// 失败的更新版本(SemVer 字符串,失败可能在拿到版本前)
+    /// 可能在拿到版本号之前就失败了
     pub target_version: Option<String>,
-    /// 失败阶段(check / precheck / shutdown / install / resume)
-    pub phase: String,
-    /// 错误描述
+    pub phase: UpdatePhase,
     pub error: String,
 }
 
 impl RecordedFailure {
-    pub fn new(phase: impl Into<String>, error: impl Into<String>) -> Self {
+    pub fn new(phase: UpdatePhase, error: impl Into<String>) -> Self {
         Self {
             timestamp: Utc::now(),
             target_version: None,
-            phase: phase.into(),
+            phase,
             error: error.into(),
         }
     }
@@ -171,16 +188,15 @@ mod tests {
 
     #[test]
     fn recorded_failure_with_phase() {
-        let f = RecordedFailure::new("install", "msi exit 1603");
-        assert_eq!(f.phase, "install");
+        let f = RecordedFailure::new(UpdatePhase::Install, "msi exit 1603");
+        assert_eq!(f.phase, UpdatePhase::Install);
         assert_eq!(f.error, "msi exit 1603");
         assert!(f.target_version.is_none());
     }
 
     #[test]
     fn recorded_failure_with_target_version_chain() {
-        let f = RecordedFailure::new("check", "404")
-            .with_target_version("1.2.3");
+        let f = RecordedFailure::new(UpdatePhase::Check, "404").with_target_version("1.2.3");
         assert_eq!(f.target_version.as_deref(), Some("1.2.3"));
     }
 }
