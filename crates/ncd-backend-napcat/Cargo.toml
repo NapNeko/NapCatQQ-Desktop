@@ -39,8 +39,6 @@ tempfile = "3"
 wiremock = "0.6"
 tokio = { version = "1", features = ["test-util"] }
 ncd-test-support = { path = "../ncd-test-support" }
-tracing-subscriber = { version = "0.3", default-features = false, features = [
-    "fmt",
-    "std",
-] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 proptest = "1"
+ncd-host = { path = "../ncd-host" }

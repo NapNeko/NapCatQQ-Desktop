@@ -1218,7 +1218,7 @@ mod transition_tests {
 
     /// 排空 bot-scoped 订阅器中已发布的事件每次循环都用极短超时探测,
     /// 直到 next() 不再立即返回事件为止
-    async fn drain_events(sub: &mut crate::events::EventSubscription) -> Vec<DomainEvent> {
+    async fn drain_events(sub: &mut ncd_traits::events::EventSubscription) -> Vec<DomainEvent> {
         let mut out = Vec::new();
         loop {
             match tokio::time::timeout(Duration::from_millis(5), sub.next()).await {
