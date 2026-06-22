@@ -1,0 +1,16 @@
+[package]
+name = "ncd-template"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+minijinja = { version = "2.5", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2.0"
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[lints]
+workspace = true

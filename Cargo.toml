@@ -11,6 +11,7 @@ members = [
     "crates/ncd-runtime",
     "crates/ncd-log",
     "crates/ncd-test-support",
+    "crates/ncd-template",
 ]
 resolver = "3"
 

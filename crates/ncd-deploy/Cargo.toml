@@ -11,6 +11,7 @@ path = "src/lib.rs"
 ncd-domain = { path = "../ncd-domain" }
 ncd-host = { path = "../ncd-host" }
 ncd-component = { path = "../ncd-component" }
+ncd-template = { path = "../ncd-template" }
 async-trait = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }

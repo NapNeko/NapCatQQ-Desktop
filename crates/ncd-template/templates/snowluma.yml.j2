@@ -1,0 +1,27 @@
+services:
+  snowluma:
+    image: {{ image }}
+    container_name: {{ name }}
+    restart: unless-stopped
+    shm_size: 1gb
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - "seccomp=unconfined"
+    environment:
+      SNOWLUMA_UID: "{{ uid }}"
+      SNOWLUMA_GID: "{{ gid }}"
+      VNC_PASSWD: {{ vnc_passwd|tojson }}
+{% if webui_bootstrap %}      SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: {{ webui_bootstrap|tojson }}
+{% endif %}      SNOWLUMA_WEBUI_PORT: "5099"
+      SNOWLUMA_HOOK_AUTOLOAD: "1"
+    ports:
+{% for port in ports %}      - "{{ port.host }}:{{ port.container }}"
+{% endfor %}    volumes:
+      - {{ name }}-data:/app/snowluma-data
+      - {{ name }}-qq-config:/app/.config
+      - {{ name }}-qq-data:/app/.local/share
+volumes:
+  {{ name }}-data:
+  {{ name }}-qq-config:
+  {{ name }}-qq-data:

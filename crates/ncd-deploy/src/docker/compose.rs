@@ -8,8 +8,15 @@
 //!
 //! 凭据(token / vnc 密码)由调用方生成后通过 secret 参数传进来,这里只负责把它
 //! 拼进 yaml,不自己造随机值(纯函数好测)
+//!
+//! 模板渲染走 ncd-template(MiniJinja),凭据字段用 |tojson 过滤器做 YAML 安全
+//! 转义,避免含特殊字符的值破坏 compose 结构
+
+use std::sync::OnceLock;
 
 use ncd_domain::{DockerDeploySpec, DockerFlavor};
+use ncd_template::TemplateEngine;
+use serde::Serialize;
 
 /// compose 中凭据的来源
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,42 +28,38 @@ pub enum ComposeSecret<'a> {
 }
 
 impl<'a> ComposeSecret<'a> {
+    /// NapCat WEBUI_TOKEN 的原始值(模板用 tojson 加引号和转义)
     fn napcat_webui_token(&self) -> String {
         match self {
-            Self::Literal(token) => format!("\"{token}\""),
-            Self::EnvRef { variable } => format!("\"${{{}:?{} is required}}\"", variable, variable),
+            Self::Literal(token) => token.to_string(),
+            Self::EnvRef { variable } => format!("${{{}:?{} is required}}", variable, variable),
         }
     }
 
+    /// SnowLuma VNC_PASSWD 的原始值
     fn snowluma_vnc_passwd(&self) -> String {
         match self {
-            Self::Literal(passwd) => format!("\"{}\"", escape_yaml_double_quoted(passwd)),
-            Self::EnvRef { variable } => format!("\"${{{variable}}}\""),
+            Self::Literal(passwd) => passwd.to_string(),
+            Self::EnvRef { variable } => format!("${{{variable}}}"),
         }
     }
 
+    /// SnowLuma WebUI bootstrap 密码的原始值
     fn snowluma_webui_bootstrap(&self) -> String {
         match self {
-            Self::Literal(passwd) => format!("\"{}\"", escape_yaml_double_quoted(passwd)),
-            Self::EnvRef { variable } => format!("\"${{{variable}}}\""),
+            Self::Literal(passwd) => passwd.to_string(),
+            Self::EnvRef { variable } => format!("${{{variable}}}"),
         }
     }
 }
 
-/// 写入 YAML 双引号字符串内的字面量(非 compose 插值)
-fn escape_yaml_double_quoted(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            other => out.push(other),
-        }
-    }
-    out
+/// 模板引擎单例(内置模板编译期嵌入,初始化一次后只读复用)
+fn engine() -> &'static TemplateEngine {
+    static ENGINE: OnceLock<TemplateEngine> = OnceLock::new();
+    ENGINE.get_or_init(|| {
+        #[allow(clippy::expect_used)]
+        TemplateEngine::with_builtin_templates().expect("内置 compose 模板语法不应错误")
+    })
 }
 
 /// 渲染 compose 文件文本
@@ -109,44 +112,49 @@ fn render_compose_with_secret(
     }
 }
 
-/// 把端口列表渲染成 yaml 的 ports 块行(已带缩进)
-fn render_ports(spec: &DockerDeploySpec) -> String {
-    let mut out = String::new();
-    for p in &spec.ports {
-        out.push_str(&format!("      - \"{}:{}\"\n", p.host, p.container));
-    }
-    out
+/// 把端口列表序列化为模板可消费的格式
+#[derive(Serialize)]
+struct PortView {
+    host: u16,
+    container: u16,
+}
+
+fn port_views(spec: &DockerDeploySpec) -> Vec<PortView> {
+    spec.ports
+        .iter()
+        .map(|p| PortView {
+            host: p.host,
+            container: p.container,
+        })
+        .collect()
 }
 
 fn render_napcat(spec: &DockerDeploySpec, secret: ComposeSecret<'_>, uid: u32, gid: u32) -> String {
-    let name = &spec.container_name;
-    let image = DockerFlavor::NapCat.default_image();
-    let ports = render_ports(spec);
-    let token = secret.napcat_webui_token();
-    // ACCOUNT 仅在用户预绑了 QQ 号时才写,避免空值干扰镜像 entrypoint 分支
-    let account_line = match spec.qq_id {
-        Some(qq) if qq != 0 => format!("      ACCOUNT: \"{qq}\"\n"),
-        _ => String::new(),
+    #[derive(Serialize)]
+    struct Ctx {
+        image: &'static str,
+        name: String,
+        uid: u32,
+        gid: u32,
+        token: String,
+        qq_id: Option<u64>,
+        ports: Vec<PortView>,
+    }
+
+    let ctx = Ctx {
+        image: DockerFlavor::NapCat.default_image(),
+        name: spec.container_name.clone(),
+        uid,
+        gid,
+        token: secret.napcat_webui_token(),
+        qq_id: spec.qq_id.filter(|&qq| qq != 0),
+        ports: port_views(spec),
     };
-    format!(
-        "\
-services:
-  napcat:
-    image: {image}
-    container_name: {name}
-    restart: always
-    environment:
-      NAPCAT_UID: \"{uid}\"
-      NAPCAT_GID: \"{gid}\"
-      WEBUI_TOKEN: {token}
-{account_line}\
-    ports:
-{ports}\
-    volumes:
-      - ./napcat/config:/app/napcat/config
-      - ./ntqq:/app/.config/QQ
-"
-    )
+
+    #[allow(clippy::expect_used)]
+    engine()
+        .render("napcat.yml", &ctx)
+        .expect("napcat 模板渲染不应失败(上下文由代码完全控制)")
 }
 
 fn render_snowluma(
@@ -156,48 +164,31 @@ fn render_snowluma(
     uid: u32,
     gid: u32,
 ) -> String {
-    let name = &spec.container_name;
-    let image = DockerFlavor::SnowLuma.default_image();
-    let ports = render_ports(spec);
-    let vnc_passwd = vnc_secret.snowluma_vnc_passwd();
-    let webui_env = webui_bootstrap
-        .map(|s| {
-            format!(
-                "      SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: {}\n",
-                s.snowluma_webui_bootstrap()
-            )
-        })
-        .unwrap_or_default();
-    // SnowLuma 必须的安全选项 + named volume,照官方 docker-compose.yml
-    format!(
-        "\
-services:
-  snowluma:
-    image: \"{image}\"
-    container_name: {name}
-    restart: unless-stopped
-    shm_size: 1gb
-    cap_add:
-      - SYS_PTRACE
-    security_opt:
-      - \"seccomp=unconfined\"
-    environment:
-      SNOWLUMA_UID: \"{uid}\"
-      SNOWLUMA_GID: \"{gid}\"
-      VNC_PASSWD: {vnc_passwd}
-{webui_env}      SNOWLUMA_WEBUI_PORT: \"5099\"
-      SNOWLUMA_HOOK_AUTOLOAD: \"1\"
-    ports:
-{ports}    volumes:
-      - {name}-data:/app/snowluma-data
-      - {name}-qq-config:/app/.config
-      - {name}-qq-data:/app/.local/share
-volumes:
-  {name}-data:
-  {name}-qq-config:
-  {name}-qq-data:
-"
-    )
+    #[derive(Serialize)]
+    struct Ctx {
+        image: &'static str,
+        name: String,
+        uid: u32,
+        gid: u32,
+        vnc_passwd: String,
+        webui_bootstrap: Option<String>,
+        ports: Vec<PortView>,
+    }
+
+    let ctx = Ctx {
+        image: DockerFlavor::SnowLuma.default_image(),
+        name: spec.container_name.clone(),
+        uid,
+        gid,
+        vnc_passwd: vnc_secret.snowluma_vnc_passwd(),
+        webui_bootstrap: webui_bootstrap.map(|s| s.snowluma_webui_bootstrap()),
+        ports: port_views(spec),
+    };
+
+    #[allow(clippy::expect_used)]
+    engine()
+        .render("snowluma.yml", &ctx)
+        .expect("snowluma 模板渲染不应失败(上下文由代码完全控制)")
 }
 
 #[cfg(test)]

@@ -1,0 +1,15 @@
+services:
+  napcat:
+    image: {{ image }}
+    container_name: {{ name }}
+    restart: always
+    environment:
+      NAPCAT_UID: "{{ uid }}"
+      NAPCAT_GID: "{{ gid }}"
+      WEBUI_TOKEN: {{ token|tojson }}
+{% if qq_id %}      ACCOUNT: "{{ qq_id }}"
+{% endif %}    ports:
+{% for port in ports %}      - "{{ port.host }}:{{ port.container }}"
+{% endfor %}    volumes:
+      - ./napcat/config:/app/napcat/config
+      - ./ntqq:/app/.config/QQ
