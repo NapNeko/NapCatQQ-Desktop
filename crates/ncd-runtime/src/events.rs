@@ -1,121 +1,17 @@
-// 事件总线实现
+// 事件总线 re-export 层
 //
-// DomainEvent/DomainEventKind 已下沉到 ncd-domain，此处 re-export 保持向后兼容。
-// EventBus trait / BroadcastEventBus / EventFilter / EventSubscription 留在本 crate。
+// EventBus trait / BroadcastEventBus / EventFilter / EventSubscription 已下沉到
+// ncd-traits::events（Layer 2），DomainEvent 等数据类型在 ncd-domain（Layer 1）。
+// 本模块仅做 re-export，保持下游 use ncd_runtime::events::* 不中断。
 
-use tokio::sync::broadcast;
+// re-export 向后兼容: EventBus trait + BroadcastEventBus + EventFilter + EventSubscription
+pub use ncd_traits::events::{
+    BroadcastEventBus, DEFAULT_BROADCAST_CAPACITY, EventBus, EventFilter, EventSubscription,
+};
 
-use crate::ids::BotId;
-
-// re-export 向后兼容
+// re-export 向后兼容: DomainEvent 数据类型
 pub use ncd_domain::domain_event::{DOMAIN_EVENT_ENVELOPE_VERSION, DomainEvent, DomainEventKind};
 pub use ncd_domain::napcat_events::NapCatLoginInvalidationReason;
-
-// ─── EventFilter / EventSubscription / EventBus / BroadcastEventBus ──────────
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct EventFilter {
-    pub bot_id: Option<BotId>,
-    pub kind: Option<DomainEventKind>,
-}
-
-impl EventFilter {
-    pub fn all() -> Self {
-        Self::default()
-    }
-
-    pub fn bot(bot_id: impl Into<BotId>) -> Self {
-        Self {
-            bot_id: Some(bot_id.into()),
-            kind: None,
-        }
-    }
-
-    pub fn kind(kind: DomainEventKind) -> Self {
-        Self {
-            bot_id: None,
-            kind: Some(kind),
-        }
-    }
-
-    pub fn matches(&self, event: &DomainEvent) -> bool {
-        if let Some(kind) = self.kind
-            && event.kind() != kind
-        {
-            return false;
-        }
-        if let Some(bot_id) = &self.bot_id
-            && event.bot_id() != Some(bot_id)
-        {
-            return false;
-        }
-        true
-    }
-}
-
-pub struct EventSubscription {
-    receiver: broadcast::Receiver<DomainEvent>,
-    filter: EventFilter,
-}
-
-impl EventSubscription {
-    pub async fn next(&mut self) -> Option<DomainEvent> {
-        loop {
-            match self.receiver.recv().await {
-                Ok(event) if self.filter.matches(&event) => return Some(event),
-                Ok(_) => continue,
-                Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                    tracing::warn!(
-                        target: "ncd::event_bus",
-                        skipped,
-                        "broadcast receiver lagged; events were dropped"
-                    );
-                    continue;
-                }
-                Err(broadcast::error::RecvError::Closed) => return None,
-            }
-        }
-    }
-}
-
-pub trait EventBus: Send + Sync {
-    fn publish(&self, event: DomainEvent);
-    fn subscribe(&self, filter: EventFilter) -> EventSubscription;
-}
-
-pub const DEFAULT_BROADCAST_CAPACITY: usize = 1024;
-
-#[derive(Debug, Clone)]
-pub struct BroadcastEventBus {
-    sender: broadcast::Sender<DomainEvent>,
-}
-
-impl BroadcastEventBus {
-    pub fn new(capacity: usize) -> Self {
-        let capacity = capacity.max(1);
-        let (sender, _) = broadcast::channel(capacity);
-        Self { sender }
-    }
-}
-
-impl Default for BroadcastEventBus {
-    fn default() -> Self {
-        Self::new(DEFAULT_BROADCAST_CAPACITY)
-    }
-}
-
-impl EventBus for BroadcastEventBus {
-    fn publish(&self, event: DomainEvent) {
-        let _ = self.sender.send(event);
-    }
-
-    fn subscribe(&self, filter: EventFilter) -> EventSubscription {
-        EventSubscription {
-            receiver: self.sender.subscribe(),
-            filter,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -169,10 +65,6 @@ mod tests {
         assert!(json.contains("start_requested"));
     }
 
-    // ─── 事件名稳定性测试 ────────────────────────────────────────────────
-
-    /// 编译期把前端事件清单嵌入测试二进制
-    /// 路径相对于本文件 (crates/ncd-runtime/src/events.rs) -> 仓库根
     const FRONTEND_EVENTS_TS: &str =
         include_str!("../../../src-ui/core/services/event-stream.service.ts");
 
@@ -270,7 +162,7 @@ mod tests {
                 FRONTEND_EVENTS_TS.contains(&needle_single)
                     || FRONTEND_EVENTS_TS.contains(&needle_double),
                 "frontend event-stream.service.ts must contain literal {name:?} \
- as a quoted string",
+as a quoted string",
             );
         }
     }
@@ -324,8 +216,6 @@ mod tests {
             );
         }
     }
-
-    // ─── SnowLuma 系列稳定性测试 ────────────────────────────────────────
 
     #[test]
     fn snowluma_daemon_state_changed_round_trips() {
@@ -438,8 +328,6 @@ mod tests {
         }
     }
 
-    // ─── ComponentActionProgress / DockerDeployProgress 稳定性 ────────────
-
     #[test]
     fn component_action_progress_round_trips() {
         let evt = NcdProgressEvent::new(NcdProgressKind::StepBegin {
@@ -503,8 +391,6 @@ mod tests {
                 || FRONTEND_EVENTS_TS.contains(&needle_double),
         );
     }
-
-    // ─── IPC envelope + payload 字段契约 ──────────────────────────────────
 
     #[test]
     fn domain_event_envelope_carries_version_and_preserves_payload() {
