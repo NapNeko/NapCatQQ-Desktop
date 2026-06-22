@@ -12,6 +12,7 @@ members = [
     "crates/ncd-log",
     "crates/ncd-test-support",
     "crates/ncd-template",
+    "crates/ncd-backend-snowluma",
 ]
 resolver = "3"
 

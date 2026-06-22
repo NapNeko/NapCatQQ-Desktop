@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::runtime_backend::BotBackendError;
+use ncd_traits::runtime_backend::BotBackendError;
 
 /// SnowLuma WebUI HTTP 客户端错误
 /// 7 variants,对应 :

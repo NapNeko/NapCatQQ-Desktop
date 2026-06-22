@@ -11,7 +11,9 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Notify, broadcast};
 use tracing::info;
 
-use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
+use ncd_domain::domain_event::DomainEvent;
+use ncd_traits::events::{BroadcastEventBus, EventBus};
+
 use crate::snowluma::error::{SnowLumaDaemonError, SnowLumaWebUiError};
 use crate::snowluma::log_sanitize::sanitize_log_line;
 use crate::snowluma::session::{load_snowluma_app_config, render_daemon_globals};
@@ -921,7 +923,8 @@ mod tests {
 
     #[tokio::test]
     async fn spawn_stdout_reader_forwards_cleaned_line() {
-        use crate::events::{DomainEventKind, EventFilter};
+        use ncd_domain::domain_event::DomainEventKind;
+        use ncd_traits::events::EventFilter;
         use std::process::Stdio;
 
         let event_bus = Arc::new(BroadcastEventBus::default());
@@ -998,7 +1001,8 @@ mod tests {
     // watch_exit_emits_crashed_when_child_unexpectedly_exits 行为
     // -----------------------------------------------------------------------
 
-    use crate::events::{DomainEventKind, EventFilter};
+    use ncd_domain::domain_event::DomainEventKind;
+    use ncd_traits::events::EventFilter;
     use proptest::prelude::*;
     use tempfile::tempdir;
     use tokio::sync::Mutex as TokioMutex;

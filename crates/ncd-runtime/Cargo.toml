@@ -12,6 +12,7 @@ ncd-deploy = { path = "../ncd-deploy" }
 ncd-host = { path = "../ncd-host" }
 ncd-network = { path = "../ncd-network" }
 ncd-log = { path = "../ncd-log" }
+ncd-backend-snowluma = { path = "../ncd-backend-snowluma" }
 async-trait = "0.1"
 futures-util = "0.3"
 serde = { workspace = true }

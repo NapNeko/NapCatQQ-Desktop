@@ -18,10 +18,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
-use crate::ids::BotId;
-use crate::kinds::{BackendKind, BotFlavor};
-use crate::runtime_backend::{
+use ncd_domain::domain_event::DomainEvent;
+use ncd_domain::ids::BotId;
+use ncd_domain::kinds::{BackendKind, BotFlavor};
+use ncd_traits::events::{BroadcastEventBus, EventBus};
+use ncd_traits::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, StopMode,
     TailOpts,
 };

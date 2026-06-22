@@ -33,11 +33,12 @@ use std::time::Duration;
 use tokio::time::{Instant, MissedTickBehavior, interval_at, sleep};
 use tokio_util::sync::CancellationToken;
 
-use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
-use crate::ids::BotId;
 use crate::snowluma::webui_client::{
     HookProcessInfo, HookProcessStatus, OneBotInstanceInfo, SnowLumaWebUiClient,
 };
+use ncd_domain::domain_event::DomainEvent;
+use ncd_domain::ids::BotId;
+use ncd_traits::events::{BroadcastEventBus, EventBus};
 
 /// 启动延迟:让 daemon 完成首启注入再开始 poll,避免抢在 daemon Ready 之前
 /// 打到没就绪的 WebUI
@@ -337,10 +338,11 @@ mod tests {
     use async_trait::async_trait;
     use tokio::sync::Mutex as TokioMutex;
 
-    use crate::events::{DomainEventKind, EventFilter};
     use crate::snowluma::error::SnowLumaWebUiError;
     use crate::snowluma::proc_tree::MockProcessTreeProbe;
     use crate::snowluma::webui_client::AuthState;
+    use ncd_domain::domain_event::DomainEventKind;
+    use ncd_traits::events::EventFilter;
 
     // --- is_real_uin ---
 

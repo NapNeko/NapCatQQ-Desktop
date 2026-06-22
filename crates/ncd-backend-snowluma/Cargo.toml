@@ -1,0 +1,47 @@
+[package]
+name = "ncd-backend-snowluma"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ncd-domain = { path = "../ncd-domain" }
+ncd-traits = { path = "../ncd-traits" }
+ncd-host = { path = "../ncd-host" }
+ncd-network = { path = "../ncd-network" }
+async-trait = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = [
+    "fs",
+    "process",
+    "sync",
+    "io-util",
+    "rt",
+    "rt-multi-thread",
+    "macros",
+    "time",
+    "net",
+] }
+tokio-util = { version = "0.7", features = ["rt"] }
+ts-rs = { version = "12", features = ["serde-compat"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "gzip",
+] }
+tracing = "0.1"
+rand = "0.8"
+scrypt = "0.11"
+base64 = "0.22"
+sysinfo = "0.31"
+chrono = "0.4"
+keyring = "2"
+aes-gcm = "0.10"
+hex = "0.4"
+netstat2 = "0.9"
+
+[dev-dependencies]
+tempfile = "3"
+proptest = "1"
