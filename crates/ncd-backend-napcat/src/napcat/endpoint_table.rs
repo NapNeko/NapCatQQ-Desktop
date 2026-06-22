@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use crate::ids::BotId;
+use ncd_domain::ids::BotId;
 
 /// 单个 NapCat bot 的 WebUI 接入信息
 #[derive(Debug, Clone, PartialEq, Eq)]

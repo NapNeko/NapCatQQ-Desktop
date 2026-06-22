@@ -9,7 +9,7 @@
 
 use async_trait::async_trait;
 
-use crate::ids::BotId;
+use ncd_domain::ids::BotId;
 
 /// 离线通知的语义分类
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,7 +60,7 @@ mod tests {
 
     #![allow(clippy::unwrap_in_result, clippy::expect_used)]
     use super::*;
-    use crate::ids::BotId;
+    use ncd_domain::ids::BotId;
 
     use std::io;
     use std::sync::{Arc, Mutex};

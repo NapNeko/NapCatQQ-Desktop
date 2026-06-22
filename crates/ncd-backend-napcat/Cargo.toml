@@ -1,0 +1,46 @@
+[package]
+name = "ncd-backend-napcat"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ncd-domain = { path = "../ncd-domain" }
+ncd-traits = { path = "../ncd-traits" }
+ncd-host = { path = "../ncd-host" }
+async-trait = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = [
+    "fs",
+    "process",
+    "sync",
+    "io-util",
+    "rt",
+    "macros",
+    "time",
+    "net",
+] }
+tokio-util = { version = "0.7", features = ["rt"] }
+ts-rs = { version = "12", features = ["serde-compat"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "gzip",
+] }
+tracing = "0.1"
+sha2 = "0.10"
+hex = "0.4"
+chrono = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+wiremock = "0.6"
+tokio = { version = "1", features = ["test-util"] }
+ncd-test-support = { path = "../ncd-test-support" }
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "fmt",
+    "std",
+] }
+proptest = "1"
