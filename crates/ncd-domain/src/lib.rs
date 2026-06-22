@@ -13,6 +13,7 @@ pub mod bot_config;
 pub mod bot_status;
 pub mod daemon_state;
 pub mod docker;
+pub mod domain_event;
 pub mod errors;
 pub mod ids;
 pub mod kinds;
@@ -44,18 +45,22 @@ pub use app_config::{
     default_snowluma_port,
 };
 pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, LocalVersionSnapshot, RepairAction};
+pub use bot_actor::{BotActorError, BotActorSnapshot, BotActorState};
 pub use bot_config::{
     AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
     BypassConfig, ConnectConfig, DeploymentType, HttpClientConfig, HttpServerConfig,
     HttpSseServerConfig, LogLevel, MessagePostFormat, NetworkBaseFields, O3HookMode,
     StatusCommandConfig, TimeUnit, WebsocketClientConfig, WebsocketServerConfig, WsRole,
 };
+pub use bot_status::{BotStatus, ProcessHandle};
+pub use daemon_state::{DaemonState, SnowLumaLoginState};
 pub use docker::{
     ContainerAction, ContainerInfo, ContainerState, DeployedContainer, DockerDeploySpec,
     DockerFlavor, DockerImageReady, DockerInstallReport, DockerInstallStatus,
     DockerPullLayerSnapshot, DockerPullSpec, DockerSpecError, DockerStatus, ImageInfo,
     ImageRemoveOptions, PortMapping,
 };
+pub use domain_event::{DOMAIN_EVENT_ENVELOPE_VERSION, DomainEvent, DomainEventKind};
 pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};
 pub use ids::{BackendId, BotId};
 pub use kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion, StopMode};
@@ -63,6 +68,8 @@ pub use migration::{
     BackupInfo, BotRuntimeSummary, MigrationOutcome, MigrationReport, MigrationSource,
     MigrationStage, MigrationWarning,
 };
+pub use napcat_events::NapCatLoginInvalidationReason;
+pub use progress::{ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use qq_dependency::{
     DependencyCategory, DependencyInstallError, DetectionMethod, DistroFamily, DistroInfo,
     FailedPackage, InstallDependenciesResult, PackageStatus, QqDependencyReport, SystemDependency,
