@@ -1,9 +1,28 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::kinds::SchemaVersion;
-use crate::models::{MigrationOutcome, MigrationStage};
-use crate::report::MigrationReport;
-use crate::version_snapshot::LocalVersionSnapshot;
+use crate::migration::{MigrationOutcome, MigrationReport, MigrationStage};
+
+// LocalVersionSnapshot 原在 version_snapshot.rs, 合并到 bootstrap 模块:
+// 它是 BootstrapSnapshot 的子结构, 两个类型共享启动快照语义
+
+/// 本地已安装的 core 版本快照
+///
+/// 解析失败一律返回 None: UI 层"显示未安装"是足够的语义, 不需要把解析
+/// 错误暴露给用户. 装配方在 src-tauri/src/bootstrap.rs::detect_local_versions
+///
+/// 字段语义:
+/// - Some("4.18.1"): 已安装且解析到版本号
+/// - None: 未安装 / 安装文件不存在 / 解析失败(fallback, 不抛错)
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct LocalVersionSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub napcat: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snowluma: Option<String>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -29,10 +48,10 @@ pub struct BootstrapSnapshot {
     pub status: BootstrapStatus,
     pub schema_version: SchemaVersion,
     pub report: MigrationReport,
-    /// 当前数据根绝对路径(已 to_string_lossy)装配方在
-    /// src-tauri/src/bootstrap.rs::build_snapshot_for_data_root,由
-    /// resolve_data_root() 决定来源#[serde(default)] 让历史快照缓存
-    /// 缺失时反序列化回空字符串,向后兼容
+    /// 当前数据根绝对路径(已 to_string_lossy), 装配方在
+    /// src-tauri/src/bootstrap.rs::build_snapshot_for_data_root, 由
+    /// resolve_data_root() 决定来源
+    /// #[serde(default)] 让历史快照缓存缺失时反序列化回空字符串, 向后兼容
     #[serde(default)]
     pub data_root: String,
     /// 本地 core 安装版本快照
@@ -99,9 +118,9 @@ mod tests {
         assert_eq!(snapshot.status, BootstrapStatus::Failed);
     }
 
-    /// 历史快照缓存(schema 演进前写入,没有 data_root / local_versions
-    /// 两个字段)必须可以反序列化回 BootstrapSnapshot:data_root 回落为空
-    /// 字符串,local_versions 回落为默认值
+    /// 历史快照缓存(schema 演进前写入, 没有 data_root / local_versions 两个字段)
+    /// 必须可以反序列化回 BootstrapSnapshot: data_root 回落为空串,
+    /// local_versions 回落为默认值
     #[test]
     fn legacy_snapshot_without_new_fields_deserializes() {
         let legacy_json = serde_json::json!({

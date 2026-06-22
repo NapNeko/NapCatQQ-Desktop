@@ -7,7 +7,9 @@ pub struct BotId(String);
 
 impl BotId {
     pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
+        let s = value.into();
+        debug_assert!(!s.is_empty(), "BotId must not be empty");
+        Self(s)
     }
 
     pub fn as_str(&self) -> &str {
@@ -45,7 +47,9 @@ pub struct BackendId(String);
 
 impl BackendId {
     pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
+        let s = value.into();
+        debug_assert!(!s.is_empty(), "BackendId must not be empty");
+        Self(s)
     }
 
     pub fn as_str(&self) -> &str {

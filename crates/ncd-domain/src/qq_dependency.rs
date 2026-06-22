@@ -1,7 +1,7 @@
 //! QQ 系统依赖管理的领域模型
 //!
 //! 定义了跨发行版的依赖项,检测报告,安装结果等核心类型
-//! 遵守 Layer 1 原则:零运行时依赖,纯数据结构
+//! 零运行时依赖,纯数据结构
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -148,10 +148,7 @@ pub enum DependencyInstallError {
         suggest_wait_seconds: u32,
     },
     /// 磁盘空间不足
-    DiskSpaceFull {
-        required_mb: u32,
-        available_mb: u32,
-    },
+    DiskSpaceFull { required_mb: u32, available_mb: u32 },
     /// 包不存在(仓库中找不到)
     PackageNotFound {
         package_name: String,

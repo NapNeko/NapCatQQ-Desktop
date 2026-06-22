@@ -5,6 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
 use crate::kinds::RuntimeTarget;
+use crate::macros::default_true;
 use crate::snowluma_start_mode::SnowLumaStartMode;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -250,7 +251,7 @@ pub struct HttpSseServerConfig {
     pub report_self_message: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct HttpClientConfig {
     #[serde(flatten)]
@@ -259,34 +260,9 @@ pub struct HttpClientConfig {
     #[serde(default)]
     #[serde(rename = "reportSelfMessage")]
     pub report_self_message: bool,
-    #[serde(default)]
-    #[serde(rename = "timeoutMs")]
+    #[serde(default, rename = "timeoutMs", skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub timeout_ms: Option<u32>,
-}
-
-impl Serialize for HttpClientConfig {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeMap;
-        let field_count = 7 + usize::from(self.timeout_ms.is_some());
-        let mut map = serializer.serialize_map(Some(field_count))?;
-        // flatten base
-        map.serialize_entry("enable", &self.base.enable)?;
-        map.serialize_entry("name", &self.base.name)?;
-        map.serialize_entry("messagePostFormat", &self.base.message_post_format)?;
-        map.serialize_entry("token", &self.base.token)?;
-        map.serialize_entry("debug", &self.base.debug)?;
-        // own fields
-        map.serialize_entry("url", &self.url)?;
-        map.serialize_entry("reportSelfMessage", &self.report_self_message)?;
-        if let Some(timeout) = self.timeout_ms {
-            map.serialize_entry("timeoutMs", &timeout)?;
-        }
-        map.end()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -449,7 +425,11 @@ pub struct BotConfig {
     pub connect: ConnectConfig,
     pub advanced: AdvancedConfig,
     /// SnowLuma onebot_<uin>.json 的 statusCommand;NapCat 不序列化
-    #[serde(default, rename = "statusCommand", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "statusCommand",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[ts(optional, rename = "statusCommand")]
     pub status_command: Option<StatusCommandConfig>,
 }
@@ -505,7 +485,7 @@ impl BotConfig {
 
         if is_docker && is_local {
             return Err(BotConfigError::UnsupportedRuntimeMatrix(
-                "本机暂不支持 Docker 部署,请改为「直接运行」或把运行宿主切换为远程 SSH 主机"
+                "Local host does not support Docker deployment. Use native run or switch to a remote SSH host"
                     .to_string(),
             ));
         }
@@ -574,10 +554,6 @@ fn check_connect_name(
 
     seen_names.insert(normalized, original.to_string());
     Ok(())
-}
-
-fn default_true() -> bool {
-    true
 }
 
 fn default_runtime_target() -> RuntimeTarget {
@@ -687,7 +663,10 @@ mod snowluma_start_mode_tests {
 
         let decoded: BotBasicConfig = serde_json::from_str(&json).expect("deserialize HotStart");
         assert_eq!(decoded, config);
-        assert_eq!(decoded.snowluma_start_mode, Some(SnowLumaStartMode::HotStart));
+        assert_eq!(
+            decoded.snowluma_start_mode,
+            Some(SnowLumaStartMode::HotStart)
+        );
 
         let json_again = serde_json::to_string(&decoded).expect("re-serialize HotStart");
         assert_eq!(json.as_bytes(), json_again.as_bytes());
@@ -728,11 +707,7 @@ mod snowluma_start_mode_tests {
 mod runtime_matrix_tests {
     use super::*;
 
-    fn cfg(
-        backend: BackendType,
-        deployment: DeploymentType,
-        target: RuntimeTarget,
-    ) -> BotConfig {
+    fn cfg(backend: BackendType, deployment: DeploymentType, target: RuntimeTarget) -> BotConfig {
         BotConfig {
             bot: BotBasicConfig {
                 name: "t".to_string(),
@@ -754,12 +729,20 @@ mod runtime_matrix_tests {
     #[test]
     fn supported_matrices_pass() {
         // 原生 + 本机
-        cfg(BackendType::NapCat, DeploymentType::Native, RuntimeTarget::Local)
-            .validate_runtime_matrix()
-            .unwrap();
-        cfg(BackendType::SnowLuma, DeploymentType::Native, RuntimeTarget::Local)
-            .validate_runtime_matrix()
-            .unwrap();
+        cfg(
+            BackendType::NapCat,
+            DeploymentType::Native,
+            RuntimeTarget::Local,
+        )
+        .validate_runtime_matrix()
+        .unwrap();
+        cfg(
+            BackendType::SnowLuma,
+            DeploymentType::Native,
+            RuntimeTarget::Local,
+        )
+        .validate_runtime_matrix()
+        .unwrap();
         // Docker + 远端
         cfg(
             BackendType::NapCat,
@@ -794,9 +777,13 @@ mod runtime_matrix_tests {
 
     #[test]
     fn docker_on_local_is_rejected() {
-        let err = cfg(BackendType::NapCat, DeploymentType::Docker, RuntimeTarget::Local)
-            .validate_runtime_matrix()
-            .unwrap_err();
+        let err = cfg(
+            BackendType::NapCat,
+            DeploymentType::Docker,
+            RuntimeTarget::Local,
+        )
+        .validate_runtime_matrix()
+        .unwrap_err();
         assert!(matches!(err, BotConfigError::UnsupportedRuntimeMatrix(_)));
     }
 
@@ -810,5 +797,4 @@ mod runtime_matrix_tests {
         .validate_runtime_matrix()
         .unwrap();
     }
-
 }

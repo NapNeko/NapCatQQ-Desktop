@@ -10,23 +10,18 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// SnowLuma 启动模式：决定是否由 backend spawn QQ.exe
+/// SnowLuma 启动模式:决定是否由 backend spawn QQ.exe
 ///
-/// - ColdStart：backend 全权 spawn QQ.exe，随后由 SnowLuma daemon 注入。
-///   stop 时 backend 负责终结 QQ.exe 进程树。
-/// - HotStart：用户已自己启动 QQ.exe（例如保留人工登录会话），backend 启动时
-///   按 BotConfig.bot.qq_id 扫所有主 QQ.exe 进程，找出登录账号匹配的 PID 注入。
-///   stop 时不 kill 用户的 QQ.exe，只 unload daemon hook。
+/// - ColdStart:backend 全权 spawn QQ.exe,随后由 SnowLuma daemon 注入
+///   stop 时 backend 负责终结 QQ.exe 进程树
+/// - HotStart:用户已自己启动 QQ.exe(例如保留人工登录会话),backend 启动时
+///   按 BotConfig.bot.qq_id 扫所有主 QQ.exe 进程,找出登录账号匹配的 PID 注入
+///   stop 时不 kill 用户的 QQ.exe,只 unload daemon hook
 ///
-/// HotStart 不再持久化 attach_pid：进程重启后 PID 必然变化，后端每次 start 时
-/// 基于 qq_id 和运行时探测自动匹配。
+/// HotStart 不再持久化 attach_pid:进程重启后 PID 必然变化,后端每次 start 时
+/// 基于 qq_id 和运行时探测自动匹配
 ///
-/// 序列化形态（#[serde(tag = "mode", rename_all = "snake_case")]）：
-///
-/// ```json
-/// { "mode": "cold_start" }
-/// { "mode": "hot_start" }
-/// ```
+/// 序列化形态: {"mode":"cold_start"} / {"mode":"hot_start"} (serde tag + rename_all)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -53,7 +48,7 @@ impl SnowLumaStartMode {
 mod tests {
     use super::*;
 
-    /// 字节级 round-trip: 序列化后字面量必须与设计一致, 且再反序列化等价.
+    /// round-trip: 序列化后字面量必须与设计一致, 且再反序列化等价.
     ///
     /// 锁定 wire format:
     /// - ColdStart → {"mode":"cold_start"}
