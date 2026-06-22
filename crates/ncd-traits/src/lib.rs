@@ -11,6 +11,7 @@ pub mod bot_config_repo;
 pub mod config_store;
 pub mod migration_step;
 pub mod path_probe;
+pub mod runtime_backend;
 pub mod secret_store;
 
 pub use backend_config_renderer::{BackendConfigRenderer, RenderError};
