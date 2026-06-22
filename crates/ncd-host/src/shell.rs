@@ -164,10 +164,11 @@ impl HostShell for CmdShell {
     }
 
     fn build_command_line(&self, cmd: &HostCommand) -> String {
-        // cmd:set K=v && program arg1 arg2
+        // cmd: set "K=v" && set "K2=v2" && program arg1 arg2
+        // 整对 K=v 用双引号包裹:cmd 的 set 在引号内不会把值中的 & 当命令分隔符
         let mut parts = Vec::new();
         for (k, v) in &cmd.environment {
-            parts.push(format!("set {}={} &&", k, v));
+            parts.push(format!("set \"{k}={v}\" &&"));
         }
         parts.push(self.escape(&cmd.program));
         for arg in &cmd.args {

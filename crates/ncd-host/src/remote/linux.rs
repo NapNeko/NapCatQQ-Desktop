@@ -822,9 +822,7 @@ impl Host for RemoteLinuxHost {
         // SFTP 协议没有原生 -p,需要逐级 mkdir简单做法:跑 mkdir -p
         // 走 SFTP 不可靠(权限错可能让 mkdir 半路成功),改 exec 更稳
         let remote = self.to_remote(path);
-        let escaped = self.shell.escape(&remote);
         let cmd = HostCommand::new("mkdir").arg("-p").arg(remote);
-        let _ = escaped; // 防止 unused warning,真正 escape 在 build_remote_command_line 内
         let out = self.run_to_string(cmd).await?;
         if !out.success() {
             return Err(HostError::CommandFailed {

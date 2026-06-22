@@ -37,7 +37,7 @@ pub fn flush_stream_remainder(buf: &mut Vec<u8>, mut on_line: impl FnMut(String)
     }
     let s = String::from_utf8_lossy(buf).into_owned();
     buf.clear();
-    let t = s.trim_end_matches('\r').trim_end_matches('\n').trim();
+    let t = s.trim_end_matches('\r').trim_end_matches('\n').trim_end();
     if !t.is_empty() {
         on_line(t.to_string());
     }
