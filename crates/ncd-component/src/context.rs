@@ -4,110 +4,19 @@
 //!
 //! 上层(ncd-deploy / Tauri Command)通过 ActionCtx 拿到 ProgressEvent 流,
 //! 转发到 BroadcastEventBus,前端订阅
+//!
+//! ProgressEvent / ProgressKind / ProgressLogLevel 已下沉到 ncd-domain,
+//! 此处 re-export 保持向后兼容。ActionCtx 留在本 crate（依赖 tokio mpsc）。
 
 use std::sync::Arc;
-use std::time::SystemTime;
 
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use ts_rs::TS;
+
+// 进度数据类型已下沉到 ncd-domain，re-export 保持向后兼容
+pub use ncd_domain::progress::{ProgressEvent, ProgressKind, ProgressLogLevel};
 
 type LoggerFn = Arc<dyn Fn(&str) + Send + Sync>;
-
-/// 进度事件类型
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub enum ProgressKind {
-    /// 整个 Action 开始,带步骤总数
-    Started { total_steps: u32 },
-    /// 进入第 N 步
-    StepBegin { step: u32, message: String },
-    /// 第 N 步进度(percent 0-100)
-    StepProgress {
-        step: u32,
-        percent: u8,
-        message: String,
-        /// 瞬时下载速度(字节/秒)仅下载步骤填充,其他步骤为 None
-        /// 前端据此显示 "已下载 12.3 MB / 28.0 MB · 850 KB/s"
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        speed_bps: Option<u64>,
-        /// 已下载字节前端用于格式化与 ETA 计算仅下载步骤填充
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        downloaded_bytes: Option<u64>,
-        /// 总字节数(服务端返 Content-Length 时有)仅下载步骤填充
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        total_bytes: Option<u64>,
-        /// 下载阶段:"racing" / "streaming" / "switching_mirror" / "resuming"
-        /// 仅下载步骤填充;前端按阶段切话术("正在选择镜像" vs "下载中")
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        download_stage: Option<String>,
-        /// docker pull 各层进度快照;仅拉镜像步骤填充
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        docker_layers: Option<Vec<ncd_domain::DockerPullLayerSnapshot>>,
-    },
-    /// 第 N 步结束
-    StepEnd { step: u32, ok: bool },
-    /// 整个 Action 结束
-    Finished { ok: bool },
-    /// 普通日志(不算进度,只是过程信息)
-    Log {
-        level: ProgressLogLevel,
-        message: String,
-    },
-}
-
-/// 日志级别(对齐 tracing 风格)
-///
-/// 命名说明:本 enum 跟 [ncd_domain::bot_config::LogLevel] 不同——后者是
-/// "bot 配置文件里写要 console_log_level 用 info" 的选项语义;本 enum 是
-/// "ProgressEvent 里这条日志的级别" 的事件语义两者跨边界场景不同,2026-05-29
-/// 远端架构重构 P1.a fix 改名 ProgressLogLevel 解决 ts-rs 派生时同名互相覆盖
-/// 的问题,避免前端 LogLevel.ts 被静默缩成 3 档(debug/info/error)丢掉
-/// trace/warn
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub enum ProgressLogLevel {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-/// 进度事件 envelope,跨边界事件必须带版本号便于增量演进
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub struct ProgressEvent {
-    /// 协议版本(默认 1,bump 时同步前端)
-    #[serde(default = "default_version")]
-    pub v: u32,
-    /// 事件时间戳(unix millis)
-    pub timestamp_ms: u64,
-    /// 事件内容
-    #[serde(flatten)]
-    pub kind: ProgressKind,
-}
-
-fn default_version() -> u32 {
-    1
-}
-
-impl ProgressEvent {
-    /// 创建一个新事件,自动填时间戳与 v=1
-    pub fn new(kind: ProgressKind) -> Self {
-        Self {
-            v: 1,
-            timestamp_ms: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0),
-            kind,
-        }
-    }
-}
 
 /// ActionCtx:Action 执行期间的辅助上下文
 ///

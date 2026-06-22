@@ -8,27 +8,8 @@
 
 use std::collections::BTreeSet;
 
-use serde::{Deserialize, Serialize};
-use ts_rs::TS;
-
-// 跨边界(Tauri / 前端)类型 -- ts-rs 派生 + 导出
-
-/// SnowLuma 单个 Bot 在 status poller 视角下合成出来的登录状态
-/// 4 档语义(与 状态合成表对齐,通过 snake_case 序列化跨 Tauri 边界):
-/// - Starting:QQ 进程已起,processes 还未出现自身候选 PID 的条目(注入未生效)
-/// - WaitingForQrScan:processes 命中且 status == Loaded,等待用户扫码 / 输密码
-/// - LoggedIn:processes 命中且 status == Online,OneBot pipe 已连
-/// - Disconnected:processes 命中但 status ∈ {Disconnected, Error}
-///   或 dispose / 连续探测失败兜底
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
-pub enum SnowLumaLoginState {
-    Starting,
-    WaitingForQrScan,
-    LoggedIn,
-    Disconnected,
-}
+// SnowLumaLoginState 已下沉到 ncd-domain，此处 re-export 保持向后兼容
+pub use ncd_domain::daemon_state::SnowLumaLoginState;
 
 // 进程树枚举抽象 -- async trait + Mock 边界
 

@@ -8,12 +8,17 @@ mod macros;
 
 pub mod app_config;
 pub mod bootstrap;
+pub mod bot_actor;
 pub mod bot_config;
+pub mod bot_status;
+pub mod daemon_state;
 pub mod docker;
 pub mod errors;
 pub mod ids;
 pub mod kinds;
 pub mod migration;
+pub mod napcat_events;
+pub mod progress;
 pub mod qq_dependency;
 pub mod release_snapshot;
 pub mod snowluma_start_mode;

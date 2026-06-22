@@ -7,11 +7,9 @@ use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use tokio::sync::{Mutex, Notify, broadcast};
 use tracing::info;
-use ts_rs::TS;
 
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
 use crate::snowluma::error::{SnowLumaDaemonError, SnowLumaWebUiError};
@@ -20,32 +18,8 @@ use crate::snowluma::session::{load_snowluma_app_config, render_daemon_globals};
 use crate::snowluma::webui_client::SnowLumaWebUiClient;
 use ncd_host::hide_console_window;
 
-// DaemonState
-
-/// SnowLuma daemon 5 档状态机
-/// - Stopped:未启动 / 已正常退出 / 启动失败回滚后的稳态
-/// - Starting:首启 caller 正在驱动 render_globals → spawn node.exe →
-///   wait_ready → login,并发 caller 等 ready_notify
-/// - Ready:node.exe 起好 + WebUI 就绪 + 已登录,ensure_running 返回
-///   Arc<dyn SnowLumaWebUiClient>
-/// - Stopping:shutdown 显式调用中,正在 logout + kill node child
-/// - Crashed:node.exe 意外退出,ensure_running 直接返回 Crashed 错误,
-///   依赖此 daemon 的所有 SL flavor actor 由 BotManager::run_snowluma_listener
-///   级联转 Crashed
-///
-/// serde rename_all = "snake_case" 把 variant 序列化成 stopped / starting /
-/// ready / stopping / crashed,与前端 src-ui/core/ipc/types.ts 的 SL
-/// DomainEvent payload 严格对齐
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
-pub enum DaemonState {
-    Stopped,
-    Starting,
-    Ready,
-    Stopping,
-    Crashed,
-}
+// DaemonState 已下沉到 ncd-domain，此处 re-export 保持向后兼容
+pub use ncd_domain::daemon_state::DaemonState;
 
 // SnowLumaWebUiClientFactory
 

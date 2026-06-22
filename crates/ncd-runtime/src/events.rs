@@ -71,12 +71,8 @@ pub enum DomainEventKind {
 /// - LoggedOut: 用户主动登出或会话过期,从未达到 online=true 即失效
 ///   #[serde(rename_all = "snake_case")] 与前端 NapCatLoginInvalidationReason
 ///   字面量类型 ('kicked' | 'logged_out') 保持字面量一致
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum NapCatLoginInvalidationReason {
-    Kicked,
-    LoggedOut,
-}
+// NapCatLoginInvalidationReason 已下沉到 ncd-domain，re-export 保持向后兼容
+pub use ncd_domain::napcat_events::NapCatLoginInvalidationReason;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
