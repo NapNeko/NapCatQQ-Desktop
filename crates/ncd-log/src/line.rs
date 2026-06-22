@@ -9,7 +9,7 @@ pub fn level_tag(level: &str) -> String {
     format!("[{level}]")
 }
 
-/// 用当前本地时间格式化一行(含末尾 \n)
+/// 格式化一行(末尾含 \n)
 pub fn format_line(
     level: &str,
     log_type: LogType,

@@ -6,10 +6,8 @@ pub fn short_module_from_target(target: &str) -> String {
     if t.is_empty() {
         return "app".to_string();
     }
-    if let Some(last) = t.rsplit("::").next() {
-        return last.to_string();
-    }
-    t.to_string()
+    // rsplit always yields at least one element, so next() is always Some
+    t.rsplit("::").next().unwrap_or(t).to_string()
 }
 
 /// 按 target 前缀推断 LogSource(仅用于展示段,非业务枚举)
