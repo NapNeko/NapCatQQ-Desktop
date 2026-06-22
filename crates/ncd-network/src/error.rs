@@ -23,7 +23,7 @@ pub enum NetworkError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// SHA256 校验失败caller 应当删除已下载文件并重试或报错
+    /// SHA256 校验失败,caller 应当删除已下载文件并重试或报错
     #[error("checksum mismatch: expected {expected}, actual {actual}")]
     ChecksumMismatch { expected: String, actual: String },
 
@@ -40,8 +40,8 @@ pub enum NetworkError {
     InvalidArgument(String),
 
     /// 流提前结束:服务端在 Content-Length 字节灌完前就 close
-    /// 镜像连接被掐断 / 反代提前 EOF / 服务端崩了等这是 zip "Could not
-    /// find EOCD" 一类下游错误的真根因——文件根本没下完整caller 应当切
+    /// 镜像连接被掐断 / 反代提前 EOF / 服务端崩了. 这是 zip "Could not
+    /// find EOCD" 一类下游错误的真根因——文件根本没下完整;caller 应当切
     /// 下一个 mirror 并 truncate .part 重下,因为续传 offset 拼错位是
     /// 同样致命的(不同 mirror 缓存内容可能不一致)
     #[error("truncated: downloaded {downloaded} of {total} bytes")]

@@ -105,7 +105,7 @@ pub fn parse_content_length_from_range(
 }
 
 /// 解析 Content-Range: bytes <start>-<end>/<total> 头,返回 (start, end)
-/// 缺头/解析失败/跟 bytes 前缀不符返 None切片下载用这个验证服务器实际返回的
+/// 缺头/解析失败/跟 bytes 前缀不符返 None;切片下载用这个验证服务器实际返回的
 /// 字节范围与请求是否同一段,避免代理不真支持 Range 时返 206 + 错误切片导致字节错位
 pub fn parse_content_range_bounds(response: &reqwest::Response) -> Option<(u64, u64)> {
     let cr = response.headers().get(reqwest::header::CONTENT_RANGE)?;

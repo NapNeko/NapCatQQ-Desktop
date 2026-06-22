@@ -1,7 +1,7 @@
 //! 全工程共享的 reqwest::Client
 //!
 //! 不设总 timeout(大文件下载可能跑很久,idle timeout 由 download 模块在 chunk
-//! 循环自己计);rustls-tls 不依赖系统 OpenSSL,Tauri 包体可控系统代理只读
+//! 循环自己计);rustls-tls 不依赖系统 OpenSSL,Tauri 包体可控;系统代理只读
 //! HTTP_PROXY/HTTPS_PROXY/ALL_PROXY 环境变量,不读 Windows 注册表——国内用户
 //! 设 HTTPS_PROXY=http://127.0.0.1:7890 即可走代理
 //!

@@ -1,9 +1,9 @@
 //! 滑动窗口瞬时速度采样
 //!
 //! 调用方 record(now, downloaded_bytes) 喂样本,current_bps() 给最近 window 时间内的
-//! 平均速度样本不足或全在同一时刻视为不可估计,返回 None
+//! 平均速度. 样本不足或全在同一时刻视为不可估计,返回 None
 //!
-//! 不持有锁,调用方自行用 Mutex / 单线程驱动download.rs 的下载循环
+//! 不持有锁,调用方自行用 Mutex / 单线程驱动;download.rs 的下载循环
 //! 是单线程消费 stream,不需要锁;race.rs 内部聚合时也保证 SpeedSampler
 //! 由单个 task 持有
 
@@ -35,7 +35,7 @@ impl SpeedSampler {
 }
 
 impl SpeedSampler {
-    /// 记录一个样本downloaded 是从下载开始累计的字节数(单调递增)
+    /// 记录一个样本,downloaded 是从下载开始累计的字节数(单调递增)
     pub fn record(&mut self, now: Instant, downloaded: u64) {
         self.samples.push_back((now, downloaded));
         // 丢弃落出窗口的老样本,但至少保留 1 个供 current_bps 比较
@@ -50,7 +50,7 @@ impl SpeedSampler {
         }
     }
 
-    /// 当前瞬时速度样本少于 2 或时间跨度 < 100ms 时返回 None
+    /// 当前瞬时速度. 样本少于 2 或时间跨度 < 100ms 时返回 None
     /// (太短的窗口算出来不稳定,UI 上闪烁严重)
     pub fn current_bps(&self) -> Option<Bps> {
         if self.samples.len() < 2 {

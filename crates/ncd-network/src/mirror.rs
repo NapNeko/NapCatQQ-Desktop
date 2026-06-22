@@ -1,6 +1,6 @@
 //! GitHub 镜像列表与 URL 改写
 //!
-//! build_mirror_urls 把原始 GitHub URL 展开成 6+1 候选(直连 + 6 镜像)镜像前缀
+//! build_mirror_urls 把原始 GitHub URL 展开成 6+1 候选(直连 + 6 镜像). 镜像前缀
 //! 是 reverse-proxy 模式(完整原始 URL 加在前缀后面,如 https://gh-proxy.com/https://github.com/...)
 //! 不是所有镜像都支持 github.com / raw.githubusercontent.com / objects.githubusercontent.com,
 //! race 阶段失败的 mirror 自然淘汰

@@ -1,7 +1,7 @@
 //! 单 URL 下载:HTTP Range 续传 + chunk-level idle timeout + 进度节流
 //!
 //! 与 race / chunked 解耦,只做"给定 URL,把字节灌到 .part,写完 rename 到 dest"
-//! idle timeout 超时报 IdleTimeout,caller(race)据此切镜像dest 已有 .part 时
+//! idle timeout 超时报 IdleTimeout,caller(race)据此切镜像;dest 已有 .part 时
 //! 取其大小作 Range offset;200 表示不支持续传则 truncate 重下,206 直接 append
 
 use std::path::Path;
@@ -21,8 +21,8 @@ use crate::client::shared_client;
 use crate::error::NetworkError;
 use crate::progress::{DownloadProgressSink, DownloadStage, ProgressUpdate};
 use crate::range::{
-    parse_content_length_from_range, parse_content_range_bounds, range_header_value,
-    supports_resume, PartFile,
+    PartFile, parse_content_length_from_range, parse_content_range_bounds, range_header_value,
+    supports_resume,
 };
 use crate::speed::SpeedSampler;
 
@@ -186,7 +186,7 @@ pub async fn download_with_client(
     // 流自然结束 ≠ 下完服务端 / 中间代理可能在没发完 Content-Length 字节
     // 的情况下 EOF(连接被掐断,反代上游超时,CDN 缓存只缓了一部分)
     // 不校验就 finalize,会留下残缺的 .part 改名成 dest,下游 zip / tar
-    // 解压立刻 "Could not find EOCD"这里强制对齐 total,差一个字节也
+    // 解压立刻 "Could not find EOCD". 这里强制对齐 total,差一个字节也
     // 算失败,把 .part 留着让上层切 mirror 时清掉重下(mirror 间内容可能
     // 不一致,续传 offset 是危险操作,所以 race 切 mirror 时也会主动
     // truncate)
@@ -225,7 +225,7 @@ async fn push_update(
     .await;
 }
 
-/// 共享进度状态:chunked 多片并发聚合到同一 sink每片往 add_bytes 累加,独立
+/// 共享进度状态:chunked 多片并发聚合到同一 sink;每片往 add_bytes 累加,独立
 /// 任务定时读 snapshot 推 sink,避免每片各推导致 UI 闪烁与数字回退
 #[derive(Clone, Default)]
 pub struct AggregatedProgress {
@@ -291,7 +291,11 @@ pub(crate) async fn download_byte_range(
     }
 
     let header_val = format!("bytes={}-{}", range.0, range.1);
-    let resp = client.get(url).header(header::RANGE, header_val).send().await?;
+    let resp = client
+        .get(url)
+        .header(header::RANGE, header_val)
+        .send()
+        .await?;
     let status = resp.status();
     if !supports_resume(status) {
         return Err(NetworkError::Status(status.as_u16()));
@@ -369,8 +373,8 @@ pub(crate) async fn download_byte_range(
     Ok(downloaded)
 }
 
-/// 探测远端文件大小 + 是否支持 Range用 GET + Range: bytes=0-0(HEAD 在
-/// GitHub releases / objects 上有镜像不支持)返回 (total_bytes, accept_ranges)
+/// 探测远端文件大小 + 是否支持 Range,用 GET + Range: bytes=0-0(HEAD 在
+/// GitHub releases / objects 上有镜像不支持). 返回 (total_bytes, accept_ranges)
 pub(crate) async fn probe_size_and_range(
     client: &Client,
     url: &str,

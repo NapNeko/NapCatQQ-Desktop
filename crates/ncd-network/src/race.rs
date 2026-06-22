@@ -1,7 +1,7 @@
 //! Mirror Race:多镜像并发探测,谁先吐第一字节用谁
 //!
-//! Top-2 阶梯加码:启动前 2 个 probe(不写盘),每 stagger 加 1 个 racer第一个
-//! 收到 chunk 的为 winner,cancel 其他winner 走 download_with_resume 正式下载,
+//! Top-2 阶梯加码:启动前 2 个 probe(不写盘),每 stagger 加 1 个 racer. 第一个
+//! 收到 chunk 的为 winner,cancel 其他;winner 走 download_with_resume 正式下载,
 //! 中途 idle timeout/硬错切下个 mirror 从 .part 续传,全挂返 AllMirrorsFailed
 //!
 //! 不复用 probe stream:winner 重新发 GET,代价是每 mirror 多收几十 KB,但避免
@@ -19,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 use crate::client::shared_client;
-use crate::download::{download_with_resume, DownloadConfig, DEFAULT_IDLE_TIMEOUT};
+use crate::download::{DEFAULT_IDLE_TIMEOUT, DownloadConfig, download_with_resume};
 use crate::error::NetworkError;
 use crate::progress::{DownloadProgressSink, DownloadStage, ProgressUpdate};
 use crate::range::part_path;
@@ -27,17 +27,17 @@ use crate::verify::verify_sha256_if_needed;
 
 #[derive(Debug, Clone)]
 pub struct MirrorRaceConfig {
-    /// 初始并发探测的镜像数默认 2
+    /// 初始并发探测的镜像数,默认 2
     pub initial_parallel: usize,
-    /// 阶梯加码间隔:每 stagger 加 1 个 racer默认 3s
+    /// 阶梯加码间隔:每 stagger 加 1 个 racer,默认 3s
     pub stagger: Duration,
-    /// 单 mirror 等首字节最长时间默认 30s
+    /// 单 mirror 等首字节最长时间,默认 30s
     pub probe_first_chunk_timeout: Duration,
-    /// 正式下载阶段每 chunk 的 idle timeout默认 20s
+    /// 正式下载阶段每 chunk 的 idle timeout,默认 20s
     pub idle_timeout: Duration,
-    /// 期望 SHA256(64-hex 小写)Some 时每个 mirror 下完后立即校验,
+    /// 期望 SHA256(64-hex 小写);Some 时每个 mirror 下完后立即校验,
     /// mismatch 视为该镜像投毒(返完整长度的垃圾字节,所有字节级防御失效),
-    /// truncate .part 切下一家None 时跳过校验
+    /// truncate .part 切下一家;None 时跳过校验
     pub expected_sha256: Option<String>,
 }
 
@@ -55,11 +55,18 @@ impl Default for MirrorRaceConfig {
 
 #[derive(Debug)]
 enum RacerOutcome {
-    FirstChunk { idx: usize, url: String },
-    Failed { idx: usize, url: String, err: String },
+    FirstChunk {
+        idx: usize,
+        url: String,
+    },
+    Failed {
+        idx: usize,
+        url: String,
+        err: String,
+    },
 }
 
-/// Mirror race 主入口mirrors 顺序即偏好顺序,前 initial_parallel 个先并发,之后按 stagger 依次加入
+/// Mirror race 主入口,mirrors 顺序即偏好顺序,前 initial_parallel 个先并发,之后按 stagger 依次加入
 pub async fn download_with_mirror_race(
     mirrors: &[String],
     dest: &Path,

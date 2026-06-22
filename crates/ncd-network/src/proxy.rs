@@ -1,7 +1,7 @@
 //! 中转代理客户端:HMAC-SHA256 签名 + 服务器时间漂移自愈
 //!
 //! 403 时读响应头 X-Server-Time 校正本地时钟 offset 并重试一次;offset 持久化到
-//! config_dir/.proxy_clock_offset构建期注入 secret(build.rs),仓库 clone 拿不到
+//! config_dir/.proxy_clock_offset. 构建期注入 secret(build.rs),仓库 clone 拿不到
 //! 真实 secret 时 is_configured() 返 false,release 拉取走 GitHub 直连
 
 use std::collections::HashMap;
@@ -44,7 +44,7 @@ impl ReleaseAlias {
     }
 }
 
-/// 中转代理是否已注入真实常量未配置时 release 拉取走 GitHub 直连
+/// 中转代理是否已注入真实常量,未配置时 release 拉取走 GitHub 直连
 pub fn is_proxy_configured() -> bool {
     !PROXY_BASE_URL.is_empty() && !PROXY_SHARED_SECRET.contains(PLACEHOLDER_MARKER)
 }
@@ -58,7 +58,7 @@ pub fn proxy_release_url(alias: ReleaseAlias) -> Option<String> {
     Some(format!("{base}/v1/release/{}", alias.as_str()))
 }
 
-/// 单例 ProxySigner,首次构造从磁盘加载 offsetconfig_dir 定位持久化文件,None 不持久化(测试用)
+/// 单例 ProxySigner,首次构造从磁盘加载 offset;config_dir 定位持久化文件,None 不持久化(测试用)
 pub fn proxy_signer(config_dir: Option<PathBuf>) -> &'static ProxySigner {
     static SIGNER: OnceLock<ProxySigner> = OnceLock::new();
     SIGNER.get_or_init(|| ProxySigner::new(config_dir))
@@ -95,7 +95,10 @@ impl ProxySigner {
         };
         let ts_str = ts.to_string();
         let message = format!("{ts_str}.{path}");
-        #[allow(clippy::expect_used, reason = "HMAC 接受任意长度 key（短补零、超长先 hash），new_from_slice 实际不会失败")]
+        #[allow(
+            clippy::expect_used,
+            reason = "HMAC 接受任意长度 key（短补零、超长先 hash），new_from_slice 实际不会失败"
+        )]
         let mut mac = HmacSha256::new_from_slice(PROXY_SHARED_SECRET.as_bytes())
             .expect("HMAC can take key of any size");
         mac.update(message.as_bytes());
@@ -111,7 +114,7 @@ impl ProxySigner {
         headers
     }
 
-    /// 读响应头 X-Server-Time 校正 offset,返回是否更新成功(更新了调用方可重试一次)
+    /// 读响应头 X-Server-Time 校正 offset,返回是否更新成功(更新了调用方可重试一次).
     /// 缺失/解析失败或抖动 < OFFSET_PERSIST_THRESHOLD_SECS 时不更新
     pub fn update_offset_from_response(&self, headers: &reqwest::header::HeaderMap) -> bool {
         let Some(server_time) = header_server_time(headers) else {
@@ -157,8 +160,8 @@ impl ProxySigner {
             return;
         };
         let path = dir.join(OFFSET_FILENAME);
-        if let Err(err) = std::fs::create_dir_all(dir)
-            .and_then(|()| std::fs::write(&path, secs.to_string()))
+        if let Err(err) =
+            std::fs::create_dir_all(dir).and_then(|()| std::fs::write(&path, secs.to_string()))
         {
             tracing::warn!(
                 target: "ncd_network::proxy",
