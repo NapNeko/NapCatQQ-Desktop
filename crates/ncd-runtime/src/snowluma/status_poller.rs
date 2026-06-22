@@ -4,16 +4,14 @@
 //
 // 严格红线:SnowLumaLoginState 跨 Tauri 边界(DomainEvent::SnowLumaLoginStateChanged
 // 的 state 字段)必须 ts-rs 派生 + 导出,避免前后端类型漂移
-// 
+//
 
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-// ---------------------------------------------------------------------------
-// 跨边界(Tauri / 前端)类型 —— ts-rs 派生 + 导出
-// ---------------------------------------------------------------------------
+// 跨边界(Tauri / 前端)类型 -- ts-rs 派生 + 导出
 
 /// SnowLuma 单个 Bot 在 status poller 视角下合成出来的登录状态
 /// 4 档语义(与 状态合成表对齐,通过 snake_case 序列化跨 Tauri 边界):
@@ -32,9 +30,7 @@ pub enum SnowLumaLoginState {
     Disconnected,
 }
 
-// ---------------------------------------------------------------------------
-// 进程树枚举抽象 —— async trait + Mock 边界
-// ---------------------------------------------------------------------------
+// 进程树枚举抽象 -- async trait + Mock 边界
 
 /// 给定起始 PID,返回该进程及其所有后代 PID 的集合(含自身)
 /// 设计目的:把 sysinfo / Windows 进程枚举从 SnowLumaStatusPoller 内剥离
@@ -48,9 +44,7 @@ pub trait ProcessTreeProbe: Send + Sync {
     async fn collect_descendants(&self, initial_pid: u32) -> BTreeSet<u32>;
 }
 
-// ===========================================================================
-// :实装主循环 + UIN 锁定 + 状态合成
-// ===========================================================================
+// 实装主循环 + UIN 锁定 + 状态合成
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -106,7 +100,7 @@ impl SnowLumaStatusPoller {
 
     /// 请求主循环退出;多次调用幂等退出前主循环若 last_state ≠ Disconnected
     /// 会补发一次终止性 SnowLumaLoginStateChanged{Disconnected}
-    /// 
+    ///
     pub fn dispose(&self) {
         self.cancel.cancel();
     }
@@ -143,9 +137,7 @@ impl PollerState {
     }
 }
 
-// ---------------------------------------------------------------------------
 // 主循环 run_poller
-// ---------------------------------------------------------------------------
 
 async fn run_poller(
     bot_id: BotId,
@@ -274,9 +266,7 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
     }
 }
 
-// ---------------------------------------------------------------------------
 // 纯函数:UIN 锁定 + 状态合成 + 真实性校验
-// ---------------------------------------------------------------------------
 
 /// is_real_uin:非空 + 非 "0" + 全 ASCII 数字 + 长度 ≥ 5
 fn is_real_uin(s: &str) -> bool {
@@ -355,9 +345,7 @@ fn synthesize_state(matched: &[&HookProcessInfo], qq_has_uin: bool) -> Option<Sn
     None
 }
 
-// ===========================================================================
-// :单元测试 + 属性测试
-// ===========================================================================
+// 单元测试 + 属性测试
 
 #[cfg(test)]
 mod tests {
@@ -515,9 +503,13 @@ mod tests {
             Ok(AuthState::default())
         }
 
-            async fn update_onebot_config(&self, _uin: &str, _config: &serde_json::Value) -> Result<bool, SnowLumaWebUiError> {
-                Ok(true)
-            }
+        async fn update_onebot_config(
+            &self,
+            _uin: &str,
+            _config: &serde_json::Value,
+        ) -> Result<bool, SnowLumaWebUiError> {
+            Ok(true)
+        }
     }
 
     fn proc(pid: u32, uin: &str, status: HookProcessStatus) -> HookProcessInfo {

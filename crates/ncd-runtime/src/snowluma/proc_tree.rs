@@ -21,9 +21,7 @@ use async_trait::async_trait;
 
 use crate::snowluma::status_poller::ProcessTreeProbe;
 
-// ---------------------------------------------------------------------------
 // Sysinfo 实装
-// ---------------------------------------------------------------------------
 
 /// 基于 sysinfo crate 的 ProcessTreeProbe 默认实装
 /// 无状态结构(Copy):每次 collect_descendants 都重新构造一个
@@ -118,9 +116,7 @@ fn collect_descendants_blocking(initial_pid: u32) -> BTreeSet<u32> {
     BTreeSet::from([initial_pid])
 }
 
-// ---------------------------------------------------------------------------
 // 单测 helper:MockProcessTreeProbe
-// ---------------------------------------------------------------------------
 
 /// 单元测试用的 ProcessTreeProbe mock
 /// 上层(SnowLumaStatusPoller / SnowLumaRuntimeBackend)测试通过它注入
@@ -129,7 +125,7 @@ fn collect_descendants_blocking(initial_pid: u32) -> BTreeSet<u32> {
 /// ignore
 /// let mock = MockProcessTreeProbe::with_set([12345, 12346])
 /// let probe: Arc<dyn ProcessTreeProbe> = Arc::new(mock)
-/// 
+///
 /// 内部用 std::sync::Mutex<BTreeSet<u32>>:trait 的 collect_descendants
 /// 接收 &self,且测试期间允许跨 task / 线程读,因此选标准库 Mutex 而非
 /// tokio::sync::Mutex(前者无 await 依赖,对小集合开销可忽略)
@@ -171,9 +167,7 @@ impl ProcessTreeProbe for MockProcessTreeProbe {
     }
 }
 
-// ---------------------------------------------------------------------------
 // 单元测试
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

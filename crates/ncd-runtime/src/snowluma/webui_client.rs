@@ -18,9 +18,7 @@ use ts_rs::TS;
 
 use crate::snowluma::error::SnowLumaWebUiError;
 
-// ---------------------------------------------------------------------------
-// 跨边界(Tauri / 前端)类型 —— ts-rs 派生 + 导出
-// ---------------------------------------------------------------------------
+// 跨边界(Tauri / 前端)类型 -- ts-rs 派生 + 导出
 
 /// SnowLuma WebUI /api/processes 单条 PID 的 hook 状态
 /// 与 legacy SnowLuma 服务端字面量对齐,使用 snake_case 序列化
@@ -112,9 +110,7 @@ pub struct AuthState {
     pub must_change_password: bool,
 }
 
-// ---------------------------------------------------------------------------
 // SnowLumaWebUiClient trait
-// ---------------------------------------------------------------------------
 
 /// SnowLuma WebUI HTTP 客户端 trait
 /// 8 个 async 方法对应 SnowLuma daemon 暴露的 8 个 endpointtrait 设计为
@@ -166,7 +162,6 @@ pub trait SnowLumaWebUiClient: Send + Sync {
         config: &serde_json::Value,
     ) -> Result<bool, SnowLumaWebUiError>;
 }
-
 
 /// 候选 host 列表
 const CANDIDATE_HOSTS: &[&str] = &["localhost", "127.0.0.1", "[::1]"];
@@ -609,19 +604,24 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
             .await
             .map_err(|e| {
                 if e.is_timeout() {
-                    SnowLumaWebUiError::Timeout { endpoint: url.clone() }
+                    SnowLumaWebUiError::Timeout {
+                        endpoint: url.clone(),
+                    }
                 } else {
-                    SnowLumaWebUiError::Http { endpoint: url.clone(), cause: e.to_string() }
+                    SnowLumaWebUiError::Http {
+                        endpoint: url.clone(),
+                        cause: e.to_string(),
+                    }
                 }
             })?;
         let status = resp.status().as_u16();
         if status == 401 {
             return Err(SnowLumaWebUiError::LoginFailed("unauthorized".into()));
         }
-        let body: Resp = resp
-            .json()
-            .await
-            .map_err(|e| SnowLumaWebUiError::Decode { endpoint: url.clone(), message: e.to_string() })?;
+        let body: Resp = resp.json().await.map_err(|e| SnowLumaWebUiError::Decode {
+            endpoint: url.clone(),
+            message: e.to_string(),
+        })?;
         if !body.success {
             return Err(SnowLumaWebUiError::ServerRejected {
                 endpoint: url,

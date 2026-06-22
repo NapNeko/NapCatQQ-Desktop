@@ -115,9 +115,7 @@ fn read_qq_id(config: &BotRuntimeConfig) -> Option<u64> {
         .and_then(|s| s.parse::<u64>().ok())
 }
 
-// ---------------------------------------------------------------------------
 // Phase A:spawn QQ.exe (COLD) / 按 qq_id 自动匹配并校验 PID (HOT)
-// ---------------------------------------------------------------------------
 
 /// HOT 模式:按 qq_id 在系统中自动定位登录此账号的 QQ.exe 主进程 PID
 ///
@@ -177,14 +175,12 @@ async fn spawn_cold_qq(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     hide_console_window(&mut qq_cmd);
-    let child = qq_cmd
-        .spawn()
-        .map_err(|e| {
-            BotBackendError::Io(format!(
-                "spawn QQ.exe failed: {e} (path={})",
-                qq_path.display()
-            ))
-        })?;
+    let child = qq_cmd.spawn().map_err(|e| {
+        BotBackendError::Io(format!(
+            "spawn QQ.exe failed: {e} (path={})",
+            qq_path.display()
+        ))
+    })?;
 
     let pid = child
         .id()
@@ -192,9 +188,7 @@ async fn spawn_cold_qq(
     Ok((pid, child))
 }
 
-// ---------------------------------------------------------------------------
 // Zombie reaper
-// ---------------------------------------------------------------------------
 
 /// 把 child 转入 zombie 池并 spawn 一个 reaper task 等 wait 完成后释放 wrapper
 fn enqueue_zombie(zombies: Arc<RwLock<Vec<tokio::process::Child>>>, child: tokio::process::Child) {
@@ -210,9 +204,7 @@ fn enqueue_zombie(zombies: Arc<RwLock<Vec<tokio::process::Child>>>, child: tokio
     // 真正的不变量是"reaper task 等到 wait 返回前持有 child 句柄"——已满足
 }
 
-// ---------------------------------------------------------------------------
 // kill_process_tree(Windows: taskkill /T /F;MVP 不深度遍历,靠 taskkill 自带递归)
-// ---------------------------------------------------------------------------
 
 #[cfg(windows)]
 async fn kill_process_tree(qq_pid: u32) -> Result<(), BotBackendError> {
@@ -241,9 +233,7 @@ async fn kill_process_tree(qq_pid: u32) -> Result<(), BotBackendError> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
 // abort_start:start 中段失败回滚
-// ---------------------------------------------------------------------------
 
 async fn abort_start(
     daemon: &Arc<SnowLumaDaemon>,
@@ -265,9 +255,7 @@ async fn abort_start(
     daemon.release().await;
 }
 
-// ---------------------------------------------------------------------------
 // BotBackend trait impl
-// ---------------------------------------------------------------------------
 
 #[async_trait]
 impl BotBackend for SnowLumaRuntimeBackend {
@@ -474,8 +462,7 @@ impl BotBackend for SnowLumaRuntimeBackend {
     }
 }
 
-// ===========================================================================
-// :单元测试
+// 单元测试
 //
 // 由于 SnowLumaRuntimeBackend 主路径强依赖 Windows + 真实 sysinfo + 真起 QQ.exe
 // 端到端 start/stop 测试只能在真机覆盖本测试模块仅验证:
@@ -484,7 +471,6 @@ impl BotBackend for SnowLumaRuntimeBackend {
 //
 // HotStart 自动按 qq_id 匹配的端到端覆盖见 qq_login_probe::tests,那里测了
 // JWT decode / extract 这些纯函数;真机匹配只能在 windows + 真实 QQ.exe 下验
-// ===========================================================================
 
 #[cfg(test)]
 mod tests {

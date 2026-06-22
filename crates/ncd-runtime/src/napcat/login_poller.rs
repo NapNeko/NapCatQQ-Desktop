@@ -24,12 +24,12 @@ use tokio::sync::mpsc;
 use tokio::time::{Interval, MissedTickBehavior, interval};
 use tokio_util::sync::CancellationToken;
 
-use crate::events::{BroadcastEventBus, DomainEvent, EventBus, NapCatLoginInvalidationReason};
-use crate::ids::BotId;
+use super::offline_notifier::{OfflineNoticeKind, OfflineNotifier};
 use super::webui_client::{
     CheckLoginStatusData, GetQQLoginInfoData, NapCatWebUiClient, NapCatWebUiError,
 };
-use super::offline_notifier::{OfflineNoticeKind, OfflineNotifier};
+use crate::events::{BroadcastEventBus, DomainEvent, EventBus, NapCatLoginInvalidationReason};
+use crate::ids::BotId;
 
 /// 单个 Poller 的运行参数
 ///
@@ -196,9 +196,7 @@ impl Drop for NapCatLoginPoller {
     }
 }
 
-// =============================================================================
 // Main loop
-// =============================================================================
 
 /// Poller 后台任务主体
 ///
@@ -558,8 +556,8 @@ async fn apply_online_status(
 mod tests {
     use super::*;
 
-    use crate::events::EventFilter;
     use super::super::offline_notifier::NoopOfflineNotifier;
+    use crate::events::EventFilter;
 
     // ── 既有测试:确保骨架未被破坏 ──
 
@@ -716,7 +714,12 @@ mod tests {
                 Err(NapCatWebUiError::Decode("stub".into()))
             }
 
-            async fn set_ob11_config(&self, _port: u16, _auth: &str, _config_json: &str) -> Result<(), NapCatWebUiError> {
+            async fn set_ob11_config(
+                &self,
+                _port: u16,
+                _auth: &str,
+                _config_json: &str,
+            ) -> Result<(), NapCatWebUiError> {
                 Ok(())
             }
         }
@@ -831,9 +834,14 @@ mod tests {
             Ok(GetQQLoginInfoData::default())
         }
 
-            async fn set_ob11_config(&self, _port: u16, _auth: &str, _config_json: &str) -> Result<(), NapCatWebUiError> {
-                Ok(())
-            }
+        async fn set_ob11_config(
+            &self,
+            _port: u16,
+            _auth: &str,
+            _config_json: &str,
+        ) -> Result<(), NapCatWebUiError> {
+            Ok(())
+        }
     }
 
     struct StubRestart;
@@ -1038,9 +1046,7 @@ mod tests {
     }
 }
 
-// =============================================================================
 // 单元测试:do_status_poll / apply_login_status / apply_online_status
-// =============================================================================
 //
 // 直接驱动私有函数,覆盖各转移分支每个测试
 // 只断言「事件流 + 状态字段 + 副作用计数」三类可观察输出,不引入 ticker /
@@ -1059,8 +1065,8 @@ mod transition_tests {
     use std::sync::Mutex as StdMutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use crate::events::EventFilter;
     use super::super::offline_notifier::OfflineNoticeKind;
+    use crate::events::EventFilter;
 
     // ── mock client:login + online 响应序列 ──────────────────────────────
 
@@ -1128,9 +1134,14 @@ mod transition_tests {
                 .unwrap_or_else(|| Err(NapCatWebUiError::Decode("online queue empty".into())))
         }
 
-            async fn set_ob11_config(&self, _port: u16, _auth: &str, _config_json: &str) -> Result<(), NapCatWebUiError> {
-                Ok(())
-            }
+        async fn set_ob11_config(
+            &self,
+            _port: u16,
+            _auth: &str,
+            _config_json: &str,
+        ) -> Result<(), NapCatWebUiError> {
+            Ok(())
+        }
     }
 
     // ── recording notifier:记录 (bot_id, kind) 调用 ──────────────────────
@@ -2002,9 +2013,7 @@ mod transition_tests {
     }
 }
 
-// =============================================================================
 // 属性测试:proptest 覆盖核心不变量
-// =============================================================================
 //
 // 与 transition_tests 模块的边界划分:
 // - transition_tests 用具体输入断言「单一分支」的预期行为(example-based)
@@ -2028,15 +2037,15 @@ mod property_tests {
     use async_trait::async_trait;
     use proptest::prelude::*;
 
+    use super::super::offline_notifier::{OfflineNoticeKind, OfflineNotifier};
+    use super::super::webui_client::{
+        CheckLoginStatusData, GetQQLoginInfoData, NapCatWebUiClient, NapCatWebUiError,
+    };
     use crate::events::{
         BroadcastEventBus, DomainEvent, EventBus, EventFilter, EventSubscription,
         NapCatLoginInvalidationReason,
     };
     use crate::ids::BotId;
-    use super::super::webui_client::{
-        CheckLoginStatusData, GetQQLoginInfoData, NapCatWebUiClient, NapCatWebUiError,
-    };
-    use super::super::offline_notifier::{OfflineNoticeKind, OfflineNotifier};
 
     use super::{
         LoginState, PollerConfig, PollerDeps, RestartHandle, apply_login_status,
@@ -2071,9 +2080,14 @@ mod property_tests {
             Ok(GetQQLoginInfoData::default())
         }
 
-            async fn set_ob11_config(&self, _port: u16, _auth: &str, _config_json: &str) -> Result<(), NapCatWebUiError> {
-                Ok(())
-            }
+        async fn set_ob11_config(
+            &self,
+            _port: u16,
+            _auth: &str,
+            _config_json: &str,
+        ) -> Result<(), NapCatWebUiError> {
+            Ok(())
+        }
     }
 
     // ── property notifier / restart:仅记录调用次数 ────────────────────────
@@ -2473,7 +2487,7 @@ mod property_tests {
     //     actual_refresh.push(arrival);
     //     last_attempt = arrival;
     // }
-    // 
+    //
     // ─────────────────────────────────────────────────────────────────────
 
     /// 把「RequestAuthRefresh 命令到达时间序列」(毫秒时间戳)按节流阈值

@@ -12,12 +12,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ncd_deploy::{DockerDeployment, bot_docker_container_name};
 use ncd_deploy::docker::DockerCli;
 use ncd_deploy::{
     Deployment, DeploymentError, NativeDeployment, NativeLaunchCommand, NativeLaunchTranslator,
     NativeRuntimeEventSink,
 };
+use ncd_deploy::{DockerDeployment, bot_docker_container_name};
 use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, StopMode};
 use ncd_host::{Host, HostError, HostPath};
 use serde_json::{Map, Value, json};
@@ -34,13 +34,11 @@ use crate::runtime_backend::{
 use crate::runtime_launch_plan::RuntimeLaunchPlanner;
 
 use crate::remote_native_launch::{
-    napcat_remote_log_path, probe_remote_napcat_layout, remote_napcat_running_pid,
-    stop_remote_napcat_on_host, RemoteNapcatLayout,
+    RemoteNapcatLayout, napcat_remote_log_path, probe_remote_napcat_layout,
+    remote_napcat_running_pid, stop_remote_napcat_on_host,
 };
 
-// ============================================================
 // RuntimeLaunchPlannerAdapter
-// ============================================================
 
 /// 把 FileSystemRuntimeLaunchPlanner 包装成 NativeLaunchTranslator
 ///
@@ -86,9 +84,7 @@ impl NativeLaunchTranslator for RuntimeLaunchPlannerAdapter {
     }
 }
 
-// ============================================================
 // EventBusSink
-// ============================================================
 
 /// 把 NativeDeployment 的运行时事件桥接到 BroadcastEventBus
 pub struct EventBusSink {
@@ -132,14 +128,12 @@ impl NativeRuntimeEventSink for EventBusSink {
     }
 }
 
-// ============================================================
 // NativeDeploymentBackend:过渡壳
 //
 // 让 BotManager 在不改结构体的情况下就能用 NativeDeployment
 // BotBackend 要求 start/stop/status/tail_log/read_config/write_config,
 // 这里把前三个转发给 NativeDeployment,后三个保留原来的文件 IO 逻辑
 // 后续删 BotBackend trait 时整个文件一起扬掉
-// ============================================================
 
 /// 过渡壳:让 NativeDeployment 穿上 BotBackend trait 的外套
 pub struct NativeDeploymentBackend {
@@ -248,9 +242,7 @@ impl BotBackend for NativeDeploymentBackend {
     }
 }
 
-// ============================================================
 // RemoteNativeDeploymentBackend:远端 SSH + NativeDeployment
-// ============================================================
 
 /// 远端「直接运行」:每 Bot 绑定一台 Host + 独立 NativeDeployment(translator 写远端路径)
 ///
@@ -357,9 +349,9 @@ impl BotBackend for RemoteNativeDeploymentBackend {
         let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
         // 用刷新包装:传输断连时会尝试 refresh 后重试一次
         let handle = self
-            .with_host_refresh(|h| async move {
-                self.deployment.launch(h.as_ref(), &bot_config).await
-            })
+            .with_host_refresh(
+                |h| async move { self.deployment.launch(h.as_ref(), &bot_config).await },
+            )
             .await
             .map_err(|err| BotBackendError::Io(err.to_string()))?;
         match handle {
@@ -546,10 +538,7 @@ fn load_bot_config_from_runtime_path(
     let Some(root) = runtime_root_from_config_path(runtime_config_path, bot_id) else {
         return Ok(None);
     };
-    let bot_path = root
-        .join("runtime")
-        .join("config")
-        .join("bot.json");
+    let bot_path = root.join("runtime").join("config").join("bot.json");
     let text = match std::fs::read_to_string(&bot_path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -616,7 +605,8 @@ async fn probe_home(host: &dyn Host) -> Result<String, BotBackendError> {
             let home = out.stdout.trim().to_string();
             if home.is_empty() {
                 Err(BotBackendError::InvalidConfig(
-                    "Docker host HOME is empty; cannot determine deployment project directory".into(),
+                    "Docker host HOME is empty; cannot determine deployment project directory"
+                        .into(),
                 ))
             } else {
                 Ok(home)
@@ -653,16 +643,18 @@ async fn render_docker_config_on_host(
             let config_dir_path = HostPath::from_posix(&config_dir);
             host.create_dir_all(&config_dir_path)
                 .await
-                .map_err(|error| BotBackendError::Io(format!("创建 Docker 配置目录失败: {error}")))?;
+                .map_err(|error| {
+                    BotBackendError::Io(format!("创建 Docker 配置目录失败: {error}"))
+                })?;
 
             let existing = read_existing_docker_napcat_config(host, bot_id, &config_dir).await?;
             for item in render_napcat_docker_config_payloads(bot_id, config, &existing) {
                 let bytes = serde_json::to_vec_pretty(&item.payload)
                     .map_err(|error| BotBackendError::Json(error.to_string()))?;
                 let path = HostPath::from_posix(format!("{config_dir}/{}", item.file_name));
-                host.write_file(&path, &bytes)
-                    .await
-                    .map_err(|error| BotBackendError::Io(format!("写 Docker 配置文件失败: {error}")))?;
+                host.write_file(&path, &bytes).await.map_err(|error| {
+                    BotBackendError::Io(format!("写 Docker 配置文件失败: {error}"))
+                })?;
             }
         }
         BackendType::SnowLuma => {
@@ -670,16 +662,18 @@ async fn render_docker_config_on_host(
             let config_dir_path = HostPath::from_posix(&config_dir);
             host.create_dir_all(&config_dir_path)
                 .await
-                .map_err(|error| BotBackendError::Io(format!("创建 Docker 配置目录失败: {error}")))?;
+                .map_err(|error| {
+                    BotBackendError::Io(format!("创建 Docker 配置目录失败: {error}"))
+                })?;
 
             let existing = read_existing_docker_snowluma_config(host, bot_id, &config_dir).await?;
             for item in render_snowluma_docker_config_payloads(bot_id, config, &existing) {
                 let bytes = serde_json::to_vec_pretty(&item.payload)
                     .map_err(|error| BotBackendError::Json(error.to_string()))?;
                 let path = HostPath::from_posix(format!("{config_dir}/{}", item.file_name));
-                host.write_file(&path, &bytes)
-                    .await
-                    .map_err(|error| BotBackendError::Io(format!("写 Docker 配置文件失败: {error}")))?;
+                host.write_file(&path, &bytes).await.map_err(|error| {
+                    BotBackendError::Io(format!("写 Docker 配置文件失败: {error}"))
+                })?;
             }
         }
     }
@@ -766,14 +760,12 @@ fn deployment_status(
     }
 }
 
-// ============================================================
 // DockerDeploymentBackend:把 DockerDeployment 包成 BotBackend
 //
 // 与 NativeDeploymentBackend 平行:让 BotManager 用统一的 BotBackend 接口起
 // docker 容器形态的 botstart 走 install(拉镜像/写 compose)+ launch(compose up);
 // status 走 observe(docker ps);stop 走 docker stop;tail_log 走 docker logs
 // host 在构造时注入(由 BotManager 按 runtime_target 解析后传入)
-// ============================================================
 
 use ncd_deploy::{DeploymentHandle, DeploymentState, NullProgressSink};
 

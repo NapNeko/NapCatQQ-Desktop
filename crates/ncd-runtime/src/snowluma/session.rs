@@ -23,9 +23,7 @@ use serde::{Deserialize, Serialize};
 use crate::snowluma::error::SnowLumaDaemonError;
 use ncd_domain::SnowLumaAppConfig;
 
-// ============================================================================
 // 公共常量
-// ============================================================================
 
 /// 默认强密码长度(与 SnowLuma webui/auth.ts 默认 16 对齐)
 const DEFAULT_PASSWORD_LEN: usize = 16;
@@ -46,9 +44,7 @@ const SCRYPT_P: u32 = 1;
 const SCRYPT_DKLEN: usize = 64;
 const SCRYPT_SALT_BYTES: usize = 16;
 
-// ============================================================================
-// SnowLumaSession:<data_root>/snowluma/session.json 强类型 wrapper
-// ============================================================================
+// SnowLumaSession:session.json 强类型 wrapper
 
 /// SnowLuma 会话密码持久化内部使用,永远不跨 Tauri 边界,因此故意不派生 ts-rs
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -133,9 +129,7 @@ fn write_session(path: &Path, session: &SnowLumaSession) -> Result<(), SnowLumaD
     atomic_write(path, text.as_bytes())
 }
 
-// ============================================================================
 // 强密码生成
-// ============================================================================
 
 /// 生成强随机密码
 /// 规则:
@@ -173,9 +167,7 @@ pub fn generate_strong_password(len: usize) -> String {
     String::from_utf8(chars).expect("password bytes are ascii")
 }
 
-// ============================================================================
 // webui.json payload + scrypt
-// ============================================================================
 
 /// 构造 webui.json 的 5 字段 payload
 /// 本函数是模块内唯一允许引用 serde_json::Value 的位置(见文件头白名单)
@@ -219,9 +211,7 @@ pub fn build_webui_json_payload(
     Ok(payload)
 }
 
-// ============================================================================
 // runtime.json / webui.json 落盘
-// ============================================================================
 
 /// 写 <runtime_root>/config/runtime.json,内容仅 { "webuiPort": port }
 pub fn render_runtime_json(runtime_root: &Path, port: u16) -> Result<(), SnowLumaDaemonError> {
@@ -278,9 +268,7 @@ pub fn render_daemon_globals(
     Ok(effective_pwd)
 }
 
-// ============================================================================
 // 内部工具
-// ============================================================================
 
 /// 原子写:写到 <path>.tmp 再 rename父目录不存在自动创建
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), SnowLumaDaemonError> {
@@ -372,9 +360,7 @@ fn civil_from_days(z: i64) -> (i32, u32, u32) {
     (y as i32, m as u32, d as u32)
 }
 
-// ============================================================================
 // Tests(smoke level;完整覆盖由 接手)
-// ============================================================================
 
 #[cfg(test)]
 mod tests {

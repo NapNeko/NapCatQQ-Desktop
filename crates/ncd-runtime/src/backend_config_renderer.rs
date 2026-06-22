@@ -11,13 +11,11 @@ use crate::ids::BotId;
 use crate::traits::backend_config_renderer::{BackendConfigRenderer, RenderError};
 use crate::traits::config_store::JsonTransaction;
 
-// ==================== Deep merge helper ====================
-//
-// 把 existing 中 known_keys 之外的字段保留下来合进 rendered两层都按 JSON
+// 把 existing 中 known_keys 之外的字段保留下来合进 rendered,两层都按 JSON
 // object merge 处理,不递归更深的层级——内层结构(network,bypass)由 schema 完全
 // 拥有,用户在子层加字段不在保留范围内(避免破坏 NapCat 反序列化)
 //
-// 我们关心的"未知字段保留"边界仅限**顶层**:用户最常见的需求是给 onebot11 加
+// "未知字段保留"边界仅限顶层:用户最常见的需求是给 onebot11 加
 // imageDownloadProxy,给 napcat 加 autoTimeSync 这种顶层扩展字段
 fn merge_unknown_top_level(
     rendered: Value,
@@ -158,7 +156,7 @@ fn napcat_build_napcat_payload(config: &BotConfig) -> Value {
     Value::Object(o)
 }
 
-// ==================== NapCat Renderer ====================
+// NapCat Renderer
 
 /// onebot11_<qq>.json 顶层"已知" key 集合(renderer 输出范围)
 /// 用户在派生文件里加这个集合之外的字段(如 imageDownloadProxy)会在
@@ -320,7 +318,7 @@ pub fn render_snowluma_docker_config_payloads(
     }]
 }
 
-// ==================== SnowLuma Renderer ====================
+// SnowLuma Renderer
 
 /// SnowLuma onebot_<qq>.json 顶层"已知" key 集合
 const SNOWLUMA_ONEBOT_KNOWN_KEYS: &[&str] = &["networks", "musicSignUrl", "statusCommand"];
@@ -499,7 +497,6 @@ impl SnowLumaConfigRenderer {
         }
         Value::Object(obj)
     }
-
 }
 
 impl BackendConfigRenderer for SnowLumaConfigRenderer {
@@ -534,7 +531,7 @@ impl BackendConfigRenderer for SnowLumaConfigRenderer {
     // 自己写出去的兜底 listener 会被当成外部新增,造成"自写自漂移"反复误报
 }
 
-// ==================== Factory ====================
+// Factory
 
 /// Create the appropriate renderer for a given BackendType.
 pub fn create_renderer(
@@ -559,7 +556,7 @@ pub fn output_paths_for_backend(
     }
 }
 
-// ==================== Dispatch Renderer ====================
+// Dispatch Renderer
 
 /// A composite renderer that dispatches to the appropriate backend renderer
 /// based on config.bot.backend_type. Used by BotManager which holds a single
@@ -940,7 +937,11 @@ mod tests {
 
         let txn = renderer.render(&bot_id, &config).unwrap();
         let write = &txn.writes[0];
-        std::fs::write(&write.path, serde_json::to_vec_pretty(&write.payload).unwrap()).unwrap();
+        std::fs::write(
+            &write.path,
+            serde_json::to_vec_pretty(&write.payload).unwrap(),
+        )
+        .unwrap();
 
         let drift = crate::config_drift::detect_drift(&bot_id, &config, &renderer)
             .await

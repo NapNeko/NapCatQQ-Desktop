@@ -14,14 +14,13 @@ use tracing::info;
 use ts_rs::TS;
 
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
-use ncd_host::hide_console_window;
 use crate::snowluma::error::{SnowLumaDaemonError, SnowLumaWebUiError};
 use crate::snowluma::log_sanitize::sanitize_log_line;
 use crate::snowluma::session::{load_snowluma_app_config, render_daemon_globals};
 use crate::snowluma::webui_client::SnowLumaWebUiClient;
+use ncd_host::hide_console_window;
 
-// ---------------------------------------------------------------------------
-// DaemonState---------------------------------------------------------------------------
+// DaemonState
 
 /// SnowLuma daemon 5 档状态机
 /// - Stopped:未启动 / 已正常退出 / 启动失败回滚后的稳态
@@ -48,9 +47,7 @@ pub enum DaemonState {
     Crashed,
 }
 
-// ---------------------------------------------------------------------------
 // SnowLumaWebUiClientFactory
-// ---------------------------------------------------------------------------
 
 /// SnowLuma WebUI 客户端工厂 trait
 /// SnowLumaDaemon::ensure_running 在 starter 路径里:
@@ -101,8 +98,7 @@ impl DaemonInner {
     }
 }
 
-// ---------------------------------------------------------------------------
-// SnowLumaDaemon---------------------------------------------------------------------------
+// SnowLumaDaemon
 
 /// SnowLuma 全局 daemon
 /// 一个 App 进程内仅一份实例,由 Tauri setup 阶段构造并注入
@@ -268,11 +264,7 @@ impl SnowLumaDaemon {
         let webui_port = app_cfg.webui_port;
         let pwd_override = {
             let t = app_cfg.webui_password_override.trim();
-            if t.is_empty() {
-                None
-            } else {
-                Some(t)
-            }
+            if t.is_empty() { None } else { Some(t) }
         };
         let password = match render_daemon_globals(
             &self.snowluma_data_root,
@@ -1121,9 +1113,13 @@ mod tests {
             Ok(crate::snowluma::webui_client::AuthState::default())
         }
 
-            async fn update_onebot_config(&self, _uin: &str, _config: &serde_json::Value) -> Result<bool, SnowLumaWebUiError> {
-                Ok(true)
-            }
+        async fn update_onebot_config(
+            &self,
+            _uin: &str,
+            _config: &serde_json::Value,
+        ) -> Result<bool, SnowLumaWebUiError> {
+            Ok(true)
+        }
     }
 
     /// SnowLumaWebUiError 不实现 Clone(含 BTreeMap 字段);测试里需要

@@ -112,7 +112,8 @@ async fn scan_qq_processes() -> QqProcessScan {
         let mut sys = sysinfo::System::new_all();
         sys.refresh_all();
 
-        let is_qq = |p: &sysinfo::Process| p.name().to_string_lossy().eq_ignore_ascii_case("QQ.exe");
+        let is_qq =
+            |p: &sysinfo::Process| p.name().to_string_lossy().eq_ignore_ascii_case("QQ.exe");
 
         let qq_pids: std::collections::HashSet<Pid> = sys
             .processes()
@@ -215,7 +216,7 @@ async fn probe_pid(pid: u32, total_qq_count: usize) -> Option<ProbedQqLogin> {
 
 /// 查 PID 实际监听的全部 TCP 端口(不再预先过滤到某个范围,由调用方分类)
 fn listening_ports_for_pid(pid: u32) -> Vec<u16> {
-    use netstat2::{get_sockets_info, AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo};
+    use netstat2::{AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo, get_sockets_info};
 
     let af_flags = AddressFamilyFlags::IPV4 | AddressFamilyFlags::IPV6;
     let proto_flags = ProtocolFlags::TCP;
@@ -245,9 +246,7 @@ fn listening_ports_for_pid(pid: u32) -> Vec<u16> {
     ports
 }
 
-// ---------------------------------------------------------------------------
 // 主路径:Ptlogin2 无弹窗探测
-// ---------------------------------------------------------------------------
 
 /// Ptlogin2 /pt_get_uins 返回的单个账号条目(只关心 uin,nickName 等字段忽略)
 /// uin 在不同 QQ 版本里可能是字符串也可能是数字,两者都接
@@ -284,7 +283,10 @@ impl PtloginAccount {
                 return u;
             }
         }
-        self.account.as_ref().map(UinField::as_string).unwrap_or_default()
+        self.account
+            .as_ref()
+            .map(UinField::as_string)
+            .unwrap_or_default()
     }
 }
 
@@ -324,7 +326,8 @@ fn select_current_uin(res1: &[PtloginAccount], res2: &[PtloginAccount]) -> Optio
 /// 向 https://127.0.0.1:<port>/pt_get_uins 发一次 GET,伪造请求头骗过本地
 /// 服务的来源校验,解析 JSONP 返回账号列表任何错误都吞成空列表(探测语义)
 async fn fetch_ptlogin(client: &reqwest::Client, port: u16) -> Vec<PtloginAccount> {
-    let url = format!("https://127.0.0.1:{port}/pt_get_uins?callback=ptui_getuins_CB&pt_local_tk=0");
+    let url =
+        format!("https://127.0.0.1:{port}/pt_get_uins?callback=ptui_getuins_CB&pt_local_tk=0");
     let resp = match client
         .get(&url)
         .header("Host", "localhost.ptlogin2.qq.com")
@@ -355,17 +358,14 @@ fn parse_ptlogin_accounts(text: &str) -> Vec<PtloginAccount> {
     serde_json::from_str::<Vec<PtloginAccount>>(&format!("[{inner}]")).unwrap_or_default()
 }
 
-// ---------------------------------------------------------------------------
 // 兜底路径:tencent:// 深链接探测(旧机制,可能触发 QQ 弹窗)
-// ---------------------------------------------------------------------------
 
 async fn probe_one_port(pid: u32, port: u16) -> Option<ProbedQqLogin> {
     let addr = format!("127.0.0.1:{port}");
-    let mut stream =
-        match tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr)).await {
-            Ok(Ok(s)) => s,
-            _ => return None,
-        };
+    let mut stream = match tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr)).await {
+        Ok(Ok(s)) => s,
+        _ => return None,
+    };
 
     let body = "tencent://snowluma-probe-noop";
     let request = format!(
@@ -460,7 +460,9 @@ fn decode_jwt_payload(token: &str) -> Option<JwtPayload> {
     while padded.len() % 4 != 0 {
         padded.push('=');
     }
-    let bytes = base64::engine::general_purpose::URL_SAFE.decode(padded).ok()?;
+    let bytes = base64::engine::general_purpose::URL_SAFE
+        .decode(padded)
+        .ok()?;
     serde_json::from_slice(&bytes).ok()
 }
 

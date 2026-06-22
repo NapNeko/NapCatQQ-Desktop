@@ -4,51 +4,51 @@ import type { ConnectionHealth } from "./ConnectionHealth";
 import type { ServerState } from "./ServerState";
 
 /**
- * 远端主机档案。不含密码——凭据走 keyring。
+ * 远端主机档案不含密码 -- 凭据走 keyring
  */
 export type ServerProfile = { 
 /**
- * 内部 id，创建时生成的短 UUID。
+ * 内部 id,创建时生成的短 UUID
  */
 id: string, 
 /**
- * 用户给的显示名称。
+ * 用户给的显示名称
  */
 name: string, 
 /**
- * 主机地址（IP 或域名）。
+ * 主机地址(IP 或域名)
  */
 host: string, 
 /**
- * SSH 端口，默认 22。
+ * SSH 端口,默认 22
  */
 port: number, 
 /**
- * 登录用户名。
+ * 登录用户名
  */
 username: string, 
 /**
- * 认证方式。
+ * 认证方式
  */
 authMethod: AuthMethod, 
 /**
- * 私钥文件路径（仅 Key 方式使用）。
+ * 私钥文件路径(仅 Key 方式使用)
  */
 privateKeyPath?: string | null, 
 /**
- * 用户是否选择了"记住密码"。
+ * 用户是否选择了 remember password
  */
 rememberCredential: boolean, 
 /**
- * 最近一次连接测试结果。
+ * 最近一次连接测试结果
  */
 state: ServerState, 
 /**
- * 连接健康度细粒度信息（最近成功时间、连续失败计数等）。
- * 可选 + 默认 + 序列化时 None 省略，保证向后兼容。
+ * 连接健康度细粒度信息(最近成功时间,连续失败计数等)
+ * 可选 + 默认 + 序列化时 None 省略,保证向后兼容
  */
 health?: ConnectionHealth | null, 
 /**
- * WebUI 端点 URL（用户手填的远端 NapCat WebUI 地址）。
+ * WebUI 端点 URL(用户手填的远端 NapCat WebUI 地址)
  */
 webuiUrl?: string | null, };

@@ -15,12 +15,10 @@
 //!   的完整状态机刻意拆开 —— SnowLuma daemon 输出仅使用 CSI 序列,足够
 
 /// 清洗 SnowLuma 子进程一行 stdout,剥除 ANSI CSI 序列与非打印控制字符
-/// # Examples
-/// 
-/// use ncd_runtime::snowluma::log_sanitize::sanitize_log_line;
-/// assert_eq!(sanitize_log_line("\x1b[31mred\x1b[0m"), "red");
-/// assert_eq!(sanitize_log_line("plain"), "plain");
-/// 
+///
+/// 用例:
+///   sanitize_log_line("\x1b[31mred\x1b[0m") == "red"
+///   sanitize_log_line("plain") == "plain"
 pub fn sanitize_log_line(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());

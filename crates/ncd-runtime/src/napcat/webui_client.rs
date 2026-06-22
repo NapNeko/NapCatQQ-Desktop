@@ -11,9 +11,9 @@
 //! dynamic JSON 透传
 //!
 //! 字段级 serde rename 严格对齐 NapCat WebUI legacy JSON:
-//! - [AuthLoginData::credential] ↔ JSON Credential(PascalCase)
-//! - [CheckLoginStatusData::is_login] ↔ JSON isLogin(camelCase)
-//! - [CheckLoginStatusData::qrcode_url] ↔ JSON qrcodeurl(小写无分隔符)
+//! - credential -> JSON Credential(PascalCase)
+//! - is_login -> JSON isLogin(camelCase)
+//! - qrcode_url -> JSON qrcodeurl(小写无分隔符)
 //!
 //! 安全边界:
 //! - [ReqwestNapCatWebUiClient::webui_url] 仅拼接 http://127.0.0.1:{port},
@@ -29,9 +29,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-// =============================================================================
 // Error
-// =============================================================================
 
 /// NapCat WebUI HTTP 客户端的统一错误枚举
 ///
@@ -92,9 +90,7 @@ impl From<reqwest::Error> for NapCatWebUiError {
     }
 }
 
-// =============================================================================
 // Payloads
-// =============================================================================
 
 /// POST /api/auth/login 请求体
 ///
@@ -154,9 +150,7 @@ pub struct GetQQLoginInfoData {
     pub online: bool,
 }
 
-// =============================================================================
 // Trait
-// =============================================================================
 
 /// NapCat WebUI HTTP 客户端 trait
 ///
@@ -203,9 +197,7 @@ pub trait NapCatWebUiClient: Send + Sync {
     ) -> Result<(), NapCatWebUiError>;
 }
 
-// =============================================================================
 // ReqwestNapCatWebUiClient
-// =============================================================================
 
 /// [NapCatWebUiClient] 的默认实现,基于 [reqwest::Client]
 ///
@@ -377,9 +369,7 @@ impl NapCatWebUiClient for ReqwestNapCatWebUiClient {
     }
 }
 
-// =============================================================================
 // Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {

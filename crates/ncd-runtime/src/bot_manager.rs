@@ -9,10 +9,12 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info, warn};
 
 use crate::app_config::WebUiPollerSettings;
-use ncd_domain::DesktopNotifySettings;
 use crate::backend_config_renderer::output_paths_for_backend;
 use crate::bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
 use crate::bot_config::{BackendType, BotConfig, BotConfigError};
+use crate::docker_bot_session::{
+    DockerBotSessionRegistry, is_remote_docker_config, is_remote_native_napcat_config,
+};
 use crate::events::{BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter};
 use crate::ids::BotId;
 use crate::kinds::BotFlavor;
@@ -20,16 +22,12 @@ use crate::napcat::endpoint_table::{NapCatEndpoint, NapCatEndpointTable};
 use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 use crate::napcat::offline_notifier::OfflineNotifier;
 use crate::napcat::webui_client::NapCatWebUiClient;
-use crate::docker_bot_session::{
-    DockerBotSessionRegistry, is_remote_docker_config, is_remote_native_napcat_config,
-};
-use crate::remote_bot_log_follow::RemoteBotLogFollowRegistry;
-use crate::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
 use crate::native_deployment_adapter::{
     DockerDeploymentBackend, EventBusSink, RemoteNativeDeploymentBackend,
 };
-use ncd_deploy::NativeDeployment;
-use crate::remote_native_launch::{remote_napcat_running_pid, RemoteNativeLaunchTranslator};
+use crate::remote_bot_log_follow::RemoteBotLogFollowRegistry;
+use crate::remote_native_launch::{RemoteNativeLaunchTranslator, remote_napcat_running_pid};
+use crate::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
 use crate::remote_snowluma::{
     RemoteSnowLumaBackend, RemoteSnowLumaDaemon, is_remote_native_snowluma_config,
     remote_qq_running_pid,
@@ -44,8 +42,10 @@ use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
 use crate::traits::{
     BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction, SecretStore,
 };
-use ncd_domain::{DeploymentType, RuntimeTarget};
+use ncd_deploy::NativeDeployment;
 use ncd_deploy::{Deployment, DeploymentState, DockerDeployment};
+use ncd_domain::DesktopNotifySettings;
+use ncd_domain::{DeploymentType, RuntimeTarget};
 use ncd_host::{Host, HostPath};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ impl RemoteQqEntryCoordinator {
         server_id: &str,
         install_base: &HostPath,
     ) -> Result<(), String> {
-        use ncd_component::remote_qq_entry::{set_remote_qq_package_main, QQ_MAIN_NAPCAT_INJECT};
+        use ncd_component::remote_qq_entry::{QQ_MAIN_NAPCAT_INJECT, set_remote_qq_package_main};
 
         self.with_server(server_id, || async {
             let pkg_path = install_base.join("opt/QQ/resources/app/package.json");
@@ -225,7 +225,7 @@ impl RemoteQqEntryCoordinator {
         server_id: &str,
         install_base: &HostPath,
     ) -> Result<(), String> {
-        use ncd_component::remote_qq_entry::{set_remote_qq_package_main, QQ_MAIN_NATIVE};
+        use ncd_component::remote_qq_entry::{QQ_MAIN_NATIVE, set_remote_qq_package_main};
 
         self.with_server(server_id, || async {
             let pkg_path = install_base.join("opt/QQ/resources/app/package.json");
@@ -623,8 +623,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                                 .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
                                 .await?;
                             let coordinator = Arc::clone(&self.remote_qq_entry_coordinator);
-                            let backend_id =
-                                BotId::new(format!("remote-sl-{}", config.bot.qq_id));
+                            let backend_id = BotId::new(format!("remote-sl-{}", config.bot.qq_id));
                             Ok(Arc::new(RemoteSnowLumaBackend::new(
                                 backend_id,
                                 daemon,
@@ -645,11 +644,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                             ));
                             let event_sink: Arc<dyn ncd_deploy::NativeRuntimeEventSink> =
                                 Arc::new(EventBusSink::new(Arc::clone(&self.event_bus)));
-                            let deployment = Arc::new(NativeDeployment::new(
-                                translator,
-                                event_sink,
-                                None,
-                            ));
+                            let deployment =
+                                Arc::new(NativeDeployment::new(translator, event_sink, None));
                             Ok(Arc::new(RemoteNativeDeploymentBackend::new(
                                 deployment,
                                 Arc::clone(resolver),
@@ -914,13 +910,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 pid,
                 "bootstrap reconcile: 已恢复远端 SnowLuma Native 运行态"
             );
-            self.attach_remote_native_snowluma_log_follow(
-                &bot_id,
-                config,
-                host,
-                &sl_paths,
-            )
-            .await;
+            self.attach_remote_native_snowluma_log_follow(&bot_id, config, host, &sl_paths)
+                .await;
         }
         reconciled
     }
@@ -1058,7 +1049,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         if !is_remote_native_snowluma_config(config) {
             return;
         }
-        self.remote_native_napcat_sessions.shutdown_bot(bot_id).await;
+        self.remote_native_napcat_sessions
+            .shutdown_bot(bot_id)
+            .await;
         if let Some(sid) = config.bot.runtime_target.server_id() {
             self.stop_remote_native_napcat_log_sessions_on_server(sid, Some(config.bot.qq_id))
                 .await;
@@ -1196,7 +1189,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         // DropAdded 的决议:从 existing 文件里删掉对应 key 再渲染这里不做
         // 额外处理——因为 render_with_existing 只合并 existing 里在 known_keys
-        // **之外**的顶层字段如果要 drop 某个顶层扩展字段,需要从 existing map
+        // outside known_keys 的顶层字段如果要 drop 某个顶层扩展字段,需要从 existing map
         // 里主动 remove但当前 render_backend_config 是从磁盘现读的 existing,
         // 要 drop 的字段仍然在磁盘文件里
         //
@@ -1223,11 +1216,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.publish_state_change(&starting, "start_requested");
         if is_remote_native_snowluma_config(&config) {
             if let Some(sid) = config.bot.runtime_target.server_id() {
-                self.stop_remote_native_napcat_log_sessions_on_server(
-                    sid,
-                    Some(config.bot.qq_id),
-                )
-                .await;
+                self.stop_remote_native_napcat_log_sessions_on_server(sid, Some(config.bot.qq_id))
+                    .await;
             }
         }
         self.start_runtime_from_starting(bot_id, &handle, &config)
@@ -1250,11 +1240,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.publish_state_change(&starting, "start_requested");
         if is_remote_native_snowluma_config(&config) {
             if let Some(sid) = config.bot.runtime_target.server_id() {
-                self.stop_remote_native_napcat_log_sessions_on_server(
-                    sid,
-                    Some(config.bot.qq_id),
-                )
-                .await;
+                self.stop_remote_native_napcat_log_sessions_on_server(sid, Some(config.bot.qq_id))
+                    .await;
             }
         }
         self.start_runtime_from_starting(bot_id, &handle, &config)
@@ -1280,7 +1267,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 _ => stopping,
             };
             self.docker_sessions.shutdown_bot(bot_id).await;
-            self.remote_native_napcat_sessions.shutdown_bot(bot_id).await;
+            self.remote_native_napcat_sessions
+                .shutdown_bot(bot_id)
+                .await;
             self.remote_bot_log_follow.stop_bot(bot_id).await;
             self.publish_state_change(&stopped, "stop_completed");
             if stopped.state == BotActorState::Starting {
@@ -1299,7 +1288,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     .publish(DomainEvent::bot_status_changed(status, "runtime_stop"));
                 let stopped = handle.confirm_stopped().await?;
                 self.docker_sessions.shutdown_bot(bot_id).await;
-                self.remote_native_napcat_sessions.shutdown_bot(bot_id).await;
+                self.remote_native_napcat_sessions
+                    .shutdown_bot(bot_id)
+                    .await;
                 self.publish_state_change(&stopped, "stop_completed");
                 if stopped.state == BotActorState::Starting {
                     let config = self.get_required_bot_config(bot_id).await?;
@@ -1525,8 +1516,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     ///   不会造成不可恢复的不一致
     /// - 新增时:检查 4 开上限,持久化,写派生文件,创建 Actor
     /// - 更新时:持久化,写派生文件,热推送(通过 restart 通知 Actor 重新加载)
-    /// - 如果 backend_type 发生切换(NapCat ↔ SnowLuma),必须用旧 backend
-    ///   停掉运行中的进程,再用**新** backend 启动,避免老进程留尸
+    /// - 如果 backend_type 发生切换(NapCat <-> SnowLuma),必须用旧 backend
+    ///   停掉运行中的进程,再用新 backend 启动,避免老进程留尸
     pub async fn upsert_bot_config(
         &self,
         config: BotConfig,
@@ -1626,7 +1617,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             let current = handle.snapshot();
             if current.state == BotActorState::Running || current.state == BotActorState::Starting {
                 if let Some(prev) = previous_backend_type.filter(|p| *p != target_backend) {
-                    // backend 切换:必须停旧 + 起新,没法热推送(NapCat ↔ SL 协议完全不同)
+                    // backend 切换:必须停旧 + 起新,没法热推送(NapCat <-> SL 协议完全不同)
                     let prev_flavor = map_backend_flavor(prev);
                     let snapshot = self
                         .restart_bot_with_backend_switch(&bot_id, prev_flavor)
@@ -1726,8 +1717,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     ///
     /// 与普通 restart_bot 的关键差异:
     /// - stop 阶段不再用 self.backend(写死 NapCat backend),而是用
-    ///   backend_for(previous_flavor),避免切换 NapCat → SnowLuma 时老进程留尸
-    /// - stop 返回后**直接** confirm_stopped 推进 actor 到 Starting,不依赖
+    ///   backend_for(previous_flavor),避免切换 NapCat -> SnowLuma 时老进程留尸
+    /// - stop 返回后直接 confirm_stopped 推进 actor 到 Starting,不依赖
     ///   异步 BotProcessExited 事件链原因:
     ///   1. backend.stop 是同步 await 的,返回时进程树已被 force kill
     ///   2. 切换 backend 时 actor 上层不一定能立刻收到旧 backend 的 exit 事件
@@ -1981,7 +1972,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 渲染派生配置文件
     ///
     /// 调用 renderer.render_with_existing 而不是 render,让 NapCat / SnowLuma
-    /// renderer 把磁盘上派生文件里**用户加的扩展字段**(如 imageDownloadProxy,
+    /// renderer 把磁盘上派生文件里用户加的扩展字段(如 imageDownloadProxy,
     /// autoTimeSync)合并进新输出,避免每次启动覆盖时丢掉用户的手改
     ///
     /// overrides 来自前端 ConfigDriftDialog 的 AcceptExternal 决议:先按
@@ -2037,12 +2028,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 };
                 if let Some(file_overrides) = overrides.get(&file_name) {
                     for (path, value) in file_overrides {
-                        set_value_at_dot_path(&mut write.payload, path, value.clone())
-                            .map_err(|e| {
+                        set_value_at_dot_path(&mut write.payload, path, value.clone()).map_err(
+                            |e| {
                                 BotManagerError::Render(format!(
                                     "应用 drift 决议到 {file_name} 的 {path} 失败: {e}"
                                 ))
-                            })?;
+                            },
+                        )?;
                     }
                 }
             }
@@ -2186,7 +2178,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         self.event_bus.publish(DomainEvent::bot_error(
                             bot_id.clone(),
                             detail.clone(),
-                            Some("Bot 启动后立即退出,请检查启动命令、运行时依赖与日志。".to_string()),
+                            Some(
+                                "Bot 启动后立即退出,请检查启动命令、运行时依赖与日志。".to_string(),
+                            ),
                         ));
                         return Err(BotManagerError::Render(detail));
                     }
@@ -2213,10 +2207,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         if let Ok(host) = resolver.resolve(&config.bot.runtime_target).await {
                             if let RuntimeTarget::Server(server_id) = &config.bot.runtime_target {
                                 if let Ok(daemon) = self
-                                    .remote_snowluma_daemon_for_server(
-                                        server_id,
-                                        Arc::clone(&host),
-                                    )
+                                    .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
                                     .await
                                 {
                                     self.attach_remote_native_snowluma_log_follow(
@@ -2447,7 +2438,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// tauri::async_runtime::spawn(async move {
     /// (*manager).clone().run_runtime_event_listener().await
     /// })
-    /// 
+    ///
     pub fn spawn_runtime_event_listener(&self) {
         let manager = self.clone();
         tokio::spawn(manager.run_runtime_event_listener());
@@ -2574,7 +2565,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         self.dispose_poller(bot_id).await;
         self.docker_sessions.shutdown_bot(bot_id).await;
-        self.remote_native_napcat_sessions.shutdown_bot(bot_id).await;
+        self.remote_native_napcat_sessions
+            .shutdown_bot(bot_id)
+            .await;
         self.remote_bot_log_follow.stop_bot(bot_id).await;
 
         self.event_bus.publish(DomainEvent::BotStateChanged {
@@ -2958,8 +2951,12 @@ mod tests {
         let mut root = serde_json::json!({
             "network": { "httpClients": [ { "token": "old" }, { "token": "keep" } ] }
         });
-        set_value_at_dot_path(&mut root, "network.httpClients.0.token", serde_json::json!("new"))
-            .unwrap();
+        set_value_at_dot_path(
+            &mut root,
+            "network.httpClients.0.token",
+            serde_json::json!("new"),
+        )
+        .unwrap();
         assert_eq!(root["network"]["httpClients"][0]["token"], "new");
         assert_eq!(root["network"]["httpClients"][1]["token"], "keep");
     }

@@ -15,7 +15,7 @@ use std::sync::Arc;
 use ncd_domain::AppSettings;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::time::{MissedTickBehavior, interval};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 use ts_rs::TS;
@@ -28,11 +28,9 @@ use ncd_host::{Host, HostError};
 use crate::credential_sync::{CredentialSyncLayer, PasswordSlot};
 use crate::events::EventBus;
 
-// ============================================================
 // 数据结构
-// ============================================================
 
-/// 远端主机档案不含密码——凭据走 keyring
+/// 远端主机档案不含密码 -- 凭据走 keyring
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -54,16 +52,16 @@ pub struct ServerProfile {
     /// 私钥文件路径(仅 Key 方式使用)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub private_key_path: Option<String>,
-    /// 用户是否选择了"记住密码"
+    /// 用户是否选择了 remember password
     #[serde(default)]
     pub remember_credential: bool,
     /// 最近一次连接测试结果
     #[serde(default)]
     pub state: ServerState,
-	    /// 连接健康度细粒度信息(最近成功时间,连续失败计数等)
-	    /// 可选 + 默认 + 序列化时 None 省略,保证向后兼容
-	    #[serde(default, skip_serializing_if = "Option::is_none")]
-	    pub health: Option<ConnectionHealth>,
+    /// 连接健康度细粒度信息(最近成功时间,连续失败计数等)
+    /// 可选 + 默认 + 序列化时 None 省略,保证向后兼容
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health: Option<ConnectionHealth>,
     /// WebUI 端点 URL(用户手填的远端 NapCat WebUI 地址)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webui_url: Option<String>,
@@ -97,26 +95,26 @@ pub enum ServerState {
     Failed,
 }
 
-	/// 连接健康度细粒度信息(可选,向后兼容)
-	/// 与 ServerState(粗状态)正交:state 仍表示 Connected/Disconnected/Failed 等,
-	/// health 提供最近成功时间,连续失败计数,最近失败原因等,用于前端展示和抑制策略
-	#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
-	#[serde(rename_all = "camelCase")]
-	#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-	pub struct ConnectionHealth {
-	    /// 最近一次成功连接/探测的时间(ISO8601 或毫秒时间戳字符串)
-	    #[serde(default, skip_serializing_if = "Option::is_none")]
-	    pub last_success_at: Option<String>,
-	    /// 连续失败次数(成功后归零)
-	    #[serde(default)]
-	    pub consecutive_failures: u32,
-	    /// 最近一次失败的原因(简短人话)
-	    #[serde(default, skip_serializing_if = "Option::is_none")]
-	    pub last_failure_reason: Option<String>,
-	    /// 最近一次失败的时间
-	    #[serde(default, skip_serializing_if = "Option::is_none")]
-	    pub last_failure_at: Option<String>,
-	}
+/// 连接健康度细粒度信息(可选,向后兼容)
+/// 与 ServerState(粗状态)正交:state 仍表示 Connected/Disconnected/Failed 等,
+/// health 提供最近成功时间,连续失败计数,最近失败原因等,用于前端展示和抑制策略
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct ConnectionHealth {
+    /// 最近一次成功连接/探测的时间(ISO8601 或毫秒时间戳字符串)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_success_at: Option<String>,
+    /// 连续失败次数(成功后归零)
+    #[serde(default)]
+    pub consecutive_failures: u32,
+    /// 最近一次失败的原因(简短人话)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_failure_reason: Option<String>,
+    /// 最近一次失败的时间
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_failure_at: Option<String>,
+}
 
 /// test_connection 返回的探测报告
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -160,9 +158,7 @@ fn default_port() -> u16 {
     22
 }
 
-// ============================================================
 // 凭据存储
-// ============================================================
 
 const KEYRING_SERVICE: &str = "napcatqq-desktop";
 
@@ -246,7 +242,11 @@ pub struct InMemoryCredentialStore {
 
 impl ServerCredentialStore for InMemoryCredentialStore {
     fn get_password(&self, server_id: &str) -> Option<String> {
-        self.store.lock().ok()?.get(&format!("ssh:{server_id}")).cloned()
+        self.store
+            .lock()
+            .ok()?
+            .get(&format!("ssh:{server_id}"))
+            .cloned()
     }
 
     fn set_password(&self, server_id: &str, password: &str) -> Result<(), String> {
@@ -258,12 +258,19 @@ impl ServerCredentialStore for InMemoryCredentialStore {
     }
 
     fn delete_password(&self, server_id: &str) -> Result<(), String> {
-        self.store.lock().map_err(|e| e.to_string())?.remove(&format!("ssh:{server_id}"));
+        self.store
+            .lock()
+            .map_err(|e| e.to_string())?
+            .remove(&format!("ssh:{server_id}"));
         Ok(())
     }
 
     fn get_sudo_password(&self, server_id: &str) -> Option<String> {
-        self.store.lock().ok()?.get(&format!("sudo:{server_id}")).cloned()
+        self.store
+            .lock()
+            .ok()?
+            .get(&format!("sudo:{server_id}"))
+            .cloned()
     }
 
     fn set_sudo_password(&self, server_id: &str, password: &str) -> Result<(), String> {
@@ -275,14 +282,15 @@ impl ServerCredentialStore for InMemoryCredentialStore {
     }
 
     fn delete_sudo_password(&self, server_id: &str) -> Result<(), String> {
-        self.store.lock().map_err(|e| e.to_string())?.remove(&format!("sudo:{server_id}"));
+        self.store
+            .lock()
+            .map_err(|e| e.to_string())?
+            .remove(&format!("sudo:{server_id}"));
         Ok(())
     }
 }
 
-// ============================================================
 // ServerProfileRepo:JSON 持久化
-// ============================================================
 
 /// servers.json 路径固定在 <data_root>/config/servers.json
 struct ServerProfileRepo {
@@ -309,17 +317,14 @@ impl ServerProfileRepo {
                 .await
                 .map_err(|e| e.to_string())?;
         }
-        let json =
-            serde_json::to_string_pretty(profiles).map_err(|e| e.to_string())?;
+        let json = serde_json::to_string_pretty(profiles).map_err(|e| e.to_string())?;
         tokio::fs::write(&self.path, json)
             .await
             .map_err(|e| e.to_string())
     }
 }
 
-// ============================================================
 // ServerManager
-// ============================================================
 
 pub struct ServerManager {
     repo: ServerProfileRepo,
@@ -346,10 +351,7 @@ pub struct ServerManager {
 }
 
 impl ServerManager {
-    pub fn new(
-        data_root: &Path,
-        credentials: Arc<dyn ServerCredentialStore>,
-    ) -> Self {
+    pub fn new(data_root: &Path, credentials: Arc<dyn ServerCredentialStore>) -> Self {
         Self {
             repo: ServerProfileRepo::new(data_root),
             sync: CredentialSyncLayer::new(credentials),
@@ -438,7 +440,8 @@ impl ServerManager {
         if let Some(slot) = changed_slot {
             if self.sync.on_password_changed(&profile.id, slot) {
                 self.hosts.write().await.remove(&profile.id);
-                self.update_state(&profile.id, ServerState::Disconnected).await;
+                self.update_state(&profile.id, ServerState::Disconnected)
+                    .await;
 
                 // 立即尝试静默重连(利用新凭据)
                 if profile.remember_credential {
@@ -447,13 +450,16 @@ impl ServerManager {
             } else {
                 // sudo 密码变更:热更新缓存连接
                 if let Some(cached) = self.hosts.read().await.get(&profile.id) {
-                    self.sync.sync_elevation_to_host(&profile.id, cached.as_ref()).await;
+                    self.sync
+                        .sync_elevation_to_host(&profile.id, cached.as_ref())
+                        .await;
                 }
             }
         } else {
             // 连接信息可能已改(host/port/认证),丢弃缓存的旧连接
             self.hosts.write().await.remove(&profile.id);
-            self.update_state(&profile.id, ServerState::Disconnected).await;
+            self.update_state(&profile.id, ServerState::Disconnected)
+                .await;
         }
 
         Ok(profile)
@@ -565,11 +571,9 @@ impl ServerManager {
         //    顺手把这次的登录密码注入 host 当提权密码——刚挪存到 sudo 槽的就是它,
         //    省得密钥登录后第一次 elevated 操作还得回 keyring 取
         let host: Arc<dyn Host> = Arc::new(host);
-        host.set_elevation_password(Some(password.to_string())).await;
-        self.hosts
-            .write()
-            .await
-            .insert(profile.id.clone(), host);
+        host.set_elevation_password(Some(password.to_string()))
+            .await;
+        self.hosts.write().await.insert(profile.id.clone(), host);
         self.update_state(id, ServerState::Connected).await;
 
         Ok(updated)
@@ -614,7 +618,10 @@ impl ServerManager {
     /// 短操作(探测,列文件)仍使用 ensure_connected 的缓存连接,保持性能
     pub async fn with_isolated_connection<F, T>(&self, id: &str, f: F) -> Result<T, String>
     where
-        F: FnOnce(Arc<dyn Host>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, String>> + Send>>,
+        F: FnOnce(
+            Arc<dyn Host>,
+        )
+            -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, String>> + Send>>,
     {
         info!(
             target: "ncd_runtime::server_manager",
@@ -727,7 +734,8 @@ impl ServerManager {
                     h.last_failure_at = Some(now.clone());
                     h.consecutive_failures = h.consecutive_failures.saturating_add(1);
                     consecutive = h.consecutive_failures;
-                }).await;
+                })
+                .await;
                 self.publish_host_lost(id, Some(err_text), consecutive);
 
                 let (error, host_key_prompt, host_key_mismatch) = classify_connect_error(&err);
@@ -777,10 +785,7 @@ impl ServerManager {
         }
 
         self.inject_elevation_password(id, host.as_ref()).await;
-        self.hosts
-            .write()
-            .await
-            .insert(profile.id.clone(), host);
+        self.hosts.write().await.insert(profile.id.clone(), host);
         self.update_state(id, ServerState::Connected).await;
 
         // P0-10: 更新 health 成功时间 + 归零失败计数 + 发布恢复事件
@@ -788,7 +793,8 @@ impl ServerManager {
         self.update_health_fields(id, |h| {
             h.last_success_at = Some(now.clone());
             h.consecutive_failures = 0;
-        }).await;
+        })
+        .await;
         self.publish_host_recovered(id, latency_ms);
 
         if log_probe {
@@ -869,7 +875,8 @@ impl ServerManager {
                 h.last_failure_at = Some(now.clone());
                 h.consecutive_failures = h.consecutive_failures.saturating_add(1);
                 consecutive = h.consecutive_failures;
-            }).await;
+            })
+            .await;
             self.publish_host_lost(id, Some("缓存连接被显式断开".to_string()), consecutive);
 
             info!(
@@ -896,7 +903,13 @@ impl ServerManager {
         self.prune_expired_auto_connect_cooldowns().await;
 
         const COOLDOWN: std::time::Duration = std::time::Duration::from_secs(90);
-        if let Some(until) = self.auto_connect_cooldown_until.read().await.get(id).copied() {
+        if let Some(until) = self
+            .auto_connect_cooldown_until
+            .read()
+            .await
+            .get(id)
+            .copied()
+        {
             if until > std::time::Instant::now() {
                 return Err(
                     "远端尚未连接（请去远端页测试连接）；近期自动连接失败，已暂停自动重试"
@@ -963,7 +976,10 @@ impl ServerManager {
             return Arc::clone(lock);
         }
         let mut map = self.connect_locks.write().await;
-        Arc::clone(map.entry(id.to_string()).or_insert_with(|| Arc::new(Mutex::new(()))))
+        Arc::clone(
+            map.entry(id.to_string())
+                .or_insert_with(|| Arc::new(Mutex::new(()))),
+        )
     }
 
     // ============================================================
@@ -998,7 +1014,8 @@ impl ServerManager {
                     return Ok(host2);
                 } else {
                     // 探测失败 → 标记不健康,驱逐,发 lost 事件,然后走 ensure 重连
-                    self.mark_unhealthy_internal(id, Some("活性探测失败".to_string())).await;
+                    self.mark_unhealthy_internal(id, Some("活性探测失败".to_string()))
+                        .await;
                     // 继续走到 ensure_connected 分支
                 }
             }
@@ -1031,7 +1048,8 @@ impl ServerManager {
             h.last_success_at = Some(now.clone());
             h.consecutive_failures = 0;
             // last_failure_* 保留上次失败信息,供前端诊断
-        }).await;
+        })
+        .await;
 
         // 4. 发布恢复事件(刷新成功即视为一次恢复)
         self.publish_host_recovered(id, 0);
@@ -1056,7 +1074,9 @@ impl ServerManager {
         self.update_state(id, ServerState::Disconnected).await;
 
         // 3. 更新 health(递增失败计数 + 记原因/时间)
-        let reason_text = reason.clone().unwrap_or_else(|| "显式标记不健康".to_string());
+        let reason_text = reason
+            .clone()
+            .unwrap_or_else(|| "显式标记不健康".to_string());
         let now = chrono::Utc::now().to_rfc3339();
         let mut consecutive = 0u32;
 
@@ -1065,7 +1085,8 @@ impl ServerManager {
             h.last_failure_at = Some(now.clone());
             h.consecutive_failures = h.consecutive_failures.saturating_add(1);
             consecutive = h.consecutive_failures;
-        }).await;
+        })
+        .await;
 
         // 4. 发布 lost 事件(仅在确实发生驱逐或状态变更时发,避免重复刷)
         if removed {
@@ -1091,7 +1112,8 @@ impl ServerManager {
                 h.consecutive_failures = 0;
             }
             // 不清 last_failure_*,留作诊断
-        }).await;
+        })
+        .await;
     }
 
     /// 通用 health 字段更新器:若 profile 不存在则静默跳过;若 health 为 None 则先初始化
@@ -1385,7 +1407,10 @@ mod tests {
         }
 
         async fn test_has_auto_connect_cooldown(&self, id: &str) -> bool {
-            self.auto_connect_cooldown_until.read().await.contains_key(id)
+            self.auto_connect_cooldown_until
+                .read()
+                .await
+                .contains_key(id)
         }
 
         async fn test_seed_auto_connect_cooldown(&self, id: &str) {
@@ -1448,7 +1473,9 @@ mod tests {
         let root = tempdir().unwrap();
         let (mgr, _) = make_mgr(root.path());
 
-        mgr.add_server(make_profile("s1", "Old"), None).await.unwrap();
+        mgr.add_server(make_profile("s1", "Old"), None)
+            .await
+            .unwrap();
         let mut updated = make_profile("s1", "New Name");
         updated.host = "10.0.0.1".to_string();
         mgr.update_server(updated, None).await.unwrap();
