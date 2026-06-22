@@ -6,6 +6,6 @@ import type { AppSettings } from "./AppSettings";
  */
 export type AppSettingsDto = { settings: AppSettings, 
 /**
- * GitHub PAT，空串视为清除
+ * GitHub PAT,空串视为清除
  */
 githubPat: string, };

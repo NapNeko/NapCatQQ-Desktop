@@ -3,8 +3,11 @@
 /**
  * 本地已安装的 core 版本快照
  *
+ * 解析失败一律返回 None: UI 层"显示未安装"是足够的语义, 不需要把解析
+ * 错误暴露给用户. 装配方在 src-tauri/src/bootstrap.rs::detect_local_versions
+ *
  * 字段语义:
- * - Some("4.18.1"):已安装且解析到版本号
- * - None:未安装 / 安装文件不存在 / 解析失败(fallback,不抛错)
+ * - Some("4.18.1"): 已安装且解析到版本号
+ * - None: 未安装 / 安装文件不存在 / 解析失败(fallback, 不抛错)
  */
 export type LocalVersionSnapshot = { napcat?: string | null, snowluma?: string | null, };

@@ -5,16 +5,11 @@ import type { ReleaseAsset } from "./ReleaseAsset";
  * 单个项目的 release 元数据(NapCat / SnowLuma / Desktop 共用结构)
  *
  * 字段:
- * - version:tag_name 去 v 前缀后的版本号字面量;保留 release 自身
- *   写法,不强制 SemVer 校验
- * - tag:原始 tag_name(含 v 前缀,如 v1.9.2);下载 URL 拼接需要原始
- *   tag(GitHub release-assets 路径包含完整 tag)
- * - published_at:发布时间,Unix epoch 秒GitHub 返回 ISO8601,由
- *   runtime 层转换
- * - html_url:release 详情页 URL,前端"查看更新"按钮直接跳转
- * - release_notes:release notes 全文(GitHub body 字段)可能多行
- *   Markdown,前端按需渲染或截断
- * - assets:release 资产指纹列表(含 sha256),安装层下载完成后做
- *   完整性校验防代理投毒老缓存没该字段时按空 Vec 反序列化
+ * - version: tag_name 去 v 前缀后的版本号字面量, 保留 release 自身写法, 不强制 SemVer
+ * - tag: 原始 tag_name(含 v 前缀, 如 v1.9.2), 下载 URL 拼接需要原始 tag
+ * - published_at: 发布时间 Unix epoch 秒, GitHub 返回 ISO8601, 由 runtime 层转换
+ * - html_url: release 详情页 URL, 前端"查看更新"按钮直接跳转
+ * - release_notes: release notes 全文(GitHub body 字段), 可能多行 Markdown
+ * - assets: release 资产指纹列表(含 sha256), 安装层下载完成后做完整性校验防代理投毒
  */
 export type ReleaseInfo = { version: string, tag?: string, published_at: bigint, html_url: string, release_notes: string, assets?: Array<ReleaseAsset>, };

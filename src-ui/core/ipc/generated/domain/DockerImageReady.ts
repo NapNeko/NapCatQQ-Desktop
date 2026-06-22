@@ -2,7 +2,7 @@
 import type { DockerFlavor } from "./DockerFlavor";
 
 /**
- * 组件页「拉镜像」完成后的回读结果不创建容器;Bot 启动时再按配置起 ncbot-<qq>
+ * 组件页「拉镜像」完成后的回读结果, 不创建容器, Bot 启动时再按配置起 ncbot-<qq>
  */
 export type DockerImageReady = { 
 /**

@@ -5,9 +5,9 @@ import type { DockerStatus } from "./DockerStatus";
 /**
  * docker_install 命令回给前端的结构化结果
  *
- * 不再裸返回一句 String:前端要靠 status 区分"装好了弹绿条""需要 sudo 密码弹
- * 输入框""彻底装不了弹红条",光凭文案没法可靠分流message 是给用户看的人话,
- * download_url 仅 Windows/macOS 引导手动装时给下载入口
+ * 不再裸返回 String: 前端要靠 status 区分"装好了弹绿条" / "需要 sudo 密码弹输入框" /
+ * "彻底装不了弹红条", 光凭文案没法可靠分流
+ * message 是给用户看的人话, download_url 仅 Windows/macOS 引导手动装时给下载入口
  */
 export type DockerInstallReport = { 
 /**
@@ -23,6 +23,6 @@ message: string,
  */
 downloadUrl?: string | null, 
 /**
- * 安装流程结束时的探测快照,供前端立刻刷新 Docker 行,无需等下一轮 probe 或重启应用
+ * 安装流程结束时的探测快照, 供前端立刻刷新 Docker 行, 无需等下一轮 probe 或重启应用
  */
 probedStatus?: DockerStatus | null, };

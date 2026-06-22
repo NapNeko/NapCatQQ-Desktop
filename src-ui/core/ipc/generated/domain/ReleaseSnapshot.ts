@@ -4,12 +4,11 @@ import type { ReleaseInfo } from "./ReleaseInfo";
 /**
  * 一次拉取远端 releases 的快照结果
  *
- * 任一 *_latest 为 None 表示对应仓库本次未成功拉到(网络 / 解析失败 /
- * 仓库未配置),前端单独按字段降级fetched_at 为 None 表示从未成功
- * 拉取
+ * 任一 *_latest 为 None 表示对应仓库本次未成功拉到(网络 / 解析失败 / 仓库未配置),
+ * 前端单独按字段降级, fetched_at 为 None 表示从未成功拉取
  */
 export type ReleaseSnapshot = { napcat_latest?: ReleaseInfo | null, snowluma_latest?: ReleaseInfo | null, desktop_latest?: ReleaseInfo | null, 
 /**
- * 本快照拉取的时间戳 Unix epoch 秒None 表示从未成功拉取
+ * 本快照拉取的时间戳 Unix epoch 秒, None 表示从未成功拉取
  */
 fetched_at?: bigint | null, };

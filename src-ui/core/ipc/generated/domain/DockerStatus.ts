@@ -3,9 +3,9 @@
 /**
  * 目标主机上 Docker 的探测结果
  *
- * installed=false 时其余字段无意义(version 为空,两个 bool 为 false),前端
- * 据此显示"安装 Docker"按钮compose_available 单独拎出来是因为老系统可能
- * 有 docker 但没有 compose v2 插件
+ * installed=false 时其余字段无意义(version 为空, 两个 bool 为 false),
+ * 前端据此显示"安装 Docker"按钮
+ * compose_available 单独拎出来是因为老系统可能有 docker 但没有 compose v2 插件
  */
 export type DockerStatus = { 
 /**

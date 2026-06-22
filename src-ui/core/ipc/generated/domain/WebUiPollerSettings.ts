@@ -5,7 +5,7 @@
  */
 export type WebUiPollerSettings = { 
 /**
- * 登录态轮询间隔（毫秒），未登录时强制 1000ms
+ * 登录态轮询间隔(毫秒),未登录时强制 1000ms
  */
 botLoginCheckInterval: bigint, 
 /**

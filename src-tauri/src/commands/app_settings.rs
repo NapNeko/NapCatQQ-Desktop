@@ -133,7 +133,10 @@ pub fn sync_close_action_preference(
     let store = config_store(&state);
     let path = store.config_dir().join(APP_SETTINGS_FILE);
     let settings = load_app_settings_from(&store, &path);
-    Ok(settings.close_action)
+    serde_json::to_value(&settings.close_action)
+        .ok()
+        .and_then(|v| v.as_str().map(String::from))
+        .ok_or_else(|| "serialize close_action failed".to_string())
 }
 
 /// 从磁盘加载 AppSettings;文件缺失或解析失败一律回落 Default,不抛错

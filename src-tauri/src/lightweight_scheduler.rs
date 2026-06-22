@@ -37,18 +37,18 @@ impl LightweightScheduler {
             return;
         }
         let cfg = self.settings.read().await.clone();
-        if cfg.close_action != "tray" {
+        if cfg.close_action != ncd_domain::CloseAction::Tray {
             return;
         }
-        match cfg.after_close_ui_behavior.as_str() {
-            "hide" => return,
-            "immediate_lightweight" => {
+        match cfg.after_close_ui_behavior {
+            ncd_domain::AfterCloseUiBehavior::Hide => return,
+            ncd_domain::AfterCloseUiBehavior::ImmediateLightweight => {
                 if has_active_component_tasks(&app).await {
                     return;
                 }
                 let _ = lightweight::enter_lightweight_mode(&app);
             }
-            "delayed_lightweight" => {
+            ncd_domain::AfterCloseUiBehavior::DelayedLightweight => {
                 let mut delay = cfg.enter_lightweight_delay_secs;
                 if delay == 0 {
                     if has_active_component_tasks(&app).await {

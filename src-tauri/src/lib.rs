@@ -17,17 +17,17 @@ pub mod bootstrap;
 pub mod bot_host_resolver;
 pub mod commands;
 pub mod desktop_log;
+pub mod desktop_log_format;
 pub mod desktop_notify;
 pub mod lightweight;
 pub mod lightweight_scheduler;
+pub mod runtime;
 pub mod single_instance;
-pub mod tray_summary;
 pub mod tray_icon;
 pub mod tray_menu;
+pub mod tray_summary;
 pub mod window_icon;
 pub mod windows_toast;
-pub mod desktop_log_format;
-pub mod runtime;
 
 pub use bootstrap::{build_snapshot, build_snapshot_for_data_root};
 
@@ -126,7 +126,10 @@ pub fn run() {
     let lightweight_scheduler = Arc::new(lightweight_scheduler::LightweightScheduler::new(
         Arc::clone(&app_settings_shared),
     ));
-    let startup_tray_only = app_settings.ui_mode_on_startup == "tray_only";
+    let startup_tray_only = matches!(
+        app_settings.ui_mode_on_startup,
+        ncd_domain::UiModeOnStartup::TrayOnly
+    );
     let poller_settings = Arc::new(RwLock::new(app_settings.poller.clone()));
     let desktop_notify = Arc::new(RwLock::new(app_settings.desktop_notify_flags()));
     let tauri_notifier = desktop_notify::TauriOfflineNotifier::new();
@@ -134,10 +137,8 @@ pub fn run() {
     // ServerManager 提前构造,既给下面 AppState 用,也给 HostResolver 用(让
     // BotManager 能按 runtime_target 把 bot 启到本机 / 远端)
     // P0-10: 注入 event_bus,用于发布 HostConnectionLost / Recovered
-    let mut server_mgr = ncd_runtime::ServerManager::new(
-        &data_root,
-        Arc::new(ncd_runtime::KeyringCredentialStore),
-    );
+    let mut server_mgr =
+        ncd_runtime::ServerManager::new(&data_root, Arc::new(ncd_runtime::KeyringCredentialStore));
     server_mgr.set_event_bus(Arc::new(event_bus.clone()));
     let server_manager = Arc::new(server_mgr);
     let host_resolver: Arc<dyn ncd_runtime::HostResolver> =
@@ -358,7 +359,11 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     if let Some(state) = app_handle.try_state::<AppState>() {
-                        let enabled = state.app_settings.read().await.remote_host_health_probe_enabled;
+                        let enabled = state
+                            .app_settings
+                            .read()
+                            .await
+                            .remote_host_health_probe_enabled;
                         if enabled {
                             let cancel_token = CancellationToken::new();
                             let child = cancel_token.child_token();
@@ -386,7 +391,7 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     let state = app.state::<AppState>();
                     let close_action = state.app_settings.read().await.close_action.clone();
-                    if close_action == "tray" {
+                    if matches!(close_action, ncd_domain::CloseAction::Tray) {
                         if let Err(err) =
                             commands::tray::hide_main_window_to_tray(app.clone()).await
                         {

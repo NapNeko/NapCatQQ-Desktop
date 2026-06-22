@@ -4,14 +4,14 @@
  * 单个 release asset 的指纹条目
  *
  * sha256 来源是 GitHub Releases API 的 assets[*].digest 字段
- * ("sha256:<64-hex>" 形态,由 runtime 层剥前缀),用于安装前下载完整性
- * 校验GitHub 没给 digest(老仓库 / 老 release)时该字段为空串,前端 /
- * 安装层应当当作"无 hash 数据"处理
+ * ("sha256:<64-hex>" 形态, 由 runtime 层剥前缀), 用于安装前下载完整性校验
+ * GitHub 没给 digest(老仓库 / 老 release)时该字段为空串,
+ * 前端 / 安装层应当当作"无 hash 数据"处理
  */
 export type ReleaseAsset = { 
 /**
- * asset 文件名,与 release URL 路径末尾一致(如 NapCat.Shell.zip /
- * SnowLuma-v1.9.2-win-x64.zip)安装层按文件名反查指纹
+ * asset 文件名, 与 release URL 路径末尾一致(如 NapCat.Shell.zip /
+ * SnowLuma-v1.9.2-win-x64.zip), 安装层按文件名反查指纹
  */
 name: string, 
 /**

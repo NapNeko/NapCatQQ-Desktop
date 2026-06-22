@@ -2,7 +2,7 @@
 import type { ContainerState } from "./ContainerState";
 
 /**
- * 一个已存在容器的概要信息来自 docker ps -a 逐行 JSON 解析
+ * 一个已存在容器的概要信息, 来自 docker ps -a 逐行 JSON 解析
  */
 export type ContainerInfo = { 
 /**

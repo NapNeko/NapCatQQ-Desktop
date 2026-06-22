@@ -5,7 +5,7 @@
  */
 export type SnowLumaAppConfig = { 
 /**
- * App 级 WebUI 密码覆盖，空字符串视为未设置
+ * App 级 WebUI 密码覆盖,空字符串视为未设置
  */
 snowlumaWebuiPasswordOverride: string, 
 /**
