@@ -15,6 +15,12 @@ pub struct WgetProgressParser {
     update_interval: Duration,
 }
 
+impl Default for WgetProgressParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WgetProgressParser {
     pub fn new() -> Self {
         Self {
@@ -64,6 +70,12 @@ impl WgetProgressParser {
 pub struct CurlProgressParser {
     last_update: Option<Instant>,
     update_interval: Duration,
+}
+
+impl Default for CurlProgressParser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CurlProgressParser {

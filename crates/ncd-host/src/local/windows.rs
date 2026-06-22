@@ -84,9 +84,7 @@ impl Default for LocalWindowsHost {
     }
 }
 
-// ============================================================
 // Host trait 实装
-// ============================================================
 
 #[async_trait]
 impl Host for LocalWindowsHost {
@@ -462,13 +460,9 @@ impl Host for LocalWindowsHost {
                     match pipe.read(&mut chunk).await {
                         Ok(0) => break,
                         Ok(n) => {
-                            crate::stream_chunk::feed_stream_chunk(
-                                &mut buf,
-                                &chunk[..n],
-                                |s| {
-                                    let _ = tx_out.try_send((StreamSource::Stdout, s));
-                                },
-                            );
+                            crate::stream_chunk::feed_stream_chunk(&mut buf, &chunk[..n], |s| {
+                                let _ = tx_out.try_send((StreamSource::Stdout, s));
+                            });
                         }
                         Err(_) => break,
                     }
@@ -488,13 +482,9 @@ impl Host for LocalWindowsHost {
                     match pipe.read(&mut chunk).await {
                         Ok(0) => break,
                         Ok(n) => {
-                            crate::stream_chunk::feed_stream_chunk(
-                                &mut buf,
-                                &chunk[..n],
-                                |s| {
-                                    let _ = tx_err.try_send((StreamSource::Stderr, s));
-                                },
-                            );
+                            crate::stream_chunk::feed_stream_chunk(&mut buf, &chunk[..n], |s| {
+                                let _ = tx_err.try_send((StreamSource::Stderr, s));
+                            });
                         }
                         Err(_) => break,
                     }
@@ -550,9 +540,7 @@ impl Host for LocalWindowsHost {
     }
 }
 
-// ============================================================
-// build_tokio_command:HostCommand → tokio::process::Command
-// ============================================================
+// build_tokio_command: HostCommand -> tokio::process::Command
 
 fn build_tokio_command(cmd: &HostCommand, host: &LocalWindowsHost) -> Result<Command, HostError> {
     if cmd.program.is_empty() {
@@ -577,9 +565,7 @@ fn build_tokio_command(cmd: &HostCommand, host: &LocalWindowsHost) -> Result<Com
     Ok(tokio_cmd)
 }
 
-// ============================================================
-// ChildHostProcess:tokio::process::Child 包装成 HostProcess
-// ============================================================
+// ChildHostProcess: tokio::process::Child 包装成 HostProcess
 
 struct ChildHostProcess {
     child: Option<Child>,
@@ -657,7 +643,7 @@ impl HostProcess for ChildHostProcess {
             .ok_or_else(|| HostError::InvalidArgument {
                 reason: "child already consumed".into(),
             })?;
-        let stdin = child.stdin.as_mut().ok_or_else(|| HostError::Unsupported {
+        let stdin = child.stdin.as_mut().ok_or(HostError::Unsupported {
             operation: "stdin pipe not available",
         })?;
         stdin.write_all(data).await?;
@@ -696,9 +682,7 @@ impl HostProcess for ChildHostProcess {
 
 // _Arc 已使用 prelude 引入但 Rust analyzer 可能报 unused —— 这里实际未用,删除即可
 
-// ============================================================
 // 同步解压辅助(在 spawn_blocking 内调用)
-// ============================================================
 
 fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
     let file = std::fs::File::open(archive).map_err(|e| format!("open zip: {e}"))?;
@@ -737,9 +721,7 @@ fn extract_tar_gz(archive: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-// ============================================================
 // 测试
-// ============================================================
 
 #[cfg(test)]
 mod tests {

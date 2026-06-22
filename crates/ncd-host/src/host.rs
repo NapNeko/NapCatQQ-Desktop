@@ -67,7 +67,6 @@ pub enum StreamSource {
 /// 跨平台主机统一接口
 ///
 /// 调用方使用模式:
-/// ignore
 /// async fn install_napcat(host: &dyn Host) -> Result<(), HostError> {
 ///     match host.os() {
 ///         Os::Windows => host.spawn(HostCommand::new("powershell")
@@ -80,7 +79,6 @@ pub enum StreamSource {
 ///     };
 ///     Ok(())
 /// }
-/// 
 #[async_trait]
 pub trait Host: Send + Sync {
     // ===== 身份信息(实装时探测一次缓存) =====
@@ -141,11 +139,7 @@ pub trait Host: Send + Sync {
     /// - 远程 Windows Stub:返回 Unsupported
     ///
     /// 默认实现返回 Unsupported,让调用方 fallback 到"本地下载→upload"
-    async fn download_url(
-        &self,
-        _url: &str,
-        _dest: &HostPath,
-    ) -> Result<(), HostError> {
+    async fn download_url(&self, _url: &str, _dest: &HostPath) -> Result<(), HostError> {
         Err(HostError::Unsupported {
             operation: "download_url",
         })
@@ -194,7 +188,9 @@ pub trait Host: Send + Sync {
     async fn command_exists(&self, command: &str) -> bool {
         let probe = match self.os() {
             Os::Windows => HostCommand::new("where").arg(command),
-            _ => HostCommand::new("sh").arg("-c").arg(format!("command -v {command}")),
+            _ => HostCommand::new("sh")
+                .arg("-c")
+                .arg(format!("command -v {command}")),
         };
         matches!(self.run_to_string(probe).await, Ok(out) if out.success())
     }

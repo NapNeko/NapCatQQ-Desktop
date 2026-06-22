@@ -56,9 +56,7 @@ pub trait HostShell: Send + Sync {
     }
 }
 
-// ============================================================
 // BashShell
-// ============================================================
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct BashShell;
@@ -90,9 +88,7 @@ impl HostShell for BashShell {
     }
 }
 
-// ============================================================
 // PowerShellShell
-// ============================================================
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PowerShellShell;
@@ -136,9 +132,7 @@ impl HostShell for PowerShellShell {
     }
 }
 
-// ============================================================
-// CmdShell(legacy Windows bat / cmd 兼容)
-// ============================================================
+// CmdShell (legacy Windows bat / cmd 兼容)
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CmdShell;
@@ -154,7 +148,10 @@ impl HostShell for CmdShell {
         }
         // cmd 转义最复杂,最稳的做法:用 " 包裹,内部 " → "",
         // ^ & | < > ( ) 等元字符在双引号内已经被禁用所以不用单独转
-        if arg.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '=')) {
+        if arg
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | ':' | '='))
+        {
             arg.to_string()
         } else {
             let escaped = arg.replace('"', "\"\"");
@@ -195,14 +192,19 @@ mod tests {
     #[test]
     fn bash_keeps_safe_chars_raw() {
         let sh = BashShell;
-        assert_eq!(sh.escape("/etc/napcat/runtime.json"), "/etc/napcat/runtime.json");
+        assert_eq!(
+            sh.escape("/etc/napcat/runtime.json"),
+            "/etc/napcat/runtime.json"
+        );
         assert_eq!(sh.escape("--depth=1"), "--depth=1");
     }
 
     #[test]
     fn bash_command_line_includes_env() {
         let sh = BashShell;
-        let cmd = HostCommand::new("git").arg("status").env("GIT_TERMINAL_PROMPT", "0");
+        let cmd = HostCommand::new("git")
+            .arg("status")
+            .env("GIT_TERMINAL_PROMPT", "0");
         let line = sh.build_command_line(&cmd);
         assert!(line.contains("GIT_TERMINAL_PROMPT=0"));
         assert!(line.contains("git status"));

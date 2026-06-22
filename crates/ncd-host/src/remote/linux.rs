@@ -147,15 +147,17 @@ impl RemoteLinuxHost {
             port: config.port,
             host_key_error: Arc::clone(&host_key_error),
         };
-        let mut russh_cfg = client::Config::default();
         // 长任务(apt 等锁,流式安装)需要更长的会话空闲上限;仅靠 keepalive 时
         // 默认 inactivity=2×keepalive 在部分 sshd/中间设备上仍可能被掐断
-        russh_cfg.inactivity_timeout = match config.keepalive_interval {
-            Some(d) if d <= Duration::from_secs(20) => Some(Duration::from_secs(900)),
-            Some(d) => Some(d.saturating_mul(4)),
-            None => None,
+        let russh_cfg = client::Config {
+            inactivity_timeout: match config.keepalive_interval {
+                Some(d) if d <= Duration::from_secs(20) => Some(Duration::from_secs(900)),
+                Some(d) => Some(d.saturating_mul(4)),
+                None => None,
+            },
+            keepalive_interval: config.keepalive_interval,
+            ..client::Config::default()
         };
-        russh_cfg.keepalive_interval = config.keepalive_interval;
         let russh_cfg = Arc::new(russh_cfg);
 
         let addr = format!("{}:{}", config.host, config.port);
@@ -441,9 +443,7 @@ async fn load_key(key: &SshKey) -> Result<key::KeyPair, HostError> {
     }
 }
 
-// ============================================================
 // Host trait 实装
-// ============================================================
 
 #[async_trait]
 impl Host for RemoteLinuxHost {
@@ -676,24 +676,16 @@ impl Host for RemoteLinuxHost {
             match tokio::time::timeout_at(deadline, channel.wait()).await {
                 Ok(Some(msg)) => match msg {
                     ChannelMsg::Data { ref data } => {
-                        crate::stream_chunk::feed_stream_chunk(
-                            &mut stdout_buf,
-                            data,
-                            |s| {
-                                on_line(StreamSource::Stdout, s.clone());
-                                stdout_lines.push(s);
-                            },
-                        );
+                        crate::stream_chunk::feed_stream_chunk(&mut stdout_buf, data, |s| {
+                            on_line(StreamSource::Stdout, s.clone());
+                            stdout_lines.push(s);
+                        });
                     }
-                    ChannelMsg::ExtendedData { ref data, ext } if ext == 1 => {
-                        crate::stream_chunk::feed_stream_chunk(
-                            &mut stderr_buf,
-                            data,
-                            |s| {
-                                on_line(StreamSource::Stderr, s.clone());
-                                stderr_lines.push(s);
-                            },
-                        );
+                    ChannelMsg::ExtendedData { ref data, ext: 1 } => {
+                        crate::stream_chunk::feed_stream_chunk(&mut stderr_buf, data, |s| {
+                            on_line(StreamSource::Stderr, s.clone());
+                            stderr_lines.push(s);
+                        });
                     }
                     ChannelMsg::ExitStatus { exit_status } => {
                         exit_code = Some(exit_status as i32);
@@ -731,7 +723,9 @@ impl Host for RemoteLinuxHost {
         RemoteLinuxHost::open_tunnel(self, spec).await
     }
 
-    fn supports_refresh(&self) -> bool { true }
+    fn supports_refresh(&self) -> bool {
+        true
+    }
 
     async fn invalidate_connection(&self) {
         self.invalidate_main_handle().await;
@@ -739,11 +733,11 @@ impl Host for RemoteLinuxHost {
     }
 
     async fn is_healthy(&self) -> bool {
-        let probe = HostCommand::new("sh").arg("-c").arg("echo ok").timeout(Duration::from_secs(3));
-        match self.run_to_string(probe).await {
-            Ok(out) if out.success() => true,
-            _ => false,
-        }
+        let probe = HostCommand::new("sh")
+            .arg("-c")
+            .arg("echo ok")
+            .timeout(Duration::from_secs(3));
+        matches!(self.run_to_string(probe).await, Ok(out) if out.success())
     }
 
     // ===== 文件操作(基于 SFTP)=====
@@ -1045,7 +1039,11 @@ impl Host for RemoteLinuxHost {
 
         if !out.success() {
             return Err(HostError::CommandFailed {
-                program: if has_wget { "wget".into() } else { "curl".into() },
+                program: if has_wget {
+                    "wget".into()
+                } else {
+                    "curl".into()
+                },
                 exit_code: out.exit_code,
                 stderr: out.stderr.lines().take(5).collect::<Vec<_>>().join("\n"),
             });
@@ -1055,9 +1053,7 @@ impl Host for RemoteLinuxHost {
     }
 }
 
-// ============================================================
-// 辅助:命令拼接 + SFTP 打开 + 错误映射
-// ============================================================
+// 辅助: 命令拼接 + SFTP 打开 + 错误映射
 
 fn build_remote_command_line(shell: &dyn HostShell, cmd: &HostCommand) -> String {
     // 远端不复用 BashShell::build_command_line 完全的能力(它没处理 cwd),这里手动加 cd
@@ -1117,9 +1113,9 @@ async fn open_sftp(
     handle: &Arc<Mutex<Option<ClientHandle<ClientCallback>>>>,
 ) -> Result<russh_sftp::client::SftpSession, HostError> {
     let session_guard = handle.lock().await;
-    let session = session_guard.as_ref().ok_or_else(|| {
-        HostError::remote_disconnected("ssh session poisoned for sftp")
-    })?;
+    let session = session_guard
+        .as_ref()
+        .ok_or_else(|| HostError::remote_disconnected("ssh session poisoned for sftp"))?;
     let channel = session
         .channel_open_session()
         .await
@@ -1160,9 +1156,7 @@ fn sftp_err_to_host(
     }
 }
 
-// ============================================================
 // 收集 channel 输出(用于 run_to_string)
-// ============================================================
 
 async fn collect_channel_output(
     channel: &mut russh::Channel<russh::client::Msg>,
@@ -1174,7 +1168,7 @@ async fn collect_channel_output(
     while let Some(msg) = channel.wait().await {
         match msg {
             ChannelMsg::Data { ref data } => stdout.extend_from_slice(data),
-            ChannelMsg::ExtendedData { ref data, ext } if ext == 1 => {
+            ChannelMsg::ExtendedData { ref data, ext: 1 } => {
                 stderr.extend_from_slice(data);
             }
             ChannelMsg::ExitStatus { exit_status } => {
@@ -1196,9 +1190,7 @@ async fn collect_channel_output(
     })
 }
 
-// ============================================================
-// RemoteHostProcess:russh::Channel 包装成 HostProcess
-// ============================================================
+// RemoteHostProcess: russh::Channel 包装成 HostProcess
 
 struct RemoteHostProcess {
     channel: Option<russh::Channel<russh::client::Msg>>,
@@ -1297,9 +1289,7 @@ impl HostProcess for RemoteHostProcess {
     }
 }
 
-// ============================================================
-// Tunnel(端口转发,direct-tcpip)
-// ============================================================
+// Tunnel (端口转发, direct-tcpip)
 
 impl RemoteLinuxHost {
     /// 打开端口转发隧道:本地 spec.local_port → 远端 spec.remote_host:spec.remote_port
@@ -1382,10 +1372,8 @@ impl RemoteLinuxHost {
     }
 }
 
-// ============================================================
-// 单测:sudo 命令拼接是纯逻辑,从 async 方法里抽出来直接断言
+// 单测: sudo 命令拼接是纯逻辑,从 async 方法里抽出来直接断言
 // 真正的 SSH 往返不在这测(需要活的远端),只锁定命令行字符串形状
-// ============================================================
 
 #[cfg(test)]
 mod tests {

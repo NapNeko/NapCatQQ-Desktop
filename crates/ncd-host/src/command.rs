@@ -41,7 +41,6 @@ impl HostProcessWaitPolicy {
 /// 跨平台命令描述
 ///
 /// 使用建议:
-/// ignore
 /// let cmd = HostCommand::new("git")
 ///     .arg("clone")
 ///     .arg("--depth=1")
@@ -50,7 +49,6 @@ impl HostProcessWaitPolicy {
 ///     .env("GIT_TERMINAL_PROMPT", "0")
 ///     .timeout(Duration::from_secs(60));
 /// host.spawn(cmd).await?
-/// 
 #[derive(Debug, Clone)]
 pub struct HostCommand {
     pub program: String,
