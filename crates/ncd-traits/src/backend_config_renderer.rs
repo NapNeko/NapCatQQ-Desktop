@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
+use crate::config_store::JsonTransaction;
 use ncd_domain::bot_config::BotConfig;
 use ncd_domain::ids::BotId;
-use crate::config_store::JsonTransaction;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {
@@ -29,14 +29,14 @@ pub trait BackendConfigRenderer: Send + Sync {
     /// output directory. The caller commits the transaction via ConfigStore::apply_transaction.
     fn render(&self, bot_id: &BotId, config: &BotConfig) -> Result<JsonTransaction, RenderError>;
 
-    /// 渲染时合并已有派生文件中的"未知字段"
+    /// 渲染时合并已有派生文件中的 unknown fields
     ///
-    /// 用于"用户在派生文件里加了我们 schema 不识别的字段"的场景:默认实装直接
+    /// 用于用户在派生文件里加了我们 schema 不识别的字段的场景:默认实现直接
     /// 调 render,把已有内容丢弃;NapCat / SnowLuma renderer 各自重写这个方法
     /// 用 deep merge 把 existing[path] 里 schema 之外的字段合进来
     ///
     /// existing 的 key 是 output_paths 返回的路径之一;不在 map 里的路径
-    /// 当作"派生文件不存在"处理(直接走 render)
+    /// 当作派生文件不存在处理(直接走 render)
     fn render_with_existing(
         &self,
         bot_id: &BotId,
