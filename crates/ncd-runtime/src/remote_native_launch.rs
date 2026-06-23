@@ -204,7 +204,7 @@ pub struct RemoteNativeLaunchTranslator {
     server_id: String,
     /// Shared coordinator so that concurrent batch starts (or mixed NC+SL on the same host)
     /// serialize the flip of the shared package.json main + artifact verification.
-    coordinator: Arc<crate::bot_manager::RemoteQqEntryCoordinator>,
+    coordinator: Arc<crate::remote_coordinator::RemoteQqEntryCoordinator>,
     cached_layout: tokio::sync::Mutex<Option<(String, RemoteNapcatLayout)>>,
 }
 
@@ -221,7 +221,7 @@ impl RemoteNativeLaunchTranslator {
         host: Arc<dyn Host>,
         flavor: BotFlavor,
         server_id: String,
-        coordinator: Arc<crate::bot_manager::RemoteQqEntryCoordinator>,
+        coordinator: Arc<crate::remote_coordinator::RemoteQqEntryCoordinator>,
     ) -> Self {
         Self {
             host,

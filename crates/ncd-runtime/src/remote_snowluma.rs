@@ -565,7 +565,7 @@ pub struct RemoteSnowLumaBackend {
     /// Shared coordinator for flipping the common ~/Napcat/opt/QQ tree entry point.
     /// Passed from BotManager so that NC and SL cold starts on the same server_id
     /// serialize their package.json main changes.
-    qq_entry_coordinator: Arc<crate::bot_manager::RemoteQqEntryCoordinator>,
+    qq_entry_coordinator: Arc<crate::remote_coordinator::RemoteQqEntryCoordinator>,
 }
 
 impl RemoteSnowLumaBackend {
@@ -582,7 +582,7 @@ impl RemoteSnowLumaBackend {
         daemon: Arc<RemoteSnowLumaDaemon>,
         event_bus: Arc<BroadcastEventBus>,
         tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
-        qq_entry_coordinator: Arc<crate::bot_manager::RemoteQqEntryCoordinator>,
+        qq_entry_coordinator: Arc<crate::remote_coordinator::RemoteQqEntryCoordinator>,
     ) -> Self {
         Self {
             backend_id: backend_id.into(),

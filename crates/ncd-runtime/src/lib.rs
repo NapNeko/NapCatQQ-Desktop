@@ -24,6 +24,7 @@ pub mod package_lock;
 pub mod path_probe_impl;
 pub mod release;
 pub mod remote_bot_log_follow;
+pub mod remote_coordinator;
 pub mod remote_native_launch;
 pub mod remote_native_napcat_session;
 pub mod remote_snowluma;
