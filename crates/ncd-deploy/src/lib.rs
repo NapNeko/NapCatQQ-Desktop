@@ -23,7 +23,7 @@ pub use deployment::{
     NativeLaunchCommand, NativeLaunchTranslator, NullProgressSink,
 };
 pub use deployments::{
-    DockerDeployment, ExternalDeployment, NativeDeployment, NativeLogSnapshot,
+    DockerDeployment, EventBusSink, ExternalDeployment, NativeDeployment, NativeLogSnapshot,
     NativeRuntimeEventSink, NullRuntimeEventSink, bot_docker_container_name,
     parse_napcat_webui_line, strip_ansi_escapes,
 };

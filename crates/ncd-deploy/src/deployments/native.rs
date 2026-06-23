@@ -81,6 +81,48 @@ impl NativeRuntimeEventSink for NullRuntimeEventSink {
     }
 }
 
+/// 把 NativeDeployment 的运行时事件桥接到 BroadcastEventBus
+pub struct EventBusSink {
+    bus: std::sync::Arc<ncd_traits::BroadcastEventBus>,
+}
+
+impl EventBusSink {
+    pub fn new(bus: std::sync::Arc<ncd_traits::BroadcastEventBus>) -> Self {
+        Self { bus }
+    }
+}
+
+impl NativeRuntimeEventSink for EventBusSink {
+    fn publish_log_line(&self, bot_id: &BotId, line: &str, channel: &str) {
+        self.bus.publish(ncd_domain::DomainEvent::BotLogAppended {
+            bot_id: bot_id.clone(),
+            line: line.to_string(),
+            channel: Some(channel.to_string()),
+        });
+    }
+
+    fn publish_napcat_webui_available(&self, bot_id: &BotId, port: u16, token: String) {
+        self.bus.publish(ncd_domain::DomainEvent::napcat_webui_available(
+            bot_id.clone(),
+            port,
+            token,
+        ));
+    }
+
+    fn publish_bot_process_exited(
+        &self,
+        bot_id: &BotId,
+        exit_code: Option<i32>,
+        reason: Option<String>,
+    ) {
+        self.bus.publish(ncd_domain::DomainEvent::bot_process_exited(
+            bot_id.clone(),
+            exit_code,
+            reason,
+        ));
+    }
+}
+
 /// 单个 bot 进程的运行时档案
 #[derive(Debug)]
 struct ManagedProcess {

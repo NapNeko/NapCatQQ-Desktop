@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 ncd-domain = { path = "../ncd-domain" }
+ncd-traits = { path = "../ncd-traits" }
 ncd-host = { path = "../ncd-host" }
 ncd-component = { path = "../ncd-component" }
 ncd-template = { path = "../ncd-template" }

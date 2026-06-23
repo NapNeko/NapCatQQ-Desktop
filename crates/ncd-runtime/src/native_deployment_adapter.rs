@@ -4,6 +4,7 @@
 //! - RuntimeLaunchPlannerAdapter:实装 NativeLaunchTranslator trait,包装现有
 //!   FileSystemRuntimeLaunchPlanner
 //! - EventBusSink:实装 NativeRuntimeEventSink trait,桥接 BroadcastEventBus
+//!   (已下沉到 ncd-deploy,此处 re-export)
 //! - NativeDeploymentBackend:把 NativeDeployment 包成 BotBackend trait object,
 //!   让 BotManager 无需修改结构体即可切到新实装后续删 BotBackend 时一起删
 
@@ -84,49 +85,8 @@ impl NativeLaunchTranslator for RuntimeLaunchPlannerAdapter {
     }
 }
 
-// EventBusSink
-
-/// 把 NativeDeployment 的运行时事件桥接到 BroadcastEventBus
-pub struct EventBusSink {
-    bus: Arc<BroadcastEventBus>,
-}
-
-impl EventBusSink {
-    pub fn new(bus: Arc<BroadcastEventBus>) -> Self {
-        Self { bus }
-    }
-}
-
-impl NativeRuntimeEventSink for EventBusSink {
-    fn publish_log_line(&self, bot_id: &BotId, line: &str, channel: &str) {
-        self.bus.publish(DomainEvent::BotLogAppended {
-            bot_id: bot_id.clone(),
-            line: line.to_string(),
-            channel: Some(channel.to_string()),
-        });
-    }
-
-    fn publish_napcat_webui_available(&self, bot_id: &BotId, port: u16, token: String) {
-        self.bus.publish(DomainEvent::napcat_webui_available(
-            bot_id.clone(),
-            port,
-            token,
-        ));
-    }
-
-    fn publish_bot_process_exited(
-        &self,
-        bot_id: &BotId,
-        exit_code: Option<i32>,
-        reason: Option<String>,
-    ) {
-        self.bus.publish(DomainEvent::bot_process_exited(
-            bot_id.clone(),
-            exit_code,
-            reason,
-        ));
-    }
-}
+// re-export EventBusSink from ncd-deploy for backward compatibility
+pub use ncd_deploy::EventBusSink;
 
 // NativeDeploymentBackend:过渡壳
 //
