@@ -82,31 +82,36 @@ impl NativeRuntimeEventSink for NullRuntimeEventSink {
 }
 
 /// 把 NativeDeployment 的运行时事件桥接到 BroadcastEventBus
+///
+/// 需要在调用 `.publish()` 的作用域里 use ncd_traits::EventBus;
+/// 此处直接在 impl 块内用 fully-qualified 调用避免顶层依赖。
 pub struct EventBusSink {
-    bus: std::sync::Arc<ncd_traits::BroadcastEventBus>,
+    bus: Arc<ncd_traits::BroadcastEventBus>,
 }
 
 impl EventBusSink {
-    pub fn new(bus: std::sync::Arc<ncd_traits::BroadcastEventBus>) -> Self {
+    pub fn new(bus: Arc<ncd_traits::BroadcastEventBus>) -> Self {
         Self { bus }
     }
 }
 
 impl NativeRuntimeEventSink for EventBusSink {
     fn publish_log_line(&self, bot_id: &BotId, line: &str, channel: &str) {
-        self.bus.publish(ncd_domain::DomainEvent::BotLogAppended {
-            bot_id: bot_id.clone(),
-            line: line.to_string(),
-            channel: Some(channel.to_string()),
-        });
+        ncd_traits::EventBus::publish(
+            &*self.bus,
+            ncd_domain::DomainEvent::BotLogAppended {
+                bot_id: bot_id.clone(),
+                line: line.to_string(),
+                channel: Some(channel.to_string()),
+            },
+        );
     }
 
     fn publish_napcat_webui_available(&self, bot_id: &BotId, port: u16, token: String) {
-        self.bus.publish(ncd_domain::DomainEvent::napcat_webui_available(
-            bot_id.clone(),
-            port,
-            token,
-        ));
+        ncd_traits::EventBus::publish(
+            &*self.bus,
+            ncd_domain::DomainEvent::napcat_webui_available(bot_id.clone(), port, token),
+        );
     }
 
     fn publish_bot_process_exited(
@@ -115,11 +120,10 @@ impl NativeRuntimeEventSink for EventBusSink {
         exit_code: Option<i32>,
         reason: Option<String>,
     ) {
-        self.bus.publish(ncd_domain::DomainEvent::bot_process_exited(
-            bot_id.clone(),
-            exit_code,
-            reason,
-        ));
+        ncd_traits::EventBus::publish(
+            &*self.bus,
+            ncd_domain::DomainEvent::bot_process_exited(bot_id.clone(), exit_code, reason),
+        );
     }
 }
 
