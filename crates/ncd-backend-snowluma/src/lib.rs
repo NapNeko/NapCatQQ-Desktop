@@ -1,4 +1,10 @@
 pub mod snowluma;
+pub mod remote_snowluma;
+pub mod remote_snowluma_layout;
+pub mod remote_snowluma_log;
+pub mod remote_snowluma_orchestrator;
+pub mod remote_snowluma_stack;
+pub mod remote_snowluma_tunnel;
 
 pub use snowluma::{
     AuthState, DaemonState, HookProcessInfo, HookProcessStatus, LinuxSinglePidProbe,

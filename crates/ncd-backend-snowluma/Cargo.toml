@@ -9,6 +9,8 @@ ncd-domain = { path = "../ncd-domain" }
 ncd-traits = { path = "../ncd-traits" }
 ncd-host = { path = "../ncd-host" }
 ncd-network = { path = "../ncd-network" }
+ncd-component = { path = "../ncd-component" }
+ncd-deploy = { path = "../ncd-deploy" }
 async-trait = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
