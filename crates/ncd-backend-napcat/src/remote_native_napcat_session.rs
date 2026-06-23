@@ -16,7 +16,6 @@ use tracing::warn;
 use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::ids::BotId;
 use ncd_deploy::{EventBusSink, NativeRuntimeEventSink};
-use ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator;
 use ncd_traits::events::{BroadcastEventBus, EventBus};
 use crate::remote_native_launch::{napcat_remote_log_path, probe_remote_napcat_layout, RemoteNapcatLayout};
 

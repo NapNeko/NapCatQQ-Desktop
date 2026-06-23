@@ -12,7 +12,6 @@ use tokio::sync::Mutex;
 
 use ncd_deploy::backend_config_renderer::render_snowluma_docker_config_payloads;
 use ncd_domain::domain_event::DomainEvent;
-use ncd_domain::ids::BotId;
 use ncd_domain::kinds::BackendKind;
 use ncd_traits::events::{BroadcastEventBus, EventBus};
 use ncd_traits::runtime_backend::{
