@@ -234,7 +234,7 @@ fn normalize_app_config_import(value: serde_json::Value) -> Result<serde_json::V
 /// validate + QQ 去重任一非法即中止,返回迁移后的强类型化 payload(而非原样透传)
 fn normalize_bot_config_import(
     value: serde_json::Value,
-    secrets: &dyn ncd_runtime::SecretStore,
+    secrets: &dyn ncd_traits::SecretStore,
 ) -> Result<serde_json::Value, String> {
     use std::collections::HashSet;
     let migrated = ncd_runtime::bot_config_migration::migrate_bot_config(value, secrets)
@@ -244,7 +244,7 @@ fn normalize_bot_config_import(
         .get("bots")
         .cloned()
         .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
-    let bots: Vec<ncd_runtime::BotConfig> = serde_json::from_value(bots_payload)
+    let bots: Vec<ncd_domain::BotConfig> = serde_json::from_value(bots_payload)
         .map_err(|e| format!("bot.json 不是合法 Bot 配置,已中止导入: {e}"))?;
     let mut seen = HashSet::new();
     for bot in &bots {
@@ -272,9 +272,9 @@ fn normalize_servers_import(value: serde_json::Value) -> Result<serde_json::Valu
 fn build_import_transaction(
     staging: &Path,
     data_root: &Path,
-    secrets: &dyn ncd_runtime::SecretStore,
-) -> Result<(ncd_runtime::JsonTransaction, Vec<String>, Vec<String>), String> {
-    let mut txn = ncd_runtime::JsonTransaction::new();
+    secrets: &dyn ncd_traits::SecretStore,
+) -> Result<(ncd_traits::JsonTransaction, Vec<String>, Vec<String>), String> {
+    let mut txn = ncd_traits::JsonTransaction::new();
     let mut files = Vec::new();
     let mut skipped = Vec::new();
 
@@ -314,7 +314,8 @@ pub async fn import_config(
     state: State<'_, AppState>,
     source_path: String,
 ) -> Result<ConfigImportResult, String> {
-    use ncd_runtime::{ConfigStore, LocalConfigStore, SecretStoreImpl};
+    use ncd_runtime::{LocalConfigStore, SecretStoreImpl};
+    use ncd_traits::ConfigStore;
 
     let source = PathBuf::from(&source_path);
     let (staging, _kind, _guard) = resolve_import_staging(&source)?;

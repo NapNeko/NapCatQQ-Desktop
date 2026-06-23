@@ -1,9 +1,9 @@
 use serde_json::{Map, Value};
 
-use crate::errors::MigrationError;
-use crate::kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion};
-use crate::models::{BotRuntimeSummary, MigrationWarning};
-use crate::traits::SecretStore;
+use ncd_domain::errors::MigrationError;
+use ncd_domain::kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion};
+use ncd_domain::migration::{BotRuntimeSummary, MigrationWarning};
+use ncd_traits::SecretStore;
 
 pub const BOT_CONFIG_COMPAT_VERSION: &str = "v2.1";
 const BOT_CONFIG_LEGACY_VERSION: &str = "v1.7.28";

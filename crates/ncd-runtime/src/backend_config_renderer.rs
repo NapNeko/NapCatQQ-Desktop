@@ -8,9 +8,9 @@ pub use ncd_deploy::backend_config_renderer::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::BotId;
-    use crate::bot_config::*;
-    use crate::kinds::RuntimeTarget;
+    use ncd_domain::BotId;
+    use ncd_domain::bot_config::*;
+    use ncd_domain::kinds::RuntimeTarget;
     use ncd_traits::BackendConfigRenderer;
 
     fn make_bot_id() -> BotId {

@@ -4,11 +4,12 @@ use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use ncd_runtime::{
-    BroadcastEventBus, DesktopNotifySettings, DomainEvent, EventBus, EventFilter,
+    BroadcastEventBus, DomainEvent, EventBus, EventFilter,
     OfflineNoticeKind, OfflineNotifier,
 };
-use ncd_runtime::events::NapCatLoginInvalidationReason;
-use ncd_runtime::ids::BotId;
+use ncd_domain::DesktopNotifySettings;
+use ncd_domain::napcat_events::NapCatLoginInvalidationReason;
+use ncd_domain::ids::BotId;
 use tauri::AppHandle;
 #[cfg(not(windows))]
 use tauri_plugin_notification::NotificationExt;

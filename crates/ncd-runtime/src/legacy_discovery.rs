@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 
 use tracing::info;
 
-use crate::errors::MigrationError;
-use crate::models::MigrationWarning;
-use crate::traits::PathProbe;
+use ncd_domain::errors::MigrationError;
+use ncd_domain::migration::MigrationWarning;
+use ncd_traits::PathProbe;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LegacySelection {
@@ -183,7 +183,7 @@ mod tests {
     }
 
     impl PathProbe for StaticProbe {
-        fn probe(&self) -> Result<Vec<PathBuf>, crate::errors::PathError> {
+        fn probe(&self) -> Result<Vec<PathBuf>, ncd_domain::errors::PathError> {
             Ok(self.roots.clone())
         }
 

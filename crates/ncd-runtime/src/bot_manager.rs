@@ -8,16 +8,12 @@ use rand::RngCore;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info, warn};
 
-use crate::app_config::WebUiPollerSettings;
 use crate::backend_config_renderer::output_paths_for_backend;
 use crate::bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
-use crate::bot_config::{BackendType, BotConfig, BotConfigError};
 use crate::docker_bot_session::{
     DockerBotSessionRegistry, is_remote_docker_config, is_remote_native_napcat_config,
 };
 use crate::events::{BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter};
-use crate::ids::BotId;
-use crate::kinds::BotFlavor;
 use crate::napcat::endpoint_table::{NapCatEndpoint, NapCatEndpointTable};
 use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 use crate::napcat::offline_notifier::OfflineNotifier;
@@ -26,27 +22,33 @@ use crate::native_deployment_adapter::{
     DockerDeploymentBackend, EventBusSink, RemoteNativeDeploymentBackend,
 };
 use crate::remote_bot_log_follow::RemoteBotLogFollowRegistry;
-use crate::remote_native_launch::{RemoteNativeLaunchTranslator, remote_napcat_running_pid};
-use crate::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
-use crate::remote_snowluma::{
+use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
+use ncd_backend_napcat::remote_native_launch::{
+    RemoteNativeLaunchTranslator, remote_napcat_running_pid,
+};
+use ncd_backend_napcat::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
+use ncd_backend_snowluma::remote_snowluma::{
     RemoteSnowLumaBackend, RemoteSnowLumaDaemon, is_remote_native_snowluma_config,
     remote_qq_running_pid,
 };
-use crate::remote_snowluma_layout::SnowLumaRemotePaths;
-use crate::remote_snowluma_log::RemoteSnowLumaLogRegistry;
-use crate::remote_snowluma_tunnel::RemoteSnowLumaTunnelRegistry;
-use crate::runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, StopMode,
-};
-use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
-use crate::traits::{
-    BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction, SecretStore,
-};
+use ncd_backend_snowluma::remote_snowluma_layout::SnowLumaRemotePaths;
+use ncd_backend_snowluma::remote_snowluma_log::RemoteSnowLumaLogRegistry;
+use ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelRegistry;
 use ncd_deploy::NativeDeployment;
 use ncd_deploy::{Deployment, DeploymentState, DockerDeployment};
+use ncd_domain::app_config::WebUiPollerSettings;
+use ncd_domain::bot_config::{BackendType, BotConfig, BotConfigError, DeploymentType};
+use ncd_domain::ids::BotId;
+use ncd_domain::kinds::{BotFlavor, RuntimeTarget, StopMode};
 use ncd_domain::DesktopNotifySettings;
-use ncd_domain::{DeploymentType, RuntimeTarget};
-use ncd_host::{Host, HostPath};
+use ncd_host::Host;
+use ncd_traits::backend_config_renderer::BackendConfigRenderer;
+use ncd_traits::runtime_backend::{
+    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx,
+};
+use ncd_traits::{
+    BotConfigRepo, ConfigStore, JsonTransaction, SecretStore,
+};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
 
@@ -92,8 +94,8 @@ pub enum BotManagerError {
     Cancelled,
 }
 
-impl From<crate::traits::RenderError> for BotManagerError {
-    fn from(err: crate::traits::RenderError) -> Self {
+impl From<ncd_traits::RenderError> for BotManagerError {
+    fn from(err: ncd_traits::RenderError) -> Self {
         Self::Render(err.to_string())
     }
 }
@@ -125,7 +127,7 @@ pub struct BootstrapResult {
 /// must atomically switch the main field (to ./loadNapCat.js or ./app_launcher/index.js)
 /// and, for NapCat, verify that the injection artifacts actually exist.
 ///
-use crate::remote_coordinator::RemoteQqEntryCoordinator;
+use ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator;
 
 // ─── BotManager ────────────────────────────────────────────────────────────────
 
@@ -805,7 +807,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let running = handle.confirm_running().await?;
         self.publish_state_change(&running, "bootstrap_reconcile");
         self.event_bus.publish(DomainEvent::bot_status_changed(
-            crate::runtime_backend::BotStatus::running(bot_id.clone(), pid, 0),
+            ncd_domain::bot_status::BotStatus::running(bot_id.clone(), pid, 0),
             "bootstrap_reconcile",
         ));
         Ok(())
@@ -825,7 +827,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let running = handle.confirm_running().await?;
         self.publish_state_change(&running, "bootstrap_reconcile");
         self.event_bus.publish(DomainEvent::bot_status_changed(
-            crate::runtime_backend::BotStatus::running(bot_id.clone(), 0, 0),
+            ncd_domain::bot_status::BotStatus::running(bot_id.clone(), 0, 0),
             "bootstrap_reconcile",
         ));
 
@@ -1467,7 +1469,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .filter(|path| !current_paths.contains(path))
             .collect();
         if !delete_paths.is_empty() {
-            let mut txn = crate::traits::config_store::JsonTransaction::new();
+            let mut txn = ncd_traits::JsonTransaction::new();
             for path in delete_paths {
                 txn = txn.delete(path);
             }
@@ -1800,15 +1802,15 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         &self,
         bot_id: &BotId,
         lines: usize,
-    ) -> Result<crate::runtime_backend::LogSnapshot, BotManagerError> {
+    ) -> Result<ncd_traits::runtime_backend::LogSnapshot, BotManagerError> {
         // Actor 不存在直接返回空,UI 不需要为此报错
         if !self.actors.read().await.contains_key(bot_id) {
-            return Ok(crate::runtime_backend::LogSnapshot {
+            return Ok(ncd_traits::runtime_backend::LogSnapshot {
                 lines: Vec::new(),
                 total_lines: 0,
             });
         }
-        let opts = crate::runtime_backend::TailOpts { lines };
+        let opts = ncd_traits::runtime_backend::TailOpts { lines };
         match self.get_bot_config(bot_id).await? {
             Some(cfg) => {
                 let backend = self.backend_for_lifecycle(&cfg).await?;
@@ -1817,7 +1819,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     .await
                     .map_err(BotManagerError::from)
             }
-            None => Ok(crate::runtime_backend::LogSnapshot {
+            None => Ok(ncd_traits::runtime_backend::LogSnapshot {
                 lines: Vec::new(),
                 total_lines: 0,
             }),
@@ -2210,7 +2212,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     pub async fn snowluma_native_endpoints_for_server(
         &self,
         server_id: &str,
-    ) -> Option<crate::remote_snowluma_tunnel::RemoteSnowLumaTunnelEndpoints> {
+    ) -> Option<ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelEndpoints> {
         self.remote_snowluma_tunnels
             .endpoints_for_server(server_id)
             .await

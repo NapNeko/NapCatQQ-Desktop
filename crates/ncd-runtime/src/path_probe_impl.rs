@@ -1,8 +1,8 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-use crate::errors::PathError;
-use crate::traits::PathProbe;
+use ncd_domain::errors::PathError;
+use ncd_traits::PathProbe;
 
 pub struct LocalPathProbe {
     allowed_roots: Vec<PathBuf>,

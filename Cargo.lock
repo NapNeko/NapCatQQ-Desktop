@@ -3121,6 +3121,7 @@ dependencies = [
  "ncd-log",
  "ncd-runtime",
  "ncd-test-support",
+ "ncd-traits",
  "netstat2",
  "serde",
  "serde_json",

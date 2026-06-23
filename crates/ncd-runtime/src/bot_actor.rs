@@ -4,7 +4,7 @@ use tracing::{info, warn};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 
-use crate::ids::BotId;
+use ncd_domain::ids::BotId;
 
 // 类型定义已下沉到 ncd-domain，此处 re-export 保持向后兼容
 pub use ncd_domain::bot_actor::{BotActorError, BotActorSnapshot, BotActorState};

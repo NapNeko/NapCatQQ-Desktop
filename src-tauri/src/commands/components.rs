@@ -21,7 +21,8 @@ use ncd_component::{
 use ncd_domain::{InstallDependenciesResult, QqDependencyReport};
 use ncd_deploy::{DeployPlan, StepKind};
 use ncd_host::{Host, HostPath};
-use ncd_runtime::{release::read_cached_release_snapshot, DomainEvent, EventBus, ReleaseInfo};
+use ncd_runtime::{release::read_cached_release_snapshot, DomainEvent, EventBus};
+use ncd_domain::release_snapshot::ReleaseInfo;
 use tauri::State;
 use uuid::Uuid;
 

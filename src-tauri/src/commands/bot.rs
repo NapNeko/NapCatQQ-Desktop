@@ -1,4 +1,6 @@
-use ncd_runtime::{BotActorSnapshot, BotConfig, BotId, LogSnapshot};
+use ncd_runtime::{BotActorSnapshot};
+use ncd_domain::{BotConfig, BotId};
+use ncd_traits::runtime_backend::LogSnapshot;
 use ncd_runtime::config_drift::{ConfigDrift, DriftDecision};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -88,7 +90,7 @@ pub async fn get_bot_config(
 #[tauri::command]
 pub async fn list_bot_flavors(
     state: State<'_, AppState>,
-) -> Result<HashMap<String, ncd_runtime::BackendType>, String> {
+) -> Result<HashMap<String, ncd_domain::bot_config::BackendType>, String> {
     state.bot_manager.list_bot_flavors().await.map_err(map_err)
 }
 
@@ -263,10 +265,19 @@ mod tests {
 
     use async_trait::async_trait;
     use ncd_runtime::{
-        BackendKind, BotActorState, BotBackend, BotBackendError, BotConfig, BotFlavor, BotManager,
-        BotRuntimeConfig, BotStartCtx, BotStatus, BroadcastEventBus, ConfigStore, DispatchRenderer,
-        DomainEventKind, EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore, LogSnapshot,
-        SecretStoreImpl, StopMode, TailOpts,
+        BotActorState, BotManager,
+        BroadcastEventBus, DispatchRenderer,
+        EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore,
+        SecretStoreImpl, FileSystemRuntimeLaunchPlanner,
+    };
+    use ncd_domain::{
+        BotConfig, BotId, BotFlavor, BackendKind, BotStatus, StopMode,
+        DesktopNotifySettings, BootstrapSnapshot,
+        domain_event::DomainEventKind,
+    };
+    use ncd_traits::{
+        ConfigStore, SecretStore,
+        runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts},
     };
     use tempfile::tempdir;
 
@@ -276,9 +287,9 @@ mod tests {
 
     #[async_trait]
     impl BotBackend for FakeBackend {
-        fn id(&self) -> &ncd_runtime::BotId {
-            static ID: std::sync::OnceLock<ncd_runtime::BotId> = std::sync::OnceLock::new();
-            ID.get_or_init(|| ncd_runtime::BotId::new("fake-backend"))
+        fn id(&self) -> &BotId {
+            static ID: std::sync::OnceLock<BotId> = std::sync::OnceLock::new();
+            ID.get_or_init(|| BotId::new("fake-backend"))
         }
         fn kind(&self) -> BackendKind {
             BackendKind::Local
@@ -289,19 +300,19 @@ mod tests {
         async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
             Ok(BotStatus::running(ctx.config.bot_id.clone(), 1, 1))
         }
-        async fn stop(&self, _bot_id: ncd_runtime::BotId, _mode: StopMode) -> Result<(), BotBackendError> {
+        async fn stop(&self, _bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
             Ok(())
         }
-        async fn status(&self, bot_id: ncd_runtime::BotId) -> Result<BotStatus, BotBackendError> {
+        async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
             Ok(BotStatus::stopped(bot_id))
         }
-        async fn read_config(&self, bot_id: ncd_runtime::BotId) -> Result<BotRuntimeConfig, BotBackendError> {
+        async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
             Err(BotBackendError::ConfigNotFound(bot_id))
         }
-        async fn write_config(&self, _bot_id: ncd_runtime::BotId, _cfg: &BotRuntimeConfig) -> Result<(), BotBackendError> {
+        async fn write_config(&self, _bot_id: BotId, _cfg: &BotRuntimeConfig) -> Result<(), BotBackendError> {
             Ok(())
         }
-        async fn tail_log(&self, _bot_id: ncd_runtime::BotId, _opts: TailOpts) -> Result<LogSnapshot, BotBackendError> {
+        async fn tail_log(&self, _bot_id: BotId, _opts: TailOpts) -> Result<LogSnapshot, BotBackendError> {
             Ok(LogSnapshot { lines: Vec::new(), total_lines: 0 })
         }
     }
@@ -310,7 +321,7 @@ mod tests {
         let bus = BroadcastEventBus::default();
         let runtime = crate::runtime::AppRuntime::new(root, bus.clone());
         let store = Arc::new(LocalConfigStore::new(root));
-        let secrets: Arc<dyn ncd_runtime::SecretStore + Send + Sync> =
+        let secrets: Arc<dyn SecretStore + Send + Sync> =
             Arc::new(SecretStoreImpl::new(root.join("secrets")));
         let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
         let renderer = Arc::new(DispatchRenderer::new(
@@ -318,7 +329,7 @@ mod tests {
             store.config_dir(),
         ));
         let backend: Arc<dyn BotBackend> = Arc::new(FakeBackend);
-        let launch_planner = Arc::new(ncd_runtime::FileSystemRuntimeLaunchPlanner::new(
+        let launch_planner = Arc::new(FileSystemRuntimeLaunchPlanner::new(
             root.join("runtime"),
         ));
         let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> =
@@ -326,7 +337,7 @@ mod tests {
         let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> =
             Arc::new(ncd_runtime::NoopOfflineNotifier);
         let poller_settings = Arc::new(tokio::sync::RwLock::new(
-            ncd_runtime::WebUiPollerSettings::default(),
+            ncd_domain::app_config::WebUiPollerSettings::default(),
         ));
         let desktop_notify = Arc::new(tokio::sync::RwLock::new(
             ncd_domain::DesktopNotifySettings::default(),
@@ -351,7 +362,7 @@ mod tests {
         ));
         let state = AppState {
             data_root: root.to_path_buf(),
-            snapshot: ncd_runtime::BootstrapSnapshot::ready(),
+            snapshot: BootstrapSnapshot::ready(),
             event_bus: bus.clone(),
             runtime,
             bot_manager,
@@ -408,14 +419,14 @@ mod tests {
 
         let err = state
             .bot_manager
-            .start_bot(&ncd_runtime::BotId::new("10002"))
+            .start_bot(&BotId::new("10002"))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("NapCatWinBootMain.exe"));
 
         let snapshot = state
             .bot_manager
-            .get_snapshot(&ncd_runtime::BotId::new("10002"))
+            .get_snapshot(&BotId::new("10002"))
             .await
             .unwrap();
         assert_eq!(snapshot.state, BotActorState::Crashed);
@@ -435,7 +446,7 @@ mod tests {
 
         state
             .bot_manager
-            .delete_bot_config(&ncd_runtime::BotId::new("10003"))
+            .delete_bot_config(&BotId::new("10003"))
             .await
             .unwrap();
         assert_eq!(state.bot_manager.bot_count().await, 0);
@@ -488,7 +499,7 @@ mod tests {
             .await
             .unwrap();
 
-        let ids = vec![ncd_runtime::BotId::new("10005"), ncd_runtime::BotId::new("10006")];
+        let ids = vec![BotId::new("10005"), BotId::new("10006")];
         let started = state.bot_manager.batch_start(&ids).await.unwrap();
         assert!(started.succeeded.is_empty());
         assert_eq!(started.failed.len(), 2);
@@ -516,7 +527,7 @@ mod tests {
 
         let err = state
             .bot_manager
-            .start_bot(&ncd_runtime::BotId::new("10007"))
+            .start_bot(&BotId::new("10007"))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("NapCatWinBootMain.exe"));

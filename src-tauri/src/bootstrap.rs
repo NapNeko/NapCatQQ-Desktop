@@ -1,9 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use ncd_runtime::{
-    BootstrapSnapshot, LocalConfigStore, LocalPathProbe, LocalVersionSnapshot,
+    LocalConfigStore, LocalPathProbe,
     MigrationOrchestrator, SecretStoreImpl,
 };
+use ncd_domain::{BootstrapSnapshot, LocalVersionSnapshot};
 
 const APP_DATA_DIR_NAME: &str = "NapCatQQ Desktop";
 

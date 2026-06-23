@@ -4,10 +4,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ncd_runtime::{
-    BootstrapSnapshot, BotManager, BroadcastEventBus, DesktopNotifySettings, DispatchRenderer,
+    BotManager, BroadcastEventBus, DispatchRenderer,
     EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore, ReqwestNapCatWebUiClient,
     SecretStoreImpl,
 };
+use ncd_domain::{BootstrapSnapshot, DesktopNotifySettings};
 use tauri::Emitter;
 use tauri::Manager;
 use tokio::sync::{Mutex, RwLock};
@@ -78,7 +79,7 @@ pub fn run() {
     let runtime_watcher = runtime.clone();
 
     let store = Arc::new(LocalConfigStore::new(&data_root));
-    let secrets: Arc<dyn ncd_runtime::SecretStore + Send + Sync> =
+    let secrets: Arc<dyn ncd_traits::SecretStore + Send + Sync> =
         Arc::new(SecretStoreImpl::new(data_root.join("secrets")));
     let repo = Arc::new(LocalBotConfigRepo::new(
         Arc::clone(&store),
@@ -106,12 +107,12 @@ pub fn run() {
         event_sink,
         Some(data_root.join("runtime").join("log")),
     ));
-    let bot_backend: Arc<dyn ncd_runtime::BotBackend> =
+    let bot_backend: Arc<dyn ncd_traits::runtime_backend::BotBackend> =
         Arc::new(ncd_runtime::NativeDeploymentBackend::new(
             native_deployment,
             Arc::clone(&local_host),
             "bot-manager-local",
-            ncd_runtime::BotFlavor::NapCat,
+            ncd_domain::kinds::BotFlavor::NapCat,
         ));
     // NapCat WebUI 登录轮询所需依赖(design.md §15.1)
     // - ReqwestNapCatWebUiClient 走 rustls-tls,仅访问 127.0.0.1
@@ -180,9 +181,9 @@ pub fn run() {
         Arc::new(event_bus.clone()),
         snowluma_factory,
     );
-    let snowluma_backend: Arc<dyn ncd_runtime::BotBackend> =
+    let snowluma_backend: Arc<dyn ncd_traits::runtime_backend::BotBackend> =
         Arc::new(ncd_runtime::SnowLumaRuntimeBackend::new(
-            ncd_runtime::BotId::new("snowluma-backend-local"),
+            ncd_domain::ids::BotId::new("snowluma-backend-local"),
             Arc::clone(&snowluma_daemon),
             Arc::new(event_bus.clone()),
         ));

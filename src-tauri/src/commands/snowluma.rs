@@ -17,21 +17,21 @@ fn snowluma_app_config_path(data_root: &std::path::Path) -> std::path::PathBuf {
     data_root.join("snowluma").join("app-config.json")
 }
 
-fn read_snowluma_app_config(data_root: &std::path::Path) -> ncd_runtime::SnowLumaAppConfig {
+fn read_snowluma_app_config(data_root: &std::path::Path) -> ncd_domain::SnowLumaAppConfig {
     let path = snowluma_app_config_path(data_root);
     if !path.exists() {
-        return ncd_runtime::SnowLumaAppConfig::default();
+        return ncd_domain::SnowLumaAppConfig::default();
     }
     let text = match std::fs::read_to_string(&path) {
         Ok(t) => t,
-        Err(_) => return ncd_runtime::SnowLumaAppConfig::default(),
+        Err(_) => return ncd_domain::SnowLumaAppConfig::default(),
     };
     serde_json::from_str(&text).unwrap_or_default()
 }
 
 fn write_snowluma_app_config(
     data_root: &std::path::Path,
-    cfg: &ncd_runtime::SnowLumaAppConfig,
+    cfg: &ncd_domain::SnowLumaAppConfig,
 ) -> Result<(), String> {
     let path = snowluma_app_config_path(data_root);
     if let Some(parent) = path.parent() {
@@ -49,14 +49,14 @@ fn write_snowluma_app_config(
 #[tauri::command]
 pub async fn get_snowluma_app_config(
     state: State<'_, AppState>,
-) -> Result<ncd_runtime::SnowLumaAppConfig, String> {
+) -> Result<ncd_domain::SnowLumaAppConfig, String> {
     Ok(read_snowluma_app_config(&state.data_root))
 }
 
 #[tauri::command]
 pub async fn set_snowluma_app_config(
     state: State<'_, AppState>,
-    config: ncd_runtime::SnowLumaAppConfig,
+    config: ncd_domain::SnowLumaAppConfig,
 ) -> Result<(), String> {
     write_snowluma_app_config(&state.data_root, &config)
 }
@@ -180,7 +180,7 @@ pub async fn open_snowluma_webui(
     bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
     use ncd_domain::{DeploymentType, RuntimeTarget};
-    use ncd_runtime::{BotId, SnowLumaAppConfig};
+    use ncd_domain::{BotId, SnowLumaAppConfig};
 
     let bid = BotId::new(bot_id.clone());
     if let Ok(Some(cfg)) = state.bot_manager.get_bot_config(&bid).await {
@@ -280,7 +280,7 @@ pub async fn open_snowluma_novnc(
     bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
     use ncd_domain::{DeploymentType, RuntimeTarget};
-    use ncd_runtime::BotId;
+    use ncd_domain::BotId;
 
     let bid = BotId::new(bot_id);
     let cfg = state

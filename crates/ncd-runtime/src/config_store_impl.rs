@@ -4,11 +4,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
-use crate::errors::ConfigError;
-use crate::kinds::SchemaVersion;
-use crate::models::BackupInfo;
-use crate::report::MigrationReport;
-use crate::traits::{ConfigStore, JsonTransaction, TransactionReport};
+use ncd_domain::errors::ConfigError;
+use ncd_domain::kinds::SchemaVersion;
+use ncd_domain::migration::BackupInfo;
+use ncd_domain::migration::MigrationReport;
+use ncd_traits::{ConfigStore, JsonTransaction, TransactionReport};
 
 #[derive(Debug, Clone)]
 pub struct LocalConfigStore {

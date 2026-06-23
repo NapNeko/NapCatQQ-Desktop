@@ -1,6 +1,6 @@
 use serde_json::{Map, Value};
 
-use crate::errors::MigrationError;
+use ncd_domain::errors::MigrationError;
 
 pub const LEGACY_APP_COMPAT_VERSION: &str = "v2.0";
 const LEGACY_CONFIG_VERSION: &str = "v1.7.28";

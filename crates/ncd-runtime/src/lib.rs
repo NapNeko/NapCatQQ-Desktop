@@ -8,12 +8,8 @@ pub mod config_drift;
 pub mod config_store_impl;
 pub mod crash_bundle;
 pub mod credential_sync;
-pub mod docker_bot_session;
-pub use docker_bot_session::{
-    DockerBotSessionRegistry, SnowLumaDockerEndpoints, is_remote_docker_config,
-    is_remote_native_napcat_config,
-};
 pub mod desktop_log;
+pub mod docker_bot_session;
 pub mod events;
 pub mod host_resolver;
 pub mod legacy_discovery;
@@ -24,46 +20,11 @@ pub mod package_lock;
 pub mod path_probe_impl;
 pub mod release;
 pub mod remote_bot_log_follow;
-pub mod remote_coordinator;
-pub mod remote_native_launch;
-pub mod remote_native_napcat_session;
-pub mod remote_snowluma;
-pub mod remote_snowluma_layout;
-pub mod remote_snowluma_log;
-pub mod remote_snowluma_orchestrator;
-pub mod remote_snowluma_stack;
-pub mod remote_snowluma_tunnel;
-pub mod runtime_backend;
 pub mod runtime_launch_plan;
 pub mod secret_store_impl;
 pub mod server_manager;
 pub mod snowluma;
 pub mod ssh_keygen;
-
-// Layer 1 数据(已迁移到 ncd-domain,此处 re-export 保持向后兼容)
-//
-// 这些类型实际定义在 ncd-domain crate下游代码可继续 use ncd_runtime::{BotId, ...},
-// 但新代码应直接 use ncd_domain::...这些 re-export 只作过渡
-pub use ncd_domain::{
-    AdvancedConfig, AppError, AppSettings, AppSettingsDto, AutoRestartSchedule, BackendId,
-    BackendKind, BackendType, BackupInfo, BootstrapSnapshot, BootstrapStatus, BotBasicConfig,
-    BotConfig, BotConfigError, BotFlavor, BotId, BotRuntimeSummary, BypassConfig, ConfigError,
-    ConnectConfig, DeploymentType, DesktopNotifySettings, HttpClientConfig, HttpServerConfig,
-    HttpSseServerConfig, LocalVersionSnapshot, LogLevel, MessagePostFormat, MigrationError,
-    MigrationOutcome, MigrationReport, MigrationSource, MigrationStage, MigrationWarning,
-    NetworkBaseFields, O3HookMode, PathError, ReleaseInfo, ReleaseSnapshot, RepairAction,
-    RuntimeTarget, SchemaVersion, SecretError, SnowLumaAppConfig, SnowLumaStartMode, TimeUnit,
-    WebUiPollerSettings, WebsocketClientConfig, WebsocketServerConfig, WsRole,
-    default_login_interval, default_perf_monitor_interval, default_snowluma_port,
-};
-// StopMode 也来自 ncd-domain 但在 runtime_backend pub use 链已 re-export,
-// 这里就不再重复导出避免 ambiguity
-
-// 兼容老路径:ncd_runtime::ids::BotId / ncd_runtime::bot_config::... 这种调用继续可用
-pub use ncd_domain::{
-    app_config, bootstrap, bot_config, errors, ids, kinds, models, release_snapshot, report,
-    snowluma_start_mode, version_snapshot,
-};
 
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
@@ -74,6 +35,10 @@ pub use bot_manager::{BatchResult, BootstrapResult, BotManager, BotManagerError}
 pub use config_store_impl::LocalConfigStore;
 pub use crash_bundle::{CrashBundleInput, desktop_output_dir, write_crash_bundle};
 pub use credential_sync::{CredentialSyncLayer, PasswordSlot};
+pub use docker_bot_session::{
+    DockerBotSessionRegistry, SnowLumaDockerEndpoints, is_remote_docker_config,
+    is_remote_native_napcat_config,
+};
 pub use events::{
     BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter, EventSubscription,
 };
@@ -89,14 +54,6 @@ pub use native_deployment_adapter::{
 };
 pub use path_probe_impl::LocalPathProbe;
 pub use remote_bot_log_follow::RemoteBotLogFollowRegistry;
-pub use remote_native_launch::RemoteNativeLaunchTranslator;
-pub use remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
-pub use remote_snowluma::{RemoteSnowLumaBackend, RemoteSnowLumaDaemon};
-pub use remote_snowluma_tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
-pub use runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot,
-    ProcessHandle, StopMode, TailOpts,
-};
 pub use runtime_launch_plan::{
     FileSystemRuntimeLaunchPlanner, NapCatLaunchPlan, RuntimeLaunchPlan, RuntimeLaunchPlanError,
     RuntimeLaunchPlanner, SnowLumaLaunchPlan, build_napcat_launch_plan_with_qq_install_path,
@@ -107,20 +64,13 @@ pub use server_manager::{
     ServerCredentialStore, ServerManager, ServerProfile, ServerState,
 };
 pub use snowluma::{
-    AuthState, DaemonState, HookProcessInfo, HookProcessStatus, MockProcessTreeProbe,
+    AuthState, HookProcessInfo, HookProcessStatus, MockProcessTreeProbe,
     OneBotInstanceInfo, ProcessTreeProbe, ReqwestSnowLumaWebUiClient,
-    ReqwestSnowLumaWebUiClientFactory, SnowLumaDaemon, SnowLumaDaemonError, SnowLumaLoginState,
+    ReqwestSnowLumaWebUiClientFactory, SnowLumaDaemon, SnowLumaDaemonError,
     SnowLumaRuntimeBackend, SnowLumaSession, SnowLumaStatusPoller, SnowLumaWebUiClient,
     SnowLumaWebUiClientFactory, SnowLumaWebUiError, SysinfoProcessTreeProbe,
     load_or_create_session, load_snowluma_app_config, render_daemon_globals, sanitize_log_line,
 };
-pub use traits::{
-    BackendConfigRenderer, BotConfigRepo, ConfigStore, JsonTransaction, JsonWrite, MigrationStep,
-    PathProbe, RenderError, SecretStore, TransactionReport,
-};
-
-// 兼容老路径:ncd_runtime::traits::xxx::* 老调用继续可用
-pub use ncd_traits as traits;
 
 #[cfg(test)]
 mod tests {
@@ -128,6 +78,7 @@ mod tests {
 
     #[test]
     fn bootstrap_snapshot_round_trips() {
+        use ncd_domain::{BootstrapSnapshot, BootstrapStatus, SchemaVersion, MigrationReport};
         let snapshot = BootstrapSnapshot::ready();
         let json = serde_json::to_string(&snapshot).unwrap();
         let decoded: BootstrapSnapshot = serde_json::from_str(&json).unwrap();

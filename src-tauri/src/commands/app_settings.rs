@@ -8,8 +8,10 @@
 //! <data_root>/runtime/config/,与 config.json / bot.json 同级,不另起数据根
 
 use ncd_runtime::{
-    AppSettings, AppSettingsDto, ConfigStore, LocalConfigStore, SecretStore, SecretStoreImpl,
+    LocalConfigStore, SecretStoreImpl,
 };
+use ncd_domain::{AppSettings, AppSettingsDto};
+use ncd_traits::{ConfigStore, SecretStore};
 use tauri::State;
 use tokio_util::sync::CancellationToken;
 

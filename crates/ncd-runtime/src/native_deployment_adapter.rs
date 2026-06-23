@@ -16,10 +16,12 @@ use async_trait::async_trait;
 use ncd_deploy::docker::DockerCli;
 use ncd_deploy::{
     Deployment, DeploymentError, NativeDeployment, NativeLaunchCommand, NativeLaunchTranslator,
-    NativeRuntimeEventSink,
 };
 use ncd_deploy::{DockerDeployment, bot_docker_container_name};
-use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, StopMode};
+use ncd_domain::{BackendType, BotConfig, BotFlavor};
+use ncd_domain::bot_status::BotStatus;
+use ncd_domain::ids::BotId;
+use ncd_domain::kinds::{BackendKind, StopMode};
 use ncd_host::{Host, HostError, HostPath};
 use serde_json::{Map, Value, json};
 
@@ -27,16 +29,13 @@ use crate::backend_config_renderer::{
     render_napcat_docker_config_payloads, render_snowluma_docker_config_payloads,
 };
 use crate::bot_actor::BotActorState;
-use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
-use crate::kinds::BackendKind;
-use crate::runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, TailOpts,
-};
 use crate::runtime_launch_plan::RuntimeLaunchPlanner;
-
-use crate::remote_native_launch::{
+use ncd_backend_napcat::remote_native_launch::{
     RemoteNapcatLayout, napcat_remote_log_path, probe_remote_napcat_layout,
     remote_napcat_running_pid, stop_remote_napcat_on_host,
+};
+use ncd_traits::runtime_backend::{
+    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts,
 };
 
 // RuntimeLaunchPlannerAdapter

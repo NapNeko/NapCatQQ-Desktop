@@ -1,4 +1,4 @@
-use ncd_runtime::remote_snowluma_layout::{RemoteSnowLumaLayout, SnowLumaRemotePaths};
+use ncd_backend_snowluma::remote_snowluma_layout::{RemoteSnowLumaLayout, SnowLumaRemotePaths};
 
 fn sample_layout() -> RemoteSnowLumaLayout {
     let paths = SnowLumaRemotePaths::from_remote_home("/home/u");

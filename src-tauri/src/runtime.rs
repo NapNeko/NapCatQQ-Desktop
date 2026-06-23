@@ -6,10 +6,12 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
 use ncd_runtime::{
-    BackendKind, BotStatus, BroadcastEventBus, DomainEvent, EventBus, RuntimeTarget,
+    BroadcastEventBus, DomainEvent, EventBus,
 };
 #[cfg(test)]
-use ncd_runtime::BotId;
+use ncd_domain::ids::BotId;
+use ncd_domain::kinds::{BackendKind, RuntimeTarget};
+use ncd_domain::bot_status::BotStatus;
 
 // ============================================================
 // 前端 IPC contract 数据结构(保留——前端 remote.service.ts 依赖这些 shape)

@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 
-use crate::bot_config::{BackendType, BotConfig};
-use crate::ids::BotId;
-use crate::kinds::RuntimeTarget;
-use crate::runtime_backend::BotRuntimeConfig;
+use ncd_domain::bot_config::{BackendType, BotConfig};
+use ncd_domain::ids::BotId;
+use ncd_domain::kinds::RuntimeTarget;
+use ncd_traits::runtime_backend::BotRuntimeConfig;
 use crate::snowluma::SnowLumaStartMode;
 
 #[async_trait]
@@ -405,12 +405,12 @@ mod snowluma_plan_tests {
     //!    且 launch_command 为空
 
     use super::*;
-    use crate::bot_config::{
+    use ncd_domain::bot_config::{
         AdvancedConfig, AutoRestartSchedule, BotBasicConfig, BotConfig, ConnectConfig,
         DeploymentType,
     };
-    use crate::ids::BotId;
-    use crate::kinds::RuntimeTarget;
+    use ncd_domain::ids::BotId;
+    use ncd_domain::kinds::RuntimeTarget;
     use std::path::PathBuf;
     use tempfile::tempdir;
 

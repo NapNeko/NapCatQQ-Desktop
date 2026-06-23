@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use ncd_runtime::{desktop_log, LogSnapshot};
+use ncd_runtime::desktop_log;
+use ncd_traits::runtime_backend::LogSnapshot;
 use serde::Deserialize;
 use tauri::State;
 

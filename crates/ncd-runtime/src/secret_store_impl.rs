@@ -10,8 +10,8 @@ use aes_gcm::{
 use keyring::Entry;
 use rand::RngCore;
 
-use crate::errors::SecretError;
-use crate::traits::SecretStore;
+use ncd_domain::errors::SecretError;
+use ncd_traits::SecretStore;
 
 pub struct SecretStoreImpl {
     fallback_dir: PathBuf,

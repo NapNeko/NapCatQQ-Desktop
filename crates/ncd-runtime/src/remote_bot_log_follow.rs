@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
 use crate::events::BroadcastEventBus;
-use crate::ids::BotId;
+use ncd_domain::ids::BotId;
 use crate::native_deployment_adapter::EventBusSink;
 use ncd_deploy::NativeRuntimeEventSink;
 

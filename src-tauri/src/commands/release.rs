@@ -4,7 +4,7 @@
 //! fetcher 内部消化为 None 字段,命令永远 Ok
 
 use ncd_runtime::release::fetch_release_snapshot;
-use ncd_runtime::ReleaseSnapshot;
+use ncd_domain::release_snapshot::ReleaseSnapshot;
 use tauri::State;
 
 use crate::AppState;

@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use ncd_deploy::DockerDeployment;
 use ncd_deploy::docker::DockerCli;
 use ncd_domain::{BackendType, BotConfig, DeploymentType};
-use crate::kinds::RuntimeTarget;
 use ncd_deploy::{Deployment, NativeRuntimeEventSink};
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostError, StreamSource};
@@ -16,7 +15,7 @@ use tokio::task::JoinHandle;
 use tracing::warn;
 
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
-use crate::ids::BotId;
+use ncd_domain::ids::BotId;
 use crate::native_deployment_adapter::EventBusSink;
 
 /// SnowLuma Docker:本机隧道上的 WebUI / noVNC 端口

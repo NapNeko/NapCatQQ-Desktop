@@ -5,11 +5,12 @@ use tracing::{info, warn};
 
 use crate::app_config_migration::migrate_app_config;
 use crate::bot_config_migration::migrate_bot_config;
-use crate::errors::MigrationError;
+use ncd_domain::errors::MigrationError;
+
 use crate::legacy_discovery::{LegacyDiscovery, LegacySelection};
-use crate::models::{MigrationSource, MigrationWarning};
-use crate::report::MigrationReport;
-use crate::traits::{ConfigStore, JsonTransaction, PathProbe, SecretStore};
+use ncd_domain::migration::{MigrationSource, MigrationWarning};
+use ncd_domain::migration::MigrationReport;
+use ncd_traits::{ConfigStore, JsonTransaction, PathProbe, SecretStore};
 
 pub struct MigrationOrchestrator<'a> {
     store: &'a dyn ConfigStore,
@@ -30,7 +31,7 @@ impl<'a> MigrationOrchestrator<'a> {
         }
     }
 
-    pub fn bootstrap(&self) -> crate::bootstrap::BootstrapSnapshot {
+    pub fn bootstrap(&self) -> ncd_domain::bootstrap::BootstrapSnapshot {
         match self.run() {
             Ok(report) => {
                 let _ = self.store.save_migration_report(&report);
@@ -53,7 +54,7 @@ impl<'a> MigrationOrchestrator<'a> {
     }
 
     pub fn run(&self) -> Result<MigrationReport, MigrationError> {
-        if self.store.load_schema_version()? == crate::kinds::SchemaVersion::CURRENT {
+        if self.store.load_schema_version()? == ncd_domain::kinds::SchemaVersion::CURRENT {
             info!(target: "ncd_runtime::migration", "schema current, skip migration");
             return Ok(MigrationReport::clean());
         }

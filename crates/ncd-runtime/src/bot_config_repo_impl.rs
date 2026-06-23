@@ -5,10 +5,10 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use tokio::task;
 
-use crate::bot_config::{BotConfig, BotConfigError};
+use ncd_domain::bot_config::{BotConfig, BotConfigError};
 use crate::bot_config_migration::{BOT_CONFIG_COMPAT_VERSION, migrate_bot_config};
-use crate::errors::ConfigError;
-use crate::traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
+use ncd_domain::errors::ConfigError;
+use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
 
 pub struct LocalBotConfigRepo<S: ConfigStore + 'static> {
     store: Arc<S>,

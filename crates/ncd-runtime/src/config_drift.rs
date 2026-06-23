@@ -1,6 +1,6 @@
-use crate::bot_config::{BackendType, BotConfig};
-use crate::ids::BotId;
-use crate::traits::backend_config_renderer::{BackendConfigRenderer, RenderError};
+use ncd_domain::bot_config::{BackendType, BotConfig};
+use ncd_domain::ids::BotId;
+use ncd_traits::backend_config_renderer::{BackendConfigRenderer, RenderError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

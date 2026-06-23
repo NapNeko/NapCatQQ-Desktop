@@ -18,7 +18,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use ncd_runtime::{BootstrapSnapshot, DomainEvent, EventBus};
+use ncd_runtime::{DomainEvent, EventBus};
+use ncd_domain::BootstrapSnapshot;
 use tauri::State;
 
 use crate::AppState;
@@ -36,7 +37,7 @@ pub fn get_bootstrap_status(state: State<'_, AppState>) -> BootstrapSnapshot {
 #[tauri::command]
 pub async fn get_all_bot_statuses(
     state: State<'_, AppState>,
-) -> Result<Vec<ncd_runtime::BotStatus>, String> {
+) -> Result<Vec<ncd_domain::bot_status::BotStatus>, String> {
     Ok(state.runtime.get_all_bot_statuses().await)
 }
 
@@ -125,7 +126,7 @@ pub async fn get_remote_runtime_status(
         .await
         .map_err(|_| format!("远端主机未连接: {}", request.remote_id))?;
 
-    let bot_id = ncd_runtime::BotId::new(&request.bot_id);
+    let bot_id = ncd_domain::ids::BotId::new(&request.bot_id);
     let cmd = ncd_host::HostCommand::new("pgrep")
         .arg("-f")
         .arg(format!("napcat.*{}", request.bot_id));
@@ -139,17 +140,17 @@ pub async fn get_remote_runtime_status(
                 .next()
                 .and_then(|l| l.trim().parse().ok())
                 .unwrap_or(0);
-            ncd_runtime::BotStatus::running(bot_id.clone(), pid, 0)
+            ncd_domain::bot_status::BotStatus::running(bot_id.clone(), pid, 0)
         }
-        _ => ncd_runtime::BotStatus::stopped(bot_id.clone()),
+        _ => ncd_domain::bot_status::BotStatus::stopped(bot_id.clone()),
     };
 
     Ok(RemoteRuntimeStatusResponse {
         remote_id: request.remote_id.clone(),
         bot_id: request.bot_id,
         status,
-        backend_kind: Some(ncd_runtime::BackendKind::RemoteSsh),
-        runtime_target: Some(ncd_runtime::RuntimeTarget::server(request.remote_id)),
+        backend_kind: Some(ncd_domain::kinds::BackendKind::RemoteSsh),
+        runtime_target: Some(ncd_domain::kinds::RuntimeTarget::server(request.remote_id)),
     })
 }
 
@@ -215,8 +216,17 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use ncd_runtime::{
-        BackendKind, BotBackend, BotBackendError, BotFlavor, BotRuntimeConfig, BotStartCtx,
-        BotStatus, ConfigStore, LogSnapshot, StopMode, TailOpts,
+        BotManager, BroadcastEventBus, DispatchRenderer, EventBus, EventFilter,
+        LocalBotConfigRepo, LocalConfigStore, NoopOfflineNotifier, ReqwestNapCatWebUiClient,
+        SecretStoreImpl, ServerManager, InMemoryCredentialStore, FileSystemRuntimeLaunchPlanner,
+    };
+    use ncd_domain::{
+        BootstrapSnapshot, DesktopNotifySettings, WebUiPollerSettings,
+        BotId, BotStatus, BotFlavor, BackendKind, StopMode,
+    };
+    use ncd_traits::{
+        ConfigStore, SecretStore,
+        runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts},
     };
     use std::sync::Arc;
     use tempfile::tempdir;
@@ -225,9 +235,9 @@ mod tests {
 
     #[async_trait]
     impl BotBackend for FakeBackend {
-        fn id(&self) -> &ncd_runtime::BotId {
-            static ID: std::sync::OnceLock<ncd_runtime::BotId> = std::sync::OnceLock::new();
-            ID.get_or_init(|| ncd_runtime::BotId::new("fake-backend"))
+        fn id(&self) -> &BotId {
+            static ID: std::sync::OnceLock<BotId> = std::sync::OnceLock::new();
+            ID.get_or_init(|| BotId::new("fake-backend"))
         }
         fn kind(&self) -> BackendKind {
             BackendKind::Local
@@ -238,50 +248,50 @@ mod tests {
         async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
             Ok(BotStatus::running(ctx.config.bot_id.clone(), 1, 1))
         }
-        async fn stop(&self, _bot_id: ncd_runtime::BotId, _mode: StopMode) -> Result<(), BotBackendError> {
+        async fn stop(&self, _bot_id: BotId, _mode: StopMode) -> Result<(), BotBackendError> {
             Ok(())
         }
-        async fn status(&self, bot_id: ncd_runtime::BotId) -> Result<BotStatus, BotBackendError> {
+        async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
             Ok(BotStatus::stopped(bot_id))
         }
-        async fn read_config(&self, bot_id: ncd_runtime::BotId) -> Result<BotRuntimeConfig, BotBackendError> {
+        async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
             Err(BotBackendError::ConfigNotFound(bot_id))
         }
-        async fn write_config(&self, _bot_id: ncd_runtime::BotId, _cfg: &BotRuntimeConfig) -> Result<(), BotBackendError> {
+        async fn write_config(&self, _bot_id: BotId, _cfg: &BotRuntimeConfig) -> Result<(), BotBackendError> {
             Ok(())
         }
-        async fn tail_log(&self, _bot_id: ncd_runtime::BotId, _opts: TailOpts) -> Result<LogSnapshot, BotBackendError> {
+        async fn tail_log(&self, _bot_id: BotId, _opts: TailOpts) -> Result<LogSnapshot, BotBackendError> {
             Ok(LogSnapshot { lines: Vec::new(), total_lines: 0 })
         }
     }
 
-    fn make_test_state(root: &std::path::Path) -> (AppState, ncd_runtime::BroadcastEventBus) {
-        let bus = ncd_runtime::BroadcastEventBus::default();
+    fn make_test_state(root: &std::path::Path) -> (AppState, BroadcastEventBus) {
+        let bus = BroadcastEventBus::default();
         let runtime = crate::runtime::AppRuntime::new(root, bus.clone());
-        let store = Arc::new(ncd_runtime::LocalConfigStore::new(root));
-        let secrets: Arc<dyn ncd_runtime::SecretStore + Send + Sync> =
-            Arc::new(ncd_runtime::SecretStoreImpl::new(root.join("secrets")));
-        let repo = Arc::new(ncd_runtime::LocalBotConfigRepo::new(
+        let store = Arc::new(LocalConfigStore::new(root));
+        let secrets: Arc<dyn SecretStore + Send + Sync> =
+            Arc::new(SecretStoreImpl::new(root.join("secrets")));
+        let repo = Arc::new(LocalBotConfigRepo::new(
             Arc::clone(&store),
             secrets,
         ));
-        let renderer = Arc::new(ncd_runtime::DispatchRenderer::new(
+        let renderer = Arc::new(DispatchRenderer::new(
             store.config_dir(),
             store.config_dir(),
         ));
         let backend: Arc<dyn BotBackend> = Arc::new(FakeBackend);
-        let launch_planner = Arc::new(ncd_runtime::FileSystemRuntimeLaunchPlanner::new(
+        let launch_planner = Arc::new(FileSystemRuntimeLaunchPlanner::new(
             root.join("runtime"),
         ));
         let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> =
-            Arc::new(ncd_runtime::ReqwestNapCatWebUiClient::new().expect("init webui client"));
+            Arc::new(ReqwestNapCatWebUiClient::new().expect("init webui client"));
         let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> =
-            Arc::new(ncd_runtime::NoopOfflineNotifier);
+            Arc::new(NoopOfflineNotifier);
         let poller_settings = Arc::new(tokio::sync::RwLock::new(
-            ncd_runtime::WebUiPollerSettings::default(),
+            WebUiPollerSettings::default(),
         ));
         let desktop_notify = Arc::new(tokio::sync::RwLock::new(
-            ncd_domain::DesktopNotifySettings::default(),
+            DesktopNotifySettings::default(),
         ));
         let app_settings = Arc::new(tokio::sync::RwLock::new(
             ncd_domain::AppSettings::default(),
@@ -289,7 +299,7 @@ mod tests {
         let lightweight_scheduler = Arc::new(
             crate::lightweight_scheduler::LightweightScheduler::new(Arc::clone(&app_settings)),
         );
-        let bot_manager = Arc::new(ncd_runtime::BotManager::new(
+        let bot_manager = Arc::new(BotManager::new(
             repo,
             Arc::clone(&store),
             renderer,
@@ -307,9 +317,9 @@ mod tests {
             event_bus: bus.clone(),
             runtime,
             bot_manager,
-            server_manager: Arc::new(ncd_runtime::ServerManager::new(
+            server_manager: Arc::new(ServerManager::new(
                 root,
-                Arc::new(ncd_runtime::InMemoryCredentialStore::default()),
+                Arc::new(InMemoryCredentialStore::default()),
             )),
             package_lock: ncd_runtime::package_lock::PackageManagerLock::new(),
             active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
@@ -326,13 +336,13 @@ mod tests {
     async fn publish_runtime_status_emits_events() {
         let root = tempdir().unwrap();
         let (state, bus) = make_test_state(root.path());
-        let mut subscription = bus.subscribe(ncd_runtime::EventFilter::kind(
-            ncd_runtime::DomainEventKind::BotStatusChanged,
+        let mut subscription = bus.subscribe(EventFilter::kind(
+            ncd_domain::domain_event::DomainEventKind::BotStatusChanged,
         ));
 
         state
             .runtime
-            .record_external_status_for_test(ncd_runtime::BotStatus::running("10001", 42, 1))
+            .record_external_status_for_test(BotStatus::running("10001", 42, 1))
             .await;
 
         state.runtime.publish_runtime_statuses().await;
