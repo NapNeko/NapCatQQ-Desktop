@@ -8,6 +8,8 @@ rust-version.workspace = true
 ncd-domain = { path = "../ncd-domain" }
 ncd-traits = { path = "../ncd-traits" }
 ncd-host = { path = "../ncd-host" }
+ncd-component = { path = "../ncd-component" }
+ncd-deploy = { path = "../ncd-deploy" }
 async-trait = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -39,6 +41,9 @@ tempfile = "3"
 wiremock = "0.6"
 tokio = { version = "1", features = ["test-util"] }
 ncd-test-support = { path = "../ncd-test-support" }
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "fmt",
+    "std",
+] }
 proptest = "1"
 ncd-host = { path = "../ncd-host" }
