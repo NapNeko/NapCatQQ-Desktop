@@ -614,3 +614,4 @@ impl BackendConfigRenderer for DispatchRenderer {
         paths.extend(self.snowluma.output_paths(bot_id));
         paths
     }
+}

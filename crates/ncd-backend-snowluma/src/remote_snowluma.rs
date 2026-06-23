@@ -570,15 +570,8 @@ pub struct RemoteSnowLumaBackend {
 }
 
 impl RemoteSnowLumaBackend {
-    /// 内部构造器
-    ///
-    /// 只应由同 crate 内的 BotManager 调用
-    /// 使用 pub(crate) 而非 pub,以避免把 pub(crate) 的 RemoteQqEntryCoordinator
-    /// 通过公开 API 泄露出去(这正是编译器 private_interfaces 警告的来源)
-    ///
-    /// 外部 crate 不应直接构造此类型,所有 backend 都应由 BotManager::backend_for_config
-    /// 统一创建
-    pub(crate) fn new(
+    /// 供 ncd-runtime facade 层统一构造远端后端实例。
+    pub fn new(
         backend_id: impl Into<BotId>,
         daemon: Arc<RemoteSnowLumaDaemon>,
         event_bus: Arc<BroadcastEventBus>,
