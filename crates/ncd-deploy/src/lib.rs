@@ -10,6 +10,7 @@
 //!    统一抽象,把"在哪跑(Host)"和"怎么跑(Native / Docker / External)"
 //!    解耦,Component 沦为 NativeDeployment 的实现细节
 
+pub mod backend_config_renderer;
 pub mod deployment;
 pub mod deployments;
 pub mod docker;
