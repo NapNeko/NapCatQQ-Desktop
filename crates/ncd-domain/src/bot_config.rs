@@ -568,6 +568,17 @@ fn default_root_path() -> String {
     "/".to_string()
 }
 
+pub fn is_remote_docker_config(config: &BotConfig) -> bool {
+    config.bot.deployment_type == DeploymentType::Docker
+        && matches!(config.bot.runtime_target, RuntimeTarget::Server(_))
+}
+
+pub fn is_remote_native_napcat_config(config: &BotConfig) -> bool {
+    config.bot.deployment_type == DeploymentType::Native
+        && config.bot.backend_type == BackendType::NapCat
+        && matches!(config.bot.runtime_target, RuntimeTarget::Server(_))
+}
+
 fn default_heart_interval() -> u32 {
     30000
 }

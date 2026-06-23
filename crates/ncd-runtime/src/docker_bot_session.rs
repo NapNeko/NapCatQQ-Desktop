@@ -258,14 +258,4 @@ async fn open_loopback_tunnel(host: &dyn Host, remote_port: u16) -> Result<Tunne
     host.open_tunnel(spec).await
 }
 
-pub fn is_remote_docker_config(config: &BotConfig) -> bool {
-    config.bot.deployment_type == DeploymentType::Docker
-        && matches!(config.bot.runtime_target, RuntimeTarget::Server(_))
-}
-
-/// 远端 SSH +「直接运行」+ NapCat(非 Docker,非本机 SnowLuma daemon)
-pub fn is_remote_native_napcat_config(config: &BotConfig) -> bool {
-    config.bot.deployment_type == DeploymentType::Native
-        && config.bot.backend_type == BackendType::NapCat
-        && matches!(config.bot.runtime_target, RuntimeTarget::Server(_))
-}
+pub use ncd_domain::bot_config::{is_remote_docker_config, is_remote_native_napcat_config};

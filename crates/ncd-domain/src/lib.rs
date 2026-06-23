@@ -51,6 +51,7 @@ pub use bot_config::{
     BypassConfig, ConnectConfig, DeploymentType, HttpClientConfig, HttpServerConfig,
     HttpSseServerConfig, LogLevel, MessagePostFormat, NetworkBaseFields, O3HookMode,
     StatusCommandConfig, TimeUnit, WebsocketClientConfig, WebsocketServerConfig, WsRole,
+    is_remote_docker_config, is_remote_native_napcat_config,
 };
 pub use bot_status::{BotStatus, ProcessHandle};
 pub use daemon_state::{DaemonState, SnowLumaLoginState};
