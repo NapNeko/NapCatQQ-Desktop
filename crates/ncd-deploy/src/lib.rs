@@ -16,6 +16,7 @@ pub mod deployments;
 pub mod docker;
 pub mod error;
 pub mod plan;
+pub mod remote_coordinator;
 pub mod result;
 pub mod runner;
 
