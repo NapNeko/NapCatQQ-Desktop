@@ -2,10 +2,10 @@
 
 export type ConfigExportResult = { 
 /**
- * 写出的 ZIP 绝对路径。
+ * 写出的 ZIP 绝对路径
  */
 export_path: string, 
 /**
- * 成功打入包内的人类可读名。
+ * 成功打入包内的人类可读名
  */
 files: Array<string>, };

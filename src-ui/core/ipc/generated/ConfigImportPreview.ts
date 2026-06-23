@@ -2,6 +2,6 @@
 
 export type ConfigImportPreview = { source_path: string, 
 /**
- * `zip` | `directory`
+ * zip | directory
  */
 source_kind: string, files_found: Array<string>, warnings: Array<string>, can_import: boolean, };

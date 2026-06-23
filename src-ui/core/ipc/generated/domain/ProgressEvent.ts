@@ -2,37 +2,4 @@
 import type { DockerPullLayerSnapshot } from "./DockerPullLayerSnapshot";
 import type { ProgressLogLevel } from "./ProgressLogLevel";
 
-/**
- * 进度事件 envelope,跨边界事件必须带版本号便于增量演进
- */
-export type ProgressEvent = { 
-/**
- * 协议版本(默认 1,bump 时同步前端)
- */
-v: number, 
-/**
- * 事件时间戳(unix millis)
- */
-timestamp_ms: bigint, } & ({ "kind": "started", total_steps: number, } | { "kind": "step_begin", step: number, message: string, } | { "kind": "step_progress", step: number, percent: number, message: string, 
-/**
- * 瞬时下载速度(字节/秒)仅下载步骤填充,其他步骤为 None
- * 前端据此显示 "已下载 12.3 MB / 28.0 MB · 850 KB/s"
- */
-speed_bps?: bigint | null, 
-/**
- * 已下载字节前端用于格式化与 ETA 计算仅下载步骤填充
- */
-downloaded_bytes?: bigint | null, 
-/**
- * 总字节数(服务端返 Content-Length 时有)仅下载步骤填充
- */
-total_bytes?: bigint | null, 
-/**
- * 下载阶段:"racing" / "streaming" / "switching_mirror" / "resuming"
- * 仅下载步骤填充;前端按阶段切话术("正在选择镜像" vs "下载中")
- */
-download_stage?: string | null, 
-/**
- * docker pull 各层进度快照;仅拉镜像步骤填充
- */
-docker_layers?: Array<DockerPullLayerSnapshot> | null, } | { "kind": "step_end", step: number, ok: boolean, } | { "kind": "finished", ok: boolean, } | { "kind": "log", level: ProgressLogLevel, message: string, });
+export type ProgressEvent = { v: number, timestamp_ms: bigint, } & ({ "kind": "started", total_steps: number, } | { "kind": "step_begin", step: number, message: string, } | { "kind": "step_progress", step: number, percent: number, message: string, speed_bps?: bigint | null, downloaded_bytes?: bigint | null, total_bytes?: bigint | null, download_stage?: string | null, docker_layers?: Array<DockerPullLayerSnapshot> | null, } | { "kind": "step_end", step: number, ok: boolean, } | { "kind": "finished", ok: boolean, } | { "kind": "log", level: ProgressLogLevel, message: string, });

@@ -2894,6 +2894,68 @@ dependencies = [
 ]
 
 [[package]]
+name = "ncd-backend-napcat"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "hex",
+ "ncd-component",
+ "ncd-deploy",
+ "ncd-domain",
+ "ncd-host",
+ "ncd-test-support",
+ "ncd-traits",
+ "proptest",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "ts-rs",
+ "wiremock",
+]
+
+[[package]]
+name = "ncd-backend-snowluma"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "hex",
+ "keyring",
+ "ncd-component",
+ "ncd-deploy",
+ "ncd-domain",
+ "ncd-host",
+ "ncd-network",
+ "ncd-test-support",
+ "ncd-traits",
+ "netstat2",
+ "proptest",
+ "rand 0.8.6",
+ "reqwest 0.12.28",
+ "scrypt",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "ts-rs",
+ "wiremock",
+]
+
+[[package]]
 name = "ncd-component"
 version = "0.1.0"
 dependencies = [
@@ -2930,6 +2992,7 @@ dependencies = [
  "ncd-host",
  "ncd-template",
  "ncd-test-support",
+ "ncd-traits",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -3011,6 +3074,8 @@ dependencies = [
  "futures-util",
  "hex",
  "keyring",
+ "ncd-backend-napcat",
+ "ncd-backend-snowluma",
  "ncd-component",
  "ncd-deploy",
  "ncd-domain",
@@ -3106,6 +3171,8 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
