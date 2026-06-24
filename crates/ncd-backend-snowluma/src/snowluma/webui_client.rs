@@ -110,6 +110,46 @@ pub struct AuthState {
     pub must_change_password: bool,
 }
 
+/// SnowLuma WebUI /api/agreements 单份协议文档
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+pub struct AgreementDoc {
+    pub id: String,
+    pub title: String,
+    pub declared_version: String,
+    pub text: String,
+}
+
+/// SnowLuma WebUI /api/agreements 响应体
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+pub struct AgreementsPayload {
+    pub version: String,
+    #[serde(default)]
+    pub consent_required: bool,
+    #[serde(default)]
+    pub documents: Vec<AgreementDoc>,
+}
+
+/// POST /api/agreements/record-consent 请求体
+#[derive(Debug, Clone, Serialize)]
+pub struct RecordConsentRequest {
+    pub version: String,
+}
+
+/// POST /api/agreements/record-consent 响应体
+#[derive(Debug, Clone, Deserialize)]
+pub struct RecordConsentResponse {
+    #[serde(default)]
+    pub success: bool,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default, rename = "currentVersion")]
+    pub current_version: Option<String>,
+}
+
 // SnowLumaWebUiClient trait
 
 /// SnowLuma WebUI HTTP 客户端 trait
@@ -152,6 +192,12 @@ pub trait SnowLumaWebUiClient: Send + Sync {
 
     /// GET /api/auth/state:免鉴权,用于侦测 daemon 是否要求强制改密
     async fn get_auth_state(&self) -> Result<AuthState, SnowLumaWebUiError>;
+
+    /// GET /api/agreements:登录后读取当前 EULA / Privacy 文本与版本
+    async fn get_agreements(&self) -> Result<AgreementsPayload, SnowLumaWebUiError>;
+
+    /// POST /api/agreements/record-consent:记录用户已同意当前协议版本
+    async fn record_agreement_consent(&self, version: &str) -> Result<(), SnowLumaWebUiError>;
 
     /// POST /api/config/:uin:热推送 OneBot 配置body = 完整 OneBotConfig JSON
     /// daemon 会 saveOneBotConfig 写盘 + oneBotManager.reloadConfig(uin) 热 reload
@@ -392,6 +438,44 @@ fn validate_host(host: &str) -> Result<(), SnowLumaWebUiError> {
     }
 }
 
+async fn decode_record_consent_response(
+    path: &str,
+    resp: reqwest::Response,
+) -> Result<(), SnowLumaWebUiError> {
+    let status = resp.status();
+    if !status.is_success() {
+        let message = resp.text().await.unwrap_or_default();
+        return Err(SnowLumaWebUiError::Status {
+            endpoint: path.into(),
+            status: status.as_u16(),
+            message,
+        });
+    }
+    let body: RecordConsentResponse = ReqwestSnowLumaWebUiClient::decode_json(path, resp).await?;
+    if body.success {
+        Ok(())
+    } else {
+        let suffix = body
+            .current_version
+            .as_deref()
+            .map(|v| format!(" currentVersion={v}"))
+            .unwrap_or_default();
+        Err(SnowLumaWebUiError::ServerRejected {
+            endpoint: path.into(),
+            message: format!("{}{}", body.message, suffix),
+        })
+    }
+}
+
+pub fn snowluma_error_requires_consent(err: &SnowLumaWebUiError) -> bool {
+    match err {
+        SnowLumaWebUiError::Status {
+            status, message, ..
+        } => *status == 403 && message.contains("\"consentRequired\":true"),
+        _ => false,
+    }
+}
+
 #[async_trait]
 impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
     async fn wait_ready(
@@ -575,6 +659,51 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
         // /api/auth/state 不需要鉴权
         self.anon_get_json("/api/auth/state", DEFAULT_REQUEST_TIMEOUT)
             .await
+    }
+
+    async fn get_agreements(&self) -> Result<AgreementsPayload, SnowLumaWebUiError> {
+        self.authed_request_json(Method::GET, "/api/agreements", DEFAULT_REQUEST_TIMEOUT)
+            .await
+    }
+
+    async fn record_agreement_consent(&self, version: &str) -> Result<(), SnowLumaWebUiError> {
+        let path = "/api/agreements/record-consent";
+        {
+            let has_token = self.inner.read().await.token.is_some();
+            if !has_token {
+                self.login().await?;
+            }
+        }
+
+        let body = RecordConsentRequest {
+            version: version.to_string(),
+        };
+        let builder = self
+            .build_authed_request(Method::POST, path, DEFAULT_REQUEST_TIMEOUT)
+            .await?
+            .json(&body);
+        let resp = builder
+            .send()
+            .await
+            .map_err(|e| Self::classify_reqwest_error(path, e))?;
+        let status = resp.status();
+        if status.as_u16() == 401 {
+            {
+                let mut inner = self.inner.write().await;
+                inner.token = None;
+            }
+            self.login().await?;
+            let builder = self
+                .build_authed_request(Method::POST, path, DEFAULT_REQUEST_TIMEOUT)
+                .await?
+                .json(&body);
+            let resp2 = builder
+                .send()
+                .await
+                .map_err(|e| Self::classify_reqwest_error(path, e))?;
+            return decode_record_consent_response(path, resp2).await;
+        }
+        decode_record_consent_response(path, resp).await
     }
 
     async fn update_onebot_config(

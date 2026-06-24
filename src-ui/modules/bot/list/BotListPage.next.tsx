@@ -44,17 +44,24 @@ import {
     isSnowlumaRemoteNativeConfig,
 } from '../../../core/domain/bot/snowluma-remote-ui';
 import { botService } from '../../../core/services/bot.service';
+import type { SnowLumaAgreementsPayload } from '../../../core/services/bot.service';
 import type { ConfigDrift } from '../../../core/ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../../../core/ipc/generated/DriftDecision';
 import { BotCard } from './next/BotCard';
 import { FloatingActions } from './next/FloatingActions';
 import { BatchBottomBar } from './next/BatchBottomBar';
 import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
+import { SnowLumaConsentDialog } from '../dialogs/SnowLumaConsentDialog';
 import gridStyles from './next/botCardGrid.module.css';
 
 interface BotListPageNextProps {
     onConfigureBot: (botId: string | null) => void;
     onViewLogs: (botId: string) => void;
+}
+
+function isSnowLumaConsentError(err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return message.includes('SNOWLUMA_CONSENT_REQUIRED') || message.includes('"consentRequired":true');
 }
 
 export function BotListPageNext({
@@ -93,8 +100,84 @@ export function BotListPageNext({
     // ── Config drift detection before start ──────────────────────────────
     const [pendingDrift, setPendingDrift] = useState<ConfigDrift | null>(null);
     const [driftBotId, setDriftBotId] = useState<string | null>(null);
+    const [consentBotId, setConsentBotId] = useState<string | null>(null);
+    const [consentPayload, setConsentPayload] = useState<SnowLumaAgreementsPayload | null>(null);
+    const [consentSubmitting, setConsentSubmitting] = useState(false);
+    const [consentRetryDecisions, setConsentRetryDecisions] = useState<DriftDecision[] | null>(null);
+    const [startingBotId, setStartingBotId] = useState<string | null>(null);
+
+    const openSnowLumaConsent = useCallback(async (
+        botId: string,
+        decisions: DriftDecision[] | null = null,
+        preparedPayload?: SnowLumaAgreementsPayload,
+    ) => {
+        setConsentBotId(botId);
+        setConsentRetryDecisions(decisions);
+        if (preparedPayload) {
+            setConsentPayload(preparedPayload);
+            return;
+        }
+        setConsentPayload(null);
+        try {
+            const payload = await botService.getSnowLumaAgreements(botId);
+            setConsentPayload(payload);
+        } catch (err: unknown) {
+            setConsentBotId(null);
+            setConsentRetryDecisions(null);
+            pushInfoBar({
+                tone: 'danger',
+                title: '读取 SnowLuma 协议失败',
+                content: err instanceof Error ? err.message : String(err),
+            });
+        }
+    }, []);
+
+    const prepareSnowLumaConsentOrOpen = useCallback(async (
+        botId: string,
+        decisions: DriftDecision[] | null = null,
+    ) => {
+        try {
+            const payload = await botService.prepareSnowLumaAgreements(botId);
+            if (payload?.consent_required) {
+                openSnowLumaConsent(botId, decisions, payload);
+                return false;
+            }
+            return true;
+        } catch (err: unknown) {
+            if (isSnowLumaConsentError(err)) {
+                await openSnowLumaConsent(botId, decisions);
+                return false;
+            }
+            pushInfoBar({
+                tone: 'danger',
+                title: 'SnowLuma 启动前检查失败',
+                content: err instanceof Error ? err.message : String(err),
+            });
+            return false;
+        }
+    }, [openSnowLumaConsent]);
+
+    const startBotDirect = useCallback(async (botId: string) => {
+        setStartingBotId(botId);
+        const ready = await prepareSnowLumaConsentOrOpen(botId);
+        if (!ready) {
+            return;
+        }
+        try {
+            await mutations.startBotAsync(botId);
+        } catch (err: unknown) {
+            if (isSnowLumaConsentError(err)) {
+                await openSnowLumaConsent(botId);
+                return;
+            }
+            throw err;
+        } finally {
+            setStartingBotId(null);
+        }
+    }, [mutations, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
 
     const handleStartBot = useCallback(async (botId: string) => {
+        setStartingBotId(botId);
         const gate = dockerStartGate(botId);
         if (gate) {
             pushInfoBar({
@@ -103,31 +186,27 @@ export function BotListPageNext({
                 content: gate,
                 key: `bot-start-gate:${botId}`,
             });
+            setStartingBotId(null);
             return;
         }
+        let drift: ConfigDrift | null = null;
         try {
-            const drift = await botService.detectConfigDrift(botId);
-            if (drift && !drift.added.length && !drift.modified.length) {
-                // clean, start directly
-                mutations.startBot(botId);
-                return;
-            }
-            if (drift) {
-                // has drift, show dialog
-                setDriftBotId(botId);
-                setPendingDrift(drift);
-            } else {
-                // null = no drift or files don't exist
-                mutations.startBot(botId);
-            }
-        } catch (err: unknown) {
-            // detection failed, fallback to direct start
-            mutations.startBot(botId);
+            drift = await botService.detectConfigDrift(botId);
+        } catch {
+            drift = null;
         }
-    }, [mutations, dockerStartGate]);
+        if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
+            setDriftBotId(botId);
+            setPendingDrift(drift);
+            setStartingBotId(null);
+            return;
+        }
+        startBotDirect(botId).catch(() => undefined);
+    }, [dockerStartGate, startBotDirect]);
 
     const handleDriftConfirm = useCallback(async (decisions: DriftDecision[]) => {
         if (!driftBotId) return;
+        setStartingBotId(driftBotId);
         const gate = dockerStartGate(driftBotId);
         if (gate) {
             setPendingDrift(null);
@@ -138,10 +217,16 @@ export function BotListPageNext({
                 key: `bot-start-gate:${driftBotId}`,
             });
             setDriftBotId(null);
+            setStartingBotId(null);
             return;
         }
         setPendingDrift(null);
         try {
+            const ready = await prepareSnowLumaConsentOrOpen(driftBotId, decisions);
+            if (!ready) {
+                setDriftBotId(null);
+                return;
+            }
             const snap = await botService.startWithDecisions(driftBotId, decisions);
             pushInfoBar({
                 tone: 'success',
@@ -150,6 +235,11 @@ export function BotListPageNext({
                 autoDismissMs: 4000,
             });
         } catch (err: unknown) {
+            if (isSnowLumaConsentError(err)) {
+                await openSnowLumaConsent(driftBotId, decisions);
+                setDriftBotId(null);
+                return;
+            }
             pushInfoBar({
                 tone: 'danger',
                 title: '启动失败',
@@ -157,12 +247,83 @@ export function BotListPageNext({
             });
         }
         setDriftBotId(null);
-    }, [driftBotId, dockerStartGate]);
+        setStartingBotId(null);
+    }, [driftBotId, dockerStartGate, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
+
+    const handleConsentConfirm = useCallback(async () => {
+        if (!consentBotId || !consentPayload) return;
+        setConsentSubmitting(true);
+        const retryBotId = consentBotId;
+        const retryDecisions = consentRetryDecisions;
+        try {
+            await botService.acceptSnowLumaAgreements(retryBotId, consentPayload.version);
+        } catch (err: unknown) {
+            pushInfoBar({
+                tone: 'danger',
+                title: 'SnowLuma 协议确认失败',
+                content: err instanceof Error ? err.message : String(err),
+            });
+            setConsentSubmitting(false);
+            return;
+        }
+
+        setConsentBotId(null);
+        setConsentPayload(null);
+        setConsentRetryDecisions(null);
+        setConsentSubmitting(false);
+
+        if (retryDecisions) {
+            try {
+                setStartingBotId(retryBotId);
+                const ready = await prepareSnowLumaConsentOrOpen(retryBotId, retryDecisions);
+                if (!ready) {
+                    setStartingBotId(null);
+                    return;
+                }
+                const snap = await botService.startWithDecisions(retryBotId, retryDecisions);
+                pushInfoBar({
+                    tone: 'success',
+                    title: '操作完成',
+                    content: `已发送启动指令给 Bot: ${snap.bot_id}`,
+                    autoDismissMs: 4000,
+                });
+            } catch (err: unknown) {
+                pushInfoBar({
+                    tone: 'danger',
+                    title: '启动失败',
+                    content: err instanceof Error ? err.message : String(err),
+                });
+            } finally {
+                setStartingBotId(null);
+            }
+        } else {
+            startBotDirect(retryBotId).catch(() => undefined);
+        }
+    }, [consentBotId, consentPayload, consentRetryDecisions, prepareSnowLumaConsentOrOpen, startBotDirect]);
+
+    const handleConsentCancel = useCallback(() => {
+        if (consentSubmitting) return;
+        const botId = consentBotId;
+        setConsentBotId(null);
+        setConsentPayload(null);
+        setConsentRetryDecisions(null);
+        if (botId) {
+            botService.releaseSnowLumaAgreementSession(botId).catch(() => undefined);
+        }
+        setStartingBotId(null);
+    }, [consentBotId, consentSubmitting]);
 
     const handleDriftCancel = useCallback(() => {
         setPendingDrift(null);
         setDriftBotId(null);
     }, []);
+
+    useEffect(() => {
+        if (consentBotId) return;
+        const pending = botSnapshots.find((bot) => isSnowLumaConsentError(bot.last_error ?? ''));
+        if (!pending) return;
+        void openSnowLumaConsent(pending.bot_id);
+    }, [botSnapshots, consentBotId, openSnowLumaConsent]);
 
     // 加载 / 错误状态也接 InfoBar，让顶部状态信息统一。但只在错误首次出现时
     // 推一次，避免 react-query 重试反复推。
@@ -247,6 +408,7 @@ export function BotListPageNext({
                         onConfigureBot={onConfigureBot}
                         onViewLogs={onViewLogs}
                         onStartBot={handleStartBot}
+                        startingBotId={startingBotId}
                     />
                 )}
             </div>
@@ -311,6 +473,15 @@ export function BotListPageNext({
                     onCancel={handleDriftCancel}
                 />
             )}
+
+            <SnowLumaConsentDialog
+                open={!!consentBotId}
+                botId={consentBotId}
+                payload={consentPayload}
+                submitting={consentSubmitting}
+                onConfirm={handleConsentConfirm}
+                onCancel={handleConsentCancel}
+            />
         </div>
     );
 }
@@ -383,6 +554,7 @@ type GridProps = {
     onConfigureBot: (botId: string | null) => void;
     onViewLogs: (botId: string) => void;
     onStartBot: (botId: string) => void;
+    startingBotId: string | null;
 };
 
 function BotListGrid({
@@ -398,6 +570,7 @@ function BotListGrid({
     onConfigureBot,
     onViewLogs,
     onStartBot,
+    startingBotId,
 }: GridProps) {
     const m = useMotion();
     const containerRef = useRef<HTMLDivElement>(null);
@@ -462,6 +635,7 @@ function BotListGrid({
                             snowlumaLoginState={snowlumaBot?.loginState ?? null}
                             isBatchMode={batch.isBatchMode}
                             isSelected={batch.selectedIds.has(bot.bot_id)}
+                            actionPending={startingBotId === bot.bot_id}
                             onStart={onStartBot}
                             onStop={mutations.stopBot}
                             onConfigure={onConfigureBot}

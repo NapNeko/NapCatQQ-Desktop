@@ -64,12 +64,12 @@ pub use server_manager::{
     ServerCredentialStore, ServerManager, ServerProfile, ServerState,
 };
 pub use snowluma::{
-    AuthState, HookProcessInfo, HookProcessStatus, MockProcessTreeProbe,
-    OneBotInstanceInfo, ProcessTreeProbe, ReqwestSnowLumaWebUiClient,
-    ReqwestSnowLumaWebUiClientFactory, SnowLumaDaemon, SnowLumaDaemonError,
-    SnowLumaRuntimeBackend, SnowLumaSession, SnowLumaStatusPoller, SnowLumaWebUiClient,
-    SnowLumaWebUiClientFactory, SnowLumaWebUiError, SysinfoProcessTreeProbe,
-    load_or_create_session, load_snowluma_app_config, render_daemon_globals, sanitize_log_line,
+    AgreementDoc, AgreementsPayload, AuthState, HookProcessInfo, HookProcessStatus,
+    MockProcessTreeProbe, OneBotInstanceInfo, ProcessTreeProbe, ReqwestSnowLumaWebUiClient,
+    ReqwestSnowLumaWebUiClientFactory, SnowLumaDaemon, SnowLumaDaemonError, SnowLumaRuntimeBackend,
+    SnowLumaSession, SnowLumaStatusPoller, SnowLumaWebUiClient, SnowLumaWebUiClientFactory,
+    SnowLumaWebUiError, SysinfoProcessTreeProbe, load_or_create_session, load_snowluma_app_config,
+    render_daemon_globals, sanitize_log_line,
 };
 
 #[cfg(test)]
@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn bootstrap_snapshot_round_trips() {
-        use ncd_domain::{BootstrapSnapshot, BootstrapStatus, SchemaVersion, MigrationReport};
+        use ncd_domain::{BootstrapSnapshot, BootstrapStatus, MigrationReport, SchemaVersion};
         let snapshot = BootstrapSnapshot::ready();
         let json = serde_json::to_string(&snapshot).unwrap();
         let decoded: BootstrapSnapshot = serde_json::from_str(&json).unwrap();

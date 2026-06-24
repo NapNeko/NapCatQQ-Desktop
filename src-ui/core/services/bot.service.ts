@@ -9,6 +9,19 @@ import type { BackendType } from '../ipc/generated/domain/BackendType';
 import type { QqLoginInfo } from '../ipc/generated/QqLoginInfo';
 import type { ConfigDrift } from '../ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../ipc/generated/DriftDecision';
+
+export interface SnowLumaAgreementDoc {
+    id: string;
+    title: string;
+    declared_version: string;
+    text: string;
+}
+
+export interface SnowLumaAgreementsPayload {
+    version: string;
+    consent_required: boolean;
+    documents: SnowLumaAgreementDoc[];
+}
 import {
     buildMockBotConfig,
     mockBatchDelete,
@@ -186,5 +199,40 @@ export const botService = {
                 }
             }, 80),
         );
+    },
+
+    getSnowLumaAgreements: async (botId: string): Promise<SnowLumaAgreementsPayload> => {
+        if (isTauri) return invoke<SnowLumaAgreementsPayload>('get_snowluma_agreements', { botId });
+        return {
+            version: 'mock',
+            consent_required: true,
+            documents: [
+                {
+                    id: 'eula',
+                    title: 'SnowLuma 用户协议',
+                    declared_version: 'mock',
+                    text: '浏览器预览模式下的 SnowLuma 用户协议占位文本。',
+                },
+                {
+                    id: 'privacy',
+                    title: 'SnowLuma 隐私政策',
+                    declared_version: 'mock',
+                    text: '浏览器预览模式下的 SnowLuma 隐私政策占位文本。',
+                },
+            ],
+        };
+    },
+
+    acceptSnowLumaAgreements: async (botId: string, version: string): Promise<void> => {
+        if (isTauri) return invoke<void>('accept_snowluma_agreements', { botId, version });
+    },
+
+    prepareSnowLumaAgreements: async (botId: string): Promise<SnowLumaAgreementsPayload | null> => {
+        if (isTauri) return invoke<SnowLumaAgreementsPayload | null>('prepare_snowluma_agreements', { botId });
+        return null;
+    },
+
+    releaseSnowLumaAgreementSession: async (botId: string): Promise<void> => {
+        if (isTauri) return invoke<void>('release_snowluma_agreement_session', { botId });
     },
 };

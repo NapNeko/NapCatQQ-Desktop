@@ -3,12 +3,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ncd_runtime::{
-    BotManager, BroadcastEventBus, DispatchRenderer,
-    EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore, ReqwestNapCatWebUiClient,
-    SecretStoreImpl,
-};
 use ncd_domain::{BootstrapSnapshot, DesktopNotifySettings};
+use ncd_runtime::{
+    BotManager, BroadcastEventBus, DispatchRenderer, EventBus, EventFilter, LocalBotConfigRepo,
+    LocalConfigStore, ReqwestNapCatWebUiClient, SecretStoreImpl,
+};
 use tauri::Emitter;
 use tauri::Manager;
 use tokio::sync::{Mutex, RwLock};
@@ -455,6 +454,10 @@ pub fn run() {
             commands::snowluma::get_snowluma_app_config,
             commands::snowluma::set_snowluma_app_config,
             commands::snowluma::set_snowluma_password_override,
+            commands::snowluma::get_snowluma_agreements,
+            commands::snowluma::accept_snowluma_agreements,
+            commands::snowluma::prepare_snowluma_agreements,
+            commands::snowluma::release_snowluma_agreement_session,
             commands::snowluma::open_snowluma_webui,
             commands::snowluma::open_snowluma_novnc,
             commands::servers::list_servers,

@@ -486,6 +486,20 @@ mod tests {
             Ok(AuthState::default())
         }
 
+        async fn get_agreements(
+            &self,
+        ) -> Result<crate::snowluma::webui_client::AgreementsPayload, SnowLumaWebUiError> {
+            Ok(crate::snowluma::webui_client::AgreementsPayload {
+                version: "mock".into(),
+                consent_required: false,
+                documents: Vec::new(),
+            })
+        }
+
+        async fn record_agreement_consent(&self, _version: &str) -> Result<(), SnowLumaWebUiError> {
+            Ok(())
+        }
+
         async fn update_onebot_config(
             &self,
             _uin: &str,

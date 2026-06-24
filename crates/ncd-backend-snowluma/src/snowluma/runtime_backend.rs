@@ -18,18 +18,19 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
+use crate::snowluma::daemon::SnowLumaDaemon;
+use crate::snowluma::proc_tree::SysinfoProcessTreeProbe;
+use crate::snowluma::status_poller::{PollerDeps, ProcessTreeProbe, SnowLumaStatusPoller};
+use crate::snowluma::webui_client::snowluma_error_requires_consent;
 use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::ids::BotId;
 use ncd_domain::kinds::{BackendKind, BotFlavor};
+use ncd_domain::snowluma_start_mode::SnowLumaStartMode;
 use ncd_traits::events::{BroadcastEventBus, EventBus};
 use ncd_traits::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, StopMode,
     TailOpts,
 };
-use crate::snowluma::daemon::SnowLumaDaemon;
-use crate::snowluma::proc_tree::SysinfoProcessTreeProbe;
-use crate::snowluma::status_poller::{PollerDeps, ProcessTreeProbe, SnowLumaStatusPoller};
-use ncd_domain::snowluma_start_mode::SnowLumaStartMode;
 
 /// daemon.ensure_running 总超时
 const DAEMON_ENSURE_TIMEOUT: Duration = Duration::from_secs(35);
@@ -315,6 +316,7 @@ impl BotBackend for SnowLumaRuntimeBackend {
             };
 
             if let Err(err) = client.load_process(qq_pid).await {
+                let requires_consent = snowluma_error_requires_consent(&err);
                 abort_start(
                     &self.daemon,
                     Arc::clone(&self.zombies),
@@ -323,6 +325,11 @@ impl BotBackend for SnowLumaRuntimeBackend {
                     start_mode,
                 )
                 .await;
+                if requires_consent {
+                    return Err(BotBackendError::Io(format!(
+                        "SNOWLUMA_CONSENT_REQUIRED: load_process: {err}"
+                    )));
+                }
                 return Err(BotBackendError::Io(format!("load_process: {err}")));
             }
 

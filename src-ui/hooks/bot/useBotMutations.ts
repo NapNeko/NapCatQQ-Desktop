@@ -45,6 +45,10 @@ export function useBotMutations({ onMessage }: MutationCallbacks = {}) {
             onMessage?.({ type: 'success', text: `已发送启动指令给 Bot: ${snap.bot_id}` });
         },
         onError: (err: any) => {
+            const text = err.message || String(err);
+            if (text.includes('SNOWLUMA_CONSENT_REQUIRED') || text.includes('"consentRequired":true')) {
+                return;
+            }
             onMessage?.({ type: 'error', text: `启动失败: ${err.message || err}` });
         },
     });
@@ -104,6 +108,7 @@ export function useBotMutations({ onMessage }: MutationCallbacks = {}) {
 
     return {
         startBot: (botId: string) => startMutation.mutate(botId),
+        startBotAsync: (botId: string) => startMutation.mutateAsync(botId),
         stopBot: (botId: string) => stopMutation.mutate(botId),
         batchStart: (ids: string[]) => batchStartMutation.mutate(ids),
         batchStop: (ids: string[]) => batchStopMutation.mutate(ids),

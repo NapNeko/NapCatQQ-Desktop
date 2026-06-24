@@ -220,6 +220,14 @@ impl SnowLumaDaemon {
         }
     }
 
+    pub async fn current_webui_client(&self) -> Option<Arc<dyn SnowLumaWebUiClient>> {
+        let inner = self.inner.lock().await;
+        if inner.state != DaemonState::Ready {
+            return None;
+        }
+        inner.webui_client.clone()
+    }
+
     /// starter 路径:渲染配置 → spawn node.exe → 构造 client → wait_ready → login
     /// 任意失败立即调 rollback_to_stopped 重置内部状态,清 ref_count 并发事件
     async fn run_starter(
@@ -1089,6 +1097,20 @@ mod tests {
             &self,
         ) -> Result<crate::snowluma::webui_client::AuthState, SnowLumaWebUiError> {
             Ok(crate::snowluma::webui_client::AuthState::default())
+        }
+
+        async fn get_agreements(
+            &self,
+        ) -> Result<crate::snowluma::webui_client::AgreementsPayload, SnowLumaWebUiError> {
+            Ok(crate::snowluma::webui_client::AgreementsPayload {
+                version: "mock".into(),
+                consent_required: false,
+                documents: Vec::new(),
+            })
+        }
+
+        async fn record_agreement_consent(&self, _version: &str) -> Result<(), SnowLumaWebUiError> {
+            Ok(())
         }
 
         async fn update_onebot_config(

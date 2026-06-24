@@ -32,6 +32,10 @@ function normError(v: string | null | undefined): string | null {
     return t && t.length > 0 ? t : null;
 }
 
+function isSnowLumaConsentError(raw: string): boolean {
+    return raw.includes('SNOWLUMA_CONSENT_REQUIRED') || raw.includes('"consentRequired":true');
+}
+
 /** InfoBar 展示用：截取首行摘要，避免 Python traceback 等长文本撑爆横幅。 */
 function briefError(raw: string): string {
     const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -77,6 +81,7 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
 
             const prev = getBotSnapshotPrev(id);
             const label = row.displayName;
+            const consentRequired = lastError ? isSnowLumaConsentError(lastError) : false;
 
             const keyLastError = `bot-last-error:${id}`;
             const keyKicked = `bot-kicked:${id}`;
@@ -88,7 +93,7 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             if (!crashed) clearBotSnapshotAlertSuppression(keyCrashed);
             if (!daemonCrashed) clearBotSnapshotAlertSuppression(keyDaemon);
 
-            if (lastError && lastError !== prev.lastError) {
+            if (lastError && !consentRequired && lastError !== prev.lastError) {
                 const brief = briefError(lastError);
                 if (isQqSystemDependencyError(lastError)) {
                     pushIfNotSuppressed(`bot-qq-deps:${id}`, {
@@ -116,7 +121,7 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
                 });
             }
 
-            if (crashed && !prev.crashed) {
+            if (crashed && !consentRequired && !prev.crashed) {
                 pushIfNotSuppressed(keyCrashed, {
                     tone: 'danger',
                     title: `Bot 已崩溃 · ${label}`,

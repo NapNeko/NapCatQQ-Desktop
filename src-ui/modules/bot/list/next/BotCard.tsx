@@ -90,6 +90,7 @@ interface BotCardProps {
 
     isBatchMode: boolean;
     isSelected: boolean;
+    actionPending?: boolean;
 
     onStart: (botId: string) => void;
     onStop: (botId: string) => void;
@@ -120,6 +121,7 @@ export function BotCard({
     snowlumaLoginState,
     isBatchMode,
     isSelected,
+    actionPending = false,
     onStart,
     onStop,
     onConfigure,
@@ -226,6 +228,7 @@ export function BotCard({
             : (isBotStarting(bot.state) || bot.state === 'repairing' ? 'brand' : 'none');
 
     const isActive = isBotActive(bot.state);
+    const startPending = actionPending && !isActive;
 
     const snowlumaTunnelReady = isSnowlumaTunnelReady({
         config: config ?? null,
@@ -410,17 +413,32 @@ export function BotCard({
                                 </IconButton>
                                 <IconButton
                                     visible={!isActive && canStartBot(bot.state)}
-                                    tooltip={transportFailed ? '远端主机不可达，无法启动' : '启动 Bot'}
+                                    tooltip={
+                                        startPending
+                                            ? '正在准备启动'
+                                            : transportFailed
+                                                ? '远端主机不可达，无法启动'
+                                                : '启动 Bot'
+                                    }
                                     onClick={stopAction(() => onStart(bot.bot_id))}
-                                    disabled={!canStartBot(bot.state) || transportFailed}
+                                    disabled={!canStartBot(bot.state) || transportFailed || startPending}
                                     tone="success"
                                 >
-                                    <ToolbarMotionIcon
-                                        icon={Play}
-                                        size={14}
-                                        strokeWidth={2.6}
-                                        hoverAccent
-                                    />
+                                    {startPending ? (
+                                        <ActionMotionIcon
+                                            icon={RefreshCw}
+                                            size={14}
+                                            strokeWidth={2.4}
+                                            motion="spin"
+                                        />
+                                    ) : (
+                                        <ToolbarMotionIcon
+                                            icon={Play}
+                                            size={14}
+                                            strokeWidth={2.6}
+                                            hoverAccent
+                                        />
+                                    )}
                                 </IconButton>
                                 <IconButton
                                     visible={isBotRunning(bot.state) || isBotStarting(bot.state)}

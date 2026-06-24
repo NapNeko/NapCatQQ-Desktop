@@ -10,6 +10,23 @@ use ncd_host::{Host, HostCommand, HostPath};
 use serde_json::Value;
 use tokio::sync::Mutex;
 
+use crate::remote_snowluma_layout::{
+    DEFAULT_WEBUI_PORT, RemoteSnowLumaLayout, SnowLumaRemotePaths, napcat_layout_qq_executable,
+    probe_remote_snowluma_layout,
+};
+use crate::remote_snowluma_orchestrator::{
+    bot_cold_start, bot_stop, daemon_start, daemon_stop, remote_daemon_already_ready,
+    resolve_remote_bash, wait_webui_tcp, write_status_daemon_json,
+};
+use crate::remote_snowluma_tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
+use crate::snowluma::daemon::DaemonState;
+use crate::snowluma::error::SnowLumaWebUiError;
+use crate::snowluma::session::{build_webui_json_payload, generate_strong_password};
+use crate::snowluma::status_poller::{PollerDeps, SnowLumaStatusPoller};
+use crate::snowluma::webui_client::{
+    HookProcessStatus, ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient,
+    snowluma_error_requires_consent,
+};
 use ncd_deploy::backend_config_renderer::render_snowluma_docker_config_payloads;
 use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::kinds::BackendKind;
@@ -18,22 +35,6 @@ use ncd_traits::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, StopMode,
     TailOpts,
 };
-use crate::remote_snowluma_layout::{
-    RemoteSnowLumaLayout, SnowLumaRemotePaths, DEFAULT_WEBUI_PORT, napcat_layout_qq_executable,
-    probe_remote_snowluma_layout,
-};
-use crate::remote_snowluma_orchestrator::{
-    bot_cold_start, bot_stop, daemon_start, daemon_stop, remote_daemon_already_ready,
-    resolve_remote_bash, wait_webui_tcp, write_status_daemon_json,
-};
-use crate::remote_snowluma_tunnel::{
-    RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry,
-};
-use crate::snowluma::daemon::DaemonState;
-use crate::snowluma::error::SnowLumaWebUiError;
-use crate::snowluma::session::{build_webui_json_payload, generate_strong_password};
-use crate::snowluma::status_poller::{PollerDeps, SnowLumaStatusPoller};
-use crate::snowluma::webui_client::{HookProcessStatus, ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
 use serde_json::json;
 
 async fn host_file_nonempty(host: &dyn Host, path: &str) -> bool {
@@ -51,14 +52,22 @@ async fn read_remote_file_trimmed(host: &dyn Host, path: &str) -> Result<String,
     Ok(String::from_utf8_lossy(&bytes).trim().to_string())
 }
 
-async fn read_remote_log_tail(host: &dyn Host, path: &str, max_lines: usize) -> Result<String, BotBackendError> {
+async fn read_remote_log_tail(
+    host: &dyn Host,
+    path: &str,
+    max_lines: usize,
+) -> Result<String, BotBackendError> {
     let bytes = match host.read_file(&HostPath::from_posix(path)).await {
         Ok(b) => b,
         Err(_) => return Ok(String::new()),
     };
     let text = String::from_utf8_lossy(&bytes);
     let lines: Vec<&str> = text.lines().collect();
-    let start = if lines.len() > max_lines { lines.len() - max_lines } else { 0 };
+    let start = if lines.len() > max_lines {
+        lines.len() - max_lines
+    } else {
+        0
+    };
     Ok(lines[start..].join("\n"))
 }
 
@@ -206,10 +215,11 @@ pub fn is_remote_native_snowluma_config(config: &BotConfig) -> bool {
 }
 
 /// 远端是否已有匹配 qq_id 的 qq 进程(热启动 attach / bootstrap reconcile 用)
-pub async fn remote_qq_running_pid(host: &dyn Host, qq_id: u64) -> Result<Option<u32>, BotBackendError> {
-    let script = format!(
-        r#"pgrep -f "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1"#
-    );
+pub async fn remote_qq_running_pid(
+    host: &dyn Host,
+    qq_id: u64,
+) -> Result<Option<u32>, BotBackendError> {
+    let script = format!(r#"pgrep -f "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1"#);
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
     let out = host
         .run_to_string(cmd)
@@ -231,8 +241,11 @@ async fn inject_via_tunnel(
     endpoints: &RemoteSnowLumaTunnelEndpoints,
     qq_pid: u32,
 ) -> Result<Arc<dyn SnowLumaWebUiClient>, BotBackendError> {
-    let client = ReqwestSnowLumaWebUiClient::new(endpoints.webui_local_port, endpoints.webui_password.clone())
-        .map_err(|e: SnowLumaWebUiError| BotBackendError::Io(e.to_string()))?;
+    let client = ReqwestSnowLumaWebUiClient::new(
+        endpoints.webui_local_port,
+        endpoints.webui_password.clone(),
+    )
+    .map_err(|e: SnowLumaWebUiError| BotBackendError::Io(e.to_string()))?;
     client
         .wait_ready(Duration::from_secs(90), Box::new(|| false))
         .await
@@ -286,11 +299,15 @@ async fn inject_via_tunnel(
                                     p.pid, p.status, p.error
                                 ));
                             } else {
-                                msg.push_str("; pid not present in current /api/processes snapshot");
+                                msg.push_str(
+                                    "; pid not present in current /api/processes snapshot",
+                                );
                             }
                         }
                         Err(list_err) => {
-                            msg.push_str(&format!("; list_processes after rejection also failed: {list_err}"));
+                            msg.push_str(&format!(
+                                "; list_processes after rejection also failed: {list_err}"
+                            ));
                         }
                     }
                 }
@@ -299,6 +316,11 @@ async fn inject_via_tunnel(
         }
         Err(e) => {
             // 其它 WebUI 错误(超时,网络,decode 等),同样尝试补快照(仅对 ServerRejected 空消息有意义,这里只透传)
+            if snowluma_error_requires_consent(&e) {
+                return Err(BotBackendError::Io(format!(
+                    "SNOWLUMA_CONSENT_REQUIRED: SnowLuma load_process: {e}"
+                )));
+            }
             return Err(BotBackendError::Io(format!("SnowLuma load_process: {e}")));
         }
     }
@@ -391,19 +413,16 @@ impl RemoteSnowLumaDaemon {
     pub async fn ensure_running(&self) -> Result<(), BotBackendError> {
         let _stack_guard = self.stack_bootstrap.lock().await;
 
-        self.event_bus.publish(DomainEvent::snowluma_daemon_state_changed(
-            DaemonState::Starting,
-            0,
-            None,
-            Some(self.server_id.clone()),
-        ));
+        self.event_bus
+            .publish(DomainEvent::snowluma_daemon_state_changed(
+                DaemonState::Starting,
+                0,
+                None,
+                Some(self.server_id.clone()),
+            ));
 
-        ensure_remote_daemon_prereqs(
-            self.host.as_ref(),
-            &self.layout.home,
-            &self.layout.paths,
-        )
-        .await?;
+        ensure_remote_daemon_prereqs(self.host.as_ref(), &self.layout.home, &self.layout.paths)
+            .await?;
 
         let stack_up = remote_daemon_already_ready(self.host.as_ref(), &self.layout.paths).await?;
         if !stack_up {
@@ -436,12 +455,7 @@ impl RemoteSnowLumaDaemon {
 
         let eps = self
             .tunnels
-            .acquire(
-                &self.server_id,
-                self.host.as_ref(),
-                webui_plain,
-                vnc_plain,
-            )
+            .acquire(&self.server_id, self.host.as_ref(), webui_plain, vnc_plain)
             .await
             .map_err(|e| BotBackendError::Io(format!("SnowLuma SSH 隧道: {e}")))?;
         *self.tunnel_eps.lock().await = Some(eps);
@@ -451,12 +465,13 @@ impl RemoteSnowLumaDaemon {
         let rc = *guard;
         drop(guard);
 
-        self.event_bus.publish(DomainEvent::snowluma_daemon_state_changed(
-            DaemonState::Ready,
-            rc,
-            None,
-            Some(self.server_id.clone()),
-        ));
+        self.event_bus
+            .publish(DomainEvent::snowluma_daemon_state_changed(
+                DaemonState::Ready,
+                rc,
+                None,
+                Some(self.server_id.clone()),
+            ));
         Ok(())
     }
 
@@ -475,12 +490,13 @@ impl RemoteSnowLumaDaemon {
         if stop_daemon {
             let _ = daemon_stop(self.host.as_ref(), &self.layout.paths).await;
             *self.tunnel_eps.lock().await = None;
-            self.event_bus.publish(DomainEvent::snowluma_daemon_state_changed(
-                DaemonState::Stopped,
-                0,
-                None,
-                Some(self.server_id.clone()),
-            ));
+            self.event_bus
+                .publish(DomainEvent::snowluma_daemon_state_changed(
+                    DaemonState::Stopped,
+                    0,
+                    None,
+                    Some(self.server_id.clone()),
+                ));
         }
     }
 
@@ -496,12 +512,8 @@ impl RemoteSnowLumaDaemon {
 
     /// 冷启动 reconcile:远端进程已在跑时只补隧道与状态文件,不重复 daemon start shell
     pub async fn ensure_running_for_reconcile(&self) -> Result<(), BotBackendError> {
-        ensure_remote_daemon_prereqs(
-            self.host.as_ref(),
-            &self.layout.home,
-            &self.layout.paths,
-        )
-        .await?;
+        ensure_remote_daemon_prereqs(self.host.as_ref(), &self.layout.home, &self.layout.paths)
+            .await?;
 
         if !crate::remote_snowluma_orchestrator::remote_daemon_already_ready(
             self.host.as_ref(),
@@ -528,12 +540,7 @@ impl RemoteSnowLumaDaemon {
 
         let eps = self
             .tunnels
-            .acquire(
-                &self.server_id,
-                self.host.as_ref(),
-                webui_plain,
-                vnc_plain,
-            )
+            .acquire(&self.server_id, self.host.as_ref(), webui_plain, vnc_plain)
             .await
             .map_err(|e| BotBackendError::Io(format!("SnowLuma SSH 隧道: {e}")))?;
         *self.tunnel_eps.lock().await = Some(eps);
@@ -544,12 +551,13 @@ impl RemoteSnowLumaDaemon {
         }
         drop(guard);
 
-        self.event_bus.publish(DomainEvent::snowluma_daemon_state_changed(
-            DaemonState::Ready,
-            *self.refcount.lock().await,
-            None,
-            Some(self.server_id.clone()),
-        ));
+        self.event_bus
+            .publish(DomainEvent::snowluma_daemon_state_changed(
+                DaemonState::Ready,
+                *self.refcount.lock().await,
+                None,
+                Some(self.server_id.clone()),
+            ));
         Ok(())
     }
 }
@@ -620,7 +628,9 @@ impl RemoteSnowLumaBackend {
         let poller_deps = PollerDeps {
             event_bus: Arc::clone(&self.event_bus),
             http,
-            proc_tree: Arc::new(crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(pid)),
+            proc_tree: Arc::new(crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(
+                pid,
+            )),
         };
         let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
         self.pollers.lock().await.insert(bot_id, poller);
@@ -655,13 +665,9 @@ impl BotBackend for RemoteSnowLumaBackend {
         self.daemon.ensure_running().await?;
 
         let paths = self.daemon.paths();
-        if let Err(e) = render_native_snowluma_config_on_host(
-            self.daemon.host.as_ref(),
-            &bot_id,
-            config,
-            paths,
-        )
-        .await
+        if let Err(e) =
+            render_native_snowluma_config_on_host(self.daemon.host.as_ref(), &bot_id, config, paths)
+                .await
         {
             self.daemon.release().await;
             return Err(e);
@@ -690,7 +696,11 @@ impl BotBackend for RemoteSnowLumaBackend {
                 let install_base = HostPath::from_posix(format!("{}/Napcat", layout.home));
                 if let Err(e) = self
                     .qq_entry_coordinator
-                    .ensure_for_native(self.daemon.host.as_ref(), self.daemon.server_id(), &install_base)
+                    .ensure_for_native(
+                        self.daemon.host.as_ref(),
+                        self.daemon.server_id(),
+                        &install_base,
+                    )
                     .await
                 {
                     self.daemon.release().await;
@@ -720,7 +730,9 @@ impl BotBackend for RemoteSnowLumaBackend {
                 if start_mode.is_cold() {
                     let _ = bot_stop(host, paths, &qq_id_str).await;
                     // 失败时带上 bot 启动日志尾部,便于诊断 "QQ 进程立即退出 / 缺库 / ptrace / DISPLAY 问题"
-                    if let Ok(tail) = read_remote_log_tail(host, &paths.log_bot_path(&qq_id_str), 40).await {
+                    if let Ok(tail) =
+                        read_remote_log_tail(host, &paths.log_bot_path(&qq_id_str), 40).await
+                    {
                         if !tail.trim().is_empty() {
                             return Err(BotBackendError::Io(format!(
                                 "{e}\n--- 启动日志末尾 (bot log) ---\n{tail}"
@@ -743,7 +755,9 @@ impl BotBackend for RemoteSnowLumaBackend {
         let poller_deps = PollerDeps {
             event_bus: Arc::clone(&self.event_bus),
             http,
-            proc_tree: Arc::new(crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(pid)),
+            proc_tree: Arc::new(crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(
+                pid,
+            )),
         };
         let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
         self.pollers.lock().await.insert(bot_id.clone(), poller);
@@ -861,6 +875,9 @@ impl BotBackend for RemoteSnowLumaBackend {
         if opts.lines > 0 && lines.len() > opts.lines {
             lines = lines.split_off(lines.len() - opts.lines);
         }
-        Ok(LogSnapshot { lines, total_lines: total })
+        Ok(LogSnapshot {
+            lines,
+            total_lines: total,
+        })
     }
 }

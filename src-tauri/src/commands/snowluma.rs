@@ -1,10 +1,11 @@
 //! SnowLuma Tauri commands
 //! 薄壳层:仅做参数转换 + 错误转 String + 调 BotManager / 实用工具
-//! 
+//!
 
 use std::time::Duration;
 
 use base64::Engine;
+use ncd_runtime::SnowLumaWebUiClient;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -92,10 +93,13 @@ pub async fn list_qq_processes(state: State<'_, AppState>) -> Result<Vec<QQProce
         // 第一遍收集所有 QQ.exe 的 PID,第二遍据此判断 parent 是不是子进程
         // 中转两遍扫描而不是一遍 + lookup,因为 sysinfo 的 process(parent_pid)
         // 在某些系统上对已退出 / 权限不足的 PID 返回 None,第一遍存集合最稳
-        let mut qq_pids: std::collections::HashSet<sysinfo::Pid> =
-            std::collections::HashSet::new();
+        let mut qq_pids: std::collections::HashSet<sysinfo::Pid> = std::collections::HashSet::new();
         for (pid, process) in sys.processes().iter() {
-            if process.name().to_string_lossy().eq_ignore_ascii_case("QQ.exe") {
+            if process
+                .name()
+                .to_string_lossy()
+                .eq_ignore_ascii_case("QQ.exe")
+            {
                 qq_pids.insert(*pid);
             }
         }
@@ -167,6 +171,42 @@ pub struct SnowLumaWebuiEndpoint {
     pub password: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
+pub struct SnowLumaAgreementDoc {
+    pub id: String,
+    pub title: String,
+    pub declared_version: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
+pub struct SnowLumaAgreementsPayload {
+    pub version: String,
+    pub consent_required: bool,
+    pub documents: Vec<SnowLumaAgreementDoc>,
+}
+
+fn map_snowluma_agreements_payload(
+    payload: ncd_runtime::AgreementsPayload,
+) -> SnowLumaAgreementsPayload {
+    SnowLumaAgreementsPayload {
+        version: payload.version,
+        consent_required: payload.consent_required,
+        documents: payload
+            .documents
+            .into_iter()
+            .map(|doc| SnowLumaAgreementDoc {
+                id: doc.id,
+                title: doc.title,
+                declared_version: doc.declared_version,
+                text: doc.text,
+            })
+            .collect(),
+    }
+}
+
 /// 打开 SnowLuma WebUI:解析 endpoint URL + 当前生效的 password
 /// 优先级(与 daemon render_daemon_globals 对齐):
 /// 1. App 级 override(<data_root>/snowluma/app-config.json 的
@@ -179,8 +219,8 @@ pub async fn open_snowluma_webui(
     state: State<'_, AppState>,
     bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
-    use ncd_domain::{DeploymentType, RuntimeTarget};
     use ncd_domain::{BotId, SnowLumaAppConfig};
+    use ncd_domain::{DeploymentType, RuntimeTarget};
 
     let bid = BotId::new(bot_id.clone());
     if let Ok(Some(cfg)) = state.bot_manager.get_bot_config(&bid).await {
@@ -191,9 +231,7 @@ pub async fn open_snowluma_webui(
                     password: ep.webui_password,
                 });
             }
-            return Err(
-                "SnowLuma Docker 隧道未就绪，请确认 Bot 已启动且运行宿主为远端 SSH".into(),
-            );
+            return Err("SnowLuma Docker 隧道未就绪，请确认 Bot 已启动且运行宿主为远端 SSH".into());
         }
         if cfg.bot.backend_type == ncd_domain::BackendType::SnowLuma
             && cfg.bot.deployment_type == DeploymentType::Native
@@ -210,7 +248,8 @@ pub async fn open_snowluma_webui(
                     });
                 }
                 return Err(
-                    "SnowLuma 远端 Native 隧道未就绪，请确认 Bot 已启动或重开软件后 reconcile 成功".into(),
+                    "SnowLuma 远端 Native 隧道未就绪，请确认 Bot 已启动或重开软件后 reconcile 成功"
+                        .into(),
                 );
             }
         }
@@ -273,14 +312,117 @@ pub async fn open_snowluma_webui(
     })
 }
 
+fn port_from_snowluma_url(url: &str) -> Result<u16, String> {
+    let parsed = url
+        .parse::<url::Url>()
+        .map_err(|e| format!("解析 SnowLuma WebUI URL 失败：{e}"))?;
+    match parsed.host_str() {
+        Some("127.0.0.1") | Some("localhost") | Some("::1") => {}
+        Some(host) => return Err(format!("拒绝访问非本机 SnowLuma WebUI: {host}")),
+        None => return Err("SnowLuma WebUI URL 缺少 host".into()),
+    }
+    parsed
+        .port()
+        .ok_or_else(|| "SnowLuma WebUI URL 缺少端口".to_string())
+}
+
+async fn snowluma_client_for_endpoint(
+    endpoint: &SnowLumaWebuiEndpoint,
+) -> Result<ncd_runtime::ReqwestSnowLumaWebUiClient, String> {
+    let port = port_from_snowluma_url(&endpoint.url)?;
+    let client = ncd_runtime::ReqwestSnowLumaWebUiClient::new(port, endpoint.password.clone())
+        .map_err(|e| e.to_string())?;
+    client
+        .wait_ready(Duration::from_secs(10), Box::new(|| false))
+        .await
+        .map_err(|e| format!("SnowLuma WebUI 未就绪：{e}"))?;
+    client
+        .login()
+        .await
+        .map_err(|e| format!("SnowLuma WebUI 登录失败：{e}"))?;
+    Ok(client)
+}
+
+#[tauri::command]
+pub async fn get_snowluma_agreements(
+    state: State<'_, AppState>,
+    bot_id: String,
+) -> Result<SnowLumaAgreementsPayload, String> {
+    let endpoint = open_snowluma_webui(state, bot_id).await?;
+    let client = snowluma_client_for_endpoint(&endpoint).await?;
+    let payload = client
+        .get_agreements()
+        .await
+        .map_err(|e| format!("读取 SnowLuma 协议失败：{e}"))?;
+    Ok(map_snowluma_agreements_payload(payload))
+}
+
+#[tauri::command]
+pub async fn accept_snowluma_agreements(
+    state: State<'_, AppState>,
+    bot_id: String,
+    version: String,
+) -> Result<(), String> {
+    let handled = state
+        .bot_manager
+        .record_snowluma_agreement_consent(&ncd_domain::BotId::new(bot_id.clone()), &version)
+        .await
+        .map_err(|e| format!("提交 SnowLuma 协议同意失败：{e}"))?;
+    if handled {
+        return Ok(());
+    }
+
+    let endpoint = match open_snowluma_webui(state.clone(), bot_id.clone()).await {
+        Ok(endpoint) => endpoint,
+        Err(open_err) => {
+            state
+                .bot_manager
+                .prepare_snowluma_agreements(&ncd_domain::BotId::new(bot_id.clone()))
+                .await
+                .map_err(|e| format!("{open_err}; SnowLuma WebUI 准备失败：{e}"))?;
+            open_snowluma_webui(state, bot_id).await?
+        }
+    };
+    let client = snowluma_client_for_endpoint(&endpoint).await?;
+    client
+        .record_agreement_consent(&version)
+        .await
+        .map_err(|e| format!("提交 SnowLuma 协议同意失败：{e}"))
+}
+
+#[tauri::command]
+pub async fn prepare_snowluma_agreements(
+    state: State<'_, AppState>,
+    bot_id: String,
+) -> Result<Option<SnowLumaAgreementsPayload>, String> {
+    let payload = state
+        .bot_manager
+        .prepare_snowluma_agreements(&ncd_domain::BotId::new(bot_id))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(payload.map(map_snowluma_agreements_payload))
+}
+
+#[tauri::command]
+pub async fn release_snowluma_agreement_session(
+    state: State<'_, AppState>,
+    bot_id: String,
+) -> Result<(), String> {
+    state
+        .bot_manager
+        .release_snowluma_agreement_session(&ncd_domain::BotId::new(bot_id))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// 打开 SnowLuma Docker noVNC 扫码页(对齐 legacy build_snowluma_novnc_url)
 #[tauri::command]
 pub async fn open_snowluma_novnc(
     state: State<'_, AppState>,
     bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
-    use ncd_domain::{DeploymentType, RuntimeTarget};
     use ncd_domain::BotId;
+    use ncd_domain::{DeploymentType, RuntimeTarget};
 
     let bid = BotId::new(bot_id);
     let cfg = state
@@ -307,10 +449,7 @@ pub async fn open_snowluma_novnc(
         );
 
         return Ok(SnowLumaWebuiEndpoint {
-            url: format!(
-                "http://127.0.0.1:{}/vnc.html?{query}",
-                ep.novnc_local_port
-            ),
+            url: format!("http://127.0.0.1:{}/vnc.html?{query}", ep.novnc_local_port),
             password: ep.vnc_password,
         });
     }
@@ -327,10 +466,7 @@ pub async fn open_snowluma_novnc(
                 "autoconnect=1&resize=scale&password={pwd_enc}&view_only=0&reconnect=1&reconnect_delay=3000"
             );
             return Ok(SnowLumaWebuiEndpoint {
-                url: format!(
-                    "http://127.0.0.1:{}/vnc.html?{query}",
-                    ep.novnc_local_port
-                ),
+                url: format!("http://127.0.0.1:{}/vnc.html?{query}", ep.novnc_local_port),
                 password: ep.vnc_password,
             });
         }
@@ -338,7 +474,6 @@ pub async fn open_snowluma_novnc(
 
     Err("仅远端 SnowLuma（Docker 或 Native）支持 noVNC 扫码".to_string())
 }
-
 
 // =============================================================================
 // QQ 登录账号探测(QQ NT tencent:// HTTP 端点 9210-9219)
@@ -420,7 +555,7 @@ pub async fn probe_qq_login_info(
 /// 通过 OS TCP 表查 PID 监听的端口,过滤到 9210-9219 范围内
 /// 失败返回空向量,让上层走全端口 fallback
 fn listening_ports_for_pid(pid: u32) -> Vec<u16> {
-    use netstat2::{get_sockets_info, AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo};
+    use netstat2::{AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo, get_sockets_info};
 
     let af_flags = AddressFamilyFlags::IPV4 | AddressFamilyFlags::IPV6;
     let proto_flags = ProtocolFlags::TCP;
@@ -454,15 +589,11 @@ fn listening_ports_for_pid(pid: u32) -> Vec<u16> {
 
 async fn probe_one_port(port: u16) -> Option<QqLoginInfo> {
     let addr = format!("127.0.0.1:{port}");
-    let mut stream = match tokio::time::timeout(
-        QQ_PROBE_CONNECT_TIMEOUT,
-        TcpStream::connect(&addr),
-    )
-    .await
-    {
-        Ok(Ok(s)) => s,
-        _ => return None,
-    };
+    let mut stream =
+        match tokio::time::timeout(QQ_PROBE_CONNECT_TIMEOUT, TcpStream::connect(&addr)).await {
+            Ok(Ok(s)) => s,
+            _ => return None,
+        };
 
     let body = "tencent://snowluma-probe-noop";
     let request = format!(
@@ -569,6 +700,8 @@ fn decode_jwt_payload(token: &str) -> Option<JwtPayload> {
     while padded.len() % 4 != 0 {
         padded.push('=');
     }
-    let bytes = base64::engine::general_purpose::URL_SAFE.decode(padded).ok()?;
+    let bytes = base64::engine::general_purpose::URL_SAFE
+        .decode(padded)
+        .ok()?;
     serde_json::from_slice(&bytes).ok()
 }

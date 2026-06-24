@@ -3139,6 +3139,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ts-rs",
+ "url",
  "urlencoding",
  "uuid",
  "windows 0.61.3",

@@ -4,8 +4,8 @@
 
 pub mod daemon;
 pub mod error;
-pub mod log_sanitize;
 pub mod linux_proc_probe;
+pub mod log_sanitize;
 pub mod proc_tree;
 pub mod qq_login_probe;
 pub mod runtime_backend;
@@ -22,8 +22,9 @@ pub use error::{SnowLumaDaemonError, SnowLumaWebUiError};
 // OneBotInstanceInfo / AuthState
 // trait + 默认实装:SnowLumaWebUiClient / ReqwestSnowLumaWebUiClient
 pub use webui_client::{
-    AuthState, HookProcessInfo, HookProcessStatus, OneBotInstanceInfo, ReqwestSnowLumaWebUiClient,
-    ReqwestSnowLumaWebUiClientFactory, SnowLumaWebUiClient,
+    AgreementDoc, AgreementsPayload, AuthState, HookProcessInfo, HookProcessStatus,
+    OneBotInstanceInfo, ReqwestSnowLumaWebUiClient, ReqwestSnowLumaWebUiClientFactory,
+    SnowLumaWebUiClient,
 };
 
 // ---- daemon.rs ----

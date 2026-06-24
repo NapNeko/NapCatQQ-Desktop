@@ -18,6 +18,7 @@ use crate::napcat::endpoint_table::{NapCatEndpoint, NapCatEndpointTable};
 use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 use crate::napcat::offline_notifier::OfflineNotifier;
 use crate::napcat::webui_client::NapCatWebUiClient;
+use crate::snowluma::SnowLumaWebUiClient;
 use crate::native_deployment_adapter::{
     DockerDeploymentBackend, EventBusSink, RemoteNativeDeploymentBackend,
 };
@@ -36,19 +37,15 @@ use ncd_backend_snowluma::remote_snowluma_log::RemoteSnowLumaLogRegistry;
 use ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelRegistry;
 use ncd_deploy::NativeDeployment;
 use ncd_deploy::{Deployment, DeploymentState, DockerDeployment};
+use ncd_domain::DesktopNotifySettings;
 use ncd_domain::app_config::WebUiPollerSettings;
 use ncd_domain::bot_config::{BackendType, BotConfig, BotConfigError, DeploymentType};
 use ncd_domain::ids::BotId;
 use ncd_domain::kinds::{BotFlavor, RuntimeTarget, StopMode};
-use ncd_domain::DesktopNotifySettings;
 use ncd_host::Host;
 use ncd_traits::backend_config_renderer::BackendConfigRenderer;
-use ncd_traits::runtime_backend::{
-    BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx,
-};
-use ncd_traits::{
-    BotConfigRepo, ConfigStore, JsonTransaction, SecretStore,
-};
+use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx};
+use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
 
@@ -2216,6 +2213,216 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.remote_snowluma_tunnels
             .endpoints_for_server(server_id)
             .await
+    }
+
+    /// SnowLuma 协议预检：只确保 daemon/WebUI 可用，不启动 QQ，也不调用 load_process。
+    ///
+    /// 本地与远端 Native 都能在 Bot 启动前准备 WebUI；Docker 的 WebUI 跟容器生命周期
+    /// 绑定，容器创建前没有端点，因此仍走启动后检测路径。
+    pub async fn prepare_snowluma_agreements(
+        &self,
+        bot_id: &BotId,
+    ) -> Result<Option<crate::snowluma::AgreementsPayload>, BotManagerError> {
+        let config = self.get_required_bot_config(bot_id).await?;
+        if config.bot.backend_type != BackendType::SnowLuma {
+            return Ok(None);
+        }
+        if config.bot.deployment_type == DeploymentType::Docker {
+            return Ok(None);
+        }
+        match &config.bot.runtime_target {
+            RuntimeTarget::Local => {
+                let daemon = self
+                    .snowluma_daemon
+                    .as_ref()
+                    .ok_or_else(|| BotManagerError::Render("SnowLuma daemon 未初始化".into()))?;
+                let client = daemon
+                    .ensure_running(Duration::from_secs(35))
+                    .await
+                    .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
+                let agreements_result = client
+                    .get_agreements()
+                    .await
+                    .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())));
+                let agreements = match agreements_result {
+                    Ok(agreements) => agreements,
+                    Err(err) => {
+                        daemon.release().await;
+                        return Err(err);
+                    }
+                };
+                if agreements.consent_required {
+                    return Ok(Some(agreements));
+                }
+                daemon.release().await;
+                Ok(None)
+            }
+            RuntimeTarget::Server(server_id) => {
+                let resolver = self
+                    .host_resolver
+                    .as_ref()
+                    .ok_or_else(|| BotManagerError::Render("HostResolver 未初始化".into()))?;
+                let host = resolver
+                    .resolve(&config.bot.runtime_target)
+                    .await
+                    .map_err(BotManagerError::Render)?;
+                let daemon = self
+                    .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
+                    .await?;
+                daemon.ensure_running().await?;
+                let agreements_result = async {
+                    let endpoints = daemon
+                        .tunnel_endpoints()
+                        .await
+                        .ok_or_else(|| BotManagerError::Render("SnowLuma 隧道未建立".into()))?;
+                    let client = crate::snowluma::ReqwestSnowLumaWebUiClient::new(
+                        endpoints.webui_local_port,
+                        endpoints.webui_password.clone(),
+                    )
+                    .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
+                    client
+                        .wait_ready(Duration::from_secs(30), Box::new(|| false))
+                        .await
+                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
+                    client
+                        .login()
+                        .await
+                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
+                    client
+                        .get_agreements()
+                        .await
+                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))
+                }
+                .await;
+                let agreements = match agreements_result {
+                    Ok(agreements) => agreements,
+                    Err(err) => {
+                        daemon.release().await;
+                        return Err(err);
+                    }
+                };
+                if agreements.consent_required {
+                    return Ok(Some(agreements));
+                }
+                daemon.release().await;
+                Ok(None)
+            }
+        }
+    }
+
+    pub async fn record_snowluma_agreement_consent(
+        &self,
+        bot_id: &BotId,
+        version: &str,
+    ) -> Result<bool, BotManagerError> {
+        let config = self.get_required_bot_config(bot_id).await?;
+        if config.bot.backend_type != BackendType::SnowLuma {
+            return Ok(false);
+        }
+        if config.bot.deployment_type == DeploymentType::Docker {
+            return Ok(false);
+        }
+        match &config.bot.runtime_target {
+            RuntimeTarget::Local => {
+                let daemon = self
+                    .snowluma_daemon
+                    .as_ref()
+                    .ok_or_else(|| BotManagerError::Render("SnowLuma daemon 未初始化".into()))?;
+                let client = match daemon.current_webui_client().await {
+                    Some(client) => client,
+                    None => daemon
+                        .ensure_running(Duration::from_secs(35))
+                        .await
+                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?,
+                };
+                let result = client
+                    .record_agreement_consent(version)
+                    .await
+                    .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())));
+                result?;
+                Ok(true)
+            }
+            RuntimeTarget::Server(server_id) => {
+                let daemon = {
+                    let guard = self.remote_snowluma_daemons.lock().await;
+                    guard.get(server_id).cloned()
+                };
+                let daemon = match daemon {
+                    Some(daemon) if daemon.tunnel_endpoints().await.is_some() => daemon,
+                    _ => {
+                        let resolver = self
+                            .host_resolver
+                            .as_ref()
+                            .ok_or_else(|| BotManagerError::Render("HostResolver 未初始化".into()))?;
+                        let host = resolver
+                            .resolve(&config.bot.runtime_target)
+                            .await
+                            .map_err(BotManagerError::Render)?;
+                        let daemon = self
+                            .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
+                            .await?;
+                        daemon.ensure_running().await?;
+                        daemon
+                    }
+                };
+                let result = async {
+                    let endpoints = daemon
+                        .tunnel_endpoints()
+                        .await
+                        .ok_or_else(|| BotManagerError::Render("SnowLuma 隧道未建立".into()))?;
+                    let client = crate::snowluma::ReqwestSnowLumaWebUiClient::new(
+                        endpoints.webui_local_port,
+                        endpoints.webui_password.clone(),
+                    )
+                    .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
+                    client
+                        .wait_ready(Duration::from_secs(30), Box::new(|| false))
+                        .await
+                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
+                    client
+                        .login()
+                        .await
+                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
+                    client
+                        .record_agreement_consent(version)
+                        .await
+                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))
+                }
+                .await;
+                result?;
+                Ok(true)
+            }
+        }
+    }
+
+    pub async fn release_snowluma_agreement_session(
+        &self,
+        bot_id: &BotId,
+    ) -> Result<(), BotManagerError> {
+        let config = self.get_required_bot_config(bot_id).await?;
+        if config.bot.backend_type != BackendType::SnowLuma {
+            return Ok(());
+        }
+        if config.bot.deployment_type == DeploymentType::Docker {
+            return Ok(());
+        }
+        match &config.bot.runtime_target {
+            RuntimeTarget::Local => {
+                if let Some(daemon) = self.snowluma_daemon.as_ref() {
+                    daemon.release().await;
+                }
+            }
+            RuntimeTarget::Server(server_id) => {
+                let daemon = {
+                    let guard = self.remote_snowluma_daemons.lock().await;
+                    guard.get(server_id).cloned()
+                };
+                if let Some(daemon) = daemon {
+                    daemon.release().await;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// 长任务:监听 SnowLumaDaemonStateChanged 事件,daemon 转 Crashed 时
