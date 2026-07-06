@@ -14,29 +14,31 @@
 //! 所有命令走 host_resolve 选主机(local 或 remote:<id>),错误统一转 String
 //! 业务编排尽量薄;真正的 docker 操作在 ncd_deploy::docker::DockerCli
 
+use std::sync::Arc;
+
 use ncd_component::{ProgressEvent, ProgressKind, ProgressLogLevel};
 use ncd_deploy::docker::{
-    classify_pull_failure, install_docker_with_progress, progress_event, DockerCli, PullProgress,
+    DockerCli, PullProgress, classify_pull_failure, install_docker_with_progress, progress_event,
 };
 use ncd_domain::{
-    ContainerAction, ContainerInfo, DeployedContainer, DockerFlavor, DockerImageReady,
-    DockerInstallReport, DockerInstallStatus, DockerPullSpec, DockerStatus, ImageInfo,
+    ContainerAction, ContainerInfo, DeployedContainer, DeploymentTaskKind, DeploymentTaskResource,
+    DockerFlavor, DockerImageReady, DockerInstallReport, DockerInstallStatus, DockerPullSpec,
+    DockerStatus, ImageInfo,
 };
 use ncd_host::{Host, HostCommand, HostPath, StreamSource};
-use ncd_runtime::{DomainEvent, EventBus};
+use ncd_runtime::{
+    BroadcastEventBus, DeploymentTaskContext, DeploymentTaskRequest, DeploymentTaskRunResult,
+    DomainEvent, EventBus,
+};
 use tauri::State;
+use tokio::sync::oneshot;
 use tracing::{error, info, warn};
 
 use crate::AppState;
 use crate::commands::host_resolve::resolve_host_with_autoconnect;
 
 /// 部署进度写入 Desktop 会话日志(设置页)不记录 docker pull 逐行 stdout,避免刷屏
-fn session_log_deploy_progress(
-    kind: &ProgressKind,
-    host_id: &str,
-    container: &str,
-    flavor: &str,
-) {
+fn session_log_deploy_progress(kind: &ProgressKind, host_id: &str, container: &str, flavor: &str) {
     match kind {
         ProgressKind::Started { total_steps } => {
             info!(
@@ -129,6 +131,21 @@ fn session_log_deploy_progress(
     }
 }
 
+fn publish_docker_deploy_progress(
+    event_bus: &BroadcastEventBus,
+    task_ctx: &Option<DeploymentTaskContext>,
+    task_id: String,
+    event: ProgressEvent,
+) {
+    if let Some(ctx) = task_ctx.clone() {
+        let event_for_task = event.clone();
+        tauri::async_runtime::spawn(async move {
+            ctx.push_progress(event_for_task).await;
+        });
+    }
+    event_bus.publish(DomainEvent::docker_deploy_progress(task_id, event));
+}
+
 #[tauri::command]
 pub async fn docker_probe(
     host_id: String,
@@ -154,32 +171,13 @@ pub async fn docker_install(
     remember_sudo: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<DockerInstallReport, String> {
-    // 检查主机类型(本地不支持 Docker 安装,由前端过滤)
-    let server_id = host_id.strip_prefix("remote:");
+    let server_id = host_id.strip_prefix("remote:").map(str::to_string);
     let effective_password = sudo_password.clone().or_else(|| {
-        server_id.and_then(|id| state.server_manager.sudo_password(id))
+        server_id
+            .as_deref()
+            .and_then(|id| state.server_manager.sudo_password(id))
     });
-
-    info!(
-        target: "ncd_tauri::docker",
-        host_id = %host_id,
-        task_id = %task_id,
-        "开始安装 Docker（远端 Linux 将执行仓库配置与 apt/dnf 安装，约 3–10 分钟）"
-    );
-
-    // 获取包管理器锁,防止同一主机的 apt/dnf 并发冲突
-    let _pkg_lock = state.package_lock.acquire(&host_id).await;
-
-    let event_bus = state.event_bus.clone();
-    let tid = task_id.clone();
-    let emit = std::sync::Arc::new(move |kind: ProgressKind| {
-        event_bus.publish(DomainEvent::docker_install_progress(
-            tid.clone(),
-            progress_event(kind),
-        ));
-    });
-
-    let ssh_user = if let Some(id) = server_id {
+    let ssh_user = if let Some(id) = server_id.as_deref() {
         state
             .server_manager
             .list_servers()
@@ -190,77 +188,159 @@ pub async fn docker_install(
     } else {
         None
     };
-
-    // Docker 安装是长操作,使用隔离连接避免污染缓存连接
-    let report = if let Some(id) = server_id {
-        let effective_password_clone = effective_password.clone();
-        let ssh_user_clone = ssh_user.clone();
-        let emit_clone = emit.clone();
-
-        state.server_manager.with_isolated_connection(id, move |host| {
-            Box::pin(async move {
-                install_docker_with_progress(
-                    host.as_ref(),
-                    effective_password_clone.as_deref(),
-                    ssh_user_clone.as_deref(),
-                    emit_clone,
-                )
-                .await
-                .map_err(|e| format!("Docker 安装失败: {e}"))
-            })
-        }).await?
+    let local_host = if server_id.is_none() {
+        Some(resolve_host_with_autoconnect(&host_id, &state).await?)
     } else {
-        // 本地主机用普通连接
-        let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-        install_docker_with_progress(
-            host.as_ref(),
-            effective_password.as_deref(),
-            ssh_user.as_deref(),
-            emit,
-        )
-        .await
-        .map_err(|e| format!("Docker 安装失败: {e}"))?
+        None
     };
 
-    match report.status {
-        DockerInstallStatus::Installed | DockerInstallStatus::AlreadyInstalled => {
-            info!(
-                target: "ncd_tauri::docker",
-                host_id = %host_id,
-                status = ?report.status,
-                "Docker 安装完成"
-            );
-        }
-        DockerInstallStatus::NeedSudoPassword => {
-            warn!(
-                target: "ncd_tauri::docker",
-                host_id = %host_id,
-                msg = %report.message,
-                "Docker 安装需要 sudo 密码"
-            );
-        }
-        DockerInstallStatus::ManualRequired => {
-            warn!(
-                target: "ncd_tauri::docker",
-                host_id = %host_id,
-                msg = %report.message,
-                "Docker 安装未达可部署状态"
-            );
-        }
+    let (tx, rx) = oneshot::channel::<Result<DockerInstallReport, String>>();
+    let event_bus = state.event_bus.clone();
+    let server_manager = std::sync::Arc::clone(&state.server_manager);
+    let deployment_tasks = state.deployment_tasks.clone();
+    let requested_task_id = task_id.clone();
+    let resources = vec![
+        DeploymentTaskResource::PackageManager {
+            host_id: host_id.clone(),
+        },
+        DeploymentTaskResource::DockerCapability {
+            host_id: host_id.clone(),
+        },
+        DeploymentTaskResource::DockerDaemon {
+            host_id: host_id.clone(),
+        },
+    ];
+    let submitted = deployment_tasks
+        .submit(DeploymentTaskRequest {
+            task_id: task_id.clone(),
+            kind: DeploymentTaskKind::DockerInstall,
+            host_id: host_id.clone(),
+            title: "Docker 安装".to_string(),
+            resources,
+            dedupe_key: Some(format!("docker-install:{host_id}")),
+            cancellable: false,
+            runner: Box::new(move |task_ctx| {
+                Box::pin(async move {
+                    info!(
+                        target: "ncd_tauri::docker",
+                        host_id = %host_id,
+                        task_id = %task_id,
+                        "开始安装 Docker（远端 Linux 将执行仓库配置与 apt/dnf 安装，约 3–10 分钟）"
+                    );
+
+                    let tid = task_id.clone();
+                    let task_ctx_for_emit = task_ctx.clone();
+                    let event_bus_for_emit = event_bus.clone();
+                    let emit = std::sync::Arc::new(move |kind: ProgressKind| {
+                        let event = progress_event(kind);
+                        let task_ctx = task_ctx_for_emit.clone();
+                        let event_for_task = event.clone();
+                        tauri::async_runtime::spawn(async move {
+                            task_ctx.push_progress(event_for_task).await;
+                        });
+                        event_bus_for_emit
+                            .publish(DomainEvent::docker_install_progress(tid.clone(), event));
+                    });
+
+                    let result = if let Some(id) = server_id.as_deref() {
+                        let effective_password_clone = effective_password.clone();
+                        let ssh_user_clone = ssh_user.clone();
+                        let emit_clone = emit.clone();
+                        server_manager
+                            .with_isolated_connection(id, move |host| {
+                                Box::pin(async move {
+                                    install_docker_with_progress(
+                                        host.as_ref(),
+                                        effective_password_clone.as_deref(),
+                                        ssh_user_clone.as_deref(),
+                                        emit_clone,
+                                    )
+                                    .await
+                                    .map_err(|e| format!("Docker 安装失败: {e}"))
+                                })
+                            })
+                            .await
+                    } else if let Some(host) = local_host {
+                        install_docker_with_progress(
+                            host.as_ref(),
+                            effective_password.as_deref(),
+                            ssh_user.as_deref(),
+                            emit,
+                        )
+                        .await
+                        .map_err(|e| format!("Docker 安装失败: {e}"))
+                    } else {
+                        Err("无法解析 Docker 安装目标主机".to_string())
+                    };
+
+                    if let Ok(report) = &result {
+                        match report.status {
+                            DockerInstallStatus::Installed
+                            | DockerInstallStatus::AlreadyInstalled => {
+                                info!(
+                                    target: "ncd_tauri::docker",
+                                    host_id = %host_id,
+                                    status = ?report.status,
+                                    "Docker 安装完成"
+                                );
+                            }
+                            DockerInstallStatus::NeedSudoPassword => {
+                                warn!(
+                                    target: "ncd_tauri::docker",
+                                    host_id = %host_id,
+                                    msg = %report.message,
+                                    "Docker 安装需要 sudo 密码"
+                                );
+                            }
+                            DockerInstallStatus::ManualRequired => {
+                                warn!(
+                                    target: "ncd_tauri::docker",
+                                    host_id = %host_id,
+                                    msg = %report.message,
+                                    "Docker 安装未达可部署状态"
+                                );
+                            }
+                        }
+
+                        if report.status != DockerInstallStatus::NeedSudoPassword
+                            && remember_sudo == Some(true)
+                        {
+                            if let (Some(id), Some(pw)) =
+                                (server_id.as_deref(), sudo_password.as_deref())
+                            {
+                                let _ = server_manager.remember_sudo_password(id, pw);
+                            }
+                        }
+                    }
+
+                    let run_result = match &result {
+                        Ok(report) => {
+                            let ok = matches!(
+                                report.status,
+                                DockerInstallStatus::Installed
+                                    | DockerInstallStatus::AlreadyInstalled
+                            );
+                            if ok {
+                                DeploymentTaskRunResult::ok(report.message.clone())
+                            } else {
+                                DeploymentTaskRunResult::failed(report.message.clone())
+                            }
+                        }
+                        Err(err) => DeploymentTaskRunResult::failed(err.clone()),
+                    };
+                    let _ = tx.send(result);
+                    run_result
+                })
+            }),
+        })
+        .await;
+
+    if submitted != requested_task_id {
+        return Err("该主机已有 Docker 安装任务在队列中".to_string());
     }
 
-    // 用户勾了"记住密码"就存,只要这次密码被验证有效判据是 status != NeedSudoPassword:
-    // 能走过提权脚本(没返回 NeedSudoPassword)就说明 sudo 密码是对的——密码有效性
-    // 与 docker daemon 起没起来是两回事早先用 == Installed 太严:脚本跑通但 daemon
-    // 没立刻就绪会返回 ManualRequired,导致有效密码没被存下,下次安装又弹框
-    // 只存用户这次亲手输入的(sudo_password),不把 keyring 里已有的回写一遍
-    if report.status != DockerInstallStatus::NeedSudoPassword && remember_sudo == Some(true) {
-        if let (Some(id), Some(pw)) = (server_id, sudo_password.as_deref()) {
-            let _ = state.server_manager.remember_sudo_password(id, pw);
-        }
-    }
-
-    Ok(report)
+    rx.await
+        .map_err(|_| "Docker 安装任务异常结束".to_string())?
 }
 
 #[tauri::command]
@@ -396,22 +476,86 @@ pub async fn docker_deploy(
     state: State<'_, AppState>,
 ) -> Result<DeployedContainer, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
+    let (tx, rx) = oneshot::channel::<Result<DeployedContainer, String>>();
+    let event_bus = state.event_bus.clone();
+    let deployment_tasks = state.deployment_tasks.clone();
+    let flavor = spec.flavor;
+    let requested_task_id = task_id.clone();
+    let submitted = deployment_tasks
+        .submit(DeploymentTaskRequest {
+            task_id: task_id.clone(),
+            kind: DeploymentTaskKind::DockerImagePull { flavor },
+            host_id: host_id.clone(),
+            title: format!("拉取 {} 镜像", flavor.as_str()),
+            resources: vec![
+                DeploymentTaskResource::DockerDaemon {
+                    host_id: host_id.clone(),
+                },
+                DeploymentTaskResource::DockerImage {
+                    host_id: host_id.clone(),
+                    flavor,
+                },
+                DeploymentTaskResource::GlobalDownloadSlot,
+            ],
+            dedupe_key: Some(format!("docker-pull:{host_id}:{}", flavor.as_str())),
+            cancellable: false,
+            runner: Box::new(move |task_ctx| {
+                Box::pin(async move {
+                    let result = docker_deploy_execute(
+                        host_id,
+                        spec,
+                        task_id,
+                        host,
+                        event_bus,
+                        Some(task_ctx),
+                    )
+                    .await;
+                    let run_result = match &result {
+                        Ok(_) => DeploymentTaskRunResult::ok("镜像已就绪"),
+                        Err(err) => DeploymentTaskRunResult::failed(err.clone()),
+                    };
+                    let _ = tx.send(result);
+                    run_result
+                })
+            }),
+        })
+        .await;
+
+    if submitted != requested_task_id {
+        return Err("该主机正在拉取此框架镜像，请在任务队列查看进度".to_string());
+    }
+
+    rx.await
+        .map_err(|_| "Docker 镜像拉取任务异常结束".to_string())?
+}
+
+async fn docker_deploy_execute(
+    host_id: String,
+    spec: DockerPullSpec,
+    task_id: String,
+    host: Arc<dyn Host>,
+    event_bus: BroadcastEventBus,
+    task_ctx: Option<DeploymentTaskContext>,
+) -> Result<DeployedContainer, String> {
     let host_ref: &dyn Host = host.as_ref();
 
     let flavor_label = format!("{:?}", spec.flavor);
     let log_label = spec.flavor.as_str().to_string();
 
-    let event_bus = state.event_bus.clone();
+    let event_bus_for_emit = event_bus.clone();
     let tid = task_id.clone();
     let host_id_log = host_id.clone();
     let container_log = log_label.clone();
     let flavor_log = flavor_label.clone();
+    let task_ctx_for_emit = task_ctx.clone();
     let emit = move |kind: ProgressKind| {
         session_log_deploy_progress(&kind, &host_id_log, &container_log, &flavor_log);
-        event_bus.publish(DomainEvent::docker_deploy_progress(
+        publish_docker_deploy_progress(
+            &event_bus_for_emit,
+            &task_ctx_for_emit,
             tid.clone(),
             ProgressEvent::new(kind),
-        ));
+        );
     };
 
     emit(ProgressKind::Started { total_steps: 2 });
@@ -454,8 +598,9 @@ pub async fn docker_deploy(
 
         let pull_wall_start = Instant::now();
 
-        let event_bus_pull = state.event_bus.clone();
+        let event_bus_pull = event_bus.clone();
         let tid_pull = task_id.clone();
+        let task_ctx_pull = task_ctx.clone();
 
         let candidates = spec.flavor.pull_candidates();
         let official = spec.flavor.default_image();
@@ -467,6 +612,7 @@ pub async fn docker_deploy(
         let hb_stop = Arc::clone(&heartbeat_stop);
         let hb_bus = event_bus_pull.clone();
         let hb_tid = tid_pull.clone();
+        let hb_task_ctx = task_ctx_pull.clone();
         let heartbeat = tokio::spawn(async move {
             let interval = std::time::Duration::from_secs(45);
             loop {
@@ -476,7 +622,9 @@ pub async fn docker_deploy(
                 }
                 let idle_ms = now_epoch_ms().saturating_sub(hb_activity.load(Ordering::Relaxed));
                 if idle_ms >= 45_000 {
-                    hb_bus.publish(DomainEvent::docker_deploy_progress(
+                    publish_docker_deploy_progress(
+                        &hb_bus,
+                        &hb_task_ctx,
                         hb_tid.clone(),
                         ProgressEvent::new(ProgressKind::Log {
                             level: ProgressLogLevel::Info,
@@ -485,7 +633,7 @@ pub async fn docker_deploy(
                                 idle_ms / 1000
                             ),
                         }),
-                    ));
+                    );
                 }
             }
         });
@@ -493,29 +641,35 @@ pub async fn docker_deploy(
         let activity_for_cb = Arc::clone(&last_activity_ms);
         let bus_for_lines = event_bus_pull.clone();
         let tid_for_lines = tid_pull.clone();
+        let task_ctx_for_lines = task_ctx_pull.clone();
         let new_line_cb = move |idx: usize, image: &str| {
             if idx == 0 {
-                bus_for_lines.publish(DomainEvent::docker_deploy_progress(
+                publish_docker_deploy_progress(
+                    &bus_for_lines,
+                    &task_ctx_for_lines,
                     tid_for_lines.clone(),
                     ProgressEvent::new(ProgressKind::Log {
                         level: ProgressLogLevel::Info,
                         message: format!("拉取镜像: {image}"),
                     }),
-                ));
+                );
             } else {
-                bus_for_lines.publish(DomainEvent::docker_deploy_progress(
+                publish_docker_deploy_progress(
+                    &bus_for_lines,
+                    &task_ctx_for_lines,
                     tid_for_lines.clone(),
                     ProgressEvent::new(ProgressKind::Log {
                         level: ProgressLogLevel::Warn,
                         message: format!("上一个源失败，改用镜像源重试: {image}"),
                     }),
-                ));
+                );
             }
 
             let pull_state = Arc::new(Mutex::new(PullProgress::new()));
             let pull_state_cb = Arc::clone(&pull_state);
             let event_bus_line = bus_for_lines.clone();
             let tid_line = tid_for_lines.clone();
+            let task_ctx_line = task_ctx_for_lines.clone();
             let activity_line = Arc::clone(&activity_for_cb);
 
             move |src: StreamSource, line: String| {
@@ -525,7 +679,9 @@ pub async fn docker_deploy(
                     ps.update(&line);
                     let (_completed, _total, msg, percent) = ps.summary();
                     let layers = ps.layer_snapshots();
-                    event_bus_line.publish(DomainEvent::docker_deploy_progress(
+                    publish_docker_deploy_progress(
+                        &event_bus_line,
+                        &task_ctx_line,
                         tid_line.clone(),
                         ProgressEvent::new(ProgressKind::StepProgress {
                             step: 2,
@@ -537,34 +693,38 @@ pub async fn docker_deploy(
                             download_stage: None,
                             docker_layers: Some(layers),
                         }),
-                    ));
+                    );
                 }
             }
         };
 
         let event_bus_fail = event_bus_pull;
         let tid_fail = tid_pull;
-        let on_mirror_fail = move |idx: usize, image: &str, err: &ncd_deploy::docker::DockerCliError| {
-            let (_kind, detail) = classify_pull_failure(err);
-            let line = if detail.len() > 220 {
-                format!("{}…", &detail[..220])
-            } else {
-                detail
+        let task_ctx_fail = task_ctx_pull;
+        let on_mirror_fail =
+            move |idx: usize, image: &str, err: &ncd_deploy::docker::DockerCliError| {
+                let (_kind, detail) = classify_pull_failure(err);
+                let line = if detail.len() > 220 {
+                    format!("{}…", &detail[..220])
+                } else {
+                    detail
+                };
+                publish_docker_deploy_progress(
+                    &event_bus_fail,
+                    &task_ctx_fail,
+                    tid_fail.clone(),
+                    ProgressEvent::new(ProgressKind::Log {
+                        level: ProgressLogLevel::Warn,
+                        message: format!(
+                            "源 {}/{} 失败（{}）：{}",
+                            idx + 1,
+                            candidate_count,
+                            image,
+                            line
+                        ),
+                    }),
+                );
             };
-            event_bus_fail.publish(DomainEvent::docker_deploy_progress(
-                tid_fail.clone(),
-                ProgressEvent::new(ProgressKind::Log {
-                    level: ProgressLogLevel::Warn,
-                    message: format!(
-                        "源 {}/{} 失败（{}）：{}",
-                        idx + 1,
-                        candidate_count,
-                        image,
-                        line
-                    ),
-                }),
-            ));
-        };
 
         let pull_result = cli
             .pull_with_fallback(&candidates, official, new_line_cb, Some(on_mirror_fail))
@@ -576,9 +736,8 @@ pub async fn docker_deploy(
         match pull_result {
             Ok(pulled_ref) => {
                 let secs = pull_wall_start.elapsed().as_secs();
-                let done_msg = format!(
-                    "镜像拉取完成：{pulled_ref}（耗时 {secs} 秒；已 tag 为 {official}）"
-                );
+                let done_msg =
+                    format!("镜像拉取完成：{pulled_ref}（耗时 {secs} 秒；已 tag 为 {official}）");
                 emit(ProgressKind::Log {
                     level: ProgressLogLevel::Info,
                     message: done_msg.clone(),
@@ -595,11 +754,7 @@ pub async fn docker_deploy(
             }
             Err(e) => {
                 let (_kind, user_msg) = classify_pull_failure(&e);
-                let msg = format!(
-                    "{}（已尝试 {} 个镜像源）",
-                    user_msg,
-                    candidate_count
-                );
+                let msg = format!("{}（已尝试 {} 个镜像源）", user_msg, candidate_count);
                 emit(ProgressKind::Log {
                     level: ProgressLogLevel::Error,
                     message: msg.clone(),
@@ -659,7 +814,9 @@ async fn resolve_project_dir(
     if host_id == "local" {
         let base = state.data_root.join("docker").join(name);
         // HostPath::from_windows 把 C:\... 规范成 /c/...,LocalWindowsHost 能还原
-        return Ok(HostPath::from_windows(&base.to_string_lossy()).as_posix().to_string());
+        return Ok(HostPath::from_windows(&base.to_string_lossy())
+            .as_posix()
+            .to_string());
     }
     // 远端:探 $HOME探不到就 fail-fast,不回退 /root——路径落盘红线:宁可报错让
     // 用户处理,也不把生产数据静默落到错误目录(/root 通常无权限,或污染 root 家目录)

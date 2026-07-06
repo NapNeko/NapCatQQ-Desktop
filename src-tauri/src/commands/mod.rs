@@ -2,6 +2,7 @@ pub mod app_settings;
 pub mod bot;
 pub mod components;
 pub mod config_transfer;
+pub mod deployment_tasks;
 pub mod desktop_log;
 pub mod docker;
 pub mod host_resolve;
@@ -321,8 +322,8 @@ mod tests {
                 root,
                 Arc::new(InMemoryCredentialStore::default()),
             )),
-            package_lock: ncd_runtime::package_lock::PackageManagerLock::new(),
             active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+            deployment_tasks: ncd_runtime::DeploymentTaskManager::new(bus.clone()),
             host_probe_cache: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings),

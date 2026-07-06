@@ -19,6 +19,9 @@ mod tests {
     use ncd_domain::bot_actor::BotActorSnapshot;
     use ncd_domain::bot_status::BotStatus;
     use ncd_domain::daemon_state::{DaemonState, SnowLumaLoginState};
+    use ncd_domain::deployment_task::{
+        DeploymentTaskKind, DeploymentTaskSnapshot, DeploymentTaskStatus,
+    };
     use ncd_domain::progress::ProgressEvent as NcdProgressEvent;
     use ncd_domain::progress::ProgressKind as NcdProgressKind;
 
@@ -202,6 +205,26 @@ as a quoted string",
                 "task-2",
                 NcdProgressEvent::new(NcdProgressKind::Started { total_steps: 5 }),
             ),
+            DomainEvent::docker_install_progress(
+                "task-3",
+                NcdProgressEvent::new(NcdProgressKind::Started { total_steps: 7 }),
+            ),
+            DomainEvent::deployment_task_changed(DeploymentTaskSnapshot {
+                task_id: "task-4".to_string(),
+                kind: DeploymentTaskKind::DockerInstall,
+                status: DeploymentTaskStatus::Queued,
+                host_id: "remote:a".to_string(),
+                title: "Docker 安装".to_string(),
+                dedupe_key: None,
+                resources: vec![],
+                progress_events: vec![],
+                submitted_at_ms: 1,
+                started_at_ms: None,
+                ended_at_ms: None,
+                message: None,
+                error: None,
+                cancellable: false,
+            }),
             DomainEvent::desktop_log_appended("desktop line"),
         ];
         for event in &all {

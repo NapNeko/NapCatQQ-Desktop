@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::bot_actor::BotActorSnapshot;
 use crate::bot_status::BotStatus;
 use crate::daemon_state::{DaemonState, SnowLumaLoginState};
+use crate::deployment_task::DeploymentTaskSnapshot;
 use crate::ids::BotId;
 use crate::napcat_events::NapCatLoginInvalidationReason;
 use crate::progress::ProgressEvent;
@@ -51,6 +52,8 @@ pub enum DomainEventKind {
     DockerDeployProgress,
     #[serde(rename = "docker_install_progress")]
     DockerInstallProgress,
+    #[serde(rename = "deployment_task_changed")]
+    DeploymentTaskChanged,
     #[serde(rename = "desktop_log_appended")]
     DesktopLogAppended,
     #[serde(rename = "host_connection_lost")]
@@ -152,6 +155,8 @@ pub enum DomainEvent {
         task_id: String,
         event: ProgressEvent,
     },
+    #[serde(rename = "deployment_task_changed")]
+    DeploymentTaskChanged { task: DeploymentTaskSnapshot },
     #[serde(rename = "desktop_log_appended")]
     DesktopLogAppended { line: String },
     #[serde(rename = "host_connection_lost")]
@@ -204,6 +209,7 @@ impl DomainEvent {
             Self::ComponentActionProgress { .. } => DomainEventKind::ComponentActionProgress,
             Self::DockerDeployProgress { .. } => DomainEventKind::DockerDeployProgress,
             Self::DockerInstallProgress { .. } => DomainEventKind::DockerInstallProgress,
+            Self::DeploymentTaskChanged { .. } => DomainEventKind::DeploymentTaskChanged,
             Self::DesktopLogAppended { .. } => DomainEventKind::DesktopLogAppended,
             Self::HostConnectionLost { .. } => DomainEventKind::HostConnectionLost,
             Self::HostConnectionRecovered { .. } => DomainEventKind::HostConnectionRecovered,
@@ -233,6 +239,7 @@ impl DomainEvent {
             Self::ComponentActionProgress { .. } => "component_action_progress",
             Self::DockerDeployProgress { .. } => "docker_deploy_progress",
             Self::DockerInstallProgress { .. } => "docker_install_progress",
+            Self::DeploymentTaskChanged { .. } => "deployment_task_changed",
             Self::DesktopLogAppended { .. } => "desktop_log_appended",
             Self::HostConnectionLost { .. } => "host_connection_lost",
             Self::HostConnectionRecovered { .. } => "host_connection_recovered",
@@ -262,6 +269,7 @@ impl DomainEvent {
             Self::ComponentActionProgress { .. } => None,
             Self::DockerDeployProgress { .. } => None,
             Self::DockerInstallProgress { .. } => None,
+            Self::DeploymentTaskChanged { .. } => None,
             Self::DesktopLogAppended { .. } => None,
             Self::HostConnectionLost { .. } => None,
             Self::HostConnectionRecovered { .. } => None,
@@ -440,6 +448,10 @@ impl DomainEvent {
             task_id: task_id.into(),
             event,
         }
+    }
+
+    pub fn deployment_task_changed(task: DeploymentTaskSnapshot) -> Self {
+        Self::DeploymentTaskChanged { task }
     }
 
     pub fn desktop_log_appended(line: impl Into<String>) -> Self {

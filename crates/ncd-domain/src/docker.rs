@@ -46,7 +46,7 @@ impl DockerStatus {
 }
 
 /// 容器运行状态对齐 docker ps 的 State 字段语义
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum ContainerState {
@@ -136,7 +136,7 @@ pub struct ImageRemoveOptions {
 }
 
 /// Desktop 认识的 Docker 部署口味只有 NapCat / SnowLuma 两种有官方镜像
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum DockerFlavor {

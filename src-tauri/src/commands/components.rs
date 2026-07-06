@@ -15,14 +15,18 @@ use std::sync::Arc;
 
 use ncd_component::{
     Component, ComponentDetectResult, ComponentId, ComponentInfo, DesktopSelfComponent,
-    NapCatComponent, NoVncComponent, NodeJsComponent, ProgressKind, QQComponent,
-    SnowLumaComponent,
+    NapCatComponent, NoVncComponent, NodeJsComponent, ProgressKind, QQComponent, SnowLumaComponent,
 };
-use ncd_domain::{InstallDependenciesResult, QqDependencyReport};
 use ncd_deploy::{DeployPlan, StepKind};
-use ncd_host::{Host, HostPath};
-use ncd_runtime::{release::read_cached_release_snapshot, DomainEvent, EventBus};
 use ncd_domain::release_snapshot::ReleaseInfo;
+use ncd_domain::{
+    DeploymentTaskKind, DeploymentTaskResource, InstallDependenciesResult, QqDependencyReport,
+};
+use ncd_host::{Host, HostPath};
+use ncd_runtime::{
+    DeploymentTaskRequest, DeploymentTaskRunResult, DomainEvent, EventBus,
+    release::read_cached_release_snapshot,
+};
 use tauri::State;
 use uuid::Uuid;
 
@@ -94,129 +98,156 @@ pub async fn run_component_action(
         .build();
     plan.validate().map_err(|err| format!("{err}"))?;
 
-    let needs_pkg_lock = (component_id == ComponentId::NoVnc
-        && (kind == StepKind::EnsureInstalled || kind == StepKind::ForceInstall))
-        || (component_id == ComponentId::Qq && kind == StepKind::EnsureDependencies);
-
     let server_id = host_id.strip_prefix("remote:").map(str::to_string);
     let remote_long_install = server_id.is_some()
         && matches!(
             kind,
-            StepKind::EnsureInstalled
-                | StepKind::ForceInstall
-                | StepKind::EnsureDependencies
+            StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::EnsureDependencies
         );
 
-    let (mut ctx, mut rx) = ncd_component::ActionCtx::new();
-    let cancel_token = ctx.cancel_token();
     let task_id = task_id
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-
-    state
-        .active_tasks
-        .lock()
-        .await
-        .insert(task_id.clone(), cancel_token.clone());
-
-    let event_bus = state.event_bus.clone();
-    let active_tasks = Arc::clone(&state.active_tasks);
     // 安装 / 卸载会改变远端布局(如新建 $HOME/Napcat),动作结束后失效该主机
     // 的布局缓存,下次 detect 重新探一次拿到最新布局
     let host_probe_cache = Arc::clone(&state.host_probe_cache);
     let probe_cache_key = host_id.clone();
-
-    // 进度转发:rx → DomainEvent::ComponentActionProgress
-    let event_task_id = task_id.clone();
-    let event_bus_for_progress = event_bus.clone();
-    tauri::async_runtime::spawn(async move {
-        while let Some(progress_event) = rx.recv().await {
-            event_bus_for_progress.publish(DomainEvent::component_action_progress(
-                event_task_id.clone(),
-                progress_event,
-            ));
-        }
-    });
-
-    // 立即返回 task_id;包管理器锁在后台获取,避免 Docker 等 apt 任务占用锁时
-    // 前端 invoke 一直挂起,任务队列无任何条目
-    let task_id_for_runner = task_id.clone();
-    let package_lock = state.package_lock.clone();
-    let host_id_for_lock = host_id.clone();
+    let event_bus = state.event_bus.clone();
+    let active_tasks = Arc::clone(&state.active_tasks);
     let server_manager = Arc::clone(&state.server_manager);
-    tauri::async_runtime::spawn(async move {
-        if needs_pkg_lock {
-            let wait_msg = "等待包管理器锁（可能正在安装 Docker 或其它 apt 组件）…";
-            event_bus.publish(DomainEvent::component_action_progress(
-                task_id_for_runner.clone(),
-                ncd_component::ProgressEvent::new(ProgressKind::Log {
-                    level: ncd_component::ProgressLogLevel::Info,
-                    message: wait_msg.to_string(),
-                }),
-            ));
-            let _pkg_lock = package_lock.acquire(&host_id_for_lock).await;
-        }
+    let deployment_tasks = state.deployment_tasks.clone();
+    let resources = component_task_resources(component_id, &host_id, kind);
+    let dedupe_key = Some(format!(
+        "component:{}:{}:{}",
+        host_id,
+        component_id.as_str(),
+        kind.as_str()
+    ));
+    let title = format!("{} {}", component_id.as_str(), kind.as_str());
+    let submitted_task_id = deployment_tasks
+        .submit(DeploymentTaskRequest {
+            task_id: task_id.clone(),
+            kind: DeploymentTaskKind::ComponentAction {
+                component_id: component_id.as_str().to_string(),
+                action: kind.as_str().to_string(),
+            },
+            host_id: host_id.clone(),
+            title,
+            resources,
+            dedupe_key,
+            cancellable: true,
+            runner: Box::new(move |task_ctx| {
+                Box::pin(async move {
+                    let (mut ctx, mut rx) = ncd_component::ActionCtx::new();
+                    let cancel_token = ctx.cancel_token();
+                    let task_id_for_runner = task_ctx.task_id().to_string();
+                    active_tasks
+                        .lock()
+                        .await
+                        .insert(task_id_for_runner.clone(), cancel_token.clone());
 
-        if cancel_token.is_cancelled() {
-            active_tasks.lock().await.remove(&task_id_for_runner);
-            let finished =
-                ncd_component::ProgressEvent::new(ProgressKind::Finished { ok: false });
-            event_bus.publish(DomainEvent::component_action_progress(
-                task_id_for_runner.clone(),
-                finished,
-            ));
-            return;
-        }
+                    let task_cancel = task_ctx.cancel_token();
+                    let action_cancel = cancel_token.clone();
+                    tauri::async_runtime::spawn(async move {
+                        task_cancel.cancelled().await;
+                        action_cancel.cancel();
+                    });
 
-        // 远端安装走隔离 SSH(与 docker_install 一致),避免长 apt/等锁占满缓存会话,
-        // 也减少与 docker pull 等同机并发操作互相掐连接
-        let outcome: Result<ncd_deploy::DeployOutcome, String> =
-            if remote_long_install {
-                let Some(id) = server_id.clone() else {
-                    return;
-                };
-                server_manager
-                    .with_isolated_connection(&id, move |iso_host| {
-                        Box::pin(async move {
-                            plan.run(iso_host.as_ref(), &mut ctx)
-                                .await
-                                .map_err(|e| format!("{e}"))
-                        })
-                    })
-                    .await
-            } else {
-                plan.run(host.as_ref(), &mut ctx)
-                    .await
-                    .map_err(|e| format!("{e}"))
-            };
+                    let event_bus_for_progress = event_bus.clone();
+                    let task_ctx_for_progress = task_ctx.clone();
+                    let progress_task_id = task_id_for_runner.clone();
+                    tauri::async_runtime::spawn(async move {
+                        while let Some(progress_event) = rx.recv().await {
+                            task_ctx_for_progress
+                                .push_progress(progress_event.clone())
+                                .await;
+                            event_bus_for_progress.publish(DomainEvent::component_action_progress(
+                                progress_task_id.clone(),
+                                progress_event,
+                            ));
+                        }
+                    });
 
-        if outcome.is_err() {
-            if let Some(ref id) = server_id {
-                server_manager.disconnect_cached_host(id).await;
-            }
-        }
+                    if cancel_token.is_cancelled() {
+                        active_tasks.lock().await.remove(&task_id_for_runner);
+                        let finished =
+                            ncd_component::ProgressEvent::new(ProgressKind::Finished { ok: false });
+                        task_ctx.push_progress(finished.clone()).await;
+                        event_bus.publish(DomainEvent::component_action_progress(
+                            task_id_for_runner.clone(),
+                            finished,
+                        ));
+                        return DeploymentTaskRunResult::failed("任务已取消");
+                    }
 
-        active_tasks.lock().await.remove(&task_id_for_runner);
-        host_probe_cache.lock().await.remove(&probe_cache_key);
+                    let outcome: Result<ncd_deploy::DeployOutcome, String> = if remote_long_install
+                    {
+                        let Some(id) = server_id.clone() else {
+                            return DeploymentTaskRunResult::failed("missing remote server id");
+                        };
+                        server_manager
+                            .with_isolated_connection(&id, move |iso_host| {
+                                Box::pin(async move {
+                                    plan.run(iso_host.as_ref(), &mut ctx)
+                                        .await
+                                        .map_err(|e| format!("{e}"))
+                                })
+                            })
+                            .await
+                    } else {
+                        plan.run(host.as_ref(), &mut ctx)
+                            .await
+                            .map_err(|e| format!("{e}"))
+                    };
 
-        if let Err(err) = outcome {
-            let progress_event = ncd_component::ProgressEvent::new(ProgressKind::Log {
-                level: ncd_component::ProgressLogLevel::Error,
-                message: format!("plan failed: {err}"),
-            });
-            event_bus.publish(DomainEvent::component_action_progress(
-                task_id_for_runner.clone(),
-                progress_event,
-            ));
-            let finished = ncd_component::ProgressEvent::new(ProgressKind::Finished { ok: false });
-            event_bus.publish(DomainEvent::component_action_progress(
-                task_id_for_runner.clone(),
-                finished,
-            ));
-        }
-    });
+                    if outcome.is_err() {
+                        if let Some(ref id) = server_id {
+                            server_manager.disconnect_cached_host(id).await;
+                        }
+                    }
 
-    Ok(task_id)
+                    active_tasks.lock().await.remove(&task_id_for_runner);
+                    host_probe_cache.lock().await.remove(&probe_cache_key);
+
+                    match outcome {
+                        Ok(outcome) if outcome.ok => DeploymentTaskRunResult::ok("组件操作完成"),
+                        Ok(outcome) => {
+                            let err = outcome
+                                .steps
+                                .iter()
+                                .find_map(|s| s.error.clone())
+                                .unwrap_or_else(|| "组件操作失败".to_string());
+                            DeploymentTaskRunResult::failed(err)
+                        }
+                        Err(err) => {
+                            let progress_event =
+                                ncd_component::ProgressEvent::new(ProgressKind::Log {
+                                    level: ncd_component::ProgressLogLevel::Error,
+                                    message: format!("plan failed: {err}"),
+                                });
+                            task_ctx.push_progress(progress_event.clone()).await;
+                            event_bus.publish(DomainEvent::component_action_progress(
+                                task_id_for_runner.clone(),
+                                progress_event,
+                            ));
+                            let finished =
+                                ncd_component::ProgressEvent::new(ProgressKind::Finished {
+                                    ok: false,
+                                });
+                            task_ctx.push_progress(finished.clone()).await;
+                            event_bus.publish(DomainEvent::component_action_progress(
+                                task_id_for_runner.clone(),
+                                finished,
+                            ));
+                            DeploymentTaskRunResult::failed(err)
+                        }
+                    }
+                })
+            }),
+        })
+        .await;
+
+    Ok(submitted_task_id)
 }
 
 #[tauri::command]
@@ -225,13 +256,49 @@ pub async fn cancel_component_action(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let token = state.active_tasks.lock().await.get(&task_id).cloned();
-    match token {
-        Some(t) => {
-            t.cancel();
-            Ok(())
-        }
-        None => Err(format!("task not found: {task_id}")),
+    if let Some(t) = token {
+        t.cancel();
     }
+    state.deployment_tasks.cancel(&task_id).await
+}
+
+fn component_task_resources(
+    component_id: ComponentId,
+    host_id: &str,
+    kind: StepKind,
+) -> Vec<DeploymentTaskResource> {
+    let mut resources = Vec::new();
+    if !matches!(kind, StepKind::Verify) {
+        resources.push(DeploymentTaskResource::InstallTarget {
+            host_id: host_id.to_string(),
+            target: component_id.as_str().to_string(),
+        });
+    }
+    if component_needs_download_slot(component_id, kind) {
+        resources.push(DeploymentTaskResource::GlobalDownloadSlot);
+    }
+    if component_needs_package_manager(component_id, kind) {
+        resources.push(DeploymentTaskResource::PackageManager {
+            host_id: host_id.to_string(),
+        });
+    }
+    resources
+}
+
+fn component_needs_download_slot(component_id: ComponentId, kind: StepKind) -> bool {
+    matches!(
+        kind,
+        StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Update
+    ) && matches!(
+        component_id,
+        ComponentId::NapCat | ComponentId::SnowLuma | ComponentId::NodeJs | ComponentId::Qq
+    )
+}
+
+fn component_needs_package_manager(component_id: ComponentId, kind: StepKind) -> bool {
+    (component_id == ComponentId::NoVnc
+        && matches!(kind, StepKind::EnsureInstalled | StepKind::ForceInstall))
+        || (component_id == ComponentId::Qq && kind == StepKind::EnsureDependencies)
 }
 
 /// 6 个组件元数据按 Framework → RuntimeDep → SelfApp 顺序返回
@@ -280,11 +347,7 @@ impl RemoteHostProbe {
 /// 同一台远端在一次 UI 会话里 home / layout 是稳定的,5 个组件并发 detect 时
 /// 没必要各探一遍缓存命中直接返回;未命中走单次合并探测,结果写缓存安装 /
 /// 卸载动作结束后由 run_component_action 清掉对应条目(布局可能变)
-async fn cached_host_probe(
-    host_id: &str,
-    host: &dyn Host,
-    state: &AppState,
-) -> RemoteHostProbe {
+async fn cached_host_probe(host_id: &str, host: &dyn Host, state: &AppState) -> RemoteHostProbe {
     if !host_id.starts_with("remote:") {
         return RemoteHostProbe::local_default();
     }
@@ -314,7 +377,11 @@ async fn probe_remote_host(host: &dyn Host) -> RemoteHostProbe {
     };
 
     let mut lines = out.stdout.lines();
-    let home = lines.next().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let home = lines
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
     let system_exists = lines.next().map(str::trim) == Some("1");
 
     // system(/opt/QQ)优先;否则一律 Rootless($HOME/Napcat,含从零安装)
@@ -391,9 +458,7 @@ fn build_component_for_host(
                 // 因为它是当前安装的旧版,需要装的是 latest(这是 EOCD 调查
                 // 顺带发现的二次 bug:之前永远拿旧 tag 拼 URL)
                 let install = data_root_host.join("runtime").join("SnowLuma");
-                let latest = snapshot
-                    .as_ref()
-                    .and_then(|s| s.snowluma_latest.as_ref());
+                let latest = snapshot.as_ref().and_then(|s| s.snowluma_latest.as_ref());
                 let tag = snowluma_github_release_tag(
                     latest,
                     state.snapshot.local_versions.snowluma.as_deref(),
@@ -406,9 +471,9 @@ fn build_component_for_host(
                     );
                 }
                 let mut comp = SnowLumaComponent::for_windows(install, tag.clone());
-                if let Some(sha) = latest.and_then(|info| {
-                    asset_sha256(info, &format!("SnowLuma-{tag}-win-x64.zip"))
-                }) {
+                if let Some(sha) = latest
+                    .and_then(|info| asset_sha256(info, &format!("SnowLuma-{tag}-win-x64.zip")))
+                {
                     comp = comp.with_sha256(sha);
                 }
                 Arc::new(comp)
@@ -424,9 +489,7 @@ fn build_component_for_host(
                 // 镜像代理把 404 页当 200 转发,下载器没 hash 拦就把 HTML 当 tar.gz 上传,
                 // 远端 tar 解压报 "not in gzip format"和 Windows 分支一样从 release 快照
                 // 拿 tag 拼对 URL + 反查 sha256,既修 404 又补上内容校验(双保险)
-                let latest = snapshot
-                    .as_ref()
-                    .and_then(|s| s.snowluma_latest.as_ref());
+                let latest = snapshot.as_ref().and_then(|s| s.snowluma_latest.as_ref());
                 let tag = snowluma_github_release_tag(
                     latest,
                     state.snapshot.local_versions.snowluma.as_deref(),
@@ -439,9 +502,8 @@ fn build_component_for_host(
                     );
                 }
                 let asset = format!("SnowLuma-{tag}-linux-x64-lite.tar.gz");
-                let url = format!(
-                    "https://github.com/SnowLuma/SnowLuma/releases/download/{tag}/{asset}"
-                );
+                let url =
+                    format!("https://github.com/SnowLuma/SnowLuma/releases/download/{tag}/{asset}");
                 let mut comp = SnowLumaComponent::new(workspace, url);
                 if let Some(sha) = latest.and_then(|info| asset_sha256(info, &asset)) {
                     comp = comp.with_sha256(sha);
@@ -469,15 +531,14 @@ fn build_component_for_host(
             Arc::new(NodeJsComponent::new("22.12.0", install_dir))
         }
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
-        ComponentId::DesktopSelf => Arc::new(
-            DesktopSelfComponent::from_env()
-                .unwrap_or_else(|_| {
-                    DesktopSelfComponent::new(
-                        env!("CARGO_PKG_VERSION"),
-                        HostPath::from_posix("NapCatQQ-Desktop"),
-                    )
-                }),
-        ),
+        ComponentId::DesktopSelf => {
+            Arc::new(DesktopSelfComponent::from_env().unwrap_or_else(|_| {
+                DesktopSelfComponent::new(
+                    env!("CARGO_PKG_VERSION"),
+                    HostPath::from_posix("NapCatQQ-Desktop"),
+                )
+            }))
+        }
     };
     Ok(component)
 }
@@ -579,13 +640,25 @@ mod tests {
     #[test]
     fn catalog_supported_targets_match_components() {
         let pairs: Vec<(ComponentInfo, Arc<dyn Component>)> = vec![
-            (NapCatComponent::info(), Arc::new(NapCatComponent::new(HostPath::from_posix("/x")))),
+            (
+                NapCatComponent::info(),
+                Arc::new(NapCatComponent::new(HostPath::from_posix("/x"))),
+            ),
             (
                 SnowLumaComponent::info(),
-                Arc::new(SnowLumaComponent::new(HostPath::from_posix("/x"), "https://example.com/x.tar.gz")),
+                Arc::new(SnowLumaComponent::new(
+                    HostPath::from_posix("/x"),
+                    "https://example.com/x.tar.gz",
+                )),
             ),
-            (NodeJsComponent::info(), Arc::new(NodeJsComponent::new("22.12.0", HostPath::from_posix("/x")))),
-            (QQComponent::info(), Arc::new(QQComponent::default_v3_2_25(HostPath::from_posix("/x")))),
+            (
+                NodeJsComponent::info(),
+                Arc::new(NodeJsComponent::new("22.12.0", HostPath::from_posix("/x"))),
+            ),
+            (
+                QQComponent::info(),
+                Arc::new(QQComponent::default_v3_2_25(HostPath::from_posix("/x"))),
+            ),
             (NoVncComponent::info(), Arc::new(NoVncComponent::new())),
         ];
         for (info, component) in pairs {
@@ -663,8 +736,14 @@ pub async fn install_qq_dependencies(
     tracing::info!(
         "[install_qq_dependencies] host={}, sudo_password={}, effective_password={}",
         host_id,
-        sudo_password.as_ref().map(|_| "<provided>").unwrap_or("<none>"),
-        effective_password.as_ref().map(|_| "<resolved>").unwrap_or("<none>")
+        sudo_password
+            .as_ref()
+            .map(|_| "<provided>")
+            .unwrap_or("<none>"),
+        effective_password
+            .as_ref()
+            .map(|_| "<resolved>")
+            .unwrap_or("<none>")
     );
 
     // 预判:没有可用密码时先探查 sudo 能力,没有免密 sudo 也没有缓存密码就直接
@@ -672,7 +751,9 @@ pub async fn install_qq_dependencies(
     if effective_password.is_none() {
         let access = ncd_host::remote::probe_sudo(host.as_ref()).await;
         if matches!(access, ncd_host::remote::SudoAccess::PasswordRequired) {
-            tracing::info!("[install_qq_dependencies] no password available, returning elevation_required");
+            tracing::info!(
+                "[install_qq_dependencies] no password available, returning elevation_required"
+            );
             return Ok(InstallDependenciesResult {
                 success: false,
                 installed: vec![],
@@ -686,7 +767,12 @@ pub async fn install_qq_dependencies(
     let installer = ncd_component::qq_deps::QqDependencyInstaller;
 
     let result = installer
-        .install(host.as_ref(), packages, effective_password.as_deref(), &mut ctx)
+        .install(
+            host.as_ref(),
+            packages,
+            effective_password.as_deref(),
+            &mut ctx,
+        )
         .await
         .map_err(|e| e.to_string())?;
 

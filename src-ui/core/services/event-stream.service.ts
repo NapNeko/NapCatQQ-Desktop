@@ -34,6 +34,7 @@ const DOMAIN_EVENT_NAMES = [
     'component_action_progress',
     'docker_deploy_progress',
     'docker_install_progress',
+    'deployment_task_changed',
     'desktop_log_appended',
     // remote-ssh-stability P0：Host 连接健康事件（不绑 bot，绑 server_id）
     'host_connection_lost',

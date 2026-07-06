@@ -12,6 +12,7 @@ pub mod bot_actor;
 pub mod bot_config;
 pub mod bot_status;
 pub mod daemon_state;
+pub mod deployment_task;
 pub mod docker;
 pub mod domain_event;
 pub mod errors;
@@ -56,6 +57,10 @@ pub use bot_config::{
 };
 pub use bot_status::{BotStatus, ProcessHandle};
 pub use daemon_state::{DaemonState, SnowLumaLoginState};
+pub use deployment_task::{
+    DeploymentTaskKind, DeploymentTaskList, DeploymentTaskResource, DeploymentTaskSnapshot,
+    DeploymentTaskStatus,
+};
 pub use docker::{
     ContainerAction, ContainerInfo, ContainerState, DeployedContainer, DockerDeploySpec,
     DockerFlavor, DockerImageReady, DockerInstallReport, DockerInstallStatus,

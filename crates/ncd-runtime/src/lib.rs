@@ -9,6 +9,7 @@ pub mod config_drift;
 pub mod config_store_impl;
 pub mod crash_bundle;
 pub mod credential_sync;
+pub mod deployment_tasks;
 pub mod desktop_log;
 pub mod docker_bot_session;
 pub mod events;
@@ -58,6 +59,9 @@ pub use bot_manager::{BatchResult, BootstrapResult, BotManager, BotManagerError}
 pub use config_store_impl::LocalConfigStore;
 pub use crash_bundle::{CrashBundleInput, desktop_output_dir, write_crash_bundle};
 pub use credential_sync::{CredentialSyncLayer, PasswordSlot};
+pub use deployment_tasks::{
+    DeploymentTaskContext, DeploymentTaskManager, DeploymentTaskRequest, DeploymentTaskRunResult,
+};
 pub use docker_bot_session::{
     DockerBotSessionRegistry, SnowLumaDockerEndpoints, is_remote_docker_config,
     is_remote_native_napcat_config,

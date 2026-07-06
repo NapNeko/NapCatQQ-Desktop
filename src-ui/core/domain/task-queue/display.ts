@@ -103,7 +103,8 @@ export function kindLabel(kind: TaskQueueItem['kind']): string {
     }
 }
 
-export function getTaskEndedAt(progress: TaskQueueItem['progress']): number | undefined {
+export function getTaskEndedAt(progress: TaskQueueItem['progress'], itemEndedAt?: number): number | undefined {
+    if (itemEndedAt !== undefined) return itemEndedAt;
     if (!progress) return undefined;
     if (
         progress.status === 'success' ||

@@ -24,10 +24,14 @@ export interface TaskQueueItem {
     status: TaskQueueStatus;
     /** 毫秒时间戳；未知时为 0 */
     startedAt: number;
+    /** 终态毫秒时间戳；未知时为 undefined */
+    endedAt?: number;
     /** 组件 / Docker 部署的细粒度进度；安装类为 null */
     progress: ActionProgressView | null;
     /** 无逐步进度时的说明（如 Docker 安装 hint） */
     logHint: string | null;
+    /** 后端是否允许取消 */
+    cancellable?: boolean;
 }
 
 export interface TaskQueueSnapshot {

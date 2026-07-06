@@ -17,6 +17,7 @@ import { useServerManager } from '../hooks/remote/useServerManager';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
 import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployProgressBridge';
 import { useDockerInstallProgressBridge } from '../hooks/docker/useDockerInstallProgressBridge';
+import { useDeploymentTaskBridge } from '../hooks/task-queue/useDeploymentTaskBridge';
 import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useHostConnectionEvents } from '../hooks/remote/useHostConnectionEvents';
 import { useHostHealthAlerts } from '../hooks/remote/useHostHealthAlerts';
@@ -46,6 +47,7 @@ export const AppNext: React.FC = () => {
     useComponentActionEventBridge();
     useDockerDeployProgressBridge();
     useDockerInstallProgressBridge();
+    useDeploymentTaskBridge();
     useComponentsWarmup();
     useHostConnectionEvents();
     useHostHealthAlerts();

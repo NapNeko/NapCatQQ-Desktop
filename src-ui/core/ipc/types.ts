@@ -98,11 +98,17 @@ export type { DeployedContainer } from './generated/domain/DeployedContainer';
 export type { PortMapping } from './generated/domain/PortMapping';
 export type { DockerInstallReport } from './generated/domain/DockerInstallReport';
 export type { DockerInstallStatus } from './generated/domain/DockerInstallStatus';
+export type { DeploymentTaskKind } from './generated/domain/DeploymentTaskKind';
+export type { DeploymentTaskStatus } from './generated/domain/DeploymentTaskStatus';
+export type { DeploymentTaskResource } from './generated/domain/DeploymentTaskResource';
+export type { DeploymentTaskSnapshot } from './generated/domain/DeploymentTaskSnapshot';
+export type { DeploymentTaskList } from './generated/domain/DeploymentTaskList';
 
 import type { BotActorState } from './generated/BotActorState';
 import type { BotActorSnapshot } from './generated/BotActorSnapshot';
 import type { LocalVersionSnapshot } from './generated/domain/LocalVersionSnapshot';
 import type { ProgressEvent } from './generated/domain/ProgressEvent';
+import type { DeploymentTaskSnapshot } from './generated/domain/DeploymentTaskSnapshot';
 
 export type BotFlavor = 'napcat' | 'snowluma';
 
@@ -288,6 +294,10 @@ type DomainEventBody =
         kind: 'docker_install_progress';
         task_id: string;
         event: ProgressEvent;
+    }
+    | {
+        kind: 'deployment_task_changed';
+        task: DeploymentTaskSnapshot;
     }
     | {
         kind: 'desktop_log_appended';

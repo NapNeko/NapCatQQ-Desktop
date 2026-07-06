@@ -55,7 +55,7 @@ export const TaskQueueListItem: React.FC<TaskQueueListItemProps> = ({
     selected,
     onSelect,
 }) => {
-    const endedAt = getTaskEndedAt(item.progress);
+    const endedAt = getTaskEndedAt(item.progress, item.endedAt);
     const busy = isActiveTaskStatus(item.status);
     const nowMs = useNowMs(busy && endedAt === undefined);
     const elapsed =

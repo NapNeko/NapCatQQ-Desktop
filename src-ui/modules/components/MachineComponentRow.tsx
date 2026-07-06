@@ -36,7 +36,7 @@ interface Props {
     hostId: string;
     latestRemoteVersion: string | null;
     activeProgress: { taskId: string; progress: ActionProgressView } | null;
-    isAnyInstalling: boolean;
+    disabled?: boolean;
     onAction: (action: { stepKind: StepKind } | { cancelTaskId: string }) => void;
     onRetryDetect: () => void;
     trailingActions?: React.ReactNode;
@@ -46,7 +46,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
     row,
     latestRemoteVersion,
     activeProgress,
-    isAnyInstalling,
+    disabled = false,
     onAction,
     onRetryDetect,
     trailingActions,
@@ -97,7 +97,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
             <ActionButtons
                 status={status}
                 latestRemoteVersion={latestRemoteVersion}
-                disabled={isAnyInstalling}
+                disabled={disabled}
                 onAction={handle}
             />
         </>

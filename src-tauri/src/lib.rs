@@ -40,11 +40,11 @@ pub struct AppState {
     pub(crate) runtime: runtime::AppRuntime,
     pub(crate) bot_manager: Arc<AppBotManager>,
     pub(crate) server_manager: Arc<ncd_runtime::ServerManager>,
-    /// 包管理器全局锁,防止同一主机的 apt/dnf 并发冲突
-    pub(crate) package_lock: ncd_runtime::package_lock::PackageManagerLock,
     /// Components 页活跃 task 注册表,task_id → CancellationToken
     /// run_component_action 启动时插入;plan 完成 / 取消时移除
     pub(crate) active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
+    /// 部署/安装任务事实源与资源调度器。
+    pub(crate) deployment_tasks: ncd_runtime::DeploymentTaskManager,
     /// 远端主机布局探测缓存:host_id → (home, layout)
     /// detect_component 对同一台机器的 home/layout 探测结果是稳定的,缓存后
     /// 5 个并发组件 detect 只探一次,不再各跑一遍 echo $HOME + layout 检查
@@ -217,8 +217,8 @@ pub fn run() {
             runtime,
             bot_manager,
             server_manager,
-            package_lock: ncd_runtime::package_lock::PackageManagerLock::new(),
             active_tasks: Arc::new(Mutex::new(HashMap::new())),
+            deployment_tasks: ncd_runtime::DeploymentTaskManager::new(event_bus.clone()),
             host_probe_cache: Arc::new(Mutex::new(HashMap::new())),
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings_shared),
@@ -431,6 +431,8 @@ pub fn run() {
             commands::components::remember_sudo_password,
             commands::components::run_component_action,
             commands::components::cancel_component_action,
+            commands::deployment_tasks::list_deployment_tasks,
+            commands::deployment_tasks::cancel_deployment_task,
             commands::bot::bootstrap_bot_manager,
             commands::bot::list_bot_snapshots,
             commands::bot::list_bot_flavors,

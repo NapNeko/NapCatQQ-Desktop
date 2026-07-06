@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { cn } from '../../shared/utils/cn';
-import { Badge } from '../../shared/ui';
+import { Badge, Button } from '../../shared/ui';
 import type { TaskQueueItem } from '../../core/domain/task-queue/types';
 import {
     failureHint,
@@ -15,12 +15,13 @@ import {
     statusTone,
 } from '../../core/domain/task-queue/display';
 import { useNowMs } from '../../hooks/ui/useNowMs';
-import { Loader2 } from 'lucide-react';
+import { Loader2, XCircle } from 'lucide-react';
 import { MotionIcon } from '../../shared/ui/motion';
 import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../components/progressView';
 import { DockerPullLayersPanel } from '../components/DockerPullLayersPanel';
 import { shouldShowDockerPullLayersInTaskDetail, shouldShowStepLogsInTaskDetail } from '../../core/domain/components/dockerPullProgress';
 import type { ActionProgressView } from '../../core/domain/components/progress';
+import { deploymentTaskService } from '../../core/services/deployment-task.service';
 
 function DockerDeployProgressBlock({
     item,
@@ -133,11 +134,18 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
 export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
     const progress = item.progress;
     const failure = failureHint(item);
-    const endedAt = getTaskEndedAt(progress);
+    const endedAt = getTaskEndedAt(progress, item.endedAt);
     const ticking = isActiveTaskStatus(item.status) && endedAt === undefined;
     const nowMs = useNowMs(ticking);
     const showStepLogs = shouldShowStepLogsInTaskDetail(item.kind);
     const dockerPullExpanded = item.kind === 'docker_deploy' && !showStepLogs;
+    const canCancel = item.cancellable === true && isActiveTaskStatus(item.status);
+
+    const handleCancel = () => {
+        void deploymentTaskService.cancel(item.id).catch((err) => {
+            console.error('[TaskQueue] cancel failed:', err);
+        });
+    };
 
     return (
         <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -169,6 +177,12 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                             </span>
                         </p>
                     </div>
+                    {canCancel && (
+                        <Button size="sm" variant="secondary" onClick={handleCancel}>
+                            <XCircle size={13} />
+                            取消
+                        </Button>
+                    )}
                 </div>
 
                 {failure && (

@@ -38,7 +38,7 @@ import scrollStyles from './componentsPageScroll.module.css';
 
 export const ComponentsPageNext: React.FC = () => {
     const { view, hosts, isLoading, error, refetch } = useComponents();
-    const { startAction, cancelAction, getProgressFor, isInstalling, onTaskTerminal } = useComponentAction();
+    const { startAction, cancelAction, getProgressFor, onTaskTerminal } = useComponentAction();
     const { snapshot: releases } = useReleases();
 
     const hostIds = useMemo(() => hosts.map((h) => h.host_id), [hosts]);
@@ -354,7 +354,6 @@ export const ComponentsPageNext: React.FC = () => {
                         machine={activeMachine}
                         latestVersionFor={latestVersionFor}
                         getProgress={getProgressFor}
-                        isInstalling={isInstalling}
                         onAction={handleAction}
                         onRetryDetect={() => refetch()}
                         dockerStatus={dockerHosts.statusByHost[activeMachine.host.host_id]}
