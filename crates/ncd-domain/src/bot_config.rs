@@ -4,8 +4,9 @@ use serde::de;
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
-use crate::kinds::RuntimeTarget;
+use crate::kinds::{BotFlavor, RuntimeTarget};
 use crate::macros::default_true;
+use crate::runtime_scenario::RuntimeScenario;
 use crate::snowluma_start_mode::SnowLumaStartMode;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -15,6 +16,15 @@ pub enum BackendType {
     #[default]
     NapCat,
     SnowLuma,
+}
+
+impl From<BackendType> for BotFlavor {
+    fn from(value: BackendType) -> Self {
+        match value {
+            BackendType::NapCat => Self::NapCat,
+            BackendType::SnowLuma => Self::SnowLuma,
+        }
+    }
 }
 
 /// Bot 启动方式: 原生进程或 Docker 容器.
@@ -477,19 +487,10 @@ impl BotConfig {
 
     /// 校验运行矩阵是否支持
     ///
-    /// 当前限制: 本机不支持 Docker(Docker Desktop 安装复杂, 本机只走原生进程);
-    /// 远端 SSH 支持原生进程和 Docker.
+    /// 当前支持三类场景: local native, remote native, remote docker.
+    /// 本机不支持 Docker;远端 SSH 支持原生进程和 Docker.
     pub fn validate_runtime_matrix(&self) -> Result<(), BotConfigError> {
-        let is_docker = matches!(self.bot.deployment_type, DeploymentType::Docker);
-        let is_local = self.bot.runtime_target.is_local();
-
-        if is_docker && is_local {
-            return Err(BotConfigError::UnsupportedRuntimeMatrix(
-                "Local host does not support Docker deployment. Use native run or switch to a remote SSH host"
-                    .to_string(),
-            ));
-        }
-        Ok(())
+        RuntimeScenario::from_config(self).map(|_| ())
     }
 }
 
@@ -569,14 +570,15 @@ fn default_root_path() -> String {
 }
 
 pub fn is_remote_docker_config(config: &BotConfig) -> bool {
-    config.bot.deployment_type == DeploymentType::Docker
-        && matches!(config.bot.runtime_target, RuntimeTarget::Server(_))
+    RuntimeScenario::from_config(config)
+        .map(|scenario| scenario.is_remote_docker())
+        .unwrap_or(false)
 }
 
 pub fn is_remote_native_napcat_config(config: &BotConfig) -> bool {
-    config.bot.deployment_type == DeploymentType::Native
-        && config.bot.backend_type == BackendType::NapCat
-        && matches!(config.bot.runtime_target, RuntimeTarget::Server(_))
+    RuntimeScenario::from_config(config)
+        .map(|scenario| scenario.is_remote_native_napcat())
+        .unwrap_or(false)
 }
 
 fn default_heart_interval() -> u32 {

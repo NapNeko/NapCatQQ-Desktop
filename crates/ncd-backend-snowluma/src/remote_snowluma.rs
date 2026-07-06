@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, DeploymentType, SnowLumaStartMode};
+use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, RuntimeScenario, SnowLumaStartMode};
 use ncd_host::{Host, HostCommand, HostPath};
 use serde_json::Value;
 use tokio::sync::Mutex;
@@ -206,12 +206,9 @@ fn resolve_start_mode(config: &BotConfig) -> SnowLumaStartMode {
 
 /// 远端 Native + SnowLuma + SSH 主机
 pub fn is_remote_native_snowluma_config(config: &BotConfig) -> bool {
-    config.bot.backend_type == BackendType::SnowLuma
-        && config.bot.deployment_type == DeploymentType::Native
-        && matches!(
-            config.bot.runtime_target,
-            ncd_domain::RuntimeTarget::Server(_)
-        )
+    RuntimeScenario::from_config(config)
+        .map(|scenario| scenario.is_remote_native_snowluma())
+        .unwrap_or(false)
 }
 
 /// 远端是否已有匹配 qq_id 的 qq 进程(热启动 attach / bootstrap reconcile 用)

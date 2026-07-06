@@ -26,13 +26,16 @@ import { isRuntimeTargetLocal } from './runtime-target';
 export type RuntimeRequirement =
     | { kind: 'local-direct'; backend: BackendType }
     | { kind: 'remote-direct'; hostId: string; backend: BackendType }
-    | { kind: 'remote-docker'; hostId: string; backend: BackendType };
+    | { kind: 'remote-docker'; hostId: string; backend: BackendType }
+    | { kind: 'unsupported-local-docker'; backend: BackendType };
 
 export function getRuntimeRequirement(config: BotConfig): RuntimeRequirement | null {
     const { backend_type, runtime_target, deploymentType } = config.bot;
 
     if (isRuntimeTargetLocal(runtime_target)) {
-        // 本地只支持直接运行（Native）
+        if (deploymentType === 'docker') {
+            return { kind: 'unsupported-local-docker', backend: backend_type };
+        }
         return { kind: 'local-direct', backend: backend_type };
     }
 
@@ -48,6 +51,9 @@ export function getRuntimeRequirement(config: BotConfig): RuntimeRequirement | n
 export function describeRuntimeRequirement(req: RuntimeRequirement): string {
     if (req.kind === 'local-direct') {
         return req.backend === 'snowluma' ? '本机 SnowLuma 运行时' : '本机 NapCat 运行时';
+    }
+    if (req.kind === 'unsupported-local-docker') {
+        return '本机 Docker 部署';
     }
     if (req.kind === 'remote-direct') {
         const label = req.backend === 'snowluma' ? 'SnowLuma' : 'NapCat';
@@ -100,6 +106,10 @@ export interface RuntimeGateArgs {
 export function runtimeStartBlockReason(args: RuntimeGateArgs): string | null {
     const req = getRuntimeRequirement(args.config);
     if (!req) return null;
+
+    if (req.kind === 'unsupported-local-docker') {
+        return '本机不支持 Docker 部署，请改为直接运行或选择远程主机';
+    }
 
     // 优先检查传输层：远端主机不可达时，直接返回 transport 原因，不再看组件。
     if ((req.kind === 'remote-direct' || req.kind === 'remote-docker') && args.remoteTransport) {
@@ -168,6 +178,13 @@ export function runtimeReadinessNotice(args: RuntimeGateArgs): {
 } | null {
     const req = getRuntimeRequirement(args.config);
     if (!req) return null;
+
+    if (req.kind === 'unsupported-local-docker') {
+        return {
+            tone: 'warn',
+            text: '本机不支持 Docker 部署，请改为直接运行或选择远程主机',
+        };
+    }
 
     if (req.kind === 'local-direct') {
         const st = args.local;

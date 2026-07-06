@@ -58,15 +58,24 @@ export function clientPrefsFromBackend(backend: BackendSettings): AppPreferences
     return appUiPreferencesToAppPreferences(backend.uiPreferences, backend.closeAction);
 }
 
-function normalizeAfterClose(raw: string | undefined): AfterCloseUiBehavior {
-    if (
-        raw === 'hide' ||
-        raw === 'delayed_lightweight' ||
-        raw === 'immediate_lightweight'
-    ) {
-        return raw;
+function normalizeAfterClose(raw: unknown): AfterCloseUiBehavior {
+    switch (raw) {
+        case 'hide':
+        case 'Hide':
+            return 'hide';
+        case 'delayed_lightweight':
+        case 'DelayedLightweight':
+            return 'delayed_lightweight';
+        case 'immediate_lightweight':
+        case 'ImmediateLightweight':
+            return 'immediate_lightweight';
+        default:
+            return 'delayed_lightweight';
     }
-    return 'delayed_lightweight';
+}
+
+function normalizeUiModeOnStartup(raw: unknown): UiModeOnStartup {
+    return raw === 'tray_only' || raw === 'TrayOnly' ? 'tray_only' : 'normal';
 }
 
 function fromDto(dto: AppSettingsDto): BackendSettings {
@@ -97,10 +106,7 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
         enterLightweightDelaySecs: Number(
             dto.settings.enterLightweightDelaySecs ?? 300,
         ),
-        uiModeOnStartup:
-            dto.settings.uiModeOnStartup === 'tray_only'
-                ? 'tray_only'
-                : 'normal',
+        uiModeOnStartup: normalizeUiModeOnStartup(dto.settings.uiModeOnStartup),
         minimizeToTrayCountsAsHidden:
             dto.settings.minimizeToTrayCountsAsHidden ?? true,
         notifyOnOffline: dto.settings.notifyOnOffline ?? true,

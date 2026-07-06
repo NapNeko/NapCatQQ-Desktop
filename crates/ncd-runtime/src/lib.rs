@@ -1,5 +1,6 @@
 pub mod app_config_migration;
 pub mod backend_config_renderer;
+mod bootstrap_reconcile;
 pub mod bot_actor;
 pub mod bot_config_migration;
 pub mod bot_config_repo_impl;
@@ -20,11 +21,32 @@ pub mod package_lock;
 pub mod path_probe_impl;
 pub mod release;
 pub mod remote_bot_log_follow;
+mod remote_runtime_sessions;
 pub mod runtime_launch_plan;
+pub mod runtime_router;
 pub mod secret_store_impl;
 pub mod server_manager;
 pub mod snowluma;
+mod snowluma_agreements;
 pub mod ssh_keygen;
+
+pub mod bot_config {
+    pub use ncd_domain::bot_config::*;
+}
+
+pub use ncd_domain::{
+    AdvancedConfig, AutoRestartSchedule, BackendKind, BackendType, BotBasicConfig, BotConfig,
+    BotConfigError, BotFlavor, BotId, BotStatus, ConnectConfig, DeploymentType,
+    DesktopNotifySettings, HttpServerConfig, LogLevel, MessagePostFormat, MigrationOutcome,
+    MigrationStage, O3HookMode, PathError, RuntimeScenario, RuntimeTarget, SchemaVersion,
+    SnowLumaStartMode, StopMode, WebUiPollerSettings, WebsocketServerConfig, WsRole,
+};
+pub use ncd_traits::{
+    BotConfigRepo, ConfigStore, JsonTransaction, PathProbe, SecretStore,
+    runtime_backend::{
+        BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts,
+    },
+};
 
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
@@ -74,8 +96,6 @@ pub use snowluma::{
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn bootstrap_snapshot_round_trips() {
         use ncd_domain::{BootstrapSnapshot, BootstrapStatus, MigrationReport, SchemaVersion};

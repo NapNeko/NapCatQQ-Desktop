@@ -22,6 +22,7 @@ pub mod napcat_events;
 pub mod progress;
 pub mod qq_dependency;
 pub mod release_snapshot;
+pub mod runtime_scenario;
 pub mod snowluma_start_mode;
 
 // 向后兼容: 下游 crate 仍可 use ncd_domain::{models::*, report::*}
@@ -76,4 +77,5 @@ pub use qq_dependency::{
     FailedPackage, InstallDependenciesResult, PackageStatus, QqDependencyReport, SystemDependency,
 };
 pub use release_snapshot::{ReleaseInfo, ReleaseSnapshot};
+pub use runtime_scenario::RuntimeScenario;
 pub use snowluma_start_mode::SnowLumaStartMode;

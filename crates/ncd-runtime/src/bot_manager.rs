@@ -4,45 +4,32 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::stream::{FuturesUnordered, StreamExt};
-use rand::RngCore;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info, warn};
 
 use crate::backend_config_renderer::output_paths_for_backend;
+use crate::bootstrap_reconcile::BootstrapReconciler;
 use crate::bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
-use crate::docker_bot_session::{
-    DockerBotSessionRegistry, is_remote_docker_config, is_remote_native_napcat_config,
-};
+use crate::docker_bot_session::DockerBotSessionRegistry;
 use crate::events::{BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter};
 use crate::napcat::endpoint_table::{NapCatEndpoint, NapCatEndpointTable};
 use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 use crate::napcat::offline_notifier::OfflineNotifier;
 use crate::napcat::webui_client::NapCatWebUiClient;
-use crate::snowluma::SnowLumaWebUiClient;
-use crate::native_deployment_adapter::{
-    DockerDeploymentBackend, EventBusSink, RemoteNativeDeploymentBackend,
-};
 use crate::remote_bot_log_follow::RemoteBotLogFollowRegistry;
+use crate::remote_runtime_sessions::RemoteRuntimeSessions;
 use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
-use ncd_backend_napcat::remote_native_launch::{
-    RemoteNativeLaunchTranslator, remote_napcat_running_pid,
-};
+use crate::runtime_router::{DockerSecretProvider, RuntimeBackendRouter, RuntimeRouterError};
+use crate::snowluma_agreements::SnowLumaAgreementService;
 use ncd_backend_napcat::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
-use ncd_backend_snowluma::remote_snowluma::{
-    RemoteSnowLumaBackend, RemoteSnowLumaDaemon, is_remote_native_snowluma_config,
-    remote_qq_running_pid,
-};
-use ncd_backend_snowluma::remote_snowluma_layout::SnowLumaRemotePaths;
+use ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaDaemon;
 use ncd_backend_snowluma::remote_snowluma_log::RemoteSnowLumaLogRegistry;
 use ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelRegistry;
-use ncd_deploy::NativeDeployment;
-use ncd_deploy::{Deployment, DeploymentState, DockerDeployment};
-use ncd_domain::DesktopNotifySettings;
 use ncd_domain::app_config::WebUiPollerSettings;
-use ncd_domain::bot_config::{BackendType, BotConfig, BotConfigError, DeploymentType};
+use ncd_domain::bot_config::{BackendType, BotConfig, BotConfigError};
 use ncd_domain::ids::BotId;
 use ncd_domain::kinds::{BotFlavor, RuntimeTarget, StopMode};
-use ncd_host::Host;
+use ncd_domain::{DesktopNotifySettings, RuntimeScenario};
 use ncd_traits::backend_config_renderer::BackendConfigRenderer;
 use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx};
 use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
@@ -100,6 +87,15 @@ impl From<ncd_traits::RenderError> for BotManagerError {
 impl From<RuntimeLaunchPlanError> for BotManagerError {
     fn from(err: RuntimeLaunchPlanError) -> Self {
         Self::Render(err.to_string())
+    }
+}
+
+impl From<RuntimeRouterError> for BotManagerError {
+    fn from(err: RuntimeRouterError) -> Self {
+        match err {
+            RuntimeRouterError::Config(err) => Self::Config(err),
+            RuntimeRouterError::Render(message) => Self::Render(message),
+        }
     }
 }
 
@@ -316,63 +312,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    fn docker_webui_secret_key(qq_id: u64) -> String {
-        format!("bot:{qq_id}:napcat_docker_webui_token")
-    }
-
-    fn docker_vnc_secret_key(qq_id: u64) -> String {
-        format!("bot:{qq_id}:snowluma_docker_vnc_passwd")
-    }
-
-    fn docker_sl_webui_bootstrap_key(qq_id: u64) -> String {
-        format!("bot:{qq_id}:snowluma_docker_webui_bootstrap")
-    }
-
-    fn generate_docker_webui_token() -> String {
-        let mut bytes = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut bytes);
-        hex::encode(bytes)
-    }
-
-    fn get_or_create_docker_webui_token(&self, qq_id: u64) -> Result<String, BotManagerError> {
-        Self::get_or_create_docker_secret_from_store(
-            self.docker_webui_secret_store.as_ref(),
-            qq_id,
-            Self::docker_webui_secret_key,
-            Self::generate_docker_webui_token,
-        )
-    }
-
-    fn get_or_create_docker_vnc_passwd(&self, qq_id: u64) -> Result<String, BotManagerError> {
-        Self::get_or_create_docker_secret_from_store(
-            self.docker_webui_secret_store.as_ref(),
-            qq_id,
-            Self::docker_vnc_secret_key,
-            Self::generate_docker_vnc_passwd,
-        )
-    }
-
-    fn get_or_create_docker_sl_webui_bootstrap(
-        &self,
-        qq_id: u64,
-    ) -> Result<String, BotManagerError> {
-        Self::get_or_create_docker_secret_from_store(
-            self.docker_webui_secret_store.as_ref(),
-            qq_id,
-            Self::docker_sl_webui_bootstrap_key,
-            Self::generate_docker_sl_webui_bootstrap_password,
-        )
-    }
-
-    fn generate_docker_vnc_passwd() -> String {
-        crate::snowluma::session::generate_strong_password(16)
-    }
-
-    /// SnowLuma WebUI 首启 bootstrap(对齐 auth.ts envBootstrapPassword,≥8 位)
-    fn generate_docker_sl_webui_bootstrap_password() -> String {
-        crate::snowluma::session::generate_strong_password(16)
-    }
-
     /// stop / restart / delete 必须按完整 BotConfig 路由 backend;backend_for_config
     /// 失败时不得静默回落本机 baked backend,否则远端 Docker 会假停/假删
     async fn backend_for_lifecycle(
@@ -382,574 +321,67 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.backend_for_config(config).await
     }
 
-    fn get_or_create_docker_secret_from_store(
-        store: Option<&Arc<dyn SecretStore + Send + Sync>>,
-        qq_id: u64,
-        key_fn: fn(u64) -> String,
-        generate: fn() -> String,
-    ) -> Result<String, BotManagerError> {
-        let store = store.ok_or_else(|| {
-            BotManagerError::Render("Docker 部署需要凭据 secret store".to_string())
-        })?;
-        let key = key_fn(qq_id);
-        if let Some(existing) = store
-            .get(&key)
-            .map_err(|e| BotManagerError::Render(e.to_string()))?
-        {
-            let trimmed = existing.trim();
-            if !trimmed.is_empty() {
-                return Ok(trimmed.to_string());
-            }
-        }
-        let value = generate();
-        store
-            .put(&key, &value)
-            .map_err(|e| BotManagerError::Render(e.to_string()))?;
-        Ok(value)
+    fn docker_secrets(&self) -> DockerSecretProvider {
+        DockerSecretProvider::new(self.docker_webui_secret_store.clone())
     }
 
-    #[allow(dead_code)]
-    fn get_or_create_docker_webui_token_from_store(
-        store: Option<&Arc<dyn SecretStore + Send + Sync>>,
-        qq_id: u64,
-    ) -> Result<String, BotManagerError> {
-        Self::get_or_create_docker_secret_from_store(
-            store,
-            qq_id,
-            Self::docker_webui_secret_key,
-            Self::generate_docker_webui_token,
+    fn runtime_router(&self) -> RuntimeBackendRouter {
+        RuntimeBackendRouter::new(
+            Arc::clone(&self.backend),
+            self.snowluma_backend.clone(),
+            self.host_resolver.clone(),
+            self.docker_secrets(),
+            Arc::clone(&self.event_bus),
+            Arc::clone(&self.remote_snowluma_daemons),
+            Arc::clone(&self.remote_snowluma_tunnels),
+            Arc::clone(&self.remote_qq_entry_coordinator),
         )
     }
 
-    /// 按 BotConfig 的 deployment_type + runtime_target 选/造 backend
-    ///
-    /// 路由矩阵:
-    /// - Docker: 按 runtime_target 解析 host(本机 Docker Desktop / 远端 SSH),
-    ///   现造 DockerDeploymentBackend这是远端 + 容器化的真正可用路径
-    /// - Native + Local: 走现有 baked backend(零行为变化,最低风险)
-    /// - Native + Server(id): 远端 Linux SSH + NativeDeployment(组件路径 + xvfb-run,无 napcat.sh)
-    /// - Native + Server + SnowLuma: 远端 launcher(daemon + bot)路径
-    ///
-    /// 无 host_resolver 注入时(过渡期/测试)一律回落 baked backend,行为同历史
+    fn snowluma_agreements(&self) -> SnowLumaAgreementService {
+        SnowLumaAgreementService::new(
+            self.snowluma_daemon.clone(),
+            self.host_resolver.clone(),
+            self.runtime_router(),
+            Arc::clone(&self.remote_snowluma_daemons),
+        )
+    }
+
+    fn remote_runtime_sessions(&self) -> RemoteRuntimeSessions<R> {
+        RemoteRuntimeSessions::new(
+            Arc::clone(&self.repo),
+            Arc::clone(&self.event_bus),
+            self.host_resolver.clone(),
+            self.runtime_router(),
+            self.docker_secrets(),
+            Arc::clone(&self.docker_sessions),
+            Arc::clone(&self.remote_native_napcat_sessions),
+            Arc::clone(&self.remote_bot_log_follow),
+            Arc::clone(&self.remote_sl_daemon_log),
+        )
+    }
+
+    fn bootstrap_reconciler(&self) -> BootstrapReconciler<R> {
+        BootstrapReconciler::new(
+            Arc::clone(&self.actors),
+            self.host_resolver.clone(),
+            Arc::clone(&self.event_bus),
+            self.runtime_router(),
+            self.remote_runtime_sessions(),
+            Arc::clone(&self.remote_snowluma_tunnels),
+            Arc::clone(&self.remote_qq_entry_coordinator),
+        )
+    }
+
+    /// 按完整 BotConfig 路由 backend。唯一矩阵入口在 RuntimeScenario/RuntimeBackendRouter。
     async fn backend_for_config(
         &self,
         config: &BotConfig,
     ) -> Result<Arc<dyn BotBackend>, BotManagerError> {
-        let flavor = map_backend_flavor(config.bot.backend_type);
-        let resolver = match &self.host_resolver {
-            Some(r) => r,
-            // 没注入 resolver:维持历史行为(全本机 native)
-            None => return Ok(self.backend_for(flavor)),
-        };
-
-        match config.bot.deployment_type {
-            DeploymentType::Docker => {
-                if config.bot.runtime_target.is_local() {
-                    return Err(BotManagerError::Render(
-                        "本机暂不支持 Docker 部署。请将启动方式改为「直接运行」,\
-                         或把运行宿主切换为远程 SSH 主机后再用 Docker。"
-                            .to_string(),
-                    ));
-                }
-                let host = resolver
-                    .resolve(&config.bot.runtime_target)
-                    .await
-                    .map_err(BotManagerError::Render)?;
-                let backend_id = BotId::new(format!("docker-{}", config.bot.qq_id));
-                let deployment: Arc<ncd_deploy::DockerDeployment> = match flavor {
-                    BotFlavor::SnowLuma => {
-                        let vnc = self.get_or_create_docker_vnc_passwd(config.bot.qq_id)?;
-                        let webui =
-                            self.get_or_create_docker_sl_webui_bootstrap(config.bot.qq_id)?;
-                        Arc::new(ncd_deploy::DockerDeployment::with_sl_secrets(vnc, webui))
-                    }
-                    BotFlavor::NapCat => {
-                        let token = self.get_or_create_docker_webui_token(config.bot.qq_id)?;
-                        Arc::new(ncd_deploy::DockerDeployment::with_webui_token(token))
-                    }
-                };
-                Ok(Arc::new(DockerDeploymentBackend::new(
-                    deployment, host, backend_id, flavor,
-                )))
-            }
-            DeploymentType::Native => match &config.bot.runtime_target {
-                RuntimeTarget::Local => Ok(self.backend_for(flavor)),
-                RuntimeTarget::Server(server_id) => {
-                    let host = resolver
-                        .resolve(&config.bot.runtime_target)
-                        .await
-                        .map_err(BotManagerError::Render)?;
-                    if host.os() != ncd_host::Os::Linux {
-                        return Err(BotManagerError::Render(
-                            "远端「直接运行」目前仅支持 Linux SSH 主机。".to_string(),
-                        ));
-                    }
-                    match flavor {
-                        BotFlavor::SnowLuma => {
-                            if config.bot.runtime_target.is_local() {
-                                warn!(
-                                    target: "ncd_runtime::bot_manager",
-                                    bot_id = %config.bot.qq_id,
-                                    "SnowLuma 运行宿主为 local，走本机 SnowLumaRuntimeBackend；\
-                                     若需远端直接运行，请在配置里选远程 SSH 主机（runtime_target=server_id）"
-                                );
-                            }
-                            let daemon = self
-                                .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
-                                .await?;
-                            let coordinator = Arc::clone(&self.remote_qq_entry_coordinator);
-                            let backend_id = BotId::new(format!("remote-sl-{}", config.bot.qq_id));
-                            Ok(Arc::new(RemoteSnowLumaBackend::new(
-                                backend_id,
-                                daemon,
-                                Arc::clone(&self.event_bus),
-                                Arc::clone(&self.remote_snowluma_tunnels),
-                                coordinator,
-                            )))
-                        }
-                        BotFlavor::NapCat => {
-                            let coordinator = Arc::clone(&self.remote_qq_entry_coordinator);
-                            let backend_id =
-                                BotId::new(format!("remote-native-{}", config.bot.qq_id));
-                            let translator = Arc::new(RemoteNativeLaunchTranslator::new(
-                                Arc::clone(&host),
-                                flavor,
-                                server_id.to_string(),
-                                coordinator,
-                            ));
-                            let event_sink: Arc<dyn ncd_deploy::NativeRuntimeEventSink> =
-                                Arc::new(EventBusSink::new(Arc::clone(&self.event_bus)));
-                            let deployment =
-                                Arc::new(NativeDeployment::new(translator, event_sink, None));
-                            Ok(Arc::new(RemoteNativeDeploymentBackend::new(
-                                deployment,
-                                Arc::clone(resolver),
-                                config.bot.runtime_target.clone(),
-                                backend_id,
-                                flavor,
-                            )))
-                        }
-                    }
-                }
-            },
-        }
-    }
-
-    /// 远端 SL:remote_snowluma_daemons 按 server_id 单例 daemon;多 Bot 共用图形栈,按 qq_id 冷/热注入
-    async fn remote_snowluma_daemon_for_server(
-        &self,
-        server_id: &str,
-        host: Arc<dyn Host>,
-    ) -> Result<Arc<RemoteSnowLumaDaemon>, BotManagerError> {
-        let sid = server_id.to_string();
-        let mut guard = self.remote_snowluma_daemons.lock().await;
-        if let Some(daemon) = guard.get(&sid) {
-            return Ok(Arc::clone(daemon));
-        }
-        let daemon = Arc::new(
-            RemoteSnowLumaDaemon::new(
-                sid.clone(),
-                Arc::clone(&host),
-                Arc::clone(&self.remote_snowluma_tunnels),
-                Arc::clone(&self.event_bus),
-            )
+        self.runtime_router()
+            .backend_for_config(config)
             .await
-            .map_err(|e| BotManagerError::Render(e.to_string()))?,
-        );
-        guard.insert(sid, Arc::clone(&daemon));
-        Ok(daemon)
-    }
-
-    // ─── bootstrap ─────────────────────────────────────────────────────────
-
-    /// 冷启动:远端 Docker / 远端 Native SnowLuma 若仍在跑,则 attach 并把 Actor 标为 Running
-    async fn reconcile_bootstrap_bots(
-        &self,
-        configs: &[BotConfig],
-        skipped: &[BotId],
-    ) -> HashSet<BotId> {
-        let mut reconciled = HashSet::new();
-        let resolver = match &self.host_resolver {
-            Some(r) => r,
-            None => return reconciled,
-        };
-
-        let deployment = DockerDeployment::new();
-        for config in configs {
-            let bot_id = BotId::new(config.bot.qq_id.to_string());
-            if skipped.contains(&bot_id) {
-                continue;
-            }
-            let handle = match self.get_actor(&bot_id).await {
-                Ok(h) => h,
-                Err(_) => continue,
-            };
-
-            if is_remote_docker_config(config) {
-                let host = match resolver.resolve(&config.bot.runtime_target).await {
-                    Ok(h) => h,
-                    Err(err) => {
-                        warn!(
-                            target: "ncd_runtime::bot_manager",
-                            bot_id = %bot_id,
-                            err = %err,
-                            "bootstrap reconcile: 远端主机未连接，跳过"
-                        );
-                        continue;
-                    }
-                };
-
-                let state = match deployment.observe(host.as_ref(), &bot_id).await {
-                    Ok(s) => s,
-                    Err(err) => {
-                        warn!(
-                            target: "ncd_runtime::bot_manager",
-                            bot_id = %bot_id,
-                            err = %err,
-                            "bootstrap reconcile: observe 失败"
-                        );
-                        continue;
-                    }
-                };
-
-                if state != DeploymentState::Running {
-                    continue;
-                }
-
-                if let Err(err) = self
-                    .attach_remote_docker_after_running(&bot_id, &handle, config, host)
-                    .await
-                {
-                    warn!(
-                        target: "ncd_runtime::bot_manager",
-                        bot_id = %bot_id,
-                        err = %err,
-                        "bootstrap reconcile: attach 失败"
-                    );
-                    continue;
-                }
-                reconciled.insert(bot_id.clone());
-                info!(
-                    target: "ncd_runtime::bot_manager",
-                    bot_id = %bot_id,
-                    "bootstrap reconcile: 已恢复远端 Docker 运行态"
-                );
-                continue;
-            }
-
-            if is_remote_native_napcat_config(config) {
-                let host = match resolver.resolve(&config.bot.runtime_target).await {
-                    Ok(h) => h,
-                    Err(err) => {
-                        warn!(
-                            target: "ncd_runtime::bot_manager",
-                            bot_id = %bot_id,
-                            err = %err,
-                            "bootstrap reconcile: 远端 NapCat Native 主机未连接，跳过"
-                        );
-                        continue;
-                    }
-                };
-
-                let pid = match remote_napcat_running_pid(host.as_ref(), config.bot.qq_id).await {
-                    Ok(Some(p)) => p,
-                    Ok(None) => continue,
-                    Err(err) => {
-                        warn!(
-                            target: "ncd_runtime::bot_manager",
-                            bot_id = %bot_id,
-                            err = %err,
-                            "bootstrap reconcile: 远端 NapCat pgrep 失败"
-                        );
-                        continue;
-                    }
-                };
-
-                if let Err(err) = self
-                    .attach_remote_native_sl_after_running(&bot_id, &handle, pid)
-                    .await
-                {
-                    warn!(
-                        target: "ncd_runtime::bot_manager",
-                        bot_id = %bot_id,
-                        err = %err,
-                        "bootstrap reconcile: 远端 NapCat Native actor 状态失败"
-                    );
-                    continue;
-                }
-
-                self.attach_remote_native_napcat_sessions(&bot_id, config, host)
-                    .await;
-
-                reconciled.insert(bot_id.clone());
-                info!(
-                    target: "ncd_runtime::bot_manager",
-                    bot_id = %bot_id,
-                    pid,
-                    "bootstrap reconcile: 已恢复远端 NapCat Native 运行态"
-                );
-                continue;
-            }
-
-            if !is_remote_native_snowluma_config(config) {
-                continue;
-            }
-
-            let RuntimeTarget::Server(server_id) = &config.bot.runtime_target else {
-                continue;
-            };
-
-            let host = match resolver.resolve(&config.bot.runtime_target).await {
-                Ok(h) => h,
-                Err(err) => {
-                    warn!(
-                        target: "ncd_runtime::bot_manager",
-                        bot_id = %bot_id,
-                        err = %err,
-                        "bootstrap reconcile: 远端 SnowLuma 主机未连接，跳过"
-                    );
-                    continue;
-                }
-            };
-
-            let pid = match remote_qq_running_pid(host.as_ref(), config.bot.qq_id).await {
-                Ok(Some(p)) => p,
-                Ok(None) => continue,
-                Err(err) => {
-                    warn!(
-                        target: "ncd_runtime::bot_manager",
-                        bot_id = %bot_id,
-                        err = %err,
-                        "bootstrap reconcile: 远端 QQ pgrep 失败"
-                    );
-                    continue;
-                }
-            };
-
-            let daemon = match self
-                .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
-                .await
-            {
-                Ok(d) => d,
-                Err(err) => {
-                    warn!(
-                        target: "ncd_runtime::bot_manager",
-                        bot_id = %bot_id,
-                        err = %err,
-                        "bootstrap reconcile: 远端 SnowLuma daemon 初始化失败"
-                    );
-                    continue;
-                }
-            };
-
-            let backend_id = BotId::new(format!("remote-sl-{}", config.bot.qq_id));
-            let sl_paths = daemon.paths().clone();
-            let sl_backend = RemoteSnowLumaBackend::new(
-                backend_id,
-                daemon,
-                Arc::clone(&self.event_bus),
-                Arc::clone(&self.remote_snowluma_tunnels),
-                Arc::clone(&self.remote_qq_entry_coordinator),
-            );
-
-            if let Err(err) = sl_backend
-                .attach_reconciled_running(bot_id.clone(), pid, config)
-                .await
-            {
-                warn!(
-                    target: "ncd_runtime::bot_manager",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "bootstrap reconcile: 远端 SnowLuma attach 失败"
-                );
-                continue;
-            }
-
-            if let Err(err) = self
-                .attach_remote_native_sl_after_running(&bot_id, &handle, pid)
-                .await
-            {
-                warn!(
-                    target: "ncd_runtime::bot_manager",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "bootstrap reconcile: 远端 SnowLuma actor 状态失败"
-                );
-                continue;
-            }
-
-            reconciled.insert(bot_id.clone());
-            info!(
-                target: "ncd_runtime::bot_manager",
-                bot_id = %bot_id,
-                pid,
-                "bootstrap reconcile: 已恢复远端 SnowLuma Native 运行态"
-            );
-            self.attach_remote_native_snowluma_log_follow(&bot_id, config, host, &sl_paths)
-                .await;
-        }
-        reconciled
-    }
-
-    async fn attach_remote_native_sl_after_running(
-        &self,
-        bot_id: &BotId,
-        handle: &BotActorHandle,
-        pid: u32,
-    ) -> Result<(), BotManagerError> {
-        let (starting, advanced) = handle.request_start_transition().await?;
-        if advanced {
-            self.publish_state_change(&starting, "bootstrap_reconcile");
-        }
-        let running = handle.confirm_running().await?;
-        self.publish_state_change(&running, "bootstrap_reconcile");
-        self.event_bus.publish(DomainEvent::bot_status_changed(
-            ncd_domain::bot_status::BotStatus::running(bot_id.clone(), pid, 0),
-            "bootstrap_reconcile",
-        ));
-        Ok(())
-    }
-
-    async fn attach_remote_docker_after_running(
-        &self,
-        bot_id: &BotId,
-        handle: &BotActorHandle,
-        config: &BotConfig,
-        host: Arc<dyn Host>,
-    ) -> Result<(), BotManagerError> {
-        let (starting, advanced) = handle.request_start_transition().await?;
-        if advanced {
-            self.publish_state_change(&starting, "bootstrap_reconcile");
-        }
-        let running = handle.confirm_running().await?;
-        self.publish_state_change(&running, "bootstrap_reconcile");
-        self.event_bus.publish(DomainEvent::bot_status_changed(
-            ncd_domain::bot_status::BotStatus::running(bot_id.clone(), 0, 0),
-            "bootstrap_reconcile",
-        ));
-
-        self.attach_remote_docker_sessions(bot_id, config, host)
-            .await;
-        Ok(())
-    }
-
-    async fn attach_remote_docker_sessions(
-        &self,
-        bot_id: &BotId,
-        config: &BotConfig,
-        host: Arc<dyn Host>,
-    ) {
-        let napcat_token = (config.bot.backend_type == BackendType::NapCat)
-            .then(|| self.get_or_create_docker_webui_token(config.bot.qq_id))
-            .transpose()
-            .ok()
-            .flatten();
-        let vnc_pass = (config.bot.backend_type == BackendType::SnowLuma)
-            .then(|| self.get_or_create_docker_vnc_passwd(config.bot.qq_id))
-            .transpose()
-            .ok()
-            .flatten();
-        let sl_webui = (config.bot.backend_type == BackendType::SnowLuma)
-            .then(|| self.get_or_create_docker_sl_webui_bootstrap(config.bot.qq_id))
-            .transpose()
-            .ok()
-            .flatten();
-        self.docker_sessions
-            .start_session(
-                bot_id.clone(),
-                config.clone(),
-                host,
-                Arc::clone(&self.event_bus),
-                napcat_token,
-                vnc_pass,
-                sl_webui,
-            )
-            .await;
-    }
-
-    async fn attach_remote_native_napcat_sessions(
-        &self,
-        bot_id: &BotId,
-        config: &BotConfig,
-        host: Arc<dyn Host>,
-    ) {
-        if let Some(sid) = config.bot.runtime_target.server_id() {
-            self.stop_remote_native_napcat_log_sessions_on_server(sid, Some(config.bot.qq_id))
-                .await;
-        }
-        self.remote_native_napcat_sessions
-            .start_session(
-                bot_id.clone(),
-                config.clone(),
-                host,
-                Arc::clone(&self.event_bus),
-            )
-            .await;
-    }
-
-    async fn stop_remote_native_napcat_log_sessions_on_server(
-        &self,
-        server_id: &str,
-        except_qq_id: Option<u64>,
-    ) {
-        let configs = match self.repo.list().await {
-            Ok(c) => c,
-            Err(_) => return,
-        };
-        for cfg in configs {
-            if !is_remote_native_napcat_config(&cfg) {
-                continue;
-            }
-            if cfg.bot.qq_id == except_qq_id.unwrap_or(u64::MAX) {
-                continue;
-            }
-            let Some(sid) = cfg.bot.runtime_target.server_id() else {
-                continue;
-            };
-            if sid != server_id {
-                continue;
-            }
-            let bid = BotId::new(cfg.bot.qq_id.to_string());
-            self.remote_native_napcat_sessions.shutdown_bot(&bid).await;
-        }
-    }
-
-    async fn attach_remote_native_snowluma_log_follow(
-        &self,
-        bot_id: &BotId,
-        config: &BotConfig,
-        host: Arc<dyn Host>,
-        paths: &SnowLumaRemotePaths,
-    ) {
-        if !is_remote_native_snowluma_config(config) {
-            return;
-        }
-        self.remote_native_napcat_sessions
-            .shutdown_bot(bot_id)
-            .await;
-        if let Some(sid) = config.bot.runtime_target.server_id() {
-            self.stop_remote_native_napcat_log_sessions_on_server(sid, Some(config.bot.qq_id))
-                .await;
-        }
-        let log_path = paths.log_bot_path(bot_id.as_str());
-        self.remote_bot_log_follow
-            .start_bot_log(
-                bot_id.clone(),
-                Arc::clone(&host),
-                log_path,
-                Arc::clone(&self.event_bus),
-            )
-            .await;
-        if let Some(sid) = config.bot.runtime_target.server_id() {
-            self.remote_sl_daemon_log
-                .start_daemon_follow_for_server(
-                    sid,
-                    host,
-                    paths.log_daemon.clone(),
-                    Arc::clone(&self.event_bus),
-                )
-                .await;
-        }
+            .map_err(BotManagerError::from)
     }
 
     /// 启动时从持久化配置恢复所有 Bot Actor,并自动启动标记了 auto_start 的 Bot
@@ -980,7 +412,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
 
         // 远端 Docker:桌面退出后容器可能仍在跑,先 reconcile attach,避免 auto_start 误 remove
-        let reconciled = self.reconcile_bootstrap_bots(&configs, &skipped).await;
+        let reconciled = self
+            .bootstrap_reconciler()
+            .reconcile_bootstrap_bots(&configs, &skipped)
+            .await;
 
         // 自动启动(只针对已注册的 actor,skipped / 已 reconcile 的不会被启动)
         let auto_start_ids: Vec<BotId> = configs
@@ -1089,12 +524,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             return Ok(starting);
         }
         self.publish_state_change(&starting, "start_requested");
-        if is_remote_native_snowluma_config(&config) {
-            if let Some(sid) = config.bot.runtime_target.server_id() {
-                self.stop_remote_native_napcat_log_sessions_on_server(sid, Some(config.bot.qq_id))
-                    .await;
-            }
-        }
+        self.remote_runtime_sessions()
+            .prepare_before_runtime_start(&config)
+            .await;
         self.start_runtime_from_starting(bot_id, &handle, &config)
             .await
     }
@@ -1113,12 +545,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             return Ok(starting);
         }
         self.publish_state_change(&starting, "start_requested");
-        if is_remote_native_snowluma_config(&config) {
-            if let Some(sid) = config.bot.runtime_target.server_id() {
-                self.stop_remote_native_napcat_log_sessions_on_server(sid, Some(config.bot.qq_id))
-                    .await;
-            }
-        }
+        self.remote_runtime_sessions()
+            .prepare_before_runtime_start(&config)
+            .await;
         self.start_runtime_from_starting(bot_id, &handle, &config)
             .await
     }
@@ -1126,7 +555,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 停止指定 Bot
     pub async fn stop_bot(&self, bot_id: &BotId) -> Result<BotActorSnapshot, BotManagerError> {
         info!(target: "ncd_runtime::bot_manager", bot_id = %bot_id, "收到停止 Bot 请求");
-        self.docker_sessions.stop_expected(bot_id).await;
+        self.remote_runtime_sessions()
+            .mark_remote_docker_stop_expected(bot_id)
+            .await;
         let handle = self.get_actor(bot_id).await?;
         let stopping = handle.request_stop().await?;
         self.publish_state_change(&stopping, "stop_requested");
@@ -1141,11 +572,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 BotActorState::Stopping => handle.confirm_stopped().await?,
                 _ => stopping,
             };
-            self.docker_sessions.shutdown_bot(bot_id).await;
-            self.remote_native_napcat_sessions
-                .shutdown_bot(bot_id)
-                .await;
-            self.remote_bot_log_follow.stop_bot(bot_id).await;
+            self.remote_runtime_sessions().shutdown_bot(bot_id).await;
             self.publish_state_change(&stopped, "stop_completed");
             if stopped.state == BotActorState::Starting {
                 let config = self.get_required_bot_config(bot_id).await?;
@@ -1162,10 +589,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 self.event_bus
                     .publish(DomainEvent::bot_status_changed(status, "runtime_stop"));
                 let stopped = handle.confirm_stopped().await?;
-                self.docker_sessions.shutdown_bot(bot_id).await;
-                self.remote_native_napcat_sessions
-                    .shutdown_bot(bot_id)
-                    .await;
+                self.remote_runtime_sessions().shutdown_bot(bot_id).await;
                 self.publish_state_change(&stopped, "stop_completed");
                 if stopped.state == BotActorState::Starting {
                     let config = self.get_required_bot_config(bot_id).await?;
@@ -1434,15 +858,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
         // 0. 读旧 config 拿原 backend_type,用于检测 backend 切换走特殊路径
         //    新建 bot 没有旧 config,这步返回 None
-        let previous_backend_type: Option<BackendType> = if is_new {
+        let previous_config: Option<BotConfig> = if is_new {
             None
         } else {
-            self.repo
-                .get(config.bot.qq_id)
-                .await
-                .ok()
-                .flatten()
-                .map(|c| c.bot.backend_type)
+            self.repo.get(config.bot.qq_id).await.ok().flatten()
         };
 
         // 1. 先持久化 bot.json(source of truth)
@@ -1491,11 +910,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             let handle = self.get_actor(&bot_id).await?;
             let current = handle.snapshot();
             if current.state == BotActorState::Running || current.state == BotActorState::Starting {
-                if let Some(prev) = previous_backend_type.filter(|p| *p != target_backend) {
+                if let Some(prev_config) = previous_config
+                    .as_ref()
+                    .filter(|prev| prev.bot.backend_type != target_backend)
+                {
                     // backend 切换:必须停旧 + 起新,没法热推送(NapCat <-> SL 协议完全不同)
-                    let prev_flavor = map_backend_flavor(prev);
                     let snapshot = self
-                        .restart_bot_with_backend_switch(&bot_id, prev_flavor)
+                        .restart_bot_with_backend_switch(&bot_id, prev_config.clone())
                         .await?;
                     self.publish_state_change(&snapshot, "config_hot_reload");
                     Ok(snapshot)
@@ -1587,12 +1008,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
-    /// 切换 backend_type 时的专用 restart:用 previous_flavor 对应的 backend
+    /// 切换 backend_type 时的专用 restart:用 previous_config 对应的完整路由
     /// 停掉老进程,再用 start_bot(自动按新 config 选 backend)启动新进程
     ///
     /// 与普通 restart_bot 的关键差异:
-    /// - stop 阶段不再用 self.backend(写死 NapCat backend),而是用
-    ///   backend_for(previous_flavor),避免切换 NapCat -> SnowLuma 时老进程留尸
+    /// - stop 阶段使用旧配置路由,避免远端 / Docker / backend 切换时老进程留尸
     /// - stop 返回后直接 confirm_stopped 推进 actor 到 Starting,不依赖
     ///   异步 BotProcessExited 事件链原因:
     ///   1. backend.stop 是同步 await 的,返回时进程树已被 force kill
@@ -1602,13 +1022,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     async fn restart_bot_with_backend_switch(
         &self,
         bot_id: &BotId,
-        previous_flavor: BotFlavor,
+        previous_config: BotConfig,
     ) -> Result<BotActorSnapshot, BotManagerError> {
         let handle = self.get_actor(bot_id).await?;
         let stopping = handle.request_restart().await?;
         self.publish_state_change(&stopping, "restart_requested");
-        // 用旧 flavor 的 backend 停老进程
-        self.backend_for(previous_flavor)
+        // 用旧配置的完整 runtime scenario 停老进程
+        self.backend_for_lifecycle(&previous_config)
+            .await?
             .stop(bot_id.clone(), StopMode::Force)
             .await?;
         // confirm_stopped 可能跟 exit watcher listener 竞争(参见 restart_bot 注释)
@@ -1761,10 +1182,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
 
-        self.docker_sessions.shutdown_all().await;
-        self.remote_native_napcat_sessions.shutdown_all().await;
-        self.remote_bot_log_follow.shutdown_all().await;
-        self.remote_sl_daemon_log.shutdown_all().await;
+        self.remote_runtime_sessions().shutdown_all().await;
 
         result
     }
@@ -1952,41 +1370,50 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         // 取消令牌:stop_bot 在 Starting 阶段会 cancel,检测到后静默退出,避免重复报错
         let cancel = handle.cancellation_token();
 
-        let runtime_config = if config.bot.deployment_type == DeploymentType::Docker
-            || !config.bot.runtime_target.is_local()
-        {
-            self.build_runtime_config(bot_id, config)
-        } else {
-            let base = self.build_runtime_config(bot_id, config);
-            match self.launch_planner.build_plan(bot_id, config).await {
-                Ok(plan) => plan.into_runtime_config(base),
-                Err(err) => {
-                    let message = err.to_string();
-                    error!(
-                        target: "ncd_runtime::bot_manager",
-                        bot_id = %bot_id,
-                        err = %message,
-                        "构造 Bot 启动计划失败"
-                    );
-                    let hint = match &err {
-                        RuntimeLaunchPlanError::SnowLumaNodeMissing(path) => Some(format!(
-                            "未在 {} 找到 SnowLuma daemon 二进制。请安装 SnowLuma 运行时组件，或在 Bot 配置中把后端类型切换为 NapCat。",
-                            path.display()
-                        )),
-                        RuntimeLaunchPlanError::SnowLumaInvalidStartMode(detail) => Some(format!(
-                            "SnowLuma 启动参数无效：{detail}。请在 Bot 配置中检查启动模式。"
-                        )),
-                        RuntimeLaunchPlanError::MissingFile { .. } => {
-                            Some("NapCat 运行时组件缺失，请先在「设置」页安装运行时。".to_string())
-                        }
-                        _ => Some("启动计划构造失败：请检查后端类型与运行时安装状态。".to_string()),
-                    };
-                    let crashed = handle.mark_crashed(message.clone()).await?;
-                    self.publish_state_change(&crashed, "start_failed");
-                    self.event_bus
-                        .publish(DomainEvent::bot_error(bot_id.clone(), message, hint));
-                    return Err(BotManagerError::Render(err.to_string()));
+        let scenario = RuntimeScenario::from_config(config)?;
+        let runtime_config = match scenario {
+            RuntimeScenario::LocalNative { .. } => {
+                let base = self.build_runtime_config(bot_id, config);
+                match self.launch_planner.build_plan(bot_id, config).await {
+                    Ok(plan) => plan.into_runtime_config(base),
+                    Err(err) => {
+                        let message = err.to_string();
+                        error!(
+                            target: "ncd_runtime::bot_manager",
+                            bot_id = %bot_id,
+                            err = %message,
+                            "构造 Bot 启动计划失败"
+                        );
+                        let hint = match &err {
+                            RuntimeLaunchPlanError::SnowLumaNodeMissing(path) => Some(format!(
+                                "未在 {} 找到 SnowLuma daemon 二进制。请安装 SnowLuma 运行时组件，或在 Bot 配置中把后端类型切换为 NapCat。",
+                                path.display()
+                            )),
+                            RuntimeLaunchPlanError::SnowLumaInvalidStartMode(detail) => {
+                                Some(format!(
+                                    "SnowLuma 启动参数无效：{detail}。请在 Bot 配置中检查启动模式。"
+                                ))
+                            }
+                            RuntimeLaunchPlanError::MissingFile { .. } => Some(
+                                "NapCat 运行时组件缺失，请先在「设置」页安装运行时。".to_string(),
+                            ),
+                            _ => Some(
+                                "启动计划构造失败：请检查后端类型与运行时安装状态。".to_string(),
+                            ),
+                        };
+                        let crashed = handle.mark_crashed(message.clone()).await?;
+                        self.publish_state_change(&crashed, "start_failed");
+                        self.event_bus.publish(DomainEvent::bot_error(
+                            bot_id.clone(),
+                            message,
+                            hint,
+                        ));
+                        return Err(BotManagerError::Render(err.to_string()));
+                    }
                 }
+            }
+            RuntimeScenario::RemoteNative { .. } | RuntimeScenario::RemoteDocker { .. } => {
+                self.build_runtime_config(bot_id, config)
             }
         };
 
@@ -2062,41 +1489,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 }
                 let running = handle.confirm_running().await?;
                 self.publish_state_change(&running, "start_completed");
-                if is_remote_docker_config(config) {
-                    if let Some(resolver) = &self.host_resolver {
-                        if let Ok(host) = resolver.resolve(&config.bot.runtime_target).await {
-                            let _ = self
-                                .attach_remote_docker_sessions(bot_id, config, host)
-                                .await;
-                        }
-                    }
-                } else if is_remote_native_napcat_config(config) {
-                    if let Some(resolver) = &self.host_resolver {
-                        if let Ok(host) = resolver.resolve(&config.bot.runtime_target).await {
-                            self.attach_remote_native_napcat_sessions(bot_id, config, host)
-                                .await;
-                        }
-                    }
-                } else if is_remote_native_snowluma_config(config) {
-                    if let Some(resolver) = &self.host_resolver {
-                        if let Ok(host) = resolver.resolve(&config.bot.runtime_target).await {
-                            if let RuntimeTarget::Server(server_id) = &config.bot.runtime_target {
-                                if let Ok(daemon) = self
-                                    .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
-                                    .await
-                                {
-                                    self.attach_remote_native_snowluma_log_follow(
-                                        bot_id,
-                                        config,
-                                        host,
-                                        daemon.paths(),
-                                    )
-                                    .await;
-                                }
-                            }
-                        }
-                    }
-                }
+                self.remote_runtime_sessions()
+                    .attach_after_runtime_start(bot_id, config)
+                    .await;
                 info!(
                     target: "ncd_runtime::bot_manager",
                     bot_id = %bot_id,
@@ -2189,10 +1584,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             daemon.shutdown().await;
         }
 
-        self.docker_sessions.shutdown_all().await;
-        self.remote_native_napcat_sessions.shutdown_all().await;
-        self.remote_bot_log_follow.shutdown_all().await;
-        self.remote_sl_daemon_log.shutdown_all().await;
+        self.remote_runtime_sessions().shutdown_all().await;
 
         result
     }
@@ -2202,7 +1594,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         &self,
         bot_id: &BotId,
     ) -> Option<crate::docker_bot_session::SnowLumaDockerEndpoints> {
-        self.docker_sessions.snowluma_endpoints(bot_id).await
+        self.remote_runtime_sessions()
+            .snowluma_docker_endpoints(bot_id)
+            .await
     }
 
     /// 远端 SnowLuma Native:按 SSH server_id 查本机隧道端口(多 Bot 同机共享)
@@ -2224,90 +1618,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         bot_id: &BotId,
     ) -> Result<Option<crate::snowluma::AgreementsPayload>, BotManagerError> {
         let config = self.get_required_bot_config(bot_id).await?;
-        if config.bot.backend_type != BackendType::SnowLuma {
-            return Ok(None);
-        }
-        if config.bot.deployment_type == DeploymentType::Docker {
-            return Ok(None);
-        }
-        match &config.bot.runtime_target {
-            RuntimeTarget::Local => {
-                let daemon = self
-                    .snowluma_daemon
-                    .as_ref()
-                    .ok_or_else(|| BotManagerError::Render("SnowLuma daemon 未初始化".into()))?;
-                let client = daemon
-                    .ensure_running(Duration::from_secs(35))
-                    .await
-                    .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
-                let agreements_result = client
-                    .get_agreements()
-                    .await
-                    .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())));
-                let agreements = match agreements_result {
-                    Ok(agreements) => agreements,
-                    Err(err) => {
-                        daemon.release().await;
-                        return Err(err);
-                    }
-                };
-                if agreements.consent_required {
-                    return Ok(Some(agreements));
-                }
-                daemon.release().await;
-                Ok(None)
-            }
-            RuntimeTarget::Server(server_id) => {
-                let resolver = self
-                    .host_resolver
-                    .as_ref()
-                    .ok_or_else(|| BotManagerError::Render("HostResolver 未初始化".into()))?;
-                let host = resolver
-                    .resolve(&config.bot.runtime_target)
-                    .await
-                    .map_err(BotManagerError::Render)?;
-                let daemon = self
-                    .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
-                    .await?;
-                daemon.ensure_running().await?;
-                let agreements_result = async {
-                    let endpoints = daemon
-                        .tunnel_endpoints()
-                        .await
-                        .ok_or_else(|| BotManagerError::Render("SnowLuma 隧道未建立".into()))?;
-                    let client = crate::snowluma::ReqwestSnowLumaWebUiClient::new(
-                        endpoints.webui_local_port,
-                        endpoints.webui_password.clone(),
-                    )
-                    .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
-                    client
-                        .wait_ready(Duration::from_secs(30), Box::new(|| false))
-                        .await
-                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
-                    client
-                        .login()
-                        .await
-                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
-                    client
-                        .get_agreements()
-                        .await
-                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))
-                }
-                .await;
-                let agreements = match agreements_result {
-                    Ok(agreements) => agreements,
-                    Err(err) => {
-                        daemon.release().await;
-                        return Err(err);
-                    }
-                };
-                if agreements.consent_required {
-                    return Ok(Some(agreements));
-                }
-                daemon.release().await;
-                Ok(None)
-            }
-        }
+        self.snowluma_agreements().prepare(&config).await
     }
 
     pub async fn record_snowluma_agreement_consent(
@@ -2316,83 +1627,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         version: &str,
     ) -> Result<bool, BotManagerError> {
         let config = self.get_required_bot_config(bot_id).await?;
-        if config.bot.backend_type != BackendType::SnowLuma {
-            return Ok(false);
-        }
-        if config.bot.deployment_type == DeploymentType::Docker {
-            return Ok(false);
-        }
-        match &config.bot.runtime_target {
-            RuntimeTarget::Local => {
-                let daemon = self
-                    .snowluma_daemon
-                    .as_ref()
-                    .ok_or_else(|| BotManagerError::Render("SnowLuma daemon 未初始化".into()))?;
-                let client = match daemon.current_webui_client().await {
-                    Some(client) => client,
-                    None => daemon
-                        .ensure_running(Duration::from_secs(35))
-                        .await
-                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?,
-                };
-                let result = client
-                    .record_agreement_consent(version)
-                    .await
-                    .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())));
-                result?;
-                Ok(true)
-            }
-            RuntimeTarget::Server(server_id) => {
-                let daemon = {
-                    let guard = self.remote_snowluma_daemons.lock().await;
-                    guard.get(server_id).cloned()
-                };
-                let daemon = match daemon {
-                    Some(daemon) if daemon.tunnel_endpoints().await.is_some() => daemon,
-                    _ => {
-                        let resolver = self
-                            .host_resolver
-                            .as_ref()
-                            .ok_or_else(|| BotManagerError::Render("HostResolver 未初始化".into()))?;
-                        let host = resolver
-                            .resolve(&config.bot.runtime_target)
-                            .await
-                            .map_err(BotManagerError::Render)?;
-                        let daemon = self
-                            .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
-                            .await?;
-                        daemon.ensure_running().await?;
-                        daemon
-                    }
-                };
-                let result = async {
-                    let endpoints = daemon
-                        .tunnel_endpoints()
-                        .await
-                        .ok_or_else(|| BotManagerError::Render("SnowLuma 隧道未建立".into()))?;
-                    let client = crate::snowluma::ReqwestSnowLumaWebUiClient::new(
-                        endpoints.webui_local_port,
-                        endpoints.webui_password.clone(),
-                    )
-                    .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
-                    client
-                        .wait_ready(Duration::from_secs(30), Box::new(|| false))
-                        .await
-                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
-                    client
-                        .login()
-                        .await
-                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
-                    client
-                        .record_agreement_consent(version)
-                        .await
-                        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))
-                }
-                .await;
-                result?;
-                Ok(true)
-            }
-        }
+        self.snowluma_agreements()
+            .record_consent(&config, version)
+            .await
     }
 
     pub async fn release_snowluma_agreement_session(
@@ -2400,29 +1637,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         bot_id: &BotId,
     ) -> Result<(), BotManagerError> {
         let config = self.get_required_bot_config(bot_id).await?;
-        if config.bot.backend_type != BackendType::SnowLuma {
-            return Ok(());
-        }
-        if config.bot.deployment_type == DeploymentType::Docker {
-            return Ok(());
-        }
-        match &config.bot.runtime_target {
-            RuntimeTarget::Local => {
-                if let Some(daemon) = self.snowluma_daemon.as_ref() {
-                    daemon.release().await;
-                }
-            }
-            RuntimeTarget::Server(server_id) => {
-                let daemon = {
-                    let guard = self.remote_snowluma_daemons.lock().await;
-                    guard.get(server_id).cloned()
-                };
-                if let Some(daemon) = daemon {
-                    daemon.release().await;
-                }
-            }
-        }
-        Ok(())
+        self.snowluma_agreements().release(&config).await
     }
 
     /// 长任务:监听 SnowLumaDaemonStateChanged 事件,daemon 转 Crashed 时
@@ -2649,11 +1864,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
 
         self.dispose_poller(bot_id).await;
-        self.docker_sessions.shutdown_bot(bot_id).await;
-        self.remote_native_napcat_sessions
-            .shutdown_bot(bot_id)
-            .await;
-        self.remote_bot_log_follow.stop_bot(bot_id).await;
+        self.remote_runtime_sessions().shutdown_bot(bot_id).await;
 
         self.event_bus.publish(DomainEvent::BotStateChanged {
             snapshot: BotActorSnapshot::new(bot_id.clone()),
@@ -2841,7 +2052,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             ev = exit_sub.next() => match ev {
             Some(DomainEvent::BotProcessExited { bot_id, .. }) => {
             self.dispose_poller(&bot_id).await;
-            self.docker_sessions.shutdown_bot(&bot_id).await;
+            self.remote_runtime_sessions().shutdown_bot(&bot_id).await;
             }
             Some(_) => continue,
             None => break,
@@ -2867,14 +2078,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> RestartHandle for Bot
                 Some("自动重启失败，请手动启动 Bot".to_string()),
             ));
         }
-    }
-}
-
-/// 把 BackendType 映射到 BotFlavor
-fn map_backend_flavor(backend: BackendType) -> BotFlavor {
-    match backend {
-        BackendType::NapCat => BotFlavor::NapCat,
-        BackendType::SnowLuma => BotFlavor::SnowLuma,
     }
 }
 
@@ -2973,6 +2176,7 @@ fn is_remote_transport_error(err: &BotBackendError) -> bool {
 mod tests {
     use super::*;
     use crate::SecretStoreImpl;
+    use crate::runtime_router::DockerSecretProvider;
 
     fn temp_secret_store() -> (tempfile::TempDir, Arc<dyn SecretStore + Send + Sync>) {
         let dir = tempfile::tempdir().unwrap();
@@ -2983,17 +2187,10 @@ mod tests {
     #[test]
     fn docker_webui_token_is_stable_and_not_predictable() {
         let (_dir, store) = temp_secret_store();
+        let secrets = DockerSecretProvider::new(Some(store));
 
-        let first = BotManager::<
-            crate::LocalBotConfigRepo<crate::LocalConfigStore>,
-            crate::LocalConfigStore,
-        >::get_or_create_docker_webui_token_from_store(Some(&store), 10001)
-        .unwrap();
-        let second = BotManager::<
-            crate::LocalBotConfigRepo<crate::LocalConfigStore>,
-            crate::LocalConfigStore,
-        >::get_or_create_docker_webui_token_from_store(Some(&store), 10001)
-        .unwrap();
+        let first = secrets.napcat_webui_token(10001).unwrap();
+        let second = secrets.napcat_webui_token(10001).unwrap();
 
         assert_eq!(first, second);
         assert_eq!(first.len(), 64);
@@ -3007,17 +2204,11 @@ mod tests {
     #[test]
     fn docker_webui_token_replaces_blank_secret() {
         let (_dir, store) = temp_secret_store();
-        let key = BotManager::<
-            crate::LocalBotConfigRepo<crate::LocalConfigStore>,
-            crate::LocalConfigStore,
-        >::docker_webui_secret_key(10002);
+        let secrets = DockerSecretProvider::new(Some(Arc::clone(&store)));
+        let key = DockerSecretProvider::napcat_webui_key(10002);
         store.put(&key, "   ").unwrap();
 
-        let token = BotManager::<
-            crate::LocalBotConfigRepo<crate::LocalConfigStore>,
-            crate::LocalConfigStore,
-        >::get_or_create_docker_webui_token_from_store(Some(&store), 10002)
-        .unwrap();
+        let token = secrets.napcat_webui_token(10002).unwrap();
 
         assert_eq!(store.get(&key).unwrap().as_deref(), Some(token.as_str()));
         assert_eq!(token.len(), 64);

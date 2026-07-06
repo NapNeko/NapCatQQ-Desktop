@@ -111,9 +111,8 @@ pub struct AuthState {
 }
 
 /// SnowLuma WebUI /api/agreements 单份协议文档
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
 pub struct AgreementDoc {
     pub id: String,
     pub title: String,
@@ -122,9 +121,8 @@ pub struct AgreementDoc {
 }
 
 /// SnowLuma WebUI /api/agreements 响应体
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
 pub struct AgreementsPayload {
     pub version: String,
     #[serde(default)]

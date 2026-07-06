@@ -1,0 +1,2 @@
+src-ui/core/ipc/generated/**/*.ts text eol=lf
+src-ui/core/ipc/generated/*.ts text eol=lf
