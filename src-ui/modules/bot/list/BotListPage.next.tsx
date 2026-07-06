@@ -105,16 +105,43 @@ export function BotListPageNext({
     const [consentSubmitting, setConsentSubmitting] = useState(false);
     const [consentRetryDecisions, setConsentRetryDecisions] = useState<DriftDecision[] | null>(null);
     const [startingBotId, setStartingBotId] = useState<string | null>(null);
+    const [batchStartPreparing, setBatchStartPreparing] = useState(false);
+    const activeConsentBotRef = useRef<string | null>(null);
+    const openingConsentBotRef = useRef<string | null>(null);
+    const suppressedConsentErrorsRef = useRef<Map<string, string>>(new Map());
+
+    useEffect(() => {
+        activeConsentBotRef.current = consentBotId;
+    }, [consentBotId]);
+
+    const suppressCurrentConsentError = useCallback((botId: string) => {
+        const currentError = botSnapshots
+            .find((bot) => bot.bot_id === botId)
+            ?.last_error
+            ?.trim();
+        if (currentError && isSnowLumaConsentError(currentError)) {
+            suppressedConsentErrorsRef.current.set(botId, currentError);
+        }
+    }, [botSnapshots]);
+
+    const clearConsentErrorSuppression = useCallback((botId: string) => {
+        suppressedConsentErrorsRef.current.delete(botId);
+    }, []);
 
     const openSnowLumaConsent = useCallback(async (
         botId: string,
         decisions: DriftDecision[] | null = null,
         preparedPayload?: SnowLumaAgreementsPayload,
     ) => {
+        const activeBot = activeConsentBotRef.current;
+        if (activeBot || openingConsentBotRef.current) return;
+        activeConsentBotRef.current = botId;
+        openingConsentBotRef.current = botId;
         setConsentBotId(botId);
         setConsentRetryDecisions(decisions);
         if (preparedPayload) {
             setConsentPayload(preparedPayload);
+            openingConsentBotRef.current = null;
             return;
         }
         setConsentPayload(null);
@@ -122,6 +149,9 @@ export function BotListPageNext({
             const payload = await botService.getSnowLumaAgreements(botId);
             setConsentPayload(payload);
         } catch (err: unknown) {
+            if (activeConsentBotRef.current === botId) {
+                activeConsentBotRef.current = null;
+            }
             setConsentBotId(null);
             setConsentRetryDecisions(null);
             pushInfoBar({
@@ -129,6 +159,10 @@ export function BotListPageNext({
                 title: '读取 SnowLuma 协议失败',
                 content: err instanceof Error ? err.message : String(err),
             });
+        } finally {
+            if (openingConsentBotRef.current === botId) {
+                openingConsentBotRef.current = null;
+            }
         }
     }, []);
 
@@ -161,6 +195,7 @@ export function BotListPageNext({
         setStartingBotId(botId);
         const ready = await prepareSnowLumaConsentOrOpen(botId);
         if (!ready) {
+            setStartingBotId(null);
             return;
         }
         try {
@@ -177,6 +212,7 @@ export function BotListPageNext({
     }, [mutations, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
 
     const handleStartBot = useCallback(async (botId: string) => {
+        clearConsentErrorSuppression(botId);
         setStartingBotId(botId);
         const gate = dockerStartGate(botId);
         if (gate) {
@@ -202,10 +238,11 @@ export function BotListPageNext({
             return;
         }
         startBotDirect(botId).catch(() => undefined);
-    }, [dockerStartGate, startBotDirect]);
+    }, [clearConsentErrorSuppression, dockerStartGate, startBotDirect]);
 
     const handleDriftConfirm = useCallback(async (decisions: DriftDecision[]) => {
         if (!driftBotId) return;
+        clearConsentErrorSuppression(driftBotId);
         setStartingBotId(driftBotId);
         const gate = dockerStartGate(driftBotId);
         if (gate) {
@@ -248,7 +285,7 @@ export function BotListPageNext({
         }
         setDriftBotId(null);
         setStartingBotId(null);
-    }, [driftBotId, dockerStartGate, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
+    }, [clearConsentErrorSuppression, driftBotId, dockerStartGate, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
 
     const handleConsentConfirm = useCallback(async () => {
         if (!consentBotId || !consentPayload) return;
@@ -257,6 +294,7 @@ export function BotListPageNext({
         const retryDecisions = consentRetryDecisions;
         try {
             await botService.acceptSnowLumaAgreements(retryBotId, consentPayload.version);
+            suppressCurrentConsentError(retryBotId);
         } catch (err: unknown) {
             pushInfoBar({
                 tone: 'danger',
@@ -270,6 +308,7 @@ export function BotListPageNext({
         setConsentBotId(null);
         setConsentPayload(null);
         setConsentRetryDecisions(null);
+        activeConsentBotRef.current = null;
         setConsentSubmitting(false);
 
         if (retryDecisions) {
@@ -299,19 +338,23 @@ export function BotListPageNext({
         } else {
             startBotDirect(retryBotId).catch(() => undefined);
         }
-    }, [consentBotId, consentPayload, consentRetryDecisions, prepareSnowLumaConsentOrOpen, startBotDirect]);
+    }, [consentBotId, consentPayload, consentRetryDecisions, prepareSnowLumaConsentOrOpen, startBotDirect, suppressCurrentConsentError]);
 
     const handleConsentCancel = useCallback(() => {
         if (consentSubmitting) return;
         const botId = consentBotId;
+        if (botId) {
+            suppressCurrentConsentError(botId);
+        }
         setConsentBotId(null);
         setConsentPayload(null);
         setConsentRetryDecisions(null);
+        activeConsentBotRef.current = null;
         if (botId) {
             botService.releaseSnowLumaAgreementSession(botId).catch(() => undefined);
         }
         setStartingBotId(null);
-    }, [consentBotId, consentSubmitting]);
+    }, [consentBotId, consentSubmitting, suppressCurrentConsentError]);
 
     const handleDriftCancel = useCallback(() => {
         setPendingDrift(null);
@@ -319,11 +362,18 @@ export function BotListPageNext({
     }, []);
 
     useEffect(() => {
-        if (consentBotId) return;
-        const pending = botSnapshots.find((bot) => isSnowLumaConsentError(bot.last_error ?? ''));
+        if (activeConsentBotRef.current || openingConsentBotRef.current) return;
+        const pending = botSnapshots.find((bot) => {
+            const lastError = bot.last_error?.trim();
+            if (!lastError || !isSnowLumaConsentError(lastError)) {
+                suppressedConsentErrorsRef.current.delete(bot.bot_id);
+                return false;
+            }
+            return suppressedConsentErrorsRef.current.get(bot.bot_id) !== lastError;
+        });
         if (!pending) return;
         void openSnowLumaConsent(pending.bot_id);
-    }, [botSnapshots, consentBotId, openSnowLumaConsent]);
+    }, [botSnapshots, openSnowLumaConsent]);
 
     // 加载 / 错误状态也接 InfoBar，让顶部状态信息统一。但只在错误首次出现时
     // 推一次，避免 react-query 重试反复推。
@@ -339,7 +389,19 @@ export function BotListPageNext({
 
     const onBatchStart = () => {
         if (batch.selectedIds.size === 0) return;
-        mutations.batchStart(Array.from(batch.selectedIds));
+        const ids = Array.from(batch.selectedIds);
+        setBatchStartPreparing(true);
+        void (async () => {
+            for (const botId of ids) {
+                clearConsentErrorSuppression(botId);
+                const config = configByBot[botId] ?? null;
+                const flavor = flavorByBot[botId] ?? config?.bot.backend_type ?? null;
+                if (!isSnowLumaFlavor(flavor)) continue;
+                const ready = await prepareSnowLumaConsentOrOpen(botId);
+                if (!ready) return;
+            }
+            mutations.batchStart(ids);
+        })().finally(() => setBatchStartPreparing(false));
     };
     const onBatchStop = () => {
         if (batch.selectedIds.size === 0) return;
@@ -433,7 +495,7 @@ export function BotListPageNext({
                 onBatchStop={onBatchStop}
                 onBatchDelete={() => setConfirmDeleteOpen(true)}
                 onExitBatch={batch.toggleBatch}
-                busy={mutations.isPending}
+                busy={mutations.isPending || batchStartPreparing}
             />
 
             {/* 批量删除确认 */}

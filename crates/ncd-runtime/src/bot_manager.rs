@@ -20,6 +20,7 @@ use crate::remote_bot_log_follow::RemoteBotLogFollowRegistry;
 use crate::remote_runtime_sessions::RemoteRuntimeSessions;
 use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
 use crate::runtime_router::{DockerSecretProvider, RuntimeBackendRouter, RuntimeRouterError};
+use crate::snowluma::{AgreementsPayload, ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
 use crate::snowluma_agreements::SnowLumaAgreementService;
 use ncd_backend_napcat::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
 use ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaDaemon;
@@ -1361,6 +1362,94 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         config.bot.backend_type == BackendType::SnowLuma && config.bot.runtime_target.is_local()
     }
 
+    async fn ensure_snowluma_agreements_ready(
+        &self,
+        config: &BotConfig,
+    ) -> Result<(), BotManagerError> {
+        if config.bot.backend_type != BackendType::SnowLuma {
+            return Ok(());
+        }
+        if let Some(payload) = self.snowluma_agreements().prepare(config).await? {
+            return Err(Self::snowluma_consent_required_error(&payload.version));
+        }
+        Ok(())
+    }
+
+    fn snowluma_consent_required_error(version: &str) -> BotManagerError {
+        BotManagerError::Runtime(BotBackendError::Io(format!(
+            "SNOWLUMA_CONSENT_REQUIRED: SnowLuma agreements version {version} requires consent"
+        )))
+    }
+
+    async fn snowluma_docker_agreements_after_attach(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+    ) -> Result<Option<AgreementsPayload>, BotManagerError> {
+        let RuntimeScenario::RemoteDocker {
+            backend: BackendType::SnowLuma,
+            ..
+        } = RuntimeScenario::from_config(config)?
+        else {
+            return Ok(None);
+        };
+        let Some(endpoint) = self
+            .remote_runtime_sessions()
+            .snowluma_docker_endpoints(bot_id)
+            .await
+        else {
+            return Ok(None);
+        };
+        let client = match ReqwestSnowLumaWebUiClient::new(
+            endpoint.webui_local_port,
+            endpoint.webui_password,
+        ) {
+            Ok(client) => client,
+            Err(err) => {
+                warn!(
+                    target: "ncd_runtime::bot_manager",
+                    bot_id = %bot_id,
+                    err = %err,
+                    "SnowLuma Docker 协议检查: WebUI client 初始化失败"
+                );
+                return Ok(None);
+            }
+        };
+        if let Err(err) = client
+            .wait_ready(Duration::from_secs(20), Box::new(|| false))
+            .await
+        {
+            warn!(
+                target: "ncd_runtime::bot_manager",
+                bot_id = %bot_id,
+                err = %err,
+                "SnowLuma Docker 协议检查: WebUI 未就绪"
+            );
+            return Ok(None);
+        }
+        if let Err(err) = client.login().await {
+            warn!(
+                target: "ncd_runtime::bot_manager",
+                bot_id = %bot_id,
+                err = %err,
+                "SnowLuma Docker 协议检查: WebUI 登录失败"
+            );
+            return Ok(None);
+        }
+        match client.get_agreements().await {
+            Ok(payload) => Ok(Some(payload)),
+            Err(err) => {
+                warn!(
+                    target: "ncd_runtime::bot_manager",
+                    bot_id = %bot_id,
+                    err = %err,
+                    "SnowLuma Docker 协议检查: 读取协议失败"
+                );
+                Ok(None)
+            }
+        }
+    }
+
     async fn start_runtime_from_starting(
         &self,
         bot_id: &BotId,
@@ -1371,7 +1460,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let cancel = handle.cancellation_token();
 
         let scenario = RuntimeScenario::from_config(config)?;
-        let runtime_config = match scenario {
+        let runtime_config = match &scenario {
             RuntimeScenario::LocalNative { .. } => {
                 let base = self.build_runtime_config(bot_id, config);
                 match self.launch_planner.build_plan(bot_id, config).await {
@@ -1416,6 +1505,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 self.build_runtime_config(bot_id, config)
             }
         };
+
+        if let Err(err) = self.ensure_snowluma_agreements_ready(config).await {
+            if cancel.is_cancelled() {
+                return Err(BotManagerError::Cancelled);
+            }
+            let message = err.to_string();
+            let crashed = handle.mark_crashed(message.clone()).await?;
+            self.publish_state_change(&crashed, "start_failed");
+            self.event_bus.publish(DomainEvent::bot_error(
+                bot_id.clone(),
+                message,
+                Some("请先阅读并同意 SnowLuma 用户协议与隐私政策后重试启动。".to_string()),
+            ));
+            return Err(err);
+        }
 
         let backend = match self.backend_for_config(config).await {
             Ok(b) => b,
@@ -1487,11 +1591,48 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         return Err(BotManagerError::Render(detail));
                     }
                 }
+                let mut attached_after_runtime_start = false;
+                if matches!(
+                    &scenario,
+                    RuntimeScenario::RemoteDocker {
+                        backend: BackendType::SnowLuma,
+                        ..
+                    }
+                ) {
+                    self.remote_runtime_sessions()
+                        .attach_after_runtime_start(bot_id, config)
+                        .await;
+                    attached_after_runtime_start = true;
+                    if let Some(payload) = self
+                        .snowluma_docker_agreements_after_attach(bot_id, config)
+                        .await?
+                        && payload.consent_required
+                    {
+                        if cancel.is_cancelled() {
+                            return Err(BotManagerError::Cancelled);
+                        }
+                        let err = Self::snowluma_consent_required_error(&payload.version);
+                        let message = err.to_string();
+                        let crashed = handle.mark_crashed(message.clone()).await?;
+                        self.publish_state_change(&crashed, "start_failed");
+                        self.event_bus.publish(DomainEvent::bot_error(
+                            bot_id.clone(),
+                            message,
+                            Some(
+                                "请先阅读并同意 SnowLuma 用户协议与隐私政策后重试启动。"
+                                    .to_string(),
+                            ),
+                        ));
+                        return Err(err);
+                    }
+                }
                 let running = handle.confirm_running().await?;
                 self.publish_state_change(&running, "start_completed");
-                self.remote_runtime_sessions()
-                    .attach_after_runtime_start(bot_id, config)
-                    .await;
+                if !attached_after_runtime_start {
+                    self.remote_runtime_sessions()
+                        .attach_after_runtime_start(bot_id, config)
+                        .await;
+                }
                 info!(
                     target: "ncd_runtime::bot_manager",
                     bot_id = %bot_id,

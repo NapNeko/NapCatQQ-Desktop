@@ -1,6 +1,6 @@
 //! SnowLuma daemon 主体红线:不引入 serde_json::Value,跨边界 enum 派生 ts-rs
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
@@ -150,6 +150,10 @@ impl SnowLumaDaemon {
             Ok(buf) => buf.iter().cloned().collect(),
             Err(_) => Vec::new(),
         }
+    }
+
+    pub fn runtime_root(&self) -> &Path {
+        &self.runtime_root
     }
 
     /// 任意 tokio 任务可调;并发 caller 安全

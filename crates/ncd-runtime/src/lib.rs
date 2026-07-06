@@ -28,6 +28,7 @@ pub mod secret_store_impl;
 pub mod server_manager;
 pub mod snowluma;
 mod snowluma_agreements;
+mod snowluma_consent_files;
 pub mod ssh_keygen;
 
 pub mod bot_config {

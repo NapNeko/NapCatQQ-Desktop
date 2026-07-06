@@ -348,6 +348,16 @@ pub async fn get_snowluma_agreements(
     state: State<'_, AppState>,
     bot_id: String,
 ) -> Result<SnowLumaAgreementsPayload, String> {
+    let bid = ncd_domain::BotId::new(bot_id.clone());
+    if let Some(payload) = state
+        .bot_manager
+        .prepare_snowluma_agreements(&bid)
+        .await
+        .map_err(|e| format!("读取 SnowLuma 协议失败：{e}"))?
+    {
+        return Ok(map_snowluma_agreements_payload(payload));
+    }
+
     let endpoint = open_snowluma_webui(state, bot_id).await?;
     let client = snowluma_client_for_endpoint(&endpoint).await?;
     let payload = client

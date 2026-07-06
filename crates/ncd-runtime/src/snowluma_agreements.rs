@@ -10,6 +10,9 @@ use crate::runtime_router::RuntimeBackendRouter;
 use crate::snowluma::{
     AgreementsPayload, ReqwestSnowLumaWebUiClient, SnowLumaDaemon, SnowLumaWebUiClient,
 };
+use crate::snowluma_consent_files::{
+    SnowLumaConsentFileError, load_payload_from_runtime_root, record_consent_to_runtime_root,
+};
 use ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaDaemon;
 use ncd_domain::{BackendType, BotConfig, RuntimeScenario, RuntimeTarget};
 use ncd_traits::runtime_backend::BotBackendError;
@@ -94,38 +97,21 @@ impl SnowLumaAgreementService {
 
     async fn prepare_local(&self) -> Result<Option<AgreementsPayload>, BotManagerError> {
         let daemon = self.local_daemon()?;
-        let client = daemon
-            .ensure_running(Duration::from_secs(35))
-            .await
-            .map_err(map_webui_io)?;
-        let agreements_result = client.get_agreements().await.map_err(map_webui_io);
-        let agreements = match agreements_result {
-            Ok(agreements) => agreements,
-            Err(err) => {
-                daemon.release().await;
-                return Err(err);
-            }
-        };
-        if agreements.consent_required {
-            return Ok(Some(agreements));
-        }
-        daemon.release().await;
-        Ok(None)
+        let agreements =
+            load_payload_from_runtime_root(daemon.runtime_root()).map_err(map_consent_file_io)?;
+        Ok(agreements.and_then(|payload| payload.consent_required.then_some(payload)))
     }
 
     async fn record_local(&self, version: &str) -> Result<bool, BotManagerError> {
         let daemon = self.local_daemon()?;
-        let client = match daemon.current_webui_client().await {
-            Some(client) => client,
-            None => daemon
-                .ensure_running(Duration::from_secs(35))
+        record_consent_to_runtime_root(daemon.runtime_root(), version)
+            .map_err(map_consent_file_io)?;
+        if let Some(client) = daemon.current_webui_client().await {
+            client
+                .record_agreement_consent(version)
                 .await
-                .map_err(map_webui_io)?,
-        };
-        client
-            .record_agreement_consent(version)
-            .await
-            .map_err(map_webui_io)?;
+                .map_err(map_webui_io)?;
+        }
         Ok(true)
     }
 
@@ -246,5 +232,9 @@ impl SnowLumaAgreementService {
 }
 
 fn map_webui_io(error: impl std::fmt::Display) -> BotManagerError {
+    BotManagerError::Runtime(BotBackendError::Io(error.to_string()))
+}
+
+fn map_consent_file_io(error: SnowLumaConsentFileError) -> BotManagerError {
     BotManagerError::Runtime(BotBackendError::Io(error.to_string()))
 }
