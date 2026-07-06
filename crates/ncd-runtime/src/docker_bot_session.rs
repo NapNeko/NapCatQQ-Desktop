@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use ncd_deploy::DockerDeployment;
 use ncd_deploy::docker::DockerCli;
-use ncd_domain::{BackendType, BotConfig, DeploymentType};
 use ncd_deploy::{Deployment, NativeRuntimeEventSink};
+use ncd_deploy::{DockerDeployment, resolve_bot_container_name};
+use ncd_domain::{BackendType, BotConfig, DeploymentType};
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostError, StreamSource};
 use tokio::sync::Mutex;
@@ -15,8 +15,8 @@ use tokio::task::JoinHandle;
 use tracing::warn;
 
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
-use ncd_domain::ids::BotId;
 use crate::native_deployment_adapter::EventBusSink;
+use ncd_domain::ids::BotId;
 
 /// SnowLuma Docker:本机隧道上的 WebUI / noVNC 端口
 #[derive(Debug, Clone)]
@@ -127,7 +127,11 @@ impl DockerBotSessionRegistry {
         self.shutdown_bot(&bot_id).await;
 
         let spec = DockerDeployment::build_spec(&config);
-        let container = spec.container_name.clone();
+        let container = resolve_bot_container_name(host.as_ref(), &bot_id)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| spec.container_name.clone());
         let stop_expected = Arc::new(AtomicBool::new(false));
         let sink = Arc::new(EventBusSink::new(bus.clone()));
 
@@ -247,7 +251,10 @@ impl DockerBotSessionRegistry {
     }
 }
 
-async fn open_loopback_tunnel(host: &dyn Host, remote_port: u16) -> Result<TunnelHandle, HostError> {
+async fn open_loopback_tunnel(
+    host: &dyn Host,
+    remote_port: u16,
+) -> Result<TunnelHandle, HostError> {
     let spec = TunnelSpec {
         local_host: "127.0.0.1".to_string(),
         local_port: 0,

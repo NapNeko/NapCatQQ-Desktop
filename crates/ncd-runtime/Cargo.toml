@@ -63,6 +63,7 @@ encoding_rs = "0.8"
 
 [dev-dependencies]
 tempfile = "3"
+bytes = "1"
 ncd-host = { path = "../ncd-host" }
 ncd-test-support = { path = "../ncd-test-support" }
 wiremock = "0.6"

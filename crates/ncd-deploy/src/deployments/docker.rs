@@ -396,9 +396,11 @@ impl Deployment for DockerDeployment {
                 reason: format!("Docker 未就绪: {e}"),
             });
         }
-        let name = resolve_bot_container_name(&cli, bot_id)
+        let name = resolve_bot_container_name_with_cli(&cli, bot_id)
             .await
-            .unwrap_or_else(|_| format!("ncbot-{}", bot_id.as_str()));
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| format!("ncbot-{}", bot_id.as_str()));
         // 归到 Failed 状态(带原因)让上层显示,而不是抛错中断轮询
         match cli.list_containers().await {
             Ok(containers) => Ok(containers
@@ -422,8 +424,9 @@ impl Deployment for DockerDeployment {
         cli.ensure_ready()
             .await
             .map_err(|e| DeploymentError::StopFailed(format!("Docker 未就绪: {e}")))?;
-        let name = match resolve_bot_container_name(&cli, bot_id).await {
-            Ok(n) => n,
+        let name = match resolve_bot_container_name_with_cli(&cli, bot_id).await {
+            Ok(Some(n)) => n,
+            Ok(None) => return Ok(()),
             Err(e) => {
                 return Err(DeploymentError::StopFailed(format!("查询容器失败: {e}")));
             }
@@ -477,11 +480,24 @@ pub fn bot_docker_container_name(backend: BackendType, qq_id: u64) -> String {
     }
 }
 
+/// 按 qq 在远端查找实际 bot 容器名。
+///
+/// SnowLuma Docker 容器当前命名为 `slbot-<qq>`,但旧版本曾有 `ncbot-<qq>`
+/// 残留。日志、状态和停止路径都应先解析远端真实容器名,避免只按当前 flavor 拼名。
+/// 查不到容器时返回 None,由调用方按自身 flavor 决定 fallback 名称。
+pub async fn resolve_bot_container_name(
+    host: &dyn Host,
+    bot_id: &BotId,
+) -> Result<Option<String>, DeploymentError> {
+    let cli = DockerCli::new(host);
+    resolve_bot_container_name_with_cli(&cli, bot_id).await
+}
+
 /// 按 qq 在远端查找实际在跑的 bot 容器名(兼容历史 ncbot 命名跑 SL 的残留)
-async fn resolve_bot_container_name(
+async fn resolve_bot_container_name_with_cli(
     cli: &DockerCli<'_>,
     bot_id: &BotId,
-) -> Result<String, DeploymentError> {
+) -> Result<Option<String>, DeploymentError> {
     let qq = bot_id.as_str();
     let candidates = [format!("slbot-{qq}"), format!("ncbot-{qq}")];
     let containers = cli
@@ -490,10 +506,10 @@ async fn resolve_bot_container_name(
         .map_err(|e| DeploymentError::LaunchFailed(format!("查询容器失败: {e}")))?;
     for name in &candidates {
         if containers.iter().any(|c| c.name == *name) {
-            return Ok(name.clone());
+            return Ok(Some(name.clone()));
         }
     }
-    Ok(candidates[0].clone())
+    Ok(None)
 }
 
 /// 容器 state 字符串 -> DeploymentState
@@ -574,6 +590,7 @@ mod tests {
         require_elevated: bool,
         /// launch 幂等测试:docker ps 在 compose up 之前返回空,之后返回 running 容器
         compose_up_done: Arc<Mutex<bool>>,
+        ps_json: Arc<Mutex<String>>,
         commands: Arc<Mutex<Vec<HostCommand>>>,
         writes: Arc<Mutex<Vec<RecordedWrite>>>,
         created_dirs: Arc<Mutex<Vec<String>>>,
@@ -585,6 +602,7 @@ mod tests {
                 home: Some("/home/napcat".into()),
                 require_elevated: false,
                 compose_up_done: Arc::new(Mutex::new(false)),
+                ps_json: Arc::new(Mutex::new(napcat_ps_json())),
                 commands: Arc::new(Mutex::new(Vec::new())),
                 writes: Arc::new(Mutex::new(Vec::new())),
                 created_dirs: Arc::new(Mutex::new(Vec::new())),
@@ -594,6 +612,13 @@ mod tests {
         fn with_running_container() -> Self {
             let h = Self::new();
             *h.compose_up_done.lock().unwrap() = true;
+            h
+        }
+
+        fn with_running_snowluma_container() -> Self {
+            let h = Self::new();
+            *h.compose_up_done.lock().unwrap() = true;
+            *h.ps_json.lock().unwrap() = snowluma_ps_json();
             h
         }
 
@@ -721,7 +746,7 @@ mod tests {
                 Some("ps") => {
                     let show = *self.compose_up_done.lock().unwrap();
                     if show {
-                        Ok(output(0, ps_json(), ""))
+                        Ok(output(0, self.ps_json.lock().unwrap().clone(), ""))
                     } else {
                         Ok(output(0, "", ""))
                     }
@@ -745,8 +770,12 @@ mod tests {
         }
     }
 
-    fn ps_json() -> String {
+    fn napcat_ps_json() -> String {
         r#"{"ID":"abc123","Names":"ncbot-10001","Image":"mlikiowa/napcat-docker:latest","State":"running","Status":"Up","Ports":"0.0.0.0:6099->6099/tcp"}"#.to_string()
+    }
+
+    fn snowluma_ps_json() -> String {
+        r#"{"ID":"def456","Names":"slbot-10001","Image":"motricseven7/snowluma:latest","State":"running","Status":"Up","Ports":"0.0.0.0:5099->5099/tcp"}"#.to_string()
     }
 
     fn bot_config() -> BotConfig {
@@ -789,6 +818,41 @@ mod tests {
         let spec = DockerDeployment::build_spec(&config);
         assert_eq!(spec.container_name, "ncbot-10001");
         assert_eq!(spec.qq_id, Some(10001));
+
+        let mut sl_config = bot_config();
+        sl_config.bot.backend_type = BackendType::SnowLuma;
+        assert_eq!(DockerDeployment::container_name(&sl_config), "slbot-10001");
+        assert_eq!(
+            DockerDeployment::build_spec(&sl_config).container_name,
+            "slbot-10001"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_container_name_prefers_current_snowluma_name() {
+        let host = MockHost::with_running_snowluma_container();
+        let name = resolve_bot_container_name(&host, &BotId::from("10001".to_string()))
+            .await
+            .unwrap();
+        assert_eq!(name.as_deref(), Some("slbot-10001"));
+    }
+
+    #[tokio::test]
+    async fn resolve_container_name_keeps_legacy_ncbot_when_that_is_running() {
+        let host = MockHost::with_running_container();
+        let name = resolve_bot_container_name(&host, &BotId::from("10001".to_string()))
+            .await
+            .unwrap();
+        assert_eq!(name.as_deref(), Some("ncbot-10001"));
+    }
+
+    #[tokio::test]
+    async fn resolve_container_name_returns_none_when_container_is_absent() {
+        let host = MockHost::new();
+        let name = resolve_bot_container_name(&host, &BotId::from("10001".to_string()))
+            .await
+            .unwrap();
+        assert_eq!(name, None);
     }
 
     #[test]

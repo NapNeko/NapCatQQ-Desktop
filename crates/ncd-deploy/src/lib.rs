@@ -27,7 +27,7 @@ pub use deployment::{
 pub use deployments::{
     DockerDeployment, EventBusSink, ExternalDeployment, NativeDeployment, NativeLogSnapshot,
     NativeRuntimeEventSink, NullRuntimeEventSink, bot_docker_container_name,
-    parse_napcat_webui_line, strip_ansi_escapes,
+    parse_napcat_webui_line, resolve_bot_container_name, strip_ansi_escapes,
 };
 pub use docker::{DockerCli, DockerCliError, DockerInstallOutcome, install_docker, render_compose};
 pub use error::DeployError;
