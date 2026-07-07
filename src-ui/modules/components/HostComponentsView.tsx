@@ -6,7 +6,7 @@
 //     仅预拉框架镜像；Bot 容器在 Bot 页启动时创建。
 
 import React from 'react';
-import { PackageX, WifiOff } from 'lucide-react';
+import { PackageX, WifiOff, Wrench } from 'lucide-react';
 import { Button, FormSection } from '../../shared/ui';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import { MachineComponentRowView } from './MachineComponentRow';
@@ -17,6 +17,7 @@ import { dockerStatusSummary } from '../../core/domain/docker/status';
 import { isHostConnectivityFailureReason } from '../../core/domain/components/types';
 import type { MachineView, MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
+import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type {
     ComponentId,
     ContainerInfo,
@@ -47,6 +48,8 @@ interface HostComponentsViewProps {
     dockerInstallProgress?: ActionProgressView | null;
     onInstallDocker: (hostId: string) => void;
     onOpenDockerDownload: () => void;
+    onEnsureQqDependencies: (hostId: string) => void;
+    qqDependencyReport?: QqDependencyReport | null;
     isPullingImage: (hostId: string, flavor: DockerFlavor) => boolean;
     onPullImage: (hostId: string, flavor: DockerFlavor, taskId: string) => Promise<DeployedContainer>;
     onPullImageError?: (hostId: string, flavor: DockerFlavor, error: unknown) => void;
@@ -69,6 +72,8 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     dockerInstallProgress,
     onInstallDocker,
     onOpenDockerDownload,
+    onEnsureQqDependencies,
+    qqDependencyReport,
     isPullingImage,
     onPullImage,
     onPullImageError,
@@ -133,9 +138,9 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     }
 
     // 框架行的尾随「Docker 部署」按钮：仅 docker 就绪 + 该行是 NapCat/SnowLuma 时给。
-    const deployButtonFor = (componentId: ComponentId): React.ReactNode => {
+    const deployButtonFor = (row: MachineComponentRow): React.ReactNode => {
         if (!dockerReady) return null;
-        const flavor = frameworkFlavor(componentId);
+        const flavor = frameworkFlavor(row.info.id);
         if (!flavor) return null;
         // 本地已有官方镜像则禁用重复拉取。
         const alreadyDeployed = imageReadyByFlavor[flavor] === true;
@@ -150,6 +155,23 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 onPullImage={onPullImage}
                 onPullError={(error) => onPullImageError?.(host.host_id, flavor, error)}
             />
+        );
+    };
+
+    const runtimeTrailingFor = (row: MachineComponentRow): React.ReactNode => {
+        if (row.info.id !== 'qq' || host.os !== 'linux') return null;
+        if (row.status.state !== 'installed') return null;
+        if (!qqDependencyReport || qqDependencyReport.missing.length === 0) return null;
+        return (
+            <Button
+                size="sm"
+                variant="secondary"
+                title={`缺失 ${qqDependencyReport.missing.length} 个 QQ 系统依赖`}
+                onClick={() => onEnsureQqDependencies(host.host_id)}
+            >
+                <Wrench size={13} strokeWidth={2} />
+                补全依赖
+            </Button>
         );
     };
 
@@ -187,6 +209,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 dockerInstallProgress={dockerInstallProgress}
                 onInstallDocker={() => onInstallDocker(host.host_id)}
                 onOpenDockerDownload={onOpenDockerDownload}
+                trailingFor={runtimeTrailingFor}
             />
 
             <Group
@@ -229,7 +252,7 @@ const Group: React.FC<{
         action: { stepKind: StepKind } | { cancelTaskId: string },
     ) => void;
     onRetryDetect: (hostId: string) => void;
-    trailingFor?: (componentId: ComponentId) => React.ReactNode;
+    trailingFor?: (row: MachineComponentRow) => React.ReactNode;
 }> = ({
     title,
     description,
@@ -256,7 +279,7 @@ const Group: React.FC<{
                         disabled={disableActions}
                         onAction={(action) => onAction(row.info.id, hostId, action)}
                         onRetryDetect={() => onRetryDetect(hostId)}
-                        trailingActions={trailingFor?.(row.info.id)}
+                        trailingActions={trailingFor?.(row)}
                     />
                 ))}
             </div>
@@ -289,6 +312,7 @@ const RuntimeDepGroup: React.FC<{
     dockerInstallProgress?: ActionProgressView | null;
     onInstallDocker: () => void;
     onOpenDockerDownload: () => void;
+    trailingFor?: (row: MachineComponentRow) => React.ReactNode;
 }> = ({
     rows,
     hostId,
@@ -306,6 +330,7 @@ const RuntimeDepGroup: React.FC<{
     dockerInstallProgress,
     onInstallDocker,
     onOpenDockerDownload,
+    trailingFor,
 }) => {
     const hasRows = rows.length > 0 || showDocker;
     if (!hasRows) return null;
@@ -326,7 +351,7 @@ const RuntimeDepGroup: React.FC<{
                         disabled={disableActions}
                         onAction={(action) => onAction(row.info.id, hostId, action)}
                         onRetryDetect={() => onRetryDetect(hostId)}
-                        trailingActions={undefined}
+                        trailingActions={trailingFor?.(row)}
                     />
                 ))}
                 {showDocker && (

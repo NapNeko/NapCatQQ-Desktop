@@ -2,7 +2,7 @@
 
 import type { ActionProgressView } from '../components/progress';
 
-export type TaskQueueKind = 'component_action' | 'docker_install' | 'docker_deploy';
+export type TaskQueueKind = 'component_action' | 'system_package' | 'docker_install' | 'docker_deploy';
 
 /** 与 ActionProgressView.status 对齐；docker_install 进行中用 installing。 */
 export type TaskQueueStatus =

@@ -1,4 +1,4 @@
-﻿//! NapCatComponent:NapCat.Shell 注入式组件
+//! NapCatComponent:NapCat.Shell 注入式组件
 //!
 //! 对齐 NapCat-Installer-main 官方一键脚本(install.sh L456-L770)
 //!
@@ -198,7 +198,6 @@ impl NapCatComponent {
     }
 }
 
-
 /// 从 napcat.mjs 内容提取版本号兼容新旧两种产物格式
 pub fn parse_napcat_version(content: &str) -> Option<String> {
     if let Some(v) = parse_version_minified(content) {
@@ -241,7 +240,10 @@ fn parse_version_minified(content: &str) -> Option<String> {
         let rest = &content[idx..];
         let trimmed = rest.trim_start();
         let ws = rest.len() - trimmed.len();
-        let var: String = trimmed.chars().take_while(|c| is_js_ident_char(*c)).collect();
+        let var: String = trimmed
+            .chars()
+            .take_while(|c| is_js_ident_char(*c))
+            .collect();
         if var.is_empty() {
             from = idx + 1;
             continue;
@@ -350,11 +352,7 @@ impl Component for NapCatComponent {
         }
     }
 
-    async fn uninstall(
-        &self,
-        host: &dyn Host,
-        _ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn uninstall(&self, host: &dyn Host, _ctx: &mut ActionCtx) -> Result<(), ActionError> {
         match host.os() {
             Os::Windows => self.uninstall_windows(host).await,
             _ => self.uninstall_linux(host).await,
@@ -378,7 +376,6 @@ impl Component for NapCatComponent {
         Ok(args.apply_to(HostCommand::new(self.qq_base_path().join("qq").as_posix())))
     }
 }
-
 
 // install 实装(独立 impl block,复用上面 trait 的字段)
 
@@ -428,11 +425,8 @@ impl NapCatComponent {
     async fn verify_windows(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
         let mjs = self.windows_napcat_mjs();
         let mjs_exists = host.exists(&mjs).await?;
-        let mut report = VerifyReport::ok().with_check(
-            "napcat.mjs exists",
-            mjs_exists,
-            Some(format!("{mjs}")),
-        );
+        let mut report =
+            VerifyReport::ok().with_check("napcat.mjs exists", mjs_exists, Some(format!("{mjs}")));
         if let Ok(Some(v)) = self.detect(host).await {
             report = report.with_check(
                 "napcat version detected",
@@ -444,14 +438,16 @@ impl NapCatComponent {
     }
 
     /// 完整 install 流程,被 Component::install 调用拆出来方便阅读
-    async fn install_inner(
-        &self,
-        host: &dyn Host,
-        ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn install_inner(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 6 }).await;
+        ctx.info(format!(
+            "准备安装 NapCat 到 {}",
+            self.napcat_dir().as_posix()
+        ))
+        .await;
 
         self.ensure_linux_qq_installed(host).await?;
+        ctx.info("Linux QQ 前置检查通过").await;
 
         // Step 1:下载 NapCat.Shell.zip 到本地
         ctx.emit(ProgressKind::StepBegin {
@@ -466,6 +462,11 @@ impl NapCatComponent {
         ));
         let helper = DownloadHelper::new()?;
         let mirrors = build_mirror_urls(&self.download_url, None);
+        ctx.info(format!(
+            "准备下载 NapCat.Shell.zip，候选镜像 {} 个",
+            mirrors.len()
+        ))
+        .await;
         helper
             .download_with_mirrors(
                 &mirrors,
@@ -484,11 +485,15 @@ impl NapCatComponent {
         })
         .await;
         host.create_dir_all(&self.tmp_dir).await?;
-        let remote_zip = self.tmp_dir.join(format!(
-            "ncd-napcat-{}.zip",
-            std::process::id()
-        ));
+        let remote_zip = self
+            .tmp_dir
+            .join(format!("ncd-napcat-{}.zip", std::process::id()));
         host.upload(&local_tmp, &remote_zip).await?;
+        ctx.info(format!(
+            "NapCat.Shell.zip 已暂存到 {}",
+            remote_zip.as_posix()
+        ))
+        .await;
         let _ = tokio::fs::remove_file(&local_tmp).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
@@ -498,12 +503,13 @@ impl NapCatComponent {
             message: "extract zip to staging".into(),
         })
         .await;
-        let stage_dir = self.tmp_dir.join(format!(
-            "ncd-napcat-stage-{}",
-            std::process::id()
-        ));
+        let stage_dir = self
+            .tmp_dir
+            .join(format!("ncd-napcat-stage-{}", std::process::id()));
         let _ = host.remove_dir_all(&stage_dir).await;
         host.create_dir_all(&stage_dir).await?;
+        ctx.info(format!("解压 NapCat 到 staging: {}", stage_dir.as_posix()))
+            .await;
         host.extract_archive(&remote_zip, &stage_dir, ncd_host::ArchiveKind::Zip)
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
@@ -515,13 +521,16 @@ impl NapCatComponent {
         })
         .await;
         let napcat_dir = self.napcat_dir();
+        ctx.info(format!("安装 NapCat 文件到 {}", napcat_dir.as_posix()))
+            .await;
         // System 布局下 napcat_dir 在 /opt/QQ 系统目录,create_dir_all 走 SFTP 不能
         // 提权,必须用 shell 命令 + .elevated()(Host 层按注入的密码决定 sudo -S/-n)
         // Rootless 布局 maybe_elevated 原样返回,退化到普通命令
-        let mkdir_cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
-            "mkdir -p {}",
-            shell_quote(napcat_dir.as_posix())
-        )));
+        let mkdir_cmd = self.maybe_elevated(
+            HostCommand::new("sh")
+                .arg("-c")
+                .arg(format!("mkdir -p {}", shell_quote(napcat_dir.as_posix()))),
+        );
         let out = host.run_to_string(mkdir_cmd).await?;
         if !out.success() {
             return Err(ActionError::install_step(
@@ -545,6 +554,7 @@ impl NapCatComponent {
         }
         let _ = host.remove_dir_all(&stage_dir).await;
         let _ = host.remove_file(&remote_zip).await;
+        ctx.info("NapCat 文件复制完成，临时文件已清理").await;
         ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
 
         // Step 5:写 loadNapCat.js
@@ -557,6 +567,11 @@ impl NapCatComponent {
             "(async () => {{await import('file://{}/napcat.mjs');}})();\n",
             napcat_dir.as_posix()
         );
+        ctx.info(format!(
+            "写入 loadNapCat.js: {}",
+            self.load_script_path().as_posix()
+        ))
+        .await;
         // System 布局走 elevated tee(密码由 Host 注入);rootless 走 SFTP write_file
         if self.requires_sudo {
             let tee_cmd = self
@@ -585,6 +600,8 @@ impl NapCatComponent {
         })
         .await;
         self.patch_qq_main(host).await?;
+        ctx.info("QQ package.json main 已切换到 ./loadNapCat.js")
+            .await;
         ctx.emit(ProgressKind::StepEnd { step: 6, ok: true }).await;
 
         ctx.emit(ProgressKind::Finished { ok: true }).await;
@@ -632,13 +649,8 @@ impl NapCatComponent {
             ));
         }
         let bytes = host.read_file(&path).await?;
-        let mut json: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(|e| {
-                ActionError::install_step(
-                    "parse_qq_package_json",
-                    format!("{e}"),
-                )
-            })?;
+        let mut json: serde_json::Value = serde_json::from_slice(&bytes)
+            .map_err(|e| ActionError::install_step("parse_qq_package_json", format!("{e}")))?;
         if let Some(obj) = json.as_object_mut() {
             obj.insert(
                 "main".to_string(),
@@ -650,16 +662,16 @@ impl NapCatComponent {
                 "package.json root is not an object",
             ));
         }
-        let new_bytes = serde_json::to_vec_pretty(&json).map_err(|e| {
-            ActionError::install_step("serialize_qq_package_json", format!("{e}"))
-        })?;
+        let new_bytes = serde_json::to_vec_pretty(&json)
+            .map_err(|e| ActionError::install_step("serialize_qq_package_json", format!("{e}")))?;
         // System 布局走 elevated tee(密码由 Host 注入);rootless 走 SFTP write_file
         if self.requires_sudo {
             let tee_cmd = self
-                .maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
-                    "tee {} > /dev/null",
-                    shell_quote(path.as_posix())
-                )))
+                .maybe_elevated(
+                    HostCommand::new("sh")
+                        .arg("-c")
+                        .arg(format!("tee {} > /dev/null", shell_quote(path.as_posix()))),
+                )
                 .stdin(new_bytes);
             let out = host.run_to_string(tee_cmd).await?;
             if !out.success() {
@@ -703,6 +715,11 @@ impl NapCatComponent {
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
+        ctx.info(format!(
+            "准备安装 Windows NapCat 到 {}",
+            self.install_base_dir.as_posix()
+        ))
+        .await;
 
         // Step 1:下载 zip 到本地
         ctx.emit(ProgressKind::StepBegin {
@@ -717,6 +734,11 @@ impl NapCatComponent {
         ));
         let helper = DownloadHelper::new()?;
         let mirrors = build_mirror_urls(&self.download_url, None);
+        ctx.info(format!(
+            "准备下载 NapCat.Shell.zip，候选镜像 {} 个",
+            mirrors.len()
+        ))
+        .await;
         helper
             .download_with_mirrors(
                 &mirrors,
@@ -735,11 +757,15 @@ impl NapCatComponent {
         })
         .await;
         host.create_dir_all(&self.tmp_dir).await?;
-        let remote_zip = self.tmp_dir.join(format!(
-            "ncd-napcat-win-{}.zip",
-            std::process::id()
-        ));
+        let remote_zip = self
+            .tmp_dir
+            .join(format!("ncd-napcat-win-{}.zip", std::process::id()));
         host.upload(&local_tmp, &remote_zip).await?;
+        ctx.info(format!(
+            "NapCat.Shell.zip 已暂存到 {}",
+            remote_zip.as_posix()
+        ))
+        .await;
         let _ = tokio::fs::remove_file(&local_tmp).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
@@ -750,6 +776,7 @@ impl NapCatComponent {
         })
         .await;
         host.create_dir_all(&self.install_base_dir).await?;
+        ctx.info("清理旧 NapCat 文件，保留 config/ 和 log/").await;
         self.remove_old_files_windows(host).await?;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
@@ -759,11 +786,21 @@ impl NapCatComponent {
             message: "extract zip".into(),
         })
         .await;
-        host.extract_archive(&remote_zip, &self.install_base_dir, ncd_host::ArchiveKind::Zip)
-            .await?;
+        ctx.info(format!(
+            "解压 NapCat 到 {}",
+            self.install_base_dir.as_posix()
+        ))
+        .await;
+        host.extract_archive(
+            &remote_zip,
+            &self.install_base_dir,
+            ncd_host::ArchiveKind::Zip,
+        )
+        .await?;
         let _ = host.remove_file(&remote_zip).await;
         // tmp_dir 自身也清掉(legacy 没保留),失败忽略
         let _ = host.remove_dir_all(&self.tmp_dir).await;
+        ctx.info("Windows NapCat 安装完成，临时文件已清理").await;
         ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
 
         ctx.emit(ProgressKind::Finished { ok: true }).await;
@@ -824,10 +861,11 @@ impl NapCatComponent {
         // Step 1: 删 napcat_dir,rootless 走 SFTP;system 走 elevated rm -rf
         if host.exists(&napcat_dir).await? {
             if self.requires_sudo {
-                let cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
-                    "rm -rf {}",
-                    shell_quote(napcat_dir.as_posix())
-                )));
+                let cmd = self.maybe_elevated(
+                    HostCommand::new("sh")
+                        .arg("-c")
+                        .arg(format!("rm -rf {}", shell_quote(napcat_dir.as_posix()))),
+                );
                 let out = host.run_to_string(cmd).await?;
                 if !out.success() {
                     return Err(ActionError::other(format!(
@@ -844,10 +882,11 @@ impl NapCatComponent {
         // Step 2: 删 loadNapCat.js
         if host.exists(&load_script).await? {
             if self.requires_sudo {
-                let cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
-                    "rm -f {}",
-                    shell_quote(load_script.as_posix())
-                )));
+                let cmd = self.maybe_elevated(
+                    HostCommand::new("sh")
+                        .arg("-c")
+                        .arg(format!("rm -f {}", shell_quote(load_script.as_posix()))),
+                );
                 let _ = host.run_to_string(cmd).await;
             } else {
                 let _ = host.remove_file(&load_script).await;
@@ -905,7 +944,6 @@ fn chrono_ms() -> u128 {
         .unwrap_or(0)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -952,9 +990,18 @@ mod tests {
     #[test]
     fn supported_targets_only_linux() {
         let c = comp();
-        assert!(c.supported_targets().contains(&(Os::Linux, Locality::Local)));
-        assert!(c.supported_targets().contains(&(Os::Linux, Locality::Remote)));
-        assert!(c.supported_targets().contains(&(Os::Windows, Locality::Local)));
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Linux, Locality::Local))
+        );
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Linux, Locality::Remote))
+        );
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Windows, Locality::Local))
+        );
     }
 
     #[test]
@@ -990,9 +1037,11 @@ mod tests {
         // ComponentInfo 里 supported_targets 必须与 trait 同步,Components 页
         // 才能在 Windows 上把 NapCat 卡显示为"支持当前平台"
         let info = NapCatComponent::info();
-        assert!(info.supported_targets.iter().any(|t| {
-            t.os == Os::Windows && t.locality == Locality::Local
-        }));
+        assert!(
+            info.supported_targets
+                .iter()
+                .any(|t| { t.os == Os::Windows && t.locality == Locality::Local })
+        );
     }
 
     #[test]
@@ -1018,7 +1067,10 @@ mod tests {
     #[test]
     fn parse_version_handles_prerelease_suffix() {
         let content = r#"const napCatVersion = "4.21.0-beta.3";"#;
-        assert_eq!(parse_napcat_version(content), Some("4.21.0-beta.3".to_string()));
+        assert_eq!(
+            parse_napcat_version(content),
+            Some("4.21.0-beta.3".to_string())
+        );
     }
 
     #[test]
@@ -1048,7 +1100,10 @@ mod tests {
     fn build_with_url_overrides_default() {
         let c = NapCatComponent::new(HostPath::from_posix("/x"))
             .with_url("https://mirror.example.com/NapCat.Shell.zip");
-        assert_eq!(c.download_url, "https://mirror.example.com/NapCat.Shell.zip");
+        assert_eq!(
+            c.download_url,
+            "https://mirror.example.com/NapCat.Shell.zip"
+        );
     }
 
     #[test]
@@ -1067,8 +1122,8 @@ mod tests {
     #[cfg(windows)]
     mod windows_e2e {
         use super::*;
-        use ncd_host::local::LocalWindowsHost;
         use ncd_host::PathStyle;
+        use ncd_host::local::LocalWindowsHost;
 
         fn windows_path(workspace: &tempfile::TempDir, sub: &str) -> HostPath {
             let full = workspace.path().join(sub);

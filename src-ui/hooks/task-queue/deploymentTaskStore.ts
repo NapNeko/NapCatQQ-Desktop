@@ -41,6 +41,14 @@ export const deploymentTaskStore = {
         });
     },
 
+    removeTask(taskId: string): void {
+        const current = store.getSnapshot();
+        if (!(taskId in current.tasks)) return;
+        const tasks = { ...current.tasks };
+        delete tasks[taskId];
+        store.setState({ ...current, tasks });
+    },
+
     async load(): Promise<void> {
         const list = await deploymentTaskService.list();
         this.applyList(list);

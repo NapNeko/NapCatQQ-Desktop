@@ -4,4 +4,4 @@ import type { DeploymentTaskResource } from "./DeploymentTaskResource";
 import type { DeploymentTaskStatus } from "./DeploymentTaskStatus";
 import type { ProgressEvent } from "./ProgressEvent";
 
-export type DeploymentTaskSnapshot = { taskId: string, kind: DeploymentTaskKind, status: DeploymentTaskStatus, hostId: string, title: string, dedupeKey?: string | null, resources: Array<DeploymentTaskResource>, progressEvents: Array<ProgressEvent>, submittedAtMs: bigint, startedAtMs?: bigint | null, endedAtMs?: bigint | null, message?: string | null, error?: string | null, cancellable: boolean, };
+export type DeploymentTaskSnapshot = { taskId: string, kind: DeploymentTaskKind, status: DeploymentTaskStatus, hostId: string, title: string, dedupeKey?: string | null, dependsOn?: Array<string>, resources: Array<DeploymentTaskResource>, progressEvents: Array<ProgressEvent>, submittedAtMs: bigint, startedAtMs?: bigint | null, endedAtMs?: bigint | null, message?: string | null, error?: string | null, cancellable: boolean, };

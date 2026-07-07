@@ -18,7 +18,6 @@ import { useComponents } from '../../hooks/components/useComponents';
 import { useComponentAction } from '../../hooks/components/useComponentAction';
 import { useComponentActionErrors } from '../../hooks/components/useComponentActionErrors';
 import { useComponentPageAlerts } from '../../hooks/components/useComponentPageAlerts';
-import { useQqDependencyAlerts } from '../../hooks/components/useQqDependencyAlerts';
 import { componentService } from '../../core/services/component.service';
 import { componentActionStore } from '../../hooks/components/componentActionStore';
 import { useReleases } from '../../hooks/diagnostics/useReleases';
@@ -29,12 +28,24 @@ import { HostComponentsView } from './HostComponentsView';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
 import type { ComponentId, DockerInstallReport } from '../../core/ipc/types';
+import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type { DockerInstallOptions } from '../../core/services/docker.service';
 import { globalInfoBarStore } from '../../hooks/ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
 import { cn } from '../../shared/utils/cn';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import scrollStyles from './componentsPageScroll.module.css';
+
+type QqDependencyProbeState =
+    | { status: 'loading'; report: null; error: null }
+    | { status: 'ready'; report: QqDependencyReport; error: null }
+    | { status: 'error'; report: null; error: string };
+
+function canProbeQqDependencies(machine: MachineView | null | undefined): machine is MachineView {
+    if (!machine || machine.host.os !== 'linux') return false;
+    const qq = machine.runtimeDep.find((row) => row.info.id === 'qq');
+    return qq?.status.state === 'installed';
+}
 
 export const ComponentsPageNext: React.FC = () => {
     const { view, hosts, isLoading, error, refetch } = useComponents();
@@ -72,6 +83,57 @@ export const ComponentsPageNext: React.FC = () => {
         () => machines.find((m) => m.host.host_id === activeHostId) ?? machines[0] ?? null,
         [machines, activeHostId],
     );
+
+    const [qqDependencyByHost, setQqDependencyByHost] = useState<
+        Record<string, QqDependencyProbeState | undefined>
+    >({});
+    const qqDependencyInFlightRef = useRef<Set<string>>(new Set());
+
+    const probeQqDependencies = useCallback(
+        async (hostId: string, force = false) => {
+            const machine = machines.find((m) => m.host.host_id === hostId);
+            if (!canProbeQqDependencies(machine)) return;
+
+            const current = qqDependencyByHost[hostId];
+            if (!force && current) {
+                return;
+            }
+            if (qqDependencyInFlightRef.current.has(hostId)) return;
+
+            qqDependencyInFlightRef.current.add(hostId);
+            setQqDependencyByHost((prev) => ({
+                ...prev,
+                [hostId]: { status: 'loading', report: null, error: null },
+            }));
+            try {
+                const report = await componentService.detectQqDependencies(hostId);
+                setQqDependencyByHost((prev) => ({
+                    ...prev,
+                    [hostId]: { status: 'ready', report, error: null },
+                }));
+            } catch (err) {
+                const message = errorText(err, 'QQ 依赖探测失败');
+                setQqDependencyByHost((prev) => ({
+                    ...prev,
+                    [hostId]: { status: 'error', report: null, error: message },
+                }));
+                console.warn('[ComponentsPage] QQ dependency probe failed:', err);
+            } finally {
+                qqDependencyInFlightRef.current.delete(hostId);
+            }
+        },
+        [machines, qqDependencyByHost],
+    );
+
+    useEffect(() => {
+        if (!canProbeQqDependencies(activeMachine)) return;
+        void probeQqDependencies(activeMachine.host.host_id);
+    }, [activeMachine, probeQqDependencies]);
+
+    const activeQqDependencyReport =
+        activeMachine
+            ? qqDependencyByHost[activeMachine.host.host_id]?.report ?? null
+            : null;
 
     // 清单 / 探测 / 组件操作终态 → 全局 InfoBar（顶层 InfoBarStack 渲染）。
     useComponentPageAlerts(allRows, error, activeHostId);
@@ -117,6 +179,9 @@ export const ComponentsPageNext: React.FC = () => {
                     // 只在成功时刷新状态；失败/取消时不刷新，避免部分删除导致探测返回 None 误显示"未安装"。
                     if (status === 'success') {
                         refetch();
+                        if (componentId === 'qq') {
+                            void probeQqDependencies(hostId, true);
+                        }
                     }
                 });
             } catch (err) {
@@ -131,7 +196,7 @@ export const ComponentsPageNext: React.FC = () => {
                 console.error('[ComponentsPage] action failed:', err);
             }
         },
-        [startAction, cancelAction, onTaskTerminal, refetch, hostNameOf],
+        [startAction, cancelAction, onTaskTerminal, refetch, hostNameOf, probeQqDependencies],
     );
 
     const startQqDepsRepair = useCallback(
@@ -141,6 +206,7 @@ export const ComponentsPageNext: React.FC = () => {
                 onTaskTerminal(taskId, (status) => {
                     if (status === 'success') {
                         refetch();
+                        void probeQqDependencies(hostId, true);
                     }
                 });
             } catch (err) {
@@ -153,10 +219,23 @@ export const ComponentsPageNext: React.FC = () => {
                 });
             }
         },
-        [startAction, onTaskTerminal, refetch, hostNameOf],
+        [startAction, onTaskTerminal, refetch, hostNameOf, probeQqDependencies],
     );
 
-    useQqDependencyAlerts(activeMachine, startQqDepsRepair);
+    const handleRefresh = useCallback(() => {
+        refetch();
+        if (activeMachine) {
+            void probeQqDependencies(activeMachine.host.host_id, true);
+        }
+    }, [refetch, activeMachine, probeQqDependencies]);
+
+    const handleRetryDetect = useCallback(
+        (hostId: string) => {
+            refetch();
+            void probeQqDependencies(hostId, true);
+        },
+        [refetch, probeQqDependencies],
+    );
 
     const allEmpty = machines.length === 0;
 
@@ -316,7 +395,7 @@ export const ComponentsPageNext: React.FC = () => {
                         选一台机器，管理它上面的 Bot 框架与运行时依赖：安装、更新、卸载、容器部署。
                     </p>
                 </div>
-                <Button size="sm" variant="secondary" onClick={refetch} disabled={isLoading}>
+                <Button size="sm" variant="secondary" onClick={handleRefresh} disabled={isLoading}>
                     <MotionIcon
                         icon={RefreshCw}
                         motion={refreshMotion(isLoading)}
@@ -355,7 +434,8 @@ export const ComponentsPageNext: React.FC = () => {
                         latestVersionFor={latestVersionFor}
                         getProgress={getProgressFor}
                         onAction={handleAction}
-                        onRetryDetect={() => refetch()}
+                        onRetryDetect={handleRetryDetect}
+                        qqDependencyReport={activeQqDependencyReport}
                         dockerStatus={dockerHosts.statusByHost[activeMachine.host.host_id]}
                         isDockerProbing={dockerHosts.probingByHost[activeMachine.host.host_id] ?? false}
                         isInstallingDocker={dockerHosts.installingByHost[activeMachine.host.host_id] ?? false}
@@ -368,6 +448,9 @@ export const ComponentsPageNext: React.FC = () => {
                         }}
                         onOpenDockerDownload={() => {
                             void dockerHosts.openDownloadPage().catch(() => undefined);
+                        }}
+                        onEnsureQqDependencies={(hostId) => {
+                            void startQqDepsRepair(hostId);
                         }}
                         isPullingImage={dockerHosts.isPullingFrameworkImage}
                         onPullImage={dockerHosts.pullFrameworkImage}

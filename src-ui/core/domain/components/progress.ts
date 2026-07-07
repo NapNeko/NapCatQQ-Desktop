@@ -32,6 +32,8 @@ export interface ActionProgressView {
     totalSteps: number;
     /// 当前 step 的百分比 0-100
     percent: number;
+    /// 整个任务的百分比 0-100。多步骤任务用它驱动任务级进度条。
+    overallPercent: number;
     /// 当前 step 的提示文字
     message: string;
     /// 当前下载步骤的瞬时速度（字节/秒），非下载步骤为 null
@@ -44,8 +46,10 @@ export interface ActionProgressView {
     downloadStage: DownloadStage | null;
     /// docker pull 各层进度；仅拉镜像步骤有值
     dockerLayers: DockerPullLayerSnapshot[];
-    /// 累计 log（最多保留 50 条）
+    /// 累计 log（最多保留 200 条）
     logs: ActionLogLine[];
+    /// step -> step_begin message。用于把 step_end 合成为可读日志。
+    stepMessages: Record<number, string>;
 }
 
 const MAX_LOGS = 200;
@@ -55,6 +59,7 @@ export const initialActionProgress: ActionProgressView = {
     currentStep: 0,
     totalSteps: 0,
     percent: 0,
+    overallPercent: 0,
     message: '',
     speedBps: null,
     downloadedBytes: null,
@@ -62,6 +67,7 @@ export const initialActionProgress: ActionProgressView = {
     downloadStage: null,
     dockerLayers: [],
     logs: [],
+    stepMessages: {},
 };
 
 function clearDownloadFields<T extends ActionProgressView>(v: T): T {
@@ -93,6 +99,44 @@ function toDownloadStage(s: string | null | undefined): DownloadStage | null {
     }
 }
 
+function clampPercent(percent: number): number {
+    if (!Number.isFinite(percent)) return 0;
+    return Math.max(0, Math.min(100, Math.round(percent)));
+}
+
+function normalizeStep(step: number, fallback: number): number {
+    if (step > 0) return step;
+    return fallback > 0 ? fallback : 1;
+}
+
+function deriveOverallPercent(totalSteps: number, step: number, stepPercent: number): number {
+    if (totalSteps <= 0) return clampPercent(stepPercent);
+    const normalizedStep = Math.max(1, Math.min(step, totalSteps));
+    const completedBefore = normalizedStep - 1;
+    const raw = ((completedBefore * 100) + clampPercent(stepPercent)) / totalSteps;
+    return clampPercent(raw);
+}
+
+function appendLogLine(
+    view: ActionProgressView,
+    level: ProgressLogLevel,
+    message: string,
+    timestampMs: bigint | number,
+): ActionProgressView {
+    const trimmed = message.trim();
+    if (!trimmed) return view;
+    const next: ActionLogLine[] = [
+        ...view.logs,
+        {
+            level,
+            message: trimmed,
+            timestamp_ms: Number(timestampMs),
+        },
+    ];
+    if (next.length > MAX_LOGS) next.splice(0, next.length - MAX_LOGS);
+    return { ...view, logs: next };
+}
+
 export function reduceActionProgress(
     prev: ActionProgressView,
     event: ProgressEvent,
@@ -105,22 +149,35 @@ export function reduceActionProgress(
                 totalSteps: event.total_steps,
                 currentStep: 0,
                 percent: 0,
+                overallPercent: 0,
                 message: '准备中…',
+                stepMessages: {},
             });
-        case 'step_begin':
-            return clearDownloadFields({
+        case 'step_begin': {
+            const step = normalizeStep(event.step, prev.currentStep);
+            const next = clearDownloadFields({
                 ...prev,
                 status: 'running',
-                currentStep: event.step,
+                currentStep: step,
                 percent: 0,
+                overallPercent: deriveOverallPercent(prev.totalSteps, step, 0),
                 message: event.message,
+                stepMessages: {
+                    ...prev.stepMessages,
+                    [step]: event.message,
+                },
             });
-        case 'step_progress':
+            return appendLogLine(next, 'info', `开始：${event.message}`, event.timestamp_ms);
+        }
+        case 'step_progress': {
+            const step = normalizeStep(event.step, prev.currentStep);
+            const percent = clampPercent(event.percent);
             return {
                 ...prev,
                 status: 'running',
-                currentStep: event.step,
-                percent: event.percent,
+                currentStep: step,
+                percent,
+                overallPercent: deriveOverallPercent(prev.totalSteps, step, percent),
                 message: event.message,
                 speedBps: toNumberOrNull(event.speed_bps),
                 downloadedBytes: toNumberOrNull(event.downloaded_bytes),
@@ -128,34 +185,51 @@ export function reduceActionProgress(
                 downloadStage: toDownloadStage(event.download_stage),
                 dockerLayers: event.docker_layers ?? [],
             };
-        case 'step_end':
-            return clearDownloadFields({ ...prev, percent: 100 });
-        case 'finished':
-            return clearDownloadFields({
+        }
+        case 'step_end': {
+            const step = normalizeStep(event.step, prev.currentStep);
+            const label = prev.stepMessages[step] || prev.message || `步骤 ${step}`;
+            const next = clearDownloadFields({
+                ...prev,
+                currentStep: step,
+                percent: 100,
+                overallPercent: deriveOverallPercent(prev.totalSteps, step, 100),
+            });
+            return appendLogLine(
+                next,
+                event.ok ? 'info' : 'error',
+                `${event.ok ? '完成' : '失败'}：${label}`,
+                event.timestamp_ms,
+            );
+        }
+        case 'finished': {
+            const next = clearDownloadFields({
                 ...prev,
                 status: event.ok ? 'success' : 'failed',
                 percent: 100,
+                overallPercent: 100,
                 message: event.ok ? '完成' : '失败',
             });
+            return appendLogLine(
+                next,
+                event.ok ? 'info' : 'error',
+                event.ok ? '任务完成' : '任务失败',
+                event.timestamp_ms,
+            );
+        }
         case 'log': {
-            const next: ActionLogLine[] = [
-                ...prev.logs,
-                {
-                    level: event.level,
-                    message: event.message,
-                    timestamp_ms: Number(event.timestamp_ms),
-                },
-            ];
-            if (next.length > MAX_LOGS) next.splice(0, next.length - MAX_LOGS);
+            const next = appendLogLine(prev, event.level, event.message, event.timestamp_ms);
             const hint =
                 event.level === 'error' || event.level === 'warn'
                     ? event.message
                     : event.message.trim();
             const messagePatch =
-                prev.status === 'running' && hint.length > 0
+                prev.status === 'running' &&
+                hint.length > 0 &&
+                (event.level === 'error' || event.level === 'warn' || prev.message.trim() === '')
                     ? { message: hint }
                     : {};
-            return { ...prev, logs: next, ...messagePatch };
+            return { ...next, ...messagePatch };
         }
         default:
             return prev;
@@ -184,7 +258,7 @@ export function isIndeterminate(view: ActionProgressView): boolean {
     if (view.dockerLayers.length > 0) {
         return false;
     }
-    if (view.percent <= 0 && view.status === 'running') return true;
+    if (view.percent <= 0 && view.overallPercent <= 0 && view.status === 'running') return true;
     return false;
 }
 

@@ -433,6 +433,8 @@ pub fn run() {
             commands::components::cancel_component_action,
             commands::deployment_tasks::list_deployment_tasks,
             commands::deployment_tasks::cancel_deployment_task,
+            commands::deployment_tasks::delete_deployment_task,
+            commands::deployment_tasks::clear_finished_deployment_tasks,
             commands::bot::bootstrap_bot_manager,
             commands::bot::list_bot_snapshots,
             commands::bot::list_bot_flavors,

@@ -8,7 +8,7 @@ import { useOpenExternal } from '../../hooks/useOpenExternal';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { DockerStatus, Os } from '../../core/ipc/types';
-import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from './progressView';
+import { shouldShowProgressBar, ProgressBarOverlay } from './progressView';
 import { ComponentManageCard } from './ComponentEntityCard';
 import { dockerRowStatusBadge } from './componentStatusPresentation';
 
@@ -105,15 +105,10 @@ const DockerMeta: React.FC<{
                 ? `${installProgress.currentStep}/${installProgress.totalSteps} · `
                 : '';
         return (
-            <div className="mt-0 min-w-0">
-                {step ? (
-                    <p className="mb-0.5 truncate text-2xs text-text-tertiary">
-                        {step}
-                        {installProgress.message || '安装中…'}
-                    </p>
-                ) : null}
-                <ProgressLine progress={installProgress} className="mt-0" />
-            </div>
+            <p className="truncate text-xs text-text-secondary">
+                {step}
+                {installProgress.message || installHint || '正在安装…'}
+            </p>
         );
     }
     if (isInstalling) {

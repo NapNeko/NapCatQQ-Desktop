@@ -11,11 +11,13 @@ import { TASK_KIND_VISUAL } from './taskQueueKindVisual';
 export interface TaskQueueEmptyStateProps {
     variant: 'no-tasks' | 'no-filter-match';
     onNavigate?: (route: AppRoute) => void;
+    showDocker?: boolean;
 }
 
 export const TaskQueueEmptyState: React.FC<TaskQueueEmptyStateProps> = ({
     variant,
     onNavigate,
+    showDocker = true,
 }) => {
     const isGlobal = variant === 'no-tasks';
 
@@ -46,10 +48,12 @@ export const TaskQueueEmptyState: React.FC<TaskQueueEmptyStateProps> = ({
                         <EmptyNavIcon kind="component_action" />
                         前往组件
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => onNavigate('docker')}>
-                        <EmptyNavIcon kind="docker_deploy" />
-                        容器管理
-                    </Button>
+                    {showDocker && (
+                        <Button size="sm" variant="ghost" onClick={() => onNavigate('docker')}>
+                            <EmptyNavIcon kind="docker_deploy" />
+                            容器管理
+                        </Button>
+                    )}
                 </div>
             )}
         </PagePlaceholder>

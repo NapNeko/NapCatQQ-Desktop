@@ -3,12 +3,12 @@
 //! 处理提权,重试,进度上报等逻辑
 
 use ncd_domain::{FailedPackage, InstallDependenciesResult};
-use ncd_host::{Host, HostCommand, HostError};
 use ncd_host::remote::SudoAccess;
+use ncd_host::{Host, HostCommand, HostError};
 
+use crate::PkgMgr;
 use crate::context::ActionCtx;
 use crate::error::ActionError;
-use crate::PkgMgr;
 
 /// QQ 依赖安装器
 pub struct QqDependencyInstaller;
@@ -27,6 +27,7 @@ impl QqDependencyInstaller {
         ctx: &mut ActionCtx,
     ) -> Result<InstallDependenciesResult, ActionError> {
         if missing.is_empty() {
+            ctx.info("QQ 系统依赖已满足").await;
             return Ok(InstallDependenciesResult {
                 success: true,
                 installed: vec![],
@@ -37,6 +38,7 @@ impl QqDependencyInstaller {
 
         // 探测提权能力(SudoAccess),上层按结果决定注入密码还是弹窗
         let sudo_access = self.check_sudo_access(host).await?;
+        ctx.info(format!("sudo 权限探测: {sudo_access:?}")).await;
 
         // host 已注入的提权密码也算可用:deploy path(ensure_dependencies)不再传
         // sudo_password,但 ServerManager 在建连时已从 keyring 注入了密码到 host,
@@ -46,7 +48,11 @@ impl QqDependencyInstaller {
         tracing::info!(
             "[QqDependencyInstaller] sudo_access={:?}, sudo_password={}, host_has_password={}",
             sudo_access,
-            if sudo_password.is_some() { "<provided>" } else { "<none>" },
+            if sudo_password.is_some() {
+                "<provided>"
+            } else {
+                "<none>"
+            },
             host_has_password
         );
 
@@ -56,13 +62,16 @@ impl QqDependencyInstaller {
                 Some(pw) => {
                     tracing::info!("[QqDependencyInstaller] injecting sudo password to host");
                     host.set_elevation_password(Some(pw.to_string())).await;
+                    ctx.info("已注入 sudo 密码，准备安装系统依赖").await;
                 }
                 None if host_has_password => {
                     tracing::info!(
                         "[QqDependencyInstaller] using host-injected sudo password (keyring cache)"
                     );
+                    ctx.info("使用已保存的 sudo 密码安装系统依赖").await;
                 }
                 None => {
+                    ctx.warn("安装 QQ 系统依赖需要 sudo 密码").await;
                     return Ok(InstallDependenciesResult {
                         success: false,
                         installed: vec![],
@@ -75,10 +84,16 @@ impl QqDependencyInstaller {
 
         // 探测一次包管理器类型,后续每个包安装复用,避免重复 command -v
         let pkg_mgr = self.detect_package_manager(host).await?;
+        ctx.info(format!("系统包管理器: {pkg_mgr:?}")).await;
 
         // 刷新包索引
+        ctx.info("刷新系统包索引").await;
         if let Err(e) = self.refresh_package_index(host, pkg_mgr).await {
             tracing::warn!("refresh package index failed: {e}");
+            ctx.warn(format!("刷新系统包索引失败，继续尝试安装: {e}"))
+                .await;
+        } else {
+            ctx.info("系统包索引已刷新").await;
         }
 
         let mut installed = Vec::new();
@@ -86,6 +101,12 @@ impl QqDependencyInstaller {
 
         // 逐个安装,单个失败记入 failed 不中断其余包
         for (idx, pkg) in missing.iter().enumerate() {
+            ctx.info(format!(
+                "安装 QQ 系统依赖 {}/{}: {pkg}",
+                idx + 1,
+                missing.len()
+            ))
+            .await;
             ctx.emit(crate::context::ProgressKind::StepProgress {
                 step: 0,
                 percent: ((idx * 100) / missing.len()) as u8,
@@ -98,9 +119,16 @@ impl QqDependencyInstaller {
             })
             .await;
 
-            match self.install_package_with_retry(host, pkg, pkg_mgr, ctx).await {
-                Ok(_) => installed.push(pkg.clone()),
+            match self
+                .install_package_with_retry(host, pkg, pkg_mgr, ctx)
+                .await
+            {
+                Ok(_) => {
+                    ctx.info(format!("已安装 QQ 系统依赖: {pkg}")).await;
+                    installed.push(pkg.clone());
+                }
                 Err(e) => {
+                    ctx.warn(format!("QQ 系统依赖安装失败: {pkg}: {e}")).await;
                     failed.push(FailedPackage {
                         name: pkg.clone(),
                         reason: e.to_string(),
@@ -108,6 +136,13 @@ impl QqDependencyInstaller {
                 }
             }
         }
+
+        ctx.info(format!(
+            "QQ 系统依赖安装完成: 成功 {} 个，失败 {} 个",
+            installed.len(),
+            failed.len()
+        ))
+        .await;
 
         Ok(InstallDependenciesResult {
             success: failed.is_empty(),
@@ -125,12 +160,20 @@ impl QqDependencyInstaller {
     /// 探测包管理器类型(一次性探测,避免重复)
     async fn detect_package_manager(&self, host: &dyn Host) -> Result<PkgMgr, ActionError> {
         let cmd_check_apt = HostCommand::new("command").arg("-v").arg("apt-get");
-        if host.run_to_string(cmd_check_apt).await.is_ok_and(|o| o.success()) {
+        if host
+            .run_to_string(cmd_check_apt)
+            .await
+            .is_ok_and(|o| o.success())
+        {
             return Ok(PkgMgr::Apt);
         }
 
         let cmd_check_dnf = HostCommand::new("command").arg("-v").arg("dnf");
-        if host.run_to_string(cmd_check_dnf).await.is_ok_and(|o| o.success()) {
+        if host
+            .run_to_string(cmd_check_dnf)
+            .await
+            .is_ok_and(|o| o.success())
+        {
             return Ok(PkgMgr::Dnf);
         }
 
@@ -141,7 +184,11 @@ impl QqDependencyInstaller {
     }
 
     /// 刷新包索引
-    async fn refresh_package_index(&self, host: &dyn Host, pkg_mgr: PkgMgr) -> Result<(), HostError> {
+    async fn refresh_package_index(
+        &self,
+        host: &dyn Host,
+        pkg_mgr: PkgMgr,
+    ) -> Result<(), HostError> {
         match pkg_mgr {
             PkgMgr::Apt => {
                 let cmd = HostCommand::new("apt-get")
@@ -204,7 +251,12 @@ impl QqDependencyInstaller {
     }
 
     /// 安装单个包
-    async fn install_package(&self, host: &dyn Host, package: &str, pkg_mgr: PkgMgr) -> Result<(), HostError> {
+    async fn install_package(
+        &self,
+        host: &dyn Host,
+        package: &str,
+        pkg_mgr: PkgMgr,
+    ) -> Result<(), HostError> {
         match pkg_mgr {
             PkgMgr::Apt => {
                 let cmd = HostCommand::new("apt-get")

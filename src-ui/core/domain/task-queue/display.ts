@@ -15,6 +15,26 @@ export function isActiveTaskItem(item: TaskQueueItem): boolean {
     return isActiveTaskStatus(item.status);
 }
 
+export function isTerminalTaskStatus(status: TaskQueueStatus): boolean {
+    return !isActiveTaskStatus(status);
+}
+
+export function isTerminalTaskItem(item: TaskQueueItem): boolean {
+    return isTerminalTaskStatus(item.status);
+}
+
+export function canCancelTaskItem(item: TaskQueueItem): boolean {
+    if (item.status === 'pending' || item.status === 'paused') return true;
+    if (item.status === 'running' || item.status === 'installing') {
+        return item.cancellable === true;
+    }
+    return false;
+}
+
+export function isRunningTaskItem(item: TaskQueueItem): boolean {
+    return item.status === 'running' || item.status === 'installing';
+}
+
 export function statusLabel(status: TaskQueueStatus): string {
     switch (status) {
         case 'running':
@@ -81,6 +101,8 @@ export function kindBadgeTone(
     switch (kind) {
         case 'component_action':
             return 'brand';
+        case 'system_package':
+            return 'success';
         case 'docker_install':
             return 'info';
         case 'docker_deploy':
@@ -94,6 +116,8 @@ export function kindLabel(kind: TaskQueueItem['kind']): string {
     switch (kind) {
         case 'component_action':
             return '组件';
+        case 'system_package':
+            return '系统依赖';
         case 'docker_install':
             return 'Docker 安装';
         case 'docker_deploy':

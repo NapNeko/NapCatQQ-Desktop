@@ -54,6 +54,8 @@ pub enum DomainEventKind {
     DockerInstallProgress,
     #[serde(rename = "deployment_task_changed")]
     DeploymentTaskChanged,
+    #[serde(rename = "deployment_task_removed")]
+    DeploymentTaskRemoved,
     #[serde(rename = "desktop_log_appended")]
     DesktopLogAppended,
     #[serde(rename = "host_connection_lost")]
@@ -157,6 +159,8 @@ pub enum DomainEvent {
     },
     #[serde(rename = "deployment_task_changed")]
     DeploymentTaskChanged { task: DeploymentTaskSnapshot },
+    #[serde(rename = "deployment_task_removed")]
+    DeploymentTaskRemoved { task_id: String },
     #[serde(rename = "desktop_log_appended")]
     DesktopLogAppended { line: String },
     #[serde(rename = "host_connection_lost")]
@@ -210,6 +214,7 @@ impl DomainEvent {
             Self::DockerDeployProgress { .. } => DomainEventKind::DockerDeployProgress,
             Self::DockerInstallProgress { .. } => DomainEventKind::DockerInstallProgress,
             Self::DeploymentTaskChanged { .. } => DomainEventKind::DeploymentTaskChanged,
+            Self::DeploymentTaskRemoved { .. } => DomainEventKind::DeploymentTaskRemoved,
             Self::DesktopLogAppended { .. } => DomainEventKind::DesktopLogAppended,
             Self::HostConnectionLost { .. } => DomainEventKind::HostConnectionLost,
             Self::HostConnectionRecovered { .. } => DomainEventKind::HostConnectionRecovered,
@@ -240,6 +245,7 @@ impl DomainEvent {
             Self::DockerDeployProgress { .. } => "docker_deploy_progress",
             Self::DockerInstallProgress { .. } => "docker_install_progress",
             Self::DeploymentTaskChanged { .. } => "deployment_task_changed",
+            Self::DeploymentTaskRemoved { .. } => "deployment_task_removed",
             Self::DesktopLogAppended { .. } => "desktop_log_appended",
             Self::HostConnectionLost { .. } => "host_connection_lost",
             Self::HostConnectionRecovered { .. } => "host_connection_recovered",
@@ -270,6 +276,7 @@ impl DomainEvent {
             Self::DockerDeployProgress { .. } => None,
             Self::DockerInstallProgress { .. } => None,
             Self::DeploymentTaskChanged { .. } => None,
+            Self::DeploymentTaskRemoved { .. } => None,
             Self::DesktopLogAppended { .. } => None,
             Self::HostConnectionLost { .. } => None,
             Self::HostConnectionRecovered { .. } => None,
@@ -452,6 +459,12 @@ impl DomainEvent {
 
     pub fn deployment_task_changed(task: DeploymentTaskSnapshot) -> Self {
         Self::DeploymentTaskChanged { task }
+    }
+
+    pub fn deployment_task_removed(task_id: impl Into<String>) -> Self {
+        Self::DeploymentTaskRemoved {
+            task_id: task_id.into(),
+        }
     }
 
     pub fn desktop_log_appended(line: impl Into<String>) -> Self {

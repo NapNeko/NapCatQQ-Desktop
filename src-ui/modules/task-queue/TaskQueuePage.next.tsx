@@ -1,6 +1,7 @@
 // 任务队列独立页：左侧任务轨 + 右侧详情工作台。
 
 import React, { useMemo, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
 import type { TaskQueueItem } from '../../core/domain/task-queue/types';
 import { isActiveTaskItem } from '../../core/domain/task-queue/display';
@@ -9,6 +10,7 @@ import { TaskQueueListItem } from './TaskQueueListItem';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { TaskQueueEmptyState } from './TaskQueueEmptyState';
 import { useTaskQueueSelection } from './useTaskQueueSelection';
+import { deploymentTaskService } from '../../core/services/deployment-task.service';
 
 export type TaskQueueFilter = 'all' | 'active' | 'done';
 
@@ -35,12 +37,14 @@ export interface TaskQueuePageNextProps {
     items: TaskQueueItem[];
     activeCount: number;
     onNavigate?: (route: AppRoute) => void;
+    showDocker?: boolean;
 }
 
 export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
     items,
     activeCount,
     onNavigate,
+    showDocker = true,
 }) => {
     const [filter, setFilter] = useState<TaskQueueFilter>('all');
     const filtered = useMemo(() => filterItems(items, filter), [items, filter]);
@@ -56,6 +60,18 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
     );
 
     const showWorkbench = items.length > 0;
+
+    const handleClearFinished = () => {
+        void deploymentTaskService.clearFinished().catch((err) => {
+            console.error('[TaskQueue] clear finished failed:', err);
+        });
+    };
+
+    const handleDeleteTask = (taskId: string) => {
+        void deploymentTaskService.delete(taskId).catch((err) => {
+            console.error('[TaskQueue] delete task failed:', err);
+        });
+    };
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -120,7 +136,11 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
             )}
 
             {!showWorkbench ? (
-                <TaskQueueEmptyState variant="no-tasks" onNavigate={onNavigate} />
+                <TaskQueueEmptyState
+                    variant="no-tasks"
+                    onNavigate={onNavigate}
+                    showDocker={showDocker}
+                />
             ) : (
             <div
                 className={cn(
@@ -137,11 +157,28 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
                                 <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
                                     任务列表
                                 </span>
-                                {activeCount > 0 && (
-                                    <span className="rounded-pill bg-brand-soft px-2 py-0.5 text-[10px] font-medium text-brand">
-                                        {activeCount} 进行中
-                                    </span>
-                                )}
+                                <div className="flex items-center gap-1.5">
+                                    {activeCount > 0 && (
+                                        <span className="rounded-pill bg-brand-soft px-2 py-0.5 text-[10px] font-medium text-brand">
+                                            {activeCount} 进行中
+                                        </span>
+                                    )}
+                                    {counts.done > 0 && (
+                                        <button
+                                            type="button"
+                                            aria-label="清理已结束任务"
+                                            title="清理已结束"
+                                            onClick={handleClearFinished}
+                                            className={cn(
+                                                'inline-flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors',
+                                                'hover:bg-danger-soft hover:text-danger',
+                                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
+                                            )}
+                                        >
+                                            <Trash2 size={13} strokeWidth={2} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                             <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto p-2">
                                 <ul className="flex flex-col gap-0.5" role="list">
@@ -151,6 +188,7 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
                                                 item={item}
                                                 selected={item.id === selectedId}
                                                 onSelect={() => setSelectedId(item.id)}
+                                                onDelete={() => handleDeleteTask(item.id)}
                                             />
                                         </li>
                                     ))}

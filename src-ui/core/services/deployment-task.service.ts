@@ -10,4 +10,13 @@ export const deploymentTaskService = {
     cancel: async (taskId: string): Promise<void> => {
         if (isTauri) return invoke<void>('cancel_deployment_task', { taskId });
     },
+
+    delete: async (taskId: string): Promise<void> => {
+        if (isTauri) return invoke<void>('delete_deployment_task', { taskId });
+    },
+
+    clearFinished: async (): Promise<number> => {
+        if (isTauri) return invoke<number>('clear_finished_deployment_tasks');
+        return 0;
+    },
 };

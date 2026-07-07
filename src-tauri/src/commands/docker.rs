@@ -217,6 +217,7 @@ pub async fn docker_install(
             host_id: host_id.clone(),
             title: "Docker 安装".to_string(),
             resources,
+            depends_on: vec![],
             dedupe_key: Some(format!("docker-install:{host_id}")),
             cancellable: false,
             runner: Box::new(move |task_ctx| {
@@ -497,6 +498,7 @@ pub async fn docker_deploy(
                 },
                 DeploymentTaskResource::GlobalDownloadSlot,
             ],
+            depends_on: vec![],
             dedupe_key: Some(format!("docker-pull:{host_id}:{}", flavor.as_str())),
             cancellable: false,
             runner: Box::new(move |task_ctx| {

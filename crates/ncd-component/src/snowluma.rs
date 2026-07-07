@@ -79,10 +79,7 @@ pub struct SnowLumaComponent {
 impl SnowLumaComponent {
     /// 创建一个 Linux framework component 描述(lite tarball)
     /// workspace_dir:SL workspace 根;snowluma_dir:framework 解压根
-    pub fn new(
-        workspace_dir: HostPath,
-        framework_url: impl Into<String>,
-    ) -> Self {
+    pub fn new(workspace_dir: HostPath, framework_url: impl Into<String>) -> Self {
         let snowluma_dir = workspace_dir.join("snowluma");
         Self {
             workspace_dir,
@@ -214,7 +211,6 @@ impl SnowLumaComponent {
     }
 }
 
-
 #[async_trait]
 impl Component for SnowLumaComponent {
     fn id(&self) -> ComponentId {
@@ -238,7 +234,6 @@ impl Component for SnowLumaComponent {
         }
     }
 
-
     async fn install(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         self.check_target(host)?;
         match host.os() {
@@ -247,17 +242,12 @@ impl Component for SnowLumaComponent {
         }
     }
 
-    async fn uninstall(
-        &self,
-        host: &dyn Host,
-        _ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn uninstall(&self, host: &dyn Host, _ctx: &mut ActionCtx) -> Result<(), ActionError> {
         match host.os() {
             Os::Windows => self.uninstall_windows(host).await,
             _ => self.uninstall_linux(host).await,
         }
     }
-
 
     async fn verify(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
         match host.os() {
@@ -284,10 +274,7 @@ impl SnowLumaComponent {
     /// Linux detect:先确认入口 <snowluma_dir>/index.mjs 存在,再尝试从
     /// 同目录的 package.json 读 version 字段拿真实版本号;缺 package.json
     /// 或字段时回退到 "installed" 占位(lite tarball 旧版本可能没有)
-    async fn detect_linux(
-        &self,
-        host: &dyn Host,
-    ) -> Result<Option<DetectedVersion>, ActionError> {
+    async fn detect_linux(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
         let entry = self.entry_path();
         if !host.exists(&entry).await? {
             return Ok(None);
@@ -337,12 +324,13 @@ impl SnowLumaComponent {
     }
 
     /// Linux install(原 install 实装,挪到独立方法以便 trait install 按 host.os 分发)
-    async fn install_linux(
-        &self,
-        host: &dyn Host,
-        ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn install_linux(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
+        ctx.info(format!(
+            "准备安装 SnowLuma 到 {}",
+            self.snowluma_dir.as_posix()
+        ))
+        .await;
 
         host.create_dir_all(&self.workspace_dir).await?;
         host.create_dir_all(&self.snowluma_dir).await?;
@@ -354,6 +342,11 @@ impl SnowLumaComponent {
             .next()
             .unwrap_or("snowluma.tar.gz");
         let remote_archive = self.workspace_dir.join(archive_filename);
+        ctx.info(format!(
+            "SnowLuma tarball 目标路径: {}",
+            remote_archive.as_posix()
+        ))
+        .await;
 
         // Step 1:获取 tarball(优先 preloaded,fallback 到镜像下载)
         ctx.emit(ProgressKind::StepBegin {
@@ -369,6 +362,8 @@ impl SnowLumaComponent {
                     .await;
                 if preloaded.as_posix() != remote_archive.as_posix() {
                     // 复制 / 移动到目标位置
+                    ctx.info(format!("复制预置 tarball 到 {}", remote_archive.as_posix()))
+                        .await;
                     let cmd = HostCommand::new("cp")
                         .arg(preloaded.as_posix())
                         .arg(remote_archive.as_posix());
@@ -402,7 +397,11 @@ impl SnowLumaComponent {
             ));
 
             let mirrors = self.mirror_urls();
-            ctx.info(format!("racing {} mirrors", mirrors.len())).await;
+            ctx.info(format!(
+                "准备下载 SnowLuma tarball，候选镜像 {} 个",
+                mirrors.len()
+            ))
+            .await;
             helper
                 .download_with_mirrors(
                     &mirrors,
@@ -415,10 +414,16 @@ impl SnowLumaComponent {
             // 上传前验本地文件确实是 gzip(magic 1f 8b)
             // 没传 sha256 时(release 快照缺失),这是唯一的内容闸:URL 拼错 / 镜像代理返回 404 HTML 页时,这里直接
             // 报人话错误,而不是把 HTML 当 tar.gz 传上去让远端 tar 报 "not in gzip format"
-            verify_gzip_magic(&local_tmp).await.map_err(|reason| {
-                ActionError::install_step("verify_download", reason)
-            })?;
+            verify_gzip_magic(&local_tmp)
+                .await
+                .map_err(|reason| ActionError::install_step("verify_download", reason))?;
+            ctx.info("SnowLuma tarball gzip 校验通过").await;
             host.upload(&local_tmp, &remote_archive).await?;
+            ctx.info(format!(
+                "SnowLuma tarball 已上传到 {}",
+                remote_archive.as_posix()
+            ))
+            .await;
             let _ = tokio::fs::remove_file(&local_tmp).await;
         }
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
@@ -430,6 +435,11 @@ impl SnowLumaComponent {
         })
         .await;
         // ncd-host::extract_archive 不支持 strip-components,直接走 tar 命令
+        ctx.info(format!(
+            "解压 SnowLuma tarball 到 {}",
+            self.snowluma_dir.as_posix()
+        ))
+        .await;
         let cmd = HostCommand::new("tar")
             .arg("-xzf")
             .arg(remote_archive.as_posix())
@@ -440,11 +450,7 @@ impl SnowLumaComponent {
         if !out.success() {
             return Err(ActionError::install_step(
                 "tar_extract",
-                format!(
-                    "exit={:?} stderr={}",
-                    out.exit_code,
-                    out.stderr.trim()
-                ),
+                format!("exit={:?} stderr={}", out.exit_code, out.stderr.trim()),
             ));
         }
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
@@ -464,6 +470,8 @@ impl SnowLumaComponent {
                 ),
             ));
         }
+        ctx.info(format!("SnowLuma 入口文件已验证: {}", self.entry_path()))
+            .await;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
@@ -481,10 +489,7 @@ impl SnowLumaComponent {
         let pkg = self.package_json_path();
         let node = self.node_exe_path();
         // 三件套都在才视为"装好的 SnowLuma 发布包"
-        if !host.exists(&entry).await?
-            || !host.exists(&pkg).await?
-            || !host.exists(&node).await?
-        {
+        if !host.exists(&entry).await? || !host.exists(&pkg).await? || !host.exists(&node).await? {
             return Ok(None);
         }
 
@@ -585,12 +590,16 @@ impl SnowLumaComponent {
         })?;
 
         ctx.emit(ProgressKind::Started { total_steps: 5 }).await;
+        ctx.info(format!(
+            "准备安装 Windows SnowLuma {tag} 到 {}",
+            self.snowluma_dir.as_posix()
+        ))
+        .await;
 
         host.create_dir_all(&self.snowluma_dir).await?;
-        let stage_dir = self.snowluma_dir.join(format!(
-            "_stage-{}",
-            std::process::id()
-        ));
+        let stage_dir = self
+            .snowluma_dir
+            .join(format!("_stage-{}", std::process::id()));
         // 任何残留 stage 都先清掉
         let _ = host.remove_dir_all(&stage_dir).await;
         host.create_dir_all(&stage_dir).await?;
@@ -613,7 +622,11 @@ impl SnowLumaComponent {
         ));
 
         let mirrors = self.mirror_urls();
-        ctx.info(format!("racing {} mirrors", mirrors.len())).await;
+        ctx.info(format!(
+            "准备下载 SnowLuma zip，候选镜像 {} 个",
+            mirrors.len()
+        ))
+        .await;
         if let Err(e) = helper
             .download_with_mirrors(
                 &mirrors,
@@ -637,6 +650,8 @@ impl SnowLumaComponent {
         .await;
         let remote_zip = stage_dir.join("snowluma.zip");
         host.upload(&local_tmp, &remote_zip).await?;
+        ctx.info(format!("SnowLuma zip 已暂存到 {}", remote_zip.as_posix()))
+            .await;
         let _ = tokio::fs::remove_file(&local_tmp).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
@@ -648,13 +663,22 @@ impl SnowLumaComponent {
         .await;
         let extract_root = stage_dir.join("extracted");
         host.create_dir_all(&extract_root).await?;
+        ctx.info(format!("解压 SnowLuma zip 到 {}", extract_root.as_posix()))
+            .await;
         host.extract_archive(&remote_zip, &extract_root, ncd_host::ArchiveKind::Zip)
             .await?;
         let payload_root = self
             .resolve_extracted_payload_root(host, &extract_root)
             .await?;
-        self.copy_extracted_into_install(host, &payload_root).await?;
+        ctx.info(format!(
+            "SnowLuma payload 根目录: {}",
+            payload_root.as_posix()
+        ))
+        .await;
+        self.copy_extracted_into_install(host, &payload_root)
+            .await?;
         let _ = host.remove_dir_all(&stage_dir).await;
+        ctx.info("SnowLuma 文件已复制，临时目录已清理").await;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
         // Step 4:校验三件套
@@ -672,6 +696,7 @@ impl SnowLumaComponent {
                 ));
             }
         }
+        ctx.info("SnowLuma 安装产物已验证").await;
         ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
 
         // Step 5:写 .installed_tag
@@ -682,6 +707,7 @@ impl SnowLumaComponent {
         .await;
         host.write_file(&self.installed_tag_path(), tag.as_bytes())
             .await?;
+        ctx.info(format!("已写入 SnowLuma 安装标记: {tag}")).await;
         ctx.emit(ProgressKind::StepEnd { step: 5, ok: true }).await;
 
         ctx.emit(ProgressKind::Finished { ok: true }).await;
@@ -754,10 +780,7 @@ impl SnowLumaComponent {
         Ok(())
     }
 
-    fn launch_command_inner(
-        &self,
-        args: &LaunchArgs,
-    ) -> HostCommand {
+    fn launch_command_inner(&self, args: &LaunchArgs) -> HostCommand {
         let cmd = HostCommand::new("node").arg(self.entry_path().as_posix());
         let mut cmd = args.apply_to(cmd);
         // apply_to 只在 args.working_dir 为 Some 时设;snowluma 需 fallback 到 snowluma_dir
@@ -779,7 +802,8 @@ async fn copy_tree(
     dst_root: &HostPath,
     preserve_top_level: &[&str],
 ) -> Result<(), ActionError> {
-    let mut stack: Vec<(HostPath, HostPath, bool)> = vec![(src_root.clone(), dst_root.clone(), true)];
+    let mut stack: Vec<(HostPath, HostPath, bool)> =
+        vec![(src_root.clone(), dst_root.clone(), true)];
     while let Some((src, dst, is_top)) = stack.pop() {
         let entries = host.list_dir(&src).await?;
         for entry in entries {
@@ -846,7 +870,9 @@ mod tests {
         // 1f 8b 打头 = 合法 gzip,放行
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("ok.tar.gz");
-        tokio::fs::write(&p, [0x1f, 0x8b, 0x08, 0x00]).await.unwrap();
+        tokio::fs::write(&p, [0x1f, 0x8b, 0x08, 0x00])
+            .await
+            .unwrap();
         assert!(verify_gzip_magic(&p).await.is_ok());
     }
 
@@ -855,7 +881,9 @@ mod tests {
         // 404 错误页常以 "<!DOCTYPE" / "<html" 开头(0x3c ...),不是 gzip,必须拦
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("fake.tar.gz");
-        tokio::fs::write(&p, b"<!DOCTYPE html><html>404</html>").await.unwrap();
+        tokio::fs::write(&p, b"<!DOCTYPE html><html>404</html>")
+            .await
+            .unwrap();
         assert!(verify_gzip_magic(&p).await.is_err());
     }
 
@@ -892,9 +920,18 @@ mod tests {
     #[test]
     fn supported_targets_includes_linux_and_windows_local() {
         let c = comp();
-        assert!(c.supported_targets().contains(&(Os::Linux, Locality::Local)));
-        assert!(c.supported_targets().contains(&(Os::Linux, Locality::Remote)));
-        assert!(c.supported_targets().contains(&(Os::Windows, Locality::Local)));
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Linux, Locality::Local))
+        );
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Linux, Locality::Remote))
+        );
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Windows, Locality::Local))
+        );
     }
 
     #[test]
@@ -923,8 +960,14 @@ mod tests {
         ]);
         let urls = c.mirror_urls();
         assert_eq!(urls[0], "https://github.com/foo/bar.tar.gz");
-        assert_eq!(urls[1], "https://mirror1.example.com/https://github.com/foo/bar.tar.gz");
-        assert_eq!(urls[2], "https://mirror2.example.com/https://github.com/foo/bar.tar.gz");
+        assert_eq!(
+            urls[1],
+            "https://mirror1.example.com/https://github.com/foo/bar.tar.gz"
+        );
+        assert_eq!(
+            urls[2],
+            "https://mirror2.example.com/https://github.com/foo/bar.tar.gz"
+        );
     }
 
     #[test]
@@ -1099,7 +1142,11 @@ mod tests {
             write_file(&host, &install.join("package.json"), b"{}").await;
 
             let comp = SnowLumaComponent::for_windows(install, "v1.7.5");
-            let v = comp.detect(&host).await.unwrap().expect("三件套齐应返回 Some");
+            let v = comp
+                .detect(&host)
+                .await
+                .unwrap()
+                .expect("三件套齐应返回 Some");
             assert_eq!(v.version, "unknown");
         }
 
@@ -1180,13 +1227,20 @@ mod tests {
             host.create_dir_all(&payload).await.unwrap();
             write_file(&host, &payload.join("index.mjs"), b"new").await;
             write_file(&host, &payload.join("node.exe"), b"new").await;
-            write_file(&host, &payload.join("package.json"), br#"{"version":"1.7.5"}"#).await;
+            write_file(
+                &host,
+                &payload.join("package.json"),
+                br#"{"version":"1.7.5"}"#,
+            )
+            .await;
             // 包内 config / data 默认值 —— 不应覆盖用户运行期数据
             write_file(&host, &payload.join("config/runtime.json"), b"default").await;
             write_file(&host, &payload.join("data/100200/messages.db"), b"shipped").await;
 
             let comp = SnowLumaComponent::for_windows(install.clone(), "v1.7.5");
-            comp.copy_extracted_into_install(&host, &payload).await.unwrap();
+            comp.copy_extracted_into_install(&host, &payload)
+                .await
+                .unwrap();
 
             // 三件套来自 payload(用 b"new" / 1.7.5 区分)
             let mjs = host.read_file(&install.join("index.mjs")).await.unwrap();
@@ -1218,7 +1272,9 @@ mod tests {
             write_file(&host, &payload.join("config/runtime.json"), b"default").await;
 
             let comp = SnowLumaComponent::for_windows(install.clone(), "v1.7.5");
-            comp.copy_extracted_into_install(&host, &payload).await.unwrap();
+            comp.copy_extracted_into_install(&host, &payload)
+                .await
+                .unwrap();
 
             let cfg = host
                 .read_file(&install.join("config/runtime.json"))
@@ -1243,7 +1299,10 @@ mod tests {
             .await;
 
             let comp = SnowLumaComponent::for_windows(windows_path(&ws, "snowluma"), "v1.7.5");
-            let payload = comp.resolve_extracted_payload_root(&host, &extracted).await.unwrap();
+            let payload = comp
+                .resolve_extracted_payload_root(&host, &extracted)
+                .await
+                .unwrap();
             assert!(payload.as_posix().ends_with("/SnowLuma-v1.7.5-win-x64"));
         }
 
@@ -1258,7 +1317,10 @@ mod tests {
             write_file(&host, &extracted.join("package.json"), b"{}").await;
 
             let comp = SnowLumaComponent::for_windows(windows_path(&ws, "snowluma"), "v1.7.5");
-            let payload = comp.resolve_extracted_payload_root(&host, &extracted).await.unwrap();
+            let payload = comp
+                .resolve_extracted_payload_root(&host, &extracted)
+                .await
+                .unwrap();
             // 扁平 zip:返回 extract_root 自身
             assert_eq!(payload.as_posix(), extracted.as_posix());
         }

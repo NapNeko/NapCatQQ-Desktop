@@ -1,7 +1,7 @@
 // 新 UI 树根 = AppShell。
 // 布局:TitleBar(透明) ─ [Sidebar | main]
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
 import { Sidebar, type AppRoute } from '../shared/components/next/Sidebar';
@@ -17,6 +17,7 @@ import { useServerManager } from '../hooks/remote/useServerManager';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
 import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployProgressBridge';
 import { useDockerInstallProgressBridge } from '../hooks/docker/useDockerInstallProgressBridge';
+import { useDockerStatusByHost } from '../hooks/docker/useDockerStatusByHost';
 import { useDeploymentTaskBridge } from '../hooks/task-queue/useDeploymentTaskBridge';
 import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useHostConnectionEvents } from '../hooks/remote/useHostConnectionEvents';
@@ -26,6 +27,7 @@ import { useAppUiPreferencesBootstrap } from '../hooks/preferences/useAppUiPrefe
 import { useMotion } from '../hooks/preferences/useMotion';
 import { useTaskQueue } from '../hooks/task-queue/useTaskQueue';
 import type { TaskQueueSnapshot } from '../core/domain/task-queue/types';
+import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
 
@@ -53,6 +55,19 @@ export const AppNext: React.FC = () => {
     useHostHealthAlerts();
 
     const { servers } = useServerManager();
+    const dockerHostIds = useMemo(
+        () => servers.map((p) => `remote:${p.id}`),
+        [servers],
+    );
+    const dockerStatusByHost = useDockerStatusByHost(dockerHostIds);
+    const showDocker = useMemo(
+        () =>
+            dockerHostIds.some((hostId) => {
+                const status = dockerStatusByHost[hostId];
+                return status ? dockerStatusSummary(status).ready : false;
+            }),
+        [dockerHostIds, dockerStatusByHost],
+    );
     const hostLabels = useMemo(() => {
         const map: Record<string, string> = { local: '本机' };
         for (const p of servers) {
@@ -67,12 +82,18 @@ export const AppNext: React.FC = () => {
 
     const { bars, dismiss } = useGlobalInfoBars();
 
-    const showDocker = servers.length > 0;
     useEffect(() => {
         if (!showDocker && route === 'docker') {
             setRoute('overview');
         }
     }, [showDocker, route]);
+
+    const navigate = useCallback(
+        (nextRoute: AppRoute) => {
+            setRoute(nextRoute === 'docker' && !showDocker ? 'overview' : nextRoute);
+        },
+        [showDocker],
+    );
 
     const [displayedRoute, setDisplayedRoute] = useState<AppRoute>(route);
     const [pageVisible, setPageVisible] = useState<boolean>(true);
@@ -104,7 +125,7 @@ export const AppNext: React.FC = () => {
                 <div className="relative flex flex-1 overflow-hidden">
                     <Sidebar
                         active={route}
-                        onChange={setRoute}
+                        onChange={navigate}
                         collapsed={collapsed}
                         onToggleCollapse={() => setCollapsed((v) => !v)}
                         showDocker={showDocker}
@@ -136,8 +157,9 @@ export const AppNext: React.FC = () => {
                                     >
                                         <RouteContent
                                             route={displayedRoute}
-                                            onNavigate={setRoute}
+                                            onNavigate={navigate}
                                             taskQueue={taskQueue}
+                                            showDocker={showDocker}
                                         />
                                     </PageTransition>
                                 </div>
@@ -157,7 +179,8 @@ const RouteContent: React.FC<{
     route: AppRoute;
     onNavigate: (route: AppRoute) => void;
     taskQueue: TaskQueueSnapshot;
-}> = ({ route, onNavigate, taskQueue }) => {
+    showDocker: boolean;
+}> = ({ route, onNavigate, taskQueue, showDocker }) => {
     switch (route) {
         case 'overview':
             return <BootstrapPanelNext onNavigate={onNavigate} />;
@@ -175,6 +198,7 @@ const RouteContent: React.FC<{
                     items={taskQueue.items}
                     activeCount={taskQueue.activeCount}
                     onNavigate={onNavigate}
+                    showDocker={showDocker}
                 />
             );
         case 'settings':

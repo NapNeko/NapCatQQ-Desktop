@@ -17,7 +17,11 @@ import {
 } from '../../core/domain/components/progress';
 
 function progressSuccessEnterKey(progress: ActionProgressView): string {
-    return `success-${progress.percent}-${progress.message ?? ''}`;
+    return `success-${progress.overallPercent}-${progress.message ?? ''}`;
+}
+
+function taskLevelPercent(progress: ActionProgressView): number {
+    return progress.dockerLayers.length > 0 ? progress.percent : progress.overallPercent;
 }
 
 export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: string }> = ({
@@ -75,7 +79,7 @@ export const ProgressLine: React.FC<{ progress: ActionProgressView; className?: 
                     {progress.message || '处理中…'}
                 </span>
                 <span className="ml-auto shrink-0 font-mono text-[11.5px] tabular-nums text-text-secondary">
-                    {progress.percent}%
+                    {progress.overallPercent}%
                 </span>
             </>,
         );
@@ -127,12 +131,14 @@ export const ProgressBarOverlay: React.FC<{
     const indeterminate = isIndeterminate(progress);
     const tone = progress.downloadStage === 'switching_mirror' ? 'warning' : 'brand';
     const isDownload = progress.downloadStage != null;
-    const barIndeterminate = determinate ? indeterminate : indeterminate || !isDownload;
+    const barIndeterminate = determinate
+        ? indeterminate
+        : indeterminate || (!isDownload && progress.overallPercent <= 0);
     return (
         <Progress
             size="sm"
             tone={tone}
-            value={progress.percent}
+            value={taskLevelPercent(progress)}
             indeterminate={barIndeterminate}
             className="absolute inset-x-0 bottom-0 h-[2px] rounded-none bg-transparent"
         />

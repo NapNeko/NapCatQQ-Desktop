@@ -12,22 +12,25 @@
 //! DeployError 的 enum 结构
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use ncd_component::{
     Component, ComponentDetectResult, ComponentId, ComponentInfo, DesktopSelfComponent,
-    NapCatComponent, NoVncComponent, NodeJsComponent, ProgressKind, QQComponent, SnowLumaComponent,
+    NapCatComponent, NoVncComponent, NodeJsComponent, ProgressEvent, ProgressKind,
+    ProgressLogLevel, QQComponent, SnowLumaComponent,
 };
 use ncd_deploy::{DeployPlan, StepKind};
 use ncd_domain::release_snapshot::ReleaseInfo;
 use ncd_domain::{
     DeploymentTaskKind, DeploymentTaskResource, InstallDependenciesResult, QqDependencyReport,
 };
-use ncd_host::{Host, HostPath};
+use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
 use ncd_runtime::{
-    DeploymentTaskRequest, DeploymentTaskRunResult, DomainEvent, EventBus,
+    DeploymentTaskContext, DeploymentTaskRequest, DeploymentTaskRunResult, DomainEvent, EventBus,
     release::read_cached_release_snapshot,
 };
 use tauri::State;
+use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::AppState;
@@ -85,9 +88,147 @@ pub async fn run_component_action(
 ) -> Result<String, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let probe = cached_host_probe(&host_id, host.as_ref(), &state).await;
+    let task_id = task_id
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    submit_component_action_with_prerequisites(
+        component_id,
+        &host_id,
+        kind,
+        task_id,
+        host,
+        &probe,
+        &state,
+    )
+    .await
+}
+
+async fn submit_component_action_with_prerequisites(
+    component_id: ComponentId,
+    host_id: &str,
+    kind: StepKind,
+    task_id: String,
+    host: Arc<dyn Host>,
+    probe: &RemoteHostProbe,
+    state: &AppState,
+) -> Result<String, String> {
+    let target_dedupe_key = component_dedupe_key(host_id, component_id, kind);
+    if let Some(existing) = state
+        .deployment_tasks
+        .active_task_by_dedupe_key(&target_dedupe_key)
+        .await
+    {
+        return Ok(existing);
+    }
+
+    let target = ComponentTaskSpec { component_id, kind };
+    let prerequisite_specs =
+        collect_component_runtime_prerequisites(target, host.os(), host.locality());
+    let mut submitted: Vec<(ComponentTaskSpec, String)> =
+        Vec::with_capacity(prerequisite_specs.len());
+
+    for spec in prerequisite_specs {
+        if component_prerequisite_is_installed(spec, &host, probe, state).await? {
+            tracing::info!(
+                host_id,
+                component = spec.component_id.as_str(),
+                action = spec.kind.as_str(),
+                "skip installed runtime prerequisite"
+            );
+            continue;
+        }
+        let depends_on = direct_runtime_dependency_ids(
+            spec,
+            host.os(),
+            host.locality(),
+            &submitted,
+        );
+        let submitted_task_id = submit_single_component_task(
+            spec.component_id,
+            host_id,
+            spec.kind,
+            None,
+            depends_on,
+            Arc::clone(&host),
+            probe,
+            state,
+        )
+        .await?;
+        submitted.push((spec, submitted_task_id));
+    }
+
+    let depends_on = direct_runtime_dependency_ids(target, host.os(), host.locality(), &submitted);
+    submit_single_component_task(
+        component_id,
+        host_id,
+        kind,
+        Some(task_id),
+        depends_on,
+        host,
+        probe,
+        state,
+    )
+    .await
+}
+
+async fn component_prerequisite_is_installed(
+    spec: ComponentTaskSpec,
+    host: &Arc<dyn Host>,
+    probe: &RemoteHostProbe,
+    state: &AppState,
+) -> Result<bool, String> {
+    if spec.kind != StepKind::EnsureInstalled {
+        return Ok(false);
+    }
+
+    let component = build_component_for_host(
+        spec.component_id,
+        state,
+        host.as_ref(),
+        probe.home.as_deref(),
+        probe.layout,
+    )?;
+
+    if component.check_target(host.as_ref()).is_err() {
+        return Ok(false);
+    }
+
+    match component.detect(host.as_ref()).await {
+        Ok(Some(detected)) => {
+            tracing::info!(
+                component = spec.component_id.as_str(),
+                version = %detected.version,
+                source = %detected.source,
+                "runtime prerequisite already installed"
+            );
+            Ok(true)
+        }
+        Ok(None) => Ok(false),
+        Err(err) => {
+            tracing::warn!(
+                component = spec.component_id.as_str(),
+                error = %err,
+                "runtime prerequisite pre-detect failed; submitting prerequisite task"
+            );
+            Ok(false)
+        }
+    }
+}
+
+async fn submit_single_component_task(
+    component_id: ComponentId,
+    host_id: &str,
+    kind: StepKind,
+    requested_task_id: Option<String>,
+    mut depends_on: Vec<String>,
+    host: Arc<dyn Host>,
+    probe: &RemoteHostProbe,
+    state: &AppState,
+) -> Result<String, String> {
     let component = build_component_for_host(
         component_id,
-        &state,
+        state,
         host.as_ref(),
         probe.home.as_deref(),
         probe.layout,
@@ -98,31 +239,42 @@ pub async fn run_component_action(
         .build();
     plan.validate().map_err(|err| format!("{err}"))?;
 
-    let server_id = host_id.strip_prefix("remote:").map(str::to_string);
+    let host_id_owned = host_id.to_string();
+    let server_id = host_id_owned.strip_prefix("remote:").map(str::to_string);
     let remote_long_install = server_id.is_some()
         && matches!(
             kind,
             StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::EnsureDependencies
         );
 
-    let task_id = task_id
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let task_id = requested_task_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     // 安装 / 卸载会改变远端布局(如新建 $HOME/Napcat),动作结束后失效该主机
     // 的布局缓存,下次 detect 重新探一次拿到最新布局
     let host_probe_cache = Arc::clone(&state.host_probe_cache);
-    let probe_cache_key = host_id.clone();
+    let probe_cache_key = host_id_owned.clone();
     let event_bus = state.event_bus.clone();
     let active_tasks = Arc::clone(&state.active_tasks);
     let server_manager = Arc::clone(&state.server_manager);
     let deployment_tasks = state.deployment_tasks.clone();
-    let resources = component_task_resources(component_id, &host_id, kind);
-    let dedupe_key = Some(format!(
-        "component:{}:{}:{}",
-        host_id,
-        component_id.as_str(),
-        kind.as_str()
-    ));
+    let dedupe_key = Some(component_dedupe_key(&host_id_owned, component_id, kind));
+    if let Some(existing) = deployment_tasks
+        .active_task_by_dedupe_key(dedupe_key.as_deref().unwrap())
+        .await
+    {
+        return Ok(existing);
+    }
+    let package_depends_on = submit_component_package_prerequisites(
+        component_id,
+        kind,
+        &host_id_owned,
+        Arc::clone(&host),
+        state,
+    )
+    .await;
+    depends_on.extend(package_depends_on);
+    let resources =
+        component_task_resources(component_id, &host_id_owned, kind, host.os(), host.locality());
+    let cancellable = component_action_cancellable(component_id, kind, host.os(), host.locality());
     let title = format!("{} {}", component_id.as_str(), kind.as_str());
     let submitted_task_id = deployment_tasks
         .submit(DeploymentTaskRequest {
@@ -131,11 +283,12 @@ pub async fn run_component_action(
                 component_id: component_id.as_str().to_string(),
                 action: kind.as_str().to_string(),
             },
-            host_id: host_id.clone(),
+            host_id: host_id_owned,
             title,
             resources,
+            depends_on,
             dedupe_key,
-            cancellable: true,
+            cancellable,
             runner: Box::new(move |task_ctx| {
                 Box::pin(async move {
                     let (mut ctx, mut rx) = ncd_component::ActionCtx::new();
@@ -262,10 +415,125 @@ pub async fn cancel_component_action(
     state.deployment_tasks.cancel(&task_id).await
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ComponentTaskSpec {
+    component_id: ComponentId,
+    kind: StepKind,
+}
+
+fn component_dedupe_key(host_id: &str, component_id: ComponentId, kind: StepKind) -> String {
+    format!(
+        "component:{}:{}:{}",
+        host_id,
+        component_id.as_str(),
+        kind.as_str()
+    )
+}
+
+fn component_action_needs_runtime_closure(kind: StepKind) -> bool {
+    matches!(
+        kind,
+        StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Update
+    )
+}
+
+fn component_runtime_prerequisites(
+    component_id: ComponentId,
+    kind: StepKind,
+    host_os: Os,
+    host_locality: Locality,
+) -> Vec<ComponentTaskSpec> {
+    if !component_action_needs_runtime_closure(kind) {
+        return Vec::new();
+    }
+
+    let ensure = |component_id| ComponentTaskSpec {
+        component_id,
+        kind: StepKind::EnsureInstalled,
+    };
+
+    match component_id {
+        ComponentId::NapCat => match host_os {
+            Os::Windows | Os::Linux => vec![ensure(ComponentId::Qq)],
+            _ => Vec::new(),
+        },
+        ComponentId::SnowLuma => match host_os {
+            Os::Windows => vec![ensure(ComponentId::Qq)],
+            Os::Linux => {
+                let mut deps = vec![ensure(ComponentId::NodeJs), ensure(ComponentId::Qq)];
+                if host_locality == Locality::Remote {
+                    deps.push(ensure(ComponentId::NoVnc));
+                }
+                deps
+            }
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    }
+}
+
+fn collect_component_runtime_prerequisites(
+    target: ComponentTaskSpec,
+    host_os: Os,
+    host_locality: Locality,
+) -> Vec<ComponentTaskSpec> {
+    let mut seen = Vec::new();
+    let mut ordered = Vec::new();
+    collect_component_runtime_prerequisites_inner(
+        target,
+        host_os,
+        host_locality,
+        &mut seen,
+        &mut ordered,
+    );
+    ordered
+}
+
+fn collect_component_runtime_prerequisites_inner(
+    target: ComponentTaskSpec,
+    host_os: Os,
+    host_locality: Locality,
+    seen: &mut Vec<ComponentTaskSpec>,
+    ordered: &mut Vec<ComponentTaskSpec>,
+) {
+    for dep in component_runtime_prerequisites(
+        target.component_id,
+        target.kind,
+        host_os,
+        host_locality,
+    ) {
+        if seen.contains(&dep) {
+            continue;
+        }
+        seen.push(dep);
+        collect_component_runtime_prerequisites_inner(dep, host_os, host_locality, seen, ordered);
+        ordered.push(dep);
+    }
+}
+
+fn direct_runtime_dependency_ids(
+    target: ComponentTaskSpec,
+    host_os: Os,
+    host_locality: Locality,
+    submitted: &[(ComponentTaskSpec, String)],
+) -> Vec<String> {
+    component_runtime_prerequisites(target.component_id, target.kind, host_os, host_locality)
+        .into_iter()
+        .filter_map(|dep| {
+            submitted
+                .iter()
+                .find(|(spec, _)| *spec == dep)
+                .map(|(_, task_id)| task_id.clone())
+        })
+        .collect()
+}
+
 fn component_task_resources(
     component_id: ComponentId,
     host_id: &str,
     kind: StepKind,
+    host_os: Os,
+    host_locality: Locality,
 ) -> Vec<DeploymentTaskResource> {
     let mut resources = Vec::new();
     if !matches!(kind, StepKind::Verify) {
@@ -277,7 +545,7 @@ fn component_task_resources(
     if component_needs_download_slot(component_id, kind) {
         resources.push(DeploymentTaskResource::GlobalDownloadSlot);
     }
-    if component_needs_package_manager(component_id, kind) {
+    if component_needs_package_manager(component_id, kind, host_os, host_locality) {
         resources.push(DeploymentTaskResource::PackageManager {
             host_id: host_id.to_string(),
         });
@@ -295,10 +563,394 @@ fn component_needs_download_slot(component_id: ComponentId, kind: StepKind) -> b
     )
 }
 
-fn component_needs_package_manager(component_id: ComponentId, kind: StepKind) -> bool {
-    (component_id == ComponentId::NoVnc
-        && matches!(kind, StepKind::EnsureInstalled | StepKind::ForceInstall))
-        || (component_id == ComponentId::Qq && kind == StepKind::EnsureDependencies)
+fn component_needs_package_manager(
+    component_id: ComponentId,
+    kind: StepKind,
+    host_os: Os,
+    _host_locality: Locality,
+) -> bool {
+    if host_os != Os::Linux {
+        return false;
+    }
+    match component_id {
+        ComponentId::NoVnc => matches!(
+            kind,
+            StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Uninstall
+        ),
+        ComponentId::Qq => kind == StepKind::EnsureDependencies,
+        _ => false,
+    }
+}
+
+fn component_action_cancellable(
+    component_id: ComponentId,
+    kind: StepKind,
+    host_os: Os,
+    host_locality: Locality,
+) -> bool {
+    !component_needs_package_manager(component_id, kind, host_os, host_locality)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SystemPackagePrerequisite {
+    ArchiveTool {
+        command: &'static str,
+        package: &'static str,
+    },
+    QqDependencies,
+}
+
+impl SystemPackagePrerequisite {
+    fn package_group(&self) -> String {
+        match self {
+            Self::ArchiveTool { command, .. } => format!("archive_tool:{command}"),
+            Self::QqDependencies => "qq_dependencies".to_string(),
+        }
+    }
+
+    fn title(&self) -> String {
+        match self {
+            Self::ArchiveTool { command, .. } => format!("准备系统工具 {command}"),
+            Self::QqDependencies => "安装 QQ 系统依赖".to_string(),
+        }
+    }
+}
+
+fn component_package_prerequisites(
+    component_id: ComponentId,
+    kind: StepKind,
+    host_os: Os,
+) -> Vec<SystemPackagePrerequisite> {
+    if host_os != Os::Linux
+        || !matches!(
+            kind,
+            StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Update
+        )
+    {
+        return Vec::new();
+    }
+
+    match component_id {
+        ComponentId::NapCat => vec![SystemPackagePrerequisite::ArchiveTool {
+            command: "unzip",
+            package: "unzip",
+        }],
+        ComponentId::NodeJs | ComponentId::SnowLuma => {
+            vec![SystemPackagePrerequisite::ArchiveTool {
+                command: "tar",
+                package: "tar",
+            }]
+        }
+        ComponentId::Qq => vec![SystemPackagePrerequisite::QqDependencies],
+        _ => Vec::new(),
+    }
+}
+
+async fn submit_component_package_prerequisites(
+    component_id: ComponentId,
+    kind: StepKind,
+    host_id: &str,
+    host: Arc<dyn Host>,
+    state: &AppState,
+) -> Vec<String> {
+    let tasks = component_package_prerequisites(component_id, kind, host.os());
+    let mut submitted_ids = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        if system_package_prerequisite_is_satisfied(&task, host.as_ref()).await {
+            tracing::info!(
+                host_id,
+                package_group = %task.package_group(),
+                "skip satisfied system package prerequisite"
+            );
+            continue;
+        }
+        let id = submit_system_package_task(task, host_id, Arc::clone(&host), state).await;
+        submitted_ids.push(id);
+    }
+    submitted_ids
+}
+
+async fn system_package_prerequisite_is_satisfied(
+    task: &SystemPackagePrerequisite,
+    host: &dyn Host,
+) -> bool {
+    match task {
+        SystemPackagePrerequisite::ArchiveTool { command, .. } => host.command_exists(command).await,
+        SystemPackagePrerequisite::QqDependencies => {
+            let manifest = ncd_component::qq_deps::qq_qqnt_dependencies_v3_2_25();
+            let detector = ncd_component::qq_deps::QqDependencyDetector::new(manifest);
+            match detector.detect(host, None).await {
+                Ok(report) => report.missing.is_empty(),
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        "QQ dependency pre-detect failed; submitting system package task"
+                    );
+                    false
+                }
+            }
+        }
+    }
+}
+
+async fn submit_system_package_task(
+    task: SystemPackagePrerequisite,
+    host_id: &str,
+    host: Arc<dyn Host>,
+    state: &AppState,
+) -> String {
+    let package_group = task.package_group();
+    let task_id = Uuid::new_v4().to_string();
+    let server_id = host_id.strip_prefix("remote:").map(str::to_string);
+    let server_manager = Arc::clone(&state.server_manager);
+    let deployment_tasks = state.deployment_tasks.clone();
+    let host_id_owned = host_id.to_string();
+    let title = task.title();
+    let resources = vec![
+        DeploymentTaskResource::PackageManager {
+            host_id: host_id_owned.clone(),
+        },
+        DeploymentTaskResource::InstallTarget {
+            host_id: host_id_owned.clone(),
+            target: format!("system_package:{package_group}"),
+        },
+    ];
+    deployment_tasks
+        .submit(DeploymentTaskRequest {
+            task_id: task_id.clone(),
+            kind: DeploymentTaskKind::SystemPackage {
+                package_group: package_group.clone(),
+            },
+            host_id: host_id_owned.clone(),
+            title,
+            resources,
+            depends_on: vec![],
+            dedupe_key: Some(format!("system-package:{host_id}:{package_group}")),
+            cancellable: false,
+            runner: Box::new(move |task_ctx| {
+                Box::pin(async move {
+                    if let Some(id) = server_id {
+                        let task_for_run = task.clone();
+                        server_manager
+                            .with_isolated_connection(&id, move |iso_host| {
+                                let task_ctx = task_ctx.clone();
+                                Box::pin(async move {
+                                    Ok(run_system_package_task(
+                                        task_for_run,
+                                        iso_host.as_ref(),
+                                        task_ctx,
+                                    )
+                                    .await)
+                                })
+                            })
+                            .await
+                            .unwrap_or_else(DeploymentTaskRunResult::failed)
+                    } else {
+                        run_system_package_task(task, host.as_ref(), task_ctx).await
+                    }
+                })
+            }),
+        })
+        .await
+}
+
+async fn run_system_package_task(
+    task: SystemPackagePrerequisite,
+    host: &dyn Host,
+    task_ctx: DeploymentTaskContext,
+) -> DeploymentTaskRunResult {
+    match task {
+        SystemPackagePrerequisite::ArchiveTool { command, package } => {
+            ensure_archive_tool_task(command, package, host, task_ctx).await
+        }
+        SystemPackagePrerequisite::QqDependencies => {
+            install_qq_dependencies_task(host, Vec::new(), None, task_ctx).await
+        }
+    }
+}
+
+async fn push_task_progress(task_ctx: &DeploymentTaskContext, kind: ProgressKind) {
+    task_ctx.push_progress(ProgressEvent::new(kind)).await;
+}
+
+async fn ensure_archive_tool_task(
+    command: &str,
+    package: &str,
+    host: &dyn Host,
+    task_ctx: DeploymentTaskContext,
+) -> DeploymentTaskRunResult {
+    push_task_progress(&task_ctx, ProgressKind::Started { total_steps: 1 }).await;
+    push_task_progress(
+        &task_ctx,
+        ProgressKind::StepBegin {
+            step: 1,
+            message: format!("检查系统工具 {command}"),
+        },
+    )
+    .await;
+
+    if host.command_exists(command).await {
+        push_task_progress(
+            &task_ctx,
+            ProgressKind::Log {
+                level: ProgressLogLevel::Info,
+                message: format!("{command} 已可用"),
+            },
+        )
+        .await;
+        push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: true }).await;
+        push_task_progress(&task_ctx, ProgressKind::Finished { ok: true }).await;
+        return DeploymentTaskRunResult::ok(format!("{command} 已就绪"));
+    }
+
+    let Some(pm) = SystemPackageManager::detect(host).await else {
+        let msg = format!("远端缺少 {command} 且未识别到包管理器，请手动安装 {package} 后重试");
+        push_task_progress(
+            &task_ctx,
+            ProgressKind::Log {
+                level: ProgressLogLevel::Error,
+                message: msg.clone(),
+            },
+        )
+        .await;
+        push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: false }).await;
+        push_task_progress(&task_ctx, ProgressKind::Finished { ok: false }).await;
+        return DeploymentTaskRunResult::failed(msg);
+    };
+
+    let access = ncd_host::remote::probe_sudo(host).await;
+    let has_password = host.has_elevation_password().await;
+    let elevation_ok = matches!(
+        access,
+        ncd_host::remote::SudoAccess::RootAlready | ncd_host::remote::SudoAccess::Passwordless
+    ) || has_password;
+    if !elevation_ok {
+        let msg = format!(
+            "安装 {package} 需要 sudo 密码，请在远端主机配置中保存 sudo 密码，或手动执行 sudo {} 后重试",
+            pm.install_hint(package)
+        );
+        push_task_progress(
+            &task_ctx,
+            ProgressKind::Log {
+                level: ProgressLogLevel::Error,
+                message: msg.clone(),
+            },
+        )
+        .await;
+        push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: false }).await;
+        push_task_progress(&task_ctx, ProgressKind::Finished { ok: false }).await;
+        return DeploymentTaskRunResult::failed(msg);
+    }
+
+    let install_line = pm.install_command(package);
+    push_task_progress(
+        &task_ctx,
+        ProgressKind::Log {
+            level: ProgressLogLevel::Info,
+            message: format!("通过 {} 安装 {package}", pm.binary()),
+        },
+    )
+    .await;
+    let out = host
+        .run_to_string(
+            HostCommand::new("sh")
+                .arg("-c")
+                .arg(&install_line)
+                .elevated()
+                .timeout(Duration::from_secs(180)),
+        )
+        .await;
+    match out {
+        Ok(out) if out.success() && host.command_exists(command).await => {
+            push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: true }).await;
+            push_task_progress(&task_ctx, ProgressKind::Finished { ok: true }).await;
+            DeploymentTaskRunResult::ok(format!("{command} 已安装"))
+        }
+        Ok(out) => {
+            let msg = format!(
+                "安装 {package} 后仍无法找到 {command}: exit={:?} stderr={}",
+                out.exit_code,
+                out.stderr.trim()
+            );
+            push_task_progress(
+                &task_ctx,
+                ProgressKind::Log {
+                    level: ProgressLogLevel::Error,
+                    message: msg.clone(),
+                },
+            )
+            .await;
+            push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: false }).await;
+            push_task_progress(&task_ctx, ProgressKind::Finished { ok: false }).await;
+            DeploymentTaskRunResult::failed(msg)
+        }
+        Err(err) => {
+            let msg = format!("安装 {package} 失败: {err}");
+            push_task_progress(
+                &task_ctx,
+                ProgressKind::Log {
+                    level: ProgressLogLevel::Error,
+                    message: msg.clone(),
+                },
+            )
+            .await;
+            push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: false }).await;
+            push_task_progress(&task_ctx, ProgressKind::Finished { ok: false }).await;
+            DeploymentTaskRunResult::failed(msg)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SystemPackageManager {
+    Apt,
+    Dnf,
+    Yum,
+    Apk,
+    Pacman,
+}
+
+impl SystemPackageManager {
+    const ALL: &'static [Self] = &[Self::Apt, Self::Dnf, Self::Yum, Self::Apk, Self::Pacman];
+
+    async fn detect(host: &dyn Host) -> Option<Self> {
+        for pm in Self::ALL {
+            if host.command_exists(pm.binary()).await {
+                return Some(*pm);
+            }
+        }
+        None
+    }
+
+    fn binary(self) -> &'static str {
+        match self {
+            Self::Apt => "apt-get",
+            Self::Dnf => "dnf",
+            Self::Yum => "yum",
+            Self::Apk => "apk",
+            Self::Pacman => "pacman",
+        }
+    }
+
+    fn install_command(self, package: &str) -> String {
+        match self {
+            Self::Apt => format!("apt-get update && apt-get install -y {package}"),
+            Self::Dnf => format!("dnf install -y {package}"),
+            Self::Yum => format!("yum install -y {package}"),
+            Self::Apk => format!("apk add --no-cache {package}"),
+            Self::Pacman => format!("pacman -Sy --noconfirm {package}"),
+        }
+    }
+
+    fn install_hint(self, package: &str) -> String {
+        match self {
+            Self::Apt => format!("apt-get install -y {package}"),
+            Self::Dnf => format!("dnf install -y {package}"),
+            Self::Yum => format!("yum install -y {package}"),
+            Self::Apk => format!("apk add {package}"),
+            Self::Pacman => format!("pacman -S {package}"),
+        }
+    }
 }
 
 /// 6 个组件元数据按 Framework → RuntimeDep → SelfApp 顺序返回
@@ -606,9 +1258,235 @@ fn data_root_to_host_path(data_root: &std::path::Path, os: ncd_host::Os) -> Host
     }
 }
 
+async fn install_qq_dependencies_task(
+    host: &dyn Host,
+    packages: Vec<String>,
+    sudo_password: Option<String>,
+    task_ctx: DeploymentTaskContext,
+) -> DeploymentTaskRunResult {
+    if host.os() != Os::Linux {
+        return DeploymentTaskRunResult::failed(
+            "QQ dependencies installation is only supported on Linux",
+        );
+    }
+
+    push_task_progress(&task_ctx, ProgressKind::Started { total_steps: 1 }).await;
+    push_task_progress(
+        &task_ctx,
+        ProgressKind::StepBegin {
+            step: 1,
+            message: "安装 QQ 系统依赖".into(),
+        },
+    )
+    .await;
+
+    let packages = if packages.is_empty() {
+        push_task_progress(
+            &task_ctx,
+            ProgressKind::Log {
+                level: ProgressLogLevel::Info,
+                message: "检测 QQ 系统依赖".into(),
+            },
+        )
+        .await;
+        let manifest = ncd_component::qq_deps::qq_qqnt_dependencies_v3_2_25();
+        let detector = ncd_component::qq_deps::QqDependencyDetector::new(manifest);
+        match detector.detect(host, None).await {
+            Ok(report) => report.missing.into_iter().map(|p| p.name).collect(),
+            Err(err) => {
+                let msg = format!("检测 QQ 系统依赖失败: {err}");
+                push_task_progress(
+                    &task_ctx,
+                    ProgressKind::Log {
+                        level: ProgressLogLevel::Error,
+                        message: msg.clone(),
+                    },
+                )
+                .await;
+                push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: false }).await;
+                push_task_progress(&task_ctx, ProgressKind::Finished { ok: false }).await;
+                return DeploymentTaskRunResult::failed(msg);
+            }
+        }
+    } else {
+        packages
+    };
+
+    if packages.is_empty() {
+        push_task_progress(
+            &task_ctx,
+            ProgressKind::Log {
+                level: ProgressLogLevel::Info,
+                message: "QQ 系统依赖已满足".into(),
+            },
+        )
+        .await;
+        push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: true }).await;
+        push_task_progress(&task_ctx, ProgressKind::Finished { ok: true }).await;
+        return DeploymentTaskRunResult::ok("QQ 系统依赖已满足");
+    }
+
+    push_task_progress(
+        &task_ctx,
+        ProgressKind::Log {
+            level: ProgressLogLevel::Info,
+            message: format!(
+                "缺失 {} 个 QQ 系统依赖: {}",
+                packages.len(),
+                packages.join(", ")
+            ),
+        },
+    )
+    .await;
+
+    let (mut ctx, mut rx) = ncd_component::ActionCtx::new();
+    let task_ctx_for_progress = task_ctx.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(progress_event) = rx.recv().await {
+            task_ctx_for_progress.push_progress(progress_event).await;
+        }
+    });
+
+    let installer = ncd_component::qq_deps::QqDependencyInstaller;
+    let result = installer
+        .install(host, packages, sudo_password.as_deref(), &mut ctx)
+        .await;
+
+    match result {
+        Ok(result) if result.elevation_required => {
+            let msg = "安装 QQ 系统依赖需要 sudo 密码，请在远端主机配置中保存 sudo 密码后重试"
+                .to_string();
+            push_task_progress(
+                &task_ctx,
+                ProgressKind::Log {
+                    level: ProgressLogLevel::Error,
+                    message: msg.clone(),
+                },
+            )
+            .await;
+            push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: false }).await;
+            push_task_progress(&task_ctx, ProgressKind::Finished { ok: false }).await;
+            DeploymentTaskRunResult::failed(msg)
+        }
+        Ok(result) if result.success => {
+            push_task_progress(
+                &task_ctx,
+                ProgressKind::Log {
+                    level: ProgressLogLevel::Info,
+                    message: format!("QQ 系统依赖安装成功: {}", result.installed.join(", ")),
+                },
+            )
+            .await;
+            push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: true }).await;
+            push_task_progress(&task_ctx, ProgressKind::Finished { ok: true }).await;
+            DeploymentTaskRunResult::ok(format!("已安装 {} 个 QQ 系统依赖", result.installed.len()))
+        }
+        Ok(result) => {
+            let failed_list = result
+                .failed
+                .iter()
+                .map(|f| format!("{}: {}", f.name, f.reason))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let msg = if failed_list.is_empty() {
+                "QQ 系统依赖安装失败".to_string()
+            } else {
+                format!("部分 QQ 系统依赖安装失败: {failed_list}")
+            };
+            push_task_progress(
+                &task_ctx,
+                ProgressKind::Log {
+                    level: ProgressLogLevel::Error,
+                    message: msg.clone(),
+                },
+            )
+            .await;
+            push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: false }).await;
+            push_task_progress(&task_ctx, ProgressKind::Finished { ok: false }).await;
+            DeploymentTaskRunResult::failed(msg)
+        }
+        Err(err) => {
+            let msg = format!("安装 QQ 系统依赖失败: {err}");
+            push_task_progress(
+                &task_ctx,
+                ProgressKind::Log {
+                    level: ProgressLogLevel::Error,
+                    message: msg.clone(),
+                },
+            )
+            .await;
+            push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok: false }).await;
+            push_task_progress(&task_ctx, ProgressKind::Finished { ok: false }).await;
+            DeploymentTaskRunResult::failed(msg)
+        }
+    }
+}
+
+async fn run_qq_dependency_install_for_command(
+    host: &dyn Host,
+    packages: Vec<String>,
+    sudo_password: Option<String>,
+    task_ctx: DeploymentTaskContext,
+) -> Result<InstallDependenciesResult, String> {
+    push_task_progress(&task_ctx, ProgressKind::Started { total_steps: 1 }).await;
+    push_task_progress(
+        &task_ctx,
+        ProgressKind::StepBegin {
+            step: 1,
+            message: "安装 QQ 系统依赖".into(),
+        },
+    )
+    .await;
+    push_task_progress(
+        &task_ctx,
+        ProgressKind::Log {
+            level: ProgressLogLevel::Info,
+            message: if packages.is_empty() {
+                "安装 QQ 系统依赖: 未指定包列表".into()
+            } else {
+                format!("安装 QQ 系统依赖: {}", packages.join(", "))
+            },
+        },
+    )
+    .await;
+
+    let (mut ctx, mut rx) = ncd_component::ActionCtx::new();
+    let task_ctx_for_progress = task_ctx.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(progress_event) = rx.recv().await {
+            task_ctx_for_progress.push_progress(progress_event).await;
+        }
+    });
+
+    let installer = ncd_component::qq_deps::QqDependencyInstaller;
+    let result = installer
+        .install(host, packages, sudo_password.as_deref(), &mut ctx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let ok = result.success && !result.elevation_required;
+    if ok {
+        push_task_progress(
+            &task_ctx,
+            ProgressKind::Log {
+                level: ProgressLogLevel::Info,
+                message: format!("QQ 系统依赖安装成功: {}", result.installed.join(", ")),
+            },
+        )
+        .await;
+    }
+    push_task_progress(&task_ctx, ProgressKind::StepEnd { step: 1, ok }).await;
+    push_task_progress(&task_ctx, ProgressKind::Finished { ok }).await;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn component_spec(component_id: ComponentId, kind: StepKind) -> ComponentTaskSpec {
+        ComponentTaskSpec { component_id, kind }
+    }
 
     /// catalog 顺序 + 元素数量必须稳定:前端按数组顺序渲染卡片
     #[test]
@@ -633,6 +1511,262 @@ mod tests {
                 ComponentId::DesktopSelf,
             ]
         );
+    }
+
+    #[test]
+    fn component_runtime_prerequisites_match_native_runtime_chains() {
+        assert_eq!(
+            component_runtime_prerequisites(
+                ComponentId::NapCat,
+                StepKind::EnsureInstalled,
+                Os::Windows,
+                Locality::Local,
+            ),
+            vec![component_spec(ComponentId::Qq, StepKind::EnsureInstalled)]
+        );
+        assert_eq!(
+            component_runtime_prerequisites(
+                ComponentId::SnowLuma,
+                StepKind::EnsureInstalled,
+                Os::Windows,
+                Locality::Local,
+            ),
+            vec![component_spec(ComponentId::Qq, StepKind::EnsureInstalled)]
+        );
+        assert_eq!(
+            component_runtime_prerequisites(
+                ComponentId::NapCat,
+                StepKind::EnsureInstalled,
+                Os::Linux,
+                Locality::Remote,
+            ),
+            vec![component_spec(ComponentId::Qq, StepKind::EnsureInstalled)]
+        );
+        assert_eq!(
+            component_runtime_prerequisites(
+                ComponentId::SnowLuma,
+                StepKind::EnsureInstalled,
+                Os::Linux,
+                Locality::Remote,
+            ),
+            vec![
+                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
+                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
+                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
+            ]
+        );
+    }
+
+    #[test]
+    fn component_runtime_prerequisites_only_apply_to_install_like_actions() {
+        for kind in [StepKind::Verify, StepKind::Uninstall, StepKind::EnsureDependencies] {
+            assert!(
+                component_runtime_prerequisites(
+                    ComponentId::SnowLuma,
+                    kind,
+                    Os::Linux,
+                    Locality::Remote,
+                )
+                .is_empty(),
+                "{kind:?} must not auto-submit runtime prerequisites"
+            );
+        }
+    }
+
+    #[test]
+    fn force_install_keeps_runtime_prerequisites_as_ensure_installed() {
+        assert_eq!(
+            component_runtime_prerequisites(
+                ComponentId::SnowLuma,
+                StepKind::ForceInstall,
+                Os::Linux,
+                Locality::Remote,
+            ),
+            vec![
+                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
+                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
+                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
+            ]
+        );
+    }
+
+    #[test]
+    fn update_keeps_runtime_prerequisites_as_ensure_installed() {
+        assert_eq!(
+            component_runtime_prerequisites(
+                ComponentId::SnowLuma,
+                StepKind::Update,
+                Os::Linux,
+                Locality::Remote,
+            ),
+            vec![
+                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
+                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
+                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
+            ]
+        );
+        assert_eq!(
+            component_runtime_prerequisites(
+                ComponentId::NapCat,
+                StepKind::Update,
+                Os::Windows,
+                Locality::Local,
+            ),
+            vec![component_spec(ComponentId::Qq, StepKind::EnsureInstalled)]
+        );
+    }
+
+    #[test]
+    fn collected_snowluma_remote_prerequisites_are_deduped_in_dependency_order() {
+        let chain = collect_component_runtime_prerequisites(
+            component_spec(ComponentId::SnowLuma, StepKind::EnsureInstalled),
+            Os::Linux,
+            Locality::Remote,
+        );
+
+        assert_eq!(
+            chain,
+            vec![
+                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
+                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
+                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
+            ]
+        );
+    }
+
+    #[test]
+    fn direct_runtime_dependency_ids_return_only_direct_component_tasks() {
+        let submitted = vec![
+            (
+                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
+                "node-task".to_string(),
+            ),
+            (
+                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
+                "qq-task".to_string(),
+            ),
+            (
+                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
+                "novnc-task".to_string(),
+            ),
+        ];
+
+        let ids = direct_runtime_dependency_ids(
+            component_spec(ComponentId::SnowLuma, StepKind::EnsureInstalled),
+            Os::Linux,
+            Locality::Remote,
+            &submitted,
+        );
+
+        assert_eq!(ids, vec!["node-task", "qq-task", "novnc-task"]);
+    }
+
+    #[test]
+    fn linux_archive_component_actions_create_visible_package_prerequisites() {
+        assert_eq!(
+            component_package_prerequisites(
+                ComponentId::NapCat,
+                StepKind::EnsureInstalled,
+                Os::Linux
+            ),
+            vec![SystemPackagePrerequisite::ArchiveTool {
+                command: "unzip",
+                package: "unzip",
+            }]
+        );
+        assert_eq!(
+            component_package_prerequisites(ComponentId::NodeJs, StepKind::Update, Os::Linux),
+            vec![SystemPackagePrerequisite::ArchiveTool {
+                command: "tar",
+                package: "tar",
+            }]
+        );
+        assert!(
+            component_package_prerequisites(
+                ComponentId::NapCat,
+                StepKind::EnsureInstalled,
+                Os::Windows
+            )
+            .is_empty()
+        );
+        assert!(
+            component_package_prerequisites(ComponentId::NapCat, StepKind::Verify, Os::Linux)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn linux_qq_install_creates_dependency_prerequisite() {
+        assert_eq!(
+            component_package_prerequisites(ComponentId::Qq, StepKind::ForceInstall, Os::Linux),
+            vec![SystemPackagePrerequisite::QqDependencies]
+        );
+    }
+
+    #[test]
+    fn component_package_manager_resources_cover_direct_pkg_commands_only() {
+        let resources = component_task_resources(
+            ComponentId::NoVnc,
+            "remote:a",
+            StepKind::Uninstall,
+            Os::Linux,
+            Locality::Remote,
+        );
+        assert!(resources.contains(&DeploymentTaskResource::PackageManager {
+            host_id: "remote:a".to_string(),
+        }));
+
+        let resources = component_task_resources(
+            ComponentId::NapCat,
+            "remote:a",
+            StepKind::EnsureInstalled,
+            Os::Linux,
+            Locality::Remote,
+        );
+        assert!(
+            !resources.contains(&DeploymentTaskResource::PackageManager {
+                host_id: "remote:a".to_string(),
+            })
+        );
+
+        let resources = component_task_resources(
+            ComponentId::Qq,
+            "remote:a",
+            StepKind::EnsureDependencies,
+            Os::Linux,
+            Locality::Remote,
+        );
+        assert!(resources.contains(&DeploymentTaskResource::PackageManager {
+            host_id: "remote:a".to_string(),
+        }));
+    }
+
+    #[test]
+    fn component_cancellable_matches_safe_runtime_stop_support() {
+        assert!(!component_action_cancellable(
+            ComponentId::NoVnc,
+            StepKind::EnsureInstalled,
+            Os::Linux,
+            Locality::Remote,
+        ));
+        assert!(!component_action_cancellable(
+            ComponentId::Qq,
+            StepKind::EnsureDependencies,
+            Os::Linux,
+            Locality::Remote,
+        ));
+        assert!(component_action_cancellable(
+            ComponentId::NapCat,
+            StepKind::EnsureInstalled,
+            Os::Linux,
+            Locality::Remote,
+        ));
+        assert!(component_action_cancellable(
+            ComponentId::Qq,
+            StepKind::EnsureInstalled,
+            Os::Linux,
+            Locality::Remote,
+        ));
     }
 
     /// catalog 中每个 ComponentInfo 的 supported_targets 必须与对应
@@ -746,37 +1880,103 @@ pub async fn install_qq_dependencies(
             .unwrap_or("<none>")
     );
 
-    // 预判:没有可用密码时先探查 sudo 能力,没有免密 sudo 也没有缓存密码就直接
-    // 返回 elevation_required,避免 installer 在毫无成功可能时执行安装
-    if effective_password.is_none() {
-        let access = ncd_host::remote::probe_sudo(host.as_ref()).await;
-        if matches!(access, ncd_host::remote::SudoAccess::PasswordRequired) {
-            tracing::info!(
-                "[install_qq_dependencies] no password available, returning elevation_required"
-            );
-            return Ok(InstallDependenciesResult {
-                success: false,
-                installed: vec![],
-                failed: vec![],
-                elevation_required: true,
-            });
-        }
+    let (tx, rx) = oneshot::channel::<Result<InstallDependenciesResult, String>>();
+    let task_id = Uuid::new_v4().to_string();
+    let requested_task_id = task_id.clone();
+    let server_id = host_id.strip_prefix("remote:").map(str::to_string);
+    let server_manager = Arc::clone(&state.server_manager);
+    let local_host = if server_id.is_none() {
+        Some(host)
+    } else {
+        None
+    };
+    let submitted = state
+        .deployment_tasks
+        .submit(DeploymentTaskRequest {
+            task_id: task_id.clone(),
+            kind: DeploymentTaskKind::SystemPackage {
+                package_group: "qq_dependencies".to_string(),
+            },
+            host_id: host_id.clone(),
+            title: "安装 QQ 系统依赖".to_string(),
+            resources: vec![
+                DeploymentTaskResource::PackageManager {
+                    host_id: host_id.clone(),
+                },
+                DeploymentTaskResource::InstallTarget {
+                    host_id: host_id.clone(),
+                    target: "system_package:qq_dependencies".to_string(),
+                },
+            ],
+            depends_on: vec![],
+            dedupe_key: Some(format!("system-package:{host_id}:qq_dependencies")),
+            cancellable: false,
+            runner: Box::new(move |task_ctx| {
+                Box::pin(async move {
+                    let result = if let Some(id) = server_id {
+                        let packages = packages.clone();
+                        let effective_password = effective_password.clone();
+                        server_manager
+                            .with_isolated_connection(&id, move |iso_host| {
+                                let task_ctx = task_ctx.clone();
+                                Box::pin(async move {
+                                    run_qq_dependency_install_for_command(
+                                        iso_host.as_ref(),
+                                        packages,
+                                        effective_password,
+                                        task_ctx,
+                                    )
+                                    .await
+                                })
+                            })
+                            .await
+                    } else if let Some(host) = local_host {
+                        run_qq_dependency_install_for_command(
+                            host.as_ref(),
+                            packages,
+                            effective_password,
+                            task_ctx,
+                        )
+                        .await
+                    } else {
+                        Err("无法解析 QQ 依赖安装目标主机".to_string())
+                    };
+
+                    let run_result = match &result {
+                        Ok(result) if result.success => {
+                            DeploymentTaskRunResult::ok("QQ 系统依赖已就绪")
+                        }
+                        Ok(result) if result.elevation_required => {
+                            DeploymentTaskRunResult::failed("安装 QQ 系统依赖需要 sudo 密码")
+                        }
+                        Ok(result) => {
+                            let failed = result
+                                .failed
+                                .iter()
+                                .map(|f| format!("{}: {}", f.name, f.reason))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            DeploymentTaskRunResult::failed(if failed.is_empty() {
+                                "QQ 系统依赖安装失败".to_string()
+                            } else {
+                                format!("部分 QQ 系统依赖安装失败: {failed}")
+                            })
+                        }
+                        Err(err) => DeploymentTaskRunResult::failed(err.clone()),
+                    };
+                    let _ = tx.send(result);
+                    run_result
+                })
+            }),
+        })
+        .await;
+
+    if submitted != requested_task_id {
+        return Err("该主机已有 QQ 系统依赖安装任务在队列中".to_string());
     }
 
-    let (mut ctx, _rx) = ncd_component::ActionCtx::new();
-    let installer = ncd_component::qq_deps::QqDependencyInstaller;
-
-    let result = installer
-        .install(
-            host.as_ref(),
-            packages,
-            effective_password.as_deref(),
-            &mut ctx,
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(result)
+    rx.await
+        .map_err(|_| "QQ 系统依赖安装任务异常结束".to_string())?
 }
 
 /// 记住远端服务器的 sudo 密码(用于提权操作)

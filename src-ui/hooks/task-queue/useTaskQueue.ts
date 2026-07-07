@@ -4,6 +4,7 @@ import {
     componentActionTitle,
     dockerDeployTitle,
     dockerInstallTitle,
+    systemPackageTitle,
 } from '../../core/domain/task-queue/labels';
 import type { TaskQueueItem, TaskQueueSnapshot, TaskQueueStatus } from '../../core/domain/task-queue/types';
 import {
@@ -118,6 +119,20 @@ function taskToItem(
                 cancellable: task.cancellable,
             };
         }
+        case 'system_package':
+            return {
+                id: task.taskId,
+                kind: 'system_package',
+                title: systemPackageTitle(task.kind.package_group, task.title),
+                hostId: task.hostId,
+                hostLabel,
+                status,
+                startedAt,
+                endedAt,
+                progress,
+                logHint: task.message ?? null,
+                cancellable: task.cancellable,
+            };
         case 'docker_install':
             return {
                 id: task.taskId,

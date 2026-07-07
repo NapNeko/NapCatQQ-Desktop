@@ -43,8 +43,7 @@ use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
 /// 腾讯 QQ Windows 版实时版本 / 下载地址清单(legacy Urls.QQ_Version)
-const QQ_PCCONFIG_URL: &str =
-    "https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json";
+const QQ_PCCONFIG_URL: &str = "https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json";
 
 /// Windows QQNT 安装信息所在注册表子键(legacy PathFunc.get_qq_path)
 const QQ_REGISTRY_SUBKEY: &str = r"SOFTWARE\WOW6432Node\Tencent\QQNT";
@@ -121,10 +120,7 @@ impl QQComponent {
             PackageFormat::Deb => "deb",
             PackageFormat::Rpm => "rpm",
         };
-        Ok(format!(
-            "linuxqq_{}_{arch_str}.{ext}",
-            self.version
-        ))
+        Ok(format!("linuxqq_{}_{arch_str}.{ext}", self.version))
     }
 
     fn build_download_url(&self, pkg: PackageFormat, arch: Arch) -> Result<String, ActionError> {
@@ -173,6 +169,7 @@ impl QQComponent {
             return Ok(()); // Windows 不需要
         }
 
+        ctx.info("检测 QQ 系统依赖").await;
         let manifest = crate::qq_deps::qq_qqnt_dependencies_v3_2_25();
         let detector = crate::qq_deps::QqDependencyDetector::new(manifest);
         let report = detector.detect(host, None).await?;
@@ -183,8 +180,14 @@ impl QQComponent {
         }
 
         ctx.info(format!(
-            "发现 {} 个缺失依赖，开始安装",
-            report.missing.len()
+            "发现 {} 个缺失依赖: {}",
+            report.missing.len(),
+            report
+                .missing
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         ))
         .await;
 
@@ -286,11 +289,7 @@ impl Component for QQComponent {
         }
     }
 
-    async fn uninstall(
-        &self,
-        host: &dyn Host,
-        ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn uninstall(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         match host.os() {
             Os::Windows => self.uninstall_windows(host, ctx).await,
             _ => self.uninstall_linux(host, ctx).await,
@@ -350,10 +349,7 @@ impl Component for QQComponent {
 impl QQComponent {
     /// Linux detect:读 <install_base>/opt/QQ/resources/app/package.json
     /// 的 version 字段
-    async fn detect_linux(
-        &self,
-        host: &dyn Host,
-    ) -> Result<Option<DetectedVersion>, ActionError> {
+    async fn detect_linux(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
         let pkg_json = self.qq_package_json();
         if !host.exists(&pkg_json).await? {
             return Ok(None);
@@ -365,9 +361,8 @@ impl QQComponent {
             Err(e) => return Err(ActionError::Host(e)),
         };
 
-        let json: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
-            ActionError::detect_failed("qq", format!("parse package.json: {e}"))
-        })?;
+        let json: serde_json::Value = serde_json::from_slice(&bytes)
+            .map_err(|e| ActionError::detect_failed("qq", format!("parse package.json: {e}")))?;
 
         let ver = json
             .get("version")
@@ -383,12 +378,14 @@ impl QQComponent {
     }
 
     /// Linux install:rootless 下载 deb/rpm → 上传 → dpkg-deb -x / rpm2cpio 解包
-    async fn install_linux(
-        &self,
-        host: &dyn Host,
-        ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn install_linux(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
+        ctx.info(format!(
+            "准备安装 Linux QQ {} 到 {}",
+            self.version,
+            self.install_base_dir.as_posix()
+        ))
+        .await;
 
         // Step 1: 检测并安装系统依赖
         ctx.emit(ProgressKind::StepBegin {
@@ -406,7 +403,7 @@ impl QQComponent {
         })
         .await;
         let pkg_format = self.detect_package_format(host).await?;
-        ctx.info(format!("package format: {pkg_format:?}")).await;
+        ctx.info(format!("QQ 安装包格式: {pkg_format:?}")).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
         // Step 3:下载 QQ 包到本地
@@ -416,6 +413,7 @@ impl QQComponent {
         })
         .await;
         let url = self.build_download_url(pkg_format, host.arch())?;
+        ctx.info(format!("QQ 安装包下载地址: {url}")).await;
 
         // 准备远程路径
         host.create_dir_all(&self.tmp_dir).await?;
@@ -429,13 +427,16 @@ impl QQComponent {
         ));
 
         let mirrors = ncd_network::build_mirror_urls(&url, None);
+        ctx.info(format!("准备获取 QQ 安装包，候选镜像 {} 个", mirrors.len()))
+            .await;
         let mut remote_download_ok = false;
 
         // Layer 1: 尝试远程直接下载
         if host.locality() == ncd_host::Locality::Remote {
             for mirror_url in &mirrors {
                 if host.download_url(mirror_url, &remote_pkg).await.is_ok() {
-                    ctx.info("远程直接下载成功").await;
+                    ctx.info(format!("远端直接下载 QQ 安装包成功: {mirror_url}"))
+                        .await;
                     remote_download_ok = true;
                     break;
                 }
@@ -444,6 +445,7 @@ impl QQComponent {
 
         // Layer 2: fallback 到本地下载 → 上传
         if !remote_download_ok {
+            ctx.info("远端直接下载不可用，改为本机下载后上传").await;
             let local_tmp = std::env::temp_dir().join(format!(
                 "ncd-qq-{}-{}.{}",
                 self.version,
@@ -456,10 +458,18 @@ impl QQComponent {
 
             let helper = DownloadHelper::new()?;
             helper
-                .download_with_mirrors(&mirrors, &local_tmp, self.expected_sha256.as_deref(), ctx, 2)
+                .download_with_mirrors(
+                    &mirrors,
+                    &local_tmp,
+                    self.expected_sha256.as_deref(),
+                    ctx,
+                    2,
+                )
                 .await?;
 
             host.upload(&local_tmp, &remote_pkg).await?;
+            ctx.info(format!("QQ 安装包已上传到 {}", remote_pkg.as_posix()))
+                .await;
             let _ = tokio::fs::remove_file(&local_tmp).await;
         }
 
@@ -474,6 +484,7 @@ impl QQComponent {
         host.create_dir_all(&self.install_base_dir).await?;
         let install_base = self.install_base_dir.as_posix();
         let pkg_path = remote_pkg.as_posix();
+        ctx.info(format!("解包 QQ 安装包到 {install_base}")).await;
 
         let extract_cmd = match pkg_format {
             PackageFormat::Deb => HostCommand::new("dpkg-deb")
@@ -484,7 +495,8 @@ impl QQComponent {
                 // rpm2cpio <pkg> | (cd <install_base> && cpio -idm)
                 HostCommand::new("sh").arg("-c").arg(format!(
                     "rpm2cpio {} | (cd {} && cpio -idm)",
-                    shell_quote(pkg_path), shell_quote(install_base)
+                    shell_quote(pkg_path),
+                    shell_quote(install_base)
                 ))
             }
         };
@@ -492,15 +504,16 @@ impl QQComponent {
         if !out.success() {
             return Err(ActionError::install_step(
                 "extract_qq",
-                format!(
-                    "exit={:?} stderr={}",
-                    out.exit_code,
-                    out.stderr.trim()
-                ),
+                format!("exit={:?} stderr={}", out.exit_code, out.stderr.trim()),
             ));
         }
         // 清理远端安装包
         let _ = host.remove_file(&remote_pkg).await;
+        ctx.info(format!(
+            "Linux QQ 已安装到 {}",
+            self.qq_base_path().as_posix()
+        ))
+        .await;
         ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
@@ -537,7 +550,11 @@ impl QQComponent {
         let json_exists = host.exists(&pkg_json).await?;
 
         let mut report = VerifyReport::ok()
-            .with_check("qq executable exists", bin_exists, Some(format!("{qq_bin}")))
+            .with_check(
+                "qq executable exists",
+                bin_exists,
+                Some(format!("{qq_bin}")),
+            )
             .with_check(
                 "package.json exists",
                 json_exists,
@@ -562,11 +579,7 @@ impl QQComponent {
                     );
                 }
                 Err(e) => {
-                    report = report.with_check(
-                        "version detect",
-                        false,
-                        Some(format!("{e}")),
-                    );
+                    report = report.with_check("version detect", false, Some(format!("{e}")));
                 }
             }
         }
@@ -657,6 +670,7 @@ impl QQComponent {
         ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
+        ctx.info("准备获取 QQ Windows 安装器").await;
 
         // Step 1:拉 pcConfig.json 解析下载地址
         ctx.emit(ProgressKind::StepBegin {
@@ -694,6 +708,7 @@ impl QQComponent {
         })
         .await;
         let installer = local_exe.to_string_lossy().to_string();
+        ctx.info(format!("运行 QQ 静默安装器: {installer}")).await;
         let cmd = HostCommand::new(installer)
             .arg("/s")
             .timeout(std::time::Duration::from_secs(600));
@@ -711,6 +726,7 @@ impl QQComponent {
                 ),
             ));
         }
+        ctx.info("QQ Windows 静默安装完成").await;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
@@ -793,24 +809,20 @@ async fn fetch_windows_qq_release() -> Result<(String, String), ActionError> {
             url: QQ_PCCONFIG_URL.to_string(),
             reason: e.to_string(),
         })?;
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| ActionError::DownloadFailed {
-            url: QQ_PCCONFIG_URL.to_string(),
-            reason: e.to_string(),
-        })?;
+    let body = resp.text().await.map_err(|e| ActionError::DownloadFailed {
+        url: QQ_PCCONFIG_URL.to_string(),
+        reason: e.to_string(),
+    })?;
     parse_windows_qq_release(&body)
 }
 
 /// 从 pcConfig.json 文本解析 Windows 段的 version 与 x64 NSIS 安装包地址
 fn parse_windows_qq_release(body: &str) -> Result<(String, String), ActionError> {
-    let json: serde_json::Value = serde_json::from_str(body).map_err(|e| {
-        ActionError::install_step("parse_pcconfig", format!("invalid json: {e}"))
-    })?;
-    let win = json.get("Windows").ok_or_else(|| {
-        ActionError::install_step("parse_pcconfig", "missing Windows section")
-    })?;
+    let json: serde_json::Value = serde_json::from_str(body)
+        .map_err(|e| ActionError::install_step("parse_pcconfig", format!("invalid json: {e}")))?;
+    let win = json
+        .get("Windows")
+        .ok_or_else(|| ActionError::install_step("parse_pcconfig", "missing Windows section"))?;
     let version = win
         .get("version")
         .and_then(|v| v.as_str())
@@ -881,14 +893,18 @@ mod tests {
     #[test]
     fn package_filename_unsupported_arch_returns_error() {
         let c = comp();
-        let err = c.package_filename(PackageFormat::Deb, Arch::X86).unwrap_err();
+        let err = c
+            .package_filename(PackageFormat::Deb, Arch::X86)
+            .unwrap_err();
         assert!(matches!(err, ActionError::UnsupportedTarget { .. }));
     }
 
     #[test]
     fn download_url_format_matches_official() {
         let c = comp();
-        let url = c.build_download_url(PackageFormat::Deb, Arch::X86_64).unwrap();
+        let url = c
+            .build_download_url(PackageFormat::Deb, Arch::X86_64)
+            .unwrap();
         // 与官方 install.sh L640 完全一致
         assert_eq!(
             url,
@@ -899,7 +915,9 @@ mod tests {
     #[test]
     fn download_url_arm64_deb() {
         let c = comp();
-        let url = c.build_download_url(PackageFormat::Deb, Arch::Aarch64).unwrap();
+        let url = c
+            .build_download_url(PackageFormat::Deb, Arch::Aarch64)
+            .unwrap();
         assert_eq!(
             url,
             "https://dldir1.qq.com/qqfile/qq/QQNT/7516007c/linuxqq_3.2.25-45758_arm64.deb"
@@ -921,17 +939,28 @@ mod tests {
     #[test]
     fn supported_targets_include_windows_and_linux() {
         let c = comp();
-        assert!(c.supported_targets().contains(&(Os::Linux, Locality::Local)));
-        assert!(c.supported_targets().contains(&(Os::Linux, Locality::Remote)));
-        assert!(c.supported_targets().contains(&(Os::Windows, Locality::Local)));
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Linux, Locality::Local))
+        );
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Linux, Locality::Remote))
+        );
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Windows, Locality::Local))
+        );
     }
 
     #[test]
     fn info_lists_windows_local_in_supported_targets() {
         let info = QQComponent::info();
-        assert!(info.supported_targets.iter().any(|t| {
-            t.os == Os::Windows && t.locality == Locality::Local
-        }));
+        assert!(
+            info.supported_targets
+                .iter()
+                .any(|t| { t.os == Os::Windows && t.locality == Locality::Local })
+        );
     }
 
     #[test]
@@ -967,7 +996,8 @@ mod tests {
     #[test]
     fn parse_qqnt_cur_version_reads_config_json() {
         // 真实 versions/config.json 结构
-        let body = br#"{"baseVersion":"9.9.26-44343","curVersion":"9.9.26-44343","buildId":"44343"}"#;
+        let body =
+            br#"{"baseVersion":"9.9.26-44343","curVersion":"9.9.26-44343","buildId":"44343"}"#;
         assert_eq!(
             parse_json_string_field(body, "curVersion"),
             Some("9.9.26-44343".to_string())
@@ -976,8 +1006,14 @@ mod tests {
 
     #[test]
     fn parse_qqnt_cur_version_none_when_empty_or_missing() {
-        assert_eq!(parse_json_string_field(br#"{"curVersion":""}"#, "curVersion"), None);
-        assert_eq!(parse_json_string_field(br#"{"baseVersion":"x"}"#, "curVersion"), None);
+        assert_eq!(
+            parse_json_string_field(br#"{"curVersion":""}"#, "curVersion"),
+            None
+        );
+        assert_eq!(
+            parse_json_string_field(br#"{"baseVersion":"x"}"#, "curVersion"),
+            None
+        );
         assert_eq!(parse_json_string_field(b"not json", "curVersion"), None);
     }
 

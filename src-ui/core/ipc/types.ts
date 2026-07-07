@@ -300,6 +300,10 @@ type DomainEventBody =
         task: DeploymentTaskSnapshot;
     }
     | {
+        kind: 'deployment_task_removed';
+        task_id: string;
+    }
+    | {
         kind: 'desktop_log_appended';
         line: string;
     }

@@ -1,7 +1,7 @@
 // 任务队列列表项：按 kind 的图标与底衬（只用语义 token，适配亮/暗/Catppuccin）。
 
 import type { LucideIcon } from 'lucide-react';
-import { Box, Container, Download } from 'lucide-react';
+import { Box, Container, Download, Wrench } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
 import type { TaskQueueItem } from '../../core/domain/task-queue/types';
 
@@ -23,6 +23,13 @@ export const TASK_KIND_VISUAL: Record<TaskQueueItem['kind'], TaskKindVisual> = {
         tileSelected: 'bg-brand-soft ring-1 ring-inset ring-brand/25',
         tileIdle: 'bg-inset ring-1 ring-inset ring-border-subtle',
         glyphSelected: 'text-brand',
+        glyphIdle: 'text-text-secondary',
+    },
+    system_package: {
+        Icon: Wrench,
+        tileSelected: 'bg-success-soft ring-1 ring-inset ring-success/28',
+        tileIdle: 'bg-inset ring-1 ring-inset ring-border-subtle',
+        glyphSelected: 'text-success',
         glyphIdle: 'text-text-secondary',
     },
     docker_install: {

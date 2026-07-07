@@ -17,6 +17,9 @@ pub enum DeploymentTaskKind {
         component_id: String,
         action: String,
     },
+    SystemPackage {
+        package_group: String,
+    },
     DockerInstall,
     DockerImagePull {
         flavor: DockerFlavor,
@@ -70,6 +73,8 @@ pub struct DeploymentTaskSnapshot {
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dedupe_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<String>,
     #[serde(default)]
     pub resources: Vec<DeploymentTaskResource>,
     #[serde(default)]

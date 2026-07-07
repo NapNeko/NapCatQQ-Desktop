@@ -11,7 +11,12 @@ export function useDeploymentTaskBridge(): void {
     }, []);
 
     useDomainEvents((event) => {
-        if (event.kind !== 'deployment_task_changed') return;
-        deploymentTaskStore.applyTask(event.task);
+        if (event.kind === 'deployment_task_changed') {
+            deploymentTaskStore.applyTask(event.task);
+            return;
+        }
+        if (event.kind === 'deployment_task_removed') {
+            deploymentTaskStore.removeTask(event.task_id);
+        }
     });
 }

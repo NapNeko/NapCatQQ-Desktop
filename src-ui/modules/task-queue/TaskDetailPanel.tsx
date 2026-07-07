@@ -5,17 +5,20 @@ import { cn } from '../../shared/utils/cn';
 import { Badge, Button } from '../../shared/ui';
 import type { TaskQueueItem } from '../../core/domain/task-queue/types';
 import {
+    canCancelTaskItem,
     failureHint,
     formatElapsedLong,
     getTaskEndedAt,
     isActiveTaskStatus,
+    isRunningTaskItem,
+    isTerminalTaskStatus,
     kindBadgeTone,
     kindLabel,
     statusLabel,
     statusTone,
 } from '../../core/domain/task-queue/display';
 import { useNowMs } from '../../hooks/ui/useNowMs';
-import { Loader2, XCircle } from 'lucide-react';
+import { Loader2, Trash2, XCircle } from 'lucide-react';
 import { MotionIcon } from '../../shared/ui/motion';
 import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../components/progressView';
 import { DockerPullLayersPanel } from '../components/DockerPullLayersPanel';
@@ -94,6 +97,29 @@ export interface TaskDetailPanelProps {
 const LOG_SURFACE =
     'bg-[color-mix(in_srgb,var(--surface-canvas)_76%,var(--surface-inset)_24%)]';
 
+function stopButtonLabel(status: TaskQueueItem['status']): string {
+    switch (status) {
+        case 'pending':
+        case 'paused':
+            return '取消排队';
+        default:
+            return '强制停止';
+    }
+}
+
+function nonCancellableHint(kind: TaskQueueItem['kind']): string {
+    switch (kind) {
+        case 'system_package':
+            return '系统包管理器任务不能安全强停，避免留下 apt/dnf 锁或半安装状态。';
+        case 'docker_install':
+            return 'Docker 安装正在修改系统服务与包源，不能安全强停。';
+        case 'docker_deploy':
+            return '镜像拉取暂未接入可取消执行器。';
+        default:
+            return '该任务暂不支持强制停止。';
+    }
+}
+
 function StepLogBody({ item }: { item: TaskQueueItem }) {
     const progress = item.progress;
     if (!progress) {
@@ -139,7 +165,10 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
     const nowMs = useNowMs(ticking);
     const showStepLogs = shouldShowStepLogsInTaskDetail(item.kind);
     const dockerPullExpanded = item.kind === 'docker_deploy' && !showStepLogs;
-    const canCancel = item.cancellable === true && isActiveTaskStatus(item.status);
+    const active = isActiveTaskStatus(item.status);
+    const canCancel = canCancelTaskItem(item);
+    const running = isRunningTaskItem(item);
+    const canDelete = isTerminalTaskStatus(item.status);
 
     const handleCancel = () => {
         void deploymentTaskService.cancel(item.id).catch((err) => {
@@ -147,10 +176,16 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
         });
     };
 
+    const handleDelete = () => {
+        void deploymentTaskService.delete(item.id).catch((err) => {
+            console.error('[TaskQueue] delete failed:', err);
+        });
+    };
+
     return (
         <div className="flex h-full min-h-0 flex-1 flex-col">
             <div className="shrink-0 border-b border-border-subtle/70 px-4 py-4 sm:px-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                             <h2 className="font-display text-lg font-semibold leading-tight text-text">
@@ -177,11 +212,36 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                             </span>
                         </p>
                     </div>
-                    {canCancel && (
-                        <Button size="sm" variant="secondary" onClick={handleCancel}>
-                            <XCircle size={13} />
-                            取消
-                        </Button>
+                    {(active || canDelete) && (
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                            {running && item.cancellable !== true && (
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled
+                                    title={nonCancellableHint(item.kind)}
+                                >
+                                    <XCircle size={13} />
+                                    不可停止
+                                </Button>
+                            )}
+                            {canCancel && (
+                                <Button
+                                    size="sm"
+                                    variant={item.status === 'pending' || item.status === 'paused' ? 'secondary' : 'danger'}
+                                    onClick={handleCancel}
+                                >
+                                    <XCircle size={13} />
+                                    {stopButtonLabel(item.status)}
+                                </Button>
+                            )}
+                            {canDelete && (
+                                <Button size="sm" variant="ghost" onClick={handleDelete}>
+                                    <Trash2 size={13} />
+                                    删除
+                                </Button>
+                            )}
+                        </div>
                     )}
                 </div>
 

@@ -38,6 +38,14 @@ export function componentActionTitle(
     return `${name} · 完成`;
 }
 
+export function systemPackageTitle(packageGroup: string | undefined, fallback: string): string {
+    const group = packageGroup?.trim();
+    if (group === 'qq_dependencies') return '系统依赖 · QQ';
+    if (group === 'archive_tool:unzip') return '系统工具 · unzip';
+    if (group === 'archive_tool:tar') return '系统工具 · tar';
+    return fallback?.trim() || '系统依赖';
+}
+
 export function dockerInstallTitle(hostLabel: string): string {
     const label = hostLabel?.trim() || '远程主机';
     return `Docker · ${label}`;

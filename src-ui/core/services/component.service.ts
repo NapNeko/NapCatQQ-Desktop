@@ -69,7 +69,16 @@ export const componentService = {
     detectQqDependencies: async (
         hostId: string,
     ): Promise<QqDependencyReport> => {
-        return invoke<QqDependencyReport>('detect_qq_dependencies', { hostId });
+        if (isTauri) return invoke<QqDependencyReport>('detect_qq_dependencies', { hostId });
+        return withMockDelay(
+            {
+                satisfied: [],
+                missing: [],
+                distroInfo: { family: 'debian', name: 'Ubuntu', version: '24.04' },
+                installCommand: null,
+            } satisfies QqDependencyReport,
+            150,
+        );
     },
 
     // QQ 系统依赖安装（仅 Linux 远端）。
