@@ -65,6 +65,8 @@ export function draftFromBackendAndPrefs(
     const tqDraft = taskQueueCleanupDraftFromStored(backend.taskQueueCleanup);
     return {
         botLoginCheckIntervalMs: backend.botLoginCheckIntervalMs,
+        botOfflineWebHookNotice: backend.botOfflineWebHookNotice,
+        botOfflineEmailNotice: backend.botOfflineEmailNotice,
         performanceMonitorEnabled: backend.performanceMonitorEnabled,
         performanceMonitorIntervalMs: backend.performanceMonitorIntervalMs,
         githubPat: backend.githubPat,
@@ -97,6 +99,8 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
     );
     return {
         botLoginCheckIntervalMs: draft.botLoginCheckIntervalMs,
+        botOfflineWebHookNotice: draft.botOfflineWebHookNotice,
+        botOfflineEmailNotice: draft.botOfflineEmailNotice,
         performanceMonitorEnabled: draft.performanceMonitorEnabled,
         performanceMonitorIntervalMs: clampPerformanceMonitorIntervalMs(
             draft.performanceMonitorIntervalMs,
@@ -139,6 +143,8 @@ export function isSettingsDirty(
     const baseline = draftFromBackendAndPrefs(backend);
     return (
         draft.botLoginCheckIntervalMs !== baseline.botLoginCheckIntervalMs ||
+        draft.botOfflineWebHookNotice !== baseline.botOfflineWebHookNotice ||
+        draft.botOfflineEmailNotice !== baseline.botOfflineEmailNotice ||
         draft.performanceMonitorEnabled !== baseline.performanceMonitorEnabled ||
         draft.performanceMonitorIntervalMs !== baseline.performanceMonitorIntervalMs ||
         draft.githubPat !== baseline.githubPat ||

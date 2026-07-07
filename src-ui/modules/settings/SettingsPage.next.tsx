@@ -8,7 +8,10 @@ import { MotionIcon, infoToneMotion } from '../../shared/ui/motion';
 import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
 import { AppearanceTab } from './tabs/AppearanceTab';
+import { WindowTab } from './tabs/WindowTab';
 import { RuntimeTab } from './tabs/RuntimeTab';
+import { MonitoringTab } from './tabs/MonitoringTab';
+import { NotificationsTab } from './tabs/NotificationsTab';
 import { DataTab } from './tabs/DataTab';
 import { useDesktopLogViewer } from '../../hooks/diagnostics/useDesktopLogViewer';
 import { DesktopLogTab } from './tabs/DesktopLogTab';
@@ -64,7 +67,7 @@ export function SettingsPageNext() {
                     设置
                 </h1>
                 <p className="mt-1.5 text-[13px] text-text-secondary">
-                    外观与运行项修改后请保存；数据页中目录与导入导出可即时操作
+                    外观、窗口、运行与通知修改后请保存；数据页中目录与导入导出可即时操作
                 </p>
             </header>
 
@@ -80,10 +83,13 @@ export function SettingsPageNext() {
                             : 'sticky top-0 z-[5] shrink-0 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm'
                     }
                 >
-                    <div className="flex items-center gap-2">
-                        <TabsList className="shrink-0 border-b-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <TabsList className="scrollbar-hide min-w-0 shrink overflow-x-auto border-b-0">
                             <TabsTrigger value="appearance">外观</TabsTrigger>
+                            <TabsTrigger value="window">窗口</TabsTrigger>
                             <TabsTrigger value="runtime">运行</TabsTrigger>
+                            <TabsTrigger value="monitoring">监控</TabsTrigger>
+                            <TabsTrigger value="notifications">通知</TabsTrigger>
                             <TabsTrigger value="log">日志</TabsTrigger>
                             <TabsTrigger value="data">数据</TabsTrigger>
                             <TabsTrigger value="about">关于</TabsTrigger>
@@ -111,8 +117,20 @@ export function SettingsPageNext() {
                         <AppearanceTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
+                    <TabsContent value="window" className="pb-10 pt-7 focus-visible:outline-none">
+                        <WindowTab draft={draft} patchDraft={patchDraft} />
+                    </TabsContent>
+
                     <TabsContent value="runtime" className="pb-10 pt-7 focus-visible:outline-none">
                         <RuntimeTab draft={draft} patchDraft={patchDraft} />
+                    </TabsContent>
+
+                    <TabsContent value="monitoring" className="pb-10 pt-7 focus-visible:outline-none">
+                        <MonitoringTab draft={draft} patchDraft={patchDraft} />
+                    </TabsContent>
+
+                    <TabsContent value="notifications" className="pb-10 pt-7 focus-visible:outline-none">
+                        <NotificationsTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
                     <TabsContent

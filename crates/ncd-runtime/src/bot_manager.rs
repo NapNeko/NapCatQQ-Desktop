@@ -2025,7 +2025,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// - auth_refresh_period 30 min;auth_refresh_throttle 5s;http_timeout 5s
     /// - offline_auto_restart ← bot_cfg.bot.offline_auto_restart
     /// - offline_notice_enabled = bot_cfg.advanced.offline_notice
-    ///   && (settings.offline_webhook_notice || settings.offline_email_notice)
+    ///   App 级桌面通知总开关由注入的 OfflineNotifier 自行判断
     /// - 旧 Poller 先 dispose(取消其 CancellationToken 并触发 Drop 兜底)
     ///   再插入新实例,保证不会同时存在两个 Poller 抢同一 BotId 的事件
     ///   restart_handle 通过 Arc::clone(self) as Arc<dyn RestartHandle> 注入

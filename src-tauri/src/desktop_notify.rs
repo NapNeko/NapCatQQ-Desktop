@@ -3,13 +3,12 @@
 use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
-use ncd_runtime::{
-    BroadcastEventBus, DomainEvent, EventBus, EventFilter,
-    OfflineNoticeKind, OfflineNotifier,
-};
 use ncd_domain::DesktopNotifySettings;
-use ncd_domain::napcat_events::NapCatLoginInvalidationReason;
 use ncd_domain::ids::BotId;
+use ncd_domain::napcat_events::NapCatLoginInvalidationReason;
+use ncd_runtime::{
+    BroadcastEventBus, DomainEvent, EventBus, EventFilter, OfflineNoticeKind, OfflineNotifier,
+};
 use tauri::AppHandle;
 #[cfg(not(windows))]
 use tauri_plugin_notification::NotificationExt;
@@ -17,12 +16,14 @@ use tokio::sync::RwLock;
 
 pub struct TauriOfflineNotifier {
     app: OnceLock<AppHandle>,
+    flags: Arc<RwLock<DesktopNotifySettings>>,
 }
 
 impl TauriOfflineNotifier {
-    pub fn new() -> Arc<Self> {
+    pub fn new(flags: Arc<RwLock<DesktopNotifySettings>>) -> Arc<Self> {
         Arc::new(Self {
             app: OnceLock::new(),
+            flags,
         })
     }
 
@@ -75,15 +76,14 @@ impl TauriOfflineNotifier {
 #[async_trait]
 impl OfflineNotifier for TauriOfflineNotifier {
     async fn notify(&self, bot_id: &BotId, kind: OfflineNoticeKind) {
+        if !self.flags.read().await.notify_on_offline {
+            return;
+        }
         let (headline, body) = match kind {
-            OfflineNoticeKind::AutoRestart => (
-                "Bot 离线",
-                format!("{bot_id} 已离线，已尝试自动重启"),
-            ),
-            OfflineNoticeKind::Manual => (
-                "Bot 离线",
-                format!("{bot_id} 已离线，请打开主界面处理"),
-            ),
+            OfflineNoticeKind::AutoRestart => {
+                ("Bot 离线", format!("{bot_id} 已离线，已尝试自动重启"))
+            }
+            OfflineNoticeKind::Manual => ("Bot 离线", format!("{bot_id} 已离线，请打开主界面处理")),
         };
         self.show(headline, &body);
     }
@@ -124,11 +124,7 @@ pub fn spawn_desktop_notify_listener(
                                 .map(|c| format!("退出码 {c}"))
                                 .unwrap_or_else(|| "进程已结束".to_string())
                         });
-                    post_notification(
-                        &app,
-                        "Bot 进程退出",
-                        &format!("{bot_id}：{detail}"),
-                    );
+                    post_notification(&app, "Bot 进程退出", &format!("{bot_id}：{detail}"));
                 }
                 DomainEvent::NapCatLoginInvalidated { bot_id, reason } => {
                     if !cfg.notify_on_login_kicked {

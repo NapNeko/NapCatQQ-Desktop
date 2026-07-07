@@ -52,8 +52,8 @@ pub struct PollerConfig {
     pub http_timeout: Duration,
     /// 离线时是否自动重启 Bot 进程来自 BotConfig.bot.offline_auto_restart
     pub offline_auto_restart: bool,
-    /// 是否启用离线通知来自
-    /// BotConfig.advanced.offline_notice && (settings.offline_webhook_notice || settings.offline_email_notice)
+    /// 是否启用离线通知来自 BotConfig.advanced.offline_notice。
+    /// App 级桌面通知总开关由注入的 OfflineNotifier 自行判断。
     pub offline_notice_enabled: bool,
 }
 

@@ -132,7 +132,7 @@ pub fn run() {
     );
     let poller_settings = Arc::new(RwLock::new(app_settings.poller.clone()));
     let desktop_notify = Arc::new(RwLock::new(app_settings.desktop_notify_flags()));
-    let tauri_notifier = desktop_notify::TauriOfflineNotifier::new();
+    let tauri_notifier = desktop_notify::TauriOfflineNotifier::new(Arc::clone(&desktop_notify));
     let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> = tauri_notifier.clone();
     // ServerManager 提前构造,既给下面 AppState 用,也给 HostResolver 用(让
     // BotManager 能按 runtime_target 把 bot 启到本机 / 远端)

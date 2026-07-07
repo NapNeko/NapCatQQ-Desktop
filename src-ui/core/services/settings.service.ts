@@ -35,6 +35,8 @@ export type UiModeOnStartup = 'normal' | 'tray_only';
 /** 设置页消费的扁平后端设置形状（全 number，无 bigint / 嵌套）。 */
 export interface BackendSettings {
     botLoginCheckIntervalMs: number;
+    botOfflineWebHookNotice: boolean;
+    botOfflineEmailNotice: boolean;
     performanceMonitorEnabled: boolean;
     performanceMonitorIntervalMs: number;
     taskQueueCleanup: TaskQueueCleanupPrefs;
@@ -90,6 +92,10 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
     }
     return {
         botLoginCheckIntervalMs: Number(dto.settings.poller.botLoginCheckInterval),
+        botOfflineWebHookNotice:
+            dto.settings.poller.botOfflineWebHookNotice ?? false,
+        botOfflineEmailNotice:
+            dto.settings.poller.botOfflineEmailNotice ?? false,
         performanceMonitorEnabled: dto.settings.performanceMonitorEnabled,
         performanceMonitorIntervalMs: clampPerformanceMonitorIntervalMs(
             Number(dto.settings.performanceMonitorInterval),
@@ -167,8 +173,8 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
         settings: {
             poller: {
                 botLoginCheckInterval: Math.round(s.botLoginCheckIntervalMs),
-                botOfflineWebHookNotice: false,
-                botOfflineEmailNotice: false,
+                botOfflineWebHookNotice: s.botOfflineWebHookNotice,
+                botOfflineEmailNotice: s.botOfflineEmailNotice,
             },
             performanceMonitorEnabled: s.performanceMonitorEnabled,
             performanceMonitorInterval: clampPerformanceMonitorIntervalMs(

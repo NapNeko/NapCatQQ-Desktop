@@ -7,6 +7,8 @@ import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
 
 export const mockBackendSettings: BackendSettings = {
     botLoginCheckIntervalMs: 5000,
+    botOfflineWebHookNotice: false,
+    botOfflineEmailNotice: false,
     performanceMonitorEnabled: true,
     performanceMonitorIntervalMs: 1200,
     taskQueueCleanup: { ...DEFAULT_TASK_QUEUE_CLEANUP },
