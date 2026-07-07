@@ -11,13 +11,14 @@ pub struct LegacySelection {
     pub root: PathBuf,
     pub app_config: Option<PathBuf>,
     pub bot_config: Option<PathBuf>,
+    pub server_config: Option<PathBuf>,
     pub auxiliary_files: Vec<PathBuf>,
     pub warnings: Vec<MigrationWarning>,
 }
 
 impl LegacySelection {
     pub fn has_any_config(&self) -> bool {
-        self.app_config.is_some() || self.bot_config.is_some()
+        self.app_config.is_some() || self.bot_config.is_some() || self.server_config.is_some()
     }
 }
 
@@ -54,14 +55,29 @@ impl<'a> LegacyDiscovery<'a> {
         let mut warnings = Vec::new();
         let app_candidates = collect_candidates(root, "config.json");
         let bot_candidates = collect_candidates(root, "bot.json");
-        let app_config = select_best_candidate(app_candidates, true, &mut warnings);
-        let bot_config = select_best_candidate(bot_candidates, false, &mut warnings);
+        let server_candidates = collect_candidates(root, "servers.json");
+        let app_config = select_best_candidate(
+            app_candidates,
+            "multiple_app_config_candidates",
+            &mut warnings,
+        );
+        let bot_config = select_best_candidate(
+            bot_candidates,
+            "multiple_bot_config_candidates",
+            &mut warnings,
+        );
+        let server_config = select_best_candidate(
+            server_candidates,
+            "multiple_server_config_candidates",
+            &mut warnings,
+        );
         let auxiliary_files = collect_auxiliary(root);
 
         LegacySelection {
             root: root.to_path_buf(),
             app_config,
             bot_config,
+            server_config,
             auxiliary_files,
             warnings,
         }
@@ -75,6 +91,9 @@ fn selection_score(selection: &LegacySelection) -> i32 {
     }
     if selection.bot_config.is_some() {
         score += 10;
+    }
+    if selection.server_config.is_some() {
+        score += 8;
     }
     score
 }
@@ -100,7 +119,7 @@ fn collect_candidates(root: &Path, filename: &str) -> Vec<PathBuf> {
 
 fn select_best_candidate(
     candidates: Vec<PathBuf>,
-    app: bool,
+    warning_code: &str,
     warnings: &mut Vec<MigrationWarning>,
 ) -> Option<PathBuf> {
     if candidates.is_empty() {
@@ -108,11 +127,7 @@ fn select_best_candidate(
     }
     if candidates.len() > 1 {
         warnings.push(MigrationWarning::new(
-            if app {
-                "multiple_app_config_candidates"
-            } else {
-                "multiple_bot_config_candidates"
-            },
+            warning_code,
             "检测到多个配置候选，已按目录布局选择最可信的一项",
         ));
     }

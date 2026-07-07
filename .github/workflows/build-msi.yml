@@ -152,9 +152,13 @@ jobs:
 
           $outDir = "release-assets"
           New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-          foreach ($file in $msiFiles) {
-            Copy-Item $file.FullName -Destination $outDir -Force
-          }
+          $primary = $msiFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          $expectedName = "NapCatQQ-Desktop-${{ steps.resolve_version.outputs.VERSION_PLAIN }}-x64.msi"
+          $expectedPath = Join-Path $outDir $expectedName
+          Copy-Item $primary.FullName -Destination $expectedPath -Force
+
+          $latestAlias = Join-Path $outDir "NapCatQQ-Desktop-x64.msi"
+          Copy-Item $primary.FullName -Destination $latestAlias -Force
 
           $updaterAssets = Get-ChildItem -Path $bundleRoot -File -Recurse -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -eq "latest.json" -or $_.Extension -eq ".sig" -or $_.Extension -eq ".zip" }
@@ -162,9 +166,8 @@ jobs:
             Copy-Item $file.FullName -Destination $outDir -Force
           }
 
-          $primary = $msiFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          "MSI_FILE_NAME=$($primary.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Collected MSI: $($primary.FullName)"
+          "MSI_FILE_NAME=$expectedName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Collected MSI: $expectedPath"
 
       - name: "解析制品名"
         id: resolve_artifact

@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{MissedTickBehavior, interval};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use ts_rs::TS;
 
 use ncd_host::remote::{
@@ -27,6 +27,7 @@ use ncd_host::{Host, HostError};
 
 use crate::credential_sync::{CredentialSyncLayer, PasswordSlot};
 use crate::events::EventBus;
+use crate::server_profile_migration::migrate_server_profiles_payload;
 
 // 数据结构
 
@@ -161,6 +162,7 @@ fn default_port() -> u16 {
 // 凭据存储
 
 const KEYRING_SERVICE: &str = "napcatqq-desktop";
+const LEGACY_SSH_KEYRING_SERVICE: &str = "napcat-desktop:ssh";
 
 /// 系统凭据库操作测试时可 mock
 ///
@@ -184,9 +186,24 @@ pub struct KeyringCredentialStore;
 /// 两套各写一遍(DRY)
 fn keyring_get(prefix: &str, server_id: &str) -> Option<String> {
     let account = format!("{prefix}:{server_id}");
-    keyring::Entry::new(KEYRING_SERVICE, &account)
+    let current = keyring::Entry::new(KEYRING_SERVICE, &account)
         .ok()
-        .and_then(|entry| entry.get_password().ok())
+        .and_then(|entry| entry.get_password().ok());
+    if current.is_some() {
+        return current;
+    }
+
+    if prefix != "ssh" {
+        return None;
+    }
+
+    let legacy = keyring::Entry::new(LEGACY_SSH_KEYRING_SERVICE, server_id)
+        .ok()
+        .and_then(|entry| entry.get_password().ok());
+    if let Some(password) = &legacy {
+        let _ = keyring_set("ssh", server_id, password);
+    }
+    legacy
 }
 
 fn keyring_set(prefix: &str, server_id: &str, password: &str) -> Result<(), String> {
@@ -199,13 +216,19 @@ fn keyring_set(prefix: &str, server_id: &str, password: &str) -> Result<(), Stri
 
 fn keyring_delete(prefix: &str, server_id: &str) -> Result<(), String> {
     let account = format!("{prefix}:{server_id}");
-    match keyring::Entry::new(KEYRING_SERVICE, &account) {
+    let result = match keyring::Entry::new(KEYRING_SERVICE, &account) {
         Ok(entry) => {
             let _ = entry.delete_password();
             Ok(())
         }
         Err(_) => Ok(()),
+    };
+    if prefix == "ssh" {
+        if let Ok(entry) = keyring::Entry::new(LEGACY_SSH_KEYRING_SERVICE, server_id) {
+            let _ = entry.delete_password();
+        }
     }
+    result
 }
 
 impl ServerCredentialStore for KeyringCredentialStore {
@@ -295,20 +318,47 @@ impl ServerCredentialStore for InMemoryCredentialStore {
 /// servers.json 路径固定在 <data_root>/config/servers.json
 struct ServerProfileRepo {
     path: PathBuf,
+    legacy_paths: Vec<PathBuf>,
 }
 
 impl ServerProfileRepo {
     fn new(data_root: &Path) -> Self {
         Self {
             path: data_root.join("config").join("servers.json"),
+            legacy_paths: legacy_server_profile_paths(data_root),
         }
     }
 
     async fn load(&self) -> Vec<ServerProfile> {
-        match tokio::fs::read_to_string(&self.path).await {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_default(),
-            Err(_) => Vec::new(),
+        if let Some(profiles) = read_profiles_file(&self.path).await {
+            return profiles;
         }
+
+        for legacy_path in &self.legacy_paths {
+            let Some(profiles) = read_profiles_file(legacy_path).await else {
+                continue;
+            };
+            if profiles.is_empty() {
+                return profiles;
+            }
+            info!(
+                target: "ncd_runtime::server_manager",
+                from = %legacy_path.display(),
+                to = %self.path.display(),
+                count = profiles.len(),
+                "已加载旧版远端服务器档案"
+            );
+            if let Err(error) = self.save(&profiles).await {
+                warn!(
+                    target: "ncd_runtime::server_manager",
+                    err = %error,
+                    "写入迁移后的远端服务器档案失败"
+                );
+            }
+            return profiles;
+        }
+
+        Vec::new()
     }
 
     async fn save(&self, profiles: &[ServerProfile]) -> Result<(), String> {
@@ -322,6 +372,41 @@ impl ServerProfileRepo {
             .await
             .map_err(|e| e.to_string())
     }
+}
+
+fn legacy_server_profile_paths(data_root: &Path) -> Vec<PathBuf> {
+    let mut paths = vec![
+        data_root
+            .join("runtime")
+            .join("config")
+            .join("servers.json"),
+    ];
+    if let Some(parent) = data_root.parent() {
+        let legacy_root = parent.join("NapCatQQ-Desktop");
+        if legacy_root != data_root {
+            paths.push(legacy_root.join("config").join("servers.json"));
+            paths.push(
+                legacy_root
+                    .join("runtime")
+                    .join("config")
+                    .join("servers.json"),
+            );
+        }
+    }
+    paths
+}
+
+async fn read_profiles_file(path: &Path) -> Option<Vec<ServerProfile>> {
+    let text = tokio::fs::read_to_string(path).await.ok()?;
+    let value = match serde_json::from_str(&text) {
+        Ok(value) => value,
+        Err(_) => return Some(Vec::new()),
+    };
+    Some(
+        migrate_server_profiles_payload(value)
+            .map(|result| result.profiles)
+            .unwrap_or_default(),
+    )
 }
 
 // ServerManager
@@ -1398,6 +1483,82 @@ mod tests {
         let creds = Arc::new(InMemoryCredentialStore::default());
         let mgr = ServerManager::new(root, creds.clone());
         (mgr, creds)
+    }
+
+    #[tokio::test]
+    async fn loads_legacy_servers_from_runtime_config_and_writes_current_copy() {
+        let root = tempdir().unwrap();
+        let legacy_path = root
+            .path()
+            .join("runtime")
+            .join("config")
+            .join("servers.json");
+        tokio::fs::create_dir_all(legacy_path.parent().unwrap())
+            .await
+            .unwrap();
+        tokio::fs::write(
+            &legacy_path,
+            r#"{
+              "schema_version": 1,
+              "servers": [{
+                "id": "legacy-s1",
+                "name": "Legacy Server",
+                "credentials": {
+                  "host": "10.0.0.8",
+                  "port": 22022,
+                  "username": "ubuntu",
+                  "auth_method": "password",
+                  "private_key_path": "C:/Users/me/.ssh/id_ed25519"
+                },
+                "backend_flavor": "snowluma"
+              }]
+            }"#,
+        )
+        .await
+        .unwrap();
+
+        let repo = ServerProfileRepo::new(root.path());
+        let profiles = repo.load().await;
+
+        assert_eq!(profiles.len(), 1);
+        let profile = &profiles[0];
+        assert_eq!(profile.id, "legacy-s1");
+        assert_eq!(profile.name, "Legacy Server");
+        assert_eq!(profile.host, "10.0.0.8");
+        assert_eq!(profile.port, 22022);
+        assert_eq!(profile.username, "ubuntu");
+        assert_eq!(profile.auth_method, AuthMethod::Password);
+        assert_eq!(profile.state, ServerState::Disconnected);
+        assert!(root.path().join("config").join("servers.json").is_file());
+    }
+
+    #[tokio::test]
+    async fn current_servers_file_wins_over_legacy_runtime_copy() {
+        let root = tempdir().unwrap();
+        let legacy_path = root
+            .path()
+            .join("runtime")
+            .join("config")
+            .join("servers.json");
+        let current_path = root.path().join("config").join("servers.json");
+        tokio::fs::create_dir_all(legacy_path.parent().unwrap())
+            .await
+            .unwrap();
+        tokio::fs::create_dir_all(current_path.parent().unwrap())
+            .await
+            .unwrap();
+        tokio::fs::write(
+            &legacy_path,
+            r#"{"schema_version":1,"servers":[{"id":"legacy","name":"Legacy","credentials":{"host":"10.0.0.8","username":"ubuntu"}}]}"#,
+        )
+        .await
+        .unwrap();
+        tokio::fs::write(&current_path, "[]").await.unwrap();
+
+        let repo = ServerProfileRepo::new(root.path());
+        let profiles = repo.load().await;
+
+        assert!(profiles.is_empty());
     }
 
     #[cfg(test)]

@@ -201,9 +201,11 @@ fn orchestrator_migrates_legacy_tree_and_is_idempotent() {
         .read_json(&store.config_dir().join("bot.json"))
         .unwrap();
     assert_eq!(bot_payload["info"]["configVersion"], "v2.1");
-    assert!(bot_payload["bots"][0]["bot"]
-        .get("snowluma_webui_password_override")
-        .is_none());
+    assert!(
+        bot_payload["bots"][0]["bot"]
+            .get("snowluma_webui_password_override")
+            .is_none()
+    );
     assert_eq!(
         bot_payload["bots"][0]["connect"]["httpServers"]
             .as_array()
@@ -228,6 +230,115 @@ fn orchestrator_migrates_legacy_tree_and_is_idempotent() {
         second.report.outcome,
         ncd_runtime::MigrationOutcome::NoChange
     );
+}
+
+#[test]
+fn orchestrator_migrates_legacy_servers_json_to_current_location() {
+    let legacy_root = TempWorkspace::new().unwrap();
+    let target_root = TempWorkspace::new().unwrap();
+    let legacy_config = legacy_root.path().join("runtime/config");
+    std::fs::create_dir_all(&legacy_config).unwrap();
+    std::fs::write(
+        legacy_config.join("servers.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "schema_version": 1,
+            "servers": [{
+                "id": "legacy-s1",
+                "name": "Legacy Server",
+                "credentials": {
+                    "host": "10.0.0.8",
+                    "port": 22022,
+                    "username": "ubuntu",
+                    "auth_method": "password"
+                }
+            }]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let store = LocalConfigStore::new(target_root.path());
+    let probe = StaticPathProbe {
+        roots: vec![legacy_root.path().to_path_buf()],
+    };
+    let secrets = MockSecretStore::new();
+    let snapshot = MigrationOrchestrator::new(&store, &probe, &secrets).bootstrap();
+
+    assert_eq!(
+        snapshot.report.outcome,
+        ncd_runtime::MigrationOutcome::Updated
+    );
+    assert_eq!(
+        snapshot.report.source.as_ref().unwrap().server_config,
+        Some(legacy_config.join("servers.json"))
+    );
+
+    let server_payload = store
+        .read_json(&target_root.path().join("config").join("servers.json"))
+        .unwrap();
+    assert!(server_payload.is_array());
+    assert_eq!(server_payload[0]["id"], "legacy-s1");
+    assert_eq!(server_payload[0]["authMethod"], "password");
+}
+
+#[test]
+fn orchestrator_migrates_legacy_single_remote_config_to_server_profile() {
+    let legacy_root = TempWorkspace::new().unwrap();
+    let target_root = TempWorkspace::new().unwrap();
+    let legacy_config = legacy_root.path().join("runtime/config");
+    std::fs::create_dir_all(&legacy_config).unwrap();
+    std::fs::write(
+        legacy_config.join("config.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "Info": {"ConfigVersion": "v2.0"},
+            "Remote": {
+                "Host": "10.0.0.9",
+                "Port": 22022,
+                "Username": "ubuntu",
+                "AuthMethod": "key",
+                "PrivateKeyPath": "C:/Users/me/.ssh/id_ed25519",
+                "Password": "do-not-persist"
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let store = LocalConfigStore::new(target_root.path());
+    let probe = StaticPathProbe {
+        roots: vec![legacy_root.path().to_path_buf()],
+    };
+    let secrets = MockSecretStore::new();
+    let snapshot = MigrationOrchestrator::new(&store, &probe, &secrets).bootstrap();
+
+    assert_eq!(
+        snapshot.report.outcome,
+        ncd_runtime::MigrationOutcome::Updated
+    );
+    assert!(
+        snapshot
+            .report
+            .source
+            .as_ref()
+            .unwrap()
+            .server_config
+            .is_none()
+    );
+
+    let app_payload = store
+        .read_json(&store.config_dir().join("config.json"))
+        .unwrap();
+    assert!(app_payload["Remote"].get("Password").is_none());
+
+    let server_payload = store
+        .read_json(&target_root.path().join("config").join("servers.json"))
+        .unwrap();
+    assert!(server_payload.is_array());
+    assert_eq!(server_payload[0]["host"], "10.0.0.9");
+    assert_eq!(server_payload[0]["port"], 22022);
+    assert_eq!(server_payload[0]["username"], "ubuntu");
+    assert_eq!(server_payload[0]["authMethod"], "key");
+    assert!(server_payload[0].get("password").is_none());
 }
 
 fn write_legacy_bot_config(root: &Path, qq: &str, name: &str) {

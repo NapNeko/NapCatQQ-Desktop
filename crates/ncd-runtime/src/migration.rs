@@ -5,11 +5,14 @@ use tracing::{info, warn};
 
 use crate::app_config_migration::migrate_app_config;
 use crate::bot_config_migration::migrate_bot_config;
+use crate::server_profile_migration::{
+    migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
+};
 use ncd_domain::errors::MigrationError;
 
 use crate::legacy_discovery::{LegacyDiscovery, LegacySelection};
-use ncd_domain::migration::{MigrationSource, MigrationWarning};
 use ncd_domain::migration::MigrationReport;
+use ncd_domain::migration::{MigrationSource, MigrationWarning};
 use ncd_traits::{ConfigStore, JsonTransaction, PathProbe, SecretStore};
 
 pub struct MigrationOrchestrator<'a> {
@@ -91,10 +94,12 @@ impl<'a> MigrationOrchestrator<'a> {
         let mut tx = JsonTransaction::new();
         let mut rules = Vec::new();
         let mut warnings = selection.warnings.clone();
+        let mut app_config_for_legacy_server = None;
 
         if let Some(app_path) = &selection.app_config {
             let raw = self.read_source_json(app_path)?;
             if crate::app_config_migration::looks_like_app_config(&raw) {
+                app_config_for_legacy_server = Some(raw.clone());
                 let app = migrate_app_config(raw);
                 rules.extend(app.rules_applied);
                 tx = tx.write(self.store.config_dir().join("config.json"), app.payload);
@@ -108,6 +113,38 @@ impl<'a> MigrationOrchestrator<'a> {
                         app_path.display()
                     ),
                 ));
+            }
+        }
+
+        if let Some(server_path) = &selection.server_config {
+            match migrate_server_profiles_payload(self.read_source_json(server_path)?) {
+                Ok(server) if !server.profiles.is_empty() => {
+                    rules.extend(server.rules_applied);
+                    tx = tx.write(
+                        self.store.root().join("config").join("servers.json"),
+                        server.payload,
+                    );
+                }
+                Ok(_) => warnings.push(MigrationWarning::new(
+                    "server_config_empty",
+                    format!("跳过空远端服务器档案 {}", server_path.display()),
+                )),
+                Err(error) => warnings.push(MigrationWarning::new(
+                    "server_config_skipped",
+                    format!(
+                        "跳过无法迁移的远端服务器档案 {}: {}",
+                        server_path.display(),
+                        error
+                    ),
+                )),
+            }
+        } else if let Some(app_config) = &app_config_for_legacy_server {
+            if let Some(server) = migrate_legacy_single_server_app_config(app_config)? {
+                rules.extend(server.rules_applied);
+                tx = tx.write(
+                    self.store.root().join("config").join("servers.json"),
+                    server.payload,
+                );
             }
         }
 
@@ -138,6 +175,7 @@ impl<'a> MigrationOrchestrator<'a> {
             root: selection.root,
             app_config: selection.app_config,
             bot_config: selection.bot_config,
+            server_config: selection.server_config,
             auxiliary_files: selection.auxiliary_files,
         };
         let mut report = MigrationReport::migrated(rules)

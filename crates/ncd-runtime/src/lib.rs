@@ -27,6 +27,7 @@ pub mod runtime_launch_plan;
 pub mod runtime_router;
 pub mod secret_store_impl;
 pub mod server_manager;
+pub mod server_profile_migration;
 pub mod snowluma;
 mod snowluma_agreements;
 mod snowluma_consent_files;

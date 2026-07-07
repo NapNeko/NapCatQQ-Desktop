@@ -12,9 +12,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use ts_rs::TS;
+use zip::ZipWriter;
 use zip::read::ZipArchive;
 use zip::write::SimpleFileOptions;
-use zip::ZipWriter;
 
 use crate::AppState;
 
@@ -108,8 +108,8 @@ pub async fn export_config(
             continue;
         }
         let text = fs::read_to_string(&src).map_err(|e| format!("读取 {label} 失败: {e}"))?;
-        let value: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("{label} 不是合法 JSON: {e}"))?;
+        let value: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("{label} 不是合法 JSON: {e}"))?;
         add_json_to_zip(&mut zip, zip_name, &value)?;
         labels.push((*label).to_string());
     }
@@ -253,17 +253,20 @@ fn normalize_bot_config_import(
         bot.validate_runtime_matrix()
             .map_err(|e| format!("bot.json 含当前不支持的运行组合,已中止导入: {e}"))?;
         if !seen.insert(bot.bot.qq_id) {
-            return Err(format!("bot.json 含重复 QQ 号 {},已中止导入", bot.bot.qq_id));
+            return Err(format!(
+                "bot.json 含重复 QQ 号 {},已中止导入",
+                bot.bot.qq_id
+            ));
         }
     }
     Ok(migrated.payload)
 }
 
-/// 校验并归一化 servers.json:必须是 ServerProfile 数组重新序列化,丢弃多余字段
+/// 校验并归一化 servers.json:支持旧版 wrapper schema,最终写成当前 ServerProfile 数组
 fn normalize_servers_import(value: serde_json::Value) -> Result<serde_json::Value, String> {
-    let servers: Vec<ncd_runtime::ServerProfile> = serde_json::from_value(value)
-        .map_err(|e| format!("servers.json 不是合法服务器档案数组,已中止导入: {e}"))?;
-    serde_json::to_value(&servers).map_err(|e| format!("servers.json 归一化失败: {e}"))
+    let migrated = ncd_runtime::server_profile_migration::migrate_server_profiles_payload(value)
+        .map_err(|e| format!("servers.json 迁移/解析失败,已中止导入: {e}"))?;
+    Ok(migrated.payload)
 }
 
 /// 读 staging 里的配置文件,全量强类型反序列化 + 迁移 + validate,通过后构造一个
@@ -370,15 +373,52 @@ mod tests {
     #[test]
     fn build_import_transaction_aborts_when_any_file_is_semantically_invalid() {
         let staging = tempfile::tempdir().unwrap();
-        // config 合法,但 servers.json 语义非法(不是数组):整体必须中止,不构造事务
+        // config 合法,但 servers.json 语义非法:整体必须中止,不构造事务
         write_file(staging.path(), "config.json", VALID_CONFIG);
         write_file(staging.path(), "servers.json", r#"{"not":"an array"}"#);
         let (_d, secrets) = force_fallback_secrets();
         let data_root = tempfile::tempdir().unwrap();
 
-        let err =
-            build_import_transaction(staging.path(), data_root.path(), &secrets).unwrap_err();
-        assert!(err.contains("servers.json"), "应报 servers.json 非法: {err}");
+        let err = build_import_transaction(staging.path(), data_root.path(), &secrets).unwrap_err();
+        assert!(
+            err.contains("servers.json"),
+            "应报 servers.json 非法: {err}"
+        );
+    }
+
+    #[test]
+    fn build_import_transaction_migrates_legacy_servers_json() {
+        let staging = tempfile::tempdir().unwrap();
+        write_file(
+            staging.path(),
+            "servers.json",
+            r#"{
+              "schema_version": 1,
+              "servers": [{
+                "id": "legacy-s1",
+                "name": "Legacy Server",
+                "credentials": {
+                  "host": "10.0.0.8",
+                  "port": 22022,
+                  "username": "ubuntu",
+                  "auth_method": "password"
+                }
+              }]
+            }"#,
+        );
+        let (_d, secrets) = force_fallback_secrets();
+        let data_root = tempfile::tempdir().unwrap();
+
+        let (txn, files, skipped) =
+            build_import_transaction(staging.path(), data_root.path(), &secrets).unwrap();
+
+        assert_eq!(txn.writes.len(), 1);
+        assert_eq!(files, vec!["远端服务器档案".to_string()]);
+        assert_eq!(skipped.len(), 2);
+        let payload = &txn.writes[0].payload;
+        assert!(payload.is_array());
+        assert_eq!(payload[0]["id"], "legacy-s1");
+        assert_eq!(payload[0]["authMethod"], "password");
     }
 
     #[test]
@@ -388,8 +428,7 @@ mod tests {
         let (_d, secrets) = force_fallback_secrets();
         let data_root = tempfile::tempdir().unwrap();
 
-        let err =
-            build_import_transaction(staging.path(), data_root.path(), &secrets).unwrap_err();
+        let err = build_import_transaction(staging.path(), data_root.path(), &secrets).unwrap_err();
         assert!(err.contains("config.json"), "应报 config.json 非法: {err}");
     }
 

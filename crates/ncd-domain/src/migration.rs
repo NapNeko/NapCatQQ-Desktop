@@ -55,6 +55,8 @@ pub struct MigrationSource {
     #[serde(default)]
     pub bot_config: Option<PathBuf>,
     #[serde(default)]
+    pub server_config: Option<PathBuf>,
+    #[serde(default)]
     pub auxiliary_files: Vec<PathBuf>,
 }
 
