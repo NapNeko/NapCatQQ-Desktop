@@ -203,7 +203,7 @@ export function BotCard({
         ? formatRelativeTime(bot.last_transition)
         : null;
 
-    const needsQrLogin = hasQrcode && isOnline === false;
+    const needsQrLogin = hasQrcode && isOnline !== true;
 
     const cardStatus = buildBotListCardStatus({
         state: bot.state,

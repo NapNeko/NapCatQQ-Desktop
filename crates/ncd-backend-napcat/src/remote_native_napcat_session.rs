@@ -13,11 +13,13 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
+use crate::remote_native_launch::{
+    RemoteNapcatLayout, napcat_remote_log_path, probe_remote_napcat_layout,
+};
+use ncd_deploy::{EventBusSink, NativeRuntimeEventSink};
 use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::ids::BotId;
-use ncd_deploy::{EventBusSink, NativeRuntimeEventSink};
 use ncd_traits::events::{BroadcastEventBus, EventBus};
-use crate::remote_native_launch::{napcat_remote_log_path, probe_remote_napcat_layout, RemoteNapcatLayout};
 
 const REMOTE_NAPCAT_WEBUI_PORT: u16 = 6099;
 const LOG_TAIL_POLL_SECS: u64 = 2;
@@ -138,6 +140,7 @@ impl RemoteNativeNapcatSessionRegistry {
 
         let log_task = tokio::spawn(async move {
             let mut webui_published = false;
+            let mut missing_tunnel_warned = false;
             let mut last_size: usize = 0;
             loop {
                 tokio::time::sleep(Duration::from_secs(LOG_TAIL_POLL_SECS)).await;
@@ -155,19 +158,34 @@ impl RemoteNativeNapcatSessionRegistry {
                 };
                 last_size = bytes.len();
                 let text = String::from_utf8_lossy(slice);
+                let mut latest_token = None;
                 for line in text.lines() {
                     sink.publish_log_line(&bot_log, line, "stdout");
                     if webui_published {
                         continue;
                     }
                     if let Some((_remote_port, token)) = parse_napcat_webui_line(line) {
-                        let port = lp.unwrap_or(REMOTE_NAPCAT_WEBUI_PORT);
+                        latest_token = Some(token);
+                    }
+                }
+                if webui_published {
+                    continue;
+                }
+                if let Some(token) = latest_token {
+                    if let Some(port) = lp {
                         bus.publish(DomainEvent::napcat_webui_available(
                             bot_log.clone(),
                             port,
                             token,
                         ));
                         webui_published = true;
+                    } else if !missing_tunnel_warned {
+                        warn!(
+                            target: "ncd_runtime::remote_native_napcat_session",
+                            bot_id = %bot_log,
+                            "NapCat 远端 Native: 已发现 WebUI token,但本地 SSH 隧道未建立,跳过登录状态轮询"
+                        );
+                        missing_tunnel_warned = true;
                     }
                 }
             }
@@ -183,7 +201,10 @@ impl RemoteNativeNapcatSessionRegistry {
     }
 }
 
-async fn open_loopback_tunnel(host: &dyn Host, remote_port: u16) -> Result<TunnelHandle, HostError> {
+async fn open_loopback_tunnel(
+    host: &dyn Host,
+    remote_port: u16,
+) -> Result<TunnelHandle, HostError> {
     let spec = TunnelSpec {
         local_host: "127.0.0.1".to_string(),
         local_port: 0,

@@ -386,8 +386,12 @@ async fn do_status_poll(
     let online_fut = deps.http.check_online_status(port, &auth);
     let (login_res, online_res) = tokio::join!(login_fut, online_fut);
 
+    let mut login_observed_online = None;
     match login_res {
-        Ok(data) => apply_login_status(bot_id, data, deps, state),
+        Ok(data) => {
+            login_observed_online = online_from_login_status(&data);
+            apply_login_status(bot_id, data, deps, state);
+        }
         Err(NapCatWebUiError::Unauthorized(_)) => {
             // 401/403 → 命令路径触发 auth 刷新online_res 这一轮也不再处理,
             // 等下一轮 status_ticker 携带新 credential 重试
@@ -400,14 +404,35 @@ async fn do_status_poll(
     }
 
     match online_res {
-        Ok(data) => apply_online_status(bot_id, data, cfg, deps, state).await,
+        Ok(mut data) => {
+            if let Some(online) = login_observed_online {
+                data.online = Some(online);
+            }
+            apply_online_status(bot_id, data, cfg, deps, state).await;
+        }
         Err(NapCatWebUiError::Unauthorized(_)) => {
             let _ = cmd_tx.try_send(PollerCommand::RequestAuthRefresh);
+            if let Some(online) = login_observed_online {
+                apply_observed_online_status(bot_id, online, cfg, deps, state).await;
+            }
         }
         Err(err) => {
             tracing::warn!(?err, %bot_id, "NapCat 在线状态查询失败（check_online_status）");
+            if let Some(online) = login_observed_online {
+                apply_observed_online_status(bot_id, online, cfg, deps, state).await;
+            }
         }
     }
+}
+
+fn online_from_login_status(data: &CheckLoginStatusData) -> Option<bool> {
+    if data.is_login {
+        return Some(true);
+    }
+    if data.is_offline == Some(true) {
+        return Some(false);
+    }
+    None
 }
 
 /// 把 CheckLoginStatusData 应用到 LoginState 并发布对应事件
@@ -494,18 +519,29 @@ async fn apply_online_status(
     deps: &PollerDeps,
     state: &mut LoginState,
 ) {
+    let Some(online) = data.online else {
+        return;
+    };
+    apply_observed_online_status(bot_id, online, cfg, deps, state).await;
+}
+
+async fn apply_observed_online_status(
+    bot_id: &BotId,
+    online: bool,
+    cfg: &PollerConfig,
+    deps: &PollerDeps,
+    state: &mut LoginState,
+) {
     let prev_online = state.online;
     let kicked = state.login_invalidated_while_online;
-    state.online = data.online;
+    state.online = online;
 
     // 步骤 1:总是先发 NapCatLoginOnline
-    deps.event_bus.publish(DomainEvent::napcat_login_online(
-        bot_id.clone(),
-        data.online,
-    ));
+    deps.event_bus
+        .publish(DomainEvent::napcat_login_online(bot_id.clone(), online));
 
     // 步骤 2:在线 → 重置离线相关 flag
-    if data.online {
+    if online {
         state.offline_notice_sent = false;
         state.login_invalidated_while_online = false;
         state.suppress_qrcode_until_online = false;
@@ -1276,9 +1312,10 @@ mod transition_tests {
         let client = Arc::new(StatusMockClient::new(
             vec![Ok(CheckLoginStatusData {
                 is_login: true,
+                is_offline: None,
                 qrcode_url: String::new(),
             })],
-            vec![Ok(GetQQLoginInfoData { online: true })],
+            vec![Ok(GetQQLoginInfoData { online: Some(true) })],
         ));
         let (deps, _bus) = status_test_deps(
             client.clone(),
@@ -1298,6 +1335,75 @@ mod transition_tests {
         assert!(cmd_rx.try_recv().is_err());
     }
 
+    #[tokio::test]
+    async fn status_poll_login_true_marks_online_even_when_info_online_missing() {
+        let bot_id = BotId::new("login-derived-online");
+        let cfg = PollerConfig::default();
+        let client = Arc::new(StatusMockClient::new(
+            vec![Ok(CheckLoginStatusData {
+                is_login: true,
+                is_offline: None,
+                qrcode_url: String::new(),
+            })],
+            vec![Ok(GetQQLoginInfoData { online: None })],
+        ));
+        let (deps, bus) = status_test_deps(
+            client,
+            Arc::new(RecordingNotifier::new()),
+            Arc::new(RecordingRestartHandle::new()),
+        );
+        let mut sub = bus.subscribe(EventFilter::bot("login-derived-online"));
+        let (cmd_tx, _cmd_rx) = mpsc::channel::<PollerCommand>(8);
+        let mut state = LoginState::new();
+        state.auth = Some("bearer".into());
+
+        do_status_poll(&bot_id, 6099, &cfg, &deps, &mut state, &cmd_tx).await;
+
+        assert!(state.online);
+        let events = drain_events(&mut sub).await;
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, DomainEvent::NapCatLoginOnline { online: true, .. })),
+            "expected derived online=true event, got {events:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn status_poll_is_offline_marks_offline_even_when_info_online_missing() {
+        let bot_id = BotId::new("login-derived-offline");
+        let cfg = PollerConfig::default();
+        let client = Arc::new(StatusMockClient::new(
+            vec![Ok(CheckLoginStatusData {
+                is_login: false,
+                is_offline: Some(true),
+                qrcode_url: String::new(),
+            })],
+            vec![Ok(GetQQLoginInfoData { online: None })],
+        ));
+        let (deps, bus) = status_test_deps(
+            client,
+            Arc::new(RecordingNotifier::new()),
+            Arc::new(RecordingRestartHandle::new()),
+        );
+        let mut sub = bus.subscribe(EventFilter::bot("login-derived-offline"));
+        let (cmd_tx, _cmd_rx) = mpsc::channel::<PollerCommand>(8);
+        let mut state = LoginState::new();
+        state.auth = Some("bearer".into());
+        state.online = true;
+
+        do_status_poll(&bot_id, 6099, &cfg, &deps, &mut state, &cmd_tx).await;
+
+        assert!(!state.online);
+        let events = drain_events(&mut sub).await;
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, DomainEvent::NapCatLoginOnline { online: false, .. })),
+            "expected derived online=false event, got {events:?}"
+        );
+    }
+
     /// login_res 返回 Unauthorized → 触发
     /// RequestAuthRefresh,且本轮不再处理 online_res(不调用
     /// apply_login_status / apply_online_status,不发布任何事件)
@@ -1307,7 +1413,7 @@ mod transition_tests {
         let cfg = PollerConfig::default();
         let client = Arc::new(StatusMockClient::new(
             vec![Err(NapCatWebUiError::Unauthorized(401))],
-            vec![Ok(GetQQLoginInfoData { online: true })],
+            vec![Ok(GetQQLoginInfoData { online: Some(true) })],
         ));
         let (deps, bus) = status_test_deps(
             client.clone(),
@@ -1344,7 +1450,7 @@ mod transition_tests {
         let cfg = PollerConfig::default();
         let client = Arc::new(StatusMockClient::new(
             vec![Err(NapCatWebUiError::Status(500))],
-            vec![Ok(GetQQLoginInfoData { online: true })],
+            vec![Ok(GetQQLoginInfoData { online: Some(true) })],
         ));
         let (deps, bus) = status_test_deps(
             client.clone(),
@@ -1383,6 +1489,7 @@ mod transition_tests {
         let client = Arc::new(StatusMockClient::new(
             vec![Ok(CheckLoginStatusData {
                 is_login: true,
+                is_offline: None,
                 qrcode_url: String::new(),
             })],
             vec![Err(NapCatWebUiError::Unauthorized(403))],
@@ -1435,6 +1542,7 @@ mod transition_tests {
             &bot_id,
             CheckLoginStatusData {
                 is_login: true,
+                is_offline: None,
                 // 即便给了 qrcode_url,已登录分支也必须忽略它
                 qrcode_url: "data:image/png;base64,SHOULD_BE_IGNORED".into(),
             },
@@ -1480,6 +1588,7 @@ mod transition_tests {
             &bot_id,
             CheckLoginStatusData {
                 is_login: false,
+                is_offline: None,
                 // 服务器把 qrcode_url 也回带了,但本调用因 invalidation flag
                 // 必须抑制 Qrcode(与 QrcodeRemoved 互斥)
                 qrcode_url: "data:image/png;base64,QR".into(),
@@ -1525,6 +1634,7 @@ mod transition_tests {
             &bot_id,
             CheckLoginStatusData {
                 is_login: false,
+                is_offline: None,
                 qrcode_url: "data:image/png;base64,QR1".into(),
             },
             &deps,
@@ -1569,6 +1679,7 @@ mod transition_tests {
             &bot_id,
             CheckLoginStatusData {
                 is_login: false,
+                is_offline: None,
                 qrcode_url: "data:image/png;base64,SUPPRESSED".into(),
             },
             &deps,
@@ -1603,6 +1714,7 @@ mod transition_tests {
             &bot_id,
             CheckLoginStatusData {
                 is_login: false,
+                is_offline: None,
                 qrcode_url: "data:image/png;base64,STILL_SUPPRESSED".into(),
             },
             &deps,
@@ -1635,6 +1747,7 @@ mod transition_tests {
             &bot_id,
             CheckLoginStatusData {
                 is_login: false,
+                is_offline: None,
                 qrcode_url: String::new(),
             },
             &deps,
@@ -1648,6 +1761,51 @@ mod transition_tests {
     // =====================================================================
     // apply_online_status
     // =====================================================================
+
+    /// online 缺失表示未知:不能当作 false,否则启动早期 / 远端直跑
+    /// OneBot selfInfo 尚未初始化时会被误报为未登录。
+    #[tokio::test]
+    async fn apply_online_unknown_noops_without_event_or_side_effects() {
+        let bot_id = BotId::new("unknown-online");
+        let cfg = PollerConfig {
+            offline_auto_restart: true,
+            offline_notice_enabled: true,
+            ..PollerConfig::default()
+        };
+        let bus = Arc::new(BroadcastEventBus::default());
+        let mut sub = bus.subscribe(EventFilter::bot("unknown-online"));
+        let notifier = Arc::new(RecordingNotifier::new());
+        let restart = Arc::new(RecordingRestartHandle::new());
+        let deps = PollerDeps {
+            event_bus: bus.clone(),
+            http: Arc::new(StatusMockClient::new(vec![], vec![])),
+            notifier: notifier.clone(),
+            restart_handle: restart.clone(),
+        };
+
+        let mut state = LoginState::new();
+        state.is_logged_in = true;
+        state.online = true;
+
+        apply_online_status(
+            &bot_id,
+            GetQQLoginInfoData { online: None },
+            &cfg,
+            &deps,
+            &mut state,
+        )
+        .await;
+
+        assert!(state.online);
+        assert!(state.is_logged_in);
+        assert!(notifier.calls().is_empty());
+        assert_eq!(restart.calls(), 0);
+        let events = drain_events(&mut sub).await;
+        assert!(
+            events.is_empty(),
+            "unknown online must not emit events: {events:?}"
+        );
+    }
 
     /// online=true → 总是先发 NapCatLoginOnline{true},
     /// 然后重置 offline_notice_sent / login_invalidated_while_online /
@@ -1675,7 +1833,7 @@ mod transition_tests {
 
         apply_online_status(
             &bot_id,
-            GetQQLoginInfoData { online: true },
+            GetQQLoginInfoData { online: Some(true) },
             &cfg,
             &deps,
             &mut state,
@@ -1725,7 +1883,9 @@ mod transition_tests {
 
         apply_online_status(
             &bot_id,
-            GetQQLoginInfoData { online: false },
+            GetQQLoginInfoData {
+                online: Some(false),
+            },
             &cfg,
             &deps,
             &mut state,
@@ -1774,7 +1934,9 @@ mod transition_tests {
 
         apply_online_status(
             &bot_id,
-            GetQQLoginInfoData { online: false },
+            GetQQLoginInfoData {
+                online: Some(false),
+            },
             &cfg,
             &deps,
             &mut state,
@@ -1842,7 +2004,9 @@ mod transition_tests {
 
         apply_online_status(
             &bot_id,
-            GetQQLoginInfoData { online: false },
+            GetQQLoginInfoData {
+                online: Some(false),
+            },
             &cfg,
             &deps,
             &mut state,
@@ -1884,7 +2048,9 @@ mod transition_tests {
 
         apply_online_status(
             &bot_id,
-            GetQQLoginInfoData { online: false },
+            GetQQLoginInfoData {
+                online: Some(false),
+            },
             &cfg,
             &deps,
             &mut state,
@@ -1921,7 +2087,9 @@ mod transition_tests {
 
         apply_online_status(
             &bot_id,
-            GetQQLoginInfoData { online: false },
+            GetQQLoginInfoData {
+                online: Some(false),
+            },
             &cfg,
             &deps,
             &mut state,
@@ -1960,7 +2128,9 @@ mod transition_tests {
 
         apply_online_status(
             &bot_id,
-            GetQQLoginInfoData { online: false },
+            GetQQLoginInfoData {
+                online: Some(false),
+            },
             &cfg,
             &deps,
             &mut state,
@@ -2001,7 +2171,9 @@ mod transition_tests {
 
         apply_online_status(
             &bot_id,
-            GetQQLoginInfoData { online: false },
+            GetQQLoginInfoData {
+                online: Some(false),
+            },
             &cfg,
             &deps,
             &mut state,
@@ -2222,7 +2394,9 @@ mod property_tests {
             for _ in 0..n {
                 apply_online_status(
                     bot_id,
-                    GetQQLoginInfoData { online: false },
+                    GetQQLoginInfoData {
+                        online: Some(false),
+                    },
                     cfg,
                     &deps,
                     state,
@@ -2293,6 +2467,7 @@ mod property_tests {
                 &mut state,
                 CheckLoginStatusData {
                     is_login: data_is_login,
+                    is_offline: None,
                     qrcode_url: qrcode_url.clone(),
                 },
             );
@@ -2349,6 +2524,7 @@ mod property_tests {
                 &mut state,
                 CheckLoginStatusData {
                     is_login: data_is_login,
+                    is_offline: None,
                     qrcode_url,
                 },
             );
@@ -2394,7 +2570,9 @@ mod property_tests {
                 &bot_id,
                 &cfg,
                 &mut state,
-                GetQQLoginInfoData { online: data_online },
+                GetQQLoginInfoData {
+                    online: Some(data_online),
+                },
             );
             let saw_qrcode = events
                 .iter()
@@ -2446,6 +2624,7 @@ mod property_tests {
                 &mut state,
                 CheckLoginStatusData {
                     is_login: data_is_login,
+                    is_offline: None,
                     qrcode_url,
                 },
             );
@@ -2639,7 +2818,9 @@ mod property_tests {
                 &bot_id,
                 &cfg,
                 &mut state,
-                GetQQLoginInfoData { online: data_online },
+                GetQQLoginInfoData {
+                    online: Some(data_online),
+                },
             );
 
             prop_assert!(

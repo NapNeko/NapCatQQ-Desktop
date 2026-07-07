@@ -17,6 +17,17 @@ describe('buildBotListCardStatus', () => {
         expect(s.alert).toBeNull();
     });
 
+    it('NC running + QR 优先显示待扫码', () => {
+        const s = buildBotListCardStatus({
+            state: 'running',
+            flavor: 'napcat',
+            pendingRestart: false,
+            needsQrLogin: true,
+            isOnline: null,
+        });
+        expect(s.session?.label).toBe('待扫码');
+    });
+
     it('SL running + logged_in 与 NC 同文案', () => {
         const s = buildBotListCardStatus({
             state: 'running',

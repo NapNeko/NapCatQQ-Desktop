@@ -130,6 +130,10 @@ pub struct CheckLoginStatusData {
     /// 当前账号是否已登录
     #[serde(rename = "isLogin", default)]
     pub is_login: bool,
+    /// 当前账号是否已登录但掉线。新版 NapCat 在 WebUI 已登录但
+    /// selfInfo.online == false 时返回 true；老版本可能省略。
+    #[serde(rename = "isOffline", default)]
+    pub is_offline: Option<bool>,
     /// 二维码 URL;通常是 data:image/png;base64,... data URL,少数版本是普通 URL
     /// 后端透传字符串,不解码,不验证(设计 D4)
     #[serde(rename = "qrcodeurl", default)]
@@ -145,9 +149,13 @@ pub struct GetQQLoginInfoResponse {
 /// POST /api/QQLogin/GetQQLoginInfo 响应体的 data 字段
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
 pub struct GetQQLoginInfoData {
-    /// 当前账号是否在线(NapCat 返回的实时在线指示)
+    /// 当前账号是否在线(NapCat 返回的实时在线指示)。
+    ///
+    /// 上游在 OneBot selfInfo 尚未初始化时会把该字段序列化为缺失，
+    /// 这代表“未知”，不能按 false 处理，否则启动早期/远端直跑会被误报
+    /// 为 QQ 未登录。
     #[serde(default)]
-    pub online: bool,
+    pub online: Option<bool>,
 }
 
 // Trait
@@ -407,10 +415,12 @@ mod tests {
 
     #[test]
     fn check_login_status_data_deserializes_legacy_field_names() {
-        let json = r#"{"isLogin":true,"qrcodeurl":"data:image/png;base64,iVBOR"}"#;
+        let json =
+            r#"{"isLogin":true,"isOffline":false,"qrcodeurl":"data:image/png;base64,iVBOR"}"#;
         let data: CheckLoginStatusData =
             serde_json::from_str(json).expect("deserialize CheckLoginStatusData");
         assert!(data.is_login);
+        assert_eq!(data.is_offline, Some(false));
         assert_eq!(data.qrcode_url, "data:image/png;base64,iVBOR");
     }
 
@@ -421,6 +431,7 @@ mod tests {
         let data: CheckLoginStatusData =
             serde_json::from_str(json).expect("deserialize empty object");
         assert!(!data.is_login);
+        assert_eq!(data.is_offline, None);
         assert_eq!(data.qrcode_url, "");
     }
 
@@ -438,15 +449,15 @@ mod tests {
         let json = r#"{"online":true}"#;
         let data: GetQQLoginInfoData =
             serde_json::from_str(json).expect("deserialize GetQQLoginInfoData");
-        assert!(data.online);
+        assert_eq!(data.online, Some(true));
     }
 
     #[test]
-    fn get_qq_login_info_data_defaults_online_to_false_when_missing() {
+    fn get_qq_login_info_data_defaults_online_to_unknown_when_missing() {
         let json = r#"{}"#;
         let data: GetQQLoginInfoData =
             serde_json::from_str(json).expect("deserialize empty object");
-        assert!(!data.online);
+        assert_eq!(data.online, None);
     }
 
     #[test]
@@ -454,7 +465,7 @@ mod tests {
         let json = r#"{"data":{"online":false}}"#;
         let resp: GetQQLoginInfoResponse =
             serde_json::from_str(json).expect("deserialize GetQQLoginInfoResponse");
-        assert!(!resp.data.online);
+        assert_eq!(resp.data.online, Some(false));
     }
 
     // -------- Error Display --------
@@ -941,7 +952,7 @@ mod tests {
             .check_online_status(port, "my-bearer")
             .await
             .expect("check_online_status should succeed");
-        assert!(data.online);
+        assert_eq!(data.online, Some(true));
     }
 
     #[tokio::test]
