@@ -1077,6 +1077,14 @@ mod tests {
             Ok(Vec::new())
         }
 
+        async fn probe_process_login_info(
+            &self,
+            _pid: u32,
+        ) -> Result<Option<crate::snowluma::webui_client::QqPortLoginInfo>, SnowLumaWebUiError>
+        {
+            Ok(None)
+        }
+
         async fn load_process(
             &self,
             _pid: u32,

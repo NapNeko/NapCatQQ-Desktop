@@ -342,6 +342,7 @@ impl BotBackend for SnowLumaRuntimeBackend {
                 event_bus: Arc::clone(&self.event_bus),
                 http: Arc::clone(&client),
                 proc_tree: Arc::clone(&self.proc_tree),
+                expected_uin: read_qq_id(&ctx.config).map(|qq| qq.to_string()),
             };
             let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), qq_pid, poller_deps);
             {

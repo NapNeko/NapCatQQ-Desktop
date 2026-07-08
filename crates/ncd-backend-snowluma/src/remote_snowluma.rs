@@ -628,6 +628,7 @@ impl RemoteSnowLumaBackend {
             proc_tree: Arc::new(crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(
                 pid,
             )),
+            expected_uin: Some(config.bot.qq_id.to_string()),
         };
         let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
         self.pollers.lock().await.insert(bot_id, poller);
@@ -755,6 +756,7 @@ impl BotBackend for RemoteSnowLumaBackend {
             proc_tree: Arc::new(crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(
                 pid,
             )),
+            expected_uin: Some(qq_id_str.clone()),
         };
         let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
         self.pollers.lock().await.insert(bot_id.clone(), poller);

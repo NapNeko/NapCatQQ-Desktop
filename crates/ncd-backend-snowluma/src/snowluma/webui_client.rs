@@ -63,6 +63,21 @@ pub struct OneBotInstanceInfo {
     pub nickname: String,
 }
 
+/// SnowLuma WebUI /api/processes/:pid/probe-login 返回的 QQ 端口探测结果
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QqPortLoginInfo {
+    #[serde(default)]
+    pub port: u16,
+    #[serde(default)]
+    pub uin: String,
+    #[serde(default)]
+    pub uid: Option<String>,
+    #[serde(default, rename = "nickName")]
+    pub nickname: Option<String>,
+    #[serde(default, rename = "loggedIn")]
+    pub logged_in: bool,
+}
+
 // 这些 struct 仅在 Rust 端 HTTP 客户端内部使用,不跨 Tauri 边界
 // 因此不派生 ts-rs,避免污染前端类型表
 
@@ -90,6 +105,12 @@ pub struct ListProcessesResponse {
 pub struct ListQqInstancesResponse {
     #[serde(default)]
     pub list: Vec<OneBotInstanceInfo>,
+}
+
+/// GET /api/processes/:pid/probe-login 响应体
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProbeProcessLoginResponse {
+    pub info: Option<QqPortLoginInfo>,
 }
 
 /// POST /api/processes/:pid/load 与 /unload 共用响应体
@@ -180,6 +201,12 @@ pub trait SnowLumaWebUiClient: Send + Sync {
 
     /// GET /api/qq-list,返回 list 字段
     async fn list_qq_instances(&self) -> Result<Vec<OneBotInstanceInfo>, SnowLumaWebUiError>;
+
+    /// GET /api/processes/{pid}/probe-login,返回 QQ 端口主动探测结果
+    async fn probe_process_login_info(
+        &self,
+        pid: u32,
+    ) -> Result<Option<QqPortLoginInfo>, SnowLumaWebUiError>;
 
     /// POST /api/processes/{pid}/load:触发注入success == false 返回
     ///   ServerRejected;缺少 process 字段返回 Decode15s 超时
@@ -617,6 +644,17 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
             .authed_request_json(Method::GET, "/api/qq-list", DEFAULT_REQUEST_TIMEOUT)
             .await?;
         Ok(resp.list)
+    }
+
+    async fn probe_process_login_info(
+        &self,
+        pid: u32,
+    ) -> Result<Option<QqPortLoginInfo>, SnowLumaWebUiError> {
+        let path = format!("/api/processes/{pid}/probe-login");
+        let resp: ProbeProcessLoginResponse = self
+            .authed_request_json(Method::GET, &path, DEFAULT_REQUEST_TIMEOUT)
+            .await?;
+        Ok(resp.info)
     }
 
     async fn load_process(&self, pid: u32) -> Result<HookProcessInfo, SnowLumaWebUiError> {

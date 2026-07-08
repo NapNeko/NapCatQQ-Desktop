@@ -34,7 +34,7 @@ use tokio::time::{Instant, MissedTickBehavior, interval_at, sleep};
 use tokio_util::sync::CancellationToken;
 
 use crate::snowluma::webui_client::{
-    HookProcessInfo, HookProcessStatus, OneBotInstanceInfo, SnowLumaWebUiClient,
+    HookProcessInfo, HookProcessStatus, OneBotInstanceInfo, QqPortLoginInfo, SnowLumaWebUiClient,
 };
 use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::ids::BotId;
@@ -56,6 +56,7 @@ pub struct PollerDeps {
     pub event_bus: Arc<BroadcastEventBus>,
     pub http: Arc<dyn SnowLumaWebUiClient>,
     pub proc_tree: Arc<dyn ProcessTreeProbe>,
+    pub expected_uin: Option<String>,
 }
 
 /// per-Bot 状态轮询组件句柄
@@ -105,6 +106,7 @@ impl Drop for SnowLumaStatusPoller {
 struct PollerState {
     initial_qq_pid: u32,
     uin: Option<String>,
+    locked_pid: Option<u32>,
     last_state: Option<SnowLumaLoginState>,
     last_pid_set: BTreeSet<u32>,
     consecutive_failures: u32,
@@ -201,35 +203,107 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
     // 全部成功:恢复失败计数
     state.consecutive_failures = 0;
 
+    let mut probe_login_evidence: Option<ProbeLoginEvidence> = None;
+
     // === UIN 锁定(仅 uin == None 时尝试)===
     if state.uin.is_none() {
         let candidates = deps
             .proc_tree
             .collect_descendants(state.initial_qq_pid)
             .await;
-        if let Some(locked) = try_lock_uin(&processes, &qq_instances, &candidates) {
+        if let Some(locked) = try_lock_uin(
+            &processes,
+            &qq_instances,
+            &candidates,
+            deps.expected_uin.as_deref(),
+        ) {
+            state.locked_pid = find_candidate_pid_for_uin(&processes, &candidates, &locked);
+            if state.locked_pid.is_none() {
+                state.locked_pid = find_pid_for_uin(&processes, &locked);
+            }
             deps.event_bus.publish(DomainEvent::snowluma_uin_detected(
                 bot_id.clone(),
                 locked.clone(),
             ));
+            tracing::info!(
+                target: "ncd_runtime::snowluma_status_poller",
+                bot_id = %bot_id,
+                uin = %locked,
+                locked_pid = ?state.locked_pid,
+                expected_uin = ?deps.expected_uin,
+                "SnowLuma UIN locked"
+            );
             state.uin = Some(locked);
+        } else if let Some(evidence) = probe_candidate_login_info(
+            &deps.http,
+            &processes,
+            &candidates,
+            deps.expected_uin.as_deref(),
+        )
+        .await
+        {
+            deps.event_bus.publish(DomainEvent::snowluma_uin_detected(
+                bot_id.clone(),
+                evidence.uin.clone(),
+            ));
+            state.locked_pid = Some(evidence.pid);
+            state.uin = Some(evidence.uin.clone());
+            tracing::info!(
+                target: "ncd_runtime::snowluma_status_poller",
+                bot_id = %bot_id,
+                uin = %evidence.uin,
+                locked_pid = evidence.pid,
+                expected_uin = ?deps.expected_uin,
+                "SnowLuma UIN locked from probe-login"
+            );
+            probe_login_evidence = Some(evidence);
         }
     }
 
     // 还没锁定 → 本轮不发布状态 / PID 集合事件
-    let Some(ref locked_uin) = state.uin else {
+    let Some(locked_uin) = state.uin.clone() else {
         return;
     };
 
+    if state.locked_pid.is_none() {
+        state.locked_pid = find_pid_for_uin(&processes, &locked_uin);
+    }
+
     // === 状态合成 ===
-    let matched: Vec<&HookProcessInfo> =
-        processes.iter().filter(|p| p.uin == *locked_uin).collect();
-    let qq_has_uin = qq_instances.iter().any(|i| i.uin == *locked_uin);
-    let synthesized = synthesize_state(&matched, qq_has_uin);
+    let locked_pid = state.locked_pid;
+    let matched: Vec<&HookProcessInfo> = processes
+        .iter()
+        .filter(|p| process_matches_locked(p, &locked_uin, locked_pid))
+        .collect();
+    let qq_has_uin = qq_instances.iter().any(|i| i.uin == locked_uin);
+    let mut probe_has_uin = probe_login_evidence
+        .as_ref()
+        .is_some_and(|e| e.uin == locked_uin);
+    if !probe_has_uin
+        && !qq_has_uin
+        && !matched
+            .iter()
+            .any(|p| p.status == HookProcessStatus::Online)
+    {
+        if let Some(pid) = locked_pid {
+            if let Ok(Some(info)) = deps.http.probe_process_login_info(pid).await {
+                probe_has_uin = probe_info_matches_uin(&info, &locked_uin);
+            }
+        }
+    }
+    let synthesized = synthesize_state(&matched, qq_has_uin || probe_has_uin);
 
     if let Some(new_state) = synthesized
         && state.last_state != Some(new_state)
     {
+        tracing::info!(
+            target: "ncd_runtime::snowluma_status_poller",
+            bot_id = %bot_id,
+            uin = %locked_uin,
+            locked_pid = ?locked_pid,
+            state = ?new_state,
+            "SnowLuma login state changed"
+        );
         deps.event_bus
             .publish(DomainEvent::snowluma_login_state_changed(
                 bot_id.clone(),
@@ -250,31 +324,135 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
 
 // 纯函数:UIN 锁定 + 状态合成 + 真实性校验
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProbeLoginEvidence {
+    pid: u32,
+    uin: String,
+}
+
 /// is_real_uin:非空 + 非 "0" + 全 ASCII 数字 + 长度 ≥ 5
 fn is_real_uin(s: &str) -> bool {
     !s.is_empty() && s != "0" && s.len() >= 5 && s.bytes().all(|b| b.is_ascii_digit())
 }
 
+fn uin_matches_expected(uin: &str, expected_uin: Option<&str>) -> bool {
+    expected_uin.is_none_or(|expected| expected == uin)
+}
+
+fn probe_info_matches_uin(info: &QqPortLoginInfo, uin: &str) -> bool {
+    info.logged_in && info.uin == uin && is_real_uin(&info.uin)
+}
+
+fn process_matches_locked(
+    process: &HookProcessInfo,
+    locked_uin: &str,
+    locked_pid: Option<u32>,
+) -> bool {
+    process.uin == locked_uin || locked_pid == Some(process.pid)
+}
+
+fn find_pid_for_uin(processes: &[HookProcessInfo], uin: &str) -> Option<u32> {
+    processes.iter().find(|p| p.uin == uin).map(|p| p.pid)
+}
+
+fn find_candidate_pid_for_uin(
+    processes: &[HookProcessInfo],
+    candidates: &BTreeSet<u32>,
+    uin: &str,
+) -> Option<u32> {
+    processes
+        .iter()
+        .find(|p| candidates.contains(&p.pid) && p.uin == uin)
+        .map(|p| p.pid)
+}
+
+async fn probe_candidate_login_info(
+    http: &Arc<dyn SnowLumaWebUiClient>,
+    processes: &[HookProcessInfo],
+    candidates: &BTreeSet<u32>,
+    expected_uin: Option<&str>,
+) -> Option<ProbeLoginEvidence> {
+    let mut pids: Vec<u32> = processes
+        .iter()
+        .filter(|p| expected_uin.is_some() || candidates.contains(&p.pid))
+        .map(|p| p.pid)
+        .collect();
+    pids.sort_unstable();
+    pids.dedup();
+
+    for pid in pids {
+        let Ok(Some(info)) = http.probe_process_login_info(pid).await else {
+            continue;
+        };
+        if info.logged_in && is_real_uin(&info.uin) && uin_matches_expected(&info.uin, expected_uin)
+        {
+            return Some(ProbeLoginEvidence { pid, uin: info.uin });
+        }
+    }
+    None
+}
+
 /// 严格 UIN 锁定策略:
 /// - 策略 A:任一 process.pid ∈ candidate set 且 is_real_uin(process.uin)
 ///   → 锁该 uin
-/// - 策略 B(fallback,仅当 processes 完全空时):qq_instances 恰好 1 条 +
+/// - 策略 B(expected):配置里有明确 QQ 号时,允许跨 PID 从 process.uin 或
+///   qq-list 精确锁定它。远端 Linux QQ 启动脚本可能返回 wrapper PID,
+///   而 SnowLuma WebUI 枚举的是最终 QQ 进程 PID。
+/// - 策略 C(fallback,仅当 processes 完全空时):qq_instances 恰好 1 条 +
 ///   is_real_uin(qq_instances[0].uin) → 锁该 uin
+/// - 策略 D(fallback):已看到 candidate 进程,但 processes 里还没有任何真实
+///   UIN,同时 qq_instances 恰好 1 条真实 UIN → 锁该 uin。扫码登录后
+///   OneBot 会话可能先出现在 qq-list,process.uin/status 下一轮才刷新。
 /// - 否则:返回 None,等下一轮重试
 ///   多 instance(≥ 2)显式拒绝,避免 cross-Bot 误匹配(legacy 复现过)
 fn try_lock_uin(
     processes: &[HookProcessInfo],
     qq_instances: &[OneBotInstanceInfo],
     candidates: &BTreeSet<u32>,
+    expected_uin: Option<&str>,
 ) -> Option<String> {
     // 策略 A
     for p in processes {
-        if candidates.contains(&p.pid) && is_real_uin(&p.uin) {
+        if candidates.contains(&p.pid)
+            && is_real_uin(&p.uin)
+            && uin_matches_expected(&p.uin, expected_uin)
+        {
             return Some(p.uin.clone());
         }
     }
-    // 策略 B:仅当 processes 完全空 + qq_instances 恰好 1 条
-    if processes.is_empty() && qq_instances.len() == 1 && is_real_uin(&qq_instances[0].uin) {
+
+    // 策略 B:配置里已有 QQ 号时,用 WebUI 事实精确绑定,不被启动 PID 卡死。
+    if let Some(expected) = expected_uin.filter(|v| is_real_uin(v)) {
+        if processes
+            .iter()
+            .any(|p| p.uin == expected && is_real_uin(&p.uin))
+        {
+            return Some(expected.to_string());
+        }
+        if qq_instances.iter().any(|i| i.uin == expected) {
+            return Some(expected.to_string());
+        }
+    }
+
+    // 策略 C:仅当 processes 完全空 + qq_instances 恰好 1 条
+    if processes.is_empty()
+        && qq_instances.len() == 1
+        && is_real_uin(&qq_instances[0].uin)
+        && uin_matches_expected(&qq_instances[0].uin, expected_uin)
+    {
+        return Some(qq_instances[0].uin.clone());
+    }
+    // 策略 D:候选 QQ 进程已被 WebUI 枚举到,但 hook loginState 还没把
+    // process.uin 刷成真实账号。只有 processes 里完全没有真实 UIN 时才
+    // 信任唯一 qq-list,避免多账号场景把别的 Bot 误锁过来。
+    let has_candidate_process = processes.iter().any(|p| candidates.contains(&p.pid));
+    let has_any_real_process_uin = processes.iter().any(|p| is_real_uin(&p.uin));
+    if has_candidate_process
+        && !has_any_real_process_uin
+        && qq_instances.len() == 1
+        && is_real_uin(&qq_instances[0].uin)
+        && uin_matches_expected(&qq_instances[0].uin, expected_uin)
+    {
         return Some(qq_instances[0].uin.clone());
     }
     None
@@ -282,17 +460,21 @@ fn try_lock_uin(
 
 /// 状态合成:
 /// 1. 任一 matched.status == Online → LoggedIn
-/// 2. 否则任一 matched.status == Loaded → WaitingForQrScan
-/// 3. 否则任一 matched.status ∈ {Available, Loading, Connecting} → Starting
-/// 4. 否则 matched 非空 + 全部 ∈ {Error, Disconnected} → Disconnected
-/// 5. 否则 matched 空 + qq_instances 含已锁 uin → fallback LoggedIn
-///    (Windows getAllMainProcess bug 兜底)
+/// 2. qq_instances 含已锁 uin → LoggedIn
+///    OneBotManager 只在 Bridge session close 时移除实例；它比 hook pipe 的
+///    短暂 Disconnected/Error 更能代表账号仍在线。
+/// 3. 否则任一 matched.status == Loaded → WaitingForQrScan
+/// 4. 否则任一 matched.status ∈ {Available, Loading, Connecting} → Starting
+/// 5. 否则 matched 非空 + 全部 ∈ {Error, Disconnected} → Disconnected
 /// 6. 否则 → None,本轮不发布
 fn synthesize_state(matched: &[&HookProcessInfo], qq_has_uin: bool) -> Option<SnowLumaLoginState> {
     if matched
         .iter()
         .any(|p| p.status == HookProcessStatus::Online)
     {
+        return Some(SnowLumaLoginState::LoggedIn);
+    }
+    if qq_has_uin {
         return Some(SnowLumaLoginState::LoggedIn);
     }
     if matched
@@ -320,9 +502,6 @@ fn synthesize_state(matched: &[&HookProcessInfo], qq_has_uin: bool) -> Option<Sn
         })
     {
         return Some(SnowLumaLoginState::Disconnected);
-    }
-    if matched.is_empty() && qq_has_uin {
-        return Some(SnowLumaLoginState::LoggedIn);
     }
     None
 }
@@ -362,8 +541,10 @@ mod tests {
     struct MockBehavior {
         processes_responses: VecDeque<Result<Vec<HookProcessInfo>, SnowLumaWebUiError>>,
         qq_responses: VecDeque<Result<Vec<OneBotInstanceInfo>, SnowLumaWebUiError>>,
+        probe_responses: VecDeque<Result<Option<QqPortLoginInfo>, SnowLumaWebUiError>>,
         last_processes: Option<Result<Vec<HookProcessInfo>, SnowLumaWebUiError>>,
         last_qq: Option<Result<Vec<OneBotInstanceInfo>, SnowLumaWebUiError>>,
+        last_probe: Option<Result<Option<QqPortLoginInfo>, SnowLumaWebUiError>>,
     }
 
     fn clone_webui_error(e: &SnowLumaWebUiError) -> SnowLumaWebUiError {
@@ -411,6 +592,15 @@ mod tests {
     fn clone_qq_result(
         r: &Result<Vec<OneBotInstanceInfo>, SnowLumaWebUiError>,
     ) -> Result<Vec<OneBotInstanceInfo>, SnowLumaWebUiError> {
+        match r {
+            Ok(v) => Ok(v.clone()),
+            Err(e) => Err(clone_webui_error(e)),
+        }
+    }
+
+    fn clone_probe_result(
+        r: &Result<Option<QqPortLoginInfo>, SnowLumaWebUiError>,
+    ) -> Result<Option<QqPortLoginInfo>, SnowLumaWebUiError> {
         match r {
             Ok(v) => Ok(v.clone()),
             Err(e) => Err(clone_webui_error(e)),
@@ -470,6 +660,20 @@ mod tests {
                 Ok(Vec::new())
             }
         }
+        async fn probe_process_login_info(
+            &self,
+            _pid: u32,
+        ) -> Result<Option<QqPortLoginInfo>, SnowLumaWebUiError> {
+            let mut behavior = self.behavior.lock().await;
+            if let Some(front) = behavior.probe_responses.pop_front() {
+                behavior.last_probe = Some(clone_probe_result(&front));
+                front
+            } else if let Some(last) = &behavior.last_probe {
+                clone_probe_result(last)
+            } else {
+                Ok(None)
+            }
+        }
         async fn load_process(&self, _pid: u32) -> Result<HookProcessInfo, SnowLumaWebUiError> {
             Err(SnowLumaWebUiError::ServerRejected {
                 endpoint: "<mock>".into(),
@@ -527,6 +731,16 @@ mod tests {
         }
     }
 
+    fn probe_info(pid_port: u16, uin: &str, logged_in: bool) -> QqPortLoginInfo {
+        QqPortLoginInfo {
+            port: pid_port,
+            uin: uin.into(),
+            uid: None,
+            nickname: None,
+            logged_in,
+        }
+    }
+
     // 占位:后续追加测试用例
 
     // ----- UIN 锁定行为(纯函数 + tick_once 集成) -----
@@ -540,8 +754,41 @@ mod tests {
         let qq_instances = vec![];
         let candidates: BTreeSet<u32> = [12345u32, 12346u32].into_iter().collect();
         assert_eq!(
-            try_lock_uin(&processes, &qq_instances, &candidates),
+            try_lock_uin(&processes, &qq_instances, &candidates, None),
             Some("100200".to_string())
+        );
+    }
+
+    #[test]
+    fn try_lock_uin_expected_matches_process_even_when_pid_differs() {
+        let processes = vec![proc(140661, "572381217", HookProcessStatus::Online)];
+        let qq_instances = vec![];
+        let candidates = BTreeSet::from([12345u32]);
+        assert_eq!(
+            try_lock_uin(&processes, &qq_instances, &candidates, Some("572381217")),
+            Some("572381217".to_string())
+        );
+    }
+
+    #[test]
+    fn try_lock_uin_expected_refuses_wrong_candidate_uin() {
+        let processes = vec![proc(12346, "999999", HookProcessStatus::Online)];
+        let qq_instances = vec![];
+        let candidates = BTreeSet::from([12346u32]);
+        assert_eq!(
+            try_lock_uin(&processes, &qq_instances, &candidates, Some("100200")),
+            None
+        );
+    }
+
+    #[test]
+    fn try_lock_uin_expected_matches_qq_list_among_multiple_instances() {
+        let processes = vec![proc(140661, "0", HookProcessStatus::Loaded)];
+        let qq_instances = vec![instance("999999"), instance("572381217")];
+        let candidates = BTreeSet::from([12345u32]);
+        assert_eq!(
+            try_lock_uin(&processes, &qq_instances, &candidates, Some("572381217")),
+            Some("572381217".to_string())
         );
     }
 
@@ -551,7 +798,7 @@ mod tests {
         let qq_instances = vec![instance("100200")];
         let candidates = BTreeSet::from([12345u32]);
         assert_eq!(
-            try_lock_uin(&processes, &qq_instances, &candidates),
+            try_lock_uin(&processes, &qq_instances, &candidates, None),
             Some("100200".to_string())
         );
     }
@@ -561,7 +808,10 @@ mod tests {
         let processes: Vec<HookProcessInfo> = vec![];
         let qq_instances = vec![instance("100200"), instance("999999")];
         let candidates = BTreeSet::from([12345u32]);
-        assert_eq!(try_lock_uin(&processes, &qq_instances, &candidates), None);
+        assert_eq!(
+            try_lock_uin(&processes, &qq_instances, &candidates, None),
+            None
+        );
     }
 
     #[test]
@@ -570,7 +820,10 @@ mod tests {
         let processes = vec![proc(77777, "100200", HookProcessStatus::Loaded)];
         let qq_instances = vec![instance("100200")];
         let candidates = BTreeSet::from([12345u32]);
-        assert_eq!(try_lock_uin(&processes, &qq_instances, &candidates), None);
+        assert_eq!(
+            try_lock_uin(&processes, &qq_instances, &candidates, None),
+            None
+        );
     }
 
     #[test]
@@ -578,7 +831,35 @@ mod tests {
         let processes = vec![proc(12346, "0", HookProcessStatus::Loaded)];
         let qq_instances = vec![];
         let candidates = BTreeSet::from([12346u32]);
-        assert_eq!(try_lock_uin(&processes, &qq_instances, &candidates), None);
+        assert_eq!(
+            try_lock_uin(&processes, &qq_instances, &candidates, None),
+            None
+        );
+    }
+
+    #[test]
+    fn try_lock_uin_strategy_c_single_qq_instance_when_candidate_uin_still_invalid() {
+        let processes = vec![proc(12346, "0", HookProcessStatus::Loaded)];
+        let qq_instances = vec![instance("100200")];
+        let candidates = BTreeSet::from([12346u32]);
+        assert_eq!(
+            try_lock_uin(&processes, &qq_instances, &candidates, None),
+            Some("100200".to_string())
+        );
+    }
+
+    #[test]
+    fn try_lock_uin_strategy_c_refuses_when_any_process_already_has_real_uin() {
+        let processes = vec![
+            proc(12346, "0", HookProcessStatus::Loaded),
+            proc(77777, "999999", HookProcessStatus::Online),
+        ];
+        let qq_instances = vec![instance("100200")];
+        let candidates = BTreeSet::from([12346u32]);
+        assert_eq!(
+            try_lock_uin(&processes, &qq_instances, &candidates, None),
+            None
+        );
     }
 
     // ----- 状态合成 6 分支 -----
@@ -600,7 +881,7 @@ mod tests {
         let p2 = proc(2, "100200", HookProcessStatus::Loaded);
         let matched = vec![&p1, &p2];
         assert_eq!(
-            synthesize_state(&matched, true),
+            synthesize_state(&matched, false),
             Some(SnowLumaLoginState::WaitingForQrScan)
         );
     }
@@ -610,21 +891,21 @@ mod tests {
         let p1 = proc(1, "100200", HookProcessStatus::Available);
         let matched = vec![&p1];
         assert_eq!(
-            synthesize_state(&matched, true),
+            synthesize_state(&matched, false),
             Some(SnowLumaLoginState::Starting)
         );
 
         let p2 = proc(2, "100200", HookProcessStatus::Loading);
         let matched = vec![&p2];
         assert_eq!(
-            synthesize_state(&matched, true),
+            synthesize_state(&matched, false),
             Some(SnowLumaLoginState::Starting)
         );
 
         let p3 = proc(3, "100200", HookProcessStatus::Connecting);
         let matched = vec![&p3];
         assert_eq!(
-            synthesize_state(&matched, true),
+            synthesize_state(&matched, false),
             Some(SnowLumaLoginState::Starting)
         );
     }
@@ -635,8 +916,18 @@ mod tests {
         let p2 = proc(2, "100200", HookProcessStatus::Disconnected);
         let matched = vec![&p1, &p2];
         assert_eq!(
-            synthesize_state(&matched, true),
+            synthesize_state(&matched, false),
             Some(SnowLumaLoginState::Disconnected)
+        );
+    }
+
+    #[test]
+    fn synthesize_state_logged_in_when_qq_list_has_uin_even_if_hook_disconnected() {
+        let p1 = proc(1, "100200", HookProcessStatus::Disconnected);
+        let matched = vec![&p1];
+        assert_eq!(
+            synthesize_state(&matched, true),
+            Some(SnowLumaLoginState::LoggedIn)
         );
     }
 
@@ -661,11 +952,20 @@ mod tests {
         client: Arc<dyn SnowLumaWebUiClient>,
         proc_tree: Arc<dyn ProcessTreeProbe>,
     ) -> (PollerDeps, Arc<BroadcastEventBus>) {
+        build_test_deps_with_expected(client, proc_tree, None)
+    }
+
+    fn build_test_deps_with_expected(
+        client: Arc<dyn SnowLumaWebUiClient>,
+        proc_tree: Arc<dyn ProcessTreeProbe>,
+        expected_uin: Option<String>,
+    ) -> (PollerDeps, Arc<BroadcastEventBus>) {
         let bus = Arc::new(BroadcastEventBus::default());
         let deps = PollerDeps {
             event_bus: Arc::clone(&bus),
             http: client,
             proc_tree,
+            expected_uin,
         };
         (deps, bus)
     }
@@ -720,6 +1020,198 @@ mod tests {
             }
         }
         assert!(got_uin && got_state && got_pids);
+    }
+
+    #[tokio::test]
+    async fn tick_once_locks_expected_uin_when_webui_pid_differs_from_launch_pid() {
+        let (client, behavior) = MockClient::new();
+        {
+            let mut b = behavior.lock().await;
+            b.processes_responses.push_back(Ok(vec![proc(
+                140661,
+                "572381217",
+                HookProcessStatus::Online,
+            )]));
+            b.qq_responses.push_back(Ok(vec![instance("572381217")]));
+        }
+        let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::with_set([12345u32]));
+        let (deps, bus) =
+            build_test_deps_with_expected(client, probe, Some("572381217".to_string()));
+
+        let bot_id = BotId::new("572381217");
+        let mut sub = bus.subscribe(EventFilter::all());
+        let mut state = PollerState::new(12345);
+        tick_once(&bot_id, &deps, &mut state).await;
+
+        assert_eq!(state.uin.as_deref(), Some("572381217"));
+        assert_eq!(state.locked_pid, Some(140661));
+        assert_eq!(state.last_state, Some(SnowLumaLoginState::LoggedIn));
+
+        let mut got_uin = false;
+        let mut got_state = false;
+        let mut got_pids = false;
+        for _ in 0..3 {
+            let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
+                .await
+                .expect("event in 1s")
+                .expect("subscription open");
+            match evt {
+                DomainEvent::SnowLumaUinDetected { uin, .. } => {
+                    assert_eq!(uin, "572381217");
+                    got_uin = true;
+                }
+                DomainEvent::SnowLumaLoginStateChanged { state, .. } => {
+                    assert_eq!(state, SnowLumaLoginState::LoggedIn);
+                    got_state = true;
+                }
+                DomainEvent::SnowLumaPidSetChanged { pids, .. } => {
+                    assert_eq!(pids, vec![140661]);
+                    got_pids = true;
+                }
+                other => panic!("unexpected event {other:?}"),
+            }
+        }
+        assert!(got_uin && got_state && got_pids);
+    }
+
+    #[tokio::test]
+    async fn tick_once_locks_uin_from_qq_list_after_manual_scan() {
+        let (client, behavior) = MockClient::new();
+        {
+            let mut b = behavior.lock().await;
+            b.processes_responses
+                .push_back(Ok(vec![proc(12346, "0", HookProcessStatus::Loaded)]));
+            b.qq_responses.push_back(Ok(vec![]));
+            b.processes_responses
+                .push_back(Ok(vec![proc(12346, "0", HookProcessStatus::Loaded)]));
+            b.qq_responses.push_back(Ok(vec![instance("100200")]));
+        }
+        let probe: Arc<dyn ProcessTreeProbe> =
+            Arc::new(MockProcessTreeProbe::with_set([12345u32, 12346u32]));
+        let (deps, bus) = build_test_deps(client, probe);
+
+        let bot_id = BotId::new("10001");
+        let mut sub = bus.subscribe(EventFilter::all());
+        let mut state = PollerState::new(12345);
+
+        tick_once(&bot_id, &deps, &mut state).await;
+        assert_eq!(state.uin, None);
+        assert_eq!(state.last_state, None);
+        let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
+        assert!(r.is_err(), "no event before UIN is locked");
+
+        tick_once(&bot_id, &deps, &mut state).await;
+        assert_eq!(state.uin.as_deref(), Some("100200"));
+        assert_eq!(state.last_state, Some(SnowLumaLoginState::LoggedIn));
+
+        let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
+            .await
+            .expect("UIN detected within 1s")
+            .expect("subscription open");
+        match evt {
+            DomainEvent::SnowLumaUinDetected { uin, .. } => assert_eq!(uin, "100200"),
+            other => panic!("expected UinDetected, got {other:?}"),
+        }
+
+        let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
+            .await
+            .expect("LoggedIn within 1s")
+            .expect("subscription open");
+        match evt {
+            DomainEvent::SnowLumaLoginStateChanged { state, .. } => {
+                assert_eq!(state, SnowLumaLoginState::LoggedIn);
+            }
+            other => panic!("expected LoginStateChanged, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn tick_once_locks_uin_from_probe_login_when_hook_stays_loaded() {
+        let (client, behavior) = MockClient::new();
+        {
+            let mut b = behavior.lock().await;
+            b.processes_responses
+                .push_back(Ok(vec![proc(12346, "0", HookProcessStatus::Loaded)]));
+            b.qq_responses.push_back(Ok(vec![]));
+            b.probe_responses
+                .push_back(Ok(Some(probe_info(4301, "100200", true))));
+        }
+        let probe: Arc<dyn ProcessTreeProbe> =
+            Arc::new(MockProcessTreeProbe::with_set([12345u32, 12346u32]));
+        let (deps, bus) = build_test_deps(client, probe);
+
+        let bot_id = BotId::new("10001");
+        let mut sub = bus.subscribe(EventFilter::all());
+        let mut state = PollerState::new(12345);
+        tick_once(&bot_id, &deps, &mut state).await;
+
+        assert_eq!(state.uin.as_deref(), Some("100200"));
+        assert_eq!(state.locked_pid, Some(12346));
+        assert_eq!(state.last_state, Some(SnowLumaLoginState::LoggedIn));
+
+        let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
+            .await
+            .expect("UIN detected within 1s")
+            .expect("subscription open");
+        match evt {
+            DomainEvent::SnowLumaUinDetected { uin, .. } => assert_eq!(uin, "100200"),
+            other => panic!("expected UinDetected, got {other:?}"),
+        }
+
+        let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
+            .await
+            .expect("LoggedIn within 1s")
+            .expect("subscription open");
+        match evt {
+            DomainEvent::SnowLumaLoginStateChanged { state, .. } => {
+                assert_eq!(state, SnowLumaLoginState::LoggedIn);
+            }
+            other => panic!("expected LoginStateChanged, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn tick_once_keeps_logged_in_via_probe_when_hook_uin_remains_invalid() {
+        let (client, behavior) = MockClient::new();
+        {
+            let mut b = behavior.lock().await;
+            b.processes_responses
+                .push_back(Ok(vec![proc(12346, "0", HookProcessStatus::Loaded)]));
+            b.qq_responses.push_back(Ok(vec![]));
+            b.probe_responses
+                .push_back(Ok(Some(probe_info(4301, "100200", true))));
+            b.processes_responses
+                .push_back(Ok(vec![proc(12346, "0", HookProcessStatus::Loaded)]));
+            b.qq_responses.push_back(Ok(vec![]));
+            b.probe_responses
+                .push_back(Ok(Some(probe_info(4301, "100200", true))));
+        }
+        let probe: Arc<dyn ProcessTreeProbe> =
+            Arc::new(MockProcessTreeProbe::with_set([12345u32, 12346u32]));
+        let (deps, bus) = build_test_deps(client, probe);
+
+        let bot_id = BotId::new("10001");
+        let mut sub = bus.subscribe(EventFilter::kind(
+            DomainEventKind::SnowLumaLoginStateChanged,
+        ));
+        let mut state = PollerState::new(12345);
+
+        tick_once(&bot_id, &deps, &mut state).await;
+        let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
+            .await
+            .expect("first LoggedIn within 1s")
+            .expect("subscription open");
+        match evt {
+            DomainEvent::SnowLumaLoginStateChanged { state, .. } => {
+                assert_eq!(state, SnowLumaLoginState::LoggedIn);
+            }
+            other => panic!("expected LoginStateChanged, got {other:?}"),
+        }
+
+        tick_once(&bot_id, &deps, &mut state).await;
+        assert_eq!(state.last_state, Some(SnowLumaLoginState::LoggedIn));
+        let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
+        assert!(r.is_err(), "no downgrade while probe still sees logged in");
     }
 
     #[tokio::test]
@@ -839,6 +1331,7 @@ mod tests {
             event_bus: Arc::clone(&bus),
             http: client,
             proc_tree: probe,
+            expected_uin: None,
         };
         let bot_id = BotId::new("10001");
 
