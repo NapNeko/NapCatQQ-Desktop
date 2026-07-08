@@ -3,7 +3,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
+use ncd_backend_snowluma::{
+    LinuxSinglePidProbe, PollerDeps, ReqwestSnowLumaWebUiClient, SnowLumaStatusPoller,
+    SnowLumaWebUiClient,
+};
 use ncd_deploy::docker::DockerCli;
 use ncd_deploy::{Deployment, NativeRuntimeEventSink};
 use ncd_deploy::{DockerDeployment, resolve_bot_container_name};
@@ -34,6 +39,7 @@ struct SessionInner {
     log_task: Option<JoinHandle<()>>,
     watch_task: Option<JoinHandle<()>>,
     snowluma: Option<SnowLumaDockerEndpoints>,
+    snowluma_poller: Option<SnowLumaStatusPoller>,
     stop_expected: Arc<AtomicBool>,
 }
 
@@ -49,6 +55,9 @@ impl DockerBotSession {
     pub async fn shutdown(&self) {
         let mut inner = self.inner.lock().await;
         inner.stop_expected.store(true, Ordering::SeqCst);
+        if let Some(p) = inner.snowluma_poller.take() {
+            p.dispose();
+        }
         if let Some(h) = inner.log_task.take() {
             h.abort();
         }
@@ -238,15 +247,49 @@ impl DockerBotSessionRegistry {
             }
         });
 
+        // SL Docker 隧道就绪时派生 poller init 参数(容器 WebUI 慢启动,异步 spawn 不阻塞)
+        let snowluma_poller_init = snowluma_eps
+            .as_ref()
+            .map(|eps| (eps.webui_local_port, eps.webui_password.clone(), config.bot.qq_id));
+
         let session = Arc::new(DockerBotSession {
             inner: Mutex::new(SessionInner {
                 tunnels,
                 log_task: Some(log_task),
                 watch_task: Some(watch_task),
                 snowluma: snowluma_eps,
+                snowluma_poller: None,
                 stop_expected,
             }),
         });
+
+        // 异步初始化 SL 登录态 poller:wait_ready 要等容器内 WebUI 起来,不能阻塞 start_session
+        if let Some((port, pwd, qq_id)) = snowluma_poller_init {
+            let session_for_init = Arc::clone(&session);
+            let bot_id_init = bot_id.clone();
+            let bus_init = bus.clone();
+            tokio::spawn(async move {
+                let bot_id_log = bot_id_init.clone();
+                match build_and_spawn_snowluma_poller(bot_id_init, port, pwd, qq_id, bus_init).await
+                {
+                    Ok(poller) => {
+                        let mut inner = session_for_init.inner.lock().await;
+                        if inner.stop_expected.load(Ordering::SeqCst) {
+                            // init 期间 session 已 shutdown(容器挂/用户停),直接 dispose 防泄漏
+                            poller.dispose();
+                        } else {
+                            inner.snowluma_poller = Some(poller);
+                        }
+                    }
+                    Err(e) => warn!(
+                        target: "ncd_runtime::docker_bot_session",
+                        bot_id = %bot_id_log,
+                        "SnowLuma Docker poller init failed: {e}"
+                    ),
+                }
+            });
+        }
+
         self.sessions.lock().await.insert(bot_id, session);
     }
 }
@@ -262,6 +305,33 @@ async fn open_loopback_tunnel(
         remote_port,
     };
     host.open_tunnel(spec).await
+}
+
+/// 构造 SnowLuma WebUI client(隧道本地端口 + bootstrap 密码)→ wait_ready → login →
+/// spawn 登录态 poller。Docker 场景无 daemon 单例也无需 load_process(容器内
+/// SNOWLUMA_HOOK_AUTOLOAD 自动注入);initial_qq_pid 传 0,完全靠 expected_uin +
+/// probe-login 兜底锁定 UIN(见 status_poller 的策略 B + probe 补偿)
+async fn build_and_spawn_snowluma_poller(
+    bot_id: BotId,
+    webui_port: u16,
+    webui_password: String,
+    qq_id: u64,
+    event_bus: Arc<BroadcastEventBus>,
+) -> Result<SnowLumaStatusPoller, String> {
+    let client = ReqwestSnowLumaWebUiClient::new(webui_port, webui_password)
+        .map_err(|e| e.to_string())?;
+    client
+        .wait_ready(Duration::from_secs(90), Box::new(|| false))
+        .await
+        .map_err(|e| e.to_string())?;
+    client.login().await.map_err(|e| e.to_string())?;
+    let deps = PollerDeps {
+        event_bus,
+        http: Arc::new(client),
+        proc_tree: Arc::new(LinuxSinglePidProbe::new(0)),
+        expected_uin: Some(qq_id.to_string()),
+    };
+    Ok(SnowLumaStatusPoller::spawn(bot_id, 0, deps))
 }
 
 pub use ncd_domain::bot_config::{is_remote_docker_config, is_remote_native_napcat_config};

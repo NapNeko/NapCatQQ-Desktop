@@ -8,7 +8,7 @@ pub mod snowluma;
 
 pub use snowluma::{
     AgreementDoc, AgreementsPayload, AuthState, DaemonState, HookProcessInfo, HookProcessStatus,
-    LinuxSinglePidProbe, MockProcessTreeProbe, OneBotInstanceInfo, ProcessTreeProbe,
+    LinuxSinglePidProbe, MockProcessTreeProbe, OneBotInstanceInfo, PollerDeps, ProcessTreeProbe,
     ReqwestSnowLumaWebUiClient, ReqwestSnowLumaWebUiClientFactory, SnowLumaDaemon,
     SnowLumaDaemonError, SnowLumaLoginState, SnowLumaRuntimeBackend, SnowLumaSession,
     SnowLumaStatusPoller, SnowLumaWebUiClient, SnowLumaWebUiClientFactory, SnowLumaWebUiError,
