@@ -51,6 +51,12 @@ const POLL_INTERVAL: Duration = Duration::from_secs(2);
 /// Disconnected,恢复前不再发新状态
 const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
+/// 曾在线后全信号消失的连续 tick 门限:达到才发 Disconnected。
+/// 远端 hook 信号 (process.uin / status) 可能短暂抖动空值,qq-list 也可能
+/// 闪断;不防抖会把短暂抖动误报成掉线。2s tick × 3 = 6s 窗口,足够滤掉
+/// 单次抖动,又比用户感知"卡住"快
+const NO_SIGNAL_THRESHOLD: u32 = 3;
+
 /// per-Bot 主循环依赖(注入边界,便于单测换 mock)
 pub struct PollerDeps {
     pub event_bus: Arc<BroadcastEventBus>,
@@ -110,6 +116,8 @@ struct PollerState {
     last_state: Option<SnowLumaLoginState>,
     last_pid_set: BTreeSet<u32>,
     consecutive_failures: u32,
+    /// 曾在线后连续"全信号消失"的 tick 数,达 NO_SIGNAL_THRESHOLD 才发 Disconnected
+    consecutive_no_signal: u32,
 }
 
 impl PollerState {
@@ -265,8 +273,28 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
         return;
     };
 
+    // UIN 已锁但 locked_pid 仍空(hook 未 login,process.uin 没刷出真实值)
+    // → 先 find_pid_for_uin 碰运气,仍空就 probe 候选 pid 补上。没有
+    // locked_pid 后续 matched / probe 兜底都拿不到 pid,掉线时无法报 Disconnected
+    let mut probe_has_uin = probe_login_evidence
+        .as_ref()
+        .is_some_and(|e| e.uin == locked_uin);
     if state.locked_pid.is_none() {
         state.locked_pid = find_pid_for_uin(&processes, &locked_uin);
+    }
+    if state.locked_pid.is_none() && !probe_has_uin {
+        if let Some(evidence) = probe_candidate_login_info(
+            &deps.http,
+            &processes,
+            &BTreeSet::new(),
+            Some(locked_uin.as_str()),
+        )
+        .await
+        {
+            state.locked_pid = Some(evidence.pid);
+            // probe_candidate_login_info 要求 info.logged_in,evidence 隐含在线证据
+            probe_has_uin = true;
+        }
     }
 
     // === 状态合成 ===
@@ -276,24 +304,55 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
         .filter(|p| process_matches_locked(p, &locked_uin, locked_pid))
         .collect();
     let qq_has_uin = qq_instances.iter().any(|i| i.uin == locked_uin);
-    let mut probe_has_uin = probe_login_evidence
-        .as_ref()
-        .is_some_and(|e| e.uin == locked_uin);
+    // 信号缺失时 probe 确认:locked_pid 优先,仍 None 时遍历候选 pid fallback
     if !probe_has_uin
         && !qq_has_uin
         && !matched
             .iter()
             .any(|p| p.status == HookProcessStatus::Online)
     {
-        if let Some(pid) = locked_pid {
+        let probe_pids: Vec<u32> = match locked_pid {
+            Some(pid) => vec![pid],
+            None => {
+                let candidates = deps
+                    .proc_tree
+                    .collect_descendants(state.initial_qq_pid)
+                    .await;
+                processes
+                    .iter()
+                    .filter(|p| candidates.contains(&p.pid))
+                    .map(|p| p.pid)
+                    .collect()
+            }
+        };
+        for pid in probe_pids {
             if let Ok(Some(info)) = deps.http.probe_process_login_info(pid).await {
-                probe_has_uin = probe_info_matches_uin(&info, &locked_uin);
+                if probe_info_matches_uin(&info, &locked_uin) {
+                    probe_has_uin = true;
+                    break;
+                }
             }
         }
     }
     let synthesized = synthesize_state(&matched, qq_has_uin || probe_has_uin);
 
-    if let Some(new_state) = synthesized
+    // 曾在线 + 全信号消失(matched 空 + qq-list 无 + probe 无)→ 候选 Disconnected。
+    // 远端 hook 信号可能短暂抖动空值,连续 NO_SIGNAL_THRESHOLD 轮才采纳,滤掉单次抖动
+    let all_signal_lost = matched.is_empty() && !qq_has_uin && !probe_has_uin;
+    let was_online = state.last_state == Some(SnowLumaLoginState::LoggedIn);
+    let new_state = if all_signal_lost && was_online {
+        state.consecutive_no_signal = state.consecutive_no_signal.saturating_add(1);
+        if state.consecutive_no_signal >= NO_SIGNAL_THRESHOLD {
+            Some(SnowLumaLoginState::Disconnected)
+        } else {
+            None
+        }
+    } else {
+        state.consecutive_no_signal = 0;
+        synthesized
+    };
+
+    if let Some(new_state) = new_state
         && state.last_state != Some(new_state)
     {
         tracing::info!(
@@ -1351,5 +1410,94 @@ mod tests {
         emit_terminal_disconnected_if_needed(&bot_id, &deps, &mut state);
         let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
         assert!(r.is_err());
+    }
+
+    /// 曾在线(LoggedIn)后全信号消失:matched 空 + qq-list 空 + probe 无。
+    /// 连续 NO_SIGNAL_THRESHOLD 轮才发 Disconnected;前两轮不报(防抖)
+    #[tokio::test]
+    async fn tick_once_emits_disconnected_after_signal_loss_threshold() {
+        let (client, behavior) = MockClient::new();
+        {
+            let mut b = behavior.lock().await;
+            // 全信号消失:processes 空 + qq-list 空(MockClient 复用 last,一轮即固定)
+            b.processes_responses.push_back(Ok(vec![]));
+            b.qq_responses.push_back(Ok(vec![]));
+        }
+        let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::new());
+        let (deps, bus) = build_test_deps(client, probe);
+
+        let bot_id = BotId::new("10001");
+        let mut sub = bus.subscribe(EventFilter::kind(
+            DomainEventKind::SnowLumaLoginStateChanged,
+        ));
+        let mut state = PollerState::new(12345);
+        // 预置:已锁 UIN + locked_pid + 曾在线
+        state.uin = Some("100200".to_string());
+        state.locked_pid = Some(12346);
+        state.last_state = Some(SnowLumaLoginState::LoggedIn);
+
+        // 第 1/2 轮:consecutive_no_signal 1,2 < 3,不发事件
+        tick_once(&bot_id, &deps, &mut state).await;
+        tick_once(&bot_id, &deps, &mut state).await;
+        let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
+        assert!(r.is_err(), "前两轮不应发事件(防抖)");
+
+        // 第 3 轮:达阈值,发 Disconnected
+        tick_once(&bot_id, &deps, &mut state).await;
+        let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
+            .await
+            .expect("Disconnected within 1s")
+            .expect("open");
+        match evt {
+            DomainEvent::SnowLumaLoginStateChanged { state: s, .. } => {
+                assert_eq!(s, SnowLumaLoginState::Disconnected);
+            }
+            o => panic!("expected Disconnected, got {o:?}"),
+        }
+    }
+
+    /// UIN 已锁但 locked_pid None(hook 未 login,process.uin 空)→ probe 候选
+    /// pid 补上 locked_pid,probe 成功隐含 logged_in → 合成 LoggedIn
+    #[tokio::test]
+    async fn tick_once_probes_to_recover_locked_pid_when_uin_locked_but_pid_missing() {
+        let (client, behavior) = MockClient::new();
+        {
+            let mut b = behavior.lock().await;
+            // process.uin="0"(hook 未 login),但 probe 能拿到真实 uin
+            b.processes_responses
+                .push_back(Ok(vec![proc(12346, "0", HookProcessStatus::Loaded)]));
+            b.qq_responses.push_back(Ok(vec![]));
+            b.probe_responses
+                .push_back(Ok(Some(probe_info(4301, "100200", true))));
+        }
+        let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::new());
+        let (deps, bus) = build_test_deps(client, probe);
+
+        let bot_id = BotId::new("10001");
+        let mut sub = bus.subscribe(EventFilter::kind(
+            DomainEventKind::SnowLumaLoginStateChanged,
+        ));
+        let mut state = PollerState::new(12345);
+        state.uin = Some("100200".to_string());
+        state.locked_pid = None; // 关键:UIN 已锁但 pid 没
+        state.last_state = None;
+
+        tick_once(&bot_id, &deps, &mut state).await;
+
+        // probe 补上了 locked_pid
+        assert_eq!(state.locked_pid, Some(12346));
+        // probe_has_uin=true → 合成 LoggedIn
+        assert_eq!(state.last_state, Some(SnowLumaLoginState::LoggedIn));
+
+        let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
+            .await
+            .expect("LoggedIn within 1s")
+            .expect("open");
+        match evt {
+            DomainEvent::SnowLumaLoginStateChanged { state: s, .. } => {
+                assert_eq!(s, SnowLumaLoginState::LoggedIn);
+            }
+            o => panic!("expected LoggedIn, got {o:?}"),
+        }
     }
 }
