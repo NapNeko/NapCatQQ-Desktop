@@ -594,6 +594,11 @@ impl RemoteSnowLumaBackend {
         }
     }
 
+    /// 供 bootstrap reconcile 取日志 follow 路径,不暴露整个 daemon
+    pub fn daemon_paths(&self) -> &SnowLumaRemotePaths {
+        self.daemon.paths()
+    }
+
     /// 冷启动后再开桌面:远端 QQ 仍在跑时恢复隧道注入与 status poller
     pub async fn attach_reconciled_running(
         &self,
@@ -758,8 +763,15 @@ impl BotBackend for RemoteSnowLumaBackend {
             )),
             expected_uin: Some(qq_id_str.clone()),
         };
-        let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
-        self.pollers.lock().await.insert(bot_id.clone(), poller);
+        // 替换旧 poller(若有):同一 bot 重进 start 时不能叠两个,也不能让旧的 drop 误发
+        {
+            let mut guard = self.pollers.lock().await;
+            if let Some(old) = guard.remove(&bot_id) {
+                old.dispose();
+            }
+            let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
+            guard.insert(bot_id.clone(), poller);
+        }
 
         self.event_bus
             .publish(DomainEvent::SnowLumaDockerEndpointsReady {

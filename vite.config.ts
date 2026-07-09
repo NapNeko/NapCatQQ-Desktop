@@ -17,6 +17,14 @@ export default defineConfig({
     strictPort: true,
     // 改 UI 时尽量只热更模块，少触发整页 reload（仍可能因改 index/main 而全刷）
     hmr: { overlay: true },
+    watch: {
+      ignored: [
+        '**/target/**',
+        '**/.references/**',
+        '**/.codex/**',
+        '**/.claude/**',
+      ],
+    },
   },
   optimizeDeps: {
     // 预打包大依赖，缩短 dev 冷启动与 HMR 后重新拉依赖的时间

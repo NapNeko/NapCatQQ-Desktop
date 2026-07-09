@@ -178,6 +178,9 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     remote_sl_daemon_log: Arc<RemoteSnowLumaLogRegistry>,
     /// 远端 SnowLuma:按 server_id 共享 daemon(多 Bot 同一 SSH 主机)
     remote_snowluma_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
+    /// 远端 SL backend 单例缓存:持有 status poller,绝不能每次 start 新建
+    remote_snowluma_backends:
+        Arc<Mutex<HashMap<String, Arc<ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaBackend>>>>,
     remote_snowluma_tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     /// Per-remote-host coordination for flipping the shared ~/Napcat/opt/QQ tree's
     /// package.json main between NapCat-injected and vanilla native modes.
@@ -210,6 +213,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_bot_log_follow: Arc::clone(&self.remote_bot_log_follow),
             remote_sl_daemon_log: Arc::clone(&self.remote_sl_daemon_log),
             remote_snowluma_daemons: Arc::clone(&self.remote_snowluma_daemons),
+            remote_snowluma_backends: Arc::clone(&self.remote_snowluma_backends),
             remote_snowluma_tunnels: Arc::clone(&self.remote_snowluma_tunnels),
             remote_qq_entry_coordinator: Arc::clone(&self.remote_qq_entry_coordinator),
         }
@@ -253,6 +257,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_bot_log_follow: Arc::new(RemoteBotLogFollowRegistry::new()),
             remote_sl_daemon_log: Arc::new(RemoteSnowLumaLogRegistry::new()),
             remote_snowluma_daemons: Arc::new(Mutex::new(HashMap::new())),
+            remote_snowluma_backends: Arc::new(Mutex::new(HashMap::new())),
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
             remote_qq_entry_coordinator: Arc::new(RemoteQqEntryCoordinator::default()),
         }
@@ -334,6 +339,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             self.docker_secrets(),
             Arc::clone(&self.event_bus),
             Arc::clone(&self.remote_snowluma_daemons),
+            Arc::clone(&self.remote_snowluma_backends),
             Arc::clone(&self.remote_snowluma_tunnels),
             Arc::clone(&self.remote_qq_entry_coordinator),
         )
@@ -369,8 +375,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             Arc::clone(&self.event_bus),
             self.runtime_router(),
             self.remote_runtime_sessions(),
-            Arc::clone(&self.remote_snowluma_tunnels),
-            Arc::clone(&self.remote_qq_entry_coordinator),
         )
     }
 

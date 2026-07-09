@@ -108,6 +108,10 @@ pub(crate) struct RuntimeBackendRouter {
     docker_secrets: DockerSecretProvider,
     event_bus: Arc<BroadcastEventBus>,
     remote_snowluma_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
+    // 必须缓存:RemoteSnowLumaBackend.pollers 持有 status poller 句柄。
+    // 以前每次 start 新建 backend,函数返回后 Arc drop → poller Drop 补发
+    // Disconnected,UI 永远显示「QQ 已掉线」即使 WebUI 在线。
+    remote_snowluma_backends: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaBackend>>>>,
     remote_snowluma_tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
 }
@@ -121,6 +125,7 @@ impl RuntimeBackendRouter {
         docker_secrets: DockerSecretProvider,
         event_bus: Arc<BroadcastEventBus>,
         remote_snowluma_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
+        remote_snowluma_backends: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaBackend>>>>,
         remote_snowluma_tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
         remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
     ) -> Self {
@@ -131,6 +136,7 @@ impl RuntimeBackendRouter {
             docker_secrets,
             event_bus,
             remote_snowluma_daemons,
+            remote_snowluma_backends,
             remote_snowluma_tunnels,
             remote_qq_entry_coordinator,
         }
@@ -179,17 +185,10 @@ impl RuntimeBackendRouter {
                 }
                 match backend {
                     BackendType::SnowLuma => {
-                        let daemon = self
-                            .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
+                        let backend = self
+                            .remote_snowluma_backend_for_server(server_id, Arc::clone(&host))
                             .await?;
-                        let backend_id = BotId::new(format!("remote-sl-{qq_id}"));
-                        Ok(Arc::new(RemoteSnowLumaBackend::new(
-                            backend_id,
-                            daemon,
-                            Arc::clone(&self.event_bus),
-                            Arc::clone(&self.remote_snowluma_tunnels),
-                            Arc::clone(&self.remote_qq_entry_coordinator),
-                        )))
+                        Ok(backend as Arc<dyn BotBackend>)
                     }
                     BackendType::NapCat => {
                         let coordinator = Arc::clone(&self.remote_qq_entry_coordinator);
@@ -243,6 +242,42 @@ impl RuntimeBackendRouter {
         );
         guard.insert(sid, Arc::clone(&daemon));
         Ok(daemon)
+    }
+
+    /// 同 server 的远端 SL backend 单例:持有 per-bot status poller。
+    /// start / stop / bootstrap reconcile 必须走同一实例,否则 poller 会随
+    /// 临时 backend drop 被 dispose 并误发 Disconnected。
+    pub async fn remote_snowluma_backend_for_server(
+        &self,
+        server_id: &str,
+        host: Arc<dyn Host>,
+    ) -> Result<Arc<RemoteSnowLumaBackend>, RuntimeRouterError> {
+        let sid = server_id.to_string();
+        {
+            let guard = self.remote_snowluma_backends.lock().await;
+            if let Some(backend) = guard.get(&sid) {
+                return Ok(Arc::clone(backend));
+            }
+        }
+        let daemon = self
+            .remote_snowluma_daemon_for_server(server_id, host)
+            .await?;
+        // backend 身份按 server 聚合(多 Bot 共享同一 daemon / 隧道 / poller 表)
+        let backend_id = BotId::new(format!("remote-sl-{sid}"));
+        let backend = Arc::new(RemoteSnowLumaBackend::new(
+            backend_id,
+            daemon,
+            Arc::clone(&self.event_bus),
+            Arc::clone(&self.remote_snowluma_tunnels),
+            Arc::clone(&self.remote_qq_entry_coordinator),
+        ));
+        let mut guard = self.remote_snowluma_backends.lock().await;
+        // 双检:并发 start 时先到者胜,后来者复用
+        if let Some(existing) = guard.get(&sid) {
+            return Ok(Arc::clone(existing));
+        }
+        guard.insert(sid, Arc::clone(&backend));
+        Ok(backend)
     }
 
     async fn resolve_remote_host(

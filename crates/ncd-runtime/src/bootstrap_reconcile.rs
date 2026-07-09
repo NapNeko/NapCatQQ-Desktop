@@ -11,9 +11,7 @@ use crate::host_resolver::HostResolver;
 use crate::remote_runtime_sessions::RemoteRuntimeSessions;
 use crate::runtime_router::RuntimeBackendRouter;
 use ncd_backend_napcat::remote_native_launch::remote_napcat_running_pid;
-use ncd_backend_snowluma::remote_snowluma::{RemoteSnowLumaBackend, remote_qq_running_pid};
-use ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelRegistry;
-use ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator;
+use ncd_backend_snowluma::remote_snowluma::remote_qq_running_pid;
 use ncd_deploy::{Deployment, DeploymentState, DockerDeployment};
 use ncd_domain::bot_status::BotStatus;
 use ncd_domain::{BackendType, BotConfig, BotId, RuntimeScenario, RuntimeTarget};
@@ -25,20 +23,15 @@ pub(crate) struct BootstrapReconciler<R: BotConfigRepo + 'static> {
     event_bus: Arc<BroadcastEventBus>,
     runtime_router: RuntimeBackendRouter,
     remote_sessions: RemoteRuntimeSessions<R>,
-    remote_snowluma_tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
-    remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
 }
 
 impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         actors: Arc<RwLock<HashMap<BotId, BotActorHandle>>>,
         host_resolver: Option<Arc<dyn HostResolver>>,
         event_bus: Arc<BroadcastEventBus>,
         runtime_router: RuntimeBackendRouter,
         remote_sessions: RemoteRuntimeSessions<R>,
-        remote_snowluma_tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
-        remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
     ) -> Self {
         Self {
             actors,
@@ -46,8 +39,6 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
             event_bus,
             runtime_router,
             remote_sessions,
-            remote_snowluma_tunnels,
-            remote_qq_entry_coordinator,
         }
     }
 
@@ -291,32 +282,24 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
             }
         };
 
-        let daemon = match self
+        let sl_backend = match self
             .runtime_router
-            .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
+            .remote_snowluma_backend_for_server(server_id, Arc::clone(&host))
             .await
         {
-            Ok(daemon) => daemon,
+            Ok(backend) => backend,
             Err(err) => {
                 warn!(
                     target: "ncd_runtime::bootstrap_reconcile",
                     bot_id = %bot_id,
                     err = %err,
-                    "bootstrap reconcile: 远端 SnowLuma daemon 初始化失败"
+                    "bootstrap reconcile: 远端 SnowLuma backend 初始化失败"
                 );
                 return false;
             }
         };
 
-        let backend_id = BotId::new(format!("remote-sl-{}", config.bot.qq_id));
-        let sl_paths = daemon.paths().clone();
-        let sl_backend = RemoteSnowLumaBackend::new(
-            backend_id,
-            daemon,
-            Arc::clone(&self.event_bus),
-            Arc::clone(&self.remote_snowluma_tunnels),
-            Arc::clone(&self.remote_qq_entry_coordinator),
-        );
+        let sl_paths = sl_backend.daemon_paths().clone();
         if let Err(err) = sl_backend
             .attach_reconciled_running(bot_id.clone(), pid, config)
             .await
