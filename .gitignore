@@ -5,13 +5,14 @@ docs/dev/
 ### AI / 助手本地产物（不进版本库，可本机重装 skills）###
 .agents/
 .claude/
+.codex/
 .codesearch.db/
 CLAUDE.md
 
 ### 编辑器（可选共享：若需团队统一 VS Code 设置再单独 un-ignore）###
 .vscode/
 
-### 参考克隆与旧 Python（体积大，仅本地对照）###
+### 参考克隆与旧实现（体积大，仅本地对照；权威旧版路径: .references/NapCatQQ-Desktop-main）###
 .references/
 legacy-python/
 

@@ -4,21 +4,23 @@
 
 ```
 docs/
+├── context/           # Agent/开发活上下文（进 git；codemap 等）
+│   └── codemap.md     # 功能域 → 代码落点
 ├── user/              # 用户文档（进 git，对外公开）
-│   ├── README.md      # 快速开始
-│   ├── installation.md
-│   ├── configuration.md
-│   └── troubleshooting.md
-│
+│   └── README.md
 └── dev/               # 开发文档（不进 git，内部使用）
-    ├── troubleshooting/   # 问题排查记录
-    ├── architecture/      # 架构设计文档（重大功能设计方案）
-    ├── workflow/          # 开发流程文档
-    └── archive/           # 归档文档（已完成/废弃的历史设计）
-        └── bugfix/        # 历史 bug 修复相关的架构设计
+    ├── troubleshooting/
+    ├── architecture/
+    ├── workflow/
+    └── archive/
 ```
 
 ## 文档分类
+
+### 上下文文档 (docs/context/)
+- **进 git 仓库**
+- 给开发者与 AI 助手的活地图：功能域 → 代码落点（codemap.md）
+- 旧实现对照根：仓库外/本地 .references/NapCatQQ-Desktop-main
 
 ### 用户文档 (`docs/user/`)
 - **进 git 仓库**，对外公开
