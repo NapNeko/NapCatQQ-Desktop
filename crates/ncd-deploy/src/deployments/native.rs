@@ -1424,6 +1424,16 @@ mod tests {
         dep.stop(&host, &bot_id, StopMode::Force)
             .await
             .expect("stop");
+
+        // FakeHost records kill via run_to_string; assert Windows taskkill for current pid
+        let kills = host.kill_calls();
+        assert_eq!(kills.len(), 1, "stop should issue exactly one kill command");
+        assert_eq!(kills[0].program, "taskkill");
+        assert_eq!(
+            kills[0].args,
+            vec!["/F".to_string(), "/T".to_string(), "/PID".to_string(), "24002".to_string()]
+        );
+
         let _ = stopped_wait_tx.send(Ok(CommandOutput {
             exit_code: Some(137),
             stdout: String::new(),

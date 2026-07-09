@@ -970,6 +970,7 @@ mod tests {
         assert_eq!(c, 0);
         p.update("deadbeefcafe: Download complete");
         let (c, t, _, _) = p.summary();
+        assert_eq!(t, 1);
         assert_eq!(c, 1);
     }
 

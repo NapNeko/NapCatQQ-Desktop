@@ -1,7 +1,7 @@
-use ncd_runtime::{BotActorSnapshot};
 use ncd_domain::{BotConfig, BotId};
-use ncd_traits::runtime_backend::LogSnapshot;
+use ncd_runtime::BotActorSnapshot;
 use ncd_runtime::config_drift::{ConfigDrift, DriftDecision};
+use ncd_traits::runtime_backend::LogSnapshot;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
@@ -167,7 +167,10 @@ pub async fn upsert_bot_config_with_decisions(
     for d in &decisions {
         match d {
             DD::AcceptExternal { file, path, value } => {
-                overrides.entry(file.clone()).or_default().push((path.clone(), value.clone()));
+                overrides
+                    .entry(file.clone())
+                    .or_default()
+                    .push((path.clone(), value.clone()));
             }
             DD::DropAdded { file, path } => {
                 overrides
@@ -264,20 +267,19 @@ mod tests {
     use std::sync::Arc;
 
     use async_trait::async_trait;
-    use ncd_runtime::{
-        BotActorState, BotManager,
-        BroadcastEventBus, DispatchRenderer,
-        EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore,
-        SecretStoreImpl, FileSystemRuntimeLaunchPlanner,
-    };
     use ncd_domain::{
-        BotConfig, BotId, BotFlavor, BackendKind, BotStatus, StopMode,
-        DesktopNotifySettings, BootstrapSnapshot,
+        BackendKind, BootstrapSnapshot, BotConfig, BotFlavor, BotId, BotStatus, StopMode,
         domain_event::DomainEventKind,
+    };
+    use ncd_runtime::{
+        BotActorState, BotManager, BroadcastEventBus, DispatchRenderer, EventBus, EventFilter,
+        FileSystemRuntimeLaunchPlanner, LocalBotConfigRepo, LocalConfigStore, SecretStoreImpl,
     };
     use ncd_traits::{
         ConfigStore, SecretStore,
-        runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts},
+        runtime_backend::{
+            BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts,
+        },
     };
     use tempfile::tempdir;
 
@@ -309,11 +311,22 @@ mod tests {
         async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
             Err(BotBackendError::ConfigNotFound(bot_id))
         }
-        async fn write_config(&self, _bot_id: BotId, _cfg: &BotRuntimeConfig) -> Result<(), BotBackendError> {
+        async fn write_config(
+            &self,
+            _bot_id: BotId,
+            _cfg: &BotRuntimeConfig,
+        ) -> Result<(), BotBackendError> {
             Ok(())
         }
-        async fn tail_log(&self, _bot_id: BotId, _opts: TailOpts) -> Result<LogSnapshot, BotBackendError> {
-            Ok(LogSnapshot { lines: Vec::new(), total_lines: 0 })
+        async fn tail_log(
+            &self,
+            _bot_id: BotId,
+            _opts: TailOpts,
+        ) -> Result<LogSnapshot, BotBackendError> {
+            Ok(LogSnapshot {
+                lines: Vec::new(),
+                total_lines: 0,
+            })
         }
     }
 
@@ -329,9 +342,7 @@ mod tests {
             store.config_dir(),
         ));
         let backend: Arc<dyn BotBackend> = Arc::new(FakeBackend);
-        let launch_planner = Arc::new(FileSystemRuntimeLaunchPlanner::new(
-            root.join("runtime"),
-        ));
+        let launch_planner = Arc::new(FileSystemRuntimeLaunchPlanner::new(root.join("runtime")));
         let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> =
             Arc::new(ncd_runtime::ReqwestNapCatWebUiClient::new().expect("init webui client"));
         let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> =
@@ -342,9 +353,7 @@ mod tests {
         let desktop_notify = Arc::new(tokio::sync::RwLock::new(
             ncd_domain::DesktopNotifySettings::default(),
         ));
-        let app_settings = Arc::new(tokio::sync::RwLock::new(
-            ncd_domain::AppSettings::default(),
-        ));
+        let app_settings = Arc::new(tokio::sync::RwLock::new(ncd_domain::AppSettings::default()));
         let lightweight_scheduler = Arc::new(
             crate::lightweight_scheduler::LightweightScheduler::new(Arc::clone(&app_settings)),
         );
