@@ -47,7 +47,10 @@ pub use app_config::{
     clamp_lightweight_delay_secs, default_login_interval, default_perf_monitor_interval,
     default_snowluma_port,
 };
-pub use bootstrap::{BootstrapSnapshot, BootstrapStatus, LocalVersionSnapshot, RepairAction};
+pub use bootstrap::{
+    BootstrapSnapshot, BootstrapStatus, DataLayoutConsolidateSnapshot, LocalVersionSnapshot,
+    RepairAction,
+};
 pub use bot_actor::{BotActorError, BotActorSnapshot, BotActorState};
 pub use bot_config::{
     AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,

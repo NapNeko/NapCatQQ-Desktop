@@ -24,6 +24,29 @@ pub struct LocalVersionSnapshot {
     pub snowluma: Option<String>,
 }
 
+/// 启动期 data_root 布局收敛结果(一次启动最多一条)。
+///
+/// 与 schema MigrationReport 分开:布局收敛先于 schema 迁移,失败时保留原目录。
+/// backup_path 可能含密钥,UI 文案需提示用户自行保管桌面 zip。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct DataLayoutConsolidateSnapshot {
+    /// 本次启动是否实际执行了收敛(false = 已是目标布局或仅 GC)
+    pub performed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skipped_reason: Option<String>,
+    /// 桌面 zip 绝对路径;含配置与密钥,勿上传
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backup_path: Option<String>,
+    /// 迁入/清理条目数(路径标签计数,非字节)
+    pub moved_count: u32,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    /// 收敛失败原因;有值时 performed 通常为 false,原目录未删
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BootstrapStatus {
@@ -57,6 +80,9 @@ pub struct BootstrapSnapshot {
     /// 本地 core 安装版本快照
     #[serde(default)]
     pub local_versions: LocalVersionSnapshot,
+    /// 布局收敛结果;未跑或旧缓存缺失时为 None
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout_consolidate: Option<DataLayoutConsolidateSnapshot>,
 }
 
 impl BootstrapSnapshot {
@@ -71,6 +97,7 @@ impl BootstrapSnapshot {
             report,
             data_root: String::new(),
             local_versions: LocalVersionSnapshot::default(),
+            layout_consolidate: None,
         }
     }
 
@@ -136,5 +163,6 @@ mod tests {
         assert_eq!(decoded.status, BootstrapStatus::Ready);
         assert!(decoded.data_root.is_empty());
         assert_eq!(decoded.local_versions, LocalVersionSnapshot::default());
+        assert!(decoded.layout_consolidate.is_none());
     }
 }
