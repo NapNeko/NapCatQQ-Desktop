@@ -110,7 +110,7 @@ export function NcdWatchRemoteSection({
                 key: 'ncd-watch-sync-dirty',
                 tone: 'warning',
                 title: '请先保存设置',
-                content: '同步使用已落盘的通知设置（Webhook / Email）；保存后再同步。',
+                content: '同步使用已落盘的通知设置（Webhook / Email / 同机 OneBot）；保存后再同步。',
             });
             return;
         }
@@ -121,7 +121,7 @@ export function NcdWatchRemoteSection({
                 key: `ncd-watch-sync-${row.serverId}`,
                 tone: 'success',
                 title: '已同步',
-                content: `${row.name}：Bot 列表、Webhook/Email 与登录探活凭据已写入远端。`,
+                content: `${row.name}：Bot 列表、Webhook/Email/同机 OneBot 与登录探活凭据已写入远端。`,
             });
             refetchAll();
         } catch (err) {
@@ -142,7 +142,7 @@ export function NcdWatchRemoteSection({
                 key: 'ncd-watch-sync-dirty',
                 tone: 'warning',
                 title: '请先保存设置',
-                content: '批量同步使用已保存的通知设置（Webhook / Email）。',
+                content: '批量同步使用已保存的通知设置（Webhook / Email / 同机 OneBot）。',
             });
             return;
         }
@@ -177,7 +177,7 @@ export function NcdWatchRemoteSection({
     return (
         <SettingsSection
             title="远端脱管监控"
-            description="Desktop 退出后，各 Linux 远端上的 NCD Watch 仍可探活并投递已启用的 Webhook / Email（不含 OneBot）；多机各自安装与同步"
+            description="Desktop 退出后，各 Linux 远端上的 NCD Watch 仍可探活并投递已启用的 Webhook / Email / 同机 OneBot（需同机另有存活发信 Bot）；多机各自安装与同步"
         >
             <FieldRow
                 label="远端主机"
