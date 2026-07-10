@@ -1,5 +1,6 @@
-//! 主循环:探活 → 登录态 → 边沿 → Webhook/Email(无 OneBot)
+//! 主循环:探活 → 登录态 → 边沿 → Webhook/Email/同机 OneBot
 
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,6 +10,7 @@ use crate::config::{NotifyConfig, WatchConfig, WatchPaths};
 use crate::edge::{EdgeAction, EdgeTracker, OfflineEdgeKind};
 use crate::email::send_watch_email;
 use crate::login_probe::probe_login_status;
+use crate::onebot::send_watch_onebot;
 use crate::present::desktop_is_present;
 use crate::probe::{LoginStatus, ProbeStatus, Prober};
 use crate::webhook::{build_offline_alert, send_watch_webhooks};
@@ -22,6 +24,7 @@ pub struct RunOnceOutcome {
     pub skipped_desktop_present: bool,
     pub webhook_errors: Vec<String>,
     pub email_errors: Vec<String>,
+    pub onebot_errors: Vec<String>,
 }
 
 fn alert_kind_for(edge: OfflineEdgeKind) -> OfflineAlertKind {
@@ -52,11 +55,19 @@ pub async fn run_once(
         Vec::new()
     };
 
+    // 先扫一轮进程态,供 OneBot 选「本轮仍在线」的 messenger
+    let mut process_online: HashSet<String> = HashSet::new();
+    let mut probe_cache: Vec<(crate::config::NotifyBotTarget, crate::probe::ProbeResult)> =
+        Vec::new();
+
     for bot in notify.enabled_bots() {
         let mut result = prober.probe_bot(bot);
         out.probed += 1;
 
-        // 进程在线时再查登录;进程已挂则登录无意义
+        if matches!(result.status, ProbeStatus::Online) {
+            process_online.insert(bot.bot_id.clone());
+        }
+
         if matches!(result.status, ProbeStatus::Online)
             && bot.backend.eq_ignore_ascii_case("napcat")
             && bot.webui_port.is_some()
@@ -69,6 +80,10 @@ pub async fn run_once(
             }
         }
 
+        probe_cache.push((bot.clone(), result));
+    }
+
+    for (bot, result) in &probe_cache {
         if matches!(result.status, ProbeStatus::Unknown)
             && matches!(result.login, LoginStatus::Unknown)
         {
@@ -96,7 +111,7 @@ pub async fn run_once(
                         continue;
                     }
                     let alert = build_offline_alert(bot, alert_kind_for(kind));
-                    deliver_channels(notify, &channels, &alert, &mut out).await;
+                    deliver_channels(notify, &channels, &process_online, &alert, &mut out).await;
                 }
                 EdgeAction::FireRecovered => {
                     tracing::info!(
@@ -110,7 +125,7 @@ pub async fn run_once(
                         continue;
                     }
                     let alert = build_offline_alert(bot, OfflineAlertKind::Recovered);
-                    deliver_channels(notify, &channels, &alert, &mut out).await;
+                    deliver_channels(notify, &channels, &process_online, &alert, &mut out).await;
                     out.recovered += 1;
                 }
             }
@@ -126,6 +141,7 @@ pub async fn run_once(
 async fn deliver_channels(
     notify: &NotifyConfig,
     channels: &[&ncd_domain::OfflineWebhookChannel],
+    process_online: &HashSet<String>,
     alert: &ncd_domain::OfflineAlert,
     out: &mut RunOnceOutcome,
 ) {
@@ -163,11 +179,31 @@ async fn deliver_channels(
             }
         }
     }
+    if notify.onebot.enabled {
+        match send_watch_onebot(
+            &notify.onebot,
+            alert.bot_id.as_str(),
+            Some(process_online),
+            alert,
+        )
+        .await
+        {
+            Ok(()) => any = true,
+            Err(e) => {
+                out.onebot_errors
+                    .push(format!("{}: {e}", alert.bot_id.as_str()));
+                tracing::warn!(bot_id = %alert.bot_id, %e, "onebot failed");
+            }
+        }
+    }
     if any && alert.is_offline_edge() {
         out.fired += 1;
     }
-    if !notify.webhook_enabled && !notify.email_enabled {
-        tracing::warn!(bot_id = %alert.bot_id, "edge fired but webhook/email both disabled");
+    if !notify.webhook_enabled && !notify.email_enabled && !notify.onebot.enabled {
+        tracing::warn!(
+            bot_id = %alert.bot_id,
+            "edge fired but webhook/email/onebot all disabled"
+        );
     }
 }
 

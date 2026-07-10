@@ -44,6 +44,7 @@ fn default_features() -> Vec<String> {
         "webhook".to_string(),
         "login_watch".to_string(),
         "email".to_string(),
+        "onebot".to_string(),
     ]
 }
 
@@ -219,6 +220,63 @@ impl NotifyBotTarget {
     }
 }
 
+/// 同机 OneBot messenger(watch 视角可达的 HTTP 根地址)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchOneBotMessenger {
+    pub bot_id: String,
+    /// 例如 http://127.0.0.1:3000
+    pub base_url: String,
+    #[serde(default)]
+    pub access_token: String,
+}
+
+/// notify.json 内 OneBot 子集(仅同机 messenger;跨机不写)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchOneBotSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub messengers: Vec<WatchOneBotMessenger>,
+    /// private | group
+    #[serde(default = "default_onebot_target_type")]
+    pub target_type: String,
+    #[serde(default)]
+    pub target_ids: Vec<u64>,
+    #[serde(default = "default_onebot_message_template")]
+    pub message_template: String,
+}
+
+fn default_onebot_target_type() -> String {
+    "private".to_string()
+}
+
+fn default_onebot_message_template() -> String {
+    "【掉线通知】{nickname}({uin}) 状态={event} 时间={time}".to_string()
+}
+
+impl Default for WatchOneBotSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            messengers: Vec::new(),
+            target_type: default_onebot_target_type(),
+            target_ids: Vec::new(),
+            message_template: default_onebot_message_template(),
+        }
+    }
+}
+
+impl WatchOneBotSettings {
+    pub fn usable(&self) -> bool {
+        self.enabled
+            && !self.messengers.is_empty()
+            && self.target_ids.iter().any(|id| *id > 0)
+            && !self.message_template.trim().is_empty()
+    }
+}
+
 /// `config/notify.json` — Desktop 下发的监控目标 + Webhook 通道
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -245,6 +303,9 @@ pub struct NotifyConfig {
     /// 对齐 Desktop OfflineEmailSettings;email_enabled 时使用
     #[serde(default)]
     pub email: OfflineEmailSettings,
+    /// 同机 OneBot;缺省兼容旧 notify.json
+    #[serde(default)]
+    pub onebot: WatchOneBotSettings,
 }
 
 impl Default for NotifyConfig {
@@ -258,6 +319,7 @@ impl Default for NotifyConfig {
             email_enabled: false,
             notify_on_recovered: false,
             email: OfflineEmailSettings::default(),
+            onebot: WatchOneBotSettings::default(),
         }
     }
 }
@@ -313,6 +375,7 @@ impl NotifyConfig {
             email_enabled: false,
             notify_on_recovered: false,
             email: OfflineEmailSettings::default(),
+            onebot: WatchOneBotSettings::default(),
         }
     }
 }

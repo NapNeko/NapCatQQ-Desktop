@@ -1,9 +1,9 @@
-//! ncd-watch: 远端主机侧监控（进程/容器探活 + Desktop 离线时 Webhook/Email）
+//! ncd-watch: 远端主机侧监控（进程/容器探活 + Desktop 离线时 Webhook/Email/同机 OneBot）
 //!
-//! 不做启停、不监听端口、不做 OneBot。配置由 Desktop 经 SFTP 下发。
+//! 不做启停、不监听端口。配置由 Desktop 经 SFTP 下发。
 //!
 //! 依赖面:
-//! - 默认 / `daemon`: 完整探活 + Webhook + Email + CLI(远端 musl 二进制)
+//! - 默认 / `daemon`: 完整探活 + 投递 + CLI(远端 musl 二进制)
 //! - `default-features = false`: 仅 config schema,供 Desktop 写 notify.json / present
 
 pub mod config;
@@ -15,6 +15,8 @@ pub mod email;
 #[cfg(feature = "daemon")]
 pub mod login_probe;
 #[cfg(feature = "daemon")]
+pub mod onebot;
+#[cfg(feature = "daemon")]
 pub mod present;
 #[cfg(feature = "daemon")]
 pub mod probe;
@@ -24,7 +26,8 @@ pub mod run;
 pub mod webhook;
 
 pub use config::{
-    DesktopPresentFile, NotifyBotTarget, NotifyConfig, WatchConfig, WatchPaths, WatchRoot,
+    DesktopPresentFile, NotifyBotTarget, NotifyConfig, WatchConfig, WatchOneBotMessenger,
+    WatchOneBotSettings, WatchPaths, WatchRoot,
 };
 
 #[cfg(feature = "daemon")]
