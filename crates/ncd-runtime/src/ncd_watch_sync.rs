@@ -1,5 +1,6 @@
 //! 为远端 server 组装 ncd-watch 的 notify.json,并经 Host 写入
 
+use ncd_deploy::bot_docker_container_name;
 use ncd_domain::bot_config::{BackendType, BotConfig, DeploymentType};
 use ncd_domain::kinds::RuntimeTarget;
 use ncd_domain::{OfflineWebhookChannel, OfflineWebhookSettings};
@@ -18,6 +19,11 @@ pub fn bots_for_server<'a>(
         .collect()
 }
 
+/// 把 BotConfig 投影成 watch 探活目标。
+///
+/// Docker: 写入与 deploy 一致的容器名(ncbot-/slbot-),不靠 watch 侧猜前缀。
+/// Native: 无稳定跨 HOME 的 pid 路径可写时,用 `-q <qq>$` 做 pgrep -f(对齐远端启停);
+/// 不再用裸 `QQ`,避免同机多 Bot 全员命中。
 pub fn bot_to_notify_target(config: &BotConfig) -> NotifyBotTarget {
     let qq = config.bot.qq_id;
     let backend = match config.bot.backend_type {
@@ -28,20 +34,35 @@ pub fn bot_to_notify_target(config: &BotConfig) -> NotifyBotTarget {
         DeploymentType::Docker => "docker",
         DeploymentType::Native => "native",
     };
+
+    let (container_name, pid_file, process_match) = match config.bot.deployment_type {
+        DeploymentType::Docker => (
+            Some(bot_docker_container_name(config.bot.backend_type, qq)),
+            None,
+            None,
+        ),
+        DeploymentType::Native => {
+            // SL 有 $HOME/snowluma-remote/.../pid_bot_<qq>,但 sync 时未必有 HOME;
+            // 进程命令行带 -q <qq>,与 remote_qq_running_pid / NC xvfb 启动参数一致。
+            // `$` 降低 `-q 1` 误匹配 `-q 12` 的概率(pgrep -f 按正则)。
+            let process_match = if qq > 0 {
+                Some(format!("-q {qq}$"))
+            } else {
+                None
+            };
+            (None, None, process_match)
+        }
+    };
+
     NotifyBotTarget {
         bot_id: qq.to_string(),
         qq_id: qq,
         bot_name: config.bot.name.clone(),
         backend: backend.into(),
         deployment: deployment.into(),
-        container_name: None,
-        pid_file: None,
-        // Native 无 pid 文件时用进程名弱匹配;Docker 走 container
-        process_match: if matches!(config.bot.deployment_type, DeploymentType::Native) {
-            Some("QQ".into())
-        } else {
-            None
-        },
+        container_name,
+        pid_file,
+        process_match,
         enabled: true,
     }
 }
@@ -168,16 +189,12 @@ mod tests {
 
     #[test]
     fn filters_server_bots() {
-        let bots = vec![
-            sample_remote("s1", 1),
-            sample_remote("s2", 2),
-            {
-                let mut l = sample_remote("s1", 3);
-                l.bot.runtime_target = RuntimeTarget::Local;
-                l.bot.qq_id = 3;
-                l
-            },
-        ];
+        let bots = vec![sample_remote("s1", 1), sample_remote("s2", 2), {
+            let mut l = sample_remote("s1", 3);
+            l.bot.runtime_target = RuntimeTarget::Local;
+            l.bot.qq_id = 3;
+            l
+        }];
         let got = bots_for_server("s1", &bots);
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].bot.qq_id, 1);
@@ -190,8 +207,40 @@ mod tests {
         wh.url = "https://example.invalid/h".into();
         let n = build_notify_config("s1", &bots, &wh);
         assert_eq!(n.bots.len(), 1);
+        assert_eq!(n.bots[0].container_name.as_deref(), Some("ncbot-9"));
         assert_eq!(n.bots[0].resolved_container_name(), "ncbot-9");
         assert!(!n.webhooks.is_empty());
     }
-}
 
+    #[test]
+    fn docker_targets_use_flavor_container_names() {
+        let nc = sample_remote("s1", 10001);
+        let mut sl = sample_remote("s1", 10002);
+        sl.bot.backend_type = BackendType::SnowLuma;
+        sl.bot.name = "sl".into();
+
+        let t_nc = bot_to_notify_target(&nc);
+        let t_sl = bot_to_notify_target(&sl);
+        assert_eq!(t_nc.container_name.as_deref(), Some("ncbot-10001"));
+        assert_eq!(t_sl.container_name.as_deref(), Some("slbot-10002"));
+        assert!(t_nc.process_match.is_none());
+        assert!(t_sl.process_match.is_none());
+    }
+
+    #[test]
+    fn native_targets_use_per_qq_process_match() {
+        let mut a = sample_remote("s1", 11);
+        a.bot.deployment_type = DeploymentType::Native;
+        let mut b = sample_remote("s1", 22);
+        b.bot.deployment_type = DeploymentType::Native;
+        b.bot.backend_type = BackendType::SnowLuma;
+
+        let ta = bot_to_notify_target(&a);
+        let tb = bot_to_notify_target(&b);
+        assert_eq!(ta.process_match.as_deref(), Some("-q 11$"));
+        assert_eq!(tb.process_match.as_deref(), Some("-q 22$"));
+        assert_ne!(ta.process_match, tb.process_match);
+        assert!(ta.container_name.is_none());
+        assert!(tb.pid_file.is_none());
+    }
+}

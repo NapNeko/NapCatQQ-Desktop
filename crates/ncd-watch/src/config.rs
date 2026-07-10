@@ -197,7 +197,13 @@ impl NotifyBotTarget {
         } else {
             self.bot_id.clone()
         };
-        format!("ncbot-{qq}")
+        // 与 ncd-deploy::bot_docker_container_name 对齐;缺 containerName 时按 backend 猜
+        let prefix = if self.backend.eq_ignore_ascii_case("snowluma") {
+            "slbot"
+        } else {
+            "ncbot"
+        };
+        format!("{prefix}-{qq}")
     }
 
     pub fn is_docker(&self) -> bool {
@@ -320,6 +326,17 @@ mod tests {
         let back: NotifyConfig = serde_json::from_str(&raw).unwrap();
         assert_eq!(c.bots[0].bot_id, back.bots[0].bot_id);
         assert_eq!(back.bots[0].resolved_container_name(), "ncbot-10001");
+    }
+
+    #[test]
+    fn resolved_container_name_uses_backend_prefix() {
+        let mut sl = NotifyConfig::example().bots.remove(0);
+        sl.backend = "snowluma".into();
+        sl.container_name = None;
+        assert_eq!(sl.resolved_container_name(), "slbot-10001");
+
+        sl.container_name = Some("custom-box".into());
+        assert_eq!(sl.resolved_container_name(), "custom-box");
     }
 
     #[test]
