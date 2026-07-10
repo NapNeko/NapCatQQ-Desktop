@@ -15,7 +15,9 @@ use ts_rs::TS;
 use crate::AppState;
 
 fn snowluma_app_config_path(data_root: &std::path::Path) -> std::path::PathBuf {
-    data_root.join("snowluma").join("app-config.json")
+    ncd_runtime::DataPaths::new(data_root)
+        .snowluma_data_dir()
+        .join("app-config.json")
 }
 
 fn read_snowluma_app_config(data_root: &std::path::Path) -> ncd_domain::SnowLumaAppConfig {
@@ -146,9 +148,8 @@ pub async fn list_qq_processes(state: State<'_, AppState>) -> Result<Vec<QQProce
 }
 
 /// 更新 App 级 SnowLuma WebUI 密码 override
-/// MVP:当前仅原子写 <data_root>/snowluma/app-config.json,下次 daemon 启动时
-/// 由 render_daemon_globals 读取该 override配置层热更新未来
-/// 可通过 BotManager 内的 Arc<RwLock<SnowLumaAppConfig>> 接入
+/// 当前仅原子写 state/snowluma/app-config.json,下次 daemon 启动时
+/// 由 render_daemon_globals 读取;配置层热更新可再接到 BotManager
 #[tauri::command]
 pub async fn set_snowluma_password_override(
     state: State<'_, AppState>,
@@ -209,7 +210,7 @@ fn map_snowluma_agreements_payload(
 
 /// 打开 SnowLuma WebUI:解析 endpoint URL + 当前生效的 password
 /// 优先级(与 daemon render_daemon_globals 对齐):
-/// 1. App 级 override(<data_root>/snowluma/app-config.json 的
+/// 1. App 级 override(state/snowluma/app-config.json 的
 /// snowlumaWebuiPasswordOverride,非空)
 /// 2. session.json 中的强随机密码
 /// bot_id 当前未使用——SnowLuma daemon 是全局单例,所有 SL bot 共享同一个
@@ -258,11 +259,8 @@ pub async fn open_snowluma_webui(
     let data_root = state.data_root.clone();
 
     // 端口:daemon 写入的 runtime.json 优先;否则读 app-config.json;再默认 5099
-    let runtime_json_path = data_root
-        .join("runtime")
-        .join("SnowLuma")
-        .join("config")
-        .join("runtime.json");
+    let paths = ncd_runtime::DataPaths::new(&data_root);
+    let runtime_json_path = paths.snowluma_config_dir().join("runtime.json");
     let port: u16 = (|| -> Option<u16> {
         let text = std::fs::read_to_string(&runtime_json_path).ok()?;
         let val: serde_json::Value = serde_json::from_str(&text).ok()?;
@@ -271,11 +269,11 @@ pub async fn open_snowluma_webui(
             .map(|n| n as u16)
     })()
     .unwrap_or_else(|| {
-        ncd_runtime::load_snowluma_app_config(&data_root.join("snowluma")).webui_port
+        ncd_runtime::load_snowluma_app_config(&paths.snowluma_data_dir()).webui_port
     });
 
     // 密码:先看 App-level override,否则读 session.json
-    let app_cfg_path = data_root.join("snowluma").join("app-config.json");
+    let app_cfg_path = paths.snowluma_data_dir().join("app-config.json");
     let override_pwd: Option<String> = (|| -> Option<String> {
         let text = std::fs::read_to_string(&app_cfg_path).ok()?;
         let cfg: SnowLumaAppConfig = serde_json::from_str(&text).ok()?;
@@ -292,7 +290,7 @@ pub async fn open_snowluma_webui(
         None => {
             // session.json 由 daemon 启动时写入;如果文件还没生成(用户没启动过
             // SL bot),返回明确错误让前端提示
-            let session_path = data_root.join("snowluma").join("session.json");
+            let session_path = paths.snowluma_data_dir().join("session.json");
             let text = std::fs::read_to_string(&session_path).map_err(|e| {
                 format!("SnowLuma session 未就绪（请先启动至少一个 SnowLuma Bot）：{e}")
             })?;

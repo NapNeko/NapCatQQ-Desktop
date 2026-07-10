@@ -5,7 +5,7 @@
 //! 关心两套存储的差异——DTO 把 PAT 当普通字段,command 层负责拆分落盘
 //!
 //! 路径权威性:app-settings.json 落在 LocalConfigStore::config_dir(),即
-//! <data_root>/runtime/config/,与 config.json / bot.json 同级,不另起数据根
+//! <data_root>/config/,与 bot.json / servers.json 同级
 
 use ncd_domain::{AppSettings, AppSettingsDto};
 use ncd_runtime::{LocalConfigStore, SecretStoreImpl};

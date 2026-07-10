@@ -82,20 +82,21 @@ pub fn run() {
     let runtime_watcher = runtime.clone();
 
     let store = Arc::new(LocalConfigStore::new(&data_root));
+    let paths = ncd_runtime::DataPaths::new(&data_root);
     let secrets: Arc<dyn ncd_traits::SecretStore + Send + Sync> =
-        Arc::new(SecretStoreImpl::new(data_root.join("secrets")));
+        Arc::new(SecretStoreImpl::new(paths.secrets_dir()));
     let repo = Arc::new(LocalBotConfigRepo::new(
         Arc::clone(&store),
         Arc::clone(&secrets),
     ));
     let renderer = Arc::new(DispatchRenderer::new(
-        data_root.join("runtime").join("NapCatQQ").join("config"),
-        data_root.join("runtime").join("SnowLuma").join("config"),
+        paths.napcat_config_dir(),
+        paths.snowluma_config_dir(),
     ));
     let launch_planner = Arc::new(
-        ncd_runtime::FileSystemRuntimeLaunchPlanner::new(data_root.join("runtime"))
-            .with_snowluma_runtime_root(data_root.join("runtime").join("SnowLuma"))
-            .with_snowluma_data_root(data_root.join("snowluma")),
+        ncd_runtime::FileSystemRuntimeLaunchPlanner::new(paths.components_dir())
+            .with_snowluma_runtime_root(paths.snowluma_install_dir())
+            .with_snowluma_data_root(paths.snowluma_data_dir()),
     );
     // NativeDeployment 替代旧 LocalRuntimeBackend:通过适配器壳对外仍是 BotBackend
     let local_host: Arc<dyn ncd_host::Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
@@ -108,7 +109,7 @@ pub fn run() {
     let native_deployment = Arc::new(ncd_deploy::NativeDeployment::new(
         translator,
         event_sink,
-        Some(data_root.join("runtime").join("log")),
+        Some(paths.bot_log_dir()),
     ));
     let bot_backend: Arc<dyn ncd_traits::runtime_backend::BotBackend> =
         Arc::new(ncd_runtime::NativeDeploymentBackend::new(
@@ -182,14 +183,11 @@ pub fn run() {
     );
 
     // SnowLuma daemon + backend wiring
-    //
-    // 路径起源严格来自 bootstrap::resolve_data_root():
-    // - SnowLuma 持久化数据根:<data_root>/snowluma/
-    // - SnowLuma 安装根:<data_root>/runtime/snowluma(与 runtime_launch_plan
-    // 建图时使用的 runtime_root 同源;后续如果 PathProbe 暴露 SnowLuma
-    // 单独路径,再切到 PathProbe 输出)
-    let snowluma_data_root = data_root.join("snowluma");
-    let snowluma_runtime_root = data_root.join("runtime").join("SnowLuma");
+    // 路径来自 DataPaths 布局 v1:
+    // - 数据根:state/snowluma
+    // - 安装根:components/SnowLuma
+    let snowluma_data_root = paths.snowluma_data_dir();
+    let snowluma_runtime_root = paths.snowluma_install_dir();
     let snowluma_factory: Arc<dyn ncd_runtime::SnowLumaWebUiClientFactory> =
         Arc::new(ncd_runtime::ReqwestSnowLumaWebUiClientFactory::new());
     let snowluma_daemon = ncd_runtime::SnowLumaDaemon::new(

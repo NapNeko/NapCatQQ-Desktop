@@ -22,8 +22,9 @@ const EXPORT_FORMAT_VERSION: &str = "v1";
 
 /// 参与导入导出的配置文件,相对 data_root 的路径 + 用途描述
 const TRANSFER_FILES: &[(&str, &str, &str)] = &[
-    ("runtime/config/config.json", "config.json", "应用配置"),
-    ("runtime/config/bot.json", "bot.json", "Bot 配置"),
+    ("config/config.json", "config.json", "应用配置"),
+    ("config/bot.json", "bot.json", "Bot 配置"),
+    ("config/app-settings.json", "app-settings.json", "应用设置"),
     ("config/servers.json", "servers.json", "远端服务器档案"),
 ];
 

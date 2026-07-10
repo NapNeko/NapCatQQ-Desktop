@@ -1082,7 +1082,7 @@ fn build_component_for_host(
         ComponentId::NapCat => {
             if host.os() == ncd_host::Os::Windows {
                 // legacy PathFunc.napcat_path = data_path/runtime/NapCatQQ
-                let install = data_root_host.join("runtime").join("NapCatQQ");
+                let install = data_root_host.join("components").join("NapCatQQ");
                 let mut comp = NapCatComponent::for_windows(install);
                 if let Some(sha) = snapshot
                     .as_ref()
@@ -1109,7 +1109,7 @@ fn build_component_for_host(
                 // → 空串(install 阶段会拒绝)已装版本不能直接拿来拼装 URL,
                 // 因为它是当前安装的旧版,需要装的是 latest(这是 EOCD 调查
                 // 顺带发现的二次 bug:之前永远拿旧 tag 拼 URL)
-                let install = data_root_host.join("runtime").join("SnowLuma");
+                let install = data_root_host.join("components").join("SnowLuma");
                 let latest = snapshot.as_ref().and_then(|s| s.snowluma_latest.as_ref());
                 let tag = snowluma_github_release_tag(
                     latest,

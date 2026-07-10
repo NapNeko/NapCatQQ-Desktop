@@ -183,7 +183,7 @@ pub fn open_data_dir(state: State<'_, AppState>) -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub fn export_migration_report(state: State<'_, AppState>) -> Result<PathBuf, String> {
-    let export_dir = state.data_root.join("runtime").join("tmp").join("exports");
+    let export_dir = ncd_runtime::DataPaths::new(&state.data_root).export_dir();
     fs::create_dir_all(&export_dir).map_err(|err| format!("创建导出目录失败: {err}"))?;
 
     let stamp = SystemTime::now()
@@ -208,7 +208,7 @@ pub async fn publish_runtime_status(state: State<'_, AppState>) -> Result<(), St
 pub fn publish_demo_event(state: State<'_, AppState>) -> Result<(), String> {
     state
         .event_bus
-        .publish(DomainEvent::task_progress("p1-demo", 50, "demo event"));
+        .publish(DomainEvent::task_progress("demo-event", 50, "demo event"));
     Ok(())
 }
 
@@ -282,7 +282,7 @@ mod tests {
         ));
         let backend: Arc<dyn BotBackend> = Arc::new(FakeBackend);
         let launch_planner = Arc::new(FileSystemRuntimeLaunchPlanner::new(
-            root.join("runtime"),
+            ncd_runtime::DataPaths::new(root).components_dir(),
         ));
         let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> =
             Arc::new(ReqwestNapCatWebUiClient::new().expect("init webui client"));

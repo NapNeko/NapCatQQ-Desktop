@@ -1,10 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use ncd_runtime::{
-    LocalConfigStore, LocalPathProbe,
-    MigrationOrchestrator, SecretStoreImpl,
-};
-use ncd_domain::{BootstrapSnapshot, LocalVersionSnapshot};
+use ncd_domain::{BootstrapSnapshot, DataLayoutConsolidateSnapshot, LocalVersionSnapshot};
+use ncd_runtime::{LocalConfigStore, LocalPathProbe, MigrationOrchestrator, SecretStoreImpl};
 
 const APP_DATA_DIR_NAME: &str = "NapCatQQ Desktop";
 
@@ -40,6 +37,43 @@ pub fn build_snapshot() -> BootstrapSnapshot {
 }
 
 pub fn build_snapshot_for_data_root(data_root: &Path) -> BootstrapSnapshot {
+    // 先收敛到布局 v1,再跑 schema 迁移;失败只记日志,不阻断启动(保留原目录)
+    let layout_consolidate = match ncd_runtime::consolidate_data_root(data_root) {
+        Ok(report) => {
+            if report.performed {
+                tracing::info!(
+                    target: "ncd_tauri::bootstrap",
+                    backup = ?report.backup_path.as_ref().map(|p| p.display().to_string()),
+                    moved = report.moved.len(),
+                    "data_root 布局收敛完成"
+                );
+            }
+            Some(DataLayoutConsolidateSnapshot {
+                performed: report.performed,
+                skipped_reason: report.skipped_reason,
+                backup_path: report.backup_path.map(|p| p.to_string_lossy().into_owned()),
+                moved_count: report.moved.len() as u32,
+                warnings: report.warnings,
+                error: None,
+            })
+        }
+        Err(err) => {
+            tracing::warn!(
+                target: "ncd_tauri::bootstrap",
+                err = %err,
+                "data_root 布局收敛失败,继续使用现有目录"
+            );
+            Some(DataLayoutConsolidateSnapshot {
+                performed: false,
+                skipped_reason: None,
+                backup_path: None,
+                moved_count: 0,
+                warnings: Vec::new(),
+                error: Some(err.to_string()),
+            })
+        }
+    };
+
     let store = LocalConfigStore::new(data_root);
     let probe = LocalPathProbe::new();
     let secrets = SecretStoreImpl::new(data_root.join("secrets"));
@@ -47,6 +81,7 @@ pub fn build_snapshot_for_data_root(data_root: &Path) -> BootstrapSnapshot {
     let mut snapshot = MigrationOrchestrator::new(&store, &probe, &secrets).bootstrap();
     snapshot.data_root = data_root.to_string_lossy().into_owned();
     snapshot.local_versions = detect_local_versions(data_root);
+    snapshot.layout_consolidate = layout_consolidate;
     snapshot
 }
 
@@ -61,27 +96,38 @@ fn detect_local_versions(data_root: &Path) -> LocalVersionSnapshot {
 }
 
 /// 复用 ncd_component::napcat::parse_napcat_version,从
-/// <data_root>/runtime/NapCatQQ/napcat.mjs grep 版本号
+/// <data_root>/components/NapCatQQ/napcat.mjs grep 版本号(兼容旧 runtime/NapCatQQ)
 fn detect_napcat_version(data_root: &Path) -> Option<String> {
-    let mjs_path = data_root
-        .join("runtime")
-        .join("NapCatQQ")
-        .join("napcat.mjs");
-    let content = std::fs::read_to_string(&mjs_path).ok()?;
-    ncd_component::napcat::parse_napcat_version(&content)
+    let paths = ncd_runtime::DataPaths::new(data_root);
+    for mjs_path in [
+        paths.napcat_install_dir().join("napcat.mjs"),
+        paths.legacy_napcat_install_dir().join("napcat.mjs"),
+    ] {
+        if let Ok(content) = std::fs::read_to_string(&mjs_path) {
+            if let Some(v) = ncd_component::napcat::parse_napcat_version(&content) {
+                return Some(v);
+            }
+        }
+    }
+    None
 }
 
 /// 从 SnowLuma daemon 安装根的 package.json 读 version 字段
-/// 路径与 lib.rs::run 中 SnowLuma daemon 的安装根保持一致:
-/// <data_root>/runtime/SnowLuma/package.json
 fn detect_snowluma_version(data_root: &Path) -> Option<String> {
-    let pkg_path = data_root
-        .join("runtime")
-        .join("SnowLuma")
-        .join("package.json");
-    let content = std::fs::read_to_string(&pkg_path).ok()?;
-    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
-    json.get("version")?.as_str().map(|s| s.to_string())
+    let paths = ncd_runtime::DataPaths::new(data_root);
+    for pkg_path in [
+        paths.snowluma_install_dir().join("package.json"),
+        paths.legacy_snowluma_install_dir().join("package.json"),
+    ] {
+        if let Ok(content) = std::fs::read_to_string(&pkg_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(v) = json.get("version").and_then(|x| x.as_str()) {
+                    return Some(v.to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]

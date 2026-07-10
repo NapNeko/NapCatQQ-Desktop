@@ -335,14 +335,16 @@ mod tests {
         let runtime = crate::runtime::AppRuntime::new(root, bus.clone());
         let store = Arc::new(LocalConfigStore::new(root));
         let secrets: Arc<dyn SecretStore + Send + Sync> =
-            Arc::new(SecretStoreImpl::new(root.join("secrets")));
+            Arc::new(SecretStoreImpl::new(ncd_runtime::DataPaths::new(root).secrets_dir()));
         let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
         let renderer = Arc::new(DispatchRenderer::new(
             store.config_dir(),
             store.config_dir(),
         ));
         let backend: Arc<dyn BotBackend> = Arc::new(FakeBackend);
-        let launch_planner = Arc::new(FileSystemRuntimeLaunchPlanner::new(root.join("runtime")));
+        let launch_planner = Arc::new(FileSystemRuntimeLaunchPlanner::new(
+            ncd_runtime::DataPaths::new(root).components_dir(),
+        ));
         let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> =
             Arc::new(ncd_runtime::ReqwestNapCatWebUiClient::new().expect("init webui client"));
         let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> =
