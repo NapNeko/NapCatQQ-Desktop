@@ -68,14 +68,49 @@ export function buildNotices(input: NoticeAggregatorInput): NoticeItem[] {
 // ─── source: migration ───────────────────────────────────────────────────
 
 function collectMigrationNotices(snap: BootstrapSnapshot | null | undefined): NoticeItem[] {
-    if (!snap?.report?.warnings?.length) return [];
-    return snap.report.warnings.map((w) => ({
-        id: `migration:${w.code}`,
-        title: `迁移诊断 · ${w.code}`,
-        detail: w.message,
-        tone: 'warning' as const,
-        source: 'migration' as const,
-    }));
+    if (!snap) return [];
+    const items: NoticeItem[] = [];
+
+    const layout = snap.layout_consolidate;
+    if (layout?.error) {
+        items.push({
+            id: 'layout-consolidate:error',
+            title: '数据目录整理未完成',
+            detail: layout.backup_path
+                ? `${layout.error}；备份：${layout.backup_path}（含密钥，请自行保管）`
+                : layout.error,
+            tone: 'warning',
+            source: 'migration',
+        });
+    } else if (layout?.performed) {
+        const detailParts = [
+            layout.backup_path
+                ? `已备份到桌面：${layout.backup_path}（含密钥，请自行保管）`
+                : null,
+            layout.moved_count > 0 ? `整理 ${layout.moved_count} 项` : null,
+            layout.warnings[0] ?? null,
+        ].filter(Boolean);
+        items.push({
+            id: 'layout-consolidate:done',
+            title: '数据目录已整理',
+            detail: detailParts.join(' · ') || '布局已收敛到新版目录结构',
+            tone: layout.warnings.length > 0 ? 'warning' : 'success',
+            source: 'migration',
+        });
+    }
+
+    if (snap.report?.warnings?.length) {
+        for (const w of snap.report.warnings) {
+            items.push({
+                id: `migration:${w.code}`,
+                title: `迁移诊断 · ${w.code}`,
+                detail: w.message,
+                tone: 'warning',
+                source: 'migration',
+            });
+        }
+    }
+    return items;
 }
 
 // ─── source: update ──────────────────────────────────────────────────────

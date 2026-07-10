@@ -41,12 +41,15 @@ export interface BootstrapSnapshot {
     report: MigrationReport;
     data_root: string;
     local_versions: LocalVersionSnapshot;
+    /** 布局收敛结果;未跑时为 null/undefined */
+    layout_consolidate?: DataLayoutConsolidateSnapshot | null;
 }
 
 // 与后端 ts-rs 派生的强类型对齐——直接 re-export 生成版本，避免手写漂移。
 export type { BotActorState } from './generated/BotActorState';
 export type { BotActorSnapshot } from './generated/BotActorSnapshot';
 export type { LocalVersionSnapshot } from './generated/domain/LocalVersionSnapshot';
+export type { DataLayoutConsolidateSnapshot } from './generated/domain/DataLayoutConsolidateSnapshot';
 export type { ReleaseInfo } from './generated/domain/ReleaseInfo';
 export type { ReleaseSnapshot } from './generated/domain/ReleaseSnapshot';
 export type { AppSettings } from './generated/domain/AppSettings';

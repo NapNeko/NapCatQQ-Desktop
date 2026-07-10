@@ -30,6 +30,8 @@ import type { TaskQueueSnapshot } from '../core/domain/task-queue/types';
 import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
+import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
+import { useDataLayoutConsolidateAlert } from '../hooks/bootstrap/useDataLayoutConsolidateAlert';
 
 /// 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
 const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
@@ -79,6 +81,9 @@ export const AppNext: React.FC = () => {
     const taskQueue = useTaskQueue({ hostLabels });
 
     useAppUiPreferencesBootstrap();
+
+    const { bootstrap } = useBootstrap();
+    useDataLayoutConsolidateAlert(bootstrap);
 
     const { bars, dismiss, remove } = useGlobalInfoBars();
 
@@ -137,8 +142,8 @@ export const AppNext: React.FC = () => {
                             className={
                                 'ndf-canvas-glow' +
                                 (motion.preset.feel.overshoot &&
-                                motion.enabled &&
-                                route === 'overview'
+                                    motion.enabled &&
+                                    route === 'overview'
                                     ? ' is-breathing'
                                     : '')
                             }

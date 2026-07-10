@@ -32,6 +32,13 @@ export const mockBootstrap: BootstrapSnapshot = {
         napcat: '4.18.1',
         snowluma: null,
     },
+    layout_consolidate: {
+        performed: true,
+        backup_path: 'C:\\Users\\QIAO\\Desktop\\NapCatQQ-Desktop-backup-2x-20260710-120000.zip',
+        moved_count: 4,
+        warnings: [],
+        error: null,
+    },
 };
 
 export const mockDataDir = 'C:\\Users\\QIAO\\AppData\\Roaming\\NapCatQQ-Desktop\\data';
