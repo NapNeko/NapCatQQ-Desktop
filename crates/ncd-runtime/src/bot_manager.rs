@@ -1078,6 +1078,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.repo.get(qq_id).await.map_err(BotManagerError::from)
     }
 
+    /// 列出全部 Bot 配置(持久化源)
+    pub async fn list_bot_configs(&self) -> Result<Vec<BotConfig>, BotManagerError> {
+        self.repo.list().await.map_err(BotManagerError::from)
+    }
+
     /// 批量返回所有 Bot 的 backend_type,用于 UI 列表页一次性拿 flavor map
     /// 避免 BotListPage 对每个 bot 单独调 get_bot_config 造成 N+1
     /// key 为 BotId.to_string()(即 QQID 数字字符串)

@@ -12,6 +12,7 @@ ncd-deploy = { path = "../ncd-deploy" }
 ncd-host = { path = "../ncd-host" }
 ncd-network = { path = "../ncd-network" }
 ncd-log = { path = "../ncd-log" }
+ncd-watch = { path = "../ncd-watch" }
 ncd-backend-snowluma = { path = "../ncd-backend-snowluma" }
 ncd-backend-napcat = { path = "../ncd-backend-napcat" }
 async-trait = "0.1"

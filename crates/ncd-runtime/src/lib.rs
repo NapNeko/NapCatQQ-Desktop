@@ -20,6 +20,7 @@ pub mod legacy_discovery;
 pub mod migration;
 pub mod napcat;
 pub mod native_deployment_adapter;
+pub mod ncd_watch_sync;
 pub mod notify;
 pub mod package_lock;
 pub mod path_probe_impl;
