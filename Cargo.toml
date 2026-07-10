@@ -14,6 +14,7 @@ members = [
     "crates/ncd-template",
     "crates/ncd-backend-snowluma",
     "crates/ncd-backend-napcat",
+    "crates/ncd-watch",
 ]
 resolver = "3"
 
