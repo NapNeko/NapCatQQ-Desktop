@@ -140,6 +140,8 @@ mod tests {
             container_name: None,
             pid_file: None,
             process_match: None,
+            webui_port: None,
+            webui_token: None,
             enabled: true,
         };
         let a = build_offline_alert(&bot, OfflineAlertKind::Manual);

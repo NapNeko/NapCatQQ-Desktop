@@ -14,6 +14,9 @@ daemon = [
     "dep:clap",
     "dep:tracing",
     "dep:tracing-subscriber",
+    "dep:sha2",
+    "dep:hex",
+    "dep:lettre",
     "tokio/rt-multi-thread",
     "tokio/macros",
     "tokio/time",
@@ -38,19 +41,21 @@ ncd-domain = { path = "../ncd-domain" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-# DesktopPresentFile::now 与 webhook 时间戳共用;schema 路径也需要
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-# daemon 模块用;schema-only 时不启用任何 feature,避免空依赖拖运行时
 tokio = { version = "1", default-features = false, optional = true }
 
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
 clap = { version = "4", features = ["derive", "env"], optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+sha2 = { version = "0.10", optional = true }
+hex = { version = "0.4", optional = true }
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "hostname", "rustls-tls"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "fs"] }
+wiremock = "0.6"
 
 [lints]
 workspace = true

@@ -259,6 +259,8 @@ mod tests {
             container_name: None,
             pid_file: None,
             process_match: Some("x".into()),
+            webui_port: None,
+            webui_token: None,
             enabled: true,
         };
         let r = m.probe_bot(&bot);

@@ -3358,15 +3358,19 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
+ "hex",
+ "lettre",
  "ncd-domain",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "wiremock",
 ]
 
 [[package]]

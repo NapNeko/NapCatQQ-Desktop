@@ -1,4 +1,4 @@
-//! 主循环:探活 → 边沿 → (可选) Webhook
+//! 主循环:探活 → 登录态 → 边沿 → Webhook/Email(无 OneBot)
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,17 +7,21 @@ use ncd_domain::OfflineAlertKind;
 
 use crate::config::{NotifyConfig, WatchConfig, WatchPaths};
 use crate::edge::{EdgeAction, EdgeTracker, OfflineEdgeKind};
+use crate::email::send_watch_email;
+use crate::login_probe::probe_login_status;
 use crate::present::desktop_is_present;
-use crate::probe::{ProbeStatus, Prober};
+use crate::probe::{LoginStatus, ProbeStatus, Prober};
 use crate::webhook::{build_offline_alert, send_watch_webhooks};
 
 #[derive(Debug, Clone, Default)]
 pub struct RunOnceOutcome {
     pub probed: usize,
     pub fired: usize,
+    pub recovered: usize,
     pub debounced: usize,
     pub skipped_desktop_present: bool,
     pub webhook_errors: Vec<String>,
+    pub email_errors: Vec<String>,
 }
 
 fn alert_kind_for(edge: OfflineEdgeKind) -> OfflineAlertKind {
@@ -37,23 +41,41 @@ pub async fn run_once(
 ) -> RunOnceOutcome {
     let mut out = RunOnceOutcome::default();
     let desktop_online = desktop_is_present(&paths.desktop_present, watch.desktop_present_ttl_secs);
-    let allow_webhook = watch.notify_while_desktop_present || !desktop_online;
+    let allow_notify = watch.notify_while_desktop_present || !desktop_online;
     if desktop_online && !watch.notify_while_desktop_present {
         out.skipped_desktop_present = true;
     }
 
-    let channels = notify.enabled_webhooks();
+    let channels = if notify.webhook_enabled {
+        notify.enabled_webhooks()
+    } else {
+        Vec::new()
+    };
 
     for bot in notify.enabled_bots() {
-        let result = prober.probe_bot(bot);
+        let mut result = prober.probe_bot(bot);
         out.probed += 1;
-        // 进程与登录都 Unknown 时整轮跳过;任一层有值仍走 edge
+
+        // 进程在线时再查登录;进程已挂则登录无意义
+        if matches!(result.status, ProbeStatus::Online)
+            && bot.backend.eq_ignore_ascii_case("napcat")
+            && bot.webui_port.is_some()
+            && bot.webui_token.as_ref().is_some_and(|t| !t.trim().is_empty())
+        {
+            let (login, detail) = probe_login_status(bot).await;
+            result.login = login;
+            if !detail.is_empty() {
+                result.detail = format!("{}; {detail}", result.detail);
+            }
+        }
+
         if matches!(result.status, ProbeStatus::Unknown)
-            && matches!(result.login, crate::probe::LoginStatus::Unknown)
+            && matches!(result.login, LoginStatus::Unknown)
         {
             tracing::debug!(bot_id = %bot.bot_id, detail = %result.detail, "probe unknown");
             continue;
         }
+
         let actions = edges.observe_layers(&bot.bot_id, result.status, result.login);
         for action in actions {
             match action {
@@ -67,24 +89,29 @@ pub async fn run_once(
                         bot_id = %bot.bot_id,
                         ?kind,
                         detail = %result.detail,
-                        allow_webhook,
+                        allow_notify,
                         "offline edge"
                     );
-                    if !allow_webhook {
-                        continue;
-                    }
-                    if channels.is_empty() {
-                        tracing::warn!(bot_id = %bot.bot_id, "offline edge but no webhook configured");
+                    if !allow_notify {
                         continue;
                     }
                     let alert = build_offline_alert(bot, alert_kind_for(kind));
-                    match send_watch_webhooks(&channels, &alert).await {
-                        Ok(()) => out.fired += 1,
-                        Err(e) => {
-                            out.webhook_errors.push(format!("{}: {e}", bot.bot_id));
-                            tracing::warn!(bot_id = %bot.bot_id, %e, "webhook failed");
-                        }
+                    deliver_channels(notify, &channels, &alert, &mut out).await;
+                }
+                EdgeAction::FireRecovered => {
+                    tracing::info!(
+                        bot_id = %bot.bot_id,
+                        detail = %result.detail,
+                        allow_notify,
+                        notify_on_recovered = notify.notify_on_recovered,
+                        "recovered edge"
+                    );
+                    if !allow_notify || !notify.notify_on_recovered {
+                        continue;
                     }
+                    let alert = build_offline_alert(bot, OfflineAlertKind::Recovered);
+                    deliver_channels(notify, &channels, &alert, &mut out).await;
+                    out.recovered += 1;
                 }
             }
         }
@@ -94,6 +121,54 @@ pub async fn run_once(
         tracing::warn!(%e, "save edge state failed");
     }
     out
+}
+
+async fn deliver_channels(
+    notify: &NotifyConfig,
+    channels: &[&ncd_domain::OfflineWebhookChannel],
+    alert: &ncd_domain::OfflineAlert,
+    out: &mut RunOnceOutcome,
+) {
+    let mut any = false;
+    if notify.webhook_enabled {
+        if channels.is_empty() {
+            tracing::debug!(bot_id = %alert.bot_id, "webhook enabled but no channels");
+        } else {
+            match send_watch_webhooks(channels, alert).await {
+                Ok(()) => {
+                    any = true;
+                }
+                Err(e) => {
+                    out.webhook_errors
+                        .push(format!("{}: {e}", alert.bot_id.as_str()));
+                    tracing::warn!(bot_id = %alert.bot_id, %e, "webhook failed");
+                }
+            }
+        }
+    }
+    if notify.email_enabled {
+        let email = notify.email.clone();
+        let alert_c = alert.clone();
+        match tokio::task::spawn_blocking(move || send_watch_email(&email, &alert_c)).await {
+            Ok(Ok(())) => any = true,
+            Ok(Err(e)) => {
+                out.email_errors
+                    .push(format!("{}: {e}", alert.bot_id.as_str()));
+                tracing::warn!(bot_id = %alert.bot_id, %e, "email failed");
+            }
+            Err(e) => {
+                out.email_errors
+                    .push(format!("{}: join {e}", alert.bot_id.as_str()));
+                tracing::warn!(bot_id = %alert.bot_id, %e, "email task join failed");
+            }
+        }
+    }
+    if any && alert.is_offline_edge() {
+        out.fired += 1;
+    }
+    if !notify.webhook_enabled && !notify.email_enabled {
+        tracing::warn!(bot_id = %alert.bot_id, "edge fired but webhook/email both disabled");
+    }
 }
 
 /// 常驻循环;收到取消后返回
@@ -121,7 +196,15 @@ pub async fn run_loop(
             NotifyConfig::default()
         });
 
-        let _ = run_once(&paths, &watch, &notify, prober.as_ref(), &mut edges).await;
+        let out = run_once(&paths, &watch, &notify, prober.as_ref(), &mut edges).await;
+        tracing::debug!(
+            probed = out.probed,
+            fired = out.fired,
+            recovered = out.recovered,
+            debounced = out.debounced,
+            skipped_desktop = out.skipped_desktop_present,
+            "run_once summary"
+        );
 
         let wait = Duration::from_secs(u64::from(watch.probe_interval_secs.max(1)));
         tokio::select! {
@@ -153,6 +236,8 @@ mod tests {
             container_name: None,
             pid_file: None,
             process_match: Some("x".into()),
+            webui_port: None,
+            webui_token: None,
             enabled: true,
         }
     }
@@ -172,6 +257,7 @@ mod tests {
         let notify = NotifyConfig {
             bots: vec![sample_bot()],
             webhooks: vec![],
+            webhook_enabled: true,
             ..NotifyConfig::default()
         };
         let mut map = HashMap::new();

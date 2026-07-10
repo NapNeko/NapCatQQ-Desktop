@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use ncd_domain::{OfflineWebhookChannel, default_webhook_body_template};
+use ncd_domain::{OfflineEmailSettings, OfflineWebhookChannel, default_webhook_body_template};
 use serde::{Deserialize, Serialize};
 
 /// 当前配置协议版本;破坏性变更时递增
@@ -42,6 +42,8 @@ fn default_features() -> Vec<String> {
         "process_watch".to_string(),
         "docker_watch".to_string(),
         "webhook".to_string(),
+        "login_watch".to_string(),
+        "email".to_string(),
     ]
 }
 
@@ -169,6 +171,12 @@ pub struct NotifyBotTarget {
     /// Native: 进程名子串匹配(如 QQ / napcat);空则仅 pid_file
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub process_match: Option<String>,
+    /// NapCat WebUI 在远端本机的端口(Docker 为 host 映射口;Native 为实际监听口)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webui_port: Option<u16>,
+    /// NapCat WebUI token(换 Bearer);仅写 0600 的 notify.json
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webui_token: Option<String>,
     /// 是否监控该 bot
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -225,6 +233,18 @@ pub struct NotifyConfig {
     /// 与 Desktop OfflineWebhookChannel 字段对齐的子集
     #[serde(default)]
     pub webhooks: Vec<OfflineWebhookChannel>,
+    /// 对齐 poller.offline_webhook_notice;缺省 true 兼容旧 notify.json
+    #[serde(default = "default_true")]
+    pub webhook_enabled: bool,
+    /// 对齐 poller.offline_email_notice
+    #[serde(default)]
+    pub email_enabled: bool,
+    /// 对齐 offline_notify_behavior.notify_on_recovered
+    #[serde(default)]
+    pub notify_on_recovered: bool,
+    /// 对齐 Desktop OfflineEmailSettings;email_enabled 时使用
+    #[serde(default)]
+    pub email: OfflineEmailSettings,
 }
 
 impl Default for NotifyConfig {
@@ -234,6 +254,10 @@ impl Default for NotifyConfig {
             server_id: None,
             bots: Vec::new(),
             webhooks: Vec::new(),
+            webhook_enabled: true,
+            email_enabled: false,
+            notify_on_recovered: false,
+            email: OfflineEmailSettings::default(),
         }
     }
 }
@@ -272,6 +296,8 @@ impl NotifyConfig {
                 container_name: None,
                 pid_file: None,
                 process_match: None,
+                webui_port: None,
+                webui_token: None,
                 enabled: true,
             }],
             webhooks: vec![OfflineWebhookChannel {
@@ -283,6 +309,10 @@ impl NotifyConfig {
                 method: "POST".into(),
                 body_template: default_webhook_body_template(),
             }],
+            webhook_enabled: true,
+            email_enabled: false,
+            notify_on_recovered: false,
+            email: OfflineEmailSettings::default(),
         }
     }
 }

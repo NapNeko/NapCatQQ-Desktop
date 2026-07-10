@@ -1,4 +1,4 @@
-//! 掉线边沿去重与防抖(进程层 + 登录层)
+//! 掉线边沿去重与防抖(进程层 + 登录层 + 可选 recovered)
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -20,6 +20,8 @@ pub enum OfflineEdgeKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EdgeAction {
     FireOffline(OfflineEdgeKind),
+    /// 进程或登录从 offline → online(需 notify_on_recovered 才投递)
+    FireRecovered,
     Debounced,
     None,
 }
@@ -27,10 +29,8 @@ pub enum EdgeAction {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct EdgeStateFile {
-    /// bot_id → 上次进程是否 online
     #[serde(default, alias = "lastOnline")]
     last_process_online: HashMap<String, bool>,
-    /// bot_id → 上次是否 LoggedIn(仅在曾观测到非 Unknown 时写入)
     #[serde(default)]
     last_login_online: HashMap<String, bool>,
 }
@@ -76,7 +76,6 @@ impl EdgeTracker {
         std::fs::write(path, text).map_err(|e| e.to_string())
     }
 
-    /// 兼容旧单层 API:只看进程层,登录固定 Unknown
     pub fn observe(&mut self, bot_id: &str, status: ProbeStatus) -> EdgeAction {
         let actions = self.observe_layers(bot_id, status, LoginStatus::Unknown);
         actions.into_iter().next().unwrap_or(EdgeAction::None)
@@ -84,11 +83,11 @@ impl EdgeTracker {
 
     /// 进程 + 登录双层边沿。
     ///
-    /// 规则:
     /// 1. Unknown 不更新、不触发该层
     /// 2. 冷启动首次已 offline / LoggedOut 不告警
-    /// 3. 同轮若进程掉线,不再报登录掉线(进程挂已覆盖)
-    /// 4. 防抖按 bot 共享(任一离线边沿共用窗口)
+    /// 3. 同轮进程掉线优先,抑制登录掉线
+    /// 4. offline→online 发 FireRecovered(投递侧再看 notify_on_recovered)
+    /// 5. 防抖按 bot 共享,仅作用于 offline 边沿
     pub fn observe_layers(
         &mut self,
         bot_id: &str,
@@ -96,63 +95,56 @@ impl EdgeTracker {
         login: LoginStatus,
     ) -> Vec<EdgeAction> {
         let mut out = Vec::new();
+        let mut process_offline_edge = false;
 
-        let mut process_fired = false;
         if !matches!(process, ProbeStatus::Unknown) {
             let online = matches!(process, ProbeStatus::Online);
-            let prev = self
-                .last_process_online
-                .insert(bot_id.to_string(), online);
+            let prev = self.last_process_online.insert(bot_id.to_string(), online);
             match (prev, online) {
-                (None, false) => out.push(EdgeAction::None),
+                (None, false) => {}
                 (Some(true), false) => {
-                    let a = self.try_fire(bot_id, OfflineEdgeKind::Process);
-                    process_fired = matches!(a, EdgeAction::FireOffline(_));
-                    // Debounced 也算本轮已处理进程掉线,不再叠登录
-                    if matches!(a, EdgeAction::FireOffline(_) | EdgeAction::Debounced) {
-                        process_fired = true;
+                    process_offline_edge = true;
+                    out.push(self.try_fire_offline(bot_id, OfflineEdgeKind::Process));
+                }
+                (Some(false), true) => out.push(EdgeAction::FireRecovered),
+                _ => {}
+            }
+        }
+
+        if process_offline_edge {
+            // 进程掉已覆盖;仍更新 login 快照避免下次误边沿
+            if !matches!(login, LoginStatus::Unknown) {
+                let logged_in = matches!(login, LoginStatus::LoggedIn);
+                self.last_login_online
+                    .insert(bot_id.to_string(), logged_in);
+            }
+            return finalize(out);
+        }
+
+        if !matches!(login, LoginStatus::Unknown) {
+            let logged_in = matches!(login, LoginStatus::LoggedIn);
+            let prev = self
+                .last_login_online
+                .insert(bot_id.to_string(), logged_in);
+            match (prev, logged_in) {
+                (None, false) => {}
+                (Some(true), false) => {
+                    out.push(self.try_fire_offline(bot_id, OfflineEdgeKind::Login));
+                }
+                (Some(false), true) => {
+                    // 进程层若本轮已 FireRecovered,不重复
+                    if !out.iter().any(|a| matches!(a, EdgeAction::FireRecovered)) {
+                        out.push(EdgeAction::FireRecovered);
                     }
-                    out.push(a);
                 }
-                (Some(false), false) => {}
-                (_, true) => {}
+                _ => {}
             }
         }
 
-        if process_fired {
-            return out;
-        }
-
-        if matches!(login, LoginStatus::Unknown) {
-            return if out.is_empty() {
-                vec![EdgeAction::None]
-            } else {
-                out
-            };
-        }
-
-        let logged_in = matches!(login, LoginStatus::LoggedIn);
-        let prev = self
-            .last_login_online
-            .insert(bot_id.to_string(), logged_in);
-        match (prev, logged_in) {
-            (None, false) => {
-                if out.is_empty() {
-                    out.push(EdgeAction::None);
-                }
-            }
-            (Some(true), false) => out.push(self.try_fire(bot_id, OfflineEdgeKind::Login)),
-            (Some(false), false) => {}
-            (_, true) => {}
-        }
-
-        if out.is_empty() {
-            out.push(EdgeAction::None);
-        }
-        out
+        finalize(out)
     }
 
-    fn try_fire(&mut self, bot_id: &str, kind: OfflineEdgeKind) -> EdgeAction {
+    fn try_fire_offline(&mut self, bot_id: &str, kind: OfflineEdgeKind) -> EdgeAction {
         if !self.debounce.is_zero() {
             if let Some(prev) = self.last_offline_fire.get(bot_id) {
                 if prev.elapsed() < self.debounce {
@@ -164,6 +156,13 @@ impl EdgeTracker {
             .insert(bot_id.to_string(), Instant::now());
         EdgeAction::FireOffline(kind)
     }
+}
+
+fn finalize(mut out: Vec<EdgeAction>) -> Vec<EdgeAction> {
+    if out.is_empty() {
+        out.push(EdgeAction::None);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -184,6 +183,14 @@ mod tests {
             t.observe("1", ProbeStatus::Offline),
             EdgeAction::FireOffline(OfflineEdgeKind::Process)
         );
+    }
+
+    #[test]
+    fn offline_to_online_fires_recovered() {
+        let mut t = EdgeTracker::new(0);
+        let _ = t.observe("1", ProbeStatus::Online);
+        let _ = t.observe("1", ProbeStatus::Offline);
+        assert_eq!(t.observe("1", ProbeStatus::Online), EdgeAction::FireRecovered);
     }
 
     #[test]
