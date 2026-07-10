@@ -8,6 +8,7 @@ const COMPONENT_DISPLAY_NAME: Record<ComponentId, string> = {
     qq: 'QQ',
     nodejs: 'Node.js',
     novnc: 'noVNC',
+    ncd_watch: 'NCD Watch',
     desktop_self: 'Desktop',
 };
 

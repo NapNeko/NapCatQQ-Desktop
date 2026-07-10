@@ -72,6 +72,14 @@ export const mockComponentCatalog: ComponentInfo[] = [
         category: 'runtime_dep',
     },
     {
+        id: 'ncd_watch',
+        display_name: 'NCD Watch',
+        description: '远端离线监控（Desktop 退出后 Webhook）',
+        repo_url: 'https://github.com/NapNeko/NapCatQQ-Desktop',
+        supported_targets: [{ os: 'linux', locality: 'remote' }],
+        category: 'runtime_dep',
+    },
+    {
         id: 'desktop_self',
         display_name: 'NapCatQQ Desktop',
         description: '桌面端自身（自更新）',
@@ -135,6 +143,11 @@ const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>
         'remote:dev': { version: 'v18.19.0', source: 'node -v' },
     },
     novnc: {
+        local: null,
+        'remote:production': null,
+        'remote:dev': null,
+    },
+    ncd_watch: {
         local: null,
         'remote:production': null,
         'remote:dev': null,

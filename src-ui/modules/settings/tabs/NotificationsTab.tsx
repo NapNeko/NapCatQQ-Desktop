@@ -46,10 +46,13 @@ import {
     SettingsTabSections,
 } from '../_shared';
 import { WebhookMessageBuilder } from './WebhookMessageBuilder';
+import { NcdWatchRemoteSection } from './NcdWatchRemoteSection';
 
 interface Props {
     draft: SettingsDraft | null;
     patchDraft: (patch: Partial<SettingsDraft>) => void;
+    /** 草稿未保存时禁用 ncd-watch 同步（避免写旧 Webhook） */
+    settingsDirty?: boolean;
 }
 
 type ChannelEditorState =
@@ -863,7 +866,11 @@ function DialogField({
     );
 }
 
-export function NotificationsTab({ draft, patchDraft }: Props) {
+export function NotificationsTab({
+    draft,
+    patchDraft,
+    settingsDirty = false,
+}: Props) {
     const [testing, setTesting] = useState<string | null>(null);
     const [editor, setEditor] = useState<ChannelEditorState | null>(null);
     const [editorMount, setEditorMount] = useState<ChannelEditorState | null>(
@@ -1207,6 +1214,8 @@ export function NotificationsTab({ draft, patchDraft }: Props) {
                     />
                 </FieldRow>
             </SettingsSection>
+
+            <NcdWatchRemoteSection settingsDirty={settingsDirty} />
 
             <SettingsSection
                 title="投递行为"

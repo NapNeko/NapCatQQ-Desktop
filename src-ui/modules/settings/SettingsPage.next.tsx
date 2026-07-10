@@ -130,7 +130,11 @@ export function SettingsPageNext() {
                     </TabsContent>
 
                     <TabsContent value="notifications" className="pb-10 pt-7 focus-visible:outline-none">
-                        <NotificationsTab draft={draft} patchDraft={patchDraft} />
+                        <NotificationsTab
+                            draft={draft}
+                            patchDraft={patchDraft}
+                            settingsDirty={dirty}
+                        />
                     </TabsContent>
 
                     <TabsContent
