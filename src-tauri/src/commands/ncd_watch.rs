@@ -35,7 +35,12 @@ async fn build_notify_for_server(
 ) -> WatchNotifyConfig {
     let settings = state.app_settings.read().await.clone();
     let webui = collect_webui_map(state, bots).await;
-    let extras = WatchNotifyExtras::from_app(&settings.poller, settings.offline_email, webui);
+    let extras = WatchNotifyExtras::from_app(
+        &settings.poller,
+        settings.offline_email,
+        settings.offline_onebot,
+        webui,
+    );
     build_notify_config_with_extras(server_id, bots, &settings.offline_webhook, &extras)
 }
 
