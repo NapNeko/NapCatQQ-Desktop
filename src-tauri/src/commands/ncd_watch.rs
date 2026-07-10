@@ -1,13 +1,45 @@
 //! ncd-watch 配置同步与 Desktop 心跳
 
-use ncd_runtime::ncd_watch_sync::{build_notify_config, write_desktop_present, write_notify_json};
+use ncd_domain::ids::BotId;
+use ncd_runtime::ncd_watch_sync::{
+    WatchNotifyConfig, WatchNotifyExtras, build_notify_config_with_extras, write_desktop_present,
+    write_notify_json,
+};
 use tauri::{AppHandle, Manager, State};
 
 use crate::AppState;
 use crate::commands::components::cached_host_probe;
 use crate::commands::host_resolve::resolve_host_with_autoconnect;
 
-/// 将当前 App Webhook 设置 + 该 server 上的 Bot 列表写入远端 notify.json
+async fn collect_webui_map(
+    state: &AppState,
+    bots: &[ncd_domain::bot_config::BotConfig],
+) -> std::collections::HashMap<String, (u16, String)> {
+    let mut map = std::collections::HashMap::new();
+    for cfg in bots {
+        if cfg.bot.backend_type != ncd_domain::bot_config::BackendType::NapCat {
+            continue;
+        }
+        let bot_id = BotId::new(cfg.bot.qq_id.to_string());
+        if let Some((port, token)) = state.bot_manager.napcat_webui_for_watch(&bot_id).await {
+            map.insert(cfg.bot.qq_id.to_string(), (port, token));
+        }
+    }
+    map
+}
+
+async fn build_notify_for_server(
+    state: &AppState,
+    server_id: &str,
+    bots: &[ncd_domain::bot_config::BotConfig],
+) -> WatchNotifyConfig {
+    let settings = state.app_settings.read().await.clone();
+    let webui = collect_webui_map(state, bots).await;
+    let extras = WatchNotifyExtras::from_app(&settings.poller, settings.offline_email, webui);
+    build_notify_config_with_extras(server_id, bots, &settings.offline_webhook, &extras)
+}
+
+/// 将当前 App 通知设置 + 该 server 上的 Bot 列表写入远端 notify.json
 #[tauri::command]
 pub async fn sync_ncd_watch_notify(
     server_id: String,
@@ -27,8 +59,7 @@ pub async fn sync_ncd_watch_notify(
         .list_bot_configs()
         .await
         .map_err(|e| e.to_string())?;
-    let webhook = state.app_settings.read().await.offline_webhook.clone();
-    let notify = build_notify_config(&server_id, &bots, &webhook);
+    let notify = build_notify_for_server(state.inner(), &server_id, &bots).await;
     write_notify_json(host.as_ref(), home, &notify).await?;
     write_desktop_present(host.as_ref(), home, Some(env!("CARGO_PKG_VERSION"))).await?;
     Ok(())
@@ -61,7 +92,6 @@ pub async fn heartbeat_all_remote_servers(state: &AppState) {
             return;
         }
     };
-    let webhook = state.app_settings.read().await.offline_webhook.clone();
     let version = env!("CARGO_PKG_VERSION");
 
     for profile in servers {
@@ -84,7 +114,7 @@ pub async fn heartbeat_all_remote_servers(state: &AppState) {
             tracing::debug!(server_id = %profile.id, %e, "write desktop_present failed");
             continue;
         }
-        let notify = build_notify_config(&profile.id, &bots, &webhook);
+        let notify = build_notify_for_server(state, &profile.id, &bots).await;
         if notify.bots.is_empty() {
             continue;
         }

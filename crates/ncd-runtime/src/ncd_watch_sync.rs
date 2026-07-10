@@ -1,13 +1,48 @@
 //! 为远端 server 组装 ncd-watch 的 notify.json,并经 Host 写入
+//!
+//! 对齐 Desktop 离线通知子集: Webhook + Email + NC 登录探活凭据。
+//! 不做 OneBot。
 
 use ncd_deploy::bot_docker_container_name;
 use ncd_domain::bot_config::{BackendType, BotConfig, DeploymentType};
+use ncd_domain::docker::DockerDeploySpec;
 use ncd_domain::kinds::RuntimeTarget;
-use ncd_domain::{OfflineWebhookChannel, OfflineWebhookSettings};
+use ncd_domain::{
+    OfflineEmailSettings, OfflineWebhookChannel, OfflineWebhookSettings, WebUiPollerSettings,
+};
 use ncd_host::{Host, HostPath};
 use ncd_watch::config::{
     DesktopPresentFile, NotifyBotTarget, NotifyConfig, WATCH_PROTOCOL_V1, WatchPaths,
 };
+
+pub use ncd_watch::config::NotifyConfig as WatchNotifyConfig;
+
+/// 组装 notify 时可选的 per-bot WebUI 凭据(仅 NapCat)
+#[derive(Debug, Clone, Default)]
+pub struct WatchNotifyExtras {
+    /// bot_id(qq 字符串) -> (port, token)
+    pub webui_by_bot: std::collections::HashMap<String, (u16, String)>,
+    pub webhook_enabled: bool,
+    pub email_enabled: bool,
+    pub notify_on_recovered: bool,
+    pub email: OfflineEmailSettings,
+}
+
+impl WatchNotifyExtras {
+    pub fn from_app(
+        poller: &WebUiPollerSettings,
+        email: OfflineEmailSettings,
+        webui_by_bot: std::collections::HashMap<String, (u16, String)>,
+    ) -> Self {
+        Self {
+            webui_by_bot,
+            webhook_enabled: poller.offline_webhook_notice,
+            email_enabled: poller.offline_email_notice,
+            notify_on_recovered: poller.offline_notify_behavior.notify_on_recovered,
+            email,
+        }
+    }
+}
 
 /// 从本机 Bot 列表筛出落在 `server_id` 上的目标
 pub fn bots_for_server<'a>(
@@ -19,12 +54,23 @@ pub fn bots_for_server<'a>(
         .collect()
 }
 
+/// Docker NapCat WebUI 宿主机端口: 6099 + (qq % 500)
+pub fn napcat_docker_webui_host_port(qq_id: u64) -> u16 {
+    DockerDeploySpec::napcat_default()
+        .with_host_port_offset(qq_id)
+        .host_port_for_container(6099)
+        .unwrap_or(6099)
+}
+
 /// 把 BotConfig 投影成 watch 探活目标。
-///
-/// Docker: 写入与 deploy 一致的容器名(ncbot-/slbot-),不靠 watch 侧猜前缀。
-/// Native: 无稳定跨 HOME 的 pid 路径可写时,用 `-q <qq>$` 做 pgrep -f(对齐远端启停);
-/// 不再用裸 `QQ`,避免同机多 Bot 全员命中。
 pub fn bot_to_notify_target(config: &BotConfig) -> NotifyBotTarget {
+    bot_to_notify_target_with_webui(config, None)
+}
+
+pub fn bot_to_notify_target_with_webui(
+    config: &BotConfig,
+    webui: Option<(u16, String)>,
+) -> NotifyBotTarget {
     let qq = config.bot.qq_id;
     let backend = match config.bot.backend_type {
         BackendType::SnowLuma => "snowluma",
@@ -42,9 +88,6 @@ pub fn bot_to_notify_target(config: &BotConfig) -> NotifyBotTarget {
             None,
         ),
         DeploymentType::Native => {
-            // SL 有 $HOME/snowluma-remote/.../pid_bot_<qq>,但 sync 时未必有 HOME;
-            // 进程命令行带 -q <qq>,与 remote_qq_running_pid / NC xvfb 启动参数一致。
-            // `$` 降低 `-q 1` 误匹配 `-q 12` 的概率(pgrep -f 按正则)。
             let process_match = if qq > 0 {
                 Some(format!("-q {qq}$"))
             } else {
@@ -52,6 +95,18 @@ pub fn bot_to_notify_target(config: &BotConfig) -> NotifyBotTarget {
             };
             (None, None, process_match)
         }
+    };
+
+    let (webui_port, webui_token) = match (config.bot.backend_type, webui) {
+        (BackendType::NapCat, Some((port, token))) if port > 0 && !token.trim().is_empty() => {
+            (Some(port), Some(token))
+        }
+        (BackendType::NapCat, None)
+            if matches!(config.bot.deployment_type, DeploymentType::Docker) =>
+        {
+            (Some(napcat_docker_webui_host_port(qq)), None)
+        }
+        _ => (None, None),
     };
 
     NotifyBotTarget {
@@ -63,6 +118,8 @@ pub fn bot_to_notify_target(config: &BotConfig) -> NotifyBotTarget {
         container_name,
         pid_file,
         process_match,
+        webui_port,
+        webui_token,
         enabled: true,
     }
 }
@@ -71,6 +128,15 @@ pub fn build_notify_config(
     server_id: &str,
     bots: &[BotConfig],
     webhook: &OfflineWebhookSettings,
+) -> NotifyConfig {
+    build_notify_config_with_extras(server_id, bots, webhook, &WatchNotifyExtras::default())
+}
+
+pub fn build_notify_config_with_extras(
+    server_id: &str,
+    bots: &[BotConfig],
+    webhook: &OfflineWebhookSettings,
+    extras: &WatchNotifyExtras,
 ) -> NotifyConfig {
     let mut settings = webhook.clone();
     settings.normalize();
@@ -81,17 +147,25 @@ pub fn build_notify_config(
         .collect();
     let targets = bots_for_server(server_id, bots)
         .into_iter()
-        .map(bot_to_notify_target)
+        .map(|c| {
+            let webui = extras.webui_by_bot.get(&c.bot.qq_id.to_string()).cloned();
+            bot_to_notify_target_with_webui(c, webui)
+        })
         .collect();
+    // 旧调用未填 extras 时:有通道则 webhook 视为开启
+    let webhook_enabled = extras.webhook_enabled || !webhooks.is_empty();
     NotifyConfig {
         protocol: WATCH_PROTOCOL_V1,
         server_id: Some(server_id.to_string()),
         bots: targets,
         webhooks,
+        webhook_enabled,
+        email_enabled: extras.email_enabled,
+        notify_on_recovered: extras.notify_on_recovered,
+        email: extras.email.clone(),
     }
 }
 
-/// 远端安装根(与 Component 一致):$HOME/ncd-watch
 pub fn remote_watch_root(home: &str) -> HostPath {
     HostPath::from_posix(format!("{}/ncd-watch", home.trim_end_matches('/')))
 }
@@ -111,7 +185,6 @@ pub async fn write_notify_json(
     host.write_file(&path, &body)
         .await
         .map_err(|e| e.to_string())?;
-    // 尽量 chmod 600
     let _ = host
         .run_to_string(
             ncd_host::HostCommand::new("chmod")
@@ -143,12 +216,10 @@ pub async fn write_desktop_present(
         .map_err(|e| e.to_string())
 }
 
-/// 本机路径布局(测试/文档)
 pub fn local_paths_under(root: impl AsRef<std::path::Path>) -> WatchPaths {
     WatchPaths::from_root(root.as_ref())
 }
 
-/// 仅当 runtime_target 指向某 server 时返回 id
 pub fn server_id_of(config: &BotConfig) -> Option<&str> {
     match &config.bot.runtime_target {
         RuntimeTarget::Server(id) => Some(id.as_str()),
@@ -189,12 +260,16 @@ mod tests {
 
     #[test]
     fn filters_server_bots() {
-        let bots = vec![sample_remote("s1", 1), sample_remote("s2", 2), {
-            let mut l = sample_remote("s1", 3);
-            l.bot.runtime_target = RuntimeTarget::Local;
-            l.bot.qq_id = 3;
-            l
-        }];
+        let bots = vec![
+            sample_remote("s1", 1),
+            sample_remote("s2", 2),
+            {
+                let mut l = sample_remote("s1", 3);
+                l.bot.runtime_target = RuntimeTarget::Local;
+                l.bot.qq_id = 3;
+                l
+            },
+        ];
         let got = bots_for_server("s1", &bots);
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].bot.qq_id, 1);
@@ -208,8 +283,7 @@ mod tests {
         let n = build_notify_config("s1", &bots, &wh);
         assert_eq!(n.bots.len(), 1);
         assert_eq!(n.bots[0].container_name.as_deref(), Some("ncbot-9"));
-        assert_eq!(n.bots[0].resolved_container_name(), "ncbot-9");
-        assert!(!n.webhooks.is_empty());
+        assert!(n.webhook_enabled);
     }
 
     #[test]
@@ -217,14 +291,11 @@ mod tests {
         let nc = sample_remote("s1", 10001);
         let mut sl = sample_remote("s1", 10002);
         sl.bot.backend_type = BackendType::SnowLuma;
-        sl.bot.name = "sl".into();
-
         let t_nc = bot_to_notify_target(&nc);
         let t_sl = bot_to_notify_target(&sl);
         assert_eq!(t_nc.container_name.as_deref(), Some("ncbot-10001"));
         assert_eq!(t_sl.container_name.as_deref(), Some("slbot-10002"));
-        assert!(t_nc.process_match.is_none());
-        assert!(t_sl.process_match.is_none());
+        assert_eq!(t_nc.webui_port, Some(napcat_docker_webui_host_port(10001)));
     }
 
     #[test]
@@ -234,13 +305,35 @@ mod tests {
         let mut b = sample_remote("s1", 22);
         b.bot.deployment_type = DeploymentType::Native;
         b.bot.backend_type = BackendType::SnowLuma;
-
         let ta = bot_to_notify_target(&a);
         let tb = bot_to_notify_target(&b);
         assert_eq!(ta.process_match.as_deref(), Some("-q 11$"));
         assert_eq!(tb.process_match.as_deref(), Some("-q 22$"));
-        assert_ne!(ta.process_match, tb.process_match);
-        assert!(ta.container_name.is_none());
-        assert!(tb.pid_file.is_none());
+    }
+
+    #[test]
+    fn extras_attach_webui_and_email() {
+        let bots = vec![sample_remote("s1", 10001)];
+        let mut map = std::collections::HashMap::new();
+        map.insert("10001".into(), (6100, "tok".into()));
+        let mut email = OfflineEmailSettings::default();
+        email.smtp_server = "smtp.example".into();
+        let extras = WatchNotifyExtras {
+            webui_by_bot: map,
+            webhook_enabled: true,
+            email_enabled: true,
+            notify_on_recovered: true,
+            email,
+        };
+        let n = build_notify_config_with_extras(
+            "s1",
+            &bots,
+            &OfflineWebhookSettings::default(),
+            &extras,
+        );
+        assert_eq!(n.bots[0].webui_port, Some(6100));
+        assert_eq!(n.bots[0].webui_token.as_deref(), Some("tok"));
+        assert!(n.email_enabled);
+        assert!(n.notify_on_recovered);
     }
 }

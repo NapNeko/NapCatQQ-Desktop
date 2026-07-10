@@ -1083,6 +1083,32 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.repo.list().await.map_err(BotManagerError::from)
     }
 
+    /// 供 ncd-watch 同步:优先内存 endpoint(stdout 真实 port/token),
+    /// Docker 再回退 secret store 中的 token + 可推导 host 端口。
+    /// 不创建新 secret,避免 watch 同步副作用写盘。
+    pub async fn napcat_webui_for_watch(&self, bot_id: &BotId) -> Option<(u16, String)> {
+        if let Some(ep) = self.napcat_endpoints.snapshot(bot_id).await {
+            if ep.port > 0 && !ep.token.trim().is_empty() {
+                return Some((ep.port, ep.token));
+            }
+        }
+        let qq: u64 = bot_id.as_str().parse().ok()?;
+        let token = self.peek_napcat_docker_webui_token(qq)?;
+        let port = crate::ncd_watch_sync::napcat_docker_webui_host_port(qq);
+        Some((port, token))
+    }
+
+    fn peek_napcat_docker_webui_token(&self, qq_id: u64) -> Option<String> {
+        let store = self.docker_webui_secret_store.as_ref()?;
+        let key = format!("bot:{qq_id}:napcat_docker_webui_token");
+        store
+            .get(&key)
+            .ok()
+            .flatten()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
     /// 批量返回所有 Bot 的 backend_type,用于 UI 列表页一次性拿 flavor map
     /// 避免 BotListPage 对每个 bot 单独调 get_bot_config 造成 N+1
     /// key 为 BotId.to_string()(即 QQID 数字字符串)
