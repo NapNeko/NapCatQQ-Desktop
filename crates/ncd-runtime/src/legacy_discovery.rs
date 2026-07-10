@@ -165,6 +165,8 @@ fn collect_auxiliary(root: &Path) -> Vec<PathBuf> {
         root.to_path_buf(),
         root.join("config"),
         root.join("runtime").join("config"),
+        root.join("runtime").join("NapCatQQ").join("config"),
+        root.join("components").join("NapCatQQ").join("config"),
     ] {
         let Ok(entries) = std::fs::read_dir(dir) else {
             continue;

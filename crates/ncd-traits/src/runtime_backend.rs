@@ -65,7 +65,6 @@ impl BotRuntimeConfig {
         Self {
             bot_id: bot_id.clone(),
             config_path: root
-                .join("runtime")
                 .join("config")
                 .join("bots")
                 .join(format!("{}.json", bot_id.as_str())),

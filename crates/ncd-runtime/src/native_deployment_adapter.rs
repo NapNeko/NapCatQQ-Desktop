@@ -205,10 +205,9 @@ impl BotBackend for NativeDeploymentBackend {
 
 /// 远端「直接运行」:每 Bot 绑定一台 Host + 独立 NativeDeployment(translator 写远端路径)
 ///
-/// 按远程 SSH 稳定性计划(P0-6):不再常驻一个固定的 host 引用,而是持有 resolver + target,
-/// 在 start/status/stop/tail_log 等边界按需通过 resolver 取“当前应活”的 host,并在检测到
-/// 传输层断连错误时触发 resolver.refresh 后重试一次持久失败时不在此层把 bot 标 Crashed
-/// (由上层 BotManager 区分 transport_error 后决定是否仅发 bot_error 事件)
+/// 不再常驻固定 host 引用,而是持有 resolver + target;在 start/status/stop/tail_log
+/// 边界按需取当前应活 host,传输层断连时 refresh 后重试一次。持久失败不在此层标 Crashed
+/// (由 BotManager 区分 transport_error 后决定是否只发 bot_error)
 pub struct RemoteNativeDeploymentBackend {
     deployment: Arc<NativeDeployment>,
     /// 用于在操作边界按需获取/刷新远端 hostServerManager 通过 TauriHostResolver 注入
@@ -252,12 +251,9 @@ impl RemoteNativeDeploymentBackend {
             .map_err(BotBackendError::RemoteHostTransport)
     }
 
-    /// 在操作边界使用:先拿一个 host,执行 op;若 op 失败,则刷新一次 host 再重试一次
-    /// 第二次仍失败则把错误向上透传(由调用方或上层决定是否仅报信息性错误,不推 Crashed)
-    ///
-    /// 注意(P0 简化):当前对任意错误(包括 DeploymentError)都做一次刷新重试(宽松策略),
-    /// 因为远端 Native 场景下 launch/stop/observe 失败很大概率与底层 SSH 传输有关;
-    /// 精确的“仅 transport 错误才刷新”可后续在错误类型里携带分类信息后再收紧
+    /// 在操作边界使用:先拿 host 执行 op;失败则 refresh 后再试一次。
+    /// 当前对任意错误都重试一次(远端 Native 失败多半与 SSH 有关);
+    /// 若错误类型以后带上 transport 分类,可再收紧为仅 transport 才刷新。
     async fn with_host_refresh<F, Fut, T, E>(&self, op: F) -> Result<T, BotBackendError>
     where
         F: FnOnce(Arc<dyn Host>) -> Fut + Clone + Send,
@@ -494,10 +490,15 @@ fn load_bot_config_from_runtime_path(
     runtime_config_path: &Path,
     bot_id: &BotId,
 ) -> Result<Option<BotConfig>, BotBackendError> {
-    let Some(root) = runtime_root_from_config_path(runtime_config_path, bot_id) else {
+    let Some(root) = data_root_from_config_path(runtime_config_path, bot_id) else {
         return Ok(None);
     };
-    let bot_path = root.join("runtime").join("config").join("bot.json");
+    let paths = crate::data_paths::DataPaths::new(&root);
+    let bot_path = if paths.bot_config_path().is_file() {
+        paths.bot_config_path()
+    } else {
+        paths.legacy_bot_config_path()
+    };
     let text = match std::fs::read_to_string(&bot_path) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -528,7 +529,7 @@ fn load_bot_config_from_runtime_path(
     Ok(None)
 }
 
-fn runtime_root_from_config_path(runtime_config_path: &Path, bot_id: &BotId) -> Option<PathBuf> {
+fn data_root_from_config_path(runtime_config_path: &Path, bot_id: &BotId) -> Option<PathBuf> {
     let file_name = runtime_config_path.file_name()?.to_string_lossy();
     if file_name != format!("{}.json", bot_id.as_str()) {
         return None;
@@ -541,11 +542,13 @@ fn runtime_root_from_config_path(runtime_config_path: &Path, bot_id: &BotId) -> 
     if config_dir.file_name()?.to_string_lossy() != "config" {
         return None;
     }
-    let runtime_dir = config_dir.parent()?;
-    if runtime_dir.file_name()?.to_string_lossy() != "runtime" {
-        return None;
+    let parent = config_dir.parent()?;
+    // 旧布局:<data_root>/runtime/config/bots/x.json
+    if parent.file_name()?.to_string_lossy() == "runtime" {
+        return parent.parent().map(Path::to_path_buf);
     }
-    runtime_dir.parent().map(Path::to_path_buf)
+    // 布局 v1:<data_root>/config/bots/x.json
+    Some(parent.to_path_buf())
 }
 
 fn docker_container_name(config: &BotConfig) -> String {
@@ -1054,19 +1057,19 @@ mod tests {
         let bot_id = BotId::new("10001");
         let path = BotRuntimeConfig::default_path("/data", bot_id.clone()).config_path;
         assert_eq!(
-            runtime_root_from_config_path(&path, &bot_id),
+            data_root_from_config_path(&path, &bot_id),
             Some(PathBuf::from("/data"))
         );
     }
 
     #[test]
-    fn runtime_root_rejects_unexpected_config_path_shape() {
+    fn data_root_rejects_unexpected_config_path_shape() {
         let bot_id = BotId::new("10001");
-        let wrong_file = PathBuf::from("/data/runtime/config/bots/10002.json");
-        let wrong_dir = PathBuf::from("/data/config/bots/10001.json");
+        let wrong_file = PathBuf::from("/data/config/bots/10002.json");
+        let wrong_dir = PathBuf::from("/data/other/bots/10001.json");
 
-        assert_eq!(runtime_root_from_config_path(&wrong_file, &bot_id), None);
-        assert_eq!(runtime_root_from_config_path(&wrong_dir, &bot_id), None);
+        assert_eq!(data_root_from_config_path(&wrong_file, &bot_id), None);
+        assert_eq!(data_root_from_config_path(&wrong_dir, &bot_id), None);
     }
 
     #[test]
@@ -1087,7 +1090,7 @@ mod tests {
     fn docker_loads_real_config_from_default_runtime_path() {
         let root = tempdir().unwrap();
         let bot_id = BotId::new("10001");
-        let config_dir = root.path().join("runtime").join("config");
+        let config_dir = root.path().join("config");
         std::fs::create_dir_all(&config_dir).unwrap();
         std::fs::write(
             config_dir.join("bot.json"),

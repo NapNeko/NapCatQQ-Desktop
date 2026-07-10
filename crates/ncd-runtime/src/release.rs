@@ -74,8 +74,8 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
     }
 
     let client = shared_client();
-    // ProxySigner 单例:offset 持久化到 data_root/runtime/config(与 LocalConfigStore 一致)
-    let config_dir = data_root.join("runtime").join("config");
+    // ProxySigner 单例:offset 持久化到 data_root/config(与 LocalConfigStore 一致)
+    let config_dir = data_root.join("config");
     // 触发单例初始化(首次拿取时从磁盘加载 offset)即使中转未配置也初始化,
     // 保持与 Python ProxySigner.instance() 一致的「always init + 日志诊断」语义
     let _ = proxy_signer(Some(config_dir));

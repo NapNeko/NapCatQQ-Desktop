@@ -1,5 +1,7 @@
-//! 桌面端会话日志:路径与读盘工具,对齐 legacy <data_root>/log/{timestamp}.log
+//! 桌面端会话日志:路径与读盘工具
 //!
+//! 布局 v1:<data_root>/logs/desktop/{timestamp}.log
+//! 兼容读取旧 <data_root>/log/*.log
 //! 写入与 Tauri tracing 层在 src-tauri 接线;本模块只做路径,尾部读取与终端预览格式化
 
 use std::fs;
@@ -7,19 +9,29 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-/// 与 legacy Logger.create_log_file 一致:<data_root>/log/
+use crate::data_paths::{DataPaths, MAX_DESKTOP_LOG_FILES};
+
+/// 布局 v1 桌面日志目录
 pub fn desktop_log_dir(data_root: &Path) -> PathBuf {
-    data_root.join("log")
+    DataPaths::new(data_root).desktop_log_dir()
 }
 
-/// 当前会话日志文件:目录下按修改时间取最新 .log;无则 None
+fn legacy_desktop_log_dir(data_root: &Path) -> PathBuf {
+    DataPaths::new(data_root).legacy_desktop_log_dir()
+}
+
+/// 当前会话日志文件:优先新目录,再旧目录;按修改时间取最新 .log
 pub fn resolve_active_log_path(data_root: &Path) -> Option<PathBuf> {
-    let dir = desktop_log_dir(data_root);
+    resolve_newest_log(&desktop_log_dir(data_root))
+        .or_else(|| resolve_newest_log(&legacy_desktop_log_dir(data_root)))
+}
+
+fn resolve_newest_log(dir: &Path) -> Option<PathBuf> {
     if !dir.is_dir() {
         return None;
     }
     let mut best: Option<(SystemTime, PathBuf)> = None;
-    for entry in fs::read_dir(&dir).ok()? {
+    for entry in fs::read_dir(dir).ok()? {
         let entry = entry.ok()?;
         let path = entry.path();
         if !path.is_file() {
@@ -36,17 +48,27 @@ pub fn resolve_active_log_path(data_root: &Path) -> Option<PathBuf> {
     best.map(|(_, p)| p)
 }
 
-/// 删除超过 retain_days 天的 .log 文件(legacy 默认 7 天)
+/// 删除超过 retain_days 天的 .log,并限制最多 MAX_DESKTOP_LOG_FILES 个
 pub fn purge_stale_logs(data_root: &Path, retain_days: u64) -> std::io::Result<()> {
-    let dir = desktop_log_dir(data_root);
+    purge_dir_logs(&desktop_log_dir(data_root), retain_days)?;
+    purge_dir_logs(&legacy_desktop_log_dir(data_root), retain_days)?;
+    Ok(())
+}
+
+fn purge_dir_logs(dir: &Path, retain_days: u64) -> std::io::Result<()> {
     if !dir.is_dir() {
         return Ok(());
     }
     let cutoff = SystemTime::now()
         .checked_sub(Duration::from_secs(retain_days * 24 * 3600))
         .unwrap_or(SystemTime::UNIX_EPOCH);
-    for entry in fs::read_dir(&dir)? {
-        let entry = entry?;
+
+    // 单文件 metadata 失败只跳过,不让整次启动清理失败
+    let mut logs: Vec<(SystemTime, PathBuf)> = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let Ok(entry) = entry else {
+            continue;
+        };
         let path = entry.path();
         if !path.is_file() {
             continue;
@@ -54,10 +76,20 @@ pub fn purge_stale_logs(data_root: &Path, retain_days: u64) -> std::io::Result<(
         if path.extension().and_then(|e| e.to_str()) != Some("log") {
             continue;
         }
-        if let Ok(modified) = entry.metadata()?.modified() {
-            if modified < cutoff {
-                let _ = fs::remove_file(&path);
-            }
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        if modified < cutoff {
+            let _ = fs::remove_file(&path);
+        } else {
+            logs.push((modified, path));
+        }
+    }
+    if logs.len() > MAX_DESKTOP_LOG_FILES {
+        logs.sort_by(|a, b| b.0.cmp(&a.0));
+        for (_, path) in logs.into_iter().skip(MAX_DESKTOP_LOG_FILES) {
+            let _ = fs::remove_file(path);
         }
     }
     Ok(())

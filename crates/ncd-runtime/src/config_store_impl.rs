@@ -10,26 +10,34 @@ use ncd_domain::migration::BackupInfo;
 use ncd_domain::migration::MigrationReport;
 use ncd_traits::{ConfigStore, JsonTransaction, TransactionReport};
 
+use crate::data_paths::{DataPaths, MAX_JSON_BAK_FILES, MAX_MIGRATION_BACKUPS};
+
 #[derive(Debug, Clone)]
 pub struct LocalConfigStore {
-    root: PathBuf,
+    paths: DataPaths,
 }
 
 impl LocalConfigStore {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            paths: DataPaths::new(root),
+        }
     }
 
     pub fn app_config_path(&self) -> PathBuf {
-        self.config_dir().join("config.json")
+        self.paths.app_config_path()
     }
 
     pub fn bot_config_path(&self) -> PathBuf {
-        self.config_dir().join("bot.json")
+        self.paths.bot_config_path()
     }
 
     pub fn napcat_config_dir(&self) -> PathBuf {
-        self.root.join("NapCatQQ").join("config")
+        self.paths.napcat_config_dir()
+    }
+
+    pub fn paths(&self) -> &DataPaths {
+        &self.paths
     }
 
     fn ensure_within_root(&self, path: &Path) -> Result<(), ConfigError> {
@@ -40,12 +48,10 @@ impl LocalConfigStore {
             return Err(ConfigError::OutsideAllowedRoots(path.display().to_string()));
         }
 
+        let root = self.paths.root();
         let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        let root = self
-            .root
-            .canonicalize()
-            .unwrap_or_else(|_| self.root.clone());
-        if target.starts_with(&root) || path.starts_with(&self.root) {
+        let root_canon = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        if target.starts_with(&root_canon) || path.starts_with(root) {
             Ok(())
         } else {
             Err(ConfigError::OutsideAllowedRoots(path.display().to_string()))
@@ -72,6 +78,7 @@ impl LocalConfigStore {
             .as_secs();
         let backup = self.backup_dir().join(format!("migration-{}", id));
         fs::create_dir_all(&backup).map_err(to_io_error)?;
+        prune_migration_backups(&self.backup_dir(), MAX_MIGRATION_BACKUPS);
         Ok(backup)
     }
 
@@ -95,40 +102,51 @@ impl LocalConfigStore {
 
 impl ConfigStore for LocalConfigStore {
     fn root(&self) -> &Path {
-        &self.root
+        self.paths.root()
     }
 
     fn config_dir(&self) -> PathBuf {
-        self.root.join("runtime").join("config")
+        self.paths.config_dir()
     }
 
     fn backup_dir(&self) -> PathBuf {
-        self.root
-            .join("runtime")
-            .join("tmp")
-            .join("migration-backup")
+        self.paths.migration_backup_dir()
     }
 
     fn migration_report_path(&self) -> PathBuf {
-        self.config_dir().join("migration-report.json")
+        self.paths.migration_report_path()
     }
 
     fn load_schema_version(&self) -> Result<SchemaVersion, ConfigError> {
-        let report = self.config_dir().join("migration-report.json");
-        if report.exists() {
-            if let Ok(payload) = self.read_json(&report) {
-                if let Some(version) = payload.get("schema_version").and_then(Value::as_u64) {
-                    return Ok(SchemaVersion::new(version as u16));
+        // 新布局优先;旧 runtime/config 仅作 schema 探测,避免收敛前误判为空
+        let report_candidates = [
+            self.paths.migration_report_path(),
+            self.paths
+                .legacy_runtime_config_dir()
+                .join("migration-report.json"),
+        ];
+        for report in report_candidates {
+            if report.exists() {
+                if let Ok(payload) = self.read_json(&report) {
+                    if let Some(version) = payload.get("schema_version").and_then(Value::as_u64) {
+                        return Ok(SchemaVersion::new(version as u16));
+                    }
                 }
             }
         }
 
-        let bot = self.bot_config_path();
-        if !bot.exists() {
-            return Ok(SchemaVersion::V1);
+        let bot_candidates = [self.bot_config_path(), self.paths.legacy_bot_config_path()];
+        let mut bot_payload = None;
+        for bot in bot_candidates {
+            if bot.exists() {
+                bot_payload = Some(self.read_json(&bot)?);
+                break;
+            }
         }
+        let Some(payload) = bot_payload else {
+            return Ok(SchemaVersion::V1);
+        };
 
-        let payload = self.read_json(&bot)?;
         if payload
             .get("schemaVersion")
             .or_else(|| payload.get("schema_version"))
@@ -180,7 +198,10 @@ impl ConfigStore for LocalConfigStore {
         }
 
         match fs::rename(&temp, path) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                prune_json_bak_files(path, MAX_JSON_BAK_FILES);
+                Ok(())
+            }
             Err(error) => {
                 let _ = fs::remove_file(&temp);
                 if moved_to_backup && backup.exists() && !path.exists() {
@@ -253,7 +274,18 @@ impl ConfigStore for LocalConfigStore {
                 Value::from(SchemaVersion::CURRENT.get()),
             );
         }
-        self.write_json_atomic(&self.migration_report_path(), &payload)
+
+        // 内容不变则不重写,避免每次启动堆 migration-report.bak.*
+        let path = self.migration_report_path();
+        if path.is_file() {
+            if let Ok(existing) = self.read_json(&path) {
+                if existing == payload {
+                    return Ok(());
+                }
+            }
+        }
+
+        self.write_json_atomic(&path, &payload)
     }
 }
 
@@ -289,6 +321,74 @@ fn to_io_error(error: std::io::Error) -> ConfigError {
     ConfigError::Io(error.to_string())
 }
 
+/// 保留同文件最新 keep 个 `name.bak.*`,其余删除。
+pub fn prune_json_bak_files(path: &Path, keep: usize) {
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+        return;
+    };
+    let prefix = format!("{file_name}.bak.");
+    let Ok(entries) = fs::read_dir(parent) else {
+        return;
+    };
+    let mut baks: Vec<(SystemTime, PathBuf)> = entries
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let p = e.path();
+            if !p.is_file() {
+                return None;
+            }
+            let name = p.file_name()?.to_str()?;
+            if !name.starts_with(&prefix) {
+                return None;
+            }
+            let modified = e.metadata().ok()?.modified().ok()?;
+            Some((modified, p))
+        })
+        .collect();
+    if baks.len() <= keep {
+        return;
+    }
+    baks.sort_by(|a, b| b.0.cmp(&a.0));
+    for (_, path) in baks.into_iter().skip(keep) {
+        let _ = fs::remove_file(path);
+    }
+}
+
+/// 保留最新 keep 个 migration-* 目录。
+pub fn prune_migration_backups(backup_dir: &Path, keep: usize) {
+    if !backup_dir.is_dir() {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(backup_dir) else {
+        return;
+    };
+    let mut dirs: Vec<(SystemTime, PathBuf)> = entries
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let p = e.path();
+            if !p.is_dir() {
+                return None;
+            }
+            let name = p.file_name()?.to_str()?;
+            if !name.starts_with("migration-") {
+                return None;
+            }
+            let modified = e.metadata().ok()?.modified().ok()?;
+            Some((modified, p))
+        })
+        .collect();
+    if dirs.len() <= keep {
+        return;
+    }
+    dirs.sort_by(|a, b| b.0.cmp(&a.0));
+    for (_, path) in dirs.into_iter().skip(keep) {
+        let _ = fs::remove_dir_all(path);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,5 +404,51 @@ mod tests {
 
         let payload = store.read_json(&target).unwrap();
         assert_eq!(payload["a"], 1);
+    }
+
+    #[test]
+    fn write_json_atomic_prunes_old_bak_files() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = LocalConfigStore::new(temp.path());
+        let path = store.config_dir().join("sample.json");
+
+        for i in 0..6 {
+            store
+                .write_json_atomic(&path, &serde_json::json!({ "n": i }))
+                .unwrap();
+        }
+
+        let prefix = "sample.json.bak.";
+        let bak_count = fs::read_dir(store.config_dir())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_str()
+                    .is_some_and(|n| n.starts_with(prefix))
+            })
+            .count();
+        assert!(bak_count <= MAX_JSON_BAK_FILES, "bak_count={bak_count}");
+        assert_eq!(store.read_json(&path).unwrap()["n"], 5);
+    }
+
+    #[test]
+    fn save_migration_report_skips_identical_rewrite() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = LocalConfigStore::new(temp.path());
+        let report = MigrationReport::clean();
+        store.save_migration_report(&report).unwrap();
+
+        store.save_migration_report(&report).unwrap();
+        let bak_count = fs::read_dir(store.config_dir())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_str()
+                    .is_some_and(|n| n.starts_with("migration-report.json.bak."))
+            })
+            .count();
+        assert_eq!(bak_count, 0);
     }
 }
