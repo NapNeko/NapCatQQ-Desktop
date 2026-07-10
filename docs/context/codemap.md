@@ -248,7 +248,8 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | 桌面日志 | `desktop_log.rs`, `desktop_log_format.rs`, `commands/desktop_log.rs` |
 | 通知 / Toast | `desktop_notify.rs`, `windows_toast.rs` |
 | 离线多渠道 | `crates/ncd-runtime/src/notify/` + `docs/dev/offline-onebot-notice.md` |
-| 远端脱管后监控（设计） | `docs/dev/ncd-watch.md`；活 plan `.claude/plan/ncd-watch.md`；crate 待建 `crates/ncd-watch` |
+| 远端脱管后监控（设计） | `docs/dev/ncd-watch.md`；活 plan `.claude/plan/ncd-watch.md`；crate `crates/ncd-watch` |
+
 | 单实例 | `single_instance.rs` |
 | hooks | `src-ui/hooks/desktop/` |
 
