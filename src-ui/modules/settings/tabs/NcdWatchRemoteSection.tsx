@@ -110,7 +110,7 @@ export function NcdWatchRemoteSection({
                 key: 'ncd-watch-sync-dirty',
                 tone: 'warning',
                 title: '请先保存设置',
-                content: '同步使用已落盘的 Webhook；保存后再同步。',
+                content: '同步使用已落盘的通知设置（Webhook / Email）；保存后再同步。',
             });
             return;
         }
@@ -121,7 +121,7 @@ export function NcdWatchRemoteSection({
                 key: `ncd-watch-sync-${row.serverId}`,
                 tone: 'success',
                 title: '已同步',
-                content: `${row.name}：该机 Bot 列表与 Webhook 已写入远端。`,
+                content: `${row.name}：Bot 列表、Webhook/Email 与登录探活凭据已写入远端。`,
             });
             refetchAll();
         } catch (err) {
@@ -142,7 +142,7 @@ export function NcdWatchRemoteSection({
                 key: 'ncd-watch-sync-dirty',
                 tone: 'warning',
                 title: '请先保存设置',
-                content: '批量同步使用已保存的 Webhook。',
+                content: '批量同步使用已保存的通知设置（Webhook / Email）。',
             });
             return;
         }
@@ -177,13 +177,13 @@ export function NcdWatchRemoteSection({
     return (
         <SettingsSection
             title="远端脱管监控"
-            description="Desktop 退出后，各 Linux 远端上的 NCD Watch 仍可探活并走已启用的 Webhook；多机各自安装与同步"
+            description="Desktop 退出后，各 Linux 远端上的 NCD Watch 仍可探活并投递已启用的 Webhook / Email（不含 OneBot）；多机各自安装与同步"
         >
             <FieldRow
                 label="远端主机"
                 description={
                     settingsDirty
-                        ? '设置未保存：同步会用磁盘上的旧 Webhook，请先保存'
+                        ? '设置未保存：同步会用磁盘上的旧通知配置，请先保存'
                         : loading && rows.length === 0
                             ? '正在加载远端主机…'
                             : rows.length === 0
