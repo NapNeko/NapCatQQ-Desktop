@@ -10,7 +10,7 @@
 // - 复用 globalInfoBarStore 的 key 顶替 + onUserDismiss 抑制，与 useComponentPageAlerts 等一致。
 // - 常驻挂载（App 根节点），类似 useHostConnectionEvents。
 //
-// 与 P1 主动探活 walker 协同：后台低频探测会持续递增 consecutiveFailures，真实持续失败才会达到阈值并推送。
+// 与后台主动探活 walker 协同：低频探测会持续递增 consecutiveFailures，真实持续失败才会达到阈值并推送。
 
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -29,7 +29,7 @@ type ServerLike = {
 };
 
 // 连续失败达到此阈值才推 danger InfoBar，低于阈值只改状态/视觉（抖动抑制）。
-// 配合后台 walker（P1 主动探活），连续探测失败才会递增计数，短暂抖动（cf=1 即恢复）不推提示。
+// 配合后台主动探活 walker，连续探测失败才会递增计数，短暂抖动（cf=1 即恢复）不推提示。
 const CONSECUTIVE_FAILURES_INFOBAR_THRESHOLD = 2;
 
 // module-level 抑制集合：key 为 serverId，存在即表示该主机当前被抑制（用户已 dismiss 过本次失败）。

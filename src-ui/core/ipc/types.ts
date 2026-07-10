@@ -1,4 +1,4 @@
-// NapCatQQ Desktop P2 UI - Core Types
+// NapCatQQ Desktop UI - Core Types
 
 export type BootstrapStatus = 'ready' | 'migrating' | 'repair_required' | 'failed';
 
@@ -310,7 +310,7 @@ type DomainEventBody =
         kind: 'desktop_log_appended';
         line: string;
     }
-    // remote-ssh-stability P0：远端主机传输层连接健康事件（不绑 bot，绑 server_id）
+    // 远端主机传输层连接健康事件（不绑 bot，绑 server_id）
     | {
         kind: 'host_connection_lost';
         server_id: string;

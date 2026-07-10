@@ -68,7 +68,7 @@ export function useHostComponentInstalled(
                     componentId as ComponentId,
                     hostId!,
                 ),
-            // P0-11：transport 不可达时不发探测请求，避免把连接失败误判成“组件缺失”，
+            // transport 不可达时不发探测请求，避免把连接失败误判成“组件缺失”，
             // 同时减少无效 SSH 往返。enabled 由三部分组成：
             // - hostId 存在
             // - 该组件在当前 backend 的依赖链里

@@ -809,7 +809,7 @@ impl ServerManager {
             Err(err) => {
                 self.update_state(id, ServerState::Failed).await;
 
-                // P0-10: 更新 health 失败信息 + 递增连续失败计数 + 发布 lost 事件
+                // 更新 health 失败信息 + 递增连续失败计数 + 发布 lost 事件
                 let latency_ms = start.elapsed().as_millis() as u64;
                 let now = chrono::Utc::now().to_rfc3339();
                 let err_text = err.to_string();
@@ -873,7 +873,7 @@ impl ServerManager {
         self.hosts.write().await.insert(profile.id.clone(), host);
         self.update_state(id, ServerState::Connected).await;
 
-        // P0-10: 更新 health 成功时间 + 归零失败计数 + 发布恢复事件
+        // 更新 health 成功时间 + 归零失败计数 + 发布恢复事件
         let now = chrono::Utc::now().to_rfc3339();
         self.update_health_fields(id, |h| {
             h.last_success_at = Some(now.clone());
@@ -947,12 +947,12 @@ impl ServerManager {
     /// 丢弃缓存中的 SSH 连接(会话已断或不可信时调用)
     /// 下次 ensure_connected 会重新握手,避免继续复用死连接
     ///
-    /// P0-10: 同时更新 health(递增失败计数 + 记原因),并发布 HostConnectionLost 事件
+    /// 同时更新 health(递增失败计数 + 记原因),并发布 HostConnectionLost 事件
     pub async fn disconnect_cached_host(&self, id: &str) {
         if self.hosts.write().await.remove(id).is_some() {
             self.update_state(id, ServerState::Disconnected).await;
 
-            // P0-10: health 失败分支 + 发布 lost
+            // health 失败分支 + 发布 lost
             let now = chrono::Utc::now().to_rfc3339();
             let mut consecutive = 0u32;
             self.update_health_fields(id, |h| {
@@ -1068,7 +1068,7 @@ impl ServerManager {
     }
 
     // ============================================================
-    // P0-10: 自愈闭环新增 API(get_live_host / refresh_host / mark_unhealthy)
+    // 自愈闭环 API:get_live_host / refresh_host / mark_unhealthy
     // ============================================================
 
     /// 取"当前应存活"的 host
@@ -1283,7 +1283,7 @@ impl ServerManager {
     }
 
     // ============================================================
-    // P1 主动探活:后台低频健康 walker(用户可开关)
+    // 主动探活:后台低频健康 walker(用户可开关)
     // ============================================================
 
     /// 后台健康探活主循环

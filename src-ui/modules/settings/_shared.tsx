@@ -532,7 +532,7 @@ export function PerformanceMonitorIntervalSlider({
     );
 }
 
-/** 远程主机健康探活间隔滑块（P1 主动探活）。范围 10s~5min，步进 1s。 */
+/** 远程主机健康探活间隔滑块。范围 10s~5min，步进 1s。 */
 export function RemoteHostHealthProbeIntervalSlider({
     value,
     onChange,

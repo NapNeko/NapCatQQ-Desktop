@@ -96,7 +96,7 @@ export function useBotRuntimeStartGate(
                     probing: st ? Object.values(st).some((v) => v === undefined) : true,
                 };
 
-                // 填充 transport 状态（P0-11）
+                // 填充 transport 状态
                 const serverId = req.hostId.startsWith('remote:')
                     ? req.hostId.slice('remote:'.length)
                     : req.hostId;
