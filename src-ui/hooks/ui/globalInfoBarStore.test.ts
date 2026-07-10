@@ -52,4 +52,26 @@ describe('globalInfoBarStore 同 key 去重', () => {
         globalInfoBarStore.push({ key: 'b', tone: 'danger', title: 'B' });
         expect(globalInfoBarStore.getSnapshot().bars).toHaveLength(2);
     });
+
+    it('用户关闭触发抑制回调，程序移除不触发', () => {
+        const onUserDismiss = vi.fn();
+        globalInfoBarStore.push({
+            key: 'recoverable',
+            tone: 'danger',
+            title: '暂时失败',
+            onUserDismiss,
+        });
+
+        globalInfoBarStore.remove('key:recoverable');
+        expect(onUserDismiss).not.toHaveBeenCalled();
+
+        globalInfoBarStore.push({
+            key: 'recoverable',
+            tone: 'danger',
+            title: '暂时失败',
+            onUserDismiss,
+        });
+        globalInfoBarStore.dismiss('key:recoverable');
+        expect(onUserDismiss).toHaveBeenCalledTimes(1);
+    });
 });

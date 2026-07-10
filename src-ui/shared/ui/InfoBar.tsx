@@ -66,6 +66,7 @@ export interface InfoBarProps
     content?: ReactNode;
     autoDismissMs?: number;
     onDismiss?: () => void;
+    onAutoDismiss?: () => void;
     closable?: boolean;
 }
 
@@ -77,6 +78,7 @@ export const InfoBar = forwardRef<HTMLDivElement, InfoBarProps>(
             content,
             autoDismissMs,
             onDismiss,
+            onAutoDismiss,
             closable = true,
             className,
             children,
@@ -86,9 +88,14 @@ export const InfoBar = forwardRef<HTMLDivElement, InfoBarProps>(
     ) => {
         const onDismissRef = useRef(onDismiss);
         onDismissRef.current = onDismiss;
+        const onAutoDismissRef = useRef(onAutoDismiss);
+        onAutoDismissRef.current = onAutoDismiss;
         useEffect(() => {
             if (!autoDismissMs || autoDismissMs <= 0) return;
-            const id = setTimeout(() => onDismissRef.current?.(), autoDismissMs);
+            const id = setTimeout(
+                () => (onAutoDismissRef.current ?? onDismissRef.current)?.(),
+                autoDismissMs,
+            );
             return () => clearTimeout(id);
         }, [autoDismissMs]);
 

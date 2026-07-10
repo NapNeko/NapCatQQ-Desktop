@@ -7,7 +7,7 @@ import type {
     DaemonState,
     NapCatLoginInvalidationReason,
 } from '../../core/ipc/types';
-import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { dismissInfoBar, pushInfoBar } from '../ui/globalInfoBarStore';
 import { isQqSystemDependencyError } from '../components/useQqDependencyAlerts';
 import {
     clearBotSnapshotAlertSuppression,
@@ -88,10 +88,24 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             const keyCrashed = `bot-crashed:${id}`;
             const keyDaemon = `bot-daemon-crashed:${id}`;
 
-            if (!lastError) clearBotSnapshotAlertSuppression(keyLastError);
-            if (!kicked) clearBotSnapshotAlertSuppression(keyKicked);
-            if (!crashed) clearBotSnapshotAlertSuppression(keyCrashed);
-            if (!daemonCrashed) clearBotSnapshotAlertSuppression(keyDaemon);
+            if (!lastError) {
+                clearBotSnapshotAlertSuppression(keyLastError);
+                clearBotSnapshotAlertSuppression(`bot-qq-deps:${id}`);
+                dismissInfoBar(`key:${keyLastError}`);
+                dismissInfoBar(`key:bot-qq-deps:${id}`);
+            }
+            if (!kicked) {
+                clearBotSnapshotAlertSuppression(keyKicked);
+                dismissInfoBar(`key:${keyKicked}`);
+            }
+            if (!crashed) {
+                clearBotSnapshotAlertSuppression(keyCrashed);
+                dismissInfoBar(`key:${keyCrashed}`);
+            }
+            if (!daemonCrashed) {
+                clearBotSnapshotAlertSuppression(keyDaemon);
+                dismissInfoBar(`key:${keyDaemon}`);
+            }
 
             if (lastError && !consentRequired && lastError !== prev.lastError) {
                 const brief = briefError(lastError);

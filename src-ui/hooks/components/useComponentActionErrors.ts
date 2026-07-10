@@ -6,8 +6,9 @@
 // 行为约定：
 //   - 仅 failed / cancelled 推 banner。success 已经在 row 里有 ✓ 反馈，
 //     不需要顶部再 toast 一遍。
-//   - 一个 task 只推一次（用 seenIds 去重）。用户 dismiss 之后即使 store
-//     里 task 仍在，也不会再次弹出。
+//   - 一个 task 只推一次。seen 必须是模块级：componentActionStore 跨路由存活，
+//     若用组件 useRef，切走再回来会清空 seen，同一 failed task 会再弹一条。
+//   - 用户 dismiss 之后即使 store 里 task 仍在，也不会再次弹出。
 //   - banner 持有完整错误文本（title + content），不截断；点 close 才消失。
 //   - banner 的 dismiss 由全局 store 处理（InfoBarStack 调
 //     globalInfoBarStore.dismiss）；本 hook 只负责"什么时候 push"。
@@ -18,6 +19,9 @@ import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { ComponentRow } from '../../core/domain/components/types';
 import type { ComponentId } from '../../core/ipc/types';
 import { globalInfoBarStore } from '../ui/globalInfoBarStore';
+
+// 已推过 banner 的 task_id。模块级，对齐 componentActionStore 生命周期。
+const seenTerminalTaskIds = new Set<string>();
 
 /// 从 progress.logs 倒序找最近一条 error / warn 记录的 message。
 /// 没找到回退到 progress.message。
@@ -60,10 +64,6 @@ export function useComponentActionErrors(rows: ComponentRow[]): void {
         componentActionStore.getSnapshot,
     );
 
-    // 已经推过 banner 的 task_id 集合，避免每次 store 变化重复推。
-    // 用 ref 不触发 re-render。
-    const seenIdsRef = useRef<Set<string>>(new Set());
-
     // rows 变化时 display 结果可能更新；用 ref 记最新版本。banner 在 push
     // 那一刻拍下当时的显示名快照（store 是冻结的字符串，rows 后续变化不会
     // 倒回去刷新已推 banner）。
@@ -71,13 +71,19 @@ export function useComponentActionErrors(rows: ComponentRow[]): void {
     rowsRef.current = rows;
 
     useEffect(() => {
+        // 终态 task 被 linger 清掉后，顺带剪掉 seen，避免会话内无限增长。
+        // 同一 task_id 不会复用，剪掉不会导致"已 dismiss 又弹"。
+        for (const id of Array.from(seenTerminalTaskIds)) {
+            if (!(id in state.tasks)) seenTerminalTaskIds.delete(id);
+        }
+
         // 每次 store 变化，扫一遍最近进入终态的 failed / cancelled task，
         // 没在 seen 集合里的就推一条新 banner。
         for (const [taskId, progress] of Object.entries(state.tasks)) {
             const status = progress.status;
             if (status !== 'failed' && status !== 'cancelled') continue;
-            if (seenIdsRef.current.has(taskId)) continue;
-            seenIdsRef.current.add(taskId);
+            if (seenTerminalTaskIds.has(taskId)) continue;
+            seenTerminalTaskIds.add(taskId);
 
             const target = state.taskTargets[taskId];
             const heading = target
@@ -98,4 +104,9 @@ export function useComponentActionErrors(rows: ComponentRow[]): void {
             });
         }
     }, [state]);
+}
+
+/** 测试 / dev 重置用。 */
+export function _resetComponentActionErrorSeen(): void {
+    seenTerminalTaskIds.clear();
 }

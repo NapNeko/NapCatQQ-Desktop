@@ -15,6 +15,7 @@ export interface UseGlobalInfoBarsResult {
     bars: InfoBarStackItem[];
     push: (opts: PushInfoBarOptions) => string;
     dismiss: (id: string) => void;
+    remove: (id: string) => void;
 }
 
 export function useGlobalInfoBars(): UseGlobalInfoBarsResult {
@@ -32,5 +33,9 @@ export function useGlobalInfoBars(): UseGlobalInfoBarsResult {
         globalInfoBarStore.dismiss(id);
     }, []);
 
-    return { bars: state.bars, push, dismiss };
+    const remove = useCallback((id: string) => {
+        globalInfoBarStore.remove(id);
+    }, []);
+
+    return { bars: state.bars, push, dismiss, remove };
 }

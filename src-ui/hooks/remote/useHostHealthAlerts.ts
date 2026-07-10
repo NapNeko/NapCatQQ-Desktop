@@ -94,7 +94,7 @@ export function useHostHealthAlerts(): void {
                 // 从 failed 恢复 → 清除抑制 + 清理屏幕上可能还存在的同 key 条
                 suppressed.delete(s.id);
                 // 主动 dismiss（幂等，如果不存在就什么都不做）
-                dismissInfoBar(key);
+                dismissInfoBar(`key:${key}`);
             }
         }
     }, [serversQuery.data]);
@@ -108,7 +108,7 @@ export function useHostHealthAlerts(): void {
                 if (!serverId) return;
 
                 suppressed.delete(serverId);
-                dismissInfoBar(`host-unreachable:${serverId}`);
+                dismissInfoBar(`key:host-unreachable:${serverId}`);
             }
 
             // 失败事件到达时，如果当前 servers 里该 server 已是 failed 且未抑制，也可在此推（兜底）。

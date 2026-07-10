@@ -110,7 +110,7 @@ export const globalInfoBarStore = {
         return item.id;
     },
 
-    /** 主动消除一条 banner。多次调用幂等。 */
+    /** 用户关闭一条 banner。多次调用幂等，并触发用户关闭抑制回调。 */
     dismiss(id: string): void {
         const current = store.getSnapshot();
         const bar = current.bars.find((b) => b.id === id);
@@ -118,6 +118,14 @@ export const globalInfoBarStore = {
         if (next.length === current.bars.length) return;
         store.setState({ bars: next });
         bar?.onUserDismiss?.();
+    },
+
+    /** 状态恢复或自动超时时移除 banner，不写入“用户已关闭”抑制。 */
+    remove(id: string): void {
+        const current = store.getSnapshot();
+        const next = current.bars.filter((b) => b.id !== id);
+        if (next.length === current.bars.length) return;
+        store.setState({ bars: next });
     },
 
     /** 清空（极少用，主要给测试 / 极端 reset 场景）。 */
@@ -137,4 +145,4 @@ export const globalInfoBarStore = {
 // 导出同名顶层方法供非 React 代码直接调用（service / 普通 .ts 文件）。
 // React 组件 / hook 通常用 useGlobalInfoBars()，多一层 useCallback 稳定引用。
 export const pushInfoBar = globalInfoBarStore.push;
-export const dismissInfoBar = globalInfoBarStore.dismiss;
+export const dismissInfoBar = globalInfoBarStore.remove;

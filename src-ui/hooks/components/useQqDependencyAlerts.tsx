@@ -5,6 +5,11 @@ import { useEffect, useRef } from 'react';
 import type { MachineView } from '../../core/domain/components/types';
 import { componentService } from '../../core/services/component.service';
 import { pushInfoBar, dismissInfoBar } from '../ui/globalInfoBarStore';
+import {
+    clearQqDependencyAlertSuppression,
+    isQqDependencyAlertSuppressed,
+    suppressQqDependencyAlert,
+} from './qqDependencyAlertState';
 
 const alertKey = (hostId: string) => `qq-system-deps:${hostId}`;
 
@@ -38,9 +43,11 @@ export function useQqDependencyAlerts(
                 if (cancelled) return;
                 const key = alertKey(hostId);
                 if (report.missing.length === 0) {
+                    clearQqDependencyAlertSuppression(hostId);
                     dismissInfoBar(`key:${key}`);
                     return;
                 }
+                if (isQqDependencyAlertSuppressed(hostId)) return;
                 const hostName = activeMachine!.host.display_name;
                 pushInfoBar({
                     key,
@@ -53,6 +60,7 @@ export function useQqDependencyAlerts(
                                 type="button"
                                 className="font-medium text-brand underline"
                                 onClick={() => {
+                                    suppressQqDependencyAlert(hostId);
                                     dismissInfoBar(`key:${key}`);
                                     onRepairRef.current(hostId);
                                 }}
@@ -63,6 +71,7 @@ export function useQqDependencyAlerts(
                         </span>
                     ),
                     autoDismissMs: 0,
+                    onUserDismiss: () => suppressQqDependencyAlert(hostId),
                 });
             } catch (e) {
                 console.warn('[useQqDependencyAlerts] detect failed:', e);

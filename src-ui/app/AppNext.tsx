@@ -80,7 +80,7 @@ export const AppNext: React.FC = () => {
 
     useAppUiPreferencesBootstrap();
 
-    const { bars, dismiss } = useGlobalInfoBars();
+    const { bars, dismiss, remove } = useGlobalInfoBars();
 
     useEffect(() => {
         if (!showDocker && route === 'docker') {
@@ -168,7 +168,7 @@ export const AppNext: React.FC = () => {
                     </div>
                 </div>
 
-                <InfoBarStack items={bars} onDismiss={dismiss} />
+                <InfoBarStack items={bars} onDismiss={dismiss} onAutoDismiss={remove} />
                 <DesktopExitGate />
             </div>
         </TooltipProvider>

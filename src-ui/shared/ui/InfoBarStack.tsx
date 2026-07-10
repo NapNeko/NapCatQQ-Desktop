@@ -22,6 +22,7 @@ export interface InfoBarStackItem extends Omit<InfoBarProps, 'onDismiss'> {
 interface InfoBarStackProps {
     items: InfoBarStackItem[];
     onDismiss: (id: string) => void;
+    onAutoDismiss?: (id: string) => void;
     className?: string;
     portal?: boolean;
     children?: ReactNode;
@@ -70,6 +71,7 @@ interface DisplayedItem extends InfoBarStackItem {
 export function InfoBarStack({
     items,
     onDismiss,
+    onAutoDismiss,
     className,
     portal = true,
     children,
@@ -139,6 +141,7 @@ export function InfoBarStack({
                     <InfoBarRow
                         {...barProps}
                         onDismiss={() => onDismiss(item.id)}
+                        onAutoDismiss={() => (onAutoDismiss ?? onDismiss)(item.id)}
                     />
                 </GsapPresence>
                 );

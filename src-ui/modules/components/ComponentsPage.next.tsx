@@ -31,6 +31,9 @@ import type { ComponentId, DockerInstallReport } from '../../core/ipc/types';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type { DockerInstallOptions } from '../../core/services/docker.service';
 import { globalInfoBarStore } from '../../hooks/ui/globalInfoBarStore';
+
+// componentActionStore 跨路由存活，提权提示的去重状态也必须保持同样生命周期。
+const qqSudoPromptedTaskIds = new Set<string>();
 import { errorText } from '../../core/domain/errors';
 import { cn } from '../../shared/utils/cn';
 import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
@@ -252,18 +255,21 @@ export const ComponentsPageNext: React.FC = () => {
         componentActionStore.getSnapshot,
         componentActionStore.getSnapshot,
     );
-    const qqSudoPromptedRef = useRef<Set<string>>(new Set());
-
     useEffect(() => {
+        for (const taskId of Array.from(qqSudoPromptedTaskIds)) {
+            if (!(taskId in componentActionSnap.tasks)) {
+                qqSudoPromptedTaskIds.delete(taskId);
+            }
+        }
         for (const [taskId, progress] of Object.entries(componentActionSnap.tasks)) {
             if (progress.status !== 'failed') continue;
-            if (qqSudoPromptedRef.current.has(taskId)) continue;
+            if (qqSudoPromptedTaskIds.has(taskId)) continue;
             const target = componentActionSnap.taskTargets[taskId];
             if (!target || target.componentId !== 'qq') continue;
             const msg = [...progress.logs].reverse().find((l) => l.level === 'error')?.message
                 ?? progress.message;
             if (!msg.includes('elevation_required')) continue;
-            qqSudoPromptedRef.current.add(taskId);
+            qqSudoPromptedTaskIds.add(taskId);
             globalInfoBarStore.push({
                 key: `qq-deps-sudo:${target.hostId}`,
                 tone: 'warning',
