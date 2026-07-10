@@ -20,6 +20,7 @@ pub mod ids;
 pub mod kinds;
 pub mod migration;
 pub mod napcat_events;
+pub mod offline_alert;
 pub mod progress;
 pub mod qq_dependency;
 pub mod release_snapshot;
@@ -76,6 +77,12 @@ pub use migration::{
     MigrationStage, MigrationWarning,
 };
 pub use napcat_events::NapCatLoginInvalidationReason;
+pub use offline_alert::{
+    EnsureOneBotMessengerHttpResult, OfflineAlert, OfflineAlertKind, OfflineAlertSource,
+    OfflineDeliveryChannelResult, OfflineDeliveryRecord, OfflineEmailSettings,
+    OfflineNotifyBehavior, OfflineOneBotSettings, OfflineWebhookChannel, OfflineWebhookSettings,
+    OneBotMessengerCandidate, default_webhook_body_template, render_template,
+};
 pub use progress::{ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use qq_dependency::{
     DependencyCategory, DependencyInstallError, DetectionMethod, DistroFamily, DistroInfo,

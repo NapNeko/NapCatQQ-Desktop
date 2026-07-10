@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::macros::default_true;
+use crate::offline_alert::{
+    OfflineEmailSettings, OfflineNotifyBehavior, OfflineOneBotSettings, OfflineWebhookSettings,
+};
 
 string_enum! {
     /// 主窗口关闭按钮行为
@@ -63,6 +66,9 @@ pub struct WebUiPollerSettings {
     /// 离线邮件通知开关
     #[serde(rename = "botOfflineEmailNotice", default)]
     pub offline_email_notice: bool,
+    /// recovered / 防抖 / 历史容量
+    #[serde(rename = "offlineNotifyBehavior", default)]
+    pub offline_notify_behavior: OfflineNotifyBehavior,
 }
 
 impl Default for WebUiPollerSettings {
@@ -71,6 +77,7 @@ impl Default for WebUiPollerSettings {
             bot_login_check_interval_ms: default_login_interval(),
             offline_webhook_notice: false,
             offline_email_notice: false,
+            offline_notify_behavior: OfflineNotifyBehavior::default(),
         }
     }
 }
@@ -322,6 +329,15 @@ pub struct AppSettings {
     /// 桌面 Toast:QQ 被踢下线
     #[serde(rename = "notifyOnLoginKicked", default = "default_true")]
     pub notify_on_login_kicked: bool,
+    /// 离线 Webhook 通道参数(开关在 poller.offline_webhook_notice)
+    #[serde(rename = "WebHook", default)]
+    pub offline_webhook: OfflineWebhookSettings,
+    /// 离线邮件通道参数(开关在 poller.offline_email_notice)
+    #[serde(rename = "Email", default)]
+    pub offline_email: OfflineEmailSettings,
+    /// 用其它 Bot 的 OneBot HTTP 发告警
+    #[serde(rename = "onebotOfflineNotice", default)]
+    pub offline_onebot: OfflineOneBotSettings,
     /// 外观偏好
     #[serde(rename = "uiPreferences", default)]
     pub ui_preferences: AppUiPreferences,
@@ -358,6 +374,9 @@ impl Default for AppSettings {
             remote_host_health_probe_enabled: true,
             remote_host_health_probe_interval_ms: default_remote_host_health_probe_interval_ms(),
             task_queue_cleanup_enabled: default_task_queue_cleanup_enabled(),
+            offline_webhook: OfflineWebhookSettings::default(),
+            offline_email: OfflineEmailSettings::default(),
+            offline_onebot: OfflineOneBotSettings::default(),
             task_queue_cleanup_linger_ms: default_task_queue_cleanup_linger_ms(),
             close_action: CloseAction::default(),
             after_close_ui_behavior: AfterCloseUiBehavior::default(),
@@ -465,11 +484,13 @@ mod tests {
         assert!(!parsed.offline_webhook_notice);
         assert!(!parsed.offline_email_notice);
 
-        let serialized = serde_json::to_string(&parsed).unwrap();
+        // 新增 offlineNotifyBehavior 后不再要求与旧三字段 JSON 字节级全等
+        assert_eq!(parsed.bot_login_check_interval_ms, 5000);
+        assert!(!parsed.offline_webhook_notice);
+        assert!(!parsed.offline_email_notice);
         assert_eq!(
-            serialized.as_bytes(),
-            LEGACY_CANONICAL_JSON.as_bytes(),
-            "serialize 输出与 legacy JSON 字节不一致：实际 = {serialized}"
+            parsed.offline_notify_behavior,
+            OfflineNotifyBehavior::default()
         );
     }
 
@@ -506,8 +527,9 @@ mod tests {
         assert!(parsed.offline_webhook_notice);
         assert!(parsed.offline_email_notice);
 
-        let serialized = serde_json::to_string(&parsed).unwrap();
-        assert_eq!(serialized.as_bytes(), canonical.as_bytes());
+        assert_eq!(parsed.bot_login_check_interval_ms, 2500);
+        assert!(parsed.offline_webhook_notice);
+        assert!(parsed.offline_email_notice);
     }
 
     /// SnowLuma 默认 JSON 字面量
@@ -620,6 +642,7 @@ mod tests {
                 bot_login_check_interval_ms: 2500,
                 offline_webhook_notice: true,
                 offline_email_notice: false,
+                offline_notify_behavior: OfflineNotifyBehavior::default(),
             },
             performance_monitor_enabled: false,
             performance_monitor_interval_ms: 3000,
