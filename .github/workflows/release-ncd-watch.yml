@@ -1,0 +1,207 @@
+name: Release ncd-watch
+
+# 远端 Linux 静态二进制（musl）。与 Desktop MSI 的 v* tag 分流：本工作流只响应 watch-v*。
+# 产物命名对齐 docs/dev/ncd-watch.md §6.2。
+
+on:
+  push:
+    tags:
+      - "watch-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号，支持 0.1.0 或 watch-v0.1.0；为空时从 tag / workspace Cargo.toml 读取"
+        required: false
+        default: ""
+        type: string
+      draft:
+        description: "是否创建 draft release"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      version_plain: ${{ steps.version.outputs.VERSION_PLAIN }}
+      tag_name: ${{ steps.version.outputs.TAG_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          input_version="${{ inputs.version }}"
+
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
+            raw="${{ github.ref_name }}"
+          elif [[ -n "${input_version}" ]]; then
+            raw="${input_version}"
+          else
+            raw="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)"
+            if [[ -z "${raw}" ]]; then
+              echo "无法从 tag、输入或 workspace Cargo.toml 解析版本号" >&2
+              exit 1
+            fi
+          fi
+
+          # 允许 watch-v1.2.3 / v1.2.3 / 1.2.3
+          plain="${raw#watch-}"
+          plain="${plain#v}"
+          if [[ -z "${plain}" ]]; then
+            echo "解析出的版本号为空: raw=${raw}" >&2
+            exit 1
+          fi
+
+          tag_name="watch-v${plain}"
+          echo "VERSION=v${plain}" >> "$GITHUB_OUTPUT"
+          echo "VERSION_PLAIN=${plain}" >> "$GITHUB_OUTPUT"
+          echo "TAG_NAME=${tag_name}" >> "$GITHUB_OUTPUT"
+          echo "Resolved watch version: plain=${plain} tag=${tag_name}"
+
+  build:
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ncd-watch-${{ matrix.target }}
+          workspaces: ". -> target"
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build ncd-watch (musl)
+        run: cross build -p ncd-watch --release --target ${{ matrix.target }}
+
+      - name: Package asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          plain="${{ needs.resolve.outputs.version_plain }}"
+          target="${{ matrix.target }}"
+          src="target/${target}/release/ncd-watch"
+          if [[ ! -f "${src}" ]]; then
+            echo "missing binary: ${src}" >&2
+            ls -la "target/${target}/release" || true
+            exit 1
+          fi
+          mkdir -p dist
+          asset="ncd-watch-${plain}-${target}"
+          cp "${src}" "dist/${asset}"
+          chmod +x "dist/${asset}"
+          # 单文件校验；publish 再合并成 SHA256SUMS
+          (cd dist && sha256sum "${asset}" | tee "${asset}.sha256")
+          file "dist/${asset}" || true
+          ls -lh dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncd-watch-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs:
+      - resolve
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: ncd-watch-*
+          merge-multiple: true
+
+      - name: Build SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          # 只汇总二进制本体，不把 *.sha256 再 hash 进表
+          mapfile -t bins < <(find . -maxdepth 1 -type f -name 'ncd-watch-*' ! -name '*.sha256' | sort)
+          if [[ ${#bins[@]} -lt 1 ]]; then
+            echo "no ncd-watch binaries in release-assets" >&2
+            ls -la
+            exit 1
+          fi
+          : > SHA256SUMS
+          for f in "${bins[@]}"; do
+            base="$(basename "${f}")"
+            sha256sum "${base}" >> SHA256SUMS
+          done
+          echo "---- SHA256SUMS ----"
+          cat SHA256SUMS
+          ls -lh
+
+      - name: Release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          plain="${{ needs.resolve.outputs.version_plain }}"
+          tag="${{ needs.resolve.outputs.tag_name }}"
+          notes_path=release-notes.md
+          cat > "${notes_path}" <<EOF
+          ## ncd-watch ${plain}
+
+          远端 Linux 主机侧监控（Desktop 退出后 Webhook）。静态链接 **musl**，不打进 Windows MSI。
+
+          ### Assets
+
+          | 文件 | 目标 |
+          |------|------|
+          | \`ncd-watch-${plain}-x86_64-unknown-linux-musl\` | x86_64 |
+          | \`ncd-watch-${plain}-aarch64-unknown-linux-musl\` | aarch64 |
+          | \`SHA256SUMS\` | 校验和 |
+
+          Tag: \`${tag}\`（与 Desktop \`v*\` 分流）
+
+          安装：组件页安装 NCD Watch，或本机 \`cargo build -p ncd-watch\` 后由 Desktop 上传。
+          EOF
+          echo "NOTES_PATH=${notes_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ needs.resolve.outputs.tag_name }}
+          name: ncd-watch ${{ needs.resolve.outputs.version_plain }}
+          body_path: ${{ steps.notes.outputs.NOTES_PATH }}
+          files: |
+            release-assets/ncd-watch-*
+            release-assets/SHA256SUMS
+          fail_on_unmatched_files: true

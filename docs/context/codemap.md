@@ -41,7 +41,8 @@ flowchart TB
 | `crates/ncd-backend-napcat/` | NapCat 本机+远端实现（WebUI/login poller/remote native） |
 | `crates/ncd-backend-snowluma/` | SnowLuma daemon/poller + remote stack/tunnel |
 | `crates/ncd-host/` | 本机 Windows / 远端 Linux SSH 主机抽象 |
-| `crates/ncd-component/` | 组件：Node/QQ/NoVnc/NapCat/SnowLuma/DesktopSelf |
+| `crates/ncd-watch/` | 远端主机侧监控 bin：探活 + Webhook（Desktop 退出后） |
+| `crates/ncd-component/` | 组件：Node/QQ/NoVnc/NapCat/SnowLuma/DesktopSelf（规划中：NcdWatch） |
 | `crates/ncd-deploy/` | 部署计划、Docker/Native、配置渲染、RemoteQq 协调 |
 | `crates/ncd-network/` | HTTP/下载/代理等 |
 | `crates/ncd-update/` | 应用自更新 |
@@ -246,6 +247,8 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | 窗口 | `commands/window.rs`, `window_icon.rs` |
 | 桌面日志 | `desktop_log.rs`, `desktop_log_format.rs`, `commands/desktop_log.rs` |
 | 通知 / Toast | `desktop_notify.rs`, `windows_toast.rs` |
+| 离线多渠道 | `crates/ncd-runtime/src/notify/` + `docs/dev/offline-onebot-notice.md` |
+| 远端脱管后监控（设计） | `docs/dev/ncd-watch.md`；活 plan `.claude/plan/ncd-watch.md`；crate 待建 `crates/ncd-watch` |
 | 单实例 | `single_instance.rs` |
 | hooks | `src-ui/hooks/desktop/` |
 
