@@ -8,6 +8,7 @@ import {
     clientPrefsFromBackend,
     type BackendSettings,
 } from '../../core/services/settings.service';
+import { webhookChannelsEqual } from '../../core/domain/settings/offline-notify-defaults';
 import {
     appPreferencesToAppUiPreferences,
     infoBarDismissPrefsFromDraftFields,
@@ -79,9 +80,29 @@ export function draftFromBackendAndPrefs(
         notifyOnBotCrashed: backend.notifyOnBotCrashed,
         notifyOnLoginKicked: backend.notifyOnLoginKicked,
         uiPreferences: backend.uiPreferences,
-        // P1 主动探活
         remoteHostHealthProbeEnabled: backend.remoteHostHealthProbeEnabled,
         remoteHostHealthProbeIntervalMs: backend.remoteHostHealthProbeIntervalMs,
+        webHookChannels: backend.webHookChannels.map((c) => ({ ...c })),
+        webHookUrl: backend.webHookUrl,
+        webHookSecret: backend.webHookSecret,
+        webHookJson: backend.webHookJson,
+        webHookMethod: backend.webHookMethod,
+        emailSender: backend.emailSender,
+        emailReceiver: backend.emailReceiver,
+        emailToken: backend.emailToken,
+        emailSmtpServer: backend.emailSmtpServer,
+        emailSmtpPort: backend.emailSmtpPort,
+        emailEncryption: backend.emailEncryption,
+        onebotNoticeEnabled: backend.onebotNoticeEnabled,
+        onebotMessengerBotId: backend.onebotMessengerBotId,
+        onebotMessengerBotIds: [...backend.onebotMessengerBotIds],
+        onebotTargetType: backend.onebotTargetType,
+        onebotTargetId: backend.onebotTargetId,
+        onebotTargetIds: [...backend.onebotTargetIds],
+        onebotMessageTemplate: backend.onebotMessageTemplate,
+        notifyOnRecovered: backend.notifyOnRecovered,
+        offlineDebounceSeconds: backend.offlineDebounceSeconds,
+        offlineDeliveryHistoryLimit: backend.offlineDeliveryHistoryLimit,
         theme: client.theme,
         showMascot: client.showMascot,
         motionEnabled: client.motionEnabled,
@@ -130,9 +151,29 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
             },
             dismiss,
         ),
-        // P1 主动探活
         remoteHostHealthProbeEnabled: draft.remoteHostHealthProbeEnabled,
         remoteHostHealthProbeIntervalMs: draft.remoteHostHealthProbeIntervalMs,
+        webHookChannels: draft.webHookChannels.map((c) => ({ ...c })),
+        webHookUrl: draft.webHookUrl,
+        webHookSecret: draft.webHookSecret,
+        webHookJson: draft.webHookJson,
+        webHookMethod: draft.webHookMethod,
+        emailSender: draft.emailSender,
+        emailReceiver: draft.emailReceiver,
+        emailToken: draft.emailToken,
+        emailSmtpServer: draft.emailSmtpServer,
+        emailSmtpPort: draft.emailSmtpPort,
+        emailEncryption: draft.emailEncryption,
+        onebotNoticeEnabled: draft.onebotNoticeEnabled,
+        onebotMessengerBotId: draft.onebotMessengerBotId,
+        onebotMessengerBotIds: [...draft.onebotMessengerBotIds],
+        onebotTargetType: draft.onebotTargetType,
+        onebotTargetId: draft.onebotTargetId,
+        onebotTargetIds: [...draft.onebotTargetIds],
+        onebotMessageTemplate: draft.onebotMessageTemplate,
+        notifyOnRecovered: draft.notifyOnRecovered,
+        offlineDebounceSeconds: draft.offlineDebounceSeconds,
+        offlineDeliveryHistoryLimit: draft.offlineDeliveryHistoryLimit,
     };
 }
 
@@ -153,7 +194,7 @@ export function isSettingsDirty(
         draft.enterLightweightDelaySecs !== baseline.enterLightweightDelaySecs ||
         draft.uiModeOnStartup !== baseline.uiModeOnStartup ||
         draft.minimizeToTrayCountsAsHidden !==
-            baseline.minimizeToTrayCountsAsHidden ||
+        baseline.minimizeToTrayCountsAsHidden ||
         draft.notifyOnOffline !== baseline.notifyOnOffline ||
         draft.notifyOnBotCrashed !== baseline.notifyOnBotCrashed ||
         draft.notifyOnLoginKicked !== baseline.notifyOnLoginKicked ||
@@ -171,9 +212,31 @@ export function isSettingsDirty(
         draft.infoBarDismissWarningMs !== baseline.infoBarDismissWarningMs ||
         draft.taskQueueCleanupEnabled !== baseline.taskQueueCleanupEnabled ||
         draft.taskQueueCleanupLingerMs !== baseline.taskQueueCleanupLingerMs ||
-        // P1 主动探活
         draft.remoteHostHealthProbeEnabled !== baseline.remoteHostHealthProbeEnabled ||
-        draft.remoteHostHealthProbeIntervalMs !== baseline.remoteHostHealthProbeIntervalMs
+        draft.remoteHostHealthProbeIntervalMs !==
+        baseline.remoteHostHealthProbeIntervalMs ||
+        !webhookChannelsEqual(draft.webHookChannels, baseline.webHookChannels) ||
+        draft.webHookUrl !== baseline.webHookUrl ||
+        draft.webHookSecret !== baseline.webHookSecret ||
+        draft.webHookJson !== baseline.webHookJson ||
+        draft.webHookMethod !== baseline.webHookMethod ||
+        draft.emailSender !== baseline.emailSender ||
+        draft.emailReceiver !== baseline.emailReceiver ||
+        draft.emailToken !== baseline.emailToken ||
+        draft.emailSmtpServer !== baseline.emailSmtpServer ||
+        draft.emailSmtpPort !== baseline.emailSmtpPort ||
+        draft.emailEncryption !== baseline.emailEncryption ||
+        draft.onebotNoticeEnabled !== baseline.onebotNoticeEnabled ||
+        draft.onebotMessengerBotId !== baseline.onebotMessengerBotId ||
+        draft.onebotMessengerBotIds.join(',') !==
+        baseline.onebotMessengerBotIds.join(',') ||
+        draft.onebotTargetType !== baseline.onebotTargetType ||
+        draft.onebotTargetId !== baseline.onebotTargetId ||
+        draft.onebotTargetIds.join(',') !== baseline.onebotTargetIds.join(',') ||
+        draft.onebotMessageTemplate !== baseline.onebotMessageTemplate ||
+        draft.notifyOnRecovered !== baseline.notifyOnRecovered ||
+        draft.offlineDebounceSeconds !== baseline.offlineDebounceSeconds ||
+        draft.offlineDeliveryHistoryLimit !== baseline.offlineDeliveryHistoryLimit
     );
 }
 

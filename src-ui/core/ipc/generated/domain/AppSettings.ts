@@ -2,6 +2,9 @@
 import type { AfterCloseUiBehavior } from "./AfterCloseUiBehavior";
 import type { AppUiPreferences } from "./AppUiPreferences";
 import type { CloseAction } from "./CloseAction";
+import type { OfflineEmailSettings } from "./OfflineEmailSettings";
+import type { OfflineOneBotSettings } from "./OfflineOneBotSettings";
+import type { OfflineWebhookSettings } from "./OfflineWebhookSettings";
 import type { UiModeOnStartup } from "./UiModeOnStartup";
 import type { WebUiPollerSettings } from "./WebUiPollerSettings";
 
@@ -57,6 +60,18 @@ notifyOnBotCrashed: boolean,
  * 桌面 Toast:QQ 被踢下线
  */
 notifyOnLoginKicked: boolean, 
+/**
+ * 离线 Webhook 通道参数(开关在 poller.offline_webhook_notice)
+ */
+WebHook: OfflineWebhookSettings, 
+/**
+ * 离线邮件通道参数(开关在 poller.offline_email_notice)
+ */
+Email: OfflineEmailSettings, 
+/**
+ * 用其它 Bot 的 OneBot HTTP 发告警
+ */
+onebotOfflineNotice: OfflineOneBotSettings, 
 /**
  * 外观偏好
  */
