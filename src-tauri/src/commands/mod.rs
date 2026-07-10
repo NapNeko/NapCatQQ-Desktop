@@ -6,6 +6,7 @@ pub mod deployment_tasks;
 pub mod desktop_log;
 pub mod docker;
 pub mod host_resolve;
+pub mod ncd_watch;
 pub mod release;
 pub mod servers;
 pub mod snowluma;

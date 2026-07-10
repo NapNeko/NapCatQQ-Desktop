@@ -379,8 +379,9 @@ pub fn run() {
                     &format!("attach failed: {err}"),
                 );
             }
-
-            // P1 主动探活:启动期根据初始 AppSettings 决定是否 spawn 后台健康 walker
+            // 远端 ncd-watch:周期写 desktop_present + 同步 notify.json
+            commands::ncd_watch::spawn_ncd_watch_heartbeat(app.handle().clone());
+            // 主动探活:启动期根据初始 AppSettings 决定是否 spawn 后台健康 walker
             // 由于 .setup 闭包是 sync 的,这里 spawn 一个一次性 async 任务来做条件判断 + spawn walker
             {
                 let app_handle = app.handle().clone();
@@ -464,6 +465,8 @@ pub fn run() {
             commands::components::remember_sudo_password,
             commands::components::run_component_action,
             commands::components::cancel_component_action,
+            commands::ncd_watch::sync_ncd_watch_notify,
+            commands::ncd_watch::touch_ncd_watch_present,
             commands::deployment_tasks::list_deployment_tasks,
             commands::deployment_tasks::cancel_deployment_task,
             commands::deployment_tasks::delete_deployment_task,

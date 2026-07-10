@@ -1,7 +1,7 @@
 //! Components 页 Tauri 命令薄壳层
 //!
 //! 暴露 4 个命令给前端:
-//! - list_components:返回所有 6 个 ComponentInfo 元数据(顺序:Framework
+//! - list_components:返回 ComponentInfo 元数据(顺序:Framework
 //!   → RuntimeDep → SelfApp)
 //! - detect_component:在指定 host 上探测某 component 的安装版本
 //! - run_component_action:把单 step DeployPlan 跑起来,进度走
@@ -16,8 +16,9 @@ use std::time::Duration;
 
 use ncd_component::{
     Component, ComponentDetectResult, ComponentId, ComponentInfo, DesktopSelfComponent,
-    NapCatComponent, NoVncComponent, NodeJsComponent, ProgressEvent, ProgressKind,
-    ProgressLogLevel, QQComponent, SnowLumaComponent,
+    NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent, ProgressEvent,
+    ProgressKind, ProgressLogLevel, QQComponent, SnowLumaComponent,
+    discover_local_ncd_watch_binary, ncd_watch_release_download_url,
 };
 use ncd_deploy::{DeployPlan, StepKind};
 use ncd_domain::release_snapshot::ReleaseInfo;
@@ -138,12 +139,8 @@ async fn submit_component_action_with_prerequisites(
             );
             continue;
         }
-        let depends_on = direct_runtime_dependency_ids(
-            spec,
-            host.os(),
-            host.locality(),
-            &submitted,
-        );
+        let depends_on =
+            direct_runtime_dependency_ids(spec, host.os(), host.locality(), &submitted);
         let submitted_task_id = submit_single_component_task(
             spec.component_id,
             host_id,
@@ -272,8 +269,13 @@ async fn submit_single_component_task(
     )
     .await;
     depends_on.extend(package_depends_on);
-    let resources =
-        component_task_resources(component_id, &host_id_owned, kind, host.os(), host.locality());
+    let resources = component_task_resources(
+        component_id,
+        &host_id_owned,
+        kind,
+        host.os(),
+        host.locality(),
+    );
     let cancellable = component_action_cancellable(component_id, kind, host.os(), host.locality());
     let title = format!("{} {}", component_id.as_str(), kind.as_str());
     let submitted_task_id = deployment_tasks
@@ -496,12 +498,9 @@ fn collect_component_runtime_prerequisites_inner(
     seen: &mut Vec<ComponentTaskSpec>,
     ordered: &mut Vec<ComponentTaskSpec>,
 ) {
-    for dep in component_runtime_prerequisites(
-        target.component_id,
-        target.kind,
-        host_os,
-        host_locality,
-    ) {
+    for dep in
+        component_runtime_prerequisites(target.component_id, target.kind, host_os, host_locality)
+    {
         if seen.contains(&dep) {
             continue;
         }
@@ -559,7 +558,11 @@ fn component_needs_download_slot(component_id: ComponentId, kind: StepKind) -> b
         StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Update
     ) && matches!(
         component_id,
-        ComponentId::NapCat | ComponentId::SnowLuma | ComponentId::NodeJs | ComponentId::Qq
+        ComponentId::NapCat
+            | ComponentId::SnowLuma
+            | ComponentId::NodeJs
+            | ComponentId::Qq
+            | ComponentId::NcdWatch
     )
 }
 
@@ -675,7 +678,9 @@ async fn system_package_prerequisite_is_satisfied(
     host: &dyn Host,
 ) -> bool {
     match task {
-        SystemPackagePrerequisite::ArchiveTool { command, .. } => host.command_exists(command).await,
+        SystemPackagePrerequisite::ArchiveTool { command, .. } => {
+            host.command_exists(command).await
+        }
         SystemPackagePrerequisite::QqDependencies => {
             let manifest = ncd_component::qq_deps::qq_qqnt_dependencies_v3_2_25();
             let detector = ncd_component::qq_deps::QqDependencyDetector::new(manifest);
@@ -953,7 +958,7 @@ impl SystemPackageManager {
     }
 }
 
-/// 6 个组件元数据按 Framework → RuntimeDep → SelfApp 顺序返回
+/// 组件元数据按 Framework → RuntimeDep → SelfApp 顺序返回
 fn catalog() -> Vec<ComponentInfo> {
     vec![
         NapCatComponent::info(),
@@ -961,6 +966,7 @@ fn catalog() -> Vec<ComponentInfo> {
         NodeJsComponent::info(),
         QQComponent::info(),
         NoVncComponent::info(),
+        NcdWatchComponent::info(),
         DesktopSelfComponent::info(),
     ]
 }
@@ -979,7 +985,7 @@ pub enum RemoteLayout {
 /// 一台远端主机的布局探测结果:$HOME + NapCat 安装布局
 /// 本机(host_id="local")这两项都没意义,用默认值(home=None / Rootless)
 #[derive(Debug, Clone)]
-pub struct RemoteHostProbe {
+pub(crate) struct RemoteHostProbe {
     pub home: Option<String>,
     pub layout: RemoteLayout,
 }
@@ -999,7 +1005,11 @@ impl RemoteHostProbe {
 /// 同一台远端在一次 UI 会话里 home / layout 是稳定的,5 个组件并发 detect 时
 /// 没必要各探一遍缓存命中直接返回;未命中走单次合并探测,结果写缓存安装 /
 /// 卸载动作结束后由 run_component_action 清掉对应条目(布局可能变)
-async fn cached_host_probe(host_id: &str, host: &dyn Host, state: &AppState) -> RemoteHostProbe {
+pub(crate) async fn cached_host_probe(
+    host_id: &str,
+    host: &dyn Host,
+    state: &AppState,
+) -> RemoteHostProbe {
     if !host_id.starts_with("remote:") {
         return RemoteHostProbe::local_default();
     }
@@ -1183,6 +1193,28 @@ fn build_component_for_host(
             Arc::new(NodeJsComponent::new("22.12.0", install_dir))
         }
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
+        ComponentId::NcdWatch => {
+            // 优先本机 cargo 产物上传;没有则按远端 arch 拼 watch-v* Release URL
+            // (Windows 开发机上的 .exe 不能装到 Linux,仍会走 download_url)
+            let mut comp = NcdWatchComponent::new(remote_home.map(|s| s.to_string()));
+            if let Some(bin) = discover_local_ncd_watch_binary() {
+                let is_windows_bin = bin
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("exe"));
+                if host.os() == Os::Linux && is_windows_bin {
+                    // 跳过本机 Windows 产物,改用 musl release
+                } else {
+                    comp = comp.with_local_binary(bin);
+                }
+            }
+            if comp.local_binary.is_none() {
+                if let Some(url) = ncd_watch_release_download_url(host.arch()) {
+                    comp = comp.with_download_url(url);
+                }
+            }
+            Arc::new(comp)
+        }
         ComponentId::DesktopSelf => {
             Arc::new(DesktopSelfComponent::from_env().unwrap_or_else(|_| {
                 DesktopSelfComponent::new(
@@ -1497,7 +1529,7 @@ mod tests {
     }
 
     #[test]
-    fn catalog_returns_six_items_in_expected_order() {
+    fn catalog_returns_items_in_expected_order() {
         let list = catalog();
         let ids: Vec<ComponentId> = list.iter().map(|info| info.id).collect();
         assert_eq!(
@@ -1508,6 +1540,7 @@ mod tests {
                 ComponentId::NodeJs,
                 ComponentId::Qq,
                 ComponentId::NoVnc,
+                ComponentId::NcdWatch,
                 ComponentId::DesktopSelf,
             ]
         );
@@ -1559,7 +1592,11 @@ mod tests {
 
     #[test]
     fn component_runtime_prerequisites_only_apply_to_install_like_actions() {
-        for kind in [StepKind::Verify, StepKind::Uninstall, StepKind::EnsureDependencies] {
+        for kind in [
+            StepKind::Verify,
+            StepKind::Uninstall,
+            StepKind::EnsureDependencies,
+        ] {
             assert!(
                 component_runtime_prerequisites(
                     ComponentId::SnowLuma,
