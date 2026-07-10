@@ -222,12 +222,25 @@ pub async fn preview_config_import(source_path: String) -> Result<ConfigImportPr
 }
 
 /// 校验并归一化 app config(config.json)非对象 / 不像应用配置直接拒,绝不覆盖
-/// 生产配置;通过则走 migrate_app_config 归一化到当前版本
-fn normalize_app_config_import(value: serde_json::Value) -> Result<serde_json::Value, String> {
+/// 生产配置;通过则走 migrate_app_config 归一化到当前版本。
+/// 同时返回可选的 app-settings 种子(旧 WebHook/Email 字段)。
+fn normalize_app_config_import(
+    value: serde_json::Value,
+) -> Result<(serde_json::Value, Option<serde_json::Value>), String> {
     if !ncd_runtime::app_config_migration::looks_like_app_config(&value) {
         return Err("config.json 不像应用配置(非对象或缺少已知配置段),已中止导入".to_string());
     }
-    Ok(ncd_runtime::app_config_migration::migrate_app_config(value).payload)
+    let seed = ncd_runtime::app_config_migration::app_settings_from_legacy_config(&value);
+    let app_settings_payload = if seed.has_any() {
+        Some(
+            serde_json::to_value(&seed.settings)
+                .map_err(|e| format!("序列化 app-settings 失败: {e}"))?,
+        )
+    } else {
+        None
+    };
+    let payload = ncd_runtime::app_config_migration::migrate_app_config(value).payload;
+    Ok((payload, app_settings_payload))
 }
 
 /// 校验并归一化 bot config(bot.json):迁移 → 反序列化 Vec<BotConfig> → 逐个
@@ -280,6 +293,7 @@ fn build_import_transaction(
     let mut txn = ncd_traits::JsonTransaction::new();
     let mut files = Vec::new();
     let mut skipped = Vec::new();
+    let mut pending_app_settings: Option<serde_json::Value> = None;
 
     for (rel, zip_name, label) in TRANSFER_FILES {
         let src = staging.join(zip_name);
@@ -292,13 +306,29 @@ fn build_import_transaction(
             .map_err(|e| format!("{label} 不是合法 JSON,已中止导入: {e}"))?;
 
         let normalized = match *zip_name {
-            "config.json" => normalize_app_config_import(value)?,
+            "config.json" => {
+                let (payload, seed) = normalize_app_config_import(value)?;
+                pending_app_settings = seed;
+                payload
+            }
             "bot.json" => normalize_bot_config_import(value, secrets)?,
             "servers.json" => normalize_servers_import(value)?,
             other => return Err(format!("未知导入文件: {other}")),
         };
         txn = txn.write(data_root.join(rel), normalized);
         files.push((*label).to_string());
+    }
+
+    // 旧版 config.json 含 WebHook/Email 时,仅在目标 app-settings.json 不存在时种子写入
+    if let Some(settings_payload) = pending_app_settings {
+        let app_settings_path = data_root
+            .join("runtime")
+            .join("config")
+            .join(ncd_runtime::app_config_migration::APP_SETTINGS_FILE);
+        if !app_settings_path.is_file() {
+            txn = txn.write(app_settings_path, settings_payload);
+            files.push("离线通知设置(app-settings)".to_string());
+        }
     }
 
     if files.is_empty() {

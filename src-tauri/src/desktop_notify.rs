@@ -84,6 +84,7 @@ impl OfflineNotifier for TauriOfflineNotifier {
                 ("Bot 离线", format!("{bot_id} 已离线，已尝试自动重启"))
             }
             OfflineNoticeKind::Manual => ("Bot 离线", format!("{bot_id} 已离线，请打开主界面处理")),
+            OfflineNoticeKind::Recovered => ("Bot 已恢复", format!("{bot_id} 已重新上线")),
         };
         self.show(headline, &body);
     }

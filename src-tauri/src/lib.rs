@@ -21,8 +21,10 @@ pub mod desktop_log_format;
 pub mod desktop_notify;
 pub mod lightweight;
 pub mod lightweight_scheduler;
+pub mod onebot_endpoint_resolver;
 pub mod runtime;
 pub mod single_instance;
+pub mod snowluma_offline_listener;
 pub mod tray_icon;
 pub mod tray_menu;
 pub mod tray_summary;
@@ -52,8 +54,10 @@ pub struct AppState {
     pub(crate) host_probe_cache: Arc<Mutex<HashMap<String, commands::components::RemoteHostProbe>>>,
     pub(crate) desktop_notify: Arc<RwLock<DesktopNotifySettings>>,
     pub(crate) app_settings: Arc<RwLock<ncd_domain::AppSettings>>,
+    /// 离线告警 fan-out(桌面 Toast / Webhook / Email / OneBot)
+    pub(crate) offline_notifier: Arc<ncd_runtime::CompositeOfflineNotifier>,
     pub(crate) lightweight_scheduler: Arc<lightweight_scheduler::LightweightScheduler>,
-    /// 远程主机健康探活 walker 的取消令牌(P1 主动探活)
+    /// 远程主机健康探活 walker 的取消令牌
     /// 由启动 wiring 和 set_app_settings 根据 enabled 变化来条件 spawn / cancel + restart
     pub(crate) health_probe_cancel: Arc<Mutex<Option<CancellationToken>>>,
 }
@@ -113,10 +117,7 @@ pub fn run() {
             "bot-manager-local",
             ncd_domain::kinds::BotFlavor::NapCat,
         ));
-    // NapCat WebUI 登录轮询所需依赖(design.md §15.1)
-    // - ReqwestNapCatWebUiClient 走 rustls-tls,仅访问 127.0.0.1
-    // - NoopOfflineNotifier 是占位实现,真实通道由后续 Spec 接入
-    // - WebUiPollerSettings 默认轮询 5s + 关闭离线通知,调用方可热更新
+    // NapCat WebUI 登录轮询依赖:WebUI client + 离线告警 fan-out(桌面 Toast / Webhook / Email)
     let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> = Arc::new(
         ReqwestNapCatWebUiClient::new()
             .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
@@ -133,10 +134,27 @@ pub fn run() {
     let poller_settings = Arc::new(RwLock::new(app_settings.poller.clone()));
     let desktop_notify = Arc::new(RwLock::new(app_settings.desktop_notify_flags()));
     let tauri_notifier = desktop_notify::TauriOfflineNotifier::new(Arc::clone(&desktop_notify));
-    let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> = tauri_notifier.clone();
+    let webhook_settings = Arc::new(RwLock::new(app_settings.offline_webhook.clone()));
+    let email_settings = Arc::new(RwLock::new(app_settings.offline_email.clone()));
+    let onebot_settings = Arc::new(RwLock::new(app_settings.offline_onebot.clone()));
+    let onebot_resolver = ncd_runtime::SwappableOneBotEndpointResolver::new(Arc::new(
+        ncd_runtime::NoopOneBotEndpointResolver,
+    ));
+    let offline_notifier = ncd_runtime::CompositeOfflineNotifier::new(
+        Some(ncd_runtime::DesktopToastSink::new(
+            tauri_notifier.clone() as Arc<dyn ncd_runtime::OfflineNotifier>,
+            Arc::clone(&desktop_notify),
+        )),
+        Arc::clone(&poller_settings),
+        Arc::clone(&webhook_settings),
+        Arc::clone(&email_settings),
+        Arc::clone(&onebot_settings),
+        onebot_resolver.clone() as Arc<dyn ncd_runtime::OneBotEndpointResolver>,
+    );
+    let offline_notifier_trait: Arc<dyn ncd_runtime::OfflineNotifier> = offline_notifier.clone();
     // ServerManager 提前构造,既给下面 AppState 用,也给 HostResolver 用(让
     // BotManager 能按 runtime_target 把 bot 启到本机 / 远端)
-    // P0-10: 注入 event_bus,用于发布 HostConnectionLost / Recovered
+    // 注入 event_bus,用于发布 HostConnectionLost / Recovered
     let mut server_mgr =
         ncd_runtime::ServerManager::new(&data_root, Arc::new(ncd_runtime::KeyringCredentialStore));
     server_mgr.set_event_bus(Arc::new(event_bus.clone()));
@@ -155,7 +173,7 @@ pub fn run() {
             launch_planner,
             Arc::new(event_bus.clone()),
             webui_client,
-            offline_notifier,
+            offline_notifier_trait,
             poller_settings,
             Arc::clone(&desktop_notify),
         )
@@ -192,11 +210,16 @@ pub fn run() {
             .expect("bot_manager Arc not yet shared")
             .with_snowluma(snowluma_backend, Arc::clone(&snowluma_daemon)),
     );
+    // BotManager 就绪后再挂 OneBot messenger 解析
+    tauri::async_runtime::block_on(onebot_resolver.set(Arc::new(
+        onebot_endpoint_resolver::BotManagerOneBotEndpointResolver::new(Arc::clone(&bot_manager)),
+    )));
 
     let bot_manager_bootstrap = Arc::clone(&bot_manager);
     let bot_manager_listener = Arc::clone(&bot_manager);
     let bot_manager_login_listener = Arc::clone(&bot_manager);
     let bot_manager_snowluma_listener = Arc::clone(&bot_manager);
+    let bot_manager_offline_listener = Arc::clone(&bot_manager);
 
     let mut builder = tauri::Builder::default();
     #[cfg(desktop)]
@@ -222,6 +245,7 @@ pub fn run() {
             host_probe_cache: Arc::new(Mutex::new(HashMap::new())),
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings_shared),
+            offline_notifier: Arc::clone(&offline_notifier),
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(Mutex::new(None)),
         })
@@ -242,6 +266,11 @@ pub fn run() {
                 app.handle().clone(),
                 event_bus.clone(),
                 Arc::clone(&desktop_notify),
+            );
+            snowluma_offline_listener::spawn_snowluma_offline_listener(
+                event_bus.clone(),
+                Arc::clone(&offline_notifier),
+                bot_manager_offline_listener,
             );
             let handle = app.handle().clone();
             let mut subscription = event_bus.subscribe(EventFilter::all());
@@ -420,6 +449,12 @@ pub fn run() {
             commands::app_settings::get_app_settings,
             commands::app_settings::set_app_settings,
             commands::app_settings::sync_close_action_preference,
+            commands::app_settings::test_offline_webhook,
+            commands::app_settings::test_offline_email,
+            commands::app_settings::list_offline_delivery_history,
+            commands::app_settings::clear_offline_delivery_history,
+            commands::app_settings::list_onebot_messenger_candidates,
+            commands::app_settings::ensure_onebot_messenger_http,
             commands::system_metrics::get_system_resource_snapshot,
             commands::config_transfer::export_config,
             commands::config_transfer::import_config,

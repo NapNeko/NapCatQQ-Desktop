@@ -354,6 +354,20 @@ mod tests {
             ncd_domain::DesktopNotifySettings::default(),
         ));
         let app_settings = Arc::new(tokio::sync::RwLock::new(ncd_domain::AppSettings::default()));
+        let composite_offline = ncd_runtime::CompositeOfflineNotifier::new(
+            None,
+            Arc::clone(&poller_settings),
+            Arc::new(tokio::sync::RwLock::new(
+                ncd_domain::OfflineWebhookSettings::default(),
+            )),
+            Arc::new(tokio::sync::RwLock::new(
+                ncd_domain::OfflineEmailSettings::default(),
+            )),
+            Arc::new(tokio::sync::RwLock::new(
+                ncd_domain::OfflineOneBotSettings::default(),
+            )),
+            Arc::new(ncd_runtime::NoopOneBotEndpointResolver),
+        );
         let lightweight_scheduler = Arc::new(
             crate::lightweight_scheduler::LightweightScheduler::new(Arc::clone(&app_settings)),
         );
@@ -384,6 +398,7 @@ mod tests {
             host_probe_cache: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings),
+            offline_notifier: composite_offline,
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(tokio::sync::Mutex::new(None)),
         };
