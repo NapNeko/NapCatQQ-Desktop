@@ -12,7 +12,8 @@ ncd-deploy = { path = "../ncd-deploy" }
 ncd-host = { path = "../ncd-host" }
 ncd-network = { path = "../ncd-network" }
 ncd-log = { path = "../ncd-log" }
-ncd-watch = { path = "../ncd-watch" }
+# 只取 watch.json / notify.json / present 类型,不链探活 daemon(避免 MSI 带上 reqwest 探活栈)
+ncd-watch = { path = "../ncd-watch", default-features = false }
 ncd-backend-snowluma = { path = "../ncd-backend-snowluma" }
 ncd-backend-napcat = { path = "../ncd-backend-napcat" }
 async-trait = "0.1"

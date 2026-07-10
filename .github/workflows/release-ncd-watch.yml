@@ -102,6 +102,7 @@ jobs:
           tool: cross
 
       - name: Build ncd-watch (musl)
+        # 默认 feature 含 daemon;Desktop 侧用 default-features=false 只链 schema
         run: cross build -p ncd-watch --release --target ${{ matrix.target }}
 
       - name: Package asset

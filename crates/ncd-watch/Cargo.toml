@@ -5,9 +5,29 @@ edition.workspace = true
 rust-version.workspace = true
 description = "Remote host-side process/container watcher and offline webhook (Desktop-independent)"
 
+# Desktop / ncd-runtime 只依赖 schema(default-features=false),不把探活/Webhook/CLI 链进 MSI。
+# 远端二进制与 CI 用默认 feature「daemon」打完整包。
+[features]
+default = ["daemon"]
+daemon = [
+    "dep:reqwest",
+    "dep:clap",
+    "dep:tracing",
+    "dep:tracing-subscriber",
+    "tokio/rt-multi-thread",
+    "tokio/macros",
+    "tokio/time",
+    "tokio/fs",
+    "tokio/signal",
+    "tokio/process",
+    "tokio/io-util",
+    "tokio/sync",
+]
+
 [[bin]]
 name = "ncd-watch"
 path = "src/main.rs"
+required-features = ["daemon"]
 
 [lib]
 name = "ncd_watch"
@@ -18,12 +38,15 @@ ncd-domain = { path = "../ncd-domain" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "fs", "signal", "process", "io-util"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# DesktopPresentFile::now 与 webhook 时间戳共用;schema 路径也需要
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-clap = { version = "4", features = ["derive", "env"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# daemon 模块用;schema-only 时不启用任何 feature,避免空依赖拖运行时
+tokio = { version = "1", default-features = false, optional = true }
+
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
+clap = { version = "4", features = ["derive", "env"], optional = true }
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"
