@@ -24,11 +24,11 @@ pub use config::{
 };
 
 #[cfg(feature = "daemon")]
-pub use edge::{EdgeAction, EdgeTracker};
+pub use edge::{EdgeAction, EdgeTracker, OfflineEdgeKind};
 #[cfg(feature = "daemon")]
 pub use present::desktop_is_present;
 #[cfg(feature = "daemon")]
-pub use probe::{ProbeKind, ProbeResult, ProbeStatus, Prober};
+pub use probe::{LoginStatus, ProbeKind, ProbeResult, ProbeStatus, Prober};
 #[cfg(feature = "daemon")]
 pub use run::{RunOnceOutcome, run_loop, run_once};
 #[cfg(feature = "daemon")]
