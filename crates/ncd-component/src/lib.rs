@@ -1,6 +1,6 @@
 //! ncd-component:NapCatQQ-Desktop 的"组件"抽象
 //!
-//! 把"装什么"(NapCat / SnowLuma / QQ / Node / noVNC / Desktop 自身)
+//! 把"装什么"(NapCat / SnowLuma / QQ / Node / noVNC / Desktop 自身 / ncd-watch)
 //! 抽成统一的 [Component] trait,与 [ncd_host::Host] trait 正交
 //!
 //! 与 ncd-host(WHERE,提供 Host trait),ncd-deploy(VERB,负责把
@@ -17,27 +17,32 @@ pub mod context;
 pub mod desktop_self;
 pub mod download;
 pub mod error;
+pub mod napcat;
+pub mod ncd_watch;
+pub mod nodejs;
+pub mod novnc;
 pub mod pkg_install_stream;
 pub mod qq;
 pub mod qq_deps;
 pub mod remote_qq_entry;
-pub mod napcat;
-pub mod nodejs;
-pub mod novnc;
 pub mod snowluma;
 pub mod traits;
 pub mod types;
 
 pub use context::{ActionCtx, ProgressEvent, ProgressKind, ProgressLogLevel};
-pub use remote_qq_entry::{QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, set_remote_qq_package_main};
 pub use desktop_self::DesktopSelfComponent;
 pub use download::DownloadHelper;
 pub use error::ActionError;
-pub use pkg_install_stream::run_pkg_command_with_progress;
-pub use qq::QQComponent;
 pub use napcat::NapCatComponent;
+pub use ncd_watch::{
+    NcdWatchComponent, discover_local_ncd_watch_binary, ncd_watch_musl_target,
+    ncd_watch_release_download_url,
+};
 pub use nodejs::NodeJsComponent;
 pub use novnc::NoVncComponent;
+pub use pkg_install_stream::run_pkg_command_with_progress;
+pub use qq::QQComponent;
+pub use remote_qq_entry::{QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, set_remote_qq_package_main};
 pub use snowluma::SnowLumaComponent;
 pub use traits::{Action, Component};
 pub use types::{

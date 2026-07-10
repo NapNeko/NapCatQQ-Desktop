@@ -12,6 +12,7 @@ use ts_rs::TS;
 /// - NodeJs → nodejs
 /// - NoVnc → novnc
 /// - DesktopSelf → desktop_self
+/// - NcdWatch → ncd_watch
 ///
 /// 与项目内 napcat_* / snowluma_* 事件名风格保持一致;不直接走 serde
 /// 的 rename_all = "snake_case",因为它会把 NapCat 切成 nap_cat,
@@ -31,6 +32,8 @@ pub enum ComponentId {
     NoVnc,
     #[serde(rename = "desktop_self")]
     DesktopSelf,
+    #[serde(rename = "ncd_watch")]
+    NcdWatch,
 }
 
 impl ComponentId {
@@ -42,6 +45,7 @@ impl ComponentId {
             Self::NodeJs => "nodejs",
             Self::NoVnc => "novnc",
             Self::DesktopSelf => "desktop_self",
+            Self::NcdWatch => "ncd_watch",
         }
     }
 }
@@ -79,7 +83,12 @@ impl VerifyReport {
         }
     }
 
-    pub fn with_check(mut self, name: impl Into<String>, passed: bool, detail: Option<String>) -> Self {
+    pub fn with_check(
+        mut self,
+        name: impl Into<String>,
+        passed: bool,
+        detail: Option<String>,
+    ) -> Self {
         self.checks.push(VerifyCheck {
             name: name.into(),
             passed,
@@ -123,7 +132,7 @@ impl LaunchArgs {
 /// 组件分类
 ///
 /// - Framework:用户主动选择安装的 Bot 框架(NapCat / SnowLuma)
-/// - RuntimeDep:Framework 依赖的运行时(QQ / NodeJs / NoVnc)
+/// - RuntimeDep:Framework 依赖的运行时(QQ / NodeJs / NoVnc / NcdWatch)
 /// - SelfApp:Desktop 自身(仅本地,自更新走 ncd-update)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -226,6 +235,7 @@ mod tests {
             ComponentId::NodeJs,
             ComponentId::NoVnc,
             ComponentId::DesktopSelf,
+            ComponentId::NcdWatch,
         ] {
             let s = serde_json::to_string(&id).unwrap();
             let expected = format!("\"{}\"", id.as_str());
@@ -244,9 +254,11 @@ mod tests {
 
     #[test]
     fn verify_report_failed_check_flips_ok() {
-        let r = VerifyReport::ok()
-            .with_check("a", true, None)
-            .with_check("b", false, Some("missing".into()));
+        let r = VerifyReport::ok().with_check("a", true, None).with_check(
+            "b",
+            false,
+            Some("missing".into()),
+        );
         assert!(!r.ok);
         assert_eq!(r.checks.len(), 2);
     }
