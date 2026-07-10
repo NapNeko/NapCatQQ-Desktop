@@ -61,7 +61,7 @@ function SettingsSectionHeader({
     title,
     description,
 }: {
-    title: string;
+    title: ReactNode;
     description?: ReactNode;
 }) {
     return (
@@ -91,7 +91,7 @@ export function SettingsSection({
     children,
     layout = 'fields',
 }: {
-    title: string;
+    title: ReactNode;
     description?: ReactNode;
     children: ReactNode;
     /** fields：左引导线 + FieldRow 分隔；panel：全宽内容区（日志/大面板，勿套竖线）。 */

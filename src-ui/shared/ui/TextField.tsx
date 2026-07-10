@@ -1,11 +1,7 @@
-// 文本输入字段。第二轮:聚焦时给 input 加一次 ring pop 反馈,失焦回静。
-//
-// CSS focus 状态本身已经是 ring + border 切换,新增 GSAP 在 focus 瞬间做一次
-// scale 1.0 → popPeak → 1.0 的轻 pulse(rich/standard 档),给"光标进来了"一个
-// 视觉确认。elegant 档不动。
-//
-// 错误态(invalid=true)出现时如果是新出现的错误,触发 m.shake 一次,提示用户
-// 有问题。靠 prevError ref 判断"刚出现"还是"持续中",避免每次 render 都 shake。
+// 文本输入字段。
+// CSS focus 用 inset ring + border，不在 focus 时做 scale pop：
+// 缩放会撑出滚动条/裁切父容器，表单密集区尤其明显。
+// 错误首次出现时 shake 一次提示。
 
 import {
     forwardRef,
@@ -68,19 +64,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
         useImperativeHandle(ref, () => inputRef.current!, []);
         const prevErrorRef = useRef<ReactNode>(undefined);
 
-        // 聚焦反馈:focus 时给 input 一次轻 pop。
-        useEffect(() => {
-            const el = inputRef.current;
-            if (!el) return;
-            const onFocus = () => {
-                if (!m.enabled) return;
-                m.pop(el, { peak: 1 + (m.preset.feel.popPeak - 1) * 0.3, ease: 'enterMicro' });
-            };
-            el.addEventListener('focus', onFocus);
-            return () => el.removeEventListener('focus', onFocus);
-        }, [m.enabled, m.level, m.speed, m.pop]);
-
-        // 错误首次出现时 shake。
+        // 错误首次出现时 shake。不在 focus 做 scale pop，避免撑出滚动条/裁切父级。
         useEffect(() => {
             const el = inputRef.current;
             if (!el) return;

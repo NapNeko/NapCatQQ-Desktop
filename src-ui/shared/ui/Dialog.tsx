@@ -285,7 +285,11 @@ const OverlayBody = forwardRef<HTMLDivElement, { className?: string }>(
 OverlayBody.displayName = 'OverlayBody';
 
 function contentHeightCap(size: DialogSize): number {
-    if (size === 'sheet') return Math.floor(window.innerHeight * 0.85);
+    // sheet / sheetWide 外层 portal 有 p-6，ContentBody 自己也有 p-6。
+    // clip 高度只能吃「视口 - 两层上下 padding」，否则会顶出外层 overflow-y-auto。
+    if (size === 'sheet' || size === 'sheetWide') {
+        return Math.max(240, Math.floor(window.innerHeight - 96));
+    }
     if (size === 'taskQueue') return Math.floor(window.innerHeight * 0.96);
     return Math.floor(window.innerHeight - 48);
 }
@@ -322,6 +326,23 @@ function useDialogContentHeight(
             clip.style.height = '';
             clip.style.flex = '1 1 0%';
             clip.style.minHeight = '0';
+            inner.style.overflowY = 'hidden';
+            inner.style.maxHeight = 'none';
+            inner.style.height = '100%';
+            inner.style.minHeight = '0';
+            inner.style.flex = '1 1 0%';
+            primedRef.current = true;
+            return;
+        }
+
+        // sheet / sheetWide: 高度封顶后交给子级 flex 分区滚动，避免整页把 header/footer 一起卷走。
+        if (size === 'sheet' || size === 'sheetWide') {
+            tweenRef.current?.kill();
+            const raw = Math.max(inner.scrollHeight, 1);
+            const target = Math.min(raw, cap);
+            clip.style.flex = '1 1 0%';
+            clip.style.minHeight = '0';
+            clip.style.height = `${target}px`;
             inner.style.overflowY = 'hidden';
             inner.style.maxHeight = 'none';
             inner.style.height = '100%';
@@ -444,7 +465,8 @@ const ContentBody = forwardRef<
             className={cn(
                 'pointer-events-auto relative w-full',
                 'rounded-md bg-elevated p-6 shadow-popover',
-                size === 'sheet' && 'flex max-h-[85dvh] flex-col',
+                size === 'sheet' && 'flex max-h-[calc(100dvh-3rem)] flex-col',
+                size === 'sheetWide' && 'flex max-h-[calc(100dvh-3rem)] flex-col',
                 size === 'taskQueue' && 'flex h-[min(92dvh,900px)] min-h-[min(52dvh,480px)] max-h-[min(92dvh,900px)] flex-col p-0',
                 'transition-[max-width] duration-300 ease-out',
                 className,
@@ -455,12 +477,14 @@ const ContentBody = forwardRef<
                 className={cn(
                     'overflow-x-clip overflow-y-hidden',
                     size === 'sheet' && 'min-h-0 flex-1',
+                    size === 'sheetWide' && 'min-h-0 flex-1',
                     size === 'taskQueue' && 'min-h-0 flex-1',
                 )}
             >
                 <div ref={setInnerRef} className={cn(
                     'px-1',
-                    size === 'sheet' && 'flex min-h-0 flex-1 flex-col',
+                    size === 'sheet' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
+                    size === 'sheetWide' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
                     size === 'taskQueue' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
                 )}>
                     {children}

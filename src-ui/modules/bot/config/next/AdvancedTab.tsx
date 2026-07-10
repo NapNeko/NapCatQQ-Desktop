@@ -94,14 +94,16 @@ export function AdvancedTab({
                     checked={data.autoStart}
                     onCheckedChange={(v) => onChange({ autoStart: v })}
                 />
-                {!isSnowLuma && (
-                    <Switch
-                        label="掉线时下发桌面通知"
-                        hint="仅 NapCat 登录轮询检测到离线时弹 Toast；与设置里「异常退出 / 被踢下线」无关"
-                        checked={data.offlineNotice}
-                        onCheckedChange={(v) => onChange({ offlineNotice: v })}
-                    />
-                )}
+                <Switch
+                    label="掉线时发送通知"
+                    hint={
+                        isSnowLuma
+                            ? 'SnowLuma 登录态从已登录变为断开时触发；需同时打开设置里对应通道（桌面 Toast / Webhook / 邮件 / OneBot）。改完后无需重启 daemon，下一轮状态变化即生效。'
+                            : 'NapCat 登录轮询检测到在线→离线边沿时触发；需同时打开设置里对应通道。改完后请重启该 Bot，让 LoginPoller 重新加载开关。'
+                    }
+                    checked={data.offlineNotice}
+                    onCheckedChange={(v) => onChange({ offlineNotice: v })}
+                />
             </FormSection>
 
             {isSnowLuma && (

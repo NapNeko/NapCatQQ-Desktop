@@ -81,8 +81,9 @@ function SelectInner<V extends string>(
                     className={cn(
                         'inline-flex w-full items-center justify-between gap-2 rounded-sm bg-field px-3 py-2',
                         'text-sm text-text border outline-none transition-colors',
-                        'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
-                        'data-[state=open]:ring-2 data-[state=open]:ring-brand data-[state=open]:ring-offset-2 data-[state=open]:ring-offset-canvas',
+                        // inset ring：避免 offset 被 overflow 父级裁切
+                        'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset',
+                        'data-[state=open]:ring-2 data-[state=open]:ring-brand data-[state=open]:ring-inset',
                         'focus:outline-none',
                         'data-[placeholder]:text-text-tertiary',
                         'disabled:cursor-not-allowed disabled:bg-inset disabled:text-text-disabled',
