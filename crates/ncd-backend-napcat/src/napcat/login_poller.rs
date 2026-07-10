@@ -540,8 +540,14 @@ async fn apply_observed_online_status(
     deps.event_bus
         .publish(DomainEvent::napcat_login_online(bot_id.clone(), online));
 
-    // 步骤 2:在线 → 重置离线相关 flag
+    // 步骤 2:在线 → 可选 recovered 通知后重置离线相关 flag
     if online {
+        // 本离线区间曾发过离线通知再上线 → recovered(投递层再按设置开关门控)
+        if !prev_online && state.offline_notice_sent {
+            deps.notifier
+                .notify(bot_id, OfflineNoticeKind::Recovered)
+                .await;
+        }
         state.offline_notice_sent = false;
         state.login_invalidated_while_online = false;
         state.suppress_qrcode_until_online = false;

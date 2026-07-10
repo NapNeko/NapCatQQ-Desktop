@@ -3,7 +3,9 @@ use std::path::Path;
 use serde_json::Value;
 use tracing::{info, warn};
 
-use crate::app_config_migration::migrate_app_config;
+use crate::app_config_migration::{
+    APP_SETTINGS_FILE, app_settings_from_legacy_config, migrate_app_config,
+};
 use crate::bot_config_migration::migrate_bot_config;
 use crate::server_profile_migration::{
     migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
@@ -14,6 +16,7 @@ use crate::legacy_discovery::{LegacyDiscovery, LegacySelection};
 use ncd_domain::migration::MigrationReport;
 use ncd_domain::migration::{MigrationSource, MigrationWarning};
 use ncd_traits::{ConfigStore, JsonTransaction, PathProbe, SecretStore};
+
 
 pub struct MigrationOrchestrator<'a> {
     store: &'a dyn ConfigStore,
@@ -58,8 +61,8 @@ impl<'a> MigrationOrchestrator<'a> {
 
     pub fn run(&self) -> Result<MigrationReport, MigrationError> {
         if self.store.load_schema_version()? == ncd_domain::kinds::SchemaVersion::CURRENT {
-            info!(target: "ncd_runtime::migration", "schema current, skip migration");
-            return Ok(MigrationReport::clean());
+            // schema 已当前时,仍可能缺 app-settings.json(旧升级只迁了 config.json)
+            return self.seed_app_settings_from_existing_config_if_needed();
         }
 
         info!(target: "ncd_runtime::migration", "legacy migration run starting");
@@ -70,6 +73,54 @@ impl<'a> MigrationOrchestrator<'a> {
         };
 
         self.migrate_selection(selection)
+    }
+
+    /// schema 已是当前版本时:若 app-settings.json 尚不存在,从本机 config.json 抽离线通知字段
+    fn seed_app_settings_from_existing_config_if_needed(
+        &self,
+    ) -> Result<MigrationReport, MigrationError> {
+        let app_settings_path = self.store.config_dir().join(APP_SETTINGS_FILE);
+        if app_settings_path.is_file() {
+            info!(target: "ncd_runtime::migration", "schema current, skip migration");
+            return Ok(MigrationReport::clean());
+        }
+
+        let config_path = self.store.config_dir().join("config.json");
+        let Ok(raw) = self.store.read_json(&config_path) else {
+            info!(target: "ncd_runtime::migration", "schema current, skip migration");
+            return Ok(MigrationReport::clean());
+        };
+        if !crate::app_config_migration::looks_like_app_config(&raw) {
+            info!(target: "ncd_runtime::migration", "schema current, skip migration");
+            return Ok(MigrationReport::clean());
+        }
+
+        let seed = app_settings_from_legacy_config(&raw);
+        if !seed.has_any() {
+            info!(target: "ncd_runtime::migration", "schema current, skip migration");
+            return Ok(MigrationReport::clean());
+        }
+
+        let payload = serde_json::to_value(&seed.settings)
+            .map_err(|error| MigrationError::InvalidPayload(error.to_string()))?;
+        let mut rules = vec!["seed app-settings.json from local config.json".to_string()];
+        rules.extend(
+            seed.rules_applied
+                .into_iter()
+                .map(|r| format!("app-settings seed: {r}")),
+        );
+        let tx = JsonTransaction::new().write(app_settings_path, payload);
+        let tx_report = self.store.apply_transaction(tx)?;
+        let mut report = MigrationReport::migrated(rules);
+        if let Some(backup) = tx_report.backup {
+            report = report.with_backup(backup);
+        }
+        info!(
+            target: "ncd_runtime::migration",
+            rules = report.rules_applied.len(),
+            "seeded app-settings from existing config.json"
+        );
+        Ok(report)
     }
 
     fn initialize_empty_config(&self) -> Result<MigrationReport, MigrationError> {
@@ -100,9 +151,23 @@ impl<'a> MigrationOrchestrator<'a> {
             let raw = self.read_source_json(app_path)?;
             if crate::app_config_migration::looks_like_app_config(&raw) {
                 app_config_for_legacy_server = Some(raw.clone());
-                let app = migrate_app_config(raw);
+                let app = migrate_app_config(raw.clone());
                 rules.extend(app.rules_applied);
                 tx = tx.write(self.store.config_dir().join("config.json"), app.payload);
+
+                // 旧 QConfig 的 WebHook/Email/Event 写入 app-settings.json(仅文件不存在时)
+                let seed = app_settings_from_legacy_config(&raw);
+                let app_settings_path = self.store.config_dir().join(APP_SETTINGS_FILE);
+                if seed.has_any() && !app_settings_path.is_file() {
+                    let payload = serde_json::to_value(&seed.settings)
+                        .map_err(|error| MigrationError::InvalidPayload(error.to_string()))?;
+                    rules.extend(
+                        seed.rules_applied
+                            .into_iter()
+                            .map(|r| format!("app-settings seed: {r}")),
+                    );
+                    tx = tx.write(app_settings_path, payload);
+                }
             } else {
                 // 误选的无关 / 非对象 config.json:跳过不写,留 warning绝不强转空对象
                 // 写 Info.ConfigVersion 当"成功迁移",否则垃圾文件会污染生产配置根

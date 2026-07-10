@@ -18,7 +18,10 @@ pub enum OfflineNoticeKind {
     AutoRestart,
     /// bot.offline_auto_restart=false 路径:通知用户「检测到离线,请手动处理」
     Manual,
+    /// 掉线后重新上线
+    Recovered,
 }
+
 
 /// 离线通知抽象
 ///

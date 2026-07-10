@@ -18,6 +18,7 @@ pub mod legacy_discovery;
 pub mod migration;
 pub mod napcat;
 pub mod native_deployment_adapter;
+pub mod notify;
 pub mod package_lock;
 pub mod path_probe_impl;
 pub mod release;
@@ -79,6 +80,12 @@ pub use napcat::webui_client::{NapCatWebUiClient, NapCatWebUiError, ReqwestNapCa
 pub use native_deployment_adapter::{
     DockerDeploymentBackend, EventBusSink, NativeDeploymentBackend, RemoteNativeDeploymentBackend,
     RuntimeLaunchPlannerAdapter,
+};
+pub use notify::{
+    CompositeOfflineNotifier, DesktopToastSink, LocalHttpServerCandidate, MessengerResolveSkip,
+    NoopOneBotEndpointResolver, OneBotEndpointResolver, OneBotMessenger,
+    SwappableOneBotEndpointResolver, resolve_local_onebot_messenger, send_offline_email,
+    send_offline_webhook, send_test_email, send_test_webhook,
 };
 pub use path_probe_impl::LocalPathProbe;
 pub use remote_bot_log_follow::RemoteBotLogFollowRegistry;

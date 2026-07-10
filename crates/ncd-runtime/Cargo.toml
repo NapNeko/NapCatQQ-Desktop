@@ -56,6 +56,12 @@ scrypt = "0.11"
 base64 = "0.22"
 netstat2 = "0.9"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+lettre = { version = "0.11", default-features = false, features = [
+    "smtp-transport",
+    "builder",
+    "hostname",
+    "rustls-tls",
+] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

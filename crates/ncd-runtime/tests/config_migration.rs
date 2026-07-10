@@ -473,3 +473,76 @@ fn bootstrap_persists_failure_report_to_writable_store() {
     let saved = std::fs::read_to_string(&report_path).unwrap();
     assert!(saved.contains("migration_failed"));
 }
+
+#[test]
+fn orchestrator_seeds_app_settings_from_legacy_webhook_email() {
+    let legacy_root = TempWorkspace::new().unwrap();
+    let target_root = TempWorkspace::new().unwrap();
+    let legacy_config = legacy_root.path().join("runtime/config");
+    std::fs::create_dir_all(&legacy_config).unwrap();
+    std::fs::write(
+        legacy_config.join("config.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "Info": {"main_window": true},
+            "Event": {
+                "BotOfflineWebHookNotice": true,
+                "BotOfflineEmailNotice": false
+            },
+            "WebHook": {
+                "WebHookUrl": "https://hook.example/legacy",
+                "WebHookSecret": "sec",
+                "WebHookJson": "{\"title\":\"{bot_name}\"}",
+                "WebHookMethod": "POST"
+            },
+            "Email": {
+                "EmailSender": "from@example.com",
+                "EmailReceiver": "to@example.com",
+                "EmailToken": "tok",
+                "EmailStmpServer": "smtp.example.com",
+                "EmailStmpPort": 465,
+                "EmailEncryption": "SSL"
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        legacy_config.join("bot.json"),
+        serde_json::to_vec(&serde_json::json!([
+            {
+                "bot": {"QQID": "10001", "name": "Bot"},
+                "connect": {},
+                "advanced": {}
+            }
+        ]))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let store = LocalConfigStore::new(target_root.path());
+    let probe = StaticPathProbe {
+        roots: vec![legacy_root.path().to_path_buf()],
+    };
+    let secrets = MockSecretStore::new();
+    let snapshot = MigrationOrchestrator::new(&store, &probe, &secrets).bootstrap();
+    assert_eq!(snapshot.report.outcome, ncd_runtime::MigrationOutcome::Updated);
+
+    let settings_path = store.config_dir().join("app-settings.json");
+    assert!(settings_path.is_file(), "应写出 app-settings.json");
+    let settings: Value = store.read_json(&settings_path).unwrap();
+    assert_eq!(settings["poller"]["botOfflineWebHookNotice"], true);
+    assert_eq!(settings["poller"]["botOfflineEmailNotice"], false);
+    assert_eq!(settings["WebHook"]["WebHookUrl"], "https://hook.example/legacy");
+    assert_eq!(settings["Email"]["EmailSender"], "from@example.com");
+    assert_eq!(settings["Email"]["EmailStmpServer"], "smtp.example.com");
+
+    // 再次 bootstrap 不覆盖已有 app-settings
+    let mut existing = settings.clone();
+    existing["WebHook"]["WebHookUrl"] = Value::String("https://keep-user".into());
+    store
+        .write_json_atomic(&settings_path, &existing)
+        .unwrap();
+    let _again = MigrationOrchestrator::new(&store, &probe, &secrets).bootstrap();
+    let after = store.read_json(&settings_path).unwrap();
+    assert_eq!(after["WebHook"]["WebHookUrl"], "https://keep-user");
+}
