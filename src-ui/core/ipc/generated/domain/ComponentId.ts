@@ -10,9 +10,10 @@
  * - NodeJs → nodejs
  * - NoVnc → novnc
  * - DesktopSelf → desktop_self
+ * - NcdWatch → ncd_watch
  *
  * 与项目内 napcat_* / snowluma_* 事件名风格保持一致;不直接走 serde
  * 的 rename_all = "snake_case",因为它会把 NapCat 切成 nap_cat,
  * Qq 切成 qq 也算巧合,但 NapCat 不行,所以统一都用显式 rename
  */
-export type ComponentId = "napcat" | "snowluma" | "qq" | "nodejs" | "novnc" | "desktop_self";
+export type ComponentId = "napcat" | "snowluma" | "qq" | "nodejs" | "novnc" | "desktop_self" | "ncd_watch";
