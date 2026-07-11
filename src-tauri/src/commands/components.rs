@@ -87,6 +87,7 @@ pub async fn run_component_action(
     task_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    ensure_host_idle_for_component_mutation(&host_id, kind, &state).await?;
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
     let probe = cached_host_probe(&host_id, host.as_ref(), &state).await;
     let task_id = task_id
@@ -103,6 +104,31 @@ pub async fn run_component_action(
         &state,
     )
     .await
+}
+
+/// 更新 / 卸载会动宿主树或框架目录;对应机器上仍有 Bot 在跑时直接拒绝
+async fn ensure_host_idle_for_component_mutation(
+    host_id: &str,
+    kind: StepKind,
+    state: &AppState,
+) -> Result<(), String> {
+    let action = match kind {
+        StepKind::Update => "更新",
+        StepKind::Uninstall => "卸载",
+        // install / ensure_deps / detect 等不动运行中 Bot 的宿主树
+        _ => return Ok(()),
+    };
+    let active = state
+        .bot_manager
+        .count_active_bots_on_component_host(host_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    if active == 0 {
+        return Ok(());
+    }
+    Err(format!(
+        "该机器上仍有 {active} 个 Bot 处于启动中/运行中/停止中，请先全部停止后再{action}组件"
+    ))
 }
 
 async fn submit_component_action_with_prerequisites(
