@@ -97,12 +97,8 @@ pub async fn run_once(
             }
         }
 
-        let actions = edges.observe_layers_prefer(
-            &bot.bot_id,
-            result.status,
-            result.login,
-            prefer_account,
-        );
+        let actions =
+            edges.observe_layers_prefer(&bot.bot_id, result.status, result.login, prefer_account);
         for action in actions {
             match action {
                 EdgeAction::None => {}
@@ -158,55 +154,79 @@ async fn deliver_channels(
     alert: &ncd_domain::OfflineAlert,
     out: &mut RunOnceOutcome,
 ) {
-    let mut any = false;
-    if notify.webhook_enabled {
+    // webhook / email / onebot 并行:SMTP 慢不能拖死 webhook
+    let webhook_fut = async {
+        if !notify.webhook_enabled {
+            return Ok::<Option<()>, String>(None);
+        }
         if channels.is_empty() {
             tracing::debug!(bot_id = %alert.bot_id, "webhook enabled but no channels");
-        } else {
-            match send_watch_webhooks(channels, alert).await {
-                Ok(()) => {
-                    any = true;
-                }
-                Err(e) => {
-                    out.webhook_errors
-                        .push(format!("{}: {e}", alert.bot_id.as_str()));
-                    tracing::warn!(bot_id = %alert.bot_id, %e, "webhook failed");
-                }
-            }
+            return Ok(None);
         }
-    }
-    if notify.email_enabled {
+        send_watch_webhooks(channels, alert)
+            .await
+            .map(Some)
+            .map_err(|e| e)
+    };
+    let email_fut = async {
+        if !notify.email_enabled {
+            return Ok::<Option<()>, String>(None);
+        }
         let email = notify.email.clone();
         let alert_c = alert.clone();
         match tokio::task::spawn_blocking(move || send_watch_email(&email, &alert_c)).await {
-            Ok(Ok(())) => any = true,
-            Ok(Err(e)) => {
-                out.email_errors
-                    .push(format!("{}: {e}", alert.bot_id.as_str()));
-                tracing::warn!(bot_id = %alert.bot_id, %e, "email failed");
-            }
-            Err(e) => {
-                out.email_errors
-                    .push(format!("{}: join {e}", alert.bot_id.as_str()));
-                tracing::warn!(bot_id = %alert.bot_id, %e, "email task join failed");
-            }
+            Ok(Ok(())) => Ok(Some(())),
+            Ok(Err(e)) => Err(e),
+            Err(e) => Err(format!("join {e}")),
         }
-    }
-    if notify.onebot.enabled {
-        match send_watch_onebot(
+    };
+    let onebot_fut = async {
+        if !notify.onebot.enabled {
+            return Ok::<Option<()>, String>(None);
+        }
+        send_watch_onebot(
             &notify.onebot,
             alert.bot_id.as_str(),
             Some(process_online),
             alert,
         )
         .await
-        {
-            Ok(()) => any = true,
-            Err(e) => {
-                out.onebot_errors
-                    .push(format!("{}: {e}", alert.bot_id.as_str()));
-                tracing::warn!(bot_id = %alert.bot_id, %e, "onebot failed");
-            }
+        .map(Some)
+    };
+
+    let (wh, em, ob) = tokio::join!(webhook_fut, email_fut, onebot_fut);
+    let mut any = false;
+    match wh {
+        Ok(Some(())) => {
+            any = true;
+            tracing::info!(bot_id = %alert.bot_id, "webhook delivered");
+        }
+        Ok(None) => {}
+        Err(e) => {
+            out.webhook_errors
+                .push(format!("{}: {e}", alert.bot_id.as_str()));
+            tracing::warn!(bot_id = %alert.bot_id, %e, "webhook failed");
+        }
+    }
+    match em {
+        Ok(Some(())) => {
+            any = true;
+            tracing::info!(bot_id = %alert.bot_id, "email delivered");
+        }
+        Ok(None) => {}
+        Err(e) => {
+            out.email_errors
+                .push(format!("{}: {e}", alert.bot_id.as_str()));
+            tracing::warn!(bot_id = %alert.bot_id, %e, "email failed");
+        }
+    }
+    match ob {
+        Ok(Some(())) => any = true,
+        Ok(None) => {}
+        Err(e) => {
+            out.onebot_errors
+                .push(format!("{}: {e}", alert.bot_id.as_str()));
+            tracing::warn!(bot_id = %alert.bot_id, %e, "onebot failed");
         }
     }
     if any && alert.is_offline_edge() {
