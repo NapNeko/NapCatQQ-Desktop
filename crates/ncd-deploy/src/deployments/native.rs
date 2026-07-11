@@ -29,7 +29,7 @@ use std::sync::{
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use ncd_domain::{BotConfig, BotFlavor, BotId, StopMode};
+use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, StopMode};
 use ncd_host::{Host, HostCommand, HostError, HostPath, HostProcess, Os};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
@@ -255,7 +255,7 @@ fn decode_log_line(raw: &[u8]) -> String {
             String::from_utf8_lossy(raw).into_owned()
         }
     };
-    strip_ansi_escapes(&decoded)
+    crate::sanitize_napcat_console_line(&decoded)
 }
 
 /// 移除字符串中的 ANSI 转义序列(CSI,OSC,单字符 ESC 命令)
@@ -316,7 +316,7 @@ pub fn strip_ansi_escapes(input: &str) -> String {
 /// 从一行 NapCat stdout 解析出 WebUI 登录入口的 (port, token)
 /// 远端 nohup 日志可能带 ANSI,或仅含 /webui?token= 片段(对齐 legacy launcher grep)
 pub fn parse_napcat_webui_line(line: &str) -> Option<(u16, String)> {
-    let cleaned = strip_ansi_escapes(line);
+    let cleaned = crate::sanitize_napcat_console_line(line);
     if let Some(p) = parse_napcat_webui_line_strict(&cleaned) {
         return Some(p);
     }
@@ -367,6 +367,8 @@ struct LogReaderCtx {
     logs: Arc<Mutex<HashMap<BotId, RuntimeLogBuffer>>>,
     log_path: Option<PathBuf>,
     event_sink: Arc<dyn NativeRuntimeEventSink>,
+    /// 仅 NapCat 走 NC 噪声 filter；SnowLuma 只做 decode/sanitize
+    apply_napcat_noise_filter: bool,
 }
 
 /// 异步读取子进程的 stdout 或 stderr,按行解码后写内存缓冲,磁盘日志,
@@ -375,6 +377,7 @@ fn spawn_log_reader(stream: Box<dyn tokio::io::AsyncRead + Send + Unpin>, ctx: L
     tokio::spawn(async move {
         let mut reader = BufReader::new(stream);
         let mut buf: Vec<u8> = Vec::with_capacity(1024);
+        let mut noise = crate::NapcatLogNoiseFilter::new();
         loop {
             buf.clear();
             match reader.read_until(b'\n', &mut buf).await {
@@ -389,10 +392,19 @@ fn spawn_log_reader(stream: Box<dyn tokio::io::AsyncRead + Send + Unpin>, ctx: L
             if buf.is_empty() {
                 continue;
             }
-            let line = decode_log_line(&buf);
-            if line.is_empty() {
+            // decode 已含 L1 sanitize；NC 再 L2，SL 原样发布清洗后文本
+            let decoded = decode_log_line(&buf);
+            if decoded.is_empty() {
                 continue;
             }
+            let line = if ctx.apply_napcat_noise_filter {
+                match noise.process_sanitized_line(decoded) {
+                    Some(l) => l,
+                    None => continue,
+                }
+            } else {
+                decoded
+            };
 
             {
                 let mut guard = ctx.logs.lock().await;
@@ -421,9 +433,11 @@ fn spawn_log_reader(stream: Box<dyn tokio::io::AsyncRead + Send + Unpin>, ctx: L
             ctx.event_sink
                 .publish_log_line(&ctx.bot_id, &line, ctx.channel);
 
-            if let Some((port, token)) = parse_napcat_webui_line(&line) {
-                ctx.event_sink
-                    .publish_napcat_webui_available(&ctx.bot_id, port, token);
+            if ctx.apply_napcat_noise_filter {
+                if let Some((port, token)) = parse_napcat_webui_line(&line) {
+                    ctx.event_sink
+                        .publish_napcat_webui_available(&ctx.bot_id, port, token);
+                }
             }
         }
     });
@@ -614,6 +628,7 @@ impl Deployment for NativeDeployment {
                     logs: Arc::clone(&self.logs),
                     log_path: self.log_path_for(&bot_id),
                     event_sink: Arc::clone(&self.event_sink),
+                    apply_napcat_noise_filter: config.bot.backend_type == BackendType::NapCat,
                 },
             );
         }
@@ -626,6 +641,7 @@ impl Deployment for NativeDeployment {
                     logs: Arc::clone(&self.logs),
                     log_path: self.log_path_for(&bot_id),
                     event_sink: Arc::clone(&self.event_sink),
+                    apply_napcat_noise_filter: config.bot.backend_type == BackendType::NapCat,
                 },
             );
         }

@@ -15,6 +15,8 @@ pub mod deployment;
 pub mod deployments;
 pub mod docker;
 pub mod error;
+pub mod napcat_log_sanitize;
+pub mod qq_console_noise;
 pub mod plan;
 pub mod remote_coordinator;
 pub mod result;
@@ -31,5 +33,10 @@ pub use deployments::{
 };
 pub use docker::{DockerCli, DockerCliError, DockerInstallOutcome, install_docker, render_compose};
 pub use error::DeployError;
+pub use napcat_log_sanitize::{
+    NapcatLogNoiseAction, NapcatLogNoiseFilter, filter_napcat_console_lines,
+    sanitize_napcat_console_line,
+};
 pub use plan::{DeployBuilder, DeployPlan, DeployStep, StepKind};
+pub use qq_console_noise::{QqConsoleNoiseFilter, is_qq_console_noise_line};
 pub use result::{DeployOutcome, StepOutcome, StepStatus};
