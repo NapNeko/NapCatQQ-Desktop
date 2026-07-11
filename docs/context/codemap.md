@@ -66,6 +66,7 @@ flowchart TB
 | 关注点 | 主路径 |
 |--------|--------|
 | 数据根解析 | `src-tauri/src/bootstrap.rs`（`resolve_data_root`） |
+| 产品路径注册表 | `src-tauri/src/product_registry.rs` + `src-tauri/wix/v2-orphan-cleanup.wxs` + `src-tauri/wix/main.wxs`（HKCU 扁平 `Software\NapCatQQ Desktop`） |
 | 启动快照 | `src-tauri/src/bootstrap.rs` + `ncd-domain` `bootstrap.rs` |
 | App 组装 / AppState | `src-tauri/src/lib.rs` |
 | 运行时句柄 | `src-tauri/src/runtime.rs` |
@@ -75,7 +76,8 @@ flowchart TB
 | domain 模型 | `src-ui/core/domain/bootstrap/` |
 | 配置迁移 / 旧目录发现 | `crates/ncd-runtime/src/migration.rs`, `legacy_discovery.rs`, `app_config_migration.rs`, `path_probe_impl.rs` |
 
-权威数据根：`%ProgramData%\NapCatQQ Desktop`（兼容候选 `NapCatQQ-Desktop`）。业务模块禁止硬编码 ProgramData/LocalAppData。
+权威数据根默认：`%ProgramData%\NapCatQQ Desktop`。Windows 生产以 `HKLM\SOFTWARE\NapCatQQ-Desktop\DataRoot` 为准（MSI 写入；启动缺键补写；后续可迁移改指针）；`NCD_DATA_ROOT` 环境变量可覆盖。业务模块禁止硬编码 ProgramData/LocalAppData。
+
 
 ---
 
