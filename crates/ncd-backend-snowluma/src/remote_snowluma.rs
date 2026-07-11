@@ -234,19 +234,27 @@ pub fn is_remote_native_snowluma_config(config: &BotConfig) -> bool {
 }
 
 /// 远端是否已有匹配 qq_id 的 qq 进程(热启动 attach / bootstrap reconcile 用)
+///
+/// 对齐远端 NapCat:先精确 `qq --no-sandbox -q <qq>$`,再回退 `qq.*-q <qq>$`,
+/// 避免 cmdline 细微差异导致 reconcile 漏恢复、UI 假 Stopped。
 pub async fn remote_qq_running_pid(
     host: &dyn Host,
     qq_id: u64,
 ) -> Result<Option<u32>, BotBackendError> {
-    let script = format!(r#"pgrep -f "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1"#);
+    let script = format!(
+        r#"pid="$(pgrep -f -- "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1)"
+if [ -z "$pid" ]; then
+  pid="$(pgrep -f -- "qq.*-q {qq_id}$" 2>/dev/null | head -n 1)"
+fi
+echo "$pid"
+"#
+    );
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
     let out = host
         .run_to_string(cmd)
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
-    if !out.success() {
-        return Ok(None);
-    }
+    // pgrep 无匹配时常 exit 1;stdout 空视为未运行
     let line = out.stdout.lines().next().unwrap_or("").trim();
     if line.is_empty() {
         return Ok(None);
