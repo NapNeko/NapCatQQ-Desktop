@@ -219,7 +219,7 @@ export function NcdWatchRemoteSection({
     return (
         <SettingsSection
             title="远端脱管监控（NCD Watch）"
-            description="装在各 Linux 远端上的轻量监控。Desktop 在线时只探活、不重复推送；关闭 Desktop 后仍会按本页已启用并同步的 Webhook、Email、同机 OneBot 告警（OneBot 需同机另有存活发信 Bot）。多机各自安装与同步；Webhook 地址在远端解析，指向本机 127.0.0.1 的测服地址在远端不可达。"
+            description="Desktop 关闭后，远端仍按已同步的 Webhook / Email / 同机 OneBot 告警；在线时只探活不重复推送。多机各自安装与同步。"
         >
             <FieldRow
                 label="远端主机"
