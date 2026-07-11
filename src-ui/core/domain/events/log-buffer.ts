@@ -94,6 +94,58 @@ function normalizeLevel(raw: string): LogLevel {
     }
 }
 
+
+// NapCat 控制台: `07-11 17:06:19 [info] nick | msg`（sanitize 后）
+// 捕获组: 月日 / 时分秒 / 正文
+const NAPCAT_TS_PREFIX =
+    /^(\d{1,2}-\d{1,2})\s+(\d{1,2}:\d{2}:\d{2})\s+(.*)$/;
+
+// SnowLuma daemon: 22:21:24 INFO               [App] ...（无月日）
+const SNOWLUMA_TS_PREFIX =
+    /^(\d{1,2}:\d{2}:\d{2})\s+(INFO|WARN|WARNING|ERROR|DEBUG|TRACE|OK|FATAL)?\s*(.*)$/i;
+
+// 行首等级标签；UI 已有 INF/ERR 列，正文里再显示会重复
+const LEADING_LEVEL_TAG =
+    /^\[(?:trace|debug|info|warn|warning|error|fatal|success)\]\s*/i;
+
+/** 列表时间列只放 HH:mm:ss；整段 `MM-DD HH:mm:ss` 塞 20px 行会折成只剩日期 */
+function normalizeClock(ts: string): string {
+    const m = ts.match(/(\d{1,2}):(\d{2}):(\d{2})/);
+    if (!m) return ts;
+    return `${m[1].padStart(2, '0')}:${m[2]}:${m[3]}`;
+}
+
+/** 去掉正文行首 `[info]` 等；level 仍由 parseLogLevel(整行) 负责 */
+export function stripLeadingLevelTag(body: string): string {
+    return body.replace(LEADING_LEVEL_TAG, '').trimStart();
+}
+
+/** 拆 NC 时间前缀；无匹配时 ts 用 fallback，body 为整行（仍可能带 [level]） */
+export function splitLogTimestamp(
+    line: string,
+    fallbackTs: string,
+): { timestamp: string; body: string } {
+    const m = line.match(NAPCAT_TS_PREFIX);
+    if (m) {
+        return {
+            timestamp: normalizeClock(m[2]),
+            body: stripLeadingLevelTag(m[3]),
+        };
+    }
+    const sl = line.match(SNOWLUMA_TS_PREFIX);
+    if (sl) {
+        const body = (sl[3] ?? '').trimStart();
+        return {
+            timestamp: normalizeClock(sl[1]),
+            body: stripLeadingLevelTag(body || line),
+        };
+    }
+    return {
+        timestamp: normalizeClock(fallbackTs),
+        body: stripLeadingLevelTag(line),
+    };
+}
+
 // 桌面会话 preview 四段：`时间 | [INFO] | [ CORE ] bot_manager | 说明`
 const DESKTOP_PREVIEW_LEVEL = /\|\s*\[(EROR|WARN|INFO|DBUG|TRCE|CRIT)\]\s*\|/i;
 
@@ -196,34 +248,36 @@ export function buildHistoryEntries(
     for (let idx = 0; idx < lines.length; idx++) {
         const raw = lines[idx];
         if (!raw || !raw.trim()) continue;
+        const { timestamp, body } = splitLogTimestamp(raw, now);
         out.push({
             id: `hist-${idx}-${counter++}`,
-            text: raw,
+            text: body,
             channel: 'unknown' as const,
             level: parseLogLevel(raw),
-            timestamp: now,
+            timestamp,
         });
     }
     return out;
 }
 
 export function appendLine(
-    prev: LogEntry[],
+    logs: LogEntry[],
     line: string,
-    channel: LogChannel,
+    channel: LogChannel = 'stdout',
+    now = new Date().toLocaleTimeString(),
 ): LogEntry[] {
-    if (!line || !line.trim()) return prev;
+    if (!line || !line.trim()) return logs;
+    const { timestamp, body } = splitLogTimestamp(line, now);
     const entry: LogEntry = {
         id: nextId(),
-        text: line,
+        text: body,
         channel,
         level: parseLogLevel(line),
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp,
     };
-    const next = [...prev, entry];
-    if (next.length > MAX_LINES) {
-        return next.slice(next.length - MAX_LINES);
-    }
+    const next =
+        logs.length >= MAX_LINES ? logs.slice(logs.length - MAX_LINES + 1) : logs.slice();
+    next.push(entry);
     return next;
 }
 

@@ -362,7 +362,7 @@ function LogLine({ entry }: { entry: LogEntry }) {
                 className="h-[12px] w-[3px] shrink-0"
                 style={{ background: levelBarColor(entry.level) }}
             />
-            <span className="w-[58px] shrink-0 select-none text-[11px] tabular-nums text-text-tertiary">
+            <span className="w-[58px] shrink-0 select-none whitespace-nowrap text-[11px] tabular-nums text-text-tertiary">
                 {entry.timestamp}
             </span>
             <span
@@ -376,10 +376,30 @@ function LogLine({ entry }: { entry: LogEntry }) {
                 style={{ color: lineTextColor(entry.level) }}
                 title={entry.text}
             >
-                {entry.text || '\u00A0'}
+                <HighlightedLogBody text={entry.text} level={entry.level} />
             </span>
         </div>
     );
+}
+
+/** 正文已无 [info]；仅对 `nick | msg` 做轻量分色 */
+function HighlightedLogBody({ text, level }: { text: string; level: LogEntry['level'] }) {
+    if (!text) return '\u00A0';
+
+    const pipeIdx = text.indexOf(' | ');
+    if (pipeIdx >= 0) {
+        const nick = text.slice(0, pipeIdx);
+        const msg = text.slice(pipeIdx + 3);
+        return (
+            <>
+                <span className="text-text-tertiary">{nick}</span>
+                <span className="text-text-tertiary"> | </span>
+                <span style={{ color: lineTextColor(level) }}>{msg}</span>
+            </>
+        );
+    }
+
+    return <>{text}</>;
 }
 
 function EmptyState({
