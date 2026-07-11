@@ -20,6 +20,7 @@ pub mod download_progress;
 pub mod host_key;
 pub mod linux;
 pub mod tunnel;
+pub mod url_download;
 pub mod windows_stub;
 
 pub use connection::ConnectionConfig;
@@ -28,4 +29,7 @@ pub use download_progress::{CurlProgressParser, DownloadProgress, WgetProgressPa
 pub use host_key::{HostKeyCheck, HostKeyPolicy, KnownHostsStore};
 pub use linux::{probe_sudo, RemoteLinuxHost, SudoAccess};
 pub use tunnel::{TunnelHandle, TunnelSpec};
+pub use url_download::{
+    curl_url_download_command, wget_url_download_command, REMOTE_URL_DOWNLOAD_TIMEOUT,
+};
 pub use windows_stub::RemoteWindowsHost;

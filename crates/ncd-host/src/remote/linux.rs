@@ -1004,7 +1004,6 @@ impl Host for RemoteLinuxHost {
     }
 
     async fn download_url(&self, url: &str, dest: &HostPath) -> Result<(), HostError> {
-        // 检测 wget 或 curl
         let has_wget = self.command_exists("wget").await;
         let has_curl = !has_wget && self.command_exists("curl").await;
 
@@ -1015,33 +1014,25 @@ impl Host for RemoteLinuxHost {
         }
 
         let dest_str = self.to_remote(dest);
-
-        // 构建下载命令
-        let cmd = if has_wget {
-            HostCommand::new("wget")
-                .arg("--progress=dot:mega")
-                .arg("-O")
-                .arg(&dest_str)
-                .arg(url)
+        let (program, cmd) = if has_wget {
+            (
+                "wget",
+                super::url_download::wget_url_download_command(url, &dest_str),
+            )
         } else {
-            HostCommand::new("curl")
-                .arg("--progress-bar")
-                .arg("-fL") // -f: fail on HTTP errors, -L: follow redirects
-                .arg("-o")
-                .arg(&dest_str)
-                .arg(url)
+            (
+                "curl",
+                super::url_download::curl_url_download_command(url, &dest_str),
+            )
         };
 
-        // 执行下载(暂不解析进度,先实现基础功能)
+        // 无进度回调场景用 run_to_string 即可；带 UI 进度由上层自行
+        // run_streaming + 同款命令构造函数解析输出
         let out = self.run_to_string(cmd).await?;
 
         if !out.success() {
             return Err(HostError::CommandFailed {
-                program: if has_wget {
-                    "wget".into()
-                } else {
-                    "curl".into()
-                },
+                program: program.into(),
                 exit_code: out.exit_code,
                 stderr: out.stderr.lines().take(5).collect::<Vec<_>>().join("\n"),
             });
