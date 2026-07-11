@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ncd_deploy::parse_napcat_webui_line;
 use ncd_domain::BotConfig;
 use ncd_domain::bot_config::is_remote_native_napcat_config;
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
@@ -27,7 +26,7 @@ use tracing::warn;
 use crate::remote_native_launch::{
     RemoteNapcatLayout, napcat_remote_log_path, probe_remote_napcat_layout,
 };
-use ncd_deploy::{EventBusSink, NativeRuntimeEventSink};
+use ncd_deploy::{EventBusSink, NapcatLogNoiseFilter, NativeRuntimeEventSink, parse_napcat_webui_line};
 use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::ids::BotId;
 use ncd_traits::events::{BroadcastEventBus, EventBus};
@@ -268,6 +267,7 @@ impl RemoteNativeNapcatSessionRegistry {
             let mut last_size: usize = initial_size;
             let mut poll_i: u32 = 0;
             let mut health_fails: u32 = 0;
+            let mut noise = NapcatLogNoiseFilter::new();
             loop {
                 tokio::time::sleep(Duration::from_secs(LOG_TAIL_POLL_SECS)).await;
                 poll_i = poll_i.wrapping_add(1);
@@ -280,6 +280,7 @@ impl RemoteNativeNapcatSessionRegistry {
                     last_published = None;
                     known_webui = None;
                     health_fails = 0;
+                    noise = NapcatLogNoiseFilter::new();
                 }
 
                 if bytes.len() > last_size {
@@ -288,10 +289,15 @@ impl RemoteNativeNapcatSessionRegistry {
                     let text = String::from_utf8_lossy(slice);
                     let mut latest = None;
                     for line in text.lines() {
-                        sink.publish_log_line(&bot_log, line, "stdout");
+                        // process_line: L1+L2；WebUI 解析用 Keep 行或对 Drop 行仍可 parse 半成品
+                        // 先 parse 原文清洗结果，避免 L2 Drop 掉带 WebUI 的异常行（实际 WebUI 不会 Drop）
                         if let Some(pair) = parse_napcat_webui_line(line) {
                             latest = Some(pair);
                         }
+                        let Some(cleaned) = noise.process_line(line) else {
+                            continue;
+                        };
+                        sink.publish_log_line(&bot_log, &cleaned, "stdout");
                     }
                     if let Some(pair) = latest {
                         known_webui = Some(pair);

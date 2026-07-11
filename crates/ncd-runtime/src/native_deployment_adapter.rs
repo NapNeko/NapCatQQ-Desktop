@@ -22,7 +22,7 @@ use ncd_domain::bot_status::BotStatus;
 use ncd_domain::ids::BotId;
 use ncd_domain::kinds::{BackendKind, StopMode};
 use ncd_domain::{BackendType, BotConfig, BotFlavor};
-use ncd_host::{Host, HostError, HostPath};
+use ncd_host::{Host, HostCommand, HostError, HostPath};
 use serde_json::{Map, Value, json};
 
 use crate::backend_config_renderer::{
@@ -410,43 +410,46 @@ impl BotBackend for RemoteNativeDeploymentBackend {
             .map_err(|_| BotBackendError::InvalidConfig(format!("invalid bot id: {bot_id}")))?;
         let install_base = self.napcat_install_base().await?;
         let log_path = napcat_remote_log_path(&install_base, qq_id);
-        let path = HostPath::from_posix(&log_path);
-
-        // 读日志文件走刷新包装:失败(含 transport 类)时刷新 host 后重试一次
-        let bytes = self
+        // 禁止 SFTP 整文件；crash dump 会把 napcat_*.log 撑到极大
+        let want = if opts.lines > 0 { opts.lines } else { 1000 };
+        let raw_n = want.saturating_mul(5).max(800).min(20_000);
+        let raw = match self
             .with_host_refresh(|h| {
-                let p = path.clone();
-                async move {
-                    match h.read_file(&p).await {
-                        Ok(b) => Ok(b),
-                        Err(HostError::PathNotFound { .. }) => {
-                            Err(HostError::PathNotFound { path: p })
-                        }
-                        Err(e) => Err(e),
-                    }
-                }
+                let p = log_path.clone();
+                async move { remote_tail_log_raw_lines(h.as_ref(), &p, raw_n).await }
             })
-            .await;
-
-        let bytes = match bytes {
-            Ok(b) => b,
-            Err(BotBackendError::Io(msg)) if msg.contains("PathNotFound") => {
-                return Ok(LogSnapshot {
-                    lines: Vec::new(),
-                    total_lines: 0,
-                });
-            }
-            Err(e) => return Err(e),
+            .await
+        {
+            Ok(v) => v,
+            Err(_) => Vec::new(),
         };
-
-        let text = String::from_utf8_lossy(&bytes);
-        let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+        let mut lines = ncd_deploy::filter_napcat_console_lines(raw);
         let total_lines = lines.len();
-        if opts.lines > 0 && lines.len() > opts.lines {
-            lines = lines.split_off(lines.len() - opts.lines);
+        if lines.len() > want {
+            lines = lines.split_off(lines.len() - want);
         }
         Ok(LogSnapshot { lines, total_lines })
     }
+}
+
+/// 远端日志尾部：SSH `tail -n`，禁止 SFTP 整文件（crash dump 可至百 MB）。
+async fn remote_tail_log_raw_lines(
+    host: &dyn Host,
+    path: &str,
+    max_raw_lines: usize,
+) -> Result<Vec<String>, BotBackendError> {
+    if max_raw_lines == 0 {
+        return Ok(Vec::new());
+    }
+    let quoted = path.replace('\'', "'\"'\"'");
+    let cmd = HostCommand::new("sh").arg("-c").arg(format!(
+        "if [ -f '{quoted}' ]; then tail -n {max_raw_lines} -- '{quoted}'; else exit 0; fi"
+    ));
+    let out = host
+        .run_to_string(cmd)
+        .await
+        .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    Ok(out.stdout.lines().map(|s| s.to_string()).collect())
 }
 
 use ncd_domain::RuntimeTarget;
@@ -863,7 +866,12 @@ impl BotBackend for DockerDeploymentBackend {
             .logs(&name, opts.lines as u32)
             .await
             .map_err(|err| BotBackendError::Io(err.to_string()))?;
-        let lines: Vec<String> = logs.lines().map(|l| l.to_string()).collect();
+        let lines: Vec<String> = match self.flavor {
+            BotFlavor::NapCat => ncd_deploy::filter_napcat_console_lines(logs.lines()),
+            BotFlavor::SnowLuma => {
+                ncd_backend_snowluma::filter_snowluma_console_lines(logs.lines())
+            }
+        };
         let total = lines.len();
         Ok(LogSnapshot {
             lines,

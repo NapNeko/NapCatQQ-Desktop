@@ -11,7 +11,7 @@ use ncd_backend_snowluma::{
 };
 use ncd_deploy::docker::DockerCli;
 use ncd_deploy::{Deployment, NativeRuntimeEventSink};
-use ncd_deploy::{DockerDeployment, resolve_bot_container_name};
+use ncd_deploy::{DockerDeployment, NapcatLogNoiseFilter, resolve_bot_container_name};
 use ncd_domain::{BackendType, BotConfig, DeploymentType};
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostError, StreamSource};
@@ -205,15 +205,29 @@ impl DockerBotSessionRegistry {
         let host_log = Arc::clone(&host);
         let bot_log = bot_id.clone();
         let sink_log = Arc::clone(&sink);
+        let is_napcat = config.bot.backend_type == BackendType::NapCat;
         let log_task = tokio::spawn(async move {
             let cli = DockerCli::new(host_log.as_ref());
+            // logs_follow callback 串行调用；poison 时 recover 后继续滤，避免脏行放行
+            let noise = std::sync::Mutex::new(NapcatLogNoiseFilter::new());
             let _ = cli
                 .logs_follow(&container, move |source, line| {
                     let ch = match source {
                         StreamSource::Stdout => "stdout",
                         StreamSource::Stderr => "stderr",
                     };
-                    sink_log.publish_log_line(&bot_log, &line, ch);
+                    if is_napcat {
+                        let mut guard = noise
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        let Some(cleaned) = guard.process_line(&line) else {
+                            return;
+                        };
+                        drop(guard);
+                        sink_log.publish_log_line(&bot_log, &cleaned, ch);
+                    } else {
+                        sink_log.publish_log_line(&bot_log, &line, ch);
+                    }
                 })
                 .await;
         });
