@@ -279,20 +279,31 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
 }
 
 /// 停止远端 NapCat QQ 进程(pgrep + SIGTERM/SIGKILL,对齐 legacy launcher stop 语义)
+///
+/// 匹配策略(从严到宽,始终要求命令行里出现 `qq` + `-q <qq_id>` 结尾):
+/// 1. 精确: `qq --no-sandbox -q <qq>`
+/// 2. 回退: `qq` 与 `-q <qq>` 同 cmdline(允许路径/参数顺序变化)
+/// 不用裸 `-q <qq>`,避免误杀其它工具。
 pub async fn stop_remote_napcat_on_host(
     host: &dyn Host,
     qq_id: u64,
 ) -> Result<(), BotBackendError> {
     let script = format!(
         r#"qq_id="{qq_id}"
-pids="$(pgrep -f "qq --no-sandbox -q ${{qq_id}}$" 2>/dev/null || true)"
+pids="$(pgrep -f -- "qq --no-sandbox -q ${{qq_id}}$" 2>/dev/null || true)"
+if [ -z "$pids" ]; then
+  pids="$(pgrep -f -- "qq.*-q ${{qq_id}}$" 2>/dev/null || true)"
+fi
 if [ -z "$pids" ]; then exit 0; fi
 echo "$pids" | while read -r pid; do
   [ -z "$pid" ] && continue
   kill "$pid" 2>/dev/null || true
 done
 sleep 1
-pids="$(pgrep -f "qq --no-sandbox -q ${{qq_id}}$" 2>/dev/null || true)"
+pids="$(pgrep -f -- "qq --no-sandbox -q ${{qq_id}}$" 2>/dev/null || true)"
+if [ -z "$pids" ]; then
+  pids="$(pgrep -f -- "qq.*-q ${{qq_id}}$" 2>/dev/null || true)"
+fi
 if [ -n "$pids" ]; then
   echo "$pids" | while read -r pid; do
     [ -z "$pid" ] && continue
@@ -317,9 +328,17 @@ fi
 }
 
 /// pgrep 探测远端 NapCat 是否在跑
-pub async fn remote_napcat_running_pid(host: &dyn Host, qq_id: u64) -> Result<Option<u32>, BotBackendError> {
+pub async fn remote_napcat_running_pid(
+    host: &dyn Host,
+    qq_id: u64,
+) -> Result<Option<u32>, BotBackendError> {
     let script = format!(
-        r#"pgrep -f "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1"#
+        r#"pid="$(pgrep -f -- "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1)"
+if [ -z "$pid" ]; then
+  pid="$(pgrep -f -- "qq.*-q {qq_id}$" 2>/dev/null | head -n 1)"
+fi
+if [ -n "$pid" ]; then echo "$pid"; fi
+"#
     );
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
     let out = host
@@ -327,7 +346,15 @@ pub async fn remote_napcat_running_pid(host: &dyn Host, qq_id: u64) -> Result<Op
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
     if !out.success() {
-        return Ok(None);
+        // pgrep 无匹配时常 exit 1;stdout 空视为未运行
+        if out.stdout.trim().is_empty() {
+            return Ok(None);
+        }
+        return Err(BotBackendError::Io(format!(
+            "远端 pgrep NapCat 失败: exit={:?} stderr={}",
+            out.exit_code,
+            out.stderr.trim()
+        )));
     }
     let line = out.stdout.lines().next().unwrap_or("").trim();
     if line.is_empty() {
