@@ -30,6 +30,8 @@ export interface ReleaseSnapshotView {
     napcat: ReleaseInfoView | null;
     snowluma: ReleaseInfoView | null;
     desktop: ReleaseInfoView | null;
+    /// 远端 ncd-watch 二进制（按机安装，不进本机 LocalVersionSnapshot）。
+    ncdWatch: ReleaseInfoView | null;
     /// `null` 表示从未成功拉过。
     fetchedAt: number | null;
 }
@@ -46,12 +48,19 @@ function toView(info: ReleaseInfo | null | undefined): ReleaseInfoView | null {
 
 export function normalizeReleaseSnapshot(snap: ReleaseSnapshot | null | undefined): ReleaseSnapshotView {
     if (!snap) {
-        return { napcat: null, snowluma: null, desktop: null, fetchedAt: null };
+        return {
+            napcat: null,
+            snowluma: null,
+            desktop: null,
+            ncdWatch: null,
+            fetchedAt: null,
+        };
     }
     return {
         napcat: toView(snap.napcat_latest),
         snowluma: toView(snap.snowluma_latest),
         desktop: toView(snap.desktop_latest),
+        ncdWatch: toView(snap.ncd_watch_latest),
         fetchedAt: snap.fetched_at !== null && snap.fetched_at !== undefined
             ? Number(snap.fetched_at)
             : null,
@@ -59,6 +68,19 @@ export function normalizeReleaseSnapshot(snap: ReleaseSnapshot | null | undefine
 }
 
 // ─── 版本比对 ────────────────────────────────────────────────────────────
+
+/// 组件/二进制版本归一：clap 常输出 `ncd-watch 0.2.0`，release 可能是
+/// `watch-v0.2.0` / `v0.2.0` / `0.2.0`。先取末段再剥前缀，便于 compareSemver。
+export function normalizeComponentVersion(version: string): string {
+    const trimmed = version.trim();
+    if (!trimmed) return '';
+    const token = trimmed.includes(' ')
+        ? (trimmed.split(/\s+/).pop() ?? trimmed)
+        : trimmed;
+    return token
+        .replace(/^watch-/i, '')
+        .replace(/^[vV]/, '');
+}
 
 /// 简化版本比对：拆 `1.2.3` / `1.2.3-rc1` 这类 SemVer 数字段后逐位比较。
 /// 拆不出数字段（比如 build metadata）直接走字典序兜底。
@@ -68,8 +90,10 @@ export function normalizeReleaseSnapshot(snap: ReleaseSnapshot | null | undefine
 ///   - < 0  local 比 remote 新（理论上不该发生，但用户改了 napcat.mjs 也可能）
 ///   - 0    一致 / 无法比较
 export function compareSemver(local: string, remote: string): number {
-    const localParts = parseNumericParts(local);
-    const remoteParts = parseNumericParts(remote);
+    const localNorm = normalizeComponentVersion(local);
+    const remoteNorm = normalizeComponentVersion(remote);
+    const localParts = parseNumericParts(localNorm);
+    const remoteParts = parseNumericParts(remoteNorm);
     const len = Math.max(localParts.length, remoteParts.length);
     for (let i = 0; i < len; i++) {
         const a = localParts[i] ?? 0;
@@ -77,8 +101,8 @@ export function compareSemver(local: string, remote: string): number {
         if (a !== b) return b - a;
     }
     // 数字段全相等：比 prerelease（有 prerelease 的版本算更老，遵循 SemVer 语义）
-    const localHasPre = local.includes('-');
-    const remoteHasPre = remote.includes('-');
+    const localHasPre = localNorm.includes('-');
+    const remoteHasPre = remoteNorm.includes('-');
     if (localHasPre && !remoteHasPre) return 1;
     if (!localHasPre && remoteHasPre) return -1;
     return 0;
@@ -111,6 +135,7 @@ export interface UpdateAvailableItem {
 /// 比对本地 + 远端，得出"哪些 project 有更新可用"。
 /// Desktop 当前版本暂不做派生（前端不知道自己哪个 build），只在 local
 /// 完全空时把 desktop release 当"提示当前发布版"显示，由 UI 决定是否提醒。
+/// ncd-watch 按远端主机安装，不进本机 LocalVersionSnapshot，由组件页/设置页按机比对。
 ///
 /// 规则：
 ///   - 远端 release info 缺失 → 该 project 不在结果列表

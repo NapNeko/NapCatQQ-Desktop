@@ -58,6 +58,9 @@ pub struct ReleaseSnapshot {
     pub snowluma_latest: Option<ReleaseInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub desktop_latest: Option<ReleaseInfo>,
+    /// ncd-watch 远端二进制(tag 形如 watch-v0.2.0);与 Desktop MSI 分流
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ncd_watch_latest: Option<ReleaseInfo>,
     /// 本快照拉取的时间戳 Unix epoch 秒, None 表示从未成功拉取
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fetched_at: Option<u64>,
@@ -101,6 +104,7 @@ mod tests {
             napcat_latest: Some(sample_release()),
             snowluma_latest: None,
             desktop_latest: None,
+            ncd_watch_latest: None,
             fetched_at: Some(1_700_000_500),
         };
         let serialized = serde_json::to_string(&value).expect("serialize populated");

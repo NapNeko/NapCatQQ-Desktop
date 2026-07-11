@@ -21,8 +21,8 @@ use std::time::Duration;
 
 use ncd_domain::release_snapshot::{ReleaseAsset, ReleaseInfo, ReleaseSnapshot};
 use ncd_network::{
-    is_proxy_configured, proxy_release_url, proxy_signer, retry_with_backoff, NetworkError,
-    ReleaseAlias, RetryPolicy, shared_client,
+    NetworkError, ReleaseAlias, RetryPolicy, is_proxy_configured, proxy_release_url, proxy_signer,
+    retry_with_backoff, shared_client,
 };
 use serde::Deserialize;
 use tracing::{info, warn};
@@ -34,14 +34,14 @@ const CACHE_DIR_NAME: &str = "cache";
 /// (DNS + TLS + 收完整 JSON)legacy Python 各调用点为 5/10/15/20s,取中位偏上
 const HTTP_TIMEOUT_SECS: u64 = 15;
 
-const NAPCAT_RELEASES_URL: &str =
-    "https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest";
+const NAPCAT_RELEASES_URL: &str = "https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest";
 // SnowLuma 上游 owner/repo(用户确认)仓库尚未正式 release 时返回 404 走 None
 // 回落,不影响整体 snapshot 返回
 const SNOWLUMA_RELEASES_URL: &str =
     "https://api.github.com/repos/SnowLuma/SnowLuma/releases/latest";
-const DESKTOP_RELEASES_URL: &str =
-    "https://api.github.com/repos/NapNeko/NapCatQQ-Desktop/releases/latest";
+/// 同仓 Desktop + watch 共用;list 后按 tag 前缀分流,避免 watch-v* 污染 latest
+const DESKTOP_RELEASES_LIST_URL: &str =
+    "https://api.github.com/repos/NapNeko/NapCatQQ-Desktop/releases?per_page=30";
 
 /// 拉取一次远端 releases 快照
 ///
@@ -89,16 +89,44 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
         "开始拉取远端版本快照（proxy_configured={proxy_configured}, pat={has_token}）"
     );
 
-    let (napcat, snowluma, desktop) = tokio::join!(
-        fetch_one(client, ReleaseAlias::Napcat, NAPCAT_RELEASES_URL, token),
-        fetch_one(client, ReleaseAlias::Snowluma, SNOWLUMA_RELEASES_URL, token),
-        fetch_one(client, ReleaseAlias::Ncd, DESKTOP_RELEASES_URL, token),
+    let (napcat, snowluma, desktop, ncd_watch) = tokio::join!(
+        fetch_one(
+            client,
+            ReleaseAlias::Napcat,
+            GithubSource::Latest(NAPCAT_RELEASES_URL),
+            token,
+        ),
+        fetch_one(
+            client,
+            ReleaseAlias::Snowluma,
+            GithubSource::Latest(SNOWLUMA_RELEASES_URL),
+            token,
+        ),
+        fetch_one(
+            client,
+            ReleaseAlias::Ncd,
+            GithubSource::ListFiltered {
+                list_url: DESKTOP_RELEASES_LIST_URL,
+                kind: TagFilterKind::Desktop,
+            },
+            token,
+        ),
+        fetch_one(
+            client,
+            ReleaseAlias::NcdWatch,
+            GithubSource::ListFiltered {
+                list_url: DESKTOP_RELEASES_LIST_URL,
+                kind: TagFilterKind::NcdWatch,
+            },
+            token,
+        ),
     );
 
     let failed: Vec<&str> = [
         (napcat.is_none(), "NapCat"),
         (snowluma.is_none(), "SnowLuma"),
         (desktop.is_none(), "Desktop"),
+        (ncd_watch.is_none(), "ncd-watch"),
     ]
     .into_iter()
     .filter(|(bad, _)| *bad)
@@ -120,6 +148,7 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
         napcat_latest: napcat,
         snowluma_latest: snowluma,
         desktop_latest: desktop,
+        ncd_watch_latest: ncd_watch,
         fetched_at: Some(current_unix_ts()),
     };
 
@@ -158,6 +187,11 @@ struct GhReleaseDto {
     html_url: Option<String>,
     body: Option<String>,
     #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    #[allow(dead_code)]
+    prerelease: bool,
+    #[serde(default)]
     assets: Vec<GhAssetDto>,
 }
 
@@ -170,12 +204,70 @@ struct GhAssetDto {
     digest: Option<String>,
 }
 
+/// GitHub 直连源:latest 单条,或 list 后按 tag 前缀挑
+#[derive(Clone, Copy, Debug)]
+enum GithubSource {
+    Latest(&'static str),
+    ListFiltered {
+        list_url: &'static str,
+        kind: TagFilterKind,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TagFilterKind {
+    Desktop,
+    NcdWatch,
+}
+
+impl TagFilterKind {
+    fn matches(self, tag: &str) -> bool {
+        match self {
+            Self::Desktop => is_desktop_release_tag(tag),
+            Self::NcdWatch => is_ncd_watch_release_tag(tag),
+        }
+    }
+}
+
+/// Desktop 产品 tag: v+数字,排除 watch-v*
+pub(crate) fn is_desktop_release_tag(tag: &str) -> bool {
+    let t = tag.trim();
+    if t.starts_with("watch-v") || t.starts_with("watch-V") {
+        return false;
+    }
+    let Some(rest) = t.strip_prefix('v').or_else(|| t.strip_prefix('V')) else {
+        return false;
+    };
+    rest.starts_with(|c: char| c.is_ascii_digit())
+}
+
+/// ncd-watch 发版 tag
+pub(crate) fn is_ncd_watch_release_tag(tag: &str) -> bool {
+    let t = tag.trim();
+    t.starts_with("watch-v") || t.starts_with("watch-V")
+}
+
+pub(crate) fn strip_watch_or_v_prefix(tag: &str) -> &str {
+    let t = tag.trim();
+    if let Some(rest) = t
+        .strip_prefix("watch-v")
+        .or_else(|| t.strip_prefix("watch-V"))
+    {
+        return rest;
+    }
+    strip_v_prefix(t)
+}
+
 async fn fetch_one(
     client: &reqwest::Client,
     alias: ReleaseAlias,
-    github_url: &str,
+    source: GithubSource,
     token: Option<&str>,
 ) -> Option<ReleaseInfo> {
+    let tag_filter = match source {
+        GithubSource::Latest(_) => None,
+        GithubSource::ListFiltered { kind, .. } => Some(kind),
+    };
     // 1. 中转代理优先(已配置时)
     if is_proxy_configured() {
         if let Some(proxy_url) = proxy_release_url(alias) {
@@ -187,13 +279,32 @@ async fn fetch_one(
             );
             match try_proxy(client, &proxy_url, alias).await {
                 ProxyOutcome::Ok(info) => {
-                    info!(
-                        target: "ncd_runtime::release",
-                        alias = alias.as_str(),
-                        version = %info.version,
-                        "中转代理拉取成功"
-                    );
-                    return Some(info);
+                    if let Some(kind) = tag_filter {
+                        if !kind.matches(&info.tag) {
+                            warn!(
+                                target: "ncd_runtime::release",
+                                alias = alias.as_str(),
+                                tag = %info.tag,
+                                "中转返回的 tag 不符合分流规则，回退 GitHub list"
+                            );
+                        } else {
+                            info!(
+                                target: "ncd_runtime::release",
+                                alias = alias.as_str(),
+                                version = %info.version,
+                                "中转代理拉取成功"
+                            );
+                            return Some(info);
+                        }
+                    } else {
+                        info!(
+                            target: "ncd_runtime::release",
+                            alias = alias.as_str(),
+                            version = %info.version,
+                            "中转代理拉取成功"
+                        );
+                        return Some(info);
+                    }
                 }
                 ProxyOutcome::Failed(err) => {
                     warn!(
@@ -214,18 +325,23 @@ async fn fetch_one(
     }
 
     // 2. GitHub 直连 fallback
+    let github_label = match source {
+        GithubSource::Latest(url) => url,
+        GithubSource::ListFiltered { list_url, .. } => list_url,
+    };
     info!(
         target: "ncd_runtime::release",
         alias = alias.as_str(),
-        url = github_url,
+        url = github_label,
         "尝试 GitHub 直连拉取"
     );
-    match try_github(client, github_url, token).await {
+    match try_github(client, source, token).await {
         Ok(info) => {
             info!(
                 target: "ncd_runtime::release",
                 alias = alias.as_str(),
                 version = %info.version,
+                tag = %info.tag,
                 "GitHub 直连拉取成功"
             );
             Some(info)
@@ -243,7 +359,7 @@ async fn fetch_one(
             warn!(
                 target: "ncd_runtime::release",
                 alias = alias.as_str(),
-                url = github_url,
+                url = github_label,
                 ?err,
                 hint,
                 "GitHub 直连拉取失败"
@@ -264,11 +380,7 @@ enum ProxyOutcome {
 /// 中转代理拉取:带 HMAC 签名,403 时读响应头校时后重试一次
 ///
 /// 返回的 JSON 与 GitHub releases/latest 同结构(中转透传),复用 GhReleaseDto 解析
-async fn try_proxy(
-    client: &reqwest::Client,
-    proxy_url: &str,
-    alias: ReleaseAlias,
-) -> ProxyOutcome {
+async fn try_proxy(client: &reqwest::Client, proxy_url: &str, alias: ReleaseAlias) -> ProxyOutcome {
     let signer = proxy_signer(None);
     let path = alias.path();
 
@@ -290,12 +402,8 @@ async fn try_proxy(
                             alias = alias.as_str(),
                             "校时成功，重签后重试一次中转"
                         );
-                        match proxy_fetch_attempt(
-                            client,
-                            proxy_url,
-                            signer.sign_headers(&path),
-                        )
-                        .await
+                        match proxy_fetch_attempt(client, proxy_url, signer.sign_headers(&path))
+                            .await
                         {
                             Ok(info) => return ProxyOutcome::Ok(info),
                             Err((err2, _)) => {
@@ -334,7 +442,9 @@ async fn proxy_fetch_attempt(
         ts = headers.get("X-Timestamp").map(String::as_str).unwrap_or("-"),
         "proxy_fetch_attempt: 发起中转请求"
     );
-    let mut req = client.get(url).timeout(Duration::from_secs(HTTP_TIMEOUT_SECS));
+    let mut req = client
+        .get(url)
+        .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS));
     for (k, v) in headers {
         // sign_headers 只产出 ASCII 安全的 header 名/值(X-Timestamp / X-Signature / User-Agent)
         let name = reqwest::header::HeaderName::from_bytes(k.as_bytes())
@@ -370,25 +480,27 @@ async fn proxy_fetch_attempt(
 /// GitHub 官方 API 直连(可带 PAT)带有限重试(瞬时网络错误)
 async fn try_github(
     client: &reqwest::Client,
-    url: &str,
+    source: GithubSource,
     token: Option<&str>,
 ) -> Result<ReleaseInfo, NetworkError> {
     let policy = RetryPolicy::default();
-    let url_owned = url.to_string();
     let token_owned = token.map(|s| s.to_string());
     retry_with_backoff(&policy, || {
-        let url = url_owned.clone();
         let token = token_owned.as_deref();
-        async move { github_fetch_attempt(client, &url, token).await }
+        async move { github_fetch_attempt(client, source, token).await }
     })
     .await
 }
 
 async fn github_fetch_attempt(
     client: &reqwest::Client,
-    url: &str,
+    source: GithubSource,
     token: Option<&str>,
 ) -> Result<ReleaseInfo, NetworkError> {
+    let url = match source {
+        GithubSource::Latest(u) => u,
+        GithubSource::ListFiltered { list_url, .. } => list_url,
+    };
     let has_token = token.map(|t| !t.trim().is_empty()).unwrap_or(false);
     tracing::debug!(
         target: "ncd_runtime::release",
@@ -415,14 +527,39 @@ async fn github_fetch_attempt(
         return Err(NetworkError::Status(status));
     }
 
-    let dto: GhReleaseDto = response.json().await.map_err(|e| NetworkError::Http(e.to_string()))?;
-    Ok(dto_to_release_info(dto))
+    match source {
+        GithubSource::Latest(_) => {
+            let dto: GhReleaseDto = response
+                .json()
+                .await
+                .map_err(|e| NetworkError::Http(e.to_string()))?;
+            Ok(dto_to_release_info(dto))
+        }
+        GithubSource::ListFiltered { kind, .. } => {
+            let list: Vec<GhReleaseDto> = response
+                .json()
+                .await
+                .map_err(|e| NetworkError::Http(e.to_string()))?;
+            pick_release_from_list(list, kind).ok_or_else(|| {
+                NetworkError::Http(format!(
+                    "no matching release for filter={kind:?} in list response"
+                ))
+            })
+        }
+    }
+}
+
+fn pick_release_from_list(list: Vec<GhReleaseDto>, kind: TagFilterKind) -> Option<ReleaseInfo> {
+    list.into_iter()
+        .filter(|r| !r.draft)
+        .find(|r| kind.matches(&r.tag_name))
+        .map(dto_to_release_info)
 }
 
 /// 把 GitHub releases DTO 转成 domain ReleaseInfo
 fn dto_to_release_info(dto: GhReleaseDto) -> ReleaseInfo {
     ReleaseInfo {
-        version: strip_v_prefix(&dto.tag_name).to_string(),
+        version: strip_watch_or_v_prefix(&dto.tag_name).to_string(),
         tag: dto.tag_name.clone(),
         published_at: dto
             .published_at
@@ -484,8 +621,11 @@ pub(crate) fn parse_iso8601_to_unix(s: &str) -> Option<u64> {
         return None;
     }
     let bytes = s.as_bytes();
-    if bytes[4] != b'-' || bytes[7] != b'-' || bytes[10] != b'T'
-        || bytes[13] != b':' || bytes[16] != b':'
+    if bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
     {
         return None;
     }
@@ -500,7 +640,8 @@ pub(crate) fn parse_iso8601_to_unix(s: &str) -> Option<u64> {
         || !(1..=31).contains(&day)
         || hour > 23
         || minute > 59
-        || second > 60  // GitHub 不会给闰秒,但宽松处理
+        || second > 60
+    // GitHub 不会给闰秒,但宽松处理
     {
         return None;
     }
@@ -581,6 +722,7 @@ mod tests {
                 }],
             }),
             snowluma_latest: None,
+            ncd_watch_latest: None,
             desktop_latest: None,
             fetched_at: Some(current_unix_ts()),
         }
@@ -649,6 +791,14 @@ mod tests {
         let loaded = read_cache(temp.path()).unwrap();
         assert!(is_stale(&loaded));
         assert_eq!(loaded.napcat_latest, snap.napcat_latest);
+    }
+
+    #[test]
+    fn is_desktop_release_tag_filters_watch() {
+        assert!(is_desktop_release_tag("v2.2.8"));
+        assert!(!is_desktop_release_tag("watch-v0.2.0"));
+        assert!(is_ncd_watch_release_tag("watch-v0.2.0"));
+        assert_eq!(strip_watch_or_v_prefix("watch-v0.2.0"), "0.2.0");
     }
 
     #[test]

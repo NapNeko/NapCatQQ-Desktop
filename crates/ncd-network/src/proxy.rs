@@ -27,6 +27,8 @@ pub enum ReleaseAlias {
     Napcat,
     Snowluma,
     Ncd,
+    /// 同仓 watch-v* 二进制;Worker 需按 tag 前缀过滤,勿与 Desktop latest 混用
+    NcdWatch,
 }
 
 impl ReleaseAlias {
@@ -35,6 +37,7 @@ impl ReleaseAlias {
             ReleaseAlias::Napcat => "napcat",
             ReleaseAlias::Snowluma => "snowluma",
             ReleaseAlias::Ncd => "ncd",
+            ReleaseAlias::NcdWatch => "ncd-watch",
         }
     }
 
@@ -207,6 +210,7 @@ mod tests {
         assert_eq!(ReleaseAlias::Napcat.path(), "/v1/release/napcat");
         assert_eq!(ReleaseAlias::Snowluma.path(), "/v1/release/snowluma");
         assert_eq!(ReleaseAlias::Ncd.path(), "/v1/release/ncd");
+        assert_eq!(ReleaseAlias::NcdWatch.path(), "/v1/release/ncd-watch");
     }
 
     #[test]

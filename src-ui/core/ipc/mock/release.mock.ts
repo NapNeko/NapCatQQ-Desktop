@@ -24,5 +24,6 @@ export const mockReleaseSnapshot: ReleaseSnapshot = {
     },
     snowluma_latest: null,
     desktop_latest: null,
+    ncd_watch_latest: null,
     fetched_at: BigInt(NOW),
 };

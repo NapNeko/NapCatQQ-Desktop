@@ -9,6 +9,10 @@ import type { ReleaseInfo } from "./ReleaseInfo";
  */
 export type ReleaseSnapshot = { napcat_latest?: ReleaseInfo | null, snowluma_latest?: ReleaseInfo | null, desktop_latest?: ReleaseInfo | null, 
 /**
+ * ncd-watch 远端二进制(tag 形如 watch-v0.2.0);与 Desktop MSI 分流
+ */
+ncd_watch_latest?: ReleaseInfo | null, 
+/**
  * 本快照拉取的时间戳 Unix epoch 秒, None 表示从未成功拉取
  */
 fetched_at?: bigint | null, };
