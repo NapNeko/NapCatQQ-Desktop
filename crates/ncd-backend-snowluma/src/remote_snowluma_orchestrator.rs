@@ -16,6 +16,7 @@ use crate::remote_snowluma_layout::{
 };
 use crate::remote_snowluma_stack::{
     ensure_stack_running, is_stack_ready, run_remote_bash, stack_stop,
+    LOG_PREV_MAX_BYTES,
     wait_webui_tcp as wait_webui_tcp_on_host,
 };
 
@@ -249,12 +250,27 @@ pub async fn bot_cold_start(
         return Ok(pid);
     }
 
+    // 冷启 Bot：bot_*.log 只留一代 .prev（过大截尾），current 清空
+    let log = shell_single_quote(&paths.log_bot_path(qq_id));
+    let log_dir = shell_single_quote(&paths.log_dir);
+    let prev_max = LOG_PREV_MAX_BYTES;
     let rotate = format!(
         r#"mkdir -p {log_dir}
-if [ -f {log} ]; then mv -f {log} "{log}.prev" 2>/dev/null || true; fi
-: > {log}"#,
-        log_dir = shell_single_quote(&paths.log_dir),
-        log = shell_single_quote(&paths.log_bot_path(qq_id)),
+if [ -f {log} ]; then
+  rm -f {log}.prev
+  mv -f {log} {log}.prev 2>/dev/null || true
+  if [ -f {log}.prev ]; then
+    sz=$(wc -c < {log}.prev 2>/dev/null || echo 0)
+    if [ "$sz" -gt {prev_max} ]; then
+      tail -c {prev_max} {log}.prev > {log}.prev.tmp 2>/dev/null \
+        && mv -f {log}.prev.tmp {log}.prev \
+        || rm -f {log}.prev.tmp
+    fi
+  fi
+fi
+: > {log}
+"#,
+        prev_max = prev_max,
     );
     run_remote_bash(host, &rotate).await?;
 

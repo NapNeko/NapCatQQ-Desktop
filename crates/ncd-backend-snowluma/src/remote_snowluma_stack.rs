@@ -262,6 +262,54 @@ cat {pid_path}
     parse_last_u32(&out, "websockify")
 }
 
+
+/// 排障用上一代日志上限（daemon/bot 的 `.prev`）
+pub(crate) const LOG_PREV_MAX_BYTES: u64 = 2 * 1024 * 1024;
+/// 仍在跑时磁盘上的活跃日志软上限（仅 stop 时收口；跑中靠 UI 裁会话）
+pub(crate) const LOG_ACTIVE_ARCHIVE_MAX_BYTES: u64 = 8 * 1024 * 1024;
+
+/// 轮转：current → .prev（只留一代），.prev 过大则 tail 截尾；再截断 current。
+/// path 须已 shell 单引号包装。进程必须未持有该路径写句柄。
+fn shell_rotate_log_file(path_q: &str) -> String {
+    format!(
+        r#"if [ -f {path_q} ]; then
+  rm -f {path_q}.prev
+  mv -f {path_q} {path_q}.prev 2>/dev/null || true
+  if [ -f {path_q}.prev ]; then
+    sz=$(wc -c < {path_q}.prev 2>/dev/null || echo 0)
+    if [ "$sz" -gt {max} ]; then
+      tail -c {max} {path_q}.prev > {path_q}.prev.tmp 2>/dev/null \
+        && mv -f {path_q}.prev.tmp {path_q}.prev \
+        || rm -f {path_q}.prev.tmp
+    fi
+  fi
+fi
+: > {path_q}
+"#,
+        path_q = path_q,
+        max = LOG_PREV_MAX_BYTES,
+    )
+}
+
+/// 进程已停：把活跃日志收成一代 `.prev`（截尾），删除 current，避免下次 UI 扫到古董。
+fn shell_archive_log_on_stop(path_q: &str) -> String {
+    format!(
+        r#"if [ -f {path_q} ]; then
+  rm -f {path_q}.prev
+  sz=$(wc -c < {path_q} 2>/dev/null || echo 0)
+  if [ "$sz" -gt {max} ]; then
+    tail -c {max} {path_q} > {path_q}.prev 2>/dev/null || mv -f {path_q} {path_q}.prev 2>/dev/null || true
+  else
+    mv -f {path_q} {path_q}.prev 2>/dev/null || true
+  fi
+  rm -f {path_q}
+fi
+"#,
+        path_q = path_q,
+        max = LOG_ACTIVE_ARCHIVE_MAX_BYTES,
+    )
+}
+
 pub async fn start_node(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<u32, BotBackendError> {
     let paths = &layout.paths;
     let display = display_str(DEFAULT_DISPLAY_NUM);
@@ -270,8 +318,11 @@ pub async fn start_node(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Resul
     let log_daemon = shell_single_quote(&paths.log_daemon);
     let pid_node = shell_single_quote(&pid_file(paths, "node"));
     let pid_daemon = shell_single_quote(&paths.pid_daemon);
+    // node 未启动时轮转：只留一代 .prev 并截尾，current 清空。
+    let rotate = shell_rotate_log_file(&log_daemon);
     let script = format!(
         r#"cd {sl}
+{rotate}
 DISPLAY="{display}" nohup setsid {node} --experimental-sqlite index.mjs >> {log_daemon} 2>&1 </dev/null &
 node_pid=$!
 echo "$node_pid" > {pid_node}
@@ -347,12 +398,29 @@ pub async fn stack_stop(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Result<
     }
     let pid_daemon = shell_single_quote(&paths.pid_daemon);
     let status = shell_single_quote(&paths.status_daemon);
+    let log_daemon = shell_single_quote(&paths.log_daemon);
+    let log_dir = shell_single_quote(&paths.log_dir);
+    let archive_daemon = shell_archive_log_on_stop(&log_daemon);
+    // 整栈停掉后：daemon + bot_*.log 各留一代 .prev（截尾），删掉 current
     let _ = run_sh_dash(
         host,
         &format!(
             r#"rm -f {pid_daemon}
 echo '{{"running":false,"ready":false}}' > {status}
-"#
+{archive_daemon}
+for f in {log_dir}/bot_*.log; do
+  [ -f "$f" ] || continue
+  rm -f "$f.prev"
+  sz=$(wc -c < "$f" 2>/dev/null || echo 0)
+  if [ "$sz" -gt {max_active} ]; then
+    tail -c {max_active} "$f" > "$f.prev" 2>/dev/null || mv -f "$f" "$f.prev" 2>/dev/null || true
+  else
+    mv -f "$f" "$f.prev" 2>/dev/null || true
+  fi
+  rm -f "$f"
+done
+"#,
+            max_active = LOG_ACTIVE_ARCHIVE_MAX_BYTES,
         ),
     )
     .await;

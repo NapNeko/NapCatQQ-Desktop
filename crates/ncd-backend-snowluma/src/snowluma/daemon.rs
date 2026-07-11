@@ -15,7 +15,7 @@ use ncd_domain::domain_event::DomainEvent;
 use ncd_traits::events::{BroadcastEventBus, EventBus};
 
 use crate::snowluma::error::{SnowLumaDaemonError, SnowLumaWebUiError};
-use crate::snowluma::log_sanitize::sanitize_log_line;
+use crate::snowluma::log_noise::SnowLumaLogNoiseFilter;
 use crate::snowluma::session::{load_snowluma_app_config, render_daemon_globals};
 use crate::snowluma::webui_client::SnowLumaWebUiClient;
 use ncd_host::hide_console_window;
@@ -635,11 +635,11 @@ fn spawn_stdout_reader(
         use tokio::io::{AsyncBufReadExt, BufReader};
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
+        let mut filter = SnowLumaLogNoiseFilter::new();
         while let Ok(Some(raw)) = lines.next_line().await {
-            let cleaned = sanitize_log_line(&raw);
-            if cleaned.is_empty() {
+            let Some(cleaned) = filter.process_line(&raw) else {
                 continue;
-            }
+            };
             push_recent(&recent, &cleaned);
             let _ = log_tx.send(cleaned.clone());
             bus.publish(DomainEvent::snowluma_daemon_log(cleaned));
@@ -658,11 +658,11 @@ fn spawn_stderr_reader(
         use tokio::io::{AsyncBufReadExt, BufReader};
         let reader = BufReader::new(stderr);
         let mut lines = reader.lines();
+        let mut filter = SnowLumaLogNoiseFilter::new();
         while let Ok(Some(raw)) = lines.next_line().await {
-            let cleaned = sanitize_log_line(&raw);
-            if cleaned.is_empty() {
+            let Some(cleaned) = filter.process_line(&raw) else {
                 continue;
-            }
+            };
             let line = format!("[stderr] {cleaned}");
             push_recent(&recent, &line);
             let _ = log_tx.send(line.clone());

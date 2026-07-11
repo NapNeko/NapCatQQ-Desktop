@@ -19,6 +19,7 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 use crate::snowluma::daemon::SnowLumaDaemon;
+use crate::snowluma::log_noise::filter_snowluma_console_lines;
 use crate::snowluma::proc_tree::SysinfoProcessTreeProbe;
 use crate::snowluma::status_poller::{PollerDeps, ProcessTreeProbe, SnowLumaStatusPoller};
 use crate::snowluma::webui_client::snowluma_error_requires_consent;
@@ -457,7 +458,8 @@ impl BotBackend for SnowLumaRuntimeBackend {
         // 的 last_error 拼上下文,复用即可,不需要再额外维护一份镜像
         // 实时增量仍然走 DomainEvent::SnowLumaDaemonLog,前端 useBotLogStream
         // 已经在订阅
-        let lines = self.daemon.snapshot_recent_log();
+        // ring 在 reader 侧已滤；再滤一次防旧进程/升级前残留脏行
+        let lines = filter_snowluma_console_lines(self.daemon.snapshot_recent_log());
         let total = lines.len();
         let limited = if opts.lines > 0 && lines.len() > opts.lines {
             lines[lines.len() - opts.lines..].to_vec()

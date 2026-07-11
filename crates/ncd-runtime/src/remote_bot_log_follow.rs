@@ -1,20 +1,25 @@
-//! 远端 Bot 磁盘日志增量 tail → bot_log_appended(SnowLuma bot_{qq}.log 等)
+//! 远端 Bot 磁盘日志增量 → bot_log_appended（SnowLuma bot_{qq}.log 等）
+//!
+//! 大文件（Bugly crash maps 可达数十 MB）禁止每 2s SFTP 整读。
+//! 用 wc + 远端 tail 按偏移读增量；文件 rotate 变小则重置。
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ncd_deploy::strip_ansi_escapes;
-use ncd_host::{Host, HostPath};
+use ncd_backend_snowluma::SnowLumaLogNoiseFilter;
+use ncd_host::{Host, HostCommand};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
 use crate::events::BroadcastEventBus;
-use ncd_domain::ids::BotId;
 use crate::native_deployment_adapter::EventBusSink;
 use ncd_deploy::NativeRuntimeEventSink;
+use ncd_domain::ids::BotId;
 
 const POLL_SECS: u64 = 2;
+/// 单次增量最多读这么多字节，防止异常暴涨一次打爆通道
+const MAX_CHUNK: u64 = 512 * 1024;
 
 struct FollowInner {
     task: Option<JoinHandle<()>>,
@@ -75,28 +80,36 @@ impl RemoteBotLogFollowRegistry {
         let sink = Arc::new(EventBusSink::new(bus));
         let bid = bot_id.clone();
         let task = tokio::spawn(async move {
-            let mut last_size: usize = 0;
+            let mut last_size: u64 = 0;
+            let mut filter = SnowLumaLogNoiseFilter::new();
             loop {
                 tokio::time::sleep(Duration::from_secs(POLL_SECS)).await;
-                let bytes = match host.read_file(&HostPath::from_posix(&log_path)).await {
-                    Ok(b) => b,
-                    Err(_) => continue,
+                let size = match remote_file_size(host.as_ref(), &log_path).await {
+                    Some(s) => s,
+                    None => continue,
                 };
-                if bytes.len() < last_size {
+                if size < last_size {
                     last_size = 0;
                 }
-                let slice = if bytes.len() > last_size {
-                    &bytes[last_size..]
-                } else {
+                if size == last_size {
                     continue;
+                }
+                let grow = size - last_size;
+                let read_from = if last_size == 0 || grow > MAX_CHUNK {
+                    size.saturating_sub(MAX_CHUNK)
+                } else {
+                    last_size
                 };
-                last_size = bytes.len();
-                let text = String::from_utf8_lossy(slice);
+                let chunk = match remote_read_from(host.as_ref(), &log_path, read_from).await {
+                    Some(c) => c,
+                    None => continue,
+                };
+                last_size = size;
+                let text = String::from_utf8_lossy(&chunk);
                 for line in text.lines() {
-                    let line = strip_ansi_escapes(line);
-                    if line.is_empty() {
+                    let Some(line) = filter.process_line(line) else {
                         continue;
-                    }
+                    };
                     sink.publish_log_line(&bid, &line, "stdout");
                 }
             }
@@ -107,4 +120,27 @@ impl RemoteBotLogFollowRegistry {
         });
         self.by_bot.lock().await.insert(bot_id, follow);
     }
+}
+
+async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
+    let quoted = shell_quote(path);
+    let cmd = HostCommand::new("sh").arg("-c").arg(format!(
+        "if [ -f {quoted} ]; then wc -c < {quoted}; else echo 0; fi"
+    ));
+    let out = host.run_to_string(cmd).await.ok()?;
+    out.stdout.trim().parse().ok()
+}
+
+async fn remote_read_from(host: &dyn Host, path: &str, offset: u64) -> Option<Vec<u8>> {
+    let quoted = shell_quote(path);
+    let start = offset.saturating_add(1);
+    let cmd = HostCommand::new("sh").arg("-c").arg(format!(
+        "if [ -f {quoted} ]; then tail -c +{start} -- {quoted} | head -c {MAX_CHUNK}; fi"
+    ));
+    let out = host.run_to_string(cmd).await.ok()?;
+    Some(out.stdout.into_bytes())
+}
+
+fn shell_quote(path: &str) -> String {
+    format!("'{}'", path.replace('\'', "'\"'\"'"))
 }

@@ -19,6 +19,7 @@ use crate::remote_snowluma_orchestrator::{
     resolve_remote_bash, wait_webui_tcp, write_status_daemon_json,
 };
 use crate::remote_snowluma_tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
+use crate::snowluma::log_noise::prepare_snowluma_bot_history_lines;
 use crate::snowluma::daemon::DaemonState;
 use crate::snowluma::error::SnowLumaWebUiError;
 use crate::snowluma::session::{build_webui_json_payload, generate_strong_password};
@@ -69,6 +70,27 @@ async fn read_remote_log_tail(
         0
     };
     Ok(lines[start..].join("\n"))
+}
+
+
+/// 只拉末尾原始行（不整文件 SFTP）。噪声多时再本地 filter。
+async fn read_remote_log_tail_lines(
+    host: &dyn Host,
+    path: &str,
+    max_raw_lines: usize,
+) -> Result<Vec<String>, BotBackendError> {
+    if max_raw_lines == 0 {
+        return Ok(Vec::new());
+    }
+    let quoted = path.replace('\'', "'\"'\"'");
+    let cmd = HostCommand::new("sh").arg("-c").arg(format!(
+        "if [ -f '{quoted}' ]; then tail -n {max_raw_lines} -- '{quoted}'; else exit 0; fi"
+    ));
+    let out = host
+        .run_to_string(cmd)
+        .await
+        .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    Ok(out.stdout.lines().map(|s| s.to_string()).collect())
 }
 
 /// daemon 启动前:全局 config,VNC/WebUI 明文密钥,图形栈探测
@@ -865,26 +887,24 @@ impl BotBackend for RemoteSnowLumaBackend {
         opts: TailOpts,
     ) -> Result<LogSnapshot, BotBackendError> {
         let qq_id = bot_id.as_str();
-        let path = self.daemon.paths().log_bot_path(qq_id);
-        let bytes = match self
-            .daemon
-            .host
-            .read_file(&HostPath::from_posix(&path))
-            .await
-        {
-            Ok(b) => b,
-            Err(_) => {
-                return Ok(LogSnapshot {
-                    lines: Vec::new(),
-                    total_lines: 0,
-                });
-            }
+        let paths = self.daemon.paths();
+        // 磁盘已轮转，这里仍裁「最后一次 starting + 本 UIN」，防 .prev 误读或 attach 不重起 stack。
+        let want = if opts.lines > 0 { opts.lines } else { 1000 };
+        let raw_n = want.saturating_mul(5).max(800).min(20_000);
+        let host = self.daemon.host.as_ref();
+        let bot_path = paths.log_bot_path(qq_id);
+        let daemon_raw = match read_remote_log_tail_lines(host, &paths.log_daemon, raw_n).await {
+            Ok(v) => v,
+            Err(_) => Vec::new(),
         };
-        let text = String::from_utf8_lossy(&bytes);
-        let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+        let bot_raw = match read_remote_log_tail_lines(host, &bot_path, raw_n).await {
+            Ok(v) => v,
+            Err(_) => Vec::new(),
+        };
+        let mut lines = prepare_snowluma_bot_history_lines(bot_raw, daemon_raw, qq_id);
         let total = lines.len();
-        if opts.lines > 0 && lines.len() > opts.lines {
-            lines = lines.split_off(lines.len() - opts.lines);
+        if lines.len() > want {
+            lines = lines.split_off(lines.len() - want);
         }
         Ok(LogSnapshot {
             lines,
