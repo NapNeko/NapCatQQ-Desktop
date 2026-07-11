@@ -1122,9 +1122,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     }
 
     /// SnowLuma UI 会话态快照(daemon + per-bot 登录/隧道),冷启动 hydrate 用
-    pub async fn list_snowluma_ui_snapshot(
-        &self,
-    ) -> crate::snowluma_ui_state::SnowLumaUiSnapshot {
+    pub async fn list_snowluma_ui_snapshot(&self) -> crate::snowluma_ui_state::SnowLumaUiSnapshot {
         self.snowluma_ui.snapshot().await
     }
 
@@ -1180,21 +1178,48 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.count_active_bots_by_host(|t| !t.is_local()).await
     }
 
+    /// 组件页 host_id(`local` / `remote:{server_id}`)上活跃 Bot 数
+    /// Starting / Running / Stopping 均算活跃;与组件 update/uninstall 门禁一致
+    pub async fn count_active_bots_on_component_host(
+        &self,
+        host_id: &str,
+    ) -> Result<usize, BotManagerError> {
+        let host_id = host_id.trim();
+        if host_id.is_empty() {
+            return Ok(0);
+        }
+        if host_id == "local" {
+            return self.count_local_active_bots().await;
+        }
+        let Some(server_id) = host_id.strip_prefix("remote:") else {
+            // 未知 host 形态不按本机兜底,避免误拦/误放
+            return Ok(0);
+        };
+        if server_id.is_empty() {
+            return Ok(0);
+        }
+        self.count_active_bots_by_host(|t| t.server_id() == Some(server_id))
+            .await
+    }
+
     async fn count_active_bots_by_host(
         &self,
         host_match: impl Fn(&RuntimeTarget) -> bool,
     ) -> Result<usize, BotManagerError> {
         let configs = self.repo.list().await?;
+        // bot_id 字符串 → runtime_target,避免对每个 snapshot 线性扫 configs 并 to_string
+        let target_by_bot_id: HashMap<String, &RuntimeTarget> = configs
+            .iter()
+            .map(|c| (c.bot.qq_id.to_string(), &c.bot.runtime_target))
+            .collect();
         let snapshots = self.list_snapshots().await;
         Ok(snapshots
             .iter()
             .filter(|s| s.state.is_active())
             .filter(|s| {
-                configs
-                    .iter()
-                    .find(|c| c.bot.qq_id.to_string() == s.bot_id.as_str())
-                    .map(|c| host_match(&c.bot.runtime_target))
-                    .unwrap_or(false)
+                target_by_bot_id
+                    .get(s.bot_id.as_str())
+                    .is_some_and(|t| host_match(t))
             })
             .count())
     }

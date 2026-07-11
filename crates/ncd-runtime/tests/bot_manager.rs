@@ -5,17 +5,17 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::Mutex;
 
+use ncd_host::local::LocalWindowsHost;
 use ncd_runtime::{
     AdvancedConfig, AutoRestartSchedule, BackendKind, BackendType, BotActorState, BotBackend,
     BotBackendError, BotBasicConfig, BotConfig, BotConfigRepo, BotId, BotManager, BotManagerError,
     BotRuntimeConfig, BotStartCtx, BotStatus, BroadcastEventBus, ConfigStore, ConnectConfig,
-    DispatchRenderer, EventBus, EventFilter, LocalBotConfigRepo, LocalConfigStore,
+    DeploymentType, DesktopNotifySettings, DispatchRenderer, EventBus, EventFilter, HostResolver,
+    JsonTransaction, LocalBotConfigRepo, LocalConfigStore, LocalOnlyHostResolver,
     NoopOfflineNotifier, ReqwestNapCatWebUiClient, RuntimeLaunchPlan, RuntimeLaunchPlanError,
     RuntimeLaunchPlanner, SecretStore, SecretStoreImpl, SnowLumaDaemon, SnowLumaWebUiClient,
     SnowLumaWebUiClientFactory, SnowLumaWebUiError, StopMode, TailOpts, WebUiPollerSettings,
-    DeploymentType, DesktopNotifySettings, HostResolver, LocalOnlyHostResolver, JsonTransaction,
 };
-use ncd_host::local::LocalWindowsHost;
 
 #[derive(Default)]
 struct FakeBackend {
@@ -98,7 +98,12 @@ impl BotBackend for FakeBackend {
         if self.fail_start.lock().await.remove(&ctx.config.bot_id) {
             return Err(BotBackendError::Io("fake start failed".to_string()));
         }
-        if self.exit_after_start.lock().await.remove(&ctx.config.bot_id) {
+        if self
+            .exit_after_start
+            .lock()
+            .await
+            .remove(&ctx.config.bot_id)
+        {
             // 模拟快速退出:start 报告成功,但进程没真正存活,不登记 running,
             // 让 BotManager 的启动后 status 复查抓到 Stopped
             return Ok(BotStatus::running(ctx.config.bot_id.clone(), 42, 1));
@@ -288,9 +293,7 @@ type ManagerFixture = (
     BotManager<LocalBotConfigRepo<LocalConfigStore>, LocalConfigStore>,
 );
 
-fn make_manager_with_local_resolver(
-    root: &std::path::Path,
-) -> ManagerFixture {
+fn make_manager_with_local_resolver(root: &std::path::Path) -> ManagerFixture {
     let (store, repo, backend, manager) = make_manager(root);
     let local_host: Arc<dyn ncd_host::Host> = Arc::new(LocalWindowsHost::new());
     let resolver: Arc<dyn HostResolver> = Arc::new(LocalOnlyHostResolver::new(local_host));
@@ -319,15 +322,16 @@ fn default_desktop_notify() -> Arc<tokio::sync::RwLock<DesktopNotifySettings>> {
     Arc::new(tokio::sync::RwLock::new(DesktopNotifySettings::default()))
 }
 
-fn make_manager(
-    root: &std::path::Path,
-) -> ManagerFixture {
+fn make_manager(root: &std::path::Path) -> ManagerFixture {
     let store = Arc::new(LocalConfigStore::new(root));
     let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(
         SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),
     );
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
-    let renderer = Arc::new(DispatchRenderer::new(store.config_dir(), store.config_dir()));
+    let renderer = Arc::new(DispatchRenderer::new(
+        store.config_dir(),
+        store.config_dir(),
+    ));
     let backend = Arc::new(FakeBackend::default());
     let event_bus = Arc::new(BroadcastEventBus::default());
     let planner = Arc::new(TestLaunchPlanner);
@@ -355,7 +359,10 @@ fn make_manager_with_planner(
         SecretStoreImpl::new_with_force_fallback(root.join("secrets"), true),
     );
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
-    let renderer = Arc::new(DispatchRenderer::new(store.config_dir(), store.config_dir()));
+    let renderer = Arc::new(DispatchRenderer::new(
+        store.config_dir(),
+        store.config_dir(),
+    ));
     let backend = Arc::new(FakeBackend::default());
     let event_bus = Arc::new(BroadcastEventBus::default());
     let manager = BotManager::new(
@@ -815,7 +822,10 @@ async fn batch_start_reports_napcat_missing_runtime_component() {
         .await
         .unwrap();
 
-    let result = manager.batch_start(std::slice::from_ref(&bot_id)).await.unwrap();
+    let result = manager
+        .batch_start(std::slice::from_ref(&bot_id))
+        .await
+        .unwrap();
     assert!(result.succeeded.is_empty());
     assert_eq!(result.failed.len(), 1);
     assert_eq!(result.failed[0].0, bot_id);
@@ -1092,7 +1102,9 @@ async fn lifecycle_stop_does_not_fallback_when_docker_local_blocked() {
         "info": {"configVersion": 999},
         "bots": [serde_json::to_value(&config).unwrap()]
     });
-    store.apply_transaction(JsonTransaction::new().write(store.bot_config_path(), payload)).unwrap();
+    store
+        .apply_transaction(JsonTransaction::new().write(store.bot_config_path(), payload))
+        .unwrap();
 
     let err = manager.stop_bot(&bot_id).await.unwrap_err();
     // 直接写 repo 不走 manager.upsert,actor map 无此 bot 会报 not found,这也算通过:
@@ -1119,7 +1131,9 @@ async fn lifecycle_delete_does_not_fallback_when_docker_local_blocked() {
         "info": {"configVersion": 999},
         "bots": [serde_json::to_value(&config).unwrap()]
     });
-    store.apply_transaction(JsonTransaction::new().write(store.bot_config_path(), payload)).unwrap();
+    store
+        .apply_transaction(JsonTransaction::new().write(store.bot_config_path(), payload))
+        .unwrap();
 
     let err = manager.delete_bot_config(&bot_id).await.unwrap_err();
     assert!(err.to_string().contains("Docker"));
@@ -1387,6 +1401,85 @@ async fn count_local_active_bots_ignores_remote_runtime_target() {
 }
 
 #[tokio::test]
+async fn count_active_bots_on_component_host_maps_local_and_remote_ids() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, _, manager) = make_manager(temp.path());
+
+    let local_id = BotId::new("10001");
+    manager
+        .upsert_bot_config(bot_config(10001, "local"))
+        .await
+        .unwrap();
+    manager.start_bot(&local_id).await.unwrap();
+
+    let remote_id = BotId::new("10002");
+    manager
+        .upsert_bot_config(bot_config_remote_docker_server(10002, "remote-docker"))
+        .await
+        .unwrap();
+    manager
+        .test_confirm_actor_running(&remote_id)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        manager
+            .count_active_bots_on_component_host("local")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        manager
+            .count_active_bots_on_component_host("remote:srv-1")
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        manager
+            .count_active_bots_on_component_host("remote:other")
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        manager
+            .count_active_bots_on_component_host("")
+            .await
+            .unwrap(),
+        0,
+        "空 host_id 不应兜底为本机"
+    );
+    assert_eq!(
+        manager
+            .count_active_bots_on_component_host("srv-1")
+            .await
+            .unwrap(),
+        0,
+        "缺 remote: 前缀的 id 不按本机或远端匹配"
+    );
+}
+
+#[tokio::test]
+async fn count_active_bots_on_component_host_ignores_stopped_bots() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, _, manager) = make_manager(temp.path());
+
+    manager
+        .upsert_bot_config(bot_config(10001, "stopped-local"))
+        .await
+        .unwrap();
+    assert_eq!(
+        manager
+            .count_active_bots_on_component_host("local")
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
 async fn exit_desktop_stops_only_local_active_bots() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, _, backend, manager) = make_manager(temp.path());
@@ -1609,7 +1702,10 @@ async fn process_exit_event_transitions_running_actor_to_crashed() {
         SecretStoreImpl::new_with_force_fallback(temp.path().join("secrets"), true),
     );
     let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
-    let renderer = Arc::new(DispatchRenderer::new(store.config_dir(), store.config_dir()));
+    let renderer = Arc::new(DispatchRenderer::new(
+        store.config_dir(),
+        store.config_dir(),
+    ));
     let backend = Arc::new(FakeBackend::default());
     let event_bus = Arc::new(BroadcastEventBus::default());
     let planner = Arc::new(TestLaunchPlanner);
