@@ -32,6 +32,10 @@ export interface ReleaseSnapshotView {
     desktop: ReleaseInfoView | null;
     /// 远端 ncd-watch 二进制（按机安装，不进本机 LocalVersionSnapshot）。
     ncdWatch: ReleaseInfoView | null;
+    /// Linux QQ 宿主最新版本（组件页更新用）。
+    qqLinux: ReleaseInfoView | null;
+    /// Windows QQ 宿主最新版本。
+    qqWindows: ReleaseInfoView | null;
     /// `null` 表示从未成功拉过。
     fetchedAt: number | null;
 }
@@ -46,13 +50,17 @@ function toView(info: ReleaseInfo | null | undefined): ReleaseInfoView | null {
     };
 }
 
-export function normalizeReleaseSnapshot(snap: ReleaseSnapshot | null | undefined): ReleaseSnapshotView {
+export function normalizeReleaseSnapshot(
+    snap: ReleaseSnapshot | null | undefined,
+): ReleaseSnapshotView {
     if (!snap) {
         return {
             napcat: null,
             snowluma: null,
             desktop: null,
             ncdWatch: null,
+            qqLinux: null,
+            qqWindows: null,
             fetchedAt: null,
         };
     }
@@ -61,9 +69,12 @@ export function normalizeReleaseSnapshot(snap: ReleaseSnapshot | null | undefine
         snowluma: toView(snap.snowluma_latest),
         desktop: toView(snap.desktop_latest),
         ncdWatch: toView(snap.ncd_watch_latest),
-        fetchedAt: snap.fetched_at !== null && snap.fetched_at !== undefined
-            ? Number(snap.fetched_at)
-            : null,
+        qqLinux: toView(snap.qq_linux_latest),
+        qqWindows: toView(snap.qq_windows_latest),
+        fetchedAt:
+            snap.fetched_at !== null && snap.fetched_at !== undefined
+                ? Number(snap.fetched_at)
+                : null,
     };
 }
 
@@ -77,19 +88,69 @@ export function normalizeComponentVersion(version: string): string {
     const token = trimmed.includes(' ')
         ? (trimmed.split(/\s+/).pop() ?? trimmed)
         : trimmed;
-    return token
-        .replace(/^watch-/i, '')
-        .replace(/^[vV]/, '');
+    return token.replace(/^watch-/i, '').replace(/^[vV]/, '');
+}
+
+/// QQ 版本常为 `3.2.25-45758` / `3.2.31` / `9.9.31`：先比主版本数字段，再比
+/// `-` 后 build id（能解析成数字时）。用于组件页 hasUpdate。
+export function compareComponentVersion(local: string, remote: string): number {
+    const localNorm = normalizeComponentVersion(local);
+    const remoteNorm = normalizeComponentVersion(remote);
+    if (!localNorm || !remoteNorm) return 0;
+
+    const [localCore, localBuildRaw] = splitVersionBuild(localNorm);
+    const [remoteCore, remoteBuildRaw] = splitVersionBuild(remoteNorm);
+
+    const coreCmp = compareNumericCore(localCore, remoteCore);
+    if (coreCmp !== 0) return coreCmp;
+
+    const localBuild = parseBuildId(localBuildRaw);
+    const remoteBuild = parseBuildId(remoteBuildRaw);
+    if (localBuild != null && remoteBuild != null && localBuild !== remoteBuild) {
+        return remoteBuild - localBuild;
+    }
+    // 一边有 build、一边没有：无 build 视为官方简写主版本，不强制判更新
+    return 0;
+}
+
+function splitVersionBuild(version: string): [string, string | null] {
+    const idx = version.indexOf('-');
+    if (idx < 0) return [version, null];
+    return [version.slice(0, idx), version.slice(idx + 1)];
+}
+
+function parseBuildId(raw: string | null): number | null {
+    if (!raw) return null;
+    const m = raw.match(/^\d+/);
+    if (!m) return null;
+    const n = Number.parseInt(m[0], 10);
+    return Number.isFinite(n) ? n : null;
+}
+
+function compareNumericCore(local: string, remote: string): number {
+    const localParts = parseNumericParts(local);
+    const remoteParts = parseNumericParts(remote);
+    const len = Math.max(localParts.length, remoteParts.length);
+    for (let i = 0; i < len; i++) {
+        const a = localParts[i] ?? 0;
+        const b = remoteParts[i] ?? 0;
+        if (a !== b) return b - a;
+    }
+    return 0;
 }
 
 /// 简化版本比对：拆 `1.2.3` / `1.2.3-rc1` 这类 SemVer 数字段后逐位比较。
-/// 拆不出数字段（比如 build metadata）直接走字典序兜底。
 ///
 /// 返回：
 ///   - > 0  remote 比 local 新
-///   - < 0  local 比 remote 新（理论上不该发生，但用户改了 napcat.mjs 也可能）
+///   - < 0  local 比 remote 新
 ///   - 0    一致 / 无法比较
 export function compareSemver(local: string, remote: string): number {
+    // QQ / 带 build id 的宿主版本走更稳的比较；纯 SemVer 路径保持原语义
+    if (local.includes('-') || remote.includes('-')) {
+        const via = compareComponentVersion(local, remote);
+        if (via !== 0) return via;
+    }
     const localNorm = normalizeComponentVersion(local);
     const remoteNorm = normalizeComponentVersion(remote);
     const localParts = parseNumericParts(localNorm);
@@ -100,7 +161,6 @@ export function compareSemver(local: string, remote: string): number {
         const b = remoteParts[i] ?? 0;
         if (a !== b) return b - a;
     }
-    // 数字段全相等：比 prerelease（有 prerelease 的版本算更老，遵循 SemVer 语义）
     const localHasPre = localNorm.includes('-');
     const remoteHasPre = remoteNorm.includes('-');
     if (localHasPre && !remoteHasPre) return 1;
@@ -109,7 +169,6 @@ export function compareSemver(local: string, remote: string): number {
 }
 
 function parseNumericParts(version: string): number[] {
-    // 去掉 v 前缀，截到第一个 `-` / `+` 之前的数字段
     const stripped = version.replace(/^[vV]/, '');
     const core = stripped.split(/[-+]/)[0];
     return core.split('.').map((part) => {
@@ -136,6 +195,7 @@ export interface UpdateAvailableItem {
 /// Desktop 当前版本暂不做派生（前端不知道自己哪个 build），只在 local
 /// 完全空时把 desktop release 当"提示当前发布版"显示，由 UI 决定是否提醒。
 /// ncd-watch 按远端主机安装，不进本机 LocalVersionSnapshot，由组件页/设置页按机比对。
+/// QQ 宿主按机安装，由组件页 latestVersionFor('qq') 驱动更新按钮。
 ///
 /// 规则：
 ///   - 远端 release info 缺失 → 该 project 不在结果列表
@@ -161,7 +221,9 @@ export function findUpdatesAvailable(
     }
 
     if (remote.snowluma) {
-        const cmp = local.snowluma ? compareSemver(local.snowluma, remote.snowluma.version) : Infinity;
+        const cmp = local.snowluma
+            ? compareSemver(local.snowluma, remote.snowluma.version)
+            : Infinity;
         if (cmp > 0) {
             out.push({
                 project: 'snowluma',

@@ -13,6 +13,14 @@ export type ReleaseSnapshot = { napcat_latest?: ReleaseInfo | null, snowluma_lat
  */
 ncd_watch_latest?: ReleaseInfo | null, 
 /**
+ * Linux QQ 宿主(pcConfig Linux 段 / nclatest 辅路);组件页更新按钮用
+ */
+qq_linux_latest?: ReleaseInfo | null, 
+/**
+ * Windows QQ 宿主(pcConfig Windows 段)
+ */
+qq_windows_latest?: ReleaseInfo | null, 
+/**
  * 本快照拉取的时间戳 Unix epoch 秒, None 表示从未成功拉取
  */
 fetched_at?: bigint | null, };

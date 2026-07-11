@@ -25,5 +25,21 @@ export const mockReleaseSnapshot: ReleaseSnapshot = {
     snowluma_latest: null,
     desktop_latest: null,
     ncd_watch_latest: null,
+    qq_linux_latest: {
+        version: '3.2.31',
+        tag: 'pcConfig',
+        published_at: BigInt(NOW - 86400),
+        html_url: 'https://im.qq.com/',
+        release_notes: 'Linux QQ via pcConfig (mock)',
+        assets: [],
+    },
+    qq_windows_latest: {
+        version: '9.9.31',
+        tag: 'pcConfig',
+        published_at: BigInt(NOW - 86400),
+        html_url: 'https://im.qq.com/',
+        release_notes: 'Windows QQ via pcConfig (mock)',
+        assets: [],
+    },
     fetched_at: BigInt(NOW),
 };
