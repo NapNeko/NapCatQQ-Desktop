@@ -502,19 +502,18 @@ impl QQComponent {
             }
         ));
 
-        let mirrors = ncd_network::build_mirror_urls(&url, None);
-        ctx.info(format!("准备获取 QQ 安装包，候选镜像 {} 个", mirrors.len()))
+        // QQ 走腾讯 CDN(gtimg / dldir1)，没有 GitHub 反代可用；
+        // build_mirror_urls 会拼出无效候选，race 全挂后报 all mirrors failed。
+        let download_candidates = vec![url.clone()];
+        ctx.info("准备获取 QQ 安装包（官方直链，不经 GitHub 镜像）")
             .await;
         let mut remote_download_ok = false;
 
         if host.locality() == ncd_host::Locality::Remote {
-            for mirror_url in &mirrors {
-                if host.download_url(mirror_url, &remote_pkg).await.is_ok() {
-                    ctx.info(format!("远端直接下载 QQ 安装包成功: {mirror_url}"))
-                        .await;
-                    remote_download_ok = true;
-                    break;
-                }
+            if host.download_url(&url, &remote_pkg).await.is_ok() {
+                ctx.info(format!("远端直接下载 QQ 安装包成功: {url}"))
+                    .await;
+                remote_download_ok = true;
             }
         }
 
@@ -537,7 +536,7 @@ impl QQComponent {
             let helper = DownloadHelper::new()?;
             helper
                 .download_with_mirrors(
-                    &mirrors,
+                    &download_candidates,
                     &local_tmp,
                     self.expected_sha256.as_deref(),
                     ctx,
@@ -770,9 +769,9 @@ impl QQComponent {
             std::process::id()
         ));
         let helper = DownloadHelper::new()?;
-        let mirrors = ncd_network::build_mirror_urls(&download_url, None);
+        // Windows 安装包同样是腾讯 CDN，只走官方直链
         helper
-            .download_with_mirrors(&mirrors, &local_exe, None, ctx, 2)
+            .download_with_mirrors(&[download_url.clone()], &local_exe, None, ctx, 2)
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
