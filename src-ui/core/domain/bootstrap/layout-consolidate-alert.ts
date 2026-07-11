@@ -1,6 +1,6 @@
 // 布局收敛 InfoBar 的纯展示逻辑（可单测，不依赖 React）。
 
-import type { DataLayoutConsolidateSnapshot } from '../../core/ipc/types';
+import type { DataLayoutConsolidateSnapshot } from '../../ipc/types';
 
 export type LayoutConsolidateAlert =
     | { kind: 'none' }

@@ -1,5 +1,8 @@
 // NapCatQQ Desktop UI - Core Types
 
+import type { LocalVersionSnapshot } from './generated/domain/LocalVersionSnapshot';
+import type { DataLayoutConsolidateSnapshot } from './generated/domain/DataLayoutConsolidateSnapshot';
+
 export type BootstrapStatus = 'ready' | 'migrating' | 'repair_required' | 'failed';
 
 export type RepairAction = 'open_data_dir' | 'export_migration_report' | 'restore_backup' | 'reauthenticate';
@@ -109,7 +112,6 @@ export type { DeploymentTaskList } from './generated/domain/DeploymentTaskList';
 
 import type { BotActorState } from './generated/BotActorState';
 import type { BotActorSnapshot } from './generated/BotActorSnapshot';
-import type { LocalVersionSnapshot } from './generated/domain/LocalVersionSnapshot';
 import type { ProgressEvent } from './generated/domain/ProgressEvent';
 import type { DeploymentTaskSnapshot } from './generated/domain/DeploymentTaskSnapshot';
 
