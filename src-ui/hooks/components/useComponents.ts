@@ -33,7 +33,7 @@ import { errorText } from '../../core/domain/errors';
 import { mockHosts } from '../../core/ipc/mock/component.mock';
 import type { Os, ComponentInfo, ComponentDetectResult } from '../../core/ipc/types';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
-import { useIsHostReachable } from '../remote/useIsHostReachable';
+import { isHostReachableFromCache } from '../remote/useIsHostReachable';
 
 type DetectQuery = UseQueryResult<ComponentDetectResult, Error>;
 
@@ -128,14 +128,16 @@ function useComponentsData(): ComponentsData {
     const { hosts, servers } = useKnownHosts();
     const queryClient = useQueryClient();
 
-    // 对所有已知主机做传输层可达性判断（本机恒 true，远端看 ServerProfile.state）。
-    // 必须在顶层以稳定顺序调用 hook，不能在 map/filter 里条件式调用。
-    // 结果用于下面 detectQueries 的 enabled 过滤，以及可能的 UI 区分。
-    const hostReachability: Record<string, boolean> = {};
-    for (const h of hosts) {
-        // eslint-disable-next-line react-hooks/rules-of-hooks
-        hostReachability[h.host_id] = useIsHostReachable(h.host_id);
-    }
+    // 主机可达性：servers 列表已由 useKnownHosts 的同一 ['servers'] 查询拉到。
+    // 禁止在 for (hosts) 里调用 useIsHostReachable——远端档案从 0→N 时 hooks
+    // 数量会变，生产环境直接 React #311 白屏（splash 结束后闪一下崩掉）。
+    const hostReachability = useMemo(() => {
+        const map: Record<string, boolean> = {};
+        for (const h of hosts) {
+            map[h.host_id] = isHostReachableFromCache(h.host_id, servers);
+        }
+        return map;
+    }, [hosts, servers]);
 
     // 自动连接：对所有 ServerState=disconnected/failed 的远端 host 触发一次
     // test_server_connection（密码用 keyring 缓存）。后端 detect 命令内部也有

@@ -10,6 +10,7 @@ import { hydrateAppUiPreferencesFromDisk } from '../hooks/preferences/useAppUiPr
 import { applySideEffects } from '../hooks/preferences/preferencesStore';
 import { syncRootChromeBackground } from '../core/design/surfaceCanvas';
 import { invoke } from '@tauri-apps/api/core';
+import { RouteErrorBoundary } from '../shared/ui/RouteErrorBoundary';
 
 export const AppBootGate: React.FC = () => {
     const [prefsReady, setPrefsReady] = useState(false);
@@ -61,7 +62,9 @@ export const AppBootGate: React.FC = () => {
         <div className="relative h-full min-h-0 w-full">
             {showApp ? (
                 <div className="relative z-0 h-full min-h-0 w-full">
-                    <AppNext />
+                    <RouteErrorBoundary title="主界面渲染失败">
+                        <AppNext />
+                    </RouteErrorBoundary>
                 </div>
             ) : null}
             {!showApp ? (

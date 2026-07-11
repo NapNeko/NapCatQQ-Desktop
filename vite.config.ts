@@ -3,7 +3,15 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 
+// Tauri 生产环境用自定义协议加载前端；base 必须相对路径，
+// 否则 index.html 写成 /assets/...，WebView 里脚本 404，表现为「前端崩溃」。
+const isTauriWindows =
+  process.env.TAURI_ENV_PLATFORM === 'windows' ||
+  process.env.TAURI_PLATFORM === 'windows';
+
 export default defineConfig({
+  // 相对 base：生产 asset 协议 + dev 都可用
+  base: './',
   plugins: [react(), tailwindcss()],
   define: {
     // dev 启动即拉全量组件 detect（含远端 SSH）会拖慢首屏；需要测组件页时设 VITE_SKIP_COMPONENTS_WARMUP=0
@@ -12,10 +20,10 @@ export default defineConfig({
     ),
   },
   clearScreen: false,
+  envPrefix: ['VITE_', 'TAURI_'],
   server: {
     port: 1420,
     strictPort: true,
-    // 改 UI 时尽量只热更模块，少触发整页 reload（仍可能因改 index/main 而全刷）
     hmr: { overlay: true },
     watch: {
       ignored: [
@@ -27,7 +35,6 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    // 预打包大依赖，缩短 dev 冷启动与 HMR 后重新拉依赖的时间
     include: [
       'react',
       'react-dom',
@@ -50,9 +57,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    target: 'esnext',
-    minify: false,
-    sourcemap: true,
+    target: isTauriWindows ? 'chrome105' : 'esnext',
+    minify: process.env.TAURI_ENV_DEBUG === 'true' ? false : 'esbuild',
+    sourcemap: process.env.TAURI_ENV_DEBUG === 'true',
     rollupOptions: {
       output: {
         manualChunks(id) {
