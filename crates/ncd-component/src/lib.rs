@@ -17,6 +17,7 @@ pub mod context;
 pub mod desktop_self;
 pub mod download;
 pub mod error;
+pub mod host_download;
 pub mod napcat;
 pub mod ncd_watch;
 pub mod nodejs;
@@ -33,6 +34,7 @@ pub use context::{ActionCtx, ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use desktop_self::DesktopSelfComponent;
 pub use download::DownloadHelper;
 pub use error::ActionError;
+pub use host_download::download_url_to_host_with_progress;
 pub use napcat::NapCatComponent;
 pub use ncd_watch::{
     NcdWatchComponent, discover_local_ncd_watch_binary, ncd_watch_asset_name,
@@ -43,8 +45,8 @@ pub use nodejs::NodeJsComponent;
 pub use novnc::NoVncComponent;
 pub use pkg_install_stream::run_pkg_command_with_progress;
 pub use qq::{
-    LinuxQqRelease, NCLATEST_QQ_VER_URL, QQ_PCCONFIG_URL, QQComponent, probe_linux_qq_latest,
-    probe_windows_qq_latest,
+    LinuxQqRelease, NCLATEST_QQ_VER_URL, QQ_PCCONFIG_URL, QQ_URL_SIGN_URL, QQComponent,
+    probe_linux_qq_latest, probe_windows_qq_latest,
 };
 
 pub use remote_qq_entry::{QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, set_remote_qq_package_main};

@@ -48,6 +48,11 @@ use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 pub const QQ_PCCONFIG_URL: &str =
     "https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json";
 
+/// 官网防盗链签名(Linux QQNTV2 裸链 403,需先换 sign+t)
+/// 与 im.qq.com SPA 中 trpc.qqntv2.urlsign.UrlSign/GetSign 一致
+pub const QQ_URL_SIGN_URL: &str =
+    "https://im.qq.com/http2rpc/gotrpc/noauth/trpc.qqntv2.urlsign.UrlSign/GetSign";
+
 /// NapCat 社区推荐 QQ 版本(辅路;挂掉则跳过)
 pub const NCLATEST_QQ_VER_URL: &str = "https://nclatest.znin.net/get_qq_ver";
 
@@ -163,49 +168,102 @@ impl QQComponent {
         })
     }
 
-    /// 官方 → 社区 → pin;任一层成功即返回
+    /// 官方 → 社区 → pin。
+    /// gtimg/QQNTV2 裸链会 403,对每条候选先走官网 UrlSign 换可下载地址,不先探裸链。
     async fn resolve_linux_release(
         &self,
         pkg: PackageFormat,
         arch: Arch,
         ctx: &mut ActionCtx,
     ) -> Result<LinuxQqRelease, ActionError> {
+        let mut candidates: Vec<LinuxQqRelease> = Vec::with_capacity(3);
+
         match fetch_linux_qq_from_pcconfig(pkg, arch).await {
             Ok(rel) => {
                 ctx.info(format!(
-                    "Linux QQ 发布源=pcConfig version={} url={}",
+                    "候选 Linux QQ: source=pcConfig version={} url={}",
                     rel.version, rel.download_url
                 ))
                 .await;
-                return Ok(rel);
+                candidates.push(rel);
             }
             Err(e) => {
-                ctx.info(format!("pcConfig Linux 段不可用,试社区源: {e}"))
-                    .await;
+                ctx.info(format!("pcConfig Linux 段不可用: {e}")).await;
             }
         }
 
         match fetch_linux_qq_from_nclatest(pkg, arch).await {
             Ok(rel) => {
                 ctx.info(format!(
-                    "Linux QQ 发布源=nclatest version={} url={}",
+                    "候选 Linux QQ: source=nclatest version={} url={}",
                     rel.version, rel.download_url
                 ))
                 .await;
-                return Ok(rel);
+                candidates.push(rel);
             }
             Err(e) => {
-                ctx.info(format!("nclatest 不可用,回退 pin: {e}")).await;
+                ctx.info(format!("nclatest 不可用: {e}")).await;
             }
         }
 
         let pin = self.pin_linux_release(pkg, arch)?;
         ctx.info(format!(
-            "Linux QQ 发布源=pin version={} url={}",
+            "候选 Linux QQ: source=pin version={} url={}",
             pin.version, pin.download_url
         ))
         .await;
-        Ok(pin)
+        candidates.push(pin);
+
+        let mut last_err: Option<String> = None;
+        for rel in candidates {
+            // gtimg/QQNTV2 直接 UrlSign,不先探裸链;dldir1 原样可用
+            match prepare_linux_download_url(&rel.download_url).await {
+                Ok(prepared) => {
+                    let signed = prepared != rel.download_url;
+                    let source = if signed {
+                        match rel.source {
+                            "pcConfig" => "pcConfig+UrlSign",
+                            "nclatest" => "nclatest+UrlSign",
+                            "pin" => "pin+UrlSign",
+                            other => other,
+                        }
+                    } else {
+                        rel.source
+                    };
+                    ctx.info(format!(
+                        "选用 Linux QQ source={} version={}{}",
+                        source,
+                        rel.version,
+                        if signed { " (已 UrlSign)" } else { "" }
+                    ))
+                    .await;
+                    return Ok(LinuxQqRelease {
+                        version: rel.version,
+                        download_url: prepared,
+                        source,
+                    });
+                }
+                Err(e) => {
+                    let msg = e.to_string();
+                    ctx.info(format!(
+                        "跳过 source={} url={}：{msg}",
+                        rel.source, rel.download_url
+                    ))
+                    .await;
+                    last_err = Some(msg);
+                }
+            }
+        }
+
+        Err(ActionError::install_step(
+            "resolve_linux_qq",
+            format!(
+                "没有可下载的 Linux QQ 安装包（pcConfig/nclatest/pin 均不可达）{}",
+                last_err
+                    .map(|e| format!("; 最后错误: {e}"))
+                    .unwrap_or_default()
+            ),
+        ))
     }
 
     /// 探测远端有 dpkg-deb 还是 rpm2cpio,dpkg 优先(deb 更普遍)
@@ -502,27 +560,45 @@ impl QQComponent {
             }
         ));
 
-        // QQ 走腾讯 CDN(gtimg / dldir1)，没有 GitHub 反代可用；
-        // build_mirror_urls 会拼出无效候选，race 全挂后报 all mirrors failed。
-        let download_candidates = vec![url.clone()];
-        ctx.info("准备获取 QQ 安装包（官方直链，不经 GitHub 镜像）")
+        // 远端优先：host 上 wget/curl 直下并桥接进度；失败再本机下载 + upload
+        let mut placed = false;
+        if host.locality() == Locality::Remote {
+            ctx.info(format!(
+                "准备在远端下载 QQ 安装包（source={}）",
+                release.source
+            ))
             .await;
-        let mut remote_download_ok = false;
-
-        if host.locality() == ncd_host::Locality::Remote {
-            if host.download_url(&url, &remote_pkg).await.is_ok() {
-                ctx.info(format!("远端直接下载 QQ 安装包成功: {url}"))
-                    .await;
-                remote_download_ok = true;
+            match crate::host_download::download_url_to_host_with_progress(
+                host,
+                &url,
+                &remote_pkg,
+                ctx,
+                3,
+                self.expected_sha256.as_deref(),
+            )
+            .await
+            {
+                Ok(()) => {
+                    placed = true;
+                    ctx.info(format!("远端下载完成 {}", remote_pkg.as_posix()))
+                        .await;
+                }
+                Err(ActionError::Cancelled) => return Err(ActionError::Cancelled),
+                Err(e) => {
+                    ctx.warn(format!("远端下载失败，回退本机下载后上传: {e}"))
+                        .await;
+                    let _ = host.remove_file(&remote_pkg).await;
+                }
             }
         }
 
-        if !remote_download_ok {
-            if host.locality() == ncd_host::Locality::Remote {
-                ctx.info("远端直接下载不可用，改为本机下载后上传").await;
-            } else {
-                ctx.info("本机下载 QQ 安装包").await;
-            }
+        if !placed {
+            ctx.info(format!(
+                "准备本机下载 QQ 安装包（source={}）",
+                release.source
+            ))
+            .await;
+
             let local_tmp = std::env::temp_dir().join(format!(
                 "ncd-qq-{}-{}.{}",
                 release.version.replace(['/', '\\', ' '], "_"),
@@ -535,20 +611,18 @@ impl QQComponent {
 
             let helper = DownloadHelper::new()?;
             helper
-                .download_with_mirrors(
-                    &download_candidates,
-                    &local_tmp,
-                    self.expected_sha256.as_deref(),
-                    ctx,
-                    2,
-                )
+                .download_to_file(&url, &local_tmp, self.expected_sha256.as_deref(), ctx, 3)
                 .await?;
 
+            if host.locality() == Locality::Remote {
+                ctx.info("本机下载完成，上传到远端").await;
+            }
             host.upload(&local_tmp, &remote_pkg).await?;
-            ctx.info(format!("QQ 安装包已就位 {}", remote_pkg.as_posix()))
-                .await;
             let _ = tokio::fs::remove_file(&local_tmp).await;
         }
+
+        ctx.info(format!("QQ 安装包已就位 {}", remote_pkg.as_posix()))
+            .await;
 
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
@@ -769,9 +843,9 @@ impl QQComponent {
             std::process::id()
         ));
         let helper = DownloadHelper::new()?;
-        // Windows 安装包同样是腾讯 CDN，只走官方直链
+        // Windows 安装包是腾讯 CDN，单 URL 直下（不经 GitHub 镜像）
         helper
-            .download_with_mirrors(&[download_url.clone()], &local_exe, None, ctx, 2)
+            .download_to_file(&download_url, &local_exe, None, ctx, 2)
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
@@ -923,6 +997,73 @@ async fn fetch_text(url: &str) -> Result<String, ActionError> {
     })
 }
 
+/// gtimg / QQNTV2 等受防盗链保护的地址需要签名;dldir1 旧链直接可用。
+fn linux_url_needs_sign(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    lower.contains("qqdl.gtimg.cn") || lower.contains("qqntv2") || lower.contains("gtimg.cn/qqfile")
+}
+
+/// 官网 UrlSign:把裸链换成 ?sign=&t= 可下载地址。
+/// 签名失败不吞错,交给上层换下一条候选。
+async fn sign_qq_download_url(raw_url: &str) -> Result<String, ActionError> {
+    let oidb = r#"{"uint32_command":"0x9b8e","uint32_service_type":1}"#;
+    let body = serde_json::json!({ "url": raw_url });
+    let resp = ncd_network::shared_client()
+        .post(QQ_URL_SIGN_URL)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header("x-oidb", oidb)
+        .header(reqwest::header::ORIGIN, "https://im.qq.com")
+        .header(reqwest::header::REFERER, "https://im.qq.com/index/")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| ActionError::DownloadFailed {
+            url: raw_url.to_string(),
+            reason: format!("UrlSign request failed: {e}"),
+        })?;
+    if !resp.status().is_success() {
+        return Err(ActionError::DownloadFailed {
+            url: raw_url.to_string(),
+            reason: format!("UrlSign HTTP {}", resp.status()),
+        });
+    }
+    let json: serde_json::Value = resp.json().await.map_err(|e| ActionError::DownloadFailed {
+        url: raw_url.to_string(),
+        reason: format!("UrlSign invalid json: {e}"),
+    })?;
+    let retcode = json.get("retcode").and_then(|v| v.as_i64()).unwrap_or(-1);
+    if retcode != 0 {
+        let msg = json
+            .pointer("/error/message")
+            .or_else(|| json.get("message"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        return Err(ActionError::DownloadFailed {
+            url: raw_url.to_string(),
+            reason: format!("UrlSign retcode={retcode}: {msg}"),
+        });
+    }
+    let signed = json
+        .pointer("/data/url")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ActionError::DownloadFailed {
+            url: raw_url.to_string(),
+            reason: "UrlSign missing data.url".into(),
+        })?;
+    Ok(signed.to_string())
+}
+
+/// 安装 / probe 共用:需要签名则签名,否则原样返回。
+async fn prepare_linux_download_url(url: &str) -> Result<String, ActionError> {
+    if linux_url_needs_sign(url) {
+        sign_qq_download_url(url).await
+    } else {
+        Ok(url.to_string())
+    }
+}
+
 /// 官方 pcConfig Linux 段 → 完整 deb/rpm 直链
 async fn fetch_linux_qq_from_pcconfig(
     pkg: PackageFormat,
@@ -934,18 +1075,49 @@ async fn fetch_linux_qq_from_pcconfig(
 
 /// 给 release 快照 / 组件页用:探测 Linux QQ 当前可装版本(官方→社区→pin)
 ///
-/// arch 用 x86_64 deb 作为版本代表即可(腾讯各 arch 版本号一致)
+/// 对 gtimg 链直接签名,不先探裸链;返回的 download_url 已可下。
 pub async fn probe_linux_qq_latest() -> Result<LinuxQqRelease, ActionError> {
-    match fetch_linux_qq_from_pcconfig(PackageFormat::Deb, Arch::X86_64).await {
-        Ok(rel) => return Ok(rel),
-        Err(_) => {}
+    let mut last_err: Option<String> = None;
+    for rel in [
+        fetch_linux_qq_from_pcconfig(PackageFormat::Deb, Arch::X86_64).await,
+        fetch_linux_qq_from_nclatest(PackageFormat::Deb, Arch::X86_64).await,
+        QQComponent::default_v3_2_25(HostPath::from_posix("/tmp/ncd-probe"))
+            .pin_linux_release(PackageFormat::Deb, Arch::X86_64),
+    ] {
+        match rel {
+            Ok(candidate) => match prepare_linux_download_url(&candidate.download_url).await {
+                Ok(prepared) => {
+                    let signed = prepared != candidate.download_url;
+                    let source = if signed {
+                        match candidate.source {
+                            "pcConfig" => "pcConfig+UrlSign",
+                            "nclatest" => "nclatest+UrlSign",
+                            "pin" => "pin+UrlSign",
+                            other => other,
+                        }
+                    } else {
+                        candidate.source
+                    };
+                    return Ok(LinuxQqRelease {
+                        version: candidate.version,
+                        download_url: prepared,
+                        source,
+                    });
+                }
+                Err(e) => last_err = Some(e.to_string()),
+            },
+            Err(e) => last_err = Some(e.to_string()),
+        }
     }
-    match fetch_linux_qq_from_nclatest(PackageFormat::Deb, Arch::X86_64).await {
-        Ok(rel) => return Ok(rel),
-        Err(_) => {}
-    }
-    QQComponent::default_v3_2_25(HostPath::from_posix("/tmp/ncd-probe"))
-        .pin_linux_release(PackageFormat::Deb, Arch::X86_64)
+    Err(ActionError::install_step(
+        "probe_linux_qq_latest",
+        format!(
+            "没有可下载的 Linux QQ 安装包{}",
+            last_err
+                .map(|e| format!("; 最后错误: {e}"))
+                .unwrap_or_default()
+        ),
+    ))
 }
 
 /// 给 release 快照用:探测 Windows QQ 当前安装包版本
@@ -1003,6 +1175,7 @@ fn parse_linux_qq_from_pcconfig(
     Ok(LinuxQqRelease {
         version,
         download_url: url,
+
         source: "pcConfig",
     })
 }
