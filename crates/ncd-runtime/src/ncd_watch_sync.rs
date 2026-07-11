@@ -154,8 +154,10 @@ pub fn bot_to_notify_target_with_webui(
             None,
         ),
         DeploymentType::Native => {
+            // 勿以 `-q` 开头：旧 ncd-watch 调 `pgrep -f <pat>` 时 procps 会把 `-q` 当选项，
+            // 探活永远 offline。前缀用真实命令行片段，且新版 probe 另加 `--`。
             let process_match = if qq > 0 {
-                Some(format!("-q {qq}$"))
+                Some(format!("no-sandbox -q {qq}$"))
             } else {
                 None
             };
@@ -234,8 +236,56 @@ pub fn build_notify_config_with_extras(
     }
 }
 
+/// 心跳/同步在 WebUI 端点尚未入内存表时,不要用空 port/token 覆盖远端已有凭据。
+/// 否则 Bot 重启后一段空窗内会把 notify.json 的 webui 清掉,登录踢号探活哑火。
+pub fn merge_notify_preserve_webui(new: &mut NotifyConfig, prev: &NotifyConfig) {
+    for bot in &mut new.bots {
+        let has_port = bot.webui_port.filter(|p| *p > 0).is_some();
+        let has_token = bot
+            .webui_token
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        if has_port && has_token {
+            continue;
+        }
+        let Some(old) = prev.bots.iter().find(|b| b.bot_id == bot.bot_id) else {
+            continue;
+        };
+        if !has_port {
+            if let Some(p) = old.webui_port.filter(|p| *p > 0) {
+                bot.webui_port = Some(p);
+            }
+        }
+        if !has_token {
+            if let Some(t) = old
+                .webui_token
+                .as_ref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+            {
+                bot.webui_token = Some(t.to_string());
+            }
+        }
+    }
+}
+
 pub fn remote_watch_root(home: &str) -> HostPath {
     HostPath::from_posix(format!("{}/ncd-watch", home.trim_end_matches('/')))
+}
+
+pub async fn read_notify_json(
+    host: &dyn Host,
+    home: &str,
+) -> Result<Option<NotifyConfig>, String> {
+    let path = remote_watch_root(home).join("config").join("notify.json");
+    let exists = host.exists(&path).await.map_err(|e| e.to_string())?;
+    if !exists {
+        return Ok(None);
+    }
+    let bytes = host.read_file(&path).await.map_err(|e| e.to_string())?;
+    let cfg = serde_json::from_slice(&bytes).map_err(|e| format!("parse notify.json: {e}"))?;
+    Ok(Some(cfg))
 }
 
 pub async fn write_notify_json(
@@ -261,6 +311,19 @@ pub async fn write_notify_json(
         )
         .await;
     Ok(())
+}
+
+/// 读旧 notify 合并 webui 后再写,避免心跳空窗擦掉登录探活凭据
+pub async fn write_notify_json_merged(
+    host: &dyn Host,
+    home: &str,
+    notify: &NotifyConfig,
+) -> Result<(), String> {
+    let mut merged = notify.clone();
+    if let Ok(Some(prev)) = read_notify_json(host, home).await {
+        merge_notify_preserve_webui(&mut merged, &prev);
+    }
+    write_notify_json(host, home, &merged).await
 }
 
 pub async fn write_desktop_present(
@@ -392,8 +455,42 @@ mod tests {
         b.bot.backend_type = BackendType::SnowLuma;
         let ta = bot_to_notify_target(&a);
         let tb = bot_to_notify_target(&b);
-        assert_eq!(ta.process_match.as_deref(), Some("-q 11$"));
-        assert_eq!(tb.process_match.as_deref(), Some("-q 22$"));
+        assert_eq!(ta.process_match.as_deref(), Some("no-sandbox -q 11$"));
+        assert_eq!(tb.process_match.as_deref(), Some("no-sandbox -q 22$"));
+    }
+
+    #[test]
+    fn merge_preserves_webui_when_new_missing() {
+        let mut prev =
+            build_notify_config("s1", &[sample_remote("s1", 9)], &OfflineWebhookSettings::default());
+        prev.bots[0].webui_port = Some(61061);
+        prev.bots[0].webui_token = Some("old-tok".into());
+
+        let mut next =
+            build_notify_config("s1", &[sample_remote("s1", 9)], &OfflineWebhookSettings::default());
+        // Docker sample may synthesize port; clear both to simulate restart gap
+        next.bots[0].webui_port = None;
+        next.bots[0].webui_token = None;
+
+        merge_notify_preserve_webui(&mut next, &prev);
+        assert_eq!(next.bots[0].webui_port, Some(61061));
+        assert_eq!(next.bots[0].webui_token.as_deref(), Some("old-tok"));
+    }
+
+    #[test]
+    fn merge_prefers_fresh_webui_over_stale() {
+        let mut prev =
+            build_notify_config("s1", &[sample_remote("s1", 9)], &OfflineWebhookSettings::default());
+        prev.bots[0].webui_port = Some(11111);
+        prev.bots[0].webui_token = Some("stale".into());
+
+        let mut next =
+            build_notify_config("s1", &[sample_remote("s1", 9)], &OfflineWebhookSettings::default());
+        next.bots[0].webui_port = Some(22222);
+        next.bots[0].webui_token = Some("fresh".into());
+        merge_notify_preserve_webui(&mut next, &prev);
+        assert_eq!(next.bots[0].webui_port, Some(22222));
+        assert_eq!(next.bots[0].webui_token.as_deref(), Some("fresh"));
     }
 
     #[test]

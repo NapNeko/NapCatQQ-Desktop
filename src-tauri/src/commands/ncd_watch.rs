@@ -3,7 +3,7 @@
 use ncd_domain::ids::BotId;
 use ncd_runtime::ncd_watch_sync::{
     WatchNotifyConfig, WatchNotifyExtras, build_notify_config_with_extras, write_desktop_present,
-    write_notify_json,
+    write_notify_json_merged,
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -65,7 +65,7 @@ pub async fn sync_ncd_watch_notify(
         .await
         .map_err(|e| e.to_string())?;
     let notify = build_notify_for_server(state.inner(), &server_id, &bots).await;
-    write_notify_json(host.as_ref(), home, &notify).await?;
+    write_notify_json_merged(host.as_ref(), home, &notify).await?;
     write_desktop_present(host.as_ref(), home, Some(env!("CARGO_PKG_VERSION"))).await?;
     Ok(())
 }
@@ -123,7 +123,7 @@ pub async fn heartbeat_all_remote_servers(state: &AppState) {
         if notify.bots.is_empty() {
             continue;
         }
-        if let Err(e) = write_notify_json(host.as_ref(), home, &notify).await {
+        if let Err(e) = write_notify_json_merged(host.as_ref(), home, &notify).await {
             tracing::debug!(server_id = %profile.id, %e, "write notify.json failed");
         }
     }
