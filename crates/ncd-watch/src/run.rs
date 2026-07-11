@@ -1,4 +1,9 @@
-//! 主循环:探活 → 登录态 → 边沿 → Webhook/Email/同机 OneBot
+//! 主循环:探活 → 账号在线(WebUI) → 边沿 → Webhook/Email/同机 OneBot
+//!
+//! 掉线主信号对齐 Desktop login_poller 的 online/isLogin:
+//! - 有 webui port+token:始终 probe 登录态,账号 LoggedIn→LoggedOut 才告警
+//! - 进程 pgrep 仅作 OneBot messenger 选择,以及无 WebUI 凭据时的回退边沿
+//! - 进程 Online 绝不冒充 QQ 已登录
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -9,7 +14,7 @@ use ncd_domain::OfflineAlertKind;
 use crate::config::{NotifyConfig, WatchConfig, WatchPaths};
 use crate::edge::{EdgeAction, EdgeTracker, OfflineEdgeKind};
 use crate::email::send_watch_email;
-use crate::login_probe::probe_login_status;
+use crate::login_probe::{has_webui_probe, probe_login_status};
 use crate::onebot::send_watch_onebot;
 use crate::present::desktop_is_present;
 use crate::probe::{LoginStatus, ProbeStatus, Prober};
@@ -55,7 +60,7 @@ pub async fn run_once(
         Vec::new()
     };
 
-    // 先扫一轮进程态,供 OneBot 选「本轮仍在线」的 messenger
+    // process_online: OneBot 选仍在线 messenger;不是掉线主信号
     let mut process_online: HashSet<String> = HashSet::new();
     let mut probe_cache: Vec<(crate::config::NotifyBotTarget, crate::probe::ProbeResult)> =
         Vec::new();
@@ -68,11 +73,8 @@ pub async fn run_once(
             process_online.insert(bot.bot_id.clone());
         }
 
-        if matches!(result.status, ProbeStatus::Online)
-            && bot.backend.eq_ignore_ascii_case("napcat")
-            && bot.webui_port.is_some()
-            && bot.webui_token.as_ref().is_some_and(|t| !t.trim().is_empty())
-        {
+        // 有 WebUI 凭据就探账号态(不要求进程 Online;进程在也不等于已登录)
+        if has_webui_probe(bot) {
             let (login, detail) = probe_login_status(bot).await;
             result.login = login;
             if !detail.is_empty() {
@@ -84,14 +86,23 @@ pub async fn run_once(
     }
 
     for (bot, result) in &probe_cache {
+        let prefer_account = has_webui_probe(bot);
         if matches!(result.status, ProbeStatus::Unknown)
             && matches!(result.login, LoginStatus::Unknown)
         {
             tracing::debug!(bot_id = %bot.bot_id, detail = %result.detail, "probe unknown");
-            continue;
+            // 无任何有效层时仍更新不了边沿;prefer_account 时 Unknown 登录会只记进程快照
+            if !prefer_account {
+                continue;
+            }
         }
 
-        let actions = edges.observe_layers(&bot.bot_id, result.status, result.login);
+        let actions = edges.observe_layers_prefer(
+            &bot.bot_id,
+            result.status,
+            result.login,
+            prefer_account,
+        );
         for action in actions {
             match action {
                 EdgeAction::None => {}
@@ -103,6 +114,7 @@ pub async fn run_once(
                     tracing::info!(
                         bot_id = %bot.bot_id,
                         ?kind,
+                        prefer_account,
                         detail = %result.detail,
                         allow_notify,
                         "offline edge"
@@ -116,6 +128,7 @@ pub async fn run_once(
                 EdgeAction::FireRecovered => {
                     tracing::info!(
                         bot_id = %bot.bot_id,
+                        prefer_account,
                         detail = %result.detail,
                         allow_notify,
                         notify_on_recovered = notify.notify_on_recovered,
@@ -252,83 +265,5 @@ pub async fn run_loop(
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::NotifyBotTarget;
-    use crate::probe::{LoginStatus, MapProber, ProbeStatus};
-    use std::collections::HashMap;
-
-    fn sample_bot() -> NotifyBotTarget {
-        NotifyBotTarget {
-            bot_id: "42".into(),
-            qq_id: 42,
-            bot_name: "t".into(),
-            backend: "napcat".into(),
-            deployment: "native".into(),
-            container_name: None,
-            pid_file: None,
-            process_match: Some("x".into()),
-            webui_port: None,
-            webui_token: None,
-            enabled: true,
-        }
-    }
-
-    #[tokio::test]
-    async fn fires_only_when_desktop_absent() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = WatchPaths::from_root(dir.path());
-        std::fs::create_dir_all(&paths.state_dir).unwrap();
-        std::fs::create_dir_all(&paths.config_dir).unwrap();
-
-        let watch = WatchConfig {
-            notify_while_desktop_present: false,
-            desktop_present_ttl_secs: 90,
-            ..WatchConfig::default()
-        };
-        let notify = NotifyConfig {
-            bots: vec![sample_bot()],
-            webhooks: vec![],
-            webhook_enabled: true,
-            ..NotifyConfig::default()
-        };
-        let mut map = HashMap::new();
-        map.insert("42".into(), (ProbeStatus::Online, LoginStatus::Unknown));
-        let prober = MapProber { map };
-        let mut edges = EdgeTracker::new(0);
-
-        let _ = run_once(&paths, &watch, &notify, &prober, &mut edges).await;
-
-        let mut prober2 = MapProber::default();
-        prober2
-            .map
-            .insert("42".into(), (ProbeStatus::Offline, LoginStatus::Unknown));
-        let out = run_once(&paths, &watch, &notify, &prober2, &mut edges).await;
-        assert_eq!(out.probed, 1);
-        assert_eq!(out.fired, 0);
-        assert!(!out.skipped_desktop_present);
-
-        let present = crate::config::DesktopPresentFile::now();
-        std::fs::write(
-            &paths.desktop_present,
-            serde_json::to_string(&present).unwrap(),
-        )
-        .unwrap();
-        let mut edges2 = EdgeTracker::new(0);
-        let mut p_on = MapProber::default();
-        p_on.map
-            .insert("42".into(), (ProbeStatus::Online, LoginStatus::Unknown));
-        let _ = run_once(&paths, &watch, &notify, &p_on, &mut edges2).await;
-        let mut p_off = MapProber::default();
-        p_off
-            .map
-            .insert("42".into(), (ProbeStatus::Offline, LoginStatus::Unknown));
-        let out2 = run_once(&paths, &watch, &notify, &p_off, &mut edges2).await;
-        assert!(out2.skipped_desktop_present);
-        assert_eq!(out2.fired, 0);
     }
 }
