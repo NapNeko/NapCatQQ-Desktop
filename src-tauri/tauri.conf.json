@@ -41,6 +41,7 @@
     "windows": {
       "wix": {
         "upgradeCode": "5EBD6A58-1B0A-4700-B16F-7E3D7D62949D",
+        "template": "wix/main.wxs",
         "fragmentPaths": [
           "wix/v2-orphan-cleanup.wxs"
         ],

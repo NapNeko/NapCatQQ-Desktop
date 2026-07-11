@@ -39,6 +39,8 @@ async-trait = "0.1"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = ["Win32_UI_Shell"] }
 tauri-winrt-notification = "0.7"
+winreg = "0.52"
+
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

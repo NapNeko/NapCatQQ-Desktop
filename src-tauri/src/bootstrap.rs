@@ -3,15 +3,42 @@ use std::path::{Path, PathBuf};
 use ncd_domain::{BootstrapSnapshot, DataLayoutConsolidateSnapshot, LocalVersionSnapshot};
 use ncd_runtime::{LocalConfigStore, LocalPathProbe, MigrationOrchestrator, SecretStoreImpl};
 
+use crate::product_registry;
+
 const APP_DATA_DIR_NAME: &str = "NapCatQQ Desktop";
 
+/// 解析权威数据根(单一入口;业务模块禁止再硬编码 ProgramData)。
+///
+/// 优先级:
+/// 1. 环境变量 `NCD_DATA_ROOT`(开发/排障覆盖)
+/// 2. Windows `HKLM\SOFTWARE\NapCatQQ-Desktop\DataRoot`(MSI 或启动补写;可迁移)
+/// 3. `%ProgramData%\NapCatQQ Desktop`(生产默认)
+/// 4. LocalAppData / cwd 兜底(无 ProgramData 的非 Windows 或开发机)
 pub(crate) fn resolve_data_root() -> PathBuf {
+    if let Some(from_env) = data_root_from_env() {
+        return from_env;
+    }
+
+    #[cfg(windows)]
+    if let Some(from_reg) = product_registry::read_data_root() {
+        return from_reg;
+    }
+
     #[cfg(windows)]
     let program_data = std::env::var_os("ProgramData").map(PathBuf::from);
     #[cfg(not(windows))]
     let program_data = None;
     let local_data = dirs::data_local_dir();
     resolve_data_root_from_candidates(program_data, local_data)
+}
+
+fn data_root_from_env() -> Option<PathBuf> {
+    let raw = std::env::var_os(product_registry::DATA_ROOT_ENV)?;
+    if raw.is_empty() {
+        return None;
+    }
+    let path = product_registry::normalize_registered_path(PathBuf::from(raw));
+    product_registry::is_usable_absolute_path(&path).then_some(path)
 }
 
 pub(crate) fn resolve_data_root_from_candidates(
@@ -357,5 +384,21 @@ mod tests {
         let snapshot = build_snapshot_for_data_root(temp.path());
 
         assert_eq!(snapshot.local_versions.snowluma, None);
+    }
+
+    #[test]
+    fn registered_path_helpers_reject_relative() {
+        assert!(!product_registry::is_usable_absolute_path(Path::new(
+            "relative-data"
+        )));
+        #[cfg(windows)]
+        {
+            let abs = PathBuf::from(r"C:\Custom\NapCatQQ Desktop");
+            assert!(product_registry::is_usable_absolute_path(&abs));
+            let norm = product_registry::normalize_registered_path(PathBuf::from(
+                r"C:\Custom\NapCatQQ Desktop\",
+            ));
+            assert_eq!(norm, abs);
+        }
     }
 }

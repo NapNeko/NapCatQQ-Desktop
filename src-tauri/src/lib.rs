@@ -23,6 +23,7 @@ pub mod legacy_install_cleanup;
 pub mod lightweight;
 pub mod lightweight_scheduler;
 pub mod onebot_endpoint_resolver;
+pub mod product_registry;
 pub mod runtime;
 pub mod single_instance;
 pub mod snowluma_offline_listener;
@@ -71,7 +72,26 @@ pub fn run() {
     desktop_log::init_desktop_logging(&data_root, event_bus.clone());
     #[cfg(windows)]
     {
+        let reg = product_registry::ensure_product_paths_registered(&data_root);
+        if reg.wrote_install_dir || reg.wrote_data_root {
+            tracing::info!(
+                target: "ncd_tauri::product_registry",
+                install_dir = ?reg.install_dir.as_ref().map(|p| p.display().to_string()),
+                data_root = ?reg.data_root.as_ref().map(|p| p.display().to_string()),
+                wrote_install_dir = reg.wrote_install_dir,
+                wrote_data_root = reg.wrote_data_root,
+                "ensured product path registry values"
+            );
+        }
+        for err in &reg.errors {
+            tracing::debug!(
+                target: "ncd_tauri::product_registry",
+                error = %err,
+                "product path registry ensure skipped or failed"
+            );
+        }
         let cleanup = legacy_install_cleanup::purge_legacy_install_orphans();
+
         if let Some(reason) = cleanup.skipped_reason.as_deref() {
             tracing::debug!(
                 target: "ncd_tauri::install_cleanup",
