@@ -87,6 +87,110 @@ pub async fn touch_ncd_watch_present(
     write_desktop_present(host.as_ref(), home, Some(env!("CARGO_PKG_VERSION"))).await
 }
 
+/// 远端 notify 同步策略:心跳 vs 保存后推送的差异只在筛选/日志级别
+#[derive(Debug, Clone, Copy)]
+enum NotifyPushMode {
+    /// 仅已 Connected;无 bot 跳过写 notify;失败 debug
+    Heartbeat,
+    /// 该机有 Bot 才推;ensure_connected;失败 warn;汇总 info
+    AfterSettingsSave,
+}
+
+/// 单机写 present + notify。成功 Ok(());跳过/失败 Err(原因字面量,已打日志)
+async fn push_notify_for_server(
+    state: &AppState,
+    profile: &ncd_runtime::ServerProfile,
+    bots: &[ncd_domain::bot_config::BotConfig],
+    version: &str,
+    mode: NotifyPushMode,
+) -> Result<(), ()> {
+    let log_tag = match mode {
+        NotifyPushMode::Heartbeat => "heartbeat",
+        NotifyPushMode::AfterSettingsSave => "save-sync",
+    };
+
+    match mode {
+        NotifyPushMode::Heartbeat => {
+            if profile.state != ncd_runtime::ServerState::Connected {
+                return Err(());
+            }
+        }
+        NotifyPushMode::AfterSettingsSave => {
+            let has_bots = bots
+                .iter()
+                .any(|cfg| cfg.bot.runtime_target.server_id() == Some(profile.id.as_str()));
+            if !has_bots {
+                return Err(());
+            }
+        }
+    }
+
+    let host_id = format!("remote:{}", profile.id);
+    let host = match state.server_manager.ensure_connected(&profile.id).await {
+        Ok(h) => h,
+        Err(e) => {
+            match mode {
+                NotifyPushMode::Heartbeat => {
+                    tracing::debug!(server_id = %profile.id, %e, %log_tag, "ncd-watch skip");
+                }
+                NotifyPushMode::AfterSettingsSave => {
+                    tracing::warn!(
+                        server_id = %profile.id,
+                        %e,
+                        %log_tag,
+                        "ncd-watch connect failed"
+                    );
+                }
+            }
+            return Err(());
+        }
+    };
+    let probe = cached_host_probe(&host_id, host.as_ref(), state).await;
+    let Some(home) = probe.home.as_deref().filter(|s| !s.is_empty()) else {
+        if matches!(mode, NotifyPushMode::AfterSettingsSave) {
+            tracing::warn!(server_id = %profile.id, %log_tag, "ncd-watch no $HOME");
+        }
+        return Err(());
+    };
+    if let Err(e) = write_desktop_present(host.as_ref(), home, Some(version)).await {
+        match mode {
+            NotifyPushMode::Heartbeat => {
+                tracing::debug!(server_id = %profile.id, %e, "write desktop_present failed");
+            }
+            NotifyPushMode::AfterSettingsSave => {
+                tracing::warn!(
+                    server_id = %profile.id,
+                    %e,
+                    %log_tag,
+                    "ncd-watch present failed"
+                );
+            }
+        }
+        return Err(());
+    }
+    let notify = build_notify_for_server(state, &profile.id, bots).await;
+    if matches!(mode, NotifyPushMode::Heartbeat) && notify.bots.is_empty() {
+        return Ok(());
+    }
+    if let Err(e) = write_notify_json_merged(host.as_ref(), home, &notify).await {
+        match mode {
+            NotifyPushMode::Heartbeat => {
+                tracing::debug!(server_id = %profile.id, %e, "write notify.json failed");
+            }
+            NotifyPushMode::AfterSettingsSave => {
+                tracing::warn!(
+                    server_id = %profile.id,
+                    %e,
+                    %log_tag,
+                    "ncd-watch notify failed"
+                );
+            }
+        }
+        return Err(());
+    }
+    Ok(())
+}
+
 /// 对所有已连接远端 server 刷 present + 有远端 bot 时同步 notify
 pub async fn heartbeat_all_remote_servers(state: &AppState) {
     let servers = state.server_manager.list_servers().await;
@@ -98,34 +202,58 @@ pub async fn heartbeat_all_remote_servers(state: &AppState) {
         }
     };
     let version = env!("CARGO_PKG_VERSION");
+    for profile in &servers {
+        let _ =
+            push_notify_for_server(state, profile, &bots, version, NotifyPushMode::Heartbeat).await;
+    }
+}
 
-    for profile in servers {
-        if profile.state != ncd_runtime::ServerState::Connected {
-            continue;
+/// 保存 App 设置后立刻推 notify:对「该机有 Bot」的远端 try ensure_connected + 写盘。
+/// 失败只记日志,不回传给设置保存(本地设置已落盘优先)。
+pub async fn push_notify_after_app_settings_save(state: &AppState) {
+    let servers = state.server_manager.list_servers().await;
+    let bots = match state.bot_manager.list_bot_configs().await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(%e, "ncd-watch save-sync: list bots failed");
+            return;
         }
-        let host_id = format!("remote:{}", profile.id);
-        let host = match state.server_manager.ensure_connected(&profile.id).await {
-            Ok(h) => h,
-            Err(e) => {
-                tracing::debug!(server_id = %profile.id, %e, "ncd-watch heartbeat skip");
-                continue;
+    };
+    let version = env!("CARGO_PKG_VERSION");
+    let mut ok = 0u32;
+    let mut fail = 0u32;
+    for profile in &servers {
+        match push_notify_for_server(
+            state,
+            profile,
+            &bots,
+            version,
+            NotifyPushMode::AfterSettingsSave,
+        )
+        .await
+        {
+            Ok(()) => {
+                // 无 bot 的机返回 Err(());有 bot 且成功才 Ok
+                // AfterSettingsSave 对无 bot 直接 Err,此处 Ok 即成功推送
+                ok += 1;
             }
-        };
-        let probe = cached_host_probe(&host_id, host.as_ref(), state).await;
-        let Some(home) = probe.home.as_deref().filter(|s| !s.is_empty()) else {
-            continue;
-        };
-        if let Err(e) = write_desktop_present(host.as_ref(), home, Some(version)).await {
-            tracing::debug!(server_id = %profile.id, %e, "write desktop_present failed");
-            continue;
+            Err(()) => {
+                // 无 bot 跳过也算 fail 计数不准:仅统计「本该推却失败」
+                let should = bots
+                    .iter()
+                    .any(|cfg| cfg.bot.runtime_target.server_id() == Some(profile.id.as_str()));
+                if should {
+                    fail += 1;
+                }
+            }
         }
-        let notify = build_notify_for_server(state, &profile.id, &bots).await;
-        if notify.bots.is_empty() {
-            continue;
-        }
-        if let Err(e) = write_notify_json_merged(host.as_ref(), home, &notify).await {
-            tracing::debug!(server_id = %profile.id, %e, "write notify.json failed");
-        }
+    }
+    if ok > 0 || fail > 0 {
+        tracing::info!(
+            ok,
+            fail,
+            "ncd-watch save-sync finished (notify after app-settings)"
+        );
     }
 }
 

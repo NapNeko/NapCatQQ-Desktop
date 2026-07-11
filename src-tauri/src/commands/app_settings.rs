@@ -10,7 +10,7 @@
 use ncd_domain::{AppSettings, AppSettingsDto};
 use ncd_runtime::{LocalConfigStore, SecretStoreImpl};
 use ncd_traits::{ConfigStore, SecretStore};
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 use tokio_util::sync::CancellationToken;
 
 use crate::AppState;
@@ -57,8 +57,10 @@ pub async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettingsD
 /// 非敏感偏好原子写入 app-settings.json;PAT 非空写 SecretStore,空串则删除
 /// 同时把轮询设置热更新到内存中的 BotManager,让正在运行的 Poller 下次 tick
 /// 用新间隔(无需重启)
+/// 落盘成功后后台把 Webhook/Email/OneBot 推到各远端 ncd-watch(不挡保存返回)
 #[tauri::command]
 pub async fn set_app_settings(
+    app: AppHandle,
     state: State<'_, AppState>,
     dto: AppSettingsDto,
 ) -> Result<(), String> {
@@ -135,6 +137,13 @@ pub async fn set_app_settings(
         }
     }
 
+    // 通知相关已落盘:后台推远端 ncd-watch notify,失败只记日志,不挡保存返回
+    tauri::async_runtime::spawn(async move {
+        if let Some(st) = app.try_state::<AppState>() {
+            crate::commands::ncd_watch::push_notify_after_app_settings_save(st.inner()).await;
+        }
+    });
+
     Ok(())
 }
 
@@ -188,9 +197,10 @@ pub async fn clear_offline_delivery_history(state: State<'_, AppState>) -> Resul
     Ok(())
 }
 
-/// 列出可作为 OneBot 发送方的本机 Bot 候选
+/// 列出可作为 OneBot 发送方的 Bot 候选(本机 + 远端)
 ///
-/// 前端用它做多选,而不是手填 QQ。eligible = Running 且具备环回 HTTP 服务。
+/// 本机: Desktop 在线投递用;eligible = Running 且环回 HTTP。
+/// 远端: 仅写入全局 messenger 列表,由 ncd-watch 按同 server 过滤;eligible 恒 false。
 #[tauri::command]
 pub async fn list_onebot_messenger_candidates(
     state: State<'_, AppState>,
@@ -198,10 +208,11 @@ pub async fn list_onebot_messenger_candidates(
     list_onebot_messenger_candidates_inner(&state).await
 }
 
-/// 为指定本机 Bot 自动补齐/启用环回 HTTP 服务
+/// 为 Bot 自动补齐/启用环回 HTTP 服务(本机 + 远端)
 ///
-/// 已有可用 HTTP 时直接返回;否则启用已有服务或新建 `desktop-offline-http`。
-/// 走 BotManager upsert,Running 中的 NC/SL 会热更新派生配置。
+/// 已有可用环回 HTTP 时直接返回;否则启用已有服务或新建 `desktop-offline-http`。
+/// 走 BotManager upsert:本机 Running 可热更;远端同样写 bot 配置并尽量热推。
+/// 只改配置里的 127.0.0.1 HTTP,不跨机打 OneBot。
 #[tauri::command]
 pub async fn ensure_onebot_messenger_http(
     state: State<'_, AppState>,
@@ -226,16 +237,14 @@ pub async fn ensure_onebot_messenger_http(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Bot 不存在: {bot_id}"))?;
 
-    if !cfg.bot.runtime_target.is_local() {
-        return Err("仅支持为本机 Bot 自动配置 OneBot HTTP".to_string());
-    }
+    let host_info = resolve_onebot_host_info(&state, &cfg).await?;
+    let is_local = host_info.scope.is_local();
 
     let snap = state
         .bot_manager
         .get_snapshot(&bot_id)
         .await
         .map_err(|e| e.to_string())?;
-
     let servers_before: Vec<ncd_runtime::LocalHttpServerCandidate> = cfg
         .connect
         .http_servers
@@ -251,7 +260,7 @@ pub async fn ensure_onebot_messenger_http(
         resolve_local_onebot_messenger(bot_id.as_str(), "__candidate__", true, &servers_before)
     {
         let port = parse_port_from_base_url(&ready.base_url).unwrap_or(0);
-        let candidate = build_onebot_candidate(&bot_id.to_string(), &cfg, &snap.state);
+        let candidate = build_onebot_candidate(&bot_id.to_string(), &cfg, &snap.state, &host_info);
         return Ok(EnsureOneBotMessengerHttpResult {
             bot_id: bot_id.to_string(),
             action: "already_ready".to_string(),
@@ -292,13 +301,19 @@ pub async fn ensure_onebot_messenger_http(
                 used_ports.insert(server.port);
             }
         }
-        // 也避开其它本机 Bot 已占用的 HTTP 端口,减少冲突
+        // 同 scope 内其它 Bot 的端口也避开:本机=全部本机;远端=同 server_id
+        let this_server = cfg.bot.runtime_target.server_id().map(str::to_string);
         for other in state.bot_manager.list_snapshots().await {
             if other.bot_id == bot_id {
                 continue;
             }
             if let Ok(Some(other_cfg)) = state.bot_manager.get_bot_config(&other.bot_id).await {
-                if !other_cfg.bot.runtime_target.is_local() {
+                let same_host = if is_local {
+                    other_cfg.bot.runtime_target.is_local()
+                } else {
+                    other_cfg.bot.runtime_target.server_id() == this_server.as_deref()
+                };
+                if !same_host {
                     continue;
                 }
                 for server in &other_cfg.connect.http_servers {
@@ -309,9 +324,16 @@ pub async fn ensure_onebot_messenger_http(
             }
         }
 
-        port = pick_loopback_http_port(&used_ports).ok_or_else(|| {
-            "无法分配可用的本机 HTTP 端口,请手动在 Bot 连接配置中添加".to_string()
-        })?;
+        port = if is_local {
+            pick_loopback_http_port(&used_ports).ok_or_else(|| {
+                "无法分配可用的本机 HTTP 端口,请手动在 Bot 连接配置中添加".to_string()
+            })?
+        } else {
+            // 远端无法在此探测目标机 TCP 占用,只在同机 Bot 配置端口池里挑空位
+            pick_configured_http_port(&used_ports).ok_or_else(|| {
+                "无法分配可用的环回 HTTP 端口,请手动在 Bot 连接配置中添加".to_string()
+            })?
+        };
         cfg.connect.http_servers.push(HttpServerConfig {
             base: NetworkBaseFields {
                 enable: true,
@@ -341,7 +363,7 @@ pub async fn ensure_onebot_messenger_http(
         .get_snapshot(&bot_id)
         .await
         .map_err(|e| e.to_string())?;
-    let candidate = build_onebot_candidate(&bot_id.to_string(), &cfg, &snap.state);
+    let candidate = build_onebot_candidate(&bot_id.to_string(), &cfg, &snap.state, &host_info);
 
     Ok(EnsureOneBotMessengerHttpResult {
         bot_id: bot_id.to_string(),
@@ -351,10 +373,77 @@ pub async fn ensure_onebot_messenger_http(
     })
 }
 
+struct OneBotHostInfo {
+    scope: ncd_domain::OneBotMessengerScope,
+    server_id: Option<String>,
+    server_label: String,
+}
+
+impl OneBotHostInfo {
+    fn local() -> Self {
+        Self {
+            scope: ncd_domain::OneBotMessengerScope::Local,
+            server_id: None,
+            server_label: "本机".to_string(),
+        }
+    }
+
+    fn remote(server_id: String, server_label: String) -> Self {
+        Self {
+            scope: ncd_domain::OneBotMessengerScope::Remote,
+            server_id: Some(server_id),
+            server_label,
+        }
+    }
+}
+
+fn format_server_label(name: &str, username: &str, host: &str, port: u16) -> String {
+    let name = name.trim();
+    if !name.is_empty() {
+        return name.to_string();
+    }
+    let port_part = if port != 0 && port != 22 {
+        format!(":{port}")
+    } else {
+        String::new()
+    };
+    format!("{username}@{host}{port_part}")
+}
+
+async fn resolve_onebot_host_info(
+    state: &State<'_, AppState>,
+    cfg: &ncd_domain::BotConfig,
+) -> Result<OneBotHostInfo, String> {
+    if cfg.bot.runtime_target.is_local() {
+        return Ok(OneBotHostInfo::local());
+    }
+    let sid = cfg
+        .bot
+        .runtime_target
+        .server_id()
+        .ok_or_else(|| "远端 Bot 未绑定服务器档案".to_string())?;
+    let servers = state.server_manager.list_servers().await;
+    let label = servers
+        .iter()
+        .find(|p| p.id == sid)
+        .map(|p| format_server_label(&p.name, &p.username, &p.host, p.port))
+        .unwrap_or_else(|| sid.to_string());
+    Ok(OneBotHostInfo::remote(sid.to_string(), label))
+}
+
 async fn list_onebot_messenger_candidates_inner(
     state: &State<'_, AppState>,
 ) -> Result<Vec<ncd_domain::OneBotMessengerCandidate>, String> {
     let snapshots = state.bot_manager.list_snapshots().await;
+    let servers = state.server_manager.list_servers().await;
+    let server_label_by_id: std::collections::HashMap<String, String> = servers
+        .into_iter()
+        .map(|p| {
+            let label = format_server_label(&p.name, &p.username, &p.host, p.port);
+            (p.id, label)
+        })
+        .collect();
+
     let mut out = Vec::with_capacity(snapshots.len());
 
     for snap in snapshots {
@@ -363,19 +452,35 @@ async fn list_onebot_messenger_candidates_inner(
             Ok(Some(cfg)) => cfg,
             _ => continue,
         };
-        if !cfg.bot.runtime_target.is_local() {
+        let host_info = if cfg.bot.runtime_target.is_local() {
+            OneBotHostInfo::local()
+        } else if let Some(sid) = cfg.bot.runtime_target.server_id() {
+            let label = server_label_by_id
+                .get(sid)
+                .cloned()
+                .unwrap_or_else(|| sid.to_string());
+            OneBotHostInfo::remote(sid.to_string(), label)
+        } else {
+            // 未绑定具体远端档案,跳过,避免误选
             continue;
-        }
+        };
         out.push(build_onebot_candidate(
             &bot_id.to_string(),
             &cfg,
             &snap.state,
+            &host_info,
         ));
     }
 
     out.sort_by(|a, b| {
-        b.eligible
-            .cmp(&a.eligible)
+        // 本机组优先,再按主机标签,组内 eligible / HTTP / 运行中 / 名
+        let a_local = a.scope.is_local();
+        let b_local = b.scope.is_local();
+        b_local
+            .cmp(&a_local)
+            .then_with(|| a.server_label.cmp(&b.server_label))
+            .then_with(|| a.server_id.cmp(&b.server_id))
+            .then_with(|| b.eligible.cmp(&a.eligible))
             .then_with(|| b.has_local_http.cmp(&a.has_local_http))
             .then_with(|| {
                 let a_running = a.state == "running";
@@ -392,6 +497,7 @@ fn build_onebot_candidate(
     bot_id: &str,
     cfg: &ncd_domain::BotConfig,
     state: &ncd_domain::BotActorState,
+    host: &OneBotHostInfo,
 ) -> ncd_domain::OneBotMessengerCandidate {
     use ncd_domain::BotActorState;
     use ncd_runtime::resolve_local_onebot_messenger;
@@ -409,6 +515,8 @@ fn build_onebot_candidate(
         .collect();
 
     let is_running = *state == BotActorState::Running;
+    let is_local = host.scope.is_local();
+    // 环回探测与是否本机无关:远端 watch 也是打该机 127.0.0.1
     let resolved = resolve_local_onebot_messenger(bot_id, "__candidate__", true, &servers).ok();
     let has_local_http = resolved.is_some();
     let http_port = resolved
@@ -435,8 +543,13 @@ fn build_onebot_candidate(
         backend_type: backend_type.to_string(),
         has_local_http,
         http_port,
-        eligible: is_running && has_local_http,
+        // Desktop 只对本机 Running+HTTP 当场发;远端 eligible 恒 false(watch 用 has_local_http)
+        eligible: is_local && is_running && has_local_http,
+        // 本机/远端缺环回 HTTP 都可一键写配置(远端走 upsert + 热推)
         can_enable_http: !has_local_http,
+        scope: host.scope,
+        server_id: host.server_id.clone(),
+        server_label: host.server_label.clone(),
     }
 }
 
@@ -446,6 +559,11 @@ fn parse_port_from_base_url(base_url: &str) -> Option<u16> {
     let host_port = after_scheme.split('/').next()?;
     let port = host_port.rsplit(':').next()?;
     port.parse().ok()
+}
+
+/// 远端新建端口:只避开已占用配置号,不做本机 bind 探测
+fn pick_configured_http_port(used: &std::collections::HashSet<u16>) -> Option<u16> {
+    (3010u16..=3999).find(|port| !used.contains(port))
 }
 
 fn pick_loopback_http_port(used: &std::collections::HashSet<u16>) -> Option<u16> {
