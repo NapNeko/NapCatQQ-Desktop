@@ -61,6 +61,12 @@ pub struct ReleaseSnapshot {
     /// ncd-watch 远端二进制(tag 形如 watch-v0.2.0);与 Desktop MSI 分流
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ncd_watch_latest: Option<ReleaseInfo>,
+    /// Linux QQ 宿主(pcConfig Linux 段 / nclatest 辅路);组件页更新按钮用
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub qq_linux_latest: Option<ReleaseInfo>,
+    /// Windows QQ 宿主(pcConfig Windows 段)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub qq_windows_latest: Option<ReleaseInfo>,
     /// 本快照拉取的时间戳 Unix epoch 秒, None 表示从未成功拉取
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fetched_at: Option<u64>,
@@ -105,6 +111,8 @@ mod tests {
             snowluma_latest: None,
             desktop_latest: None,
             ncd_watch_latest: None,
+            qq_linux_latest: None,
+            qq_windows_latest: None,
             fetched_at: Some(1_700_000_500),
         };
         let serialized = serde_json::to_string(&value).expect("serialize populated");
