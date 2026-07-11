@@ -9,6 +9,12 @@ docs/dev/
 .codesearch.db/
 CLAUDE.md
 
+# Copilot / agent 个性化（本机自管，不入库）
+.github/copilot-instructions.md
+.github/instructions/
+.github/hooks/
+scripts/hooks/
+
 ### 编辑器（可选共享：若需团队统一 VS Code 设置再单独 un-ignore）###
 .vscode/
 
