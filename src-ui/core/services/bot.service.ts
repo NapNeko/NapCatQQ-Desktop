@@ -68,6 +68,23 @@ export const botService = {
         return [];
     },
 
+    /** SnowLuma daemon + per-bot 登录/隧道;冷启动 hydrate 用 */
+    listSnowlumaUiSnapshot: async (): Promise<{
+        daemon_state: import('../ipc/generated/DaemonState').DaemonState | null;
+        bots: Array<{
+            bot_id: string;
+            injected: boolean;
+            uin: string | null;
+            login_state: import('../ipc/generated/SnowLumaLoginState').SnowLumaLoginState | null;
+            endpoints_ready: boolean;
+        }>;
+    }> => {
+        if (isTauri) {
+            return invoke('list_snowluma_ui_snapshot');
+        }
+        return { daemon_state: null, bots: [] };
+    },
+
     getSnapshot: async (botId: string): Promise<BotActorSnapshot> => {
         if (isTauri) return invoke<BotActorSnapshot>('get_bot_snapshot', { botId });
         return new Promise((resolve, reject) => {
