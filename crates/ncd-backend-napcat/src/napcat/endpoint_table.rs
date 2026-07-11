@@ -74,6 +74,16 @@ impl NapCatEndpointTable {
     pub async fn snapshot(&self, bot_id: &BotId) -> Option<NapCatEndpoint> {
         self.inner.read().await.get(bot_id).cloned()
     }
+
+    /// 列出当前全部端点(冷启动 hydrate / 前端补齐 WebUI 按钮用)
+    pub async fn list_all(&self) -> Vec<(BotId, NapCatEndpoint)> {
+        self.inner
+            .read()
+            .await
+            .iter()
+            .map(|(id, ep)| (id.clone(), ep.clone()))
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -126,6 +136,40 @@ mod tests {
             .await;
         assert!(table.remove(&id).await.is_some());
         assert!(table.snapshot(&id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn list_all_returns_all_entries() {
+        let table = NapCatEndpointTable::new();
+        let a = BotId::new("10001");
+        let b = BotId::new("10002");
+        table
+            .insert(
+                a.clone(),
+                NapCatEndpoint {
+                    port: 6099,
+                    host_port: None,
+                    token: "a".into(),
+                },
+            )
+            .await;
+        table
+            .insert(
+                b.clone(),
+                NapCatEndpoint {
+                    port: 6100,
+                    host_port: Some(6100),
+                    token: "b".into(),
+                },
+            )
+            .await;
+        let mut all = table.list_all().await;
+        all.sort_by(|x, y| x.0.as_str().cmp(y.0.as_str()));
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].0, a);
+        assert_eq!(all[0].1.port, 6099);
+        assert_eq!(all[1].0, b);
+        assert_eq!(all[1].1.port, 6100);
     }
 
     #[tokio::test]
