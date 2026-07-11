@@ -1336,7 +1336,7 @@ impl RemoteLinuxHost {
                                 };
                                 session
                                     .channel_open_direct_tcpip(
-                                        remote_host_for_conn,
+                                        remote_host_for_conn.clone(),
                                         remote_port as u32,
                                         originator_for_conn,
                                         peer.port() as u32,
@@ -1346,7 +1346,12 @@ impl RemoteLinuxHost {
                             let channel = match channel {
                                 Ok(c) => c,
                                 Err(e) => {
-                                    tracing::warn!(target: "ncd_host::tunnel", "open direct-tcpip: {e}");
+                                    tracing::warn!(
+                                        target: "ncd_host::tunnel",
+                                        remote_host = %remote_host_for_conn,
+                                        remote_port,
+                                        "open direct-tcpip: {e}"
+                                    );
                                     return;
                                 }
                             };
