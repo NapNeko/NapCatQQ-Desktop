@@ -293,7 +293,8 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | 路由：overview / bots / components / docker / remote / tasks / settings | 各 `src-ui/modules/*` |
 | 设计 token / 主题 | `src-ui/core/design/`, `hooks/theme/` |
 | 共享 UI | `src-ui/shared/ui/`, `shared/components/` |
-| 入口 | `src-ui/main.tsx`, `index.html` |
+| 入口 | `src-ui/main.tsx`, `src-ui/index.html` |
+
 
 ---
 

@@ -9,9 +9,13 @@ const isTauriWindows =
   process.env.TAURI_ENV_PLATFORM === 'windows' ||
   process.env.TAURI_PLATFORM === 'windows';
 
+// 配置位于 src-ui/；仓库根为 monorepo 工作区（package.json / Cargo / dist）。
+const repoRoot = resolve(__dirname, '..');
+
 export default defineConfig({
   // 相对 base：生产 asset 协议 + dev 都可用
   base: './',
+  root: __dirname,
   plugins: [react(), tailwindcss()],
   define: {
     // dev 启动即拉全量组件 detect（含远端 SSH）会拖慢首屏；需要测组件页时设 VITE_SKIP_COMPONENTS_WARMUP=0
@@ -21,10 +25,15 @@ export default defineConfig({
   },
   clearScreen: false,
   envPrefix: ['VITE_', 'TAURI_'],
+  // .env 仍放在仓库根，与既有本地开发习惯一致。
+  envDir: repoRoot,
   server: {
     port: 1420,
     strictPort: true,
     hmr: { overlay: true },
+    fs: {
+      allow: [repoRoot],
+    },
     watch: {
       ignored: [
         '**/target/**',
@@ -51,11 +60,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src-ui'),
+      '@': resolve(__dirname),
     },
   },
   build: {
-    outDir: 'dist',
+    // 产物仍输出到仓库根 dist，供 src-tauri frontendDist 使用。
+    outDir: resolve(repoRoot, 'dist'),
     emptyOutDir: true,
     target: isTauriWindows ? 'chrome105' : 'esnext',
     minify: process.env.TAURI_ENV_DEBUG === 'true' ? false : 'esbuild',
@@ -70,6 +80,7 @@ export default defineConfig({
             if (id.includes('lucide-react')) return 'vendor-icons';
             return 'vendor';
           }
+          return undefined;
         },
       },
     },
