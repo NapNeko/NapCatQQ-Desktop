@@ -494,7 +494,31 @@ where
     out
 }
 
-/// 设置页可选的 OneBot 发送方候选(本机 Bot + 是否具备环回 HTTP)
+/// OneBot 发送方所在主机范围(同机冗余;不做跨机)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum OneBotMessengerScope {
+    /// 本机:Desktop 可当场 HTTP 投递
+    Local,
+    /// 远端:仅该机 ncd-watch 同机投递
+    Remote,
+}
+
+impl OneBotMessengerScope {
+    pub const fn is_local(self) -> bool {
+        matches!(self, Self::Local)
+    }
+
+    pub const fn is_remote(self) -> bool {
+        matches!(self, Self::Remote)
+    }
+}
+
+/// 设置页可选的 OneBot 发送方候选(本机 + 远端同机;跨机不互通)
+///
+/// - Local: Desktop 在线时可真正发 HTTP;eligible 表示 Running 且环回 HTTP 就绪
+/// - Remote: 仅供 ncd-watch 同机冗余;eligible 恒 false
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct OneBotMessengerCandidate {
@@ -504,14 +528,21 @@ pub struct OneBotMessengerCandidate {
     pub state: String,
     /// napcat / snowluma
     pub backend_type: String,
+    /// 配置里是否已有环回可用的 OneBot HTTP(对 watch 与 Desktop 本机投递都有意义)
     pub has_local_http: bool,
-    /// 已有可用本机 HTTP 时的端口;没有则为 0
+    /// 已有可用环回 HTTP 时的端口;没有则为 0
     #[ts(type = "number")]
     pub http_port: u16,
-    /// Running 且具备本机 HTTP 端点时为 true
+    /// 仅本机: Running 且具备环回 HTTP 时为 true(Desktop 可当场发)
     pub eligible: bool,
-    /// 缺本机 HTTP 时可一键补齐
+    /// 缺环回 HTTP 时可一键补齐(本机 bind 探测;远端只写配置端口池)
     pub can_enable_http: bool,
+    pub scope: OneBotMessengerScope,
+    /// 远端 server profile id;本机为 null
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_id: Option<String>,
+    /// 分组展示:「本机」或服务器名 / user@host
+    pub server_label: String,
 }
 
 /// 为发送方自动补齐本机 HTTP 后的结果

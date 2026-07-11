@@ -491,3 +491,62 @@ impl DomainEvent {
         Self::DesktopLogAppended { line: line.into() }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn napcat_webui_available_local_omits_host_port_on_wire() {
+        let e = DomainEvent::napcat_webui_available("10001", 6099, "tok");
+        let v = serde_json::to_value(&e).expect("serialize");
+        assert_eq!(v["kind"], "napcat_webui_available");
+        assert_eq!(v["port"], 6099);
+        assert_eq!(v["token"], "tok");
+        assert!(v.get("host_port").is_none());
+        let back: DomainEvent = serde_json::from_value(v).expect("deserialize");
+        assert_eq!(back, e);
+    }
+
+    #[test]
+    fn napcat_webui_available_remote_round_trips_host_port() {
+        let e = DomainEvent::napcat_webui_available_remote("10001", 58408, 6099, "tok");
+        let json = serde_json::to_string(&e).expect("serialize");
+        assert!(json.contains("\"host_port\":6099"));
+        assert!(json.contains("\"port\":58408"));
+        let back: DomainEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, e);
+        match back {
+            DomainEvent::NapCatWebuiAvailable {
+                port,
+                host_port,
+                token,
+                ..
+            } => {
+                assert_eq!(port, 58408);
+                assert_eq!(host_port, Some(6099));
+                assert_eq!(token, "tok");
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn napcat_webui_available_legacy_json_without_host_port_deserializes() {
+        let legacy = r#"{"kind":"napcat_webui_available","bot_id":"1","port":6099,"token":"t"}"#;
+        let e: DomainEvent = serde_json::from_str(legacy).expect("legacy deserialize");
+        match e {
+            DomainEvent::NapCatWebuiAvailable {
+                port,
+                host_port,
+                token,
+                ..
+            } => {
+                assert_eq!(port, 6099);
+                assert_eq!(host_port, None);
+                assert_eq!(token, "t");
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+}

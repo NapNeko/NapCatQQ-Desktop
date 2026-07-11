@@ -84,7 +84,7 @@ pub use offline_alert::{
     EnsureOneBotMessengerHttpResult, OfflineAlert, OfflineAlertKind, OfflineAlertSource,
     OfflineDeliveryChannelResult, OfflineDeliveryRecord, OfflineEmailSettings,
     OfflineNotifyBehavior, OfflineOneBotSettings, OfflineWebhookChannel, OfflineWebhookSettings,
-    OneBotMessengerCandidate, default_webhook_body_template, render_template,
+    OneBotMessengerCandidate, OneBotMessengerScope, default_webhook_body_template, render_template,
 };
 pub use progress::{ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use qq_dependency::{
