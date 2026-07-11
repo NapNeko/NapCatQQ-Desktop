@@ -163,10 +163,7 @@ async fn deliver_channels(
             tracing::debug!(bot_id = %alert.bot_id, "webhook enabled but no channels");
             return Ok(None);
         }
-        send_watch_webhooks(channels, alert)
-            .await
-            .map(Some)
-            .map_err(|e| e)
+        send_watch_webhooks(channels, alert).await.map(Some)
     };
     let email_fut = async {
         if !notify.email_enabled {

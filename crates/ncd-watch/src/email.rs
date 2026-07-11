@@ -6,6 +6,10 @@ use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{SmtpTransport, Transport};
 use ncd_domain::{OfflineAlert, OfflineEmailSettings};
 
+// 远端 SMTP 出网常慢/半开;过长会占满 spawn_blocking 并拖慢告警观感。
+// 与探活周期同量级即可,失败靠下一轮边沿/人工重试。
+const SMTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 pub fn send_watch_email(settings: &OfflineEmailSettings, alert: &OfflineAlert) -> Result<(), String> {
     validate_settings(settings)?;
     let subject = "NapCatQQ-Desktop 机器人离线通知";
@@ -82,14 +86,14 @@ fn send_smtp(settings: &OfflineEmailSettings, subject: &str, html: &str) -> Resu
             SmtpTransport::starttls_relay(host)
                 .map_err(|e| format!("SMTP STARTTLS 构建失败: {e}"))?
                 .port(port)
-                .timeout(Some(std::time::Duration::from_secs(15)))
+                .timeout(Some(SMTP_TIMEOUT))
                 .tls(Tls::Required(tls))
                 .credentials(creds)
                 .build()
         }
         "无加密" | "NONE" | "None" => SmtpTransport::builder_dangerous(host)
             .port(port)
-            .timeout(Some(std::time::Duration::from_secs(15)))
+            .timeout(Some(SMTP_TIMEOUT))
             .credentials(creds)
             .build(),
         _ => {
@@ -98,7 +102,7 @@ fn send_smtp(settings: &OfflineEmailSettings, subject: &str, html: &str) -> Resu
             SmtpTransport::relay(host)
                 .map_err(|e| format!("SMTP SSL 构建失败: {e}"))?
                 .port(port)
-                .timeout(Some(std::time::Duration::from_secs(15)))
+                .timeout(Some(SMTP_TIMEOUT))
                 .tls(Tls::Wrapper(tls))
                 .credentials(creds)
                 .build()

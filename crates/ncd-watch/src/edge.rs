@@ -120,7 +120,9 @@ impl EdgeTracker {
         let login_known = !matches!(login, LoginStatus::Unknown);
 
         if prefer_account {
-            // 进程快照始终更新;仅在登录 Unknown 时允许进程 offline 边沿作回退
+            // 进程快照始终更新;仅在登录 Unknown 时允许进程 offline 边沿作回退。
+            // 意图:进程/WebUI 同死时仍能告警。token/端口错导致长期 Unknown 时可能
+            // 把进程抖动误报成 Process——host_port 修对后概率应很低。
             if !matches!(process, ProbeStatus::Unknown) {
                 let online = matches!(process, ProbeStatus::Online);
                 let prev = self.last_process_online.insert(bot_id.to_string(), online);
@@ -140,9 +142,7 @@ impl EdgeTracker {
 
             if login_known {
                 let logged_in = matches!(login, LoginStatus::LoggedIn);
-                let prev = self
-                    .last_login_online
-                    .insert(bot_id.to_string(), logged_in);
+                let prev = self.last_login_online.insert(bot_id.to_string(), logged_in);
                 match (prev, logged_in) {
                     (None, false) => {}
                     (Some(true), false) => {
@@ -218,29 +218,22 @@ mod tests {
         let mut t = EdgeTracker::new(0);
         let _ = t.observe("1", ProbeStatus::Online);
         let _ = t.observe("1", ProbeStatus::Offline);
-        assert_eq!(t.observe("1", ProbeStatus::Online), EdgeAction::FireRecovered);
+        assert_eq!(
+            t.observe("1", ProbeStatus::Online),
+            EdgeAction::FireRecovered
+        );
     }
 
     #[test]
     fn account_logout_fires_login_even_if_process_up() {
         let mut t = EdgeTracker::new(0);
-        let a = t.observe_layers_prefer(
-            "1",
-            ProbeStatus::Online,
-            LoginStatus::LoggedIn,
-            true,
-        );
+        let a = t.observe_layers_prefer("1", ProbeStatus::Online, LoginStatus::LoggedIn, true);
         assert!(a.iter().all(|x| matches!(x, EdgeAction::None)));
-        let a = t.observe_layers_prefer(
-            "1",
-            ProbeStatus::Online,
-            LoginStatus::LoggedOut,
-            true,
+        let a = t.observe_layers_prefer("1", ProbeStatus::Online, LoginStatus::LoggedOut, true);
+        assert!(
+            a.iter()
+                .any(|x| matches!(x, EdgeAction::FireOffline(OfflineEdgeKind::Login)))
         );
-        assert!(a.iter().any(|x| matches!(
-            x,
-            EdgeAction::FireOffline(OfflineEdgeKind::Login)
-        )));
     }
 
     #[test]
@@ -250,10 +243,10 @@ mod tests {
         let mut t = EdgeTracker::new(0);
         let _ = t.observe_layers_prefer("1", ProbeStatus::Online, LoginStatus::LoggedIn, true);
         let a = t.observe_layers_prefer("1", ProbeStatus::Offline, LoginStatus::LoggedIn, true);
-        assert!(!a.iter().any(|x| matches!(
-            x,
-            EdgeAction::FireOffline(OfflineEdgeKind::Process)
-        )));
+        assert!(
+            !a.iter()
+                .any(|x| matches!(x, EdgeAction::FireOffline(OfflineEdgeKind::Process)))
+        );
         assert!(a.iter().all(|x| matches!(x, EdgeAction::None)));
     }
 
@@ -263,10 +256,10 @@ mod tests {
         let mut t = EdgeTracker::new(0);
         let _ = t.observe_layers_prefer("1", ProbeStatus::Online, LoginStatus::LoggedIn, true);
         let a = t.observe_layers_prefer("1", ProbeStatus::Offline, LoginStatus::Unknown, true);
-        assert!(a.iter().any(|x| matches!(
-            x,
-            EdgeAction::FireOffline(OfflineEdgeKind::Process)
-        )));
+        assert!(
+            a.iter()
+                .any(|x| matches!(x, EdgeAction::FireOffline(OfflineEdgeKind::Process)))
+        );
     }
 
     #[test]
@@ -274,10 +267,10 @@ mod tests {
         let mut t = EdgeTracker::new(0);
         let _ = t.observe_layers_prefer("1", ProbeStatus::Online, LoginStatus::Unknown, false);
         let a = t.observe_layers_prefer("1", ProbeStatus::Offline, LoginStatus::Unknown, false);
-        assert!(a.iter().any(|x| matches!(
-            x,
-            EdgeAction::FireOffline(OfflineEdgeKind::Process)
-        )));
+        assert!(
+            a.iter()
+                .any(|x| matches!(x, EdgeAction::FireOffline(OfflineEdgeKind::Process)))
+        );
     }
 
     #[test]
