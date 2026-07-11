@@ -35,6 +35,7 @@ pub mod server_profile_migration;
 pub mod snowluma;
 mod snowluma_agreements;
 mod snowluma_consent_files;
+pub mod snowluma_ui_state;
 pub mod ssh_keygen;
 
 pub mod bot_config {
@@ -64,7 +65,7 @@ pub use bot_manager::{BatchResult, BootstrapResult, BotManager, BotManagerError}
 pub use config_store_impl::LocalConfigStore;
 pub use crash_bundle::{CrashBundleInput, desktop_output_dir, write_crash_bundle};
 pub use credential_sync::{CredentialSyncLayer, PasswordSlot};
-pub use data_consolidate::{consolidate_data_root, ConsolidateReport};
+pub use data_consolidate::{ConsolidateReport, consolidate_data_root};
 pub use data_paths::{DataPaths, LAYOUT_VERSION};
 pub use deployment_tasks::{
     DeploymentTaskContext, DeploymentTaskManager, DeploymentTaskRequest, DeploymentTaskRunResult,

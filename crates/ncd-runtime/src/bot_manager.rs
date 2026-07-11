@@ -150,6 +150,8 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// 自己的 stdout 抓 WebUi User Panel Url本表的写/删时机与 login_pollers
     /// 完全对齐,供配置热推送在保存配置时反查 (port, token)
     napcat_endpoints: NapCatEndpointTable,
+    /// SnowLuma UI 会话态镜像表:冷启动 hydrate 用(对齐 napcat_endpoints)
+    snowluma_ui: crate::snowluma_ui_state::SnowLumaUiStateTable,
     /// NapCat WebUI HTTP 客户端依赖,可注入 mock 用于测试
     webui_client: Arc<dyn NapCatWebUiClient>,
     /// 离线通知通道依赖,可注入 mock;默认 wiring 走 NoopOfflineNotifier
@@ -201,6 +203,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             actors: Arc::clone(&self.actors),
             login_pollers: Arc::clone(&self.login_pollers),
             napcat_endpoints: self.napcat_endpoints.clone(),
+            snowluma_ui: self.snowluma_ui.clone(),
             webui_client: Arc::clone(&self.webui_client),
             offline_notifier: Arc::clone(&self.offline_notifier),
             poller_settings: Arc::clone(&self.poller_settings),
@@ -245,6 +248,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             actors: Arc::new(RwLock::new(HashMap::new())),
             login_pollers: Arc::new(RwLock::new(HashMap::new())),
             napcat_endpoints: NapCatEndpointTable::new(),
+            snowluma_ui: crate::snowluma_ui_state::SnowLumaUiStateTable::new(),
             webui_client,
             offline_notifier,
             poller_settings,
@@ -1117,6 +1121,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .collect()
     }
 
+    /// SnowLuma UI 会话态快照(daemon + per-bot 登录/隧道),冷启动 hydrate 用
+    pub async fn list_snowluma_ui_snapshot(
+        &self,
+    ) -> crate::snowluma_ui_state::SnowLumaUiSnapshot {
+        self.snowluma_ui.snapshot().await
+    }
+
     fn peek_napcat_docker_webui_token(&self, qq_id: u64) -> Option<String> {
         let store = self.docker_webui_secret_store.as_ref()?;
         let key = format!("bot:{qq_id}:napcat_docker_webui_token");
@@ -1835,21 +1846,55 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.snowluma_agreements().release(&config).await
     }
 
-    /// 长任务:监听 SnowLumaDaemonStateChanged 事件,daemon 转 Crashed 时
-    /// 把所有 SnowLuma flavor 且 active 的 actor 级联转 Crashed,并各发一次
-    /// BotError
-    /// 调用方应在 setup 阶段 tokio::spawn(manager.clone().run_snowluma_listener)
-    pub async fn run_snowluma_listener(self: Arc<Self>) {
+    /// 长任务:镜像 SnowLuma UI 事件到内存表(hydrate),并在 daemon Crashed 时
+    /// 级联把同 scope 的 SL actor 标 Crashed。
+    /// - ready:subscribe 完成后立刻 signal,bootstrap 须等它再 reconcile attach
+    ///   (与 run_napcat_login_listener 对称;broadcast 无 backlog)
+    pub async fn run_snowluma_listener(
+        self: Arc<Self>,
+        ready: Option<tokio::sync::oneshot::Sender<()>>,
+    ) {
         use crate::snowluma::DaemonState;
 
-        let mut sub = self.event_bus.subscribe(EventFilter::kind(
-            DomainEventKind::SnowLumaDaemonStateChanged,
-        ));
+        let mut sub = self.event_bus.subscribe(EventFilter::all());
+        if let Some(tx) = ready {
+            let _ = tx.send(());
+        }
         loop {
             let evt = match sub.next().await {
                 Some(e) => e,
                 None => break,
             };
+
+            // 1) UI 会话态镜像(供 list_snowluma_ui_snapshot hydrate)
+            match &evt {
+                DomainEvent::SnowLumaDaemonStateChanged { state, .. } => {
+                    self.snowluma_ui.set_daemon_state(*state).await;
+                }
+                DomainEvent::SnowLumaBotInjected { bot_id, .. } => {
+                    self.snowluma_ui.mark_injected(bot_id).await;
+                }
+                DomainEvent::SnowLumaUinDetected { bot_id, uin } => {
+                    self.snowluma_ui.set_uin(bot_id, uin.clone()).await;
+                }
+                DomainEvent::SnowLumaLoginStateChanged { bot_id, state } => {
+                    self.snowluma_ui.set_login_state(bot_id, *state).await;
+                }
+                DomainEvent::SnowLumaDockerEndpointsReady { bot_id } => {
+                    self.snowluma_ui.mark_endpoints_ready(bot_id).await;
+                }
+                DomainEvent::BotStateChanged { snapshot, .. }
+                    if matches!(
+                        snapshot.state,
+                        BotActorState::Stopped | BotActorState::Crashed
+                    ) =>
+                {
+                    self.snowluma_ui.clear_bot(&snapshot.bot_id).await;
+                }
+                _ => {}
+            }
+
+            // 2) daemon Crashed → 级联 actor
             let DomainEvent::SnowLumaDaemonStateChanged {
                 state,
                 reason,
