@@ -118,6 +118,43 @@ pub async fn list_napcat_webui_bindings(
         .collect())
 }
 
+/// SnowLuma UI 会话态(daemon + per-bot 登录/隧道);冷启动 hydrate 用
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnowlumaUiBotDto {
+    pub bot_id: String,
+    pub injected: bool,
+    pub uin: Option<String>,
+    pub login_state: Option<ncd_domain::daemon_state::SnowLumaLoginState>,
+    pub endpoints_ready: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnowlumaUiSnapshotDto {
+    pub daemon_state: Option<ncd_domain::daemon_state::DaemonState>,
+    pub bots: Vec<SnowlumaUiBotDto>,
+}
+
+#[tauri::command]
+pub async fn list_snowluma_ui_snapshot(
+    state: State<'_, AppState>,
+) -> Result<SnowlumaUiSnapshotDto, String> {
+    let snap = state.bot_manager.list_snowluma_ui_snapshot().await;
+    Ok(SnowlumaUiSnapshotDto {
+        daemon_state: snap.daemon_state,
+        bots: snap
+            .by_bot
+            .into_iter()
+            .map(|(id, b)| SnowlumaUiBotDto {
+                bot_id: id.to_string(),
+                injected: b.injected,
+                uin: b.uin,
+                login_state: b.login_state,
+                endpoints_ready: b.endpoints_ready,
+            })
+            .collect(),
+    })
+}
+
 #[tauri::command]
 pub async fn upsert_bot_config(
     state: State<'_, AppState>,

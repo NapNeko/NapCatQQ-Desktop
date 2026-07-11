@@ -306,6 +306,7 @@ pub fn run() {
             // bootstrap 等 ready 再跑,避免多实例真实 port(+1) 丢失。
             // event emit 的 subscribe 在上面已同步完成(spawn 前 register)。
             let (login_ready_tx, login_ready_rx) = tokio::sync::oneshot::channel::<()>();
+            let (sl_ready_tx, sl_ready_rx) = tokio::sync::oneshot::channel::<()>();
             tauri::async_runtime::spawn(async move {
                 (*bot_manager_listener)
                     .clone()
@@ -318,7 +319,9 @@ pub fn run() {
                     .await;
             });
             tauri::async_runtime::spawn(async move {
-                bot_manager_snowluma_listener.run_snowluma_listener().await;
+                bot_manager_snowluma_listener
+                    .run_snowluma_listener(Some(sl_ready_tx))
+                    .await;
             });
             tauri::async_runtime::spawn(async move {
                 if login_ready_rx.await.is_err() {
@@ -326,6 +329,13 @@ pub fn run() {
                         "WARN",
                         "ncd::bot_manager",
                         "login listener ready signal dropped; bootstrap continues",
+                    );
+                }
+                if sl_ready_rx.await.is_err() {
+                    desktop_log::write_session_line(
+                        "WARN",
+                        "ncd::bot_manager",
+                        "snowluma listener ready signal dropped; bootstrap continues",
                     );
                 }
                 match bot_manager_bootstrap.bootstrap().await {
@@ -480,6 +490,7 @@ pub fn run() {
             commands::bot::list_bot_snapshots,
             commands::bot::list_bot_flavors,
             commands::bot::list_napcat_webui_bindings,
+            commands::bot::list_snowluma_ui_snapshot,
             commands::bot::get_bot_snapshot,
             commands::bot::get_bot_config,
             commands::bot::upsert_bot_config,
