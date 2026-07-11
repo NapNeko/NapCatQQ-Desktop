@@ -97,8 +97,12 @@ pub enum DomainEvent {
     #[serde(rename = "napcat_webui_available")]
     NapCatWebuiAvailable {
         bot_id: BotId,
+        /// Desktop 本机可达端口(本机进程口 / 远端 SSH 隧道本地口)
         port: u16,
         token: String,
+        /// 远端 Host 上 NapCat 实际监听口;供 ncd-watch。None=与 port 相同
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        host_port: Option<u16>,
     },
     BotProcessExited {
         bot_id: BotId,
@@ -340,6 +344,22 @@ impl DomainEvent {
             bot_id: bot_id.into(),
             port,
             token: token.into(),
+            host_port: None,
+        }
+    }
+
+    /// 远端:port=本机隧道口(给 Desktop poller),host_port=远端真实 WebUI 口(给 ncd-watch)
+    pub fn napcat_webui_available_remote(
+        bot_id: impl Into<BotId>,
+        local_port: u16,
+        host_port: u16,
+        token: impl Into<String>,
+    ) -> Self {
+        Self::NapCatWebuiAvailable {
+            bot_id: bot_id.into(),
+            port: local_port,
+            token: token.into(),
+            host_port: Some(host_port),
         }
     }
 
