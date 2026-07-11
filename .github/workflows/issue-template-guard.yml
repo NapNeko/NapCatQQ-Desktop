@@ -1,0 +1,92 @@
+name: Issue template guard
+
+# blank_issues_enabled: false 只藏 chooser 入口；
+# CLI / API / 直链仍可开无模板 issue。本工作流事后关闭：
+# 无写权限作者 + 未带模板标签（bug / enhancement）→ 评论并关闭。
+# 注意：issues 事件工作流以默认分支上的文件为准（main）。
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const { owner, repo } = context.repo;
+            const number = issue.number;
+            const title = (issue.title || '').trim();
+            const labels = (issue.labels || []).map((l) => (typeof l === 'string' ? l : l.name));
+
+            const privileged = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            if (privileged.includes(issue.author_association)) {
+              core.info(`author_association=${issue.author_association} — allowed`);
+              return;
+            }
+
+            // 模板会打上 bug / enhancement
+            const TEMPLATE_LABELS = ['bug', 'enhancement'];
+            const hasTemplate = labels.some((l) => TEMPLATE_LABELS.includes(l));
+
+            // 标题为空、仅前缀、或明显占位 → 视为无效标题
+            const bare = title
+              .replace(/^\[(Bug|Feature|BUG|FEATURE)\]\s*/i, '')
+              .trim();
+            const titleBad =
+              title.length === 0 ||
+              bare.length < 4 ||
+              /^(bug|feature|test|标题|title|asdf|xxx|\.+)$/i.test(bare);
+
+            if (hasTemplate && !titleBad) {
+              core.info('template label + usable title — allowed');
+              return;
+            }
+
+            // 已关闭则不再刷
+            if (issue.state === 'closed') {
+              core.info('already closed');
+              return;
+            }
+
+            const chooser = `https://github.com/${owner}/${repo}/issues/new/choose`;
+            const reasons = [];
+            if (!hasTemplate) {
+              reasons.push('- 未通过 **Bug 反馈** / **功能请求** 模板创建（无 `bug` / `enhancement` 标签）');
+            }
+            if (titleBad) {
+              reasons.push('- 标题无效：请写清楚问题本身，不要只留 `[Bug]` / `[Feature]` 或空标题');
+            }
+
+            const body = [
+              '感谢反馈。',
+              '',
+              '本仓库 **不允许空白 issue**，也 **要求有可用标题**。当前 issue 不满足：',
+              '',
+              ...reasons,
+              '',
+              `请到模板入口重新提交：${chooser}`,
+              '',
+              '本 issue 将关闭。维护者 / 协作者开的 issue 不受此限制。',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: number,
+              body,
+            });
+            await github.rest.issues.update({
+              owner,
+              repo,
+              issue_number: number,
+              state: 'closed',
+              state_reason: 'not_planned',
+            });
+            core.info(`closed #${number} (template=${hasTemplate}, titleBad=${titleBad})`);

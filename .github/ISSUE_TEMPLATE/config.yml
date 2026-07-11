@@ -1,0 +1,11 @@
+# 关闭空白 / 自由格式 issue。
+# 注意：CLI / API / 直链仍可能绕过 chooser，需配合 issue-template-guard.yml。
+blank_issues_enabled: false
+
+contact_links:
+  - name: Releases
+    url: https://github.com/NapNeko/NapCatQQ-Desktop/releases
+    about: 反馈前请先确认是否已用最新相关版本；V3 正式 MSI 尚未发布时以 main 说明为准
+  - name: NapCat 文档
+    url: https://napneko.github.io/
+    about: NapCat 协议端本身的使用与对接问题，优先看官方文档

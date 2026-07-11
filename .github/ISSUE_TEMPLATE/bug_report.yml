@@ -1,59 +1,137 @@
 name: Bug 反馈
-description: 报告可能的 NapCat Desktop 异常行为
-title: '[BUG] '
-labels: bug
+description: 报告一个可复现的 Desktop / 相关组件问题
+title: "[Bug] "
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        欢迎来到 NapCat Desktop 的 Issue Tracker！请填写以下表格来提交 Bug。
-        在提交新的 Bug 反馈前，请确保您：
-        * 已经搜索了现有的 issues，并且没有找到可以解决您问题的方法
-        * 不与现有的某一 issue 重复
+        感谢反馈。请尽量填全，方便定位。
+        提交前请先在 [Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues?q=is%3Aissue) 搜一下有没有重复的。
+
+        > **V3 还在准备中**：正式 MSI 未发时，请写明你是源码 dev 还是旧版 MSI，避免对错版本。
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前检查
+      options:
+        - label: 我已搜索过 Issues，确认没有重复的反馈
+          required: true
+        - label: 标题已改成能看懂的一句话（不要只留 `[Bug]` 前缀）
+          required: true
+        - label: 我知道空白 / 不选模板的 issue 会被关闭
+          required: true
+
   - type: input
-    id: system-version
+    id: desktop-version
     attributes:
-      label: 系统版本
-      description: 运行 NapCat Desktop 的系统版本
-      placeholder: Windows 10 Pro Workstation 22H2
+      label: NapCatQQ Desktop 版本
+      description: 设置页 / 关于，或 package.json / tauri.conf 的版本；源码请写 commit 短 hash
+      placeholder: "例如 3.0.0-dev / 2.2.8 / abc1234"
     validations:
       required: true
+
+  - type: dropdown
+    id: channel
+    attributes:
+      label: 你怎么拿到的这个版本
+      options:
+        - 源码运行（pnpm tauri:dev / 本地 build）
+        - 正式 MSI（Releases）
+        - 内测 / 自打 MSI
+        - 其他 / 不确定
+    validations:
+      required: true
+
   - type: input
-    id: napcat-desktop-version
+    id: os
     attributes:
-      label: NapCat Desktop 版本
-      description: 可在 NapCat Desktop 的首页找到
-      placeholder: 1.0.0
+      label: 操作系统
+      placeholder: "例如 Windows 11 23H2"
     validations:
       required: true
-  - type: textarea
-    id: what-happened
+
+  - type: dropdown
+    id: area
     attributes:
-      label: 发生了什么?
-      description: 填写你认为的 NapCat Desktop 的不正常行为
+      label: 出问题的范围
+      description: 可多选
+      multiple: true
+      options:
+        - 安装 / 升级 / MSI
+        - 启动 / 崩溃 / 托盘
+        - Bot · NapCat
+        - Bot · SnowLuma
+        - 远端 SSH / 部署
+        - Docker
+        - 组件页（Node / QQ / 框架等）
+        - 设置 / 通知 / Webhook
+        - ncd-watch（远端监控）
+        - 界面 / 主题
+        - 其他 / 不确定
     validations:
       required: true
-  - type: textarea
-    id: how-reproduce
+
+  - type: dropdown
+    id: runtime
     attributes:
-      label: 如何复现
-      description: 填写应当如何操作才能触发这个不正常行为
+      label: 运行位置
+      options:
+        - 仅本机
+        - 仅远端
+        - 本机 + 远端都有
+        - 不适用
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 发生了什么，简要说明
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 按顺序写，别人照着做应能复现
       placeholder: |
-        1. xxx
-        2. xxx
-        3. xxx
+        1. 打开 …
+        2. 点 …
+        3. 观察到 …
     validations:
       required: true
+
   - type: textarea
-    id: what-expected
+    id: expected
     attributes:
-      label: 期望的结果?
-      description: 填写你认为 NapCat Desktop 应当执行的正常行为
+      label: 期望行为
     validations:
       required: true
+
   - type: textarea
-    id: napcat-log
+    id: actual
     attributes:
-      label: NapCat Desktop 运行日志
-      description: 粘贴相关日志内容到此处
+      label: 实际行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 报错
+      description: |
+        有堆栈、控制台、应用日志请贴出来（可脱敏 token / 密码 / 私聊内容）。
+        没有日志时请说明「没有日志 / 界面直接闪退」等。
       render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 截图、相关 Issue / PR、配置片段（脱敏）等
