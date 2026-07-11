@@ -1,3 +1,6 @@
+# Desktop MSI 发版。与 ncd-watch 的 watch-v* 分流；本工作流只响应 v*.*.*。
+# 质量门禁默认信任 ci.yml；需要时可勾选 run_gates 再测一遍。
+
 name: Release MSI
 
 on:
@@ -14,61 +17,134 @@ on:
       draft:
         description: "是否创建 draft release"
         required: false
+        default: true
+        type: boolean
+      run_gates:
+        description: "发版前再跑一遍门禁（Windows cargo test + 前端）；默认关闭以缩短发版"
+        required: false
         default: false
         type: boolean
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-msi-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
 jobs:
   resolve:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
       version_plain: ${{ steps.version.outputs.VERSION_PLAIN }}
+      tag_name: ${{ steps.version.outputs.TAG_NAME }}
     steps:
-      - name: "检出代码"
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: "解析版本号"
+      - name: Resolve version
         id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          input_version="${{ inputs.version }}"
+
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
+            raw="${{ github.ref_name }}"
+          elif [[ -n "${input_version}" ]]; then
+            raw="${input_version}"
+          elif [[ -f src-tauri/tauri.conf.json ]]; then
+            raw="$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+          elif [[ -f package.json ]]; then
+            raw="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
+          else
+            echo "无法从 tag、输入、tauri.conf.json 或 package.json 解析版本号" >&2
+            exit 1
+          fi
+
+          plain="${raw#v}"
+          if [[ -z "${plain}" ]]; then
+            echo "解析出的版本号为空: raw=${raw}" >&2
+            exit 1
+          fi
+
+          version="v${plain}"
+          echo "VERSION=${version}" >> "$GITHUB_OUTPUT"
+          echo "VERSION_PLAIN=${plain}" >> "$GITHUB_OUTPUT"
+          echo "TAG_NAME=${version}" >> "$GITHUB_OUTPUT"
+          echo "Resolved Desktop version: ${version}"
+
+  gates:
+    name: Optional release gates
+    needs: resolve
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_gates }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-gates-windows
+          workspaces: ". -> target"
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Check version metadata
+        run: pnpm run check:versions
+
+      - name: Export ts-rs bindings
         shell: pwsh
         run: |
-          $inputVersion = "${{ inputs.version }}"
+          cargo test -p ncd-runtime --lib export_bindings_ -- --quiet
+          cargo test -p ncd-domain --lib export_bindings_ -- --quiet
+          cargo test -p ncd-component --lib export_bindings_ -- --quiet
+          cargo test -p ncd-deploy --lib export_bindings_ -- --quiet
+          cargo test -p ncd-host --lib export_bindings_ -- --quiet
+          cargo test -p ncd-tauri --lib export_bindings_ -- --quiet
 
-          if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref }}" -like "refs/tags/*") {
-            $version = "${{ github.ref }}" -replace "refs/tags/", ""
-          } elseif ($inputVersion) {
-            $version = $inputVersion
-          } elseif (Test-Path "src-tauri/tauri.conf.json") {
-            $config = Get-Content "src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json
-            $version = $config.version
-          } elseif (Test-Path "package.json") {
-            $package = Get-Content "package.json" -Raw | ConvertFrom-Json
-            $version = $package.version
-          } else {
-            Write-Error "无法从 tag、输入、src-tauri/tauri.conf.json 或 package.json 解析版本号"
-            exit 1
-          }
+      - name: Assert generated IPC types committed
+        shell: pwsh
+        run: git diff --exit-code -- src-ui/core/ipc/generated
 
-          if (-not $version) {
-            Write-Error "解析出的版本号为空"
-            exit 1
-          }
+      - name: Frontend unit tests
+        run: pnpm run test:unit
 
-          if (-not ($version -like "v*")) {
-            $version = "v$version"
-          }
-
-          $plain = $version -replace "^v", ""
-          "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "VERSION_PLAIN=$plain" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Version: $version"
+      - name: Workspace tests
+        run: cargo test --workspace
 
   build-msi:
-    needs: resolve
+    needs:
+      - resolve
+      - gates
+    # gates 跳过时 needs.gates.result = skipped，仍应继续打包。
+    if: ${{ always() && needs.resolve.result == 'success' && (needs.gates.result == 'success' || needs.gates.result == 'skipped') }}
     uses: ./.github/workflows/build-msi.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
@@ -79,50 +155,105 @@ jobs:
     needs:
       - resolve
       - build-msi
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
-      - name: "检出代码"
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: "下载 MSI 制品"
+      - name: Download MSI artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build-msi.outputs.artifact_name }}
           path: release-assets
 
-      - name: "生成 Release notes"
-        id: notes
-        shell: pwsh
+      - name: Verify assets and checksums
+        id: assets
+        shell: bash
         run: |
-          $notesPath = "release-notes.md"
-          @"
-          NapCatQQ Desktop ${{ needs.resolve.outputs.version }}
-
-          Windows installer assets are generated by the Tauri MSI workflow.
-          "@ | Set-Content -Path $notesPath -Encoding UTF8
-          "NOTES_PATH=$notesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: "检查 Release 制品"
-        shell: pwsh
-        run: |
-          $msiFiles = Get-ChildItem -Path "release-assets" -Filter "*.msi" -File -Recurse -ErrorAction SilentlyContinue
-          if (-not $msiFiles) {
-            Write-Error "release-assets 中没有 MSI 制品"
+          set -euo pipefail
+          cd release-assets
+          shopt -s nullglob
+          msis=(*.msi)
+          if [[ ${#msis[@]} -lt 1 ]]; then
+            echo "release-assets 中没有 MSI" >&2
+            ls -la
             exit 1
-          }
-          $msiFiles | ForEach-Object { Write-Host "MSI asset: $($_.FullName)" }
+          fi
+          : > SHA256SUMS
+          for f in *; do
+            [[ -f "$f" ]] || continue
+            [[ "$f" == "SHA256SUMS" ]] && continue
+            sha256sum "$f" >> SHA256SUMS
+          done
+          echo "---- SHA256SUMS ----"
+          cat SHA256SUMS
+          ls -lh
 
-      - name: "发布到 GitHub Releases"
+          has_updater=false
+          if compgen -G "*.sig" > /dev/null || [[ -f latest.json ]]; then
+            has_updater=true
+          fi
+          echo "HAS_UPDATER=${has_updater}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.resolve.outputs.version }}"
+          plain="${{ needs.resolve.outputs.version_plain }}"
+          notes_path=release-notes.md
+          prev="$(git describe --tags --abbrev=0 --match 'v*.*.*' "${version}^" 2>/dev/null || true)"
+
+          {
+            echo "## NapCatQQ Desktop ${plain}"
+            echo
+            echo "Windows 安装包由 Tauri MSI 工作流生成。"
+            echo
+            echo "### Assets"
+            echo
+            echo "| 文件 | 说明 |"
+            echo "|------|------|"
+            echo "| \`NapCatQQ-Desktop-${plain}-x64.msi\` | 版本化安装包 |"
+            echo "| \`NapCatQQ-Desktop-x64.msi\` | 同内容别名 |"
+            echo "| \`SHA256SUMS\` | 校验和 |"
+            echo
+            echo "### 说明"
+            echo
+            echo "- 旧版 MSI（同 UpgradeCode）可直接覆盖升级；生产数据根仍为 ProgramData。"
+            echo "- **自动更新**（\`latest.json\` / \`.sig\`）当前未接线；请以本 Release 的 MSI 为准手动安装。"
+            echo "- 与远端监控二进制分流：\`ncd-watch\` 使用 \`watch-v*\` tag 与独立工作流。"
+            echo
+            if [[ -n "${prev}" ]]; then
+              echo "### Changes since \`${prev}\`"
+              echo
+              git log --pretty=format:'- %s (%h)' "${prev}..HEAD" --no-merges | head -n 80 || true
+              echo
+            else
+              echo "### Changes"
+              echo
+              echo "_无上一 v* tag，跳过自动 changelog。_"
+              echo
+            fi
+            echo "Tag: \`${version}\`"
+          } > "${notes_path}"
+
+          echo "NOTES_PATH=${notes_path}" >> "$GITHUB_OUTPUT"
+          cat "${notes_path}"
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ needs.resolve.outputs.version }}
+          tag_name: ${{ needs.resolve.outputs.tag_name }}
           name: NapCatQQ Desktop ${{ needs.resolve.outputs.version }}
           body_path: ${{ steps.notes.outputs.NOTES_PATH }}
           files: |
-            release-assets/**/*.msi
-            release-assets/**/*.sig
-            release-assets/**/latest.json
+            release-assets/*.msi
+            release-assets/SHA256SUMS
+            release-assets/*.sig
+            release-assets/latest.json
+          fail_on_unmatched_files: false

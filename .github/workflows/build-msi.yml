@@ -1,3 +1,5 @@
+# 只负责 Windows MSI 打包与布局断言。质量门禁在 ci.yml；发版编排在 release.yml。
+
 name: Build MSI Package
 
 on:
@@ -52,6 +54,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-msi-${{ inputs.git_ref || github.ref }}-${{ inputs.version || 'auto' }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
 jobs:
   build:
     runs-on: windows-latest
@@ -61,32 +71,36 @@ jobs:
       artifact_name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}
       msi_file_name: ${{ steps.collect_msi.outputs.MSI_FILE_NAME }}
     steps:
-      - name: "检出代码"
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.git_ref || github.ref }}
-          submodules: true
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: "设置 Node.js"
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
+          cache: pnpm
 
-      - name: "设置 Rust"
-        shell: pwsh
-        run: |
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: "缓存 Cargo"
+      - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build-msi-windows
+          workspaces: ". -> target"
 
-      - name: "安装前端依赖"
-        run: npm ci
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
 
-      - name: "解析版本号"
+      - name: Resolve version
         id: resolve_version
         shell: pwsh
         run: |
@@ -119,27 +133,13 @@ jobs:
           "VERSION_PLAIN=$plain" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Resolved version: $version"
 
-      - name: "校验版本元数据"
-        run: npm run check:versions
+      - name: Check version metadata
+        run: pnpm run check:versions
 
-      - name: "运行综合门禁"
-        run: npm run verify
+      - name: Build Tauri MSI
+        run: pnpm run tauri:build -- --bundles msi
 
-      - name: "检查生成的 IPC 类型已提交"
-        shell: pwsh
-        run: |
-          git diff --exit-code -- src-ui/core/ipc/generated
-
-      - name: "运行 Rust 测试"
-        run: npm run rust:test
-
-      - name: "运行前端单元测试"
-        run: npm run test:unit
-
-      - name: "构建 Tauri MSI"
-        run: npm run tauri:build -- --bundles msi
-
-      - name: "收集 MSI 输出"
+      - name: Collect MSI output
         id: collect_msi
         shell: pwsh
         run: |
@@ -160,6 +160,7 @@ jobs:
           $latestAlias = Join-Path $outDir "NapCatQQ-Desktop-x64.msi"
           Copy-Item $primary.FullName -Destination $latestAlias -Force
 
+          # updater 未接线时通常没有这些文件；有则一并收集，发布侧再条件上传。
           $updaterAssets = Get-ChildItem -Path $bundleRoot -File -Recurse -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -eq "latest.json" -or $_.Extension -eq ".sig" -or $_.Extension -eq ".zip" }
           foreach ($file in $updaterAssets) {
@@ -168,8 +169,9 @@ jobs:
 
           "MSI_FILE_NAME=$expectedName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Collected MSI: $expectedPath"
+          Get-ChildItem $outDir | ForEach-Object { Write-Host ("  asset: {0} ({1} bytes)" -f $_.Name, $_.Length) }
 
-      - name: "断言 MSI UpgradeCode 与安装布局"
+      - name: Assert MSI UpgradeCode and layout
         shell: pwsh
         run: |
           $msi = Join-Path "release-assets" "${{ steps.collect_msi.outputs.MSI_FILE_NAME }}"
@@ -177,9 +179,9 @@ jobs:
             Write-Error "MSI not found for assert: $msi"
             exit 1
           }
-          powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/assert-msi-layout.ps1" -MsiPath $msi
+          & powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/assert-msi-layout.ps1" -MsiPath $msi
 
-      - name: "解析制品名"
+      - name: Resolve artifact name
         id: resolve_artifact
         shell: pwsh
         run: |
@@ -189,7 +191,7 @@ jobs:
           }
           "ARTIFACT_NAME=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: "上传 MSI 制品"
+      - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.resolve_artifact.outputs.ARTIFACT_NAME }}

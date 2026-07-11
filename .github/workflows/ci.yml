@@ -1,0 +1,114 @@
+# PR / 主分支日常门禁。发版 MSI 不跑本文件；见 release.yml + build-msi.yml。
+# Rust 全量测试必须在 Windows（大量 #[cfg(windows)]）。
+#
+# 分支策略：
+#   main  ← Rust/Tauri 主线（原 rust-migration）
+#   v1    ← 旧 Python 归档（原 master），不跑本 CI
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Check version metadata
+        run: pnpm run check:versions
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Unit tests
+        run: pnpm run test:unit
+
+  rust:
+    name: Rust (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-windows
+          workspaces: ". -> target"
+
+      # ts-bindings 会写出 src-ui/core/ipc/generated；需与提交内容一致（R1）。
+      - name: Export ts-rs bindings
+        shell: pwsh
+        run: |
+          cargo test -p ncd-runtime --lib export_bindings_ -- --quiet
+          cargo test -p ncd-domain --lib export_bindings_ -- --quiet
+          cargo test -p ncd-component --lib export_bindings_ -- --quiet
+          cargo test -p ncd-deploy --lib export_bindings_ -- --quiet
+          cargo test -p ncd-host --lib export_bindings_ -- --quiet
+          cargo test -p ncd-tauri --lib export_bindings_ -- --quiet
+
+      - name: Assert generated IPC types committed
+        shell: pwsh
+        run: git diff --exit-code -- src-ui/core/ipc/generated
+
+      - name: Workspace tests
+        run: cargo test --workspace
+
+  gate:
+    name: Gate
+    needs:
+      - frontend
+      - rust
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Require green jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          fe="${{ needs.frontend.result }}"
+          rs="${{ needs.rust.result }}"
+          echo "frontend=$fe rust=$rs"
+          if [[ "$fe" != "success" || "$rs" != "success" ]]; then
+            echo "CI gate failed" >&2
+            exit 1
+          fi
