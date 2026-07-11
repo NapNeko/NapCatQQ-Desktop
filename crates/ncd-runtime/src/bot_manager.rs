@@ -1094,8 +1094,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 不创建新 secret,避免 watch 同步副作用写盘。
     pub async fn napcat_webui_for_watch(&self, bot_id: &BotId) -> Option<(u16, String)> {
         if let Some(ep) = self.napcat_endpoints.snapshot(bot_id).await {
-            if ep.port > 0 && !ep.token.trim().is_empty() {
-                return Some((ep.port, ep.token));
+            let port = ep.watch_port();
+            if port > 0 && !ep.token.trim().is_empty() {
+                return Some((port, ep.token));
             }
         }
         let qq: u64 = bot_id.as_str().parse().ok()?;
@@ -2071,17 +2072,22 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     ///   再插入新实例,保证不会同时存在两个 Poller 抢同一 BotId 的事件
     ///   restart_handle 通过 Arc::clone(self) as Arc<dyn RestartHandle> 注入
     ///   利用本类型的 impl RestartHandle for BotManager(见文件末尾)
-    pub async fn handle_webui_available(self: &Arc<Self>, bot_id: BotId, port: u16, token: String) {
-        // 0. 先把 (port, token) 落进 endpoint 表,让保存配置时的热推送可查
-        //    NapCat 多 bot 时 6099 会被先到的占住,后到的自动 +1,token 也是
-        //    每进程随机的,必须按 bot 隔离记忆本步在 BotConfig 解析之前做:
-        //    即便 BotConfig 不再存在(事件晚到 / 配置已删),表里多一条孤儿
-        //    记录也无害——dispose_poller 会清掉,最坏情况是占一个 BotId 槽位
+    pub async fn handle_webui_available(
+        self: &Arc<Self>,
+        bot_id: BotId,
+        port: u16,
+        token: String,
+        host_port: Option<u16>,
+    ) {
+        // 0. 先把 (port, token[, host_port]) 落进 endpoint 表
+        //    port: Desktop 本机可达(本机进程口/远端隧道口),login_poller 用
+        //    host_port: 远端真实监听口,ncd-watch 用;本机为 None
         self.napcat_endpoints
             .insert(
                 bot_id.clone(),
                 NapCatEndpoint {
                     port,
+                    host_port,
                     token: token.clone(),
                 },
             )
@@ -2139,7 +2145,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         endpoint: NapCatEndpoint,
         payload: serde_json::Value,
     ) -> &'static str {
-        let NapCatEndpoint { port, token } = endpoint;
+        let NapCatEndpoint {
+            port,
+            token,
+            host_port: _,
+        } = endpoint;
         let credential = match self.webui_client.fetch_credential(port, &token).await {
             Ok(c) => c,
             Err(err) => {
@@ -2224,21 +2234,27 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .subscribe(EventFilter::kind(DomainEventKind::BotProcessExited));
         loop {
             tokio::select! {
-            ev = webui_sub.next() => match ev {
-            Some(DomainEvent::NapCatWebuiAvailable { bot_id, port, token }) => {
-            self.handle_webui_available(bot_id, port, token).await;
-            }
-            Some(_) => continue,
-            None => break,
-            },
-            ev = exit_sub.next() => match ev {
-            Some(DomainEvent::BotProcessExited { bot_id, .. }) => {
-            self.dispose_poller(&bot_id).await;
-            self.remote_runtime_sessions().shutdown_bot(&bot_id).await;
-            }
-            Some(_) => continue,
-            None => break,
-            },
+                ev = webui_sub.next() => match ev {
+                    Some(DomainEvent::NapCatWebuiAvailable {
+                        bot_id,
+                        port,
+                        token,
+                        host_port,
+                    }) => {
+                        self.handle_webui_available(bot_id, port, token, host_port)
+                            .await;
+                    }
+                    Some(_) => continue,
+                    None => break,
+                },
+                ev = exit_sub.next() => match ev {
+                    Some(DomainEvent::BotProcessExited { bot_id, .. }) => {
+                        self.dispose_poller(&bot_id).await;
+                        self.remote_runtime_sessions().shutdown_bot(&bot_id).await;
+                    }
+                    Some(_) => continue,
+                    None => break,
+                },
             }
         }
     }

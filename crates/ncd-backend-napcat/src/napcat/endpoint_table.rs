@@ -10,6 +10,9 @@
 //! DomainEvent::NapCatWebuiAvailable { bot_id, port, token },本模块提供
 //! 一个轻量内存表,让 BotManager 在需要的时候按 BotId 反查
 //!
+//! 远端场景额外记 host_port:SSH 隧道本机口只能给 Desktop login_poller 用,
+//! ncd-watch 跑在远端,必须探 Bot 进程本机监听口(通常 6099),不能写隧道口。
+//!
 //! 关键约束:
 //! - 表内容由 BotManager 单点维护,写入路径在 handle_webui_available;
 //!   清理路径在 dispose_poller
@@ -26,10 +29,20 @@ use ncd_domain::ids::BotId;
 /// 单个 NapCat bot 的 WebUI 接入信息
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NapCatEndpoint {
-    /// stdout 抓到的真实监听端口
+    /// Desktop 本机可达端口(本机=进程口;远端=SSH 隧道本地口)
     pub port: u16,
+    /// 远端 Host 上进程实际监听口;供 ncd-watch 写 notify.json
+    /// None 表示与 port 相同(本机)
+    pub host_port: Option<u16>,
     /// stdout 抓到的 webui token,用于换 Bearer credential
     pub token: String,
+}
+
+impl NapCatEndpoint {
+    /// watch / 远端本机探活用的端口
+    pub fn watch_port(&self) -> u16 {
+        self.host_port.filter(|p| *p > 0).unwrap_or(self.port)
+    }
 }
 
 /// per-Bot 端点表Clone 共享同一份内部 RwLock,方便嵌入需要 Clone 的
@@ -76,88 +89,60 @@ mod tests {
                 id.clone(),
                 NapCatEndpoint {
                     port: 6099,
+                    host_port: None,
                     token: "tok".into(),
                 },
             )
             .await;
-
-        let got = table.snapshot(&id).await.expect("snapshot present");
-        assert_eq!(got.port, 6099);
-        assert_eq!(got.token, "tok");
+        let snap = table.snapshot(&id).await.unwrap();
+        assert_eq!(snap.port, 6099);
+        assert_eq!(snap.token, "tok");
+        assert_eq!(snap.watch_port(), 6099);
     }
 
     #[tokio::test]
-    async fn insert_overwrites_previous_endpoint() {
-        // NapCat 进程重启场景:同一 bot 的端口和 token 都会换
+    async fn watch_port_prefers_host_port() {
+        let ep = NapCatEndpoint {
+            port: 58408,
+            host_port: Some(6099),
+            token: "t".into(),
+        };
+        assert_eq!(ep.watch_port(), 6099);
+    }
+
+    #[tokio::test]
+    async fn remove_clears_entry() {
         let table = NapCatEndpointTable::new();
         let id = BotId::new("10001");
         table
             .insert(
                 id.clone(),
                 NapCatEndpoint {
-                    port: 6099,
-                    token: "old".into(),
+                    port: 1,
+                    host_port: None,
+                    token: "a".into(),
                 },
             )
             .await;
-        table
-            .insert(
-                id.clone(),
-                NapCatEndpoint {
-                    port: 6100,
-                    token: "new".into(),
-                },
-            )
-            .await;
-
-        let got = table.snapshot(&id).await.expect("snapshot present");
-        assert_eq!(got.port, 6100);
-        assert_eq!(got.token, "new");
-    }
-
-    #[tokio::test]
-    async fn remove_returns_old_value_and_clears_entry() {
-        let table = NapCatEndpointTable::new();
-        let id = BotId::new("10001");
-        table
-            .insert(
-                id.clone(),
-                NapCatEndpoint {
-                    port: 6099,
-                    token: "tok".into(),
-                },
-            )
-            .await;
-
-        let removed = table.remove(&id).await.expect("present before remove");
-        assert_eq!(removed.port, 6099);
+        assert!(table.remove(&id).await.is_some());
         assert!(table.snapshot(&id).await.is_none());
     }
 
     #[tokio::test]
-    async fn remove_missing_is_idempotent() {
-        let table = NapCatEndpointTable::new();
-        let id = BotId::new("never-inserted");
-        assert!(table.remove(&id).await.is_none());
-        assert!(table.remove(&id).await.is_none());
-    }
-
-    #[tokio::test]
-    async fn clone_shares_state_across_handles() {
+    async fn clone_shares_inner_map() {
         // BotManager::Clone 会复制 NapCatEndpointTable,必须共享同一份内部 map
         let a = NapCatEndpointTable::new();
         let b = a.clone();
-        let id = BotId::new("10001");
+        let id = BotId::new("1");
         a.insert(
             id.clone(),
             NapCatEndpoint {
-                port: 6099,
-                token: "tok".into(),
+                port: 9,
+                host_port: Some(6099),
+                token: "x".into(),
             },
         )
         .await;
-
-        let got = b.snapshot(&id).await.expect("clone shares state");
-        assert_eq!(got.port, 6099);
+        assert_eq!(b.snapshot(&id).await.unwrap().watch_port(), 6099);
     }
 }

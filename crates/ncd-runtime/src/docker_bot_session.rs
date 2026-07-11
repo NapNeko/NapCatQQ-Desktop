@@ -154,9 +154,10 @@ impl DockerBotSessionRegistry {
                     let local_port = handle.local_port();
                     tunnels.push(handle);
                     if let Some(token) = napcat_webui_token.filter(|t| !t.trim().is_empty()) {
-                        bus.publish(DomainEvent::napcat_webui_available(
+                        bus.publish(DomainEvent::napcat_webui_available_remote(
                             bot_id.clone(),
                             local_port,
+                            remote_webui,
                             token,
                         ));
                     }

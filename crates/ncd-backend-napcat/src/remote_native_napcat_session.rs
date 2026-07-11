@@ -141,12 +141,13 @@ impl RemoteNativeNapcatSessionRegistry {
         }
 
         // 立刻发布,避免等 2s poll 才出二维码/登录态
-        // 只在需要 owned token 时 clone,不整包 clone seed
+        // port=隧道本机口(Desktop poller);host_port=远端真实 WebUI(ncd-watch)
         if let Some(port) = local_port {
-            if let Some((_, token)) = seed.as_ref() {
-                bus.publish(DomainEvent::napcat_webui_available(
+            if let Some((remote_port, token)) = seed.as_ref() {
+                bus.publish(DomainEvent::napcat_webui_available_remote(
                     bot_id.clone(),
                     port,
+                    *remote_port,
                     token.clone(),
                 ));
             }
@@ -197,11 +198,12 @@ impl RemoteNativeNapcatSessionRegistry {
                 if webui_published {
                     continue;
                 }
-                if let Some((_remote_port, token)) = latest {
+                if let Some((remote_port, token)) = latest {
                     if let Some(port) = lp {
-                        bus.publish(DomainEvent::napcat_webui_available(
+                        bus.publish(DomainEvent::napcat_webui_available_remote(
                             bot_log.clone(),
                             port,
+                            remote_port,
                             token,
                         ));
                         webui_published = true;
