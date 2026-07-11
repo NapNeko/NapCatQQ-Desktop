@@ -89,7 +89,7 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
         "开始拉取远端版本快照（proxy_configured={proxy_configured}, pat={has_token}）"
     );
 
-    let (napcat, snowluma, desktop, ncd_watch) = tokio::join!(
+    let (napcat, snowluma, desktop, ncd_watch, qq_linux, qq_windows) = tokio::join!(
         fetch_one(
             client,
             ReleaseAlias::Napcat,
@@ -120,6 +120,8 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
             },
             token,
         ),
+        fetch_qq_linux_latest(),
+        fetch_qq_windows_latest(),
     );
 
     let failed: Vec<&str> = [
@@ -127,6 +129,8 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
         (snowluma.is_none(), "SnowLuma"),
         (desktop.is_none(), "Desktop"),
         (ncd_watch.is_none(), "ncd-watch"),
+        (qq_linux.is_none(), "QQ-Linux"),
+        (qq_windows.is_none(), "QQ-Windows"),
     ]
     .into_iter()
     .filter(|(bad, _)| *bad)
@@ -149,6 +153,8 @@ pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> Re
         snowluma_latest: snowluma,
         desktop_latest: desktop,
         ncd_watch_latest: ncd_watch,
+        qq_linux_latest: qq_linux,
+        qq_windows_latest: qq_windows,
         fetched_at: Some(current_unix_ts()),
     };
 
@@ -256,6 +262,78 @@ pub(crate) fn strip_watch_or_v_prefix(tag: &str) -> &str {
         return rest;
     }
     strip_v_prefix(t)
+}
+
+
+async fn fetch_qq_linux_latest() -> Option<ReleaseInfo> {
+    match ncd_component::probe_linux_qq_latest().await {
+        Ok(rel) => {
+            info!(
+                target: "ncd_runtime::release",
+                version = %rel.version,
+                source = rel.source,
+                "QQ Linux 版本探测成功"
+            );
+            Some(ReleaseInfo {
+                version: rel.version,
+                tag: rel.source.to_string(),
+                published_at: current_unix_ts(),
+                html_url: ncd_component::QQ_PCCONFIG_URL.to_string(),
+                release_notes: format!(
+                    "Linux QQ via {}\n{}",
+                    rel.source, rel.download_url
+                ),
+                assets: vec![ReleaseAsset {
+                    name: rel
+                        .download_url
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or("linuxqq.deb")
+                        .to_string(),
+                    sha256: String::new(),
+                }],
+            })
+        }
+        Err(err) => {
+            warn!(
+                target: "ncd_runtime::release",
+                %err,
+                "QQ Linux 版本探测失败"
+            );
+            None
+        }
+    }
+}
+
+async fn fetch_qq_windows_latest() -> Option<ReleaseInfo> {
+    match ncd_component::probe_windows_qq_latest().await {
+        Ok((version, url)) => {
+            info!(
+                target: "ncd_runtime::release",
+                %version,
+                "QQ Windows 版本探测成功"
+            );
+            Some(ReleaseInfo {
+                version: version.clone(),
+                tag: "pcConfig".to_string(),
+                published_at: current_unix_ts(),
+                html_url: ncd_component::QQ_PCCONFIG_URL.to_string(),
+                release_notes: format!("Windows QQ via pcConfig\n{url}"),
+                assets: vec![ReleaseAsset {
+                    name: url.rsplit('/').next().unwrap_or("QQ_setup.exe").to_string(),
+                    sha256: String::new(),
+                }],
+            })
+        }
+        Err(err) => {
+            warn!(
+                target: "ncd_runtime::release",
+                %err,
+                "QQ Windows 版本探测失败"
+            );
+            None
+        }
+    }
 }
 
 async fn fetch_one(
@@ -724,6 +802,8 @@ mod tests {
             snowluma_latest: None,
             ncd_watch_latest: None,
             desktop_latest: None,
+            qq_linux_latest: None,
+            qq_windows_latest: None,
             fetched_at: Some(current_unix_ts()),
         }
     }
