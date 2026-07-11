@@ -2,14 +2,31 @@
 """Local webhook sink for NapCatQQ Desktop offline-notify verification.
 
 Usage:
-  python scripts/webhook_test_server.py
-  python scripts/webhook_test_server.py --port 9876 --secret my-token
+  uv run scripts/webhook_test_server.py
+  uv run scripts/webhook_test_server.py --port 9876 --secret my-token
+  uv run scripts/webhook_test_server.py --host 0.0.0.0 --port 9876
 
-Desktop settings:
+Desktop 本机通知（Desktop 进程自己发 Webhook）:
   URL:    http://127.0.0.1:9876/webhook
   Method: POST
-  Secret: same as --secret (optional; sent as Authorization: Bearer <secret>)
-  Body:   any preset / custom JSON with {nickname} {uin} {event} {time}
+  Secret: same as --secret（可选；Authorization: Bearer <secret>）
+
+远端 ncd-watch 联调（重要）:
+  notify.json 里的 URL 在「远端机器」上解析。
+  填 http://127.0.0.1:9876/webhook 会打到服务器自己，不是 Windows。
+
+  推荐：本机监听 127.0.0.1 + SSH 反向隧道（无需开防火墙）：
+    # 终端 A
+    uv run scripts/webhook_test_server.py --host 127.0.0.1 --port 9876 --secret ncd-test-secret
+    # 终端 B（密钥路径按 server 档案）
+    ssh -i "<ssh_key>" -N -R 9876:127.0.0.1:9876 <user>@<remote>
+    # Desktop Webhook URL 仍可写 http://127.0.0.1:9876/webhook，同步后远端经隧道打到本机。
+
+  备选：--host 0.0.0.0 + 防火墙放行 + URL 改电脑局域网 IP。
+  Hyper-V/NAT 远端常访问不到宿主机 WLAN IP，优先反向隧道。
+
+  ncd-watch 默认 desktop_present 在线只探不报：完全退出 Desktop（或等 present TTL
+  ~90s）后再制造 online→offline；冷启动时已 offline 不刷历史告警。
 
 Press Ctrl+C to stop.
 """
@@ -145,12 +162,18 @@ def main() -> int:
 
     server = ThreadingHTTPServer((args.host, args.port), WebhookHandler)
     print(f"[{_now()}] webhook test server listening on http://{args.host}:{args.port}")
-    print(f"  POST URL for Desktop: http://{args.host}:{args.port}/webhook")
+    print(f"  POST URL for Desktop / ncd-watch: http://127.0.0.1:{args.port}/webhook")
+    if args.host in ("0.0.0.0", "::"):
+        print("  bound all interfaces — remote may use your LAN IP if firewall allows")
+    else:
+        print("  bound loopback only — for remote ncd-watch use SSH reverse tunnel:")
+        print(f"    ssh -N -R {args.port}:127.0.0.1:{args.port} <user>@<remote>")
     if args.secret:
         print(f"  expected Authorization: Bearer {args.secret}")
     else:
         print("  secret: (none) — any Authorization accepted")
     print("  health: GET /health")
+    print("  note: ncd-watch skips webhooks while desktop_present is fresh (Desktop online)")
     print("Ctrl+C to stop.\n", flush=True)
 
     try:

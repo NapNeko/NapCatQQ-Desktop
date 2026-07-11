@@ -6,6 +6,7 @@ import { Button } from '../../shared/ui';
 import { useOpenExternal } from '../../hooks/useOpenExternal';
 import type { MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
+import { compareSemver } from '../../core/domain/release/normalize';
 import { ProgressLine, ProgressBarOverlay, shouldShowProgressBar } from './progressView';
 import { ComponentManageCard } from './ComponentEntityCard';
 import { hostComponentStatusBadge } from './componentStatusPresentation';
@@ -143,7 +144,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
 
 function hasUpdate(status: MachineComponentRow['status'], latest: string | null): boolean {
     if (status.state !== 'installed' || !latest) return false;
-    return status.detected.version !== latest;
+    return compareSemver(status.detected.version, latest) > 0;
 }
 
 const TERMINAL_DISMISS_MS = 3500;
@@ -201,7 +202,8 @@ const StatusMeta: React.FC<{
     switch (status.state) {
         case 'installed': {
             const local = status.detected.version;
-            const updatable = latestRemoteVersion && local !== latestRemoteVersion;
+            const updatable =
+                !!latestRemoteVersion && compareSemver(local, latestRemoteVersion) > 0;
             return (
                 <p className="truncate font-mono text-xs tabular-nums text-text-tertiary">
                     本地 {local}
@@ -243,7 +245,8 @@ const ActionButtons: React.FC<{
     switch (status.state) {
         case 'installed': {
             const updatable =
-                latestRemoteVersion && status.detected.version !== latestRemoteVersion;
+                !!latestRemoteVersion &&
+                compareSemver(status.detected.version, latestRemoteVersion) > 0;
             return (
                 <>
                     {updatable && (

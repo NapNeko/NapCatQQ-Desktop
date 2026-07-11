@@ -159,6 +159,8 @@ export const ComponentsPageNext: React.FC = () => {
                     return releases.snowluma?.version ?? null;
                 case 'desktop_self':
                     return releases.desktop?.version ?? null;
+                case 'ncd_watch':
+                    return releases.ncdWatch?.version ?? null;
                 default:
                     return null;
             }

@@ -102,8 +102,15 @@ jobs:
           tool: cross
 
       - name: Build ncd-watch (musl)
-        # 默认 feature 含 daemon;Desktop 侧用 default-features=false 只链 schema
-        run: cross build -p ncd-watch --release --target ${{ matrix.target }}
+        # clap --version 读 CARGO_PKG_VERSION;workspace 常仍是 0.1.0,发版前注入 tag 版本。
+        # 默认 feature 含 daemon;Desktop 侧用 default-features=false 只链 schema。
+        run: |
+          set -euo pipefail
+          plain="${{ needs.resolve.outputs.version_plain }}"
+          # 仅改 ncd-watch package 行,不动 workspace.package.version
+          sed -i "0,/^version\.workspace = true$/s//version = \"${plain}\"/" crates/ncd-watch/Cargo.toml
+          grep -n '^version' crates/ncd-watch/Cargo.toml | head -n5
+          cross build -p ncd-watch --release --target ${{ matrix.target }}
 
       - name: Package asset
         shell: bash

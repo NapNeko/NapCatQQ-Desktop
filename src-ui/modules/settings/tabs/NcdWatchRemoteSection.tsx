@@ -7,17 +7,19 @@ import { RefreshCw } from 'lucide-react';
 import { componentService } from '../../../core/services/component.service';
 import { ncdWatchService } from '../../../core/services/ncd-watch.service';
 import { errorText } from '../../../core/domain/errors';
+import { compareSemver } from '../../../core/domain/release/normalize';
 import {
     useNcdWatchServers,
     type NcdWatchServerRow,
 } from '../../../hooks/settings/useNcdWatchServers';
+import { useReleases } from '../../../hooks/diagnostics/useReleases';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { Badge, Button, Spinner } from '../../../shared/ui';
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import { cn } from '../../../shared/utils/cn';
 import { FieldRow, SettingsSection } from '../_shared';
 
-type BusyKind = 'install' | 'sync';
+type BusyKind = 'install' | 'update' | 'sync';
 
 function connectionLabel(state: NcdWatchServerRow['state']): string {
     switch (state) {
@@ -32,24 +34,27 @@ function connectionLabel(state: NcdWatchServerRow['state']): string {
     }
 }
 
-function watchStatusLabel(row: NcdWatchServerRow): string {
+function watchStatusLabel(row: NcdWatchServerRow, latestVersion: string | null): string {
     if (row.watchInstalled === null && !row.detectError) return '探测中';
     if (row.watchInstalled) {
-        return row.watchVersion?.trim()
-            ? `已安装 · ${row.watchVersion.trim()}`
-            : '已安装';
+        const local = row.watchVersion?.trim() || '';
+        if (!local) return '已安装';
+        if (latestVersion && compareSemver(local, latestVersion) > 0) {
+            return `已安装 · ${local} → ${latestVersion}`;
+        }
+        return `已安装 · ${local}`;
     }
     if (row.detectError) return '未确认';
-    return '未安装';
+    return latestVersion ? `未安装 · 可装 ${latestVersion}` : '未安装';
 }
 
-function rowDescription(row: NcdWatchServerRow): string {
+function rowDescription(row: NcdWatchServerRow, latestVersion: string | null): string {
     const bots = row.botCount > 0 ? `${row.botCount} 个 Bot` : '暂无 Bot';
     const parts = [
         row.hostLabel,
         connectionLabel(row.state),
         bots,
-        watchStatusLabel(row),
+        watchStatusLabel(row, latestVersion),
     ];
     if (row.detectError) parts.push(row.detectError);
     return parts.join(' · ');
@@ -59,12 +64,21 @@ function readyDot(row: NcdWatchServerRow): boolean {
     return row.watchInstalled === true && row.state === 'connected';
 }
 
+function canUpdateWatch(row: NcdWatchServerRow, latestVersion: string | null): boolean {
+    if (!row.watchInstalled || !latestVersion) return false;
+    const local = row.watchVersion?.trim();
+    if (!local) return true;
+    return compareSemver(local, latestVersion) > 0;
+}
+
 export function NcdWatchRemoteSection({
     settingsDirty,
 }: {
     settingsDirty: boolean;
 }) {
     const { rows, loading, refetchAll } = useNcdWatchServers();
+    const { snapshot: releases } = useReleases();
+    const latestWatchVersion = releases.ncdWatch?.version ?? null;
     const [busy, setBusy] = useState<Record<string, BusyKind | undefined>>({});
     const [bulkSyncing, setBulkSyncing] = useState(false);
 
@@ -97,6 +111,33 @@ export function NcdWatchRemoteSection({
                 key: `ncd-watch-install-${row.serverId}`,
                 tone: 'danger',
                 title: '安装失败',
+                content: `${row.name}：${errorText(err, '未知错误')}`,
+            });
+        } finally {
+            setRowBusy(row.serverId, undefined);
+        }
+    };
+
+    const updateWatch = async (row: NcdWatchServerRow) => {
+        setRowBusy(row.serverId, 'update');
+        try {
+            await componentService.runComponentAction(
+                'ncd_watch',
+                `remote:${row.serverId}`,
+                'update',
+            );
+            pushInfoBar({
+                key: `ncd-watch-update-${row.serverId}`,
+                tone: 'info',
+                title: '已提交 NCD Watch 更新',
+                content: `${row.name}：将拉取最新二进制并重启服务；进度见任务队列。`,
+            });
+            window.setTimeout(() => refetchAll(), 2500);
+        } catch (err) {
+            pushInfoBar({
+                key: `ncd-watch-update-${row.serverId}`,
+                tone: 'danger',
+                title: '更新失败',
                 content: `${row.name}：${errorText(err, '未知错误')}`,
             });
         } finally {
@@ -172,12 +213,13 @@ export function NcdWatchRemoteSection({
     };
 
     const installedCount = rows.filter((r) => r.watchInstalled).length;
+    const updateCount = rows.filter((r) => canUpdateWatch(r, latestWatchVersion)).length;
     const anyBusy = bulkSyncing || Object.values(busy).some(Boolean);
 
     return (
         <SettingsSection
             title="远端脱管监控"
-            description="Desktop 退出后，各 Linux 远端上的 NCD Watch 仍可探活并投递已启用的 Webhook / Email / 同机 OneBot（需同机另有存活发信 Bot）；多机各自安装与同步"
+            description="Desktop 退出后，各 Linux 远端上的 NCD Watch 仍可探活并投递已启用的 Webhook / Email / 同机 OneBot（需同机另有存活发信 Bot）。Webhook URL 在远端解析：本机 127.0.0.1 测服需 SSH 反向隧道或公网/可达地址；多机各自安装与同步"
         >
             <FieldRow
                 label="远端主机"
@@ -189,8 +231,19 @@ export function NcdWatchRemoteSection({
                             : rows.length === 0
                                 ? '还没有远端服务器；先在「远程」页添加'
                                 : installedCount > 0
-                                    ? `${rows.length} 台主机 · ${installedCount} 台已装 Watch`
-                                    : `${rows.length} 台主机 · 尚未安装 Watch`
+                                    ? `${rows.length} 台主机 · ${installedCount} 台已装 Watch${updateCount > 0
+                                        ? ` · ${updateCount} 台可更新${latestWatchVersion
+                                            ? `（${latestWatchVersion}）`
+                                            : ''
+                                        }`
+                                        : latestWatchVersion
+                                            ? ` · 最新 ${latestWatchVersion}`
+                                            : ''
+                                    }`
+                                    : `${rows.length} 台主机 · 尚未安装 Watch${latestWatchVersion
+                                        ? ` · 可装 ${latestWatchVersion}`
+                                        : ''
+                                    }`
                 }
                 isLast={rows.length === 0}
             >
@@ -230,12 +283,13 @@ export function NcdWatchRemoteSection({
                     bulkSyncing ||
                     settingsDirty ||
                     row.state === 'connecting';
-                const installDisabled = !!rowBusy || bulkSyncing;
+                const actionDisabled = !!rowBusy || bulkSyncing;
+                const showUpdate = canUpdateWatch(row, latestWatchVersion);
                 return (
                     <FieldRow
                         key={row.serverId}
                         label={row.name}
-                        description={rowDescription(row)}
+                        description={rowDescription(row, latestWatchVersion)}
                         isLast={index === rows.length - 1}
                     >
                         <div className="flex items-center gap-1.5">
@@ -252,24 +306,48 @@ export function NcdWatchRemoteSection({
                                 <Badge tone="neutral" appearance="soft">
                                     未安装
                                 </Badge>
+                            ) : showUpdate ? (
+                                <Badge tone="warning" appearance="soft">
+                                    可更新
+                                </Badge>
                             ) : row.state === 'failed' || row.detectError ? (
                                 <Badge tone="warning" appearance="soft">
                                     {row.state === 'failed' ? '连接失败' : '异常'}
                                 </Badge>
                             ) : null}
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={installDisabled}
-                                onClick={() => void installWatch(row)}
-                            >
-                                {rowBusy === 'install'
-                                    ? '提交中…'
-                                    : row.watchInstalled
-                                        ? '重装'
-                                        : '安装'}
-                            </Button>
+                            {row.watchInstalled ? (
+                                showUpdate ? (
+                                    <Button
+                                        type="button"
+                                        variant="primary"
+                                        size="sm"
+                                        disabled={actionDisabled}
+                                        onClick={() => void updateWatch(row)}
+                                    >
+                                        {rowBusy === 'update' ? '提交中…' : '更新'}
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={actionDisabled}
+                                        onClick={() => void installWatch(row)}
+                                    >
+                                        {rowBusy === 'install' ? '提交中…' : '重装'}
+                                    </Button>
+                                )
+                            ) : (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={actionDisabled}
+                                    onClick={() => void installWatch(row)}
+                                >
+                                    {rowBusy === 'install' ? '提交中…' : '安装'}
+                                </Button>
+                            )}
                             <Button
                                 type="button"
                                 variant="secondary"
