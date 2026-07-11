@@ -19,6 +19,7 @@ pub mod commands;
 pub mod desktop_log;
 pub mod desktop_log_format;
 pub mod desktop_notify;
+pub mod legacy_install_cleanup;
 pub mod lightweight;
 pub mod lightweight_scheduler;
 pub mod onebot_endpoint_resolver;
@@ -68,6 +69,35 @@ pub fn run() {
     let snapshot = build_snapshot_for_data_root(&data_root);
     let event_bus = BroadcastEventBus::default();
     desktop_log::init_desktop_logging(&data_root, event_bus.clone());
+    #[cfg(windows)]
+    {
+        let cleanup = legacy_install_cleanup::purge_legacy_install_orphans();
+        if let Some(reason) = cleanup.skipped_reason.as_deref() {
+            tracing::debug!(
+                target: "ncd_tauri::install_cleanup",
+                install_dir = %cleanup.install_dir.display(),
+                reason,
+                "legacy install orphan cleanup skipped"
+            );
+        }
+        for name in &cleanup.removed {
+            tracing::info!(
+                target: "ncd_tauri::install_cleanup",
+                install_dir = %cleanup.install_dir.display(),
+                name = %name,
+                "removed legacy install orphan"
+            );
+        }
+        for (name, err) in &cleanup.failed {
+            tracing::warn!(
+                target: "ncd_tauri::install_cleanup",
+                install_dir = %cleanup.install_dir.display(),
+                name = %name,
+                error = %err,
+                "failed to remove legacy install orphan"
+            );
+        }
+    }
     tracing::info!(
         target: "ncd_tauri",
         data_root = %data_root.display(),

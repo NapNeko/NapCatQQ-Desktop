@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  V2 (PyInstaller onedir) -> V3 (Tauri near-single-exe) MSI helpers.
+
+  V2 install tree:
+    Program Files\NapCatQQ Desktop\NapCatQQ-Desktop.exe
+    Program Files\NapCatQQ Desktop\_internal\**   (~200 files)
+    Program Files\NapCatQQ Desktop\guild1.db{,-shm,-wal}  (runtime SQLite)
+
+  MajorUpgrade removes files owned by the old product, but locked/untracked
+  leftovers can remain under the same INSTALLDIR. V3 file table does not
+  include those paths, so purge them explicitly.
+
+  Do NOT touch ProgramData / user config here.
+
+  Note: Tauri only candles fragments that are listed; a ComponentRef from the
+  main Feature keeps this fragment linked into the MSI (orphan Fragments can
+  be dropped by light).
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+  <Fragment>
+    <util:CloseApplication
+      Id="CloseNapCatQQDesktop"
+      Target="NapCatQQ-Desktop.exe"
+      Description="NapCatQQ Desktop is running and must be closed before setup can continue."
+      CloseMessage="yes"
+      ElevatedCloseMessage="yes"
+      RebootPrompt="no"
+      PromptToContinue="yes"
+      Timeout="10"
+      TerminateProcess="1" />
+
+    <!--
+      Directory=INSTALLDIR so relative paths resolve under the install root.
+      Return=ignore: missing paths / locked files must not abort install;
+      app startup has a narrow whitelist fallback for leftovers.
+    -->
+    <CustomAction
+      Id="PurgeV2InstallOrphans"
+      Directory="INSTALLDIR"
+      ExeCommand="&quot;[SystemFolder]cmd.exe&quot; /c if exist _internal rmdir /s /q _internal &amp; if exist icons rmdir /s /q icons &amp; if exist guild1.db del /f /q guild1.db &amp; if exist guild1.db-shm del /f /q guild1.db-shm &amp; if exist guild1.db-wal del /f /q guild1.db-wal"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="PurgeV2InstallOrphans" After="RemoveExistingProducts">
+        NOT REMOVE="ALL"
+      </Custom>
+    </InstallExecuteSequence>
+
+    <!--
+      Anchor component so the fragment is referenced from Tauri MainFeature
+      via bundle.windows.wix.componentRefs = ["V2OrphanCleanup"].
+      Registry keypath only; no payload files.
+    -->
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="V2OrphanCleanup" Guid="D099BE7B-6258-4D8B-88E5-1C2D33456771" Win64="yes">
+        <RegistryKey Root="HKLM" Key="Software\NapCatQQ-Desktop\V3">
+          <RegistryValue
+            Name="LegacyOrphanCleanup"
+            Type="integer"
+            Value="1"
+            KeyPath="yes" />
+        </RegistryKey>
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>

@@ -35,11 +35,18 @@
   },
   "bundle": {
     "publisher": "Qiao",
-    "icon": ["icons/icon.ico"],
-    "resources": ["icons/tray/*", "icons/*.png"],
+    "icon": [
+      "icons/icon.ico"
+    ],
     "windows": {
       "wix": {
-        "upgradeCode": "5EBD6A58-1B0A-4700-B16F-7E3D7D62949D"
+        "upgradeCode": "5EBD6A58-1B0A-4700-B16F-7E3D7D62949D",
+        "fragmentPaths": [
+          "wix/v2-orphan-cleanup.wxs"
+        ],
+        "componentRefs": [
+          "V2OrphanCleanup"
+        ]
       }
     }
   }

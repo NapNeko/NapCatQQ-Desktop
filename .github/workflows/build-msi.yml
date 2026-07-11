@@ -169,6 +169,16 @@ jobs:
           "MSI_FILE_NAME=$expectedName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Collected MSI: $expectedPath"
 
+      - name: "断言 MSI UpgradeCode 与安装布局"
+        shell: pwsh
+        run: |
+          $msi = Join-Path "release-assets" "${{ steps.collect_msi.outputs.MSI_FILE_NAME }}"
+          if (-not (Test-Path $msi)) {
+            Write-Error "MSI not found for assert: $msi"
+            exit 1
+          }
+          powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/assert-msi-layout.ps1" -MsiPath $msi
+
       - name: "解析制品名"
         id: resolve_artifact
         shell: pwsh
