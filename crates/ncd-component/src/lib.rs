@@ -35,8 +35,9 @@ pub use download::DownloadHelper;
 pub use error::ActionError;
 pub use napcat::NapCatComponent;
 pub use ncd_watch::{
-    NcdWatchComponent, discover_local_ncd_watch_binary, ncd_watch_musl_target,
-    ncd_watch_release_download_url,
+    NcdWatchComponent, discover_local_ncd_watch_binary, ncd_watch_asset_name,
+    ncd_watch_musl_target, ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
+    ncd_watch_version_from_tag, normalize_detected_version, probe_remote_arch,
 };
 pub use nodejs::NodeJsComponent;
 pub use novnc::NoVncComponent;

@@ -17,8 +17,8 @@ use std::time::Duration;
 use ncd_component::{
     Component, ComponentDetectResult, ComponentId, ComponentInfo, DesktopSelfComponent,
     NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent, ProgressEvent,
-    ProgressKind, ProgressLogLevel, QQComponent, SnowLumaComponent,
-    discover_local_ncd_watch_binary, ncd_watch_release_download_url,
+    ProgressKind, ProgressLogLevel, QQComponent, SnowLumaComponent, ncd_watch_asset_name,
+    ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
 };
 use ncd_deploy::{DeployPlan, StepKind};
 use ncd_domain::release_snapshot::ReleaseInfo;
@@ -241,7 +241,10 @@ async fn submit_single_component_task(
     let remote_long_install = server_id.is_some()
         && matches!(
             kind,
-            StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::EnsureDependencies
+            StepKind::EnsureInstalled
+                | StepKind::ForceInstall
+                | StepKind::Update
+                | StepKind::EnsureDependencies
         );
 
     let task_id = requested_task_id.unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -1194,24 +1197,37 @@ fn build_component_for_host(
         }
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
         ComponentId::NcdWatch => {
-            // 优先本机 cargo 产物上传;没有则按远端 arch 拼 watch-v* Release URL
-            // (Windows 开发机上的 .exe 不能装到 Linux,仍会走 download_url)
+            // 正式路径:release 快照 tag → install 时 uname 拼 musl URL →
+            // Desktop 本机下载 → SFTP 上传。本机 cargo 产物不参与生产安装。
             let mut comp = NcdWatchComponent::new(remote_home.map(|s| s.to_string()));
-            if let Some(bin) = discover_local_ncd_watch_binary() {
-                let is_windows_bin = bin
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| e.eq_ignore_ascii_case("exe"));
-                if host.os() == Os::Linux && is_windows_bin {
-                    // 跳过本机 Windows 产物,改用 musl release
+            if let Some(info) = snapshot.as_ref().and_then(|s| s.ncd_watch_latest.as_ref()) {
+                let tag = if info.tag.trim().is_empty() {
+                    format!(
+                        "watch-v{}",
+                        info.version.trim().trim_start_matches(['v', 'V'])
+                    )
                 } else {
-                    comp = comp.with_local_binary(bin);
+                    info.tag.clone()
+                };
+                comp = comp
+                    .with_release_tag(tag.clone())
+                    .with_version_label(info.version.clone());
+                // 预填 x86_64 asset 的 sha;aarch64 远端会在 place_binary 用 uname 重拼 URL,
+                // 若 sha 与文件不匹配 download 会失败——因此仅在 host 声称 x86_64 时预填,
+                // 其它架构交给无 hash 下载(仍有 mirror + 完整性靠版本探测)。
+                if host.arch() == ncd_host::Arch::X86_64 {
+                    if let Some(asset) = ncd_watch_asset_name(&tag, ncd_host::Arch::X86_64) {
+                        if let Some(sha) = asset_sha256(info, &asset) {
+                            comp = comp.with_sha256(sha);
+                        }
+                    }
                 }
-            }
-            if comp.local_binary.is_none() {
-                if let Some(url) = ncd_watch_release_download_url(host.arch()) {
+                // 同时给一个 fallback URL(uname 失败时仍能下)
+                if let Some(url) = ncd_watch_release_download_url_for_tag(&tag, host.arch()) {
                     comp = comp.with_download_url(url);
                 }
+            } else if let Some(url) = ncd_watch_release_download_url(host.arch()) {
+                comp = comp.with_download_url(url);
             }
             Arc::new(comp)
         }
