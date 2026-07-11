@@ -57,6 +57,8 @@ pub async fn request_exit_app(
             result.failed.len()
         );
     }
+    // 删远端 desktop_present,ncd-watch 立刻可告警(不必干等 90s TTL)
+    crate::commands::ncd_watch::clear_present_on_all_remote_servers(state.inner()).await;
     state.runtime.shutdown().await;
     app.exit(0);
     Ok(())

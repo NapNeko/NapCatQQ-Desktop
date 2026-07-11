@@ -274,10 +274,7 @@ pub fn remote_watch_root(home: &str) -> HostPath {
     HostPath::from_posix(format!("{}/ncd-watch", home.trim_end_matches('/')))
 }
 
-pub async fn read_notify_json(
-    host: &dyn Host,
-    home: &str,
-) -> Result<Option<NotifyConfig>, String> {
+pub async fn read_notify_json(host: &dyn Host, home: &str) -> Result<Option<NotifyConfig>, String> {
     let path = remote_watch_root(home).join("config").join("notify.json");
     let exists = host.exists(&path).await.map_err(|e| e.to_string())?;
     if !exists {
@@ -345,6 +342,19 @@ pub async fn write_desktop_present(
     host.write_file(&path, &bytes)
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Desktop 退出时删掉心跳文件,让 watch 立刻 allow_notify,不必干等 TTL。
+/// 文件缺失时 present 判定为 false(见 ncd-watch present.rs)。
+pub async fn clear_desktop_present(host: &dyn Host, home: &str) -> Result<(), String> {
+    let path = remote_watch_root(home)
+        .join("state")
+        .join("desktop_present");
+    let exists = host.exists(&path).await.map_err(|e| e.to_string())?;
+    if !exists {
+        return Ok(());
+    }
+    host.remove_file(&path).await.map_err(|e| e.to_string())
 }
 
 pub fn local_paths_under(root: impl AsRef<std::path::Path>) -> WatchPaths {
@@ -461,13 +471,19 @@ mod tests {
 
     #[test]
     fn merge_preserves_webui_when_new_missing() {
-        let mut prev =
-            build_notify_config("s1", &[sample_remote("s1", 9)], &OfflineWebhookSettings::default());
+        let mut prev = build_notify_config(
+            "s1",
+            &[sample_remote("s1", 9)],
+            &OfflineWebhookSettings::default(),
+        );
         prev.bots[0].webui_port = Some(61061);
         prev.bots[0].webui_token = Some("old-tok".into());
 
-        let mut next =
-            build_notify_config("s1", &[sample_remote("s1", 9)], &OfflineWebhookSettings::default());
+        let mut next = build_notify_config(
+            "s1",
+            &[sample_remote("s1", 9)],
+            &OfflineWebhookSettings::default(),
+        );
         // Docker sample may synthesize port; clear both to simulate restart gap
         next.bots[0].webui_port = None;
         next.bots[0].webui_token = None;
@@ -479,13 +495,19 @@ mod tests {
 
     #[test]
     fn merge_prefers_fresh_webui_over_stale() {
-        let mut prev =
-            build_notify_config("s1", &[sample_remote("s1", 9)], &OfflineWebhookSettings::default());
+        let mut prev = build_notify_config(
+            "s1",
+            &[sample_remote("s1", 9)],
+            &OfflineWebhookSettings::default(),
+        );
         prev.bots[0].webui_port = Some(11111);
         prev.bots[0].webui_token = Some("stale".into());
 
-        let mut next =
-            build_notify_config("s1", &[sample_remote("s1", 9)], &OfflineWebhookSettings::default());
+        let mut next = build_notify_config(
+            "s1",
+            &[sample_remote("s1", 9)],
+            &OfflineWebhookSettings::default(),
+        );
         next.bots[0].webui_port = Some(22222);
         next.bots[0].webui_token = Some("fresh".into());
         merge_notify_preserve_webui(&mut next, &prev);

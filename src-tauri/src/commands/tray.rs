@@ -153,6 +153,7 @@ async fn quit_from_tray(app: AppHandle) -> Result<(), String> {
             result.failed.len()
         );
     }
+    crate::commands::ncd_watch::clear_present_on_all_remote_servers(state.inner()).await;
     state.runtime.shutdown().await;
     app.exit(0);
     Ok(())

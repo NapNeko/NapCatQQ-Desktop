@@ -2,8 +2,8 @@
 
 use ncd_domain::ids::BotId;
 use ncd_runtime::ncd_watch_sync::{
-    WatchNotifyConfig, WatchNotifyExtras, build_notify_config_with_extras, write_desktop_present,
-    write_notify_json_merged,
+    WatchNotifyConfig, WatchNotifyExtras, build_notify_config_with_extras, clear_desktop_present,
+    write_desktop_present, write_notify_json_merged,
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -142,4 +142,29 @@ pub fn spawn_ncd_watch_heartbeat(app: AppHandle) {
             heartbeat_all_remote_servers(state.inner()).await;
         }
     });
+}
+
+/// Desktop 退出前:对远端删掉 desktop_present,watch 立即接管告警。
+/// 失败只记日志,不挡退出。
+pub async fn clear_present_on_all_remote_servers(state: &AppState) {
+    let servers = state.server_manager.list_servers().await;
+    for profile in servers {
+        let host = match state.server_manager.ensure_connected(&profile.id).await {
+            Ok(h) => h,
+            Err(e) => {
+                tracing::debug!(server_id = %profile.id, %e, "clear present: connect skip");
+                continue;
+            }
+        };
+        let host_id = format!("remote:{}", profile.id);
+        let probe = cached_host_probe(&host_id, host.as_ref(), state).await;
+        let Some(home) = probe.home.as_deref().filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        if let Err(e) = clear_desktop_present(host.as_ref(), home).await {
+            tracing::debug!(server_id = %profile.id, %e, "clear desktop_present failed");
+        } else {
+            tracing::info!(server_id = %profile.id, "cleared desktop_present on exit");
+        }
+    }
 }
