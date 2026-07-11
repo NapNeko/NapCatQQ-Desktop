@@ -302,6 +302,22 @@ impl BotBackend for RemoteNativeDeploymentBackend {
 
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
         let bot_config = bot_config_for_start(ctx, self.flavor, true)?;
+        // 远端 nohup 进程不在本机 processes 表里;若上次 stop 不彻底,先按 qq 清掉再起,
+        // 否则会双开且日志 rotate 后旧 WebUI 仍占端口。
+        // 与 stop/status 一致走 with_host_refresh,避免 SSH 半死时 pre-stop 一次失败整条 start 挂掉。
+        if self.flavor == BotFlavor::NapCat {
+            let qq_id = bot_config.bot.qq_id;
+            self.with_host_refresh(move |h| async move {
+                if remote_napcat_running_pid(h.as_ref(), qq_id)
+                    .await?
+                    .is_some()
+                {
+                    stop_remote_napcat_on_host(h.as_ref(), qq_id).await?;
+                }
+                Ok::<(), BotBackendError>(())
+            })
+            .await?;
+        }
         // 用刷新包装:传输断连时会尝试 refresh 后重试一次
         let handle = self
             .with_host_refresh(

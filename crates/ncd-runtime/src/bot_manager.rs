@@ -179,8 +179,9 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// 远端 SnowLuma:按 server_id 共享 daemon(多 Bot 同一 SSH 主机)
     remote_snowluma_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
     /// 远端 SL backend 单例缓存:持有 status poller,绝不能每次 start 新建
-    remote_snowluma_backends:
-        Arc<Mutex<HashMap<String, Arc<ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaBackend>>>>,
+    remote_snowluma_backends: Arc<
+        Mutex<HashMap<String, Arc<ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaBackend>>>,
+    >,
     remote_snowluma_tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     /// Per-remote-host coordination for flipping the shared ~/Napcat/opt/QQ tree's
     /// package.json main between NapCat-injected and vanilla native modes.
@@ -577,6 +578,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 BotActorState::Stopping => handle.confirm_stopped().await?,
                 _ => stopping,
             };
+            self.dispose_poller(bot_id).await;
             self.remote_runtime_sessions().shutdown_bot(bot_id).await;
             self.publish_state_change(&stopped, "stop_completed");
             if stopped.state == BotActorState::Starting {
@@ -594,6 +596,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 self.event_bus
                     .publish(DomainEvent::bot_status_changed(status, "runtime_stop"));
                 let stopped = handle.confirm_stopped().await?;
+                self.dispose_poller(bot_id).await;
                 self.remote_runtime_sessions().shutdown_bot(bot_id).await;
                 self.publish_state_change(&stopped, "stop_completed");
                 if stopped.state == BotActorState::Starting {
@@ -666,6 +669,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 };
                 let backend = self.backend_for_lifecycle(&cfg).await?;
                 backend.stop(bot_id.clone(), StopMode::Force).await?;
+                // 远端 Native stop 不保证发 BotProcessExited,这里主动清 poller/会话
+                self.dispose_poller(bot_id).await;
+                self.remote_runtime_sessions().shutdown_bot(bot_id).await;
                 match handle.confirm_stopped().await {
                     Ok(s) => self.publish_state_change(&s, "restart_stopped"),
                     Err(crate::bot_actor::BotActorError::InvalidTransition { .. }) => {}
