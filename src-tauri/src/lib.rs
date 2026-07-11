@@ -301,7 +301,33 @@ pub fn run() {
                     runtime_watcher.publish_runtime_status_changes().await;
                 }
             });
+            // 订阅必须先于 bootstrap:reconcile attach 会立刻发 napcat_webui_available,
+            // broadcast 无 backlog。login listener 在 subscribe 后 oneshot ready,
+            // bootstrap 等 ready 再跑,避免多实例真实 port(+1) 丢失。
+            // event emit 的 subscribe 在上面已同步完成(spawn 前 register)。
+            let (login_ready_tx, login_ready_rx) = tokio::sync::oneshot::channel::<()>();
             tauri::async_runtime::spawn(async move {
+                (*bot_manager_listener)
+                    .clone()
+                    .run_runtime_event_listener()
+                    .await;
+            });
+            tauri::async_runtime::spawn(async move {
+                bot_manager_login_listener
+                    .run_napcat_login_listener(Some(login_ready_tx))
+                    .await;
+            });
+            tauri::async_runtime::spawn(async move {
+                bot_manager_snowluma_listener.run_snowluma_listener().await;
+            });
+            tauri::async_runtime::spawn(async move {
+                if login_ready_rx.await.is_err() {
+                    desktop_log::write_session_line(
+                        "WARN",
+                        "ncd::bot_manager",
+                        "login listener ready signal dropped; bootstrap continues",
+                    );
+                }
                 match bot_manager_bootstrap.bootstrap().await {
                     Ok(result) => {
                         if !result.skipped.is_empty() {
@@ -333,27 +359,6 @@ pub fn run() {
                         );
                     }
                 }
-            });
-            // 订阅运行时事件总线,把 BotProcessExited 转成 actor 状态机转移
-            // 防止 UI 残留假 Running必须用 tauri::async_runtime::spawn
-            // setup 回调本身没有 tokio current handle,直接 tokio::spawn 会 panic
-            tauri::async_runtime::spawn(async move {
-                (*bot_manager_listener)
-                    .clone()
-                    .run_runtime_event_listener()
-                    .await;
-            });
-            // NapCat WebUI 登录轮询监听(design.md §15.3 / §15.4):
-            // 同时订阅 NapCatWebuiAvailable / BotProcessExited 两路事件,分别
-            // 驱动 NapCatLoginPoller 的创建与回收run_napcat_login_listener
-            // 需要 Arc<Self> 作为接收者(用于 cast 到 Arc<dyn RestartHandle>)
-            tauri::async_runtime::spawn(async move {
-                bot_manager_login_listener.run_napcat_login_listener().await;
-            });
-
-            // SnowLuma daemon Crashed 级联级 actor
-            tauri::async_runtime::spawn(async move {
-                bot_manager_snowluma_listener.run_snowluma_listener().await;
             });
 
             if let Err(err) = commands::window::apply_main_window_startup_geometry(&app.handle()) {
@@ -474,6 +479,7 @@ pub fn run() {
             commands::bot::bootstrap_bot_manager,
             commands::bot::list_bot_snapshots,
             commands::bot::list_bot_flavors,
+            commands::bot::list_napcat_webui_bindings,
             commands::bot::get_bot_snapshot,
             commands::bot::get_bot_config,
             commands::bot::upsert_bot_config,
