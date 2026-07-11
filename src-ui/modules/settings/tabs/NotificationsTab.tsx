@@ -446,18 +446,15 @@ function OneBotMessengerPicker({
     const selectedMissing = selected.filter(
         (id) => !candidates.some((item) => item.bot_id === id),
     );
-    const eligibleCount = candidates.filter((item) => item.eligible).length;
+    const localEligible = candidates.filter(
+        (item) => item.scope !== 'remote' && item.eligible,
+    ).length;
+    const remoteWatchReady = candidates.filter(
+        (item) => item.scope === 'remote' && item.has_local_http,
+    ).length;
 
-    const filtered = (() => {
-        const q = query.trim().toLowerCase();
-        const list = !q
-            ? candidates
-            : candidates.filter((item) => {
-                const hay =
-                    `${item.name} ${item.bot_id} ${item.backend_type} ${item.state}`.toLowerCase();
-                return hay.includes(q);
-            });
-        return [...list].sort((a, b) => {
+    const sortCandidates = (list: OneBotCandidate[]) =>
+        [...list].sort((a, b) => {
             const aSelected = selectedSet.has(a.bot_id) ? 1 : 0;
             const bSelected = selectedSet.has(b.bot_id) ? 1 : 0;
             if (aSelected !== bSelected) return bSelected - aSelected;
@@ -470,6 +467,50 @@ function OneBotMessengerPicker({
             if (aRunning !== bRunning) return bRunning - aRunning;
             return (a.name || a.bot_id).localeCompare(b.name || b.bot_id, 'zh-CN');
         });
+
+    const filtered = (() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return candidates;
+        return candidates.filter((item) => {
+            const hay =
+                `${item.name} ${item.bot_id} ${item.backend_type} ${item.state} ${item.server_label ?? ''} ${item.server_id ?? ''}`.toLowerCase();
+            return hay.includes(q);
+        });
+    })();
+
+    type HostGroup = {
+        key: string;
+        label: string;
+        isLocal: boolean;
+        items: OneBotCandidate[];
+    };
+
+    const groups: HostGroup[] = (() => {
+        const map = new Map<string, HostGroup>();
+        for (const item of filtered) {
+            const isLocal = item.scope !== 'remote';
+            const key = isLocal
+                ? 'local'
+                : `remote:${item.server_id ?? item.server_label ?? 'unknown'}`;
+            const label = isLocal
+                ? '本机'
+                : item.server_label?.trim() || item.server_id || '远端';
+            let group = map.get(key);
+            if (!group) {
+                group = { key, label, isLocal, items: [] };
+                map.set(key, group);
+            }
+            group.items.push(item);
+        }
+        const list = [...map.values()].map((g) => ({
+            ...g,
+            items: sortCandidates(g.items),
+        }));
+        list.sort((a, b) => {
+            if (a.isLocal !== b.isLocal) return a.isLocal ? -1 : 1;
+            return a.label.localeCompare(b.label, 'zh-CN');
+        });
+        return list;
     })();
 
     const toggle = (botId: string) => {
@@ -491,6 +532,52 @@ function OneBotMessengerPicker({
         onChange(next);
     };
 
+    const statusBadge = (candidate: OneBotCandidate) => {
+        const enabling = enablingId === candidate.bot_id;
+        const isRemote = candidate.scope === 'remote';
+        // 本机 Desktop 可当场发
+        if (candidate.eligible) {
+            return (
+                <Badge tone="success" appearance="soft">
+                    Desktop 可发
+                </Badge>
+            );
+        }
+        // 环回 HTTP 已配好:本机未 Running 仍可能 watch/稍后发;远端给同机 watch
+        if (candidate.has_local_http) {
+            return (
+                <Badge tone="success" appearance="soft">
+                    {isRemote ? '同机可发' : 'HTTP 就绪'}
+                </Badge>
+            );
+        }
+        if (candidate.can_enable_http) {
+            return (
+                <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={enabling}
+                    onClick={() => onEnsureHttp(candidate.bot_id)}
+                >
+                    {enabling ? '配置中…' : '启用 HTTP'}
+                </Button>
+            );
+        }
+        return (
+            <Badge tone="warning" appearance="soft">
+                暂不可用
+            </Badge>
+        );
+    };
+
+    const chipTone = (candidate: OneBotCandidate | undefined) => {
+        if (!candidate) return false;
+        if (candidate.eligible) return true;
+        if (candidate.has_local_http) return true;
+        return false;
+    };
+
     return (
         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-subtle bg-field">
             <div className="shrink-0 space-y-2.5 border-b border-border-subtle px-3 py-3">
@@ -505,9 +592,10 @@ function OneBotMessengerPicker({
                             </Badge>
                         </div>
                         <p className="mt-0.5 text-[11.5px] leading-relaxed text-text-tertiary">
-                            多选时按顺序尝试；当前掉线的会自动跳过
-                            {eligibleCount > 0
-                                ? ` · ${eligibleCount} 个可发送`
+                            按主机分组；同机多 Bot 冗余，不会跨服务器发 OneBot
+                            {localEligible > 0 ? ` · 本机可发 ${localEligible}` : ''}
+                            {remoteWatchReady > 0
+                                ? ` · 远端同机 ${remoteWatchReady}`
                                 : ''}
                         </p>
                     </div>
@@ -520,12 +608,13 @@ function OneBotMessengerPicker({
                                 (item) => item.bot_id === id,
                             );
                             const label = candidate?.name || id;
+                            const isRemote = candidate?.scope === 'remote';
                             return (
                                 <span
                                     key={id}
                                     className={cn(
                                         'inline-flex max-w-full items-center gap-1 rounded-sm border px-1.5 py-1 text-[11.5px]',
-                                        candidate?.eligible
+                                        chipTone(candidate)
                                             ? 'border-success/30 bg-success-soft text-text'
                                             : 'border-warning/30 bg-warning-soft text-text',
                                     )}
@@ -533,6 +622,11 @@ function OneBotMessengerPicker({
                                     <span className="shrink-0 rounded-xs bg-field/70 px-1 py-px font-mono text-[10px] text-text-tertiary">
                                         {index + 1}
                                     </span>
+                                    {isRemote ? (
+                                        <span className="shrink-0 rounded-xs bg-field/70 px-1 py-px text-[10px] text-text-tertiary">
+                                            远端
+                                        </span>
+                                    ) : null}
                                     <span className="truncate">{label}</span>
                                     {selected.length > 1 ? (
                                         <span className="flex shrink-0 items-center">
@@ -574,14 +668,14 @@ function OneBotMessengerPicker({
                     </div>
                 ) : (
                     <div className="rounded-sm border border-dashed border-border-subtle bg-inset/25 px-2.5 py-2 text-[11.5px] text-text-tertiary">
-                        从下方列表勾选至少一个本机 Bot 作为发送方
+                        从下方按主机勾选发送方；本机供 Desktop 投递，远端供该机 ncd-watch
                     </div>
                 )}
 
                 <TextField
                     name="onebot-messenger-search"
                     value={query}
-                    placeholder="搜索名称 / QQ / 后端"
+                    placeholder="搜索名称 / QQ / 后端 / 主机"
                     onValueChange={setQuery}
                 />
             </div>
@@ -589,128 +683,118 @@ function OneBotMessengerPicker({
             <div className="min-h-0 flex-1 overflow-y-auto">
                 {loading ? (
                     <p className="px-3 py-6 text-center text-[12px] text-text-tertiary">
-                        正在加载本机 Bot…
+                        正在加载发送方候选…
                     </p>
-                ) : filtered.length === 0 && selectedMissing.length === 0 ? (
+                ) : groups.length === 0 && selectedMissing.length === 0 ? (
                     <div className="flex h-full min-h-[10rem] flex-col items-center justify-center gap-1 px-4 py-8 text-center">
                         <p className="text-[13px] text-text-secondary">
                             {candidates.length === 0
-                                ? '还没有本机 Bot'
+                                ? '还没有可作发送方的 Bot'
                                 : '没有匹配的 Bot'}
                         </p>
                         <p className="text-[11.5px] text-text-tertiary">
                             {candidates.length === 0
-                                ? '先在 Bot 列表添加本机实例，再回来配置通知'
+                                ? '先在 Bot 列表添加本机或远端实例，再回来配置'
                                 : '试试换个关键词'}
                         </p>
                     </div>
                 ) : (
-                    <ul className="divide-y divide-border-subtle/70">
-                        {filtered.map((candidate) => {
-                            const checked = selectedSet.has(candidate.bot_id);
-                            const enabling = enablingId === candidate.bot_id;
-                            const order = selected.indexOf(candidate.bot_id);
-                            return (
-                                <li
-                                    key={candidate.bot_id}
-                                    className={cn(
-                                        'group relative',
-                                        checked && 'bg-brand/6',
-                                    )}
-                                >
-                                    <div className="flex items-stretch gap-0">
-                                        <button
-                                            type="button"
-                                            onClick={() => toggle(candidate.bot_id)}
-                                            className="flex min-w-0 flex-1 items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-inset/40"
-                                        >
-                                            <span
+                    <div className="pb-1">
+                        {groups.map((group) => (
+                            <div key={group.key}>
+                                <div className="sticky top-0 z-[1] flex items-center gap-2 border-b border-border-subtle/80 bg-inset/90 px-3 py-1.5 backdrop-blur-sm">
+                                    <span className="text-[11px] font-medium text-text-secondary">
+                                        {group.label}
+                                    </span>
+                                    <Badge tone="neutral" appearance="soft">
+                                        {group.items.length}
+                                    </Badge>
+                                    {!group.isLocal ? (
+                                        <span className="truncate text-[10.5px] text-text-tertiary">
+                                            仅同机 watch · 不同服务器互不调用
+                                        </span>
+                                    ) : null}
+                                </div>
+                                <ul className="divide-y divide-border-subtle/70">
+                                    {group.items.map((candidate) => {
+                                        const checked = selectedSet.has(candidate.bot_id);
+                                        const order = selected.indexOf(candidate.bot_id);
+                                        return (
+                                            <li
+                                                key={candidate.bot_id}
                                                 className={cn(
-                                                    'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border text-[10px] font-medium',
-                                                    checked
-                                                        ? 'border-brand bg-brand text-white'
-                                                        : 'border-border-subtle bg-field text-transparent',
+                                                    'group relative',
+                                                    checked && 'bg-brand/6',
                                                 )}
-                                                aria-hidden
                                             >
-                                                {checked && order >= 0
-                                                    ? order + 1
-                                                    : '✓'}
-                                            </span>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex min-w-0 items-center gap-1.5">
-                                                    <span className="truncate text-[13px] font-medium text-text">
-                                                        {candidate.name ||
-                                                            candidate.bot_id}
-                                                    </span>
-                                                    <Badge
-                                                        tone="neutral"
-                                                        appearance="soft"
+                                                <div className="flex items-stretch gap-0">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            toggle(candidate.bot_id)
+                                                        }
+                                                        className="flex min-w-0 flex-1 items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-inset/40"
                                                     >
-                                                        {backendLabel(
-                                                            candidate.backend_type,
-                                                        )}
-                                                    </Badge>
-                                                </div>
-                                                <p className="mt-0.5 truncate text-[11px] text-text-tertiary">
-                                                    {candidate.bot_id}
-                                                    {' · '}
-                                                    {stateLabel(candidate.state)}
-                                                    {candidate.has_local_http
-                                                        ? ` · :${candidate.http_port || '?'}`
-                                                        : ' · 缺 HTTP'}
-                                                </p>
-                                            </div>
-                                        </button>
+                                                        <span
+                                                            className={cn(
+                                                                'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border text-[10px] font-medium',
+                                                                checked
+                                                                    ? 'border-brand bg-brand text-white'
+                                                                    : 'border-border-subtle bg-field text-transparent',
+                                                            )}
+                                                            aria-hidden
+                                                        >
+                                                            {checked && order >= 0
+                                                                ? order + 1
+                                                                : '✓'}
+                                                        </span>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex min-w-0 items-center gap-1.5">
+                                                                <span className="truncate text-[13px] font-medium text-text">
+                                                                    {candidate.name ||
+                                                                        candidate.bot_id}
+                                                                </span>
+                                                                <Badge
+                                                                    tone="neutral"
+                                                                    appearance="soft"
+                                                                >
+                                                                    {backendLabel(
+                                                                        candidate.backend_type,
+                                                                    )}
+                                                                </Badge>
+                                                            </div>
+                                                            <p className="mt-0.5 truncate text-[11px] text-text-tertiary">
+                                                                {candidate.bot_id}
+                                                                {' · '}
+                                                                {stateLabel(candidate.state)}
+                                                                {candidate.has_local_http
+                                                                    ? ` · :${candidate.http_port || '?'}`
+                                                                    : ' · 缺 HTTP'}
+                                                            </p>
+                                                        </div>
+                                                    </button>
 
-                                        <div className="flex shrink-0 items-center pr-3">
-                                            {candidate.eligible ? (
-                                                <Badge
-                                                    tone="success"
-                                                    appearance="soft"
-                                                >
-                                                    可发送
-                                                </Badge>
-                                            ) : candidate.can_enable_http ? (
-                                                <Button
-                                                    type="button"
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    disabled={enabling}
-                                                    onClick={() =>
-                                                        onEnsureHttp(
-                                                            candidate.bot_id,
-                                                        )
-                                                    }
-                                                >
-                                                    {enabling
-                                                        ? '配置中…'
-                                                        : '启用 HTTP'}
-                                                </Button>
-                                            ) : (
-                                                <Badge
-                                                    tone="warning"
-                                                    appearance="soft"
-                                                >
-                                                    暂不可用
-                                                </Badge>
-                                            )}
-                                        </div>
-                                    </div>
-                                </li>
-                            );
-                        })}
+                                                    <div className="flex shrink-0 items-center pr-3">
+                                                        {statusBadge(candidate)}
+                                                    </div>
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
+                        ))}
                         {selectedMissing.map((id) => (
-                            <li
+                            <div
                                 key={`missing-${id}`}
-                                className="flex items-center justify-between gap-2 px-3 py-2.5"
+                                className="flex items-center justify-between gap-2 border-t border-border-subtle/70 px-3 py-2.5"
                             >
                                 <div className="min-w-0">
                                     <div className="truncate text-[13px] font-medium text-text">
                                         {id}
                                     </div>
                                     <p className="text-[11px] text-text-tertiary">
-                                        已保存，但不在本机候选中
+                                        已保存，但不在当前候选中
                                     </p>
                                 </div>
                                 <Button
@@ -725,9 +809,9 @@ function OneBotMessengerPicker({
                                 >
                                     移除
                                 </Button>
-                            </li>
+                            </div>
                         ))}
-                    </ul>
+                    </div>
                 )}
             </div>
         </section>
@@ -1100,15 +1184,19 @@ export function NotificationsTab({
             });
             const actionText =
                 result.action === 'already_ready'
-                    ? '已具备本机 HTTP'
+                    ? '已具备环回 HTTP'
                     : result.action === 'enabled'
                         ? '已启用现有 HTTP 服务'
-                        : '已自动创建本机 HTTP 服务';
+                        : '已自动创建环回 HTTP 服务';
+            const scopeHint =
+                result.candidate.scope === 'remote'
+                    ? '远端配置已写入；保存后请同步 ncd-watch。运行中时会尽量热更新。'
+                    : '若 Bot 正在运行，会热更新连接配置。';
             pushInfoBar({
                 key: 'onebot-enable-http',
                 tone: 'success',
                 title: actionText,
-                content: `${result.candidate.name || botId} · 端口 ${result.port}。若 Bot 正在运行，会热更新连接配置。`,
+                content: `${result.candidate.name || botId} · 端口 ${result.port}。${scopeHint}`,
             });
         } catch (err) {
             pushInfoBar({
@@ -1477,7 +1565,7 @@ export function NotificationsTab({
                         ) : null}
                     </span>
                 }
-                description="用仍在线 Bot 的本机 HTTP 发私聊或群消息。发送方与消息收敛到同一个对话框。"
+                description="本机掉线用本机发送方；远端掉线由该机 ncd-watch 用同机发送方。不会跨服务器调用 OneBot。"
             >
                 <FieldRow
                     label="启用 OneBot 通知"
@@ -2122,7 +2210,7 @@ export function NotificationsTab({
                     <DialogHeader className="shrink-0">
                         <DialogTitle>配置 OneBot 通知</DialogTitle>
                         <DialogDescription>
-                            选好发送方和接收目标即可；消息模板可按需改。
+                            按主机勾选发送方：本机供 Desktop，远端供同机 ncd-watch。目标与模板全局共用。
                         </DialogDescription>
                     </DialogHeader>
 

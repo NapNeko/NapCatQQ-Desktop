@@ -36,7 +36,12 @@ export function useBackendSettings(cb: Callbacks = {}) {
         },
         onSuccess: (savedBackend) => {
             queryClient.setQueryData(backendSettingsKey, savedBackend);
-            pushInfoBar({ key: 'app-settings-save', tone: 'success', title: '设置已保存' });
+            pushInfoBar({
+                key: 'app-settings-save',
+                tone: 'success',
+                title: '设置已保存',
+                content: '若有远端 Bot，会自动同步 ncd-watch 通知配置（失败不影响本地保存）。',
+            });
             cb.onSaved?.();
         },
         onError: (err: Error) => {

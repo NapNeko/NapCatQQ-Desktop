@@ -103,7 +103,7 @@ export function NcdWatchRemoteSection({
                 key: `ncd-watch-install-${row.serverId}`,
                 tone: 'info',
                 title: '已提交 NCD Watch 安装',
-                content: `${row.name}：进度见任务队列；装完后可点「同步」。`,
+                content: `${row.name}：进度见任务队列；装完后保存设置会自动同步 notify，也可点「同步」。`,
             });
             window.setTimeout(() => refetchAll(), 2500);
         } catch (err) {
@@ -151,7 +151,7 @@ export function NcdWatchRemoteSection({
                 key: 'ncd-watch-sync-dirty',
                 tone: 'warning',
                 title: '请先保存设置',
-                content: '同步使用已落盘的通知设置（Webhook / Email / 同机 OneBot）；保存后再同步。',
+                content: '同步使用已落盘的通知设置（Webhook / Email / 同机 OneBot）。点「保存设置」会自动推送到远端；也可在此手动再同步。',
             });
             return;
         }
@@ -183,7 +183,7 @@ export function NcdWatchRemoteSection({
                 key: 'ncd-watch-sync-dirty',
                 tone: 'warning',
                 title: '请先保存设置',
-                content: '批量同步使用已保存的通知设置（Webhook / Email / 同机 OneBot）。',
+                content: '批量同步使用已保存的通知设置。通常保存设置后已自动推送；此处可再强制同步。',
             });
             return;
         }
