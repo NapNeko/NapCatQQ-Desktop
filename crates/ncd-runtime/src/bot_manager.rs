@@ -1105,6 +1105,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Some((port, token))
     }
 
+    /// 列出当前内存中的 NapCat WebUI 端点(Desktop 本机可达 port + token)
+    /// 冷启动 / 页面刷新后前端 hydrate 用;多实例时 port 可能是 6099/6100/...
+    pub async fn list_napcat_webui_endpoints(&self) -> Vec<(BotId, u16, String)> {
+        self.napcat_endpoints
+            .list_all()
+            .await
+            .into_iter()
+            .filter(|(_, ep)| ep.port > 0 && !ep.token.trim().is_empty())
+            .map(|(id, ep)| (id, ep.port, ep.token))
+            .collect()
+    }
+
     fn peek_napcat_docker_webui_token(&self, qq_id: u64) -> Option<String> {
         let store = self.docker_webui_secret_store.as_ref()?;
         let key = format!("bot:{qq_id}:napcat_docker_webui_token");
@@ -2225,13 +2237,41 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     ///   分支退出循环,避免半挂死
     /// - 调用方(Tauri setup 或测试)通过 tauri::async_runtime::spawn /
     ///   tokio::spawn 启动;与 run_runtime_event_listener 风格一致
-    pub async fn run_napcat_login_listener(self: Arc<Self>) {
+    /// - ready:subscribe 完成后立刻 signal,bootstrap 必须等它再 attach,
+    ///   否则 broadcast 无 backlog 会丢掉 napcat_webui_available(多实例 port+1)
+    pub async fn run_napcat_login_listener(
+        self: Arc<Self>,
+        ready: Option<tokio::sync::oneshot::Sender<()>>,
+    ) {
+        // 远端 NC 隧道建不起来 / 连续探活失败:清 poller+endpoint,避免 UI 打死后端口
+        {
+            let manager = Arc::clone(&self);
+            self.remote_native_napcat_sessions
+                .set_on_webui_unreachable(Arc::new(move |bot_id| {
+                    let manager = Arc::clone(&manager);
+                    tokio::spawn(async move {
+                        manager.dispose_poller(&bot_id).await;
+                        // 不把 actor 标 Crashed;只发 reason 让前端灭 WebUI 按钮
+                        if let Ok(snap) = manager.get_snapshot(&bot_id).await {
+                            manager.event_bus.publish(DomainEvent::bot_state_changed(
+                                snap,
+                                "webui_tunnel_unreachable",
+                            ));
+                        }
+                    });
+                }))
+                .await;
+        }
+
         let mut webui_sub = self
             .event_bus
             .subscribe(EventFilter::kind(DomainEventKind::NapCatWebuiAvailable));
         let mut exit_sub = self
             .event_bus
             .subscribe(EventFilter::kind(DomainEventKind::BotProcessExited));
+        if let Some(tx) = ready {
+            let _ = tx.send(());
+        }
         loop {
             tokio::select! {
                 ev = webui_sub.next() => match ev {

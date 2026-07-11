@@ -173,15 +173,15 @@ impl<R: BotConfigRepo + 'static> RemoteRuntimeSessions<R> {
         host: Arc<dyn Host>,
     ) {
         let Ok(RuntimeScenario::RemoteNative {
-            server_id,
+            server_id: _,
             backend: BackendType::NapCat,
         }) = RuntimeScenario::from_config(config)
         else {
             return;
         };
 
-        self.stop_other_remote_native_napcat_sessions_on_server(&server_id, Some(config.bot.qq_id))
-            .await;
+        // 同机可并存多个远端 NC Native Bot(多实例 WebUI 6099/6100+);
+        // 只关本 bot 旧会话,不要 stop_other 互踢别人的隧道/log follow。
         self.remote_native_napcat_sessions
             .start_session(
                 bot_id.clone(),
