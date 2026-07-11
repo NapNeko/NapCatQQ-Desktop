@@ -59,6 +59,47 @@ export function reduceNapcatLogin(
                 },
             };
 
+        case 'bot_process_exited': {
+            const prev = state.byBot[event.bot_id];
+            if (!prev || prev.webui === null) return state;
+            return {
+                ...state,
+                byBot: {
+                    ...state.byBot,
+                    [event.bot_id]: {
+                        ...prev,
+                        webui: null,
+                        qrcodeUrl: null,
+                        online: null,
+                    },
+                },
+            };
+        }
+
+        case 'bot_state_changed': {
+            // stop/crash 后清 binding,避免按钮仍点到死端口
+            // webui_tunnel_unreachable:隧道失效但 Bot 仍 Running,同样要灭灯
+            const st = event.snapshot.state;
+            const reason = event.reason ?? '';
+            const tunnelDead = reason === 'webui_tunnel_unreachable';
+            if (!tunnelDead && st !== 'stopped' && st !== 'crashed') return state;
+            const botId = event.snapshot.bot_id;
+            const cur = state.byBot[botId];
+            if (!cur || cur.webui === null) return state;
+            return {
+                ...state,
+                byBot: {
+                    ...state.byBot,
+                    [botId]: {
+                        ...cur,
+                        webui: null,
+                        qrcodeUrl: null,
+                        online: null,
+                    },
+                },
+            };
+        }
+
         case 'napcat_login_qrcode':
             return {
                 ...state,

@@ -58,6 +58,16 @@ export const botService = {
         );
     },
 
+    /** 内存中的 NapCat WebUI 端点(多实例 port 可能 +1);冷启动 hydrate 用 */
+    listNapcatWebuiBindings: async (): Promise<
+        Array<{ bot_id: string; port: number; token: string }>
+    > => {
+        if (isTauri) {
+            return invoke('list_napcat_webui_bindings');
+        }
+        return [];
+    },
+
     getSnapshot: async (botId: string): Promise<BotActorSnapshot> => {
         if (isTauri) return invoke<BotActorSnapshot>('get_bot_snapshot', { botId });
         return new Promise((resolve, reject) => {
