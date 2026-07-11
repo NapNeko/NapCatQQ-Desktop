@@ -56,7 +56,12 @@ impl Prober for HostProber {
         if bot.is_docker() {
             return probe_docker(bot);
         }
-        if let Some(pid_file) = bot.pid_file.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        if let Some(pid_file) = bot
+            .pid_file
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
             return probe_pid_file(bot, Path::new(pid_file));
         }
         if let Some(pat) = bot
@@ -77,7 +82,12 @@ impl Prober for HostProber {
     }
 }
 
-fn process_only(bot: &NotifyBotTarget, kind: ProbeKind, status: ProbeStatus, detail: String) -> ProbeResult {
+fn process_only(
+    bot: &NotifyBotTarget,
+    kind: ProbeKind,
+    status: ProbeStatus,
+    detail: String,
+) -> ProbeResult {
     ProbeResult {
         bot_id: bot.bot_id.clone(),
         kind,
@@ -98,7 +108,9 @@ fn probe_docker(bot: &NotifyBotTarget) -> ProbeResult {
 
     match output {
         Ok(out) if out.status.success() => {
-            let text = String::from_utf8_lossy(&out.stdout).trim().to_ascii_lowercase();
+            let text = String::from_utf8_lossy(&out.stdout)
+                .trim()
+                .to_ascii_lowercase();
             let online = text == "true";
             process_only(
                 bot,
@@ -179,8 +191,10 @@ fn probe_pid_file(bot: &NotifyBotTarget, path: &Path) -> ProbeResult {
 }
 
 fn probe_process_match(bot: &NotifyBotTarget, pattern: &str) -> ProbeResult {
+    // processMatch 常为 `-q <qq>$`；若不加 `--`，procps pgrep 会把 `-q` 当选项并失败，
+    // 探活永远 Offline，边沿/Webhook/Email 全哑火。
     let output = std::process::Command::new("pgrep")
-        .args(["-f", pattern])
+        .args(["-f", "--", pattern])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -190,13 +204,13 @@ fn probe_process_match(bot: &NotifyBotTarget, pattern: &str) -> ProbeResult {
             bot,
             ProbeKind::ProcessMatch,
             ProbeStatus::Online,
-            format!("pgrep -f {pattern} matched"),
+            format!("pgrep -f -- {pattern} matched"),
         ),
         Ok(_) => process_only(
             bot,
             ProbeKind::ProcessMatch,
             ProbeStatus::Offline,
-            format!("pgrep -f {pattern} no match"),
+            format!("pgrep -f -- {pattern} no match"),
         ),
         Err(e) => process_only(
             bot,
