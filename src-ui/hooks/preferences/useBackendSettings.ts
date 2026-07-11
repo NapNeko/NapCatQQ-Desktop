@@ -40,7 +40,6 @@ export function useBackendSettings(cb: Callbacks = {}) {
                 key: 'app-settings-save',
                 tone: 'success',
                 title: '设置已保存',
-                content: '若有远端 Bot，会自动同步 ncd-watch 通知配置（失败不影响本地保存）。',
             });
             cb.onSaved?.();
         },

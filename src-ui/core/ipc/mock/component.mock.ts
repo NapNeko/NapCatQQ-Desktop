@@ -74,7 +74,9 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'ncd_watch',
         display_name: 'NCD Watch',
-        description: '远端离线监控（Desktop 退出后 Webhook）',
+        description:
+            '远端 Linux 常驻探活；Desktop 关闭后仍可按已同步配置推送 Webhook / Email / 同机 OneBot',
+
         repo_url: 'https://github.com/NapNeko/NapCatQQ-Desktop',
         supported_targets: [{ os: 'linux', locality: 'remote' }],
         category: 'runtime_dep',
