@@ -18,6 +18,8 @@ import { useComponents } from '../../hooks/components/useComponents';
 import { useComponentAction } from '../../hooks/components/useComponentAction';
 import { useComponentActionErrors } from '../../hooks/components/useComponentActionErrors';
 import { useComponentPageAlerts } from '../../hooks/components/useComponentPageAlerts';
+import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
+import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
 import { componentService } from '../../core/services/component.service';
 import { componentActionStore } from '../../hooks/components/componentActionStore';
 import { useReleases } from '../../hooks/diagnostics/useReleases';
@@ -27,6 +29,7 @@ import { HostSwitcher } from './HostSwitcher';
 import { HostComponentsView } from './HostComponentsView';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
+import { componentMutationBlockedReason, componentLifecycleBlockedReason } from '../../core/domain/components/mutation-gate';
 import type { ComponentId, DockerInstallReport } from '../../core/ipc/types';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type { DockerInstallOptions } from '../../core/services/docker.service';
@@ -54,6 +57,8 @@ export const ComponentsPageNext: React.FC = () => {
     const { view, hosts, isLoading, error, refetch } = useComponents();
     const { startAction, cancelAction, getProgressFor, onTaskTerminal } = useComponentAction();
     const { snapshot: releases } = useReleases();
+    const { data: botSnapshots = [] } = useBotSnapshots();
+    const botConfigs = useBotConfigsMap(botSnapshots);
 
     const hostIds = useMemo(() => hosts.map((h) => h.host_id), [hosts]);
     const dockerHosts = useDockerHosts(hostIds);
@@ -161,11 +166,17 @@ export const ComponentsPageNext: React.FC = () => {
                     return releases.desktop?.version ?? null;
                 case 'ncd_watch':
                     return releases.ncdWatch?.version ?? null;
+                case 'qq':
+                    // 按当前主机 OS 选 Linux/Windows 探测结果；远端几乎全是 Linux QQ
+                    if (activeMachine?.host.os === 'windows') {
+                        return releases.qqWindows?.version ?? null;
+                    }
+                    return releases.qqLinux?.version ?? releases.qqWindows?.version ?? null;
                 default:
                     return null;
             }
         },
-        [releases],
+        [releases, activeMachine?.host.os],
     );
 
     const handleAction = useCallback(
@@ -177,6 +188,22 @@ export const ComponentsPageNext: React.FC = () => {
             try {
                 if ('cancelTaskId' in payload) {
                     await cancelAction(payload.cancelTaskId);
+                    return;
+                }
+                const blocked = componentMutationBlockedReason(
+                    botSnapshots,
+                    botConfigs,
+                    hostId,
+                    payload.stepKind,
+                );
+                if (blocked) {
+                    globalInfoBarStore.push({
+                        key: `component-action-blocked:${componentId}:${hostId}:${payload.stepKind}`,
+                        tone: 'warning',
+                        title: `无法${payload.stepKind === 'update' ? '更新' : '卸载'} · ${hostNameOf(hostId)}`,
+                        content: blocked,
+                        autoDismissMs: 8_000,
+                    });
                     return;
                 }
                 const taskId = await startAction(componentId, hostId, payload.stepKind);
@@ -201,7 +228,22 @@ export const ComponentsPageNext: React.FC = () => {
                 console.error('[ComponentsPage] action failed:', err);
             }
         },
-        [startAction, cancelAction, onTaskTerminal, refetch, hostNameOf, probeQqDependencies],
+        [
+            startAction,
+            cancelAction,
+            onTaskTerminal,
+            refetch,
+            hostNameOf,
+            probeQqDependencies,
+            botSnapshots,
+            botConfigs,
+        ],
+    );
+
+    const lifecycleBlockedReasonForHost = useCallback(
+        (hostId: string) =>
+            componentLifecycleBlockedReason(botSnapshots, botConfigs, hostId),
+        [botSnapshots, botConfigs],
     );
 
     const startQqDepsRepair = useCallback(
@@ -443,6 +485,9 @@ export const ComponentsPageNext: React.FC = () => {
                         getProgress={getProgressFor}
                         onAction={handleAction}
                         onRetryDetect={handleRetryDetect}
+                        lifecycleBlockedReason={lifecycleBlockedReasonForHost(
+                            activeMachine.host.host_id,
+                        )}
                         qqDependencyReport={activeQqDependencyReport}
                         dockerStatus={dockerHosts.statusByHost[activeMachine.host.host_id]}
                         isDockerProbing={dockerHosts.probingByHost[activeMachine.host.host_id] ?? false}

@@ -38,6 +38,8 @@ interface Props {
     latestRemoteVersion: string | null;
     activeProgress: { taskId: string; progress: ActionProgressView } | null;
     disabled?: boolean;
+    /** 本机有活跃 Bot 时限制 update/uninstall；安装仍可用 */
+    lifecycleBlockedReason?: string | null;
     onAction: (action: { stepKind: StepKind } | { cancelTaskId: string }) => void;
     onRetryDetect: () => void;
     trailingActions?: React.ReactNode;
@@ -48,6 +50,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
     latestRemoteVersion,
     activeProgress,
     disabled = false,
+    lifecycleBlockedReason = null,
     onAction,
     onRetryDetect,
     trailingActions,
@@ -99,6 +102,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
                 status={status}
                 latestRemoteVersion={latestRemoteVersion}
                 disabled={disabled}
+                lifecycleBlockedReason={lifecycleBlockedReason}
                 onAction={handle}
             />
         </>
@@ -240,8 +244,10 @@ const ActionButtons: React.FC<{
     status: MachineComponentRow['status'];
     latestRemoteVersion: string | null;
     disabled?: boolean;
+    lifecycleBlockedReason?: string | null;
     onAction: (a: RowAction) => void;
-}> = ({ status, latestRemoteVersion, disabled, onAction }) => {
+}> = ({ status, latestRemoteVersion, disabled, lifecycleBlockedReason, onAction }) => {
+    const lifecycleDisabled = disabled || !!lifecycleBlockedReason;
     switch (status.state) {
         case 'installed': {
             const updatable =
@@ -253,7 +259,8 @@ const ActionButtons: React.FC<{
                         <Button
                             size="sm"
                             variant="primary"
-                            disabled={disabled}
+                            disabled={lifecycleDisabled}
+                            title={lifecycleBlockedReason ?? undefined}
                             onClick={() => onAction({ kind: 'update' })}
                         >
                             更新
@@ -262,7 +269,8 @@ const ActionButtons: React.FC<{
                     <Button
                         size="sm"
                         variant="ghost"
-                        disabled={disabled}
+                        disabled={lifecycleDisabled}
+                        title={lifecycleBlockedReason ?? undefined}
                         onClick={() => onAction({ kind: 'uninstall' })}
                     >
                         卸载

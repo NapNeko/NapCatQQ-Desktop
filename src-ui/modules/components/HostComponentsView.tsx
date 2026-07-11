@@ -40,6 +40,8 @@ interface HostComponentsViewProps {
         action: { stepKind: StepKind } | { cancelTaskId: string },
     ) => void;
     onRetryDetect: (hostId: string) => void;
+    /** 该主机有活跃 Bot 时，update/uninstall 按钮禁用文案 */
+    lifecycleBlockedReason?: string | null;
     // Docker 数据 + 动作（来自 useDockerHosts）
     dockerStatus: DockerStatus | undefined;
     isDockerProbing: boolean;
@@ -65,6 +67,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     getProgress,
     onAction,
     onRetryDetect,
+    lifecycleBlockedReason = null,
     dockerStatus,
     isDockerProbing,
     isInstallingDocker,
@@ -184,6 +187,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                     rows={machine.framework}
                     hostId={host.host_id}
                     disableActions={false}
+                    lifecycleBlockedReason={lifecycleBlockedReason}
                     latestVersionFor={latestVersionFor}
                     getProgress={getProgress}
                     onAction={onAction}
@@ -198,6 +202,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 os={host.os}
                 showDocker={dockerApplicable}
                 disableActions={false}
+                lifecycleBlockedReason={lifecycleBlockedReason}
                 latestVersionFor={latestVersionFor}
                 getProgress={getProgress}
                 onAction={onAction}
@@ -218,6 +223,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 rows={machine.selfApp}
                 hostId={host.host_id}
                 disableActions={false}
+                lifecycleBlockedReason={lifecycleBlockedReason}
                 latestVersionFor={latestVersionFor}
                 getProgress={getProgress}
                 onAction={onAction}
@@ -241,6 +247,7 @@ const Group: React.FC<{
     rows: MachineComponentRow[];
     hostId: string;
     disableActions?: boolean;
+    lifecycleBlockedReason?: string | null;
     latestVersionFor: (id: ComponentId) => string | null;
     getProgress: (
         componentId: ComponentId,
@@ -259,33 +266,35 @@ const Group: React.FC<{
     rows,
     hostId,
     disableActions = false,
+    lifecycleBlockedReason = null,
     latestVersionFor,
     getProgress,
     onAction,
     onRetryDetect,
     trailingFor,
 }) => {
-    if (rows.length === 0) return null;
-    return (
-        <FormSection title={title} description={description} layout="none">
-            <div className={componentCardGridClass}>
-                {rows.map((row) => (
-                    <MachineComponentRowView
-                        key={row.info.id}
-                        row={row}
-                        hostId={hostId}
-                        latestRemoteVersion={latestVersionFor(row.info.id)}
-                        activeProgress={getProgress(row.info.id, hostId)}
-                        disabled={disableActions}
-                        onAction={(action) => onAction(row.info.id, hostId, action)}
-                        onRetryDetect={() => onRetryDetect(hostId)}
-                        trailingActions={trailingFor?.(row)}
-                    />
-                ))}
-            </div>
-        </FormSection>
-    );
-};
+        if (rows.length === 0) return null;
+        return (
+            <FormSection title={title} description={description} layout="none">
+                <div className={componentCardGridClass}>
+                    {rows.map((row) => (
+                        <MachineComponentRowView
+                            key={row.info.id}
+                            row={row}
+                            hostId={hostId}
+                            latestRemoteVersion={latestVersionFor(row.info.id)}
+                            activeProgress={getProgress(row.info.id, hostId)}
+                            disabled={disableActions}
+                            lifecycleBlockedReason={lifecycleBlockedReason}
+                            onAction={(action) => onAction(row.info.id, hostId, action)}
+                            onRetryDetect={() => onRetryDetect(hostId)}
+                            trailingActions={trailingFor?.(row)}
+                        />
+                    ))}
+                </div>
+            </FormSection>
+        );
+    };
 
 /// 运行时依赖组：常规组件行 + 一行 Docker（合成行，状态/动作走 docker hook）。
 const RuntimeDepGroup: React.FC<{
@@ -294,6 +303,7 @@ const RuntimeDepGroup: React.FC<{
     os: Os;
     showDocker: boolean;
     disableActions?: boolean;
+    lifecycleBlockedReason?: string | null;
     latestVersionFor: (id: ComponentId) => string | null;
     getProgress: (
         componentId: ComponentId,
@@ -319,6 +329,7 @@ const RuntimeDepGroup: React.FC<{
     os,
     showDocker,
     disableActions = false,
+    lifecycleBlockedReason = null,
     latestVersionFor,
     getProgress,
     onAction,
@@ -332,43 +343,44 @@ const RuntimeDepGroup: React.FC<{
     onOpenDockerDownload,
     trailingFor,
 }) => {
-    const hasRows = rows.length > 0 || showDocker;
-    if (!hasRows) return null;
-    return (
-        <FormSection
-            title="运行时依赖"
-            description="Node.js、QQ 运行时等与框架配套的依赖；远端 Linux 含 Docker"
-            layout="none"
-        >
-            <div className={componentCardGridClass}>
-                {rows.map((row) => (
-                    <MachineComponentRowView
-                        key={row.info.id}
-                        row={row}
-                        hostId={hostId}
-                        latestRemoteVersion={latestVersionFor(row.info.id)}
-                        activeProgress={getProgress(row.info.id, hostId)}
-                        disabled={disableActions}
-                        onAction={(action) => onAction(row.info.id, hostId, action)}
-                        onRetryDetect={() => onRetryDetect(hostId)}
-                        trailingActions={trailingFor?.(row)}
-                    />
-                ))}
-                {showDocker && (
-                    <DockerRow
-                        os={os}
-                        status={dockerStatus}
-                        isProbing={isDockerProbing}
-                        isInstalling={isInstallingDocker}
-                        installHint={dockerInstallHint}
-                        installProgress={dockerInstallProgress}
-                        onInstall={onInstallDocker}
-                        onOpenDownload={onOpenDockerDownload}
-                    />
-                )}
-            </div>
-        </FormSection>
-    );
-};
+        const hasRows = rows.length > 0 || showDocker;
+        if (!hasRows) return null;
+        return (
+            <FormSection
+                title="运行时依赖"
+                description="Node.js、QQ 运行时等与框架配套的依赖；远端 Linux 含 Docker"
+                layout="none"
+            >
+                <div className={componentCardGridClass}>
+                    {rows.map((row) => (
+                        <MachineComponentRowView
+                            key={row.info.id}
+                            row={row}
+                            hostId={hostId}
+                            latestRemoteVersion={latestVersionFor(row.info.id)}
+                            activeProgress={getProgress(row.info.id, hostId)}
+                            disabled={disableActions}
+                            lifecycleBlockedReason={lifecycleBlockedReason}
+                            onAction={(action) => onAction(row.info.id, hostId, action)}
+                            onRetryDetect={() => onRetryDetect(hostId)}
+                            trailingActions={trailingFor?.(row)}
+                        />
+                    ))}
+                    {showDocker && (
+                        <DockerRow
+                            os={os}
+                            status={dockerStatus}
+                            isProbing={isDockerProbing}
+                            isInstalling={isInstallingDocker}
+                            installHint={dockerInstallHint}
+                            installProgress={dockerInstallProgress}
+                            onInstall={onInstallDocker}
+                            onOpenDownload={onOpenDockerDownload}
+                        />
+                    )}
+                </div>
+            </FormSection>
+        );
+    };
 
 export default HostComponentsView;
