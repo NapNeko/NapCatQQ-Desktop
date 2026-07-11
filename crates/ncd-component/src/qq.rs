@@ -2,7 +2,7 @@
 //!
 //! 跨平台:
 //! - Linux 本地/远端:rootless 安装,对齐 NapCat-Installer 官方一键脚本
-//!   下载 linuxqq_<ver>_<arch>.{deb,rpm} 解压到 <install_base_dir>/opt/QQ/
+//!   下载 deb/rpm 解压到 <install_base_dir>/opt/QQ/
 //! - Windows 本地:detect 走注册表
 //!   HKLM\SOFTWARE\WOW6432Node\Tencent\QQNT\Install 拿安装根,新版 QQNT
 //!   按版本分目录,版本号在 versions/config.json 的 curVersion;旧版是
@@ -14,14 +14,16 @@
 //! - $INSTALL_BASE_DIR/opt/QQ/qq:QQ 可执行
 //! - $INSTALL_BASE_DIR/opt/QQ/resources/app/package.json:版本探测点
 //!
-//! 版本号说明:腾讯 Linux QQ 没有 "latest" 端点,版本号 + hash segment 都是
-//! 硬编码,改版时手动同步当前(2026-05)锁定 3.2.25-45758(hash 7516007c)
+//! Linux 版本发现(官方为主,社区为辅,pin 兜底):
+//! 1. 官方 pcConfig.json 的 Linux.x64/arm*DownloadUrl.{deb,rpm} 完整直链
+//! 2. 社区 nclatest get_qq_ver (linuxVersion + linuxVerHash → 旧 dldir1 拼法)
+//! 3. QQComponent 上 pin 的 version + url_hash_segment(离线可装)
 //!
 //! Windows 版本号通过 pcConfig.json 实时拉取,不固化
 //!
 //! Linux 安装流程(rootless):
 //! 1. 探测 dpkg-deb 或 rpm2cpio 哪个可用(用 which 或 command -v)
-//! 2. 下载对应 deb/rpm 包 → 上传到远端 <tmp>/
+//! 2. 解析下载 URL(见上) → 下载对应 deb/rpm 包 → 上传到远端 <tmp>/
 //! 3. dpkg-deb -x 或 rpm2cpio | cpio -idm 解压到 <install_base_dir>
 //! 4. 删除安装包,清理临时文件
 //!
@@ -42,8 +44,16 @@ use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
-/// 腾讯 QQ Windows 版实时版本 / 下载地址清单(legacy Urls.QQ_Version)
-const QQ_PCCONFIG_URL: &str = "https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json";
+/// 腾讯 QQ 实时版本 / 下载地址清单(Win + Linux 同源,legacy Urls.QQ_Version)
+pub const QQ_PCCONFIG_URL: &str =
+    "https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json";
+
+/// NapCat 社区推荐 QQ 版本(辅路;挂掉则跳过)
+pub const NCLATEST_QQ_VER_URL: &str = "https://nclatest.znin.net/get_qq_ver";
+
+/// 离线 pin:旧版 dldir1 拼法仍可用时的最后兜底
+const PIN_LINUX_QQ_VERSION: &str = "3.2.25-45758";
+const PIN_LINUX_QQ_HASH: &str = "7516007c";
 
 /// Windows QQNT 安装信息所在注册表子键(legacy PathFunc.get_qq_path)
 const QQ_REGISTRY_SUBKEY: &str = r"SOFTWARE\WOW6432Node\Tencent\QQNT";
@@ -55,12 +65,21 @@ enum PackageFormat {
     Rpm,
 }
 
+/// Linux QQ 一次安装解析到的发布信息
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinuxQqRelease {
+    pub version: String,
+    pub download_url: String,
+    /// 来源标签,进安装日志便于排障
+    pub source: &'static str,
+}
+
 /// QQ component 配置
 #[derive(Debug, Clone)]
 pub struct QQComponent {
-    /// 版本号(如 "3.2.25-45758")
+    /// pin 版本号(如 "3.2.25-45758");动态发现失败时拼旧 CDN 用
     pub version: String,
-    /// 腾讯 CDN URL 中的 hash 段(如 "7516007c")
+    /// pin 的腾讯 CDN hash 段(如 "7516007c")
     pub url_hash_segment: String,
     /// 安装根目录(对齐官方 $HOME/Napcat)
     pub install_base_dir: HostPath,
@@ -86,10 +105,10 @@ impl QQComponent {
         }
     }
 
-    /// 默认配置:锁定已知版本 v3.2.25-45758,安装到 $HOME/Napcat
-    /// 腾讯改版后通过更新本默认值即可,业务代码不改
+    /// 默认 pin:已知可装版本 v3.2.25-45758,安装到 $HOME/Napcat
+    /// 动态发现失败时才用这组 version/hash 拼旧 CDN;业务代码不改
     pub fn default_v3_2_25(install_base_dir: HostPath) -> Self {
-        Self::new("3.2.25-45758", "7516007c", install_base_dir)
+        Self::new(PIN_LINUX_QQ_VERSION, PIN_LINUX_QQ_HASH, install_base_dir)
     }
 
     pub fn with_sha256(mut self, sha256: impl Into<String>) -> Self {
@@ -129,6 +148,64 @@ impl QQComponent {
             "https://dldir1.qq.com/qqfile/qq/QQNT/{}/{filename}",
             self.url_hash_segment
         ))
+    }
+
+    /// pin 兜底发布信息(不发起网络)
+    fn pin_linux_release(
+        &self,
+        pkg: PackageFormat,
+        arch: Arch,
+    ) -> Result<LinuxQqRelease, ActionError> {
+        Ok(LinuxQqRelease {
+            version: self.version.clone(),
+            download_url: self.build_download_url(pkg, arch)?,
+            source: "pin",
+        })
+    }
+
+    /// 官方 → 社区 → pin;任一层成功即返回
+    async fn resolve_linux_release(
+        &self,
+        pkg: PackageFormat,
+        arch: Arch,
+        ctx: &mut ActionCtx,
+    ) -> Result<LinuxQqRelease, ActionError> {
+        match fetch_linux_qq_from_pcconfig(pkg, arch).await {
+            Ok(rel) => {
+                ctx.info(format!(
+                    "Linux QQ 发布源=pcConfig version={} url={}",
+                    rel.version, rel.download_url
+                ))
+                .await;
+                return Ok(rel);
+            }
+            Err(e) => {
+                ctx.info(format!("pcConfig Linux 段不可用,试社区源: {e}"))
+                    .await;
+            }
+        }
+
+        match fetch_linux_qq_from_nclatest(pkg, arch).await {
+            Ok(rel) => {
+                ctx.info(format!(
+                    "Linux QQ 发布源=nclatest version={} url={}",
+                    rel.version, rel.download_url
+                ))
+                .await;
+                return Ok(rel);
+            }
+            Err(e) => {
+                ctx.info(format!("nclatest 不可用,回退 pin: {e}")).await;
+            }
+        }
+
+        let pin = self.pin_linux_release(pkg, arch)?;
+        ctx.info(format!(
+            "Linux QQ 发布源=pin version={} url={}",
+            pin.version, pin.download_url
+        ))
+        .await;
+        Ok(pin)
     }
 
     /// 探测远端有 dpkg-deb 还是 rpm2cpio,dpkg 优先(deb 更普遍)
@@ -302,7 +379,6 @@ impl Component for QQComponent {
             _ => self.verify_linux(host).await,
         }
     }
-
     async fn ensure_dependencies(
         &self,
         host: &dyn Host,
@@ -380,14 +456,7 @@ impl QQComponent {
     /// Linux install:rootless 下载 deb/rpm → 上传 → dpkg-deb -x / rpm2cpio 解包
     async fn install_linux(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
-        ctx.info(format!(
-            "准备安装 Linux QQ {} 到 {}",
-            self.version,
-            self.install_base_dir.as_posix()
-        ))
-        .await;
 
-        // Step 1: 检测并安装系统依赖
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "check system dependencies".into(),
@@ -396,7 +465,6 @@ impl QQComponent {
         self.ensure_linux_dependencies(host, ctx).await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // Step 2:探测包格式
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "detect package format".into(),
@@ -406,16 +474,24 @@ impl QQComponent {
         ctx.info(format!("QQ 安装包格式: {pkg_format:?}")).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // Step 3:下载 QQ 包到本地
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
             message: "download QQ package".into(),
         })
         .await;
-        let url = self.build_download_url(pkg_format, host.arch())?;
+        let release = self
+            .resolve_linux_release(pkg_format, host.arch(), ctx)
+            .await?;
+        let url = release.download_url.clone();
+        ctx.info(format!(
+            "准备安装 Linux QQ {} (source={}) 到 {}",
+            release.version,
+            release.source,
+            self.install_base_dir.as_posix()
+        ))
+        .await;
         ctx.info(format!("QQ 安装包下载地址: {url}")).await;
 
-        // 准备远程路径
         host.create_dir_all(&self.tmp_dir).await?;
         let remote_pkg = self.tmp_dir.join(format!(
             "ncd-qq-{}.{}",
@@ -431,7 +507,6 @@ impl QQComponent {
             .await;
         let mut remote_download_ok = false;
 
-        // Layer 1: 尝试远程直接下载
         if host.locality() == ncd_host::Locality::Remote {
             for mirror_url in &mirrors {
                 if host.download_url(mirror_url, &remote_pkg).await.is_ok() {
@@ -443,12 +518,15 @@ impl QQComponent {
             }
         }
 
-        // Layer 2: fallback 到本地下载 → 上传
         if !remote_download_ok {
-            ctx.info("远端直接下载不可用，改为本机下载后上传").await;
+            if host.locality() == ncd_host::Locality::Remote {
+                ctx.info("远端直接下载不可用，改为本机下载后上传").await;
+            } else {
+                ctx.info("本机下载 QQ 安装包").await;
+            }
             let local_tmp = std::env::temp_dir().join(format!(
                 "ncd-qq-{}-{}.{}",
-                self.version,
+                release.version.replace(['/', '\\', ' '], "_"),
                 std::process::id(),
                 match pkg_format {
                     PackageFormat::Deb => "deb",
@@ -468,14 +546,13 @@ impl QQComponent {
                 .await?;
 
             host.upload(&local_tmp, &remote_pkg).await?;
-            ctx.info(format!("QQ 安装包已上传到 {}", remote_pkg.as_posix()))
+            ctx.info(format!("QQ 安装包已就位 {}", remote_pkg.as_posix()))
                 .await;
             let _ = tokio::fs::remove_file(&local_tmp).await;
         }
 
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
-        // Step 4:rootless 解压
         ctx.emit(ProgressKind::StepBegin {
             step: 4,
             message: "extract QQ".into(),
@@ -491,14 +568,11 @@ impl QQComponent {
                 .arg("-x")
                 .arg(pkg_path)
                 .arg(install_base),
-            PackageFormat::Rpm => {
-                // rpm2cpio <pkg> | (cd <install_base> && cpio -idm)
-                HostCommand::new("sh").arg("-c").arg(format!(
-                    "rpm2cpio {} | (cd {} && cpio -idm)",
-                    shell_quote(pkg_path),
-                    shell_quote(install_base)
-                ))
-            }
+            PackageFormat::Rpm => HostCommand::new("sh").arg("-c").arg(format!(
+                "rpm2cpio {} | (cd {} && cpio -idm)",
+                shell_quote(pkg_path),
+                shell_quote(install_base)
+            )),
         };
         let out = host.run_to_string(extract_cmd).await?;
         if !out.success() {
@@ -507,11 +581,12 @@ impl QQComponent {
                 format!("exit={:?} stderr={}", out.exit_code, out.stderr.trim()),
             ));
         }
-        // 清理远端安装包
         let _ = host.remove_file(&remote_pkg).await;
         ctx.info(format!(
-            "Linux QQ 已安装到 {}",
-            self.qq_base_path().as_posix()
+            "Linux QQ {} 已安装到 {} (source={})",
+            release.version,
+            self.qq_base_path().as_posix(),
+            release.source
         ))
         .await;
         ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
@@ -564,11 +639,11 @@ impl QQComponent {
         if json_exists {
             match self.detect(host).await {
                 Ok(Some(v)) => {
-                    let matches = v.version == self.version;
+                    // 动态发现装的版本不必等于 pin;能读到真实版本即可
                     report = report.with_check(
-                        "version matches",
-                        matches,
-                        Some(format!("expected={} actual={}", self.version, v.version)),
+                        "qq version detected",
+                        !v.version.is_empty() && v.version != "unknown",
+                        Some(format!("version={} (pin={})", v.version, self.version)),
                     );
                 }
                 Ok(None) => {
@@ -801,18 +876,7 @@ fn parse_reg_install_value(stdout: &str) -> Option<String> {
 
 /// 拉 pcConfig.json 解析 Windows 段的 (version, ntDownloadX64Url)
 async fn fetch_windows_qq_release() -> Result<(String, String), ActionError> {
-    let resp = ncd_network::shared_client()
-        .get(QQ_PCCONFIG_URL)
-        .send()
-        .await
-        .map_err(|e| ActionError::DownloadFailed {
-            url: QQ_PCCONFIG_URL.to_string(),
-            reason: e.to_string(),
-        })?;
-    let body = resp.text().await.map_err(|e| ActionError::DownloadFailed {
-        url: QQ_PCCONFIG_URL.to_string(),
-        reason: e.to_string(),
-    })?;
+    let body = fetch_text(QQ_PCCONFIG_URL).await?;
     parse_windows_qq_release(&body)
 }
 
@@ -837,6 +901,168 @@ fn parse_windows_qq_release(body: &str) -> Result<(String, String), ActionError>
         })?
         .to_string();
     Ok((version, url))
+}
+
+async fn fetch_text(url: &str) -> Result<String, ActionError> {
+    let resp = ncd_network::shared_client()
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| ActionError::DownloadFailed {
+            url: url.to_string(),
+            reason: e.to_string(),
+        })?;
+    if !resp.status().is_success() {
+        return Err(ActionError::DownloadFailed {
+            url: url.to_string(),
+            reason: format!("HTTP {}", resp.status()),
+        });
+    }
+    resp.text().await.map_err(|e| ActionError::DownloadFailed {
+        url: url.to_string(),
+        reason: e.to_string(),
+    })
+}
+
+/// 官方 pcConfig Linux 段 → 完整 deb/rpm 直链
+async fn fetch_linux_qq_from_pcconfig(
+    pkg: PackageFormat,
+    arch: Arch,
+) -> Result<LinuxQqRelease, ActionError> {
+    let body = fetch_text(QQ_PCCONFIG_URL).await?;
+    parse_linux_qq_from_pcconfig(&body, pkg, arch)
+}
+
+/// 给 release 快照 / 组件页用:探测 Linux QQ 当前可装版本(官方→社区→pin)
+///
+/// arch 用 x86_64 deb 作为版本代表即可(腾讯各 arch 版本号一致)
+pub async fn probe_linux_qq_latest() -> Result<LinuxQqRelease, ActionError> {
+    match fetch_linux_qq_from_pcconfig(PackageFormat::Deb, Arch::X86_64).await {
+        Ok(rel) => return Ok(rel),
+        Err(_) => {}
+    }
+    match fetch_linux_qq_from_nclatest(PackageFormat::Deb, Arch::X86_64).await {
+        Ok(rel) => return Ok(rel),
+        Err(_) => {}
+    }
+    QQComponent::default_v3_2_25(HostPath::from_posix("/tmp/ncd-probe"))
+        .pin_linux_release(PackageFormat::Deb, Arch::X86_64)
+}
+
+/// 给 release 快照用:探测 Windows QQ 当前安装包版本
+pub async fn probe_windows_qq_latest() -> Result<(String, String), ActionError> {
+    fetch_windows_qq_release().await
+}
+
+fn parse_linux_qq_from_pcconfig(
+    body: &str,
+    pkg: PackageFormat,
+    arch: Arch,
+) -> Result<LinuxQqRelease, ActionError> {
+    let json: serde_json::Value = serde_json::from_str(body).map_err(|e| {
+        ActionError::install_step("parse_pcconfig_linux", format!("invalid json: {e}"))
+    })?;
+    let linux = json.get("Linux").ok_or_else(|| {
+        ActionError::install_step("parse_pcconfig_linux", "missing Linux section")
+    })?;
+    let version = linux
+        .get("version")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let arch_key = match arch {
+        Arch::X86_64 => "x64DownloadUrl",
+        Arch::Aarch64 => "armDownloadUrl",
+        _ => {
+            return Err(ActionError::UnsupportedTarget {
+                component: "qq".into(),
+                os: Os::Linux,
+                locality: Locality::Remote,
+            });
+        }
+    };
+    let fmt_key = match pkg {
+        PackageFormat::Deb => "deb",
+        PackageFormat::Rpm => "rpm",
+    };
+    let url = linux
+        .get(arch_key)
+        .and_then(|v| v.get(fmt_key))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            ActionError::install_step(
+                "parse_pcconfig_linux",
+                format!("missing Linux.{arch_key}.{fmt_key}"),
+            )
+        })?
+        .to_string();
+
+    Ok(LinuxQqRelease {
+        version,
+        download_url: url,
+        source: "pcConfig",
+    })
+}
+
+/// 社区 nclatest:linuxVersion + linuxVerHash → 旧 dldir1 拼法
+async fn fetch_linux_qq_from_nclatest(
+    pkg: PackageFormat,
+    arch: Arch,
+) -> Result<LinuxQqRelease, ActionError> {
+    let body = fetch_text(NCLATEST_QQ_VER_URL).await?;
+    parse_linux_qq_from_nclatest(&body, pkg, arch)
+}
+
+fn parse_linux_qq_from_nclatest(
+    body: &str,
+    pkg: PackageFormat,
+    arch: Arch,
+) -> Result<LinuxQqRelease, ActionError> {
+    let json: serde_json::Value = serde_json::from_str(body)
+        .map_err(|e| ActionError::install_step("parse_nclatest", format!("invalid json: {e}")))?;
+    let version = json
+        .get("linuxVersion")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ActionError::install_step("parse_nclatest", "missing linuxVersion"))?
+        .to_string();
+    let hash = json
+        .get("linuxVerHash")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ActionError::install_step("parse_nclatest", "missing linuxVerHash"))?
+        .to_string();
+
+    let arch_str = match (pkg, arch) {
+        (PackageFormat::Deb, Arch::X86_64) => "amd64",
+        (PackageFormat::Deb, Arch::Aarch64) => "arm64",
+        (PackageFormat::Rpm, Arch::X86_64) => "x86_64",
+        (PackageFormat::Rpm, Arch::Aarch64) => "aarch64",
+        _ => {
+            return Err(ActionError::UnsupportedTarget {
+                component: "qq".into(),
+                os: Os::Linux,
+                locality: Locality::Remote,
+            });
+        }
+    };
+    let ext = match pkg {
+        PackageFormat::Deb => "deb",
+        PackageFormat::Rpm => "rpm",
+    };
+    let download_url =
+        format!("https://dldir1.qq.com/qqfile/qq/QQNT/{hash}/linuxqq_{version}_{arch_str}.{ext}");
+    Ok(LinuxQqRelease {
+        version,
+        download_url,
+        source: "nclatest",
+    })
 }
 
 #[cfg(test)]
@@ -1035,5 +1261,55 @@ mod tests {
     fn install_base_dir_can_be_custom() {
         let c = QQComponent::default_v3_2_25(HostPath::from_posix("/opt/napcat"));
         assert_eq!(c.qq_executable().as_posix(), "/opt/napcat/opt/QQ/qq");
+    }
+
+    #[test]
+    fn parse_linux_qq_from_pcconfig_x64_deb() {
+        let body = r#"{"Linux":{"version":"3.2.31","x64DownloadUrl":{"deb":"https://qqdl.gtimg.cn/qqfile/QQNTV2/9.9.32/release/c390e792/QQ_3.2.31_260710_amd64_01.deb","rpm":"https://qqdl.gtimg.cn/x.rpm"},"armDownloadUrl":{"deb":"https://qqdl.gtimg.cn/arm.deb","rpm":"https://qqdl.gtimg.cn/arm.rpm"}}}"#;
+        let rel = parse_linux_qq_from_pcconfig(body, PackageFormat::Deb, Arch::X86_64).unwrap();
+        assert_eq!(rel.version, "3.2.31");
+        assert_eq!(rel.source, "pcConfig");
+        assert!(rel.download_url.ends_with("_amd64_01.deb"));
+    }
+
+    #[test]
+    fn parse_linux_qq_from_pcconfig_arm_rpm() {
+        let body = r#"{"Linux":{"version":"3.2.31","x64DownloadUrl":{"deb":"https://qqdl.gtimg.cn/x64.deb","rpm":"https://qqdl.gtimg.cn/x64.rpm"},"armDownloadUrl":{"deb":"https://qqdl.gtimg.cn/arm.deb","rpm":"https://qqdl.gtimg.cn/arm.rpm"}}}"#;
+        let rel = parse_linux_qq_from_pcconfig(body, PackageFormat::Rpm, Arch::Aarch64).unwrap();
+        assert_eq!(rel.version, "3.2.31");
+        assert_eq!(rel.download_url, "https://qqdl.gtimg.cn/arm.rpm");
+    }
+
+    #[test]
+    fn parse_linux_qq_from_pcconfig_missing_url_errors() {
+        let body = r#"{"Linux":{"version":"3.2.31"}}"#;
+        assert!(parse_linux_qq_from_pcconfig(body, PackageFormat::Deb, Arch::X86_64).is_err());
+    }
+
+    #[test]
+    fn parse_linux_qq_from_nclatest_builds_old_cdn_url() {
+        let body = r#"{"linuxVersion":"3.2.25-45758","linuxVerHash":"7516007c"}"#;
+        let rel = parse_linux_qq_from_nclatest(body, PackageFormat::Deb, Arch::X86_64).unwrap();
+        assert_eq!(rel.version, "3.2.25-45758");
+        assert_eq!(rel.source, "nclatest");
+        assert_eq!(
+            rel.download_url,
+            "https://dldir1.qq.com/qqfile/qq/QQNT/7516007c/linuxqq_3.2.25-45758_amd64.deb"
+        );
+    }
+
+    #[test]
+    fn pin_linux_release_matches_build_download_url() {
+        let c = comp();
+        let pin = c
+            .pin_linux_release(PackageFormat::Deb, Arch::X86_64)
+            .unwrap();
+        assert_eq!(pin.source, "pin");
+        assert_eq!(pin.version, "3.2.25-45758");
+        assert_eq!(
+            pin.download_url,
+            c.build_download_url(PackageFormat::Deb, Arch::X86_64)
+                .unwrap()
+        );
     }
 }

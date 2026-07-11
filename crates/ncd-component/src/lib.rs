@@ -42,7 +42,11 @@ pub use ncd_watch::{
 pub use nodejs::NodeJsComponent;
 pub use novnc::NoVncComponent;
 pub use pkg_install_stream::run_pkg_command_with_progress;
-pub use qq::QQComponent;
+pub use qq::{
+    LinuxQqRelease, NCLATEST_QQ_VER_URL, QQ_PCCONFIG_URL, QQComponent, probe_linux_qq_latest,
+    probe_windows_qq_latest,
+};
+
 pub use remote_qq_entry::{QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, set_remote_qq_package_main};
 pub use snowluma::SnowLumaComponent;
 pub use traits::{Action, Component};
