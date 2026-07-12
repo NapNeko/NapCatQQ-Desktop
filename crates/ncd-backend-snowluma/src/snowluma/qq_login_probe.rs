@@ -95,7 +95,7 @@ pub async fn find_pid_by_qq_id(qq_id: u64) -> Option<ProbedQqLogin> {
 /// 一次 sysinfo 扫描的结果:主 QQ.exe PID 列表 + QQ.exe 进程总数
 ///
 /// 进程总数把 Chromium 子进程也算进去,用于 [probe_pid] 的污染启发式
-/// (对齐上游 PR #73 的 getQqProcessCount)复用同一次 refresh_all
+/// (对齐上游 PR #73 的 getQqProcessCount)复用同一次进程刷新
 /// 而非另起 tasklist/pgrep,省一次进程枚举
 struct QqProcessScan {
     main_pids: Vec<u32>,
@@ -109,8 +109,12 @@ struct QqProcessScan {
 /// 2. cmdline 任意 arg 含 --type= → Chromium 标 renderer / GPU / utility
 async fn scan_qq_processes() -> QqProcessScan {
     tokio::task::spawn_blocking(|| {
-        let mut sys = sysinfo::System::new_all();
-        sys.refresh_all();
+        // 只要 name/parent/cmd;不要 new_all + refresh_all 拉 CPU/内存/磁盘
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            sysinfo::ProcessRefreshKind::new().with_cmd(sysinfo::UpdateKind::OnlyIfNotSet),
+        );
 
         let is_qq =
             |p: &sysinfo::Process| p.name().to_string_lossy().eq_ignore_ascii_case("QQ.exe");

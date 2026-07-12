@@ -8,9 +8,8 @@
 //! - SnowLuma 仅在 Windows 工作(runtime_backend::start 在非 Windows 上直接返回
 //!   Unsupported),但本 trait 实装跨平台编译可通过:非 Windows 上直接返回
 //!   只含 initial_pid 的集合,避免在 macOS / Linux CI 上把测试拉爆
-//! - sysinfo::System::new_all() 在 Windows 上枚举所有进程开销可观(数十毫秒)
-//!   必须放进 tokio::task::spawn_blocking 跑,否则会阻塞主 runtime 上的其它
-//!   I/O / 计时任务
+//! - sysinfo 进程枚举在 Windows 上仍有开销,必须放进 spawn_blocking;
+//!   只 refresh 进程列表(不要 new_all 拉 CPU/内存/磁盘),parent 链路 BFS 够用
 //! - 实现失败兜底:sysinfo 找不到 initial_pid,权限不足,API 调用 panic
 //!   等所有异常情况都收敛到「返回单元素集合 {initial_pid}」,不向上抛
 //!   Status poller 允许"暂时拿不到子进程",下一轮会再 probe
@@ -24,13 +23,11 @@ use crate::snowluma::status_poller::ProcessTreeProbe;
 // Sysinfo 实装
 
 /// 基于 sysinfo crate 的 ProcessTreeProbe 默认实装
-/// 无状态结构(Copy):每次 collect_descendants 都重新构造一个
-/// sysinfo::System 并 new_all 刷新每轮 poller tick 之间不复用
-/// 避免脏快照(process exit / new spawn)影响 BFS 结果
+/// 无状态结构(Copy):每次 collect_descendants 新建 System 并只刷进程表
+/// 不在 tick 间复用,避免脏快照(process exit / new spawn)影响 BFS
 /// # 平台差异
-/// - Windows:通过 sysinfo 枚举所有进程,按 parent 链路 BFS
-/// - 非 Windows:直接返回 {initial_pid}SnowLuma 不在非 Windows 上运行
-///   保留只是为了让 ncd-core 在非 Windows CI 上仍可 cargo test --lib
+/// - Windows:枚举进程,按 parent 链路 BFS
+/// - 非 Windows:直接返回 {initial_pid};SnowLuma 不在非 Windows 上运行
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SysinfoProcessTreeProbe;
 
@@ -44,8 +41,7 @@ impl SysinfoProcessTreeProbe {
 #[async_trait]
 impl ProcessTreeProbe for SysinfoProcessTreeProbe {
     async fn collect_descendants(&self, initial_pid: u32) -> BTreeSet<u32> {
-        // sysinfo 调用是同步阻塞的(new_all + 内部 win32 API)
-        // 必须 offload 到 blocking pool 以免占用主 runtime worker
+        // sysinfo 调用是同步阻塞的(win32 进程快照),必须 offload
         let join = tokio::task::spawn_blocking(move || collect_descendants_blocking(initial_pid));
 
         // spawn_blocking 几乎不会失败;万一 panic 也不该把整个 poller 拖垮
@@ -63,9 +59,13 @@ impl ProcessTreeProbe for SysinfoProcessTreeProbe {
 /// #[cfg(windows)] 路径在非 Windows 平台被裁剪,只剩 fallback 分支
 #[cfg(windows)]
 fn collect_descendants_blocking(initial_pid: u32) -> BTreeSet<u32> {
-    // sysinfo 0.31:System::new_all 内部已经调用 refresh_processes_specifics
-    // 拉满了 process snapshot,无须再额外 refresh
-    let system = sysinfo::System::new_all();
+    // 只要 pid + parent 做 BFS;ProcessRefreshKind::new() 全关仍会拿到基础字段,
+    // 比 System::new_all() 少刷 CPU/内存/磁盘/用户等无关信息
+    let mut system = sysinfo::System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        sysinfo::ProcessRefreshKind::new(),
+    );
     let processes = system.processes();
 
     // 构造 parent -> children 邻接表,避免在 BFS 内对 N 个进程做 N 次扫描
