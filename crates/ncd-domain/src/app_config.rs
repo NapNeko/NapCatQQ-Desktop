@@ -318,6 +318,9 @@ pub struct AppSettings {
     pub enter_lightweight_delay_secs: u32,
     #[serde(rename = "uiModeOnStartup", default)]
     pub ui_mode_on_startup: UiModeOnStartup,
+    /// 登录当前 Windows 用户后自动启动本程序(HKCU Run,无需管理员)
+    #[serde(rename = "launchOnStartup", default)]
+    pub launch_on_startup: bool,
     #[serde(rename = "minimizeToTrayCountsAsHidden", default = "default_true")]
     pub minimize_to_tray_counts_as_hidden: bool,
     /// 桌面 Toast:NapCat 登录态离线
@@ -382,6 +385,7 @@ impl Default for AppSettings {
             after_close_ui_behavior: AfterCloseUiBehavior::default(),
             enter_lightweight_delay_secs: default_enter_lightweight_delay_secs(),
             ui_mode_on_startup: UiModeOnStartup::default(),
+            launch_on_startup: false,
             minimize_to_tray_counts_as_hidden: true,
             notify_on_offline: true,
             notify_on_bot_crashed: true,
