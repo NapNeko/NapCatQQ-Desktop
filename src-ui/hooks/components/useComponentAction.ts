@@ -9,6 +9,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 import { componentService } from '../../core/services/component.service';
+import { desktopUpdateService } from '../../core/services/desktop-update.service';
 import {
     componentActionStore,
     targetKey,
@@ -66,6 +67,20 @@ export function useComponentAction(): UseComponentActionResult {
                 : undefined;
             componentActionStore.started(taskId, componentId, hostId, queueHint);
             try {
+                // Desktop 自身更新走 ncd-update MSI 路径，不走 DeployPlan/Component::update
+                if (componentId === 'desktop_self' && kind === 'update') {
+                    if (hostId !== 'local') {
+                        throw new Error('Desktop 自更新仅支持本机');
+                    }
+                    const available = await desktopUpdateService.check();
+                    if (!available) {
+                        throw new Error('当前已是最新版本，无需更新');
+                    }
+                    // install 成功后进程会 exit；失败则抛错进入 failTask
+                    await desktopUpdateService.install(available);
+                    return taskId;
+                }
+
                 const backendTaskId = await componentService.runComponentAction(
                     componentId,
                     hostId,
