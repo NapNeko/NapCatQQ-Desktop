@@ -3,7 +3,7 @@ import type { OneBotMessengerScope } from "./OneBotMessengerScope";
 
 /**
  * 设置页可选的 OneBot 发送方候选(本机 + 远端同机;跨机不互通)
- * 
+ *
  * - Local: Desktop 在线时可真正发 HTTP;eligible 表示 Running 且环回 HTTP 就绪
  * - Remote: 仅供 ncd-watch 同机冗余;eligible 恒 false
  */

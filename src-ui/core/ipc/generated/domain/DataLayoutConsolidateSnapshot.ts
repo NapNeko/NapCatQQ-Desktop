@@ -6,21 +6,20 @@
  * 与 schema MigrationReport 分开:布局收敛先于 schema 迁移,失败时保留原目录。
  * backup_path 可能含密钥,UI 文案需提示用户自行保管桌面 zip。
  */
-export type DataLayoutConsolidateSnapshot = {
-    /**
-     * 本次启动是否实际执行了收敛(false = 已是目标布局或仅 GC)
-     */
-    performed: boolean, skipped_reason?: string | null,
-    /**
-     * 桌面 zip 绝对路径;含配置与密钥,勿上传
-     */
-    backup_path?: string | null,
-    /**
-     * 迁入/清理条目数(路径标签计数,非字节)
-     */
-    moved_count: number, warnings: Array<string>,
-    /**
-     * 收敛失败原因;有值时 performed 通常为 false,原目录未删
-     */
-    error?: string | null,
-};
+export type DataLayoutConsolidateSnapshot = { 
+/**
+ * 本次启动是否实际执行了收敛(false = 已是目标布局或仅 GC)
+ */
+performed: boolean, skipped_reason?: string | null, 
+/**
+ * 桌面 zip 绝对路径;含配置与密钥,勿上传
+ */
+backup_path?: string | null, 
+/**
+ * 迁入/清理条目数(路径标签计数,非字节)
+ */
+moved_count: number, warnings: Array<string>, 
+/**
+ * 收敛失败原因;有值时 performed 通常为 false,原目录未删
+ */
+error?: string | null, };
