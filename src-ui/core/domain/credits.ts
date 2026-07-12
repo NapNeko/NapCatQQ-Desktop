@@ -65,12 +65,6 @@ export const APP_CREDIT_GROUPS: readonly CreditGroup[] = [
                 url: 'https://lucide.dev/',
             },
             {
-                name: 'Recharts',
-                role: '图表',
-                license: 'MIT',
-                url: 'https://recharts.org/',
-            },
-            {
                 name: 'Plus Jakarta Sans / Inter / JetBrains Mono',
                 role: '界面字体（Fontsource）',
                 license: 'OFL',

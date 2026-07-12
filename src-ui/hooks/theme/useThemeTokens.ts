@@ -1,7 +1,7 @@
 // 读取一组 CSS custom property（design token）的当前解析值，主题变化时自动重渲染。
 //
 // 使用场景：组件需要把 token 颜色喂给 canvas / SVG 字符串 / 第三方库这种
-// "不能用纯 CSS 表达"的边界（如 qrcode 库渲染、recharts 老本不接 var()）。
+// 不能用纯 CSS 表达的边界（如 qrcode 库渲染）。
 //
 // 实现方式：用一个临时 <span> 当探针，把 `color: var(--xxx)` 喂给它，再读
 // 探针的 computed `color`。CSS color 属性的 computed value 在所有浏览器

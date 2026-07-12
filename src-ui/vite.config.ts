@@ -55,7 +55,6 @@ export default defineConfig({
       'gsap/CustomBounce',
       'gsap/CustomWiggle',
       'lucide-react',
-      'recharts',
     ],
   },
   resolve: {
@@ -74,7 +73,6 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('recharts')) return 'vendor-recharts';
             if (id.includes('gsap')) return 'vendor-gsap';
             if (id.includes('@radix-ui')) return 'vendor-radix';
             if (id.includes('lucide-react')) return 'vendor-icons';

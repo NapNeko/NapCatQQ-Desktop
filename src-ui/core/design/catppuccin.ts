@@ -1,6 +1,6 @@
 // Catppuccin 四味色值定义。
 // 来源：https://github.com/catppuccin/catppuccin
-// 仅给"必须在 JS 端取值"的场景使用（recharts 折线、QR code、canvas 绘制等）。
+// 仅给必须在 JS 端取值的场景使用（QR / canvas / 图表路径色等）。
 // 普通组件应走 CSS var(--xxx) token，不要从这里 import 字面值。
 
 /** Catppuccin 单 flavor 的 26 色结构。 */

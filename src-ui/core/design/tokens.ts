@@ -1,5 +1,5 @@
-// design token 的 TS 镜像。仅给“必须在 JS 端取值”的场景使用：
-//   - recharts 折线颜色（不能用 CSS variable 走 prop）
+// design token 的 TS 镜像。仅给必须在 JS 端取值的场景使用：
+//   - 图表 / canvas / QR 等不能走 CSS variable 的 prop
 //   - 计算派生值（CSS color-mix 不够用时）
 //   - Catppuccin flavor 语义色（品牌色 / 状态色等）
 // 普通组件应该走 className + tailwind utility / 或直接 var(--xxx)，
@@ -51,10 +51,8 @@ export const tokens = {
 
 export type Tokens = typeof tokens;
 
-/**
- * Catppuccin 四味语义色块。给 JS 端“需要知道某 flavor 下 brand / text 是什么色”
- * 的场景使用（recharts 调色板、QR 码前景等）。结构对齐 tokens 主块的语义层。
- */
+// Catppuccin 四味语义色块。给 JS 端需要某 flavor 下 brand / text 字面色的场景
+// （图表路径、QR 前景等）。结构对齐 tokens 主块的语义层。
 export const catppuccinSemantic: Record<
     CatppuccinFlavorName,
     {
@@ -112,5 +110,5 @@ export const catppuccinSemantic: Record<
     },
 } as const;
 
-/** 完整 flavor 原始色值（recharts 多色盘等需要全部 26 色时）。 */
+// 完整 flavor 原始色值（需要全部 26 色时）。
 export { catppuccinFlavors } from './catppuccin';
