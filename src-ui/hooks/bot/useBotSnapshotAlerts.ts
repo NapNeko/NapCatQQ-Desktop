@@ -33,7 +33,11 @@ function normError(v: string | null | undefined): string | null {
 }
 
 function isSnowLumaConsentError(raw: string): boolean {
-    return raw.includes('SNOWLUMA_CONSENT_REQUIRED') || raw.includes('"consentRequired":true');
+    return (
+        raw.includes('SNOWLUMA_CONSENT_REQUIRED')
+        || raw.includes('DESKTOP_CONSENT_REQUIRED')
+        || raw.includes('"consentRequired":true')
+    );
 }
 
 /** InfoBar 展示用：截取首行摘要，避免 Python traceback 等长文本撑爆横幅。 */

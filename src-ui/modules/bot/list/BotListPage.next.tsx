@@ -52,6 +52,8 @@ import { FloatingActions } from './next/FloatingActions';
 import { BatchBottomBar } from './next/BatchBottomBar';
 import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
 import { SnowLumaConsentDialog } from '../dialogs/SnowLumaConsentDialog';
+import { DesktopConsentDialog } from '../../../shared/components/next/DesktopConsentDialog';
+import { useDesktopConsentGate } from '../../../hooks/desktop/useDesktopConsentGate';
 import gridStyles from './next/botCardGrid.module.css';
 
 interface BotListPageNextProps {
@@ -62,6 +64,11 @@ interface BotListPageNextProps {
 function isSnowLumaConsentError(err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return message.includes('SNOWLUMA_CONSENT_REQUIRED') || message.includes('"consentRequired":true');
+}
+
+function isDesktopConsentError(err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return message.includes('DESKTOP_CONSENT_REQUIRED');
 }
 
 export function BotListPageNext({
@@ -77,6 +84,7 @@ export function BotListPageNext({
     const batch = useBotBatchSelection();
     const openWebui = useOpenWebui();
     const openSnowlumaNovnc = useOpenSnowlumaNovnc();
+    const desktopConsent = useDesktopConsentGate();
 
     // 批量删除二次确认
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -201,6 +209,14 @@ export function BotListPageNext({
         try {
             await mutations.startBotAsync(botId);
         } catch (err: unknown) {
+            if (isDesktopConsentError(err)) {
+                await desktopConsent.ensureConsent(async () => {
+                    const again = await prepareSnowLumaConsentOrOpen(botId);
+                    if (!again) return;
+                    await mutations.startBotAsync(botId);
+                });
+                return;
+            }
             if (isSnowLumaConsentError(err)) {
                 await openSnowLumaConsent(botId);
                 return;
@@ -209,36 +225,39 @@ export function BotListPageNext({
         } finally {
             setStartingBotId(null);
         }
-    }, [mutations, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
+    }, [desktopConsent, mutations, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
 
     const handleStartBot = useCallback(async (botId: string) => {
-        clearConsentErrorSuppression(botId);
-        setStartingBotId(botId);
-        const gate = dockerStartGate(botId);
-        if (gate) {
-            pushInfoBar({
-                tone: 'danger',
-                title: '无法启动',
-                content: gate,
-                key: `bot-start-gate:${botId}`,
-            });
-            setStartingBotId(null);
-            return;
-        }
-        let drift: ConfigDrift | null = null;
-        try {
-            drift = await botService.detectConfigDrift(botId);
-        } catch {
-            drift = null;
-        }
-        if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
-            setDriftBotId(botId);
-            setPendingDrift(drift);
-            setStartingBotId(null);
-            return;
-        }
-        startBotDirect(botId).catch(() => undefined);
-    }, [clearConsentErrorSuppression, dockerStartGate, startBotDirect]);
+        const allowed = await desktopConsent.ensureConsent(async () => {
+            clearConsentErrorSuppression(botId);
+            setStartingBotId(botId);
+            const gate = dockerStartGate(botId);
+            if (gate) {
+                pushInfoBar({
+                    tone: 'danger',
+                    title: '无法启动',
+                    content: gate,
+                    key: `bot-start-gate:${botId}`,
+                });
+                setStartingBotId(null);
+                return;
+            }
+            let drift: ConfigDrift | null = null;
+            try {
+                drift = await botService.detectConfigDrift(botId);
+            } catch {
+                drift = null;
+            }
+            if (drift && (drift.added.length > 0 || drift.modified.length > 0)) {
+                setDriftBotId(botId);
+                setPendingDrift(drift);
+                setStartingBotId(null);
+                return;
+            }
+            startBotDirect(botId).catch(() => undefined);
+        });
+        if (!allowed) return;
+    }, [clearConsentErrorSuppression, desktopConsent, dockerStartGate, startBotDirect]);
 
     const handleDriftConfirm = useCallback(async (decisions: DriftDecision[]) => {
         if (!driftBotId) return;
@@ -390,19 +409,27 @@ export function BotListPageNext({
     const onBatchStart = () => {
         if (batch.selectedIds.size === 0) return;
         const ids = Array.from(batch.selectedIds);
-        setBatchStartPreparing(true);
-        void (async () => {
-            for (const botId of ids) {
-                clearConsentErrorSuppression(botId);
-                const config = configByBot[botId] ?? null;
-                const flavor = flavorByBot[botId] ?? config?.bot.backend_type ?? null;
-                if (!isSnowLumaFlavor(flavor)) continue;
-                const ready = await prepareSnowLumaConsentOrOpen(botId);
-                if (!ready) return;
-            }
-            mutations.batchStart(ids);
-        })().finally(() => setBatchStartPreparing(false));
+        void desktopConsent.ensureConsent(() => {
+            setBatchStartPreparing(true);
+            void (async () => {
+                for (const botId of ids) {
+                    clearConsentErrorSuppression(botId);
+                    const config = configByBot[botId] ?? null;
+                    const flavor = flavorByBot[botId] ?? config?.bot.backend_type ?? null;
+                    if (!isSnowLumaFlavor(flavor)) continue;
+                    const ready = await prepareSnowLumaConsentOrOpen(botId);
+                    if (!ready) return;
+                }
+                mutations.batchStart(ids);
+            })().finally(() => setBatchStartPreparing(false));
+        });
     };
+
+    const onCreateBot = useCallback(() => {
+        void desktopConsent.ensureConsent(() => {
+            onConfigureBot(null);
+        });
+    }, [desktopConsent, onConfigureBot]);
     const onBatchStop = () => {
         if (batch.selectedIds.size === 0) return;
         mutations.batchStop(Array.from(batch.selectedIds));
@@ -455,7 +482,7 @@ export function BotListPageNext({
                 ) : error ? (
                     <ErrorState onRetry={() => refetch()} />
                 ) : botSnapshots.length === 0 ? (
-                    <EmptyState onCreate={() => onConfigureBot(null)} />
+                    <EmptyState onCreate={onCreateBot} />
                 ) : (
                     <BotListGrid
                         bots={botSnapshots}
@@ -480,7 +507,7 @@ export function BotListPageNext({
             <FloatingActions
                 visible={!batch.isBatchMode}
                 busy={mutations.isPending}
-                onCreate={() => onConfigureBot(null)}
+                onCreate={onCreateBot}
                 onRefresh={() => refetch()}
                 onEnterBatch={batch.toggleBatch}
             />
@@ -544,6 +571,15 @@ export function BotListPageNext({
                 onConfirm={handleConsentConfirm}
                 onCancel={handleConsentCancel}
             />
+
+            <DesktopConsentDialog
+                open={desktopConsent.open}
+                mode={desktopConsent.mode}
+                payload={desktopConsent.payload}
+                submitting={desktopConsent.submitting}
+                onAccept={() => void desktopConsent.accept()}
+                onClose={desktopConsent.close}
+            />
         </div>
     );
 }
@@ -601,10 +637,10 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 /// motion 逻辑。stagger 由档位 preset 提供;优雅档 stagger=0 退化为同步进场。
 type GridProps = {
     bots: ReturnType<typeof useBotSnapshots>['data'] extends infer T
-        ? T extends readonly (infer U)[]
-            ? U[]
-            : never
-        : never;
+    ? T extends readonly (infer U)[]
+    ? U[]
+    : never
+    : never;
     flavorByBot: ReturnType<typeof useBotFlavorMap>;
     configByBot: ReturnType<typeof useBotConfigsMap>;
     napcat: ReturnType<typeof useNapcatLogin>;

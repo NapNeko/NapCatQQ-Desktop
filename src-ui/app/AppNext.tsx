@@ -32,6 +32,8 @@ import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
 import { useBootstrap } from '../hooks/bootstrap/useBootstrap';
 import { useDataLayoutConsolidateAlert } from '../hooks/bootstrap/useDataLayoutConsolidateAlert';
+import { useDesktopConsentGate } from '../hooks/desktop/useDesktopConsentGate';
+import { DesktopConsentDialog } from '../shared/components/next/DesktopConsentDialog';
 
 /// 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
 const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
@@ -84,6 +86,13 @@ export const AppNext: React.FC = () => {
 
     const { bootstrap } = useBootstrap();
     useDataLayoutConsolidateAlert(bootstrap);
+
+    const desktopConsent = useDesktopConsentGate();
+    useEffect(() => {
+        void desktopConsent.promptAtStartup();
+        // 仅挂载时检查一次；同意状态由本机 consent 文件与 content-hash 决定
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- startup once
+    }, []);
 
     const { bars, dismiss, remove } = useGlobalInfoBars();
 
@@ -175,6 +184,15 @@ export const AppNext: React.FC = () => {
 
                 <InfoBarStack items={bars} onDismiss={dismiss} onAutoDismiss={remove} />
                 <DesktopExitGate />
+
+                <DesktopConsentDialog
+                    open={desktopConsent.open}
+                    mode={desktopConsent.mode}
+                    payload={desktopConsent.payload}
+                    submitting={desktopConsent.submitting}
+                    onAccept={() => void desktopConsent.accept()}
+                    onClose={desktopConsent.close}
+                />
             </div>
         </TooltipProvider>
     );

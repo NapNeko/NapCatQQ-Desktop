@@ -46,7 +46,11 @@ export function useBotMutations({ onMessage }: MutationCallbacks = {}) {
         },
         onError: (err: any) => {
             const text = err.message || String(err);
-            if (text.includes('SNOWLUMA_CONSENT_REQUIRED') || text.includes('"consentRequired":true')) {
+            if (
+                text.includes('SNOWLUMA_CONSENT_REQUIRED')
+                || text.includes('DESKTOP_CONSENT_REQUIRED')
+                || text.includes('"consentRequired":true')
+            ) {
                 return;
             }
             onMessage?.({ type: 'error', text: `启动失败: ${err.message || err}` });

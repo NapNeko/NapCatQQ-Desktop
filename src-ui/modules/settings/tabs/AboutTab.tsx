@@ -18,8 +18,10 @@ import {
     type AvailableUpdate,
 } from '../../../core/services/desktop-update.service';
 import { useComponentAction } from '../../../hooks/components/useComponentAction';
+import { useDesktopConsentGate } from '../../../hooks/desktop/useDesktopConsentGate';
 import { useOpenExternal } from '../../../hooks/useOpenExternal';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { DesktopConsentDialog } from '../../../shared/components/next/DesktopConsentDialog';
 import { Button, Spinner } from '../../../shared/ui';
 import { cn } from '../../../shared/utils/cn';
 import { FieldRow, SettingsSection, SettingsTabSections } from '../_shared';
@@ -38,6 +40,7 @@ export function AboutTab() {
     const openExternal = useOpenExternal();
     const { startAction, isInstalling } = useComponentAction();
     const installing = isInstalling('desktop_self', 'local');
+    const consent = useDesktopConsentGate();
 
     const [checkState, setCheckState] = useState<CheckState>('idle');
     const [available, setAvailable] = useState<AvailableUpdate | null>(null);
@@ -204,7 +207,7 @@ export function AboutTab() {
                         <ExternalLink size={12} strokeWidth={2} className="opacity-70" />
                     </Button>
                 </FieldRow>
-                <FieldRow label="许可" description={APP_LICENSE_SPDX} isLast>
+                <FieldRow label="许可" description={APP_LICENSE_SPDX}>
                     <Button
                         variant="secondary"
                         size="sm"
@@ -212,6 +215,19 @@ export function AboutTab() {
                     >
                         查看 LICENSE
                         <ExternalLink size={12} strokeWidth={2} className="opacity-70" />
+                    </Button>
+                </FieldRow>
+                <FieldRow
+                    label="用户协议"
+                    description="EULA 与隐私说明（本机同意记录）"
+                    isLast
+                >
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void consent.openViewer()}
+                    >
+                        查看
                     </Button>
                 </FieldRow>
             </SettingsSection>
@@ -249,6 +265,15 @@ export function AboutTab() {
                     ))}
                 </SettingsSection>
             ))}
+
+            <DesktopConsentDialog
+                open={consent.open}
+                mode={consent.mode}
+                payload={consent.payload}
+                submitting={consent.submitting}
+                onAccept={() => void consent.accept()}
+                onClose={consent.close}
+            />
         </SettingsTabSections>
     );
 }
