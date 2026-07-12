@@ -1892,10 +1892,11 @@ mod tests {
     }
 
     #[test]
-    fn list_components_returns_six_items() {
+    fn list_components_returns_seven_items() {
         // tauri::command 内部就是调 catalog(),本测试直接验等价
+        // Framework×2 + RuntimeDep×3 + SelfApp×2(ncd-watch + Desktop)
         let result = catalog();
-        assert_eq!(result.len(), 6);
+        assert_eq!(result.len(), 7);
     }
 }
 

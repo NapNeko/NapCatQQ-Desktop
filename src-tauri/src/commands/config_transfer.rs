@@ -283,6 +283,20 @@ fn normalize_servers_import(value: serde_json::Value) -> Result<serde_json::Valu
     Ok(migrated.payload)
 }
 
+/// 校验 app-settings.json:反序列化为 AppSettings 并 normalize,再写回 JSON
+fn normalize_app_settings_import(value: serde_json::Value) -> Result<serde_json::Value, String> {
+    let mut settings: ncd_domain::AppSettings = serde_json::from_value(value)
+        .map_err(|e| format!("app-settings.json 不是合法应用设置,已中止导入: {e}"))?;
+    settings.normalize_performance_monitor();
+    settings.normalize_task_queue_cleanup();
+    settings.normalize_lightweight_prefs();
+    settings.normalize_remote_host_health_probe();
+    settings.offline_webhook.normalize();
+    settings.offline_onebot.normalize();
+    settings.poller.offline_notify_behavior.normalize();
+    serde_json::to_value(&settings).map_err(|e| format!("序列化 app-settings 失败: {e}"))
+}
+
 /// 读 staging 里的配置文件,全量强类型反序列化 + 迁移 + validate,通过后构造一个
 /// 一次性 JsonTransaction任一文件语义非法即整体中止(返回 Err),绝不半导入;调用方
 /// 对返回的 transaction 走 ConfigStore::apply_transaction 原子提交(失败自动回滚)
@@ -313,6 +327,7 @@ fn build_import_transaction(
                 payload
             }
             "bot.json" => normalize_bot_config_import(value, secrets)?,
+            "app-settings.json" => normalize_app_settings_import(value)?,
             "servers.json" => normalize_servers_import(value)?,
             other => return Err(format!("未知导入文件: {other}")),
         };
@@ -321,9 +336,9 @@ fn build_import_transaction(
     }
 
     // 旧版 config.json 含 WebHook/Email 时,仅在目标 app-settings.json 不存在时种子写入
+    // 路径与 DataPaths::app_settings_path / TRANSFER_FILES 一致:config/app-settings.json
     if let Some(settings_payload) = pending_app_settings {
         let app_settings_path = data_root
-            .join("runtime")
             .join("config")
             .join(ncd_runtime::app_config_migration::APP_SETTINGS_FILE);
         if !app_settings_path.is_file() {
@@ -384,21 +399,30 @@ mod tests {
     const VALID_BOT: &str =
         r#"{"bots":[{"bot":{"QQID":"10001","name":"X"},"connect":{},"advanced":{}}]}"#;
 
+    fn valid_app_settings_json() -> String {
+        serde_json::to_string(&ncd_domain::AppSettings::default()).unwrap()
+    }
+
     #[test]
     fn build_import_transaction_validates_all_and_batches_writes() {
         let staging = tempfile::tempdir().unwrap();
         write_file(staging.path(), "config.json", VALID_CONFIG);
         write_file(staging.path(), "bot.json", VALID_BOT);
+        write_file(
+            staging.path(),
+            "app-settings.json",
+            &valid_app_settings_json(),
+        );
         write_file(staging.path(), "servers.json", "[]");
         let (_d, secrets) = force_fallback_secrets();
         let data_root = tempfile::tempdir().unwrap();
 
         let (txn, files, skipped) =
             build_import_transaction(staging.path(), data_root.path(), &secrets).unwrap();
-        // 三个文件一次性进同一个 transaction,而非逐文件落盘
-        assert_eq!(txn.writes.len(), 3);
-        assert_eq!(files.len(), 3);
-        assert!(skipped.is_empty());
+        // 四个文件一次性进同一个 transaction,而非逐文件落盘
+        assert_eq!(txn.writes.len(), 4, "files={files:?} skipped={skipped:?}");
+        assert_eq!(files.len(), 4);
+        assert!(skipped.is_empty(), "unexpected skipped: {skipped:?}");
     }
 
     #[test]
@@ -445,7 +469,8 @@ mod tests {
 
         assert_eq!(txn.writes.len(), 1);
         assert_eq!(files, vec!["远端服务器档案".to_string()]);
-        assert_eq!(skipped.len(), 2);
+        // config / bot / app-settings 缺失
+        assert_eq!(skipped.len(), 3, "skipped={skipped:?}");
         let payload = &txn.writes[0].payload;
         assert!(payload.is_array());
         assert_eq!(payload[0]["id"], "legacy-s1");
@@ -474,6 +499,7 @@ mod tests {
             build_import_transaction(staging.path(), data_root.path(), &secrets).unwrap();
         assert_eq!(txn.writes.len(), 1);
         assert_eq!(files, vec!["应用配置".to_string()]);
-        assert_eq!(skipped.len(), 2);
+        // bot / app-settings / servers 缺失
+        assert_eq!(skipped.len(), 3, "skipped={skipped:?}");
     }
 }

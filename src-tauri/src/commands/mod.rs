@@ -4,17 +4,17 @@ pub mod components;
 pub mod config_transfer;
 pub mod deployment_tasks;
 pub mod desktop_consent;
-pub mod desktop_onboarding;
 pub mod desktop_log;
+pub mod desktop_onboarding;
 pub mod desktop_update;
 pub mod docker;
+pub mod exit;
 pub mod host_resolve;
 pub mod ncd_watch;
 pub mod release;
 pub mod servers;
 pub mod snowluma;
 pub mod system_metrics;
-pub mod exit;
 pub mod tray;
 pub mod window;
 
@@ -23,8 +23,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use ncd_runtime::{DomainEvent, EventBus};
 use ncd_domain::BootstrapSnapshot;
+use ncd_runtime::{DomainEvent, EventBus};
 use tauri::State;
 
 use crate::AppState;
@@ -220,18 +220,21 @@ pub fn publish_demo_event(state: State<'_, AppState>) -> Result<(), String> {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use ncd_domain::{
+        BackendKind, BootstrapSnapshot, BotFlavor, BotId, BotStatus, DesktopNotifySettings,
+        StopMode, WebUiPollerSettings,
+    };
     use ncd_runtime::{
         BotManager, BroadcastEventBus, DispatchRenderer, EventBus, EventFilter,
-        LocalBotConfigRepo, LocalConfigStore, NoopOfflineNotifier, ReqwestNapCatWebUiClient,
-        SecretStoreImpl, ServerManager, InMemoryCredentialStore, FileSystemRuntimeLaunchPlanner,
-    };
-    use ncd_domain::{
-        BootstrapSnapshot, DesktopNotifySettings, WebUiPollerSettings,
-        BotId, BotStatus, BotFlavor, BackendKind, StopMode,
+        FileSystemRuntimeLaunchPlanner, InMemoryCredentialStore, LocalBotConfigRepo,
+        LocalConfigStore, NoopOfflineNotifier, ReqwestNapCatWebUiClient, SecretStoreImpl,
+        ServerManager,
     };
     use ncd_traits::{
         ConfigStore, SecretStore,
-        runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts},
+        runtime_backend::{
+            BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts,
+        },
     };
     use std::sync::Arc;
     use tempfile::tempdir;
@@ -262,11 +265,22 @@ mod tests {
         async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {
             Err(BotBackendError::ConfigNotFound(bot_id))
         }
-        async fn write_config(&self, _bot_id: BotId, _cfg: &BotRuntimeConfig) -> Result<(), BotBackendError> {
+        async fn write_config(
+            &self,
+            _bot_id: BotId,
+            _cfg: &BotRuntimeConfig,
+        ) -> Result<(), BotBackendError> {
             Ok(())
         }
-        async fn tail_log(&self, _bot_id: BotId, _opts: TailOpts) -> Result<LogSnapshot, BotBackendError> {
-            Ok(LogSnapshot { lines: Vec::new(), total_lines: 0 })
+        async fn tail_log(
+            &self,
+            _bot_id: BotId,
+            _opts: TailOpts,
+        ) -> Result<LogSnapshot, BotBackendError> {
+            Ok(LogSnapshot {
+                lines: Vec::new(),
+                total_lines: 0,
+            })
         }
     }
 
@@ -276,31 +290,26 @@ mod tests {
         let store = Arc::new(LocalConfigStore::new(root));
         let secrets: Arc<dyn SecretStore + Send + Sync> =
             Arc::new(SecretStoreImpl::new(root.join("secrets")));
-        let repo = Arc::new(LocalBotConfigRepo::new(
-            Arc::clone(&store),
-            secrets,
-        ));
+        let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
         let renderer = Arc::new(DispatchRenderer::new(
             store.config_dir(),
             store.config_dir(),
         ));
         let backend: Arc<dyn BotBackend> = Arc::new(FakeBackend);
-        let launch_planner = Arc::new(FileSystemRuntimeLaunchPlanner::new(
-            ncd_runtime::DataPaths::new(root).components_dir(),
-        ));
+        // 注入假 QQ 安装目录,CI 无本机 QQ 注册表时仍能测到 NapCat 缺组件
+        let qq_install = root.join("fake-qqnt");
+        let _ = std::fs::create_dir_all(&qq_install);
+        let _ = std::fs::write(qq_install.join("QQ.exe"), b"");
+        let launch_planner = Arc::new(
+            FileSystemRuntimeLaunchPlanner::new(ncd_runtime::DataPaths::new(root).components_dir())
+                .with_qq_install_path(qq_install),
+        );
         let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> =
             Arc::new(ReqwestNapCatWebUiClient::new().expect("init webui client"));
-        let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> =
-            Arc::new(NoopOfflineNotifier);
-        let poller_settings = Arc::new(tokio::sync::RwLock::new(
-            WebUiPollerSettings::default(),
-        ));
-        let desktop_notify = Arc::new(tokio::sync::RwLock::new(
-            DesktopNotifySettings::default(),
-        ));
-        let app_settings = Arc::new(tokio::sync::RwLock::new(
-            ncd_domain::AppSettings::default(),
-        ));
+        let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> = Arc::new(NoopOfflineNotifier);
+        let poller_settings = Arc::new(tokio::sync::RwLock::new(WebUiPollerSettings::default()));
+        let desktop_notify = Arc::new(tokio::sync::RwLock::new(DesktopNotifySettings::default()));
+        let app_settings = Arc::new(tokio::sync::RwLock::new(ncd_domain::AppSettings::default()));
         let composite_offline = ncd_runtime::CompositeOfflineNotifier::new(
             None,
             Arc::clone(&poller_settings),

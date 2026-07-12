@@ -420,9 +420,14 @@ mod tests {
             store.config_dir(),
         ));
         let backend: Arc<dyn BotBackend> = Arc::new(FakeBackend);
-        let launch_planner = Arc::new(FileSystemRuntimeLaunchPlanner::new(
-            ncd_runtime::DataPaths::new(root).components_dir(),
-        ));
+        // 注入假 QQ 安装目录,CI runner 无本机 QQ 注册表时仍能测到 NapCat 缺组件
+        let qq_install = root.join("fake-qqnt");
+        let _ = std::fs::create_dir_all(&qq_install);
+        let _ = std::fs::write(qq_install.join("QQ.exe"), b"");
+        let launch_planner = Arc::new(
+            FileSystemRuntimeLaunchPlanner::new(ncd_runtime::DataPaths::new(root).components_dir())
+                .with_qq_install_path(qq_install),
+        );
         let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> =
             Arc::new(ncd_runtime::ReqwestNapCatWebUiClient::new().expect("init webui client"));
         let offline_notifier: Arc<dyn ncd_runtime::OfflineNotifier> =
