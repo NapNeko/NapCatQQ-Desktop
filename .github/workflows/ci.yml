@@ -1,19 +1,19 @@
-# PR / 主分支日常门禁。发版 MSI 不跑本文件；见 release.yml + build-msi.yml。
+# 质量门禁：只在 PR 与手动触发时跑，不在每次 push main 时跑。
+# 发版前可 workflow_dispatch 本工作流，或 release.yml 勾选 run_gates。
+# MSI 打包见 build-msi.yml / release.yml。
 # Rust 全量测试必须在 Windows（大量 #[cfg(windows)]）。
 #
 # 分支策略：
-#   main  ← Rust/Tauri 主线（原 rust-migration）
-#   v1    ← 旧 Python 归档（原 master），不跑本 CI
+#   main  ← Rust/Tauri 主线
+#   v1    ← 旧 Python 归档，不跑本 CI
 
 name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
