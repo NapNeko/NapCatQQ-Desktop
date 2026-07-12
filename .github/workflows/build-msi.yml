@@ -136,8 +136,10 @@ jobs:
       - name: Check version metadata
         run: pnpm run check:versions
 
+      # 不要用 `pnpm run tauri:build -- --bundles msi`：
+      # pnpm 会把中间的 `--` 原样传给 tauri，导致 `--bundles` 落到 cargo 上失败。
       - name: Build Tauri MSI
-        run: pnpm run tauri:build -- --bundles msi
+        run: pnpm run tauri:build:msi
 
       - name: Collect MSI output
         id: collect_msi
