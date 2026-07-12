@@ -1,5 +1,6 @@
-// 全应用共享一份 Tauri 事件订阅（22 路 listen 只建一次），按 handler 分发。
-// 避免每个 useDomainEvents 实例各订一套 listen（WebView2 订阅乘数 + IPC 解析开销）。
+// 全应用共享一份 Tauri 事件订阅：底层 eventStreamService.subscribe 只建一次，
+// 再按 handler 分发。业务侧（含模块级 store）统一走 subscribeDomainEvents，
+// 避免每个消费者各订一套 listen（WebView2 订阅乘数 + 重复 JSON 解析）。
 
 import type { DomainEvent } from '../ipc/types';
 import {
@@ -35,10 +36,8 @@ function ensureStarted(): Promise<void> {
     return startPromise;
 }
 
-/**
- * 订阅合并 DomainEvent 流。返回的函数与 useEffect cleanup 对齐调用即可。
- * 最后一个 handler 移除时会 unlisten 全部 22 路通道。
- */
+// 订阅合并 DomainEvent 流。返回的函数与 useEffect cleanup 对齐调用即可。
+// 最后一个 handler 移除时会 unlisten 底层全量通道。
 export function subscribeDomainEvents(handler: Handler): () => void {
     handlers.add(handler);
     void ensureStarted().catch((err) => {
@@ -60,7 +59,7 @@ export function subscribeDomainEvents(handler: Handler): () => void {
     };
 }
 
-/** 测试 / HMR 复位：清空 handler 并拆掉底层 listen。 */
+// 测试 / HMR 复位：清空 handler 并拆掉底层 listen。
 export function _resetDomainEventHubForTests(): void {
     handlers.clear();
     if (teardown) {
@@ -72,4 +71,9 @@ export function _resetDomainEventHubForTests(): void {
     }
     teardown = null;
     startPromise = null;
+}
+
+// 测试用：当前 fan-out handler 数量（不含底层 listen 本身）。
+export function _domainEventHandlerCountForTests(): number {
+    return handlers.size;
 }

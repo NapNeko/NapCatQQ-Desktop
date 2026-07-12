@@ -1,15 +1,18 @@
 // NapCat 登录态聚合 store（模块级单例）。
 //
-// state 持久不丢、跨路由保留；事件订阅在首个 React 订阅者来时挂一次，永远不
-// 卸载。invalidationEpoch 自动消失定时器（被踢 toast 3s 后淡出）也搬进 store，
+// state 持久不丢、跨路由保留；事件订阅在首个 React 订阅者来时挂一次，正常运行
+// 不卸载。invalidationEpoch 自动消失定时器（被踢 toast 3s 后淡出）也搬进 store，
 // 跟组件树解耦。
 //
 // 冷启动 / 页面晚于 reconcile 时：拉 list_napcat_webui_bindings 补齐 binding，
 // 避免只靠 broadcast 事件导致 WebUI 按钮永不亮（多实例 port+1 场景尤甚）。
 // Running 状态变化时再 hydrate 一次，不依赖固定 setTimeout 魔法时间。
+//
+// 事件走 domain-event-hub，不直接 eventStreamService.subscribe，避免与其它
+// 消费者各订一套底层 listen。
 
 import { createStore } from '../utils/createStore';
-import { eventStreamService } from '../../core/services/event-stream.service';
+import { subscribeDomainEvents } from '../../core/services/domain-event-hub';
 import { botService } from '../../core/services/bot.service';
 import {
     clearInvalidation,
@@ -24,7 +27,7 @@ const store = createStore<NapcatLoginState>(initialNapcatLoginState);
 const timers: Record<string, ReturnType<typeof setTimeout>> = {};
 const lastEpoch: Record<string, number> = {};
 
-let subscribePromise: Promise<() => void> | null = null;
+let unsubDomain: (() => void) | null = null;
 let hydrateInFlight: Promise<void> | null = null;
 let hydrateAttempts = 0;
 const MAX_EMPTY_HYDRATE_RETRIES = 10;
@@ -104,8 +107,8 @@ function onDomainEvent(event: DomainEvent): void {
 }
 
 function ensureSubscribed(): void {
-    if (subscribePromise) return;
-    subscribePromise = eventStreamService.subscribe(onDomainEvent);
+    if (unsubDomain) return;
+    unsubDomain = subscribeDomainEvents(onDomainEvent);
     void scheduleHydrate();
 }
 
@@ -117,12 +120,19 @@ export const napcatLoginStore = {
         return store.subscribe(listener);
     },
 
-    /** 测试 / dev 重置用。 */
+    // 测试 / dev 重置用。
     _reset(): void {
         for (const t of Object.values(timers)) clearTimeout(t);
         for (const k of Object.keys(timers)) delete timers[k];
         for (const k of Object.keys(lastEpoch)) delete lastEpoch[k];
-        subscribePromise = null;
+        if (unsubDomain) {
+            try {
+                unsubDomain();
+            } catch {
+                /* noop */
+            }
+            unsubDomain = null;
+        }
         hydrateInFlight = null;
         hydrateAttempts = 0;
         store._reset();

@@ -1,6 +1,5 @@
 // 全局 DomainEvent 订阅 hook。
-// 把 `eventStreamService.subscribe` 包装成稳定的 React effect，handler 用 ref
-// 锁定避免重订阅风暴。
+// 经 domain-event-hub 订阅；handler 用 ref 锁定，避免 effect 重跑时重订阅。
 
 import { useEffect, useRef } from 'react';
 import { subscribeDomainEvents } from '../../core/services/domain-event-hub';

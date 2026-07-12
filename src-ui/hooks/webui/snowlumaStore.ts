@@ -4,9 +4,11 @@
 // 冷启动 / 页面晚于 reconcile 时：拉 list_snowluma_ui_snapshot 补齐
 // daemonState / loginState / endpointsReady，避免只靠 broadcast 丢事件
 // 导致 WebUI 按钮与登录徽章永不恢复（对齐 napcatLoginStore hydrate）。
+//
+// 事件走 domain-event-hub，不直接 eventStreamService.subscribe。
 
 import { createStore } from '../utils/createStore';
-import { eventStreamService } from '../../core/services/event-stream.service';
+import { subscribeDomainEvents } from '../../core/services/domain-event-hub';
 import { botService } from '../../core/services/bot.service';
 import {
     initialSnowlumaState,
@@ -20,7 +22,7 @@ import type { DomainEvent } from '../../core/ipc/types';
 
 const store = createStore<SnowlumaState>(initialSnowlumaState);
 
-let subscribePromise: Promise<() => void> | null = null;
+let unsubDomain: (() => void) | null = null;
 let hydrateInFlight: Promise<void> | null = null;
 let hydrateAttempts = 0;
 const MAX_EMPTY_HYDRATE_RETRIES = 10;
@@ -33,10 +35,8 @@ const emptyBot = (): SnowlumaBotState => ({
 });
 
 function ensureSubscribed(): void {
-    if (subscribePromise) return;
-    subscribePromise = eventStreamService.subscribe((event) => {
-        onDomainEvent(event);
-    });
+    if (unsubDomain) return;
+    unsubDomain = subscribeDomainEvents(onDomainEvent);
     void scheduleHydrate();
 }
 
@@ -134,10 +134,18 @@ export const snowlumaStore = {
         return store.subscribe(listener);
     },
 
-    /** 测试 / dev 重置用。 */
+    // 测试 / dev 重置用。
     _reset(): void {
-        store._reset();
+        if (unsubDomain) {
+            try {
+                unsubDomain();
+            } catch {
+                /* noop */
+            }
+            unsubDomain = null;
+        }
         hydrateAttempts = 0;
         hydrateInFlight = null;
+        store._reset();
     },
 };

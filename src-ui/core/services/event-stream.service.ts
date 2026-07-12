@@ -1,7 +1,8 @@
 // Tauri 事件流订阅服务。
 //
 // 唯一持有所有 Tauri event name 字符串的位置。
-// 业务侧应经 `domain-event-hub` / `useDomainEvents` 订阅，勿多处直接 subscribe（避免 22×N listen）。
+// 业务侧应经 domain-event-hub / useDomainEvents 订阅，不要直接 subscribe，
+// 否则每个调用方都会再订一遍 DOMAIN_EVENT_NAMES 全量通道。
 
 import { isTauri, listen } from '../ipc/transport';
 import type { DomainEvent } from '../ipc/types';
@@ -10,8 +11,7 @@ import { subscribeMockEvents } from '../ipc/mock/events.mock';
 export type DomainEventCallback = (event: DomainEvent) => void;
 export type UnsubscribeFn = () => void;
 
-/// 后端会广播的 Tauri 事件名清单。
-/// **新增事件类型时唯一需要改的位置。**
+// 后端会广播的 Tauri 事件名清单。新增事件类型时只改这里。
 const DOMAIN_EVENT_NAMES = [
     'bot_state_changed',
     'bot_status_changed',
@@ -43,8 +43,8 @@ const DOMAIN_EVENT_NAMES = [
 ] as const;
 
 export const eventStreamService = {
-    /// 订阅一份合并的 DomainEvent 流。
-    /// 浏览器预览模式自动 fallback 到 mock 周期事件。
+    // 订阅一份合并的 DomainEvent 流。
+    // 浏览器预览模式自动 fallback 到 mock 周期事件。
     subscribe: async (callback: DomainEventCallback): Promise<UnsubscribeFn> => {
         if (!isTauri) {
             return subscribeMockEvents(callback);
@@ -73,6 +73,6 @@ export const eventStreamService = {
     },
 };
 
-/// 浏览器预览模式下，给 services 内部的 mock 状态机用：手工广播一条事件。
-/// （现在只 re-export 供 mock 内部调用，不打算给业务代码用。）
+// 浏览器预览模式下，给 services 内部的 mock 状态机用：手工广播一条事件。
+// 只 re-export 供 mock 内部调用，不打算给业务代码用。
 export { emitMockEvent } from '../ipc/mock/events.mock';
