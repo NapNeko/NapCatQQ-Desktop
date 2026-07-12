@@ -11,8 +11,13 @@ use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use ncd_domain::SchemaVersion;
 use ncd_domain::release_snapshot::ReleaseInfo;
-use ncd_network::{DownloadConfig, NoopProgressSink, download_with_resume};
+use ncd_domain::{ProgressEvent, ProgressKind, ProgressLogLevel};
+use ncd_network::{
+    download_with_resume, DownloadConfig, DownloadProgressSink, DownloadStage, NoopProgressSink,
+    ProgressUpdate,
+};
 use ncd_runtime::release::fetch_release_snapshot;
+use ncd_runtime::{BroadcastEventBus, DomainEvent, EventBus};
 use ncd_update::{AvailableUpdate, UpdateChannel, UpdateError, UpdateProvider};
 use semver::Version;
 use tokio_util::sync::CancellationToken;
@@ -156,15 +161,139 @@ pub fn release_info_to_available_update(
         notes: info.release_notes.clone(),
         pub_date,
         download_url,
-        // 字段名是 signature（原为 Ed25519）；MSI 路径暂塞期望 SHA256 hex，无 digest 时为空
-        signature: sha.unwrap_or_default(),
+        signature: String::new(),
+        content_sha256: sha.unwrap_or_default(),
     })
+}
+
+/// 把 ncd-network 下载进度翻成 component_action_progress，复用组件页任务队列 UI。
+pub struct DesktopUpdateProgressSink {
+    event_bus: BroadcastEventBus,
+    task_id: String,
+    /// 当前 step（检查=1，下载=2）；下载开始前 set_step(2)
+    step: std::sync::atomic::AtomicU32,
+}
+
+impl DesktopUpdateProgressSink {
+    pub fn new(event_bus: BroadcastEventBus, task_id: impl Into<String>, step: u32) -> Self {
+        Self {
+            event_bus,
+            task_id: task_id.into(),
+            step: std::sync::atomic::AtomicU32::new(step),
+        }
+    }
+
+    pub fn set_step(&self, step: u32) {
+        self.step
+            .store(step, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn current_step(&self) -> u32 {
+        self.step.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn publish(&self, kind: ProgressKind) {
+        self.event_bus.publish(DomainEvent::component_action_progress(
+            self.task_id.clone(),
+            ProgressEvent::new(kind),
+        ));
+    }
+
+    pub fn emit_started(&self, total_steps: u32) {
+        self.publish(ProgressKind::Started { total_steps });
+    }
+
+    pub fn emit_step_begin(&self, step: u32, message: impl Into<String>) {
+        self.publish(ProgressKind::StepBegin {
+            step,
+            message: message.into(),
+        });
+    }
+
+    pub fn emit_step_end(&self, step: u32, ok: bool) {
+        self.publish(ProgressKind::StepEnd { step, ok });
+    }
+
+    pub fn emit_log(&self, level: ProgressLogLevel, message: impl Into<String>) {
+        self.publish(ProgressKind::Log {
+            level,
+            message: message.into(),
+        });
+    }
+
+    pub fn emit_finished(&self, ok: bool) {
+        self.publish(ProgressKind::Finished { ok });
+    }
+}
+
+#[async_trait]
+impl DownloadProgressSink for DesktopUpdateProgressSink {
+    async fn tick(&self, update: ProgressUpdate) {
+        let pct = match (update.total, update.downloaded) {
+            (Some(t), d) if t > 0 => ((d as f64 / t as f64) * 100.0).clamp(0.0, 99.0) as u8,
+            _ => 0,
+        };
+        let stage_id = match update.stage {
+            DownloadStage::Racing => "racing",
+            DownloadStage::Streaming => "streaming",
+            DownloadStage::SwitchingMirror => "switching_mirror",
+            DownloadStage::Resuming => "resuming",
+        };
+        let message = if update.message.trim().is_empty() {
+            match (update.total, update.speed_bps) {
+                (Some(t), Some(bps)) => format!(
+                    "下载 {} / {} · {}/s",
+                    fmt_bytes(update.downloaded),
+                    fmt_bytes(t),
+                    fmt_bytes(bps)
+                ),
+                (Some(t), None) => {
+                    format!("下载 {} / {}", fmt_bytes(update.downloaded), fmt_bytes(t))
+                }
+                (None, Some(bps)) => {
+                    format!("下载 {} · {}/s", fmt_bytes(update.downloaded), fmt_bytes(bps))
+                }
+                (None, None) => format!("下载 {}", fmt_bytes(update.downloaded)),
+            }
+        } else {
+            update.message
+        };
+
+        self.publish(ProgressKind::StepProgress {
+            step: self.current_step(),
+            percent: pct,
+            message,
+            speed_bps: update.speed_bps,
+            downloaded_bytes: Some(update.downloaded),
+            total_bytes: update.total,
+            download_stage: Some(stage_id.to_string()),
+            docker_layers: None,
+        });
+    }
+}
+
+fn fmt_bytes(n: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = 1024 * 1024;
+    const GB: u64 = 1024 * 1024 * 1024;
+    if n >= GB {
+        format!("{:.2} GB", n as f64 / GB as f64)
+    } else if n >= MB {
+        format!("{:.2} MB", n as f64 / MB as f64)
+    } else if n >= KB {
+        format!("{:.1} KB", n as f64 / KB as f64)
+    } else {
+        format!("{n} B")
+    }
 }
 
 pub struct GithubMsiUpdateProvider {
     data_root: PathBuf,
     /// 检查时注入 PAT 的闭包结果缓存：命令层构造时读一次即可
     github_token: Option<String>,
+    /// 下载进度（install 路径注入；check 路径为 None）
+    progress: Option<Arc<dyn DownloadProgressSink>>,
+    cancel: CancellationToken,
 }
 
 impl GithubMsiUpdateProvider {
@@ -172,7 +301,19 @@ impl GithubMsiUpdateProvider {
         Self {
             data_root: data_root.into(),
             github_token,
+            progress: None,
+            cancel: CancellationToken::new(),
         }
+    }
+
+    pub fn with_progress(mut self, sink: Arc<dyn DownloadProgressSink>) -> Self {
+        self.progress = Some(sink);
+        self
+    }
+
+    pub fn with_cancel(mut self, token: CancellationToken) -> Self {
+        self.cancel = token;
+        self
     }
 
     fn staging_dir(&self) -> PathBuf {
@@ -210,9 +351,9 @@ impl GithubMsiUpdateProvider {
         let actual = hex::encode(hasher.finalize());
         if !expected.eq_ignore_ascii_case(&actual) {
             let _ = tokio::fs::remove_file(path).await;
-            return Err(UpdateError::SignatureFailed {
-                reason: format!("msi sha256 mismatch: expected {expected}, actual {actual}"),
-            });
+            return Err(UpdateError::install_failed(format!(
+                "msi content sha256 mismatch: expected {expected}, actual {actual}"
+            )));
         }
         Ok(())
     }
@@ -280,7 +421,14 @@ async fn download_and_install_windows(
         "downloading desktop MSI"
     );
 
-    let sink = Arc::new(NoopProgressSink);
+    if provider.cancel.is_cancelled() {
+        return Err(UpdateError::Cancelled);
+    }
+
+    let sink: Arc<dyn DownloadProgressSink> = provider
+        .progress
+        .clone()
+        .unwrap_or_else(|| Arc::new(NoopProgressSink));
     let cfg = DownloadConfig {
         mirror_url: Some(update.download_url.clone()),
         ..Default::default()
@@ -289,11 +437,18 @@ async fn download_and_install_windows(
         &update.download_url,
         &dest,
         sink,
-        CancellationToken::new(),
+        provider.cancel.clone(),
         cfg,
     )
     .await
-    .map_err(|e| UpdateError::install_failed(format!("download msi: {e}")))?;
+    .map_err(|e| match e {
+        ncd_network::NetworkError::Cancelled => UpdateError::Cancelled,
+        other => UpdateError::install_failed(format!("download msi: {other}")),
+    })?;
+
+    if provider.cancel.is_cancelled() {
+        return Err(UpdateError::Cancelled);
+    }
 
     let meta = tokio::fs::metadata(&dest)
         .await
@@ -306,7 +461,7 @@ async fn download_and_install_windows(
         )));
     }
 
-    let expected = update.signature.trim();
+    let expected = update.content_sha256.trim();
     GithubMsiUpdateProvider::verify_sha256_if_needed(
         &dest,
         if expected.is_empty() {
@@ -465,6 +620,25 @@ mod tests {
         assert_eq!(u.version, Version::new(3, 1, 0));
         assert!(u.download_url.contains("3.1.0"));
         assert!(is_trusted_desktop_msi_url(&u.download_url));
+        assert!(u.signature.is_empty());
+        assert!(u.content_sha256.is_empty());
+    }
+
+    #[test]
+    fn release_puts_digest_in_content_sha256_not_signature() {
+        let info = sample_info(
+            "3.1.0",
+            vec![(
+                "NapCatQQ-Desktop-3.1.0-x64.msi",
+                "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            )],
+        );
+        let u = release_info_to_available_update(&info).unwrap();
+        assert!(u.signature.is_empty());
+        assert_eq!(
+            u.content_sha256,
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+        );
     }
 
     #[test]
