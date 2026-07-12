@@ -2,9 +2,10 @@
 // useQuery + bot_state_changed 事件合并 → 单一 source of truth。
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { botService } from '../../core/services/bot.service';
 import { useDomainEvents } from '../events/useDomainEvents';
+import { perfMark } from '../../core/domain/performance/perfMarks';
 import type { BotActorSnapshot } from '../../core/ipc/types';
 
 const BOT_SNAPSHOTS_KEY = ['botSnapshots'] as const;
@@ -12,6 +13,7 @@ const BOT_SNAPSHOTS_KEY = ['botSnapshots'] as const;
 export function useBotSnapshots() {
     const queryClient = useQueryClient();
     const mountedAt = useRef(Date.now());
+    const firstDataMarked = useRef(false);
 
     const query = useQuery<BotActorSnapshot[], Error>({
         queryKey: BOT_SNAPSHOTS_KEY,
@@ -20,6 +22,13 @@ export function useBotSnapshots() {
         refetchInterval: () =>
             Date.now() - mountedAt.current < 30_000 ? 2_500 : false,
     });
+
+    useEffect(() => {
+        if (firstDataMarked.current) return;
+        if (query.data === undefined) return;
+        firstDataMarked.current = true;
+        perfMark('bots_first_data', { once: true });
+    }, [query.data]);
 
     useDomainEvents((event) => {
         if (event.kind !== 'bot_state_changed') return;

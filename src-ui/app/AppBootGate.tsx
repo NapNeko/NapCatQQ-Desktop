@@ -11,6 +11,7 @@ import { applySideEffects } from '../hooks/preferences/preferencesStore';
 import { syncRootChromeBackground } from '../core/design/surfaceCanvas';
 import { invoke } from '@tauri-apps/api/core';
 import { RouteErrorBoundary } from '../shared/ui/RouteErrorBoundary';
+import { perfMark, perfMeasure } from '../core/domain/performance/perfMarks';
 
 export const AppBootGate: React.FC = () => {
     const [prefsReady, setPrefsReady] = useState(false);
@@ -24,6 +25,7 @@ export const AppBootGate: React.FC = () => {
         syncRootChromeBackground();
         void hydrateAppUiPreferencesFromDisk().finally(() => {
             syncRootChromeBackground();
+            perfMark('prefs_ready', { once: true });
             setPrefsReady(true);
         });
     }, []);
@@ -40,6 +42,8 @@ export const AppBootGate: React.FC = () => {
             setConfetti(true);
         }
         document.getElementById('root')?.removeAttribute('aria-busy');
+        perfMark('splash_exit', { once: true });
+        perfMeasure('boot_prefs_to_splash_exit', 'prefs_ready', 'splash_exit');
 
         // 显示主窗口（避免透明窗口启动闪烁）
         void invoke('show_main_window').catch((err) => {
