@@ -1093,10 +1093,10 @@ async fn batch_delete_stops_and_removes_bots() {
 #[tokio::test]
 async fn lifecycle_stop_does_not_fallback_when_docker_local_blocked() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
-    let (store, _, backend, manager) = make_manager_with_local_resolver(temp.path());
+    let (store, repo, backend, manager) = make_manager_with_local_resolver(temp.path());
     let bot_id = BotId::new("10120");
 
-    // 直接写 repo 绕过 upsert 矩阵校验,测试运行时路由健壮性
+    // 直接写盘绕过 upsert 矩阵校验;invalidate 后 stop 才能读到 Docker 配置
     let config = docker_local_blocked_config(10120, "bot");
     let payload = serde_json::json!({
         "info": {"configVersion": 999},
@@ -1105,11 +1105,15 @@ async fn lifecycle_stop_does_not_fallback_when_docker_local_blocked() {
     store
         .apply_transaction(JsonTransaction::new().write(store.bot_config_path(), payload))
         .unwrap();
+    repo.invalidate_cache().await;
 
     let err = manager.stop_bot(&bot_id).await.unwrap_err();
-    // 直接写 repo 不走 manager.upsert,actor map 无此 bot 会报 not found,这也算通过:
+    // 未 upsert actor 时可能 not found;有配置时走 Docker 路由失败。
     // 重点是验证没有错误回退本地 backend(stop_count=0)
-    assert!(err.to_string().contains("not found") || err.to_string().contains("Docker"));
+    assert!(
+        err.to_string().contains("not found") || err.to_string().contains("Docker"),
+        "unexpected stop error: {err}"
+    );
     assert_eq!(backend.stop_count(bot_id.clone()).await, 0);
 }
 
@@ -1125,7 +1129,7 @@ async fn lifecycle_delete_does_not_fallback_when_docker_local_blocked() {
         .unwrap();
     manager.start_bot(&bot_id).await.unwrap();
 
-    // 直接写 repo 绕过 upsert 矩阵校验,测试运行时路由健壮性
+    // 直接写盘绕过 upsert 矩阵校验;必须 invalidate 进程内 cache,否则 delete 仍读到本机配置
     let config = docker_local_blocked_config(10121, "bot");
     let payload = serde_json::json!({
         "info": {"configVersion": 999},
@@ -1134,9 +1138,13 @@ async fn lifecycle_delete_does_not_fallback_when_docker_local_blocked() {
     store
         .apply_transaction(JsonTransaction::new().write(store.bot_config_path(), payload))
         .unwrap();
+    repo.invalidate_cache().await;
 
     let err = manager.delete_bot_config(&bot_id).await.unwrap_err();
-    assert!(err.to_string().contains("Docker"));
+    assert!(
+        err.to_string().contains("Docker"),
+        "expected Docker routing error, got: {err}"
+    );
     assert_eq!(backend.stop_count(bot_id).await, 0);
     assert!(repo.get(10121).await.unwrap().is_some());
 }
@@ -1555,13 +1563,18 @@ async fn exit_desktop_leaves_remote_native_running() {
 #[tokio::test]
 async fn upsert_backend_switch_cleans_old_backend_files() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
-    let (_, _, _, manager) = make_manager(temp.path());
-    let config_dir = temp.path().join("runtime").join("config");
+    let (store, _, _, manager) = make_manager(temp.path());
+    // DataPaths: 派生配置在 data_root/config,不是 runtime/config
+    let config_dir = store.config_dir();
 
     let mut napcat_config = bot_config(10008, "bot");
     napcat_config.bot.backend_type = BackendType::NapCat;
     manager.upsert_bot_config(napcat_config).await.unwrap();
-    assert!(config_dir.join("onebot11_10008.json").exists());
+    assert!(
+        config_dir.join("onebot11_10008.json").exists(),
+        "missing napcat onebot under {}",
+        config_dir.display()
+    );
     assert!(config_dir.join("napcat_10008.json").exists());
     assert!(!config_dir.join("onebot_10008.json").exists());
 

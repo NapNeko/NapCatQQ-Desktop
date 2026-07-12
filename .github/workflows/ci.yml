@@ -76,20 +76,16 @@ jobs:
           workspaces: ". -> target"
 
       # ts-bindings 会写出 src-ui/core/ipc/generated；需与提交内容一致（R1）。
+      # 一次 cargo 调起 workspace lib 过滤,避免 6 次 -p 重复解析/编译依赖图。
       - name: Export ts-rs bindings
         shell: pwsh
-        run: |
-          cargo test -p ncd-runtime --lib export_bindings_ -- --quiet
-          cargo test -p ncd-domain --lib export_bindings_ -- --quiet
-          cargo test -p ncd-component --lib export_bindings_ -- --quiet
-          cargo test -p ncd-deploy --lib export_bindings_ -- --quiet
-          cargo test -p ncd-host --lib export_bindings_ -- --quiet
-          cargo test -p ncd-tauri --lib export_bindings_ -- --quiet
+        run: cargo test --workspace --lib export_bindings_ -- --quiet
 
       - name: Assert generated IPC types committed
         shell: pwsh
         run: git diff --exit-code -- src-ui/core/ipc/generated
 
+      # 复用上一步 target；全量仍含 lib/tests（export 再跑一遍成本低）。
       - name: Workspace tests
         run: cargo test --workspace
 

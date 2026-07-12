@@ -32,6 +32,12 @@ impl<S: ConfigStore + 'static> LocalBotConfigRepo<S> {
         }
     }
 
+    /// 丢弃进程内缓存;下次 list/get 从盘重载。
+    /// 测试若绕过 repo 直接改 bot.json,必须先调本方法,否则仍读到旧快照。
+    pub async fn invalidate_cache(&self) {
+        *self.cache.lock().await = None;
+    }
+
     fn bot_path(&self) -> PathBuf {
         Self::bot_path_for(&*self.store)
     }
