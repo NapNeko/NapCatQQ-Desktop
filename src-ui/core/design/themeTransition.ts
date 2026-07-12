@@ -10,7 +10,7 @@
 
 import { gsap } from 'gsap';
 import { toPng } from 'html-to-image';
-import { isDarkSurfaceCanvas, readSurfaceCanvasColor } from './surfaceCanvas';
+import { readSurfaceCanvasColor } from './surfaceCanvas';
 
 /** 主题过渡的动画配置。 */
 export interface ThemeTransitionOptions {
@@ -93,19 +93,15 @@ function runWaveTransition(
     // 在覆盖层遮挡下切换主题，用户看不到 DOM 变化
     changeTheme();
 
-    // 暗色底上不做全页提亮，否则透明窗口会闪白
-    if (!isDarkSurfaceCanvas()) {
-        gsap.fromTo(
-            document.body,
-            { filter: 'brightness(1.06)' },
-            { filter: 'brightness(1)', duration: 0.2, ease: 'power2.out', clearProps: 'filter' },
-        );
-    }
+    // 不用 document.body 的 filter brightness：整页滤镜强制重绘，且暗色窗易闪。
+    // 水波 clip-path 本身已足够炫；rich 档略加大波幅/采样即可。
 
     // ─── 波形参数 ──────────────────────────────────────────────────
-    const amp = Math.max(18, vh * 0.03);   // 波幅
-    const waves = 2.5;                       // 波数（非整数 → 边缘不对称，更自然）
-    const samples = 32;                      // 采样点（32 足够平滑，减少计算量）
+    const rich = opts.level === 'rich';
+    const amp = Math.max(rich ? 22 : 18, vh * (rich ? 0.036 : 0.03));
+    const waves = rich ? 2.8 : 2.5;
+    // rich 多几个采样点更顺；standard 少算一点
+    const samples = rich ? 40 : 28;
 
     // ─── GSAP 驱动水波动画 ─────────────────────────────────────────
     // yBase 从顶部向底部移动：覆盖层从上方开始消失，新主题从上往下出现
@@ -156,16 +152,6 @@ function runWaveTransition(
         duration: dur,
         ease: 'power1.inOut',
     }, 0);
-
-    // rich 档：额外加强亮度脉冲
-    if (opts.level === 'rich' && !isDarkSurfaceCanvas()) {
-        tl.fromTo(
-            document.body,
-            { filter: 'brightness(1.04)' },
-            { filter: 'brightness(1)', duration: dur * 0.35, ease: 'power2.out' },
-            dur * 0.4,
-        );
-    }
 
     // 安全超时清理（防止 GSAP timeline 卡住）
     setTimeout(() => {

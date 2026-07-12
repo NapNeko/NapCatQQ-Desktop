@@ -87,6 +87,7 @@ export function GsapPresence({
                     autoAlpha: 0,
                     opacity: 0,
                     visibility: 'hidden',
+                    clearProps: 'willChange',
                 });
                 setMounted(false);
                 onExited?.();

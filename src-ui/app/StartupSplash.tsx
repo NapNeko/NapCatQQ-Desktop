@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import { useMotion } from '../hooks/preferences/useMotion';
 import { APP_VERSION_LABEL } from '../core/domain/app-meta';
 import logoSplash from '../assets/logo-72.png?inline';
+import { bindVisibilityPause } from '../shared/ui/motion/visibilityPause';
 
 /// 壳已就绪后至少再展示这么久；实际退场还要等进场时间轴播完。
 const MIN_VISIBLE_MS = 880;
@@ -105,7 +106,12 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onFini
             rotation: isRich ? -8 : 0,
             transformOrigin: '50% 50%',
         });
-        gsap.set(title, { autoAlpha: 0, y: 14, filter: 'blur(6px)' });
+        // blur 仅 rich：滤镜贵，standard 用位移+淡入同样够炫。
+        gsap.set(title, {
+            autoAlpha: 0,
+            y: 14,
+            ...(isRich ? { filter: 'blur(6px)' } : {}),
+        });
         gsap.set(sub, { autoAlpha: 0, y: 10 });
         gsap.set(bar, { autoAlpha: 0, scaleX: 0, transformOrigin: 'left center' });
         if (barShine) gsap.set(barShine, { xPercent: -120, autoAlpha: 0 });
@@ -200,7 +206,9 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onFini
             {
                 autoAlpha: 1,
                 y: 0,
-                filter: 'blur(0px)',
+                ...(isRich
+                    ? { filter: 'blur(0px)', clearProps: 'filter' }
+                    : {}),
                 duration: motion.duration('base'),
                 ease: t.ease.enter,
             },
@@ -320,7 +328,14 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onFini
                 )
                 : null;
 
+        const unbinds = [
+            bindVisibilityPause(floatTween),
+            bindVisibilityPause(haloTween),
+            bindVisibilityPause(shineLoop),
+            bindVisibilityPause(barShineLoop),
+        ];
         return () => {
+            for (const u of unbinds) u();
             floatTween?.kill();
             haloTween?.kill();
             shineLoop?.kill();

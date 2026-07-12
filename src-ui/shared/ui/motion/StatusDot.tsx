@@ -10,6 +10,7 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { useMotion } from '../../../hooks/preferences/useMotion';
+import { bindVisibilityPause } from './visibilityPause';
 
 export type StatusDotTone =
     | 'success'
@@ -60,8 +61,11 @@ export function StatusDot({ tone, size = 8, className }: StatusDotProps) {
             scale: f.overshoot ? 0.92 : 1,
             duration: dur / 2,
             ease: 'sine.inOut',
+            force3D: true,
         });
+        const unbindVis = bindVisibilityPause(tl);
         return () => {
+            unbindVis();
             tl.kill();
         };
     }, [pulsing, tone, m.preset.feel, m.speed]);

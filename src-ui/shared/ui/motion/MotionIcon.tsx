@@ -5,6 +5,7 @@ import gsap from 'gsap';
 import type { LucideProps } from 'lucide-react';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { cn } from '../../utils/cn';
+import { bindVisibilityPause } from './visibilityPause';
 
 export type MotionIconPreset =
     | 'none'
@@ -218,7 +219,9 @@ export function MotionIcon({
                 break;
         }
 
+        const unbindVis = bindVisibilityPause(tl);
         return () => {
+            unbindVis();
             tl?.kill();
             // 同一 DOM 在 spin → 静止图标间复用时，必须清零 rotation，否则会「歪着」停住
             if (el) {

@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { useMotion } from '../../../hooks/preferences/useMotion';
+import { bindVisibilityPause } from './visibilityPause';
 
 interface ShimmerProps {
     className?: string;
@@ -32,7 +33,9 @@ export function Shimmer({ className, height = 16 }: ShimmerProps) {
             { backgroundPosition: '200% 0' },
             { backgroundPosition: '-200% 0', duration: dur, ease: 'sine.inOut' },
         );
+        const unbindVis = bindVisibilityPause(tl);
         return () => {
+            unbindVis();
             tl.kill();
         };
     }, [animated, m.speed]);

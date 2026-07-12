@@ -37,6 +37,10 @@ export function useOccupancyScrollAnimation(
     const rafRef = useRef(0);
     const animStartRef = useRef(0);
     const steadyRef = useRef(steadyValues);
+    // rAF 期间用 ref 攒 progress，约每 2 帧才 setState，少触发 React 重渲染。
+    const scrollPayloadRef = useRef<Omit<ScrollAnimState, 'progress'> | null>(null);
+    const lastCommitProgressRef = useRef(-1);
+    const frameSkipRef = useRef(0);
     steadyRef.current = steadyValues;
 
     const latestT = history[history.length - 1]?.t ?? null;
@@ -44,6 +48,9 @@ export function useOccupancyScrollAnimation(
     const stopRaf = () => {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = 0;
+        scrollPayloadRef.current = null;
+        lastCommitProgressRef.current = -1;
+        frameSkipRef.current = 0;
     };
 
     const startScroll = (
@@ -58,17 +65,35 @@ export function useOccupancyScrollAnimation(
         }
 
         animStartRef.current = performance.now();
-        const state0 = { animationSource, incoming, steadySlotCount, progress: 0 };
-        setScroll(state0);
+        scrollPayloadRef.current = { animationSource, incoming, steadySlotCount };
+        lastCommitProgressRef.current = 0;
+        frameSkipRef.current = 0;
+        setScroll({ animationSource, incoming, steadySlotCount, progress: 0 });
 
         const tick = (now: number) => {
-            const p = Math.min(1, (now - animStartRef.current) / duration);
-            if (p < 1) {
-                setScroll({ animationSource, incoming, steadySlotCount, progress: p });
+            const payload = scrollPayloadRef.current;
+            if (!payload) return;
+            if (document.hidden) {
+                // 后台不刷 React；回到前台继续从当前时间算 progress。
                 rafRef.current = requestAnimationFrame(tick);
                 return;
             }
-            setScroll(null);
+            const p = Math.min(1, (now - animStartRef.current) / duration);
+            if (p >= 1) {
+                setScroll(null);
+                scrollPayloadRef.current = null;
+                return;
+            }
+            // 隔帧提交 + 进度变化阈值，保持滚动观感同时降 React 压力。
+            frameSkipRef.current += 1;
+            const shouldCommit =
+                frameSkipRef.current % 2 === 0 &&
+                Math.abs(p - lastCommitProgressRef.current) >= 0.04;
+            if (shouldCommit) {
+                lastCommitProgressRef.current = p;
+                setScroll({ ...payload, progress: p });
+            }
+            rafRef.current = requestAnimationFrame(tick);
         };
         rafRef.current = requestAnimationFrame(tick);
     };

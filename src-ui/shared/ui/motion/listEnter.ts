@@ -38,7 +38,7 @@ export function animateListChildrenEnter(
 
     gsap.fromTo(
         pending,
-        { autoAlpha: 0, y: 6, scale: 0.985 },
+        { autoAlpha: 0, y: 6, scale: 0.985, force3D: true },
         {
             autoAlpha: 1,
             y: 0,
@@ -46,6 +46,7 @@ export function animateListChildrenEnter(
             duration: m.duration('base'),
             ease: m.ease.enter,
             stagger: useStagger ? m.stagger() : 0,
+            force3D: true,
             onComplete: () => markEntered(pending),
             onInterrupt: () => markEntered(pending),
         },
