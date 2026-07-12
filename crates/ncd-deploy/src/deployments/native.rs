@@ -81,33 +81,134 @@ impl NativeRuntimeEventSink for NullRuntimeEventSink {
     }
 }
 
+/// 日志行合并阈值:满行立即 flush,否则等短窗口合并,压低 broadcast 洪峰。
+/// 前端 `bot_log_appended` 会按 `\n` 再拆成多行展示,语义仍是逐行日志。
+const LOG_BATCH_MAX_LINES: usize = 32;
+const LOG_BATCH_FLUSH_MS: u64 = 40;
+
 /// 把 NativeDeployment 的运行时事件桥接到 BroadcastEventBus
 ///
+/// 日志走短窗口合并(同 bot + channel),状态类事件仍即时 publish。
 /// 需要在调用 `.publish()` 的作用域里 use ncd_traits::EventBus;
 /// 此处直接在 impl 块内用 fully-qualified 调用避免顶层依赖。
 pub struct EventBusSink {
     bus: Arc<ncd_traits::BroadcastEventBus>,
+    log_batch: Arc<std::sync::Mutex<LogBatchState>>,
+}
+
+#[derive(Default)]
+struct LogBatchState {
+    /// key = (bot_id, channel); value = 待发日志行
+    buckets: HashMap<(BotId, String), Vec<String>>,
+    flush_scheduled: bool,
 }
 
 impl EventBusSink {
     pub fn new(bus: Arc<ncd_traits::BroadcastEventBus>) -> Self {
-        Self { bus }
+        Self {
+            bus,
+            log_batch: Arc::new(std::sync::Mutex::new(LogBatchState::default())),
+        }
+    }
+
+    fn lock_batch(&self) -> std::sync::MutexGuard<'_, LogBatchState> {
+        // poison 只表示上次持锁线程 panic;日志缓冲仍可继续用
+        self.log_batch
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn publish_log_batch(
+        bus: &ncd_traits::BroadcastEventBus,
+        bot_id: BotId,
+        channel: String,
+        lines: Vec<String>,
+    ) {
+        if lines.is_empty() {
+            return;
+        }
+        ncd_traits::EventBus::publish(
+            bus,
+            ncd_domain::DomainEvent::BotLogAppended {
+                bot_id,
+                line: lines.join("\n"),
+                channel: Some(channel),
+            },
+        );
+    }
+
+    fn flush_log_batch_locked(bus: &ncd_traits::BroadcastEventBus, state: &mut LogBatchState) {
+        state.flush_scheduled = false;
+        let buckets = std::mem::take(&mut state.buckets);
+        for ((bot_id, channel), lines) in buckets {
+            Self::publish_log_batch(bus, bot_id, channel, lines);
+        }
+    }
+
+    fn schedule_log_flush(&self) {
+        let batch = Arc::clone(&self.log_batch);
+        let bus = Arc::clone(&self.bus);
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            // 无 runtime(极少):同步 flush,避免丢行
+            let mut state = self.lock_batch();
+            Self::flush_log_batch_locked(&self.bus, &mut state);
+            return;
+        };
+        handle.spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(LOG_BATCH_FLUSH_MS)).await;
+            let mut state = batch
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            EventBusSink::flush_log_batch_locked(&bus, &mut state);
+        });
+    }
+}
+
+impl Drop for EventBusSink {
+    fn drop(&mut self) {
+        let mut state = self.lock_batch();
+        Self::flush_log_batch_locked(&self.bus, &mut state);
     }
 }
 
 impl NativeRuntimeEventSink for EventBusSink {
     fn publish_log_line(&self, bot_id: &BotId, line: &str, channel: &str) {
-        ncd_traits::EventBus::publish(
-            &*self.bus,
-            ncd_domain::DomainEvent::BotLogAppended {
-                bot_id: bot_id.clone(),
-                line: line.to_string(),
-                channel: Some(channel.to_string()),
-            },
-        );
+        if line.is_empty() {
+            return;
+        }
+
+        let mut state = self.lock_batch();
+        // entry 一次拿走 key 所有权,满批时 remove_entry 不再二次 clone key
+        let key = (bot_id.clone(), channel.to_string());
+        let need_schedule = match state.buckets.entry(key) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().push(line.to_string());
+                if entry.get().len() >= LOG_BATCH_MAX_LINES {
+                    let ((bot_id, channel), lines) = entry.remove_entry();
+                    drop(state);
+                    Self::publish_log_batch(&self.bus, bot_id, channel, lines);
+                    return;
+                }
+                !state.flush_scheduled
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(vec![line.to_string()]);
+                !state.flush_scheduled
+            }
+        };
+        if need_schedule {
+            state.flush_scheduled = true;
+            drop(state);
+            self.schedule_log_flush();
+        }
     }
 
     fn publish_napcat_webui_available(&self, bot_id: &BotId, port: u16, token: String) {
+        // 状态事件优先:先冲掉积压日志,避免 UI 先看到 WebUI 再看到前置日志
+        {
+            let mut state = self.lock_batch();
+            Self::flush_log_batch_locked(&self.bus, &mut state);
+        }
         ncd_traits::EventBus::publish(
             &*self.bus,
             ncd_domain::DomainEvent::napcat_webui_available(bot_id.clone(), port, token),
@@ -120,6 +221,10 @@ impl NativeRuntimeEventSink for EventBusSink {
         exit_code: Option<i32>,
         reason: Option<String>,
     ) {
+        {
+            let mut state = self.lock_batch();
+            Self::flush_log_batch_locked(&self.bus, &mut state);
+        }
         ncd_traits::EventBus::publish(
             &*self.bus,
             ncd_domain::DomainEvent::bot_process_exited(bot_id.clone(), exit_code, reason),
@@ -1447,7 +1552,12 @@ mod tests {
         assert_eq!(kills[0].program, "taskkill");
         assert_eq!(
             kills[0].args,
-            vec!["/F".to_string(), "/T".to_string(), "/PID".to_string(), "24002".to_string()]
+            vec![
+                "/F".to_string(),
+                "/T".to_string(),
+                "/PID".to_string(),
+                "24002".to_string()
+            ]
         );
 
         let _ = stopped_wait_tx.send(Ok(CommandOutput {
