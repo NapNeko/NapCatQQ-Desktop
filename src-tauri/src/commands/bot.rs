@@ -7,6 +7,12 @@ use std::collections::HashMap;
 use tauri::State;
 
 use crate::AppState;
+use crate::desktop_consent;
+
+/// 创建 / 启动等关键操作前：未同意当前 Desktop 协议则拒绝。
+fn ensure_desktop_consent(state: &AppState) -> Result<(), String> {
+    desktop_consent::ensure_accepted(&state.data_root).map_err(|e| e.to_command_string())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchResultResponse {
@@ -43,7 +49,12 @@ fn batch_to_response(result: ncd_runtime::BatchResult) -> BatchResultResponse {
 pub async fn bootstrap_bot_manager(
     state: State<'_, AppState>,
 ) -> Result<BootstrapResultResponse, String> {
-    let result = state.bot_manager.bootstrap().await.map_err(map_err)?;
+    let allow_auto_start = !desktop_consent::is_consent_required(&state.data_root);
+    let result = state
+        .bot_manager
+        .bootstrap_with_auto_start(allow_auto_start)
+        .await
+        .map_err(map_err)?;
     Ok(BootstrapResultResponse {
         started: batch_to_response(result.started),
         skipped: result
@@ -160,6 +171,7 @@ pub async fn upsert_bot_config(
     state: State<'_, AppState>,
     config: BotConfig,
 ) -> Result<BotActorSnapshot, String> {
+    ensure_desktop_consent(&state)?;
     state
         .bot_manager
         .upsert_bot_config(config)
@@ -181,6 +193,7 @@ pub async fn start_bot(
     state: State<'_, AppState>,
     bot_id: String,
 ) -> Result<BotActorSnapshot, String> {
+    ensure_desktop_consent(&state)?;
     state
         .bot_manager
         .start_bot(&BotId::new(bot_id))
@@ -208,6 +221,7 @@ pub async fn start_bot_with_drift_decisions(
     bot_id: String,
     decisions: Vec<DriftDecision>,
 ) -> Result<BotActorSnapshot, String> {
+    ensure_desktop_consent(&state)?;
     state
         .bot_manager
         .start_bot_with_decisions(&BotId::new(bot_id), &decisions)
@@ -222,6 +236,7 @@ pub async fn upsert_bot_config_with_decisions(
     config: BotConfig,
     decisions: Vec<DriftDecision>,
 ) -> Result<BotActorSnapshot, String> {
+    ensure_desktop_consent(&state)?;
     use ncd_runtime::config_drift::DriftDecision as DD;
     let mut overrides: std::collections::HashMap<String, Vec<(String, serde_json::Value)>> =
         std::collections::HashMap::new();
@@ -266,6 +281,7 @@ pub async fn batch_start_bots(
     state: State<'_, AppState>,
     bot_ids: Vec<String>,
 ) -> Result<BatchResultResponse, String> {
+    ensure_desktop_consent(&state)?;
     let ids: Vec<BotId> = bot_ids.into_iter().map(BotId::new).collect();
     let result = state.bot_manager.batch_start(&ids).await.map_err(map_err)?;
     Ok(batch_to_response(result))
@@ -395,8 +411,9 @@ mod tests {
         let bus = BroadcastEventBus::default();
         let runtime = crate::runtime::AppRuntime::new(root, bus.clone());
         let store = Arc::new(LocalConfigStore::new(root));
-        let secrets: Arc<dyn SecretStore + Send + Sync> =
-            Arc::new(SecretStoreImpl::new(ncd_runtime::DataPaths::new(root).secrets_dir()));
+        let secrets: Arc<dyn SecretStore + Send + Sync> = Arc::new(SecretStoreImpl::new(
+            ncd_runtime::DataPaths::new(root).secrets_dir(),
+        ));
         let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
         let renderer = Arc::new(DispatchRenderer::new(
             store.config_dir(),

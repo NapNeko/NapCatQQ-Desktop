@@ -3,6 +3,7 @@ pub mod bot;
 pub mod components;
 pub mod config_transfer;
 pub mod deployment_tasks;
+pub mod desktop_consent;
 pub mod desktop_log;
 pub mod desktop_update;
 pub mod docker;

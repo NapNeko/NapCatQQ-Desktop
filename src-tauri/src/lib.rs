@@ -17,6 +17,7 @@ pub mod autostart;
 pub mod bootstrap;
 pub mod bot_host_resolver;
 pub mod commands;
+pub mod desktop_consent;
 pub mod desktop_log;
 pub mod desktop_log_format;
 pub mod desktop_notify;
@@ -268,6 +269,7 @@ pub fn run() {
     )));
 
     let bot_manager_bootstrap = Arc::clone(&bot_manager);
+    let data_root_for_bootstrap = data_root.clone();
     let bot_manager_listener = Arc::clone(&bot_manager);
     let bot_manager_login_listener = Arc::clone(&bot_manager);
     let bot_manager_snowluma_listener = Arc::clone(&bot_manager);
@@ -392,7 +394,20 @@ pub fn run() {
                         "snowluma listener ready signal dropped; bootstrap continues",
                     );
                 }
-                match bot_manager_bootstrap.bootstrap().await {
+                // 未同意当前 Desktop 协议时只恢复 Actor / reconcile，不 auto_start
+                let allow_auto_start =
+                    !crate::desktop_consent::is_consent_required(&data_root_for_bootstrap);
+                if !allow_auto_start {
+                    desktop_log::write_session_line(
+                        "INFO",
+                        "ncd::bot_manager",
+                        "desktop consent pending; bootstrap skips auto_start",
+                    );
+                }
+                match bot_manager_bootstrap
+                    .bootstrap_with_auto_start(allow_auto_start)
+                    .await
+                {
                     Ok(result) => {
                         if !result.skipped.is_empty() {
                             desktop_log::write_session_line(
@@ -516,6 +531,8 @@ pub fn run() {
             commands::release::get_release_snapshot,
             commands::app_settings::get_app_settings,
             commands::app_settings::set_app_settings,
+            commands::desktop_consent::get_desktop_agreements,
+            commands::desktop_consent::accept_desktop_agreements,
             commands::app_settings::sync_close_action_preference,
             commands::app_settings::test_offline_webhook,
             commands::app_settings::test_offline_email,
