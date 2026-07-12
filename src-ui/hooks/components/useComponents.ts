@@ -18,7 +18,7 @@
 // frontend-layering：本 hook 唯一允许调 service 的位置。
 
 import { useQuery, useQueries, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { isTauri } from '../../core/ipc/transport';
 import { componentService } from '../../core/services/component.service';
 import { serverService } from '../../core/services/server.service';
@@ -124,7 +124,14 @@ function autoConnectBlocked(serverId: string): boolean {
     return Date.now() < until;
 }
 
-function useComponentsData(): ComponentsData {
+interface ComponentsDataOptions {
+    // false 时只拉 servers/catalog，不发 detect / 不自动连远端。
+    // 启动预热先暖轻量缓存，idle 后再开探测，避免与首屏抢 IPC。
+    detectEnabled?: boolean;
+}
+
+function useComponentsData(options: ComponentsDataOptions = {}): ComponentsData {
+    const detectEnabled = options.detectEnabled ?? true;
     const { hosts, servers } = useKnownHosts();
     const queryClient = useQueryClient();
 
@@ -146,7 +153,7 @@ function useComponentsData(): ComponentsData {
     // 去重用模块级 Set 而非实例 ref：预热 hook 和组件页可能同时挂载，两个实例
     // 共享去重表才不会对同一台远端各发一次 testConnection（又退化成并发握手）。
     useEffect(() => {
-        if (!isTauri) return;
+        if (!isTauri || !detectEnabled) return;
         for (const profile of servers) {
             if (profile.state === 'connected' || profile.state === 'connecting') continue;
             // 已失败的主机不自动重试，避免公钥/密码错误时刷 SSH 日志；用户去远端页手动测。
@@ -178,7 +185,7 @@ function useComponentsData(): ComponentsData {
                     autoConnectInFlight.delete(profile.id);
                 });
         }
-    }, [servers, queryClient]);
+    }, [servers, queryClient, detectEnabled]);
 
     const catalogQuery = useQuery({
         queryKey: ['componentCatalog'],
@@ -198,7 +205,8 @@ function useComponentsData(): ComponentsData {
             hosts.map((h) => ({
                 queryKey: ['componentDetect', c.id, h.host_id],
                 queryFn: () => componentService.detectComponent(c.id, h.host_id),
-                enabled: hostReachability[h.host_id] ?? true,
+                enabled:
+                    detectEnabled && (hostReachability[h.host_id] ?? true),
                 staleTime: 30 * 1000,
             })),
         ),
@@ -220,15 +228,48 @@ function useComponentsData(): ComponentsData {
     };
 }
 
-/// 启动期后台预热：在 App 根节点常驻挂载，程序一起来就开始拉服务器列表、
-/// 自动连接远端、拉 catalog、逐主机 detect。永不卸载，保持缓存新鲜；用户切到
-/// 组件页时 useComponents 直接命中缓存，不再从零等一轮 SSH 探测。
-/// dev 可设 VITE_SKIP_COMPONENTS_WARMUP=1 减少改 UI 时 HMR 后的 IPC 风暴。
+// 启动期后台预热：App 根常驻。先拉 servers + catalog；idle（或短延迟）后再
+// 自动连远端与逐主机 detect，避免与 splash/首屏抢 IPC。永不卸载，保持缓存；
+// 进组件页时 useComponents 共享同一 query key。
+// dev 可设 VITE_SKIP_COMPONENTS_WARMUP=1 跳过整段预热，减轻 HMR 后 IPC 风暴。
+// skip 为构建期常量，early return 不会在运行时改变 hooks 数量。
 export function useComponentsWarmup(): void {
     if (import.meta.env.DEV && import.meta.env.VITE_SKIP_COMPONENTS_WARMUP === '1') {
         return;
     }
-    useComponentsData();
+
+    const [detectEnabled, setDetectEnabled] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        const arm = () => {
+            if (!cancelled) setDetectEnabled(true);
+        };
+
+        const w = window as Window & {
+            requestIdleCallback?: (
+                cb: () => void,
+                opts?: { timeout: number },
+            ) => number;
+            cancelIdleCallback?: (id: number) => void;
+        };
+
+        if (typeof w.requestIdleCallback === 'function') {
+            const id = w.requestIdleCallback(arm, { timeout: 2500 });
+            return () => {
+                cancelled = true;
+                w.cancelIdleCallback?.(id);
+            };
+        }
+
+        const timer = window.setTimeout(arm, 800);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, []);
+
+    useComponentsData({ detectEnabled });
 }
 
 export function useComponents(): UseComponentsResult {
