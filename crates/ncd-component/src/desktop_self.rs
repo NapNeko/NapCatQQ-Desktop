@@ -40,7 +40,9 @@ impl DesktopSelfComponent {
     }
 
     /// 用 std::env::current_exe() 自动获取 exe 路径(失败 fallback 到提示路径)
-    pub fn from_env() -> Result<Self, ActionError> {
+    ///
+    /// version 由调用方注入产品版本(tauri.conf),不要用 workspace CARGO_PKG_VERSION
+    pub fn from_env(current_version: impl Into<String>) -> Result<Self, ActionError> {
         let exe = std::env::current_exe().map_err(|e| ActionError::InvalidConfig {
             reason: format!("current_exe: {e}"),
         })?;
@@ -51,7 +53,7 @@ impl DesktopSelfComponent {
         } else {
             HostPath::from_posix(path_str)
         };
-        Ok(Self::new(env!("CARGO_PKG_VERSION"), host_path))
+        Ok(Self::new(current_version, host_path))
     }
 
     /// 组件元数据,给 list_components Tauri command 使用
@@ -174,14 +176,14 @@ mod tests {
     #[test]
     fn from_env_returns_real_exe_path() {
         // current_exe 在测试 binary 上应能拿到一个绝对路径
-        let c = DesktopSelfComponent::from_env().unwrap();
-        assert!(!c.current_version.is_empty());
+        let c = DesktopSelfComponent::from_env("9.9.9").unwrap();
+        assert_eq!(c.current_version, "9.9.9");
         assert!(c.exe_path.is_absolute() || !c.exe_path.as_posix().is_empty());
     }
 
     #[test]
-    fn version_uses_cargo_pkg_version_in_from_env() {
-        let c = DesktopSelfComponent::from_env().unwrap();
-        assert_eq!(c.current_version, env!("CARGO_PKG_VERSION"));
+    fn from_env_uses_injected_product_version() {
+        let c = DesktopSelfComponent::from_env("3.0.0").unwrap();
+        assert_eq!(c.current_version, "3.0.0");
     }
 }
