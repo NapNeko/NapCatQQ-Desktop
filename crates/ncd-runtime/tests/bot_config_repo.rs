@@ -204,3 +204,28 @@ async fn test_concurrent_upsert_does_not_lose_updates() {
     qq_ids.sort();
     assert_eq!(qq_ids, (10001u64..10009).collect::<Vec<_>>());
 }
+
+#[tokio::test]
+async fn list_get_count_should_see_cache_after_upsert_and_delete() {
+    // 热路径:list/get/count 走 cache;upsert/delete 落盘后必须立刻可见
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, repo) = make_repo(temp.path());
+
+    repo.upsert(bot_config(10001, "alpha")).await.unwrap();
+    repo.upsert(bot_config(10002, "beta")).await.unwrap();
+
+    let listed = repo.list().await.unwrap();
+    assert_eq!(listed.len(), 2);
+
+    let got = repo.get(10002).await.unwrap().expect("bot 10002");
+    assert_eq!(got.bot.name, "beta");
+
+    repo.upsert(bot_config(10002, "beta-2")).await.unwrap();
+    let got = repo.get(10002).await.unwrap().expect("bot 10002");
+    assert_eq!(got.bot.name, "beta-2");
+    assert_eq!(repo.count().await.unwrap(), 2);
+
+    assert!(repo.delete(10001).await.unwrap());
+    assert_eq!(repo.get(10001).await.unwrap(), None);
+    assert_eq!(repo.list().await.unwrap().len(), 1);
+}
