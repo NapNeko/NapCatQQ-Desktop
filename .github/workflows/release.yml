@@ -121,13 +121,7 @@ jobs:
 
       - name: Export ts-rs bindings
         shell: pwsh
-        run: |
-          cargo test -p ncd-runtime --lib export_bindings_ -- --quiet
-          cargo test -p ncd-domain --lib export_bindings_ -- --quiet
-          cargo test -p ncd-component --lib export_bindings_ -- --quiet
-          cargo test -p ncd-deploy --lib export_bindings_ -- --quiet
-          cargo test -p ncd-host --lib export_bindings_ -- --quiet
-          cargo test -p ncd-tauri --lib export_bindings_ -- --quiet
+        run: cargo test --workspace --lib export_bindings_ -- --quiet
 
       - name: Assert generated IPC types committed
         shell: pwsh

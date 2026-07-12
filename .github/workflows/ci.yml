@@ -1,7 +1,11 @@
-# 质量门禁：只在 PR 与手动触发时跑，不在每次 push main 时跑。
-# 发版前可 workflow_dispatch 本工作流，或 release.yml 勾选 run_gates。
+# 质量门禁：PR 默认 full；手动可选手动 suite 加速迭代。
 # MSI 打包见 build-msi.yml / release.yml。
 # Rust 全量测试必须在 Windows（大量 #[cfg(windows)]）。
+#
+# 关于「虚拟机复用」：
+#   GitHub-hosted runner 每次 job 都是新 VM，不能整机复用。
+#   能复用的是 Cargo/pnpm 缓存（Swatinem/rust-cache、setup-node cache）。
+#   要真·常驻机只能 self-hosted runner。
 #
 # 分支策略：
 #   main  ← Rust/Tauri 主线
@@ -14,9 +18,20 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      suite:
+        description: "跑哪些门禁（PR 固定 full）"
+        required: false
+        default: full
+        type: choice
+        options:
+          - full
+          - frontend
+          - rust
+          - rust-smoke
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.inputs.suite || 'full' }}
   cancel-in-progress: true
 
 permissions:
@@ -24,11 +39,16 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # 跨 job 靠 rust-cache 复用 target；job 内增量对 Windows 收益有限且易脏缓存
   CARGO_INCREMENTAL: "0"
 
 jobs:
   frontend:
     name: Frontend
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event.inputs.suite == 'full' ||
+      github.event.inputs.suite == 'frontend'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -59,24 +79,30 @@ jobs:
 
   rust:
     name: Rust (Windows)
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event.inputs.suite == 'full' ||
+      github.event.inputs.suite == 'rust' ||
+      github.event.inputs.suite == 'rust-smoke'
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 本 job 不跑 clippy/fmt，不装组件可少下几百 MB
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ci-windows
+          # bump key 时会冷启动一次；之后跨 run 复用 registry/git/target
+          shared-key: ci-windows-v2
           workspaces: ". -> target"
+          cache-all-crates: true
 
-      # ts-bindings 会写出 src-ui/core/ipc/generated；需与提交内容一致（R1）。
-      # 一次 cargo 调起 workspace lib 过滤,避免 6 次 -p 重复解析/编译依赖图。
+      # ts-bindings 写出 src-ui/core/ipc/generated；需与提交一致（R1）。
+      # 一次 workspace --lib 过滤，避免 6 次 -p 重复解析依赖图。
       - name: Export ts-rs bindings
         shell: pwsh
         run: cargo test --workspace --lib export_bindings_ -- --quiet
@@ -85,8 +111,21 @@ jobs:
         shell: pwsh
         run: git diff --exit-code -- src-ui/core/ipc/generated
 
-      # 复用上一步 target；全量仍含 lib/tests（export 再跑一遍成本低）。
+      # 快速回归：只跑近期易碎的 integration / compose，不跑全 workspace
+      - name: Smoke tests
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'rust-smoke'
+        shell: pwsh
+        run: |
+          cargo test -p ncd-runtime --test bot_manager -- --quiet
+          cargo test -p ncd-deploy --lib docker::compose::tests -- --quiet
+          cargo test -p ncd-backend-napcat --lib napcat::login_poller -- --quiet
+
+      # 全量：复用上一步已编译的 target
       - name: Workspace tests
+        if: >-
+          github.event_name == 'pull_request' ||
+          github.event.inputs.suite == 'full' ||
+          github.event.inputs.suite == 'rust'
         run: cargo test --workspace
 
   gate:
@@ -103,8 +142,34 @@ jobs:
           set -euo pipefail
           fe="${{ needs.frontend.result }}"
           rs="${{ needs.rust.result }}"
-          echo "frontend=$fe rust=$rs"
-          if [[ "$fe" != "success" || "$rs" != "success" ]]; then
-            echo "CI gate failed" >&2
+          suite="${{ github.event.inputs.suite || 'full' }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            suite="full"
+          fi
+          echo "suite=$suite frontend=$fe rust=$rs"
+
+          need_fe=0
+          need_rs=0
+          case "$suite" in
+            full) need_fe=1; need_rs=1 ;;
+            frontend) need_fe=1 ;;
+            rust|rust-smoke) need_rs=1 ;;
+            *) echo "unknown suite: $suite" >&2; exit 1 ;;
+          esac
+
+          if [[ "$need_fe" -eq 1 && "$fe" != "success" ]]; then
+            echo "CI gate failed: frontend=$fe" >&2
+            exit 1
+          fi
+          if [[ "$need_rs" -eq 1 && "$rs" != "success" ]]; then
+            echo "CI gate failed: rust=$rs" >&2
+            exit 1
+          fi
+          if [[ "$need_fe" -eq 0 && "$fe" != "skipped" && "$fe" != "success" ]]; then
+            echo "CI gate failed: unexpected frontend=$fe" >&2
+            exit 1
+          fi
+          if [[ "$need_rs" -eq 0 && "$rs" != "skipped" && "$rs" != "success" ]]; then
+            echo "CI gate failed: unexpected rust=$rs" >&2
             exit 1
           fi
