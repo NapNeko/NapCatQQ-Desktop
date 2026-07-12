@@ -2,6 +2,9 @@
 //!
 //! 业务在 ncd-update::UpdateOrchestrator + GithubMsiUpdateProvider；
 //! 安装成功后主动 exit，让 msiexec 完成 MajorUpgrade。
+//!
+//! 安全：install 不信任前端传入的 download_url，安装前重新 check，
+//! 仅使用服务端解析出的 AvailableUpdate；期望版本与 UI 展示不一致则拒绝。
 
 use std::sync::Arc;
 
@@ -29,7 +32,10 @@ fn build_orchestrator(state: &AppState) -> Result<UpdateOrchestrator, String> {
     ))
 }
 
-/// 检查是否有新的 Desktop MSI（Stable 通道）。
+/// 检查是否有新的 Desktop MSI（正式 Release；渠道未开放）。
+///
+/// - `Ok(None)`：远端可达且已是最新（或 orchestrator 过滤了伪更新）
+/// - `Err`：网络/解析/无 release 快照等检查失败（前端勿当成「无需更新」）
 #[tauri::command]
 pub async fn check_desktop_update(
     state: State<'_, AppState>,
@@ -52,12 +58,15 @@ pub async fn precheck_desktop_update(
 
 /// 下载 MSI 并启动 msiexec；成功后退出本进程。
 ///
+/// `expected` 仅用于对齐 UI 展示的版本号；真实下载 URL / 校验值一律
+/// 以服务端 `check` 结果为准，防止 IPC 篡改。
+///
 /// 若本机仍有活跃 Bot，拒绝更新（与组件更新闸门一致）。
 #[tauri::command]
 pub async fn install_desktop_update(
     app: AppHandle,
     state: State<'_, AppState>,
-    update: AvailableUpdate,
+    expected: AvailableUpdate,
 ) -> Result<(), String> {
     let local_active = state
         .bot_manager
@@ -70,10 +79,29 @@ pub async fn install_desktop_update(
         ));
     }
 
-    let report = {
-        let orch = build_orchestrator(&state)?;
-        orch.precheck(&update).await.map_err(|e| e.to_string())?
+    let orch = build_orchestrator(&state)?;
+
+    // 服务端重拉最新包元数据，不使用前端传入的 download_url / signature
+    let server_update = match orch
+        .check(UpdateChannel::Stable)
+        .await
+        .map_err(|e| e.to_string())?
+    {
+        Some(u) => u,
+        None => return Err("当前已是最新版本，无需更新".into()),
     };
+
+    if server_update.version != expected.version {
+        return Err(format!(
+            "可更新版本已变化（界面 {} → 远端 {}），请重新检查后再更新",
+            expected.version, server_update.version
+        ));
+    }
+
+    let report = orch
+        .precheck(&server_update)
+        .await
+        .map_err(|e| e.to_string())?;
     if !report.can_upgrade {
         let reason = report
             .blocking
@@ -87,8 +115,7 @@ pub async fn install_desktop_update(
     let running_bots: Vec<String> = Vec::new();
     let snowluma_running = false;
 
-    let orch = build_orchestrator(&state)?;
-    orch.install_with_graceful_shutdown(update, running_bots, snowluma_running)
+    orch.install_with_graceful_shutdown(server_update, running_bots, snowluma_running)
         .await
         .map_err(|e| e.to_string())?;
 

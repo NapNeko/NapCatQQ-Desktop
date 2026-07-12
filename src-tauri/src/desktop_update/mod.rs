@@ -9,9 +9,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use ncd_domain::release_snapshot::ReleaseInfo;
 use ncd_domain::SchemaVersion;
-use ncd_network::{download_with_resume, DownloadConfig, NoopProgressSink};
+use ncd_domain::release_snapshot::ReleaseInfo;
+use ncd_network::{DownloadConfig, NoopProgressSink, download_with_resume};
 use ncd_runtime::release::fetch_release_snapshot;
 use ncd_update::{AvailableUpdate, UpdateChannel, UpdateError, UpdateProvider};
 use semver::Version;
@@ -22,6 +22,10 @@ use tracing::info;
 pub const MSI_VERSIONED_NAME_FMT: &str = "NapCatQQ-Desktop-{version}-x64.msi";
 pub const MSI_ALIAS_NAME: &str = "NapCatQQ-Desktop-x64.msi";
 const MINIMUM_MSI_SIZE_BYTES: u64 = 1024 * 1024;
+/// 仅允许本仓库 GitHub Releases 下载路径，防止 IPC 篡改 download_url。
+const TRUSTED_RELEASE_HOST: &str = "github.com";
+const TRUSTED_RELEASE_OWNER: &str = "NapNeko";
+const TRUSTED_RELEASE_REPO: &str = "NapCatQQ-Desktop";
 
 /// 产品版本（build.rs 从 tauri.conf.json 注入；回退 workspace crate 版本仅开发兜底）。
 pub fn product_version_str() -> &'static str {
@@ -37,8 +41,48 @@ pub fn product_version() -> Result<Version, UpdateError> {
     })
 }
 
+/// 是否为可信 Desktop MSI 下载 URL（固定 owner/repo + releases/download + .msi）。
+pub fn is_trusted_desktop_msi_url(url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(url.trim()) else {
+        return false;
+    };
+    if parsed.scheme() != "https" {
+        return false;
+    }
+    if parsed.host_str() != Some(TRUSTED_RELEASE_HOST) {
+        return false;
+    }
+    let segments: Vec<&str> = match parsed.path_segments() {
+        Some(s) => s.filter(|p| !p.is_empty()).collect(),
+        None => return false,
+    };
+    // /NapNeko/NapCatQQ-Desktop/releases/download/<tag>/<file.msi>
+    match segments.as_slice() {
+        [owner, repo, "releases", "download", tag, file]
+            if *owner == TRUSTED_RELEASE_OWNER
+                && *repo == TRUSTED_RELEASE_REPO
+                && !tag.is_empty()
+                && is_desktop_msi_asset_name(file) =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+fn is_desktop_msi_asset_name(name: &str) -> bool {
+    let name = name.trim();
+    if !name.ends_with(".msi") || !name.contains("NapCatQQ-Desktop") {
+        return false;
+    }
+    // versioned / alias 都以 x64.msi 结尾；拒绝奇怪拼接
+    name.ends_with("x64.msi") || name == MSI_ALIAS_NAME
+}
+
 /// 从 ReleaseInfo 选出 MSI 下载 URL + 可选 sha256。
-pub fn pick_desktop_msi(info: &ReleaseInfo) -> Result<(String, String, Option<String>), UpdateError> {
+pub fn pick_desktop_msi(
+    info: &ReleaseInfo,
+) -> Result<(String, String, Option<String>), UpdateError> {
     let version_plain = info.version.trim().trim_start_matches(['v', 'V']);
     let versioned = MSI_VERSIONED_NAME_FMT.replace("{version}", version_plain);
     let tag = if info.tag.trim().is_empty() {
@@ -47,28 +91,25 @@ pub fn pick_desktop_msi(info: &ReleaseInfo) -> Result<(String, String, Option<St
         info.tag.clone()
     };
 
-    let asset_name = if info.assets.iter().any(|a| a.name == versioned) {
-        versioned
-    } else if info.assets.iter().any(|a| a.name == MSI_ALIAS_NAME) {
-        MSI_ALIAS_NAME.to_string()
-    } else if info.assets.iter().any(|a| {
-        a.name.ends_with(".msi")
-            && a.name.contains("NapCatQQ-Desktop")
-            && a.name.contains("x64")
-    }) {
-        info.assets
-            .iter()
-            .find(|a| {
-                a.name.ends_with(".msi")
-                    && a.name.contains("NapCatQQ-Desktop")
-                    && a.name.contains("x64")
-            })
-            .map(|a| a.name.clone())
-            .unwrap_or(versioned)
-    } else {
-        // API 未列 assets 时仍拼规范 URL（CI 会上传 versioned + alias）
-        versioned
-    };
+    // 优先 versioned 名，再 alias，再收紧的模糊匹配；API 无 assets 时仍拼规范 URL
+    let asset_name = info
+        .assets
+        .iter()
+        .find(|a| a.name == versioned)
+        .map(|a| a.name.clone())
+        .or_else(|| {
+            info.assets
+                .iter()
+                .find(|a| a.name == MSI_ALIAS_NAME)
+                .map(|a| a.name.clone())
+        })
+        .or_else(|| {
+            info.assets
+                .iter()
+                .find(|a| is_desktop_msi_asset_name(&a.name))
+                .map(|a| a.name.clone())
+        })
+        .unwrap_or(versioned);
 
     let sha = info
         .assets
@@ -84,17 +125,21 @@ pub fn pick_desktop_msi(info: &ReleaseInfo) -> Result<(String, String, Option<St
         });
 
     let url = format!(
-        "https://github.com/NapNeko/NapCatQQ-Desktop/releases/download/{tag}/{asset_name}"
+        "https://{TRUSTED_RELEASE_HOST}/{TRUSTED_RELEASE_OWNER}/{TRUSTED_RELEASE_REPO}/releases/download/{tag}/{asset_name}"
     );
+    if !is_trusted_desktop_msi_url(&url) {
+        return Err(UpdateError::check_failed(format!(
+            "constructed download URL failed trust check: {url}"
+        )));
+    }
     Ok((url, asset_name, sha))
 }
 
 pub fn release_info_to_available_update(
     info: &ReleaseInfo,
 ) -> Result<AvailableUpdate, UpdateError> {
-    let version = Version::parse(info.version.trim().trim_start_matches(['v', 'V'])).map_err(
-        |e| UpdateError::check_failed(format!("desktop release version parse: {e}")),
-    )?;
+    let version = Version::parse(info.version.trim().trim_start_matches(['v', 'V']))
+        .map_err(|e| UpdateError::check_failed(format!("desktop release version parse: {e}")))?;
     let (download_url, _name, sha) = pick_desktop_msi(info)?;
     let pub_date = if info.published_at > 0 {
         Utc.timestamp_opt(info.published_at as i64, 0)
@@ -106,12 +151,12 @@ pub fn release_info_to_available_update(
     Ok(AvailableUpdate {
         v: ncd_update::types::UPDATE_PROTOCOL_VERSION,
         version,
-        // 1ase notes/manifest 读取
+        // MSI 路径暂固定当前 schema；跨版本迁移元数据以后可从 release notes/manifest 读
         schema_version: SchemaVersion::CURRENT,
         notes: info.release_notes.clone(),
         pub_date,
         download_url,
-        // MSI 路径：字段复用为期望 SHA256 hex（无 Ed25519 签名时为空）
+        // 字段名是 signature（原为 Ed25519）；MSI 路径暂塞期望 SHA256 hex，无 digest 时为空
         signature: sha.unwrap_or_default(),
     })
 }
@@ -176,13 +221,13 @@ impl GithubMsiUpdateProvider {
 #[async_trait]
 impl UpdateProvider for GithubMsiUpdateProvider {
     async fn check(&self, channel: UpdateChannel) -> Result<Option<AvailableUpdate>, UpdateError> {
-        // 当前仅 Stable；Beta/Nightly 与 Stable 同一 GitHub list 过滤（后续可分 pre-release）
+        // 产品策略：暂不开放更新渠道，一律按正式 Desktop release 拉（ignore channel）
         let _ = channel;
-        let snap =
-            fetch_release_snapshot(&self.data_root, self.github_token.as_deref()).await;
+        let snap = fetch_release_snapshot(&self.data_root, self.github_token.as_deref()).await;
         let Some(info) = snap.desktop_latest.as_ref() else {
+            // 与「已是最新」区分：无快照 = 检查失败，由上层变成 Err 字符串，UI 勿显示「无需更新」
             return Err(UpdateError::check_failed(
-                "无法获取 Desktop 最新版本（网络或 GitHub 不可达）",
+                "无法获取 Desktop 最新版本（网络不可达、缓存为空或尚无正式 Release）",
             ));
         };
         let update = release_info_to_available_update(info)?;
@@ -190,6 +235,13 @@ impl UpdateProvider for GithubMsiUpdateProvider {
     }
 
     async fn download_and_install(&self, update: &AvailableUpdate) -> Result<(), UpdateError> {
+        if !is_trusted_desktop_msi_url(&update.download_url) {
+            return Err(UpdateError::install_failed(format!(
+                "拒绝非本仓库 GitHub Release 的下载地址: {}",
+                update.download_url
+            )));
+        }
+
         #[cfg(not(windows))]
         {
             let _ = update;
@@ -285,11 +337,13 @@ async fn download_and_install_windows(
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI: ShellExecuteW 启动 msiexec 必须用 unsafe
 fn launch_msiexec_elevated(msi_path: &Path, log_path: &Path) -> Result<(), UpdateError> {
-    use std::os::windows::ffi::OsStrExt;
     use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
 
     let system_root = std::env::var_os("SystemRoot").unwrap_or_else(|| r"C:\Windows".into());
-    let msiexec = PathBuf::from(system_root).join("System32").join("msiexec.exe");
+    let msiexec = PathBuf::from(system_root)
+        .join("System32")
+        .join("msiexec.exe");
     if !msiexec.is_file() {
         return Err(UpdateError::install_failed(format!(
             "msiexec not found: {}",
@@ -410,5 +464,47 @@ mod tests {
         let u = release_info_to_available_update(&info).unwrap();
         assert_eq!(u.version, Version::new(3, 1, 0));
         assert!(u.download_url.contains("3.1.0"));
+        assert!(is_trusted_desktop_msi_url(&u.download_url));
+    }
+
+    #[test]
+    fn pick_uses_versioned_name_when_assets_empty() {
+        let info = sample_info("3.0.2", vec![]);
+        let (url, name, sha) = pick_desktop_msi(&info).unwrap();
+        assert_eq!(name, "NapCatQQ-Desktop-3.0.2-x64.msi");
+        assert!(url.ends_with("/v3.0.2/NapCatQQ-Desktop-3.0.2-x64.msi"));
+        assert!(sha.is_none());
+    }
+
+    #[test]
+    fn trusted_url_accepts_github_release_msi() {
+        assert!(is_trusted_desktop_msi_url(
+            "https://github.com/NapNeko/NapCatQQ-Desktop/releases/download/v3.0.1/NapCatQQ-Desktop-3.0.1-x64.msi"
+        ));
+        assert!(is_trusted_desktop_msi_url(
+            "https://github.com/NapNeko/NapCatQQ-Desktop/releases/download/v3.0.1/NapCatQQ-Desktop-x64.msi"
+        ));
+    }
+
+    #[test]
+    fn trusted_url_rejects_foreign_host_or_path() {
+        assert!(!is_trusted_desktop_msi_url(
+            "https://evil.example/NapNeko/NapCatQQ-Desktop/releases/download/v1/x.msi"
+        ));
+        assert!(!is_trusted_desktop_msi_url(
+            "http://github.com/NapNeko/NapCatQQ-Desktop/releases/download/v1/NapCatQQ-Desktop-x64.msi"
+        ));
+        assert!(!is_trusted_desktop_msi_url(
+            "https://github.com/other/NapCatQQ-Desktop/releases/download/v1/NapCatQQ-Desktop-x64.msi"
+        ));
+        assert!(!is_trusted_desktop_msi_url(
+            "https://github.com/NapNeko/NapCatQQ-Desktop/releases/download/v1/readme.txt"
+        ));
+    }
+
+    #[test]
+    fn release_info_to_available_update_errs_on_bad_semver() {
+        let info = sample_info("not-a-version", vec![]);
+        assert!(release_info_to_available_update(&info).is_err());
     }
 }
