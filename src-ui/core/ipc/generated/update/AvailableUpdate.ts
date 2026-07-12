@@ -14,10 +14,14 @@ schema_version: number,
  */
 notes: string, pub_date: string, 
 /**
- * tauri-plugin-updater 从这个 URL 下载并验签
+ * 安装包下载 URL(GitHub MSI 或 updater 资产)
  */
 download_url: string, 
 /**
- * base64 Ed25519 签名, 由 tauri-plugin-updater 自动验证
+ * base64 Ed25519 签名; 仅签名包路径使用, MSI 路径恒为空串
  */
-signature: string, };
+signature: string, 
+/**
+ * 下载内容期望 SHA256(64-hex 小写); 无 digest 时为空串。MSI 路径用此字段校验。
+ */
+content_sha256: string, };

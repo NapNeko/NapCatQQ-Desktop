@@ -95,7 +95,8 @@ mod tests {
             notes: "x".into(),
             pub_date: Utc::now(),
             download_url: "https://example/u.msi".into(),
-            signature: "sig".into(),
+            signature: String::new(),
+            content_sha256: String::new(),
         }
     }
 

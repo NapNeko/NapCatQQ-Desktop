@@ -26,10 +26,14 @@ pub struct AvailableUpdate {
     pub notes: String,
     #[ts(type = "string")]
     pub pub_date: DateTime<Utc>,
-    /// tauri-plugin-updater 从这个 URL 下载并验签
+    /// 安装包下载 URL(GitHub MSI 或 updater 资产)
     pub download_url: String,
-    /// base64 Ed25519 签名, 由 tauri-plugin-updater 自动验证
+    /// base64 Ed25519 签名; 仅签名包路径使用, MSI 路径恒为空串
+    #[serde(default)]
     pub signature: String,
+    /// 下载内容期望 SHA256(64-hex 小写); 无 digest 时为空串。MSI 路径用此字段校验。
+    #[serde(default)]
+    pub content_sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -179,7 +183,8 @@ mod tests {
             notes: "test".into(),
             pub_date: Utc::now(),
             download_url: "https://example.com/update.msi".into(),
-            signature: "fake".into(),
+            signature: String::new(),
+            content_sha256: "abc".into(),
         };
         let json = serde_json::to_string(&u).unwrap();
         assert!(json.contains("\"v\":1"));

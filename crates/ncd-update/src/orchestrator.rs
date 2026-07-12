@@ -229,7 +229,8 @@ mod tests {
             notes: "release notes".into(),
             pub_date: Utc::now(),
             download_url: "https://example.com/update.msi".into(),
-            signature: "sig".into(),
+            signature: String::new(),
+            content_sha256: String::new(),
         }
     }
 
