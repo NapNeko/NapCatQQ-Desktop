@@ -1,2 +1,4 @@
 src-ui/core/ipc/generated/**/*.ts text eol=lf
 src-ui/core/ipc/generated/*.ts text eol=lf
+# compose 模板嵌入 include_str!;Windows checkout 若转 CRLF 会让渲染结果带 \r
+crates/ncd-template/templates/** text eol=lf

@@ -20,7 +20,7 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
+    // TS 6 起 baseUrl 弃用；paths 相对本 tsconfig 解析，@/* 仍指向 src-ui 根
     "paths": {
       "@/*": [
         "./*"

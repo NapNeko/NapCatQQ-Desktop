@@ -322,7 +322,11 @@ mod tests {
         assert!(yaml.contains("VNC_PASSWD: \"vncpass\""));
         // named volume 以容器名为前缀,避免多容器撞卷
         assert!(yaml.contains("snowluma-data:/app/snowluma-data"));
-        assert!(yaml.contains("volumes:\n  snowluma-data:"));
+        // Windows checkout 可能把模板变成 CRLF,断言按行比较避免 \n/\r\n 差异
+        assert!(
+            yaml_has_top_level_named_volume(&yaml, "snowluma-data"),
+            "missing top-level named volume snowluma-data in:\n{yaml}"
+        );
     }
 
     #[test]
@@ -332,6 +336,31 @@ mod tests {
         let yaml = render_compose(&spec, "p", 0, 0);
         assert!(yaml.contains("container_name: sl2"));
         assert!(yaml.contains("- sl2-data:/app/snowluma-data"));
-        assert!(yaml.contains("volumes:\n  sl2-data:"));
+        assert!(
+            yaml_has_top_level_named_volume(&yaml, "sl2-data"),
+            "missing top-level named volume sl2-data in:\n{yaml}"
+        );
+    }
+
+    /// 顶层 `volumes:` 下是否声明了 `name:`(兼容 LF/CRLF)。
+    fn yaml_has_top_level_named_volume(yaml: &str, name: &str) -> bool {
+        let mut in_top_volumes = false;
+        for line in yaml.lines() {
+            if line == "volumes:" {
+                in_top_volumes = true;
+                continue;
+            }
+            if in_top_volumes {
+                if line.starts_with(' ') || line.starts_with('\t') {
+                    if line.trim() == format!("{name}:") {
+                        return true;
+                    }
+                } else if !line.trim().is_empty() {
+                    // 离开顶层 volumes 块
+                    in_top_volumes = false;
+                }
+            }
+        }
+        false
     }
 }
