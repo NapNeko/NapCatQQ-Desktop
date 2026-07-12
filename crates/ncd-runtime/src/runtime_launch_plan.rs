@@ -26,6 +26,9 @@ pub struct FileSystemRuntimeLaunchPlanner {
     /// None 时回落到 <runtime_root>/snowluma注意:这与 NapCat 的
     /// runtime_root 不同——NapCat 直接装在 runtime 根,SnowLuma 装在子目录
     snowluma_runtime_root: Option<PathBuf>,
+    /// 可选 QQ 安装目录(含 QQ.exe)。生产默认 None,走注册表解析;
+    /// 测试注入假路径,避免 CI runner 依赖本机 QQ。
+    qq_install_path: Option<PathBuf>,
 }
 
 impl FileSystemRuntimeLaunchPlanner {
@@ -37,6 +40,7 @@ impl FileSystemRuntimeLaunchPlanner {
             runtime_root: runtime_root.into(),
             snowluma_data_root: None,
             snowluma_runtime_root: None,
+            qq_install_path: None,
         }
     }
 
@@ -51,6 +55,12 @@ impl FileSystemRuntimeLaunchPlanner {
     /// 与 NapCat runtime_root 严格分离
     pub fn with_snowluma_runtime_root(mut self, runtime_root: impl Into<PathBuf>) -> Self {
         self.snowluma_runtime_root = Some(runtime_root.into());
+        self
+    }
+
+    /// 注入 QQ 安装目录(测试用假 QQ.exe;生产勿用,应走注册表)
+    pub fn with_qq_install_path(mut self, qq_install: impl Into<PathBuf>) -> Self {
+        self.qq_install_path = Some(qq_install.into());
         self
     }
 }
@@ -70,14 +80,25 @@ impl RuntimeLaunchPlanner for FileSystemRuntimeLaunchPlanner {
             .snowluma_runtime_root
             .clone()
             .unwrap_or_else(|| self.runtime_root.join("snowluma"));
-        build_runtime_launch_plan(
-            bot_id,
-            config,
-            &self.runtime_root,
-            &snowluma_runtime_root,
-            &snowluma_data_root,
-        )
-        .await
+        match config.bot.backend_type {
+            BackendType::NapCat => {
+                if let Some(qq_install) = &self.qq_install_path {
+                    build_napcat_launch_plan_with_qq_install_path(
+                        bot_id,
+                        config,
+                        &self.runtime_root,
+                        qq_install,
+                    )
+                    .await
+                } else {
+                    build_napcat_launch_plan(bot_id, config, &self.runtime_root).await
+                }
+            }
+            BackendType::SnowLuma => {
+                build_snowluma_launch_plan(config, &snowluma_runtime_root, &snowluma_data_root)
+                    .await
+            }
+        }
     }
 }
 

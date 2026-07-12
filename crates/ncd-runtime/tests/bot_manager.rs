@@ -811,9 +811,15 @@ async fn batch_start_reports_join_error_for_panicking_task() {
 #[tokio::test]
 async fn batch_start_reports_napcat_missing_runtime_component() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
-    let planner = Arc::new(ncd_runtime::FileSystemRuntimeLaunchPlanner::new(
-        temp.path().join("runtime"),
-    ));
+    let runtime_root = temp.path().join("runtime");
+    // 注入假 QQ 安装目录,不依赖本机注册表 / CI 上是否装了 QQ
+    let qq_install = temp.path().join("QQNT");
+    touch(&qq_install.join("QQ.exe"));
+    // 故意不 prepare_napcat_runtime:应在 NapCatWinBootMain.exe 处失败
+    let planner = Arc::new(
+        ncd_runtime::FileSystemRuntimeLaunchPlanner::new(runtime_root)
+            .with_qq_install_path(qq_install),
+    );
     let (_, _, _, manager) = make_manager_with_planner(temp.path(), planner);
     let bot_id = BotId::new("10020");
 
@@ -829,11 +835,10 @@ async fn batch_start_reports_napcat_missing_runtime_component() {
     assert!(result.succeeded.is_empty());
     assert_eq!(result.failed.len(), 1);
     assert_eq!(result.failed[0].0, bot_id);
+    let err = result.failed[0].1.to_string();
     assert!(
-        result.failed[0]
-            .1
-            .to_string()
-            .contains("NapCatWinBootMain.exe")
+        err.contains("NapCatWinBootMain.exe"),
+        "expected missing NapCat boot main, got: {err}"
     );
 
     let snap = manager.get_snapshot(&BotId::new("10020")).await.unwrap();
