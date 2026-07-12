@@ -1813,9 +1813,8 @@ mod transition_tests {
         );
     }
 
-    /// online=true → 总是先发 NapCatLoginOnline{true},
-    /// 然后重置 offline_notice_sent / login_invalidated_while_online /
-    /// suppress_qrcode_until_online 三个 flag,return 不触发其它副作用
+    /// online=true → 总是先发 NapCatLoginOnline{true};
+    /// 若本离线区间曾发过离线通知,再补一次 Recovered,然后清三个 flag。
     #[tokio::test]
     async fn apply_online_true_resets_flags_and_emits_online_event() {
         let bot_id = BotId::new("back-online");
@@ -1851,8 +1850,11 @@ mod transition_tests {
         assert!(!state.login_invalidated_while_online);
         assert!(!state.suppress_qrcode_until_online);
         assert!(state.online);
-        // 没有副作用调用
-        assert!(notifier.calls().is_empty());
+        // 曾发过离线通知再上线 → Recovered;不触发 restart
+        assert_eq!(
+            notifier.calls(),
+            vec![(bot_id.clone(), OfflineNoticeKind::Recovered)]
+        );
         assert_eq!(restart.calls(), 0);
         // 仅 1 个事件:NapCatLoginOnline{true}
         let events = drain_events(&mut sub).await;
