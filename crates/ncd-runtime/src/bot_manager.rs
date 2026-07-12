@@ -397,10 +397,19 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 启动时从持久化配置恢复所有 Bot Actor,并自动启动标记了 auto_start 的 Bot
     /// 返回 BootstrapResult,其中 skipped 包含超出 4 开上限而未注册的 Bot ID
     pub async fn bootstrap(&self) -> Result<BootstrapResult, BotManagerError> {
+        self.bootstrap_with_auto_start(true).await
+    }
+
+    /// 与 [`Self::bootstrap`] 相同，但可关闭 auto_start（例如 Desktop 协议未同意时）。
+    pub async fn bootstrap_with_auto_start(
+        &self,
+        enable_auto_start: bool,
+    ) -> Result<BootstrapResult, BotManagerError> {
         let configs = self.repo.list().await?;
         info!(
             target: "ncd_runtime::bot_manager",
             bot_configs = configs.len(),
+            enable_auto_start,
             "启动恢复：正在加载 Bot 配置并注册 Actor"
         );
 
@@ -428,12 +437,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .await;
 
         // 自动启动(只针对已注册的 actor,skipped / 已 reconcile 的不会被启动)
-        let auto_start_ids: Vec<BotId> = configs
-            .iter()
-            .filter(|c| c.advanced.auto_start)
-            .map(|c| BotId::new(c.bot.qq_id.to_string()))
-            .filter(|id| !skipped.contains(id) && !reconciled.contains(id))
-            .collect();
+        let auto_start_ids: Vec<BotId> = if enable_auto_start {
+            configs
+                .iter()
+                .filter(|c| c.advanced.auto_start)
+                .map(|c| BotId::new(c.bot.qq_id.to_string()))
+                .filter(|id| !skipped.contains(id) && !reconciled.contains(id))
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         let started = if auto_start_ids.is_empty() {
             BatchResult {
