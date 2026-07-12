@@ -31,6 +31,11 @@ import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
 import { componentMutationBlockedReason, componentLifecycleBlockedReason } from '../../core/domain/components/mutation-gate';
+import { buildDemoRemoteMachine } from '../../core/domain/onboarding/demoRemoteMachine';
+import {
+    getComponentsHostBridge,
+    subscribeComponentsHostBridge,
+} from '../../hooks/desktop/componentsHostBridge';
 import type { ReleaseInfoView } from '../../core/domain/release/normalize';
 import type { ComponentId, DockerInstallReport } from '../../core/ipc/types';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
@@ -70,24 +75,47 @@ export const ComponentsPageNext: React.FC = () => {
         () => [...view.framework, ...view.runtimeDep, ...view.selfApp],
         [view],
     );
+    const hostBridge = useSyncExternalStore(
+        subscribeComponentsHostBridge,
+        getComponentsHostBridge,
+        getComponentsHostBridge,
+    );
+
     const machines = useMemo<MachineView[]>(() => {
         const grouped = groupByHost(allRows, hosts);
-        return grouped.filter(
+        const real = grouped.filter(
             (m) => m.framework.length + m.runtimeDep.length + m.selfApp.length > 0,
         );
-    }, [allRows, hosts]);
+        // 框架 tour：注入只读演示远端，不进 servers.json
+        if (hostBridge.includeDemoRemote) {
+            return [...real, buildDemoRemoteMachine()];
+        }
+        return real;
+    }, [allRows, hosts, hostBridge.includeDemoRemote]);
 
-    // 选中的主机：默认停在第一台（本机）。机器列表变动后若当前选中项消失，
-    // 回落到第一台，避免选中一台已被移除的远端导致空白。
+    // 选中的主机：默认第一台。仅 tour 的 hostSelectionLocked 时强制 preferred；
+    // 结束后 locked=false，用户可自由点远端 tab。
     const [activeHostId, setActiveHostId] = useState<string | null>(null);
     useEffect(() => {
         if (machines.length === 0) {
             if (activeHostId !== null) setActiveHostId(null);
             return;
         }
+        if (hostBridge.hostSelectionLocked && hostBridge.preferredHostId) {
+            const preferred = hostBridge.preferredHostId;
+            if (machines.some((m) => m.host.host_id === preferred)) {
+                if (activeHostId !== preferred) setActiveHostId(preferred);
+                return;
+            }
+        }
         const stillThere = machines.some((m) => m.host.host_id === activeHostId);
         if (!stillThere) setActiveHostId(machines[0].host.host_id);
-    }, [machines, activeHostId]);
+    }, [
+        machines,
+        activeHostId,
+        hostBridge.preferredHostId,
+        hostBridge.hostSelectionLocked,
+    ]);
 
     const activeMachine = useMemo(
         () => machines.find((m) => m.host.host_id === activeHostId) ?? machines[0] ?? null,
@@ -500,13 +528,13 @@ export const ComponentsPageNext: React.FC = () => {
                 </Button>
             </header>
 
-            {machines.length > 1 && activeHostId && (
+            {machines.length > 1 && activeHostId ? (
                 <HostSwitcher
                     machines={machines}
                     activeHostId={activeHostId}
                     onSelect={setActiveHostId}
                 />
-            )}
+            ) : null}
 
             <div
                 className={cn(

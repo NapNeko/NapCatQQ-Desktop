@@ -98,6 +98,7 @@ export function FloatingActions({
                     onClick={onCreate}
                     disabled={busy}
                     variant="primary"
+                    dataTourId="bot-create-fab"
                 >
                     <MotionIcon
                         icon={Plus}
@@ -120,6 +121,8 @@ interface CircleButtonProps {
     disabled?: boolean;
     variant: 'primary' | 'ghost';
     children: React.ReactNode;
+    /** spotlight 锚点 */
+    dataTourId?: string;
 }
 
 function CircleButton({
@@ -128,6 +131,7 @@ function CircleButton({
     disabled,
     variant,
     children,
+    dataTourId,
 }: CircleButtonProps) {
     const m = useMotion();
     const ref = useRef<HTMLButtonElement | null>(null);
@@ -150,6 +154,7 @@ function CircleButton({
                     type="button"
                     onClick={onClick}
                     disabled={disabled}
+                    data-tour-id={dataTourId}
                     className={cn(
                         'pointer-events-auto inline-flex h-11 w-11 items-center justify-center rounded-full',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',

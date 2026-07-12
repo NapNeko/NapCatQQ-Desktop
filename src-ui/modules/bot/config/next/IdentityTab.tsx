@@ -184,148 +184,152 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
     return (
         <div className="flex flex-col gap-14">
-            <FormSection
-                title="账号身份"
-                description="QQ 账号、实例显示名与底座类型"
-            >
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <NumberField
-                        label="QQ 账号"
-                        required
-                        value={data.QQID || null}
-                        onValueChange={(v) => onChange({ QQID: v ?? 0 })}
-                        placeholder="例如：10001"
-                        disabled={isEditMode}
-                        hint={isEditMode ? '编辑模式下不可修改' : undefined}
-                    />
-                    <TextField
-                        label="实例名称"
-                        value={data.name}
-                        onValueChange={(v) => onChange({ name: v })}
-                        placeholder={namePlaceholder}
-                    />
-                </div>
-                <Select
-                    label="底座类型"
-                    items={BACKEND_ITEMS}
-                    value={data.backend_type}
-                    onValueChange={(v) => onChange({ backend_type: v })}
-                    disabled={isRunning}
-                    hint={
-                        isRunning
-                            ? '运行中请先停止再切换底座'
-                            : undefined
-                    }
-                />
-            </FormSection>
-
-            <FormSection
-                title="运行场景"
-                description="本机固定直接运行；远程 Linux 可选 Docker"
-                actions={
-                    sceneExplainer ? (
-                        <SceneExplainerPopover>
-                            {sceneExplainer}
-                        </SceneExplainerPopover>
-                    ) : undefined
-                }
-            >
-                <RadioGroup
-                    label="运行宿主"
-                    items={RUNTIME_ITEMS}
-                    value={runtimeMode}
-                    onValueChange={onRuntimeModeChange}
-                    orientation="horizontal"
-                    name="runtime-target"
-                />
-
-                <GsapPresence visible={isRemote}>
-                    <div className="flex flex-col gap-3">
-                        {!hasRemoteHosts && !serversLoading && (
-                            <InlineNotice tone="warn">
-                                请先在「远程主机」页添加 SSH 主机；当前配置仍按远程保存
-                            </InlineNotice>
-                        )}
-                        {hasRemoteHosts && serverItems.length > 0 && (
-                            <Select
-                                label="远程主机"
-                                items={serverItems}
-                                value={remoteHostSelectValue}
-                                onValueChange={(v) => onChange({ runtime_target: v })}
-                                placeholder="选择主机"
-                            />
-                        )}
-
-                        <RadioGroup
-                            label="启动方式"
-                            items={DEPLOYMENT_ITEMS}
-                            value={deploymentType}
-                            onValueChange={(v) =>
-                                onChange({ deploymentType: v as DeploymentType })
-                            }
-                            orientation="horizontal"
-                            name="deployment-type"
+            <div data-tour-id="bot-identity-section">
+                <FormSection
+                    title="账号身份"
+                    description="QQ 账号、实例显示名与底座类型"
+                >
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <NumberField
+                            label="QQ 账号"
+                            required
+                            value={data.QQID || null}
+                            onValueChange={(v) => onChange({ QQID: v ?? 0 })}
+                            placeholder="例如：10001"
+                            disabled={isEditMode}
+                            hint={isEditMode ? '编辑模式下不可修改' : undefined}
                         />
-
-                        <GsapPresence visible={!!showDockerBlock && !!remoteHostId}>
-                            <div>
-                                <DockerReadinessLine
-                                    flavorLabel={dockerFlavorLabel}
-                                    status={remoteHostId ? statusByHost[remoteHostId] : undefined}
-                                    probing={remoteHostId ? probingByHost[remoteHostId] ?? false : false}
-                                    imageReady={
-                                        remoteHostId
-                                            ? imageReadyByHost[remoteHostId]?.[
-                                                  data.backend_type === 'snowluma'
-                                                      ? 'snowluma'
-                                                      : 'napcat'
-                                              ]
-                                            : undefined
-                                    }
-                                />
-                            </div>
-                        </GsapPresence>
-
-                        {isRemote && deploymentType === 'native' && remoteHostId && (
-                            (() => {
-                                if (remoteTransportFailed) {
-                                    return (
-                                        <InlineNotice tone="danger">
-                                            远端主机不可达，保存后无法启动。请先在「远程主机」页恢复连接。
-                                        </InlineNotice>
-                                    );
-                                }
-                                if (missingDirectRunNotice) {
-                                    return (
-                                        <InlineNotice tone="warn">
-                                            {missingDirectRunNotice}
-                                        </InlineNotice>
-                                    );
-                                }
-                                return null;
-                            })()
-                        )}
+                        <TextField
+                            label="实例名称"
+                            value={data.name}
+                            onValueChange={(v) => onChange({ name: v })}
+                            placeholder={namePlaceholder}
+                        />
                     </div>
-                </GsapPresence>
+                    <Select
+                        label="底座类型"
+                        items={BACKEND_ITEMS}
+                        value={data.backend_type}
+                        onValueChange={(v) => onChange({ backend_type: v })}
+                        disabled={isRunning}
+                        hint={
+                            isRunning
+                                ? '运行中请先停止再切换底座'
+                                : undefined
+                        }
+                    />
+                </FormSection>
+            </div>
 
-                {!isRemote && (
-                    (() => {
-                        const chain = localDirectRunChain(data.backend_type);
-                        const missing = chain.filter((id) => localInstalled[id] === false);
-                        if (missing.length > 0) {
-                            return (
+            <div data-tour-id="bot-runtime-section">
+                <FormSection
+                    title="运行场景"
+                    description="本机固定直接运行；远程 Linux 可选 Docker"
+                    actions={
+                        sceneExplainer ? (
+                            <SceneExplainerPopover>
+                                {sceneExplainer}
+                            </SceneExplainerPopover>
+                        ) : undefined
+                    }
+                >
+                    <RadioGroup
+                        label="运行宿主"
+                        items={RUNTIME_ITEMS}
+                        value={runtimeMode}
+                        onValueChange={onRuntimeModeChange}
+                        orientation="horizontal"
+                        name="runtime-target"
+                    />
+
+                    <GsapPresence visible={isRemote}>
+                        <div className="flex flex-col gap-3">
+                            {!hasRemoteHosts && !serversLoading && (
                                 <InlineNotice tone="warn">
-                                    本机缺少 {missing.map(componentIdToDisplayName).join('、')}，请到「组件」页安装后再使用本机直接运行
+                                    请先在「远程主机」页添加 SSH 主机；当前配置仍按远程保存
                                 </InlineNotice>
-                            );
-                        }
-                        if (chain.some((id) => localInstalled[id] === undefined)) {
-                            return <InlineNotice tone="neutral">正在检测本机运行时组件…</InlineNotice>;
-                        }
-                        return null;
-                    })()
-                )}
-            </FormSection>
+                            )}
+                            {hasRemoteHosts && serverItems.length > 0 && (
+                                <Select
+                                    label="远程主机"
+                                    items={serverItems}
+                                    value={remoteHostSelectValue}
+                                    onValueChange={(v) => onChange({ runtime_target: v })}
+                                    placeholder="选择主机"
+                                />
+                            )}
+
+                            <RadioGroup
+                                label="启动方式"
+                                items={DEPLOYMENT_ITEMS}
+                                value={deploymentType}
+                                onValueChange={(v) =>
+                                    onChange({ deploymentType: v as DeploymentType })
+                                }
+                                orientation="horizontal"
+                                name="deployment-type"
+                            />
+
+                            <GsapPresence visible={!!showDockerBlock && !!remoteHostId}>
+                                <div>
+                                    <DockerReadinessLine
+                                        flavorLabel={dockerFlavorLabel}
+                                        status={remoteHostId ? statusByHost[remoteHostId] : undefined}
+                                        probing={remoteHostId ? probingByHost[remoteHostId] ?? false : false}
+                                        imageReady={
+                                            remoteHostId
+                                                ? imageReadyByHost[remoteHostId]?.[
+                                                data.backend_type === 'snowluma'
+                                                    ? 'snowluma'
+                                                    : 'napcat'
+                                                ]
+                                                : undefined
+                                        }
+                                    />
+                                </div>
+                            </GsapPresence>
+
+                            {isRemote && deploymentType === 'native' && remoteHostId && (
+                                (() => {
+                                    if (remoteTransportFailed) {
+                                        return (
+                                            <InlineNotice tone="danger">
+                                                远端主机不可达，保存后无法启动。请先在「远程主机」页恢复连接。
+                                            </InlineNotice>
+                                        );
+                                    }
+                                    if (missingDirectRunNotice) {
+                                        return (
+                                            <InlineNotice tone="warn">
+                                                {missingDirectRunNotice}
+                                            </InlineNotice>
+                                        );
+                                    }
+                                    return null;
+                                })()
+                            )}
+                        </div>
+                    </GsapPresence>
+
+                    {!isRemote && (
+                        (() => {
+                            const chain = localDirectRunChain(data.backend_type);
+                            const missing = chain.filter((id) => localInstalled[id] === false);
+                            if (missing.length > 0) {
+                                return (
+                                    <InlineNotice tone="warn">
+                                        本机缺少 {missing.map(componentIdToDisplayName).join('、')}，请到「组件」页安装后再使用本机直接运行
+                                    </InlineNotice>
+                                );
+                            }
+                            if (chain.some((id) => localInstalled[id] === undefined)) {
+                                return <InlineNotice tone="neutral">正在检测本机运行时组件…</InlineNotice>;
+                            }
+                            return null;
+                        })()
+                    )}
+                </FormSection>
+            </div>
 
             {data.backend_type === 'snowluma' && deploymentType !== 'docker' && (
                 <FormSection
@@ -415,10 +419,10 @@ function InlineNotice({
         tone === 'ok'
             ? 'bg-success-soft text-success'
             : tone === 'danger'
-              ? 'bg-danger-soft text-danger'
-              : tone === 'warn'
-                ? 'bg-warning-soft text-warning'
-                : 'bg-inset text-text-tertiary';
+                ? 'bg-danger-soft text-danger'
+                : tone === 'warn'
+                    ? 'bg-warning-soft text-warning'
+                    : 'bg-inset text-text-tertiary';
     return (
         <p className={`rounded-sm px-3 py-2 text-2xs leading-relaxed ${cls}`}>
             {children}

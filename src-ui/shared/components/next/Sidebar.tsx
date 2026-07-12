@@ -260,6 +260,13 @@ const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect }) 
                 onClick={() => onSelect(item.id)}
                 aria-current={isActive ? 'page' : undefined}
                 title={collapsed ? item.label : undefined}
+                data-tour-id={
+                    item.id === 'components'
+                        ? 'nav-components'
+                        : item.id === 'bots'
+                            ? 'nav-bots'
+                            : undefined
+                }
                 className={cn(
                     'group relative flex w-full items-center gap-2.5 rounded-sm px-2.5',
                     'text-[13.5px] font-medium transition-colors',

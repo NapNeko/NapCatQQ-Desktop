@@ -184,15 +184,23 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
         );
     };
 
+    const isDemo = host.host_id === 'tour:demo-remote'; // DEMO_REMOTE_HOST_ID
+
     return (
         <div className="flex min-w-0 w-full max-w-full flex-col gap-6">
-            <div className="flex w-full flex-col gap-3">
+            {isDemo ? (
+                <p className="rounded-md border border-brand/25 bg-brand/[0.06] px-3 py-2 text-[12.5px] leading-relaxed text-text-secondary">
+                    当前是<strong className="font-medium text-text">演示远端</strong>
+                    ，不会连真机、也不写入远程档案。用来对照远端 NC / SL 要装啥。
+                </p>
+            ) : null}
+            <div className="flex w-full flex-col gap-3" data-tour-id="comp-group-framework">
                 <Group
                     title="框架"
                     description="Bot 框架本体；Docker 就绪时可预拉框架镜像，Bot 启动时再创建容器"
                     rows={machine.framework}
                     hostId={host.host_id}
-                    disableActions={false}
+                    disableActions={isDemo}
                     lifecycleBlockedReason={lifecycleBlockedReason}
                     latestVersionFor={latestVersionFor}
                     latestReleaseFor={latestReleaseFor}
@@ -200,32 +208,34 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                     onAction={onAction}
                     onRetryDetect={onRetryDetect}
                     onShowReleaseNotes={onShowReleaseNotes}
-                    trailingFor={deployButtonFor}
+                    trailingFor={isDemo ? undefined : deployButtonFor}
                 />
             </div>
 
-            <RuntimeDepGroup
-                rows={machine.runtimeDep}
-                hostId={host.host_id}
-                os={host.os}
-                showDocker={dockerApplicable}
-                disableActions={false}
-                lifecycleBlockedReason={lifecycleBlockedReason}
-                latestVersionFor={latestVersionFor}
-                latestReleaseFor={latestReleaseFor}
-                getProgress={getProgress}
-                onAction={onAction}
-                onRetryDetect={onRetryDetect}
-                onShowReleaseNotes={onShowReleaseNotes}
-                dockerStatus={dockerStatus}
-                isDockerProbing={isDockerProbing}
-                isInstallingDocker={isInstallingDocker}
-                dockerInstallHint={dockerInstallHint}
-                dockerInstallProgress={dockerInstallProgress}
-                onInstallDocker={() => onInstallDocker(host.host_id)}
-                onOpenDockerDownload={onOpenDockerDownload}
-                trailingFor={runtimeTrailingFor}
-            />
+            <div data-tour-id="comp-group-runtime">
+                <RuntimeDepGroup
+                    rows={machine.runtimeDep}
+                    hostId={host.host_id}
+                    os={host.os}
+                    showDocker={dockerApplicable && !isDemo}
+                    disableActions={isDemo}
+                    lifecycleBlockedReason={lifecycleBlockedReason}
+                    latestVersionFor={latestVersionFor}
+                    latestReleaseFor={latestReleaseFor}
+                    getProgress={getProgress}
+                    onAction={onAction}
+                    onRetryDetect={onRetryDetect}
+                    onShowReleaseNotes={onShowReleaseNotes}
+                    dockerStatus={dockerStatus}
+                    isDockerProbing={isDockerProbing}
+                    isInstallingDocker={isInstallingDocker}
+                    dockerInstallHint={dockerInstallHint}
+                    dockerInstallProgress={dockerInstallProgress}
+                    onInstallDocker={() => onInstallDocker(host.host_id)}
+                    onOpenDockerDownload={onOpenDockerDownload}
+                    trailingFor={isDemo ? undefined : runtimeTrailingFor}
+                />
+            </div>
 
             <Group
                 title="桌面端"
@@ -294,20 +304,25 @@ const Group: React.FC<{
             <FormSection title={title} description={description} layout="none">
                 <div className={componentCardGridClass}>
                     {rows.map((row) => (
-                        <MachineComponentRowView
+                        <div
                             key={row.info.id}
-                            row={row}
-                            hostId={hostId}
-                            latestRemoteVersion={latestVersionFor(row.info.id)}
-                            latestRelease={latestReleaseFor(row.info.id)}
-                            activeProgress={getProgress(row.info.id, hostId)}
-                            disabled={disableActions}
-                            lifecycleBlockedReason={lifecycleBlockedReason}
-                            onAction={(action) => onAction(row.info.id, hostId, action)}
-                            onRetryDetect={() => onRetryDetect(hostId)}
-                            onShowReleaseNotes={() => onShowReleaseNotes(row.info.id)}
-                            trailingActions={trailingFor?.(row)}
-                        />
+                            data-tour-id={`comp-row-${row.info.id}`}
+                            className="min-w-0"
+                        >
+                            <MachineComponentRowView
+                                row={row}
+                                hostId={hostId}
+                                latestRemoteVersion={latestVersionFor(row.info.id)}
+                                latestRelease={latestReleaseFor(row.info.id)}
+                                activeProgress={getProgress(row.info.id, hostId)}
+                                disabled={disableActions}
+                                lifecycleBlockedReason={lifecycleBlockedReason}
+                                onAction={(action) => onAction(row.info.id, hostId, action)}
+                                onRetryDetect={() => onRetryDetect(hostId)}
+                                onShowReleaseNotes={() => onShowReleaseNotes(row.info.id)}
+                                trailingActions={trailingFor?.(row)}
+                            />
+                        </div>
                     ))}
                 </div>
             </FormSection>
@@ -375,33 +390,40 @@ const RuntimeDepGroup: React.FC<{
             >
                 <div className={componentCardGridClass}>
                     {rows.map((row) => (
-                        <MachineComponentRowView
+                        <div
                             key={row.info.id}
-                            row={row}
-                            hostId={hostId}
-                            latestRemoteVersion={latestVersionFor(row.info.id)}
-                            latestRelease={latestReleaseFor(row.info.id)}
-                            activeProgress={getProgress(row.info.id, hostId)}
-                            disabled={disableActions}
-                            lifecycleBlockedReason={lifecycleBlockedReason}
-                            onAction={(action) => onAction(row.info.id, hostId, action)}
-                            onRetryDetect={() => onRetryDetect(hostId)}
-                            onShowReleaseNotes={() => onShowReleaseNotes(row.info.id)}
-                            trailingActions={trailingFor?.(row)}
-                        />
+                            data-tour-id={`comp-row-${row.info.id}`}
+                            className="min-w-0"
+                        >
+                            <MachineComponentRowView
+                                row={row}
+                                hostId={hostId}
+                                latestRemoteVersion={latestVersionFor(row.info.id)}
+                                latestRelease={latestReleaseFor(row.info.id)}
+                                activeProgress={getProgress(row.info.id, hostId)}
+                                disabled={disableActions}
+                                lifecycleBlockedReason={lifecycleBlockedReason}
+                                onAction={(action) => onAction(row.info.id, hostId, action)}
+                                onRetryDetect={() => onRetryDetect(hostId)}
+                                onShowReleaseNotes={() => onShowReleaseNotes(row.info.id)}
+                                trailingActions={trailingFor?.(row)}
+                            />
+                        </div>
                     ))}
-                    {showDocker && (
-                        <DockerRow
-                            os={os}
-                            status={dockerStatus}
-                            isProbing={isDockerProbing}
-                            isInstalling={isInstallingDocker}
-                            installHint={dockerInstallHint}
-                            installProgress={dockerInstallProgress}
-                            onInstall={onInstallDocker}
-                            onOpenDownload={onOpenDockerDownload}
-                        />
-                    )}
+                    {showDocker ? (
+                        <div data-tour-id="comp-row-docker" className="min-w-0">
+                            <DockerRow
+                                os={os}
+                                status={dockerStatus}
+                                isProbing={isDockerProbing}
+                                isInstalling={isInstallingDocker}
+                                installHint={dockerInstallHint}
+                                installProgress={dockerInstallProgress}
+                                onInstall={onInstallDocker}
+                                onOpenDownload={onOpenDockerDownload}
+                            />
+                        </div>
+                    ) : null}
                 </div>
             </FormSection>
         );

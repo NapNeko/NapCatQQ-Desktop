@@ -65,12 +65,17 @@ import { IdentityTab } from './next/IdentityTab';
 import { ConnectionsTab } from './next/ConnectionsTab';
 import { AdvancedTab } from './next/AdvancedTab';
 import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
+import { BOT_TOUR_DEMO } from '../../../hooks/desktop/botTourBridge';
 
 interface BotConfigPageNextProps {
     botId: string | null;
     onBack: () => void;
     /** 保存成功后留在配置页；新建时由父级把 botId 设为刚写入的 QQ 号。 */
     onSavedStay?: (savedBotId: string) => void;
+    /** 入门引导演示新建：预填 + 拦截保存，不落盘 */
+    tourDemoMode?: boolean;
+    /** 引导强制切到的 Tab */
+    tourForceTab?: TabValue | null;
 }
 
 type TabValue = 'identity' | 'connections' | 'advanced';
@@ -80,7 +85,13 @@ const defaultSnowlumaAppConfig = (): SnowLumaAppConfig => ({
     snowlumaWebuiPort: 5099,
 });
 
-export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageNextProps) {
+export function BotConfigPageNext({
+    botId,
+    onBack,
+    onSavedStay,
+    tourDemoMode = false,
+    tourForceTab = null,
+}: BotConfigPageNextProps) {
     const isEditMode = botId !== null;
     const formHydratedForBotRef = useRef<string | null>(null);
 
@@ -184,13 +195,28 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
         },
     });
 
+    // 引导强制 Tab（演示新建流程）
+    useEffect(() => {
+        if (tourForceTab) setActiveTab(tourForceTab);
+    }, [tourForceTab]);
+
     // 编辑态：每个 botId 只从服务端灌一次表单，避免 invalidate 后把用户未保存的改动盖掉。
     useEffect(() => {
         if (!isEditMode) {
             formHydratedForBotRef.current = null;
             const fresh = createDefaultBotConfig();
+            if (tourDemoMode) {
+                fresh.bot = {
+                    ...fresh.bot,
+                    QQID: BOT_TOUR_DEMO.qqId,
+                    name: BOT_TOUR_DEMO.name,
+                    backend_type: 'napcat',
+                    runtime_target: 'local',
+                };
+            }
             setFormData(fresh);
-            setPristine(fresh);
+            // 演示：pristine 用空默认，让 dirty=true，保存按钮可点（仍拦截落盘）
+            setPristine(tourDemoMode ? createDefaultBotConfig() : fresh);
             return;
         }
         if (!loadedConfig || botId == null) return;
@@ -199,7 +225,7 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
         setFormData(normalized);
         setPristine(normalized);
         formHydratedForBotRef.current = botId;
-    }, [loadedConfig, isEditMode, botId]);
+    }, [loadedConfig, isEditMode, botId, tourDemoMode]);
 
     const dirty = useMemo(() => {
         const botDirty = JSON.stringify(formData) !== JSON.stringify(pristine);
@@ -249,6 +275,17 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
     };
 
     const handleSave = async () => {
+        if (tourDemoMode) {
+            pushInfoBar({
+                tone: 'info',
+                title: '演示模式：不会真正添加',
+                content: '这是入门引导里的演示新建，配置不会写入。结束引导后可自己点加号真实创建。',
+                key: 'bot-tour-demo-save',
+                autoDismissMs: 4000,
+            });
+            return;
+        }
+
         // 实例名为空时用 placeholder 兜底(后端不允许空 name)
         const finalData: BotConfig = {
             ...formData,
@@ -415,23 +452,38 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
     return (
         <div className="flex h-full w-full flex-col">
             {/* ────── Header ────── */}
-            <header className="flex items-start justify-between gap-3 border-b border-border-subtle py-3">
+            <header
+                className="flex items-start justify-between gap-3 border-b border-border-subtle py-3"
+                data-tour-id="bot-config-header"
+            >
                 <div className="flex items-start gap-3">
-                    <Button variant="ghost" size="icon" onClick={onBack} aria-label="返回列表">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={onBack}
+                        aria-label="返回列表"
+                        disabled={tourDemoMode}
+                    >
                         <ActionMotionIcon icon={ArrowLeft} size={16} />
                     </Button>
                     <div className="flex flex-col gap-0.5">
                         <h1 className="font-display text-md font-semibold text-text">
-                            {isEditMode ? '编辑 Bot 配置' : '新建 Bot'}
+                            {tourDemoMode
+                                ? '新建 Bot（演示）'
+                                : isEditMode
+                                    ? '编辑 Bot 配置'
+                                    : '新建 Bot'}
                         </h1>
                         <p className="text-xs text-text-tertiary">
-                            {isEditMode
-                                ? `QQ ${botId} · ${formData.bot.backend_type} · ${formData.bot.runtime_target}`
-                                : '账号身份 → 连接通道 → 高级选项，至少添加一个连接才能与外部通信'}
+                            {tourDemoMode
+                                ? '已预填演示数据，点保存不会写入配置'
+                                : isEditMode
+                                    ? `QQ ${botId} · ${formData.bot.backend_type} · ${formData.bot.runtime_target}`
+                                    : '账号身份 → 连接通道 → 高级选项，至少添加一个连接才能与外部通信'}
                         </p>
                     </div>
                 </div>
-                {isEditMode && (
+                {isEditMode && !tourDemoMode && (
                     <Button
                         variant="ghost"
                         size="sm"
@@ -449,13 +501,19 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
                 <div className="flex flex-1 flex-col">
                     <Tabs
                         value={activeTab}
-                        onValueChange={(v) => setActiveTab(v as TabValue)}
+                        onValueChange={(v) => {
+                            if (tourDemoMode && tourForceTab) return;
+                            setActiveTab(v as TabValue);
+                        }}
                         className="flex flex-1 flex-col"
                     >
                         <div className="sticky top-0 z-[5] flex items-center justify-between gap-3 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
                             <TabsList className="border-b-0">
                                 <TabsTrigger value="identity">身份</TabsTrigger>
-                                <TabsTrigger value="connections">
+                                <TabsTrigger
+                                    value="connections"
+                                    data-tour-id="bot-connections-tab"
+                                >
                                     连接
                                     <ConnectionCountBadge count={countConnections(formData)} />
                                 </TabsTrigger>
@@ -466,6 +524,7 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
                                 saving={isSaving}
                                 onSave={handleSave}
                                 onCancel={handleCancel}
+                                tourDemoMode={tourDemoMode}
                             />
                         </div>
 
@@ -478,11 +537,14 @@ export function BotConfigPageNext({ botId, onBack, onSavedStay }: BotConfigPageN
                             />
                         </TabsContent>
                         <TabsContent value="connections" className="pb-8 pt-2">
-                            <ConnectionsTab
-                                data={formData.connect}
-                                onChange={updateConnect}
-                                backendType={formData.bot.backend_type}
-                            />
+                            {/* 锚点必须在 TabsContent 子树内：TabsContent 非激活不挂载，且 asChild 不转发 data-tour-id */}
+                            <div data-tour-id="bot-connections-body" className="min-h-[12rem]">
+                                <ConnectionsTab
+                                    data={formData.connect}
+                                    onChange={updateConnect}
+                                    backendType={formData.bot.backend_type}
+                                />
+                            </div>
                         </TabsContent>
                         <TabsContent value="advanced" className="pb-8 pt-2">
                             <AdvancedTab
@@ -561,13 +623,25 @@ interface SaveActionsProps {
     saving: boolean;
     onSave: () => void;
     onCancel: () => void;
+    tourDemoMode?: boolean;
 }
 
-function SaveActions({ dirty, saving, onSave, onCancel }: SaveActionsProps) {
+function SaveActions({
+    dirty,
+    saving,
+    onSave,
+    onCancel,
+    tourDemoMode = false,
+}: SaveActionsProps) {
     return (
-        <div className="flex shrink-0 items-center gap-3 pr-1">
+        <div
+            className="flex shrink-0 items-center gap-3 pr-1"
+            data-tour-id="bot-save-actions"
+        >
             <span className="hidden text-xs sm:inline-flex sm:items-center sm:gap-1.5">
-                {dirty ? (
+                {tourDemoMode ? (
+                    <span className="text-brand">演示 · 不会写入</span>
+                ) : dirty ? (
                     <>
                         <ActionMotionIcon
                             icon={AlertCircle}
@@ -595,7 +669,7 @@ function SaveActions({ dirty, saving, onSave, onCancel }: SaveActionsProps) {
                     variant="ghost"
                     size="sm"
                     onClick={onCancel}
-                    disabled={!dirty || saving}
+                    disabled={!dirty || saving || tourDemoMode}
                 >
                     撤销
                 </Button>
@@ -603,7 +677,7 @@ function SaveActions({ dirty, saving, onSave, onCancel }: SaveActionsProps) {
                     variant="primary"
                     size="sm"
                     onClick={onSave}
-                    disabled={!dirty || saving}
+                    disabled={(!dirty && !tourDemoMode) || saving}
                 >
                     {saving ? (
                         <>
@@ -613,7 +687,7 @@ function SaveActions({ dirty, saving, onSave, onCancel }: SaveActionsProps) {
                     ) : (
                         <>
                             <ActionMotionIcon icon={Save} size={13} strokeWidth={2.2} />
-                            <span>保存</span>
+                            <span>{tourDemoMode ? '保存（演示）' : '保存'}</span>
                         </>
                     )}
                 </Button>

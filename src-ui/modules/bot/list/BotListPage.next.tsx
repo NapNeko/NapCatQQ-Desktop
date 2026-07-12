@@ -454,7 +454,10 @@ export function BotListPageNext({
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             {/* 头部 */}
-            <header className="flex shrink-0 items-end justify-between pb-4 pt-2">
+            <header
+                className="flex shrink-0 items-end justify-between pb-4 pt-2"
+                data-tour-id="bot-list-header"
+            >
                 <div>
                     <p className="text-2xs uppercase tracking-widest text-text-tertiary">
                         bots
@@ -626,7 +629,12 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
                     创建第一个配置后，这里就会显示出来。
                 </p>
             </div>
-            <Button size="sm" variant="primary" onClick={onCreate}>
+            <Button
+                size="sm"
+                variant="primary"
+                onClick={onCreate}
+                data-tour-id="bot-create-empty"
+            >
                 创建第一个实例
             </Button>
         </PagePlaceholder>

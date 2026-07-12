@@ -19,6 +19,7 @@ import {
 } from '../../../core/services/desktop-update.service';
 import { useComponentAction } from '../../../hooks/components/useComponentAction';
 import { useDesktopConsentGate } from '../../../hooks/desktop/useDesktopConsentGate';
+import { requestOnboardingFromSettings } from '../../../hooks/desktop/onboardingHost';
 import { useOpenExternal } from '../../../hooks/useOpenExternal';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { DesktopConsentDialog } from '../../../shared/components/next/DesktopConsentDialog';
@@ -41,9 +42,28 @@ export function AboutTab() {
     const { startAction, isInstalling } = useComponentAction();
     const installing = isInstalling('desktop_self', 'local');
     const consent = useDesktopConsentGate();
+    const [openingGuide, setOpeningGuide] = useState(false);
 
     const [checkState, setCheckState] = useState<CheckState>('idle');
     const [available, setAvailable] = useState<AvailableUpdate | null>(null);
+
+    const handleOpenOnboarding = useCallback(async () => {
+        if (openingGuide) return;
+        setOpeningGuide(true);
+        try {
+            // 整条引导：Dialog 认路 → 组件页遮罩（同一流程，无第二入口）
+            await requestOnboardingFromSettings();
+        } catch (err) {
+            pushInfoBar({
+                key: 'about-onboarding',
+                tone: 'danger',
+                title: '无法打开入门引导',
+                content: err instanceof Error ? err.message : String(err),
+            });
+        } finally {
+            setOpeningGuide(false);
+        }
+    }, [openingGuide]);
 
     const handleCheckUpdate = useCallback(async () => {
         setCheckState('checking');
@@ -220,7 +240,6 @@ export function AboutTab() {
                 <FieldRow
                     label="用户协议"
                     description="EULA 与隐私说明（本机同意记录）"
-                    isLast
                 >
                     <Button
                         variant="secondary"
@@ -228,6 +247,21 @@ export function AboutTab() {
                         onClick={() => void consent.openViewer()}
                     >
                         查看
+                    </Button>
+                </FieldRow>
+                <FieldRow
+                    label="入门引导"
+                    description="认路说明 + 组件页框架对比。不会重走协议门禁。"
+                    isLast
+                >
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={openingGuide}
+                        onClick={() => void handleOpenOnboarding()}
+                    >
+                        {openingGuide ? <Spinner size="xs" tone="brand" /> : null}
+                        {openingGuide ? '打开中…' : '重新查看入门'}
                     </Button>
                 </FieldRow>
             </SettingsSection>

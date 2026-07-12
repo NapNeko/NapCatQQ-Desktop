@@ -5,11 +5,18 @@
 //
 // 回到 list 时在过渡结束后再清 selectedBotId；退场动画期间仍要带着 botId，
 // 否则配置页会瞬间变成「新建 Bot」标题。
+//
+// botTourBridge：入门引导可强制打开演示新建（不落盘）。
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Button } from '../../shared/ui';
 import { PageTransition } from '../../shared/ui/motion';
 import { RouteErrorBoundary } from '../../shared/ui/RouteErrorBoundary';
+import {
+    getBotTourBridge,
+    setBotTourBridge,
+    subscribeBotTourBridge,
+} from '../../hooks/desktop/botTourBridge';
 import { BotListPageNext } from './list/BotListPage.next';
 import { BotConfigPageNext } from './config/BotConfigPage.next';
 import { BotLogPageNext } from './log/BotLogPage.next';
@@ -25,6 +32,34 @@ export function BotPageNext() {
     const [displayedView, setDisplayedView] = useState<View>('list');
     const [subVisible, setSubVisible] = useState(true);
     const [subDirection, setSubDirection] = useState<-1 | 0 | 1>(0);
+
+    const botTour = useSyncExternalStore(
+        subscribeBotTourBridge,
+        getBotTourBridge,
+        getBotTourBridge,
+    );
+
+    // 入门引导：打开演示新建 / 回列表。
+    // 同步切 displayedView，跳过 PageTransition 空窗，否则遮罩量不到配置页锚点。
+    useEffect(() => {
+        if (botTour.openCreate) {
+            setSelectedBotId(null);
+            setView('config');
+            setDisplayedView('config');
+            setSubVisible(true);
+            setBotTourBridge({ openCreate: false });
+        }
+    }, [botTour.openCreate]);
+
+    useEffect(() => {
+        if (botTour.requestList) {
+            setView('list');
+            setDisplayedView('list');
+            setSubVisible(true);
+            setSelectedBotId(null);
+            setBotTourBridge({ requestList: false });
+        }
+    }, [botTour.requestList]);
 
     useEffect(() => {
         if (view === displayedView) {
@@ -62,6 +97,12 @@ export function BotPageNext() {
                 <BotViewContent
                     view={displayedView}
                     selectedBotId={selectedBotId}
+                    demoMode={
+                        botTour.demoMode &&
+                        (view === 'config' || displayedView === 'config') &&
+                        selectedBotId === null
+                    }
+                    forceTab={botTour.forceTab}
                     onConfigureBot={(botId) => {
                         setSelectedBotId(botId);
                         setView('config');
@@ -81,6 +122,8 @@ export function BotPageNext() {
 function BotViewContent({
     view,
     selectedBotId,
+    demoMode,
+    forceTab,
     onConfigureBot,
     onViewLogs,
     onBack,
@@ -88,6 +131,8 @@ function BotViewContent({
 }: {
     view: View;
     selectedBotId: string | null;
+    demoMode: boolean;
+    forceTab: 'identity' | 'connections' | 'advanced' | null;
     onConfigureBot: (botId: string | null) => void;
     onViewLogs: (botId: string) => void;
     onBack: () => void;
@@ -109,6 +154,8 @@ function BotViewContent({
                     botId={selectedBotId}
                     onBack={onBack}
                     onSavedStay={onSavedStay}
+                    tourDemoMode={demoMode}
+                    tourForceTab={forceTab}
                 />
             );
         case 'log':
