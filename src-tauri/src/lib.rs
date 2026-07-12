@@ -18,6 +18,7 @@ pub mod bootstrap;
 pub mod bot_host_resolver;
 pub mod commands;
 pub mod desktop_consent;
+pub mod desktop_onboarding;
 pub mod desktop_log;
 pub mod desktop_log_format;
 pub mod desktop_notify;
@@ -533,6 +534,11 @@ pub fn run() {
             commands::app_settings::set_app_settings,
             commands::desktop_consent::get_desktop_agreements,
             commands::desktop_consent::accept_desktop_agreements,
+            commands::desktop_onboarding::get_desktop_onboarding,
+            commands::desktop_onboarding::start_desktop_onboarding,
+            commands::desktop_onboarding::skip_desktop_onboarding,
+            commands::desktop_onboarding::complete_desktop_onboarding,
+            commands::desktop_onboarding::reopen_desktop_onboarding,
             commands::app_settings::sync_close_action_preference,
             commands::app_settings::test_offline_webhook,
             commands::app_settings::test_offline_email,
