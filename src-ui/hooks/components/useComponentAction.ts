@@ -76,9 +76,8 @@ export function useComponentAction(): UseComponentActionResult {
                     if (!available) {
                         throw new Error('当前已是最新版本，无需更新');
                     }
-                    // install 成功后进程会 exit；失败则抛错进入 failTask
-                    await desktopUpdateService.install(available);
-                    return taskId;
+                    // 进度经 component_action_progress；成功后进程会 exit
+                    return await desktopUpdateService.install(available, taskId);
                 }
 
                 const backendTaskId = await componentService.runComponentAction(

@@ -38,10 +38,17 @@ export const desktopUpdateService = {
     /**
      * 下载 MSI 并启动 msiexec；成功时进程会退出，Promise 可能永不 resolve。
      * `expected` 只带 UI 看到的版本；后端会重新 check，不信任本地下发的 URL。
+     * `taskId` 与组件任务队列对齐，后端推 component_action_progress。
      */
-    install: async (expected: AvailableUpdate): Promise<void> => {
+    install: async (
+        expected: AvailableUpdate,
+        taskId?: string,
+    ): Promise<string> => {
         if (isTauri) {
-            return invoke<void>('install_desktop_update', { expected });
+            return invoke<string>('install_desktop_update', {
+                expected,
+                taskId: taskId ?? null,
+            });
         }
         console.info(
             '[desktopUpdateService] mock install',
@@ -49,6 +56,6 @@ export const desktopUpdateService = {
             'from',
             APP_VERSION,
         );
-        return withMockDelay(undefined, 200);
+        return withMockDelay(taskId ?? 'mock-desktop-update', 200);
     },
 };
