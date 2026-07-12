@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
     Dialog,
@@ -7,14 +7,9 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
+    SimpleMarkdown,
 } from '../../../shared/ui';
 import type { SnowLumaAgreementsPayload } from '../../../core/services/bot.service';
-
-type MarkdownBlock =
-    | { kind: 'heading'; level: 1 | 2 | 3 | 4; text: string }
-    | { kind: 'paragraph'; text: string }
-    | { kind: 'list_item'; text: string }
-    | { kind: 'quote'; text: string };
 
 interface SnowLumaConsentDialogProps {
     open: boolean;
@@ -91,7 +86,7 @@ export function SnowLumaConsentDialog({
                                     </span>
                                 )}
                             </div>
-                            <MarkdownText text={doc.text} />
+                            <SimpleMarkdown text={doc.text} />
                         </section>
                     ))}
                     {!payload && (
@@ -130,134 +125,4 @@ export function SnowLumaConsentDialog({
             </DialogContent>
         </Dialog>
     );
-}
-
-function MarkdownText({ text }: { text: string }) {
-    const blocks = parseMarkdownBlocks(text);
-    return (
-        <div className="space-y-2 text-sm leading-6 text-text-secondary">
-            {blocks.map((block, index) => {
-                if (block.kind === 'heading') {
-                    const className =
-                        block.level === 1
-                            ? 'mt-4 text-lg font-semibold text-text'
-                            : block.level === 2
-                            ? 'mt-4 text-base font-semibold text-text'
-                            : block.level === 3
-                                ? 'mt-3 text-sm font-semibold text-text'
-                                : 'mt-2 text-sm font-medium text-text';
-                    return (
-                        <h4 key={index} className={className}>
-                            {renderInlineMarkdown(block.text)}
-                        </h4>
-                    );
-                }
-                if (block.kind === 'list_item') {
-                    return (
-                        <div key={index} className="flex gap-2">
-                            <span className="mt-[0.7em] h-1 w-1 shrink-0 rounded-full bg-text-tertiary" />
-                            <p className="min-w-0 whitespace-pre-wrap break-words">
-                                {renderInlineMarkdown(block.text)}
-                            </p>
-                        </div>
-                    );
-                }
-                if (block.kind === 'quote') {
-                    return (
-                        <blockquote
-                            key={index}
-                            className="border-l-2 border-border pl-3 text-text-tertiary"
-                        >
-                            {renderInlineMarkdown(block.text)}
-                        </blockquote>
-                    );
-                }
-                return (
-                    <p key={index} className="whitespace-pre-wrap break-words">
-                        {renderInlineMarkdown(block.text)}
-                    </p>
-                );
-            })}
-        </div>
-    );
-}
-
-function parseMarkdownBlocks(text: string): MarkdownBlock[] {
-    const blocks: MarkdownBlock[] = [];
-    const paragraphs: string[] = [];
-    const flushParagraph = () => {
-        if (paragraphs.length === 0) return;
-        const joined = paragraphs.join(' ').trim();
-        if (joined) blocks.push({ kind: 'paragraph', text: joined });
-        paragraphs.length = 0;
-    };
-
-    for (const rawLine of text.split(/\r?\n/)) {
-        const line = rawLine.trim();
-        if (!line || line === '---') {
-            flushParagraph();
-            continue;
-        }
-        const heading = /^(#{1,4})\s+(.+)$/.exec(line);
-        if (heading) {
-            flushParagraph();
-            blocks.push({
-                kind: 'heading',
-                level: heading[1].length as 1 | 2 | 3 | 4,
-                text: heading[2].trim(),
-            });
-            continue;
-        }
-        const quote = /^>\s*(.+)$/.exec(line);
-        if (quote) {
-            flushParagraph();
-            blocks.push({ kind: 'quote', text: quote[1].trim() });
-            continue;
-        }
-        const listItem = /^[-*]\s+(.+)$/.exec(line);
-        if (listItem) {
-            flushParagraph();
-            blocks.push({ kind: 'list_item', text: listItem[1].trim() });
-            continue;
-        }
-        if (/^\d+(?:\.\d+)+\s+/.test(line)) {
-            flushParagraph();
-            blocks.push({ kind: 'paragraph', text: line });
-            continue;
-        }
-        paragraphs.push(line);
-    }
-    flushParagraph();
-    return blocks;
-}
-
-function renderInlineMarkdown(text: string) {
-    const parts: ReactNode[] = [];
-    const pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g;
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(text)) !== null) {
-        if (match.index > lastIndex) {
-            parts.push(text.slice(lastIndex, match.index));
-        }
-        const token = match[0];
-        if (token.startsWith('**')) {
-            parts.push(
-                <strong key={parts.length} className="font-semibold text-text">
-                    {token.slice(2, -2)}
-                </strong>,
-            );
-        } else {
-            parts.push(
-                <code key={parts.length} className="rounded-xs bg-muted px-1 py-0.5 font-mono text-[0.85em] text-text">
-                    {token.slice(1, -1)}
-                </code>,
-            );
-        }
-        lastIndex = pattern.lastIndex;
-    }
-    if (lastIndex < text.length) {
-        parts.push(text.slice(lastIndex));
-    }
-    return parts;
 }

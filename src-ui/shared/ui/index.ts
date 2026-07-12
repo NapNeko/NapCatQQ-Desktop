@@ -43,6 +43,7 @@ export { Select, type SelectProps, type SelectItem } from './Select';
 export { RadioGroup, type RadioGroupProps, type RadioItem } from './RadioGroup';
 export { FormSection, type FormSectionProps } from './FormSection';
 export { PagePlaceholder, type PagePlaceholderProps } from './PagePlaceholder';
+export { SimpleMarkdown, type SimpleMarkdownProps } from './SimpleMarkdown';
 export {
     Popover,
     PopoverTrigger,
