@@ -147,10 +147,7 @@ async fn test_runtime_matrix_blocks_docker_on_local_upsert() {
 
     let error = repo.upsert(config).await.unwrap_err();
 
-    assert!(matches!(
-        error,
-        BotConfigError::UnsupportedRuntimeMatrix(_)
-    ));
+    assert!(matches!(error, BotConfigError::UnsupportedRuntimeMatrix(_)));
     assert!(!store.bot_config_path().exists());
 }
 
