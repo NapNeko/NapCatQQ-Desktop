@@ -13,8 +13,8 @@ use ncd_domain::SchemaVersion;
 use ncd_domain::release_snapshot::ReleaseInfo;
 use ncd_domain::{ProgressEvent, ProgressKind, ProgressLogLevel};
 use ncd_network::{
-    download_with_resume, DownloadConfig, DownloadProgressSink, DownloadStage, NoopProgressSink,
-    ProgressUpdate,
+    DownloadConfig, DownloadProgressSink, DownloadStage, NoopProgressSink, ProgressUpdate,
+    download_with_resume,
 };
 use ncd_runtime::release::fetch_release_snapshot;
 use ncd_runtime::{BroadcastEventBus, DomainEvent, EventBus};
@@ -184,8 +184,7 @@ impl DesktopUpdateProgressSink {
     }
 
     pub fn set_step(&self, step: u32) {
-        self.step
-            .store(step, std::sync::atomic::Ordering::Relaxed);
+        self.step.store(step, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn current_step(&self) -> u32 {
@@ -193,10 +192,11 @@ impl DesktopUpdateProgressSink {
     }
 
     fn publish(&self, kind: ProgressKind) {
-        self.event_bus.publish(DomainEvent::component_action_progress(
-            self.task_id.clone(),
-            ProgressEvent::new(kind),
-        ));
+        self.event_bus
+            .publish(DomainEvent::component_action_progress(
+                self.task_id.clone(),
+                ProgressEvent::new(kind),
+            ));
     }
 
     pub fn emit_started(&self, total_steps: u32) {
@@ -251,7 +251,11 @@ impl DownloadProgressSink for DesktopUpdateProgressSink {
                     format!("下载 {} / {}", fmt_bytes(update.downloaded), fmt_bytes(t))
                 }
                 (None, Some(bps)) => {
-                    format!("下载 {} · {}/s", fmt_bytes(update.downloaded), fmt_bytes(bps))
+                    format!(
+                        "下载 {} · {}/s",
+                        fmt_bytes(update.downloaded),
+                        fmt_bytes(bps)
+                    )
                 }
                 (None, None) => format!("下载 {}", fmt_bytes(update.downloaded)),
             }

@@ -134,7 +134,7 @@ export function useComponentAction(): UseComponentActionResult {
                 initial === 'cancelled'
             ) {
                 queueMicrotask(() => cb(initial));
-                return () => {};
+                return () => { };
             }
             const unsub = componentActionStore.subscribe(() => {
                 const status = componentActionStore.getSnapshot().tasks[taskId]?.status;

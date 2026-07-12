@@ -19,19 +19,14 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::commands::app_settings::read_github_pat;
-use crate::desktop_update::{
-    product_version, DesktopUpdateProgressSink, GithubMsiUpdateProvider,
-};
 use crate::AppState;
+use crate::commands::app_settings::read_github_pat;
+use crate::desktop_update::{DesktopUpdateProgressSink, GithubMsiUpdateProvider, product_version};
 
 fn build_check_orchestrator(state: &AppState) -> Result<UpdateOrchestrator, String> {
     let version = product_version().map_err(|e| e.to_string())?;
     let token = read_github_pat(&state.data_root);
-    let provider = Arc::new(GithubMsiUpdateProvider::new(
-        state.data_root.clone(),
-        token,
-    ));
+    let provider = Arc::new(GithubMsiUpdateProvider::new(state.data_root.clone(), token));
     Ok(UpdateOrchestrator::new(
         provider,
         &state.data_root,
@@ -199,10 +194,7 @@ pub async fn install_desktop_update(
 
     progress_ui.emit_step_end(1, true);
     progress_ui.set_step(2);
-    progress_ui.emit_step_begin(
-        2,
-        format!("下载 Desktop {}…", server_update.version),
-    );
+    progress_ui.emit_step_begin(2, format!("下载 Desktop {}…", server_update.version));
 
     // running_bots 列表留给 resume；当前先停本机再装，列表可为空
     let running_bots: Vec<String> = Vec::new();
