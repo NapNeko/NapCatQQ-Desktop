@@ -1,12 +1,15 @@
 // 机器卡里的一行：一个组件在这台机器上的状态 + 操作。
 
 import React, { useEffect, useState } from 'react';
-import { ExternalLink, X } from 'lucide-react';
+import { ExternalLink, ScrollText, X } from 'lucide-react';
 import { Button } from '../../shared/ui';
 import { useOpenExternal } from '../../hooks/useOpenExternal';
 import type { MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
-import { compareSemver } from '../../core/domain/release/normalize';
+import {
+    compareSemver,
+    type ReleaseInfoView,
+} from '../../core/domain/release/normalize';
 import { ProgressLine, ProgressBarOverlay, shouldShowProgressBar } from './progressView';
 import { ComponentManageCard } from './ComponentEntityCard';
 import { hostComponentStatusBadge } from './componentStatusPresentation';
@@ -36,23 +39,28 @@ interface Props {
     row: MachineComponentRow;
     hostId: string;
     latestRemoteVersion: string | null;
+    /** 远端 release 元数据（含更新日志）；null 表示尚未拉到 */
+    latestRelease?: ReleaseInfoView | null;
     activeProgress: { taskId: string; progress: ActionProgressView } | null;
     disabled?: boolean;
     /** 本机有活跃 Bot 时限制 update/uninstall；安装仍可用 */
     lifecycleBlockedReason?: string | null;
     onAction: (action: { stepKind: StepKind } | { cancelTaskId: string }) => void;
     onRetryDetect: () => void;
+    onShowReleaseNotes?: () => void;
     trailingActions?: React.ReactNode;
 }
 
 export const MachineComponentRowView: React.FC<Props> = ({
     row,
     latestRemoteVersion,
+    latestRelease = null,
     activeProgress,
     disabled = false,
     lifecycleBlockedReason = null,
     onAction,
     onRetryDetect,
+    onShowReleaseNotes,
     trailingActions,
 }) => {
     const { info, status } = row;
@@ -86,6 +94,8 @@ export const MachineComponentRowView: React.FC<Props> = ({
         activeProgress.progress.status !== 'failed' &&
         activeProgress.progress.status !== 'cancelled';
 
+    const canShowNotes = !!latestRelease && !!onShowReleaseNotes;
+
     const footer = isCancelable ? (
         <Button
             size="sm"
@@ -97,6 +107,17 @@ export const MachineComponentRowView: React.FC<Props> = ({
         </Button>
     ) : (
         <>
+            {canShowNotes ? (
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    title="查看更新日志"
+                    onClick={onShowReleaseNotes}
+                >
+                    <ScrollText size={13} strokeWidth={2} aria-hidden />
+                    日志
+                </Button>
+            ) : null}
             {trailingActions}
             <ActionButtons
                 status={status}

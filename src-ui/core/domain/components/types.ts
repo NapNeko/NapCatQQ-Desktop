@@ -191,7 +191,8 @@ export function splitByCategory(rows: ComponentRow[]): ComponentsView {
 const CATEGORY_LABEL: Record<ComponentCategory, string> = {
     framework: '框架',
     runtime_dep: '运行时依赖',
-    self_app: '桌面端自身',
+    // 含本机 Desktop + 远端 ncd-watch（产品侧配套，非框架运行时依赖）
+    self_app: '桌面端',
 };
 
 export function categoryLabel(c: ComponentCategory): string {

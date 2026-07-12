@@ -17,6 +17,7 @@ import { dockerStatusSummary } from '../../core/domain/docker/status';
 import { isHostConnectivityFailureReason } from '../../core/domain/components/types';
 import type { MachineView, MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
+import type { ReleaseInfoView } from '../../core/domain/release/normalize';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type {
     ComponentId,
@@ -30,6 +31,8 @@ import type {
 interface HostComponentsViewProps {
     machine: MachineView;
     latestVersionFor: (id: ComponentId) => string | null;
+    /** 远端 release 全文（含更新日志）；无则不显示「日志」按钮 */
+    latestReleaseFor: (id: ComponentId) => ReleaseInfoView | null;
     getProgress: (
         componentId: ComponentId,
         hostId: string,
@@ -40,6 +43,7 @@ interface HostComponentsViewProps {
         action: { stepKind: StepKind } | { cancelTaskId: string },
     ) => void;
     onRetryDetect: (hostId: string) => void;
+    onShowReleaseNotes: (componentId: ComponentId) => void;
     /** 该主机有活跃 Bot 时，update/uninstall 按钮禁用文案 */
     lifecycleBlockedReason?: string | null;
     // Docker 数据 + 动作（来自 useDockerHosts）
@@ -64,9 +68,11 @@ interface HostComponentsViewProps {
 export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     machine,
     latestVersionFor,
+    latestReleaseFor,
     getProgress,
     onAction,
     onRetryDetect,
+    onShowReleaseNotes,
     lifecycleBlockedReason = null,
     dockerStatus,
     isDockerProbing,
@@ -189,9 +195,11 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                     disableActions={false}
                     lifecycleBlockedReason={lifecycleBlockedReason}
                     latestVersionFor={latestVersionFor}
+                    latestReleaseFor={latestReleaseFor}
                     getProgress={getProgress}
                     onAction={onAction}
                     onRetryDetect={onRetryDetect}
+                    onShowReleaseNotes={onShowReleaseNotes}
                     trailingFor={deployButtonFor}
                 />
             </div>
@@ -204,9 +212,11 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 disableActions={false}
                 lifecycleBlockedReason={lifecycleBlockedReason}
                 latestVersionFor={latestVersionFor}
+                latestReleaseFor={latestReleaseFor}
                 getProgress={getProgress}
                 onAction={onAction}
                 onRetryDetect={onRetryDetect}
+                onShowReleaseNotes={onShowReleaseNotes}
                 dockerStatus={dockerStatus}
                 isDockerProbing={isDockerProbing}
                 isInstallingDocker={isInstallingDocker}
@@ -219,15 +229,17 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
 
             <Group
                 title="桌面端"
-                description="NapCatQQ Desktop 本体更新与维护"
+                description="NapCatQQ Desktop 本体，以及配套的远端 NCD Watch（Desktop 退出后仍可告警）"
                 rows={machine.selfApp}
                 hostId={host.host_id}
                 disableActions={false}
                 lifecycleBlockedReason={lifecycleBlockedReason}
                 latestVersionFor={latestVersionFor}
+                latestReleaseFor={latestReleaseFor}
                 getProgress={getProgress}
                 onAction={onAction}
                 onRetryDetect={onRetryDetect}
+                onShowReleaseNotes={onShowReleaseNotes}
             />
 
         </div>
@@ -249,6 +261,7 @@ const Group: React.FC<{
     disableActions?: boolean;
     lifecycleBlockedReason?: string | null;
     latestVersionFor: (id: ComponentId) => string | null;
+    latestReleaseFor: (id: ComponentId) => ReleaseInfoView | null;
     getProgress: (
         componentId: ComponentId,
         hostId: string,
@@ -259,6 +272,7 @@ const Group: React.FC<{
         action: { stepKind: StepKind } | { cancelTaskId: string },
     ) => void;
     onRetryDetect: (hostId: string) => void;
+    onShowReleaseNotes: (componentId: ComponentId) => void;
     trailingFor?: (row: MachineComponentRow) => React.ReactNode;
 }> = ({
     title,
@@ -268,9 +282,11 @@ const Group: React.FC<{
     disableActions = false,
     lifecycleBlockedReason = null,
     latestVersionFor,
+    latestReleaseFor,
     getProgress,
     onAction,
     onRetryDetect,
+    onShowReleaseNotes,
     trailingFor,
 }) => {
         if (rows.length === 0) return null;
@@ -283,11 +299,13 @@ const Group: React.FC<{
                             row={row}
                             hostId={hostId}
                             latestRemoteVersion={latestVersionFor(row.info.id)}
+                            latestRelease={latestReleaseFor(row.info.id)}
                             activeProgress={getProgress(row.info.id, hostId)}
                             disabled={disableActions}
                             lifecycleBlockedReason={lifecycleBlockedReason}
                             onAction={(action) => onAction(row.info.id, hostId, action)}
                             onRetryDetect={() => onRetryDetect(hostId)}
+                            onShowReleaseNotes={() => onShowReleaseNotes(row.info.id)}
                             trailingActions={trailingFor?.(row)}
                         />
                     ))}
@@ -305,6 +323,7 @@ const RuntimeDepGroup: React.FC<{
     disableActions?: boolean;
     lifecycleBlockedReason?: string | null;
     latestVersionFor: (id: ComponentId) => string | null;
+    latestReleaseFor: (id: ComponentId) => ReleaseInfoView | null;
     getProgress: (
         componentId: ComponentId,
         hostId: string,
@@ -315,6 +334,7 @@ const RuntimeDepGroup: React.FC<{
         action: { stepKind: StepKind } | { cancelTaskId: string },
     ) => void;
     onRetryDetect: (hostId: string) => void;
+    onShowReleaseNotes: (componentId: ComponentId) => void;
     dockerStatus: DockerStatus | undefined;
     isDockerProbing: boolean;
     isInstallingDocker: boolean;
@@ -331,9 +351,11 @@ const RuntimeDepGroup: React.FC<{
     disableActions = false,
     lifecycleBlockedReason = null,
     latestVersionFor,
+    latestReleaseFor,
     getProgress,
     onAction,
     onRetryDetect,
+    onShowReleaseNotes,
     dockerStatus,
     isDockerProbing,
     isInstallingDocker,
@@ -358,11 +380,13 @@ const RuntimeDepGroup: React.FC<{
                             row={row}
                             hostId={hostId}
                             latestRemoteVersion={latestVersionFor(row.info.id)}
+                            latestRelease={latestReleaseFor(row.info.id)}
                             activeProgress={getProgress(row.info.id, hostId)}
                             disabled={disableActions}
                             lifecycleBlockedReason={lifecycleBlockedReason}
                             onAction={(action) => onAction(row.info.id, hostId, action)}
                             onRetryDetect={() => onRetryDetect(hostId)}
+                            onShowReleaseNotes={() => onShowReleaseNotes(row.info.id)}
                             trailingActions={trailingFor?.(row)}
                         />
                     ))}

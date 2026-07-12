@@ -79,7 +79,8 @@ export const mockComponentCatalog: ComponentInfo[] = [
 
         repo_url: 'https://github.com/NapNeko/NapCatQQ-Desktop',
         supported_targets: [{ os: 'linux', locality: 'remote' }],
-        category: 'runtime_dep',
+        // 与 Desktop 同属产品侧 SelfApp，不是 QQ/Node 运行时依赖
+        category: 'self_app',
     },
     {
         id: 'desktop_self',

@@ -27,9 +27,11 @@ import { useDockerHosts } from '../../hooks/docker/useDockerHosts';
 import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallProgress';
 import { HostSwitcher } from './HostSwitcher';
 import { HostComponentsView } from './HostComponentsView';
+import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
 import { componentMutationBlockedReason, componentLifecycleBlockedReason } from '../../core/domain/components/mutation-gate';
+import type { ReleaseInfoView } from '../../core/domain/release/normalize';
 import type { ComponentId, DockerInstallReport } from '../../core/ipc/types';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type { DockerInstallOptions } from '../../core/services/docker.service';
@@ -155,6 +157,7 @@ export const ComponentsPageNext: React.FC = () => {
         [machines],
     );
 
+    // 版本号：组件更新按钮用（含 QQ 宿主探测）。
     const latestVersionFor = useCallback(
         (id: ComponentId): string | null => {
             switch (id) {
@@ -178,6 +181,47 @@ export const ComponentsPageNext: React.FC = () => {
         },
         [releases, activeMachine?.host.os],
     );
+
+    // 更新日志：只给有 GitHub release body 的组件（NC / SL / NCD / ncd-watch）。
+    // QQ 走 pcConfig 版本探测，没有可用 changelog，不展示「日志」。
+    const latestReleaseFor = useCallback(
+        (id: ComponentId): ReleaseInfoView | null => {
+            switch (id) {
+                case 'napcat':
+                    return releases.napcat;
+                case 'snowluma':
+                    return releases.snowluma;
+                case 'desktop_self':
+                    return releases.desktop;
+                case 'ncd_watch':
+                    return releases.ncdWatch;
+                default:
+                    return null;
+            }
+        },
+        [releases],
+    );
+
+    const [releaseNotesTarget, setReleaseNotesTarget] = useState<ComponentId | null>(null);
+
+    const releaseNotesLabel = (id: ComponentId | null): string => {
+        switch (id) {
+            case 'napcat':
+                return 'NapCat';
+            case 'snowluma':
+                return 'SnowLuma';
+            case 'desktop_self':
+                return 'NapCatQQ Desktop';
+            case 'ncd_watch':
+                return 'ncd-watch';
+            default:
+                return '组件';
+        }
+    };
+
+    const handleShowReleaseNotes = useCallback((componentId: ComponentId) => {
+        setReleaseNotesTarget(componentId);
+    }, []);
 
     const handleAction = useCallback(
         async (
@@ -482,9 +526,11 @@ export const ComponentsPageNext: React.FC = () => {
                     <HostComponentsView
                         machine={activeMachine}
                         latestVersionFor={latestVersionFor}
+                        latestReleaseFor={latestReleaseFor}
                         getProgress={getProgressFor}
                         onAction={handleAction}
                         onRetryDetect={handleRetryDetect}
+                        onShowReleaseNotes={handleShowReleaseNotes}
                         lifecycleBlockedReason={lifecycleBlockedReasonForHost(
                             activeMachine.host.host_id,
                         )}
@@ -515,6 +561,17 @@ export const ComponentsPageNext: React.FC = () => {
                     />
                 ) : null}
             </div>
+
+            <ReleaseNotesDialog
+                open={releaseNotesTarget != null}
+                onOpenChange={(open) => {
+                    if (!open) setReleaseNotesTarget(null);
+                }}
+                componentLabel={releaseNotesLabel(releaseNotesTarget)}
+                release={
+                    releaseNotesTarget ? latestReleaseFor(releaseNotesTarget) : null
+                }
+            />
 
             {sudoPrompt && (
                 <SudoPasswordDialog
