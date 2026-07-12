@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { useMotion } from '../hooks/preferences/useMotion';
 import { APP_VERSION_LABEL } from '../core/domain/app-meta';
-import logoSplash from '../assets/logo-72.png';
+import logoSplash from '../assets/logo-72.png?inline';
 
 /// 壳已就绪后至少再展示这么久；实际退场还要等进场时间轴播完。
 const MIN_VISIBLE_MS = 880;
@@ -17,17 +17,17 @@ const SPLASH_PARTICLES: ReadonlyArray<{
     delay: number;
     accent?: boolean;
 }> = [
-    { left: '14%', top: '22%', size: 6, delay: 0 },
-    { left: '78%', top: '18%', size: 5, delay: 0.4, accent: true },
-    { left: '22%', top: '72%', size: 4, delay: 0.8 },
-    { left: '84%', top: '68%', size: 7, delay: 0.2, accent: true },
-    { left: '48%', top: '12%', size: 3, delay: 1.1 },
-    { left: '6%', top: '48%', size: 5, delay: 0.6 },
-    { left: '92%', top: '42%', size: 4, delay: 0.9 },
-    { left: '38%', top: '82%', size: 5, delay: 0.3, accent: true },
-    { left: '62%', top: '78%', size: 4, delay: 0.7 },
-    { left: '52%', top: '28%', size: 3, delay: 1.3 },
-];
+        { left: '14%', top: '22%', size: 6, delay: 0 },
+        { left: '78%', top: '18%', size: 5, delay: 0.4, accent: true },
+        { left: '22%', top: '72%', size: 4, delay: 0.8 },
+        { left: '84%', top: '68%', size: 7, delay: 0.2, accent: true },
+        { left: '48%', top: '12%', size: 3, delay: 1.1 },
+        { left: '6%', top: '48%', size: 5, delay: 0.6 },
+        { left: '92%', top: '42%', size: 4, delay: 0.9 },
+        { left: '38%', top: '82%', size: 5, delay: 0.3, accent: true },
+        { left: '62%', top: '78%', size: 4, delay: 0.7 },
+        { left: '52%', top: '28%', size: 3, delay: 1.3 },
+    ];
 
 export interface StartupSplashProps {
     shellReady: boolean;
@@ -273,51 +273,51 @@ export const StartupSplash: React.FC<StartupSplashProps> = ({ shellReady, onFini
         const floatTween =
             logoWrap && isRich
                 ? gsap.to(logoWrap, {
-                      y: -5,
-                      duration: 2.2 / Math.max(0.5, motion.speed),
-                      ease: 'sine.inOut',
-                      yoyo: true,
-                      repeat: -1,
-                  })
+                    y: -5,
+                    duration: 2.2 / Math.max(0.5, motion.speed),
+                    ease: 'sine.inOut',
+                    yoyo: true,
+                    repeat: -1,
+                })
                 : null;
 
         const haloTween =
             halo && isRich
                 ? gsap.to(halo, {
-                      rotation: 360,
-                      duration: 18 / Math.max(0.5, motion.speed),
-                      ease: 'none',
-                      repeat: -1,
-                  })
+                    rotation: 360,
+                    duration: 18 / Math.max(0.5, motion.speed),
+                    ease: 'none',
+                    repeat: -1,
+                })
                 : null;
 
         const shineLoop =
             shine && isRich
                 ? gsap.timeline({ repeat: -1, repeatDelay: 2.8 / Math.max(0.5, motion.speed) }).to(shine, {
-                      left: '140%',
-                      autoAlpha: 0.4,
-                      duration: 0.85 / Math.max(0.5, motion.speed),
-                      ease: 'power2.inOut',
-                      onStart: () => {
-                          gsap.set(shine, { left: '-120%', autoAlpha: 0 });
-                      },
-                  })
+                    left: '140%',
+                    autoAlpha: 0.4,
+                    duration: 0.85 / Math.max(0.5, motion.speed),
+                    ease: 'power2.inOut',
+                    onStart: () => {
+                        gsap.set(shine, { left: '-120%', autoAlpha: 0 });
+                    },
+                })
                 : null;
 
         const barShineLoop =
             barShine && motion.level !== 'elegant'
                 ? gsap.fromTo(
-                      barShine,
-                      { xPercent: -120, autoAlpha: 0.35 },
-                      {
-                          xPercent: 220,
-                          autoAlpha: 0.75,
-                          duration: 1.4 / Math.max(0.5, motion.speed),
-                          ease: 'power1.inOut',
-                          repeat: -1,
-                          repeatDelay: 0.35 / Math.max(0.5, motion.speed),
-                      },
-                  )
+                    barShine,
+                    { xPercent: -120, autoAlpha: 0.35 },
+                    {
+                        xPercent: 220,
+                        autoAlpha: 0.75,
+                        duration: 1.4 / Math.max(0.5, motion.speed),
+                        ease: 'power1.inOut',
+                        repeat: -1,
+                        repeatDelay: 0.35 / Math.max(0.5, motion.speed),
+                    },
+                )
                 : null;
 
         return () => {

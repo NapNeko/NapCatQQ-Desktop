@@ -23,8 +23,8 @@ import gsap from 'gsap';
 import { cn } from '../../utils/cn';
 import { MotionIcon, NAV_ROUTE_MOTION } from '../../ui/motion';
 import { useMotion } from '../../../hooks/preferences/useMotion';
-import logoSidebar from '../../../assets/logo-32.png';
-import logoSidebarCollapsed from '../../../assets/logo-48.png';
+import logoSidebar from '../../../assets/logo-32.png?inline';
+import logoSidebarCollapsed from '../../../assets/logo-48.png?inline';
 
 export type AppRoute =
     | 'overview'

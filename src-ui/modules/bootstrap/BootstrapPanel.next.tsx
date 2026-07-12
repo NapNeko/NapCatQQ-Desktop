@@ -32,7 +32,7 @@ import { Card } from '../../shared/ui';
 import { MotionIcon } from '../../shared/ui/motion';
 import { Mascot } from '../../shared/components/next/Mascot';
 import { usePreferences } from '../../hooks/preferences/preferencesStore';
-import logoPng from '../../assets/logo.png';
+import logoPng from '../../assets/logo.png?inline';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
 import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
@@ -79,7 +79,7 @@ export const BootstrapPanelNext: React.FC<BootstrapPanelNextProps> = ({ onNaviga
     });
     const motionEnabled = usePreferences().motionEnabled;
 
-    const navigate = onNavigate ?? (() => {});
+    const navigate = onNavigate ?? (() => { });
 
     const notices = useMemo(
         () =>
@@ -176,8 +176,8 @@ const RemoteSummaryCard: React.FC<{ onNavigate?: (route: AppRoute) => void }> = 
         count === 0
             ? '添加 SSH 档案后，可在组件页向远端部署 NapCat。'
             : count === 1
-              ? '点击进入管理连接与免密配置。'
-              : '点击进入管理各台主机的连接与免密配置。';
+                ? '点击进入管理连接与免密配置。'
+                : '点击进入管理各台主机的连接与免密配置。';
 
     const countBadge = isLoading ? (
         <span className="inline-flex h-5 min-w-[2.5rem] items-center justify-center rounded-full bg-inset/80 px-2 text-[11px] text-text-tertiary">
