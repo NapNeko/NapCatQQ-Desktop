@@ -1258,11 +1258,11 @@ fn build_component_for_host(
             Arc::new(comp)
         }
         ComponentId::DesktopSelf => {
-            Arc::new(DesktopSelfComponent::from_env().unwrap_or_else(|_| {
-                DesktopSelfComponent::new(
-                    env!("CARGO_PKG_VERSION"),
-                    HostPath::from_posix("NapCatQQ-Desktop"),
-                )
+            // 产品版本来自 tauri.conf（build 注入 NCD_PRODUCT_VERSION），
+            // 不是 workspace crate version（0.1.0）
+            let ver = crate::desktop_update::product_version_str();
+            Arc::new(DesktopSelfComponent::from_env(ver).unwrap_or_else(|_| {
+                DesktopSelfComponent::new(ver, HostPath::from_posix("NapCatQQ-Desktop"))
             }))
         }
     };

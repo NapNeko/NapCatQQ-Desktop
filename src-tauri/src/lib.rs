@@ -19,6 +19,7 @@ pub mod commands;
 pub mod desktop_log;
 pub mod desktop_log_format;
 pub mod desktop_notify;
+pub mod desktop_update;
 pub mod legacy_install_cleanup;
 pub mod lightweight;
 pub mod lightweight_scheduler;
@@ -530,6 +531,9 @@ pub fn run() {
             commands::components::remember_sudo_password,
             commands::components::run_component_action,
             commands::components::cancel_component_action,
+            commands::desktop_update::check_desktop_update,
+            commands::desktop_update::precheck_desktop_update,
+            commands::desktop_update::install_desktop_update,
             commands::ncd_watch::sync_ncd_watch_notify,
             commands::ncd_watch::touch_ncd_watch_present,
             commands::deployment_tasks::list_deployment_tasks,

@@ -13,6 +13,8 @@ ncd-component = { path = "../crates/ncd-component" }
 ncd-deploy = { path = "../crates/ncd-deploy" }
 ncd-host = { path = "../crates/ncd-host" }
 ncd-domain = { path = "../crates/ncd-domain" }
+ncd-network = { path = "../crates/ncd-network" }
+ncd-update = { path = "../crates/ncd-update" }
 dirs = "5"
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -35,9 +37,12 @@ urlencoding = "2"
 url = "2"
 netstat2 = "0.9"
 async-trait = "0.1"
+semver = { version = "1", features = ["serde"] }
+sha2 = "0.10"
+hex = "0.4"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = ["Win32_UI_Shell"] }
+windows = { version = "0.61", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 tauri-winrt-notification = "0.7"
 winreg = "0.52"
 
