@@ -39,7 +39,12 @@ describe('webhook-message-visual', () => {
             const json = serializeVisualFields(kind, fields);
             expect(detectWebhookService(json)).toBe(kind);
             const parsed = parseVisualFields(json, kind);
-            expect(parsed?.title).toBe(fields.title);
+            // 飞书 text 载荷只有 content.text，title 不进 JSON，解析回退默认标题。
+            if (kind === 'feishu') {
+                expect(parsed?.title).toBe(fieldsFromPresetBody('feishu').title);
+            } else {
+                expect(parsed?.title).toBe(fields.title);
+            }
             expect(parsed?.body).toBe(fields.body);
             if (kind === 'bark') expect(parsed?.group).toBe('G');
         }

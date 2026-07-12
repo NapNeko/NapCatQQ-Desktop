@@ -43,9 +43,14 @@ describe('trimTerminalTasksInRecord', () => {
     it('drops oldest terminal ids when over cap', () => {
         const max = TASK_QUEUE_TERMINAL_RETENTION_MAX_WHEN_AUTO_OFF;
         const tasks: Record<string, { status: string }> = {};
+        // 终态必须超过 cap；另留若干 running 验证不会被误删。
         for (let i = 0; i < max + 5; i++) {
             const id = `t-${String(i).padStart(4, '0')}`;
-            tasks[id] = { status: i % 2 === 0 ? 'success' : 'running' };
+            tasks[id] = { status: 'success' };
+        }
+        for (let i = 0; i < 3; i++) {
+            const id = `r-${String(i).padStart(4, '0')}`;
+            tasks[id] = { status: 'running' };
         }
         const terminalCount = Object.values(tasks).filter(
             (t) => t.status === 'success',
