@@ -81,6 +81,11 @@ pub async fn set_app_settings(
         .write_json_atomic(&path, &payload)
         .map_err(|e| format!("写入 app-settings.json 失败: {e}"))?;
 
+    // 开机自启:JSON 为权威源,落盘成功后再收敛 HKCU Run(用户级,无需 UAC)。
+    // 若此处失败,启动时 reconcile_launch_on_startup 会再按 JSON 对齐。
+    crate::autostart::apply_launch_on_startup(settings.launch_on_startup)
+        .map_err(|e| format!("同步开机自启失败: {e}"))?;
+
     // PAT:非空写 keyring,空串清除删除失败(本就没有)忽略
     let secrets = secret_store(&state);
     let pat = dto.github_pat.trim();

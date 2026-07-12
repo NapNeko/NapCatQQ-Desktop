@@ -13,6 +13,7 @@ use tauri::Manager;
 use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
+pub mod autostart;
 pub mod bootstrap;
 pub mod bot_host_resolver;
 pub mod commands;
@@ -175,6 +176,8 @@ pub fn run() {
             .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
     );
     let app_settings = commands::app_settings::read_app_settings(&data_root);
+    // 以 app-settings 为准收敛 HKCU Run(开=刷新路径,关=删本产品值)
+    autostart::reconcile_launch_on_startup(app_settings.launch_on_startup);
     let app_settings_shared = Arc::new(RwLock::new(app_settings.clone()));
     let lightweight_scheduler = Arc::new(lightweight_scheduler::LightweightScheduler::new(
         Arc::clone(&app_settings_shared),

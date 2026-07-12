@@ -77,6 +77,16 @@
             Type="integer"
             Value="1" />
         </RegistryKey>
+        <!--
+          App 运行时写入的用户级开机自启(HKCU Run,值名与 productName 一致)。
+          MSI 不负责创建该值;卸载时删掉,避免登录后启动已删除的 exe。
+        -->
+        <RemoveRegistryValue
+          Id="RemoveAutostartRunValue"
+          Root="HKCU"
+          Key="Software\Microsoft\Windows\CurrentVersion\Run"
+          Name="NapCatQQ Desktop"
+          Action="removeOnUninstall" />
       </Component>
     </DirectoryRef>
   </Fragment>
