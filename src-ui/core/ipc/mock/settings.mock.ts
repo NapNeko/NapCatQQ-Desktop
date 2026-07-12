@@ -21,6 +21,7 @@ export const mockBackendSettings: BackendSettings = {
     afterCloseUiBehavior: 'delayed_lightweight',
     enterLightweightDelaySecs: 300,
     uiModeOnStartup: 'normal',
+    launchOnStartup: false,
     minimizeToTrayCountsAsHidden: true,
     notifyOnOffline: true,
     notifyOnBotCrashed: true,

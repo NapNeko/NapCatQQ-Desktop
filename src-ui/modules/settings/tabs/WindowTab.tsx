@@ -5,7 +5,7 @@ import type {
     AfterCloseUiBehavior,
     UiModeOnStartup,
 } from '../../../core/services/settings.service';
-import { Select } from '../../../shared/ui';
+import { Select, Switch } from '../../../shared/ui';
 import type { SettingsDraft } from '../settings-draft';
 import { FieldRow, SettingsSection, SettingsTabSections } from '../_shared';
 
@@ -72,36 +72,47 @@ export function WindowTab({ draft, patchDraft }: Props) {
                         </FieldRow>
                         {draft.afterCloseUiBehavior ===
                             'delayed_lightweight' && (
-                            <FieldRow
-                                label="释放前等待"
-                                description="主窗口不可见累计多久后释放 WebView"
-                            >
-                                <Select
-                                    value={String(
-                                        draft.enterLightweightDelaySecs,
-                                    )}
-                                    onValueChange={(v) =>
-                                        patchDraft({
-                                            enterLightweightDelaySecs: Number(
-                                                v,
-                                            ),
-                                        })
-                                    }
-                                    items={[
-                                        { value: '60', label: '1 分钟' },
-                                        { value: '180', label: '3 分钟' },
-                                        { value: '300', label: '5 分钟' },
-                                        { value: '900', label: '15 分钟' },
-                                        { value: '1800', label: '30 分钟' },
-                                    ]}
-                                />
-                            </FieldRow>
-                        )}
+                                <FieldRow
+                                    label="释放前等待"
+                                    description="主窗口不可见累计多久后释放 WebView"
+                                >
+                                    <Select
+                                        value={String(
+                                            draft.enterLightweightDelaySecs,
+                                        )}
+                                        onValueChange={(v) =>
+                                            patchDraft({
+                                                enterLightweightDelaySecs: Number(
+                                                    v,
+                                                ),
+                                            })
+                                        }
+                                        items={[
+                                            { value: '60', label: '1 分钟' },
+                                            { value: '180', label: '3 分钟' },
+                                            { value: '300', label: '5 分钟' },
+                                            { value: '900', label: '15 分钟' },
+                                            { value: '1800', label: '30 分钟' },
+                                        ]}
+                                    />
+                                </FieldRow>
+                            )}
                     </>
                 )}
             </SettingsSection>
 
             <SettingsSection title="启动">
+                <FieldRow
+                    label="开机自启"
+                    description="登录当前 Windows 用户后自动启动（写入当前用户启动项，无需管理员）"
+                >
+                    <Switch
+                        checked={draft.launchOnStartup}
+                        onCheckedChange={(v) =>
+                            patchDraft({ launchOnStartup: v })
+                        }
+                    />
+                </FieldRow>
                 <FieldRow
                     label="启动时"
                     description="仅托盘：无界面直接托管 Bot，需从托盘打开主界面"

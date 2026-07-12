@@ -47,7 +47,11 @@ closeAction: CloseAction,
 /**
  * 关窗行为: hide / delayed_lightweight / immediate_lightweight
  */
-afterCloseUiBehavior: AfterCloseUiBehavior, enterLightweightDelaySecs: number, uiModeOnStartup: UiModeOnStartup, minimizeToTrayCountsAsHidden: boolean, 
+afterCloseUiBehavior: AfterCloseUiBehavior, enterLightweightDelaySecs: number, uiModeOnStartup: UiModeOnStartup, 
+/**
+ * 登录当前 Windows 用户后自动启动本程序(HKCU Run,无需管理员)
+ */
+launchOnStartup: boolean, minimizeToTrayCountsAsHidden: boolean, 
 /**
  * 桌面 Toast:NapCat 登录态离线
  */

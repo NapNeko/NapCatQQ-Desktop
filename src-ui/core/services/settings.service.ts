@@ -60,6 +60,8 @@ export interface BackendSettings {
     afterCloseUiBehavior: AfterCloseUiBehavior;
     enterLightweightDelaySecs: number;
     uiModeOnStartup: UiModeOnStartup;
+    /** 登录 Windows 后自动启动本程序 */
+    launchOnStartup: boolean;
     minimizeToTrayCountsAsHidden: boolean;
     notifyOnOffline: boolean;
     notifyOnBotCrashed: boolean;
@@ -192,6 +194,7 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
             dto.settings.enterLightweightDelaySecs ?? 300,
         ),
         uiModeOnStartup: normalizeUiModeOnStartup(dto.settings.uiModeOnStartup),
+        launchOnStartup: dto.settings.launchOnStartup ?? false,
         minimizeToTrayCountsAsHidden:
             dto.settings.minimizeToTrayCountsAsHidden ?? true,
         notifyOnOffline: dto.settings.notifyOnOffline ?? true,
@@ -252,6 +255,7 @@ type AppSettingsDtoInvoke = {
         afterCloseUiBehavior: string;
         enterLightweightDelaySecs: number;
         uiModeOnStartup: string;
+        launchOnStartup: boolean;
         minimizeToTrayCountsAsHidden: boolean;
         notifyOnOffline: boolean;
         notifyOnBotCrashed: boolean;
@@ -343,6 +347,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             afterCloseUiBehavior: s.afterCloseUiBehavior,
             enterLightweightDelaySecs: s.enterLightweightDelaySecs,
             uiModeOnStartup: s.uiModeOnStartup,
+            launchOnStartup: s.launchOnStartup,
             minimizeToTrayCountsAsHidden: s.minimizeToTrayCountsAsHidden,
             notifyOnOffline: s.notifyOnOffline,
             notifyOnBotCrashed: s.notifyOnBotCrashed,
