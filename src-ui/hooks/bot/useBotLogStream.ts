@@ -40,7 +40,7 @@ export function useBotLogStream(botId: string) {
                 if (!cfg) return;
                 backendRef.current = cfg.bot.backend_type;
             })
-            .catch(() => {});
+            .catch(() => { });
     }, [botId]);
 
     // 历史快照：有磁盘尾部则覆盖缓存；空结果保留内存缓存（SL 常见）
@@ -71,15 +71,22 @@ export function useBotLogStream(botId: string) {
     useDomainEvents((event) => {
         const id = botIdRef.current;
         if (event.kind === 'bot_log_appended' && event.bot_id === id) {
-            if (
-                backendRef.current === 'snowluma' &&
-                event.line.includes('[NapCat]')
-            ) {
-                return;
-            }
+            // 后端 EventBusSink 可能把同 channel 多行用 \n 合并成一条事件
+            const rawLines = event.line.includes('\n')
+                ? event.line.split('\n')
+                : [event.line];
             const channel = normalizeChannel(event.channel);
             setLogs((prev) => {
-                const next = appendLine(prev, event.line, channel);
+                let next = prev;
+                for (const line of rawLines) {
+                    if (
+                        backendRef.current === 'snowluma' &&
+                        line.includes('[NapCat]')
+                    ) {
+                        continue;
+                    }
+                    next = appendLine(next, line, channel);
+                }
                 writeCache(id, next);
                 return next;
             });
