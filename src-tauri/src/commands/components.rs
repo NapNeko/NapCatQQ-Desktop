@@ -987,7 +987,8 @@ impl SystemPackageManager {
     }
 }
 
-/// 组件元数据按 Framework → RuntimeDep → SelfApp 顺序返回
+/// 组件元数据按 Framework → RuntimeDep → SelfApp 顺序返回。
+/// SelfApp 段：远端 ncd-watch 在前，本机 Desktop 在后（同属产品侧）。
 fn catalog() -> Vec<ComponentInfo> {
     vec![
         NapCatComponent::info(),

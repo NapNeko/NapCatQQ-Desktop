@@ -81,7 +81,8 @@ impl NcdWatchComponent {
                 Os::Linux,
                 Locality::Remote,
             )],
-            category: crate::types::ComponentCategory::RuntimeDep,
+            // 与 Desktop 同属产品侧配套：远端脱管后的告警进程，不是 QQ/Node 一类框架运行时依赖
+            category: crate::types::ComponentCategory::SelfApp,
         }
     }
 
@@ -671,6 +672,14 @@ mod tests {
         assert_eq!(
             c.bin_path().unwrap().as_posix(),
             "/home/u/ncd-watch/bin/ncd-watch"
+        );
+    }
+
+    #[test]
+    fn info_should_use_self_app_category() {
+        assert_eq!(
+            NcdWatchComponent::info().category,
+            crate::types::ComponentCategory::SelfApp
         );
     }
 

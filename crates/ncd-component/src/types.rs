@@ -132,8 +132,8 @@ impl LaunchArgs {
 /// 组件分类
 ///
 /// - Framework:用户主动选择安装的 Bot 框架(NapCat / SnowLuma)
-/// - RuntimeDep:Framework 依赖的运行时(QQ / NodeJs / NoVnc / NcdWatch)
-/// - SelfApp:Desktop 自身(仅本地,自更新走 ncd-update)
+/// - RuntimeDep:Framework 依赖的运行时(QQ / NodeJs / NoVnc)
+/// - SelfApp:Desktop 产品侧(本机 Desktop 自更新;远端 ncd-watch 脱管监控)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
