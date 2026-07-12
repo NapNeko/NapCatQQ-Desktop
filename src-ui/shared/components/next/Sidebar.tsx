@@ -38,9 +38,11 @@ export type AppRoute =
 interface SidebarProps {
     active: AppRoute;
     onChange: (route: AppRoute) => void;
+    // 可选：hover/focus 时预取路由 chunk，不改变点击语义。
+    onPrefetch?: (route: AppRoute) => void;
     collapsed: boolean;
     onToggleCollapse: () => void;
-    /// 是否显示 Docker 项。
+    // 是否显示 Docker 项。
     showDocker?: boolean;
     taskQueueActiveCount?: number;
 }
@@ -77,6 +79,7 @@ const LOGO_IMG_CLASS =
 export const Sidebar: React.FC<SidebarProps> = ({
     active,
     onChange,
+    onPrefetch,
     collapsed,
     onToggleCollapse,
     showDocker = true,
@@ -218,6 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             isActive={active === item.id}
                             collapsed={collapsed}
                             onSelect={onChange}
+                            onPrefetch={onPrefetch}
                         />
                     ))}
                 </ul>
@@ -229,12 +233,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         collapsed={collapsed}
                         activeCount={taskQueueActiveCount}
                         onSelect={onChange}
+                        onPrefetch={onPrefetch}
                     />
                     <NavRow
                         item={SETTINGS_NAV}
                         isActive={active === 'settings'}
                         collapsed={collapsed}
                         onSelect={onChange}
+                        onPrefetch={onPrefetch}
                     />
                 </ul>
             </nav>
@@ -247,9 +253,16 @@ interface NavRowProps {
     isActive: boolean;
     collapsed: boolean;
     onSelect: (id: AppRoute) => void;
+    onPrefetch?: (id: AppRoute) => void;
 }
 
-const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect }) => {
+const NavRow: React.FC<NavRowProps> = ({
+    item,
+    isActive,
+    collapsed,
+    onSelect,
+    onPrefetch,
+}) => {
     const Icon = item.icon;
     const iconSize = collapsed ? 20 : 15;
 
@@ -258,6 +271,8 @@ const NavRow: React.FC<NavRowProps> = ({ item, isActive, collapsed, onSelect }) 
             <button
                 type="button"
                 onClick={() => onSelect(item.id)}
+                onMouseEnter={() => onPrefetch?.(item.id)}
+                onFocus={() => onPrefetch?.(item.id)}
                 aria-current={isActive ? 'page' : undefined}
                 title={collapsed ? item.label : undefined}
                 data-tour-id={
@@ -298,6 +313,7 @@ interface TaskQueueNavRowProps {
     collapsed: boolean;
     activeCount: number;
     onSelect: (id: AppRoute) => void;
+    onPrefetch?: (id: AppRoute) => void;
 }
 
 const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
@@ -306,6 +322,7 @@ const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
     collapsed,
     activeCount,
     onSelect,
+    onPrefetch,
 }) => {
     const busy = activeCount > 0 && !isActive;
     const iconSize = collapsed ? 20 : 15;
@@ -318,6 +335,8 @@ const TaskQueueNavRow: React.FC<TaskQueueNavRowProps> = ({
             <button
                 type="button"
                 onClick={() => onSelect(item.id)}
+                onMouseEnter={() => onPrefetch?.(item.id)}
+                onFocus={() => onPrefetch?.(item.id)}
                 aria-current={isActive ? 'page' : undefined}
                 title={collapsed ? (activeCount > 0 ? `任务 (${activeCount})` : item.label) : undefined}
                 aria-label={

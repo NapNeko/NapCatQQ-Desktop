@@ -1,4 +1,4 @@
-// AppNext 注册框架 tour；P0 去组件 / 设置关于 通过 request 触发。
+// AppNext 注册框架 tour；去组件 / 设置关于 通过 request 触发。
 
 export type FrameworkTourRequest = {
     /** full = 本机 + 演示远端 + 创建 Bot；也可只跑某一段 */

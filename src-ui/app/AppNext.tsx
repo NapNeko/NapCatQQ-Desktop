@@ -1,18 +1,27 @@
 // 新 UI 树根 = AppShell。
 // 布局:TitleBar(透明) ─ [Sidebar | main]
+// overview 首屏同步加载；其余业务路由 lazy，降低主包解析成本。
+// spotlight 等锚点仍靠 waitForTourTarget，lazy 挂载延迟可接受。
+// 侧栏 hover/focus 预取对应 chunk；导航 setRoute 走 startTransition，不改路由语义。
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+    Suspense,
+    lazy,
+    startTransition,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
 import { Sidebar, type AppRoute } from '../shared/components/next/Sidebar';
 import { InfoBarStack, TooltipProvider } from '../shared/ui';
+// fallback 直引，避免只为 Spinner 再钉死整个 shared/ui barrel 图。
+import { PagePlaceholder } from '../shared/ui/PagePlaceholder';
+import { Spinner } from '../shared/ui/Spinner';
 import { BootstrapPanelNext } from '../modules/bootstrap/BootstrapPanel.next';
-import { BotPageNext } from '../modules/bot/BotPage.next';
-import { ComponentsPageNext } from '../modules/components/ComponentsPage.next';
-import { DockerPageNext } from '../modules/docker/DockerPage.next';
-import { RemoteHostPanelNext } from '../modules/remote/RemoteHostPanel.next';
-import { SettingsPageNext } from '../modules/settings/SettingsPage.next';
-import { TaskQueuePageNext } from '../modules/task-queue/TaskQueuePage.next';
 import { useServerManager } from '../hooks/remote/useServerManager';
 import { useComponentActionEventBridge } from '../hooks/components/useComponentActionBridge';
 import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployProgressBridge';
@@ -43,8 +52,9 @@ import {
 } from '../shared/components/next/OnboardingDialog';
 import { OnboardingContinueDialog } from '../shared/components/next/OnboardingContinueDialog';
 import { SpotlightTour } from '../shared/components/next/SpotlightTour';
+import { perfMark } from '../core/domain/performance/perfMarks';
 
-/// 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
+// 路由顺序,跟 Sidebar PRIMARY_NAV 对齐。PageTransition 用此判断切换方向。
 const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
     'overview',
     'bots',
@@ -55,9 +65,65 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
     'settings',
 ];
 
+// 与 lazy 共用同一 import 工厂，侧栏预取与首点加载同一 chunk。
+const loadBotPage = () =>
+    import('../modules/bot/BotPage.next').then((m) => ({ default: m.BotPageNext }));
+const loadComponentsPage = () =>
+    import('../modules/components/ComponentsPage.next').then((m) => ({
+        default: m.ComponentsPageNext,
+    }));
+const loadDockerPage = () =>
+    import('../modules/docker/DockerPage.next').then((m) => ({ default: m.DockerPageNext }));
+const loadRemotePage = () =>
+    import('../modules/remote/RemoteHostPanel.next').then((m) => ({
+        default: m.RemoteHostPanelNext,
+    }));
+const loadSettingsPage = () =>
+    import('../modules/settings/SettingsPage.next').then((m) => ({
+        default: m.SettingsPageNext,
+    }));
+const loadTaskQueuePage = () =>
+    import('../modules/task-queue/TaskQueuePage.next').then((m) => ({
+        default: m.TaskQueuePageNext,
+    }));
+
+const BotPageNext = lazy(loadBotPage);
+const ComponentsPageNext = lazy(loadComponentsPage);
+const DockerPageNext = lazy(loadDockerPage);
+const RemoteHostPanelNext = lazy(loadRemotePage);
+const SettingsPageNext = lazy(loadSettingsPage);
+const TaskQueuePageNext = lazy(loadTaskQueuePage);
+
+const ROUTE_PRELOAD: Partial<Record<AppRoute, () => Promise<unknown>>> = {
+    bots: loadBotPage,
+    components: loadComponentsPage,
+    docker: loadDockerPage,
+    remote: loadRemotePage,
+    settings: loadSettingsPage,
+    tasks: loadTaskQueuePage,
+};
+
+function preloadRoute(route: AppRoute): void {
+    const load = ROUTE_PRELOAD[route];
+    if (load) void load();
+}
+
+function RouteFallback() {
+    return (
+        <PagePlaceholder>
+            <Spinner size="md" tone="brand" label="页面加载中" />
+            <p className="text-[13px] text-text-secondary">正在加载页面…</p>
+        </PagePlaceholder>
+    );
+}
+
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
     const [collapsed, setCollapsed] = useState(true);
+
+    useEffect(() => {
+        perfMark('app_mounted', { once: true });
+    }, []);
 
     useComponentActionEventBridge();
     useDockerDeployProgressBridge();
@@ -104,16 +170,21 @@ export const AppNext: React.FC = () => {
 
     useEffect(() => {
         if (!showDocker && route === 'docker') {
-            setRoute('overview');
+            startTransition(() => setRoute('overview'));
         }
     }, [showDocker, route]);
 
-    const navigate = useCallback(
-        (nextRoute: AppRoute) => {
-            setRoute(nextRoute === 'docker' && !showDocker ? 'overview' : nextRoute);
-        },
-        [showDocker],
-    );
+    const navigate = useCallback((nextRoute: AppRoute) => {
+        const target =
+            nextRoute === 'docker' && !showDocker ? 'overview' : nextRoute;
+        // 非紧急 UI 更新：与 lazy 解析叠在一起时少抢输入响应。
+        startTransition(() => setRoute(target));
+    }, [showDocker]);
+
+    const prefetchRoute = useCallback((nextRoute: AppRoute) => {
+        if (nextRoute === 'docker' && !showDocker) return;
+        preloadRoute(nextRoute);
+    }, [showDocker]);
 
     useEffect(() => {
         void (async () => {
@@ -216,6 +287,7 @@ export const AppNext: React.FC = () => {
                     <Sidebar
                         active={route}
                         onChange={navigate}
+                        onPrefetch={prefetchRoute}
                         collapsed={collapsed}
                         onToggleCollapse={() => setCollapsed((v) => !v)}
                         showDocker={showDocker}
@@ -316,19 +388,25 @@ const RouteContent: React.FC<{
     taskQueue: TaskQueueSnapshot;
     showDocker: boolean;
 }> = ({ route, onNavigate, taskQueue, showDocker }) => {
+    let body: React.ReactNode;
     switch (route) {
         case 'overview':
-            return <BootstrapPanelNext onNavigate={onNavigate} />;
+            body = <BootstrapPanelNext onNavigate={onNavigate} />;
+            break;
         case 'bots':
-            return <BotPageNext />;
+            body = <BotPageNext />;
+            break;
         case 'components':
-            return <ComponentsPageNext />;
+            body = <ComponentsPageNext />;
+            break;
         case 'docker':
-            return <DockerPageNext />;
+            body = <DockerPageNext />;
+            break;
         case 'remote':
-            return <RemoteHostPanelNext />;
+            body = <RemoteHostPanelNext />;
+            break;
         case 'tasks':
-            return (
+            body = (
                 <TaskQueuePageNext
                     items={taskQueue.items}
                     activeCount={taskQueue.activeCount}
@@ -336,14 +414,22 @@ const RouteContent: React.FC<{
                     showDocker={showDocker}
                 />
             );
+            break;
         case 'settings':
-            return <SettingsPageNext />;
+            body = <SettingsPageNext />;
+            break;
         default: {
             const _exhaustive: never = route;
             void _exhaustive;
-            return null;
+            body = null;
         }
     }
+
+    // overview 同步；其余 lazy 包一层 Suspense，避免切页白屏。
+    if (route === 'overview') {
+        return body;
+    }
+    return <Suspense fallback={<RouteFallback />}>{body}</Suspense>;
 };
 
 export default AppNext;

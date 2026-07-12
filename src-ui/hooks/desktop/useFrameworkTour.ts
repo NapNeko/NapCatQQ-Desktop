@@ -25,8 +25,9 @@ import type { AppRoute } from '../../shared/components/next/Sidebar';
 
 type NavigateFn = (route: AppRoute) => void;
 
-/** 等 DOM 锚点出现（连接 Tab 等延迟挂载） */
-function waitForTourTarget(tourId: string, attempts = 40): Promise<boolean> {
+// 等 DOM 锚点出现（连接 Tab / 路由 lazy 挂载等延迟）。
+// attempts 略放宽：业务页 code-split 后首进可能多等几帧 chunk。
+function waitForTourTarget(tourId: string, attempts = 80): Promise<boolean> {
     return new Promise((resolve) => {
         let n = 0;
         const tick = () => {
