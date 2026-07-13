@@ -13,10 +13,16 @@
 //! Program Files 对普通用户只读:Access Denied 只记日志,不阻断启动,
 //! 也不碰 ProgramData / 用户配置。
 //!
+//! 路径安全(防「空路径/盘符根递归删」类事故):
+//! - 只删 install_dir 下固定白名单相对名,从不删 install_dir 本身
+//! - 拒绝空路径、相对路径、盘符根(C:\)、过浅路径
+//! - 白名单名不得含分隔符 / `.` / `..`
+//! - 目标必须仍落在 install_dir 之下
+//!
 //! 另:3.0.0 曾把 HKCU 产品键写成字面量 `Software{{product_name}}`
 //! (Handlebars 吃掉 `\`)。启动时删掉该脏键(HKCU,无需管理员)。
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 /// 允许删除的安装目录子项(相对安装根)。只加确认无用的 V2 痕迹。
 const LEGACY_ORPHAN_NAMES: &[&str] = &[
@@ -80,7 +86,7 @@ pub fn purge_legacy_install_orphans() -> LegacyInstallCleanupReport {
 fn resolve_install_dir_for_cleanup() -> Result<PathBuf, String> {
     if let Some(from_reg) = crate::product_registry::read_install_dir() {
         let candidate = crate::product_registry::normalize_registered_path(from_reg);
-        if candidate.is_dir() && candidate.join(MAIN_EXE_NAME).is_file() {
+        if is_safe_install_dir(&candidate) && candidate.join(MAIN_EXE_NAME).is_file() {
             return Ok(candidate);
         }
     }
@@ -90,6 +96,12 @@ fn resolve_install_dir_for_cleanup() -> Result<PathBuf, String> {
         .parent()
         .ok_or_else(|| "exe has no parent".to_string())?
         .to_path_buf();
+    if !is_safe_install_dir(&dir) {
+        return Err(format!(
+            "current_exe parent rejected as unsafe install_dir: {}",
+            dir.display()
+        ));
+    }
     Ok(dir)
 }
 
@@ -118,6 +130,84 @@ pub fn purge_broken_hkcu_product_key() -> BrokenRegistryCleanupReport {
     BrokenRegistryCleanupReport::default()
 }
 
+/// 安装根是否允许作为删除锚点。
+///
+/// 拒绝空/相对/盘符根/过浅路径,避免「路径解析失败 → 落到 C:\ → 递归删」类事故。
+/// 不要求目录已存在(调用方再查 is_dir)。
+pub(crate) fn is_safe_install_dir(path: &Path) -> bool {
+    if path.as_os_str().is_empty() {
+        return false;
+    }
+    let s = path.to_string_lossy();
+    let trimmed = s.trim().trim_end_matches(['\\', '/']);
+    if trimmed.is_empty() || trimmed.contains('\0') {
+        return false;
+    }
+    if !path.is_absolute() {
+        return false;
+    }
+    // 盘符根: C:\ / C: / \\?\C:\
+    if is_drive_root(path) {
+        return false;
+    }
+    // 至少要有一层目录名(Program Files\App 或更深),不能是 \\server\share 根
+    let normal_components = path
+        .components()
+        .filter(|c| matches!(c, Component::Normal(_)))
+        .count();
+    if normal_components < 1 {
+        return false;
+    }
+    // 路径字符串过短几乎只能是根
+    if trimmed.chars().count() < 4 {
+        return false;
+    }
+    true
+}
+
+fn is_drive_root(path: &Path) -> bool {
+    let mut comps = path.components();
+    match (comps.next(), comps.next(), comps.next()) {
+        // C:\
+        (Some(Component::Prefix(_)), Some(Component::RootDir), None) => true,
+        // \
+        (Some(Component::RootDir), None, _) => true,
+        _ => {
+            // 规范化后 parent 为 None 且有 root 也视为根
+            path.parent().is_none_or(|p| p.as_os_str().is_empty())
+                && path
+                    .components()
+                    .any(|c| matches!(c, Component::RootDir | Component::Prefix(_)))
+                && path
+                    .components()
+                    .filter(|c| matches!(c, Component::Normal(_)))
+                    .count()
+                    == 0
+        }
+    }
+}
+
+/// 白名单项是否为安全的单层相对名(无分隔符、非 . / ..)。
+pub(crate) fn is_safe_orphan_name(name: &str) -> bool {
+    if name.is_empty() || name == "." || name == ".." {
+        return false;
+    }
+    if name.contains('/') || name.contains('\\') || name.contains('\0') {
+        return false;
+    }
+    if name.eq_ignore_ascii_case(MAIN_EXE_NAME) {
+        return false;
+    }
+    // 拒绝绝对路径片段
+    if Path::new(name).is_absolute() {
+        return false;
+    }
+    Path::new(name)
+        .components()
+        .all(|c| matches!(c, Component::Normal(_)))
+        && Path::new(name).components().count() == 1
+}
+
 /// 可测入口:只处理 `install_dir` 下白名单名字。
 pub fn purge_legacy_install_orphans_in(install_dir: &Path) -> LegacyInstallCleanupReport {
     let mut report = LegacyInstallCleanupReport {
@@ -127,21 +217,42 @@ pub fn purge_legacy_install_orphans_in(install_dir: &Path) -> LegacyInstallClean
         skipped_reason: None,
     };
 
+    if !is_safe_install_dir(install_dir) {
+        report.skipped_reason = Some(format!(
+            "install_dir rejected as unsafe: {}",
+            install_dir.display()
+        ));
+        return report;
+    }
+
     if !install_dir.is_dir() {
         report.skipped_reason = Some("install_dir missing".into());
         return report;
     }
 
     for name in LEGACY_ORPHAN_NAMES {
-        // 硬拒绝主程序名,防止名单被误改成自杀
-        if name.eq_ignore_ascii_case(MAIN_EXE_NAME) {
+        if !is_safe_orphan_name(name) {
             report
                 .failed
-                .push(((*name).to_string(), "refusing main binary name".into()));
+                .push(((*name).to_string(), "refusing unsafe orphan name".into()));
             continue;
         }
         let target = install_dir.join(name);
+        // join 后必须仍是 install_dir 的直接子项(防将来名单被改成 ..\..)
+        if target.parent() != Some(install_dir) {
+            report
+                .failed
+                .push(((*name).to_string(), "target escaped install_dir".into()));
+            continue;
+        }
         if !target.exists() {
+            continue;
+        }
+        // 永不删除安装根自身
+        if target == install_dir {
+            report
+                .failed
+                .push(((*name).to_string(), "refusing to delete install_dir".into()));
             continue;
         }
         let result = if target.is_dir() {
@@ -235,5 +346,42 @@ mod tests {
         // 必须是字面量 Software{{product_name}},不是展开后的产品名
         assert_eq!(BROKEN_HKCU_PRODUCT_KEY, "Software{{product_name}}");
         assert!(!BROKEN_HKCU_PRODUCT_KEY.contains('\\'));
+    }
+
+    #[test]
+    fn rejects_drive_root_and_empty_install_dir() {
+        assert!(!is_safe_install_dir(Path::new("")));
+        assert!(!is_safe_install_dir(Path::new(".")));
+        assert!(!is_safe_install_dir(Path::new("relative\\app")));
+        #[cfg(windows)]
+        {
+            // raw string 不能以 \ 结尾,用普通转义
+            assert!(!is_safe_install_dir(Path::new("C:\\")));
+            assert!(!is_safe_install_dir(Path::new("C:/")));
+            assert!(!is_safe_install_dir(Path::new("D:\\")));
+            // 至少一层目录名才允许
+            assert!(is_safe_install_dir(Path::new(
+                r"C:\Program Files\NapCatQQ Desktop"
+            )));
+        }
+    }
+
+    #[test]
+    fn rejects_unsafe_orphan_names() {
+        assert!(!is_safe_orphan_name(""));
+        assert!(!is_safe_orphan_name("."));
+        assert!(!is_safe_orphan_name(".."));
+        assert!(!is_safe_orphan_name(r"..\Windows"));
+        assert!(!is_safe_orphan_name(r"foo\bar"));
+        assert!(!is_safe_orphan_name("NapCatQQ-Desktop.exe"));
+        assert!(is_safe_orphan_name("_internal"));
+        assert!(is_safe_orphan_name("guild1.db"));
+    }
+
+    #[test]
+    fn purge_skips_unsafe_install_dir_without_deleting() {
+        let report = purge_legacy_install_orphans_in(Path::new("C:\\"));
+        assert!(report.skipped_reason.is_some());
+        assert!(report.removed.is_empty());
     }
 }

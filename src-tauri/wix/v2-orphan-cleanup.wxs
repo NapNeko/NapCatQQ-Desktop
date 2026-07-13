@@ -32,24 +32,27 @@
       TerminateProcess="1" />
 
     <!--
-      Directory=INSTALLDIR so relative paths resolve under the install root.
-      Elevated (Impersonate=no): Program Files is not writable for normal users,
-      so app-start cleanup often gets Access Denied; MSI must delete here.
+      Purge only under [INSTALLDIR] with *absolute* child paths.
+      Do NOT use bare relative names alone as the sole safety net: if Directory=
+      ever resolved wrong, relative rmdir could hit the wrong cwd.
+      Guard: if INSTALLDIR is empty/missing, skip (if not exist "\..." is false
+      on empty expansion we still prefix with [INSTALLDIR] so paths stay scoped).
+      Elevated (Impersonate=no): Program Files is not writable for normal users.
       Return=ignore: missing paths / locked files must not abort install.
-      Run twice: after RemoveExistingProducts (old tree) and after InstallFiles
-      (if a lock delayed the first pass, second pass still has a chance).
+      Run twice: after RemoveExistingProducts and after InstallFiles.
+      Never touch ProgramData / DataRoot / user config.
     -->
     <CustomAction
       Id="PurgeV2InstallOrphans"
       Directory="INSTALLDIR"
-      ExeCommand="&quot;[SystemFolder]cmd.exe&quot; /c if exist _internal rmdir /s /q _internal &amp; if exist icons rmdir /s /q icons &amp; if exist guild1.db del /f /q /a guild1.db &amp; if exist guild1.db-shm del /f /q /a guild1.db-shm &amp; if exist guild1.db-wal del /f /q /a guild1.db-wal"
+      ExeCommand="&quot;[SystemFolder]cmd.exe&quot; /c if not &quot;[INSTALLDIR]&quot;==&quot;&quot; if exist &quot;[INSTALLDIR]_internal&quot; rmdir /s /q &quot;[INSTALLDIR]_internal&quot; &amp; if not &quot;[INSTALLDIR]&quot;==&quot;&quot; if exist &quot;[INSTALLDIR]icons&quot; rmdir /s /q &quot;[INSTALLDIR]icons&quot; &amp; if not &quot;[INSTALLDIR]&quot;==&quot;&quot; if exist &quot;[INSTALLDIR]guild1.db&quot; del /f /q /a &quot;[INSTALLDIR]guild1.db&quot; &amp; if not &quot;[INSTALLDIR]&quot;==&quot;&quot; if exist &quot;[INSTALLDIR]guild1.db-shm&quot; del /f /q /a &quot;[INSTALLDIR]guild1.db-shm&quot; &amp; if not &quot;[INSTALLDIR]&quot;==&quot;&quot; if exist &quot;[INSTALLDIR]guild1.db-wal&quot; del /f /q /a &quot;[INSTALLDIR]guild1.db-wal&quot;"
       Execute="deferred"
       Impersonate="no"
       Return="ignore" />
     <CustomAction
       Id="PurgeV2InstallOrphansLate"
       Directory="INSTALLDIR"
-      ExeCommand="&quot;[SystemFolder]cmd.exe&quot; /c if exist _internal rmdir /s /q _internal &amp; if exist icons rmdir /s /q icons &amp; if exist guild1.db del /f /q /a guild1.db &amp; if exist guild1.db-shm del /f /q /a guild1.db-shm &amp; if exist guild1.db-wal del /f /q /a guild1.db-wal"
+      ExeCommand="&quot;[SystemFolder]cmd.exe&quot; /c if not &quot;[INSTALLDIR]&quot;==&quot;&quot; if exist &quot;[INSTALLDIR]_internal&quot; rmdir /s /q &quot;[INSTALLDIR]_internal&quot; &amp; if not &quot;[INSTALLDIR]&quot;==&quot;&quot; if exist &quot;[INSTALLDIR]icons&quot; rmdir /s /q &quot;[INSTALLDIR]icons&quot; &amp; if not &quot;[INSTALLDIR]&quot;==&quot;&quot; if exist &quot;[INSTALLDIR]guild1.db&quot; del /f /q /a &quot;[INSTALLDIR]guild1.db&quot; &amp; if not &quot;[INSTALLDIR]&quot;==&quot;&quot; if exist &quot;[INSTALLDIR]guild1.db-shm&quot; del /f /q /a &quot;[INSTALLDIR]guild1.db-shm&quot; &amp; if not &quot;[INSTALLDIR]&quot;==&quot;&quot; if exist &quot;[INSTALLDIR]guild1.db-wal&quot; del /f /q /a &quot;[INSTALLDIR]guild1.db-wal&quot;"
       Execute="deferred"
       Impersonate="no"
       Return="ignore" />
