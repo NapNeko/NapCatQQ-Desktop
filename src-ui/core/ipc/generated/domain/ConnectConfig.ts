@@ -5,4 +5,9 @@ import type { HttpSseServerConfig } from "./HttpSseServerConfig";
 import type { WebsocketClientConfig } from "./WebsocketClientConfig";
 import type { WebsocketServerConfig } from "./WebsocketServerConfig";
 
-export type ConnectConfig = { httpServers: Array<HttpServerConfig>, httpSseServers: Array<HttpSseServerConfig>, httpClients: Array<HttpClientConfig>, websocketServers: Array<WebsocketServerConfig>, websocketClients: Array<WebsocketClientConfig>, plugins: Array<unknown>, };
+export type ConnectConfig = { httpServers: Array<HttpServerConfig>, httpSseServers: Array<HttpSseServerConfig>, httpClients: Array<HttpClientConfig>, websocketServers: Array<WebsocketServerConfig>, websocketClients: Array<WebsocketClientConfig>, 
+/**
+ * 上游插件条目形态不稳时的务实透传；禁止在此之上再扩 Value 业务字段。
+ * 强类型化等上游 schema 稳定后再开 plan（架构债 T6 挂账）。
+ */
+plugins: Array<unknown>, };
