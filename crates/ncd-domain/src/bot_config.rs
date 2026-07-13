@@ -334,6 +334,8 @@ pub struct ConnectConfig {
     #[serde(default)]
     #[serde(rename = "websocketClients")]
     pub websocket_clients: Vec<WebsocketClientConfig>,
+    /// 上游插件条目形态不稳时的务实透传；禁止在此之上再扩 Value 业务字段。
+    /// 强类型化等上游 schema 稳定后再开 plan（架构债 T6 挂账）。
     #[serde(default)]
     #[ts(type = "Array<unknown>")]
     pub plugins: Vec<serde_json::Value>,
