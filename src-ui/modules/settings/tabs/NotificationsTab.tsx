@@ -2,8 +2,8 @@
 // 主列表只留开关 + 通道摘要；通道详情 / 消息模板收敛进 Dialog（对齐连接配置交互）。
 // 颜色只走语义 token，随主题切换。
 
-import { useEffect, useRef, useState } from 'react';
-import { History, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { History, Pencil, Plus, Trash2 } from 'lucide-react';
 import { DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED } from '../../../core/domain/ui/infoBarDismiss';
 import {
     createBlankWebhookChannel,
@@ -22,7 +22,6 @@ import {
     DialogHeader,
     DialogTitle,
     NumberField,
-    Select,
     Switch,
 } from '../../../shared/ui';
 import { ActionMotionIcon } from '../../../shared/ui/motion';
@@ -36,17 +35,20 @@ import {
     SettingsTabSections,
 } from '../_shared';
 import { NcdWatchRemoteSection } from './NcdWatchRemoteSection';
+import { DeliveryHistoryDialog } from './notifications/DeliveryHistoryDialog';
 import {
     EmailEditorDialog,
     emailIsReady,
     emailSummary,
     type EmailEditorDraft,
 } from './notifications/EmailEditorDialog';
-import { OneBotMessageEditor } from './notifications/OneBotMessageEditor';
 import {
-    OneBotMessengerPicker,
-    type OneBotCandidate,
-} from './notifications/OneBotMessengerPicker';
+    OneBotEditorDialog,
+    oneBotIsReady,
+    oneBotSummary,
+    type OneBotEditorDraft,
+} from './notifications/OneBotEditorDialog';
+import type { OneBotCandidate } from './notifications/OneBotMessengerPicker';
 import {
     WebhookChannelEditorDialog,
     type ChannelEditorState,
@@ -58,19 +60,6 @@ interface Props {
     /** 草稿未保存时禁用 ncd-watch 同步（避免写旧 Webhook） */
     settingsDirty?: boolean;
 }
-
-const ONEBOT_TARGET_ITEMS = [
-    { value: 'private', label: '私聊' },
-    { value: 'group', label: '群聊' },
-] as const;
-
-type OneBotEditorDraft = Pick<
-    SettingsDraft,
-    | 'onebotMessengerBotIds'
-    | 'onebotTargetType'
-    | 'onebotTargetIds'
-    | 'onebotMessageTemplate'
->;
 
 function newChannelId(existing: WebhookChannelDraft[]): string {
     const stamp = Date.now().toString(36);
@@ -105,178 +94,6 @@ function channelSummary(ch: WebhookChannelDraft): string {
         }
     }
     return '未填写地址';
-}
-
-function oneBotIsReady(oneBot: OneBotEditorDraft): boolean {
-    return (
-        oneBot.onebotMessengerBotIds.some((id) => id.trim()) &&
-        oneBot.onebotTargetIds.some((id) => id > 0)
-    );
-}
-
-function oneBotSummary(oneBot: OneBotEditorDraft): string {
-    const messengers = oneBot.onebotMessengerBotIds.filter((id) => id.trim());
-    const targets = oneBot.onebotTargetIds.filter((id) => id > 0);
-    if (messengers.length === 0) return '尚未选择发送方 Bot';
-    if (targets.length === 0) return '待填写接收目标';
-    const messengerLabel =
-        messengers.length === 1
-            ? messengers[0]
-            : `${messengers[0]} 等 ${messengers.length} 个`;
-    const targetLabel =
-        targets.length === 1
-            ? String(targets[0])
-            : `${targets[0]} 等 ${targets.length} 个`;
-    return `${messengerLabel} → ${oneBot.onebotTargetType === 'group' ? '群' : '私聊'} ${targetLabel}`;
-}
-
-function parseTargetTokens(raw: string): number[] {
-    return raw
-        .split(/[,，;；\s]+/)
-        .map((part) => Number(part.trim()))
-        .filter((n) => Number.isFinite(n) && n > 0)
-        .map((n) => Math.round(n));
-}
-
-function historyKindLabel(kind: string): string {
-    switch (kind) {
-        case 'auto_restart':
-        case 'manual':
-            return '掉线';
-        case 'kicked':
-            return '被踢下线';
-        case 'process_crashed':
-            return '异常退出';
-        case 'recovered':
-            return '恢复上线';
-        default:
-            return kind;
-    }
-}
-
-function DeliveryResultBadge({
-    label,
-    value,
-}: {
-    label: string;
-    value: 'ok' | 'failed' | 'skipped';
-}) {
-    if (value === 'ok') {
-        return <Badge tone="success" appearance="soft">{label} 已发送</Badge>;
-    }
-    if (value === 'failed') {
-        return <Badge tone="danger" appearance="soft">{label} 失败</Badge>;
-    }
-    return <Badge tone="neutral" appearance="soft">{label} 未投递</Badge>;
-}
-
-function Chip({
-    label,
-    onRemove,
-    tone = 'neutral',
-}: {
-    label: string;
-    onRemove: () => void;
-    tone?: 'neutral' | 'success' | 'warning';
-}) {
-    return (
-        <span
-            className={cn(
-                'inline-flex max-w-full items-center gap-1 rounded-sm border px-2 py-1 text-[12px]',
-                tone === 'success' &&
-                    'border-success/30 bg-success-soft text-text',
-                tone === 'warning' &&
-                    'border-warning/30 bg-warning-soft text-text',
-                tone === 'neutral' &&
-                    'border-border-subtle bg-inset text-text-secondary',
-            )}
-        >
-            <span className="truncate">{label}</span>
-            <button
-                type="button"
-                aria-label={`移除 ${label}`}
-                onClick={onRemove}
-                className="rounded-xs p-0.5 text-text-tertiary transition-colors hover:bg-field hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-            >
-                <X size={12} />
-            </button>
-        </span>
-    );
-}
-
-function TargetIdChipsInput({
-    values,
-    onChange,
-    placeholder,
-    className,
-}: {
-    values: number[];
-    onChange: (next: number[]) => void;
-    placeholder?: string;
-    className?: string;
-}) {
-    const [draft, setDraft] = useState('');
-    const inputRef = useRef<HTMLInputElement | null>(null);
-
-    const commitDraft = (raw: string) => {
-        const tokens = parseTargetTokens(raw);
-        if (tokens.length === 0) {
-            setDraft('');
-            return;
-        }
-        const next = [...values];
-        for (const token of tokens) {
-            if (!next.includes(token)) next.push(token);
-        }
-        onChange(next);
-        setDraft('');
-    };
-
-    return (
-        <div
-            className={cn(
-                'flex min-h-10 w-full content-start items-start gap-1.5 overflow-y-auto rounded-sm border border-border-subtle bg-field px-2 py-1.5',
-                'flex-wrap focus-within:border-brand focus-within:ring-2 focus-within:ring-brand focus-within:ring-inset',
-                className,
-            )}
-            onClick={() => inputRef.current?.focus()}
-        >
-            {values.map((id) => (
-                <Chip
-                    key={id}
-                    label={String(id)}
-                    onRemove={() => onChange(values.filter((item) => item !== id))}
-                />
-            ))}
-            <input
-                ref={inputRef}
-                value={draft}
-                placeholder={values.length === 0 ? placeholder : '继续输入，逗号确认'}
-                onChange={(event) => {
-                    const next = event.target.value;
-                    if (/[,，;；\n]/.test(next)) {
-                        commitDraft(next);
-                        return;
-                    }
-                    setDraft(next);
-                }}
-                onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ',' || event.key === '，') {
-                        event.preventDefault();
-                        commitDraft(draft);
-                        return;
-                    }
-                    if (event.key === 'Backspace' && !draft && values.length > 0) {
-                        onChange(values.slice(0, -1));
-                    }
-                }}
-                onBlur={() => {
-                    if (draft.trim()) commitDraft(draft);
-                }}
-                className="min-w-[9rem] flex-1 bg-transparent py-0.5 text-sm text-text outline-none placeholder:text-text-tertiary"
-            />
-        </div>
-    );
 }
 
 export function NotificationsTab({
@@ -984,114 +801,21 @@ export function NotificationsTab({
                 </FieldRow>
             </SettingsSection>
 
-            {/* 投递历史 Dialog */}
-            <Dialog
+            <DeliveryHistoryDialog
                 open={historyDialogOpen}
+                history={history}
+                loading={historyLoading}
                 onOpenChange={setHistoryDialogOpen}
-            >
-                <DialogContent
-                    size="lg"
-                    dismissOnOutsideClick={false}
-                    hideClose
-                >
-                    <DialogHeader>
-                        <div className="flex min-w-0 items-center gap-2">
-                            <DialogTitle>最近投递</DialogTitle>
-                            <Badge tone="neutral" appearance="soft">
-                                {history.length} 条
-                            </Badge>
-                        </div>
-                        <DialogDescription>
-                            本次运行的通知结果；重启应用后自动清空。
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="min-h-0 overflow-hidden rounded-sm border border-border-subtle bg-field">
-                        {history.length === 0 ? (
-                            <div className="flex min-h-48 flex-col justify-center px-5 py-8 text-center">
-                                <p className="text-[13px] font-medium text-text-secondary">
-                                    暂无投递记录
-                                </p>
-                                <p className="mx-auto mt-1.5 max-w-sm text-[12px] leading-relaxed text-text-tertiary">
-                                    Bot 掉线、恢复或异常退出后，这里会记录桌面通知和各推送通道的结果。
-                                </p>
-                            </div>
-                        ) : (
-                            <ul className="max-h-[min(55vh,32rem)] divide-y divide-border-subtle/70 overflow-y-auto">
-                                {history.map((h, i) => (
-                                    <li
-                                        key={`${h.at}-${h.bot_id}-${i}`}
-                                        className="space-y-2 px-4 py-3"
-                                    >
-                                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                                            <div className="flex min-w-0 items-center gap-2">
-                                                <span className="truncate text-[13px] font-medium text-text">
-                                                    {h.botName || h.bot_id}
-                                                </span>
-                                                <Badge
-                                                    tone={h.debounced ? 'warning' : 'neutral'}
-                                                    appearance="soft"
-                                                >
-                                                    {h.debounced
-                                                        ? '已合并重复提醒'
-                                                        : historyKindLabel(h.kind)}
-                                                </Badge>
-                                            </div>
-                                            <span className="shrink-0 text-[11px] tabular-nums text-text-tertiary">
-                                                {h.at}
-                                            </span>
-                                        </div>
-                                        {!h.debounced ? (
-                                            <div className="flex flex-wrap gap-1.5">
-                                                <DeliveryResultBadge label="桌面" value={h.toast} />
-                                                <DeliveryResultBadge label="Webhook" value={h.webhook} />
-                                                <DeliveryResultBadge label="邮件" value={h.email} />
-                                                <DeliveryResultBadge label="OneBot" value={h.onebot} />
-                                            </div>
-                                        ) : null}
-                                        {h.note ? (
-                                            <p className="text-[12px] leading-relaxed text-text-tertiary">
-                                                {h.note}
-                                            </p>
-                                        ) : null}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={historyLoading}
-                            onClick={() => void refreshHistory()}
-                        >
-                            {historyLoading ? '刷新中…' : '刷新'}
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={history.length === 0}
-                            onClick={async () => {
-                                await settingsService.clearOfflineDeliveryHistory();
-                                setHistory([]);
-                            }}
-                        >
-                            清空记录
-                        </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => setHistoryDialogOpen(false)}
-                        >
-                            完成
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                onRefresh={() => {
+                    void refreshHistory();
+                }}
+                onClear={() => {
+                    void (async () => {
+                        await settingsService.clearOfflineDeliveryHistory();
+                        setHistory([]);
+                    })();
+                }}
+            />
 
             <WebhookChannelEditorDialog
                 open={editor !== null}
@@ -1125,149 +849,26 @@ export function NotificationsTab({
                 onSave={saveEmailEditor}
             />
 
-            {/* OneBot Dialog：左发送方主列表，右栏目标 + 消息上下叠 */}
-            <Dialog
+            <OneBotEditorDialog
                 open={oneBotEditorOpen}
+                draft={oneBotDraft}
+                candidates={oneBotCandidates}
+                candidatesLoading={oneBotCandidatesLoading}
+                enablingId={oneBotEnablingId}
                 onOpenChange={(open) => {
                     setOneBotEditorOpen(open);
                     if (!open) setOneBotEditorDraft(null);
                 }}
-            >
-                <DialogContent size="sheetWide" dismissOnOutsideClick={false}>
-                    <DialogHeader className="shrink-0">
-                        <DialogTitle>配置 OneBot 通知</DialogTitle>
-                        <DialogDescription>
-                            按主机勾选发送方：本机供 Desktop，远端供同机 ncd-watch。目标与模板全局共用。
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {/* min-h 抬高 sheetWide 内容高度，避免矮对话框里目标区被压扁 */}
-                    <div className="grid min-h-[min(72dvh,40rem)] flex-1 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] lg:overflow-hidden">
-                        {/* 左：发送方列表（主焦点） */}
-                        <div className="flex min-h-[22rem] min-w-0 flex-col lg:h-full lg:min-h-0">
-                            <OneBotMessengerPicker
-                                selected={oneBotDraft.onebotMessengerBotIds}
-                                candidates={oneBotCandidates}
-                                loading={oneBotCandidatesLoading}
-                                enablingId={oneBotEnablingId}
-                                onChange={(onebotMessengerBotIds) =>
-                                    setOneBotEditorDraft((current) =>
-                                        current
-                                            ? {
-                                                  ...current,
-                                                  onebotMessengerBotIds,
-                                              }
-                                            : current,
-                                    )
-                                }
-                                onEnsureHttp={(botId) => {
-                                    void ensureOneBotHttp(botId);
-                                }}
-                            />
-                        </div>
-
-                        {/* 右：接收目标（上）+ 消息内容（下） */}
-                        <div className="flex min-h-0 min-w-0 flex-col gap-3 lg:h-full lg:overflow-hidden">
-                            <section className="shrink-0 space-y-2.5 rounded-sm border border-border-subtle bg-field p-3">
-                                <div className="flex items-center justify-between gap-2">
-                                    <p className="text-[13px] font-medium text-text">
-                                        接收目标
-                                    </p>
-                                    {oneBotDraft.onebotTargetIds.length > 0 ? (
-                                        <Badge tone="neutral" appearance="soft">
-                                            {oneBotDraft.onebotTargetIds.length}{' '}
-                                            个
-                                        </Badge>
-                                    ) : null}
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="w-full max-w-[10rem]">
-                                        <Select
-                                            value={oneBotDraft.onebotTargetType}
-                                            onValueChange={(onebotTargetType) =>
-                                                setOneBotEditorDraft((current) =>
-                                                    current
-                                                        ? {
-                                                              ...current,
-                                                              onebotTargetType,
-                                                          }
-                                                        : current,
-                                                )
-                                            }
-                                            items={[...ONEBOT_TARGET_ITEMS]}
-                                        />
-                                    </div>
-                                    <TargetIdChipsInput
-                                        values={oneBotDraft.onebotTargetIds}
-                                        className="min-h-[6.5rem] max-h-[9.5rem]"
-                                        placeholder={
-                                            oneBotDraft.onebotTargetType ===
-                                            'group'
-                                                ? '群号，逗号添加多个'
-                                                : 'QQ 号，逗号添加多个'
-                                        }
-                                        onChange={(onebotTargetIds) =>
-                                            setOneBotEditorDraft((current) =>
-                                                current
-                                                    ? {
-                                                          ...current,
-                                                          onebotTargetIds,
-                                                      }
-                                                    : current,
-                                            )
-                                        }
-                                    />
-                                </div>
-                            </section>
-
-                            <div className="flex min-h-[16rem] min-w-0 flex-1 flex-col lg:min-h-0">
-                                <OneBotMessageEditor
-                                    value={oneBotDraft.onebotMessageTemplate}
-                                    onChange={(onebotMessageTemplate) =>
-                                        setOneBotEditorDraft((current) =>
-                                            current
-                                                ? {
-                                                      ...current,
-                                                      onebotMessageTemplate,
-                                                  }
-                                                : current,
-                                        )
-                                    }
-                                    onReset={() =>
-                                        setOneBotEditorDraft((current) =>
-                                            current
-                                                ? {
-                                                      ...current,
-                                                      onebotMessageTemplate:
-                                                          DEFAULT_ONEBOT_MESSAGE,
-                                                  }
-                                                : current,
-                                        )
-                                    }
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <DialogFooter className="mt-3 shrink-0">
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setOneBotEditorOpen(false)}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            onClick={saveOneBotEditor}
-                        >
-                            完成
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                onDraftChange={(patch) =>
+                    setOneBotEditorDraft((current) =>
+                        current ? { ...current, ...patch } : current,
+                    )
+                }
+                onEnsureHttp={(botId) => {
+                    void ensureOneBotHttp(botId);
+                }}
+                onSave={saveOneBotEditor}
+            />
 
             {/* 删除确认 */}
             <Dialog
