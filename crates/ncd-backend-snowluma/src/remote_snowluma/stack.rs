@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use ncd_host::{Host, HostCommand, HostPath};
 
-use crate::remote_snowluma_layout::{
+use super::layout::{
     DEFAULT_DISPLAY_NUM, DEFAULT_NOVNC_PORT, DEFAULT_VNC_PORT, DEFAULT_WEBUI_PORT,
     RemoteSnowLumaLayout, SnowLumaRemotePaths, shell_single_quote,
 };

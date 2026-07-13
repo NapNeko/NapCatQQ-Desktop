@@ -154,7 +154,7 @@ fn extract_bracket_uin(line: &str) -> Option<&str> {
             if j > start && j < bytes.len() && bytes[j] == b']' {
                 // 至少 5 位，避免误伤 [App] 等
                 if j - start >= 5 {
-                    return Some(std::str::from_utf8(&bytes[start..j]).ok()?);
+                    return std::str::from_utf8(&bytes[start..j]).ok();
                 }
             }
         }

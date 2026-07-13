@@ -8,13 +8,13 @@ use serde_json::json;
 
 use ncd_traits::runtime_backend::BotBackendError;
 
-pub use crate::remote_snowluma_stack::{resolve_remote_bash, run_remote_bash as run_sh};
+pub use super::stack::{resolve_remote_bash, run_remote_bash as run_sh};
 
-use crate::remote_snowluma_layout::{
+use super::layout::{
     DEFAULT_DISPLAY_NUM, DEFAULT_NOVNC_PORT, DEFAULT_VNC_PORT, DEFAULT_WEBUI_PORT,
     RemoteSnowLumaLayout, SnowLumaRemotePaths, shell_single_quote,
 };
-use crate::remote_snowluma_stack::{
+use super::stack::{
     ensure_stack_running, is_stack_ready, run_remote_bash, stack_stop,
     LOG_PREV_MAX_BYTES,
     wait_webui_tcp as wait_webui_tcp_on_host,
