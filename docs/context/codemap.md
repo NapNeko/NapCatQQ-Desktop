@@ -74,7 +74,7 @@ flowchart TB
 | 前端 bootstrap 服务 | `src-ui/core/services/bootstrap.service.ts` |
 | hooks | `src-ui/hooks/bootstrap/` |
 | domain 模型 | `src-ui/core/domain/bootstrap/` |
-| 配置迁移 / 旧目录发现 | `crates/ncd-runtime/src/migration.rs`, `legacy_discovery.rs`, `app_config_migration.rs`, `path_probe_impl.rs` |
+| 配置迁移 / 旧目录发现 | `crates/ncd-runtime/src/config/{migration,app_migration,bot_migration,server_profile_migration}.rs`, `legacy_discovery.rs`, `path_probe_impl.rs`（crate 根旧路径 re-export 兼容） |
 | Desktop 用户协议 / 隐私 | `src-tauri/legal/{EULA,PRIVACY}.md` + `src-tauri/src/desktop_consent.rs` + `commands/desktop_consent.rs`；前端 `desktop-consent.service.ts` / `useDesktopConsentGate` / `DesktopConsentDialog`；**启动进主界面即 gate**（不同意退出）；`start/upsert/batch_start` command 强制 `ensure_accepted`（`DESKTOP_CONSENT_REQUIRED`）；未同意时 bootstrap 跳过 auto_start；同意落 `data_root/config/desktop-consent.json`（content-hash，进程内 OnceLock 缓存正文） |
 | 新手引导（可选） | `src-tauri/src/desktop_onboarding.rs` + `commands/desktop_onboarding.rs`；前端 `desktop-onboarding.service.ts` / `useOnboardingGate` / `OnboardingDialog` / `onboardingHost`；**consent 通过后**弹「了解 / 跳过」（门禁式，无 X）；设置·关于「重新查看入门」；**只认** `data_root/config/desktop-onboarding.json` 的 status，不探测 bot.json |
 
@@ -155,7 +155,7 @@ KB：`.claude/kb/snowluma-runtime.md`, `snowluma-docker.md`
 | SSH keygen | `crates/ncd-runtime/src/ssh_keygen.rs` |
 | Host 解析 | `crates/ncd-runtime/src/host_resolver.rs`, `src-tauri/src/bot_host_resolver.rs` |
 | Host 抽象 | `crates/ncd-host/src/host.rs`, `local/`, `remote/` |
-| Server profile 迁移 | `crates/ncd-runtime/src/server_profile_migration.rs` |
+| Server profile 迁移 | `crates/ncd-runtime/src/config/server_profile_migration.rs` |
 | Tauri | `src-tauri/src/commands/servers.rs`, `host_resolve.rs` |
 | 前端页 | `src-ui/modules/remote/*`（`RemoteHostPanel`, `ServerCard`, `AddServerDialog`） |
 | hooks | `src-ui/hooks/remote/` |
@@ -209,10 +209,10 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | App 配置模型 | `crates/ncd-domain/src/app_config.rs` |
 | Bot 配置模型 | `crates/ncd-domain/src/bot_config.rs` |
 | ConfigStore / Repo trait | `ncd-traits/config_store.rs`, `bot_config_repo.rs` |
-| 本地实现 | `ncd-runtime/config_store_impl.rs`, `bot_config_repo_impl.rs` |
-| drift / 渲染 | `ncd-runtime/config_drift.rs`, `backend_config_renderer.rs` |
-| Bot/App 迁移 | `bot_config_migration.rs`, `app_config_migration.rs` |
-| SecretStore | `secret_store_impl.rs` + trait |
+| 本地实现 | `ncd-runtime/src/config/{store,bot_repo}.rs`（旧路径 `config_store_impl` / `bot_config_repo_impl` re-export） |
+| drift / 渲染 | `ncd-runtime/src/config/{drift,renderer}.rs` |
+| Bot/App 迁移 | `config/{bot_migration,app_migration,migration}.rs` |
+| SecretStore | `config/secret_store.rs` + trait |
 | Tauri | `commands/app_settings.rs`, `config_transfer.rs` |
 | 前端设置页 | `src-ui/modules/settings/*`（`SettingsPage`, `tabs/`, `settings-draft.ts`） |
 | Bot 配置 UI | `src-ui/modules/bot/config/` |

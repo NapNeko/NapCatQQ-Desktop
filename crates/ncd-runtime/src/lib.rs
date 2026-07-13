@@ -1,5 +1,3 @@
-pub mod app_config_migration;
-pub mod backend_config_renderer;
 mod bootstrap_reconcile;
 pub mod bot_actor;
 pub mod component_action_policy;
@@ -14,11 +12,37 @@ pub use component_action_policy::{
     parse_remote_host_probe_stdout, require_remote_home, snowluma_github_release_tag,
 };
 pub use component_factory::build_component_for_host;
-pub mod bot_config_migration;
-pub mod bot_config_repo_impl;
 pub mod bot_manager;
-pub mod config_drift;
-pub mod config_store_impl;
+/// 配置横切（store / drift / renderer / migration）目录收束。
+pub mod config;
+// 旧路径兼容：外部 crate / 既有 `crate::config_drift` 等引用不改语义。
+pub mod app_config_migration {
+    pub use crate::config::app_migration::*;
+}
+pub mod backend_config_renderer {
+    pub use crate::config::renderer::*;
+}
+pub mod bot_config_migration {
+    pub use crate::config::bot_migration::*;
+}
+pub mod bot_config_repo_impl {
+    pub use crate::config::bot_repo::*;
+}
+pub mod config_drift {
+    pub use crate::config::drift::*;
+}
+pub mod config_store_impl {
+    pub use crate::config::store::*;
+}
+pub mod migration {
+    pub use crate::config::migration::*;
+}
+pub mod secret_store_impl {
+    pub use crate::config::secret_store::*;
+}
+pub mod server_profile_migration {
+    pub use crate::config::server_profile_migration::*;
+}
 pub mod crash_bundle;
 pub mod credential_sync;
 pub mod data_consolidate;
@@ -29,7 +53,6 @@ pub mod docker_bot_session;
 pub mod events;
 pub mod host_resolver;
 pub mod legacy_discovery;
-pub mod migration;
 pub mod napcat;
 pub mod native_deployment_adapter;
 pub mod ncd_watch_sync;
@@ -41,9 +64,7 @@ pub mod remote_bot_log_follow;
 mod remote_runtime_sessions;
 pub mod runtime_launch_plan;
 pub mod runtime_router;
-pub mod secret_store_impl;
 pub mod server_manager;
-pub mod server_profile_migration;
 pub mod snowluma;
 mod snowluma_agreements;
 mod snowluma_consent_files;

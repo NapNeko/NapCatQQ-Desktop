@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use tokio::task;
 
-use crate::bot_config_migration::{BOT_CONFIG_COMPAT_VERSION, migrate_bot_config};
+use crate::config::bot_migration::{BOT_CONFIG_COMPAT_VERSION, migrate_bot_config};
 use ncd_domain::bot_config::{BotConfig, BotConfigError};
 use ncd_domain::errors::ConfigError;
 use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};

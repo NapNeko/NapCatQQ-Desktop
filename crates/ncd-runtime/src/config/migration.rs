@@ -3,11 +3,11 @@ use std::path::Path;
 use serde_json::Value;
 use tracing::{info, warn};
 
-use crate::app_config_migration::{
+use crate::config::app_migration::{
     APP_SETTINGS_FILE, app_settings_from_legacy_config, migrate_app_config,
 };
-use crate::bot_config_migration::migrate_bot_config;
-use crate::server_profile_migration::{
+use crate::config::bot_migration::migrate_bot_config;
+use crate::config::server_profile_migration::{
     migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
 };
 use ncd_domain::errors::MigrationError;
@@ -90,7 +90,7 @@ impl<'a> MigrationOrchestrator<'a> {
             info!(target: "ncd_runtime::migration", "schema current, skip migration");
             return Ok(MigrationReport::clean());
         };
-        if !crate::app_config_migration::looks_like_app_config(&raw) {
+        if !crate::config::app_migration::looks_like_app_config(&raw) {
             info!(target: "ncd_runtime::migration", "schema current, skip migration");
             return Ok(MigrationReport::clean());
         }
@@ -125,7 +125,7 @@ impl<'a> MigrationOrchestrator<'a> {
 
     fn initialize_empty_config(&self) -> Result<MigrationReport, MigrationError> {
         let payload = serde_json::json!({
-            "info": {"configVersion": crate::bot_config_migration::BOT_CONFIG_COMPAT_VERSION},
+            "info": {"configVersion": crate::config::bot_migration::BOT_CONFIG_COMPAT_VERSION},
             "bots": [],
         });
         let tx = JsonTransaction::new().write(self.store.config_dir().join("bot.json"), payload);
@@ -149,7 +149,7 @@ impl<'a> MigrationOrchestrator<'a> {
 
         if let Some(app_path) = &selection.app_config {
             let raw = self.read_source_json(app_path)?;
-            if crate::app_config_migration::looks_like_app_config(&raw) {
+            if crate::config::app_migration::looks_like_app_config(&raw) {
                 app_config_for_legacy_server = Some(raw.clone());
                 let app = migrate_app_config(raw.clone());
                 rules.extend(app.rules_applied);
