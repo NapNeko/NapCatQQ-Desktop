@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
-use tracing::{info, warn};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
+use tracing::{info, warn};
 
 use ncd_domain::ids::BotId;
 
@@ -188,11 +188,7 @@ impl BotActorHandle {
     }
 }
 
-fn log_actor_result(
-    bot_id: &BotId,
-    result: &Result<bool, BotActorError>,
-    command: &'static str,
-) {
+fn log_actor_result(bot_id: &BotId, result: &Result<bool, BotActorError>, command: &'static str) {
     match result {
         Ok(true) => {
             // 状态已推进,last_transition 在 snapshot 里;此处只记命令名避免与 manager 重复刷屏
