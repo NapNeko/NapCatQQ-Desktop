@@ -70,6 +70,9 @@ export function draftFromBackendAndPrefs(
         botOfflineEmailNotice: backend.botOfflineEmailNotice,
         performanceMonitorEnabled: backend.performanceMonitorEnabled,
         performanceMonitorIntervalMs: backend.performanceMonitorIntervalMs,
+        botRuntimeMetricsEnabled: backend.botRuntimeMetricsEnabled,
+        botRuntimeMetricsIntervalMs: backend.botRuntimeMetricsIntervalMs,
+        botRuntimeMetricsRetentionDays: backend.botRuntimeMetricsRetentionDays,
         githubPat: backend.githubPat,
         closeAction: backend.closeAction,
         afterCloseUiBehavior: backend.afterCloseUiBehavior,
@@ -126,6 +129,15 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
         performanceMonitorEnabled: draft.performanceMonitorEnabled,
         performanceMonitorIntervalMs: clampPerformanceMonitorIntervalMs(
             draft.performanceMonitorIntervalMs,
+        ),
+        botRuntimeMetricsEnabled: draft.botRuntimeMetricsEnabled,
+        botRuntimeMetricsIntervalMs: Math.max(
+            1000,
+            Math.min(30_000, Math.round(draft.botRuntimeMetricsIntervalMs) || 3000),
+        ),
+        botRuntimeMetricsRetentionDays: Math.max(
+            1,
+            Math.min(90, Math.round(draft.botRuntimeMetricsRetentionDays) || 7),
         ),
         taskQueueCleanup: {
             taskQueueCleanupEnabled: draft.taskQueueCleanupEnabled,
@@ -190,6 +202,10 @@ export function isSettingsDirty(
         draft.botOfflineEmailNotice !== baseline.botOfflineEmailNotice ||
         draft.performanceMonitorEnabled !== baseline.performanceMonitorEnabled ||
         draft.performanceMonitorIntervalMs !== baseline.performanceMonitorIntervalMs ||
+        draft.botRuntimeMetricsEnabled !== baseline.botRuntimeMetricsEnabled ||
+        draft.botRuntimeMetricsIntervalMs !== baseline.botRuntimeMetricsIntervalMs ||
+        draft.botRuntimeMetricsRetentionDays !==
+        baseline.botRuntimeMetricsRetentionDays ||
         draft.githubPat !== baseline.githubPat ||
         draft.closeAction !== baseline.closeAction ||
         draft.afterCloseUiBehavior !== baseline.afterCloseUiBehavior ||

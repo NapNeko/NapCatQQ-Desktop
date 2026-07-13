@@ -72,6 +72,7 @@ import {
 } from './botCardParts';
 import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
 import { isRuntimeTargetLocal, remoteHostIdFromRuntimeTarget } from '../../../../core/domain/bot/runtime-target';
+import { BotRuntimeMetricsStrip } from './BotRuntimeMetricsStrip';
 
 interface BotCardProps {
     bot: BotActorSnapshot;
@@ -305,6 +306,7 @@ export function BotCard({
         );
     }
     const visibleChips = chips.slice(0, 3);
+    const metricsStrip = <BotRuntimeMetricsStrip botId={bot.bot_id} />;
 
     return (
         <>
@@ -315,6 +317,7 @@ export function BotCard({
                 accent={cardAccent}
                 onRowClick={isBatchMode ? handleRowClick : undefined}
                 processBadgeRef={badgeRef}
+                metaExtra={metricsStrip}
                 header={
                     <>
                         {isBatchMode && (

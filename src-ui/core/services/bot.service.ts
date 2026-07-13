@@ -9,6 +9,8 @@ import type { BackendType } from '../ipc/generated/domain/BackendType';
 import type { QqLoginInfo } from '../ipc/generated/QqLoginInfo';
 import type { ConfigDrift } from '../ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../ipc/generated/DriftDecision';
+import type { BotRuntimeMetrics } from '../ipc/generated/domain/BotRuntimeMetrics';
+import type { MetricsHistoryPoint } from '../ipc/generated/domain/MetricsHistoryPoint';
 
 export interface SnowLumaAgreementDoc {
     id: string;
@@ -56,6 +58,43 @@ export const botService = {
         return new Promise((resolve) =>
             setTimeout(() => resolve([...mockSnapshots]), 200),
         );
+    },
+
+    getRuntimeMetrics: async (botId: string): Promise<BotRuntimeMetrics> => {
+        if (isTauri) {
+            return invoke<BotRuntimeMetrics>('get_bot_runtime_metrics', {
+                botId,
+            });
+        }
+        return {
+            v: 1,
+            bot_id: botId,
+            collected_at_ms: Date.now(),
+            source: 'unavailable',
+            nodes: [],
+            probe: 'not_injected',
+        };
+    },
+
+    getRuntimeMetricsHistory: async (
+        botId: string,
+        fromMs?: number,
+        toMs?: number,
+    ): Promise<MetricsHistoryPoint[]> => {
+        if (isTauri) {
+            return invoke<MetricsHistoryPoint[]>(
+                'get_bot_runtime_metrics_history',
+                { botId, fromMs, toMs },
+            );
+        }
+        return [];
+    },
+
+    listRuntimeMetrics: async (): Promise<BotRuntimeMetrics[]> => {
+        if (isTauri) {
+            return invoke<BotRuntimeMetrics[]>('list_bot_runtime_metrics');
+        }
+        return [];
     },
 
     /** 内存中的 NapCat WebUI 端点(多实例 port 可能 +1);冷启动 hydrate 用 */

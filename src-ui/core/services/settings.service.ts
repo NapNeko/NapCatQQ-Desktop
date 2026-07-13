@@ -54,6 +54,10 @@ export interface BackendSettings {
     botOfflineEmailNotice: boolean;
     performanceMonitorEnabled: boolean;
     performanceMonitorIntervalMs: number;
+    /** Bot 实例运行时指标（内存/网络节点） */
+    botRuntimeMetricsEnabled: boolean;
+    botRuntimeMetricsIntervalMs: number;
+    botRuntimeMetricsRetentionDays: number;
     taskQueueCleanup: TaskQueueCleanupPrefs;
     githubPat: string;
     closeAction: CloseAction;
@@ -181,6 +185,15 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
         performanceMonitorIntervalMs: clampPerformanceMonitorIntervalMs(
             Number(dto.settings.performanceMonitorInterval),
         ),
+        botRuntimeMetricsEnabled: dto.settings.botRuntimeMetricsEnabled ?? false,
+        botRuntimeMetricsIntervalMs: Math.max(
+            1000,
+            Math.min(30_000, Number(dto.settings.botRuntimeMetricsIntervalMs ?? 3000) || 3000),
+        ),
+        botRuntimeMetricsRetentionDays: Math.max(
+            1,
+            Math.min(90, Number(dto.settings.botRuntimeMetricsRetentionDays ?? 7) || 7),
+        ),
         taskQueueCleanup: taskQueueCleanupFromAppSettings({
             taskQueueCleanupEnabled: dto.settings.taskQueueCleanupEnabled,
             taskQueueCleanupLingerMs: dto.settings.taskQueueCleanupLingerMs,
@@ -249,6 +262,9 @@ type AppSettingsDtoInvoke = {
         };
         performanceMonitorEnabled: boolean;
         performanceMonitorInterval: number;
+        botRuntimeMetricsEnabled: boolean;
+        botRuntimeMetricsIntervalMs: number;
+        botRuntimeMetricsRetentionDays: number;
         taskQueueCleanupEnabled: boolean;
         taskQueueCleanupLingerMs: number;
         closeAction: string;
@@ -340,6 +356,15 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             performanceMonitorEnabled: s.performanceMonitorEnabled,
             performanceMonitorInterval: clampPerformanceMonitorIntervalMs(
                 s.performanceMonitorIntervalMs,
+            ),
+            botRuntimeMetricsEnabled: s.botRuntimeMetricsEnabled,
+            botRuntimeMetricsIntervalMs: Math.max(
+                1000,
+                Math.min(30_000, Math.round(s.botRuntimeMetricsIntervalMs) || 3000),
+            ),
+            botRuntimeMetricsRetentionDays: Math.max(
+                1,
+                Math.min(90, Math.round(s.botRuntimeMetricsRetentionDays) || 7),
             ),
             taskQueueCleanupEnabled: tq.taskQueueCleanupEnabled,
             taskQueueCleanupLingerMs: tq.taskQueueCleanupLingerMs,

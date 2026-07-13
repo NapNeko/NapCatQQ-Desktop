@@ -63,6 +63,68 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
             </SettingsSection>
 
             <SettingsSection
+                title="实例运行时指标"
+                description="内存与 OneBot 网络节点收发。不修改你的连接配置；探针需重新启动实例后生效。远端已装 ncd-watch 时，Desktop 退出后仍继续记录历史。"
+            >
+                <FieldRow
+                    label="启用实例指标"
+                    description="默认关闭。开启后由 Desktop 启动的实例将注入轻量探针"
+                >
+                    <Switch
+                        checked={draft.botRuntimeMetricsEnabled}
+                        onCheckedChange={(v) =>
+                            patchDraft({ botRuntimeMetricsEnabled: v })
+                        }
+                    />
+                </FieldRow>
+                <FieldRow
+                    label="采样间隔"
+                    description="1–30 秒；同时影响探针写盘与界面刷新"
+                >
+                    <input
+                        type="range"
+                        min={1000}
+                        max={30000}
+                        step={500}
+                        disabled={!draft.botRuntimeMetricsEnabled}
+                        value={draft.botRuntimeMetricsIntervalMs}
+                        onChange={(e) =>
+                            patchDraft({
+                                botRuntimeMetricsIntervalMs: Number(e.target.value),
+                            })
+                        }
+                        className="w-40 accent-brand"
+                    />
+                    <span className="ml-2 font-mono text-[12px] text-text-secondary">
+                        {Math.round(draft.botRuntimeMetricsIntervalMs / 100) / 10}s
+                    </span>
+                </FieldRow>
+                <FieldRow
+                    label="历史保留"
+                    description="默认 7 天，最长 90 天；图表粒度可能降为约 1 分钟"
+                    isLast
+                >
+                    <input
+                        type="number"
+                        min={1}
+                        max={90}
+                        disabled={!draft.botRuntimeMetricsEnabled}
+                        value={draft.botRuntimeMetricsRetentionDays}
+                        onChange={(e) =>
+                            patchDraft({
+                                botRuntimeMetricsRetentionDays: Math.max(
+                                    1,
+                                    Math.min(90, Number(e.target.value) || 7),
+                                ),
+                            })
+                        }
+                        className="w-20 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[13px]"
+                    />
+                    <span className="ml-2 text-[12px] text-text-tertiary">天</span>
+                </FieldRow>
+            </SettingsSection>
+
+            <SettingsSection
                 title="任务队列"
                 description="已完成、失败或已取消的条目在列表中的保留时间；关闭自动清理则一直保留，直至重启应用。"
             >

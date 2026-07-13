@@ -41,6 +41,7 @@ export function BotManageCard({
     onRowClick,
     header,
     meta,
+    metaExtra,
     chips,
     footerActions,
     processBadgeRef,
@@ -53,6 +54,8 @@ export function BotManageCard({
     onRowClick?: () => void;
     header: ReactNode;
     meta: ReactNode;
+    /** 可选：meta 下方附加行（如运行时指标） */
+    metaExtra?: ReactNode;
     chips?: ReactNode;
     footerActions: ReactNode;
     /** 进程徽章动效锚点（状态切换 pop） */
@@ -108,6 +111,7 @@ export function BotManageCard({
                             —
                         </p>
                     )}
+                    {metaExtra}
                 </div>
 
                 <div className="min-h-[1.625rem] min-w-0">
