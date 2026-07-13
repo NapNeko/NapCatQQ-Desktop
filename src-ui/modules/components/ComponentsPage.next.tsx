@@ -63,7 +63,8 @@ function canProbeQqDependencies(machine: MachineView | null | undefined): machin
 export const ComponentsPageNext: React.FC = () => {
     const { view, hosts, isLoading, error, refetch } = useComponents();
     const { startAction, cancelAction, getProgressFor, onTaskTerminal } = useComponentAction();
-    const { snapshot: releases } = useReleases();
+    const { snapshot: releases, refetch: refetchReleases, isFetching: releasesFetching } =
+        useReleases();
     const { data: botSnapshots = [] } = useBotSnapshots();
     const botConfigs = useBotConfigsMap(botSnapshots);
 
@@ -342,17 +343,20 @@ export const ComponentsPageNext: React.FC = () => {
     );
 
     const handleRefresh = useCallback(() => {
-        refetch();
+        // 远端版本必须 force，否则 1h 磁盘缓存会挡住中转/GitHub 重拉
+        refetchReleases();
         if (activeMachine) {
             void probeQqDependencies(activeMachine.host.host_id, true);
         }
-    }, [refetch, activeMachine, probeQqDependencies]);
+    }, [refetch, refetchReleases, activeMachine, probeQqDependencies]);
 
     const handleRetryDetect = useCallback(
         (hostId: string) => {
             refetch();
+            refetchReleases();
             void probeQqDependencies(hostId, true);
         },
+        [refetch, refetchReleases
         [refetch, probeQqDependencies],
     );
 
@@ -514,17 +518,22 @@ export const ComponentsPageNext: React.FC = () => {
                     </p>
                     <h1 className="font-display text-xl font-semibold text-text">组件管理</h1>
                     <p className="mt-1 text-sm text-text-secondary">
-                        选一台机器，管理它上面的 Bot 框架与运行时依赖：安装、更新、卸载、容器部署。
-                    </p>
-                </div>
-                <Button size="sm" variant="secondary" onClick={handleRefresh} disabled={isLoading}>
-                    <MotionIcon
-                        icon={RefreshCw}
-                        motion={refreshMotion(isLoading)}
-                        playEnter={false}
-                        size={14}
-                    />
-                    刷新
+
+                        size="sm"
+                        variant="secondary"
+                        onClick={handleRefresh}
+                        disabled={isLoading || releasesFetching}
+                >
+                        <MotionIcon
+                            icon={RefreshCw}
+                            motion={refreshMotion(isLoading || releasesFetch" onClick={handleRefresh} disabled={isLoading}>
+                                < MotionIcon
+                        icon = { RefreshCw }
+                        motion = { refreshMotion(isLoading) }
+                        playEnter = { false}
+                        size = { 14}
+                                />
+                                刷新
                 </Button>
             </header>
 

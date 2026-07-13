@@ -368,7 +368,9 @@ impl UpdateProvider for GithubMsiUpdateProvider {
     async fn check(&self, channel: UpdateChannel) -> Result<Option<AvailableUpdate>, UpdateError> {
         // 产品策略：暂不开放更新渠道，一律按正式 Desktop release 拉（ignore channel）
         let _ = channel;
-        let snap = fetch_release_snapshot(&self.data_root, self.github_token.as_deref()).await;
+        // 用户主动「检查更新」:跳过 release 磁盘 TTL,避免半小时内假缓存挡检查
+        let snap =
+            fetch_release_snapshot(&self.data_root, self.github_token.as_deref(), true).await;
         let Some(info) = snap.desktop_latest.as_ref() else {
             // 与「已是最新」区分：无快照 = 检查失败，由上层变成 Err 字符串，UI 勿显示「无需更新」
             return Err(UpdateError::check_failed(

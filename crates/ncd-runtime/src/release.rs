@@ -50,27 +50,40 @@ const DESKTOP_RELEASES_LIST_URL: &str =
 /// 认证额度(5000 次/小时)token 不参与缓存 key——缓存只按 TTL,认证与否
 /// 拿到的 release 数据一致中转代理请求不带 PAT(中转用自己的 HMAC 签名)
 ///
+/// force:true 时跳过磁盘 TTL 缓存,强制走中转/GitHub(用户点「刷新」用);
+/// false 时仍 1 小时内复用 cache/release-snapshot.json
+///
 /// 流程:
-/// 1. 尝试读 <data_root>/cache/release-snapshot.json;如果缓存还在 TTL 内
-///    直接返回;
-/// 2. 并发拉三个仓库的 latest release(每个先中转后 fallback GitHub);
+/// 1. force=false 时读缓存;未过 TTL 直接返回;
+/// 2. 并发拉仓库 latest(每个先中转后 fallback GitHub);
 /// 3. 写缓存(失败仅 warn,不阻断返回);
 /// 4. 返回新快照
 ///
 /// 任何 IO / 网络错误一律降级到 None 字段或老缓存,不向 caller 抛错
-pub async fn fetch_release_snapshot(data_root: &Path, token: Option<&str>) -> ReleaseSnapshot {
-    if let Some(cached) = read_cache(data_root) {
-        if !is_stale(&cached) {
-            tracing::debug!(
-                target: "ncd_runtime::release",
-                fetched_at = cached.fetched_at,
-                "缓存未过 TTL，跳过远端拉取"
-            );
-            return cached;
+pub async fn fetch_release_snapshot(
+    data_root: &Path,
+    token: Option<&str>,
+    force: bool,
+) -> ReleaseSnapshot {
+    if !force {
+        if let Some(cached) = read_cache(data_root) {
+            if !is_stale(&cached) {
+                tracing::debug!(
+                    target: "ncd_runtime::release",
+                    fetched_at = cached.fetched_at,
+                    "缓存未过 TTL，跳过远端拉取"
+                );
+                return cached;
+            }
+            tracing::debug!(target: "ncd_runtime::release", "缓存已过 TTL，开始远端拉取");
+        } else {
+            tracing::debug!(target: "ncd_runtime::release", "无缓存文件，首次远端拉取");
         }
-        tracing::debug!(target: "ncd_runtime::release", "缓存已过 TTL，开始远端拉取");
     } else {
-        tracing::debug!(target: "ncd_runtime::release", "无缓存文件，首次远端拉取");
+        info!(
+            target: "ncd_runtime::release",
+            "强制刷新：跳过磁盘 TTL 缓存，重新拉取远端版本"
+        );
     }
 
     let client = shared_client();
@@ -264,7 +277,6 @@ pub(crate) fn strip_watch_or_v_prefix(tag: &str) -> &str {
     strip_v_prefix(t)
 }
 
-
 async fn fetch_qq_linux_latest() -> Option<ReleaseInfo> {
     match ncd_component::probe_linux_qq_latest().await {
         Ok(rel) => {
@@ -279,10 +291,7 @@ async fn fetch_qq_linux_latest() -> Option<ReleaseInfo> {
                 tag: rel.source.to_string(),
                 published_at: current_unix_ts(),
                 html_url: ncd_component::QQ_PCCONFIG_URL.to_string(),
-                release_notes: format!(
-                    "Linux QQ via {}\n{}",
-                    rel.source, rel.download_url
-                ),
+                release_notes: format!("Linux QQ via {}\n{}", rel.source, rel.download_url),
                 assets: vec![ReleaseAsset {
                     name: rel
                         .download_url
@@ -971,9 +980,40 @@ mod tests {
     #[tokio::test]
     async fn live_fetch_release_snapshot_smoke() {
         let temp = tempdir().unwrap();
-        let snap = fetch_release_snapshot(temp.path(), None).await;
+        let snap = fetch_release_snapshot(temp.path(), None, false).await;
         // 能拉到任意一个仓库的 release 即视为通;网络抖动时全 None 也算
         // 通(只要不 panic / 不抛错)
         assert!(snap.fetched_at.is_some());
+    }
+
+    /// force=true 必须忽略未过期磁盘缓存(不发起真网络时用 mock 路径难测;
+    /// 这里用「写新鲜缓存 + force 后 fetched_at 会更新或至少不短路返回旧对象」
+    /// 的契约:force 路径会打日志并进入拉取;无网时仍写新 snapshot)
+    #[tokio::test]
+    async fn force_refresh_bypasses_fresh_disk_cache() {
+        let temp = tempdir().unwrap();
+        let mut snap = fresh_snapshot();
+        // 标记为「刚拉过」的假数据,非 force 应直接返回
+        snap.fetched_at = Some(current_unix_ts());
+        snap.napcat_latest.as_mut().unwrap().version = "cached-only".into();
+        write_cache(temp.path(), &snap).unwrap();
+
+        let cached = fetch_release_snapshot(temp.path(), None, false).await;
+        assert_eq!(
+            cached.napcat_latest.as_ref().map(|r| r.version.as_str()),
+            Some("cached-only")
+        );
+
+        // force:不返回磁盘里的 cached-only 短路结果;会走网络(可能全 None)
+        // 但绝不能再原样吐出 version=cached-only 的未触网缓存
+        let forced = fetch_release_snapshot(temp.path(), None, true).await;
+        let still_cached_only =
+            forced.napcat_latest.as_ref().map(|r| r.version.as_str()) == Some("cached-only");
+        // 无网时 napcat 可能是 None;有网时是真实版本。两种都不是「原样缓存短路」
+        // 若实现错误地 force 仍读 TTL,会稳定拿到 cached-only
+        assert!(
+            !still_cached_only || forced.fetched_at != snap.fetched_at,
+            "force=true must not short-circuit on fresh disk cache"
+        );
     }
 }
