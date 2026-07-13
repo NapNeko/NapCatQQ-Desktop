@@ -1,9 +1,11 @@
 //! 编译期注入中转代理常量(base url + HMAC secret)
 //!
-//! 读 NCD_PROXY_BASE_URL / NCD_PROXY_SECRET 生成 src/proxy_constants.rs(.gitignore 忽略)
+//! 读环境变量生成 src/proxy_constants.rs(.gitignore 忽略):
+//! - NCD_PROXY_BASE_URL
+//! - NCD_PROXY_SECRET(首选)或 NCD_PROXY_SHARED_SECRET(仓库 secrets 历史名)
 //! 都缺失时拷贝 template.rs 占位,运行时 is_configured() 返 false 走 GitHub 直连
 //! 变量来源:系统环境变量优先,其次 workspace 根 .env仓库 clone 拿不到真实 secret,
-//! 必须用官方构建产物或本地配 .env
+//! 必须用官方构建产物或本地配 .env / CI secrets
 
 // build.rs 是构建脚本:main() 返 () 无法用 ?,panic 是中止构建的标准方式;
 // env::set_var 在 Rust 2024 要求 unsafe,单线程构建期无并发风险两者语义
@@ -16,6 +18,8 @@ use std::path::PathBuf;
 
 const ENV_BASE_URL: &str = "NCD_PROXY_BASE_URL";
 const ENV_SECRET: &str = "NCD_PROXY_SECRET";
+/// 仓库 secrets 历史命名,与 Worker SHARED_SECRET 对齐;CI 常只配这一项
+const ENV_SECRET_LEGACY: &str = "NCD_PROXY_SHARED_SECRET";
 
 const TEMPLATE_FILE: &str = "src/proxy_constants.template.rs";
 const OUT_FILE: &str = "src/proxy_constants.rs";
@@ -23,6 +27,7 @@ const OUT_FILE: &str = "src/proxy_constants.rs";
 fn main() {
     println!("cargo:rerun-if-env-changed={ENV_BASE_URL}");
     println!("cargo:rerun-if-env-changed={ENV_SECRET}");
+    println!("cargo:rerun-if-env-changed={ENV_SECRET_LEGACY}");
     println!("cargo:rerun-if-changed={TEMPLATE_FILE}");
     println!("cargo:rerun-if-changed=build.rs");
 
@@ -39,15 +44,14 @@ fn main() {
     }
 
     let base_url = env::var(ENV_BASE_URL).ok();
-    let secret = env::var(ENV_SECRET).ok();
+    // 首选 NCD_PROXY_SECRET;空则回退仓库 secrets 名 NCD_PROXY_SHARED_SECRET
+    let secret = env::var(ENV_SECRET)
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| env::var(ENV_SECRET_LEGACY).ok().filter(|s| !s.trim().is_empty()));
 
     // 两个都没注入 → 用模板占位(is_configured 返回 false,走 GitHub 直连)
-    if base_url.as_deref().map(str::trim).unwrap_or("").is_empty()
-        || secret
-            .as_deref()
-            .map(|s| s.trim().is_empty())
-            .unwrap_or(true)
-    {
+    if base_url.as_deref().map(str::trim).unwrap_or("").is_empty() || secret.is_none() {
         let template = crate_dir.join(TEMPLATE_FILE);
         let content = fs::read_to_string(&template).unwrap_or_else(|err| {
             panic!(
@@ -56,6 +60,7 @@ fn main() {
             )
         });
         write_if_changed(&out_path, &content);
+        println!("cargo:warning=ncd-network: proxy constants not injected (missing env); GitHub direct only");
         return;
     }
 
@@ -64,12 +69,13 @@ fn main() {
     let secret = escape_rust_str(secret.as_deref().unwrap_or("").trim());
     let generated = format!(
         "// 由 build.rs 在编译期生成,请勿手工编辑;改动请改 build.rs / 模板\n\
-         // 真实中转代理常量已通过 NCD_PROXY_BASE_URL / NCD_PROXY_SECRET 注入\n\
+         // 真实中转代理常量已通过 NCD_PROXY_BASE_URL + SECRET 注入\n\
          \n\
          pub const PROXY_BASE_URL: &str = {base_url};\n\
          pub const PROXY_SHARED_SECRET: &str = {secret};\n"
     );
     write_if_changed(&out_path, &generated);
+    println!("cargo:warning=ncd-network: proxy constants injected (base_url set, secret len hidden)");
 }
 
 /// 简易 .env 文件解析器逐行读 KEY=VALUE(忽略注释,空行,引号包裹),

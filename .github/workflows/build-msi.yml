@@ -136,9 +136,34 @@ jobs:
       - name: Check version metadata
         run: pnpm run check:versions
 
+      # 中转代理编译期注入(ncd-network/build.rs)。
+      # 仓库 secrets 历史名是 NCD_PROXY_SHARED_SECRET;build.rs 同时认 NCD_PROXY_SECRET。
+      # BASE_URL 非机密,与 .env.example 一致;若以后要换域名可改成 vars.NCD_PROXY_BASE_URL。
+      - name: Check proxy build env
+        shell: pwsh
+        env:
+          NCD_PROXY_BASE_URL: ${{ vars.NCD_PROXY_BASE_URL || 'https://napcat-desktop.aqiaoyo.top' }}
+          NCD_PROXY_SECRET: ${{ secrets.NCD_PROXY_SECRET }}
+          NCD_PROXY_SHARED_SECRET: ${{ secrets.NCD_PROXY_SHARED_SECRET }}
+        run: |
+          $base = $env:NCD_PROXY_BASE_URL
+          $hasSecret = -not [string]::IsNullOrWhiteSpace($env:NCD_PROXY_SECRET)
+          $hasLegacy = -not [string]::IsNullOrWhiteSpace($env:NCD_PROXY_SHARED_SECRET)
+          Write-Host "NCD_PROXY_BASE_URL set=$([bool]$base) value_len=$($base.Length)"
+          Write-Host "NCD_PROXY_SECRET present=$hasSecret"
+          Write-Host "NCD_PROXY_SHARED_SECRET present=$hasLegacy"
+          if (-not $base -or (-not $hasSecret -and -not $hasLegacy)) {
+            Write-Warning "Proxy env incomplete: MSI will fall back to GitHub direct (proxy_configured=false)"
+          }
+
       # 不要用 `pnpm run tauri:build -- --bundles msi`：
       # pnpm 会把中间的 `--` 原样传给 tauri，导致 `--bundles` 落到 cargo 上失败。
       - name: Build Tauri MSI
+        env:
+          NCD_PROXY_BASE_URL: ${{ vars.NCD_PROXY_BASE_URL || 'https://napcat-desktop.aqiaoyo.top' }}
+          # 首选新名;空则 build.rs 回退 SHARED_SECRET
+          NCD_PROXY_SECRET: ${{ secrets.NCD_PROXY_SECRET }}
+          NCD_PROXY_SHARED_SECRET: ${{ secrets.NCD_PROXY_SHARED_SECRET }}
         run: pnpm run tauri:build:msi
 
       - name: Collect MSI output
