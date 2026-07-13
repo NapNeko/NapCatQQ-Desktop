@@ -46,7 +46,8 @@
           "wix/v2-orphan-cleanup.wxs"
         ],
         "componentRefs": [
-          "V2OrphanCleanup"
+          "V2OrphanCleanup",
+          "V2OrphanCleanupUser"
         ]
       }
     }

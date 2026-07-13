@@ -74,6 +74,11 @@
       NOT deleted here).
     -->
     <DirectoryRef Id="INSTALLDIR">
+      <!--
+        Machine component: only HKLM. ICE57 fails if HKCU RemoveRegistryKey shares
+        a per-machine KeyPath component (RemoveRegistryValue alone is OK, but
+        RemoveRegistryKey is not).
+      -->
       <Component Id="V2OrphanCleanup" Guid="D099BE7B-6258-4D8B-88E5-1C2D33456771" Win64="yes">
         <RegistryKey Root="HKLM" Key="Software\NapCatQQ-Desktop">
           <RegistryValue
@@ -90,21 +95,26 @@
             Type="integer"
             Value="1" />
         </RegistryKey>
-        <!--
-          App 运行时写入的用户级开机自启(HKCU Run,值名与 productName 一致)。
-          MSI 不负责创建该值;卸载时删掉,避免登录后启动已删除的 exe。
-          WiX 3 的 RemoveRegistryValue 无 Action 属性(那是 WiX 4+);默认即卸载时移除。
-        -->
+      </Component>
+      <!--
+        User component: HKCU-only cleanup.
+        - Autostart Run value (app-written; MSI never creates it)
+        - 3.0.0 broken product key: literal Software + product_name mustache with
+          one backslash so Handlebars leaves Software{{product_name}} unexpanded
+      -->
+      <Component Id="V2OrphanCleanupUser" Guid="6F2C8A91-4B3E-4D7A-9C1F-8E5A2B0D4F73" Win64="yes">
+        <RegistryValue
+          Root="HKCU"
+          Key="Software\NapCatQQ Desktop"
+          Name="LegacyUserCleanup"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
         <RemoveRegistryValue
           Id="RemoveAutostartRunValue"
           Root="HKCU"
           Key="Software\Microsoft\Windows\CurrentVersion\Run"
           Name="NapCatQQ Desktop" />
-        <!--
-          3.0.0 wrote a literal broken HKCU key (Handlebars ate the path separator).
-          Keep that literal on install/uninstall cleanup: one backslash before the
-          product_name mustache so the expression is not expanded.
-        -->
         <RemoveRegistryKey
           Id="RemoveBrokenProductNameTemplateKeyInstall"
           Root="HKCU"
