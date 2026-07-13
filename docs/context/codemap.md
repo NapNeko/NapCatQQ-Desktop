@@ -66,7 +66,7 @@ flowchart TB
 | 关注点 | 主路径 |
 |--------|--------|
 | 数据根解析 | `src-tauri/src/bootstrap.rs`（`resolve_data_root`） |
-| 产品路径注册表 | `src-tauri/src/product_registry.rs` + `src-tauri/wix/v2-orphan-cleanup.wxs` + `src-tauri/wix/main.wxs`（HKCU 扁平 `Software\NapCatQQ Desktop`） |
+| 产品路径注册表 | `src-tauri/src/product_registry.rs` + `src-tauri/wix/v2-orphan-cleanup.wxs`（HKLM `SOFTWARE\NapCatQQ-Desktop`：InstallDir/DataRoot）+ `src-tauri/wix/main.wxs`（HKCU `Software\NapCatQQ Desktop`；模板须 `Software\\{{product_name}}`）+ `legacy_install_cleanup.rs`（V2 孤儿 + 3.0.0 脏键兜底） |
 | 启动快照 | `src-tauri/src/bootstrap.rs` + `ncd-domain` `bootstrap.rs` |
 | App 组装 / AppState | `src-tauri/src/lib.rs` |
 | 运行时句柄 | `src-tauri/src/runtime.rs` |

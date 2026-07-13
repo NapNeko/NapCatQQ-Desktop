@@ -33,19 +33,32 @@
 
     <!--
       Directory=INSTALLDIR so relative paths resolve under the install root.
-      Return=ignore: missing paths / locked files must not abort install;
-      app startup has a narrow whitelist fallback for leftovers.
+      Elevated (Impersonate=no): Program Files is not writable for normal users,
+      so app-start cleanup often gets Access Denied; MSI must delete here.
+      Return=ignore: missing paths / locked files must not abort install.
+      Run twice: after RemoveExistingProducts (old tree) and after InstallFiles
+      (if a lock delayed the first pass, second pass still has a chance).
     -->
     <CustomAction
       Id="PurgeV2InstallOrphans"
       Directory="INSTALLDIR"
-      ExeCommand="&quot;[SystemFolder]cmd.exe&quot; /c if exist _internal rmdir /s /q _internal &amp; if exist icons rmdir /s /q icons &amp; if exist guild1.db del /f /q guild1.db &amp; if exist guild1.db-shm del /f /q guild1.db-shm &amp; if exist guild1.db-wal del /f /q guild1.db-wal"
+      ExeCommand="&quot;[SystemFolder]cmd.exe&quot; /c if exist _internal rmdir /s /q _internal &amp; if exist icons rmdir /s /q icons &amp; if exist guild1.db del /f /q /a guild1.db &amp; if exist guild1.db-shm del /f /q /a guild1.db-shm &amp; if exist guild1.db-wal del /f /q /a guild1.db-wal"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore" />
+    <CustomAction
+      Id="PurgeV2InstallOrphansLate"
+      Directory="INSTALLDIR"
+      ExeCommand="&quot;[SystemFolder]cmd.exe&quot; /c if exist _internal rmdir /s /q _internal &amp; if exist icons rmdir /s /q icons &amp; if exist guild1.db del /f /q /a guild1.db &amp; if exist guild1.db-shm del /f /q /a guild1.db-shm &amp; if exist guild1.db-wal del /f /q /a guild1.db-wal"
       Execute="deferred"
       Impersonate="no"
       Return="ignore" />
 
     <InstallExecuteSequence>
       <Custom Action="PurgeV2InstallOrphans" After="RemoveExistingProducts">
+        NOT REMOVE="ALL"
+      </Custom>
+      <Custom Action="PurgeV2InstallOrphansLate" After="InstallFiles">
         NOT REMOVE="ALL"
       </Custom>
     </InstallExecuteSequence>
@@ -87,6 +100,21 @@
           Root="HKCU"
           Key="Software\Microsoft\Windows\CurrentVersion\Run"
           Name="NapCatQQ Desktop" />
+        <!--
+          3.0.0 wrote the literal HKCU key Software{{product_name}} (Handlebars ate
+          the path separator). Fragment render must keep that literal: use a single
+          backslash before {{ so the mustache is not expanded.
+        -->
+        <RemoveRegistryKey
+          Id="RemoveBrokenProductNameTemplateKeyInstall"
+          Root="HKCU"
+          Key="Software\{{product_name}}"
+          Action="removeOnInstall" />
+        <RemoveRegistryKey
+          Id="RemoveBrokenProductNameTemplateKeyUninstall"
+          Root="HKCU"
+          Key="Software\{{product_name}}"
+          Action="removeOnUninstall" />
       </Component>
     </DirectoryRef>
   </Fragment>

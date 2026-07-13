@@ -8,13 +8,17 @@
 //! `guild1.db` / `guild1.db-shm` / `guild1.db-wal`。这些不在 MSI 文件表里,
 //! MajorUpgrade 也不会删,必须白名单清掉。
 //!
-//! MSI 侧已有 deferred 清理(见 `src-tauri/wix/`)。
-//! 这里只在进程启动时对 **当前 exe 父目录** 做一次白名单兜底,失败只记日志,
-//! 绝不碰 ProgramData / 用户配置。
+//! 权威清理在 MSI elevated deferred CA(`src-tauri/wix/v2-orphan-cleanup.wxs`)。
+//! 进程启动兜底优先读 HKLM InstallDir,再退回 current_exe 父目录。
+//! Program Files 对普通用户只读:Access Denied 只记日志,不阻断启动,
+//! 也不碰 ProgramData / 用户配置。
+//!
+//! 另:3.0.0 曾把 HKCU 产品键写成字面量 `Software{{product_name}}`
+//! (Handlebars 吃掉 `\`)。启动时删掉该脏键(HKCU,无需管理员)。
 
 use std::path::{Path, PathBuf};
 
-/// 允许删除的安装目录子项(相对 exe 父目录)。只加确认无用的 V2 痕迹。
+/// 允许删除的安装目录子项(相对安装根)。只加确认无用的 V2 痕迹。
 const LEGACY_ORPHAN_NAMES: &[&str] = &[
     "_internal",
     // 早期 V3 曾把 tray png 打进 resources；现已 embed，安装树不应再有 icons/
@@ -24,6 +28,11 @@ const LEGACY_ORPHAN_NAMES: &[&str] = &[
     "guild1.db-wal",
 ];
 
+const MAIN_EXE_NAME: &str = "NapCatQQ-Desktop.exe";
+
+/// 3.0.0 模板转义错误留下的字面量键(不是 `Software\NapCatQQ Desktop`)
+const BROKEN_HKCU_PRODUCT_KEY: &str = r"Software{{product_name}}";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LegacyInstallCleanupReport {
     pub install_dir: PathBuf,
@@ -32,7 +41,15 @@ pub struct LegacyInstallCleanupReport {
     pub skipped_reason: Option<String>,
 }
 
-/// 用 `current_exe` 父目录作为安装根;非 Windows 直接 skip。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BrokenRegistryCleanupReport {
+    /// 是否发现并尝试处理脏键
+    pub found: bool,
+    pub removed: bool,
+    pub error: Option<String>,
+}
+
+/// 解析安装根并清理白名单孤儿;非 Windows 直接 skip。
 pub fn purge_legacy_install_orphans() -> LegacyInstallCleanupReport {
     #[cfg(not(windows))]
     {
@@ -46,24 +63,59 @@ pub fn purge_legacy_install_orphans() -> LegacyInstallCleanupReport {
 
     #[cfg(windows)]
     {
-        match std::env::current_exe() {
-            Ok(exe) => match exe.parent() {
-                Some(dir) => purge_legacy_install_orphans_in(dir),
-                None => LegacyInstallCleanupReport {
-                    install_dir: exe,
-                    removed: Vec::new(),
-                    failed: Vec::new(),
-                    skipped_reason: Some("exe has no parent".into()),
-                },
-            },
-            Err(err) => LegacyInstallCleanupReport {
+        match resolve_install_dir_for_cleanup() {
+            Ok(dir) => purge_legacy_install_orphans_in(&dir),
+            Err(reason) => LegacyInstallCleanupReport {
                 install_dir: PathBuf::new(),
                 removed: Vec::new(),
                 failed: Vec::new(),
-                skipped_reason: Some(format!("current_exe: {err}")),
+                skipped_reason: Some(reason),
             },
         }
     }
+}
+
+/// 优先 HKLM InstallDir(且含主程序),否则 current_exe 父目录。
+#[cfg(windows)]
+fn resolve_install_dir_for_cleanup() -> Result<PathBuf, String> {
+    if let Some(from_reg) = crate::product_registry::read_install_dir() {
+        let candidate = crate::product_registry::normalize_registered_path(from_reg);
+        if candidate.is_dir() && candidate.join(MAIN_EXE_NAME).is_file() {
+            return Ok(candidate);
+        }
+    }
+
+    let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
+    let dir = exe
+        .parent()
+        .ok_or_else(|| "exe has no parent".to_string())?
+        .to_path_buf();
+    Ok(dir)
+}
+
+/// 删除 3.0.0 误写的 `HKCU\Software{{product_name}}`(若存在)。
+/// 不需要管理员;失败只返回 error 字符串。
+#[cfg(windows)]
+pub fn purge_broken_hkcu_product_key() -> BrokenRegistryCleanupReport {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
+
+    let mut report = BrokenRegistryCleanupReport::default();
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    match hkcu.open_subkey(BROKEN_HKCU_PRODUCT_KEY) {
+        Ok(_) => report.found = true,
+        Err(_) => return report,
+    }
+    match hkcu.delete_subkey_all(BROKEN_HKCU_PRODUCT_KEY) {
+        Ok(()) => report.removed = true,
+        Err(err) => report.error = Some(err.to_string()),
+    }
+    report
+}
+
+#[cfg(not(windows))]
+pub fn purge_broken_hkcu_product_key() -> BrokenRegistryCleanupReport {
+    BrokenRegistryCleanupReport::default()
 }
 
 /// 可测入口:只处理 `install_dir` 下白名单名字。
@@ -82,7 +134,7 @@ pub fn purge_legacy_install_orphans_in(install_dir: &Path) -> LegacyInstallClean
 
     for name in LEGACY_ORPHAN_NAMES {
         // 硬拒绝主程序名,防止名单被误改成自杀
-        if name.eq_ignore_ascii_case("NapCatQQ-Desktop.exe") {
+        if name.eq_ignore_ascii_case(MAIN_EXE_NAME) {
             report
                 .failed
                 .push(((*name).to_string(), "refusing main binary name".into()));
@@ -99,7 +151,15 @@ pub fn purge_legacy_install_orphans_in(install_dir: &Path) -> LegacyInstallClean
         };
         match result {
             Ok(()) => report.removed.push((*name).to_string()),
-            Err(err) => report.failed.push(((*name).to_string(), err.to_string())),
+            Err(err) => {
+                // Program Files 下 Users 只有 RX:Access Denied 是预期,等 MSI elevated CA
+                let msg = if err.kind() == std::io::ErrorKind::PermissionDenied {
+                    format!("{err} (need elevated MSI purge under Program Files)")
+                } else {
+                    err.to_string()
+                };
+                report.failed.push(((*name).to_string(), msg));
+            }
         }
     }
 
@@ -168,5 +228,12 @@ mod tests {
         assert!(report.removed.is_empty());
         assert!(report.failed.is_empty());
         assert!(report.skipped_reason.is_none());
+    }
+
+    #[test]
+    fn broken_hkcu_key_constant_is_literal_template_bug() {
+        // 必须是字面量 Software{{product_name}},不是展开后的产品名
+        assert_eq!(BROKEN_HKCU_PRODUCT_KEY, "Software{{product_name}}");
+        assert!(!BROKEN_HKCU_PRODUCT_KEY.contains('\\'));
     }
 }

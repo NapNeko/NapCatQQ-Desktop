@@ -18,10 +18,10 @@ pub mod bootstrap;
 pub mod bot_host_resolver;
 pub mod commands;
 pub mod desktop_consent;
-pub mod desktop_onboarding;
 pub mod desktop_log;
 pub mod desktop_log_format;
 pub mod desktop_notify;
+pub mod desktop_onboarding;
 pub mod desktop_update;
 pub mod legacy_install_cleanup;
 pub mod lightweight;
@@ -119,6 +119,25 @@ pub fn run() {
                 name = %name,
                 error = %err,
                 "failed to remove legacy install orphan"
+            );
+        }
+
+        let broken_reg = legacy_install_cleanup::purge_broken_hkcu_product_key();
+        if broken_reg.removed {
+            tracing::info!(
+                target: "ncd_tauri::install_cleanup",
+                "removed broken HKCU product key Software{{{{product_name}}}}"
+            );
+        } else if let Some(err) = broken_reg.error.as_deref() {
+            tracing::warn!(
+                target: "ncd_tauri::install_cleanup",
+                error = %err,
+                "failed to remove broken HKCU product key Software{{{{product_name}}}}"
+            );
+        } else if broken_reg.found {
+            tracing::debug!(
+                target: "ncd_tauri::install_cleanup",
+                "broken HKCU product key present but not removed"
             );
         }
     }

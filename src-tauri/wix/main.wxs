@@ -1,9 +1,14 @@
 <!--
-  Custom Tauri MSI template: HKCU product key is Software\{{product_name}}
+  Custom Tauri MSI template: HKCU product key is Software\<productName>
   (no manufacturer segment; personal project).
   ARP Publisher still uses Manufacturer from tauri.conf.json publisher.
   Product DataRoot contract: HKLM\SOFTWARE\NapCatQQ-Desktop
   (v2-orphan-cleanup.wxs + product_registry.rs).
+
+  Handlebars: a single backslash before {{ eats the mustache
+  (Software\{{product_name}} renders as Software{{product_name}}).
+  Registry keys must use Software\\{{product_name}} so the MSI gets
+  Software\NapCatQQ Desktop. Directory Name="{{product_name}}" is fine.
 -->
 <?if $(sys.BUILDARCH)="x86"?>
     <?define Win64 = "no" ?>
@@ -83,10 +88,10 @@
              search second so that the MSI-specific path takes priority when both keys exist. -->
         <Property Id="INSTALLDIR">
           <!-- First attempt: Search for the default key value (this is how the nsis installer stores the path) -->
-          <RegistrySearch Id="PrevInstallDirNoName" Root="HKCU" Key="Software\{{product_name}}" Type="raw" />
+          <RegistrySearch Id="PrevInstallDirNoName" Root="HKCU" Key="Software\\{{product_name}}" Type="raw" />
 
           <!-- Second attempt: Search for "InstallDir" which takes priority if found (this is how the msi installer stores the path) -->
-          <RegistrySearch Id="PrevInstallDirWithName" Root="HKCU" Key="Software\{{product_name}}" Name="InstallDir" Type="raw" />
+          <RegistrySearch Id="PrevInstallDirWithName" Root="HKCU" Key="Software\\{{product_name}}" Name="InstallDir" Type="raw" />
         </Property>
 
         <!-- launch app checkbox -->
@@ -122,7 +127,7 @@
                 <Component Id="ApplicationShortcutDesktop" Guid="*">
                     <Shortcut Id="ApplicationDesktopShortcut" Name="{{product_name}}" Description="Runs {{product_name}}" Target="[!Path]" WorkingDirectory="INSTALLDIR" />
                     <RemoveFolder Id="DesktopFolder" On="uninstall" />
-                    <RegistryValue Root="HKCU" Key="Software\{{product_name}}" Name="Desktop Shortcut" Type="integer" Value="1" KeyPath="yes" />
+                    <RegistryValue Root="HKCU" Key="Software\\{{product_name}}" Name="Desktop Shortcut" Type="integer" Value="1" KeyPath="yes" />
                 </Component>
             </Directory>
             <Directory Id="$(var.PlatformProgramFilesFolder)" Name="PFiles">
@@ -135,7 +140,7 @@
 
         <DirectoryRef Id="INSTALLDIR">
             <Component Id="RegistryEntries" Guid="*">
-                <RegistryKey Root="HKCU" Key="Software\{{product_name}}">
+                <RegistryKey Root="HKCU" Key="Software\\{{product_name}}">
                     <RegistryValue Name="InstallDir" Type="string" Value="[INSTALLDIR]" KeyPath="yes" />
                 </RegistryKey>
                 <!-- Change the Root to HKCU for perUser installations -->
@@ -193,7 +198,7 @@
 							  On="uninstall" />
 
 				<RegistryValue Root="HKCU"
-							   Key="Software\{{product_name}}"
+							   Key="Software\\{{product_name}}"
 							   Name="Uninstaller Shortcut"
 							   Type="integer"
 							   Value="1"
@@ -212,7 +217,7 @@
                     <ShortcutProperty Key="System.AppUserModel.ID" Value="{{bundle_id}}"/>
                 </Shortcut>
                 <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
-                <RegistryValue Root="HKCU" Key="Software\{{product_name}}" Name="Start Menu Shortcut" Type="integer" Value="1" KeyPath="yes"/>
+                <RegistryValue Root="HKCU" Key="Software\\{{product_name}}" Name="Start Menu Shortcut" Type="integer" Value="1" KeyPath="yes"/>
            </Component>
         </DirectoryRef>
 
