@@ -2,16 +2,9 @@
 
 use ncd_traits::runtime_backend::BotBackendError;
 
-/// 按 dot-path(如 network.httpServers)在 JSON Value 树里设值
-/// 路径不存在的中间节点自动创建为 object用于应用前端 ConfigDriftDialog
-/// 的 AcceptExternal 决议到渲染输出
-/// 把 value 写到 root 的 dot-path 位置;value 为 null 表示删除该位置(DropAdded)
-///
-/// 支持 object key 与 array index(纯数字段)混合,如 network.httpClients.0.token:
-/// ConfigDrift 对连接数组里的字段就是这种路径中间 object 缺失自动建;遇到数组时
-/// 按下标定位现有元素,越界 / 段非数字 / 落到非容器值上一律返回错误,而不是像旧实现
-/// 那样静默 return——否则用户在 ConfigDriftDialog 里对 token/url 的 AcceptExternal /
-/// DropAdded 决议会"看起来点了却没生效"
+// ConfigDriftDialog 的 AcceptExternal / DropAdded 走 dot-path（含数组下标）。
+// 中间 object 缺失时建空 object；数组越界 / 非数字段必须 Err，避免「点了没生效」。
+// value=null 表示删除该位置（DropAdded）。
 pub(crate) fn set_value_at_dot_path(
     root: &mut serde_json::Value,
     dot_path: &str,
@@ -73,9 +66,8 @@ pub(crate) fn set_value_at_dot_path(
     }
 }
 
-/// 判断 BotBackendError 是否属于“远端主机传输层问题”
-/// 优先匹配显式的 RemoteHostTransport 变体;
-/// 对 Io 变体做字符串启发式(包含 disconnected / remote_disconnected / ssh / connection / poisoned / broken pipe 等)
+// stop/start 失败时区分「远端传输层挂了」与业务错误，便于 UI 提示重连而非假崩溃。
+// Io 变体只能字符串启发式（历史错误未全量结构化）。
 pub(crate) fn is_remote_transport_error(err: &BotBackendError) -> bool {
     match err {
         BotBackendError::RemoteHostTransport(_) => true,

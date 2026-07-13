@@ -11,8 +11,10 @@ use crate::backend_config_renderer::output_paths_for_backend;
 use crate::bootstrap_reconcile::BootstrapReconciler;
 use crate::bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
 use crate::docker_bot_session::DockerBotSessionRegistry;
+// EventBus trait 必须 in scope 才能 publish；DomainEventKind/EventFilter 供 listeners 经 super::* 使用。
 use crate::events::{BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter};
 use crate::napcat::endpoint_table::{NapCatEndpoint, NapCatEndpointTable};
+// PollerConfig/PollerDeps 仅 listeners 建 poller 用；RestartHandle 在本文件 impl。
 use crate::napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 use crate::napcat::offline_notifier::OfflineNotifier;
 use crate::napcat::webui_client::NapCatWebUiClient;
@@ -20,6 +22,7 @@ use crate::remote_bot_log_follow::RemoteBotLogFollowRegistry;
 use crate::remote_runtime_sessions::RemoteRuntimeSessions;
 use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
 use crate::runtime_router::{DockerSecretProvider, RuntimeBackendRouter, RuntimeRouterError};
+// SnowLumaWebUiClient: wait_ready/login/get_agreements 的 trait 方法解析需要 in scope。
 use crate::snowluma::{AgreementsPayload, ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
 use crate::snowluma_agreements::SnowLumaAgreementService;
 use ncd_backend_napcat::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;

@@ -216,16 +216,14 @@ impl BotBackend for RemoteNativeDeploymentBackend {
         let log_path = napcat_remote_log_path(&install_base, qq_id);
         let want = if opts.lines > 0 { opts.lines } else { 1000 };
         let raw_n = want.saturating_mul(5).clamp(800, 20_000);
-        let raw = match self
+        // 读日志失败时给空行：UI tail 不应因单次 SSH 抖动整页失败。
+        let raw = self
             .with_host_refresh(|h| {
                 let p = log_path.clone();
                 async move { remote_tail_log_raw_lines(h.as_ref(), &p, raw_n).await }
             })
             .await
-        {
-            Ok(v) => v,
-            Err(_) => Vec::new(),
-        };
+            .unwrap_or_default();
         let mut lines = ncd_deploy::filter_napcat_console_lines(raw);
         let total_lines = lines.len();
         if lines.len() > want {
