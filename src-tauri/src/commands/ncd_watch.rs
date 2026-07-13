@@ -66,6 +66,24 @@ pub async fn sync_ncd_watch_notify(
         .map_err(|e| e.to_string())?;
     let notify = build_notify_for_server(state.inner(), &server_id, &bots).await;
     write_notify_json_merged(host.as_ref(), home, &notify).await?;
+    // 实例指标：同步 metrics.json 供 Desktop 退出后 ncd-watch 续采
+    {
+        use ncd_runtime::ncd_watch_sync::{
+            bots_for_server, build_watch_metrics_config, write_metrics_json,
+        };
+        let settings = state.app_settings.read().await.clone();
+        let remote_bots = bots_for_server(&server_id, bots.iter());
+        let metrics = build_watch_metrics_config(
+            home,
+            settings.bot_runtime_metrics_enabled,
+            settings.bot_runtime_metrics_interval_ms,
+            settings.bot_runtime_metrics_retention_days,
+            &remote_bots,
+        );
+        if let Err(e) = write_metrics_json(host.as_ref(), home, &metrics).await {
+            tracing::warn!(%server_id, %e, "write metrics.json failed");
+        }
+    }
     write_desktop_present(host.as_ref(), home, Some(env!("CARGO_PKG_VERSION"))).await?;
     Ok(())
 }

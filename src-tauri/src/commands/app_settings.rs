@@ -69,6 +69,7 @@ pub async fn set_app_settings(
 
     let mut settings = dto.settings;
     settings.normalize_performance_monitor();
+    settings.normalize_bot_runtime_metrics();
     settings.normalize_task_queue_cleanup();
     settings.normalize_lightweight_prefs();
     settings.normalize_remote_host_health_probe();

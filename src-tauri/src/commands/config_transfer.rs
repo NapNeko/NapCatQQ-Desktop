@@ -288,6 +288,7 @@ fn normalize_app_settings_import(value: serde_json::Value) -> Result<serde_json:
     let mut settings: ncd_domain::AppSettings = serde_json::from_value(value)
         .map_err(|e| format!("app-settings.json 不是合法应用设置,已中止导入: {e}"))?;
     settings.normalize_performance_monitor();
+    settings.normalize_bot_runtime_metrics();
     settings.normalize_task_queue_cleanup();
     settings.normalize_lightweight_prefs();
     settings.normalize_remote_host_health_probe();
