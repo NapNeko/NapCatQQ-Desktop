@@ -198,40 +198,79 @@ jobs:
           set -euo pipefail
           version="${{ needs.resolve.outputs.version }}"
           plain="${{ needs.resolve.outputs.version_plain }}"
+          repo="${{ github.repository }}"
           notes_path=release-notes.md
+          msi_versioned="NapCatQQ-Desktop-${plain}-x64.msi"
+          msi_alias="NapCatQQ-Desktop-x64.msi"
+
+          # 上一 Desktop tag（仅 v*.*.*，不含 watch-v*）
           prev="$(git describe --tags --abbrev=0 --match 'v*.*.*' "${version}^" 2>/dev/null || true)"
+          commit_count=0
+          if [[ -n "${prev}" ]]; then
+            commit_count="$(git rev-list --count --no-merges "${prev}..HEAD" 2>/dev/null || echo 0)"
+          fi
 
           {
-            echo "## NapCatQQ Desktop ${plain}"
+            echo "## NapCatQQ Desktop \`${plain}\`"
             echo
-            echo "Windows 安装包由 Tauri MSI 工作流生成。"
+            echo "Windows 桌面控制台正式安装包（Tauri MSI · x64）。"
+            echo
+            echo "### Install"
+            echo
+            echo "1. 下载下方 **\`${msi_versioned}\`**（或同内容别名 \`${msi_alias}\`）"
+            echo "2. 双击安装并启动"
+            echo "3. 需要时在设置中完成引导 / 协议确认"
+            echo
+            echo "> **Requirements:** Windows 10 / Server 2016+ · x64"
+            echo
+            echo "### Upgrade"
+            echo
+            echo "- 与旧版 **同一 UpgradeCode**，可直接覆盖安装"
+            echo "- 生产数据根：\`%ProgramData%\\NapCatQQ Desktop\`（配置与程序分离）"
+            echo "- 建议升级前导出一次配置备份；装完后确认 Bot 列表与远端档案仍在"
             echo
             echo "### Assets"
             echo
-            echo "| 文件 | 说明 |"
-            echo "|------|------|"
-            echo "| \`NapCatQQ-Desktop-${plain}-x64.msi\` | 版本化安装包 |"
-            echo "| \`NapCatQQ-Desktop-x64.msi\` | 同内容别名 |"
+            echo "| File | Description |"
+            echo "| --- | --- |"
+            echo "| \`${msi_versioned}\` | 推荐下载 · 版本化 MSI |"
+            echo "| \`${msi_alias}\` | 同内容别名（便于脚本固定文件名） |"
             echo "| \`SHA256SUMS\` | 校验和 |"
             echo
-            echo "### 说明"
+            echo "### Notes"
             echo
-            echo "- 旧版 MSI（同 UpgradeCode）可直接覆盖升级；生产数据根仍为 ProgramData。"
-            echo "- **自动更新**（\`latest.json\` / \`.sig\`）当前未接线；请以本 Release 的 MSI 为准手动安装。"
-            echo "- 与远端监控二进制分流：\`ncd-watch\` 使用 \`watch-v*\` tag 与独立工作流。"
+            echo "- 应用内「检查更新」走 GitHub Release MSI 下载安装；**不是** tauri-plugin-updater 的 \`latest.json\` / \`.sig\` 签名通道"
+            echo "- 远端主机侧监控二进制 **ncd-watch** 使用独立 tag \`watch-v*\` 与工作流，不包含在本 MSI 内"
+            echo "- 名字带 \`watch-v\` 的产物是监控小工具，**不是** 桌面安装包"
+            echo
+            echo "### Changelog"
             echo
             if [[ -n "${prev}" ]]; then
-              echo "### Changes since \`${prev}\`"
+              echo "Compared to \`${prev}\` · **${commit_count}** commits (no merges)."
               echo
-              git log --pretty=format:'- %s (%h)' "${prev}..HEAD" --no-merges | head -n 80 || true
+              echo "Full history: https://github.com/${repo}/compare/${prev}...${version}"
+              echo
+              echo "<details>"
+              echo "<summary>Commits since ${prev}</summary>"
+              echo
+              git log --pretty=format:'- %s (%h)' "${prev}..HEAD" --no-merges
+              echo
+              echo
+              echo "</details>"
               echo
             else
-              echo "### Changes"
-              echo
-              echo "_无上一 v* tag，跳过自动 changelog。_"
+              echo "_No previous \`v*.*.*\` tag found; open the repository history for this release._"
               echo
             fi
-            echo "Tag: \`${version}\`"
+            echo "### Support"
+            echo
+            echo "- Issues: https://github.com/${repo}/issues"
+            echo "- QQ group: https://qm.qq.com/q/8UK5ecfDyw"
+            echo "- Docs: https://github.com/${repo}/blob/main/docs/user/README.md"
+            echo
+            echo "---"
+            echo
+            echo "Tag \`${version}\` · built by [Release MSI](https://github.com/${repo}/actions/workflows/release.yml)"
           } > "${notes_path}"
 
           echo "NOTES_PATH=${notes_path}" >> "$GITHUB_OUTPUT"
@@ -243,7 +282,7 @@ jobs:
           draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ needs.resolve.outputs.tag_name }}
-          name: NapCatQQ Desktop ${{ needs.resolve.outputs.version }}
+          name: NapCatQQ Desktop ${{ needs.resolve.outputs.version_plain }}
           body_path: ${{ steps.notes.outputs.NOTES_PATH }}
           files: |
             release-assets/*.msi
