@@ -2,22 +2,14 @@
 // 主列表只留开关 + 通道摘要；通道详情 / 消息模板收敛进 Dialog（对齐连接配置交互）。
 // 颜色只走语义 token，随主题切换。
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Eye, EyeOff, History, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { History, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { DEFAULT_INFOBAR_DISMISS_WHEN_ENABLED } from '../../../core/domain/ui/infoBarDismiss';
 import {
     createBlankWebhookChannel,
     DEFAULT_ONEBOT_MESSAGE,
-    WEBHOOK_PRESETS,
     type WebhookChannelDraft,
-    type WebhookPresetId,
 } from '../../../core/domain/settings/offline-notify-defaults';
-import {
-    detectWebhookService,
-    fieldsFromPresetBody,
-    parseVisualFields,
-    serializeVisualFields,
-} from '../../../core/domain/settings/webhook-message-visual';
 import { settingsService } from '../../../core/services/settings.service';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import {
@@ -32,7 +24,6 @@ import {
     NumberField,
     Select,
     Switch,
-    TextField,
 } from '../../../shared/ui';
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import { cn } from '../../../shared/utils/cn';
@@ -44,13 +35,22 @@ import {
     SettingsSection,
     SettingsTabSections,
 } from '../_shared';
-import { WebhookMessageBuilder } from './WebhookMessageBuilder';
 import { NcdWatchRemoteSection } from './NcdWatchRemoteSection';
+import {
+    EmailEditorDialog,
+    emailIsReady,
+    emailSummary,
+    type EmailEditorDraft,
+} from './notifications/EmailEditorDialog';
 import { OneBotMessageEditor } from './notifications/OneBotMessageEditor';
 import {
     OneBotMessengerPicker,
     type OneBotCandidate,
 } from './notifications/OneBotMessengerPicker';
+import {
+    WebhookChannelEditorDialog,
+    type ChannelEditorState,
+} from './notifications/WebhookChannelEditorDialog';
 
 interface Props {
     draft: SettingsDraft | null;
@@ -59,52 +59,10 @@ interface Props {
     settingsDirty?: boolean;
 }
 
-type ChannelEditorState =
-    | { mode: 'create'; draft: WebhookChannelDraft }
-    | { mode: 'edit'; id: string; draft: WebhookChannelDraft };
-
-const METHOD_ITEMS = [
-    { value: 'POST', label: 'POST' },
-    { value: 'GET', label: 'GET' },
-] as const;
-
-const ENCRYPTION_ITEMS = [
-    { value: 'SSL', label: 'SSL' },
-    { value: 'TLS', label: 'TLS' },
-    { value: '无加密', label: '无加密' },
-] as const;
-
 const ONEBOT_TARGET_ITEMS = [
     { value: 'private', label: '私聊' },
     { value: 'group', label: '群聊' },
 ] as const;
-
-const EMAIL_PRESETS = [
-    { label: 'QQ 邮箱', server: 'smtp.qq.com', port: 465, encryption: 'SSL' },
-    { label: '163 邮箱', server: 'smtp.163.com', port: 465, encryption: 'SSL' },
-    { label: 'Gmail', server: 'smtp.gmail.com', port: 465, encryption: 'SSL' },
-    {
-        label: 'Outlook',
-        server: 'smtp.office365.com',
-        port: 587,
-        encryption: 'TLS',
-    },
-] as const;
-
-const EMAIL_PRESET_ITEMS = EMAIL_PRESETS.map((preset) => ({
-    value: preset.label,
-    label: preset.label,
-}));
-
-type EmailEditorDraft = Pick<
-    SettingsDraft,
-    | 'emailSender'
-    | 'emailReceiver'
-    | 'emailToken'
-    | 'emailSmtpServer'
-    | 'emailSmtpPort'
-    | 'emailEncryption'
->;
 
 type OneBotEditorDraft = Pick<
     SettingsDraft,
@@ -113,15 +71,6 @@ type OneBotEditorDraft = Pick<
     | 'onebotTargetIds'
     | 'onebotMessageTemplate'
 >;
-
-/** 左侧服务卡片副文案：尽量短 */
-const PRESET_HINTS: Record<WebhookPresetId, string> = {
-    serverchan: 'title / desp',
-    dingtalk: 'markdown',
-    feishu: 'text',
-    discord: 'Embed',
-    bark: '推送',
-};
 
 function newChannelId(existing: WebhookChannelDraft[]): string {
     const stamp = Date.now().toString(36);
@@ -156,25 +105,6 @@ function channelSummary(ch: WebhookChannelDraft): string {
         }
     }
     return '未填写地址';
-}
-
-function emailIsReady(email: EmailEditorDraft): boolean {
-    return Boolean(
-        email.emailSender.trim() &&
-        email.emailReceiver.trim() &&
-        email.emailToken.trim() &&
-        email.emailSmtpServer.trim() &&
-        email.emailSmtpPort > 0,
-    );
-}
-
-function emailSummary(email: EmailEditorDraft): string {
-    if (!email.emailSmtpServer.trim()) return '尚未选择邮箱服务';
-    if (!email.emailSender.trim() || !email.emailReceiver.trim()) {
-        return `${email.emailSmtpServer} · 待填写收发地址`;
-    }
-    if (!email.emailToken.trim()) return `${email.emailSmtpServer} · 缺授权码`;
-    return `${email.emailSender.trim()} → ${email.emailReceiver.trim()}`;
 }
 
 function oneBotIsReady(oneBot: OneBotEditorDraft): boolean {
@@ -240,55 +170,6 @@ function DeliveryResultBadge({
     return <Badge tone="neutral" appearance="soft">{label} 未投递</Badge>;
 }
 
-function SecretField({
-    value,
-    onValueChange,
-    className,
-    placeholder,
-    name,
-}: {
-    value: string;
-    onValueChange: (v: string) => void;
-    className?: string;
-    placeholder?: string;
-    name?: string;
-}) {
-    const [reveal, setReveal] = useState(false);
-    return (
-        <div className={cn('relative w-full min-w-0', className)}>
-            <input
-                type={reveal ? 'text' : 'password'}
-                name={name}
-                autoComplete="off"
-                spellCheck={false}
-                value={value}
-                placeholder={placeholder}
-                onChange={(e) => onValueChange(e.target.value)}
-                className={cn(
-                    'block w-full rounded-sm bg-field py-2 pl-3 pr-9 text-sm text-text',
-                    'border border-border-subtle outline-none transition-colors duration-150',
-                    'placeholder:text-text-tertiary',
-                    'disabled:cursor-not-allowed disabled:bg-inset disabled:text-text-disabled',
-                    'focus:border-brand focus:ring-2 focus:ring-brand focus:ring-inset',
-                )}
-            />
-            <button
-                type="button"
-                onClick={() => setReveal((r) => !r)}
-                className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                aria-label={reveal ? '隐藏密钥' : '显示密钥'}
-            >
-                {reveal ? (
-                    <ActionMotionIcon icon={EyeOff} size={15} />
-                ) : (
-                    <ActionMotionIcon icon={Eye} size={15} />
-                )}
-            </button>
-        </div>
-    );
-}
-
-
 function Chip({
     label,
     onRemove,
@@ -303,11 +184,11 @@ function Chip({
             className={cn(
                 'inline-flex max-w-full items-center gap-1 rounded-sm border px-2 py-1 text-[12px]',
                 tone === 'success' &&
-                'border-success/30 bg-success-soft text-text',
+                    'border-success/30 bg-success-soft text-text',
                 tone === 'warning' &&
-                'border-warning/30 bg-warning-soft text-text',
+                    'border-warning/30 bg-warning-soft text-text',
                 tone === 'neutral' &&
-                'border-border-subtle bg-inset text-text-secondary',
+                    'border-border-subtle bg-inset text-text-secondary',
             )}
         >
             <span className="truncate">{label}</span>
@@ -394,43 +275,6 @@ function TargetIdChipsInput({
                 }}
                 className="min-w-[9rem] flex-1 bg-transparent py-0.5 text-sm text-text outline-none placeholder:text-text-tertiary"
             />
-        </div>
-    );
-}
-
-
-function DialogField({
-    label,
-    hint,
-    children,
-    trailing,
-}: {
-    label: ReactNode;
-    hint?: ReactNode;
-    children: ReactNode;
-    /** 标签行右侧（如启用开关），与控件垂直节奏分开 */
-    trailing?: ReactNode;
-}) {
-    return (
-        <div className="min-w-0 space-y-1.5">
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 space-y-0.5">
-                    <div className="text-xs font-medium text-text-secondary">
-                        {label}
-                    </div>
-                    {hint ? (
-                        <p className="text-[11.5px] leading-relaxed text-text-tertiary">
-                            {hint}
-                        </p>
-                    ) : null}
-                </div>
-                {trailing ? (
-                    <div className="flex shrink-0 items-center pt-0.5">
-                        {trailing}
-                    </div>
-                ) : null}
-            </div>
-            {children}
         </div>
     );
 }
@@ -561,20 +405,6 @@ export function NotificationsTab({
         setDeleteId(null);
     };
 
-    const applyPreset = (presetId: WebhookPresetId) => {
-        if (!editor) return;
-        const preset = WEBHOOK_PRESETS.find((p) => p.id === presetId);
-        if (!preset) return;
-        // 切换服务时尽量保留用户已填的标题/正文，只换外壳 JSON 结构。
-        const existing =
-            parseVisualFields(editor.draft.bodyTemplate) ??
-            fieldsFromPresetBody(presetId);
-        patchEditorDraft({
-            bodyTemplate: serializeVisualFields(presetId, existing),
-            name: editor.draft.name.trim() || preset.label,
-        });
-    };
-
     const openEmailEditor = () => {
         setEmailPreset('');
         setEmailEditorDraft({
@@ -606,14 +436,14 @@ export function NotificationsTab({
             draft.onebotMessengerBotIds.length > 0
                 ? [...draft.onebotMessengerBotIds]
                 : draft.onebotMessengerBotId.trim()
-                    ? [draft.onebotMessengerBotId.trim()]
-                    : [];
+                  ? [draft.onebotMessengerBotId.trim()]
+                  : [];
         const targetIds =
             draft.onebotTargetIds.length > 0
                 ? [...draft.onebotTargetIds]
                 : draft.onebotTargetId > 0
-                    ? [draft.onebotTargetId]
-                    : [];
+                  ? [draft.onebotTargetId]
+                  : [];
         setOneBotEditorDraft({
             onebotMessengerBotIds: messengerIds,
             onebotTargetType:
@@ -671,8 +501,8 @@ export function NotificationsTab({
                 result.action === 'already_ready'
                     ? '已具备环回 HTTP'
                     : result.action === 'enabled'
-                        ? '已启用现有 HTTP 服务'
-                        : '已自动创建环回 HTTP 服务';
+                      ? '已启用现有 HTTP 服务'
+                      : '已自动创建环回 HTTP 服务';
             const scopeHint =
                 result.candidate.scope === 'remote'
                     ? '远端配置已写入；保存后请同步 ncd-watch。运行中时会尽量热更新。'
@@ -732,16 +562,16 @@ export function NotificationsTab({
             draft.onebotMessengerBotIds.length > 0
                 ? draft.onebotMessengerBotIds
                 : draft.onebotMessengerBotId.trim()
-                    ? [draft.onebotMessengerBotId.trim()]
-                    : [],
+                  ? [draft.onebotMessengerBotId.trim()]
+                  : [],
         onebotTargetType:
             draft.onebotTargetType === 'group' ? 'group' : 'private',
         onebotTargetIds:
             draft.onebotTargetIds.length > 0
                 ? draft.onebotTargetIds
                 : draft.onebotTargetId > 0
-                    ? [draft.onebotTargetId]
-                    : [],
+                  ? [draft.onebotTargetId]
+                  : [],
         onebotMessageTemplate:
             draft.onebotMessageTemplate || DEFAULT_ONEBOT_MESSAGE,
     };
@@ -913,8 +743,8 @@ export function NotificationsTab({
                                 const status = !ch.enabled
                                     ? '已关闭'
                                     : !ch.url.trim()
-                                        ? '缺地址'
-                                        : ch.method || 'POST';
+                                      ? '缺地址'
+                                      : ch.method || 'POST';
                                 return (
                                     <FieldRow
                                         key={ch.id}
@@ -1263,425 +1093,37 @@ export function NotificationsTab({
                 </DialogContent>
             </Dialog>
 
-            {/* 通道编辑 Dialog */}
-            <Dialog
+            <WebhookChannelEditorDialog
                 open={editor !== null}
+                working={editorWorking}
+                testingKey={testing}
                 onOpenChange={(open) => {
                     if (!open) closeEditor();
                 }}
-            >
-                <DialogContent
-                    size="sheetWide"
-                    dismissOnOutsideClick={false}
-                    onExited={() => setEditorMount(null)}
-                    onPointerDownOutside={(e) => {
-                        const target = e.target as HTMLElement;
-                        if (target.hasAttribute('data-dialog-overlay')) {
-                            e.preventDefault();
-                        }
-                    }}
-                    onInteractOutside={(e) => {
-                        const target = e.target as HTMLElement;
-                        if (target.hasAttribute('data-dialog-overlay')) {
-                            e.preventDefault();
-                        }
-                    }}
-                >
-                    {editorWorking ? (
-                        <>
-                            <DialogHeader className="shrink-0">
-                                <DialogTitle>
-                                    {editorWorking.mode === 'create'
-                                        ? '添加推送通道'
-                                        : '编辑推送通道'}
-                                </DialogTitle>
-                                <DialogDescription>
-                                    选服务、填连接、编辑消息。完成后点添加/完成，再保存设置。
-                                </DialogDescription>
-                            </DialogHeader>
+                onExited={() => setEditorMount(null)}
+                onPatchDraft={patchEditorDraft}
+                onSave={saveEditor}
+                onTest={(channelId) => {
+                    void runWebhookTest(channelId);
+                }}
+            />
 
-                            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                                <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-[14.5rem_minmax(0,1fr)] lg:gap-3 lg:overflow-hidden">
-                                    {/* 左：服务 + 连接；宽屏栏内滚动，窄屏整页流式 */}
-                                    <div className="flex min-h-0 min-w-0 flex-col gap-3 overflow-x-hidden lg:overflow-y-auto lg:px-0.5 lg:py-0.5">
-                                        <div className="space-y-1.5">
-                                            <p className="text-xs font-medium text-text-secondary">
-                                                服务类型
-                                            </p>
-                                            <div className="grid grid-cols-2 gap-1.5">
-                                                {WEBHOOK_PRESETS.map((preset) => {
-                                                    const active =
-                                                        detectWebhookService(
-                                                            editorWorking.draft
-                                                                .bodyTemplate,
-                                                        ) === preset.id;
-                                                    return (
-                                                        <button
-                                                            key={preset.id}
-                                                            type="button"
-                                                            onClick={() =>
-                                                                applyPreset(
-                                                                    preset.id,
-                                                                )
-                                                            }
-                                                            className={cn(
-                                                                'rounded-sm border px-2 py-1.5 text-left transition-colors',
-                                                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-                                                                active
-                                                                    ? 'border-brand bg-brand/10 text-text'
-                                                                    : 'border-border-subtle bg-field text-text-secondary hover:bg-inset hover:text-text',
-                                                            )}
-                                                        >
-                                                            <span className="block text-[12px] font-medium leading-snug">
-                                                                {preset.label}
-                                                            </span>
-                                                            <span className="mt-0.5 block truncate text-[10.5px] leading-snug text-text-tertiary">
-                                                                {
-                                                                    PRESET_HINTS[
-                                                                    preset
-                                                                        .id
-                                                                    ]
-                                                                }
-                                                            </span>
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2.5 border-t border-border-subtle/70 pt-3">
-                                            <p className="text-xs font-medium text-text-secondary">
-                                                连接
-                                            </p>
-                                            {/* 启用是独立表单项，不和「连接」标题绑在一起 */}
-                                            <div className="flex items-center justify-between gap-3 rounded-sm border border-border-subtle bg-field px-3 py-2.5">
-                                                <div className="min-w-0 space-y-0.5">
-                                                    <p className="text-xs font-medium text-text">
-                                                        启用通道
-                                                    </p>
-                                                    <p className="text-[11px] leading-relaxed text-text-tertiary">
-                                                        关闭后保留配置，掉线时不发送
-                                                    </p>
-                                                </div>
-                                                <Switch
-                                                    checked={
-                                                        editorWorking.draft
-                                                            .enabled
-                                                    }
-                                                    onCheckedChange={(v) =>
-                                                        patchEditorDraft({
-                                                            enabled: v,
-                                                        })
-                                                    }
-                                                />
-                                            </div>
-                                            <DialogField label="名称">
-                                                <TextField
-                                                    name="webhook-channel-name"
-                                                    autoComplete="off"
-                                                    value={
-                                                        editorWorking.draft.name
-                                                    }
-                                                    placeholder="如 Server酱"
-                                                    onValueChange={(v) =>
-                                                        patchEditorDraft({
-                                                            name: v,
-                                                        })
-                                                    }
-                                                />
-                                            </DialogField>
-                                            <DialogField label="地址">
-                                                <TextField
-                                                    name="webhook-url"
-                                                    type="url"
-                                                    autoComplete="off"
-                                                    spellCheck={false}
-                                                    value={
-                                                        editorWorking.draft.url
-                                                    }
-                                                    placeholder="https://…"
-                                                    onValueChange={(v) =>
-                                                        patchEditorDraft({
-                                                            url: v,
-                                                        })
-                                                    }
-                                                />
-                                            </DialogField>
-                                            <DialogField label="请求方法">
-                                                <Select
-                                                    value={
-                                                        editorWorking.draft
-                                                            .method === 'GET'
-                                                            ? 'GET'
-                                                            : 'POST'
-                                                    }
-                                                    onValueChange={(v) =>
-                                                        patchEditorDraft({
-                                                            method: v,
-                                                        })
-                                                    }
-                                                    items={[...METHOD_ITEMS]}
-                                                />
-                                            </DialogField>
-                                            <DialogField
-                                                label={
-                                                    <>
-                                                        密钥
-                                                        <span className="ml-1 text-[10.5px] font-normal text-text-tertiary">
-                                                            - 可选 Bearer
-                                                        </span>
-                                                    </>
-                                                }
-                                            >
-                                                <SecretField
-                                                    name="webhook-secret"
-                                                    value={
-                                                        editorWorking.draft
-                                                            .secret
-                                                    }
-                                                    onValueChange={(v) =>
-                                                        patchEditorDraft({
-                                                            secret: v,
-                                                        })
-                                                    }
-                                                />
-                                            </DialogField>
-                                            {editorWorking.mode === 'edit' ? (
-                                                <Button
-                                                    type="button"
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    className="self-start"
-                                                    disabled={
-                                                        testing ===
-                                                        `webhook:${editorWorking.id}` ||
-                                                        !editorWorking.draft.url.trim()
-                                                    }
-                                                    onClick={() =>
-                                                        void runWebhookTest(
-                                                            editorWorking.id,
-                                                        )
-                                                    }
-                                                >
-                                                    {testing ===
-                                                        `webhook:${editorWorking.id}`
-                                                        ? '发送中…'
-                                                        : '发送测试'}
-                                                </Button>
-                                            ) : null}
-                                        </div>
-                                    </div>
-
-                                    {/* 中+右：字段表单 + 原始 JSON（组件内两栏） */}
-                                    <div className="flex min-h-[14rem] min-w-0 flex-col lg:h-full lg:min-h-0">
-                                        <WebhookMessageBuilder
-                                            bodyTemplate={
-                                                editorWorking.draft
-                                                    .bodyTemplate
-                                            }
-                                            serviceHint={(() => {
-                                                const k = detectWebhookService(
-                                                    editorWorking.draft
-                                                        .bodyTemplate,
-                                                );
-                                                return k === 'custom'
-                                                    ? null
-                                                    : k;
-                                            })()}
-                                            onBodyTemplateChange={(v) =>
-                                                patchEditorDraft({
-                                                    bodyTemplate: v,
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <DialogFooter className="mt-3 shrink-0">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={closeEditor}
-                                >
-                                    取消
-                                </Button>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={saveEditor}
-                                >
-                                    {editorWorking.mode === 'create'
-                                        ? '添加'
-                                        : '完成'}
-                                </Button>
-                            </DialogFooter>
-                        </>
-                    ) : null}
-                </DialogContent>
-            </Dialog>
-
-            {/* 邮件连接 Dialog */}
-            <Dialog
+            <EmailEditorDialog
                 open={emailEditorOpen}
+                draft={emailDraft}
+                preset={emailPreset}
                 onOpenChange={(open) => {
                     setEmailEditorOpen(open);
                     if (!open) setEmailEditorDraft(null);
                 }}
-            >
-                <DialogContent size="md" dismissOnOutsideClick={false}>
-                    <DialogHeader>
-                        <DialogTitle>配置邮件通知</DialogTitle>
-                        <DialogDescription>
-                            选择常用邮箱后补齐收发地址和授权码。完成后回到设置页保存。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-5 py-1">
-                        <DialogField
-                            label="常用邮箱"
-                            hint="选择后会自动填入服务器、端口和加密方式。"
-                        >
-                            <Select
-                                value={emailPreset}
-                                placeholder="选择服务商，或手动填写"
-                                onValueChange={(label) => {
-                                    setEmailPreset(label);
-                                    const preset = EMAIL_PRESETS.find(
-                                        (item) => item.label === label,
-                                    );
-                                    if (!preset) return;
-                                    setEmailEditorDraft((current) =>
-                                        current
-                                            ? {
-                                                ...current,
-                                                emailSmtpServer: preset.server,
-                                                emailSmtpPort: preset.port,
-                                                emailEncryption: preset.encryption,
-                                            }
-                                            : current,
-                                    );
-                                }}
-                                items={EMAIL_PRESET_ITEMS}
-                            />
-                        </DialogField>
-
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <DialogField label="发件邮箱">
-                                <TextField
-                                    name="email-sender"
-                                    type="email"
-                                    autoComplete="off"
-                                    spellCheck={false}
-                                    value={emailDraft.emailSender}
-                                    placeholder="you@example.com"
-                                    onValueChange={(emailSender) =>
-                                        setEmailEditorDraft((current) =>
-                                            current ? { ...current, emailSender } : current,
-                                        )
-                                    }
-                                />
-                            </DialogField>
-                            <DialogField label="收件邮箱">
-                                <TextField
-                                    name="email-receiver"
-                                    type="email"
-                                    autoComplete="off"
-                                    spellCheck={false}
-                                    value={emailDraft.emailReceiver}
-                                    placeholder="alert@example.com"
-                                    onValueChange={(emailReceiver) =>
-                                        setEmailEditorDraft((current) =>
-                                            current ? { ...current, emailReceiver } : current,
-                                        )
-                                    }
-                                />
-                            </DialogField>
-                        </div>
-
-                        <DialogField
-                            label="授权码"
-                            hint="使用邮箱服务商生成的 SMTP 授权码，不是登录密码。"
-                        >
-                            <SecretField
-                                name="email-token"
-                                value={emailDraft.emailToken}
-                                placeholder="输入授权码"
-                                onValueChange={(emailToken) =>
-                                    setEmailEditorDraft((current) =>
-                                        current ? { ...current, emailToken } : current,
-                                    )
-                                }
-                            />
-                        </DialogField>
-
-                        <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] gap-3">
-                            <DialogField label="SMTP 服务器">
-                                <TextField
-                                    name="email-smtp"
-                                    autoComplete="off"
-                                    spellCheck={false}
-                                    value={emailDraft.emailSmtpServer}
-                                    placeholder="smtp.example.com"
-                                    onValueChange={(emailSmtpServer) =>
-                                        setEmailEditorDraft((current) =>
-                                            current
-                                                ? { ...current, emailSmtpServer }
-                                                : current,
-                                        )
-                                    }
-                                />
-                            </DialogField>
-                            <DialogField label="端口">
-                                <NumberField
-                                    name="email-port"
-                                    value={emailDraft.emailSmtpPort}
-                                    min={1}
-                                    max={65535}
-                                    onValueChange={(value) =>
-                                        setEmailEditorDraft((current) =>
-                                            current
-                                                ? {
-                                                    ...current,
-                                                    emailSmtpPort: Math.max(
-                                                        1,
-                                                        Math.min(65535, Math.round(value || 1)),
-                                                    ),
-                                                }
-                                                : current,
-                                        )
-                                    }
-                                />
-                            </DialogField>
-                        </div>
-
-                        <DialogField label="连接加密">
-                            <Select
-                                value={emailDraft.emailEncryption || 'SSL'}
-                                onValueChange={(emailEncryption) =>
-                                    setEmailEditorDraft((current) =>
-                                        current ? { ...current, emailEncryption } : current,
-                                    )
-                                }
-                                items={[...ENCRYPTION_ITEMS]}
-                            />
-                        </DialogField>
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setEmailEditorOpen(false)}
-                        >
-                            取消
-                        </Button>
-                        <Button type="button" size="sm" onClick={saveEmailEditor}>
-                            完成
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                onPresetChange={setEmailPreset}
+                onDraftChange={(patch) =>
+                    setEmailEditorDraft((current) =>
+                        current ? { ...current, ...patch } : current,
+                    )
+                }
+                onSave={saveEmailEditor}
+            />
 
             {/* OneBot Dialog：左发送方主列表，右栏目标 + 消息上下叠 */}
             <Dialog
@@ -1712,9 +1154,9 @@ export function NotificationsTab({
                                     setOneBotEditorDraft((current) =>
                                         current
                                             ? {
-                                                ...current,
-                                                onebotMessengerBotIds,
-                                            }
+                                                  ...current,
+                                                  onebotMessengerBotIds,
+                                              }
                                             : current,
                                     )
                                 }
@@ -1746,9 +1188,9 @@ export function NotificationsTab({
                                                 setOneBotEditorDraft((current) =>
                                                     current
                                                         ? {
-                                                            ...current,
-                                                            onebotTargetType,
-                                                        }
+                                                              ...current,
+                                                              onebotTargetType,
+                                                          }
                                                         : current,
                                                 )
                                             }
@@ -1760,7 +1202,7 @@ export function NotificationsTab({
                                         className="min-h-[6.5rem] max-h-[9.5rem]"
                                         placeholder={
                                             oneBotDraft.onebotTargetType ===
-                                                'group'
+                                            'group'
                                                 ? '群号，逗号添加多个'
                                                 : 'QQ 号，逗号添加多个'
                                         }
@@ -1768,9 +1210,9 @@ export function NotificationsTab({
                                             setOneBotEditorDraft((current) =>
                                                 current
                                                     ? {
-                                                        ...current,
-                                                        onebotTargetIds,
-                                                    }
+                                                          ...current,
+                                                          onebotTargetIds,
+                                                      }
                                                     : current,
                                             )
                                         }
@@ -1785,9 +1227,9 @@ export function NotificationsTab({
                                         setOneBotEditorDraft((current) =>
                                             current
                                                 ? {
-                                                    ...current,
-                                                    onebotMessageTemplate,
-                                                }
+                                                      ...current,
+                                                      onebotMessageTemplate,
+                                                  }
                                                 : current,
                                         )
                                     }
@@ -1795,10 +1237,10 @@ export function NotificationsTab({
                                         setOneBotEditorDraft((current) =>
                                             current
                                                 ? {
-                                                    ...current,
-                                                    onebotMessageTemplate:
-                                                        DEFAULT_ONEBOT_MESSAGE,
-                                                }
+                                                      ...current,
+                                                      onebotMessageTemplate:
+                                                          DEFAULT_ONEBOT_MESSAGE,
+                                                  }
                                                 : current,
                                         )
                                     }
@@ -1863,7 +1305,6 @@ export function NotificationsTab({
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </SettingsTabSections >
+        </SettingsTabSections>
     );
 }
-
