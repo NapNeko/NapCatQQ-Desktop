@@ -113,6 +113,18 @@ pub fn default_perf_monitor_interval() -> u64 {
     1200
 }
 
+fn default_bot_runtime_metrics_enabled() -> bool {
+    false
+}
+
+fn default_bot_runtime_metrics_interval_field() -> u64 {
+    crate::bot_runtime_metrics::default_bot_runtime_metrics_interval_ms()
+}
+
+fn default_bot_runtime_metrics_retention_field() -> u32 {
+    crate::bot_runtime_metrics::default_bot_runtime_metrics_retention_days()
+}
+
 /// 与前端 performanceSettings 一致:500–10000 ms
 pub const PERF_MONITOR_INTERVAL_MIN_MS: u64 = 500;
 pub const PERF_MONITOR_INTERVAL_MAX_MS: u64 = 10_000;
@@ -282,6 +294,25 @@ pub struct AppSettings {
     )]
     pub performance_monitor_interval_ms: u64,
 
+    /// Bot 实例运行时指标（内存/网络节点）开关；默认关；启动注入下次生效
+    #[serde(
+        rename = "botRuntimeMetricsEnabled",
+        default = "default_bot_runtime_metrics_enabled"
+    )]
+    pub bot_runtime_metrics_enabled: bool,
+    /// 实例指标采样间隔(毫秒)
+    #[serde(
+        rename = "botRuntimeMetricsIntervalMs",
+        default = "default_bot_runtime_metrics_interval_field"
+    )]
+    pub bot_runtime_metrics_interval_ms: u64,
+    /// 实例指标历史保留天数(默认 7)
+    #[serde(
+        rename = "botRuntimeMetricsRetentionDays",
+        default = "default_bot_runtime_metrics_retention_field"
+    )]
+    pub bot_runtime_metrics_retention_days: u32,
+
     /// 远程主机健康探活开关
     #[serde(rename = "remoteHostHealthProbeEnabled", default = "default_true")]
     pub remote_host_health_probe_enabled: bool,
@@ -374,6 +405,9 @@ impl Default for AppSettings {
             poller: WebUiPollerSettings::default(),
             performance_monitor_enabled: true,
             performance_monitor_interval_ms: default_perf_monitor_interval(),
+            bot_runtime_metrics_enabled: false,
+            bot_runtime_metrics_interval_ms: default_bot_runtime_metrics_interval_field(),
+            bot_runtime_metrics_retention_days: default_bot_runtime_metrics_retention_field(),
             remote_host_health_probe_enabled: true,
             remote_host_health_probe_interval_ms: default_remote_host_health_probe_interval_ms(),
             task_queue_cleanup_enabled: default_task_queue_cleanup_enabled(),
@@ -400,6 +434,18 @@ impl AppSettings {
     pub fn normalize_performance_monitor(&mut self) {
         self.performance_monitor_interval_ms =
             clamp_perf_monitor_interval_ms(self.performance_monitor_interval_ms);
+    }
+
+    /// 规范化 Bot 运行时指标间隔与保留天数
+    pub fn normalize_bot_runtime_metrics(&mut self) {
+        self.bot_runtime_metrics_interval_ms =
+            crate::bot_runtime_metrics::clamp_bot_runtime_metrics_interval_ms(
+                self.bot_runtime_metrics_interval_ms,
+            );
+        self.bot_runtime_metrics_retention_days =
+            crate::bot_runtime_metrics::clamp_bot_runtime_metrics_retention_days(
+                self.bot_runtime_metrics_retention_days,
+            );
     }
 
     pub fn desktop_notify_flags(&self) -> DesktopNotifySettings {

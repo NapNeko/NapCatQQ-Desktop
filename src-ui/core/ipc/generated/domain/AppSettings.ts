@@ -25,6 +25,18 @@ performanceMonitorEnabled: boolean,
  */
 performanceMonitorInterval: bigint, 
 /**
+ * Bot 实例运行时指标（内存/网络节点）开关；默认关；启动注入下次生效
+ */
+botRuntimeMetricsEnabled: boolean, 
+/**
+ * 实例指标采样间隔(毫秒)
+ */
+botRuntimeMetricsIntervalMs: bigint, 
+/**
+ * 实例指标历史保留天数(默认 7)
+ */
+botRuntimeMetricsRetentionDays: number, 
+/**
  * 远程主机健康探活开关
  */
 remoteHostHealthProbeEnabled: boolean, 

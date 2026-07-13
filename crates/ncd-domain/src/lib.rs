@@ -11,6 +11,7 @@ pub mod app_framework;
 pub mod bootstrap;
 pub mod bot_actor;
 pub mod bot_config;
+pub mod bot_runtime_metrics;
 pub mod bot_status;
 pub mod daemon_state;
 pub mod deployment_task;
@@ -63,6 +64,15 @@ pub use bot_config::{
     HttpSseServerConfig, LogLevel, MessagePostFormat, NetworkBaseFields, O3HookMode,
     StatusCommandConfig, TimeUnit, WebsocketClientConfig, WebsocketServerConfig, WsRole,
     is_remote_docker_config, is_remote_native_napcat_config,
+};
+pub use bot_runtime_metrics::{
+    BOT_RUNTIME_METRICS_INTERVAL_MAX_MS, BOT_RUNTIME_METRICS_INTERVAL_MIN_MS,
+    BOT_RUNTIME_METRICS_RETENTION_MAX_DAYS, BOT_RUNTIME_METRICS_RETENTION_MIN_DAYS,
+    BotRuntimeMetrics, MemoryMetrics, MetricsHistoryPoint, MetricsNodeMapEntry, MetricsSource,
+    NetworkNodeKind, NetworkNodeMetrics, NodesRollup, ProbeHealth, ProbeStatsFile,
+    clamp_bot_runtime_metrics_interval_ms, clamp_bot_runtime_metrics_retention_days,
+    default_bot_runtime_metrics_interval_ms, default_bot_runtime_metrics_retention_days,
+    history_min_interval_ms,
 };
 pub use bot_status::{BotStatus, ProcessHandle};
 pub use daemon_state::{DaemonState, SnowLumaLoginState};
