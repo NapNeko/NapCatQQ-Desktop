@@ -7,10 +7,10 @@ use std::path::{Path, PathBuf};
 use ncd_domain::bot_config::BotConfig;
 use ncd_domain::{MetricsNodeMapEntry, NetworkNodeKind};
 
+use super::BotRuntimeMetricsPrefs;
 use super::paths::{
     metrics_bot_dir, nodes_map_path_for_bot, probe_script_path, stats_path_for_bot,
 };
-use super::BotRuntimeMetricsPrefs;
 
 // 与 src-tauri/resources/metrics/ncd-ob11-stats.cjs 同源；改脚本须两边一致。
 const EMBEDDED_PROBE_CJS: &str =
@@ -104,10 +104,7 @@ pub fn prepare_inject(
     }))
 }
 
-pub fn apply_metrics_to_environment(
-    env: &mut BTreeMap<String, String>,
-    plan: &MetricsInjectPlan,
-) {
+pub fn apply_metrics_to_environment(env: &mut BTreeMap<String, String>, plan: &MetricsInjectPlan) {
     env.insert("NCD_METRICS_ENABLED".into(), "1".into());
     env.insert(
         "NCD_METRICS_OUT".into(),
@@ -161,12 +158,12 @@ pub fn build_napcat_load_script(napcat_mjs_uri: &str, probe: Option<&Path>) -> S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ncd_domain::MessagePostFormat;
     use ncd_domain::bot_config::{
         AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, ConnectConfig,
         DeploymentType, HttpServerConfig, NetworkBaseFields,
     };
     use ncd_domain::kinds::RuntimeTarget;
-    use ncd_domain::MessagePostFormat;
 
     fn sample_config() -> BotConfig {
         BotConfig {
