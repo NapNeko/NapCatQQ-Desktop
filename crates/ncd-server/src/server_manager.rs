@@ -1395,9 +1395,9 @@ async fn set_key_file_permissions(path: &Path) {
 }
 
 fn short_uuid() -> String {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let bytes: [u8; 8] = rng.r#gen();
+    use rand::RngCore;
+    let mut bytes = [0u8; 8];
+    rand::thread_rng().fill_bytes(&mut bytes);
     hex::encode(bytes)
 }
 
