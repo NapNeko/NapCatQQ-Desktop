@@ -1,14 +1,14 @@
 <!--
-  Custom Tauri MSI template: HKCU product key is Software\<productName>
+  Custom Tauri MSI template: HKCU product key is Software\NapCatQQ Desktop
   (no manufacturer segment; personal project).
   ARP Publisher still uses Manufacturer from tauri.conf.json publisher.
   Product DataRoot contract: HKLM\SOFTWARE\NapCatQQ-Desktop
   (v2-orphan-cleanup.wxs + product_registry.rs).
 
-  Handlebars: a single backslash before {{ eats the mustache
-  (Software\{{product_name}} renders as Software{{product_name}}).
-  Registry keys must use Software\\{{product_name}} so the MSI gets
-  Software\NapCatQQ Desktop. Directory Name="{{product_name}}" is fine.
+  Handlebars note: do NOT put mustache tokens in comments.
+  A single backslash before a mustache eats the expression; registry Key
+  attributes need a doubled backslash so the MSI gets Software\NapCatQQ Desktop.
+  Directory Name uses a plain product_name mustache and is fine.
 -->
 <?if $(sys.BUILDARCH)="x86"?>
     <?define Win64 = "no" ?>

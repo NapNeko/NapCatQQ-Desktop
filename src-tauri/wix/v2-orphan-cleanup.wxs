@@ -101,9 +101,9 @@
           Key="Software\Microsoft\Windows\CurrentVersion\Run"
           Name="NapCatQQ Desktop" />
         <!--
-          3.0.0 wrote the literal HKCU key Software{{product_name}} (Handlebars ate
-          the path separator). Fragment render must keep that literal: use a single
-          backslash before {{ so the mustache is not expanded.
+          3.0.0 wrote a literal broken HKCU key (Handlebars ate the path separator).
+          Keep that literal on install/uninstall cleanup: one backslash before the
+          product_name mustache so the expression is not expanded.
         -->
         <RemoveRegistryKey
           Id="RemoveBrokenProductNameTemplateKeyInstall"
