@@ -3134,6 +3134,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "ncd-config"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "async-trait",
+ "chrono",
+ "dirs 5.0.1",
+ "keyring",
+ "ncd-deploy",
+ "ncd-domain",
+ "ncd-server",
+ "ncd-test-support",
+ "ncd-traits",
+ "rand 0.8.6",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "ts-rs",
+]
+
+[[package]]
 name = "ncd-deploy"
 version = "0.1.0"
 dependencies = [
@@ -3218,7 +3242,6 @@ dependencies = [
 name = "ncd-runtime"
 version = "0.1.0"
 dependencies = [
- "aes-gcm",
  "async-trait",
  "base64 0.22.1",
  "bytes",
@@ -3227,11 +3250,11 @@ dependencies = [
  "encoding_rs",
  "futures-util",
  "hex",
- "keyring",
  "lettre",
  "ncd-backend-napcat",
  "ncd-backend-snowluma",
  "ncd-component",
+ "ncd-config",
  "ncd-deploy",
  "ncd-domain",
  "ncd-host",

@@ -1,0 +1,39 @@
+[package]
+name = "ncd-config"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ncd-domain = { path = "../ncd-domain" }
+ncd-traits = { path = "../ncd-traits" }
+ncd-deploy = { path = "../ncd-deploy" }
+ncd-server = { path = "../ncd-server" }
+async-trait = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+keyring = "2"
+aes-gcm = "0.10"
+rand = "0.8"
+dirs = "5"
+tokio = { version = "1", features = [
+    "fs",
+    "sync",
+    "rt",
+    "macros",
+] }
+tracing = "0.1"
+ts-rs = { version = "12", features = ["serde-compat"] }
+chrono = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+ncd-test-support = { path = "../ncd-test-support" }
+tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

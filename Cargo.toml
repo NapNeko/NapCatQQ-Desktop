@@ -10,6 +10,7 @@ members = [
     "crates/ncd-update",
     "crates/ncd-runtime",
     "crates/ncd-server",
+    "crates/ncd-config",
     "crates/ncd-log",
     "crates/ncd-test-support",
     "crates/ncd-template",

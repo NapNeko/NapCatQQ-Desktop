@@ -330,7 +330,7 @@ mod tests {
         )
         .unwrap();
 
-        let drift = crate::config::drift::detect_drift(&bot_id, &config, &renderer)
+        let drift = crate::drift::detect_drift(&bot_id, &config, &renderer)
             .await
             .unwrap();
         assert!(

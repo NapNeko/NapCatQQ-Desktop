@@ -11,6 +11,7 @@ ncd-component = { path = "../ncd-component" }
 ncd-deploy = { path = "../ncd-deploy" }
 ncd-host = { path = "../ncd-host" }
 ncd-server = { path = "../ncd-server" }
+ncd-config = { path = "../ncd-config" }
 ncd-network = { path = "../ncd-network" }
 ncd-log = { path = "../ncd-log" }
 # 只取 watch.json / notify.json / present 类型,不链探活 daemon(避免 MSI 带上 reqwest 探活栈)
@@ -22,8 +23,7 @@ futures-util = "0.3"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-keyring = "2"
-aes-gcm = "0.10"
+# keyring / aes-gcm 已随 ncd-config（SecretStore）下沉。
 rand = "0.8"
 dirs = "5"
 tokio = { version = "1", features = [
