@@ -85,6 +85,9 @@ pnpm run tauri:build -- --bundles msi
 | Download | [![Releases](https://img.shields.io/badge/GitHub-Releases-E85D75?style=flat-square)](https://github.com/NapNeko/NapCatQQ-Desktop/releases) | [![ncd-watch](https://img.shields.io/badge/ncd--watch-远端监控-7C9CBF?style=flat-square)](https://github.com/NapNeko/NapCatQQ-Desktop/releases?q=watch) |
 |:-:|:-:|:-:|
 
+| Community | [![QQ 群](https://img.shields.io/badge/QQ%20群-加入交流-12B7F5?style=flat-square&logo=tencentqq&logoColor=white)](https://qm.qq.com/q/8UK5ecfDyw) |
+|:-:|:-:|
+
 | Docs | [![用户说明](https://img.shields.io/badge/docs-用户说明-orange?style=flat-square)](docs/user/README.md) | [![代码地图](https://img.shields.io/badge/docs-代码地图-blue?style=flat-square)](docs/context/codemap.md) | [![NapCat Docs](https://img.shields.io/badge/docs%20on-Github.IO-orange?style=flat-square)](https://napneko.github.io/) |
 |:-:|:-:|:-:|:-:|
 
