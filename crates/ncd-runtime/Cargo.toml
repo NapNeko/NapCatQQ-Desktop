@@ -10,6 +10,7 @@ ncd-traits = { path = "../ncd-traits" }
 ncd-component = { path = "../ncd-component" }
 ncd-deploy = { path = "../ncd-deploy" }
 ncd-host = { path = "../ncd-host" }
+ncd-server = { path = "../ncd-server" }
 ncd-network = { path = "../ncd-network" }
 ncd-log = { path = "../ncd-log" }
 # 只取 watch.json / notify.json / present 类型,不链探活 daemon(避免 MSI 带上 reqwest 探活栈)
@@ -47,8 +48,7 @@ sha2 = "0.10"
 hex = "0.4"
 tracing = "0.1"
 chrono = "0.4"
-# 免密登录：本地生成 ed25519 密钥对 + 把公钥写进远端 authorized_keys。
-ssh-key = { version = "0.6", features = ["ed25519", "std"] }
+# SSH 密钥生成已下沉 ncd-server（ssh-key 依赖随 ncd-server）。
 # SnowLuma backend runtime 依赖（spec: snowluma-backend-runtime, task 1.1）
 # - sysinfo: Windows 子进程树枚举 (proc_tree.rs / commands/snowluma.rs)
 # - scrypt:  webui.json 密码哈希；纯 Rust 实现，免 OpenSSL (session.rs)

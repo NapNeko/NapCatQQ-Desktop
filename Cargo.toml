@@ -9,6 +9,7 @@ members = [
     "crates/ncd-deploy",
     "crates/ncd-update",
     "crates/ncd-runtime",
+    "crates/ncd-server",
     "crates/ncd-log",
     "crates/ncd-test-support",
     "crates/ncd-template",

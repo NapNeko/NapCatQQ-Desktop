@@ -8,7 +8,6 @@ pub mod drift;
 pub mod migration;
 pub mod renderer;
 pub mod secret_store;
-pub mod server_profile_migration;
 pub mod store;
 
 pub use app_migration::{
@@ -24,8 +23,4 @@ pub use renderer::{
     output_paths_for_backend,
 };
 pub use secret_store::SecretStoreImpl;
-pub use server_profile_migration::{
-    SERVER_PROFILE_COMPAT_VERSION, ServerProfileMigrationResult,
-    migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
-};
 pub use store::{LocalConfigStore, prune_json_bak_files, prune_migration_backups};

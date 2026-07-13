@@ -15,13 +15,16 @@
 flowchart TB
   UI[src-ui React] --> IPC[src-tauri commands]
   IPC --> RT[ncd-runtime 编排]
+  RT --> SRV[ncd-server]
   RT --> BN[ncd-backend-napcat]
   RT --> BS[ncd-backend-snowluma]
   RT --> DEP[ncd-deploy]
   RT --> HOST[ncd-host]
   RT --> COMP[ncd-component]
   RT --> DOM[ncd-domain]
-  BN --> TR[ncd-traits]
+  SRV --> HOST
+  SRV --> TR[ncd-traits]
+  BN --> TR
   BS --> TR
   DEP --> TR
   HOST --> TR
@@ -37,7 +40,8 @@ flowchart TB
 |------|------|
 | `crates/ncd-domain/` | Layer1 强类型模型、事件 payload、配置/ID/错误 |
 | `crates/ncd-traits/` | Layer2 契约：BotBackend、ConfigStore、EventBus、SecretStore… |
-| `crates/ncd-runtime/` | Layer3 编排：BotManager、ServerManager、reconcile、任务、迁移 |
+| `crates/ncd-runtime/` | Layer3 编排：BotManager、reconcile、任务、迁移；Server 轴 re-export |
+| `crates/ncd-server/` | 远端主机档案 / 凭据 / SSH 密钥 / HostResolver（runtime re-export 兼容） |
 | `crates/ncd-backend-napcat/` | NapCat 本机+远端实现（WebUI/login poller/remote native） |
 | `crates/ncd-backend-snowluma/` | SnowLuma daemon/poller + remote stack/tunnel |
 | `crates/ncd-host/` | 本机 Windows / 远端 Linux SSH 主机抽象 |
@@ -74,7 +78,7 @@ flowchart TB
 | 前端 bootstrap 服务 | `src-ui/core/services/bootstrap.service.ts` |
 | hooks | `src-ui/hooks/bootstrap/` |
 | domain 模型 | `src-ui/core/domain/bootstrap/` |
-| 配置迁移 / 旧目录发现 | `crates/ncd-runtime/src/config/{migration,app_migration,bot_migration,server_profile_migration}.rs`, `legacy_discovery.rs`, `path_probe_impl.rs`（crate 根旧路径 re-export 兼容） |
+| 配置迁移 / 旧目录发现 | `crates/ncd-runtime/src/config/{migration,app_migration,bot_migration}.rs`；server profile 迁移在 `ncd-server`（runtime re-export）；`legacy_discovery.rs`, `path_probe_impl.rs` |
 | Desktop 用户协议 / 隐私 | `src-tauri/legal/{EULA,PRIVACY}.md` + `src-tauri/src/desktop_consent.rs` + `commands/desktop_consent.rs`；前端 `desktop-consent.service.ts` / `useDesktopConsentGate` / `DesktopConsentDialog`；**启动进主界面即 gate**（不同意退出）；`start/upsert/batch_start` command 强制 `ensure_accepted`（`DESKTOP_CONSENT_REQUIRED`）；未同意时 bootstrap 跳过 auto_start；同意落 `data_root/config/desktop-consent.json`（content-hash，进程内 OnceLock 缓存正文） |
 | 新手引导（可选） | `src-tauri/src/desktop_onboarding.rs` + `commands/desktop_onboarding.rs`；前端 `desktop-onboarding.service.ts` / `useOnboardingGate` / `OnboardingDialog` / `onboardingHost`；**consent 通过后**弹「了解 / 跳过」（门禁式，无 X）；设置·关于「重新查看入门」；**只认** `data_root/config/desktop-onboarding.json` 的 status，不探测 bot.json |
 
@@ -87,7 +91,7 @@ flowchart TB
 
 | 关注点 | 主路径 |
 |--------|--------|
-| 编排核心 | `crates/ncd-runtime/src/bot_manager.rs` |
+| 编排核心 | `crates/ncd-runtime/src/bot_manager/`（mod + helpers + listeners） |
 | 路由 NC/SL × Local/Server × Native/Docker | `crates/ncd-runtime/src/runtime_router.rs` + `bot_manager` `backend_for_config` |
 | Actor 状态机 | `crates/ncd-runtime/src/bot_actor.rs` + `ncd-domain/bot_actor.rs` |
 | 本机启动计划 | `crates/ncd-runtime/src/runtime_launch_plan.rs` |
@@ -150,12 +154,12 @@ KB：`.claude/kb/snowluma-runtime.md`, `snowluma-docker.md`
 
 | 关注点 | 主路径 |
 |--------|--------|
-| ServerManager / 健康探活 | `crates/ncd-runtime/src/server_manager.rs` |
-| 凭据同步 | `crates/ncd-runtime/src/credential_sync.rs` |
-| SSH keygen | `crates/ncd-runtime/src/ssh_keygen.rs` |
-| Host 解析 | `crates/ncd-runtime/src/host_resolver.rs`, `src-tauri/src/bot_host_resolver.rs` |
+| ServerManager / 健康探活 | `crates/ncd-server/src/server_manager.rs`（`ncd_runtime::server_manager` re-export） |
+| 凭据同步 | `crates/ncd-server/src/credential_sync.rs` |
+| SSH keygen | `crates/ncd-server/src/ssh_keygen.rs` |
+| Host 解析 | `crates/ncd-server/src/host_resolver.rs`, `src-tauri/src/bot_host_resolver.rs` |
 | Host 抽象 | `crates/ncd-host/src/host.rs`, `local/`, `remote/` |
-| Server profile 迁移 | `crates/ncd-runtime/src/config/server_profile_migration.rs` |
+| Server profile 迁移 | `crates/ncd-server/src/server_profile_migration.rs` |
 | Tauri | `src-tauri/src/commands/servers.rs`, `host_resolve.rs` |
 | 前端页 | `src-ui/modules/remote/*`（`RemoteHostPanel`, `ServerCard`, `AddServerDialog`） |
 | hooks | `src-ui/hooks/remote/` |

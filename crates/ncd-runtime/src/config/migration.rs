@@ -7,7 +7,7 @@ use crate::config::app_migration::{
     APP_SETTINGS_FILE, app_settings_from_legacy_config, migrate_app_config,
 };
 use crate::config::bot_migration::migrate_bot_config;
-use crate::config::server_profile_migration::{
+use crate::server_profile_migration::{
     migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
 };
 use ncd_domain::errors::MigrationError;

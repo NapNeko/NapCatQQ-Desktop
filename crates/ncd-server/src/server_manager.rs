@@ -26,8 +26,9 @@ use ncd_host::remote::{
 use ncd_host::{Host, HostError};
 
 use crate::credential_sync::{CredentialSyncLayer, PasswordSlot};
-use crate::events::EventBus;
 use crate::server_profile_migration::migrate_server_profiles_payload;
+use ncd_domain::DomainEvent;
+use ncd_traits::EventBus;
 
 // 数据结构
 
@@ -1264,7 +1265,7 @@ impl ServerManager {
     /// 发布 HostConnectionLost 事件(若已注入 sink)
     fn publish_host_lost(&self, server_id: &str, reason: Option<String>, consecutive: u32) {
         if let Some(sink) = &self.event_sink {
-            sink.publish(crate::events::DomainEvent::HostConnectionLost {
+            sink.publish(DomainEvent::HostConnectionLost {
                 server_id: server_id.to_string(),
                 reason,
                 consecutive_failures: consecutive,
@@ -1275,7 +1276,7 @@ impl ServerManager {
     /// 发布 HostConnectionRecovered 事件(若已注入 sink)
     fn publish_host_recovered(&self, server_id: &str, latency_ms: u64) {
         if let Some(sink) = &self.event_sink {
-            sink.publish(crate::events::DomainEvent::HostConnectionRecovered {
+            sink.publish(DomainEvent::HostConnectionRecovered {
                 server_id: server_id.to_string(),
                 latency_ms,
             });

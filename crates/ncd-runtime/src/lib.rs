@@ -41,18 +41,29 @@ pub mod migration {
 pub mod secret_store_impl {
     pub use crate::config::secret_store::*;
 }
+// server 轴已抽出 ncd-server；旧路径 re-export 保持 API。
+pub mod credential_sync {
+    pub use ncd_server::credential_sync::*;
+}
+pub mod host_resolver {
+    pub use ncd_server::host_resolver::*;
+}
+pub mod server_manager {
+    pub use ncd_server::server_manager::*;
+}
 pub mod server_profile_migration {
-    pub use crate::config::server_profile_migration::*;
+    pub use ncd_server::server_profile_migration::*;
+}
+pub mod ssh_keygen {
+    pub use ncd_server::ssh_keygen::*;
 }
 pub mod crash_bundle;
-pub mod credential_sync;
 pub mod data_consolidate;
 pub mod data_paths;
 pub mod deployment_tasks;
 pub mod desktop_log;
 pub mod docker_bot_session;
 pub mod events;
-pub mod host_resolver;
 pub mod legacy_discovery;
 pub mod napcat;
 pub mod native_deployment_adapter;
@@ -65,12 +76,10 @@ pub mod remote_bot_log_follow;
 mod remote_runtime_sessions;
 pub mod runtime_launch_plan;
 pub mod runtime_router;
-pub mod server_manager;
 pub mod snowluma;
 mod snowluma_agreements;
 mod snowluma_consent_files;
 pub mod snowluma_ui_state;
-pub mod ssh_keygen;
 
 pub mod bot_config {
     pub use ncd_domain::bot_config::*;
@@ -141,6 +150,11 @@ pub use server_manager::{
     AuthMethod, ConnectionHealth, InMemoryCredentialStore, KeyringCredentialStore, ProbeReport,
     ServerCredentialStore, ServerManager, ServerProfile, ServerState,
 };
+pub use server_profile_migration::{
+    SERVER_PROFILE_COMPAT_VERSION, ServerProfileMigrationResult,
+    migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
+};
+pub use ssh_keygen::{GeneratedKeyPair, generate_ed25519};
 pub use snowluma::{
     AgreementDoc, AgreementsPayload, AuthState, HookProcessInfo, HookProcessStatus,
     LinuxSinglePidProbe, MockProcessTreeProbe, OneBotInstanceInfo, ProcessTreeProbe,

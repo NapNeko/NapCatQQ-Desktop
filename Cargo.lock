@@ -3237,6 +3237,7 @@ dependencies = [
  "ncd-host",
  "ncd-log",
  "ncd-network",
+ "ncd-server",
  "ncd-test-support",
  "ncd-traits",
  "ncd-watch",
@@ -3248,7 +3249,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "ssh-key",
  "sysinfo",
  "tempfile",
  "thiserror 2.0.18",
@@ -3260,6 +3260,31 @@ dependencies = [
  "winreg 0.52.0",
  "wiremock",
  "zip",
+]
+
+[[package]]
+name = "ncd-server"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "hex",
+ "keyring",
+ "ncd-domain",
+ "ncd-host",
+ "ncd-traits",
+ "rand 0.8.6",
+ "serde",
+ "serde_json",
+ "sha2",
+ "ssh-key",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "ts-rs",
 ]
 
 [[package]]
