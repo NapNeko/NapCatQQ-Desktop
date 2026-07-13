@@ -207,6 +207,7 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | 关注点 | 主路径 |
 |--------|--------|
 | App 配置模型 | `crates/ncd-domain/src/app_config.rs` |
+| **应用端框架轴（AppFramework）** | `ncd-domain/app_framework.rs`；traits `AppIntegration`/`AppRuntime`；runtime `app_framework/`（OneBot 导出 + Stub）；**不**进 `BackendType`；真框架对接未排期 |
 | Bot 配置模型 | `crates/ncd-domain/src/bot_config.rs` |
 | ConfigStore / Repo trait | `ncd-traits/config_store.rs`, `bot_config_repo.rs` |
 | 本地实现 | `ncd-runtime/src/config/{store,bot_repo}.rs`（旧路径 `config_store_impl` / `bot_config_repo_impl` re-export） |

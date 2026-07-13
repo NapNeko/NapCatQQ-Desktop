@@ -1,3 +1,4 @@
+pub mod app_framework;
 mod bootstrap_reconcile;
 pub mod bot_actor;
 pub mod component_action_policy;
@@ -89,6 +90,9 @@ pub use ncd_traits::{
     },
 };
 
+pub use app_framework::{
+    OneBotExportError, StubAppIntegration, StubAppRuntime, export_onebot_endpoint,
+};
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
 };

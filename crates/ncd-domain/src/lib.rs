@@ -7,6 +7,7 @@
 mod macros;
 
 pub mod app_config;
+pub mod app_framework;
 pub mod bootstrap;
 pub mod bot_actor;
 pub mod bot_config;
@@ -46,6 +47,10 @@ pub use app_config::{
     SnowLumaAppConfig, SystemResourceSnapshot, UiModeOnStartup, WebUiPollerSettings,
     clamp_lightweight_delay_secs, default_login_interval, default_perf_monitor_interval,
     default_snowluma_port,
+};
+pub use app_framework::{
+    AppFrameworkId, AppInstance, AppInstanceId, AppInstanceState, AppPlacement,
+    OneBotEndpointExport,
 };
 pub use bootstrap::{
     BootstrapSnapshot, BootstrapStatus, DataLayoutConsolidateSnapshot, LocalVersionSnapshot,
