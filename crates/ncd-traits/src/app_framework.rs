@@ -22,10 +22,8 @@ pub trait AppIntegration: Send + Sync {
     ) -> Result<AppInstance, AppFrameworkError>;
 
     /// 解除对接（可选清理应用端内协议配置）。
-    async fn unlink_onebot(
-        &self,
-        instance: &AppInstance,
-    ) -> Result<AppInstance, AppFrameworkError>;
+    async fn unlink_onebot(&self, instance: &AppInstance)
+    -> Result<AppInstance, AppFrameworkError>;
 }
 
 /// 应用端运行时最小面：启停 / 状态 / 打开 WebUI。
@@ -42,8 +40,10 @@ pub trait AppRuntime: Send + Sync {
         mode: StopMode,
     ) -> Result<AppInstance, AppFrameworkError>;
 
-    async fn status(&self, instance_id: &AppInstanceId)
-        -> Result<AppInstanceState, AppFrameworkError>;
+    async fn status(
+        &self,
+        instance_id: &AppInstanceId,
+    ) -> Result<AppInstanceState, AppFrameworkError>;
 
     /// 返回可打开的 WebUI URL；无则 Ok(None)。
     async fn webui_url(

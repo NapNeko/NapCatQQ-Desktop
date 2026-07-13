@@ -154,7 +154,6 @@ pub use server_profile_migration::{
     SERVER_PROFILE_COMPAT_VERSION, ServerProfileMigrationResult,
     migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
 };
-pub use ssh_keygen::{GeneratedKeyPair, generate_ed25519};
 pub use snowluma::{
     AgreementDoc, AgreementsPayload, AuthState, HookProcessInfo, HookProcessStatus,
     LinuxSinglePidProbe, MockProcessTreeProbe, OneBotInstanceInfo, ProcessTreeProbe,
@@ -163,6 +162,7 @@ pub use snowluma::{
     SnowLumaWebUiClient, SnowLumaWebUiClientFactory, SnowLumaWebUiError, SysinfoProcessTreeProbe,
     load_or_create_session, load_snowluma_app_config, render_daemon_globals, sanitize_log_line,
 };
+pub use ssh_keygen::{GeneratedKeyPair, generate_ed25519};
 
 #[cfg(test)]
 mod tests {
