@@ -15,8 +15,8 @@ pub mod deploy;
 pub mod desktop;
 pub mod launch;
 pub mod remote;
-pub mod watch;
 pub mod snowluma;
+pub mod watch;
 
 // 配置横切已抽出 ncd-config；旧路径 re-export 保持 API。
 pub mod config {
@@ -73,7 +73,8 @@ pub mod ssh_keygen {
     pub use ncd_server::ssh_keygen::*;
 }
 
-// 旧根文件路径兼容（目录化前的名字）
+// 旧根文件路径兼容（目录化前的名字；新代码优先域目录 bootstrap/launch/remote/…）
+// 外部 crate 仍可用这些路径；后续可标 deprecated 再删。
 pub(crate) mod bootstrap_reconcile {
     pub(crate) use crate::bootstrap::reconcile::*;
 }
@@ -163,7 +164,7 @@ pub use component_action_policy::{
     data_root_to_host_path, direct_runtime_dependency_ids, normalize_github_release_tag,
     parse_remote_host_probe_stdout, require_remote_home, snowluma_github_release_tag,
 };
-pub use component_factory::build_component_for_host;
+pub use component_factory::{BuildComponentCtx, build_component_for_host};
 pub use config_store_impl::LocalConfigStore;
 pub use crash_bundle::{CrashBundleInput, desktop_output_dir, write_crash_bundle};
 pub use credential_sync::{CredentialSyncLayer, PasswordSlot};
@@ -179,7 +180,7 @@ pub use docker_bot_session::{
 pub use events::{
     BroadcastEventBus, DomainEvent, DomainEventKind, EventBus, EventFilter, EventSubscription,
 };
-pub use host_resolver::{HostResolver, LocalOnlyHostResolver};
+pub use host_resolver::{HostResolveError, HostResolver, LocalOnlyHostResolver};
 pub use legacy_discovery::{LegacyDiscovery, LegacySelection};
 pub use migration::MigrationOrchestrator;
 pub use napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
@@ -218,7 +219,7 @@ pub use snowluma::{
     SnowLumaWebUiClient, SnowLumaWebUiClientFactory, SnowLumaWebUiError, SysinfoProcessTreeProbe,
     load_or_create_session, load_snowluma_app_config, render_daemon_globals, sanitize_log_line,
 };
-pub use ssh_keygen::{GeneratedKeyPair, generate_ed25519};
+pub use ssh_keygen::{GeneratedKeyPair, SshKeygenError, generate_ed25519};
 
 #[cfg(test)]
 mod tests {

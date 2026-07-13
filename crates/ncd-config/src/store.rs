@@ -351,7 +351,7 @@ pub fn prune_json_bak_files(path: &Path, keep: usize) {
     if baks.len() <= keep {
         return;
     }
-    baks.sort_by(|a, b| b.0.cmp(&a.0));
+    baks.sort_by_key(|b| std::cmp::Reverse(b.0));
     for (_, path) in baks.into_iter().skip(keep) {
         let _ = fs::remove_file(path);
     }
@@ -383,7 +383,7 @@ pub fn prune_migration_backups(backup_dir: &Path, keep: usize) {
     if dirs.len() <= keep {
         return;
     }
-    dirs.sort_by(|a, b| b.0.cmp(&a.0));
+    dirs.sort_by_key(|b| std::cmp::Reverse(b.0));
     for (_, path) in dirs.into_iter().skip(keep) {
         let _ = fs::remove_dir_all(path);
     }

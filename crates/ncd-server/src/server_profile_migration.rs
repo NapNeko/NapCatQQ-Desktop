@@ -89,7 +89,7 @@ fn result_from_current_payload(
     rules_applied: Vec<String>,
     current_payload: Value,
 ) -> Result<ServerProfileMigrationResult, MigrationError> {
-    let profiles: Vec<ServerProfile> = serde_json::from_value(current_payload.clone())
+    let profiles: Vec<ServerProfile> = serde_json::from_value(current_payload)
         .map_err(|e| MigrationError::InvalidPayload(format!("invalid server profiles: {e}")))?;
     let payload = serde_json::to_value(&profiles)
         .map_err(|e| MigrationError::InvalidPayload(format!("serialize server profiles: {e}")))?;

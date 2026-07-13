@@ -56,7 +56,7 @@ impl RemoteNativeDeploymentBackend {
         self.resolver
             .resolve(&self.target)
             .await
-            .map_err(BotBackendError::RemoteHostTransport)
+            .map_err(|e| BotBackendError::RemoteHostTransport(e.to_string()))
     }
 
     /// 通过 resolver 取得一个“新鲜”host(会触发底层刷新/重连)
@@ -64,7 +64,7 @@ impl RemoteNativeDeploymentBackend {
         self.resolver
             .refresh(&self.target)
             .await
-            .map_err(BotBackendError::RemoteHostTransport)
+            .map_err(|e| BotBackendError::RemoteHostTransport(e.to_string()))
     }
 
     /// 在操作边界使用:先拿 host 执行 op;失败则 refresh 后再试一次。

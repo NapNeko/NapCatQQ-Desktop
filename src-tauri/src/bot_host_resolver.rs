@@ -11,7 +11,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ncd_domain::RuntimeTarget;
 use ncd_host::Host;
-use ncd_runtime::{HostResolver, ServerManager};
+use ncd_runtime::{HostResolveError, HostResolver, ServerManager};
 
 pub struct TauriHostResolver {
     server_manager: Arc<ServerManager>,
@@ -29,17 +29,25 @@ impl TauriHostResolver {
 
 #[async_trait]
 impl HostResolver for TauriHostResolver {
-    async fn resolve(&self, target: &RuntimeTarget) -> Result<Arc<dyn Host>, String> {
+    async fn resolve(&self, target: &RuntimeTarget) -> Result<Arc<dyn Host>, HostResolveError> {
         match target {
             RuntimeTarget::Local => Ok(Arc::clone(&self.local)),
-            RuntimeTarget::Server(id) => self.server_manager.ensure_connected(id).await,
+            RuntimeTarget::Server(id) => self
+                .server_manager
+                .ensure_connected(id)
+                .await
+                .map_err(HostResolveError::from),
         }
     }
 
-    async fn refresh(&self, target: &RuntimeTarget) -> Result<Arc<dyn Host>, String> {
+    async fn refresh(&self, target: &RuntimeTarget) -> Result<Arc<dyn Host>, HostResolveError> {
         match target {
             RuntimeTarget::Local => Ok(Arc::clone(&self.local)),
-            RuntimeTarget::Server(id) => self.server_manager.refresh_host(id).await,
+            RuntimeTarget::Server(id) => self
+                .server_manager
+                .refresh_host(id)
+                .await
+                .map_err(HostResolveError::from),
         }
     }
 }

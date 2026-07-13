@@ -68,7 +68,7 @@ impl BotActorHandle {
         let bot_id = bot_id.into();
         let initial_snapshot = BotActorSnapshot::new(bot_id.clone());
         let (command_tx, command_rx) = mpsc::channel(32);
-        let (snapshot_tx, snapshot_rx) = watch::channel(initial_snapshot.clone());
+        let (snapshot_tx, snapshot_rx) = watch::channel(initial_snapshot);
         let cancellation_token = Arc::new(Mutex::new(CancellationToken::new()));
         let worker_token = Arc::clone(&cancellation_token);
         let worker_bot_id = bot_id.clone();

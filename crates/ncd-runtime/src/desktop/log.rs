@@ -87,7 +87,7 @@ fn purge_dir_logs(dir: &Path, retain_days: u64) -> std::io::Result<()> {
         }
     }
     if logs.len() > MAX_DESKTOP_LOG_FILES {
-        logs.sort_by(|a, b| b.0.cmp(&a.0));
+        logs.sort_by_key(|b| std::cmp::Reverse(b.0));
         for (_, path) in logs.into_iter().skip(MAX_DESKTOP_LOG_FILES) {
             let _ = fs::remove_file(path);
         }

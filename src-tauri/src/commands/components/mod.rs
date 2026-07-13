@@ -476,12 +476,14 @@ fn build_component_for_host_from_state(
     let desktop_ver = crate::desktop_update::product_version_str();
     build_component_for_host(
         id,
-        &state.data_root,
-        host,
-        remote_home,
-        layout,
-        snapshot.as_ref(),
-        state.snapshot.local_versions.snowluma.as_deref(),
-        desktop_ver,
+        &ncd_runtime::BuildComponentCtx {
+            data_root: &state.data_root,
+            host,
+            remote_home,
+            layout,
+            snapshot: snapshot.as_ref(),
+            local_snowluma_version: state.snapshot.local_versions.snowluma.as_deref(),
+            desktop_product_version: desktop_ver,
+        },
     )
 }

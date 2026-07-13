@@ -201,7 +201,7 @@ impl SnowLumaAgreementService {
         let host = resolver
             .resolve(&RuntimeTarget::server(server_id.to_string()))
             .await
-            .map_err(BotManagerError::Render)?;
+            .map_err(|e| BotManagerError::Render(e.to_string()))?;
         self.runtime_router
             .remote_snowluma_daemon_for_server(server_id, host)
             .await

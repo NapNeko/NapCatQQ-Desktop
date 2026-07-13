@@ -17,7 +17,8 @@ pub mod store;
 
 pub use app_migration::{
     APP_SETTINGS_FILE, AppConfigMigrationResult, AppSettingsSeedResult, LEGACY_APP_COMPAT_VERSION,
-    app_settings_from_legacy_config, ensure_object_payload, looks_like_app_config, migrate_app_config,
+    app_settings_from_legacy_config, ensure_object_payload, looks_like_app_config,
+    migrate_app_config,
 };
 pub use bot_migration::{BOT_CONFIG_COMPAT_VERSION, BotConfigMigrationResult, migrate_bot_config};
 pub use bot_repo::LocalBotConfigRepo;

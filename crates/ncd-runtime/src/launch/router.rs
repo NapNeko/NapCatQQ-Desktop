@@ -291,7 +291,7 @@ impl RuntimeBackendRouter {
         resolver
             .resolve(&RuntimeTarget::server(server_id.to_string()))
             .await
-            .map_err(RuntimeRouterError::Render)
+            .map_err(|e| RuntimeRouterError::Render(e.to_string()))
     }
 
     fn local_backend_for(&self, backend: BackendType) -> Arc<dyn BotBackend> {

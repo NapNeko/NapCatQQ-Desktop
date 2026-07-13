@@ -1,8 +1,8 @@
 //! 本地 SSH 密钥对生成
 //!
 //! 用于"密码登录 → 自动配置免密"流程:本地生成一对 ed25519 密钥,私钥落盘到
-//! 数据目录,公钥推到远端 authorized_keys生成走纯 Rust 的 ssh-key crate,
-//! 不依赖系统 ssh-keygen 二进制(Windows 上不一定有)
+//! 数据目录,公钥推到远端 authorized_keys。生成走纯 Rust 的 ssh-key crate,
+//! 不依赖系统 ssh-keygen 二进制(Windows 上不一定有)。
 
 use ssh_key::rand_core::OsRng;
 use ssh_key::{Algorithm, LineEnding, PrivateKey};
@@ -15,22 +15,33 @@ pub struct GeneratedKeyPair {
     pub public_line: String,
 }
 
-/// 生成一对 ed25519 密钥comment 写进公钥尾部,方便用户在远端
-/// authorized_keys 里认出这是哪台 Desktop 加的
-pub fn generate_ed25519(comment: &str) -> Result<GeneratedKeyPair, String> {
+/// SSH 密钥生成失败
+#[derive(Debug, thiserror::Error)]
+pub enum SshKeygenError {
+    #[error("生成 ed25519 密钥失败: {0}")]
+    Generate(String),
+    #[error("编码私钥失败: {0}")]
+    EncodePrivate(String),
+    #[error("编码公钥失败: {0}")]
+    EncodePublic(String),
+}
+
+/// 生成一对 ed25519 密钥。comment 写进公钥尾部,方便用户在远端
+/// authorized_keys 里认出这是哪台 Desktop 加的。
+pub fn generate_ed25519(comment: &str) -> Result<GeneratedKeyPair, SshKeygenError> {
     let mut private = PrivateKey::random(&mut OsRng, Algorithm::Ed25519)
-        .map_err(|e| format!("生成 ed25519 密钥失败: {e}"))?;
+        .map_err(|e| SshKeygenError::Generate(e.to_string()))?;
     private.set_comment(comment);
 
     let private_openssh = private
         .to_openssh(LineEnding::LF)
-        .map_err(|e| format!("编码私钥失败: {e}"))?
+        .map_err(|e| SshKeygenError::EncodePrivate(e.to_string()))?
         .to_string();
 
     let public_line = private
         .public_key()
         .to_openssh()
-        .map_err(|e| format!("编码公钥失败: {e}"))?;
+        .map_err(|e| SshKeygenError::EncodePublic(e.to_string()))?;
 
     Ok(GeneratedKeyPair {
         private_openssh,

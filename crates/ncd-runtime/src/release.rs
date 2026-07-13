@@ -323,7 +323,7 @@ async fn fetch_qq_windows_latest() -> Option<ReleaseInfo> {
                 "QQ Windows 版本探测成功"
             );
             Some(ReleaseInfo {
-                version: version.clone(),
+                version,
                 tag: "pcConfig".to_string(),
                 published_at: current_unix_ts(),
                 html_url: ncd_component::QQ_PCCONFIG_URL.to_string(),

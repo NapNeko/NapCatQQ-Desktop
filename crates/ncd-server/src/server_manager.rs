@@ -594,7 +594,7 @@ impl ServerManager {
 
         // 2. 本地生成密钥对
         let comment = format!("napcatqq-desktop@{}", profile.id);
-        let pair = crate::ssh_keygen::generate_ed25519(&comment)?;
+        let pair = crate::ssh_keygen::generate_ed25519(&comment).map_err(|e| e.to_string())?;
 
         // 3. 公钥追加进远端 authorized_keys公钥从 stdin 传入,避免把 key 文本拼进 shell
         let pub_line = pair.public_line.trim();

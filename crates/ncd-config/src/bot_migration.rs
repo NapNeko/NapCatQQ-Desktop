@@ -99,8 +99,8 @@ fn migrate_bot_entry(
     ensure_section(payload, "connect");
     ensure_section(payload, "advanced");
 
-    rules.extend(ensure_connect_shape(payload));
-    rules.extend(normalize_advanced(payload));
+    rules.extend(ensure_connect_shape(payload)?);
+    rules.extend(normalize_advanced(payload)?);
     rules.extend(normalize_bot_fields(payload, index, secrets, warnings)?);
     rules.extend(normalize_qqid(payload));
     rules.extend(normalize_urls(payload));
@@ -108,13 +108,33 @@ fn migrate_bot_entry(
     Ok(rules)
 }
 
-#[allow(clippy::expect_used, clippy::unwrap_used)]
-fn ensure_connect_shape(payload: &mut Map<String, Value>) -> Vec<String> {
-    let mut rules = Vec::new();
-    let connect = payload
-        .get_mut("connect")
+fn require_object_mut<'a>(
+    payload: &'a mut Map<String, Value>,
+    key: &str,
+) -> Result<&'a mut Map<String, Value>, MigrationError> {
+    payload
+        .get_mut(key)
         .and_then(Value::as_object_mut)
-        .expect("section ensured");
+        .ok_or_else(|| {
+            MigrationError::InvalidPayload(format!("bot 配置缺少对象字段: {key}"))
+        })
+}
+
+fn require_array_mut<'a>(
+    object: &'a mut Map<String, Value>,
+    key: &str,
+) -> Result<&'a mut Vec<Value>, MigrationError> {
+    object
+        .get_mut(key)
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| {
+            MigrationError::InvalidPayload(format!("bot 配置缺少数组字段: {key}"))
+        })
+}
+
+fn ensure_connect_shape(payload: &mut Map<String, Value>) -> Result<Vec<String>, MigrationError> {
+    let mut rules = Vec::new();
+    let connect = require_object_mut(payload, "connect")?;
 
     for key in [
         "httpServers",
@@ -131,31 +151,19 @@ fn ensure_connect_shape(payload: &mut Map<String, Value>) -> Vec<String> {
 
     if let Some(http) = connect.remove("http") {
         if let Some(server) = legacy_http_server(&http) {
-            connect
-                .get_mut("httpServers")
-                .and_then(Value::as_array_mut)
-                .unwrap()
-                .push(server);
+            require_array_mut(connect, "httpServers")?.push(server);
             rules.push("connect.http -> connect.httpServers".to_string());
         }
         let clients = legacy_http_clients(&http);
         if !clients.is_empty() {
-            connect
-                .get_mut("httpClients")
-                .and_then(Value::as_array_mut)
-                .unwrap()
-                .extend(clients);
+            require_array_mut(connect, "httpClients")?.extend(clients);
             rules.push("connect.http.postUrls -> connect.httpClients".to_string());
         }
     }
 
     if let Some(ws) = connect.remove("ws") {
         if let Some(server) = legacy_websocket_server(&ws) {
-            connect
-                .get_mut("websocketServers")
-                .and_then(Value::as_array_mut)
-                .unwrap()
-                .push(server);
+            require_array_mut(connect, "websocketServers")?.push(server);
             rules.push("connect.ws -> connect.websocketServers".to_string());
         }
     }
@@ -163,46 +171,43 @@ fn ensure_connect_shape(payload: &mut Map<String, Value>) -> Vec<String> {
     if let Some(reverse_ws) = connect.remove("reverseWs") {
         let clients = legacy_websocket_clients(&reverse_ws);
         if !clients.is_empty() {
-            connect
-                .get_mut("websocketClients")
-                .and_then(Value::as_array_mut)
-                .unwrap()
-                .extend(clients);
+            require_array_mut(connect, "websocketClients")?.extend(clients);
             rules.push("connect.reverseWs -> connect.websocketClients".to_string());
         }
     }
 
-    rules
+    Ok(rules)
 }
 
-#[allow(clippy::expect_used, clippy::unwrap_used)]
-fn normalize_advanced(payload: &mut Map<String, Value>) -> Vec<String> {
+fn normalize_advanced(payload: &mut Map<String, Value>) -> Result<Vec<String>, MigrationError> {
     let mut rules = Vec::new();
-    let advanced = payload
-        .get_mut("advanced")
-        .and_then(Value::as_object_mut)
-        .expect("section ensured");
-    if !advanced.get("bypass").is_some_and(Value::is_object) {
-        advanced.insert("bypass".to_string(), serde_json::json!({}));
-        rules.push("advanced.bypass default".to_string());
-    }
-    let bypass = advanced
-        .get_mut("bypass")
-        .and_then(Value::as_object_mut)
-        .unwrap();
-    for (key, default) in [
-        ("hook", false),
-        ("window", false),
-        ("module", false),
-        ("process", false),
-        ("container", false),
-        ("js", false),
-    ] {
-        if !bypass.contains_key(key) {
-            bypass.insert(key.to_string(), Value::Bool(default));
-            rules.push(format!("advanced.bypass.{} default", key));
+    {
+        let advanced = require_object_mut(payload, "advanced")?;
+        if !advanced.get("bypass").is_some_and(Value::is_object) {
+            advanced.insert("bypass".to_string(), serde_json::json!({}));
+            rules.push("advanced.bypass default".to_string());
+        }
+        let bypass = advanced
+            .get_mut("bypass")
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| {
+                MigrationError::InvalidPayload("bot 配置 advanced.bypass 必须是对象".to_string())
+            })?;
+        for (key, default) in [
+            ("hook", false),
+            ("window", false),
+            ("module", false),
+            ("process", false),
+            ("container", false),
+            ("js", false),
+        ] {
+            if !bypass.contains_key(key) {
+                bypass.insert(key.to_string(), Value::Bool(default));
+                rules.push(format!("advanced.bypass.{} default", key));
+            }
         }
     }
+    let advanced = require_object_mut(payload, "advanced")?;
     for (key, default) in [
         ("fileLog", Value::Bool(true)),
         ("consoleLog", Value::Bool(true)),
@@ -217,10 +222,9 @@ fn normalize_advanced(payload: &mut Map<String, Value>) -> Vec<String> {
             rules.push(format!("advanced.{} default", key));
         }
     }
-    rules
+    Ok(rules)
 }
 
-#[allow(clippy::expect_used)]
 fn normalize_bot_fields(
     payload: &mut Map<String, Value>,
     index: usize,
@@ -228,10 +232,7 @@ fn normalize_bot_fields(
     warnings: &mut Vec<MigrationWarning>,
 ) -> Result<Vec<String>, MigrationError> {
     let mut rules = Vec::new();
-    let bot = payload
-        .get_mut("bot")
-        .and_then(Value::as_object_mut)
-        .expect("section ensured");
+    let bot = require_object_mut(payload, "bot")?;
 
     if !bot.contains_key("name")
         || bot

@@ -13,4 +13,4 @@ pub use action_policy::{
     direct_runtime_dependency_ids, normalize_github_release_tag, parse_remote_host_probe_stdout,
     require_remote_home, snowluma_github_release_tag,
 };
-pub use factory::build_component_for_host;
+pub use factory::{BuildComponentCtx, build_component_for_host};

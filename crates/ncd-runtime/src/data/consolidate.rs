@@ -367,7 +367,7 @@ fn prune_pre_consolidate_archives(tmp_dir: &Path, keep: usize) {
             (p, mtime)
         })
         .collect();
-    dirs.sort_by(|a, b| b.1.cmp(&a.1));
+    dirs.sort_by_key(|b| std::cmp::Reverse(b.1));
     for (path, _) in dirs.into_iter().skip(keep) {
         let _ = fs::remove_dir_all(path);
     }
@@ -399,7 +399,7 @@ fn prune_desktop_backup_zips(keep: usize) {
     if zips.len() <= keep {
         return;
     }
-    zips.sort_by(|a, b| b.1.cmp(&a.1));
+    zips.sort_by_key(|b| std::cmp::Reverse(b.1));
     for (path, _) in zips.into_iter().skip(keep) {
         if let Err(err) = fs::remove_file(&path) {
             warn!(
