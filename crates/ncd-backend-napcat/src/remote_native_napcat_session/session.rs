@@ -1,12 +1,6 @@
-//! 远端 NapCat Native:SSH 隧道 + 远端 napcat_{qq}.log tail
+//! 远端 NapCat Native: SSH 隧道 + 远端 napcat_{qq}.log tail
 //!
-//! WebUI 端口/token 只从日志解析;隧道远端端口优先用日志里的真实 port,
-//! 没有日志时不瞎开 6099(多实例会连错口)。reconcile attach 时必须立刻扫
-//! 一遍已有日志,否则 UI 拿不到登录态/二维码。
-//!
-//! 多实例时 NapCat 会从 6099 起 +1;进程重启也会换 token。log task 必须在
-//! (remote_port, token) 变化或本地转发失效时重建隧道并重发 NapCatWebuiAvailable。
-//! 重建失败时清 endpoint/poller(via hook),避免 UI 继续打死后端口。
+//! WebUI 端口/token 只从日志解析;隧道远端端口优先用日志里的真实 port。
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,16 +8,12 @@ use std::time::Duration;
 
 use ncd_domain::BotConfig;
 use ncd_domain::bot_config::is_remote_native_napcat_config;
-use ncd_host::remote::{TunnelHandle, TunnelSpec};
-use ncd_host::{Host, HostCommand, HostError, HostPath};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
+use ncd_host::{Host, HostPath};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
 use tracing::warn;
 
-use crate::remote_native_launch::{
+use super::launch::{
     RemoteNapcatLayout, napcat_remote_log_path, probe_remote_napcat_layout,
 };
 use ncd_deploy::{EventBusSink, NapcatLogNoiseFilter, NativeRuntimeEventSink, parse_napcat_webui_line};
@@ -31,91 +21,19 @@ use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::ids::BotId;
 use ncd_traits::events::{BroadcastEventBus, EventBus};
 
+use super::decision::{
+    PublishedWebui, TunnelAction, decide_tunnel_action, health_force_retunnel, should_republish,
+};
+use super::tunnel_io::{
+    TunnelSlot, ensure_loopback_tunnel, local_forward_healthy, notify_unreachable, scan_latest_webui,
+};
+
 const LOG_TAIL_POLL_SECS: u64 = 2;
-/// 每隔多少次 poll 做一次本机转发健康检查(约 6s)
 const TUNNEL_HEALTH_EVERY_POLLS: u32 = 3;
-const TUNNEL_HEALTH_TIMEOUT: Duration = Duration::from_secs(2);
-/// 连续健康失败多少次才强制重建,避免慢 WebUI 抖动
 const TUNNEL_HEALTH_FAIL_THRESHOLD: u32 = 3;
 
-/// 本机 loopback 隧道当前状态;与 log_task 共享
-#[derive(Default)]
-struct TunnelSlot {
-    handle: Option<TunnelHandle>,
-    /// Desktop 本机可达口
-    local_port: Option<u16>,
-    /// 隧道远端目标口(Bot 真实 WebUI);None 表示无隧道
-    remote_port: Option<u16>,
-}
-
-impl TunnelSlot {
-    fn clear(&mut self) {
-        self.handle = None;
-        self.local_port = None;
-        self.remote_port = None;
-    }
-
-    fn set_open(&mut self, handle: TunnelHandle, remote_port: u16) {
-        self.local_port = Some(handle.local_port());
-        self.remote_port = Some(remote_port);
-        self.handle = Some(handle);
-    }
-
-    fn take_handle(&mut self) -> Option<TunnelHandle> {
-        self.local_port = None;
-        self.remote_port = None;
-        self.handle.take()
-    }
-}
-
-/// 上次成功对外发布的 (local, remote, token)
-type PublishedWebui = (u16, u16, String);
-
-/// 是否需要按新发现的远端 WebUI 口重建隧道
-fn should_retunnel(slot_remote: Option<u16>, has_local_port: bool, discovered_remote: u16) -> bool {
-    !has_local_port || slot_remote != Some(discovered_remote)
-}
-
-/// 是否需要再发 NapCatWebuiAvailable(本机口 / 远端口 / token 任一变化)
-fn should_republish(
-    last: Option<&PublishedWebui>,
-    local_port: u16,
-    remote_port: u16,
-    token: &str,
-) -> bool {
-    match last {
-        Some((lp, rp, t)) if *lp == local_port && *rp == remote_port && t == token => false,
-        _ => true,
-    }
-}
-
-/// 健康失败计数:连续失败达到阈值才强制 retunnel
-fn health_force_retunnel(consecutive_fails: u32, threshold: u32) -> bool {
-    consecutive_fails >= threshold
-}
-
-/// 本 tick 对隧道要做的动作(纯决策,便于单测)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TunnelAction {
-    Keep,
-    Retunnel,
-}
-
-fn decide_tunnel_action(
-    slot_remote: Option<u16>,
-    has_local_port: bool,
-    discovered_remote: u16,
-    force_health: bool,
-) -> TunnelAction {
-    if force_health || should_retunnel(slot_remote, has_local_port, discovered_remote) {
-        TunnelAction::Retunnel
-    } else {
-        TunnelAction::Keep
-    }
-}
-
-/// 隧道失效时清 endpoint + dispose poller;由 BotManager 注入,backend 不依赖 runtime
-pub type WebuiUnreachableHook = Arc<dyn Fn(BotId) + Send + Sync>;
+/// 隧道失效时清 endpoint + dispose poller;由 BotManager 注入
+pub use super::tunnel_io::WebuiUnreachableHook;
 
 struct SessionInner {
     tunnel_slot: Arc<Mutex<TunnelSlot>>,
@@ -422,194 +340,5 @@ impl RemoteNativeNapcatSessionRegistry {
             }),
         });
         self.sessions.lock().await.insert(bot_id, session);
-    }
-}
-
-fn notify_unreachable(hook: &Option<WebuiUnreachableHook>, bot_id: &BotId) {
-    if let Some(h) = hook {
-        h(bot_id.clone());
-    }
-}
-
-fn scan_latest_webui(bytes: &[u8]) -> Option<(u16, String)> {
-    let text = String::from_utf8_lossy(bytes);
-    let mut latest = None;
-    for line in text.lines() {
-        if let Some(pair) = parse_napcat_webui_line(line) {
-            latest = Some(pair);
-        }
-    }
-    latest
-}
-
-/// 远端 127.0.0.1:port 是否有人听;避免 bind 了本地口但 direct-tcpip ConnectFailed
-async fn remote_loopback_listening(host: &dyn Host, remote_port: u16) -> bool {
-    let script = format!(
-        "bash -c 'echo >/dev/tcp/127.0.0.1/{remote_port}' 2>/dev/null \
-         || (command -v ss >/dev/null 2>&1 && ss -lnt 2>/dev/null | grep -Eq ':{remote_port}([[:space:]]|$)') \
-         || (command -v netstat >/dev/null 2>&1 && netstat -lnt 2>/dev/null | grep -Eq ':{remote_port}([[:space:]]|$)')"
-    );
-    let cmd = HostCommand::new("sh")
-        .arg("-c")
-        .arg(script)
-        .timeout(Duration::from_secs(5));
-    match host.run_to_string(cmd).await {
-        Ok(out) => out.success(),
-        Err(_) => false,
-    }
-}
-
-/// 对本机转发口做极短探测:能 connect 且至少读到 1 字节才算通
-async fn local_forward_healthy(local_port: u16) -> bool {
-    let connect = timeout(
-        TUNNEL_HEALTH_TIMEOUT,
-        TcpStream::connect(("127.0.0.1", local_port)),
-    )
-    .await;
-    let Ok(Ok(mut stream)) = connect else {
-        return false;
-    };
-    let req = b"GET / HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-    if timeout(TUNNEL_HEALTH_TIMEOUT, stream.write_all(req))
-        .await
-        .ok()
-        .and_then(|r| r.ok())
-        .is_none()
-    {
-        return false;
-    }
-    let mut buf = [0u8; 16];
-    matches!(
-        timeout(TUNNEL_HEALTH_TIMEOUT, stream.read(&mut buf)).await,
-        Ok(Ok(n)) if n > 0
-    )
-}
-
-async fn ensure_loopback_tunnel(
-    host: &dyn Host,
-    remote_port: u16,
-) -> Result<TunnelHandle, HostError> {
-    if !remote_loopback_listening(host, remote_port).await {
-        // 目标口无人听,不是 SSH session 断线;勿用 remote_disconnected 以免误触发 host 自愈
-        return Err(HostError::InvalidArgument {
-            reason: format!("remote 127.0.0.1:{remote_port} not listening"),
-        });
-    }
-    open_loopback_tunnel(host, remote_port).await
-}
-
-async fn open_loopback_tunnel(
-    host: &dyn Host,
-    remote_port: u16,
-) -> Result<TunnelHandle, HostError> {
-    let spec = TunnelSpec {
-        local_host: "127.0.0.1".to_string(),
-        local_port: 0,
-        remote_host: "127.0.0.1".to_string(),
-        remote_port,
-    };
-    host.open_tunnel(spec).await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        TunnelAction, decide_tunnel_action, health_force_retunnel, scan_latest_webui,
-        should_republish, should_retunnel,
-    };
-
-    #[test]
-    fn empty_log_returns_none() {
-        assert!(scan_latest_webui(b"").is_none());
-        assert!(scan_latest_webui(b"noise without panel url\n").is_none());
-    }
-
-    #[test]
-    fn keeps_last_webui_line_when_multiple() {
-        let log = b"\
-[info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:6099/webui?token=first\n\
-noise\n\
-[info] [NapCat] [WebUi] WebUi User Panel Url: http://127.0.0.1:6101/webui?token=second\n\
-";
-        let (port, token) = scan_latest_webui(log).expect("should parse");
-        assert_eq!(port, 6101);
-        assert_eq!(token, "second");
-    }
-
-    #[test]
-    fn loose_url_fragment_also_works() {
-        let log = b"panel http://127.0.0.1:6123/webui?token=loose_tok trailing\n";
-        let (port, token) = scan_latest_webui(log).expect("loose parse");
-        assert_eq!(port, 6123);
-        assert_eq!(token, "loose_tok");
-    }
-
-    #[test]
-    fn should_retunnel_when_no_local_port() {
-        assert!(should_retunnel(None, false, 6100));
-    }
-
-    #[test]
-    fn should_retunnel_when_remote_port_changed() {
-        assert!(should_retunnel(Some(6099), true, 6100));
-    }
-
-    #[test]
-    fn should_not_retunnel_when_same_remote_and_alive() {
-        assert!(!should_retunnel(Some(6100), true, 6100));
-    }
-
-    #[test]
-    fn should_republish_when_token_changes() {
-        let last = (50000_u16, 6100_u16, "old".to_string());
-        assert!(should_republish(Some(&last), 50000, 6100, "new"));
-    }
-
-    #[test]
-    fn should_not_republish_when_all_same() {
-        let last = (50000_u16, 6100_u16, "tok".to_string());
-        assert!(!should_republish(Some(&last), 50000, 6100, "tok"));
-    }
-
-    #[test]
-    fn should_republish_when_local_port_changes() {
-        let last = (50000_u16, 6100_u16, "tok".to_string());
-        assert!(should_republish(Some(&last), 50001, 6100, "tok"));
-    }
-
-    #[test]
-    fn should_republish_when_remote_port_changes() {
-        let last = (50000_u16, 6099_u16, "tok".to_string());
-        assert!(should_republish(Some(&last), 50000, 6100, "tok"));
-    }
-
-    #[test]
-    fn health_force_only_after_threshold() {
-        assert!(!health_force_retunnel(2, 3));
-        assert!(health_force_retunnel(3, 3));
-    }
-
-    #[test]
-    fn decide_retunnel_on_force_health_even_if_port_same() {
-        assert_eq!(
-            decide_tunnel_action(Some(6100), true, 6100, true),
-            TunnelAction::Retunnel
-        );
-    }
-
-    #[test]
-    fn decide_keep_when_healthy_same_port() {
-        assert_eq!(
-            decide_tunnel_action(Some(6100), true, 6100, false),
-            TunnelAction::Keep
-        );
-    }
-
-    #[test]
-    fn decide_retunnel_when_no_local() {
-        assert_eq!(
-            decide_tunnel_action(None, false, 6100, false),
-            TunnelAction::Retunnel
-        );
     }
 }

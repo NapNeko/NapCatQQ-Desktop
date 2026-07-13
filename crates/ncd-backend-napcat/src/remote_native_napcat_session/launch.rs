@@ -178,16 +178,13 @@ async fn build_napcat_remote_launch(
         .collect::<Vec<_>>()
         .join(" ");
     let log_q = shell_single_quote(&log_path);
-    let inner = format!(
-        "nohup xvfb-run -a {qq_invoke} >> {log_q} 2>&1 </dev/null & wait $! || true"
-    );
+    let inner =
+        format!("nohup xvfb-run -a {qq_invoke} >> {log_q} 2>&1 </dev/null & wait $! || true");
 
     Ok(NativeLaunchCommand {
         program: "sh".into(),
         args: vec!["-c".into(), inner],
-        working_dir: qq_cmd
-            .working_dir
-            .map(|p| PathBuf::from(p.as_posix())),
+        working_dir: qq_cmd.working_dir.map(|p| PathBuf::from(p.as_posix())),
         environment: qq_cmd.environment,
     })
 }
@@ -283,6 +280,7 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
 /// 匹配策略(从严到宽,始终要求命令行里出现 `qq` + `-q <qq_id>` 结尾):
 /// 1. 精确: `qq --no-sandbox -q <qq>`
 /// 2. 回退: `qq` 与 `-q <qq>` 同 cmdline(允许路径/参数顺序变化)
+///
 /// 不用裸 `-q <qq>`,避免误杀其它工具。
 pub async fn stop_remote_napcat_on_host(
     host: &dyn Host,
