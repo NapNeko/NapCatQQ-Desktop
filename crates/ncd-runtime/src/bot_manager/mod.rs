@@ -318,6 +318,131 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         *self.desktop_notify.write().await = settings;
     }
 
+    /// 从 data_root 读 AppSettings 派生指标偏好（缺文件/解析失败 → 默认关）
+    fn load_metrics_prefs(data_root: &std::path::Path) -> crate::metrics::BotRuntimeMetricsPrefs {
+        use crate::metrics::BotRuntimeMetricsPrefs;
+        let settings_path = data_root.join("config").join("app-settings.json");
+        let mut prefs = BotRuntimeMetricsPrefs::default();
+        if !settings_path.is_file() {
+            return prefs;
+        }
+        let Ok(text) = std::fs::read_to_string(&settings_path) else {
+            return prefs;
+        };
+        let Ok(app) = serde_json::from_str::<ncd_domain::AppSettings>(&text) else {
+            return prefs;
+        };
+        prefs = BotRuntimeMetricsPrefs::from_app(&app);
+        prefs.normalize();
+        prefs
+    }
+
+    /// 启动前按 AppSettings 注入指标探针（本机）；失败只记日志，不阻断启动
+    async fn apply_runtime_metrics_inject(&self, bot_id: &BotId, config: &BotConfig) {
+        use crate::metrics::{
+            apply_metrics_to_environment, build_napcat_load_script, prepare_inject,
+        };
+        use ncd_domain::bot_config::BackendType;
+        use ncd_domain::kinds::RuntimeTarget;
+
+        // 仅本机启动注入；远端由部署/watch 路径处理
+        if !matches!(config.bot.runtime_target, RuntimeTarget::Local) {
+            return;
+        }
+
+        let Some(data_root) = self.store.config_dir().parent().map(|p| p.to_path_buf()) else {
+            return;
+        };
+        let prefs = Self::load_metrics_prefs(&data_root);
+
+        let plan = match prepare_inject(&data_root, bot_id.as_str(), config, &prefs) {
+            Ok(p) => p,
+            Err(err) => {
+                warn!(
+                    target: "ncd_runtime::bot_manager",
+                    bot_id = %bot_id,
+                    %err,
+                    "metrics inject prepare failed"
+                );
+                return;
+            }
+        };
+
+        match config.bot.backend_type {
+            BackendType::SnowLuma => {
+                if let Some(daemon) = &self.snowluma_daemon {
+                    if let Some(plan) = plan.as_ref() {
+                        let mut env = std::collections::BTreeMap::new();
+                        apply_metrics_to_environment(&mut env, plan);
+                        env.insert(
+                            "NCD_METRICS_PROBE_PATH".into(),
+                            plan.probe_script.to_string_lossy().into_owned(),
+                        );
+                        daemon.set_metrics_child_env(Some(env));
+                    } else {
+                        daemon.set_metrics_child_env(None);
+                    }
+                }
+            }
+            BackendType::NapCat => {
+                // 改写 loadNapCat.js（require 探针）。NCD_* env 在 build_plan 之后
+                // 合并进 BotRuntimeConfig.environment，由 native 启动透传，不碰进程全局 env。
+                let napcat_dir = data_root.join("components").join("NapCatQQ");
+                let load_path = napcat_dir.join("loadNapCat.js");
+                let napcat_mjs = napcat_dir.join("napcat.mjs");
+                if napcat_mjs.is_file() {
+                    let uri = {
+                        let normalized = napcat_mjs.to_string_lossy().replace('\\', "/");
+                        if normalized.contains(":/") {
+                            format!("file:///{normalized}")
+                        } else {
+                            format!("file://{normalized}")
+                        }
+                    };
+                    let script = build_napcat_load_script(
+                        &uri,
+                        plan.as_ref().map(|p| p.probe_script.as_path()),
+                    );
+                    if let Err(err) = std::fs::write(&load_path, script) {
+                        warn!(
+                            target: "ncd_runtime::bot_manager",
+                            bot_id = %bot_id,
+                            %err,
+                            "rewrite loadNapCat.js for metrics failed"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// 把指标 env 合并进本机启动用的 BotRuntimeConfig.environment
+    fn merge_metrics_env_into_runtime_config(
+        &self,
+        bot_id: &BotId,
+        config: &BotConfig,
+        runtime_config: &mut ncd_traits::runtime_backend::BotRuntimeConfig,
+    ) {
+        use crate::metrics::{apply_metrics_to_environment, prepare_inject};
+        use ncd_domain::kinds::RuntimeTarget;
+
+        if !matches!(config.bot.runtime_target, RuntimeTarget::Local) {
+            return;
+        }
+        let Some(data_root) = self.store.config_dir().parent().map(|p| p.to_path_buf()) else {
+            return;
+        };
+        let prefs = Self::load_metrics_prefs(&data_root);
+        // 此处再 prepare 一次：会覆盖探针脚本与 nodes 映射，与 apply 阶段一致且幂等
+        if let Ok(Some(plan)) = prepare_inject(&data_root, bot_id.as_str(), config, &prefs) {
+            apply_metrics_to_environment(&mut runtime_config.environment, &plan);
+            runtime_config.environment.insert(
+                "NCD_METRICS_PROBE_PATH".into(),
+                plan.probe_script.to_string_lossy().into_owned(),
+            );
+        }
+    }
+
     /// 按 flavor 选择 backend:SnowLuma 时优先用注入的 SL backend,否则
     /// 回落到默认 backend(向后兼容:未注入 SL 时与历史行为一致)
     fn backend_for(&self, flavor: BotFlavor) -> Arc<dyn BotBackend> {
@@ -1569,8 +1694,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         // 取消令牌:stop_bot 在 Starting 阶段会 cancel,检测到后静默退出,避免重复报错
         let cancel = handle.cancellation_token();
 
+        // 实例运行时指标：启动时注入（开关关则清理）
+        self.apply_runtime_metrics_inject(bot_id, config).await;
+
         let scenario = RuntimeScenario::from_config(config)?;
-        let runtime_config = match &scenario {
+        let mut runtime_config = match &scenario {
             RuntimeScenario::LocalNative { .. } => {
                 let base = self.build_runtime_config(bot_id, config);
                 match self.launch_planner.build_plan(bot_id, config).await {
@@ -1615,6 +1743,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 self.build_runtime_config(bot_id, config)
             }
         };
+        self.merge_metrics_env_into_runtime_config(bot_id, config, &mut runtime_config);
 
         if let Err(err) = self.ensure_snowluma_agreements_ready(config).await {
             if cancel.is_cancelled() {

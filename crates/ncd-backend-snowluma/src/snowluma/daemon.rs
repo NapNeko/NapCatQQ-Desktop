@@ -99,6 +99,8 @@ pub struct SnowLumaDaemon {
     /// 最近 N 行 stdout/stderr ring buffer,启动失败时被拼进 last_error
     /// 让卡片上能直接看到 node 报的错——broadcast 没订阅者时也不会丢
     recent_log: Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
+    /// Desktop 指标探针：仅在 spawn node 时注入子进程 env（不改安装树）
+    metrics_child_env: std::sync::Mutex<Option<std::collections::BTreeMap<String, String>>>,
 }
 
 /// stdout 广播容量订阅滞后会被 broadcast 通道 overwrite
@@ -139,7 +141,18 @@ impl SnowLumaDaemon {
             recent_log: Arc::new(std::sync::Mutex::new(
                 std::collections::VecDeque::with_capacity(RECENT_LOG_CAPACITY),
             )),
+            metrics_child_env: std::sync::Mutex::new(None),
         })
+    }
+
+    /// 设置/清除 node 子进程指标 env；None 表示不注入（与指标开关关一致）
+    pub fn set_metrics_child_env(
+        &self,
+        env: Option<std::collections::BTreeMap<String, String>>,
+    ) {
+        if let Ok(mut g) = self.metrics_child_env.lock() {
+            *g = env;
+        }
     }
 
     /// 取最近的日志行快照(按时间顺序),用于把 node 启动失败前的 stderr 拼进
@@ -277,6 +290,14 @@ impl SnowLumaDaemon {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        // Desktop 指标探针：仅注入子进程 env，不改 SL 安装树。
+        if let Ok(guard) = self.metrics_child_env.lock() {
+            if let Some(map) = guard.as_ref() {
+                for (k, v) in map {
+                    node_cmd.env(k, v);
+                }
+            }
+        }
         hide_console_window(&mut node_cmd);
         let child_result = node_cmd.spawn();
         let mut child = match child_result {

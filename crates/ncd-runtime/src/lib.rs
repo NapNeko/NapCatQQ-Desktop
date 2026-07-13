@@ -17,6 +17,7 @@ pub mod launch;
 pub mod remote;
 pub mod snowluma;
 pub mod watch;
+pub mod metrics;
 
 // 配置横切已抽出 ncd-config；旧路径 re-export 保持 API。
 pub mod config {
@@ -117,6 +118,9 @@ pub mod runtime_router {
 }
 pub mod ncd_watch_sync {
     pub use crate::watch::sync::*;
+}
+pub mod bot_runtime_metrics {
+    pub use crate::metrics::*;
 }
 pub(crate) mod snowluma_agreements {
     pub(crate) use crate::snowluma::agreements::*;

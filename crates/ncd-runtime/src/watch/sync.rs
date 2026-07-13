@@ -285,6 +285,64 @@ pub async fn read_notify_json(host: &dyn Host, home: &str) -> Result<Option<Noti
     Ok(Some(cfg))
 }
 
+/// 写入远端 ncd-watch metrics.json（实例指标续采配置）
+pub async fn write_metrics_json(
+    host: &dyn Host,
+    home: &str,
+    metrics: &ncd_watch::WatchMetricsConfig,
+) -> Result<(), String> {
+    let root = remote_watch_root(home);
+    let config_dir = root.join("config");
+    host.create_dir_all(&config_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    let path = config_dir.join("metrics.json");
+    let body = serde_json::to_vec_pretty(metrics).map_err(|e| e.to_string())?;
+    host.write_file(&path, &body)
+        .await
+        .map_err(|e| e.to_string())?;
+    let _ = host
+        .run_to_string(
+            ncd_host::HostCommand::new("chmod")
+                .arg("600")
+                .arg(path.as_posix()),
+        )
+        .await;
+    Ok(())
+}
+
+/// 从 App 设置与该 host 上的 bot 列表组装 WatchMetricsConfig
+pub fn build_watch_metrics_config(
+    home: &str,
+    enabled: bool,
+    interval_ms: u64,
+    retention_days: u32,
+    bots: &[&BotConfig],
+) -> ncd_watch::WatchMetricsConfig {
+    let root = format!("{}/ncd-watch", home.trim_end_matches('/'));
+    let history_min = interval_ms.max(60_000) as u32;
+    let bots = bots
+        .iter()
+        .map(|c| {
+            let bot_id = c.bot.qq_id.to_string();
+            ncd_watch::WatchMetricsBot {
+                bot_id: bot_id.clone(),
+                qq_id: c.bot.qq_id,
+                stats_path: format!("{root}/metrics/{bot_id}/net-stats.json"),
+                history_path: format!("{root}/metrics/{bot_id}/history.jsonl"),
+            }
+        })
+        .collect();
+    ncd_watch::WatchMetricsConfig {
+        enabled,
+        sample_interval_ms: interval_ms.clamp(1000, 30_000) as u32,
+        retention_days: retention_days.clamp(1, 90),
+        history_min_interval_ms: history_min,
+        bots,
+    }
+    .clamp()
+}
+
 pub async fn write_notify_json(
     host: &dyn Host,
     home: &str,

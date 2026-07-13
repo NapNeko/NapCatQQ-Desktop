@@ -318,7 +318,8 @@ async fn build_napcat_launch_plan_inner(
 
     let load_script_path = napcat_dir.join("loadNapCat.js");
     let napcat_mjs_uri = path_to_file_uri(&napcat_dir.join("napcat.mjs"));
-    let load_script = format!("(async () => {{await import('{}')}})()", napcat_mjs_uri);
+    // 默认与 3.0 一致：单行 import。指标开启时由 BotManager 在启动前改写本文件并注入 env。
+    let load_script = crate::metrics::build_napcat_load_script(&napcat_mjs_uri, None);
     tokio::fs::write(&load_script_path, load_script)
         .await
         .map_err(|error| RuntimeLaunchPlanError::LoadScript(error.to_string()))?;
