@@ -229,9 +229,6 @@ impl BotBackend for RemoteNativeDeploymentBackend {
         if lines.len() > want {
             lines = lines.split_off(lines.len() - want);
         }
-        Ok(LogSnapshot {
-            lines,
-            total_lines,
-        })
+        Ok(LogSnapshot { lines, total_lines })
     }
 }

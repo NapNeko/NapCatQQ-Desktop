@@ -253,14 +253,14 @@ export function NotificationsTab({
             draft.onebotMessengerBotIds.length > 0
                 ? [...draft.onebotMessengerBotIds]
                 : draft.onebotMessengerBotId.trim()
-                  ? [draft.onebotMessengerBotId.trim()]
-                  : [];
+                    ? [draft.onebotMessengerBotId.trim()]
+                    : [];
         const targetIds =
             draft.onebotTargetIds.length > 0
                 ? [...draft.onebotTargetIds]
                 : draft.onebotTargetId > 0
-                  ? [draft.onebotTargetId]
-                  : [];
+                    ? [draft.onebotTargetId]
+                    : [];
         setOneBotEditorDraft({
             onebotMessengerBotIds: messengerIds,
             onebotTargetType:
@@ -318,8 +318,8 @@ export function NotificationsTab({
                 result.action === 'already_ready'
                     ? '已具备环回 HTTP'
                     : result.action === 'enabled'
-                      ? '已启用现有 HTTP 服务'
-                      : '已自动创建环回 HTTP 服务';
+                        ? '已启用现有 HTTP 服务'
+                        : '已自动创建环回 HTTP 服务';
             const scopeHint =
                 result.candidate.scope === 'remote'
                     ? '远端配置已写入；保存后请同步 ncd-watch。运行中时会尽量热更新。'
@@ -379,16 +379,16 @@ export function NotificationsTab({
             draft.onebotMessengerBotIds.length > 0
                 ? draft.onebotMessengerBotIds
                 : draft.onebotMessengerBotId.trim()
-                  ? [draft.onebotMessengerBotId.trim()]
-                  : [],
+                    ? [draft.onebotMessengerBotId.trim()]
+                    : [],
         onebotTargetType:
             draft.onebotTargetType === 'group' ? 'group' : 'private',
         onebotTargetIds:
             draft.onebotTargetIds.length > 0
                 ? draft.onebotTargetIds
                 : draft.onebotTargetId > 0
-                  ? [draft.onebotTargetId]
-                  : [],
+                    ? [draft.onebotTargetId]
+                    : [],
         onebotMessageTemplate:
             draft.onebotMessageTemplate || DEFAULT_ONEBOT_MESSAGE,
     };
@@ -560,8 +560,8 @@ export function NotificationsTab({
                                 const status = !ch.enabled
                                     ? '已关闭'
                                     : !ch.url.trim()
-                                      ? '缺地址'
-                                      : ch.method || 'POST';
+                                        ? '缺地址'
+                                        : ch.method || 'POST';
                                 return (
                                     <FieldRow
                                         key={ch.id}

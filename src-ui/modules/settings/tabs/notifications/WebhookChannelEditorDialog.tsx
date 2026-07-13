@@ -148,7 +148,7 @@ export function WebhookChannelEditorDialog({
                                                         <span className="mt-0.5 block truncate text-[10.5px] leading-snug text-text-tertiary">
                                                             {
                                                                 PRESET_HINTS[
-                                                                    preset.id
+                                                                preset.id
                                                                 ]
                                                             }
                                                         </span>
@@ -209,7 +209,7 @@ export function WebhookChannelEditorDialog({
                                             <Select
                                                 value={
                                                     working.draft.method ===
-                                                    'GET'
+                                                        'GET'
                                                         ? 'GET'
                                                         : 'POST'
                                                 }
@@ -249,7 +249,7 @@ export function WebhookChannelEditorDialog({
                                                 className="self-start"
                                                 disabled={
                                                     testingKey ===
-                                                        `webhook:${working.id}` ||
+                                                    `webhook:${working.id}` ||
                                                     !working.draft.url.trim()
                                                 }
                                                 onClick={() =>
@@ -257,7 +257,7 @@ export function WebhookChannelEditorDialog({
                                                 }
                                             >
                                                 {testingKey ===
-                                                `webhook:${working.id}`
+                                                    `webhook:${working.id}`
                                                     ? '发送中…'
                                                     : '发送测试'}
                                             </Button>

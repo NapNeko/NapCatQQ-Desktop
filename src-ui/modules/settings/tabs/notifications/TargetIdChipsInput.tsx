@@ -26,11 +26,11 @@ function Chip({
             className={cn(
                 'inline-flex max-w-full items-center gap-1 rounded-sm border px-2 py-1 text-[12px]',
                 tone === 'success' &&
-                    'border-success/30 bg-success-soft text-text',
+                'border-success/30 bg-success-soft text-text',
                 tone === 'warning' &&
-                    'border-warning/30 bg-warning-soft text-text',
+                'border-warning/30 bg-warning-soft text-text',
                 tone === 'neutral' &&
-                    'border-border-subtle bg-inset text-text-secondary',
+                'border-border-subtle bg-inset text-text-secondary',
             )}
         >
             <span className="truncate">{label}</span>

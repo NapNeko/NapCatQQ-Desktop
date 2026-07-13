@@ -51,10 +51,10 @@ export type EmailEditorDraft = Pick<
 export function emailIsReady(email: EmailEditorDraft): boolean {
     return Boolean(
         email.emailSender.trim() &&
-            email.emailReceiver.trim() &&
-            email.emailToken.trim() &&
-            email.emailSmtpServer.trim() &&
-            email.emailSmtpPort > 0,
+        email.emailReceiver.trim() &&
+        email.emailToken.trim() &&
+        email.emailSmtpServer.trim() &&
+        email.emailSmtpPort > 0,
     );
 }
 
