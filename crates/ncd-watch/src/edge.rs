@@ -88,11 +88,11 @@ impl EdgeTracker {
 
     /// 账号态优先 + 进程回退。
     ///
-    /// prefer_account=true(有 WebUI 凭据):
-    ///   - 登录 LoggedIn/LoggedOut 明确:跟登录边沿;进程 Online 不代表在线
-    ///   - 登录 Unknown 且进程 Online→Offline:回退 Process(进程/WebUI 同死)
-    /// prefer_account=false:
-    ///   进程层为主(Docker/无 token 的 native)
+    /// `prefer_account=true`（有 WebUI 凭据）:
+    /// - 登录 LoggedIn/LoggedOut 明确:跟登录边沿;进程 Online 不代表在线
+    /// - 登录 Unknown 且进程 Online→Offline:回退 Process(进程/WebUI 同死)
+    ///
+    /// `prefer_account=false`: 进程层为主(Docker/无 token 的 native)
     ///
     /// 共用:
     /// 1. Unknown 不更新该层快照(进程 Unknown 例外于不触发)

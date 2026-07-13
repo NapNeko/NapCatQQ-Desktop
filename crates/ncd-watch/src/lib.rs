@@ -7,6 +7,7 @@
 //! - `default-features = false`: 仅 config schema,供 Desktop 写 notify.json / present
 
 pub mod config;
+pub mod metrics;
 
 #[cfg(feature = "daemon")]
 pub mod edge;
@@ -29,6 +30,7 @@ pub use config::{
     DesktopPresentFile, NotifyBotTarget, NotifyConfig, WatchConfig, WatchOneBotMessenger,
     WatchOneBotSettings, WatchPaths, WatchRoot,
 };
+pub use metrics::{WatchMetricsBot, WatchMetricsConfig};
 
 #[cfg(feature = "daemon")]
 pub use edge::{EdgeAction, EdgeTracker, OfflineEdgeKind};

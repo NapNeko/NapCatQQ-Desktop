@@ -15,6 +15,7 @@ use crate::config::{NotifyConfig, WatchConfig, WatchPaths};
 use crate::edge::{EdgeAction, EdgeTracker, OfflineEdgeKind};
 use crate::email::send_watch_email;
 use crate::login_probe::{has_webui_probe, probe_login_status};
+use crate::metrics::{sample_metrics_once, MetricsRunState, WatchMetricsConfig};
 use crate::onebot::send_watch_onebot;
 use crate::present::desktop_is_present;
 use crate::probe::{LoginStatus, ProbeStatus, Prober};
@@ -249,6 +250,7 @@ pub async fn run_loop(
             .unwrap_or_default()
             .debounce_secs,
     );
+    let mut metrics_state = MetricsRunState::default();
 
     loop {
         let watch = WatchConfig::load_or_default(&paths.watch_json)
@@ -271,6 +273,12 @@ pub async fn run_loop(
             skipped_desktop = out.skipped_desktop_present,
             "run_once summary"
         );
+
+        // 指标续采：与告警解耦；Desktop 退出后仍写 history
+        let metrics_cfg = WatchMetricsConfig::load_or_default(&paths.metrics_json()).clamp();
+        if metrics_cfg.enabled {
+            sample_metrics_once(&metrics_cfg, &mut metrics_state);
+        }
 
         let wait = Duration::from_secs(u64::from(watch.probe_interval_secs.max(1)));
         tokio::select! {
