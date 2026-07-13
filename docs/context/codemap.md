@@ -115,8 +115,7 @@ KB：`.claude/kb/desktop-routing.md`, `nc-vs-sl.md`
 | 登录轮询 | `.../napcat/login_poller.rs` |
 | 端点表 | `.../napcat/endpoint_table.rs` |
 | 离线通知 | `.../napcat/offline_notifier.rs` |
-| 远端 Native 启动 | `.../remote_native_launch.rs` |
-| 远端 NapCat session | `.../remote_native_napcat_session.rs` |
+| 远端 NapCat session | `.../remote_native_napcat_session/`（含 `launch.rs` 启动规划） |
 | runtime re-export | `crates/ncd-runtime/src/napcat/` |
 | 事件原因类型 | `crates/ncd-domain/src/napcat_events.rs` |
 
@@ -131,12 +130,12 @@ KB：`.claude/kb/napcat-runtime.md`
 | 关注点 | 主路径 |
 |--------|--------|
 | crate 入口 | `crates/ncd-backend-snowluma/src/lib.rs` |
-| 本机 daemon / session / poller | `.../snowluma/daemon.rs`, `session.rs`, `status_poller.rs` |
-| WebUI 客户端 | `.../snowluma/webui_client.rs` |
+| 本机 daemon / session / poller | `.../snowluma/daemon.rs`, `session.rs`, `status_poller/` |
+| WebUI 客户端 | `.../snowluma/webui_client/` |
 | 进程树 / login probe | `.../snowluma/proc_tree.rs`, `qq_login_probe.rs`, `linux_proc_probe.rs` |
 | 本机 runtime backend | `.../snowluma/runtime_backend.rs` |
-| 远端 backend 总装 | `.../remote_snowluma.rs` |
-| 远端编排 / 栈 / 布局 / 隧道 / 日志 | `remote_snowluma_orchestrator.rs`, `_stack.rs`, `_layout.rs`, `_tunnel.rs`, `_log.rs` |
+| 远端 backend 总装 | `.../remote_snowluma/`（backend/daemon/inject/config/helpers） |
+| 远端编排 / 栈 / 布局 / 隧道 / 日志 | `.../remote_snowluma/{orchestrator,stack,layout,tunnel,log}.rs` |
 | 协议同意 / consent 文件 | `crates/ncd-runtime/src/snowluma_agreements.rs`, `snowluma_consent_files.rs` |
 | Tauri SL 命令 | `src-tauri/src/commands/snowluma.rs` |
 | 前端服务 | `src-ui/core/services/snowlumaApp.service.ts` |
