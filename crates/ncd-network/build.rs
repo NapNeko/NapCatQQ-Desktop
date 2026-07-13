@@ -48,7 +48,11 @@ fn main() {
     let secret = env::var(ENV_SECRET)
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .or_else(|| env::var(ENV_SECRET_LEGACY).ok().filter(|s| !s.trim().is_empty()));
+        .or_else(|| {
+            env::var(ENV_SECRET_LEGACY)
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        });
 
     // 两个都没注入 → 用模板占位(is_configured 返回 false,走 GitHub 直连)
     if base_url.as_deref().map(str::trim).unwrap_or("").is_empty() || secret.is_none() {
@@ -60,7 +64,9 @@ fn main() {
             )
         });
         write_if_changed(&out_path, &content);
-        println!("cargo:warning=ncd-network: proxy constants not injected (missing env); GitHub direct only");
+        println!(
+            "cargo:warning=ncd-network: proxy constants not injected (missing env); GitHub direct only"
+        );
         return;
     }
 
@@ -75,7 +81,9 @@ fn main() {
          pub const PROXY_SHARED_SECRET: &str = {secret};\n"
     );
     write_if_changed(&out_path, &generated);
-    println!("cargo:warning=ncd-network: proxy constants injected (base_url set, secret len hidden)");
+    println!(
+        "cargo:warning=ncd-network: proxy constants injected (base_url set, secret len hidden)"
+    );
 }
 
 /// 简易 .env 文件解析器逐行读 KEY=VALUE(忽略注释,空行,引号包裹),
@@ -99,15 +107,16 @@ fn load_dotenv(path: &PathBuf) {
         // 仅在系统环境变量未设置时注入
         if env::var(key).is_err() {
             // SAFETY: build.rs 是单线程执行,不存在并发读取环境变量的 UB 风险
-            unsafe { env::set_var(key, value); }
+            unsafe {
+                env::set_var(key, value);
+            }
         }
     }
 }
 
 fn strip_quotes(s: &str) -> &str {
     if s.len() >= 2
-        && ((s.starts_with('"') && s.ends_with('"'))
-            || (s.starts_with('\'') && s.ends_with('\'')))
+        && ((s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')))
     {
         return &s[1..s.len() - 1];
     }
@@ -123,12 +132,8 @@ fn write_if_changed(path: &PathBuf, content: &str) {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    fs::write(path, content).unwrap_or_else(|err| {
-        panic!(
-            "ncd-network build.rs: 写入 {} 失败: {err}",
-            path.display()
-        )
-    });
+    fs::write(path, content)
+        .unwrap_or_else(|err| panic!("ncd-network build.rs: 写入 {} 失败: {err}", path.display()));
 }
 
 /// 把任意字符串转成合法的 Rust 字面量(双引号包裹 + 转义)
