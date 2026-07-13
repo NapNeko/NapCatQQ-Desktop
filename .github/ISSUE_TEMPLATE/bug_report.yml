@@ -9,7 +9,9 @@ body:
         感谢反馈。请尽量填全，方便定位。
         提交前请先在 [Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues?q=is%3Aissue) 搜一下有没有重复的。
 
-        > **V3 还在准备中**：正式 MSI 未发时，请写明你是源码 dev 还是旧版 MSI，避免对错版本。
+        > **当前主线是 V3（`3.0.0+`）**。请优先用 [Releases](https://github.com/NapNeko/NapCatQQ-Desktop/releases) 最新正式 MSI 复现后再反馈。
+        > 旧 Python / 2.x 已归档（分支 `v1`），一般不再作为主线修复目标；若仍卡在旧版，请在版本与渠道里写清楚。
+        > 名字带 `watch-v` 的是远端监控小工具，不是桌面安装包。
 
   - type: checkboxes
     id: preflight
@@ -20,6 +22,8 @@ body:
           required: true
         - label: 标题已改成能看懂的一句话（不要只留 `[Bug]` 前缀）
           required: true
+        - label: 我已尽量用最新正式版复现（或说明为何不能升级）
+          required: true
         - label: 我知道空白 / 不选模板的 issue 会被关闭
           required: true
 
@@ -27,8 +31,8 @@ body:
     id: desktop-version
     attributes:
       label: NapCatQQ Desktop 版本
-      description: 设置页 / 关于，或 package.json / tauri.conf 的版本；源码请写 commit 短 hash
-      placeholder: "例如 3.0.0-dev / 2.2.8 / abc1234"
+      description: 设置页 / 关于里的版本号；源码运行请写 commit 短 hash。ncd-watch 问题请写 `watch-v*` tag
+      placeholder: "例如 3.0.0 / 3.0.1 / abc1234 / watch-v0.2.1"
     validations:
       required: true
 
@@ -37,9 +41,11 @@ body:
     attributes:
       label: 你怎么拿到的这个版本
       options:
+        - 正式 MSI（GitHub Releases）
+        - 应用内更新到的正式版
         - 源码运行（pnpm tauri:dev / 本地 build）
-        - 正式 MSI（Releases）
-        - 内测 / 自打 MSI
+        - 自打 / 内测 MSI
+        - 旧版 2.x / Python（归档）
         - 其他 / 不确定
     validations:
       required: true

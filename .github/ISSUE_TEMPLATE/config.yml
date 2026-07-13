@@ -5,7 +5,10 @@ blank_issues_enabled: false
 contact_links:
   - name: Releases
     url: https://github.com/NapNeko/NapCatQQ-Desktop/releases
-    about: 反馈前请先确认是否已用最新相关版本；V3 正式 MSI 尚未发布时以 main 说明为准
+    about: 下载最新 V3 正式 MSI（v*.*.*）；watch-v* 是远端监控，不是桌面安装包
+  - name: 用户说明
+    url: https://github.com/NapNeko/NapCatQQ-Desktop/blob/main/docs/user/README.md
+    about: 安装、升级与基本使用说明
   - name: NapCat 文档
     url: https://napneko.github.io/
     about: NapCat 协议端本身的使用与对接问题，优先看官方文档

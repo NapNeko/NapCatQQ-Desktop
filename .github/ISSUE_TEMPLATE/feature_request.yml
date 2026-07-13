@@ -8,6 +8,8 @@ body:
       value: |
         感谢建议。提交前请先在 [Issues](https://github.com/NapNeko/NapCatQQ-Desktop/issues?q=is%3Aissue) 搜一下有没有类似提案。
 
+        > 当前主线是 **V3（Rust + Tauri + React，`3.0.0+`）**。提案默认按 V3 能力与架构评估；旧 Python / 2.x 不再作为新功能目标。
+
   - type: checkboxes
     id: preflight
     attributes:
@@ -31,7 +33,7 @@ body:
         - 远端 / SSH / 部署
         - Docker
         - 组件安装
-        - 设置 / 通知
+        - 设置 / 通知 / 自更新
         - ncd-watch
         - 界面 / 交互
         - 安装 / 升级 / MSI
