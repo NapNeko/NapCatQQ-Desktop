@@ -149,6 +149,9 @@ jobs:
     needs:
       - resolve
       - build-msi
+    # gates 跳过时 build-msi 仍会 success；但若 publish 无 always()，
+    # GitHub 会因上游链路上有 skipped job 而把 publish 一并跳过（v3.1.0 已踩坑）。
+    if: ${{ always() && needs.resolve.result == 'success' && needs.build-msi.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
