@@ -39,7 +39,8 @@ pub use ncd_domain::snowluma_start_mode::SnowLumaStartMode;
 
 // ---- session.rs ----
 pub use session::{
-    SnowLumaSession, load_or_create_session, load_snowluma_app_config, render_daemon_globals,
+    SnowLumaSession, find_available_webui_port, load_or_create_session, load_snowluma_app_config,
+    parse_bound_webui_port_from_logs, render_daemon_globals,
 };
 
 // ---- log_sanitize.rs ----

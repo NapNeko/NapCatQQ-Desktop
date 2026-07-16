@@ -16,7 +16,10 @@ use ncd_traits::events::{BroadcastEventBus, EventBus};
 
 use crate::snowluma::error::{SnowLumaDaemonError, SnowLumaWebUiError};
 use crate::snowluma::log_noise::SnowLumaLogNoiseFilter;
-use crate::snowluma::session::{load_snowluma_app_config, render_daemon_globals};
+use crate::snowluma::session::{
+    find_available_webui_port, load_snowluma_app_config, parse_bound_webui_port_from_logs,
+    render_daemon_globals, render_runtime_json,
+};
 use crate::snowluma::webui_client::SnowLumaWebUiClient;
 use ncd_host::hide_console_window;
 
@@ -146,10 +149,7 @@ impl SnowLumaDaemon {
     }
 
     /// 设置/清除 node 子进程指标 env；None 表示不注入（与指标开关关一致）
-    pub fn set_metrics_child_env(
-        &self,
-        env: Option<std::collections::BTreeMap<String, String>>,
-    ) {
+    pub fn set_metrics_child_env(&self, env: Option<std::collections::BTreeMap<String, String>>) {
         if let Ok(mut g) = self.metrics_child_env.lock() {
             *g = env;
         }
@@ -261,8 +261,25 @@ impl SnowLumaDaemon {
             ));
 
         // === 2. 渲染全局配置(读 app-config.json → runtime.json + webui.json)===
+        // 端口：用户偏好(app-config)为起点；启动前探测占用并选空闲口写入
+        // runtime.json。上游 SL 也会在 bind 前 findAvailablePort，但不会通知
+        // Desktop；若两边端口不一致，wait_ready 会在 5099 上空转 30s。
         let app_cfg = load_snowluma_app_config(&self.snowluma_data_root);
-        let webui_port = app_cfg.webui_port;
+        let preferred_port = app_cfg.webui_port;
+        let webui_port = match find_available_webui_port(preferred_port) {
+            Ok(port) => {
+                if port != preferred_port {
+                    info!(
+                        target: "ncd_runtime::snowluma_daemon",
+                        preferred = preferred_port,
+                        selected = port,
+                        "SnowLuma WebUI 偏好端口被占用，改用空闲端口"
+                    );
+                }
+                port
+            }
+            Err(err) => return Err(self.rollback_to_stopped(err).await),
+        };
         let pwd_override = {
             let t = app_cfg.webui_password_override.trim();
             if t.is_empty() { None } else { Some(t) }
@@ -349,7 +366,7 @@ impl SnowLumaDaemon {
         tokio::spawn(watch_exit(weak_for_early));
 
         // === 4. 构造 WebUI client + wait_ready + login ===
-        let client = match self.http.create(password, webui_port).await {
+        let mut client = match self.http.create(password.clone(), webui_port).await {
             Ok(c) => c,
             Err(err) => {
                 // node 子进程已经 spawn 出来了;rollback 路径会清 inner.node_child
@@ -366,9 +383,19 @@ impl SnowLumaDaemon {
             Box::new(move || dead_flag.load(Ordering::Acquire));
 
         if let Err(err) = client.wait_ready(WAIT_READY_TIMEOUT, dead_check).await {
-            self.kill_inner_child().await;
-            let mapped: SnowLumaDaemonError = err.into();
-            return Err(self.rollback_to_stopped(mapped).await);
+            // 竞态兜底：探测与 SL bind 之间端口又被占时，SL 会自行换口并打日志，
+            // 但 runtime.json / client 仍是旧口。从 recent log 解析实际端口后重连一次。
+            let recovered = self
+                .try_recover_webui_port_mismatch(password.clone(), webui_port)
+                .await;
+            match recovered {
+                Ok(c) => client = c,
+                Err(_) => {
+                    self.kill_inner_child().await;
+                    let mapped: SnowLumaDaemonError = err.into();
+                    return Err(self.rollback_to_stopped(mapped).await);
+                }
+            }
         }
         // wait_ready 也可能因 dead_flag=true 短路返回 Ok;此时进程其实已死
         // 在调 login 前先确认进程仍在
@@ -399,6 +426,74 @@ impl SnowLumaDaemon {
                 Some(DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL.to_string()),
             ));
         self.ready_notify.notify_waiters();
+
+        Ok(client)
+    }
+
+    /// wait_ready 失败时：若 recent log 显示 SL 实际绑在别的端口，回写 runtime.json
+    /// 并用新端口重建 client 再 wait_ready 一次。成功返回新 client；无法恢复则 Err。
+    async fn try_recover_webui_port_mismatch(
+        self: &Arc<Self>,
+        password: String,
+        expected_port: u16,
+    ) -> Result<Arc<dyn SnowLumaWebUiClient>, SnowLumaDaemonError> {
+        if self.dead_flag.load(Ordering::Acquire) {
+            return Err(SnowLumaDaemonError::Crashed(
+                "node.exe exited before WebUI ready".into(),
+            ));
+        }
+
+        // stdout reader 异步灌 recent_log；轮询几轮等 "using N instead" / listening 落盘
+        let mut actual_port = None;
+        for attempt in 0..8u8 {
+            if self.dead_flag.load(Ordering::Acquire) {
+                return Err(SnowLumaDaemonError::Crashed(
+                    "node.exe exited before WebUI ready".into(),
+                ));
+            }
+            let recent = self.snapshot_recent_log();
+            if let Some(port) = parse_bound_webui_port_from_logs(&recent) {
+                if port != expected_port {
+                    actual_port = Some(port);
+                    break;
+                }
+            }
+            if attempt + 1 < 8 {
+                tokio::time::sleep(Duration::from_millis(150)).await;
+            }
+        }
+        let Some(actual_port) = actual_port else {
+            return Err(SnowLumaDaemonError::Io(format!(
+                "wait_ready failed on port {expected_port}; no alternate WebUI port found in daemon log"
+            )));
+        };
+
+        info!(
+            target: "ncd_runtime::snowluma_daemon",
+            expected = expected_port,
+            actual = actual_port,
+            "SnowLuma WebUI 实际绑定端口与配置不一致，按日志端口重连"
+        );
+
+        // 与 open-webui / 下次启动对齐：把实际端口写回 runtime.json
+        if let Err(err) = render_runtime_json(&self.runtime_root, actual_port) {
+            return Err(err);
+        }
+
+        let client = self
+            .http
+            .create(password, actual_port)
+            .await
+            .map_err(SnowLumaDaemonError::from)?;
+
+        let dead_flag = self.dead_flag.clone();
+        let dead_check: Box<dyn Fn() -> bool + Send + Sync> =
+            Box::new(move || dead_flag.load(Ordering::Acquire));
+        // 端口已确认在听，给短超时即可；仍失败则交给外层 rollback
+        client
+            .wait_ready(Duration::from_secs(10), dead_check)
+            .await
+            .map_err(SnowLumaDaemonError::from)?;
 
         Ok(client)
     }

@@ -50,7 +50,7 @@ export function SnowLumaGlobalWebuiSection({
                 }
                 min={1}
                 max={65535}
-                hint="默认 5099；需重启 SnowLuma 守护进程后生效"
+                hint="默认 5099；启动时若被占用会自动改用附近空闲端口（写入 runtime.json），需重启守护进程后生效"
             />
             <TextField
                 label="WebUI 登录密码（可选覆盖）"

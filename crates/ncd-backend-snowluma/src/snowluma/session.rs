@@ -213,6 +213,92 @@ pub fn build_webui_json_payload(
 
 // runtime.json / webui.json 落盘
 
+/// 与上游 SnowLuma `findAvailablePort` 对齐：从 preferred 起最多试 50 个端口。
+const WEBUI_PORT_MAX_TRIES: u16 = 50;
+
+/// 探测 TCP 端口是否可被 `0.0.0.0` 绑定（与 SL WebUI 默认 host 一致）。
+fn is_tcp_port_available(port: u16) -> bool {
+    std::net::TcpListener::bind(("0.0.0.0", port)).is_ok()
+}
+
+/// 从 preferred 起找一个本机可绑定的 WebUI 端口。
+///
+/// 背景：上游 SL 在 `desiredPort` 被占时会 `findAvailablePort` 自动 +1，
+/// 但不会回写 Desktop 侧 client 使用的端口；若 Desktop 仍连 preferred，
+/// 就会出现 wait_ready 30s 全失败。启动前先选空闲口并写入 runtime.json，
+/// 让 node 与 Desktop 使用同一端口。
+pub fn find_available_webui_port(preferred: u16) -> Result<u16, SnowLumaDaemonError> {
+    let start = preferred.max(1);
+    for offset in 0..WEBUI_PORT_MAX_TRIES {
+        let Some(port) = start.checked_add(offset) else {
+            break;
+        };
+        if port == 0 {
+            continue;
+        }
+        if is_tcp_port_available(port) {
+            return Ok(port);
+        }
+    }
+    Err(SnowLumaDaemonError::Io(format!(
+        "no available TCP port found near {start} (tried {WEBUI_PORT_MAX_TRIES})"
+    )))
+}
+
+/// 从 daemon stdout/stderr 解析 SL 实际绑定的 WebUI 端口。
+///
+/// 上游日志形态：
+/// - `port 5099 is in use, using 5100 instead`
+/// - `listening http://0.0.0.0:5100` / `listening https://127.0.0.1:5100`
+///
+/// 优先取 "using N instead"（明确换口），否则取最近一条 listening 行的端口。
+pub fn parse_bound_webui_port_from_logs<I, S>(lines: I) -> Option<u16>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut listening_port: Option<u16> = None;
+    for line in lines {
+        let line = line.as_ref();
+        if let Some(port) = parse_port_in_use_using_instead(line) {
+            return Some(port);
+        }
+        if let Some(port) = parse_listening_url_port(line) {
+            listening_port = Some(port);
+        }
+    }
+    listening_port
+}
+
+fn parse_port_in_use_using_instead(line: &str) -> Option<u16> {
+    // "... port 5099 is in use, using 5100 instead"
+    const MARKER: &str = " is in use, using ";
+    let idx = line.find(MARKER)?;
+    let after = &line[idx + MARKER.len()..];
+    let digits: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    let port: u16 = digits.parse().ok()?;
+    (port > 0).then_some(port)
+}
+
+fn parse_listening_url_port(line: &str) -> Option<u16> {
+    // "... listening http://0.0.0.0:5100" / "listening https://[::]:5100"
+    let lower = line.to_ascii_lowercase();
+    let listen_idx = lower.find("listening ")?;
+    let rest = &line[listen_idx + "listening ".len()..];
+    // 取最后一个 ':' 后的端口数字（IPv6 URL 也是 scheme://host:port）
+    let colon = rest.rfind(':')?;
+    let tail = &rest[colon + 1..];
+    let digits: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    let port: u16 = digits.parse().ok()?;
+    (port > 0).then_some(port)
+}
+
 /// 写 <runtime_root>/config/runtime.json,内容仅 { "webuiPort": port }
 pub fn render_runtime_json(runtime_root: &Path, port: u16) -> Result<(), SnowLumaDaemonError> {
     let path = runtime_root.join("config").join("runtime.json");
