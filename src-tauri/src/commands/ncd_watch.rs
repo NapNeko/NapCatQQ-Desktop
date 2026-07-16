@@ -188,6 +188,8 @@ async fn push_notify_for_server(
     }
     let notify = build_notify_for_server(state, &profile.id, bots).await;
     if matches!(mode, NotifyPushMode::Heartbeat) && notify.bots.is_empty() {
+        // 无 bot 时仍尽量写 metrics.json（enabled=false 清空续采列表）
+        let _ = push_metrics_json_for_server(state, host.as_ref(), home, &profile.id, bots).await;
         return Ok(());
     }
     if let Err(e) = write_notify_json_merged(host.as_ref(), home, &notify).await {
@@ -206,7 +208,49 @@ async fn push_notify_for_server(
         }
         return Err(());
     }
+    // 与手动 sync_ncd_watch_notify 对齐：设置保存 / 心跳也下发 metrics.json
+    if let Err(e) =
+        push_metrics_json_for_server(state, host.as_ref(), home, &profile.id, bots).await
+    {
+        match mode {
+            NotifyPushMode::Heartbeat => {
+                tracing::debug!(server_id = %profile.id, %e, "write metrics.json failed");
+            }
+            NotifyPushMode::AfterSettingsSave => {
+                tracing::warn!(
+                    server_id = %profile.id,
+                    %e,
+                    %log_tag,
+                    "ncd-watch metrics.json failed"
+                );
+            }
+        }
+        // notify 已成功：metrics 失败不整单失败，避免挡 present/notify 心跳
+    }
     Ok(())
+}
+
+/// 把当前 App 指标设置 + 该 server 上 bot 列表写成远端 metrics.json
+async fn push_metrics_json_for_server(
+    state: &AppState,
+    host: &dyn ncd_host::Host,
+    home: &str,
+    server_id: &str,
+    bots: &[ncd_domain::bot_config::BotConfig],
+) -> Result<(), String> {
+    use ncd_runtime::ncd_watch_sync::{
+        bots_for_server, build_watch_metrics_config, write_metrics_json,
+    };
+    let settings = state.app_settings.read().await.clone();
+    let remote_bots = bots_for_server(server_id, bots.iter());
+    let metrics = build_watch_metrics_config(
+        home,
+        settings.bot_runtime_metrics_enabled,
+        settings.bot_runtime_metrics_interval_ms,
+        settings.bot_runtime_metrics_retention_days,
+        &remote_bots,
+    );
+    write_metrics_json(host, home, &metrics).await
 }
 
 /// 对所有已连接远端 server 刷 present + 有远端 bot 时同步 notify

@@ -66,6 +66,8 @@ pub struct AppState {
     /// 远程主机健康探活 walker 的取消令牌
     /// 由启动 wiring 和 set_app_settings 根据 enabled 变化来条件 spawn / cancel + restart
     pub(crate) health_probe_cancel: Arc<Mutex<Option<CancellationToken>>>,
+    /// 本机 Bot 指标采集（读 net-stats + 节流写 history.jsonl）；远端历史由 ncd-watch 写
+    pub(crate) metrics_collector: ncd_runtime::metrics::MetricsCollector,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -200,6 +202,13 @@ pub fn run() {
     // 以 app-settings 为准收敛 HKCU Run(开=刷新路径,关=删本产品值)
     autostart::reconcile_launch_on_startup(app_settings.launch_on_startup);
     let app_settings_shared = Arc::new(RwLock::new(app_settings.clone()));
+    let metrics_prefs = {
+        let mut p = ncd_runtime::metrics::BotRuntimeMetricsPrefs::from_app(&app_settings);
+        p.normalize();
+        Arc::new(RwLock::new(p))
+    };
+    let metrics_collector =
+        ncd_runtime::metrics::MetricsCollector::new(data_root.clone(), Arc::clone(&metrics_prefs));
     let lightweight_scheduler = Arc::new(lightweight_scheduler::LightweightScheduler::new(
         Arc::clone(&app_settings_shared),
     ));
@@ -322,6 +331,7 @@ pub fn run() {
             offline_notifier: Arc::clone(&offline_notifier),
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(Mutex::new(None)),
+            metrics_collector: metrics_collector.clone(),
         })
         .setup(move |app| {
             if startup_tray_only {
@@ -485,6 +495,8 @@ pub fn run() {
             }
             // 远端 ncd-watch:周期写 desktop_present + 同步 notify.json
             commands::ncd_watch::spawn_ncd_watch_heartbeat(app.handle().clone());
+            // 本机实例指标：读 net-stats 并节流写 history（远端 history 由 ncd-watch）
+            commands::bot_metrics::spawn_local_metrics_collector(app.handle().clone());
             // 主动探活:启动期根据初始 AppSettings 决定是否 spawn 后台健康 walker
             // 由于 .setup 闭包是 sync 的,这里 spawn 一个一次性 async 任务来做条件判断 + spawn walker
             {
