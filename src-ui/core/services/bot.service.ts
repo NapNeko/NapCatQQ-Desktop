@@ -66,13 +66,39 @@ export const botService = {
                 botId,
             });
         }
+        // 浏览器预览：假快照，便于看卡片摘要与对话框
         return {
             v: 1,
             bot_id: botId,
             collected_at_ms: Date.now(),
-            source: 'unavailable',
-            nodes: [],
-            probe: 'not_injected',
+            source: 'probe',
+            memory: {
+                rss_bytes: 128 * 1024 * 1024,
+                heap_used_bytes: 48 * 1024 * 1024,
+            },
+            nodes: [
+                {
+                    name: 'http-1',
+                    kind: 'httpServer',
+                    events_out: 1204,
+                    actions_in: 86,
+                    bytes_out: 2_400_000,
+                    bytes_in: 180_000,
+                    errors: 0,
+                    last_activity_at_ms: Date.now() - 12_000,
+                },
+                {
+                    name: 'ws-client',
+                    kind: 'wsClient',
+                    events_out: 340,
+                    actions_in: 12,
+                    bytes_out: 90_000,
+                    bytes_in: 40_000,
+                    errors: 1,
+                    last_activity_at_ms: Date.now() - 45_000,
+                },
+            ],
+            probe: 'active',
         };
     },
 
@@ -87,14 +113,64 @@ export const botService = {
                 { botId, fromMs, toMs },
             );
         }
-        return [];
+        void botId;
+        const end = toMs ?? Date.now();
+        const start = fromMs ?? end - 3600_000;
+        const step = 60_000;
+        const out: MetricsHistoryPoint[] = [];
+        let t = start;
+        let i = 0;
+        while (t <= end && out.length < 120) {
+            const wave = Math.sin(i / 8) * 0.15 + 1;
+            out.push({
+                v: 1,
+                at_ms: t,
+                memory: {
+                    rss_bytes: Math.round(100 * 1024 * 1024 * wave),
+                },
+                nodes_summary: {
+                    events_out_total: Math.round(800 + i * 12 + wave * 40),
+                    actions_in_total: Math.round(40 + i * 2),
+                    bytes_out_total: Math.round(1_000_000 + i * 8000),
+                    bytes_in_total: Math.round(100_000 + i * 900),
+                },
+            });
+            t += step;
+            i += 1;
+        }
+        return out;
     },
 
     listRuntimeMetrics: async (): Promise<BotRuntimeMetrics[]> => {
         if (isTauri) {
             return invoke<BotRuntimeMetrics[]>('list_bot_runtime_metrics');
         }
-        return [];
+        // 预览：与 getRuntimeMetrics 同形，供 catalog 批量路径（避免自引用 botService）
+        return [
+            {
+                v: 1,
+                bot_id: 'preview',
+                collected_at_ms: Date.now(),
+                source: 'probe',
+                memory: {
+                    rss_bytes: 128 * 1024 * 1024,
+                    heap_used_bytes: 48 * 1024 * 1024,
+                },
+                nodes: [
+                    {
+                        name: 'http-1',
+                        kind: 'httpServer',
+                        events_out: 1204,
+                        actions_in: 86,
+                        bytes_out: 2_400_000,
+                        bytes_in: 180_000,
+                        errors: 0,
+                        last_activity_at_ms: Date.now() - 12_000,
+                    },
+                ],
+                probe: 'active',
+            },
+        ];
     },
 
     /** 内存中的 NapCat WebUI 端点(多实例 port 可能 +1);冷启动 hydrate 用 */

@@ -11,6 +11,7 @@ import {
     type SettingsDraft,
 } from '../../modules/settings/settings-draft';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { reloadBotRuntimeMetricsCatalogSettings } from '../bot/botRuntimeMetricsCatalog';
 
 const backendSettingsKey = ['appSettings'] as const;
 
@@ -36,6 +37,7 @@ export function useBackendSettings(cb: Callbacks = {}) {
         },
         onSuccess: (savedBackend) => {
             queryClient.setQueryData(backendSettingsKey, savedBackend);
+            void reloadBotRuntimeMetricsCatalogSettings();
             pushInfoBar({
                 key: 'app-settings-save',
                 tone: 'success',
