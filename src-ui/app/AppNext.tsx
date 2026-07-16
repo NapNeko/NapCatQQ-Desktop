@@ -44,6 +44,7 @@ import { useDataLayoutConsolidateAlert } from '../hooks/bootstrap/useDataLayoutC
 import { useDesktopConsentGate } from '../hooks/desktop/useDesktopConsentGate';
 import { useOnboardingGate } from '../hooks/desktop/useOnboardingGate';
 import { registerOnboardingHost } from '../hooks/desktop/onboardingHost';
+import { registerDesktopConsentHost } from '../hooks/desktop/desktopConsentHost';
 import { useFrameworkTour } from '../hooks/desktop/useFrameworkTour';
 import { DesktopConsentDialog } from '../shared/components/next/DesktopConsentDialog';
 import {
@@ -255,6 +256,12 @@ export const AppNext: React.FC = () => {
         return () => registerOnboardingHost(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- host once per mount identity
     }, [onboarding.openFromSettings]);
+
+    useEffect(() => {
+        // Bot 列表 / 批量启动等复用 App 级协议门禁，禁止页面内再挂一份 gate
+        registerDesktopConsentHost((action) => desktopConsent.ensureConsent(action));
+        return () => registerDesktopConsentHost(null);
+    }, [desktopConsent.ensureConsent]);
 
     const [displayedRoute, setDisplayedRoute] = useState<AppRoute>(route);
     const [pageVisible, setPageVisible] = useState<boolean>(true);

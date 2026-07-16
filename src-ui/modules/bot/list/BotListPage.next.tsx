@@ -52,13 +52,13 @@ import { FloatingActions } from './next/FloatingActions';
 import { BatchBottomBar } from './next/BatchBottomBar';
 import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
 import { SnowLumaConsentDialog } from '../dialogs/SnowLumaConsentDialog';
-import { DesktopConsentDialog } from '../../../shared/components/next/DesktopConsentDialog';
-import { useDesktopConsentGate } from '../../../hooks/desktop/useDesktopConsentGate';
+import { requestDesktopConsent } from '../../../hooks/desktop/desktopConsentHost';
 import gridStyles from './next/botCardGrid.module.css';
 
 interface BotListPageNextProps {
     onConfigureBot: (botId: string | null) => void;
     onViewLogs: (botId: string) => void;
+    onViewMetrics: (botId: string) => void;
 }
 
 function isSnowLumaConsentError(err: unknown) {
@@ -74,6 +74,7 @@ function isDesktopConsentError(err: unknown) {
 export function BotListPageNext({
     onConfigureBot,
     onViewLogs,
+    onViewMetrics,
 }: BotListPageNextProps) {
     const { data: botSnapshots = [], isLoading, error, refetch } = useBotSnapshots();
     const flavorByBot = useBotFlavorMap(botSnapshots);
@@ -84,8 +85,7 @@ export function BotListPageNext({
     const batch = useBotBatchSelection();
     const openWebui = useOpenWebui();
     const openSnowlumaNovnc = useOpenSnowlumaNovnc();
-    const desktopConsent = useDesktopConsentGate();
-
+    // Desktop 协议门禁统一走 App 级 host，避免本页再挂一份 gate/Dialog 打架
     // 批量删除二次确认
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
@@ -210,7 +210,7 @@ export function BotListPageNext({
             await mutations.startBotAsync(botId);
         } catch (err: unknown) {
             if (isDesktopConsentError(err)) {
-                await desktopConsent.ensureConsent(async () => {
+                await requestDesktopConsent(async () => {
                     const again = await prepareSnowLumaConsentOrOpen(botId);
                     if (!again) return;
                     await mutations.startBotAsync(botId);
@@ -225,10 +225,11 @@ export function BotListPageNext({
         } finally {
             setStartingBotId(null);
         }
-    }, [desktopConsent, mutations, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
+    }, [mutations, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
 
     const handleStartBot = useCallback(async (botId: string) => {
-        const allowed = await desktopConsent.ensureConsent(async () => {
+        // 顺序：Desktop 协议 → Docker 门禁 → 配置漂移 → SnowLuma 协议 → start
+        const allowed = await requestDesktopConsent(async () => {
             clearConsentErrorSuppression(botId);
             setStartingBotId(botId);
             const gate = dockerStartGate(botId);
@@ -257,7 +258,7 @@ export function BotListPageNext({
             startBotDirect(botId).catch(() => undefined);
         });
         if (!allowed) return;
-    }, [clearConsentErrorSuppression, desktopConsent, dockerStartGate, startBotDirect]);
+    }, [clearConsentErrorSuppression, dockerStartGate, startBotDirect]);
 
     const handleDriftConfirm = useCallback(async (decisions: DriftDecision[]) => {
         if (!driftBotId) return;
@@ -409,7 +410,7 @@ export function BotListPageNext({
     const onBatchStart = () => {
         if (batch.selectedIds.size === 0) return;
         const ids = Array.from(batch.selectedIds);
-        void desktopConsent.ensureConsent(() => {
+        void requestDesktopConsent(() => {
             setBatchStartPreparing(true);
             void (async () => {
                 for (const botId of ids) {
@@ -426,10 +427,10 @@ export function BotListPageNext({
     };
 
     const onCreateBot = useCallback(() => {
-        void desktopConsent.ensureConsent(() => {
+        void requestDesktopConsent(() => {
             onConfigureBot(null);
         });
-    }, [desktopConsent, onConfigureBot]);
+    }, [onConfigureBot]);
     const onBatchStop = () => {
         if (batch.selectedIds.size === 0) return;
         mutations.batchStop(Array.from(batch.selectedIds));
@@ -499,6 +500,7 @@ export function BotListPageNext({
                         openSnowlumaNovnc={openSnowlumaNovnc}
                         onConfigureBot={onConfigureBot}
                         onViewLogs={onViewLogs}
+                        onViewMetrics={onViewMetrics}
                         onStartBot={handleStartBot}
                         startingBotId={startingBotId}
                     />
@@ -573,15 +575,6 @@ export function BotListPageNext({
                 submitting={consentSubmitting}
                 onConfirm={handleConsentConfirm}
                 onCancel={handleConsentCancel}
-            />
-
-            <DesktopConsentDialog
-                open={desktopConsent.open}
-                mode={desktopConsent.mode}
-                payload={desktopConsent.payload}
-                submitting={desktopConsent.submitting}
-                onAccept={() => void desktopConsent.accept()}
-                onClose={desktopConsent.close}
             />
         </div>
     );
@@ -659,6 +652,7 @@ type GridProps = {
     openSnowlumaNovnc: ReturnType<typeof useOpenSnowlumaNovnc>;
     onConfigureBot: (botId: string | null) => void;
     onViewLogs: (botId: string) => void;
+    onViewMetrics: (botId: string) => void;
     onStartBot: (botId: string) => void;
     startingBotId: string | null;
 };
@@ -675,6 +669,7 @@ function BotListGrid({
     openSnowlumaNovnc,
     onConfigureBot,
     onViewLogs,
+    onViewMetrics,
     onStartBot,
     startingBotId,
 }: GridProps) {
@@ -746,6 +741,7 @@ function BotListGrid({
                             onStop={mutations.stopBot}
                             onConfigure={onConfigureBot}
                             onViewLogs={onViewLogs}
+                            onViewMetrics={onViewMetrics}
                             onToggleSelect={batch.toggleSelect}
                             onOpenWebui={(params) => {
                                 openWebui(params).catch((err: unknown) => {
