@@ -57,9 +57,18 @@ export const dataRootMigrateService = {
         await invoke<void>('cancel_migrate_data_root');
     },
 
-    deleteRetired: async (oldRoot: string): Promise<void> => {
+    deleteRetired: async (oldRoot: string, expectedNewRoot: string): Promise<void> => {
         if (!isTauri) return;
-        await invoke<void>('delete_retired_data_root', { oldRoot });
+        await invoke<void>('delete_retired_data_root', {
+            oldRoot,
+            expectedNewRoot,
+        });
+    },
+
+    /** 迁移完成后重启以加载新 data_root */
+    restart: async (): Promise<void> => {
+        if (!isTauri) return;
+        await invoke<void>('restart_after_data_root_migrate');
     },
 
     pickTargetDirectory: async (): Promise<string | null> =>

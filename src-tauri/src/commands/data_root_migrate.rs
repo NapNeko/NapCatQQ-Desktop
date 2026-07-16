@@ -4,8 +4,8 @@
 //! 写 HKCU 指针、进度事件与重启。
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use ncd_domain::{
     DataRootMigratePhase, DataRootMigratePreview, DataRootMigrateProgress, DataRootMigrateResult,
@@ -13,8 +13,8 @@ use ncd_domain::{
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
-use crate::product_registry;
 use crate::AppState;
+use crate::product_registry;
 
 /// 前端 listen 的事件名(R3:单一字面量)。
 pub const DATA_ROOT_MIGRATE_PROGRESS_EVENT: &str = "data-root-migrate-progress";
@@ -126,10 +126,7 @@ pub async fn start_migrate_data_root(
             .unwrap_or_else(|| "预检未通过".into()));
     }
 
-    state
-        .migrate_gate
-        .in_progress
-        .store(true, Ordering::SeqCst);
+    state.migrate_gate.in_progress.store(true, Ordering::SeqCst);
     state.migrate_gate.cancel.store(false, Ordering::SeqCst);
 
     emit_progress(
@@ -224,39 +221,14 @@ pub async fn start_migrate_data_root(
             bytes_done: preview.bytes_estimate,
             bytes_total: preview.bytes_estimate,
             current_rel: None,
-            message: Some("迁移完成,即将重启…".into()),
+            message: Some("迁移完成,可删除旧目录后重启".into()),
         },
     );
 
-    // 重启:拉起新进程后退出当前实例
-    if let Err(err) = relaunch_self() {
-        tracing::error!(
-            target: "ncd_tauri::data_root_migrate",
-            err = %err,
-            "relaunch after migrate failed; user must restart manually"
-        );
-        clear_in_progress(&state);
-        return Ok(DataRootMigrateResult {
-            restart_required: true,
-            warnings: {
-                let mut w = result.warnings;
-                w.push(format!(
-                    "自动重启失败({err}),请手动重启应用以加载新数据目录"
-                ));
-                w
-            },
-            ..result
-        });
-    }
-
-    // relaunch 成功:短暂延迟后 exit,让前端收到 Done
-    let app_exit = app.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
-        app_exit.exit(0);
-    });
-
-    // in_progress 保持 true 直到进程退出,阻止其它写操作
+    // 不自动重启:前端可先删旧根再调 restart_after_data_root_migrate
+    // 指针已写,进程内 data_root 仍是旧路径,直到重启
+    clear_in_progress(&state);
+    let _ = app;
     Ok(result)
 }
 
@@ -269,14 +241,37 @@ pub fn cancel_migrate_data_root(state: State<'_, AppState>) -> Result<(), String
     Ok(())
 }
 
+/// 删除已 retired 的旧数据根。
+///
+/// 迁移刚完成、尚未重启时 `state.data_root` 仍是旧路径,必须传 `expected_new_root`
+/// (迁移结果里的 new_root) 才能通过校验。
 #[tauri::command]
 pub fn delete_retired_data_root(
     state: State<'_, AppState>,
     old_root: String,
+    expected_new_root: Option<String>,
 ) -> Result<(), String> {
     state.migrate_gate.ensure_idle()?;
     let old = PathBuf::from(old_root.trim());
-    ncd_runtime::delete_retired_data_root(&old, &state.data_root)
+    let expected = expected_new_root
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| state.data_root.clone());
+    ncd_runtime::delete_retired_data_root(&old, &expected)
+}
+
+/// 迁移完成后重启进程以加载新 data_root。
+#[tauri::command]
+pub fn restart_after_data_root_migrate(app: AppHandle) -> Result<(), String> {
+    relaunch_self()?;
+    let app_exit = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        app_exit.exit(0);
+    });
+    Ok(())
 }
 
 fn relaunch_self() -> Result<(), String> {
@@ -290,7 +285,6 @@ fn relaunch_self() -> Result<(), String> {
         const DETACHED_PROCESS: u32 = 0x00000008;
         cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS);
     }
-    cmd.spawn()
-        .map_err(|e| format!("spawn self failed: {e}"))?;
+    cmd.spawn().map_err(|e| format!("spawn self failed: {e}"))?;
     Ok(())
 }

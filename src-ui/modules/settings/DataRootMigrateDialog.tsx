@@ -60,7 +60,7 @@ function TreePreview({ entries }: { entries: DataRootTreeEntry[] }) {
         );
     }
     return (
-        <div className="max-h-48 overflow-auto rounded-md border border-border-subtle bg-inset/30">
+        <div className="scrollbar-hide max-h-48 overflow-auto rounded-md border border-border-subtle bg-inset/30">
             <table className="w-full border-collapse text-left text-[12px]">
                 <thead className="sticky top-0 bg-elevated/95 text-text-tertiary">
                     <tr className="border-b border-border-subtle">
@@ -110,6 +110,9 @@ export function DataRootMigrateDialog({
     const [result, setResult] = useState<DataRootMigrateResult | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [picking, setPicking] = useState(false);
+    const [deletingOld, setDeletingOld] = useState(false);
+    const [oldDeleted, setOldDeleted] = useState(false);
+    const [restarting, setRestarting] = useState(false);
 
     const reset = useCallback(() => {
         setPhase('guide');
@@ -119,6 +122,9 @@ export function DataRootMigrateDialog({
         setResult(null);
         setErrorMsg(null);
         setPicking(false);
+        setDeletingOld(false);
+        setOldDeleted(false);
+        setRestarting(false);
     }, []);
 
     useEffect(() => {
@@ -139,9 +145,38 @@ export function DataRootMigrateDialog({
     }, [open, phase]);
 
     const handleOpenChange = (next: boolean) => {
-        if (phase === 'running') return;
+        if (phase === 'running' || deletingOld || restarting) return;
         if (!next) onOpenChange(false);
         else onOpenChange(true);
+    };
+
+    const deleteOldRoot = async () => {
+        if (!result?.old_root || !result.new_root) return;
+        const ok = window.confirm(
+            `确认新数据目录可用后，将永久删除旧目录：\n\n${result.old_root}\n\n此操作不可恢复。`,
+        );
+        if (!ok) return;
+        setDeletingOld(true);
+        setErrorMsg(null);
+        try {
+            await dataRootMigrateService.deleteRetired(result.old_root, result.new_root);
+            setOldDeleted(true);
+        } catch (e) {
+            setErrorMsg(e instanceof Error ? e.message : String(e));
+        } finally {
+            setDeletingOld(false);
+        }
+    };
+
+    const restartApp = async () => {
+        setRestarting(true);
+        setErrorMsg(null);
+        try {
+            await dataRootMigrateService.restart();
+        } catch (e) {
+            setRestarting(false);
+            setErrorMsg(e instanceof Error ? e.message : String(e));
+        }
     };
 
     const pickTarget = async () => {
@@ -194,7 +229,7 @@ export function DataRootMigrateDialog({
                 <DialogHeader>
                     <DialogTitle>迁移数据目录</DialogTitle>
                     <DialogDescription>
-                        将当前数据根整树复制到新位置（配置、密钥、组件），成功后自动重启。
+                        将当前数据根整树复制到新位置（配置、密钥、组件）。完成后可删除旧目录并重启。
                         与「导出 ZIP」不同：ZIP 不含密钥与组件安装树。
                     </DialogDescription>
                 </DialogHeader>
@@ -214,10 +249,10 @@ export function DataRootMigrateDialog({
                                     作为新的数据根（路径本身即 data root，不会再拼产品名）。
                                 </li>
                                 <li>确认预览中的目标路径与将复制的文件结构。</li>
-                                <li>确认后开始迁移；完成后应用会自动重启。</li>
+                                <li>开始迁移；完成后可删除旧目录，再重启应用。</li>
                             </ol>
                             <p className="text-[12px] text-text-tertiary">
-                                旧目录默认保留；全程无需管理员权限（用户级指针）。
+                                无需管理员权限。旧目录仅在你确认后才会删除。
                             </p>
                         </div>
                     ) : null}
@@ -294,7 +329,24 @@ export function DataRootMigrateDialog({
                             <p className="break-all font-mono text-[12px] text-text">
                                 {result.new_root}
                             </p>
-                            <p>应用即将重启；若未自动重启，请手动退出后重新打开。</p>
+                            <div className="rounded-md border border-border-subtle px-3 py-2">
+                                <div className="text-[11px] text-text-tertiary">旧数据根</div>
+                                <div className="mt-0.5 break-all font-mono text-[12px] text-text">
+                                    {result.old_root}
+                                </div>
+                                {oldDeleted ? (
+                                    <p className="mt-1.5 text-[12px] text-text-secondary">
+                                        旧目录已删除。
+                                    </p>
+                                ) : (
+                                    <p className="mt-1.5 text-[12px] text-text-tertiary">
+                                        确认新位置正常后可删除旧目录，释放磁盘空间。
+                                    </p>
+                                )}
+                            </div>
+                            <p className="text-[12px] text-text-tertiary">
+                                需重启后才会使用新数据根；可先删旧目录再重启。
+                            </p>
                             {result.warnings.length > 0 ? (
                                 <ul className="list-disc pl-4 text-text-tertiary">
                                     {result.warnings.map((w) => (
@@ -315,24 +367,32 @@ export function DataRootMigrateDialog({
                         <Button variant="secondary" size="sm" onClick={() => void cancelRunning()}>
                             取消复制
                         </Button>
-                    ) : (
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleOpenChange(false)}
-                        >
-                            {phase === 'done' ? '关闭' : '取消'}
-                        </Button>
-                    )}
+                    ) : null}
 
                     {phase === 'guide' || phase === 'error' ? (
-                        <Button size="sm" disabled={picking} onClick={() => void pickTarget()}>
-                            {picking ? '选择中…' : '选择目标文件夹'}
-                        </Button>
+                        <>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleOpenChange(false)}
+                            >
+                                取消
+                            </Button>
+                            <Button size="sm" disabled={picking} onClick={() => void pickTarget()}>
+                                {picking ? '选择中…' : '选择目标文件夹'}
+                            </Button>
+                        </>
                     ) : null}
 
                     {phase === 'preview' ? (
                         <>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleOpenChange(false)}
+                            >
+                                取消
+                            </Button>
                             <Button
                                 variant="secondary"
                                 size="sm"
@@ -346,7 +406,29 @@ export function DataRootMigrateDialog({
                                 disabled={!preview?.ok || picking}
                                 onClick={() => void startMigrate()}
                             >
-                                确认并开始迁移
+                                开始迁移
+                            </Button>
+                        </>
+                    ) : null}
+
+                    {phase === 'done' && result ? (
+                        <>
+                            {!oldDeleted ? (
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    disabled={deletingOld || restarting}
+                                    onClick={() => void deleteOldRoot()}
+                                >
+                                    {deletingOld ? '删除中…' : '删除旧目录'}
+                                </Button>
+                            ) : null}
+                            <Button
+                                size="sm"
+                                disabled={restarting || deletingOld}
+                                onClick={() => void restartApp()}
+                            >
+                                {restarting ? '重启中…' : '重启应用'}
                             </Button>
                         </>
                     ) : null}

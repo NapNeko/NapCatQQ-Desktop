@@ -72,7 +72,7 @@ export function DataTab({
                             onClick={() => setMigrateOpen(true)}
                             disabled={!dataRoot || dataRoot === '—'}
                         >
-                            迁移…
+                            迁移
                         </Button>
                     </div>
                 </FieldRow>

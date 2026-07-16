@@ -563,6 +563,7 @@ pub fn run() {
             commands::data_root_migrate::start_migrate_data_root,
             commands::data_root_migrate::cancel_migrate_data_root,
             commands::data_root_migrate::delete_retired_data_root,
+            commands::data_root_migrate::restart_after_data_root_migrate,
             commands::desktop_log::open_desktop_log_location,
             commands::desktop_log::tail_desktop_log,
             commands::publish_demo_event,
