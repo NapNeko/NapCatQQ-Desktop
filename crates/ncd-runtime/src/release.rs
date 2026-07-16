@@ -637,10 +637,46 @@ async fn github_fetch_attempt(
 }
 
 fn pick_release_from_list(list: Vec<GhReleaseDto>, kind: TagFilterKind) -> Option<ReleaseInfo> {
+    // GitHub /releases?per_page=N 默认按 created_at 降序，不是 semver。
+    // watch 曾出现 watch-v0.2.0 创建时间晚于 0.2.1–0.2.3，find 第一个会永远停在 0.2.0。
+    // Desktop / ncd-watch 都按 tag 解析出的版本号取最大。
     list.into_iter()
-        .filter(|r| !r.draft)
-        .find(|r| kind.matches(&r.tag_name))
+        .filter(|r| !r.draft && kind.matches(&r.tag_name))
+        .max_by(|a, b| {
+            compare_release_version_key(&a.tag_name, &b.tag_name)
+                .then_with(|| a.tag_name.cmp(&b.tag_name))
+        })
         .map(dto_to_release_info)
+}
+
+/// 从 tag 抽出可比较的 (major, minor, patch, pre 是否为空优先正式版)
+///
+/// 只解析前三段数字；无法解析时排到最后（Ord 用 (0,0,0) 且 pre=true 仍可能误伤，
+/// 故用 Option：None 小于任何 Some）。
+fn parse_release_version_key(tag: &str) -> Option<(u64, u64, u64, bool)> {
+    let ver = strip_watch_or_v_prefix(tag).trim();
+    if ver.is_empty() {
+        return None;
+    }
+    let (core, pre_empty) = match ver.split_once(['-', '+']) {
+        Some((core, _rest)) => (core, false),
+        None => (ver, true),
+    };
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next().unwrap_or("0").parse().unwrap_or(0);
+    let patch = parts.next().unwrap_or("0").parse().unwrap_or(0);
+    // pre_empty=true 的正式版优先于同号 pre（bool: true > false 时正式更大）
+    Some((major, minor, patch, pre_empty))
+}
+
+fn compare_release_version_key(a: &str, b: &str) -> std::cmp::Ordering {
+    match (parse_release_version_key(a), parse_release_version_key(b)) {
+        (Some(ka), Some(kb)) => ka.cmp(&kb),
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
 }
 
 /// 把 GitHub releases DTO 转成 domain ReleaseInfo
@@ -888,6 +924,64 @@ mod tests {
         assert!(!is_desktop_release_tag("watch-v0.2.0"));
         assert!(is_ncd_watch_release_tag("watch-v0.2.0"));
         assert_eq!(strip_watch_or_v_prefix("watch-v0.2.0"), "0.2.0");
+    }
+
+    #[test]
+    fn pick_release_from_list_prefers_highest_semver_not_list_order() {
+        // 模拟 GitHub 列表：0.2.0 创建更晚排在前面，但 0.2.4 才是最高版本
+        let list = vec![
+            GhReleaseDto {
+                tag_name: "watch-v0.2.0".into(),
+                draft: false,
+                prerelease: false,
+                published_at: None,
+                html_url: None,
+                body: None,
+                assets: vec![],
+            },
+            GhReleaseDto {
+                tag_name: "watch-v0.2.4".into(),
+                draft: false,
+                prerelease: false,
+                published_at: None,
+                html_url: None,
+                body: None,
+                assets: vec![],
+            },
+            GhReleaseDto {
+                tag_name: "watch-v0.2.3".into(),
+                draft: false,
+                prerelease: false,
+                published_at: None,
+                html_url: None,
+                body: None,
+                assets: vec![],
+            },
+            GhReleaseDto {
+                tag_name: "v3.0.0".into(),
+                draft: false,
+                prerelease: false,
+                published_at: None,
+                html_url: None,
+                body: None,
+                assets: vec![],
+            },
+        ];
+        let picked = pick_release_from_list(list, TagFilterKind::NcdWatch).expect("pick");
+        assert_eq!(picked.tag, "watch-v0.2.4");
+        assert_eq!(picked.version, "0.2.4");
+    }
+
+    #[test]
+    fn compare_release_version_key_orders_semver() {
+        assert_eq!(
+            compare_release_version_key("watch-v0.2.4", "watch-v0.2.0"),
+            std::cmp::Ordering::Greater
+        );
+        assert_eq!(
+            compare_release_version_key("v3.0.0", "v2.2.8"),
+            std::cmp::Ordering::Greater
+        );
     }
 
     #[test]

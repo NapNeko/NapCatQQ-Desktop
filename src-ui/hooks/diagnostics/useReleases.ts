@@ -48,11 +48,13 @@ export function useReleases(): UseReleasesResult {
     );
 
     const refetch = useCallback(() => {
+        // fetchQuery 会尊重 staleTime：若仍设 FIVE_MINUTES，5 分钟内点刷新
+        // 会直接返回 react-query 缓存、根本不调 getSnapshot(true)，后端 1h
+        // 磁盘 TTL 也绕不过。强制刷新必须 staleTime:0 才能重跑 queryFn。
         void queryClient.fetchQuery({
             queryKey: RELEASE_QUERY_KEY,
             queryFn: () => releaseService.getSnapshot(true),
-            // 立刻视为新鲜，避免紧接着的 observer 再打一次非 force
-            staleTime: FIVE_MINUTES,
+            staleTime: 0,
         });
     }, [queryClient]);
 
