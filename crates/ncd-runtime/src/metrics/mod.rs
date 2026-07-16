@@ -1,11 +1,13 @@
 //! Bot 运行时指标：路径、探针注入、历史落盘、采集
 
+mod docker;
 mod history;
 mod inject;
 mod paths;
 mod probe_parse;
 mod remote;
 
+pub use docker::prepare_docker_metrics_overlay;
 pub use history::{append_history_point, load_history, prune_history_file};
 pub use inject::{
     MetricsInjectPlan, apply_metrics_env_vars, apply_metrics_to_environment,

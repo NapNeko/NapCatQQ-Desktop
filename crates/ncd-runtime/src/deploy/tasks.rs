@@ -6,7 +6,7 @@ use std::time::SystemTime;
 
 use ncd_domain::{
     DeploymentTaskKind, DeploymentTaskList, DeploymentTaskResource, DeploymentTaskSnapshot,
-    DeploymentTaskStatus, ProgressEvent,
+    DeploymentTaskStatus, ProgressEvent, ProgressKind, ProgressLogLevel,
 };
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -209,8 +209,21 @@ impl DeploymentTaskManager {
                     if !record.snapshot.cancellable {
                         return Err("该任务正在执行，不能安全强制停止".to_string());
                     }
+                    // 先 cancel token,再写进度:UI 立刻看到「正在取消」,runner 侧杀进程
                     record.cancel.cancel();
                     record.snapshot.message = Some("正在取消...".to_string());
+                    record.snapshot.progress_events.push(ProgressEvent::new(ProgressKind::Log {
+                        level: ProgressLogLevel::Warn,
+                        message: "正在取消…已请求停止命令".to_string(),
+                    }));
+                    let excess = record
+                        .snapshot
+                        .progress_events
+                        .len()
+                        .saturating_sub(MAX_PROGRESS_EVENTS_PER_TASK);
+                    if excess > 0 {
+                        record.snapshot.progress_events.drain(0..excess);
+                    }
                     to_publish = Some(record.snapshot.clone());
                 }
                 status if status.is_terminal() => {}

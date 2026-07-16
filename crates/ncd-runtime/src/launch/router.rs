@@ -116,6 +116,11 @@ pub(crate) struct RuntimeBackendRouter {
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
     /// 远端 NC 启动时注入探针（可选；未设则远端永不写 net-stats）
     remote_metrics_injector: Option<Arc<crate::metrics::RuntimeRemoteMetricsInjector>>,
+    /// Docker bot 指标：本机 data_root + prefs（可选）
+    docker_metrics: Option<(
+        std::path::PathBuf,
+        crate::metrics::BotRuntimeMetricsPrefs,
+    )>,
 }
 
 impl RuntimeBackendRouter {
@@ -142,6 +147,7 @@ impl RuntimeBackendRouter {
             remote_snowluma_tunnels,
             remote_qq_entry_coordinator,
             remote_metrics_injector: None,
+            docker_metrics: None,
         }
     }
 
@@ -150,6 +156,15 @@ impl RuntimeBackendRouter {
         injector: Arc<crate::metrics::RuntimeRemoteMetricsInjector>,
     ) -> Self {
         self.remote_metrics_injector = Some(injector);
+        self
+    }
+
+    pub fn with_docker_metrics(
+        mut self,
+        local_data_root: impl Into<std::path::PathBuf>,
+        prefs: crate::metrics::BotRuntimeMetricsPrefs,
+    ) -> Self {
+        self.docker_metrics = Some((local_data_root.into(), prefs));
         self
     }
 
@@ -183,9 +198,12 @@ impl RuntimeBackendRouter {
                         Arc::new(DockerDeployment::with_webui_token(token))
                     }
                 };
-                Ok(Arc::new(DockerDeploymentBackend::new(
-                    deployment, host, backend_id, flavor,
-                )))
+                let mut backend =
+                    DockerDeploymentBackend::new(deployment, host, backend_id, flavor);
+                if let Some((data_root, prefs)) = self.docker_metrics.clone() {
+                    backend = backend.with_metrics(data_root, prefs);
+                }
+                Ok(Arc::new(backend))
             }
             RuntimeScenario::RemoteNative { server_id, backend } => {
                 let host = self.resolve_remote_host(server_id).await?;

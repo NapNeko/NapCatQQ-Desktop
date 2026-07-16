@@ -564,16 +564,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             Arc::clone(&self.remote_snowluma_tunnels),
             Arc::clone(&self.remote_qq_entry_coordinator),
         );
-        // 远端 NC 启动注入探针：开关开时挂上 injector（失败不阻断启动）
+        // 远端 NC / Docker 启动注入探针：开关开时挂上（失败不阻断启动）
         if let Some(data_root) = self.store.config_dir().parent() {
             let prefs = Self::load_metrics_prefs(data_root);
             if prefs.enabled {
-                router = router.with_remote_metrics_injector(Arc::new(
-                    crate::metrics::RuntimeRemoteMetricsInjector::new(
-                        data_root.to_path_buf(),
-                        prefs,
-                    ),
-                ));
+                router = router
+                    .with_remote_metrics_injector(Arc::new(
+                        crate::metrics::RuntimeRemoteMetricsInjector::new(
+                            data_root.to_path_buf(),
+                            prefs.clone(),
+                        ),
+                    ))
+                    .with_docker_metrics(data_root.to_path_buf(), prefs);
             }
         }
         router
