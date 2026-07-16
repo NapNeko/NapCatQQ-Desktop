@@ -390,6 +390,12 @@ impl<'h> DockerCli<'h> {
         Ok(())
     }
 
+    /// 单源硬上限:有进度时允许拉很久(大镜像 / 慢网)
+    pub const PULL_PER_CANDIDATE_TIMEOUT: std::time::Duration =
+        std::time::Duration::from_secs(30 * 60);
+    /// 无任何输出超过此时长 → 判定卡死,换下一个源(不是用户取消)
+    pub const PULL_STALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8 * 60);
+
     /// docker pull <image> 流式版本,on_line 每收到一行就被调用,调用方
     /// 可在回调里更新 PullProgress 并推进度事件,命令结束后返回 CommandOutput
     /// 失败(exit code 非 0)时返回 DockerCliError::CommandFailed
@@ -401,12 +407,115 @@ impl<'h> DockerCli<'h> {
         image: &str,
         on_line: impl FnMut(StreamSource, String) + Send + 'static,
     ) -> Result<(), DockerCliError> {
+        self.pull_streaming_with_cancel(image, None, on_line).await
+    }
+
+    /// 同 [Self::pull_streaming],可绑取消令牌(任务队列停止时杀 docker pull)
+    ///
+    /// 超时策略:
+    /// - 硬上限 [PULL_PER_CANDIDATE_TIMEOUT](有进度可拉满)
+    /// - 无输出超过 [PULL_STALL_TIMEOUT] → 杀进程并返回「无进度」错误以便换源
+    /// - 用户 cancel → HostError::Cancelled,上层停止换源
+    pub async fn pull_streaming_with_cancel(
+        &self,
+        image: &str,
+        cancel: Option<tokio_util::sync::CancellationToken>,
+        mut on_line: impl FnMut(StreamSource, String) + Send + 'static,
+    ) -> Result<(), DockerCliError> {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let now_ms = || {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0)
+        };
+
+        // 用户 cancel 用 child_token 联动,避免再 spawn 桥接任务泄漏
+        // stall 只 cancel 子 token,不会误标用户取消
+        let kill_token = match cancel.as_ref() {
+            Some(user) => user.child_token(),
+            None => tokio_util::sync::CancellationToken::new(),
+        };
+        let stalled = Arc::new(AtomicBool::new(false));
+        let last_activity_ms = Arc::new(AtomicU64::new(now_ms()));
+
+        {
+            let kill = kill_token.clone();
+            let stalled_flag = Arc::clone(&stalled);
+            let activity = Arc::clone(&last_activity_ms);
+            let stall_ms = Self::PULL_STALL_TIMEOUT.as_millis() as u64;
+            tokio::spawn(async move {
+                let tick = std::time::Duration::from_secs(5);
+                loop {
+                    tokio::select! {
+                        _ = kill.cancelled() => break,
+                        _ = tokio::time::sleep(tick) => {
+                            let idle = now_ms().saturating_sub(activity.load(Ordering::Relaxed));
+                            if idle >= stall_ms {
+                                stalled_flag.store(true, Ordering::Relaxed);
+                                kill.cancel();
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        let activity_cb = Arc::clone(&last_activity_ms);
+        let wrapped = move |src: StreamSource, line: String| {
+            activity_cb.store(now_ms(), Ordering::Relaxed);
+            on_line(src, line);
+        };
+
         let cmd = self
             .docker_cmd()
             .arg("pull")
             .arg(image)
-            .timeout(std::time::Duration::from_secs(900));
-        let out = self.host.run_streaming(cmd, Box::new(on_line)).await?;
+            .timeout(Self::PULL_PER_CANDIDATE_TIMEOUT)
+            .cancel_token(kill_token.clone());
+
+        let stall_err = || DockerCliError::CommandFailed {
+            command: format!("docker pull {image}"),
+            exit_code: None,
+            stderr: format!(
+                "镜像源超过 {} 秒无进度，尝试下一个源",
+                Self::PULL_STALL_TIMEOUT.as_secs()
+            ),
+        };
+
+        let out = match self.host.run_streaming(cmd, Box::new(wrapped)).await {
+            Ok(o) => o,
+            Err(HostError::Cancelled) => {
+                // 结束 stall 监视任务(cancel 子 token 不会牵连用户 token)
+                kill_token.cancel();
+                // 用户取消优先于 stall(两者可能同时成立)
+                if cancel.as_ref().is_some_and(|c| c.is_cancelled()) {
+                    return Err(DockerCliError::Host(HostError::Cancelled));
+                }
+                if stalled.load(Ordering::Relaxed) {
+                    return Err(stall_err());
+                }
+                return Err(DockerCliError::Host(HostError::Cancelled));
+            }
+            Err(e) => {
+                kill_token.cancel();
+                return Err(DockerCliError::Host(e));
+            }
+        };
+
+        // 正常结束也停 stall 监视,避免成功后仍挂 8 分钟
+        kill_token.cancel();
+
+        if cancel.as_ref().is_some_and(|c| c.is_cancelled()) {
+            return Err(DockerCliError::Host(HostError::Cancelled));
+        }
+        if stalled.load(Ordering::Relaxed) {
+            return Err(stall_err());
+        }
         if !out.success() {
             return Err(DockerCliError::CommandFailed {
                 command: format!("docker pull {image}"),
@@ -429,6 +538,30 @@ impl<'h> DockerCli<'h> {
         &self,
         candidates: &[String],
         official_image: &str,
+        new_line_cb: F,
+        on_mirror_fail: Option<M>,
+    ) -> Result<String, DockerCliError>
+    where
+        F: FnMut(usize, &str) -> L,
+        L: FnMut(StreamSource, String) + Send + 'static,
+        M: FnMut(usize, &str, &DockerCliError),
+    {
+        self.pull_with_fallback_cancel(
+            candidates,
+            official_image,
+            None,
+            new_line_cb,
+            on_mirror_fail,
+        )
+        .await
+    }
+
+    /// 同 [Self::pull_with_fallback],支持任务取消
+    pub async fn pull_with_fallback_cancel<F, L, M>(
+        &self,
+        candidates: &[String],
+        official_image: &str,
+        cancel: Option<tokio_util::sync::CancellationToken>,
         mut new_line_cb: F,
         mut on_mirror_fail: Option<M>,
     ) -> Result<String, DockerCliError>
@@ -439,8 +572,18 @@ impl<'h> DockerCli<'h> {
     {
         let mut last_err: Option<DockerCliError> = None;
         for (idx, image) in candidates.iter().enumerate() {
+            if cancel.as_ref().is_some_and(|c| c.is_cancelled()) {
+                return Err(DockerCliError::CommandFailed {
+                    command: "docker pull".to_string(),
+                    exit_code: None,
+                    stderr: "已取消".to_string(),
+                });
+            }
             let on_line = new_line_cb(idx, image);
-            match self.pull_streaming(image, on_line).await {
+            match self
+                .pull_streaming_with_cancel(image, cancel.clone(), on_line)
+                .await
+            {
                 Ok(()) => {
                     if image != official_image {
                         let _ = self.retag(image, official_image).await;
@@ -456,6 +599,12 @@ impl<'h> DockerCli<'h> {
                     return Ok(image.clone());
                 }
                 Err(e) => {
+                    // 用户取消:不再试下一个源(无进度换源走 CommandFailed,会继续)
+                    if matches!(&e, DockerCliError::Host(HostError::Cancelled))
+                        || cancel.as_ref().is_some_and(|c| c.is_cancelled())
+                    {
+                        return Err(DockerCliError::Host(HostError::Cancelled));
+                    }
                     warn!(
                         target: "ncd_deploy::docker",
                         index = idx,

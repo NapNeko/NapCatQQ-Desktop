@@ -17,7 +17,11 @@ pub mod pkg_install_emit;
 pub mod pull_failure;
 
 pub use cli::{DockerCli, DockerCliError, LayerPhase, PullProgress};
-pub use compose::render_compose;
+pub use compose::{
+    DOCKER_METRICS_CONTAINER_ROOT, DOCKER_NAPCAT_LOAD_CONTAINER_PATH, DOCKER_NAPCAT_MJS_URI,
+    DockerMetricsOverlay, render_compose, render_compose_with_env, render_compose_with_metrics,
+    render_snowluma_compose_with_env, render_snowluma_compose_with_metrics,
+};
 pub use install::{DockerInstallOutcome, install_docker};
 pub use install_progress::{
     INSTALL_TOTAL_STEPS, InstallProgressEmit, install_docker_with_progress, progress_event,

@@ -102,6 +102,9 @@ pub fn classify_pull_failure(err: &DockerCliError) -> (PullFailureKind, String) 
                 reason.trim()
             ),
         ),
+        DockerCliError::Host(HostError::Cancelled) => {
+            (PullFailureKind::Other, "已取消".to_string())
+        }
         DockerCliError::Host(e) => {
             let detail = e.to_string();
             let kind = classify_text_blob(&detail).unwrap_or(PullFailureKind::Other);

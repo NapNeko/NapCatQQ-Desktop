@@ -31,7 +31,12 @@ pub use deployments::{
     NativeRuntimeEventSink, NullRuntimeEventSink, bot_docker_container_name,
     parse_napcat_webui_line, resolve_bot_container_name, strip_ansi_escapes,
 };
-pub use docker::{DockerCli, DockerCliError, DockerInstallOutcome, install_docker, render_compose};
+pub use docker::{
+    DOCKER_METRICS_CONTAINER_ROOT, DOCKER_NAPCAT_LOAD_CONTAINER_PATH, DOCKER_NAPCAT_MJS_URI,
+    DockerCli, DockerCliError, DockerInstallOutcome, DockerMetricsOverlay, install_docker,
+    render_compose, render_compose_with_env, render_compose_with_metrics,
+    render_snowluma_compose_with_env, render_snowluma_compose_with_metrics,
+};
 pub use error::DeployError;
 pub use napcat_log_sanitize::{
     NapcatLogNoiseAction, NapcatLogNoiseFilter, filter_napcat_console_lines,
