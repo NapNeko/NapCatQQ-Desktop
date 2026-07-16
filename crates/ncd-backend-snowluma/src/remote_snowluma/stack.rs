@@ -311,6 +311,15 @@ fi
 }
 
 pub async fn start_node(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<u32, BotBackendError> {
+    start_node_with_env(host, layout, None).await
+}
+
+/// 启动远端 SL node；`metrics_env` 会 export 进 nohup 子 shell（NCD_METRICS_* / NODE_OPTIONS）。
+pub async fn start_node_with_env(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+    metrics_env: Option<&std::collections::BTreeMap<String, String>>,
+) -> Result<u32, BotBackendError> {
     let paths = &layout.paths;
     let display = display_str(DEFAULT_DISPLAY_NUM);
     let sl = shell_single_quote(&paths.snowluma_dir);
@@ -320,10 +329,27 @@ pub async fn start_node(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Resul
     let pid_daemon = shell_single_quote(&paths.pid_daemon);
     // node 未启动时轮转：只留一代 .prev 并截尾，current 清空。
     let rotate = shell_rotate_log_file(&log_daemon);
+    let mut env_exports = String::new();
+    if let Some(map) = metrics_env {
+        for (k, v) in map {
+            if k.is_empty() {
+                continue;
+            }
+            // 仅允许安全标识符作 env 名
+            if !k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                continue;
+            }
+            env_exports.push_str(&format!(
+                "export {}={}; ",
+                k,
+                shell_single_quote(v)
+            ));
+        }
+    }
     let script = format!(
         r#"cd {sl}
 {rotate}
-DISPLAY="{display}" nohup setsid {node} --experimental-sqlite index.mjs >> {log_daemon} 2>&1 </dev/null &
+{env_exports}DISPLAY="{display}" nohup setsid {node} --experimental-sqlite index.mjs >> {log_daemon} 2>&1 </dev/null &
 node_pid=$!
 echo "$node_pid" > {pid_node}
 echo "$node_pid" > {pid_daemon}
@@ -332,6 +358,23 @@ echo "$node_pid"
     );
     let out = run_remote_bash(host, &script).await?;
     parse_last_u32(&out, "node")
+}
+
+/// 停掉已有 node 再带 env 拉起（metrics 开关/路径变更后需重启共享 daemon node）
+pub async fn restart_node_with_env(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+    metrics_env: Option<&std::collections::BTreeMap<String, String>>,
+) -> Result<u32, BotBackendError> {
+    let paths = &layout.paths;
+    let pf = pid_file(paths, "node");
+    if let Ok(Some(pid)) = read_pid_file(host, &pf).await {
+        if pid != 0 {
+            let _ = kill_pid_graceful(host, pid).await;
+            tokio::time::sleep(Duration::from_millis(400)).await;
+        }
+    }
+    start_node_with_env(host, layout, metrics_env).await
 }
 
 fn parse_last_u32(out: &str, label: &str) -> Result<u32, BotBackendError> {

@@ -1,5 +1,6 @@
 //! 远端主机共享 SnowLuma daemon（图形栈 + node + 隧道）
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,6 +16,7 @@ use super::layout::{
 use super::orchestrator::{
     daemon_start, daemon_stop, remote_daemon_already_ready, wait_webui_tcp, write_status_daemon_json,
 };
+use super::stack::restart_node_with_env;
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
 use crate::snowluma::daemon::DaemonState;
 
@@ -32,6 +34,8 @@ pub struct RemoteSnowLumaDaemon {
     tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     event_bus: Arc<BroadcastEventBus>,
     tunnel_eps: Mutex<Option<RemoteSnowLumaTunnelEndpoints>>,
+    /// 最近一次应用到共享 node 的 metrics env（多 bot 时后启动者覆盖，与本机 daemon 一致）
+    metrics_node_env: Mutex<Option<BTreeMap<String, String>>>,
 }
 
 impl RemoteSnowLumaDaemon {
@@ -51,7 +55,26 @@ impl RemoteSnowLumaDaemon {
             tunnels,
             event_bus,
             tunnel_eps: Mutex::new(None),
+            metrics_node_env: Mutex::new(None),
         })
+    }
+
+    /// 应用 metrics env 到共享 node：与当前已应用 env 不同则重启 node 并等 WebUI。
+    /// 调用方应在 ensure_running 之后调用（栈已就绪）。
+    pub async fn apply_metrics_node_env(
+        &self,
+        env: Option<BTreeMap<String, String>>,
+    ) -> Result<(), BotBackendError> {
+        let mut guard = self.metrics_node_env.lock().await;
+        if *guard == env {
+            return Ok(());
+        }
+        let host = self.host.as_ref();
+        let layout = &self.layout;
+        restart_node_with_env(host, layout, env.as_ref()).await?;
+        wait_webui_tcp(host, DEFAULT_WEBUI_PORT, Duration::from_secs(60)).await?;
+        *guard = env;
+        Ok(())
     }
 
     pub fn server_id(&self) -> &str {

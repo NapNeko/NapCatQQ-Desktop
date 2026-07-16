@@ -1,13 +1,13 @@
 //! 远端 SnowLuma BotBackend
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::kinds::BackendKind;
 use ncd_domain::{BotConfig, BotFlavor, BotId, SnowLumaStartMode};
-use ncd_host::HostPath;
+use ncd_host::{Host, HostPath};
 use ncd_traits::events::{BroadcastEventBus, EventBus};
 use ncd_traits::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, StopMode,
@@ -27,6 +27,18 @@ use super::daemon::RemoteSnowLumaDaemon;
 use super::helpers::{read_remote_log_tail, read_remote_log_tail_lines};
 use super::inject::{inject_via_tunnel, remote_qq_running_pid};
 
+/// 远端 SL 指标探针：上传资产并返回应 export 进共享 node 的 env
+#[async_trait]
+pub trait RemoteSlMetricsInjector: Send + Sync {
+    async fn prepare(
+        &self,
+        host: &dyn Host,
+        home: &str,
+        bot_id: &str,
+        config: &BotConfig,
+    ) -> Option<BTreeMap<String, String>>;
+}
+
 /// 远端 SnowLuma BotBackend(内联编排,非本机 SnowLumaDaemon)
 pub struct RemoteSnowLumaBackend {
     backend_id: BotId,
@@ -40,6 +52,7 @@ pub struct RemoteSnowLumaBackend {
     /// Passed from BotManager so that NC and SL cold starts on the same server_id
     /// serialize their package.json main changes.
     qq_entry_coordinator: Arc<ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator>,
+    metrics_injector: Option<Arc<dyn RemoteSlMetricsInjector>>,
 }
 
 impl RemoteSnowLumaBackend {
@@ -51,6 +64,24 @@ impl RemoteSnowLumaBackend {
         tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
         qq_entry_coordinator: Arc<ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator>,
     ) -> Self {
+        Self::new_with_metrics(
+            backend_id,
+            daemon,
+            event_bus,
+            tunnels,
+            qq_entry_coordinator,
+            None,
+        )
+    }
+
+    pub fn new_with_metrics(
+        backend_id: impl Into<BotId>,
+        daemon: Arc<RemoteSnowLumaDaemon>,
+        event_bus: Arc<BroadcastEventBus>,
+        tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
+        qq_entry_coordinator: Arc<ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator>,
+        metrics_injector: Option<Arc<dyn RemoteSlMetricsInjector>>,
+    ) -> Self {
         Self {
             backend_id: backend_id.into(),
             daemon,
@@ -59,6 +90,7 @@ impl RemoteSnowLumaBackend {
             start_modes: Arc::new(Mutex::new(HashMap::new())),
             pollers: Arc::new(Mutex::new(HashMap::new())),
             qq_entry_coordinator,
+            metrics_injector,
         }
     }
 
@@ -134,6 +166,30 @@ impl BotBackend for RemoteSnowLumaBackend {
         let start_mode = resolve_start_mode(config);
 
         self.daemon.ensure_running().await?;
+
+        // 指标探针：上传到 ncd-watch/metrics，并重启共享 node 带上 NCD_* / NODE_OPTIONS
+        // （失败不阻断启动；多 bot 同机时后启动者覆盖 env，与本机 SL daemon 一致）
+        if let Some(inj) = &self.metrics_injector {
+            let home = self.daemon.remote_home();
+            if let Some(env) = inj
+                .prepare(
+                    self.daemon.host.as_ref(),
+                    home,
+                    bot_id.as_str(),
+                    config,
+                )
+                .await
+            {
+                if let Err(e) = self.daemon.apply_metrics_node_env(Some(env)).await {
+                    tracing::warn!(
+                        target: "ncd_backend_snowluma::remote",
+                        bot_id = %bot_id,
+                        %e,
+                        "remote SL metrics node env apply failed (start continues)"
+                    );
+                }
+            }
+        }
 
         let paths = self.daemon.paths();
         if let Err(e) =
