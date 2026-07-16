@@ -4,17 +4,40 @@ mod history;
 mod inject;
 mod paths;
 mod probe_parse;
+mod remote;
 
 pub use history::{append_history_point, load_history, prune_history_file};
 pub use inject::{
-    apply_metrics_to_environment, build_napcat_load_script, build_node_map,
-    build_probe_load_prefix, ensure_probe_script, merge_node_options_require, prepare_inject,
-    MetricsInjectPlan,
+    MetricsInjectPlan, apply_metrics_env_vars, apply_metrics_to_environment,
+    build_metrics_env_prefix, build_napcat_load_script, build_napcat_load_script_with_env,
+    build_node_map, build_probe_load_prefix, ensure_probe_script, merge_node_options_require,
+    prepare_inject, write_nodes_map,
 };
 pub use paths::{
-    history_path_for_bot, metrics_bot_dir, metrics_root, probe_script_path, stats_path_for_bot,
+    history_path_for_bot, metrics_bot_dir, metrics_root, nodes_map_path_for_bot, probe_script_path,
+    stats_path_for_bot,
 };
 pub use probe_parse::load_probe_stats_file;
+pub use remote::{
+    RemoteMetricsPaths, RuntimeRemoteMetricsInjector, ensure_remote_metrics_assets,
+    merge_metrics_env, probe_remote_home, rewrite_remote_napcat_load_script,
+};
+
+/// 远端 ncd-watch 侧 metrics 路径（与 watch/sync::build_watch_metrics_config 一致）
+pub fn remote_metrics_stats_posix(home: &str, bot_id: &str) -> String {
+    let root = home.trim_end_matches('/');
+    format!("{root}/ncd-watch/metrics/{bot_id}/net-stats.json")
+}
+
+pub fn remote_metrics_history_posix(home: &str, bot_id: &str) -> String {
+    let root = home.trim_end_matches('/');
+    format!("{root}/ncd-watch/metrics/{bot_id}/history.jsonl")
+}
+
+pub fn remote_metrics_nodes_posix(home: &str, bot_id: &str) -> String {
+    let root = home.trim_end_matches('/');
+    format!("{root}/ncd-watch/metrics/{bot_id}/nodes.json")
+}
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -22,8 +45,8 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ncd_domain::{
-    history_min_interval_ms, BotId, BotRuntimeMetrics, MetricsHistoryPoint, MetricsSource,
-    ProbeHealth, ProbeStatsFile,
+    BotId, BotRuntimeMetrics, MetricsHistoryPoint, MetricsSource, ProbeHealth, ProbeStatsFile,
+    history_min_interval_ms,
 };
 use tokio::sync::RwLock;
 
@@ -54,8 +77,7 @@ impl BotRuntimeMetricsPrefs {
     }
 
     pub fn normalize(&mut self) {
-        self.interval_ms =
-            ncd_domain::clamp_bot_runtime_metrics_interval_ms(self.interval_ms);
+        self.interval_ms = ncd_domain::clamp_bot_runtime_metrics_interval_ms(self.interval_ms);
         self.retention_days =
             ncd_domain::clamp_bot_runtime_metrics_retention_days(self.retention_days);
     }

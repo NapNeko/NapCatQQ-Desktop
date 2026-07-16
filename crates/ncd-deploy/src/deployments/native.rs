@@ -34,11 +34,9 @@ use ncd_host::{Host, HostCommand, HostError, HostPath, HostProcess, Os};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
-#[cfg(test)]
-use crate::deployment::NativeLaunchCommand;
 use crate::deployment::{
     Deployment, DeploymentError, DeploymentHandle, DeploymentProgressSink, DeploymentState,
-    NativeLaunchTranslator,
+    NativeLaunchCommand, NativeLaunchTranslator,
 };
 
 /// 原生部署的运行时事件桥接
@@ -317,6 +315,105 @@ impl NativeDeployment {
     /// 把 BotConfig 推导成 BotId,BotId 取 qq_id 字符串
     fn derive_bot_id(config: &BotConfig) -> BotId {
         BotId::new(config.bot.qq_id.to_string())
+    }
+
+    /// 用已准备好的启动命令 spawn（跳过 translator.translate / 二次 build_plan）
+    ///
+    /// BotManager 路径会先 build_plan + 合并指标 env，再经 BotStartCtx 传入；
+    /// 若这里再 translate，会冲掉 loadNapCat.js 探针并丢掉 NCD_METRICS_*。
+    pub async fn launch_with_command(
+        &self,
+        host: &dyn Host,
+        config: &BotConfig,
+        plan: NativeLaunchCommand,
+    ) -> Result<DeploymentHandle, DeploymentError> {
+        let bot_id = Self::derive_bot_id(config);
+        if plan.program.is_empty() {
+            return Err(DeploymentError::LaunchFailed(
+                "translator produced empty program".into(),
+            ));
+        }
+
+        // plan 已是 owned：直接 move，避免 program/args/env 再 clone 一份
+        let NativeLaunchCommand {
+            program,
+            args,
+            working_dir,
+            environment,
+        } = plan;
+        let mut cmd = HostCommand::new(program).args(args);
+        if let Some(dir) = working_dir.as_ref() {
+            cmd = cmd.working_dir(host_path_from_native(dir, host.os()));
+        }
+        cmd = cmd.envs(environment).long_running();
+
+        {
+            let mut guard = self.logs.lock().await;
+            guard.remove(&bot_id);
+        }
+
+        let mut process = host
+            .spawn(cmd)
+            .await
+            .map_err(|err| DeploymentError::LaunchFailed(host_err_msg(err)))?;
+        let pid = process.id().native;
+        let started_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let generation = self.generation.fetch_add(1, Ordering::Relaxed);
+
+        {
+            let mut guard = self.processes.lock().await;
+            guard.insert(
+                bot_id.clone(),
+                ManagedProcess {
+                    pid,
+                    started_at,
+                    generation,
+                    stop_requested: false,
+                },
+            );
+        }
+
+        if let Some(stdout) = process.take_stdout() {
+            spawn_log_reader(
+                stdout,
+                LogReaderCtx {
+                    bot_id: bot_id.clone(),
+                    channel: "stdout",
+                    logs: Arc::clone(&self.logs),
+                    log_path: self.log_path_for(&bot_id),
+                    event_sink: Arc::clone(&self.event_sink),
+                    apply_napcat_noise_filter: config.bot.backend_type == BackendType::NapCat,
+                },
+            );
+        }
+        if let Some(stderr) = process.take_stderr() {
+            spawn_log_reader(
+                stderr,
+                LogReaderCtx {
+                    bot_id: bot_id.clone(),
+                    channel: "stderr",
+                    logs: Arc::clone(&self.logs),
+                    log_path: self.log_path_for(&bot_id),
+                    event_sink: Arc::clone(&self.event_sink),
+                    apply_napcat_noise_filter: config.bot.backend_type == BackendType::NapCat,
+                },
+            );
+        }
+
+        spawn_exit_watcher(
+            bot_id.clone(),
+            pid,
+            generation,
+            process,
+            Arc::clone(&self.processes),
+            Arc::clone(&self.logs),
+            Arc::clone(&self.event_sink),
+        );
+
+        Ok(DeploymentHandle::Native { pid, started_at })
     }
 }
 
@@ -675,93 +772,9 @@ impl Deployment for NativeDeployment {
         host: &dyn Host,
         config: &BotConfig,
     ) -> Result<DeploymentHandle, DeploymentError> {
-        let bot_id = Self::derive_bot_id(config);
-
-        // 1. 翻译用户配置为进程命令
+        // 1. 翻译用户配置为进程命令（会再走一次 build_plan；指标注入须在 plan 内完成）
         let plan = self.translator.translate(config).await?;
-        if plan.program.is_empty() {
-            return Err(DeploymentError::LaunchFailed(
-                "translator produced empty program".into(),
-            ));
-        }
-
-        // 2. 拼 HostCommand,working_dir 走 HostPath;环境变量整张表透传
-        let mut cmd = HostCommand::new(plan.program.clone()).args(plan.args.clone());
-        if let Some(dir) = plan.working_dir.as_ref() {
-            cmd = cmd.working_dir(host_path_from_native(dir, host.os()));
-        }
-        cmd = cmd.envs(plan.environment.clone()).long_running();
-
-        // 3. 启动新进程前清掉这个 bot 旧的内存日志缓冲
-        {
-            let mut guard = self.logs.lock().await;
-            guard.remove(&bot_id);
-        }
-
-        // 4. spawn 进程,拿 stdout / stderr 给 reader 任务
-        let mut process = host
-            .spawn(cmd)
-            .await
-            .map_err(|err| DeploymentError::LaunchFailed(host_err_msg(err)))?;
-        let pid = process.id().native;
-        let started_at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let generation = self.generation.fetch_add(1, Ordering::Relaxed);
-
-        // 先落档再启动 watcher,避免快速退出时 watcher 先 remove,launch 后 insert stale running
-        {
-            let mut guard = self.processes.lock().await;
-            guard.insert(
-                bot_id.clone(),
-                ManagedProcess {
-                    pid,
-                    started_at,
-                    generation,
-                    stop_requested: false,
-                },
-            );
-        }
-
-        if let Some(stdout) = process.take_stdout() {
-            spawn_log_reader(
-                stdout,
-                LogReaderCtx {
-                    bot_id: bot_id.clone(),
-                    channel: "stdout",
-                    logs: Arc::clone(&self.logs),
-                    log_path: self.log_path_for(&bot_id),
-                    event_sink: Arc::clone(&self.event_sink),
-                    apply_napcat_noise_filter: config.bot.backend_type == BackendType::NapCat,
-                },
-            );
-        }
-        if let Some(stderr) = process.take_stderr() {
-            spawn_log_reader(
-                stderr,
-                LogReaderCtx {
-                    bot_id: bot_id.clone(),
-                    channel: "stderr",
-                    logs: Arc::clone(&self.logs),
-                    log_path: self.log_path_for(&bot_id),
-                    event_sink: Arc::clone(&self.event_sink),
-                    apply_napcat_noise_filter: config.bot.backend_type == BackendType::NapCat,
-                },
-            );
-        }
-
-        spawn_exit_watcher(
-            bot_id.clone(),
-            pid,
-            generation,
-            process,
-            Arc::clone(&self.processes),
-            Arc::clone(&self.logs),
-            Arc::clone(&self.event_sink),
-        );
-
-        Ok(DeploymentHandle::Native { pid, started_at })
+        self.launch_with_command(host, config, plan).await
     }
 
     async fn observe(

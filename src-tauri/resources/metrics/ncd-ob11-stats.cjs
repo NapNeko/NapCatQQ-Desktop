@@ -32,15 +32,8 @@ const intervalMs = Math.max(
 
 /** @type {{ name: string, kind: string, listenPort?: number, targetUrl?: string }[]} */
 let nodeMap = [];
-try {
-    if (process.env.NCD_METRICS_NODES_JSON) {
-        nodeMap = JSON.parse(process.env.NCD_METRICS_NODES_JSON);
-    } else if (process.env.NCD_METRICS_NODES_PATH) {
-        nodeMap = JSON.parse(fs.readFileSync(process.env.NCD_METRICS_NODES_PATH, 'utf8'));
-    }
-} catch (_) {
-    nodeMap = [];
-}
+/** 上次成功加载 nodes 文件的 mtime，用于热更新（NC/SL 连接配置可热改） */
+let nodesMapMtimeMs = 0;
 
 /** @type {Map<string, any>} */
 const counters = new Map();
@@ -59,13 +52,46 @@ function ensureNode(name, kind) {
             lastActivityAtMs: 0,
         };
         counters.set(name, c);
+    } else if (kind && c.kind === 'unknown') {
+        c.kind = kind;
     }
     return c;
 }
 
-for (const n of nodeMap) {
-    if (n && n.name) ensureNode(String(n.name), n.kind || 'unknown');
+function applyNodeMap(next) {
+    if (!Array.isArray(next)) return;
+    nodeMap = next;
+    for (const n of nodeMap) {
+        if (n && n.name) ensureNode(String(n.name), n.kind || 'unknown');
+    }
 }
+
+function loadNodeMapFromEnv(force) {
+    try {
+        if (process.env.NCD_METRICS_NODES_JSON) {
+            if (force || nodeMap.length === 0) {
+                applyNodeMap(JSON.parse(process.env.NCD_METRICS_NODES_JSON));
+            }
+            return;
+        }
+        const p = process.env.NCD_METRICS_NODES_PATH;
+        if (!p) return;
+        let st;
+        try {
+            st = fs.statSync(p);
+        } catch (_) {
+            return;
+        }
+        const mtime = st.mtimeMs || 0;
+        if (!force && mtime && mtime === nodesMapMtimeMs) return;
+        applyNodeMap(JSON.parse(fs.readFileSync(p, 'utf8')));
+        nodesMapMtimeMs = mtime;
+    } catch (_) {
+        /* 保持上一份 map */
+    }
+}
+
+loadNodeMapFromEnv(true);
 
 function matchByPort(port) {
     if (!port) return null;
@@ -263,6 +289,8 @@ function memorySnapshot() {
 
 function writeSnapshot() {
     try {
+        // 连接配置热更新：Desktop 改 nodes.json 后无需重启 Bot
+        loadNodeMapFromEnv(false);
         const nodes = [];
         for (const c of counters.values()) {
             nodes.push({
@@ -296,7 +324,22 @@ function writeSnapshot() {
         const tmp = outPath + '.tmp';
         fs.writeFileSync(tmp, JSON.stringify(payload));
         fs.renameSync(tmp, outPath);
-    } catch (_) { }
+        // 成功后清掉上次写失败痕迹
+        try {
+            fs.unlinkSync(outPath + '.err');
+        } catch (_) { }
+    } catch (err) {
+        // 静默吞掉会导致 UI 永远「未注入」；落盘 .err 便于 SSH 排查
+        try {
+            const dir = path.dirname(outPath);
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(
+                outPath + '.err',
+                String((err && err.stack) || err || 'writeSnapshot failed'),
+                'utf8',
+            );
+        } catch (_) { }
+    }
 }
 
 writeSnapshot();

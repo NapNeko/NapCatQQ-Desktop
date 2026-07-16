@@ -114,6 +114,8 @@ pub(crate) struct RuntimeBackendRouter {
     remote_snowluma_backends: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaBackend>>>>,
     remote_snowluma_tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
+    /// 远端 NC 启动时注入探针（可选；未设则远端永不写 net-stats）
+    remote_metrics_injector: Option<Arc<crate::metrics::RuntimeRemoteMetricsInjector>>,
 }
 
 impl RuntimeBackendRouter {
@@ -139,7 +141,16 @@ impl RuntimeBackendRouter {
             remote_snowluma_backends,
             remote_snowluma_tunnels,
             remote_qq_entry_coordinator,
+            remote_metrics_injector: None,
         }
+    }
+
+    pub fn with_remote_metrics_injector(
+        mut self,
+        injector: Arc<crate::metrics::RuntimeRemoteMetricsInjector>,
+    ) -> Self {
+        self.remote_metrics_injector = Some(injector);
+        self
     }
 
     pub async fn backend_for_config(
@@ -193,11 +204,16 @@ impl RuntimeBackendRouter {
                     BackendType::NapCat => {
                         let coordinator = Arc::clone(&self.remote_qq_entry_coordinator);
                         let backend_id = BotId::new(format!("remote-native-{qq_id}"));
-                        let translator = Arc::new(RemoteNativeLaunchTranslator::new(
+                        // 远端指标：上传探针 + 改 loadNapCat + 启动 env（失败不阻断）
+                        let metrics_injector = self.remote_metrics_injector.clone().map(
+                            |inj| inj as Arc<dyn ncd_backend_napcat::remote_native_launch::RemoteMetricsInjector>,
+                        );
+                        let translator = Arc::new(RemoteNativeLaunchTranslator::new_with_metrics(
                             Arc::clone(&host),
                             BotFlavor::NapCat,
                             server_id.to_string(),
                             coordinator,
+                            metrics_injector,
                         ));
                         let event_sink: Arc<dyn ncd_deploy::NativeRuntimeEventSink> =
                             Arc::new(EventBusSink::new(Arc::clone(&self.event_bus)));

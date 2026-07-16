@@ -131,10 +131,15 @@ async fn read_existing_napcat_config(
 }
 
 /// xvfb-run -a <qq> --no-sandbox -q <qq_id>,与 legacy launcher 核心一致(无 bash 脚本)
+///
+/// `metrics_env`：可选 NCD_METRICS_*，export 进 nohup 子 shell 作兜底。
+/// 探针主路径是 loadNapCat.js 内 bake env + require；不要带 NODE_OPTIONS=--require
+///（会在入口脚本写 env 前预加载并被 module cache 锁成 disabled）。
 async fn build_napcat_remote_launch(
     host: &dyn Host,
     config: &BotConfig,
     install_base: &HostPath,
+    metrics_env: &std::collections::BTreeMap<String, String>,
 ) -> Result<NativeLaunchCommand, DeploymentError> {
     let qq_id = config.bot.qq_id;
     let component = NapCatComponent::new(install_base.clone());
@@ -178,19 +183,64 @@ async fn build_napcat_remote_launch(
         .collect::<Vec<_>>()
         .join(" ");
     let log_q = shell_single_quote(&log_path);
-    let inner =
-        format!("nohup xvfb-run -a {qq_invoke} >> {log_q} 2>&1 </dev/null & wait $! || true");
+
+    // export NCD_METRICS_* 兜底；主路径是 loadNapCat 内 bake（勿 export NODE_OPTIONS=--require 探针）
+    let mut env_exports = String::new();
+    for (k, v) in metrics_env {
+        if k.is_empty() || k == "NODE_OPTIONS" {
+            continue;
+        }
+        env_exports.push_str(&format!(
+            "export {}={}; ",
+            k,
+            shell_single_quote(v)
+        ));
+    }
+    // 合并 qq_cmd.environment
+    for (k, v) in &qq_cmd.environment {
+        if metrics_env.contains_key(k) {
+            continue;
+        }
+        env_exports.push_str(&format!(
+            "export {}={}; ",
+            k,
+            shell_single_quote(v)
+        ));
+    }
+
+    let inner = format!(
+        "{env_exports}nohup xvfb-run -a {qq_invoke} >> {log_q} 2>&1 </dev/null & wait $! || true"
+    );
 
     Ok(NativeLaunchCommand {
         program: "sh".into(),
         args: vec!["-c".into(), inner],
         working_dir: qq_cmd.working_dir.map(|p| PathBuf::from(p.as_posix())),
-        environment: qq_cmd.environment,
+        // env 已 bake 进 shell；仍透传一份便于日志/调试
+        environment: {
+            let mut e = qq_cmd.environment.clone();
+            e.extend(metrics_env.iter().map(|(k, v)| (k.clone(), v.clone())));
+            e
+        },
     })
 }
 
 fn shell_single_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\"'\"'"))
+}
+
+/// 远端指标注入上下文（由 ncd-runtime 在 wiring 时注入）
+#[async_trait]
+pub trait RemoteMetricsInjector: Send + Sync {
+    /// 返回应 export 进 QQ 启动 shell 的 env；None = 指标关或失败（不阻断启动）
+    async fn prepare_napcat(
+        &self,
+        host: &dyn Host,
+        home: &str,
+        bot_id: &str,
+        config: &BotConfig,
+        install_base: &HostPath,
+    ) -> Option<std::collections::BTreeMap<String, String>>;
 }
 
 /// 按 runtime_target 在远端 Host 上翻译 Native 启动命令
@@ -202,6 +252,8 @@ pub struct RemoteNativeLaunchTranslator {
     /// Shared coordinator so that concurrent batch starts (or mixed NC+SL on the same host)
     /// serialize the flip of the shared package.json main + artifact verification.
     coordinator: Arc<ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator>,
+    /// 可选：远端实例指标探针注入（失败不阻断启动）
+    metrics_injector: Option<Arc<dyn RemoteMetricsInjector>>,
     cached_layout: tokio::sync::Mutex<Option<(String, RemoteNapcatLayout)>>,
 }
 
@@ -213,11 +265,22 @@ impl RemoteNativeLaunchTranslator {
         server_id: String,
         coordinator: Arc<ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator>,
     ) -> Self {
+        Self::new_with_metrics(host, flavor, server_id, coordinator, None)
+    }
+
+    pub fn new_with_metrics(
+        host: Arc<dyn Host>,
+        flavor: BotFlavor,
+        server_id: String,
+        coordinator: Arc<ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator>,
+        metrics_injector: Option<Arc<dyn RemoteMetricsInjector>>,
+    ) -> Self {
         Self {
             host,
             flavor,
             server_id,
             coordinator,
+            metrics_injector,
             cached_layout: tokio::sync::Mutex::new(None),
         }
     }
@@ -265,7 +328,29 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
                     .await
                     .map_err(DeploymentError::LaunchFailed)?;
 
-                build_napcat_remote_launch(self.host.as_ref(), config, &install_base).await
+                let mut metrics_env = std::collections::BTreeMap::new();
+                if let Some(inj) = &self.metrics_injector {
+                    if let Some(env) = inj
+                        .prepare_napcat(
+                            self.host.as_ref(),
+                            &home,
+                            bot_id.as_str(),
+                            config,
+                            &install_base,
+                        )
+                        .await
+                    {
+                        metrics_env = env;
+                    }
+                }
+
+                build_napcat_remote_launch(
+                    self.host.as_ref(),
+                    config,
+                    &install_base,
+                    &metrics_env,
+                )
+                .await
             }
             BotFlavor::SnowLuma => Err(DeploymentError::LaunchFailed(
                 "远端 SnowLuma 走 RemoteSnowLumaBackend + RemoteSnowLumaDaemon（非 NativeDeployment 单进程模型）。"

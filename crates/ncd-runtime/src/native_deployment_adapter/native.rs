@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ncd_deploy::{Deployment, NativeDeployment};
+use ncd_deploy::{Deployment, NativeDeployment, NativeLaunchCommand};
 use ncd_domain::bot_status::BotStatus;
 use ncd_domain::ids::BotId;
 use ncd_domain::kinds::{BackendKind, StopMode};
@@ -56,11 +56,19 @@ impl BotBackend for NativeDeploymentBackend {
     async fn start(&self, ctx: &BotStartCtx) -> Result<BotStatus, BotBackendError> {
         let bot_config = bot_config_for_start(ctx, self.flavor, false)?;
 
-        let handle = self
-            .deployment
-            .launch(self.host.as_ref(), &bot_config)
-            .await
-            .map_err(|err| BotBackendError::Io(err.to_string()))?;
+        // BotManager 已 build_plan + 合并指标 env。优先用 ctx.config 直接 spawn，
+        // 避免 NativeDeployment::launch → translate → 二次 build_plan 冲掉探针。
+        let handle = if let Some(plan) = native_launch_command_from_runtime(&ctx.config) {
+            self.deployment
+                .launch_with_command(self.host.as_ref(), &bot_config, plan)
+                .await
+                .map_err(|err| BotBackendError::Io(err.to_string()))?
+        } else {
+            self.deployment
+                .launch(self.host.as_ref(), &bot_config)
+                .await
+                .map_err(|err| BotBackendError::Io(err.to_string()))?
+        };
 
         match handle {
             ncd_deploy::DeploymentHandle::Native { pid, started_at } => Ok(BotStatus::running(
@@ -120,4 +128,19 @@ impl BotBackend for NativeDeploymentBackend {
             total_lines: snap.total_lines,
         })
     }
+}
+
+/// 从 BotManager 已准备好的 BotRuntimeConfig 抽出 spawn 命令。
+/// launch_command 为空（如 SnowLuma daemon 路径）时返回 None，走原 translate。
+fn native_launch_command_from_runtime(cfg: &BotRuntimeConfig) -> Option<NativeLaunchCommand> {
+    let (program, args) = cfg.launch_command.split_first()?;
+    if program.is_empty() {
+        return None;
+    }
+    Some(NativeLaunchCommand {
+        program: program.clone(),
+        args: args.to_vec(),
+        working_dir: cfg.working_dir.clone(),
+        environment: cfg.environment.clone(),
+    })
 }

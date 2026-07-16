@@ -274,24 +274,41 @@ async fn is_regular_file(path: &Path) -> bool {
 
 pub async fn build_napcat_launch_plan_with_qq_install_path(
     bot_id: &BotId,
-    _config: &BotConfig,
+    config: &BotConfig,
     runtime_root: impl AsRef<Path>,
     qq_install: impl AsRef<Path>,
 ) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
-    build_napcat_launch_plan_inner(bot_id, runtime_root.as_ref(), qq_install.as_ref()).await
+    build_napcat_launch_plan_inner(bot_id, config, runtime_root.as_ref(), qq_install.as_ref()).await
 }
 
 pub async fn build_napcat_launch_plan(
     bot_id: &BotId,
-    _config: &BotConfig,
+    config: &BotConfig,
     runtime_root: impl AsRef<Path>,
 ) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
     let qq_install = resolve_qq_install_path()?;
-    build_napcat_launch_plan_inner(bot_id, runtime_root.as_ref(), &qq_install).await
+    build_napcat_launch_plan_inner(bot_id, config, runtime_root.as_ref(), &qq_install).await
+}
+
+/// 从 data_root/config/app-settings.json 读指标偏好；缺文件/解析失败 → 默认关
+fn load_metrics_prefs_from_data_root(data_root: &Path) -> crate::metrics::BotRuntimeMetricsPrefs {
+    use crate::metrics::BotRuntimeMetricsPrefs;
+    let settings_path = data_root.join("config").join("app-settings.json");
+    let mut prefs = BotRuntimeMetricsPrefs::default();
+    let Ok(text) = std::fs::read_to_string(&settings_path) else {
+        return prefs;
+    };
+    let Ok(app) = serde_json::from_str::<ncd_domain::AppSettings>(&text) else {
+        return prefs;
+    };
+    prefs = BotRuntimeMetricsPrefs::from_app(&app);
+    prefs.normalize();
+    prefs
 }
 
 async fn build_napcat_launch_plan_inner(
     bot_id: &BotId,
+    config: &BotConfig,
     runtime_root: &Path,
     qq_install: &Path,
 ) -> Result<RuntimeLaunchPlan, RuntimeLaunchPlanError> {
@@ -318,11 +335,50 @@ async fn build_napcat_launch_plan_inner(
 
     let load_script_path = napcat_dir.join("loadNapCat.js");
     let napcat_mjs_uri = path_to_file_uri(&napcat_dir.join("napcat.mjs"));
-    // 默认与 3.0 一致：单行 import。指标开启时由 BotManager 在启动前改写本文件并注入 env。
-    let load_script = crate::metrics::build_napcat_load_script(&napcat_mjs_uri, None);
+
+    // 指标注入必须在本函数内完成：BotManager 与 NativeDeployment::launch 都会
+    // 调 build_plan。若只在 Manager 侧改 loadNapCat.js，launch 里第二次
+    // translate→build_plan 会写回无探针基线，且 spawn 环境也丢 NCD_METRICS_*。
+    // runtime_root 是 components 目录，data_root 为其父。
+    let data_root = runtime_root.parent().unwrap_or(runtime_root);
+    let metrics_prefs = load_metrics_prefs_from_data_root(data_root);
+    let metrics_plan =
+        match crate::metrics::prepare_inject(data_root, bot_id.as_str(), config, &metrics_prefs) {
+            Ok(p) => p,
+            Err(err) => {
+                tracing::warn!(
+                    target: "ncd_runtime::launch",
+                    bot_id = %bot_id,
+                    %err,
+                    "metrics prepare_inject failed; writing plain loadNapCat.js"
+                );
+                None
+            }
+        };
+
+    // load 脚本内 bake env + require；不要依赖 NODE_OPTIONS 预加载（会抢在 env 写入前执行）
+    let metrics_env = metrics_plan.as_ref().map(|p| {
+        let mut env = BTreeMap::new();
+        crate::metrics::apply_metrics_to_environment(&mut env, p);
+        env
+    });
+    let probe_path = metrics_plan.as_ref().map(|p| p.probe_script.as_path());
+    let load_script = crate::metrics::build_napcat_load_script_with_env(
+        &napcat_mjs_uri,
+        probe_path,
+        metrics_env.as_ref(),
+    );
     tokio::fs::write(&load_script_path, load_script)
         .await
         .map_err(|error| RuntimeLaunchPlanError::LoadScript(error.to_string()))?;
+    if metrics_plan.is_some() {
+        tracing::info!(
+            target: "ncd_runtime::launch",
+            bot_id = %bot_id,
+            path = %load_script_path.display(),
+            "metrics: loadNapCat.js includes env bake + probe require"
+        );
+    }
 
     let mut environment = BTreeMap::new();
     environment.insert(
@@ -351,6 +407,14 @@ async fn build_napcat_launch_plan_inner(
         "NAPCAT_MAIN_PATH".to_string(),
         napcat_dir.join("napcat.mjs").to_string_lossy().to_string(),
     );
+    // 本机 NC：NCD_* 仍放进 spawn env 作兜底；不设 NODE_OPTIONS=--require
+    if let Some(plan) = metrics_plan.as_ref() {
+        crate::metrics::apply_metrics_to_environment(&mut environment, plan);
+        environment.insert(
+            "NCD_METRICS_PROBE_PATH".into(),
+            plan.probe_script.to_string_lossy().into_owned(),
+        );
+    }
 
     Ok(RuntimeLaunchPlan::NapCat(NapCatLaunchPlan {
         runtime_root: runtime_root.to_path_buf(),
