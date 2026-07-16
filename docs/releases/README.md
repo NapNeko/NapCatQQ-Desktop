@@ -32,6 +32,22 @@ pnpm run release:notes:preview -- --kind watch --version 0.2.6
 满意后把 `docs/releases/vX.Y.Z.md` **提交进仓库**，再打 tag / 跑 Release 工作流。  
 CI 会优先读取本目录文件；没有策展文件时才用自动草稿（并在页脚提示建议策展）。
 
+## 升版 / 发版闸门（CLI）
+
+对齐旧版「本地真相源、默认不 push」：
+
+```bash
+# 只改版本三处（package / tauri.conf / app-meta）
+pnpm run release:bump -- 3.1.0
+
+# 提交版本 + 策展后检查（脏工作区会失败；通过后可加 --tag 打本地 tag）
+pnpm run release:prepare -- 3.1.0
+pnpm run release:prepare -- 3.1.0 --tag
+
+# 人工推送才会触发正式 Release（脚本故意不提供 --push）
+git push origin main && git push origin v3.1.0
+```
+
 ## 策展文件写什么
 
 **写：**

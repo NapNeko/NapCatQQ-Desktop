@@ -1,7 +1,7 @@
 {
   "name": "napcatqq-desktop-ui",
   "private": true,
-  "version": "3.0.0",
+  "version": "3.1.0",
   "type": "module",
   "packageManager": "pnpm@9.15.9",
   "scripts": {
@@ -23,7 +23,9 @@
     "tauri:watch": "cargo watch --watch src-tauri/src --watch crates --ignore '**/*.md' --ignore 'target/**' --ignore 'src-ui/core/ipc/generated/**' --shell \"tauri dev\"",
     "release:notes:draft": "node scripts/release-notes.mjs draft",
     "release:notes:preview": "node scripts/release-notes.mjs preview",
-    "release:notes:render": "node scripts/release-notes.mjs render"
+    "release:notes:render": "node scripts/release-notes.mjs render",
+    "release:bump": "node scripts/release.mjs bump",
+    "release:prepare": "node scripts/release.mjs prepare"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
