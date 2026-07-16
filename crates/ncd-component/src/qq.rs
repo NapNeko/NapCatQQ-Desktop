@@ -29,9 +29,10 @@
 //!
 //! Windows 安装流程:
 //! 1. HTTP GET https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json
-//! 2. 取 Windows.ntDownloadX64Url → 下载 NSIS 安装包到本地临时目录
-//! 3. 跑 installer.exe /s 静默安装,等待退出码 0
-//! 4. 删除本地临时安装包
+//! 2. 取 Windows.ntDownloadX64Url;gtimg/QQNTV2 裸链先 UrlSign 再下
+//! 3. 下载 NSIS 安装包到本地临时目录
+//! 4. 跑 installer.exe /s 静默安装,等待退出码 0
+//! 5. 删除本地临时安装包
 
 use async_trait::async_trait;
 
@@ -48,7 +49,7 @@ use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 pub const QQ_PCCONFIG_URL: &str =
     "https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json";
 
-/// 官网防盗链签名(Linux QQNTV2 裸链 403,需先换 sign+t)
+/// 官网防盗链签名(Win/Linux gtimg/QQNTV2 裸链 403,需先换 sign+t)
 /// 与 im.qq.com SPA 中 trpc.qqntv2.urlsign.UrlSign/GetSign 一致
 pub const QQ_URL_SIGN_URL: &str =
     "https://im.qq.com/http2rpc/gotrpc/noauth/trpc.qqntv2.urlsign.UrlSign/GetSign";
@@ -217,7 +218,7 @@ impl QQComponent {
         let mut last_err: Option<String> = None;
         for rel in candidates {
             // gtimg/QQNTV2 直接 UrlSign,不先探裸链;dldir1 原样可用
-            match prepare_linux_download_url(&rel.download_url).await {
+            match prepare_qq_download_url(&rel.download_url).await {
                 Ok(prepared) => {
                     let signed = prepared != rel.download_url;
                     let source = if signed {
@@ -810,8 +811,8 @@ impl QQComponent {
         }
     }
 
-    /// Windows install:拉 pcConfig.json 拿 NSIS 安装包地址 → 下载 → 跑
-    /// installer.exe /s 静默安装(对齐 legacy QQInstall)
+    /// Windows install:拉 pcConfig.json 拿 NSIS 安装包地址 → UrlSign(如需)
+    /// → 下载 → 跑 installer.exe /s 静默安装(对齐 legacy QQInstall)
     async fn install_windows(
         &self,
         host: &dyn Host,
@@ -820,7 +821,7 @@ impl QQComponent {
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
         ctx.info("准备获取 QQ Windows 安装器").await;
 
-        // Step 1:拉 pcConfig.json 解析下载地址
+        // Step 1:拉 pcConfig.json 解析下载地址;gtimg 裸链先 UrlSign
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "fetch QQ pcConfig.json".into(),
@@ -947,10 +948,13 @@ fn parse_reg_install_value(stdout: &str) -> Option<String> {
     None
 }
 
-/// 拉 pcConfig.json 解析 Windows 段的 (version, ntDownloadX64Url)
+/// 拉 pcConfig.json 解析 Windows 段,并对 gtimg/QQNTV2 裸链做 UrlSign。
+/// 返回的 download_url 已可直接下载(与 Linux 路径一致)。
 async fn fetch_windows_qq_release() -> Result<(String, String), ActionError> {
     let body = fetch_text(QQ_PCCONFIG_URL).await?;
-    parse_windows_qq_release(&body)
+    let (version, raw_url) = parse_windows_qq_release(&body)?;
+    let download_url = prepare_qq_download_url(&raw_url).await?;
+    Ok((version, download_url))
 }
 
 /// 从 pcConfig.json 文本解析 Windows 段的 version 与 x64 NSIS 安装包地址
@@ -998,13 +1002,14 @@ async fn fetch_text(url: &str) -> Result<String, ActionError> {
 }
 
 /// gtimg / QQNTV2 等受防盗链保护的地址需要签名;dldir1 旧链直接可用。
-fn linux_url_needs_sign(url: &str) -> bool {
+/// Win/Linux 共用(pcConfig 两边都已切到 qqdl.gtimg.cn)。
+fn qq_url_needs_sign(url: &str) -> bool {
     let lower = url.to_ascii_lowercase();
     lower.contains("qqdl.gtimg.cn") || lower.contains("qqntv2") || lower.contains("gtimg.cn/qqfile")
 }
 
 /// 官网 UrlSign:把裸链换成 ?sign=&t= 可下载地址。
-/// 签名失败不吞错,交给上层换下一条候选。
+/// 签名失败不吞错,交给上层换下一条候选或直接报错。
 async fn sign_qq_download_url(raw_url: &str) -> Result<String, ActionError> {
     let oidb = r#"{"uint32_command":"0x9b8e","uint32_service_type":1}"#;
     let body = serde_json::json!({ "url": raw_url });
@@ -1056,8 +1061,9 @@ async fn sign_qq_download_url(raw_url: &str) -> Result<String, ActionError> {
 }
 
 /// 安装 / probe 共用:需要签名则签名,否则原样返回。
-async fn prepare_linux_download_url(url: &str) -> Result<String, ActionError> {
-    if linux_url_needs_sign(url) {
+/// Win/Linux 同一套防盗链规则。
+async fn prepare_qq_download_url(url: &str) -> Result<String, ActionError> {
+    if qq_url_needs_sign(url) {
         sign_qq_download_url(url).await
     } else {
         Ok(url.to_string())
@@ -1085,7 +1091,7 @@ pub async fn probe_linux_qq_latest() -> Result<LinuxQqRelease, ActionError> {
             .pin_linux_release(PackageFormat::Deb, Arch::X86_64),
     ] {
         match rel {
-            Ok(candidate) => match prepare_linux_download_url(&candidate.download_url).await {
+            Ok(candidate) => match prepare_qq_download_url(&candidate.download_url).await {
                 Ok(prepared) => {
                     let signed = prepared != candidate.download_url;
                     let source = if signed {
@@ -1121,6 +1127,8 @@ pub async fn probe_linux_qq_latest() -> Result<LinuxQqRelease, ActionError> {
 }
 
 /// 给 release 快照用:探测 Windows QQ 当前安装包版本
+///
+/// 返回的 URL 已对 gtimg/QQNTV2 做过 UrlSign,可直接下载。
 pub async fn probe_windows_qq_latest() -> Result<(String, String), ActionError> {
     fetch_windows_qq_release().await
 }
@@ -1389,6 +1397,19 @@ mod tests {
     fn parse_windows_qq_release_errors_without_x64_url() {
         let body = r#"{"Windows":{"version":"9.9.31"}}"#;
         assert!(parse_windows_qq_release(body).is_err());
+    }
+
+    #[test]
+    fn qq_url_needs_sign_for_gtimg_and_qqntv2() {
+        assert!(qq_url_needs_sign(
+            "https://qqdl.gtimg.cn/qqfile/QQNTV2/9.9.32/release/9d4083e2/QQ_9.9.32_260716_x64_01.exe"
+        ));
+        assert!(qq_url_needs_sign(
+            "https://qqdl.gtimg.cn/qqfile/QQNT/9.9.31/release/092069d7/QQ_9.9.31_260528_x64_01.exe"
+        ));
+        assert!(!qq_url_needs_sign(
+            "https://dldir1.qq.com/qqfile/qq/QQNT/7516007c/linuxqq_3.2.25-45758_amd64.deb"
+        ));
     }
 
     #[test]

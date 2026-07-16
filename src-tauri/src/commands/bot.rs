@@ -456,6 +456,13 @@ mod tests {
         let lightweight_scheduler = Arc::new(
             crate::lightweight_scheduler::LightweightScheduler::new(Arc::clone(&app_settings)),
         );
+        let metrics_prefs = {
+            let mut p = ncd_runtime::metrics::BotRuntimeMetricsPrefs::default();
+            p.normalize();
+            Arc::new(tokio::sync::RwLock::new(p))
+        };
+        let metrics_collector =
+            ncd_runtime::metrics::MetricsCollector::new(root, Arc::clone(&metrics_prefs));
         let bot_manager = Arc::new(BotManager::new(
             repo,
             Arc::clone(&store),
@@ -486,6 +493,7 @@ mod tests {
             offline_notifier: composite_offline,
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(tokio::sync::Mutex::new(None)),
+            metrics_collector,
         };
         (state, bus)
     }
