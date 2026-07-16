@@ -70,15 +70,17 @@ export const CONNECTION_KINDS: ReadonlyArray<ConnectionKindMeta> = [
     },
     {
         kind: 'websocketServer',
-        title: 'WS 反向服务器',
-        description: '作 WS 服务端，外部连入双向通信',
+        // NapCat 文档：WebSocket 服务端 = 正向 WS（本端监听，外部连入）
+        title: 'WS 正向服务器',
+        description: '正向 WS：本端作服务端监听，外部连入双向通信',
         supportedBackends: ['napcat', 'snowluma'],
         namePrefix: 'ws-server',
     },
     {
         kind: 'websocketClient',
-        title: 'WS 正向客户端',
-        description: '主动连远端 WS，全双工低延迟',
+        // NapCat 文档：WebSocket 客户端 = 反向 WS（本端主动连远端）
+        title: 'WS 反向客户端',
+        description: '反向 WS：本端作客户端主动连远端，全双工低延迟',
         supportedBackends: ['napcat', 'snowluma'],
         namePrefix: 'ws-client',
     },

@@ -200,11 +200,12 @@ function forwardRefIcon() {
                     <button
                         ref={setRef}
                         type="button"
+                        aria-label={tooltip}
                         onClick={onClick}
                         disabled={disabled}
                         className={cn(
                             'inline-flex h-8 w-8 items-center justify-center rounded-xs',
-                            'transition-all duration-150',
+                            'transition-[color,background-color,transform] duration-150',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
                             'disabled:cursor-not-allowed disabled:opacity-40',
                             m.level !== 'rich' && 'hover:scale-[1.04]',
@@ -267,7 +268,8 @@ export function channelDetailLabel(c: ChannelCount): string {
     const parts: string[] = [];
     if (c.httpServer || c.httpSse) parts.push(`HTTP ${c.httpServer + c.httpSse}`);
     if (c.httpClient) parts.push(`回调 ${c.httpClient}`);
-    if (c.wsServer) parts.push(`WS ${c.wsServer}`);
+    // 与 NapCat 文档一致：服务端=正向 WS，客户端=反向 WS
+    if (c.wsServer) parts.push(`正向 WS ${c.wsServer}`);
     if (c.wsClient) parts.push(`反向 WS ${c.wsClient}`);
     if (c.plugins) parts.push(`插件 ${c.plugins}`);
     return parts.join(' · ');
