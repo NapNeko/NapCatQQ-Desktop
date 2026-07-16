@@ -212,10 +212,13 @@ impl DeploymentTaskManager {
                     // 先 cancel token,再写进度:UI 立刻看到「正在取消」,runner 侧杀进程
                     record.cancel.cancel();
                     record.snapshot.message = Some("正在取消...".to_string());
-                    record.snapshot.progress_events.push(ProgressEvent::new(ProgressKind::Log {
-                        level: ProgressLogLevel::Warn,
-                        message: "正在取消…已请求停止命令".to_string(),
-                    }));
+                    record
+                        .snapshot
+                        .progress_events
+                        .push(ProgressEvent::new(ProgressKind::Log {
+                            level: ProgressLogLevel::Warn,
+                            message: "正在取消…已请求停止命令".to_string(),
+                        }));
                     let excess = record
                         .snapshot
                         .progress_events

@@ -161,7 +161,12 @@ async fn docker_deploy_execute(
         let official = spec.flavor.default_image();
         let candidate_count = candidates.len();
         let cancel = task_ctx.as_ref().map(|c| c.cancel_token());
-        if let Some(m) = spec.mirror.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(m) = spec
+            .mirror
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             emit(ProgressKind::Log {
                 level: ProgressLogLevel::Info,
                 message: format!("镜像源策略：{m}"),

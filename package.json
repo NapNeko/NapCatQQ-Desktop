@@ -20,7 +20,10 @@
     "tauri:build:msi": "tauri build --bundles msi",
     "icons:gen": "python script/generate_app_icons.py",
     "tauri:icon": "tauri icon src-ui/assets/logo.png",
-    "tauri:watch": "cargo watch --watch src-tauri/src --watch crates --ignore '**/*.md' --ignore 'target/**' --ignore 'src-ui/core/ipc/generated/**' --shell \"tauri dev\""
+    "tauri:watch": "cargo watch --watch src-tauri/src --watch crates --ignore '**/*.md' --ignore 'target/**' --ignore 'src-ui/core/ipc/generated/**' --shell \"tauri dev\"",
+    "release:notes:draft": "node scripts/release-notes.mjs draft",
+    "release:notes:preview": "node scripts/release-notes.mjs preview",
+    "release:notes:render": "node scripts/release-notes.mjs render"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

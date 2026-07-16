@@ -796,7 +796,7 @@ export function BotRuntimeMetricsPageNext({
     // 主机 CPU/磁盘：本机 system_metrics / 远端 ncd-watch host-stats，不是进程探针
     const hostCpu =
         metrics?.memory?.host_cpu_percent != null &&
-        Number.isFinite(Number(metrics.memory.host_cpu_percent))
+            Number.isFinite(Number(metrics.memory.host_cpu_percent))
             ? Math.max(0, Math.min(100, Number(metrics.memory.host_cpu_percent)))
             : null;
     const hostDiskUsed = metrics?.memory?.host_disk_used_bytes;

@@ -6,6 +6,9 @@
 docs/
 ├── context/           # Agent/开发活上下文（进 git；codemap 等）
 │   └── codemap.md     # 功能域 → 代码落点
+├── releases/          # 发版策展正文（进 git；CI / 本地 preview）
+│   ├── README.md      # 写法与 pnpm release:notes:* 流程
+│   └── vX.Y.Z.md      # Desktop；watch-vX.Y.Z.md 为 ncd-watch
 ├── user/              # 用户文档（进 git，对外公开）
 │   └── README.md
 └── dev/               # 开发文档（不进 git，内部使用）
@@ -27,6 +30,12 @@ docs/
 - 面向最终用户：安装、配置、使用指南
 - 语言：简体中文为主
 - 保持简洁、易懂
+
+### 发版说明 (`docs/releases/`)
+- **进 git 仓库**
+- 每版用户向更新内容（策展）；安装/资源表由 `scripts/release-notes.mjs` 拼装
+- 本地：`pnpm run release:notes:draft` → 编辑 → `pnpm run release:notes:preview`
+- CI Release 工作流 `render` 优先读本目录，避免把原始 git log 当更新日志
 
 ### 开发文档 (`docs/dev/`)
 - **不进 git 仓库**（已在 .gitignore）

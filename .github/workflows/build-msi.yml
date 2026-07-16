@@ -187,12 +187,7 @@ jobs:
           $latestAlias = Join-Path $outDir "NapCatQQ-Desktop-x64.msi"
           Copy-Item $primary.FullName -Destination $latestAlias -Force
 
-          # updater 未接线时通常没有这些文件；有则一并收集，发布侧再条件上传。
-          $updaterAssets = Get-ChildItem -Path $bundleRoot -File -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -eq "latest.json" -or $_.Extension -eq ".sig" -or $_.Extension -eq ".zip" }
-          foreach ($file in $updaterAssets) {
-            Copy-Item $file.FullName -Destination $outDir -Force
-          }
+          # 自更新走 GitHub Release MSI，不收集 latest.json / .sig
 
           "MSI_FILE_NAME=$expectedName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Collected MSI: $expectedPath"

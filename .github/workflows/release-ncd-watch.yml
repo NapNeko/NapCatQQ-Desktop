@@ -146,6 +146,12 @@ jobs:
       - build
     runs-on: ubuntu-latest
     steps:
+      # 需要仓库内 scripts/ + docs/releases/ + 完整 tag 历史（上一版 compare）
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download all assets
         uses: actions/download-artifact@v4
         with:
@@ -174,73 +180,20 @@ jobs:
           cat SHA256SUMS
           ls -lh
 
-      - name: Release notes
+      - name: Render release notes
         id: notes
         shell: bash
         run: |
           set -euo pipefail
           plain="${{ needs.resolve.outputs.version_plain }}"
-          tag="${{ needs.resolve.outputs.tag_name }}"
-          repo="${{ github.repository }}"
           notes_path=release-notes.md
-          bin_x64="ncd-watch-${plain}-x86_64-unknown-linux-musl"
-          bin_arm="ncd-watch-${plain}-aarch64-unknown-linux-musl"
-
-          prev="$(git describe --tags --abbrev=0 --match 'watch-v*' "${tag}^" 2>/dev/null || true)"
-          commit_count=0
-          if [[ -n "${prev}" ]]; then
-            commit_count="$(git rev-list --count --no-merges "${prev}..HEAD" 2>/dev/null || echo 0)"
-          fi
-
-          {
-            echo "## ncd-watch \`${plain}\`"
-            echo
-            echo "远端 Linux 主机侧监控二进制（Desktop 退出后仍可 Webhook / 探活）。"
-            echo "静态链接 **musl**，**不**打进 Windows MSI；与 Desktop \`v*\` 发版分流。"
-            echo
-            echo "### Install"
-            echo
-            echo "- 推荐：Desktop 组件页安装 **NCD Watch**"
-            echo "- 或本机 \`cargo build -p ncd-watch --release\` 后由 Desktop 上传到远端"
-            echo
-            echo "### Assets"
-            echo
-            echo "| File | Target |"
-            echo "| --- | --- |"
-            echo "| \`${bin_x64}\` | x86_64 Linux musl |"
-            echo "| \`${bin_arm}\` | aarch64 Linux musl |"
-            echo "| \`SHA256SUMS\` | 校验和 |"
-            echo
-            echo "### Changelog"
-            echo
-            if [[ -n "${prev}" ]]; then
-              echo "Compared to \`${prev}\` · **${commit_count}** commits (no merges)."
-              echo
-              echo "Full history: https://github.com/${repo}/compare/${prev}...${tag}"
-              echo
-              echo "<details>"
-              echo "<summary>Commits since ${prev}</summary>"
-              echo
-              git log --pretty=format:'- %s (%h)' "${prev}..HEAD" --no-merges
-              echo
-              echo
-              echo "</details>"
-              echo
-            else
-              echo "_No previous \`watch-v*\` tag found._"
-              echo
-            fi
-            echo "### Support"
-            echo
-            echo "- Issues: https://github.com/${repo}/issues"
-            echo "- Desktop releases: https://github.com/${repo}/releases?q=v"
-            echo
-            echo "---"
-            echo
-            echo "Tag \`${tag}\` · built by [Release ncd-watch](https://github.com/${repo}/actions/workflows/release-ncd-watch.yml)"
-          } > "${notes_path}"
-
+          # 优先 docs/releases/watch-vX.Y.Z.md；publish 必须 checkout 才能读到
+          node scripts/release-notes.mjs render \
+            --kind watch \
+            --version "${plain}" \
+            --out "${notes_path}"
           echo "NOTES_PATH=${notes_path}" >> "$GITHUB_OUTPUT"
+          echo "---- release notes ----"
           cat "${notes_path}"
 
       - name: Publish GitHub Release
