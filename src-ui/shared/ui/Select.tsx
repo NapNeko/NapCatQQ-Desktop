@@ -107,13 +107,25 @@ function SelectInner<V extends string>(
                     <RadixSelect.Content
                         ref={(node) => {
                             if (!node) return;
+                            // Content 可能以 hidden 起手；无论动效开/关，最终都必须可见。
+                            // 旧 bug：!m.enabled 时直接 return，下拉挂在 DOM 里但永远看不见。
+                            gsap.killTweensOf(node);
+                            if (!m.enabled) {
+                                gsap.set(node, { autoAlpha: 1, scale: 1, y: 0 });
+                                return;
+                            }
                             // 进场动画:trigger 方向(data-side)缩放展开。Radix 在 mount
                             // 时立刻给 data-side。读不到时退化为顶部展开。
-                            if (!m.enabled) return;
                             const side = node.getAttribute('data-side') ?? 'bottom';
                             const origin =
                                 side === 'top' ? '50% 100%' : side === 'bottom' ? '50% 0%' : '50% 50%';
+                            const dur = m.duration('fast');
                             gsap.set(node, { transformOrigin: origin });
+                            // duration 异常为 0 时 fromTo 可能不跑完，直接落到可见终态。
+                            if (dur <= 0) {
+                                gsap.set(node, { autoAlpha: 1, scale: 1, y: 0 });
+                                return;
+                            }
                             gsap.fromTo(
                                 node,
                                 { autoAlpha: 0, scale: 0.96, y: side === 'top' ? 4 : -4 },
@@ -121,8 +133,12 @@ function SelectInner<V extends string>(
                                     autoAlpha: 1,
                                     scale: 1,
                                     y: 0,
-                                    duration: m.duration('fast'),
+                                    duration: dur,
                                     ease: m.ease.enterMicro,
+                                    // 被 kill / 中断时也落到可见，避免偶发卡在 hidden。
+                                    onInterrupt: () => {
+                                        gsap.set(node, { autoAlpha: 1, scale: 1, y: 0 });
+                                    },
                                 },
                             );
                         }}
@@ -133,7 +149,13 @@ function SelectInner<V extends string>(
                             'bg-elevated shadow-popover',
                             'min-w-[var(--radix-select-trigger-width)]',
                         )}
-                        style={{ visibility: 'hidden', opacity: 0 }}
+                        // 关动效 / reduced-motion：不写 hidden，不依赖 GSAP。
+                        // 开动效：先 hidden，由上面 ref 回调 fromTo 露出。
+                        style={
+                            m.enabled
+                                ? { visibility: 'hidden', opacity: 0 }
+                                : undefined
+                        }
                     >
                         <RadixSelect.ScrollUpButton className="flex h-6 cursor-default items-center justify-center bg-elevated text-text-tertiary">
                             <ChevronUp size={14} />

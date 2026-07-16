@@ -51,3 +51,12 @@ export {
     PopoverClose,
     PopoverAnchor,
 } from './Popover';
+export {
+    TimePicker,
+    formatTimeValue,
+    timeFromMs,
+    applyTimeToMs,
+    type TimePickerProps,
+    type TimeValue,
+} from './TimePicker';
+export { MonthCalendar, type MonthCalendarProps } from './MonthCalendar';

@@ -98,22 +98,27 @@
     border-style: solid;
     box-shadow: var(--shadow-md);
 }
+
 .ndf-infobar--info {
     background: var(--infobar-info-bg);
     border-color: var(--infobar-info-border);
 }
+
 .ndf-infobar--success {
     background: var(--infobar-success-bg);
     border-color: var(--infobar-success-border);
 }
+
 .ndf-infobar--warning {
     background: var(--infobar-warning-bg);
     border-color: var(--infobar-warning-border);
 }
+
 .ndf-infobar--danger {
     background: var(--infobar-danger-bg);
     border-color: var(--infobar-danger-border);
 }
+
 .ndf-infobar-icon-well {
     display: flex;
     height: 2.25rem;
@@ -123,15 +128,19 @@
     justify-content: center;
     border-radius: var(--radius-sm);
 }
+
 .ndf-infobar-icon-well--info {
     background: var(--infobar-icon-well-info);
 }
+
 .ndf-infobar-icon-well--success {
     background: var(--infobar-icon-well-success);
 }
+
 .ndf-infobar-icon-well--warning {
     background: var(--infobar-icon-well-warning);
 }
+
 .ndf-infobar-icon-well--danger {
     background: var(--infobar-icon-well-danger);
 }
@@ -264,6 +273,55 @@ samp,
     background: none;
 }
 
+/*
+ * 指标「时间颗粒度」面板布局（对齐 CCS UsageDateRangePicker 思路）。
+ * 用弹层自身 inline-size 做容器查询，不用 viewport sm:，避免窄窗把日历挤出裁切。
+ * 默认上下叠；弹层够宽时左右并排，右侧月历始终可见。
+ */
+.ndf-metrics-range-popover {
+    container-type: inline-size;
+    container-name: metrics-range;
+}
+
+.ndf-metrics-range-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: stretch;
+}
+
+.ndf-metrics-range-fields {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ndf-metrics-range-calendar {
+    min-width: 0;
+    min-height: 16rem;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+@container metrics-range (min-width: 32rem) {
+    .ndf-metrics-range-layout {
+        flex-direction: row;
+        align-items: stretch;
+    }
+
+    .ndf-metrics-range-fields {
+        width: 15.5rem;
+        flex: 0 0 15.5rem;
+    }
+
+    .ndf-metrics-range-calendar {
+        flex: 1 1 0%;
+        min-height: 0;
+    }
+}
+
 /* 开屏粒子：静态样式 + 缓慢漂移（具体位移由 GSAP 进场覆盖） */
 @keyframes splash-particle-drift {
 
@@ -309,23 +367,19 @@ samp,
     width: 45%;
     height: 200%;
     transform: skewX(-18deg);
-    background: linear-gradient(
-        90deg,
-        transparent,
-        color-mix(in srgb, var(--text-primary) 18%, transparent),
-        transparent
-    );
+    background: linear-gradient(90deg,
+            transparent,
+            color-mix(in srgb, var(--text-primary) 18%, transparent),
+            transparent);
     opacity: 0;
     pointer-events: none;
 }
 
 .ndf-splash-bar-shine {
-    background: linear-gradient(
-        90deg,
-        transparent,
-        color-mix(in srgb, var(--text-primary) 22%, transparent),
-        transparent
-    );
+    background: linear-gradient(90deg,
+            transparent,
+            color-mix(in srgb, var(--text-primary) 22%, transparent),
+            transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
