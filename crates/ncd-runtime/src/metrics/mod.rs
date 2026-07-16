@@ -39,6 +39,12 @@ pub fn remote_metrics_nodes_posix(home: &str, bot_id: &str) -> String {
     format!("{root}/ncd-watch/metrics/{bot_id}/nodes.json")
 }
 
+/// 远端整机资源快照（ncd-watch 写；非 per-bot）
+pub fn remote_metrics_host_stats_posix(home: &str) -> String {
+    let root = home.trim_end_matches('/');
+    format!("{root}/ncd-watch/metrics/host-stats.json")
+}
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

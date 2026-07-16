@@ -1,9 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use ncd_domain::{
-    MemoryMetrics, NetworkNodeKind, NetworkNodeMetrics, ProbeStatsFile,
-};
+use ncd_domain::{MemoryMetrics, NetworkNodeKind, NetworkNodeMetrics, ProbeStatsFile};
 use serde_json::Value;
 
 pub fn load_probe_stats_file(path: &Path) -> Result<ProbeStatsFile, String> {
@@ -43,6 +41,19 @@ pub fn parse_probe_stats_json(text: &str) -> Result<ProbeStatsFile, String> {
                 .get("host_used_bytes")
                 .or_else(|| m.get("hostUsedBytes"))
                 .and_then(|x| x.as_u64()),
+            host_cpu_percent: m
+                .get("host_cpu_percent")
+                .or_else(|| m.get("hostCpuPercent"))
+                .or_else(|| m.get("cpuPercent"))
+                .and_then(|x| x.as_f64()),
+            host_disk_total_bytes: m
+                .get("host_disk_total_bytes")
+                .or_else(|| m.get("hostDiskTotalBytes"))
+                .and_then(|x| x.as_u64()),
+            host_disk_used_bytes: m
+                .get("host_disk_used_bytes")
+                .or_else(|| m.get("hostDiskUsedBytes"))
+                .and_then(|x| x.as_u64()),
         })
     });
 
@@ -57,11 +68,7 @@ pub fn parse_probe_stats_json(text: &str) -> Result<ProbeStatsFile, String> {
             if name.is_empty() {
                 continue;
             }
-            let kind = parse_kind(
-                n.get("kind")
-                    .and_then(|x| x.as_str())
-                    .unwrap_or("unknown"),
-            );
+            let kind = parse_kind(n.get("kind").and_then(|x| x.as_str()).unwrap_or("unknown"));
             nodes.push(NetworkNodeMetrics {
                 name,
                 kind,
