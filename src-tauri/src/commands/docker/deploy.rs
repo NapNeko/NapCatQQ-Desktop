@@ -51,7 +51,8 @@ pub async fn docker_deploy(
             ],
             depends_on: vec![],
             dedupe_key: Some(format!("docker-pull:{host_id}:{}", flavor.as_str())),
-            cancellable: false,
+            // 可取消：停止会 cancel token 并杀掉 docker pull 子进程
+            cancellable: true,
             runner: Box::new(move |task_ctx| {
                 Box::pin(async move {
                     let result = docker_deploy_execute(
@@ -63,6 +64,7 @@ pub async fn docker_deploy(
                         Some(task_ctx),
                     )
                     .await;
+                    // finish() 会看 cancel token 把状态标成 Cancelled,这里不必按文案分支
                     let run_result = match &result {
                         Ok(_) => DeploymentTaskRunResult::ok("镜像已就绪"),
                         Err(err) => DeploymentTaskRunResult::failed(err.clone()),
@@ -155,9 +157,25 @@ async fn docker_deploy_execute(
         let tid_pull = task_id.clone();
         let task_ctx_pull = task_ctx.clone();
 
-        let candidates = spec.flavor.pull_candidates();
+        let candidates = spec.resolve_candidates();
         let official = spec.flavor.default_image();
         let candidate_count = candidates.len();
+        let cancel = task_ctx.as_ref().map(|c| c.cancel_token());
+        if let Some(m) = spec.mirror.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            emit(ProgressKind::Log {
+                level: ProgressLogLevel::Info,
+                message: format!("镜像源策略：{m}"),
+            });
+        } else {
+            emit(ProgressKind::Log {
+                level: ProgressLogLevel::Info,
+                message: format!(
+                    "自动换源：优先国内镜像站；有进度可拉最长约 {} 分钟，连续 {} 分钟无输出才换源",
+                    ncd_deploy::docker::DockerCli::PULL_PER_CANDIDATE_TIMEOUT.as_secs() / 60,
+                    ncd_deploy::docker::DockerCli::PULL_STALL_TIMEOUT.as_secs() / 60
+                ),
+            });
+        }
 
         let last_activity_ms = Arc::new(AtomicU64::new(now_epoch_ms()));
         let heartbeat_stop = Arc::new(AtomicBool::new(false));
@@ -283,7 +301,13 @@ async fn docker_deploy_execute(
             };
 
         let pull_result = cli
-            .pull_with_fallback(&candidates, official, new_line_cb, Some(on_mirror_fail))
+            .pull_with_fallback_cancel(
+                &candidates,
+                official,
+                cancel.clone(),
+                new_line_cb,
+                Some(on_mirror_fail),
+            )
             .await;
 
         heartbeat_stop.store(true, Ordering::Relaxed);
@@ -309,6 +333,19 @@ async fn docker_deploy_execute(
                 );
             }
             Err(e) => {
+                if matches!(
+                    &e,
+                    ncd_deploy::docker::DockerCliError::Host(ncd_host::HostError::Cancelled)
+                ) || cancel.as_ref().is_some_and(|c| c.is_cancelled())
+                {
+                    let msg = "已取消".to_string();
+                    emit(ProgressKind::Log {
+                        level: ProgressLogLevel::Warn,
+                        message: msg.clone(),
+                    });
+                    emit(ProgressKind::Finished { ok: false });
+                    return Err(msg);
+                }
                 let (_kind, user_msg) = classify_pull_failure(&e);
                 let msg = format!("{}（已尝试 {} 个镜像源）", user_msg, candidate_count);
                 emit(ProgressKind::Log {
