@@ -15,12 +15,19 @@ services:
 {% if webui_bootstrap %}      SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD: {{ webui_bootstrap|tojson }}
 {% endif %}      SNOWLUMA_WEBUI_PORT: "5099"
       SNOWLUMA_HOOK_AUTOLOAD: "1"
-    ports:
+{% if metrics %}      NCD_METRICS_ENABLED: "1"
+      NCD_METRICS_OUT: {{ metrics.out|tojson }}
+      NCD_METRICS_INTERVAL_MS: "{{ metrics.interval_ms }}"
+      NCD_METRICS_NODES_PATH: {{ metrics.nodes|tojson }}
+{% if metrics.node_options %}      NODE_OPTIONS: {{ metrics.node_options|tojson }}
+{% endif %}{% endif %}    ports:
 {% for port in ports %}      - "{{ port.host }}:{{ port.container }}"
 {% endfor %}    volumes:
       - {{ name }}-data:/app/snowluma-data
       - {{ name }}-qq-config:/app/.config
       - {{ name }}-qq-data:/app/.local/share
+{% if metrics %}      - {{ metrics.metrics_volume }}
+{% endif %}
 volumes:
   {{ name }}-data:
   {{ name }}-qq-config:

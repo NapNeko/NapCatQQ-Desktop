@@ -8,8 +8,15 @@ services:
       NAPCAT_GID: "{{ gid }}"
       WEBUI_TOKEN: {{ token|tojson }}
 {% if qq_id %}      ACCOUNT: "{{ qq_id }}"
+{% endif %}{% if metrics %}      NCD_METRICS_ENABLED: "1"
+      NCD_METRICS_OUT: {{ metrics.out|tojson }}
+      NCD_METRICS_INTERVAL_MS: "{{ metrics.interval_ms }}"
+      NCD_METRICS_NODES_PATH: {{ metrics.nodes|tojson }}
 {% endif %}    ports:
 {% for port in ports %}      - "{{ port.host }}:{{ port.container }}"
 {% endfor %}    volumes:
       - ./napcat/config:/app/napcat/config
       - ./ntqq:/app/.config/QQ
+{% if metrics %}      - {{ metrics.metrics_volume }}
+{% if metrics.load_volume %}      - {{ metrics.load_volume }}
+{% endif %}{% endif %}

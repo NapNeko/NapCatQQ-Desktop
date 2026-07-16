@@ -9,6 +9,9 @@
 //! 凭据(token / vnc 密码)由调用方生成后通过 secret 参数传进来,这里只负责把它
 //! 拼进 yaml,不自己造随机值(纯函数好测)
 //!
+//! 可选 DockerMetricsOverlay:实例指标探针(NCD_METRICS_* + bind 卷)。
+//! 关指标时不传 overlay,输出与现网基线一致。
+//!
 //! 模板渲染走 ncd-template(MiniJinja),凭据字段用 |tojson 过滤器做 YAML 安全
 //! 转义,避免含特殊字符的值破坏 compose 结构
 
@@ -17,6 +20,76 @@ use std::sync::OnceLock;
 use ncd_domain::{DockerDeploySpec, DockerFlavor};
 use ncd_template::TemplateEngine;
 use serde::Serialize;
+
+/// 容器内 metrics 挂载点(宿主机 ncd-watch/metrics 整目录 bind)
+pub const DOCKER_METRICS_CONTAINER_ROOT: &str = "/ncd-metrics";
+/// 官方 NapCat-Docker 镜像内 load 入口(Dockerfile 写死)
+pub const DOCKER_NAPCAT_LOAD_CONTAINER_PATH: &str = "/opt/QQ/resources/app/loadNapCat.js";
+/// 官方镜像内 napcat 入口 URI
+pub const DOCKER_NAPCAT_MJS_URI: &str = "file:///app/napcat/napcat.mjs";
+
+/// compose 可选 metrics 注入(路径均为容器内语义; volume 行为 host:container)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DockerMetricsOverlay {
+    /// NCD_METRICS_OUT(容器路径)
+    pub out: String,
+    /// NCD_METRICS_NODES_PATH(容器路径)
+    pub nodes: String,
+    pub interval_ms: u64,
+    /// 例如 `/home/u/ncd-watch/metrics:/ncd-metrics`
+    pub metrics_volume: String,
+    /// NapCat: 覆盖 loadNapCat.js 的 bind; SnowLuma 为 None
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_volume: Option<String>,
+    /// SnowLuma: NODE_OPTIONS=--require ...; NapCat 必须为 None
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_options: Option<String>,
+}
+
+impl DockerMetricsOverlay {
+    /// 容器内路径:(out, nodes, probe)；整目录挂载 /ncd-metrics 时使用
+    pub fn container_paths(bot_id: &str) -> (String, String, String) {
+        let root = DOCKER_METRICS_CONTAINER_ROOT;
+        (
+            format!("{root}/{bot_id}/net-stats.json"),
+            format!("{root}/{bot_id}/nodes.json"),
+            format!("{root}/ncd-ob11-stats.cjs"),
+        )
+    }
+
+    pub fn for_napcat(
+        host_metrics_root: &str,
+        host_load_script: &str,
+        bot_id: &str,
+        interval_ms: u64,
+    ) -> Self {
+        let (out, nodes, _) = Self::container_paths(bot_id);
+        let host_root = host_metrics_root.trim_end_matches('/');
+        Self {
+            out,
+            nodes,
+            interval_ms,
+            metrics_volume: format!("{host_root}:{DOCKER_METRICS_CONTAINER_ROOT}"),
+            load_volume: Some(format!(
+                "{host_load_script}:{DOCKER_NAPCAT_LOAD_CONTAINER_PATH}:ro"
+            )),
+            node_options: None,
+        }
+    }
+
+    pub fn for_snowluma(host_metrics_root: &str, bot_id: &str, interval_ms: u64) -> Self {
+        let (out, nodes, probe) = Self::container_paths(bot_id);
+        let host_root = host_metrics_root.trim_end_matches('/');
+        Self {
+            out,
+            nodes,
+            interval_ms,
+            metrics_volume: format!("{host_root}:{DOCKER_METRICS_CONTAINER_ROOT}"),
+            load_volume: None,
+            node_options: Some(format!("--require \"{probe}\"")),
+        }
+    }
+}
 
 /// compose 中凭据的来源
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,7 +140,7 @@ fn engine() -> &'static TemplateEngine {
 /// secret 是调用方生成的凭据:NapCat 当 WEBUI_TOKEN,SnowLuma 当 VNC_PASSWD
 /// uid / gid 写进对应的 *_UID / *_GID 环境变量(Linux 文件属主对齐)
 pub fn render_compose(spec: &DockerDeploySpec, secret: &str, uid: u32, gid: u32) -> String {
-    render_compose_with_secret(spec, ComposeSecret::Literal(secret), uid, gid, None)
+    render_compose_with_secret(spec, ComposeSecret::Literal(secret), uid, gid, None, None)
 }
 
 /// 渲染引用同目录 .env 的 compose 文件文本
@@ -77,7 +150,25 @@ pub fn render_compose_with_env(
     uid: u32,
     gid: u32,
 ) -> String {
-    render_compose_with_secret(spec, ComposeSecret::EnvRef { variable }, uid, gid, None)
+    render_compose_with_metrics(spec, variable, uid, gid, None)
+}
+
+/// 同 render_compose_with_env,可附带 metrics overlay
+pub fn render_compose_with_metrics(
+    spec: &DockerDeploySpec,
+    variable: &str,
+    uid: u32,
+    gid: u32,
+    metrics: Option<&DockerMetricsOverlay>,
+) -> String {
+    render_compose_with_secret(
+        spec,
+        ComposeSecret::EnvRef { variable },
+        uid,
+        gid,
+        None,
+        metrics,
+    )
 }
 
 /// SnowLuma:VNC 与 WebUI bootstrap 分别来自 .env 中两个变量
@@ -88,6 +179,18 @@ pub fn render_snowluma_compose_with_env(
     uid: u32,
     gid: u32,
 ) -> String {
+    render_snowluma_compose_with_metrics(spec, vnc_var, webui_bootstrap_var, uid, gid, None)
+}
+
+/// 同 render_snowluma_compose_with_env,可附带 metrics overlay
+pub fn render_snowluma_compose_with_metrics(
+    spec: &DockerDeploySpec,
+    vnc_var: &str,
+    webui_bootstrap_var: &str,
+    uid: u32,
+    gid: u32,
+    metrics: Option<&DockerMetricsOverlay>,
+) -> String {
     render_compose_with_secret(
         spec,
         ComposeSecret::EnvRef { variable: vnc_var },
@@ -96,6 +199,7 @@ pub fn render_snowluma_compose_with_env(
         Some(ComposeSecret::EnvRef {
             variable: webui_bootstrap_var,
         }),
+        metrics,
     )
 }
 
@@ -105,10 +209,13 @@ fn render_compose_with_secret(
     uid: u32,
     gid: u32,
     snowluma_webui_bootstrap: Option<ComposeSecret<'_>>,
+    metrics: Option<&DockerMetricsOverlay>,
 ) -> String {
     match spec.flavor {
-        DockerFlavor::NapCat => render_napcat(spec, secret, uid, gid),
-        DockerFlavor::SnowLuma => render_snowluma(spec, secret, snowluma_webui_bootstrap, uid, gid),
+        DockerFlavor::NapCat => render_napcat(spec, secret, uid, gid, metrics),
+        DockerFlavor::SnowLuma => {
+            render_snowluma(spec, secret, snowluma_webui_bootstrap, uid, gid, metrics)
+        }
     }
 }
 
@@ -129,9 +236,15 @@ fn port_views(spec: &DockerDeploySpec) -> Vec<PortView> {
         .collect()
 }
 
-fn render_napcat(spec: &DockerDeploySpec, secret: ComposeSecret<'_>, uid: u32, gid: u32) -> String {
+fn render_napcat(
+    spec: &DockerDeploySpec,
+    secret: ComposeSecret<'_>,
+    uid: u32,
+    gid: u32,
+    metrics: Option<&DockerMetricsOverlay>,
+) -> String {
     #[derive(Serialize)]
-    struct Ctx {
+    struct Ctx<'a> {
         image: &'static str,
         name: String,
         uid: u32,
@@ -139,6 +252,7 @@ fn render_napcat(spec: &DockerDeploySpec, secret: ComposeSecret<'_>, uid: u32, g
         token: String,
         qq_id: Option<u64>,
         ports: Vec<PortView>,
+        metrics: Option<&'a DockerMetricsOverlay>,
     }
 
     let ctx = Ctx {
@@ -149,6 +263,7 @@ fn render_napcat(spec: &DockerDeploySpec, secret: ComposeSecret<'_>, uid: u32, g
         token: secret.napcat_webui_token(),
         qq_id: spec.qq_id.filter(|&qq| qq != 0),
         ports: port_views(spec),
+        metrics,
     };
 
     #[allow(clippy::expect_used)]
@@ -163,9 +278,10 @@ fn render_snowluma(
     webui_bootstrap: Option<ComposeSecret<'_>>,
     uid: u32,
     gid: u32,
+    metrics: Option<&DockerMetricsOverlay>,
 ) -> String {
     #[derive(Serialize)]
-    struct Ctx {
+    struct Ctx<'a> {
         image: &'static str,
         name: String,
         uid: u32,
@@ -173,6 +289,7 @@ fn render_snowluma(
         vnc_passwd: String,
         webui_bootstrap: Option<String>,
         ports: Vec<PortView>,
+        metrics: Option<&'a DockerMetricsOverlay>,
     }
 
     let ctx = Ctx {
@@ -183,6 +300,7 @@ fn render_snowluma(
         vnc_passwd: vnc_secret.snowluma_vnc_passwd(),
         webui_bootstrap: webui_bootstrap.map(|s| s.snowluma_webui_bootstrap()),
         ports: port_views(spec),
+        metrics,
     };
 
     #[allow(clippy::expect_used)]
@@ -362,5 +480,64 @@ mod tests {
             }
         }
         false
+    }
+
+    #[test]
+    fn napcat_compose_without_metrics_has_no_ncd_env() {
+        let spec = DockerDeploySpec::napcat_default();
+        let yaml = render_compose_with_env(&spec, "WEBUI_TOKEN", 1000, 1000);
+        assert!(!yaml.contains("NCD_METRICS"));
+        assert!(!yaml.contains("/ncd-metrics"));
+        assert!(!yaml.contains("loadNapCat.js"));
+    }
+
+    #[test]
+    fn napcat_compose_with_metrics_binds_probe_and_load() {
+        let mut spec = DockerDeploySpec::napcat_default();
+        spec.qq_id = Some(10001);
+        let overlay = DockerMetricsOverlay::for_napcat(
+            "/home/u/ncd-watch/metrics",
+            "/home/u/.napcat-bots/ncbot-10001/ncd-metrics-load/loadNapCat.js",
+            "10001",
+            3000,
+        );
+        let yaml = render_compose_with_metrics(&spec, "WEBUI_TOKEN", 1000, 1000, Some(&overlay));
+        assert!(yaml.contains("NCD_METRICS_ENABLED: \"1\""));
+        assert!(yaml.contains("/ncd-metrics/10001/net-stats.json"));
+        assert!(yaml.contains("/home/u/ncd-watch/metrics:/ncd-metrics"));
+        assert!(yaml.contains(
+            "/home/u/.napcat-bots/ncbot-10001/ncd-metrics-load/loadNapCat.js:/opt/QQ/resources/app/loadNapCat.js:ro"
+        ));
+        assert!(!yaml.contains("NODE_OPTIONS"));
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).expect("yaml");
+        assert!(parsed.get("services").is_some());
+    }
+
+    #[test]
+    fn snowluma_compose_with_metrics_sets_node_options() {
+        let mut spec = DockerDeploySpec::snowluma_default();
+        spec.container_name = "slbot-10001".to_string();
+        let overlay =
+            DockerMetricsOverlay::for_snowluma("/home/u/ncd-watch/metrics", "10001", 5000);
+        let yaml = render_snowluma_compose_with_metrics(
+            &spec,
+            "VNC_PASSWD",
+            "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD",
+            1000,
+            1000,
+            Some(&overlay),
+        );
+        assert!(yaml.contains("NCD_METRICS_ENABLED: \"1\""));
+        assert!(
+            yaml.contains("NODE_OPTIONS: \"--require \\\"/ncd-metrics/ncd-ob11-stats.cjs\\\"\"")
+                || yaml
+                    .contains("NODE_OPTIONS: \"--require \\\"/ncd-metrics/ncd-ob11-stats.cjs\\\"")
+                || yaml.contains("--require \\\"/ncd-metrics/ncd-ob11-stats.cjs\\\"")
+                || yaml.contains("--require \"/ncd-metrics/ncd-ob11-stats.cjs\"")
+        );
+        assert!(yaml.contains("/home/u/ncd-watch/metrics:/ncd-metrics"));
+        assert!(!yaml.contains("loadNapCat.js"));
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).expect("yaml");
+        assert!(parsed.get("services").is_some());
     }
 }

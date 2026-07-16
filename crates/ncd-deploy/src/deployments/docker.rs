@@ -28,11 +28,12 @@ use crate::deployment::{
     Deployment, DeploymentError, DeploymentHandle, DeploymentProgressSink, DeploymentState,
 };
 use crate::docker::{
-    DockerCli,
-    compose::{render_compose_with_env, render_snowluma_compose_with_env},
+    DockerCli, DockerMetricsOverlay,
+    compose::{render_compose_with_metrics, render_snowluma_compose_with_metrics},
 };
 
 /// Docker 部署实装
+#[derive(Clone)]
 pub struct DockerDeployment {
     id: &'static str,
     flavors: &'static [BotFlavor],
@@ -41,6 +42,8 @@ pub struct DockerDeployment {
     /// SnowLuma: 写入 SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD(WebUI 登录,非 VNC)
     sl_webui_bootstrap: Option<String>,
     allow_test_default_token: bool,
+    /// 可选实例指标:compose 注入 NCD_METRICS_* + bind 卷
+    metrics_overlay: Option<DockerMetricsOverlay>,
 }
 
 impl DockerDeployment {
@@ -51,6 +54,7 @@ impl DockerDeployment {
             compose_secret: None,
             sl_webui_bootstrap: None,
             allow_test_default_token: false,
+            metrics_overlay: None,
         }
     }
 
@@ -80,6 +84,12 @@ impl DockerDeployment {
             compose_secret: Some(passwd.into()),
             ..Self::new()
         }
+    }
+
+    /// 附加实例指标 compose overlay(None = 关,与现网 compose 一致)
+    pub fn with_metrics_overlay(mut self, overlay: Option<DockerMetricsOverlay>) -> Self {
+        self.metrics_overlay = overlay;
+        self
     }
 
     #[cfg(test)]
@@ -268,16 +278,18 @@ impl Deployment for DockerDeployment {
             .map_err(|e| DeploymentError::InstallFailed(format!("写 Docker .env 失败: {e}")))?;
 
         let (uid, gid) = default_uid_gid(host);
+        let metrics = self.metrics_overlay.as_ref();
         let yaml = if backend == BackendType::SnowLuma {
-            render_snowluma_compose_with_env(
+            render_snowluma_compose_with_metrics(
                 &spec,
                 "VNC_PASSWD",
                 "SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD",
                 uid,
                 gid,
+                metrics,
             )
         } else {
-            render_compose_with_env(&spec, env_var, uid, gid)
+            render_compose_with_metrics(&spec, env_var, uid, gid, metrics)
         };
         let compose_path = HostPath::from_posix(format!("{project_dir}/docker-compose.yml"));
         host.write_file(&compose_path, yaml.as_bytes())
