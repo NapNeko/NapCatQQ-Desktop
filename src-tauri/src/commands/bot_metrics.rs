@@ -3,10 +3,13 @@
 //! 本机：MetricsCollector 读 net-stats + system_metrics 合并主机内存/CPU
 //! 远端：SSH 读 net-stats + host-stats.json（ncd-watch 写）
 //! 禁止把远端 bot 的陈旧本机文件当成 live 数据。
+//!
+//! 远端 stale 必须用「远端主机时钟」比 collectedAtMs：Desktop 与 VPS 时钟差
+//! 几分钟就会把仍在刷新的 net-stats 判成永远陈旧。
 
 use ncd_domain::bot_config::BotConfig;
 use ncd_domain::{BotId, BotRuntimeMetrics, MetricsHistoryPoint, ProbeHealth};
-use ncd_host::HostPath;
+use ncd_host::{HostCommand, HostPath};
 use ncd_runtime::metrics::{
     BotRuntimeMetricsPrefs, history_path_for_bot, load_history, now_ms, parse_probe_stats_json,
     remote_metrics_history_posix, remote_metrics_host_stats_posix, remote_metrics_stats_posix,
@@ -23,10 +26,15 @@ fn metrics_prefs_from_settings(settings: &ncd_domain::AppSettings) -> BotRuntime
     prefs
 }
 
+/// 远端 stale 窗口：比本机更宽，吸收 SSH 延迟与探针 flush 抖动
+fn remote_stale_after_ms(prefs: &BotRuntimeMetricsPrefs) -> u64 {
+    prefs.interval_ms.saturating_mul(5).max(15_000)
+}
+
 fn metrics_from_bytes(
     bot_id: BotId,
     bytes: &[u8],
-    prefs: &BotRuntimeMetricsPrefs,
+    stale_after_ms: u64,
     now: u64,
 ) -> BotRuntimeMetrics {
     let text = match std::str::from_utf8(bytes) {
@@ -40,7 +48,17 @@ fn metrics_from_bytes(
         }
     };
     match parse_probe_stats_json(text) {
-        Ok(file) => file.into_metrics(bot_id, prefs.stale_after_ms(), now),
+        Ok(file) => {
+            let mut m = file.into_metrics(bot_id, stale_after_ms, now);
+            if m.probe == ProbeHealth::Stale {
+                let age = now.saturating_sub(m.collected_at_ms);
+                m.probe_error = Some(format!(
+                    "快照偏旧约 {}s（阈值 {stale_after_ms}ms；若探针仍在写请查远端时钟/注入）",
+                    age / 1000
+                ));
+            }
+            m
+        }
         Err(err) => {
             let mut m = BotRuntimeMetrics::unavailable(bot_id);
             m.probe = ProbeHealth::Error;
@@ -49,6 +67,19 @@ fn metrics_from_bytes(
             m
         }
     }
+}
+
+/// 远端主机 epoch 毫秒（秒精度 ×1000）。失败则 None，调用方回退本机 now。
+async fn probe_remote_now_ms(host: &dyn ncd_host::Host) -> Option<u64> {
+    let out = host
+        .run_to_string(HostCommand::new("date").arg("+%s"))
+        .await
+        .ok()?;
+    if !out.success() {
+        return None;
+    }
+    let secs: u64 = out.stdout.trim().lines().next()?.parse().ok()?;
+    Some(secs.saturating_mul(1000))
 }
 
 struct HostMerge {
@@ -120,27 +151,23 @@ fn parse_host_stats_json(text: &str) -> HostMerge {
     let disk = v.get("disk");
     let nz = |x: Option<u64>| x.filter(|&n| n > 0);
     HostMerge {
-        mem_total: nz(
-            mem.and_then(|m| m.get("totalBytes").or_else(|| m.get("total_bytes")))
-                .and_then(|x| x.as_u64()),
-        ),
-        mem_used: nz(
-            mem.and_then(|m| m.get("usedBytes").or_else(|| m.get("used_bytes")))
-                .and_then(|x| x.as_u64()),
-        ),
+        mem_total: nz(mem
+            .and_then(|m| m.get("totalBytes").or_else(|| m.get("total_bytes")))
+            .and_then(|x| x.as_u64())),
+        mem_used: nz(mem
+            .and_then(|m| m.get("usedBytes").or_else(|| m.get("used_bytes")))
+            .and_then(|x| x.as_u64())),
         cpu: v
             .get("cpuPercent")
             .or_else(|| v.get("cpu_percent"))
             .and_then(|x| x.as_f64())
             .filter(|p| p.is_finite() && *p >= 0.0),
-        disk_total: nz(
-            disk.and_then(|d| d.get("totalBytes").or_else(|| d.get("total_bytes")))
-                .and_then(|x| x.as_u64()),
-        ),
-        disk_used: nz(
-            disk.and_then(|d| d.get("usedBytes").or_else(|| d.get("used_bytes")))
-                .and_then(|x| x.as_u64()),
-        ),
+        disk_total: nz(disk
+            .and_then(|d| d.get("totalBytes").or_else(|| d.get("total_bytes")))
+            .and_then(|x| x.as_u64())),
+        disk_used: nz(disk
+            .and_then(|d| d.get("usedBytes").or_else(|| d.get("used_bytes")))
+            .and_then(|x| x.as_u64())),
     }
 }
 
@@ -246,16 +273,22 @@ async fn fetch_one_metrics(
                 Ok(v) => v,
                 Err(e) => return remote_unavailable(bot_id, e, now),
             };
+            // 用远端时钟判 stale；拿不到则放宽窗口，避免 Desktop 时钟快导致假陈旧
+            let remote_now = probe_remote_now_ms(host.as_ref()).await;
+            let (clock_ms, stale_ms) = match remote_now {
+                Some(t) => (t, remote_stale_after_ms(prefs)),
+                None => (now, prefs.interval_ms.saturating_mul(10).max(60_000)),
+            };
             let remote_posix = remote_metrics_stats_posix(&home, bot_id.as_str());
             let remote_path = HostPath::from_posix(&remote_posix);
             let m = match host.read_file(&remote_path).await {
-                Ok(bytes) => metrics_from_bytes(bot_id, &bytes, prefs, now),
+                Ok(bytes) => metrics_from_bytes(bot_id, &bytes, stale_ms, clock_ms),
                 Err(err) => {
                     let hint = remote_probe_error_hint(host.as_ref(), &remote_posix, &err).await;
                     let mut m = BotRuntimeMetrics::unavailable(bot_id);
                     m.probe = ProbeHealth::NotInjected;
                     m.probe_error = Some(hint);
-                    m.collected_at_ms = now;
+                    m.collected_at_ms = clock_ms;
                     m
                 }
             };
