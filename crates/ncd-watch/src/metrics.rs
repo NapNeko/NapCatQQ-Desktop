@@ -1,6 +1,7 @@
-//! 远端脱管时续采 Bot 探针快照并写入 history.jsonl
+//! 远端脱管时续采 Bot 探针快照并写入 history.jsonl；
+//! 另写整机 host-stats.json（内存/CPU/磁盘，供 Desktop 指标页合并）。
 //!
-//! 不启停 Bot；失败不影响探活/告警主路径。
+//! 不启停 Bot；host 采样失败只跳过写盘，不影响探活/告警主路径。
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -73,11 +74,20 @@ impl WatchPaths {
     pub fn metrics_json(&self) -> PathBuf {
         self.config_dir.join("metrics.json")
     }
+
+    /// 整机资源快照（与 per-bot 目录并列）
+    pub fn host_stats_json(&self) -> PathBuf {
+        self.root.join("metrics").join("host-stats.json")
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct MetricsRunState {
     pub last_history_at: std::collections::HashMap<String, u64>,
+    /// /proc/stat 上一拍 idle+total，用于 CPU%
+    pub last_cpu_idle: Option<u64>,
+    pub last_cpu_total: Option<u64>,
+    pub last_host_sample_at: u64,
 }
 
 /// 读探针文件 → 若间隔足够则 append history → GC
@@ -219,10 +229,183 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// 写整机 host-stats.json（Linux /proc；失败静默）
+///
+/// `min_interval_ms`：与 metrics sample 对齐，避免每轮探活都写盘。
+pub fn sample_host_stats(
+    host_stats_path: &Path,
+    state: &mut MetricsRunState,
+    min_interval_ms: u64,
+) {
+    let now = now_ms();
+    let iv = min_interval_ms.max(2000);
+    if now.saturating_sub(state.last_host_sample_at) < iv {
+        return;
+    }
+    if write_host_stats(host_stats_path, state, now).is_ok() {
+        state.last_host_sample_at = now;
+    }
+}
+
+fn write_host_stats(path: &Path, state: &mut MetricsRunState, now: u64) -> Result<(), String> {
+    let mem = read_meminfo_bytes();
+    let cpu = sample_cpu_percent(state);
+    let disk = read_root_disk_bytes();
+    // 全空则不写：避免 Desktop 把 0 当成有效主机资源
+    if mem.is_none() && cpu.is_none() && disk.is_none() {
+        return Err("no host metrics available".into());
+    }
+    let (total, used) = mem.unwrap_or((0, 0));
+    let (disk_total, disk_used) = disk.unwrap_or((0, 0));
+    let mut payload = serde_json::json!({
+        "collectedAtMs": now,
+    });
+    if total > 0 {
+        payload["memory"] = serde_json::json!({
+            "totalBytes": total,
+            "usedBytes": used,
+        });
+    }
+    if let Some(p) = cpu {
+        payload["cpuPercent"] = serde_json::json!(p);
+    }
+    if disk_total > 0 {
+        payload["disk"] = serde_json::json!({
+            "totalBytes": disk_total,
+            "usedBytes": disk_used,
+        });
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    // temp + rename：同文件系统上近似原子替换，读侧少见半截 JSON
+    let tmp = path.with_extension("json.tmp");
+    let body = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+    fs::write(&tmp, body).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// /proc/meminfo → (total, used) bytes；used ≈ total - MemAvailable
+fn read_meminfo_bytes() -> Option<(u64, u64)> {
+    let text = fs::read_to_string("/proc/meminfo").ok()?;
+    let mut total_kb = None;
+    let mut avail_kb = None;
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("MemTotal:") {
+            total_kb = parse_meminfo_kb(rest);
+        } else if let Some(rest) = line.strip_prefix("MemAvailable:") {
+            avail_kb = parse_meminfo_kb(rest);
+        }
+    }
+    let total = total_kb? * 1024;
+    let avail = avail_kb.unwrap_or(0) * 1024;
+    let used = total.saturating_sub(avail);
+    Some((total, used))
+}
+
+fn parse_meminfo_kb(s: &str) -> Option<u64> {
+    s.split_whitespace().next()?.parse().ok()
+}
+
+/// /proc/stat 两拍差分；首拍只记 baseline 返回 None
+fn sample_cpu_percent(state: &mut MetricsRunState) -> Option<f64> {
+    let (idle, total) = read_proc_stat_cpu()?;
+    let pct = match (state.last_cpu_idle, state.last_cpu_total) {
+        (Some(prev_idle), Some(prev_total)) => {
+            let d_idle = idle.saturating_sub(prev_idle);
+            let d_total = total.saturating_sub(prev_total);
+            if d_total == 0 {
+                None
+            } else {
+                let busy = d_total.saturating_sub(d_idle) as f64;
+                Some(((busy / d_total as f64) * 100.0).clamp(0.0, 100.0))
+            }
+        }
+        _ => None,
+    };
+    state.last_cpu_idle = Some(idle);
+    state.last_cpu_total = Some(total);
+    pct
+}
+
+fn read_proc_stat_cpu() -> Option<(u64, u64)> {
+    let text = fs::read_to_string("/proc/stat").ok()?;
+    let line = text.lines().next()?;
+    // cpu  user nice system idle iowait irq softirq steal ...
+    let mut parts = line.split_whitespace();
+    if parts.next()? != "cpu" {
+        return None;
+    }
+    let mut vals = [0u64; 8];
+    for v in vals.iter_mut() {
+        *v = parts.next()?.parse().ok()?;
+    }
+    let idle = vals[3].saturating_add(vals[4]); // idle + iowait
+    let total: u64 = vals.iter().sum();
+    Some((idle, total))
+}
+
+/// 根分区 used/total。优先 `df -B1`（字节）；部分 busybox 无 -B 时回退 `df -k`。
+fn read_root_disk_bytes() -> Option<(u64, u64)> {
+    if let Some(v) = parse_df_output(&run_df(&["-B1", "/"])?, 1) {
+        return Some(v);
+    }
+    // -k：1KiB 块，乘 1024 得字节
+    parse_df_output(&run_df(&["-k", "/"])?, 1024)
+}
+
+fn run_df(args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new("df")
+        .args(args)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// `block_scale`：df 输出块大小（字节）。`df -B1` → 1；`df -k` → 1024。
+fn parse_df_output(text: &str, block_scale: u64) -> Option<(u64, u64)> {
+    // Filesystem blocks Used Available Use% Mounted on
+    for line in text.lines().skip(1) {
+        let mut cols = line.split_whitespace();
+        let _fs = cols.next()?;
+        let total_blocks: u64 = cols.next()?.parse().ok()?;
+        let used_blocks: u64 = cols.next()?.parse().ok()?;
+        if total_blocks == 0 {
+            continue;
+        }
+        let total = total_blocks.saturating_mul(block_scale);
+        let used = used_blocks.saturating_mul(block_scale);
+        return Some((total, used));
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn parse_df_b1_line_to_bytes() {
+        let text = "Filesystem     1B-blocks      Used Available Use% Mounted on\n\
+/dev/sda1     10000000000 4000000000 6000000000  40% /\n";
+        let (total, used) = parse_df_output(text, 1).expect("parse");
+        assert_eq!(total, 10_000_000_000);
+        assert_eq!(used, 4_000_000_000);
+    }
+
+    #[test]
+    fn parse_df_k_scales_to_bytes() {
+        let text = "Filesystem     1K-blocks    Used Available Use% Mounted on\n\
+/dev/root         1024     512       512  50% /\n";
+        let (total, used) = parse_df_output(text, 1024).expect("parse");
+        assert_eq!(total, 1024 * 1024);
+        assert_eq!(used, 512 * 1024);
+    }
 
     #[test]
     fn sample_appends_history() {

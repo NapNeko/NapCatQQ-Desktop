@@ -274,10 +274,15 @@ pub async fn run_loop(
             "run_once summary"
         );
 
-        // 指标续采：与告警解耦；Desktop 退出后仍写 history
+        // 指标续采：与告警解耦；Desktop 退出后仍写 history + host-stats
         let metrics_cfg = WatchMetricsConfig::load_or_default(&paths.metrics_json()).clamp();
         if metrics_cfg.enabled {
             sample_metrics_once(&metrics_cfg, &mut metrics_state);
+            crate::metrics::sample_host_stats(
+                &paths.host_stats_json(),
+                &mut metrics_state,
+                u64::from(metrics_cfg.sample_interval_ms),
+            );
         }
 
         let wait = Duration::from_secs(u64::from(watch.probe_interval_secs.max(1)));
