@@ -47,6 +47,7 @@ pub async fn add_server(
     profile: ServerProfile,
     password: Option<String>,
 ) -> Result<ServerProfile, String> {
+    state.migrate_gate.ensure_idle()?;
     state.server_manager.add_server(profile, password).await
 }
 
@@ -56,6 +57,7 @@ pub async fn update_server(
     profile: ServerProfile,
     password: Option<String>,
 ) -> Result<ServerProfile, String> {
+    state.migrate_gate.ensure_idle()?;
     state.server_manager.update_server(profile, password).await
 }
 
@@ -67,6 +69,7 @@ pub async fn setup_server_key_auth(
     id: String,
     password: String,
 ) -> Result<ServerProfile, String> {
+    state.migrate_gate.ensure_idle()?;
     state.server_manager.setup_key_auth(&id, &password).await
 }
 
@@ -75,6 +78,7 @@ pub async fn delete_server(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<(), String> {
+    state.migrate_gate.ensure_idle()?;
     state.server_manager.delete_server(&id).await
 }
 

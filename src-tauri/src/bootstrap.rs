@@ -11,9 +11,12 @@ const APP_DATA_DIR_NAME: &str = "NapCatQQ Desktop";
 ///
 /// 优先级:
 /// 1. 环境变量 `NCD_DATA_ROOT`(开发/排障覆盖)
-/// 2. Windows `HKLM\SOFTWARE\NapCatQQ-Desktop\DataRoot`(MSI 或启动补写;可迁移)
-/// 3. `%ProgramData%\NapCatQQ Desktop`(生产默认)
-/// 4. LocalAppData / cwd 兜底(无 ProgramData 的非 Windows 或开发机)
+/// 2. Windows `HKCU\SOFTWARE\NapCatQQ-Desktop\DataRoot`(用户迁移,无 UAC)
+/// 3. Windows `HKLM\SOFTWARE\NapCatQQ-Desktop\DataRoot`(MSI 默认 / 启动补写)
+/// 4. `%ProgramData%\NapCatQQ Desktop`(生产默认)
+/// 5. LocalAppData / cwd 兜底(无 ProgramData 的非 Windows 或开发机)
+///
+/// `read_data_root` 已合并 2+3;此处只再调一次。
 pub(crate) fn resolve_data_root() -> PathBuf {
     if let Some(from_env) = data_root_from_env() {
         return from_env;

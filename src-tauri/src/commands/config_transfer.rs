@@ -90,6 +90,7 @@ pub async fn export_config(
     state: State<'_, AppState>,
     dest_path: String,
 ) -> Result<ConfigExportResult, String> {
+    state.migrate_gate.ensure_idle()?;
     let dest = PathBuf::from(&dest_path);
     if dest.extension().and_then(|s| s.to_str()) != Some("zip") {
         return Err("导出目标必须是 .zip 文件路径".to_string());
@@ -367,6 +368,7 @@ pub async fn import_config(
     use ncd_runtime::{LocalConfigStore, SecretStoreImpl};
     use ncd_traits::ConfigStore;
 
+    state.migrate_gate.ensure_idle()?;
     let source = PathBuf::from(&source_path);
     let (staging, _kind, _guard) = resolve_import_staging(&source)?;
 

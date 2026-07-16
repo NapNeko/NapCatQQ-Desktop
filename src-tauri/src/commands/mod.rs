@@ -3,6 +3,7 @@ pub mod bot;
 pub mod bot_metrics;
 pub mod components;
 pub mod config_transfer;
+pub mod data_root_migrate;
 pub mod deployment_tasks;
 pub mod desktop_consent;
 pub mod desktop_log;
@@ -366,6 +367,7 @@ mod tests {
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(tokio::sync::Mutex::new(None)),
             metrics_collector,
+            migrate_gate: Arc::new(crate::commands::data_root_migrate::DataRootMigrateGate::default()),
         };
         (state, bus)
     }

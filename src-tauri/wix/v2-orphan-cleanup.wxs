@@ -70,8 +70,10 @@
       Product path registry (shared contract for resolve_data_root / uninstall CA):
         HKLM\SOFTWARE\NapCatQQ-Desktop
           InstallDir  = [INSTALLDIR]
-          DataRoot    = [CommonAppDataFolder]NapCatQQ Desktop  (default; app may
-                        later rewrite after user migration)
+          DataRoot    = [CommonAppDataFolder]NapCatQQ Desktop
+            (machine default only; NeverOverwrite so upgrade/repair does not
+             clobber a customized HKLM value. User migrate writes HKCU DataRoot
+             and resolve prefers HKCU over HKLM — see product_registry.rs.)
       Also anchors this fragment into MainFeature via componentRefs.
       Uninstall removes the key with the component (user data under DataRoot is
       NOT deleted here).
@@ -89,10 +91,15 @@
             Type="string"
             Value="[INSTALLDIR]"
             KeyPath="yes" />
+          <!--
+            NeverOverwrite: REINSTALLMODE=amus must not reset DataRoot to ProgramData
+            after the user (or a future machine-level migrate) changed it.
+          -->
           <RegistryValue
             Name="DataRoot"
             Type="string"
-            Value="[CommonAppDataFolder]NapCatQQ Desktop" />
+            Value="[CommonAppDataFolder]NapCatQQ Desktop"
+            NeverOverwrite="yes" />
           <RegistryValue
             Name="LegacyOrphanCleanup"
             Type="integer"

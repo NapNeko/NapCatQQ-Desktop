@@ -172,6 +172,7 @@ pub async fn upsert_bot_config(
     config: BotConfig,
 ) -> Result<BotActorSnapshot, String> {
     ensure_desktop_consent(&state)?;
+    state.migrate_gate.ensure_idle()?;
     state
         .bot_manager
         .upsert_bot_config(config)
@@ -181,6 +182,7 @@ pub async fn upsert_bot_config(
 
 #[tauri::command]
 pub async fn delete_bot_config(state: State<'_, AppState>, bot_id: String) -> Result<(), String> {
+    state.migrate_gate.ensure_idle()?;
     state
         .bot_manager
         .delete_bot_config(&BotId::new(bot_id))
@@ -194,6 +196,7 @@ pub async fn start_bot(
     bot_id: String,
 ) -> Result<BotActorSnapshot, String> {
     ensure_desktop_consent(&state)?;
+    state.migrate_gate.ensure_idle()?;
     state
         .bot_manager
         .start_bot(&BotId::new(bot_id))
@@ -222,6 +225,7 @@ pub async fn start_bot_with_drift_decisions(
     decisions: Vec<DriftDecision>,
 ) -> Result<BotActorSnapshot, String> {
     ensure_desktop_consent(&state)?;
+    state.migrate_gate.ensure_idle()?;
     state
         .bot_manager
         .start_bot_with_decisions(&BotId::new(bot_id), &decisions)
@@ -237,6 +241,7 @@ pub async fn upsert_bot_config_with_decisions(
     decisions: Vec<DriftDecision>,
 ) -> Result<BotActorSnapshot, String> {
     ensure_desktop_consent(&state)?;
+    state.migrate_gate.ensure_idle()?;
     use ncd_runtime::config_drift::DriftDecision as DD;
     let mut overrides: std::collections::HashMap<String, Vec<(String, serde_json::Value)>> =
         std::collections::HashMap::new();
@@ -282,6 +287,7 @@ pub async fn batch_start_bots(
     bot_ids: Vec<String>,
 ) -> Result<BatchResultResponse, String> {
     ensure_desktop_consent(&state)?;
+    state.migrate_gate.ensure_idle()?;
     let ids: Vec<BotId> = bot_ids.into_iter().map(BotId::new).collect();
     let result = state.bot_manager.batch_start(&ids).await.map_err(map_err)?;
     Ok(batch_to_response(result))
@@ -494,6 +500,9 @@ mod tests {
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(tokio::sync::Mutex::new(None)),
             metrics_collector,
+            migrate_gate: Arc::new(
+                crate::commands::data_root_migrate::DataRootMigrateGate::default(),
+            ),
         };
         (state, bus)
     }

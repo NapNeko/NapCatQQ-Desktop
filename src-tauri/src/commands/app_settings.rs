@@ -64,6 +64,7 @@ pub async fn set_app_settings(
     state: State<'_, AppState>,
     dto: AppSettingsDto,
 ) -> Result<(), String> {
+    state.migrate_gate.ensure_idle()?;
     let store = config_store(&state);
     let path = store.config_dir().join(APP_SETTINGS_FILE);
 

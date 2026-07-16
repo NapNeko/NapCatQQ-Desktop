@@ -68,6 +68,8 @@ pub struct AppState {
     pub(crate) health_probe_cancel: Arc<Mutex<Option<CancellationToken>>>,
     /// 本机 Bot 指标采集（读 net-stats + 节流写 history.jsonl）；远端历史由 ncd-watch 写
     pub(crate) metrics_collector: ncd_runtime::metrics::MetricsCollector,
+    /// 数据根整树迁移闸门(进行中拒绝其它写盘 command)
+    pub(crate) migrate_gate: Arc<commands::data_root_migrate::DataRootMigrateGate>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -332,6 +334,7 @@ pub fn run() {
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(Mutex::new(None)),
             metrics_collector: metrics_collector.clone(),
+            migrate_gate: Arc::new(commands::data_root_migrate::DataRootMigrateGate::default()),
         })
         .setup(move |app| {
             if startup_tray_only {
@@ -556,6 +559,10 @@ pub fn run() {
             commands::get_remote_webui_endpoint,
             commands::list_remote_files,
             commands::open_data_dir,
+            commands::data_root_migrate::preview_migrate_data_root,
+            commands::data_root_migrate::start_migrate_data_root,
+            commands::data_root_migrate::cancel_migrate_data_root,
+            commands::data_root_migrate::delete_retired_data_root,
             commands::desktop_log::open_desktop_log_location,
             commands::desktop_log::tail_desktop_log,
             commands::publish_demo_event,
