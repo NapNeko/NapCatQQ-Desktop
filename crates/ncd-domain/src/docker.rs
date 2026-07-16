@@ -166,19 +166,20 @@ impl DockerFlavor {
 
     /// 拉镜像时按优先级尝试的镜像引用列表
     ///
-    /// Hub 官方名优先(走 daemon registry-mirrors), SnowLuma 在 Hub 500 时尽早试
-    /// docker.1ms.run(用户实测可拉满 ~933MB), 再 GHCR, 其余 Hub 反代
-    /// 不试 GHCR 加速前缀(not found/403 居多)
+    /// 国内默认:镜像站优先,官方 Hub 最后兜底(Hub 直连常卡在 Pulling fs layer)。
+    /// 用户可在 DockerPullSpec.mirror 里强制 hub / 指定站。
     pub fn pull_candidates(self) -> Vec<String> {
         let official = self.default_image();
-        let mut refs = vec![official.to_string()];
+        let mut refs = Vec::new();
         match self {
             Self::NapCat => {
                 refs.extend(DOCKER_HUB_MIRRORS.iter().map(|m| format!("{m}/{official}")));
+                refs.push(official.to_string());
             }
             Self::SnowLuma => {
+                // 1ms 对 SL 实测较稳,放最前
                 refs.push(format!("docker.1ms.run/{official}"));
-                // GHCR 官方源 + 国内加速前缀
+                refs.push(format!("1ms.run/{official}"));
                 refs.push("ghcr.io/snowluma/snowluma:latest".to_string());
                 refs.extend(
                     GHCR_MIRROR_PREFIXES
@@ -186,10 +187,11 @@ impl DockerFlavor {
                         .map(|prefix| format!("{prefix}/snowluma/snowluma:latest")),
                 );
                 refs.extend(
-                    DOCKER_HUB_MIRRORS[1..]
+                    DOCKER_HUB_MIRRORS[2..]
                         .iter()
                         .map(|m| format!("{m}/{official}")),
                 );
+                refs.push(official.to_string());
             }
         }
         refs
@@ -233,12 +235,63 @@ impl PortMapping {
     }
 }
 
-/// 组件页「拉镜像」请求只选框架口味;不创建容器,端口与容器名由 Bot 启动时决定
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+/// 组件页「拉镜像」请求:框架口味 + 可选镜像源策略
+///
+/// 不创建容器;端口与容器名由 Bot 启动时决定。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct DockerPullSpec {
     pub flavor: DockerFlavor,
+    /// 镜像源策略:auto | hub | 镜像站主机名(如 docker.1ms.run)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub mirror: Option<String>,
+}
+
+impl DockerPullSpec {
+    pub fn new(flavor: DockerFlavor) -> Self {
+        Self {
+            flavor,
+            mirror: None,
+        }
+    }
+
+    /// 解析拉取候选列表(mirror 覆盖默认 pull_candidates 顺序)
+    pub fn resolve_candidates(&self) -> Vec<String> {
+        let official = self.flavor.default_image();
+        let Some(raw) = self
+            .mirror
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        else {
+            return self.flavor.pull_candidates();
+        };
+        let key = raw.to_ascii_lowercase();
+        match key.as_str() {
+            "auto" | "default" => self.flavor.pull_candidates(),
+            "hub" | "official" | "dockerhub" | "docker.io" => {
+                vec![official.to_string()]
+            }
+            host => {
+                // 允许用户填主机名或完整 image ref
+                if host.contains('/') && (host.contains(':') || host.contains("docker.")) {
+                    // 完整引用: docker.1ms.run/mlikiowa/... 或 用户自定义
+                    if host.contains("mlikiowa/")
+                        || host.contains("motricseven7/")
+                        || host.contains("snowluma/")
+                        || host.contains("ghcr.io/")
+                    {
+                        return vec![raw.to_string(), official.to_string()];
+                    }
+                }
+                let prefixed = format!("{}/{}", raw.trim_end_matches('/'), official);
+                // 优先镜像站,失败再官方(官方仍可能走 daemon registry-mirrors)
+                vec![prefixed, official.to_string()]
+            }
+        }
+    }
 }
 
 /// Bot 启动 / compose 渲染用的完整部署参数(容器名,端口,可选 QQ)
@@ -528,33 +581,55 @@ mod tests {
     }
 
     #[test]
-    fn pull_candidates_official_first_then_mirrors() {
+    fn pull_candidates_mirrors_first_official_last() {
         let cands = DockerFlavor::NapCat.pull_candidates();
         assert_eq!(cands.len(), DOCKER_HUB_MIRRORS.len() + 1);
-        assert_eq!(cands[0], "mlikiowa/napcat-docker:latest");
+        assert_eq!(cands[0], "docker.1ms.run/mlikiowa/napcat-docker:latest");
+        assert_eq!(
+            cands.last().map(String::as_str),
+            Some("mlikiowa/napcat-docker:latest")
+        );
         for (i, mirror) in DOCKER_HUB_MIRRORS.iter().enumerate() {
-            assert_eq!(
-                cands[i + 1],
-                format!("{mirror}/mlikiowa/napcat-docker:latest")
-            );
+            assert_eq!(cands[i], format!("{mirror}/mlikiowa/napcat-docker:latest"));
         }
     }
 
     #[test]
-    fn snowluma_pull_candidates_hub_mirrors_before_ghcr() {
+    fn snowluma_pull_candidates_mirrors_before_official() {
         let cands = DockerFlavor::SnowLuma.pull_candidates();
-        assert_eq!(cands[0], "motricseven7/snowluma:latest");
-        assert_eq!(cands[1], "docker.1ms.run/motricseven7/snowluma:latest");
-        // GHCR official + mirror prefixes
+        assert_eq!(cands[0], "docker.1ms.run/motricseven7/snowluma:latest");
+        assert_eq!(cands[1], "1ms.run/motricseven7/snowluma:latest");
         assert_eq!(cands[2], "ghcr.io/snowluma/snowluma:latest");
-        assert_eq!(cands[3], "ghcr.1ms.run/snowluma/snowluma:latest");
-        assert_eq!(cands[4], "ghcr.m.daocloud.io/snowluma/snowluma:latest");
-        // Hub mirrors (skipping first, which is docker.1ms.run already at index 1)
-        assert_eq!(cands[5], "1ms.run/motricseven7/snowluma:latest");
         assert_eq!(
-            cands.len(),
-            1 + 1 + 1 + GHCR_MIRROR_PREFIXES.len() + (DOCKER_HUB_MIRRORS.len() - 1)
+            cands.last().map(String::as_str),
+            Some("motricseven7/snowluma:latest")
         );
+    }
+
+    #[test]
+    fn pull_spec_mirror_hub_only() {
+        let spec = DockerPullSpec {
+            flavor: DockerFlavor::NapCat,
+            mirror: Some("hub".into()),
+        };
+        assert_eq!(
+            spec.resolve_candidates(),
+            vec!["mlikiowa/napcat-docker:latest".to_string()]
+        );
+    }
+
+    #[test]
+    fn pull_spec_mirror_host_prefixes_official() {
+        let spec = DockerPullSpec {
+            flavor: DockerFlavor::NapCat,
+            mirror: Some("docker.m.daocloud.io".into()),
+        };
+        let cands = spec.resolve_candidates();
+        assert_eq!(
+            cands[0],
+            "docker.m.daocloud.io/mlikiowa/napcat-docker:latest"
+        );
+        assert_eq!(cands[1], "mlikiowa/napcat-docker:latest");
     }
 
     #[test]
