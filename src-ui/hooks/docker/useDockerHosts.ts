@@ -48,10 +48,12 @@ export interface UseDockerHostsResult {
     /// 打开 Docker Desktop 下载页（Windows / macOS 手动安装引导用）。
     openDownloadPage: () => Promise<void>;
     /// 在远端拉取 NapCat/SnowLuma 框架镜像（不创建容器）。
+    /// mirror: auto 省略；hub 仅官方；或镜像站主机名如 docker.1ms.run
     pullFrameworkImage: (
         hostId: string,
         flavor: DockerFlavor,
         taskId: string,
+        mirror?: string | null,
     ) => Promise<DeployedContainer>;
     /** 该主机该口味是否正在拉镜像（模块级 store，切页不丢） */
     isPullingFrameworkImage: (hostId: string, flavor: DockerFlavor) => boolean;
@@ -201,8 +203,18 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
     const isInstalling = Object.keys(installingByHost).length > 0;
 
     const pullMutation = useMutation({
-        mutationFn: (args: { hostId: string; flavor: DockerFlavor; taskId: string }) =>
-            dockerService.pullFrameworkImage(args.hostId, args.flavor, args.taskId),
+        mutationFn: (args: {
+            hostId: string;
+            flavor: DockerFlavor;
+            taskId: string;
+            mirror?: string | null;
+        }) =>
+            dockerService.pullFrameworkImage(
+                args.hostId,
+                args.flavor,
+                args.taskId,
+                args.mirror,
+            ),
         onSuccess: (_result, args) => {
             queryClient.setQueryData(
                 ['docker', 'imageReady', args.hostId, args.flavor],
@@ -217,6 +229,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
             hostId: string,
             flavor: DockerFlavor,
             taskId: string,
+            mirror?: string | null,
         ): Promise<DeployedContainer> => {
             const key = dockerPullTargetKey(hostId, flavor);
             const snap = dockerActionStore.getSnapshot();
@@ -228,7 +241,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
                 dockerActionStore.markPulling(hostId, flavor, taskId);
             }
             try {
-                return await pullMutation.mutateAsync({ hostId, flavor, taskId });
+                return await pullMutation.mutateAsync({ hostId, flavor, taskId, mirror });
             } catch (err) {
                 dockerActionStore.clearPulling(hostId, flavor);
                 throw err;

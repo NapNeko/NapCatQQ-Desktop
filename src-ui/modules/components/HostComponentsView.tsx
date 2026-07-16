@@ -57,7 +57,12 @@ interface HostComponentsViewProps {
     onEnsureQqDependencies: (hostId: string) => void;
     qqDependencyReport?: QqDependencyReport | null;
     isPullingImage: (hostId: string, flavor: DockerFlavor) => boolean;
-    onPullImage: (hostId: string, flavor: DockerFlavor, taskId: string) => Promise<DeployedContainer>;
+    onPullImage: (
+        hostId: string,
+        flavor: DockerFlavor,
+        taskId: string,
+        mirror?: string | null,
+    ) => Promise<DeployedContainer>;
     onPullImageError?: (hostId: string, flavor: DockerFlavor, error: unknown) => void;
     // 这台主机各 flavor 官方镜像是否已拉取（不创建 napcat/snowluma 演示容器）。
     imageReadyByFlavor: Partial<Record<DockerFlavor, boolean | undefined>>;

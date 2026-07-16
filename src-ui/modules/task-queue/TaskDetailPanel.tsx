@@ -64,7 +64,9 @@ function DockerDeployProgressBlock({
                     className="shrink-0 text-brand"
                 />
                 <span className="min-w-0 truncate text-[12px] text-text-secondary">
-                    {progress.message || '拉取镜像…'}
+                    {item.logHint?.includes('正在取消')
+                        ? item.logHint
+                        : progress.message || '拉取镜像…'}
                 </span>
                 <span className="ml-auto shrink-0 font-mono text-[11.5px] tabular-nums text-text-secondary">
                     {progress.percent}%
@@ -114,7 +116,7 @@ function nonCancellableHint(kind: TaskQueueItem['kind']): string {
         case 'docker_install':
             return 'Docker 安装正在修改系统服务与包源，不能安全强停。';
         case 'docker_deploy':
-            return '镜像拉取暂未接入可取消执行器。';
+            return '镜像拉取应可停止；若仍显示不可停止，请重启应用后再试。';
         default:
             return '该任务暂不支持强制停止。';
     }
@@ -170,10 +172,23 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
     const running = isRunningTaskItem(item);
     const canDelete = isTerminalTaskStatus(item.status);
 
+    const [cancelBusy, setCancelBusy] = React.useState(false);
+    const [cancelError, setCancelError] = React.useState<string | null>(null);
+
     const handleCancel = () => {
-        void deploymentTaskService.cancel(item.id).catch((err) => {
-            console.error('[TaskQueue] cancel failed:', err);
-        });
+        if (cancelBusy) return;
+        setCancelBusy(true);
+        setCancelError(null);
+        void deploymentTaskService
+            .cancel(item.id)
+            .catch((err) => {
+                const msg = err instanceof Error ? err.message : String(err);
+                setCancelError(msg || '取消失败');
+                console.error('[TaskQueue] cancel failed:', err);
+            })
+            .finally(() => {
+                setCancelBusy(false);
+            });
     };
 
     const handleDelete = () => {
@@ -181,6 +196,12 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
             console.error('[TaskQueue] delete failed:', err);
         });
     };
+
+    const cancelling =
+        cancelBusy ||
+        (active &&
+            typeof item.logHint === 'string' &&
+            (item.logHint.includes('正在取消') || item.logHint.includes('取消中')));
 
     return (
         <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -229,10 +250,11 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                                 <Button
                                     size="sm"
                                     variant={item.status === 'pending' || item.status === 'paused' ? 'secondary' : 'danger'}
+                                    disabled={cancelling}
                                     onClick={handleCancel}
                                 >
                                     <XCircle size={13} />
-                                    {stopButtonLabel(item.status)}
+                                    {cancelling ? '正在停止…' : stopButtonLabel(item.status)}
                                 </Button>
                             )}
                             {canDelete && (
@@ -248,6 +270,18 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
                 {failure && (
                     <div className="mt-3 rounded-md border border-danger/30 bg-danger-soft/35 px-3 py-2.5 text-[12px] leading-relaxed text-danger">
                         {failure}
+                    </div>
+                )}
+
+                {cancelError && (
+                    <div className="mt-3 rounded-md border border-danger/30 bg-danger-soft/35 px-3 py-2.5 text-[12px] leading-relaxed text-danger">
+                        停止失败：{cancelError}
+                    </div>
+                )}
+
+                {cancelling && !cancelError && (
+                    <div className="mt-3 rounded-md border border-warning/30 bg-warning-soft/30 px-3 py-2.5 text-[12px] leading-relaxed text-text-secondary">
+                        正在取消…若远端 docker pull 卡住，可能需数秒结束
                     </div>
                 )}
 

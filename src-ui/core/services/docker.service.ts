@@ -99,8 +99,12 @@ export const dockerService = {
         hostId: string,
         flavor: DockerFlavor,
         taskId: string,
+        mirror?: string | null,
     ): Promise<DeployedContainer> => {
-        const spec = { flavor };
+        const spec = {
+            flavor,
+            ...(mirror && mirror.trim() ? { mirror: mirror.trim() } : {}),
+        };
         if (isTauri) return invoke<DeployedContainer>('docker_deploy', { hostId, spec, taskId });
         mockProgressSequence(taskId);
         return withMockDelay(mockDeployed(flavor), 2000);
