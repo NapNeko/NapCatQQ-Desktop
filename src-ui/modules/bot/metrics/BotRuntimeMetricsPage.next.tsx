@@ -786,12 +786,26 @@ export function BotRuntimeMetricsPageNext({
     const heap = metrics?.memory?.heap_used_bytes;
     const hostUsed = metrics?.memory?.host_used_bytes;
     const hostTotal = metrics?.memory?.host_total_bytes;
+    const hostCpu = metrics?.memory?.host_cpu_percent;
+    const diskUsed = metrics?.memory?.host_disk_used_bytes;
+    const diskTotal = metrics?.memory?.host_disk_total_bytes;
     const hostRatio =
         hostUsed != null &&
             hostTotal != null &&
             Number(hostTotal) > 0 &&
             Number.isFinite(Number(hostUsed))
             ? Number(hostUsed) / Number(hostTotal)
+            : null;
+    const hostCpuNum =
+        hostCpu != null && Number.isFinite(Number(hostCpu))
+            ? Math.min(100, Math.max(0, Number(hostCpu)))
+            : null;
+    const diskRatio =
+        diskUsed != null &&
+            diskTotal != null &&
+            Number(diskTotal) > 0 &&
+            Number.isFinite(Number(diskUsed))
+            ? Number(diskUsed) / Number(diskTotal)
             : null;
 
     const probe = metrics?.probe ?? 'not_injected';
@@ -1028,7 +1042,7 @@ export function BotRuntimeMetricsPageNext({
 
                         <Panel
                             title="系统资源"
-                            description="内存可用；CPU / 磁盘待采集接入"
+                            description="进程来自探针；主机内存/CPU/磁盘来自主机侧采样（本机 sysinfo / 远端 ncd-watch）"
                             className="min-h-0"
                         >
                             <div className="flex h-full min-h-0 flex-col gap-2">
@@ -1060,7 +1074,9 @@ export function BotRuntimeMetricsPageNext({
                                     detail={
                                         hostRatio != null
                                             ? `占用 ${(hostRatio * 100).toFixed(1)}%`
-                                            : 'WebUI / 探针未提供主机内存'
+                                            : isRemote
+                                                ? '远端 host-stats 未就绪（需 ncd-watch 新版本）'
+                                                : '主机侧采样暂无数据'
                                     }
                                     ratio={hostRatio}
                                     unavailable={hostRatio == null}
@@ -1068,16 +1084,40 @@ export function BotRuntimeMetricsPageNext({
                                 <ResourceMeter
                                     icon={Cpu}
                                     label="CPU"
-                                    value="—"
-                                    detail="当前探针未采集 CPU"
-                                    unavailable
+                                    value={
+                                        hostCpuNum != null
+                                            ? `${hostCpuNum.toFixed(1)}%`
+                                            : '—'
+                                    }
+                                    detail={
+                                        hostCpuNum != null
+                                            ? '整机占用'
+                                            : isRemote
+                                                ? '远端 host-stats 未含 CPU 或未就绪'
+                                                : '主机侧采样暂无数据'
+                                    }
+                                    ratio={
+                                        hostCpuNum != null ? hostCpuNum / 100 : null
+                                    }
+                                    unavailable={hostCpuNum == null}
                                 />
                                 <ResourceMeter
                                     icon={Database}
                                     label="磁盘"
-                                    value="—"
-                                    detail="当前探针未采集磁盘"
-                                    unavailable
+                                    value={
+                                        diskUsed != null || diskTotal != null
+                                            ? `${formatBytes(diskUsed != null ? Number(diskUsed) : null)} / ${formatBytes(diskTotal != null ? Number(diskTotal) : null)}`
+                                            : '—'
+                                    }
+                                    detail={
+                                        diskRatio != null
+                                            ? `占用 ${(diskRatio * 100).toFixed(1)}% · 系统盘/根分区`
+                                            : isRemote
+                                                ? '远端 host-stats 未含磁盘或未就绪'
+                                                : '主机侧采样暂无数据'
+                                    }
+                                    ratio={diskRatio}
+                                    unavailable={diskRatio == null}
                                 />
                             </div>
                         </Panel>
