@@ -14,6 +14,7 @@ pub mod bot_config;
 pub mod bot_runtime_metrics;
 pub mod bot_status;
 pub mod daemon_state;
+pub mod data_root_migrate;
 pub mod deployment_task;
 pub mod docker;
 pub mod domain_event;
@@ -76,6 +77,10 @@ pub use bot_runtime_metrics::{
 };
 pub use bot_status::{BotStatus, ProcessHandle};
 pub use daemon_state::{DaemonState, SnowLumaLoginState};
+pub use data_root_migrate::{
+    DataRootMigratePhase, DataRootMigratePreview, DataRootMigrateProgress, DataRootMigrateResult,
+    DataRootRetiredMarker, DataRootTreeEntry,
+};
 pub use deployment_task::{
     DeploymentTaskKind, DeploymentTaskList, DeploymentTaskResource, DeploymentTaskSnapshot,
     DeploymentTaskStatus,
