@@ -84,12 +84,26 @@ pub struct MemoryMetrics {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub heap_used_bytes: Option<u64>,
+    /// 主机物理内存总量（主机侧采样，非 WebUI）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub host_total_bytes: Option<u64>,
+    /// 主机已用物理内存
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub host_used_bytes: Option<u64>,
+    /// 主机 CPU 占用 0–100（主机侧；与进程无关）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub host_cpu_percent: Option<f64>,
+    /// 主机系统盘/根分区总量（主机侧）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub host_disk_total_bytes: Option<u64>,
+    /// 主机系统盘/根分区已用
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub host_disk_used_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, Default)]
@@ -246,8 +260,11 @@ impl MetricsHistoryPoint {
             memory: snap.memory.clone().map(|m| MemoryMetrics {
                 rss_bytes: m.rss_bytes,
                 heap_used_bytes: None,
-                host_total_bytes: None,
-                host_used_bytes: None,
+                host_total_bytes: m.host_total_bytes,
+                host_used_bytes: m.host_used_bytes,
+                host_cpu_percent: None,
+                host_disk_total_bytes: m.host_disk_total_bytes,
+                host_disk_used_bytes: m.host_disk_used_bytes,
             }),
             nodes_summary: Some(snap.rollup()),
         }
