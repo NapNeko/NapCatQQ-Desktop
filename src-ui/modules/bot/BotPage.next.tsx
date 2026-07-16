@@ -20,10 +20,11 @@ import {
 import { BotListPageNext } from './list/BotListPage.next';
 import { BotConfigPageNext } from './config/BotConfigPage.next';
 import { BotLogPageNext } from './log/BotLogPage.next';
+import { BotRuntimeMetricsPageNext } from './metrics/BotRuntimeMetricsPage.next';
 
-type View = 'list' | 'config' | 'log';
+type View = 'list' | 'config' | 'log' | 'metrics';
 
-const VIEW_ORDER: ReadonlyArray<View> = ['list', 'config', 'log'];
+const VIEW_ORDER: ReadonlyArray<View> = ['list', 'config', 'log', 'metrics'];
 
 export function BotPageNext() {
     const [view, setView] = useState<View>('list');
@@ -111,6 +112,10 @@ export function BotPageNext() {
                         setSelectedBotId(botId);
                         setView('log');
                     }}
+                    onViewMetrics={(botId) => {
+                        setSelectedBotId(botId);
+                        setView('metrics');
+                    }}
                     onBack={goList}
                     onSavedStay={(savedBotId) => setSelectedBotId(savedBotId)}
                 />
@@ -126,6 +131,7 @@ function BotViewContent({
     forceTab,
     onConfigureBot,
     onViewLogs,
+    onViewMetrics,
     onBack,
     onSavedStay,
 }: {
@@ -135,6 +141,7 @@ function BotViewContent({
     forceTab: 'identity' | 'connections' | 'advanced' | null;
     onConfigureBot: (botId: string | null) => void;
     onViewLogs: (botId: string) => void;
+    onViewMetrics: (botId: string) => void;
     onBack: () => void;
     onSavedStay: (savedBotId: string) => void;
 }) {
@@ -145,6 +152,7 @@ function BotViewContent({
                     <BotListPageNext
                         onConfigureBot={onConfigureBot}
                         onViewLogs={onViewLogs}
+                        onViewMetrics={onViewMetrics}
                     />
                 </RouteErrorBoundary>
             );
@@ -165,6 +173,22 @@ function BotViewContent({
             return (
                 <div className="flex flex-col items-center gap-3 rounded-md bg-elevated p-6 ring-1 ring-border-subtle">
                     <p className="text-sm text-text-secondary">未选择要查看日志的 Bot 实例</p>
+                    <Button size="sm" variant="ghost" onClick={onBack}>
+                        返回实例列表
+                    </Button>
+                </div>
+            );
+        case 'metrics':
+            if (selectedBotId) {
+                return (
+                    <RouteErrorBoundary title="运行时指标加载失败">
+                        <BotRuntimeMetricsPageNext botId={selectedBotId} onBack={onBack} />
+                    </RouteErrorBoundary>
+                );
+            }
+            return (
+                <div className="flex flex-col items-center gap-3 rounded-md bg-elevated p-6 ring-1 ring-border-subtle">
+                    <p className="text-sm text-text-secondary">未选择要查看指标的 Bot 实例</p>
                     <Button size="sm" variant="ghost" onClick={onBack}>
                         返回实例列表
                     </Button>

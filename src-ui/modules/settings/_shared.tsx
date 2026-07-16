@@ -34,6 +34,12 @@ import {
     PERFORMANCE_MONITOR_INTERVAL_MS_MIN,
 } from '../../core/domain/performance/performanceSettings';
 import {
+    BOT_RUNTIME_METRICS_INTERVAL_MS_DEFAULT,
+    BOT_RUNTIME_METRICS_INTERVAL_MS_MAX,
+    BOT_RUNTIME_METRICS_INTERVAL_MS_MIN,
+    clampBotRuntimeMetricsIntervalMs,
+} from '../../core/domain/bot/runtime-metrics-settings';
+import {
     clampRemoteHostHealthProbeIntervalMs,
     REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_DEFAULT,
     REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX,
@@ -521,6 +527,55 @@ export function PerformanceMonitorIntervalSlider({
                 disabled={
                     disabled || clamped === PERFORMANCE_MONITOR_INTERVAL_MS_DEFAULT
                 }
+                className={
+                    'rounded-sm px-1.5 py-0.5 text-[11px] text-text-tertiary transition-colors ' +
+                    'hover:bg-inset hover:text-text disabled:pointer-events-none disabled:opacity-40'
+                }
+            >
+                重置
+            </button>
+        </div>
+    );
+}
+
+/** Bot 指标采样间隔：展示用户更容易理解的秒，底层仍保存毫秒。 */
+export function BotRuntimeMetricsIntervalSlider({
+    value,
+    onChange,
+    disabled,
+}: {
+    value: number;
+    onChange: (next: number) => void;
+    disabled?: boolean;
+}) {
+    const clamped = clampBotRuntimeMetricsIntervalMs(value);
+    const seconds = clamped / 1000;
+    return (
+        <div className="flex items-center gap-2">
+            <input
+                aria-label="实例指标采样间隔"
+                type="range"
+                min={BOT_RUNTIME_METRICS_INTERVAL_MS_MIN}
+                max={BOT_RUNTIME_METRICS_INTERVAL_MS_MAX}
+                step={500}
+                value={clamped}
+                disabled={disabled}
+                onChange={(e) =>
+                    onChange(clampBotRuntimeMetricsIntervalMs(Number(e.target.value)))
+                }
+                className={
+                    'h-1.5 w-36 cursor-pointer appearance-none rounded-pill bg-inset outline-none ' +
+                    'accent-brand focus-visible:ring-2 focus-visible:ring-brand/45 focus-visible:ring-offset-2 ' +
+                    'disabled:pointer-events-none disabled:opacity-50'
+                }
+            />
+            <span className="w-12 text-right font-mono text-[11.5px] tabular-nums text-text-tertiary">
+                {Number.isInteger(seconds) ? seconds : seconds.toFixed(1)} 秒
+            </span>
+            <button
+                type="button"
+                onClick={() => onChange(BOT_RUNTIME_METRICS_INTERVAL_MS_DEFAULT)}
+                disabled={disabled || clamped === BOT_RUNTIME_METRICS_INTERVAL_MS_DEFAULT}
                 className={
                     'rounded-sm px-1.5 py-0.5 text-[11px] text-text-tertiary transition-colors ' +
                     'hover:bg-inset hover:text-text disabled:pointer-events-none disabled:opacity-40'

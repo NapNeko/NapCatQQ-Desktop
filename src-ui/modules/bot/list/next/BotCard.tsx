@@ -71,6 +71,7 @@ import {
     formatRestartHint,
 } from './botCardParts';
 import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
+import { useBotRuntimeMetrics } from '../../../../hooks/bot/useBotRuntimeMetrics';
 import { isRuntimeTargetLocal, remoteHostIdFromRuntimeTarget } from '../../../../core/domain/bot/runtime-target';
 import { BotRuntimeMetricsStrip } from './BotRuntimeMetricsStrip';
 
@@ -97,6 +98,7 @@ interface BotCardProps {
     onStop: (botId: string) => void;
     onConfigure: (botId: string) => void;
     onViewLogs: (botId: string) => void;
+    onViewMetrics: (botId: string) => void;
     onToggleSelect: (botId: string) => void;
     onOpenWebui: (params: {
         botId: string;
@@ -127,12 +129,17 @@ export function BotCard({
     onStop,
     onConfigure,
     onViewLogs,
+    onViewMetrics,
     onToggleSelect,
     onOpenWebui,
     isSnowlumaRemoteTunnelUi = false,
     onOpenNovnc,
 }: BotCardProps) {
     const [qrOpen, setQrOpen] = useState(false);
+    const {
+        enabled: metricsEnabled,
+        metrics: runtimeMetrics,
+    } = useBotRuntimeMetrics(bot.bot_id);
 
     const isSL = isSnowLumaFlavor(flavor);
     const hasQrcode = !!qrcodeUrl;
@@ -306,7 +313,13 @@ export function BotCard({
         );
     }
     const visibleChips = chips.slice(0, 3);
-    const metricsStrip = <BotRuntimeMetricsStrip botId={bot.bot_id} />;
+    const metricsStrip = (
+        <BotRuntimeMetricsStrip
+            enabled={metricsEnabled}
+            metrics={runtimeMetrics}
+            onOpenDetail={() => onViewMetrics(bot.bot_id)}
+        />
+    );
 
     return (
         <>

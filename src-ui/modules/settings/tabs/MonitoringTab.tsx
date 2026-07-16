@@ -5,11 +5,18 @@ import {
     PERFORMANCE_MONITOR_INTERVAL_MS_MAX,
     PERFORMANCE_MONITOR_INTERVAL_MS_MIN,
 } from '../../../core/domain/performance/performanceSettings';
+import {
+    BOT_RUNTIME_METRICS_RETENTION_DAYS_DEFAULT,
+    BOT_RUNTIME_METRICS_RETENTION_DAYS_MAX,
+    BOT_RUNTIME_METRICS_RETENTION_DAYS_MIN,
+    clampBotRuntimeMetricsRetentionDays,
+} from '../../../core/domain/bot/runtime-metrics-settings';
 import { DEFAULT_TASK_QUEUE_CLEANUP_WHEN_ENABLED_MS } from '../../../core/domain/task-queue/cleanup';
-import { Switch } from '../../../shared/ui';
+import { NumberField, Switch } from '../../../shared/ui';
 import type { SettingsDraft } from '../settings-draft';
 import {
     FieldRow,
+    BotRuntimeMetricsIntervalSlider,
     InfoBarDismissSliderPresence,
     PerformanceMonitorIntervalSlider,
     TaskQueueCleanupDurationSlider,
@@ -68,7 +75,7 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
             >
                 <FieldRow
                     label="启用实例指标"
-                    description="默认关闭。开启后由 Desktop 启动的实例将注入轻量探针"
+                    description="默认关闭。保存后重启需要观测的 Bot，轻量探针才会随进程载入"
                 >
                     <Switch
                         checked={draft.botRuntimeMetricsEnabled}
@@ -79,48 +86,42 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
                 </FieldRow>
                 <FieldRow
                     label="采样间隔"
-                    description="1–30 秒；同时影响探针写盘与界面刷新"
+                    description="影响当前数据的刷新速度；历史趋势按不低于 1 分钟的粒度保存"
                 >
-                    <input
-                        type="range"
-                        min={1000}
-                        max={30000}
-                        step={500}
+                    <BotRuntimeMetricsIntervalSlider
                         disabled={!draft.botRuntimeMetricsEnabled}
                         value={draft.botRuntimeMetricsIntervalMs}
-                        onChange={(e) =>
+                        onChange={(value) =>
                             patchDraft({
-                                botRuntimeMetricsIntervalMs: Number(e.target.value),
+                                botRuntimeMetricsIntervalMs: value,
                             })
                         }
-                        className="w-40 accent-brand"
                     />
-                    <span className="ml-2 font-mono text-[12px] text-text-secondary">
-                        {Math.round(draft.botRuntimeMetricsIntervalMs / 100) / 10}s
-                    </span>
                 </FieldRow>
                 <FieldRow
                     label="历史保留"
                     description="默认 7 天，最长 90 天；图表粒度可能降为约 1 分钟"
                     isLast
                 >
-                    <input
-                        type="number"
-                        min={1}
-                        max={90}
-                        disabled={!draft.botRuntimeMetricsEnabled}
-                        value={draft.botRuntimeMetricsRetentionDays}
-                        onChange={(e) =>
-                            patchDraft({
-                                botRuntimeMetricsRetentionDays: Math.max(
-                                    1,
-                                    Math.min(90, Number(e.target.value) || 7),
-                                ),
-                            })
-                        }
-                        className="w-20 rounded-md border border-border bg-surface px-2 py-1 font-mono text-[13px]"
-                    />
-                    <span className="ml-2 text-[12px] text-text-tertiary">天</span>
+                    <div className="flex items-center gap-2">
+                        <NumberField
+                            aria-label="指标历史保留天数"
+                            name="botRuntimeMetricsRetentionDays"
+                            min={BOT_RUNTIME_METRICS_RETENTION_DAYS_MIN}
+                            max={BOT_RUNTIME_METRICS_RETENTION_DAYS_MAX}
+                            disabled={!draft.botRuntimeMetricsEnabled}
+                            value={draft.botRuntimeMetricsRetentionDays}
+                            onValueChange={(value) =>
+                                patchDraft({
+                                    botRuntimeMetricsRetentionDays: clampBotRuntimeMetricsRetentionDays(
+                                        value ?? BOT_RUNTIME_METRICS_RETENTION_DAYS_DEFAULT,
+                                    ),
+                                })
+                            }
+                            className="w-20"
+                        />
+                        <span className="text-[12px] text-text-tertiary">天</span>
+                    </div>
                 </FieldRow>
             </SettingsSection>
 
