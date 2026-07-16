@@ -280,12 +280,16 @@ impl RuntimeBackendRouter {
             .await?;
         // backend 身份按 server 聚合(多 Bot 共享同一 daemon / 隧道 / poller 表)
         let backend_id = BotId::new(format!("remote-sl-{sid}"));
-        let backend = Arc::new(RemoteSnowLumaBackend::new(
+        let sl_metrics = self.remote_metrics_injector.clone().map(
+            |inj| inj as Arc<dyn ncd_backend_snowluma::remote_snowluma::RemoteSlMetricsInjector>,
+        );
+        let backend = Arc::new(RemoteSnowLumaBackend::new_with_metrics(
             backend_id,
             daemon,
             Arc::clone(&self.event_bus),
             Arc::clone(&self.remote_snowluma_tunnels),
             Arc::clone(&self.remote_qq_entry_coordinator),
+            sl_metrics,
         ));
         let mut guard = self.remote_snowluma_backends.lock().await;
         // 双检:并发 start 时先到者胜,后来者复用

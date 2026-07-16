@@ -15,12 +15,10 @@ use ncd_domain::bot_config::BotConfig;
 use ncd_host::{Host, HostCommand, HostPath};
 
 use super::inject::{
-    apply_metrics_to_environment, build_napcat_load_script_with_env, build_node_map,
-    ensure_probe_script, MetricsInjectPlan,
+    MetricsInjectPlan, apply_metrics_to_environment, build_napcat_load_script_with_env,
+    build_node_map, ensure_probe_script,
 };
-use super::{
-    remote_metrics_nodes_posix, remote_metrics_stats_posix, BotRuntimeMetricsPrefs,
-};
+use super::{BotRuntimeMetricsPrefs, remote_metrics_nodes_posix, remote_metrics_stats_posix};
 
 const REMOTE_PROBE_NAME: &str = "ncd-ob11-stats.cjs";
 
@@ -48,10 +46,7 @@ impl RemoteMetricsPaths {
     pub fn env_map(&self) -> BTreeMap<String, String> {
         let mut env = BTreeMap::new();
         apply_metrics_to_environment(&mut env, &self.to_inject_plan());
-        env.insert(
-            "NCD_METRICS_PROBE_PATH".into(),
-            self.probe_script.clone(),
-        );
+        env.insert("NCD_METRICS_PROBE_PATH".into(), self.probe_script.clone());
         // 双保险：绝不把对本探针的 --require 放进 shell env
         if env
             .get("NODE_OPTIONS")
@@ -59,6 +54,16 @@ impl RemoteMetricsPaths {
         {
             env.remove("NODE_OPTIONS");
         }
+        env
+    }
+
+    /// 远端 SL 共享 node：NCD_* + NODE_OPTIONS=--require（与本机 daemon 子进程一致）
+    pub fn env_map_for_snowluma(&self) -> BTreeMap<String, String> {
+        use super::inject::merge_node_options_require;
+        let mut env = BTreeMap::new();
+        apply_metrics_to_environment(&mut env, &self.to_inject_plan());
+        env.insert("NCD_METRICS_PROBE_PATH".into(), self.probe_script.clone());
+        merge_node_options_require(&mut env, std::path::Path::new(&self.probe_script));
         env
     }
 }
@@ -156,10 +161,7 @@ pub async fn rewrite_remote_napcat_load_script(
 }
 
 /// 把 metrics env 合并进已有 environment（不覆盖无关键）
-pub fn merge_metrics_env(
-    env: &mut BTreeMap<String, String>,
-    paths: &RemoteMetricsPaths,
-) {
+pub fn merge_metrics_env(env: &mut BTreeMap<String, String>, paths: &RemoteMetricsPaths) {
     let m = paths.env_map();
     for (k, v) in m {
         env.insert(k, v);
@@ -173,7 +175,10 @@ pub struct RuntimeRemoteMetricsInjector {
 }
 
 impl RuntimeRemoteMetricsInjector {
-    pub fn new(local_data_root: impl Into<std::path::PathBuf>, prefs: BotRuntimeMetricsPrefs) -> Self {
+    pub fn new(
+        local_data_root: impl Into<std::path::PathBuf>,
+        prefs: BotRuntimeMetricsPrefs,
+    ) -> Self {
         Self {
             local_data_root: local_data_root.into(),
             prefs,
@@ -225,8 +230,7 @@ impl ncd_backend_napcat::remote_native_launch::RemoteMetricsInjector
         // 与 NapCatComponent 路径一致
         let base = install_base.as_posix().trim_end_matches('/');
         let load_js = format!("{base}/opt/QQ/resources/app/loadNapCat.js");
-        let napcat_mjs =
-            format!("{base}/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs");
+        let napcat_mjs = format!("{base}/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs");
 
         let env = paths.env_map();
         if let Err(err) = rewrite_remote_napcat_load_script(
@@ -277,6 +281,53 @@ impl ncd_backend_napcat::remote_native_launch::RemoteMetricsInjector
             }
         }
 
+        Some(env)
+    }
+}
+
+#[async_trait::async_trait]
+impl ncd_backend_snowluma::remote_snowluma::RemoteSlMetricsInjector
+    for RuntimeRemoteMetricsInjector
+{
+    async fn prepare(
+        &self,
+        host: &dyn Host,
+        home: &str,
+        bot_id: &str,
+        config: &BotConfig,
+    ) -> Option<BTreeMap<String, String>> {
+        if !self.prefs.enabled {
+            return None;
+        }
+        let paths = match ensure_remote_metrics_assets(
+            host,
+            home,
+            bot_id,
+            config,
+            &self.prefs,
+            &self.local_data_root,
+        )
+        .await
+        {
+            Ok(p) => p,
+            Err(err) => {
+                tracing::warn!(
+                    target: "ncd_runtime::metrics",
+                    bot_id,
+                    %err,
+                    "remote SL metrics assets failed (start continues without probe)"
+                );
+                return None;
+            }
+        };
+        let env = paths.env_map_for_snowluma();
+        tracing::info!(
+            target: "ncd_runtime::metrics",
+            bot_id,
+            probe = %paths.probe_script,
+            stats = %paths.stats_out,
+            "remote SL metrics: probe assets ready (NODE_OPTIONS + NCD_* for shared node)"
+        );
         Some(env)
     }
 }
