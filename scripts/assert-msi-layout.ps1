@@ -13,6 +13,8 @@ if (-not (Test-Path -LiteralPath $MsiPath)) {
 $ExpectedUpgradeCode = "{5EBD6A58-1B0A-4700-B16F-7E3D7D62949D}"
 $ExpectedProductName = "NapCatQQ Desktop"
 $ExpectedManufacturer = "Qiao"
+# zh-CN LCID; see tauri-bundler languages.json + bundle.windows.wix.language
+$ExpectedProductLanguage = "2052"
 $MainExeName = "NapCatQQ-Desktop.exe"
 $MaxExtractedFiles = 40
 
@@ -37,12 +39,12 @@ $props = Get-MsiProperties -Path $MsiPath
 
 $upgrade = $props["UpgradeCode"]
 $product = $props["ProductName"]
-$manufacturer = $props["Manufacturer"]
-$version = $props["ProductVersion"]
+$productLanguage = $props["ProductLanguage"]
 
 Write-Host ("  ProductName     = " + $product)
 Write-Host ("  Manufacturer    = " + $manufacturer)
 Write-Host ("  ProductVersion  = " + $version)
+Write-Host ("  ProductLanguage = " + $productLanguage)
 Write-Host ("  UpgradeCode     = " + $upgrade)
 Write-Host ("  ProductCode     = " + $props["ProductCode"])
 
@@ -52,6 +54,11 @@ if ($upgrade -ne $ExpectedUpgradeCode) {
 if ($product -ne $ExpectedProductName) {
   throw ("ProductName mismatch: got '" + $product + "', expected '" + $ExpectedProductName + "'")
 }
+if ($manufacturer -ne $ExpectedManufacturer) {
+  throw ("Manufacturer mismatch: got '" + $manufacturer + "', expected '" + $ExpectedManufacturer + "'")
+}
+if ($productLanguage -ne $ExpectedProductLanguage) {
+  throw ("ProductLanguage mismatch: got '" + $productLanguage + "', expected '" + $ExpectedProductLanguage + "' (zh-CN)
 if ($manufacturer -ne $ExpectedManufacturer) {
   throw ("Manufacturer mismatch: got '" + $manufacturer + "', expected '" + $ExpectedManufacturer + "'")
 }

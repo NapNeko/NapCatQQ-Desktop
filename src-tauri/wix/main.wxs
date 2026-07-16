@@ -33,7 +33,7 @@
             Version="{{version}}">
 
         <Package Id="*"
-                 Keywords="Installer"
+                 Keywords="!(loc.PackageKeywords)"
                  InstallerVersion="450"
                  Languages="0"
                  Compressed="yes"
@@ -125,7 +125,7 @@
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="DesktopFolder" Name="Desktop">
                 <Component Id="ApplicationShortcutDesktop" Guid="*">
-                    <Shortcut Id="ApplicationDesktopShortcut" Name="{{product_name}}" Description="Runs {{product_name}}" Target="[!Path]" WorkingDirectory="INSTALLDIR" />
+                    <Shortcut Id="ApplicationDesktopShortcut" Name="{{product_name}}" Description="!(loc.RunAppDescription)" Target="[!Path]" WorkingDirectory="INSTALLDIR" />
                     <RemoveFolder Id="DesktopFolder" On="uninstall" />
                     <RegistryValue Root="HKCU" Key="Software\\{{product_name}}" Name="Desktop Shortcut" Type="integer" Value="1" KeyPath="yes" />
                 </Component>
@@ -189,8 +189,8 @@
             <Component Id="CMP_UninstallShortcut" Guid="*">
 
                 <Shortcut Id="UninstallShortcut"
-						  Name="Uninstall {{product_name}}"
-						  Description="Uninstalls {{product_name}}"
+						  Name="!(loc.UninstallShortcutName)"
+						  Description="!(loc.UninstallShortcutDescription)"
 						  Target="[System64Folder]msiexec.exe"
 						  Arguments="/x [ProductCode]" />
 
@@ -210,7 +210,7 @@
             <Component Id="ApplicationShortcut" Guid="*">
                 <Shortcut Id="ApplicationStartMenuShortcut"
                     Name="{{product_name}}"
-                    Description="Runs {{product_name}}"
+                    Description="!(loc.RunAppDescription)"
                     Target="[!Path]"
                     Icon="ProductIcon"
                     WorkingDirectory="INSTALLDIR">
@@ -233,7 +233,7 @@
 
         <Feature
                 Id="MainProgram"
-                Title="Application"
+                Title="!(loc.MainProgramTitle)"
                 Description="!(loc.InstallAppFeature)"
                 Level="1"
                 ConfigurableDirectory="INSTALLDIR"
@@ -254,7 +254,7 @@
             {{/if}}
 
             <Feature Id="ShortcutsFeature"
-                Title="Shortcuts"
+                Title="!(loc.ShortcutsFeatureTitle)"
                 Level="1">
                 <ComponentRef Id="Path"/>
                 <ComponentRef Id="CMP_UninstallShortcut" />
@@ -264,7 +264,7 @@
 
             <Feature
                 Id="Environment"
-                Title="PATH Environment Variable"
+                Title="!(loc.EnvironmentFeatureTitle)"
                 Description="!(loc.PathEnvVarFeature)"
                 Level="1"
                 Absent="allow">

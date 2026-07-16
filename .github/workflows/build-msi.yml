@@ -166,31 +166,69 @@ jobs:
           NCD_PROXY_SHARED_SECRET: ${{ secrets.NCD_PROXY_SHARED_SECRET }}
         run: pnpm run tauri:build:msi
 
+      # Tauri WiX 中间产物名：`{product}_{ver}_{arch}_{lang}.msi`
+      # 例如 `NapCatQQ Desktop_3.1.1_x64_zh-CN.msi`（language=zh-CN 时）。
+      # 对外/自更新仍固定：`NapCatQQ-Desktop-{ver}-x64.msi` + 别名 `NapCatQQ-Desktop-x64.msi`
+      # （desktop_update / release-notes 认这两个名字，不要把 zh-CN 写进 Release 资产名）。
       - name: Collect MSI output
         id: collect_msi
         shell: pwsh
         run: |
           $bundleRoot = "target/release/bundle"
-          $msiFiles = Get-ChildItem -Path $bundleRoot -Filter "*.msi" -File -Recurse -ErrorAction SilentlyContinue
-          if (-not $msiFiles) {
+          $versionPlain = "${{ steps.resolve_version.outputs.VERSION_PLAIN }}"
+          $preferredLang = "zh-CN"
+
+          $msiFiles = @(Get-ChildItem -Path $bundleRoot -Filter "*.msi" -File -Recurse -ErrorAction SilentlyContinue)
+          if (-not $msiFiles -or $msiFiles.Count -eq 0) {
             Write-Error "未在 $bundleRoot 下找到 MSI 输出"
             exit 1
           }
 
+          Write-Host "Found MSI candidates:"
+          $msiFiles | Sort-Object LastWriteTime -Descending | ForEach-Object {
+            Write-Host ("  {0}  ({1} bytes, {2})" -f $_.FullName, $_.Length, $_.LastWriteTime)
+          }
+
+          # 1) 优先当前配置语言后缀（*_zh-CN.msi）
+          # 2) 再优先文件名含版本号
+          # 3) 最后按 mtime 取最新
+          $langSuffix = "_" + $preferredLang + ".msi"
+          $byLang = @($msiFiles | Where-Object { $_.Name.EndsWith($langSuffix, [System.StringComparison]::OrdinalIgnoreCase) })
+          $pool = if ($byLang.Count -gt 0) { $byLang } else { $msiFiles }
+
+          $byVersion = @($pool | Where-Object {
+            $_.Name -like ("*" + $versionPlain + "*")
+          })
+          $pool = if ($byVersion.Count -gt 0) { $byVersion } else { $pool }
+
+          $primary = $pool | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $primary) {
+            Write-Error "无法从候选 MSI 中选出主产物"
+            exit 1
+          }
+
+          if ($byLang.Count -eq 0) {
+            Write-Warning "未找到 *$langSuffix；回退到其它 MSI（当前 wix.language 应为 $preferredLang）: $($primary.Name)"
+          } else {
+            Write-Host "Selected preferred language MSI: $($primary.Name)"
+          }
+
           $outDir = "release-assets"
           New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-          $primary = $msiFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          $expectedName = "NapCatQQ-Desktop-${{ steps.resolve_version.outputs.VERSION_PLAIN }}-x64.msi"
+          $expectedName = "NapCatQQ-Desktop-${versionPlain}-x64.msi"
           $expectedPath = Join-Path $outDir $expectedName
-          Copy-Item $primary.FullName -Destination $expectedPath -Force
+          Copy-Item -LiteralPath $primary.FullName -Destination $expectedPath -Force
 
           $latestAlias = Join-Path $outDir "NapCatQQ-Desktop-x64.msi"
-          Copy-Item $primary.FullName -Destination $latestAlias -Force
+          Copy-Item -LiteralPath $primary.FullName -Destination $latestAlias -Force
 
           # 自更新走 GitHub Release MSI，不收集 latest.json / .sig
 
           "MSI_FILE_NAME=$expectedName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Collected MSI: $expectedPath"
+          "MSI_SOURCE_NAME=$($primary.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Collected MSI source: $($primary.FullName)"
+          Write-Host "Collected MSI public: $expectedPath"
+          Write-Host "Collected MSI alias:  $latestAlias"
           Get-ChildItem $outDir | ForEach-Object { Write-Host ("  asset: {0} ({1} bytes)" -f $_.Name, $_.Length) }
 
       - name: Assert MSI UpgradeCode and layout

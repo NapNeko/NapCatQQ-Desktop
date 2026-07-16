@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WiX locale for zh-CN MSI UI.
+  Tauri merges missing default strings (TauriLanguage / TauriCodepage / …)
+  from its built-in default-locale-strings.xml; override the user-facing ones here.
+  language key in tauri.conf.json is zh-CN; WiX Culture is lowercase zh-cn
+  (matches light -cultures:zh-cn;en-US).
+-->
+<WixLocalization
+    Culture="zh-cn"
+    Codepage="936"
+    xmlns="http://schemas.microsoft.com/wix/2006/localization">
+
+    <!-- Tauri-referenced strings (override English defaults) -->
+    <String Id="LaunchApp">启动 NapCatQQ Desktop</String>
+    <String Id="DowngradeErrorMessage">已安装更新版本的 NapCatQQ Desktop，无法继续安装此版本。</String>
+    <String Id="PathEnvVarFeature">将 NapCatQQ Desktop 的安装目录加入 PATH 系统环境变量，以便在任意位置调用可执行文件。</String>
+    <String Id="InstallAppFeature">安装 NapCatQQ Desktop。</String>
+
+    <!-- Custom template strings (src-tauri/wix/main.wxs) -->
+    <String Id="MainProgramTitle">应用程序</String>
+    <String Id="ShortcutsFeatureTitle">快捷方式</String>
+    <String Id="EnvironmentFeatureTitle">PATH 环境变量</String>
+    <String Id="RunAppDescription">运行 NapCatQQ Desktop</String>
+    <String Id="UninstallShortcutName">卸载 NapCatQQ Desktop</String>
+    <String Id="UninstallShortcutDescription">卸载 NapCatQQ Desktop</String>
+    <String Id="PackageKeywords">安装程序</String>
+</WixLocalization>
