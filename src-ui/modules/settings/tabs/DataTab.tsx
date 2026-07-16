@@ -1,9 +1,10 @@
-// 数据 Tab：数据根目录、配置导入导出、GitHub Token（即时操作 + PAT 进草稿）。
+// 数据 Tab：数据根目录、整树迁移、配置导入导出、GitHub Token。
 
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useConfigTransfer } from '../../../hooks/preferences/useConfigTransfer';
 import { ConfigImportDialog } from '../ConfigImportDialog';
+import { DataRootMigrateDialog } from '../DataRootMigrateDialog';
 import { Button, TextField } from '../../../shared/ui';
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import type { SettingsDraft } from '../settings-draft';
@@ -25,6 +26,7 @@ export function DataTab({
     patchDraft,
 }: Props) {
     const [revealPat, setRevealPat] = useState(false);
+    const [migrateOpen, setMigrateOpen] = useState(false);
     const {
         exportConfig,
         openImportWizard,
@@ -46,19 +48,40 @@ export function DataTab({
     return (
         <SettingsTabSections>
             <SettingsSection title="存储">
-                <FieldRow label="数据根目录" description={dataRoot} isLast>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={handleOpen}
-                        disabled={isOpeningDir}
-                    >
-                        打开
-                    </Button>
+                <FieldRow
+                    label="数据根目录"
+                    description={
+                        <span className="break-all font-mono text-[12px] text-text-tertiary">
+                            {dataRoot}
+                        </span>
+                    }
+                    isLast
+                >
+                    <div className="flex shrink-0 items-center gap-1.5">
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleOpen}
+                            disabled={isOpeningDir}
+                        >
+                            打开
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setMigrateOpen(true)}
+                            disabled={!dataRoot || dataRoot === '—'}
+                        >
+                            迁移…
+                        </Button>
+                    </div>
                 </FieldRow>
             </SettingsSection>
 
-            <SettingsSection title="配置备份">
+            <SettingsSection
+                title="配置备份"
+                description="仅配置 JSON 子集；不含 secrets / 组件安装树。换盘请用「数据根目录」旁的迁移。"
+            >
                 <FieldRow
                     label="导出当前配置"
                     description="保存为 ZIP 包（config.json、bot.json、servers.json 与元数据；不含密钥）"
@@ -88,6 +111,12 @@ export function DataTab({
                 open={importOpen}
                 onOpenChange={setImportOpen}
                 onImported={onImported}
+            />
+
+            <DataRootMigrateDialog
+                open={migrateOpen}
+                onOpenChange={setMigrateOpen}
+                currentDataRoot={dataRoot}
             />
 
             <SettingsSection
