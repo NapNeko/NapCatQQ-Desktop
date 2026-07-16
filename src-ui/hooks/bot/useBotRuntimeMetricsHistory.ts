@@ -10,9 +10,10 @@ import {
 
 export interface UseBotRuntimeMetricsHistoryResult {
     points: MetricsHistoryPoint[];
+    /** 尚无 points 时的首拉 / 换窗口；已有数据时静默刷新不置 true */
     loading: boolean;
     error: string | null;
-    refresh: () => void;
+    refresh: () => Promise<void>;
 }
 
 export function useBotRuntimeMetricsHistory(
@@ -25,12 +26,13 @@ export function useBotRuntimeMetricsHistory(
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const load = useCallback(async () => {
+    const load = useCallback(async (opts?: { silent?: boolean }) => {
         if (!botId || !enabled) {
             setPoints([]);
             return;
         }
-        setLoading(true);
+        const silent = opts?.silent === true;
+        if (!silent) setLoading(true);
         setError(null);
         try {
             const { fromMs, toMs } = resolveHistoryWindowBounds(
@@ -47,7 +49,7 @@ export function useBotRuntimeMetricsHistory(
             setError(e instanceof Error ? e.message : String(e));
             setPoints([]);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, [
         botId,
@@ -69,8 +71,6 @@ export function useBotRuntimeMetricsHistory(
         points,
         loading,
         error,
-        refresh: () => {
-            void load();
-        },
+        refresh: () => load({ silent: true }),
     };
 }

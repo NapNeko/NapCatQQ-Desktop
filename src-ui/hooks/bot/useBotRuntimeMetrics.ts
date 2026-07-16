@@ -22,8 +22,9 @@ export interface UseBotRuntimeMetricsResult {
     intervalMs: number;
     retentionDays: number;
     metrics: BotRuntimeMetrics | null;
+    /** 尚无任何快照时的首屏加载；后台轮询不会置 true（避免刷新按钮抽搐） */
     loading: boolean;
-    refresh: () => void;
+    refresh: () => Promise<void>;
 }
 
 export function useBotRuntimeMetrics(
@@ -40,7 +41,8 @@ export function useBotRuntimeMetrics(
     const fromCatalog = botId ? catalog.byId[botId] ?? null : null;
     const [detailOverride, setDetailOverride] = useState<BotRuntimeMetrics | null>(null);
     const [gapFill, setGapFill] = useState<BotRuntimeMetrics | null>(null);
-    const [detailLoading, setDetailLoading] = useState(false);
+    /** 仅「还没有任何 metrics」时的首拉；静默轮询不碰它 */
+    const [initialLoading, setInitialLoading] = useState(false);
 
     // catalog 未含该 bot 时补一次单拉（新启 bot 两轮 list 之间 / 浏览器 mock）
     useEffect(() => {
@@ -73,18 +75,24 @@ export function useBotRuntimeMetrics(
     useEffect(() => {
         if (!liveDetail || !catalog.enabled || !botId) {
             setDetailOverride(null);
+            setInitialLoading(false);
             return;
         }
         let cancelled = false;
+        let hasSnapshot = false;
         const tick = async () => {
+            // 首屏才亮 loading；后续 interval 静默更新，不驱动按钮转圈
+            if (!hasSnapshot) setInitialLoading(true);
             try {
-                setDetailLoading(true);
                 const m = await botService.getRuntimeMetrics(botId);
-                if (!cancelled) setDetailOverride(m);
+                if (!cancelled) {
+                    setDetailOverride(m);
+                    hasSnapshot = true;
+                }
             } catch {
                 if (!cancelled) setDetailOverride(null);
             } finally {
-                if (!cancelled) setDetailLoading(false);
+                if (!cancelled) setInitialLoading(false);
             }
         };
         void tick();
@@ -103,11 +111,13 @@ export function useBotRuntimeMetrics(
         return fromCatalog ?? gapFill;
     }, [liveDetail, detailOverride, fromCatalog, gapFill]);
 
-    const refresh = useCallback(() => {
-        if (liveDetail && botId) {
-            void botService.getRuntimeMetrics(botId).then(setDetailOverride).catch(() => {
-                setDetailOverride(null);
-            });
+    const refresh = useCallback(async () => {
+        if (!liveDetail || !botId) return;
+        try {
+            const m = await botService.getRuntimeMetrics(botId);
+            setDetailOverride(m);
+        } catch {
+            setDetailOverride(null);
         }
     }, [liveDetail, botId]);
 
@@ -116,7 +126,8 @@ export function useBotRuntimeMetrics(
         intervalMs: catalog.intervalMs,
         retentionDays: catalog.retentionDays,
         metrics,
-        loading: catalog.fetching || detailLoading,
+        // 有数据后 catalog.fetching 也不再算 loading，避免 list 轮询抽按钮
+        loading: metrics == null && (initialLoading || catalog.fetching),
         refresh,
     };
 }

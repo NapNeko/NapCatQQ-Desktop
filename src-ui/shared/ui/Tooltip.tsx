@@ -51,14 +51,21 @@ function originForSide(side: string): string {
 export const TooltipContent = forwardRef<
     React.ElementRef<typeof RadixTooltip.Content>,
     React.ComponentPropsWithoutRef<typeof RadixTooltip.Content>
->(({ className, sideOffset = 6, side = 'top', ...props }, _ref) => {
+>(({ className, sideOffset = 6, side = 'top', style, ...props }, _ref) => {
     const m = useMotion();
     const localRef = useRef<HTMLDivElement | null>(null);
+    // 进场只跑一次：父组件轮询重渲时不能再把 style 打回 hidden，否则悬停气泡闪一下就没
+    const enteredRef = useRef(false);
 
     useLayoutEffect(() => {
         const el = localRef.current;
         if (!el) return;
-        // Radix 把 data-state 写在 element 上,初始时 mount 即 delayed-open。
+        // 已进场：只保证可见，避免 metrics 轮询触发的 re-render 重播 fromTo
+        if (enteredRef.current) {
+            gsap.set(el, { autoAlpha: 1, scale: 1 });
+            return;
+        }
+        enteredRef.current = true;
         if (!m.enabled) {
             gsap.set(el, { autoAlpha: 1, scale: 1 });
             return;
@@ -81,6 +88,10 @@ export const TooltipContent = forwardRef<
             <RadixTooltip.Content
                 ref={(node) => {
                     localRef.current = node;
+                    // 首次挂载先藏住，由 useLayoutEffect 在 paint 前打开（勿用 React style 常驻 hidden）
+                    if (node && !enteredRef.current) {
+                        gsap.set(node, { autoAlpha: 0, scale: m.enabled ? 0.92 : 1 });
+                    }
                 }}
                 side={side}
                 sideOffset={sideOffset}
@@ -88,7 +99,7 @@ export const TooltipContent = forwardRef<
                     'z-50 max-w-xs rounded-sm bg-text px-2.5 py-1.5 text-2xs font-medium text-canvas shadow-popover',
                     className,
                 )}
-                style={{ visibility: 'hidden', opacity: 0 }}
+                style={style}
                 {...props}
             />
         </RadixTooltip.Portal>
