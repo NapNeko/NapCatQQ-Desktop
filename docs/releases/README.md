@@ -16,6 +16,8 @@
 
 ```bash
 # 1. 从提交生成草稿（已存在则拒绝覆盖，除非 --force）
+#    默认读仓库根 .env 的 OPENAI_* / OPENROUTER_* 调模型（对齐旧版）；
+#    无 key 或加 --no-ai 则规则归类
 pnpm run release:notes:draft -- --version 3.0.1
 
 # 2. 编辑 docs/releases/v3.0.1.md —— 只留用户能感知的条目
@@ -29,24 +31,37 @@ pnpm run release:notes:draft -- --kind watch --version 0.2.6
 pnpm run release:notes:preview -- --kind watch --version 0.2.6
 ```
 
+### AI 配置（可选）
+
+在仓库根 `.env`（已 gitignore）增加，与旧版 `script/utils/.env` 字段兼容：
+
+```ini
+OPENAI_API_KEY="sk-or-v1-..."
+# 或 OPENROUTER_API_KEY="sk-or-v1-..."
+OPENAI_API_URL="https://openrouter.ai/api/v1/chat/completions"
+OPENAI_MODEL="z-ai/glm-4.5-air:free"
+```
+
+模板见根目录 `.env.example`。
+
 满意后把 `docs/releases/vX.Y.Z.md` **提交进仓库**，再打 tag / 跑 Release 工作流。  
 CI 会优先读取本目录文件；没有策展文件时才用自动草稿（并在页脚提示建议策展）。
 
-## 升版 / 发版闸门（CLI）
-
-对齐旧版「本地真相源、默认不 push」：
+## 一键发版（推荐，对齐旧版 release.py）
 
 ```bash
-# 只改版本三处（package / tauri.conf / app-meta）
-pnpm run release:bump -- 3.1.0
+# 工作区干净时：写版本 + 策展 + 单 commit + 本地 tag（默认不 push）
+pnpm run release -- 3.1.2
 
-# 提交版本 + 策展后检查（脏工作区会失败；通过后可加 --tag 打本地 tag）
-pnpm run release:prepare -- 3.1.0
-pnpm run release:prepare -- 3.1.0 --tag
+# 确认后推送分支与 tag → 触发 Release MSI
+pnpm run release -- 3.1.2 --push
 
-# 人工推送才会触发正式 Release（脚本故意不提供 --push）
-git push origin main && git push origin v3.1.0
+# 跳过交互确认
+pnpm run release -- 3.1.2 --yes --push
 ```
+
+无 `docs/releases/vX.Y.Z.md` 时会自动 draft；仍建议先改策展再发。  
+分步工具仍可用：`release:bump` / `release:prepare` / `release:notes:*`。
 
 ## 策展文件写什么
 
