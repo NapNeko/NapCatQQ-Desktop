@@ -97,6 +97,9 @@ pub mod desktop_log {
 pub mod data_consolidate {
     pub use crate::data::consolidate::*;
 }
+pub mod data_relocate {
+    pub use crate::data::relocate::*;
+}
 pub mod deployment_tasks {
     pub use crate::deploy::tasks::*;
 }
@@ -174,6 +177,10 @@ pub use crash_bundle::{CrashBundleInput, desktop_output_dir, write_crash_bundle}
 pub use credential_sync::{CredentialSyncLayer, PasswordSlot};
 pub use data_consolidate::{ConsolidateReport, consolidate_data_root};
 pub use data_paths::{DataPaths, LAYOUT_VERSION};
+pub use data_relocate::{
+    RelocateError, STAGING_DIR_NAME, delete_retired_data_root, estimate_copy_bytes,
+    execute_relocate, normalize_root, preflight_relocate, read_retired_marker, target_inside_source,
+};
 pub use deployment_tasks::{
     DeploymentTaskContext, DeploymentTaskManager, DeploymentTaskRequest, DeploymentTaskRunResult,
 };
