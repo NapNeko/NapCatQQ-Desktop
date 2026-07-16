@@ -10,6 +10,8 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use tokio_util::sync::CancellationToken;
+
 use crate::path::HostPath;
 
 /// 默认命令等待上限短命令避免无限挂起,长生命周期进程要显式选择
@@ -61,6 +63,8 @@ pub struct HostCommand {
     pub elevated: bool,
     /// stdin 输入(如 echo "yes" | sudo apt install)None = 不传 stdin
     pub stdin: Option<Vec<u8>>,
+    /// 可选取消令牌:run_streaming 收到后杀子进程/断通道并返回 Cancelled
+    pub cancel: Option<CancellationToken>,
 }
 
 impl HostCommand {
@@ -75,6 +79,7 @@ impl HostCommand {
             wait_policy: HostProcessWaitPolicy::Default,
             elevated: false,
             stdin: None,
+            cancel: None,
         }
     }
 
@@ -145,6 +150,12 @@ impl HostCommand {
     /// 标记需要提权(具体提权机制由 Host 实装决定)
     pub fn elevated(mut self) -> Self {
         self.elevated = true;
+        self
+    }
+
+    /// 绑定取消令牌(docker pull 等长任务可被任务队列停止)
+    pub fn cancel_token(mut self, token: CancellationToken) -> Self {
+        self.cancel = Some(token);
         self
     }
 

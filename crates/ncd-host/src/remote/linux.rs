@@ -21,6 +21,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use bytes::Bytes;
 use russh::ChannelMsg;
+use russh::Sig;
 use russh::client::{self, Handle as ClientHandle, Handler};
 use russh::keys::{PublicKeyBase64, key};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -672,8 +673,27 @@ impl Host for RemoteLinuxHost {
         let mut exit_code: Option<i32> = None;
 
         let deadline = tokio::time::Instant::now() + timeout;
+        let cancel = cmd.cancel.clone();
         loop {
-            match tokio::time::timeout_at(deadline, channel.wait()).await {
+            if cancel.as_ref().is_some_and(|c| c.is_cancelled()) {
+                // 必须限时强杀:裸 close 在 docker pull 等长任务上可能一直不返回
+                force_kill_remote_channel(&channel).await;
+                return Err(HostError::Cancelled);
+            }
+
+            let wait_msg = async {
+                if let Some(token) = cancel.as_ref() {
+                    tokio::select! {
+                        biased;
+                        _ = token.cancelled() => None,
+                        msg = channel.wait() => msg,
+                    }
+                } else {
+                    channel.wait().await
+                }
+            };
+
+            match tokio::time::timeout_at(deadline, wait_msg).await {
                 Ok(Some(msg)) => match msg {
                     ChannelMsg::Data { ref data } => {
                         crate::stream_chunk::feed_stream_chunk(&mut stdout_buf, data, |s| {
@@ -694,8 +714,15 @@ impl Host for RemoteLinuxHost {
                     ChannelMsg::Close => break,
                     _ => {}
                 },
-                Ok(None) => break,
+                Ok(None) => {
+                    if cancel.as_ref().is_some_and(|c| c.is_cancelled()) {
+                        force_kill_remote_channel(&channel).await;
+                        return Err(HostError::Cancelled);
+                    }
+                    break;
+                }
                 Err(_) => {
+                    force_kill_remote_channel(&channel).await;
                     return Err(HostError::Timeout {
                         operation: "remote_run_streaming",
                     });
@@ -1044,6 +1071,25 @@ impl Host for RemoteLinuxHost {
 
 // 辅助: 命令拼接 + SFTP 打开 + 错误映射
 
+/// 远端 exec 强杀:SSH SIGKILL + 限时 close。
+/// 只 close 时,部分 OpenSSH/docker pull 场景 channel.close 会一直等进程结束,
+/// 任务队列「强制停止」就会表现为点了没反应。
+async fn force_kill_remote_channel(channel: &russh::Channel<russh::client::Msg>) {
+    // 强制停止路径直接 KILL;信号失败也继续 close
+    let _ = channel.signal(Sig::KILL).await;
+    let close = channel.close();
+    match tokio::time::timeout(Duration::from_secs(2), close).await {
+        Ok(Ok(())) => {}
+        Ok(Err(_)) | Err(_) => {
+            // close 挂起或失败:放弃等待,让上层立刻返回 Cancelled/Timeout
+            tracing::debug!(
+                target: "ncd_host::remote",
+                "remote channel force-kill: close timed out or failed"
+            );
+        }
+    }
+}
+
 fn build_remote_command_line(shell: &dyn HostShell, cmd: &HostCommand) -> String {
     // 远端不复用 BashShell::build_command_line 完全的能力(它没处理 cwd),这里手动加 cd
     let mut prefix = String::new();
@@ -1241,11 +1287,8 @@ impl HostProcess for RemoteHostProcess {
             .ok_or_else(|| HostError::InvalidArgument {
                 reason: "remote channel already consumed".into(),
             })?;
-        // SSH 没有标准 SIGKILL 跨服务器请求,尝试 close channel
-        channel
-            .close()
-            .await
-            .map_err(|e| HostError::remote_disconnected(format!("close channel: {e}")))?;
+        // signal + 限时 close;裸 close 对 docker pull 等可能挂死
+        force_kill_remote_channel(channel).await;
         Ok(())
     }
 

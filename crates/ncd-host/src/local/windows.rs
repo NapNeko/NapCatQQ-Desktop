@@ -500,6 +500,7 @@ impl Host for LocalWindowsHost {
 
         let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
         let deadline = tokio::time::Instant::now() + timeout;
+        let cancel = cmd.cancel.clone();
 
         let mut stdout_lines: Vec<String> = Vec::new();
         let mut stderr_lines: Vec<String> = Vec::new();
@@ -507,7 +508,27 @@ impl Host for LocalWindowsHost {
         // 收行循环:回调收 owned String(trait 签名如此,避开 async_trait 下
         // &str 生命周期被 box 固定的问题)行很小,clone 进缓冲可忽略
         loop {
-            match tokio::time::timeout_at(deadline, rx.recv()).await {
+            if cancel.as_ref().is_some_and(|c| c.is_cancelled()) {
+                force_kill_local_child(&mut child).await;
+                let _ = stdout_task.await;
+                let _ = stderr_task.await;
+                return Err(HostError::Cancelled);
+            }
+
+            let recv = rx.recv();
+            let wait = async {
+                if let Some(token) = cancel.as_ref() {
+                    tokio::select! {
+                        biased;
+                        _ = token.cancelled() => None,
+                        msg = recv => msg,
+                    }
+                } else {
+                    recv.await
+                }
+            };
+
+            match tokio::time::timeout_at(deadline, wait).await {
                 Ok(Some((src, line))) => match src {
                     StreamSource::Stdout => {
                         on_line(StreamSource::Stdout, line.clone());
@@ -518,8 +539,19 @@ impl Host for LocalWindowsHost {
                         stderr_lines.push(line);
                     }
                 },
-                Ok(None) => break, // channel 关闭,两个 reader task 都结束了
+                Ok(None) => {
+                    if cancel.as_ref().is_some_and(|c| c.is_cancelled()) {
+                        force_kill_local_child(&mut child).await;
+                        let _ = stdout_task.await;
+                        let _ = stderr_task.await;
+                        return Err(HostError::Cancelled);
+                    }
+                    break; // channel 关闭,两个 reader task 都结束了
+                }
                 Err(_) => {
+                    force_kill_local_child(&mut child).await;
+                    let _ = stdout_task.await;
+                    let _ = stderr_task.await;
                     return Err(HostError::Timeout {
                         operation: "run_streaming",
                     });
@@ -538,6 +570,23 @@ impl Host for LocalWindowsHost {
             stderr: stderr_lines.join("\n"),
         })
     }
+}
+
+/// 强杀本机子进程树。docker pull 常挂着 CLI 子进程,只 kill 父进程会卡住 wait。
+async fn force_kill_local_child(child: &mut Child) {
+    if let Some(pid) = child.id() {
+        // /T 杀进程树;/F 强制。失败再 fallback start_kill。
+        let mut killer = Command::new("taskkill");
+        hide_console_window(&mut killer);
+        killer
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let _ = killer.status().await;
+    }
+    let _ = child.start_kill();
+    let wait = child.wait();
+    let _ = tokio::time::timeout(Duration::from_secs(5), wait).await;
 }
 
 // build_tokio_command: HostCommand -> tokio::process::Command
