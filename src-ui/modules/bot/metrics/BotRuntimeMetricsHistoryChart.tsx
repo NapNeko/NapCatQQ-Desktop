@@ -25,6 +25,8 @@ export interface BotRuntimeMetricsHistoryChartProps {
     /** zero: 从 0 到 max（默认）；fit: 贴合数据区间 */
     scaleMode?: ChartScaleMode;
     showDots?: boolean;
+    /** 三图堆叠时收紧页眉与内边距 */
+    compact?: boolean;
 }
 
 const PADDING = { top: 10, right: 12, bottom: 22, left: 52 } as const;
@@ -45,6 +47,24 @@ function seriesValues(points: MetricsHistoryPoint[], series: HistorySeriesKey): 
 function formatY(series: HistorySeriesKey, v: number): string {
     if (series === 'rss') return formatBytes(v);
     return formatCompactCount(v);
+}
+
+/** 纵轴刻度：更短、无空格，避免窄 gutter 把「256.0 MB」拆成两行 */
+function formatAxisTick(series: HistorySeriesKey, v: number): string {
+    if (series !== 'rss') return formatCompactCount(v);
+    if (!Number.isFinite(v) || v < 0) return '—';
+    if (v < 1024) return `${Math.round(v)}B`;
+    if (v < 1024 * 1024) {
+        const kb = v / 1024;
+        return `${kb >= 100 ? kb.toFixed(0) : kb.toFixed(1)}K`;
+    }
+    if (v < 1024 * 1024 * 1024) {
+        const mb = v / (1024 * 1024);
+        // 256M / 85.3M，不带空格
+        return `${mb >= 100 ? mb.toFixed(0) : mb.toFixed(1)}M`;
+    }
+    const gb = v / (1024 * 1024 * 1024);
+    return `${gb >= 10 ? gb.toFixed(0) : gb.toFixed(1)}G`;
 }
 
 function formatChartTime(atMs: number | null | undefined): string {
@@ -260,12 +280,17 @@ export function BotRuntimeMetricsHistoryChart({
     className,
     scaleMode = 'zero',
     showDots = false,
+    compact = false,
 }: BotRuntimeMetricsHistoryChartProps) {
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const [size, setSize] = useState({ w: 0, h: 0 });
     const [hoverX, setHoverX] = useState<number | null>(null);
     const reactId = useId().replace(/:/g, '');
     const gradientId = `metrics-hist-${reactId}`;
+    // compact 左侧略宽：短刻度（如 256M）+ nowrap，避免单位被挤换行
+    const pad = compact
+        ? { top: 6, right: 8, bottom: 14, left: 40 }
+        : PADDING;
 
     useEffect(() => {
         const el = wrapperRef.current;
@@ -282,8 +307,8 @@ export function BotRuntimeMetricsHistoryChart({
         () => computeAxisDomain(values, series, scaleMode),
         [values, series, scaleMode],
     );
-    const innerW = Math.max(0, size.w - PADDING.left - PADDING.right);
-    const innerH = Math.max(0, size.h - PADDING.top - PADDING.bottom);
+    const innerW = Math.max(0, size.w - pad.left - pad.right);
+    const innerH = Math.max(0, size.h - pad.top - pad.bottom);
 
     const rawPoints = useMemo(
         () => pointsFromValues(values, innerW, innerH, domain.min, domain.max),
@@ -339,32 +364,61 @@ export function BotRuntimeMetricsHistoryChart({
     return (
         <div
             className={cn(
-                'flex h-full min-h-0 flex-col rounded-md bg-inset/35 p-2',
+                'flex h-full min-h-0 flex-col rounded-md bg-inset/35',
+                compact ? 'p-1.5' : 'p-2',
                 className,
             )}
         >
-            <div className="mb-1.5 flex shrink-0 items-start justify-between gap-2 px-0.5">
+            <div
+                className={cn(
+                    'flex shrink-0 justify-between gap-2 px-0.5',
+                    compact ? 'mb-1 items-center' : 'mb-1.5 items-start',
+                )}
+            >
                 <div className="min-w-0">
-                    <p className="text-2xs font-medium text-text-secondary">{title}</p>
-                    {stats ? (
-                        <p className="mt-0.5 text-[10px] tabular-nums text-text-tertiary">
-                            最低 {formatY(series, stats.min)} · 最高{' '}
-                            {formatY(series, stats.max)} · {stats.count} 点
+                    {compact ? (
+                        <p className="flex min-w-0 items-baseline gap-1.5 truncate">
+                            <span className="shrink-0 text-2xs font-medium text-text-secondary">
+                                {title}
+                            </span>
+                            {stats ? (
+                                <span className="min-w-0 truncate font-mono text-[10px] tabular-nums text-text-tertiary">
+                                    {formatY(series, stats.min)} – {formatY(series, stats.max)}
+                                </span>
+                            ) : (
+                                <span className="text-[10px] text-text-tertiary">等待采样…</span>
+                            )}
                         </p>
                     ) : (
-                        <p className="mt-0.5 text-[10px] text-text-tertiary">等待采样…</p>
+                        <>
+                            <p className="text-2xs font-medium text-text-secondary">{title}</p>
+                            {stats ? (
+                                <p className="mt-0.5 text-[10px] tabular-nums text-text-tertiary">
+                                    最低 {formatY(series, stats.min)} · 最高{' '}
+                                    {formatY(series, stats.max)} · {stats.count} 点
+                                </p>
+                            ) : (
+                                <p className="mt-0.5 text-[10px] text-text-tertiary">等待采样…</p>
+                            )}
+                        </>
                     )}
                 </div>
                 <div className="shrink-0 text-right">
                     <p
-                        className="font-mono text-sm font-semibold tabular-nums leading-none"
+                        className={cn(
+                            'font-mono font-semibold tabular-nums leading-none',
+                            compact ? 'text-xs' : 'text-sm',
+                        )}
                         style={{ color: accentColor }}
                     >
                         {headerValue}
                     </p>
-                    <p className="mt-0.5 text-[10px] tabular-nums text-text-tertiary">
-                        {hoverIdx != null ? activeTime : `最新 · ${activeTime}`}
-                    </p>
+                    {/* compact：时间只在曲线指示器上；非 compact 仅展示最新时间（悬停也不重复） */}
+                    {!compact ? (
+                        <p className="mt-0.5 text-[10px] tabular-nums text-text-tertiary">
+                            最新 · {lastTime}
+                        </p>
+                    ) : null}
                 </div>
             </div>
 
@@ -375,7 +429,7 @@ export function BotRuntimeMetricsHistoryChart({
                     const el = wrapperRef.current;
                     if (!el) return;
                     const rect = el.getBoundingClientRect();
-                    const localX = e.clientX - rect.left - PADDING.left;
+                    const localX = e.clientX - rect.left - pad.left;
                     if (localX < 0 || localX > innerW) {
                         setHoverX(null);
                         return;
@@ -397,7 +451,7 @@ export function BotRuntimeMetricsHistoryChart({
                         <div
                             aria-hidden
                             className="pointer-events-none absolute inset-x-0"
-                            style={{ top: PADDING.top, height: innerH }}
+                            style={{ top: pad.top, height: innerH }}
                         >
                             {yTicks.map((tick, i) => {
                                 const yRatio =
@@ -411,10 +465,10 @@ export function BotRuntimeMetricsHistoryChart({
                                         style={{ top: `calc(${yRatio * 100}% - 6px)` }}
                                     >
                                         <span
-                                            className="shrink-0 pr-1.5 text-right font-mono text-[10px] tabular-nums text-text-tertiary"
-                                            style={{ width: PADDING.left - 4 }}
+                                            className="shrink-0 whitespace-nowrap pr-1 text-right font-mono text-[10px] tabular-nums leading-none text-text-tertiary"
+                                            style={{ width: pad.left - 4 }}
                                         >
-                                            {formatY(series, tick)}
+                                            {formatAxisTick(series, tick)}
                                         </span>
                                         <div className="flex-1 border-t border-dashed border-border-subtle/55" />
                                     </div>
@@ -432,7 +486,7 @@ export function BotRuntimeMetricsHistoryChart({
                                     <stop offset="100%" stopColor={accentColor} stopOpacity={0.02} />
                                 </linearGradient>
                             </defs>
-                            <g transform={`translate(${PADDING.left}, ${PADDING.top})`}>
+                            <g transform={`translate(${pad.left}, ${pad.top})`}>
                                 {areaPath ? (
                                     <path d={areaPath} fill={`url(#${gradientId})`} />
                                 ) : null}
@@ -476,7 +530,7 @@ export function BotRuntimeMetricsHistoryChart({
                 ) : null}
             </div>
 
-            {values.length > 0 ? (
+            {values.length > 0 && !compact ? (
                 <div className="mt-1 flex justify-between gap-2 px-0.5 text-[10px] tabular-nums text-text-tertiary">
                     <span>{firstTime}</span>
                     <span>

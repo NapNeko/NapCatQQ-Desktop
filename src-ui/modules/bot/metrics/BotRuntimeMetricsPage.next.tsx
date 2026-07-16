@@ -1,5 +1,5 @@
 // Bot 运行时指标全页：与配置 / 日志同级。
-// 单页自适应仪表盘：总览 / 系统资源 / 节点流量同屏，页面本身不滚动。
+// 单页自适应仪表盘：总览（含系统资源）/ 节点表 / 三序列历史趋势同屏，页面本身不滚动。
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
@@ -26,14 +26,9 @@ import {
     Popover,
     PopoverContent,
     PopoverTrigger,
-    Select,
     Switch,
     timeFromMs,
     TimePicker,
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
 } from '../../../shared/ui';
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import { useBotRuntimeMetrics } from '../../../hooks/bot/useBotRuntimeMetrics';
@@ -79,15 +74,21 @@ function formatActivity(ms: number | null | undefined): string {
 function Panel({
     title,
     description,
+    titleExtra,
     aside,
     children,
     className,
+    /** 内容区 class；节点表用 p-0 贴齐标题栏，与卡片同面 */
+    bodyClassName,
 }: {
     title: string;
     description?: string;
+    /** 标题旁附加（如问号提示） */
+    titleExtra?: ReactNode;
     aside?: ReactNode;
     children: ReactNode;
     className?: string;
+    bodyClassName?: string;
 }) {
     return (
         <section
@@ -98,7 +99,7 @@ function Panel({
         >
             <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border-subtle/70 px-3 py-2.5">
                 <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
                         <span
                             aria-hidden
                             className="h-3.5 w-0.5 shrink-0 rounded-full bg-brand/55"
@@ -106,6 +107,9 @@ function Panel({
                         <h2 className="truncate text-[13px] font-semibold text-text">
                             {title}
                         </h2>
+                        {titleExtra ? (
+                            <div className="shrink-0">{titleExtra}</div>
+                        ) : null}
                     </div>
                     {description ? (
                         <p className="mt-1 pl-2.5 text-2xs text-text-tertiary">
@@ -115,8 +119,46 @@ function Panel({
                 </div>
                 {aside ? <div className="shrink-0">{aside}</div> : null}
             </div>
-            <div className="min-h-0 flex-1 overflow-hidden p-3">{children}</div>
+            <div
+                className={cn(
+                    'min-h-0 flex-1 overflow-hidden p-3',
+                    bodyClassName,
+                )}
+            >
+                {children}
+            </div>
         </section>
+    );
+}
+
+function PanelHelpTip({
+    label,
+    children,
+}: {
+    label: string;
+    children: ReactNode;
+}) {
+    // 点击展开说明（不用 hover Tooltip：轮询重渲 + 桌面端更稳）
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text data-[state=open]:bg-inset data-[state=open]:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                    aria-label={label}
+                >
+                    <CircleHelp aria-hidden size={14} strokeWidth={2.1} />
+                </button>
+            </PopoverTrigger>
+            <PopoverContent
+                side="bottom"
+                align="start"
+                sideOffset={8}
+                className="w-[min(18rem,calc(100vw-2rem))] p-3 text-2xs font-normal leading-relaxed text-text-secondary"
+            >
+                {children}
+            </PopoverContent>
+        </Popover>
     );
 }
 
@@ -230,11 +272,15 @@ function ResourceMeter({
     );
 }
 
-const SERIES_OPTIONS: { id: HistorySeriesKey; label: string; hint: string }[] = [
-    { id: 'rss', label: '内存 RSS', hint: '进程常驻内存趋势' },
-    { id: 'eventsOut', label: '出站事件', hint: 'OneBot 事件发出累计' },
-    { id: 'actionsIn', label: '入站 action', hint: '收到的 action 累计' },
-];
+const HISTORY_SERIES: {
+    id: HistorySeriesKey;
+    label: string;
+    accent: string;
+}[] = [
+        { id: 'rss', label: '内存 RSS', accent: 'var(--color-brand)' },
+        { id: 'eventsOut', label: '出站事件', accent: 'var(--color-info)' },
+        { id: 'actionsIn', label: '入站 action', accent: 'var(--color-success)' },
+    ];
 
 function SegmentControl<T extends string>({
     value,
@@ -278,53 +324,32 @@ function SegmentControl<T extends string>({
 }
 
 function TrendConfigMenu({
-    series,
-    onSeriesChange,
     fitData,
     onFitDataChange,
     showDots,
     onShowDotsChange,
 }: {
-    series: HistorySeriesKey;
-    onSeriesChange: (v: HistorySeriesKey) => void;
     fitData: boolean;
     onFitDataChange: (v: boolean) => void;
     showDots: boolean;
     onShowDotsChange: (v: boolean) => void;
 }) {
-    const seriesLabel =
-        SERIES_OPTIONS.find((o) => o.id === series)?.label ?? '序列';
-
     return (
         <Popover>
             <PopoverTrigger asChild>
                 <button
                     type="button"
                     className="inline-flex h-7 items-center gap-1 rounded-md bg-inset px-2 text-[11px] font-medium text-text-secondary transition-colors hover:bg-muted/50 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-                    aria-label="趋势显示配置"
-                    title="序列、纵轴与采样点"
+                    aria-label="图表显示配置"
+                    title="纵轴与采样点"
                 >
                     <Settings2 aria-hidden size={13} strokeWidth={2.1} />
-                    <span className="max-w-[5.5rem] truncate">{seriesLabel}</span>
+                    <span>显示</span>
                     <ChevronDown aria-hidden size={12} className="text-text-tertiary" />
                 </button>
             </PopoverTrigger>
-            <PopoverContent side="bottom" align="end" sideOffset={6} className="w-[17rem] p-3">
+            <PopoverContent side="bottom" align="end" sideOffset={6} className="w-[16rem] p-3">
                 <div className="space-y-3">
-                    <Select
-                        label="显示序列"
-                        value={series}
-                        onValueChange={onSeriesChange}
-                        items={SERIES_OPTIONS.map((o) => ({
-                            value: o.id,
-                            label: o.label,
-                        }))}
-                        hint={
-                            SERIES_OPTIONS.find((o) => o.id === series)?.hint ??
-                            undefined
-                        }
-                    />
-
                     <div className="space-y-1.5">
                         <p className="text-xs font-medium text-text-secondary">纵轴</p>
                         <SegmentControl
@@ -676,17 +701,18 @@ function NodeRows({ nodes }: { nodes: NetworkNodeMetrics[] }) {
         );
     }
 
+    // 与 Panel 同面：无内嵌底、无 sticky 色带；列 padding 与标题栏 px-3 对齐
     return (
-        <div className="h-full min-h-0 overflow-auto rounded-sm bg-field ring-1 ring-border-subtle">
+        <div className="h-full min-h-0 overflow-auto">
             <table className="w-full border-collapse text-left text-2xs">
-                <thead className="sticky top-0 z-[1] bg-field text-text-tertiary">
-                    <tr className="border-b border-border-subtle">
-                        <th className="px-2.5 py-1.5 font-medium">节点</th>
-                        <th className="px-2.5 py-1.5 font-medium">类型</th>
-                        <th className="px-2.5 py-1.5 font-medium tabular-nums">出/入</th>
-                        <th className="px-2.5 py-1.5 font-medium tabular-nums">字节</th>
-                        <th className="px-2.5 py-1.5 font-medium tabular-nums">错误</th>
-                        <th className="px-2.5 py-1.5 font-medium">活动</th>
+                <thead className="text-text-tertiary">
+                    <tr className="border-b border-border-subtle/60">
+                        <th className="px-3 py-2 font-medium">节点</th>
+                        <th className="px-3 py-2 font-medium">类型</th>
+                        <th className="px-3 py-2 font-medium tabular-nums">出/入</th>
+                        <th className="px-3 py-2 font-medium tabular-nums">字节</th>
+                        <th className="px-3 py-2 font-medium tabular-nums">错误</th>
+                        <th className="px-3 py-2 font-medium">活动</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -695,28 +721,28 @@ function NodeRows({ nodes }: { nodes: NetworkNodeMetrics[] }) {
                         return (
                             <tr
                                 key={`${n.name}-${n.kind}`}
-                                className="border-b border-border-subtle/70 last:border-0 hover:bg-inset/35"
+                                className="border-b border-border-subtle/40 last:border-0 hover:bg-inset/25"
                             >
                                 <td
-                                    className="max-w-[8rem] truncate px-2.5 py-1.5 font-medium text-text"
+                                    className="max-w-[9rem] truncate px-3 py-2 font-medium text-text"
                                     title={n.name || undefined}
                                 >
                                     {n.name || '—'}
                                 </td>
-                                <td className="whitespace-nowrap px-2.5 py-1.5 text-text-secondary">
+                                <td className="whitespace-nowrap px-3 py-2 text-text-secondary">
                                     {networkNodeKindLabel(n.kind)}
                                 </td>
-                                <td className="whitespace-nowrap px-2.5 py-1.5 font-mono tabular-nums text-text-secondary">
+                                <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-text-secondary">
                                     {formatCompactCount(Number(n.events_out ?? 0))} /{' '}
                                     {formatCompactCount(Number(n.actions_in ?? 0))}
                                 </td>
-                                <td className="whitespace-nowrap px-2.5 py-1.5 font-mono tabular-nums text-text-secondary">
+                                <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-text-secondary">
                                     {formatBytes(Number(n.bytes_out ?? 0))} /{' '}
                                     {formatBytes(Number(n.bytes_in ?? 0))}
                                 </td>
                                 <td
                                     className={cn(
-                                        'px-2.5 py-1.5 font-mono tabular-nums',
+                                        'px-3 py-2 font-mono tabular-nums',
                                         errors > 0
                                             ? 'font-semibold text-danger'
                                             : 'text-text-secondary',
@@ -724,7 +750,7 @@ function NodeRows({ nodes }: { nodes: NetworkNodeMetrics[] }) {
                                 >
                                     {formatCompactCount(errors)}
                                 </td>
-                                <td className="whitespace-nowrap px-2.5 py-1.5 text-text-tertiary">
+                                <td className="whitespace-nowrap px-3 py-2 text-text-tertiary">
                                     {formatActivity(
                                         n.last_activity_at_ms != null
                                             ? Number(n.last_activity_at_ms)
@@ -763,10 +789,11 @@ export function BotRuntimeMetricsPageNext({
         mode: 'preset',
         range: '1h',
     });
-    const [series, setSeries] = useState<HistorySeriesKey>('rss');
     /** false = 从 0 起（默认更直观）；true = 贴合数据区间看小波动 */
     const [fitData, setFitData] = useState(false);
     const [showDots, setShowDots] = useState(false);
+    /** 仅手动点「刷新」时转圈，与后台自动轮询脱钩 */
+    const [manualRefreshing, setManualRefreshing] = useState(false);
     const history = useBotRuntimeMetricsHistory(
         botId,
         historyWindow,
@@ -819,8 +846,11 @@ export function BotRuntimeMetricsPageNext({
     );
 
     const onRefreshAll = () => {
-        refresh();
-        history.refresh();
+        if (manualRefreshing) return;
+        setManualRefreshing(true);
+        void Promise.all([refresh(), history.refresh()]).finally(() => {
+            setManualRefreshing(false);
+        });
     };
 
     const statusBanner =
@@ -870,29 +900,9 @@ export function BotRuntimeMetricsPageNext({
         ? '远端历史由同机 ncd-watch 续写，Desktop 退出后不会中断。'
         : '本机历史由 Desktop 在线时写入；关闭应用后暂停采样。';
 
-    const overviewAside = (
-        <TooltipProvider delayDuration={120}>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <button
-                        type="button"
-                        title={overviewHelpText}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-                        aria-label="指标说明"
-                    >
-                        <CircleHelp aria-hidden size={15} strokeWidth={2.1} />
-                    </button>
-                </TooltipTrigger>
-                <TooltipContent
-                    side="bottom"
-                    sideOffset={8}
-                    className="max-w-[17rem] text-left font-normal leading-relaxed"
-                >
-                    {overviewHelpText}
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
-    );
+    const historyHelpText = isRemote
+        ? '三条曲线分别为进程内存、出站事件累计与入站 action 累计。约每分钟一个采样点；悬停曲线可读该时刻数值与时间。时间范围可在右上角切换。远端由 ncd-watch 在主机侧续写历史。'
+        : '三条曲线分别为进程内存、出站事件累计与入站 action 累计。约每分钟一个采样点；悬停曲线可读该时刻数值与时间。时间范围可在右上角切换。本机仅在 Desktop 在线时写入历史。';
 
     return (
         <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
@@ -978,74 +988,69 @@ export function BotRuntimeMetricsPageNext({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    disabled={loading}
+                    disabled={manualRefreshing}
                     onClick={onRefreshAll}
                 >
                     <RefreshCw
                         aria-hidden
                         size={14}
-                        className={cn('mr-1.5', loading && 'animate-spin')}
+                        className={cn('mr-1.5', manualRefreshing && 'animate-spin')}
                     />
-                    {loading ? '刷新中…' : '刷新'}
+                    {manualRefreshing ? '刷新中…' : '刷新'}
                 </Button>
             </header>
 
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden pt-2.5 lg:grid-cols-12 lg:grid-rows-2">
-                <div className="grid min-h-0 grid-cols-1 gap-2.5 lg:col-span-7 lg:row-span-2 lg:grid-rows-2">
-                    <div className="grid min-h-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
-                        <Panel
-                            title="总览"
-                            description="当前健康度与关键计数"
-                            className="min-h-0"
-                            aside={overviewAside}
-                        >
-                            <div className="flex h-full min-h-0 flex-col gap-2">
-                                {statusBanner}
-                                <div className="@container min-h-0 flex-1">
-                                    <div className="grid h-full min-h-0 grid-cols-2 grid-rows-2 gap-2">
-                                        <KpiTile
-                                            label="内存 RSS"
-                                            value={formatBytes(rss)}
-                                            hint={
-                                                heap != null
-                                                    ? `堆 ${formatBytes(Number(heap))}`
-                                                    : undefined
-                                            }
-                                        />
-                                        <KpiTile
-                                            label="活跃节点"
-                                            value={`${activeNodes} / ${metrics?.nodes.length ?? 0}`}
-                                            tone={activeNodes > 0 ? 'success' : 'neutral'}
-                                            hint={
-                                                (metrics?.nodes.length ?? 0) === 0
-                                                    ? '暂无节点'
-                                                    : activeNodes > 0
-                                                        ? '有近期活动'
-                                                        : '暂无活动'
-                                            }
-                                        />
-                                        <KpiTile
-                                            label="事件 出 / 入"
-                                            value={`${formatCompactCount(totals.eventsOut)} / ${formatCompactCount(totals.actionsIn)}`}
-                                            hint={`${formatBytes(totals.bytesOut)} / ${formatBytes(totals.bytesIn)}`}
-                                        />
-                                        <KpiTile
-                                            label="累计错误"
-                                            value={formatCompactCount(totals.errors)}
-                                            tone={totals.errors > 0 ? 'danger' : 'neutral'}
-                                            hint={totals.errors > 0 ? '需关注节点表' : '正常'}
-                                        />
-                                    </div>
+                <div className="grid min-h-0 grid-cols-1 gap-2.5 lg:col-span-7 lg:row-span-2 lg:grid-rows-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                    <Panel
+                        title="总览"
+                        description="关键计数与系统资源（进程探针 · 主机侧采样）"
+                        className="min-h-0"
+                        titleExtra={
+                            <PanelHelpTip label="总览说明">
+                                {overviewHelpText}
+                            </PanelHelpTip>
+                        }
+                    >
+                        <div className="flex h-full min-h-0 flex-col gap-2">
+                            {statusBanner}
+                            <div className="@container shrink-0">
+                                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                                    <KpiTile
+                                        label="内存 RSS"
+                                        value={formatBytes(rss)}
+                                        hint={
+                                            heap != null
+                                                ? `堆 ${formatBytes(Number(heap))}`
+                                                : undefined
+                                        }
+                                    />
+                                    <KpiTile
+                                        label="活跃节点"
+                                        value={`${activeNodes} / ${metrics?.nodes.length ?? 0}`}
+                                        tone={activeNodes > 0 ? 'success' : 'neutral'}
+                                        hint={
+                                            (metrics?.nodes.length ?? 0) === 0
+                                                ? '暂无节点'
+                                                : activeNodes > 0
+                                                    ? '有近期活动'
+                                                    : '暂无活动'
+                                        }
+                                    />
+                                    <KpiTile
+                                        label="事件 出 / 入"
+                                        value={`${formatCompactCount(totals.eventsOut)} / ${formatCompactCount(totals.actionsIn)}`}
+                                        hint={`${formatBytes(totals.bytesOut)} / ${formatBytes(totals.bytesIn)}`}
+                                    />
+                                    <KpiTile
+                                        label="累计错误"
+                                        value={formatCompactCount(totals.errors)}
+                                        tone={totals.errors > 0 ? 'danger' : 'neutral'}
+                                        hint={totals.errors > 0 ? '需关注节点表' : '正常'}
+                                    />
                                 </div>
                             </div>
-                        </Panel>
-
-                        <Panel
-                            title="系统资源"
-                            description="进程来自探针；主机内存/CPU/磁盘来自主机侧采样（本机 sysinfo / 远端 ncd-watch）"
-                            className="min-h-0"
-                        >
-                            <div className="flex h-full min-h-0 flex-col gap-2">
+                            <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2">
                                 <ResourceMeter
                                     icon={MemoryStick}
                                     label="进程 RSS"
@@ -1120,13 +1125,14 @@ export function BotRuntimeMetricsPageNext({
                                     unavailable={diskRatio == null}
                                 />
                             </div>
-                        </Panel>
-                    </div>
+                        </div>
+                    </Panel>
 
                     <Panel
                         title="节点与出入流量"
                         description="各 OneBot 网络节点累计收发"
                         className="min-h-0"
+                        bodyClassName="p-0"
                         aside={
                             <span className="font-mono text-[10px] tabular-nums text-text-tertiary">
                                 出 {formatBytes(totals.bytesOut)} · 入{' '}
@@ -1139,9 +1145,13 @@ export function BotRuntimeMetricsPageNext({
                 </div>
 
                 <Panel
-                    title="流量趋势"
-                    description="约每分钟一点 · 悬停查看采样"
+                    title="历史趋势"
                     className="min-h-[18rem] lg:col-span-5 lg:row-span-2"
+                    titleExtra={
+                        <PanelHelpTip label="历史趋势说明">
+                            {historyHelpText}
+                        </PanelHelpTip>
+                    }
                     aside={
                         <div className="flex items-center gap-1">
                             <TrendRangePanel
@@ -1150,8 +1160,6 @@ export function BotRuntimeMetricsPageNext({
                                 retentionDays={retentionDays}
                             />
                             <TrendConfigMenu
-                                series={series}
-                                onSeriesChange={setSeries}
                                 fitData={fitData}
                                 onFitDataChange={setFitData}
                                 showDots={showDots}
@@ -1160,77 +1168,52 @@ export function BotRuntimeMetricsPageNext({
                         </div>
                     }
                 >
-                    <div className="flex h-full min-h-0 flex-col gap-2">
-                        <div className="grid shrink-0 grid-cols-3 gap-1.5">
-                            <div className="rounded-sm bg-inset/45 px-2 py-1.5 text-center">
-                                <p className="text-[10px] text-text-tertiary">出站事件</p>
-                                <p className="mt-0.5 font-mono text-sm font-semibold tabular-nums text-text">
-                                    {formatCompactCount(totals.eventsOut)}
-                                </p>
+                    <div className="flex h-full min-h-0 flex-col gap-1.5">
+                        {history.loading && history.points.length === 0 ? (
+                            <div className="flex h-full items-center justify-center rounded-sm bg-inset/35 text-2xs text-text-tertiary">
+                                加载历史…
                             </div>
-                            <div className="rounded-sm bg-inset/45 px-2 py-1.5 text-center">
-                                <p className="text-[10px] text-text-tertiary">入站 action</p>
-                                <p className="mt-0.5 font-mono text-sm font-semibold tabular-nums text-text">
-                                    {formatCompactCount(totals.actionsIn)}
+                        ) : history.error ? (
+                            <div className="flex h-full flex-col items-center justify-center gap-1.5 rounded-sm bg-danger-soft/25 px-3 text-center">
+                                <p className="text-2xs font-medium text-danger">
+                                    历史读取失败
                                 </p>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={history.refresh}
+                                >
+                                    重试
+                                </Button>
                             </div>
-                            <div className="rounded-sm bg-inset/45 px-2 py-1.5 text-center">
-                                <p className="text-[10px] text-text-tertiary">字节 出/入</p>
-                                <p className="mt-0.5 truncate font-mono text-[11px] font-semibold tabular-nums text-text">
-                                    {formatBytes(totals.bytesOut)} /{' '}
-                                    {formatBytes(totals.bytesIn)}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="min-h-0 flex-1">
-                            {history.loading && history.points.length === 0 ? (
-                                <div className="flex h-full items-center justify-center rounded-sm bg-inset/35 text-2xs text-text-tertiary">
-                                    加载历史…
-                                </div>
-                            ) : history.error ? (
-                                <div className="flex h-full flex-col items-center justify-center gap-1.5 rounded-sm bg-danger-soft/25 px-3 text-center">
-                                    <p className="text-2xs font-medium text-danger">
-                                        历史读取失败
-                                    </p>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={history.refresh}
-                                    >
-                                        重试
-                                    </Button>
-                                </div>
-                            ) : history.points.length === 0 ? (
-                                <div className="flex h-full flex-col items-center justify-center rounded-sm bg-inset/35 px-3 text-center">
-                                    <Activity
-                                        aria-hidden
-                                        size={16}
-                                        className="mb-1 text-text-disabled"
-                                    />
-                                    <p className="text-2xs text-text-tertiary">
-                                        尚无历史采样点
-                                    </p>
-                                </div>
-                            ) : (
-                                <BotRuntimeMetricsHistoryChart
-                                    points={history.points}
-                                    series={series}
-                                    title={
-                                        series === 'rss'
-                                            ? '内存 RSS'
-                                            : series === 'eventsOut'
-                                                ? '出站事件'
-                                                : '入站 action'
-                                    }
-                                    accentColor="var(--color-brand)"
-                                    scaleMode={fitData ? 'fit' : 'zero'}
-                                    showDots={showDots}
-                                    className="h-full min-h-0"
+                        ) : history.points.length === 0 ? (
+                            <div className="flex h-full flex-col items-center justify-center rounded-sm bg-inset/35 px-3 text-center">
+                                <Activity
+                                    aria-hidden
+                                    size={16}
+                                    className="mb-1 text-text-disabled"
                                 />
-                            )}
-                        </div>
+                                <p className="text-2xs text-text-tertiary">
+                                    尚无历史采样点
+                                </p>
+                            </div>
+                        ) : (
+                            HISTORY_SERIES.map((s) => (
+                                <div key={s.id} className="min-h-0 flex-1">
+                                    <BotRuntimeMetricsHistoryChart
+                                        points={history.points}
+                                        series={s.id}
+                                        title={s.label}
+                                        accentColor={s.accent}
+                                        scaleMode={fitData ? 'fit' : 'zero'}
+                                        showDots={showDots}
+                                        compact
+                                        className="h-full min-h-0"
+                                    />
+                                </div>
+                            ))
+                        )}
                     </div>
                 </Panel>
             </div>
