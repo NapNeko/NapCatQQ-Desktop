@@ -76,16 +76,27 @@ async function cmdShip(versionPlain, { push, yes }) {
     const tagName = `v${versionPlain}`;
     const curatedRel = `docs/releases/v${versionPlain}.md`;
     const curatedPath = path.join(ROOT, curatedRel);
+    // 允许「先 draft 再 release」：仅本版策展 + 版本三处可脏，其它改动仍拦截
+    const allowedDirty = new Set([...VERSION_FILES, curatedRel]);
 
     console.log(`[ship] NapCatQQ Desktop ${versionPlain} → ${tagName}`);
     console.log(`[ship] push=${push ? 'yes' : 'no（默认）'} yes=${yes ? 'yes' : 'no'}`);
     console.log('');
 
-    const dirty = gitStatusPorcelain();
-    if (dirty) {
-        fail(`工作区不干净（对齐旧版 release.py）。请先提交或 stash。\n${dirty}`);
+    const dirtyMap = gitStatusMap();
+    const foreign = [...dirtyMap.keys()].filter((f) => !allowedDirty.has(f));
+    if (foreign.length) {
+        fail(
+            `工作区有与本版发版无关的改动，请先提交或 stash：\n${foreign.map((f) => `  ${dirtyMap.get(f)} ${f}`).join('\n')}`,
+        );
     }
-    console.log('[ok] 工作区干净');
+    if (dirtyMap.size === 0) {
+        console.log('[ok] 工作区干净');
+    } else {
+        console.log(
+            `[ok] 仅本版发版相关改动（${[...dirtyMap.keys()].join(', ')}），允许继续`,
+        );
+    }
 
     if (gitTagExists(tagName)) fail(`本地已存在 tag ${tagName}`);
     if (remoteTagExists(tagName)) fail(`远端已存在 tag ${tagName}（origin）`);
@@ -94,12 +105,7 @@ async function cmdShip(versionPlain, { push, yes }) {
     let notesCreated = false;
     if (!fs.existsSync(curatedPath)) {
         console.log(`[info] 无 ${curatedRel}，生成草稿（优先 .env 模型，失败则规则归类）…`);
-        // draft 内部 async；spawn 同步等进程结束即可
-        runNode([
-            'scripts/release-notes.mjs',
-            'draft',
-            '--kind',
-            'desktop',
+        'desktop',
             '--version',
             versionPlain,
         ]);
@@ -414,15 +420,28 @@ function gitStatusPorcelain() {
     }
 }
 
-function readFileAtHead(relPath) {
-    try {
-        return execFileSync('git', ['show', `HEAD:${relPath.replace(/\\/g, '/')}`], {
-            cwd: ROOT,
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
-    } catch {
-        return null;
+/** path → XY status；路径统一正斜杠 */
+function gitStatusMap() {
+    const raw = gitStatusPorcelain();
+    const map = new Map();
+    if (!raw) return map;
+    for (const line of raw.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        // porcelain: XY PATH 或 XY ORIG -> PATH
+        const xy = line.slice(0, 2);
+        let file = line.slice(3).trim();
+        if (file.includes(' -> ')) file = file.split(' -> ').pop().trim();
+        // 带引号的路径
+        if (
+            (file.startsWith('"') && file.endsWith('"')) ||
+            (file.startsWith("'") && file.endsWith("'"))
+        ) {
+            file = file.slice(1, -1);
+        }
+        map.set(file.replace(/\\/g, '/'), xy);
+    }
+    return map;
+}
     }
 }
 
@@ -487,11 +506,17 @@ function printHelp() {
   pnpm run release:notes:preview -- --version <X.Y.Z>
 
 流程:
-  1. 工作区干净、tag 不存在
-  2. 确保 docs/releases/vX.Y.Z.md（没有则 draft）
+  1. 无无关脏文件（允许本版 docs/releases/vX.Y.Z.md 与版本三处未提交）
+  2. tag 不存在；确保策展（没有则 draft）
   3. 预览正文 → 确认（--yes 跳过）
   4. 写版本三处 → 单 commit → annotated tag
   5. 可选 --push
+
+推荐:
+  pnpm run release:notes:draft -- --version X.Y.Z
+  # 编辑 docs/releases/vX.Y.Z.md
+  pnpm run release -- X.Y.Z
+  pnpm run release -- X.Y.Z --push
 
 注意:
   - 推送 tag 会触发正式 Release MSI
