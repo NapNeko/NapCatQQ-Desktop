@@ -39,6 +39,8 @@ $props = Get-MsiProperties -Path $MsiPath
 
 $upgrade = $props["UpgradeCode"]
 $product = $props["ProductName"]
+$manufacturer = $props["Manufacturer"]
+$version = $props["ProductVersion"]
 $productLanguage = $props["ProductLanguage"]
 
 Write-Host ("  ProductName     = " + $product)
@@ -58,9 +60,7 @@ if ($manufacturer -ne $ExpectedManufacturer) {
   throw ("Manufacturer mismatch: got '" + $manufacturer + "', expected '" + $ExpectedManufacturer + "'")
 }
 if ($productLanguage -ne $ExpectedProductLanguage) {
-  throw ("ProductLanguage mismatch: got '" + $productLanguage + "', expected '" + $ExpectedProductLanguage + "' (zh-CN)
-if ($manufacturer -ne $ExpectedManufacturer) {
-  throw ("Manufacturer mismatch: got '" + $manufacturer + "', expected '" + $ExpectedManufacturer + "'")
+  throw ("ProductLanguage mismatch: got '" + $productLanguage + "', expected '" + $ExpectedProductLanguage + "' (zh-CN)")
 }
 
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("ncd-msi-assert-" + [guid]::NewGuid().ToString("n"))

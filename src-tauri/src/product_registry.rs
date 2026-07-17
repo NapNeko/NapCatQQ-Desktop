@@ -3,7 +3,8 @@
 //! 机器级(MSI / 启动补写,可能需管理员):
 //!   HKLM\SOFTWARE\NapCatQQ-Desktop
 //!     InstallDir  REG_SZ  程序安装根(含 NapCatQQ-Desktop.exe)
-//!     DataRoot    REG_SZ  默认数据根(首次安装写入;升级 NeverOverwrite)
+//!     DataRoot    REG_SZ  机器默认数据根(MSI 首次写入;WiX3 无 NeverOverwrite,
+//!                         修复/重装可能写回 ProgramData 默认)
 //!
 //! 用户级(数据目录迁移,无 UAC):
 //!   HKCU\SOFTWARE\NapCatQQ-Desktop

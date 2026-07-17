@@ -71,9 +71,9 @@
         HKLM\SOFTWARE\NapCatQQ-Desktop
           InstallDir  = [INSTALLDIR]
           DataRoot    = [CommonAppDataFolder]NapCatQQ Desktop
-            (machine default only; NeverOverwrite so upgrade/repair does not
-             clobber a customized HKLM value. User migrate writes HKCU DataRoot
-             and resolve prefers HKCU over HKLM — see product_registry.rs.)
+            (machine default only. WiX 3 RegistryValue has no NeverOverwrite;
+             REINSTALLMODE=amus may rewrite this HKLM default. User migrate writes
+             HKCU DataRoot and resolve prefers HKCU over HKLM — see product_registry.rs.)
       Also anchors this fragment into MainFeature via componentRefs.
       Uninstall removes the key with the component (user data under DataRoot is
       NOT deleted here).
@@ -92,14 +92,14 @@
             Value="[INSTALLDIR]"
             KeyPath="yes" />
           <!--
-            NeverOverwrite: REINSTALLMODE=amus must not reset DataRoot to ProgramData
-            after the user (or a future machine-level migrate) changed it.
+            Machine default only. Do not put NeverOverwrite here: WiX 3 candle
+            rejects that attribute (CNDL0004) and broke the v3.1.3 MSI build.
+            User-facing migrate authority is HKCU; see product_registry.rs.
           -->
           <RegistryValue
             Name="DataRoot"
             Type="string"
-            Value="[CommonAppDataFolder]NapCatQQ Desktop"
-            NeverOverwrite="yes" />
+            Value="[CommonAppDataFolder]NapCatQQ Desktop" />
           <RegistryValue
             Name="LegacyOrphanCleanup"
             Type="integer"
