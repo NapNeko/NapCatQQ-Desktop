@@ -105,7 +105,11 @@ async function cmdShip(versionPlain, { push, yes }) {
     let notesCreated = false;
     if (!fs.existsSync(curatedPath)) {
         console.log(`[info] 无 ${curatedRel}，生成草稿（优先 .env 模型，失败则规则归类）…`);
-        'desktop',
+        runNode([
+            'scripts/release-notes.mjs',
+            'draft',
+            '--kind',
+            'desktop',
             '--version',
             versionPlain,
         ]);
@@ -427,11 +431,12 @@ function gitStatusMap() {
     if (!raw) return map;
     for (const line of raw.split(/\r?\n/)) {
         if (!line.trim()) continue;
-        // porcelain: XY PATH 或 XY ORIG -> PATH
-        const xy = line.slice(0, 2);
-        let file = line.slice(3).trim();
+        // porcelain v1: 两位状态 + 一个空格 + path（rename 为 "old -> new"）
+        const m = /^(?<xy>[\sMADRCU?!]{2}) (?<path>.+)$/.exec(line);
+        if (!m) continue;
+        const xy = m.groups.xy;
+        let file = m.groups.path.trim();
         if (file.includes(' -> ')) file = file.split(' -> ').pop().trim();
-        // 带引号的路径
         if (
             (file.startsWith('"') && file.endsWith('"')) ||
             (file.startsWith("'") && file.endsWith("'"))
@@ -442,6 +447,16 @@ function gitStatusMap() {
     }
     return map;
 }
+
+function readFileAtHead(relPath) {
+    try {
+        return execFileSync('git', ['show', `HEAD:${relPath.replace(/\\/g, '/')}`], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+    } catch {
+        return null;
     }
 }
 
