@@ -40,7 +40,7 @@ pub mod stream_chunk;
 pub mod subprocess;
 
 pub use apt_lock::{
-    dpkg_lock_wait_preamble_sh, host_command_wrap_dpkg_wait_for_apt,
+    dpkg_lock_wait_preamble_sh, host_command_wrap_dpkg_wait_for_apt, normalize_posix_sh_script,
     output_indicates_dpkg_lock_hold, wrap_sh_script_with_dpkg_wait,
 };
 pub use command::{CommandOutput, HostCommand};

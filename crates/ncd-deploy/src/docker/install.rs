@@ -159,4 +159,17 @@ mod tests {
     fn phases_are_non_empty() {
         assert!(DOCKER_INSTALL_PHASES.len() >= 5);
     }
+
+    #[test]
+    fn install_phase_scripts_have_no_cr() {
+        // Windows checkout 若把脚本转成 CRLF,dash 会在 set -e\r 上报 Illegal option
+        for (name, script) in DOCKER_INSTALL_PHASES.iter() {
+            assert!(
+                !script.contains('\r'),
+                "阶段 {name} 含 CR,远端 /bin/sh(dash) 会失败"
+            );
+        }
+        let mirrors = write_registry_mirrors_script();
+        assert!(!mirrors.contains('\r'), "registry mirrors 脚本含 CR");
+    }
 }

@@ -7,18 +7,29 @@ use std::time::Duration;
 
 use crate::command::{CommandOutput, HostCommand};
 
+/// 去掉脚本里的 CR。dash(/bin/sh) 会把 `set -e\r` 报成 `set: Illegal option -`。
+/// Windows 源文件或 checkout 成 CRLF 时,include_str!/raw string 会把 \r 带进远端 sh -c。
+pub fn normalize_posix_sh_script(script: &str) -> String {
+    if script.contains('\r') {
+        script.replace('\r', "")
+    } else {
+        script.to_string()
+    }
+}
+
 /// 若 sh -c 脚本含 apt/apt-get,自动加上 dpkg 锁等待前导
 pub fn host_command_wrap_dpkg_wait_for_apt(mut cmd: HostCommand) -> HostCommand {
     if cmd.program != "sh" || cmd.args.len() < 2 {
         return cmd;
     }
-    let script = cmd.args.last().map(String::as_str).unwrap_or("");
+    let n = cmd.args.len();
+    let script = normalize_posix_sh_script(&cmd.args[n - 1]);
     if !script.contains("apt-get") && !script.contains("apt ") {
+        // 非 apt 也要去 CR:dnf/yum 阶段同样走 sh -c,CRLF 一样会炸 dash
+        cmd.args[n - 1] = script;
         return cmd;
     }
-    let wrapped = wrap_sh_script_with_dpkg_wait(script);
-    let n = cmd.args.len();
-    cmd.args[n - 1] = wrapped;
+    cmd.args[n - 1] = wrap_sh_script_with_dpkg_wait(&script);
     let need = Duration::from_secs(1200);
     if cmd.timeout.map(|t| t < need).unwrap_or(true) {
         cmd.timeout = Some(need);
@@ -71,8 +82,11 @@ wait_ncd_dpkg_lock
 
 /// 将内层 set -e 脚本包上锁等待前导
 pub fn wrap_sh_script_with_dpkg_wait(inner: &str) -> String {
+    // preamble 也可能来自 CRLF 的 .rs raw string,两边都去 CR
+    let preamble = normalize_posix_sh_script(dpkg_lock_wait_preamble_sh());
+    let inner = normalize_posix_sh_script(inner);
     let inner = inner.trim_start();
-    format!("{}\n{}", dpkg_lock_wait_preamble_sh(), inner)
+    format!("{preamble}\n{inner}")
 }
 
 #[cfg(test)]
@@ -97,5 +111,54 @@ mod tests {
             stderr: "E: Unable to locate package foo".into(),
         };
         assert!(!output_indicates_dpkg_lock_hold(&out));
+    }
+
+    #[test]
+    fn normalize_strips_cr() {
+        assert_eq!(
+            normalize_posix_sh_script("set -e\r\napt-get update\r\n"),
+            "set -e\napt-get update\n"
+        );
+        assert_eq!(normalize_posix_sh_script("set -e\n"), "set -e\n");
+    }
+
+    #[test]
+    fn wrap_strips_crlf_so_set_e_is_dash_safe() {
+        // 复现用户侧:sh: N: set: Illegal option -
+        let inner = "set -e\r\nexport DEBIAN_FRONTEND=noninteractive\r\napt-get update\r\n";
+        let wrapped = wrap_sh_script_with_dpkg_wait(inner);
+        assert!(
+            !wrapped.contains('\r'),
+            "包装后不得残留 CR,否则 dash 会把 set -e\\r 当成非法选项"
+        );
+        assert!(
+            wrapped.lines().any(|l| l == "set -e"),
+            "set -e 必须是独立整行: {wrapped}"
+        );
+        assert!(wrapped.contains("wait_ncd_dpkg_lock"));
+        assert!(wrapped.contains("apt-get update"));
+    }
+
+    #[test]
+    fn host_command_normalizes_cr_for_non_apt_scripts() {
+        let cmd = HostCommand::new("sh")
+            .arg("-c")
+            .arg("set -e\r\necho hi\r\n");
+        let out = host_command_wrap_dpkg_wait_for_apt(cmd);
+        let script = out.args.last().expect("sh -c script");
+        assert!(!script.contains('\r'));
+        assert_eq!(script, "set -e\necho hi\n");
+    }
+
+    #[test]
+    fn host_command_wraps_apt_and_strips_cr() {
+        let cmd = HostCommand::new("sh")
+            .arg("-c")
+            .arg("set -e\r\napt-get install -y curl\r\n");
+        let out = host_command_wrap_dpkg_wait_for_apt(cmd);
+        let script = out.args.last().expect("sh -c script");
+        assert!(!script.contains('\r'));
+        assert!(script.contains("wait_ncd_dpkg_lock"));
+        assert!(script.contains("apt-get install -y curl"));
     }
 }
