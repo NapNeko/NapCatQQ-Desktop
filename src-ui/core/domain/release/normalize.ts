@@ -145,11 +145,23 @@ function compareNumericCore(local: string, remote: string): number {
 ///   - > 0  remote 比 local 新
 ///   - < 0  local 比 remote 新
 ///   - 0    一致 / 无法比较
+///
+/// QQ 宿主本地常是 `9.9.32-50969`，pcConfig 远端只有 `9.9.32`。数字 build
+/// 走 compareComponentVersion（缺 build = 官方简写，等主版本即相等），不能
+/// 再落到下面的 SemVer 预发布启发式，否则会误报可更新。
 export function compareSemver(local: string, remote: string): number {
-    // QQ / 带 build id 的宿主版本走更稳的比较；纯 SemVer 路径保持原语义
     if (local.includes('-') || remote.includes('-')) {
         const via = compareComponentVersion(local, remote);
         if (via !== 0) return via;
+
+        const localNormEarly = normalizeComponentVersion(local);
+        const remoteNormEarly = normalizeComponentVersion(remote);
+        const [, localBuildRaw] = splitVersionBuild(localNormEarly);
+        const [, remoteBuildRaw] = splitVersionBuild(remoteNormEarly);
+        // 任一侧是 QQ 式数字 build：component 已判等则结束，勿当 pre-release
+        if (parseBuildId(localBuildRaw) != null || parseBuildId(remoteBuildRaw) != null) {
+            return 0;
+        }
     }
     const localNorm = normalizeComponentVersion(local);
     const remoteNorm = normalizeComponentVersion(remote);
@@ -161,6 +173,7 @@ export function compareSemver(local: string, remote: string): number {
         const b = remoteParts[i] ?? 0;
         if (a !== b) return b - a;
     }
+    // 非数字后缀才按 SemVer 预发布：1.2.3-rc1 < 1.2.3
     const localHasPre = localNorm.includes('-');
     const remoteHasPre = remoteNorm.includes('-');
     if (localHasPre && !remoteHasPre) return 1;
