@@ -599,6 +599,7 @@ pub fn run() {
             commands::desktop_update::check_desktop_update,
             commands::desktop_update::precheck_desktop_update,
             commands::desktop_update::install_desktop_update,
+            commands::desktop_update::consume_desktop_update_startup_notice,
             commands::ncd_watch::sync_ncd_watch_notify,
             commands::ncd_watch::touch_ncd_watch_present,
             commands::deployment_tasks::list_deployment_tasks,

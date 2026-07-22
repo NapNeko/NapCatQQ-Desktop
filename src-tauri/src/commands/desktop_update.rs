@@ -21,7 +21,11 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::commands::app_settings::read_github_pat;
-use crate::desktop_update::{DesktopUpdateProgressSink, GithubMsiUpdateProvider, product_version};
+use crate::desktop_update::{
+    DesktopUpdateProgressSink, DesktopUpdateStartupNotice, GithubMsiUpdateProvider,
+    consume_startup_update_notice, product_version, product_version_str,
+    spawn_post_install_relaunch_helper,
+};
 
 fn build_check_orchestrator(state: &AppState) -> Result<UpdateOrchestrator, String> {
     let version = product_version().map_err(|e| e.to_string())?;
@@ -194,11 +198,18 @@ pub async fn install_desktop_update(
 
     progress_ui.emit_step_end(1, true);
     progress_ui.set_step(2);
-    progress_ui.emit_step_begin(2, format!("下载 Desktop {}…", server_update.version));
+    progress_ui.emit_step_begin(
+        2,
+        format!(
+            "下载并安装 Desktop {}（将显示安装进度）…",
+            server_update.version
+        ),
+    );
 
     // running_bots 列表留给 resume；当前先停本机再装，列表可为空
     let running_bots: Vec<String> = Vec::new();
     let snowluma_running = false;
+    let target_version = server_update.version.to_string();
 
     let install_result = orch
         .install_with_graceful_shutdown(server_update, running_bots, snowluma_running)
@@ -211,15 +222,19 @@ pub async fn install_desktop_update(
             progress_ui.emit_step_end(2, true);
             progress_ui.emit_log(
                 ProgressLogLevel::Info,
-                "安装程序已启动，即将退出以完成升级…",
+                "安装程序已启动（进度条窗口）。应用即将退出；安装完成后会自动重新打开。",
             );
             progress_ui.emit_finished(true);
 
             info!(
                 target: "ncd_tauri::desktop_update",
                 task_id = %task_id,
+                target = %target_version,
                 "desktop MSI installer launched; exiting app for upgrade"
             );
+
+            // 先起 relaunch helper（带目标版本），再关 runtime / exit
+            spawn_post_install_relaunch_helper(&target_version);
 
             crate::commands::ncd_watch::clear_present_on_all_remote_servers(state.inner()).await;
             state.runtime.shutdown().await;
@@ -234,4 +249,12 @@ pub async fn install_desktop_update(
             Err(msg)
         }
     }
+}
+
+/// 启动时消费一次：上次自更新成功 / 未完成 / 失败提示。
+#[tauri::command]
+pub async fn consume_desktop_update_startup_notice(
+    state: State<'_, AppState>,
+) -> Result<Option<DesktopUpdateStartupNotice>, String> {
+    Ok(consume_startup_update_notice(&state.data_root, product_version_str()).await)
 }

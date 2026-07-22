@@ -1,8 +1,11 @@
 //! Desktop 自更新：GitHub Release MSI 路径（对齐 legacy + CI 产物命名）。
 //!
-//! 不走 tauri-plugin-updater 签名包；下载 MSI 后用 msiexec 静默升级，
-//! 资产名与 build-msi.yml 一致：`NapCatQQ-Desktop-{ver}-x64.msi` /
-//! 别名 `NapCatQQ-Desktop-x64.msi`。
+//! 不走 tauri-plugin-updater 签名包；下载 MSI 后用 msiexec 安装
+//!（`/passive` 进度条 + `/norestart` 不重启系统），资产名与 build-msi.yml
+//! 一致：`NapCatQQ-Desktop-{ver}-x64.msi` / 别名 `NapCatQQ-Desktop-x64.msi`。
+//!
+//! 装完自启：在退出前 spawn 独立 helper，等本进程退出后再启动新 exe
+//!（避免文件锁；不依赖整机 reboot）。
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -23,14 +26,35 @@ use semver::Version;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
+// 跨边界类型 re-export：定义在 ncd-update（ts-rs 路径与 AvailableUpdate 一致）
+pub use ncd_update::{DesktopUpdateNoticeKind, DesktopUpdateStartupNotice};
+
 /// 与 CI collect 步骤 / legacy UpdateManager 一致的 MSI 命名。
 pub const MSI_VERSIONED_NAME_FMT: &str = "NapCatQQ-Desktop-{version}-x64.msi";
 pub const MSI_ALIAS_NAME: &str = "NapCatQQ-Desktop-x64.msi";
+/// 安装树主程序（与 autostart / WiX 一致）
+pub const MAIN_EXE_NAME: &str = "NapCatQQ-Desktop.exe";
 const MINIMUM_MSI_SIZE_BYTES: u64 = 1024 * 1024;
 /// 仅允许本仓库 GitHub Releases 下载路径，防止 IPC 篡改 download_url。
 const TRUSTED_RELEASE_HOST: &str = "github.com";
 const TRUSTED_RELEASE_OWNER: &str = "NapNeko";
 const TRUSTED_RELEASE_REPO: &str = "NapCatQQ-Desktop";
+
+/// 去掉 v/V 前缀，便于版本字符串比较。
+pub fn normalize_version_label(raw: &str) -> String {
+    raw.trim().trim_start_matches(['v', 'V']).to_string()
+}
+
+/// 判断 FileVersion/ProductVersion 是否已到达目标版本。
+/// MSI 常写成 `3.1.6.0`，目标可能是 `3.1.6`：前缀匹配即可。
+pub fn file_version_matches_target(file_version: &str, target: &str) -> bool {
+    let file = normalize_version_label(file_version);
+    let target = normalize_version_label(target);
+    if file.is_empty() || target.is_empty() {
+        return false;
+    }
+    file == target || file.starts_with(&format!("{target}."))
+}
 
 /// 产品版本（build.rs 从 tauri.conf.json 注入；回退 workspace crate 版本仅开发兜底）。
 pub fn product_version_str() -> &'static str {
@@ -482,8 +506,26 @@ async fn download_and_install_windows(
         .ok()
         .and_then(|p| p.parent().map(|p| p.to_path_buf()))
         .unwrap_or_else(|| PathBuf::from("."));
-    let log_path = app_root.join("msi_install.log");
+    // 日志放 data_root staging，避免 Program Files 无写权限；探测可写后立刻 drop 句柄
+    let preferred_log = provider
+        .staging_dir()
+        .join(format!("msi_install_{}.log", update.version));
+    let _ = tokio::fs::create_dir_all(provider.staging_dir()).await;
+    let log_path = match tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&preferred_log)
+        .await
+    {
+        Ok(file) => {
+            drop(file);
+            preferred_log
+        }
+        Err(_) => app_root.join("msi_install.log"),
+    };
 
+    // Microsoft docs: /passive = 进度条无交互；/norestart = 不重启系统
+    // https://learn.microsoft.com/windows/win32/msi/standard-installer-command-line-options
     launch_msiexec_elevated(&dest, &log_path)?;
     info!(
         target: "ncd_tauri::desktop_update",
@@ -494,7 +536,225 @@ async fn download_and_install_windows(
     Ok(())
 }
 
-/// 对齐 legacy：ShellExecuteW runas + msiexec /i /quiet /norestart /l*v
+/// 组装 msiexec 参数（纯函数，便于单测）。
+///
+/// `/passive`：显示进度条，无取消/错误对话框（MS 标准选项，等价旧 `/qb!-`）。
+/// `/norestart`：禁止安装后重启系统（应用自启由 helper 负责）。
+pub fn build_msiexec_install_args(msi_path: &Path, log_path: &Path) -> String {
+    format!(
+        "/i \"{}\" /passive /norestart /l*v \"{}\"",
+        msi_path.display(),
+        log_path.display()
+    )
+}
+
+/// 解析升级后应启动的主程序路径：优先 InstallDir，再 current_exe。
+pub fn resolve_post_update_exe() -> Result<PathBuf, UpdateError> {
+    if let Some(dir) = crate::product_registry::read_install_dir() {
+        let candidate = dir.join(MAIN_EXE_NAME);
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    std::env::current_exe().map_err(|e| UpdateError::install_failed(format!("current_exe: {e}")))
+}
+
+/// 生成「等本进程退出 + 目标版本落盘后再启动」的 PowerShell 脚本（纯函数，可测）。
+///
+/// ShellExecute 异步启动 msiexec，不能只等旧 PID 退出就 Start-Process，
+/// 否则会在安装写文件中途拉起旧/半更新 exe。helper 会：
+/// 1) 等旧 Desktop PID 退出；
+/// 2) 等主程序 ProductVersion/FileVersion 匹配目标版本；
+/// 3) Start-Process 失败（文件锁）则重试。
+pub fn build_relaunch_helper_script(pid: u32, exe: &Path, expected_version: &str) -> String {
+    // 单引号路径 / 版本：PowerShell 里 ' 用 '' 转义
+    let exe_ps = exe.to_string_lossy().replace('\'', "''");
+    let ver_ps = normalize_version_label(expected_version).replace('\'', "''");
+    format!(
+        r#"$ErrorActionPreference = 'SilentlyContinue'
+$pidToWait = {pid}
+$exe = '{exe_ps}'
+$expected = '{ver_ps}'
+function Get-ExeVersion([string]$path) {{
+  try {{
+    $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($path)
+    if ($info.ProductVersion) {{ return [string]$info.ProductVersion }}
+    if ($info.FileVersion) {{ return [string]$info.FileVersion }}
+  }} catch {{}}
+  return ''
+}}
+function Version-Matches([string]$fileVer, [string]$target) {{
+  if (-not $fileVer -or -not $target) {{ return $false }}
+  $f = $fileVer.Trim().TrimStart('v','V')
+  $t = $target.Trim().TrimStart('v','V')
+  return ($f -eq $t) -or ($f.StartsWith($t + '.'))
+}}
+$deadline = (Get-Date).AddMinutes(8)
+while ((Get-Date) -lt $deadline) {{
+  $p = Get-Process -Id $pidToWait -ErrorAction SilentlyContinue
+  if (-not $p) {{ break }}
+  Start-Sleep -Milliseconds 400
+}}
+$deadline2 = (Get-Date).AddMinutes(12)
+while ((Get-Date) -lt $deadline2) {{
+  if (-not (Test-Path -LiteralPath $exe)) {{
+    Start-Sleep -Milliseconds 500
+    continue
+  }}
+  $ver = Get-ExeVersion $exe
+  if (-not (Version-Matches $ver $expected)) {{
+    Start-Sleep -Milliseconds 700
+    continue
+  }}
+  try {{
+    Start-Process -FilePath $exe -ErrorAction Stop
+    exit 0
+  }} catch {{
+    Start-Sleep -Milliseconds 800
+  }}
+}}
+"#
+    )
+}
+
+/// 在退出前启动独立 helper：等当前 PID 退出且 exe 版本匹配后再启动。
+///
+/// 失败只记日志，不阻断已启动的 msiexec（安装仍可完成，用户可手动打开）。
+pub fn spawn_post_install_relaunch_helper(expected_version: &str) {
+    #[cfg(windows)]
+    {
+        if let Err(err) = spawn_post_install_relaunch_helper_windows(expected_version) {
+            tracing::warn!(
+                target: "ncd_tauri::desktop_update",
+                error = %err,
+                "failed to spawn post-install relaunch helper"
+            );
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = expected_version;
+    }
+}
+
+#[cfg(windows)]
+fn spawn_post_install_relaunch_helper_windows(expected_version: &str) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+
+    let exe = resolve_post_update_exe().map_err(|e| e.to_string())?;
+    let pid = std::process::id();
+    let script = build_relaunch_helper_script(pid, &exe, expected_version);
+
+    let staging = std::env::temp_dir().join(format!("ncd-desktop-relaunch-{pid}.ps1"));
+    std::fs::write(&staging, script.as_bytes())
+        .map_err(|e| format!("write relaunch script: {e}"))?;
+
+    // CREATE_NO_WINDOW：不弹黑框；DETACHED：不随父进程退出
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+
+    let mut cmd = Command::new("powershell.exe");
+    cmd.args([
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-WindowStyle",
+        "Hidden",
+        "-File",
+        &staging.to_string_lossy(),
+    ])
+    .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+    .stdin(std::process::Stdio::null())
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null());
+
+    cmd.spawn()
+        .map_err(|e| format!("spawn powershell relaunch helper: {e}"))?;
+    info!(
+        target: "ncd_tauri::desktop_update",
+        pid,
+        expected = %normalize_version_label(expected_version),
+        exe = %exe.display(),
+        script = %staging.display(),
+        "post-install relaunch helper started"
+    );
+    Ok(())
+}
+
+/// 启动时消费 resume / 失败记录，生成一次性用户提示。
+///
+/// 只读 `update-resume.json` / `update-failures.jsonl`，不构造 Mock provider、
+/// 不触网，避免把测试桩带进生产启动路径。
+pub async fn consume_startup_update_notice(
+    data_root: &Path,
+    current_version: &str,
+) -> Option<DesktopUpdateStartupNotice> {
+    let store = ncd_update::ResumeStore::new(data_root);
+    if let Ok(Some(point)) = store.load().await {
+        // 成功路径清 resume；未完成也清，避免每次启动刷 incomplete
+        //（用户可到关于页重试；失败细节仍可能在 failures 里）
+        let _ = store.clear().await;
+        let cur = normalize_version_label(current_version);
+        let target = normalize_version_label(&point.to_version);
+        if !target.is_empty() && cur == target {
+            return Some(DesktopUpdateStartupNotice {
+                v: 1,
+                kind: DesktopUpdateNoticeKind::Success,
+                from_version: Some(point.from_version),
+                to_version: Some(point.to_version.clone()),
+                message: format!("已更新到 v{target}"),
+            });
+        }
+        return Some(DesktopUpdateStartupNotice {
+            v: 1,
+            kind: DesktopUpdateNoticeKind::Incomplete,
+            from_version: Some(point.from_version),
+            to_version: Some(point.to_version.clone()),
+            message: format!(
+                "上次更新目标为 v{target}，当前仍为 v{cur}。若安装未完成，请到「设置 · 关于」重试，或查看安装日志。"
+            ),
+        });
+    }
+
+    let failures_path = data_root.join("update-failures.jsonl");
+    if let Ok(content) = tokio::fs::read_to_string(&failures_path).await {
+        let mut last_install: Option<ncd_update::RecordedFailure> = None;
+        for line in content.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(f) = serde_json::from_str::<ncd_update::RecordedFailure>(line) {
+                if matches!(f.phase, ncd_update::UpdatePhase::Install) {
+                    last_install = Some(f);
+                }
+            }
+        }
+        if let Some(last) = last_install {
+            let _ = clear_update_failures_file(data_root).await;
+            return Some(DesktopUpdateStartupNotice {
+                v: 1,
+                kind: DesktopUpdateNoticeKind::Failure,
+                from_version: None,
+                to_version: last.target_version.clone(),
+                message: format!("上次 Desktop 更新失败：{}", last.error),
+            });
+        }
+    }
+    None
+}
+
+async fn clear_update_failures_file(data_root: &Path) -> Result<(), std::io::Error> {
+    let path = data_root.join("update-failures.jsonl");
+    match tokio::fs::remove_file(&path).await {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+/// ShellExecuteW runas + msiexec /i /passive /norestart /l*v
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI: ShellExecuteW 启动 msiexec 必须用 unsafe
 fn launch_msiexec_elevated(msi_path: &Path, log_path: &Path) -> Result<(), UpdateError> {
@@ -512,11 +772,7 @@ fn launch_msiexec_elevated(msi_path: &Path, log_path: &Path) -> Result<(), Updat
         )));
     }
 
-    let arguments = format!(
-        "/i \"{}\" /quiet /norestart /l*v \"{}\"",
-        msi_path.display(),
-        log_path.display()
-    );
+    let arguments = build_msiexec_install_args(msi_path, log_path);
 
     fn wide(s: &OsStr) -> Vec<u16> {
         s.encode_wide().chain(std::iter::once(0)).collect()
@@ -686,5 +942,99 @@ mod tests {
     fn release_info_to_available_update_errs_on_bad_semver() {
         let info = sample_info("not-a-version", vec![]);
         assert!(release_info_to_available_update(&info).is_err());
+    }
+
+    #[test]
+    fn msiexec_args_use_passive_and_norestart() {
+        let args = build_msiexec_install_args(
+            Path::new(r"C:\tmp\NapCatQQ-Desktop-x64.msi"),
+            Path::new(r"C:\tmp\msi.log"),
+        );
+        assert!(
+            args.contains("/passive"),
+            "expected /passive for progress UI"
+        );
+        assert!(args.contains("/norestart"));
+        assert!(!args.contains("/quiet"), "quiet hides all UI; issue #126");
+        assert!(args.contains(r"C:\tmp\NapCatQQ-Desktop-x64.msi"));
+        assert!(args.contains(r"C:\tmp\msi.log"));
+    }
+
+    #[test]
+    fn file_version_matches_target_accepts_msi_four_part() {
+        assert!(file_version_matches_target("3.1.6.0", "3.1.6"));
+        assert!(file_version_matches_target("v3.1.6", "3.1.6"));
+        assert!(!file_version_matches_target("3.1.5.0", "3.1.6"));
+        assert!(!file_version_matches_target("", "3.1.6"));
+    }
+
+    #[test]
+    fn relaunch_helper_script_waits_pid_version_and_starts_exe() {
+        let script = build_relaunch_helper_script(
+            4242,
+            Path::new(r"C:\Program Files\NapCatQQ Desktop\NapCatQQ-Desktop.exe"),
+            "3.1.6",
+        );
+        assert!(script.contains("$pidToWait = 4242"));
+        assert!(script.contains("$expected = '3.1.6'"));
+        assert!(script.contains("Get-Process -Id $pidToWait"));
+        assert!(script.contains("GetVersionInfo"));
+        assert!(script.contains("Version-Matches"));
+        assert!(script.contains("Start-Process -FilePath $exe -ErrorAction Stop"));
+        assert!(script.contains("NapCatQQ-Desktop.exe"));
+        // PowerShell 单引号转义
+        let script_q = build_relaunch_helper_script(1, Path::new(r"C:\a'b\app.exe"), "1.0.0");
+        assert!(script_q.contains(r"C:\a''b\app.exe"));
+    }
+
+    #[tokio::test]
+    async fn consume_startup_notice_success_when_version_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ncd_update::ResumeStore::new(dir.path());
+        store
+            .save(&ncd_update::UpdateResumePoint::new("3.1.4", "3.1.5"))
+            .await
+            .unwrap();
+        let notice = consume_startup_update_notice(dir.path(), "3.1.5")
+            .await
+            .expect("notice");
+        assert_eq!(notice.kind, DesktopUpdateNoticeKind::Success);
+        assert!(notice.message.contains("3.1.5"));
+        // resume 应被消费
+        assert!(store.load().await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn consume_startup_notice_incomplete_when_version_mismatch() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ncd_update::ResumeStore::new(dir.path());
+        store
+            .save(&ncd_update::UpdateResumePoint::new("3.1.4", "3.1.5"))
+            .await
+            .unwrap();
+        let notice = consume_startup_update_notice(dir.path(), "3.1.4")
+            .await
+            .expect("notice");
+        assert_eq!(notice.kind, DesktopUpdateNoticeKind::Incomplete);
+        assert!(store.load().await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn consume_startup_notice_failure_from_jsonl() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("update-failures.jsonl");
+        let line = serde_json::json!({
+            "timestamp": "2026-07-22T00:00:00Z",
+            "target_version": "3.1.5",
+            "phase": "install",
+            "error": "download msi: timeout"
+        });
+        tokio::fs::write(&path, format!("{line}\n")).await.unwrap();
+        let notice = consume_startup_update_notice(dir.path(), "3.1.4")
+            .await
+            .expect("notice");
+        assert_eq!(notice.kind, DesktopUpdateNoticeKind::Failure);
+        assert!(notice.message.contains("timeout"));
+        assert!(!path.exists());
     }
 }
