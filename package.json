@@ -1,7 +1,7 @@
 {
   "name": "napcatqq-desktop-ui",
   "private": true,
-  "version": "3.1.5",
+  "version": "3.1.6",
   "type": "module",
   "packageManager": "pnpm@9.15.9",
   "scripts": {
