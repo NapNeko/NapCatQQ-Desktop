@@ -5,10 +5,11 @@
 import { invoke, isTauri } from '../ipc/transport';
 import type { AvailableUpdate } from '../ipc/generated/update/AvailableUpdate';
 import type { PrecheckReport } from '../ipc/generated/update/PrecheckReport';
+import type { DesktopUpdateStartupNotice } from '../ipc/generated/update/DesktopUpdateStartupNotice';
 import { withMockDelay } from '../ipc/mock/bootstrap.mock';
 import { APP_VERSION } from '../domain/app-meta';
 
-export type { AvailableUpdate, PrecheckReport };
+export type { AvailableUpdate, PrecheckReport, DesktopUpdateStartupNotice };
 
 export const desktopUpdateService = {
     check: async (): Promise<AvailableUpdate | null> => {
@@ -57,5 +58,15 @@ export const desktopUpdateService = {
             APP_VERSION,
         );
         return withMockDelay(taskId ?? 'mock-desktop-update', 200);
+    },
+
+    /** 启动时消费一次上次自更新结果（成功 / 未完成 / 失败）。 */
+    consumeStartupNotice: async (): Promise<DesktopUpdateStartupNotice | null> => {
+        if (isTauri) {
+            return invoke<DesktopUpdateStartupNotice | null>(
+                'consume_desktop_update_startup_notice',
+            );
+        }
+        return withMockDelay(null, 20);
     },
 };

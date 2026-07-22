@@ -102,12 +102,20 @@ export function AboutTab() {
     const handleInstallUpdate = useCallback(async () => {
         if (!available || installing) return;
         try {
-            await startAction('desktop_self', 'local', 'update');
             pushInfoBar({
                 key: 'about-desktop-update',
                 tone: 'info',
                 title: '正在安装更新',
-                content: '下载并启动安装程序后应用会退出；进度也可在任务队列查看。',
+                content:
+                    '将下载安装包并显示安装进度；应用会短暂退出，安装完成后自动重新打开。进度也可在任务队列查看。',
+            });
+            await startAction('desktop_self', 'local', 'update');
+            // 成功路径后端会 exit；若仍返回则多为 mock / 异常未退出
+            pushInfoBar({
+                key: 'about-desktop-update',
+                tone: 'info',
+                title: '安装程序已启动',
+                content: '若应用未自动退出，请手动关闭后等待安装完成。',
             });
         } catch (err) {
             pushInfoBar({

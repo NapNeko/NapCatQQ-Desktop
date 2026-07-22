@@ -32,6 +32,7 @@ import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useHostConnectionEvents } from '../hooks/remote/useHostConnectionEvents';
 import { useHostHealthAlerts } from '../hooks/remote/useHostHealthAlerts';
 import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
+import { pushInfoBar } from '../hooks/ui/globalInfoBarStore';
 import { useAppUiPreferencesBootstrap } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
 import { useTaskQueue } from '../hooks/task-queue/useTaskQueue';
@@ -47,6 +48,7 @@ import { registerOnboardingHost } from '../hooks/desktop/onboardingHost';
 import { registerDesktopConsentHost } from '../hooks/desktop/desktopConsentHost';
 import { useFrameworkTour } from '../hooks/desktop/useFrameworkTour';
 import { DesktopConsentDialog } from '../shared/components/next/DesktopConsentDialog';
+import { desktopUpdateService } from '../core/services/desktop-update.service';
 import {
     ONBOARDING_GUIDE_STEP_IDS,
     OnboardingDialog,
@@ -195,6 +197,42 @@ export const AppNext: React.FC = () => {
         })();
         // 仅挂载时检查一次
         // eslint-disable-next-line react-hooks/exhaustive-deps -- startup once
+    }, []);
+
+    // 自更新结果：resume / 失败日志消费一次（#126 装完无反馈）
+    useEffect(() => {
+        let cancelled = false;
+        void (async () => {
+            try {
+                const notice = await desktopUpdateService.consumeStartupNotice();
+                if (cancelled || !notice) return;
+                // wire: serde rename_all = snake_case → "success" | "incomplete" | "failure"
+                const tone =
+                    notice.kind === 'success'
+                        ? 'success'
+                        : notice.kind === 'failure'
+                            ? 'danger'
+                            : 'warning';
+                const title =
+                    notice.kind === 'success'
+                        ? '更新完成'
+                        : notice.kind === 'failure'
+                            ? '上次更新失败'
+                            : '更新可能未完成';
+                pushInfoBar({
+                    key: 'desktop-update-startup',
+                    tone,
+                    title,
+                    content: notice.message,
+                    autoDismissMs: notice.kind === 'success' ? 6000 : 12000,
+                });
+            } catch {
+                // 启动提示失败不挡主流程
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     useEffect(() => {
