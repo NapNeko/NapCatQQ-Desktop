@@ -20,4 +20,7 @@ pub use error::UpdateError;
 pub use orchestrator::UpdateOrchestrator;
 pub use provider::{MockUpdateProvider, UpdateProvider};
 pub use resume::{ResumeStore, UpdateResumePoint};
-pub use types::{AvailableUpdate, PrecheckReport, RecordedFailure, UpdatePhase};
+pub use types::{
+    AvailableUpdate, DesktopUpdateNoticeKind, DesktopUpdateStartupNotice, PrecheckReport,
+    RecordedFailure, UpdatePhase,
+};

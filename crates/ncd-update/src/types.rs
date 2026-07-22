@@ -11,6 +11,28 @@ pub(crate) fn default_v() -> u32 {
     UPDATE_PROTOCOL_VERSION
 }
 
+/// 启动时消费一次的自更新结果提示（resume / 失败日志）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/update/")]
+pub struct DesktopUpdateStartupNotice {
+    #[serde(default = "default_v")]
+    pub v: u32,
+    pub kind: DesktopUpdateNoticeKind,
+    pub from_version: Option<String>,
+    pub to_version: Option<String>,
+    pub message: String,
+}
+
+/// 启动提示分类（wire: snake_case，与前端 InfoBar 分支对齐）。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/update/")]
+pub enum DesktopUpdateNoticeKind {
+    Success,
+    Incomplete,
+    Failure,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/update/")]
 pub struct AvailableUpdate {
