@@ -51,8 +51,9 @@ pub trait SnowLumaWebUiClientFactory: Send + Sync {
 /// SnowLumaDaemon 内部受 tokio::sync::Mutex 保护的可变状态
 struct DaemonInner {
     state: DaemonState,
-    /// 当前 ensure_running 引用计数;持久 daemon 模型下仅作监控信号
-    /// 不再驱动 terminate
+    /// 当前 ensure_running 引用计数。
+    /// 最后一个引用 release 到 0 时会关闭 node.exe，避免 Bot 停用后残留进程、
+    /// 再次启动时多开（与远端 RemoteSnowLumaDaemon::release 语义对齐）。
     ref_count: u32,
     node_pid: Option<u32>,
     /// tokio::process::Child:starter 路径写入;shutdown / watch_exit
@@ -620,11 +621,32 @@ impl SnowLumaDaemon {
         err
     }
 
-    /// ref_count -= 1;持久 daemon 模型下不触发 terminate
+    /// ref_count -= 1。
+    /// 归零且 daemon 仍在 Ready/Starting 时关闭 node.exe（logout + kill child）。
+    /// 多 Bot 共享时只减计数；最后一个 Bot 停用 / abort_start 回滚后才真正停 daemon。
+    /// 与远端 `RemoteSnowLumaDaemon::release` 一致：ref_count==0 → stop。
+    ///
+    /// 必须在同一把 `inner` 锁里完成「减引用 + 切入 Stopping」：若先解锁再
+    /// `shutdown()`，中间可能被 `ensure_running` 看到 Ready 且 ref_count==0 又 +1，
+    /// 随后仍把 node 杀掉，造成「引用还在、进程已死」。
     pub async fn release(&self) {
-        let mut inner = self.inner.lock().await;
-        if inner.ref_count > 0 {
-            inner.ref_count -= 1;
+        let claimed = {
+            let mut inner = self.inner.lock().await;
+            if inner.ref_count > 0 {
+                inner.ref_count -= 1;
+            }
+            if inner.ref_count == 0
+                && matches!(inner.state, DaemonState::Ready | DaemonState::Starting)
+            {
+                // 与 shutdown 相同：先占 Stopping，挡住并发 ensure_running 复用。
+                inner.state = DaemonState::Stopping;
+                true
+            } else {
+                false
+            }
+        };
+        if claimed {
+            self.finish_shutdown_from_stopping().await;
         }
     }
 
@@ -636,23 +658,33 @@ impl SnowLumaDaemon {
     ///    超时则 child.kill().await
     /// 4. 切 Stopped + 清 ref_count + 清字段 + 发事件 + 唤醒 waiter
     pub async fn shutdown(&self) {
-        let (client, child_opt) = {
+        let claimed = {
             let mut inner = self.inner.lock().await;
             if !matches!(inner.state, DaemonState::Ready | DaemonState::Starting) {
                 return;
             }
             inner.state = DaemonState::Stopping;
+            true
+        };
+        if claimed {
+            self.finish_shutdown_from_stopping().await;
+        }
+    }
+
+    /// 调用方已把 state 设为 Stopping；取出句柄、杀进程、落到 Stopped。
+    /// release / shutdown 共用，避免两套杀进程逻辑分叉。
+    async fn finish_shutdown_from_stopping(&self) {
+        let (client, child_opt) = {
+            let mut inner = self.inner.lock().await;
             (inner.webui_client.take(), inner.node_child.take())
         };
 
-        // logout fire-and-forget
         if let Some(c) = client {
             let _ = c.logout().await;
         }
 
         if let Some(mut child) = child_opt {
             let _ = child.start_kill();
-            // 5s 内等子进程退出;超时 → 强 kill 兜底
             match tokio::time::timeout(SHUTDOWN_WAIT_TIMEOUT, child.wait()).await {
                 Ok(_) => {}
                 Err(_) => {
@@ -663,6 +695,7 @@ impl SnowLumaDaemon {
 
         {
             let mut inner = self.inner.lock().await;
+            // Stopping 期间 ensure_running 直接 Err，不会 +ref；清零是幂等收尾。
             inner.state = DaemonState::Stopped;
             inner.ref_count = 0;
             inner.node_pid = None;
@@ -688,6 +721,16 @@ impl SnowLumaDaemon {
     /// 当前 ref_count 快照
     pub async fn ref_count(&self) -> u32 {
         self.inner.lock().await.ref_count
+    }
+
+    /// 测试用：不 spawn node，直接把 daemon 标成 Ready 并设置 ref_count。
+    /// 用于验证 release 归零时会走 shutdown（无 child 时仍应切到 Stopped）。
+    #[cfg(test)]
+    pub(crate) async fn test_force_ready_with_ref_count(&self, ref_count: u32) {
+        let mut inner = self.inner.lock().await;
+        inner.state = DaemonState::Ready;
+        inner.ref_count = ref_count;
+        inner.last_error = None;
     }
 
     /// 订阅 daemon 共享的 node.exe stdout 行流
