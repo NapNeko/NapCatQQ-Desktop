@@ -78,14 +78,15 @@ impl SnowLumaAgreementService {
             RuntimeScenario::LocalNative {
                 backend: BackendType::SnowLuma,
             } => {
-                if let Some(daemon) = self.local_daemon.as_ref() {
-                    daemon.release().await;
-                }
+                // 本机 prepare 只读 runtime 下协议文件，不 ensure_running，
+                // 没有占用 daemon 引用。这里不能 release：否则会误减正在跑的
+                // Bot 的 ref_count，最后一个引用归零时还会杀掉 node.exe。
             }
             RuntimeScenario::RemoteNative {
                 server_id,
                 backend: BackendType::SnowLuma,
             } => {
+                // 远端 prepare 会 ensure_running 占引用；取消协议弹窗时必须配对 release。
                 if let Some(daemon) = self.remote_daemon_if_known(&server_id).await {
                     daemon.release().await;
                 }
