@@ -3,7 +3,28 @@
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import type { DaemonState } from '../../ipc/generated/DaemonState';
 import { isSnowLumaFlavor } from './flavor';
-import { isRuntimeTargetConcreteRemote } from './runtime-target';
+import {
+    isRuntimeTargetConcreteRemote,
+    normalizeRuntimeTargetFromDisk,
+} from './runtime-target';
+
+/** SnowLuma Native daemon 的运行作用域；Docker 每 Bot 独立，不走 daemon。 */
+export function snowlumaDaemonScope(
+    config: BotConfig | null | undefined,
+): string | null {
+    if (!config) return null;
+    if (!isSnowLumaFlavor(config.bot.backend_type)) return null;
+    if (config.bot.deploymentType !== 'native') return null;
+    return normalizeRuntimeTargetFromDisk(config.bot.runtime_target);
+}
+
+export function snowlumaDaemonStateForConfig(
+    config: BotConfig | null | undefined,
+    daemonStates: Record<string, DaemonState>,
+): DaemonState | null {
+    const scope = snowlumaDaemonScope(config);
+    return scope ? (daemonStates[scope] ?? null) : null;
+}
 
 export function isSnowlumaRemoteNativeConfig(config: BotConfig | null | undefined): boolean {
     if (!config) return false;

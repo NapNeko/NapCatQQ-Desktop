@@ -2,7 +2,7 @@
 // state 持久不丢，事件订阅一次（首个 React 订阅者来时挂上），路由切回不重置。
 //
 // 冷启动 / 页面晚于 reconcile 时：拉 list_snowluma_ui_snapshot 补齐
-// daemonState / loginState / endpointsReady，避免只靠 broadcast 丢事件
+// daemonStates / loginState / endpointsReady，避免只靠 broadcast 丢事件
 // 导致 WebUI 按钮与登录徽章永不恢复（对齐 napcatLoginStore hydrate）。
 //
 // 事件走 domain-event-hub，不直接 eventStreamService.subscribe。
@@ -25,14 +25,8 @@ const store = createStore<SnowlumaState>(initialSnowlumaState);
 let unsubDomain: (() => void) | null = null;
 let hydrateInFlight: Promise<void> | null = null;
 let hydrateAttempts = 0;
+let eventRevision = 0;
 const MAX_EMPTY_HYDRATE_RETRIES = 10;
-
-const emptyBot = (): SnowlumaBotState => ({
-    injected: false,
-    uin: null,
-    loginState: null,
-    dockerEndpointsReady: false,
-});
 
 function ensureSubscribed(): void {
     if (unsubDomain) return;
@@ -60,32 +54,40 @@ function isLoginState(v: unknown): v is SnowLumaLoginState {
 }
 
 async function hydrateFromBackend(): Promise<void> {
+    const revisionAtStart = eventRevision;
     try {
         const snap = await botService.listSnowlumaUiSnapshot();
-        const prev = store.getSnapshot();
-        const nextByBot: Record<string, SnowlumaBotState> = { ...prev.byBot };
+        // hydrate 期间若收到更新事件，不能让较旧 command 响应覆盖实时状态。
+        if (eventRevision !== revisionAtStart) return;
+
+        const nextByBot: Record<string, SnowlumaBotState> = {};
 
         for (const row of snap.bots) {
             if (!row.bot_id) continue;
-            const cur = nextByBot[row.bot_id] ?? emptyBot();
             nextByBot[row.bot_id] = {
-                ...cur,
                 injected: row.injected,
                 uin: row.uin,
-                loginState: isLoginState(row.login_state) ? row.login_state : cur.loginState,
+                loginState: isLoginState(row.login_state) ? row.login_state : null,
                 dockerEndpointsReady: row.endpoints_ready,
             };
         }
 
+        const daemonStates: Record<string, DaemonState> = {};
+        for (const [scope, state] of Object.entries(snap.daemon_states ?? {})) {
+            if (scope && isDaemonState(state)) daemonStates[scope] = state;
+        }
+        // 兼容旧 Desktop command 响应。
+        if (!daemonStates.local && isDaemonState(snap.daemon_state)) {
+            daemonStates.local = snap.daemon_state;
+        }
+
         store.setState({
-            daemonState: isDaemonState(snap.daemon_state)
-                ? snap.daemon_state
-                : prev.daemonState,
+            daemonStates,
             byBot: nextByBot,
         });
 
         const hasAny =
-            isDaemonState(snap.daemon_state) ||
+            Object.keys(daemonStates).length > 0 ||
             snap.bots.some(
                 (b) => b.injected || b.endpoints_ready || b.login_state || b.uin,
             );
@@ -114,6 +116,7 @@ function scheduleHydrate(): Promise<void> {
 }
 
 function onDomainEvent(event: DomainEvent): void {
+    eventRevision += 1;
     const next = reduceSnowluma(store.getSnapshot(), event);
     store.setState(next);
 
@@ -145,6 +148,7 @@ export const snowlumaStore = {
             unsubDomain = null;
         }
         hydrateAttempts = 0;
+        eventRevision = 0;
         hydrateInFlight = null;
         store._reset();
     },

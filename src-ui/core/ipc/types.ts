@@ -256,6 +256,10 @@ type DomainEventBody =
         online: boolean;
     }
     | {
+        kind: 'napcat_login_probe_unavailable';
+        bot_id: string;
+    }
+    | {
         kind: 'napcat_login_invalidated';
         bot_id: string;
         reason: NapCatLoginInvalidationReason;
@@ -282,6 +286,10 @@ type DomainEventBody =
         kind: 'snowluma_login_state_changed';
         bot_id: string;
         state: SnowLumaLoginState;
+    }
+    | {
+        kind: 'snowluma_login_probe_unavailable';
+        bot_id: string;
     }
     | {
         kind: 'snowluma_pid_set_changed';

@@ -175,7 +175,7 @@ export const botService = {
 
     /** 内存中的 NapCat WebUI 端点(多实例 port 可能 +1);冷启动 hydrate 用 */
     listNapcatWebuiBindings: async (): Promise<
-        Array<{ bot_id: string; port: number; token: string }>
+        Array<{ bot_id: string; port: number; token: string; online: boolean | null }>
     > => {
         if (isTauri) {
             return invoke('list_napcat_webui_bindings');
@@ -186,6 +186,7 @@ export const botService = {
     /** SnowLuma daemon + per-bot 登录/隧道;冷启动 hydrate 用 */
     listSnowlumaUiSnapshot: async (): Promise<{
         daemon_state: import('../ipc/generated/DaemonState').DaemonState | null;
+        daemon_states: Record<string, import('../ipc/generated/DaemonState').DaemonState>;
         bots: Array<{
             bot_id: string;
             injected: boolean;
@@ -197,7 +198,7 @@ export const botService = {
         if (isTauri) {
             return invoke('list_snowluma_ui_snapshot');
         }
-        return { daemon_state: null, bots: [] };
+        return { daemon_state: null, daemon_states: {}, bots: [] };
     },
 
     getSnapshot: async (botId: string): Promise<BotActorSnapshot> => {

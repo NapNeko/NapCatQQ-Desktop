@@ -40,6 +40,7 @@ import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { useBotSnapshotAlerts } from '../../../hooks/bot/useBotSnapshotAlerts';
 import { isSnowLumaFlavor } from '../../../core/domain/bot/flavor';
 import {
+    snowlumaDaemonStateForConfig,
     isSnowlumaRemoteDockerConfig,
     isSnowlumaRemoteNativeConfig,
 } from '../../../core/domain/bot/snowluma-remote-ui';
@@ -688,11 +689,14 @@ function BotListGrid({
                     invalidationReason:
                         napcat.byBot[bot.bot_id]?.invalidationReason ?? null,
                     isSnowLuma: isSnowLumaFlavor(flavor),
-                    snowlumaDaemonState: snowluma.daemonState,
+                    snowlumaDaemonState: snowlumaDaemonStateForConfig(
+                        config,
+                        snowluma.daemonStates,
+                    ),
                     offlineAutoRestart: !!config?.bot.offlineAutoRestart,
                 };
             }),
-        [bots, configByBot, flavorByBot, napcat.byBot, snowluma.daemonState],
+        [bots, configByBot, flavorByBot, napcat.byBot, snowluma.daemonStates],
     );
     useBotSnapshotAlerts(alertRows);
 
@@ -714,6 +718,10 @@ function BotListGrid({
                 const config = configByBot[bot.bot_id] ?? null;
                 const napcatBot = napcat.byBot[bot.bot_id];
                 const snowlumaBot = snowluma.byBot[bot.bot_id];
+                const snowlumaDaemonState = snowlumaDaemonStateForConfig(
+                    config,
+                    snowluma.daemonStates,
+                );
                 const isSnowlumaRemoteTunnelUi =
                     isSnowLumaFlavor(flavor) &&
                     (isSnowlumaRemoteDockerConfig(config) ||
@@ -728,7 +736,7 @@ function BotListGrid({
                             isOnline={napcatBot?.online ?? null}
                             invalidationReason={napcatBot?.invalidationReason ?? null}
                             napcatBinding={napcatBot?.webui ?? null}
-                            snowlumaDaemonState={snowluma.daemonState}
+                            snowlumaDaemonState={snowlumaDaemonState}
                             snowlumaDockerEndpointsReady={
                                 snowlumaBot?.dockerEndpointsReady ?? false
                             }

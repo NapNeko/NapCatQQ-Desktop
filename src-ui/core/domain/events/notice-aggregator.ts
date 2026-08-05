@@ -200,10 +200,12 @@ function describeRuntimeEvent(event: DomainEvent): NoticeItem | null {
         case 'snowluma_daemon_state_changed': {
             // 只关心 crashed；其它态变化是预期行为，不做通知
             if (event.state !== 'crashed') return null;
+            const scope = event.server_id?.trim() || 'local';
+            const location = scope === 'local' ? '本机' : `远端 ${scope}`;
             return {
-                id: `runtime:snowluma_daemon_crashed`,
-                title: 'SnowLuma daemon 已崩溃',
-                detail: event.reason ?? '所有 SnowLuma Bot 暂时不可用，请重启应用。',
+                id: `runtime:snowluma_daemon_crashed:${scope}`,
+                title: `${location} SnowLuma daemon 已崩溃`,
+                detail: event.reason ?? '该主机上的 SnowLuma Bot 暂时不可用。',
                 tone: 'danger',
                 source: 'runtime',
             };

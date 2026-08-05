@@ -13,6 +13,7 @@ vi.mock('./bot.service', () => ({
         listNapcatWebuiBindings: vi.fn(async () => []),
         listSnowlumaUiSnapshot: vi.fn(async () => ({
             daemon_state: null,
+            daemon_states: {},
             bots: [],
         })),
     },
@@ -92,10 +93,11 @@ describe('domain-event-hub 单次底层订阅', () => {
             kind: 'snowluma_daemon_state_changed',
             state: 'ready',
             ref_count: 1,
+            server_id: 'local',
         } as DomainEvent);
 
         expect(seenA).toContain('snowluma_daemon_state_changed');
-        expect(snowlumaStore.getSnapshot().daemonState).toBe('ready');
+        expect(snowlumaStore.getSnapshot().daemonStates.local).toBe('ready');
 
         unsubA();
         unsubNapcat();

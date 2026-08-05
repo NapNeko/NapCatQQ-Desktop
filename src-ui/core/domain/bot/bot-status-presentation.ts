@@ -100,14 +100,14 @@ function snowlumaSessionBadge(args: {
     needsQrLogin: boolean;
     daemonState: DaemonState | null | undefined;
 }): StatusBadgeSpec | null {
+    if (args.state !== 'running' && args.state !== 'starting') {
+        return null;
+    }
     if (args.daemonState === 'crashed') {
         return { tone: 'danger', label: 'Daemon 崩溃' };
     }
     if (args.daemonState === 'starting' || args.daemonState === 'stopping') {
         return { tone: 'brand', label: SESSION_LABELS.preparing };
-    }
-    if (args.state !== 'running' && args.state !== 'starting') {
-        return null;
     }
     if (args.needsQrLogin) {
         return { tone: 'warning', label: SESSION_LABELS.needQr, dot: true };

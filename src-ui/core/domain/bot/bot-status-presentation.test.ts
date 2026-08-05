@@ -53,6 +53,19 @@ describe('buildBotListCardStatus', () => {
         expect(s.session?.label).toBe('探测登录');
     });
 
+    it('SL 已停止时不受共享 Daemon 状态影响', () => {
+        const s = buildBotListCardStatus({
+            state: 'stopped',
+            flavor: 'snowluma',
+            pendingRestart: false,
+            needsQrLogin: false,
+            snowlumaLoginState: 'logged_in',
+            snowlumaDaemonState: 'crashed',
+        });
+        expect(s.lifecycle.label).toBe('已停止');
+        expect(s.session).toBeNull();
+    });
+
     it('待重启独立第三枚徽章', () => {
         const s = buildBotListCardStatus({
             state: 'running',

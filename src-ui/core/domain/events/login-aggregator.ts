@@ -5,6 +5,7 @@
 //   - napcat_login_qrcode        → qrcode_url（待扫码）
 //   - napcat_login_qrcode_removed→ qrcode 已扫除
 //   - napcat_login_online        → online: bool
+//   - napcat_login_probe_unavailable → 连续探测失败，在线态回到 unknown
 //   - napcat_login_invalidated   → reason: kicked | logged_out
 //
 // 这里把它们 reducer 化，输入是事件，输出是稳定的 `NapcatLoginState`。
@@ -47,21 +48,34 @@ export function reduceNapcatLogin(
     event: DomainEvent,
 ): NapcatLoginState {
     switch (event.kind) {
-        case 'napcat_webui_available':
+        case 'napcat_webui_available': {
+            const previous = ensureBot(state, event.bot_id);
+            const sameBinding =
+                previous.webui?.port === event.port &&
+                previous.webui.token === event.token;
             return {
                 ...state,
                 byBot: {
                     ...state.byBot,
                     [event.bot_id]: {
-                        ...ensureBot(state, event.bot_id),
+                        ...previous,
                         webui: { port: event.port, token: event.token },
+                        online: sameBinding ? previous.online : null,
+                        qrcodeUrl: sameBinding ? previous.qrcodeUrl : null,
+                        invalidationReason: sameBinding
+                            ? previous.invalidationReason
+                            : null,
                     },
                 },
             };
+        }
 
         case 'bot_process_exited': {
             const prev = state.byBot[event.bot_id];
-            if (!prev || prev.webui === null) return state;
+            if (!prev) return state;
+            if (prev.webui === null && prev.qrcodeUrl === null && prev.online === null) {
+                return state;
+            }
             return {
                 ...state,
                 byBot: {
@@ -85,7 +99,10 @@ export function reduceNapcatLogin(
             if (!tunnelDead && st !== 'stopped' && st !== 'crashed') return state;
             const botId = event.snapshot.bot_id;
             const cur = state.byBot[botId];
-            if (!cur || cur.webui === null) return state;
+            if (!cur) return state;
+            if (cur.webui === null && cur.qrcodeUrl === null && cur.online === null) {
+                return state;
+            }
             return {
                 ...state,
                 byBot: {
@@ -132,6 +149,18 @@ export function reduceNapcatLogin(
                     [event.bot_id]: {
                         ...ensureBot(state, event.bot_id),
                         online: event.online,
+                    },
+                },
+            };
+
+        case 'napcat_login_probe_unavailable':
+            return {
+                ...state,
+                byBot: {
+                    ...state.byBot,
+                    [event.bot_id]: {
+                        ...ensureBot(state, event.bot_id),
+                        online: null,
                     },
                 },
             };
