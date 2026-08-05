@@ -112,6 +112,7 @@ pub struct NapcatWebuiBindingDto {
     pub bot_id: String,
     pub port: u16,
     pub token: String,
+    pub online: Option<bool>,
 }
 
 #[tauri::command]
@@ -121,10 +122,11 @@ pub async fn list_napcat_webui_bindings(
     let rows = state.bot_manager.list_napcat_webui_endpoints().await;
     Ok(rows
         .into_iter()
-        .map(|(id, port, token)| NapcatWebuiBindingDto {
+        .map(|(id, port, token, online)| NapcatWebuiBindingDto {
             bot_id: id.to_string(),
             port,
             token,
+            online,
         })
         .collect())
 }
@@ -141,7 +143,10 @@ pub struct SnowlumaUiBotDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnowlumaUiSnapshotDto {
+    /// 兼容旧前端：仅表示本机 daemon。
     pub daemon_state: Option<ncd_domain::daemon_state::DaemonState>,
+    /// `local` 或 SSH server_id → 各自主机上的 daemon 状态。
+    pub daemon_states: HashMap<String, ncd_domain::daemon_state::DaemonState>,
     pub bots: Vec<SnowlumaUiBotDto>,
 }
 
@@ -150,8 +155,13 @@ pub async fn list_snowluma_ui_snapshot(
     state: State<'_, AppState>,
 ) -> Result<SnowlumaUiSnapshotDto, String> {
     let snap = state.bot_manager.list_snowluma_ui_snapshot().await;
+    let daemon_state = snap
+        .daemon_states
+        .get(ncd_domain::domain_event::DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL)
+        .copied();
     Ok(SnowlumaUiSnapshotDto {
-        daemon_state: snap.daemon_state,
+        daemon_state,
+        daemon_states: snap.daemon_states,
         bots: snap
             .by_bot
             .into_iter()

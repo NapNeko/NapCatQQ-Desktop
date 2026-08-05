@@ -36,6 +36,8 @@ pub struct NapCatEndpoint {
     pub host_port: Option<u16>,
     /// stdout 抓到的 webui token,用于换 Bearer credential
     pub token: String,
+    /// 最近一次可信登录探测；None 表示尚未探测或连续探测失败。
+    pub online: Option<bool>,
 }
 
 impl NapCatEndpoint {
@@ -75,6 +77,13 @@ impl NapCatEndpointTable {
         self.inner.read().await.get(bot_id).cloned()
     }
 
+    /// 更新最近一次登录探测，不存在的端点说明会话已回收，忽略迟到事件。
+    pub async fn set_online(&self, bot_id: &BotId, online: Option<bool>) {
+        if let Some(endpoint) = self.inner.write().await.get_mut(bot_id) {
+            endpoint.online = online;
+        }
+    }
+
     /// 列出当前全部端点(冷启动 hydrate / 前端补齐 WebUI 按钮用)
     pub async fn list_all(&self) -> Vec<(BotId, NapCatEndpoint)> {
         self.inner
@@ -101,6 +110,7 @@ mod tests {
                     port: 6099,
                     host_port: None,
                     token: "tok".into(),
+                    online: None,
                 },
             )
             .await;
@@ -116,6 +126,7 @@ mod tests {
             port: 58408,
             host_port: Some(6099),
             token: "t".into(),
+            online: Some(true),
         };
         assert_eq!(ep.watch_port(), 6099);
     }
@@ -131,6 +142,7 @@ mod tests {
                     port: 1,
                     host_port: None,
                     token: "a".into(),
+                    online: None,
                 },
             )
             .await;
@@ -150,6 +162,7 @@ mod tests {
                     port: 6099,
                     host_port: None,
                     token: "a".into(),
+                    online: Some(true),
                 },
             )
             .await;
@@ -160,6 +173,7 @@ mod tests {
                     port: 6100,
                     host_port: Some(6100),
                     token: "b".into(),
+                    online: Some(false),
                 },
             )
             .await;
@@ -184,9 +198,33 @@ mod tests {
                 port: 9,
                 host_port: Some(6099),
                 token: "x".into(),
+                online: None,
             },
         )
         .await;
         assert_eq!(b.snapshot(&id).await.unwrap().watch_port(), 6099);
+    }
+
+    #[tokio::test]
+    async fn set_online_updates_existing_endpoint_only() {
+        let table = NapCatEndpointTable::new();
+        let id = BotId::new("10001");
+        table
+            .insert(
+                id.clone(),
+                NapCatEndpoint {
+                    port: 6099,
+                    host_port: None,
+                    token: "tok".into(),
+                    online: None,
+                },
+            )
+            .await;
+
+        table.set_online(&id, Some(true)).await;
+        table.set_online(&BotId::new("missing"), Some(false)).await;
+
+        assert_eq!(table.snapshot(&id).await.unwrap().online, Some(true));
+        assert_eq!(table.list_all().await.len(), 1);
     }
 }

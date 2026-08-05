@@ -26,7 +26,8 @@ pub struct SnowLumaUiBotSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SnowLumaUiSnapshot {
-    pub daemon_state: Option<DaemonState>,
+    /// `local` 表示本机；其它 key 为 SSH server_id。不同主机 daemon 互不覆盖。
+    pub daemon_states: HashMap<String, DaemonState>,
     pub by_bot: HashMap<BotId, SnowLumaUiBotSnapshot>,
 }
 
@@ -40,17 +41,9 @@ impl SnowLumaUiStateTable {
         Self::default()
     }
 
-    pub async fn set_daemon_state(&self, state: DaemonState) {
+    pub async fn set_daemon_state(&self, scope: impl Into<String>, state: DaemonState) {
         let mut guard = self.inner.write().await;
-        guard.daemon_state = Some(state);
-        if state == DaemonState::Crashed {
-            for bot in guard.by_bot.values_mut() {
-                bot.injected = false;
-                bot.login_state = None;
-                // daemon 挂了本机隧道也可能废,避免 UI 继续亮 WebUI
-                bot.endpoints_ready = false;
-            }
-        }
+        guard.daemon_states.insert(scope.into(), state);
     }
 
     pub async fn mark_injected(&self, bot_id: &BotId) {
@@ -66,6 +59,11 @@ impl SnowLumaUiStateTable {
     pub async fn set_login_state(&self, bot_id: &BotId, state: SnowLumaLoginState) {
         let mut guard = self.inner.write().await;
         guard.by_bot.entry(bot_id.clone()).or_default().login_state = Some(state);
+    }
+
+    pub async fn clear_login_state(&self, bot_id: &BotId) {
+        let mut guard = self.inner.write().await;
+        guard.by_bot.entry(bot_id.clone()).or_default().login_state = None;
     }
 
     pub async fn mark_endpoints_ready(&self, bot_id: &BotId) {
@@ -94,14 +92,14 @@ mod tests {
     async fn mirror_and_clear_bot() {
         let t = SnowLumaUiStateTable::new();
         let bot = BotId::new("10001");
-        t.set_daemon_state(DaemonState::Ready).await;
+        t.set_daemon_state("local", DaemonState::Ready).await;
         t.mark_injected(&bot).await;
         t.mark_endpoints_ready(&bot).await;
         t.set_login_state(&bot, SnowLumaLoginState::LoggedIn).await;
         t.set_uin(&bot, "10001".into()).await;
 
         let snap = t.snapshot().await;
-        assert_eq!(snap.daemon_state, Some(DaemonState::Ready));
+        assert_eq!(snap.daemon_states.get("local"), Some(&DaemonState::Ready));
         let b = snap.by_bot.get(&bot).expect("bot");
         assert!(b.injected);
         assert!(b.endpoints_ready);
@@ -113,16 +111,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn crashed_clears_login_and_endpoints() {
+    async fn daemon_states_are_isolated_by_host_scope() {
         let t = SnowLumaUiStateTable::new();
         let bot = BotId::new("10001");
         t.mark_injected(&bot).await;
         t.mark_endpoints_ready(&bot).await;
         t.set_login_state(&bot, SnowLumaLoginState::LoggedIn).await;
-        t.set_daemon_state(DaemonState::Crashed).await;
+        t.set_daemon_state("server-a", DaemonState::Crashed).await;
+        t.set_daemon_state("server-b", DaemonState::Ready).await;
         let b = t.snapshot().await.by_bot.get(&bot).cloned().unwrap();
-        assert!(!b.injected);
-        assert_eq!(b.login_state, None);
-        assert!(!b.endpoints_ready);
+        assert!(b.injected);
+        assert_eq!(b.login_state, Some(SnowLumaLoginState::LoggedIn));
+        assert!(b.endpoints_ready);
+        let snap = t.snapshot().await;
+        assert_eq!(
+            snap.daemon_states.get("server-a"),
+            Some(&DaemonState::Crashed)
+        );
+        assert_eq!(
+            snap.daemon_states.get("server-b"),
+            Some(&DaemonState::Ready)
+        );
     }
 }

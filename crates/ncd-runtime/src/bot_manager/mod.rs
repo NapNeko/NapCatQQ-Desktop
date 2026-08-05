@@ -1380,13 +1380,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 列出当前内存中的 NapCat WebUI 端点(Desktop 本机可达 port + token)
     /// 冷启动 / 页面刷新后前端 hydrate 用;多实例时 port 可能是 6099/6100/...
-    pub async fn list_napcat_webui_endpoints(&self) -> Vec<(BotId, u16, String)> {
+    pub async fn list_napcat_webui_endpoints(&self) -> Vec<(BotId, u16, String, Option<bool>)> {
         self.napcat_endpoints
             .list_all()
             .await
             .into_iter()
             .filter(|(_, ep)| ep.port > 0 && !ep.token.trim().is_empty())
-            .map(|(id, ep)| (id, ep.port, ep.token))
+            .map(|(id, ep)| (id, ep.port, ep.token, ep.online))
             .collect()
     }
 
@@ -2248,6 +2248,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             port,
             token,
             host_port: _,
+            online: _,
         } = endpoint;
         let credential = match self.webui_client.fetch_credential(port, &token).await {
             Ok(c) => c,
@@ -2267,7 +2268,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .check_login_status(port, &credential)
             .await
         {
-            Ok(data) if !data.is_login => return "config_saved_pending_login",
+            Ok(data) if !data.is_login && data.is_offline != Some(true) => {
+                return "config_saved_pending_login";
+            }
             Ok(_) => {}
             Err(err) => {
                 tracing::warn!(

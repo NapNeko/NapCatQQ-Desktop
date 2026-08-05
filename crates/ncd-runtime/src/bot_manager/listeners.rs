@@ -24,8 +24,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
             // 1) UI 会话态镜像(供 list_snowluma_ui_snapshot hydrate)
             match &evt {
-                DomainEvent::SnowLumaDaemonStateChanged { state, .. } => {
-                    self.snowluma_ui.set_daemon_state(*state).await;
+                DomainEvent::SnowLumaDaemonStateChanged {
+                    state, server_id, ..
+                } => {
+                    let scope = server_id
+                        .clone()
+                        .unwrap_or_else(|| DomainEvent::SNOWLUMA_DAEMON_SCOPE_LOCAL.to_string());
+                    self.snowluma_ui.set_daemon_state(scope, *state).await;
                 }
                 DomainEvent::SnowLumaBotInjected { bot_id, .. } => {
                     self.snowluma_ui.mark_injected(bot_id).await;
@@ -35,6 +40,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 }
                 DomainEvent::SnowLumaLoginStateChanged { bot_id, state } => {
                     self.snowluma_ui.set_login_state(bot_id, *state).await;
+                }
+                DomainEvent::SnowLumaLoginProbeUnavailable { bot_id } => {
+                    self.snowluma_ui.clear_login_state(bot_id).await;
                 }
                 DomainEvent::SnowLumaDockerEndpointsReady { bot_id } => {
                     self.snowluma_ui.mark_endpoints_ready(bot_id).await;
@@ -190,6 +198,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     port,
                     host_port,
                     token: token.clone(),
+                    online: None,
                 },
             )
             .await;
@@ -270,6 +279,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let mut exit_sub = self
             .event_bus
             .subscribe(EventFilter::kind(DomainEventKind::BotProcessExited));
+        let mut online_sub = self
+            .event_bus
+            .subscribe(EventFilter::kind(DomainEventKind::NapCatLoginOnline));
+        let mut unavailable_sub = self.event_bus.subscribe(EventFilter::kind(
+            DomainEventKind::NapCatLoginProbeUnavailable,
+        ));
         if let Some(tx) = ready {
             let _ = tx.send(());
         }
@@ -292,6 +307,20 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     Some(DomainEvent::BotProcessExited { bot_id, .. }) => {
                         self.dispose_poller(&bot_id).await;
                         self.remote_runtime_sessions().shutdown_bot(&bot_id).await;
+                    }
+                    Some(_) => continue,
+                    None => break,
+                },
+                ev = online_sub.next() => match ev {
+                    Some(DomainEvent::NapCatLoginOnline { bot_id, online }) => {
+                        self.napcat_endpoints.set_online(&bot_id, Some(online)).await;
+                    }
+                    Some(_) => continue,
+                    None => break,
+                },
+                ev = unavailable_sub.next() => match ev {
+                    Some(DomainEvent::NapCatLoginProbeUnavailable { bot_id }) => {
+                        self.napcat_endpoints.set_online(&bot_id, None).await;
                     }
                     Some(_) => continue,
                     None => break,
