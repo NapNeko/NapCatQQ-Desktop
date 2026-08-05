@@ -291,10 +291,12 @@
         let mut state = LoginState::new();
         state.auth = Some("bearer".into());
         state.online = true;
+        state.consecutive_offline_observations = 1;
 
         do_status_poll(&bot_id, 6099, &cfg, &deps, &mut state, &cmd_tx).await;
 
         assert!(!state.online);
+        assert!(state.is_logged_in, "isOffline 仍表示登录会话存在");
         let events = drain_events(&mut sub).await;
         assert!(
             events
@@ -380,6 +382,51 @@
         assert!(state.online);
     }
 
+    #[tokio::test]
+    async fn status_poll_two_signal_failures_publish_probe_unavailable_once() {
+        let bot_id = BotId::new("probe-unavailable");
+        let cfg = PollerConfig::default();
+        let client = Arc::new(StatusMockClient::new(
+            vec![
+                Err(NapCatWebUiError::Status(500)),
+                Err(NapCatWebUiError::Status(500)),
+                Err(NapCatWebUiError::Status(500)),
+            ],
+            vec![
+                Err(NapCatWebUiError::Timeout),
+                Err(NapCatWebUiError::Timeout),
+                Err(NapCatWebUiError::Timeout),
+            ],
+        ));
+        let (deps, bus) = status_test_deps(
+            client,
+            Arc::new(RecordingNotifier::new()),
+            Arc::new(RecordingRestartHandle::new()),
+        );
+        let mut sub = bus.subscribe(EventFilter::bot("probe-unavailable"));
+        let (cmd_tx, _cmd_rx) = mpsc::channel::<PollerCommand>(8);
+        let mut state = LoginState::new();
+        state.auth = Some("bearer".into());
+        state.online = true;
+
+        do_status_poll(&bot_id, 6099, &cfg, &deps, &mut state, &cmd_tx).await;
+        do_status_poll(&bot_id, 6099, &cfg, &deps, &mut state, &cmd_tx).await;
+        do_status_poll(&bot_id, 6099, &cfg, &deps, &mut state, &cmd_tx).await;
+
+        let events = drain_events(&mut sub).await;
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(
+                    event,
+                    DomainEvent::NapCatLoginProbeUnavailable { .. }
+                ))
+                .count(),
+            1
+        );
+        assert!(state.probe_unavailable_published);
+    }
+
     /// online_res 返回 Unauthorized → 触发
     /// RequestAuthRefreshlogin_res 已成功 apply,对应的事件正常发布
     #[tokio::test]
@@ -462,6 +509,45 @@
             }
             other => panic!("expected NapCatLoginQrcodeRemoved, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn apply_login_is_offline_keeps_session_without_invalidation() {
+        let bot_id = BotId::new("session-offline");
+        let bus = Arc::new(BroadcastEventBus::default());
+        let mut sub = bus.subscribe(EventFilter::bot("session-offline"));
+        let deps = PollerDeps {
+            event_bus: bus,
+            http: Arc::new(StatusMockClient::new(vec![], vec![])),
+            notifier: Arc::new(RecordingNotifier::new()),
+            restart_handle: Arc::new(RecordingRestartHandle::new()),
+        };
+        let mut state = LoginState::new();
+        state.is_logged_in = true;
+        state.online = true;
+
+        apply_login_status(
+            &bot_id,
+            CheckLoginStatusData {
+                is_login: false,
+                is_offline: Some(true),
+                qrcode_url: "stale-qr".into(),
+            },
+            &deps,
+            &mut state,
+        );
+
+        assert!(state.is_logged_in);
+        assert!(!state.login_invalidated_while_online);
+        let events = drain_events(&mut sub).await;
+        assert!(events.iter().any(|event| matches!(
+            event,
+            DomainEvent::NapCatLoginQrcodeRemoved { .. }
+        )));
+        assert!(!events.iter().any(|event| matches!(
+            event,
+            DomainEvent::NapCatLoginInvalidated { .. }
+        )));
     }
 
     /// prev_login=true ∧ state.online=true ∧
@@ -759,6 +845,46 @@
         }
     }
 
+    #[tokio::test]
+    async fn apply_online_first_offline_sample_keeps_online_without_side_effects() {
+        let bot_id = BotId::new("transient-offline");
+        let cfg = PollerConfig {
+            offline_auto_restart: true,
+            offline_notice_enabled: true,
+            ..PollerConfig::default()
+        };
+        let bus = Arc::new(BroadcastEventBus::default());
+        let mut sub = bus.subscribe(EventFilter::bot("transient-offline"));
+        let notifier = Arc::new(RecordingNotifier::new());
+        let restart = Arc::new(RecordingRestartHandle::new());
+        let deps = PollerDeps {
+            event_bus: bus,
+            http: Arc::new(StatusMockClient::new(vec![], vec![])),
+            notifier: notifier.clone(),
+            restart_handle: restart.clone(),
+        };
+        let mut state = LoginState::new();
+        state.online = true;
+        state.is_logged_in = true;
+
+        apply_online_status(
+            &bot_id,
+            GetQQLoginInfoData {
+                online: Some(false),
+            },
+            &cfg,
+            &deps,
+            &mut state,
+        )
+        .await;
+
+        assert!(state.online);
+        assert_eq!(state.consecutive_offline_observations, 1);
+        assert!(notifier.calls().is_empty());
+        assert_eq!(restart.calls(), 0);
+        assert!(drain_events(&mut sub).await.is_empty());
+    }
+
     /// prev_online=false ∧ online=false → 持续离线,仅发
     /// NapCatLoginOnline{false},不触发任何副作用
     #[tokio::test]
@@ -832,6 +958,7 @@
         // 置为 true(踢线第一阶段)
         state.online = true;
         state.login_invalidated_while_online = true;
+        state.consecutive_offline_observations = 1;
         // is_logged_in 当前已被 apply_login_status 设为 false(被踢后)
 
         apply_online_status(
@@ -903,6 +1030,7 @@
         let mut state = LoginState::new();
         state.online = true;
         state.is_logged_in = true; // 已登录但掉线(非踢线)
+        state.consecutive_offline_observations = 1;
 
         apply_online_status(
             &bot_id,
@@ -947,6 +1075,7 @@
         state.online = true;
         state.is_logged_in = true;
         state.offline_notice_sent = true; // 上次离线已通知过
+        state.consecutive_offline_observations = 1;
 
         apply_online_status(
             &bot_id,
@@ -986,6 +1115,7 @@
         let mut state = LoginState::new();
         state.online = true;
         state.is_logged_in = true;
+        state.consecutive_offline_observations = 1;
 
         apply_online_status(
             &bot_id,
@@ -1027,6 +1157,7 @@
         let mut state = LoginState::new();
         state.online = true;
         state.is_logged_in = true;
+        state.consecutive_offline_observations = 1;
 
         apply_online_status(
             &bot_id,
@@ -1070,6 +1201,7 @@
         let mut state = LoginState::new();
         // 上一轮在线,但本轮未登录(is_logged_in=false)+ 没被踢
         state.online = true;
+        state.consecutive_offline_observations = 1;
 
         apply_online_status(
             &bot_id,

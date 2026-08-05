@@ -202,15 +202,15 @@
 
         // sub.next().await 会再次让出执行权,运行时调度 poller 任务,
         // poller 发布 QrcodeRemoved 后 break,事件被广播到订阅者
-        let event = sub
-            .next()
-            .await
-            .expect("subscription should yield the terminal event");
-        match event {
-            DomainEvent::NapCatLoginQrcodeRemoved { bot_id } => {
+        loop {
+            let event = sub
+                .next()
+                .await
+                .expect("subscription should yield the terminal event");
+            if let DomainEvent::NapCatLoginQrcodeRemoved { bot_id } = event {
                 assert_eq!(bot_id, BotId::new("smoke-bot"));
+                break;
             }
-            other => panic!("expected NapCatLoginQrcodeRemoved on cancel, got {other:?}"),
         }
     }
 

@@ -48,6 +48,12 @@ pub(crate) struct LoginState {
     pub offline_notice_sent: bool,
     pub login_invalidated_while_online: bool,
     pub suppress_qrcode_until_online: bool,
+    /// 连续离线样本；在线→离线需两个样本确认，避免瞬时 selfInfo 抖动。
+    pub consecutive_offline_observations: u32,
+    /// 连续没有拿到任何在线信号的轮数。
+    pub consecutive_probe_failures: u32,
+    /// 避免探测持续失败时重复广播 unknown。
+    pub probe_unavailable_published: bool,
     /// None = 从未尝试,首次必过节流(避免 Instant::checked_sub 短 uptime 失败)
     pub last_auth_refresh_attempt_at: Option<Instant>,
 }
@@ -62,6 +68,9 @@ impl LoginState {
             offline_notice_sent: false,
             login_invalidated_while_online: false,
             suppress_qrcode_until_online: false,
+            consecutive_offline_observations: 0,
+            consecutive_probe_failures: 0,
+            probe_unavailable_published: false,
             last_auth_refresh_attempt_at: None,
         }
     }

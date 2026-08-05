@@ -6,11 +6,11 @@ use tokio::sync::mpsc;
 use tokio::time::{Interval, MissedTickBehavior, interval};
 use tokio_util::sync::CancellationToken;
 
-use crate::napcat::webui_client::NapCatWebUiError;
 use super::transitions::{
-    apply_login_status, apply_observed_online_status, apply_online_status, online_from_login_status,
+    apply_login_status, apply_online_status, mark_probe_unavailable, online_from_login_status,
 };
 use super::types::{LoginState, PollerCommand, PollerConfig, PollerDeps};
+use crate::napcat::webui_client::NapCatWebUiError;
 use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::ids::BotId;
 use ncd_traits::events::EventBus;
@@ -77,7 +77,11 @@ pub(crate) fn adjust_status_interval(
     cfg: &PollerConfig,
 ) {
     let target = if state.is_logged_in {
-        cfg.login_check_interval
+        if state.consecutive_offline_observations == 0 && state.consecutive_probe_failures == 0 {
+            cfg.login_check_interval
+        } else {
+            cfg.unlogged_interval
+        }
     } else {
         cfg.unlogged_interval
     };
@@ -122,6 +126,7 @@ pub(crate) async fn do_status_poll(
 ) {
     let Some(auth) = state.auth.clone() else {
         let _ = cmd_tx.try_send(PollerCommand::RequestAuthRefresh);
+        mark_probe_unavailable(bot_id, deps, state);
         return;
     };
 
@@ -129,14 +134,15 @@ pub(crate) async fn do_status_poll(
     let online_fut = deps.http.check_online_status(port, &auth);
     let (login_res, online_res) = tokio::join!(login_fut, online_fut);
 
-    let mut login_observed_online = None;
+    let mut observed_online = None;
     match login_res {
         Ok(data) => {
-            login_observed_online = online_from_login_status(&data);
+            observed_online = online_from_login_status(&data);
             apply_login_status(bot_id, data, deps, state);
         }
         Err(NapCatWebUiError::Unauthorized(_)) => {
             let _ = cmd_tx.try_send(PollerCommand::RequestAuthRefresh);
+            mark_probe_unavailable(bot_id, deps, state);
             return;
         }
         Err(err) => {
@@ -145,23 +151,31 @@ pub(crate) async fn do_status_poll(
     }
 
     match online_res {
-        Ok(mut data) => {
-            if let Some(online) = login_observed_online {
-                data.online = Some(online);
+        Ok(data) => {
+            if observed_online.is_none() {
+                observed_online = data.online;
             }
-            apply_online_status(bot_id, data, cfg, deps, state).await;
         }
         Err(NapCatWebUiError::Unauthorized(_)) => {
             let _ = cmd_tx.try_send(PollerCommand::RequestAuthRefresh);
-            if let Some(online) = login_observed_online {
-                apply_observed_online_status(bot_id, online, cfg, deps, state).await;
-            }
         }
         Err(err) => {
             tracing::warn!(?err, %bot_id, "NapCat 在线状态查询失败（check_online_status）");
-            if let Some(online) = login_observed_online {
-                apply_observed_online_status(bot_id, online, cfg, deps, state).await;
-            }
         }
+    }
+
+    if let Some(online) = observed_online {
+        apply_online_status(
+            bot_id,
+            crate::napcat::webui_client::GetQQLoginInfoData {
+                online: Some(online),
+            },
+            cfg,
+            deps,
+            state,
+        )
+        .await;
+    } else {
+        mark_probe_unavailable(bot_id, deps, state);
     }
 }
