@@ -30,6 +30,8 @@ pub enum DomainEventKind {
     NapCatLoginQrcodeRemoved,
     #[serde(rename = "napcat_login_online")]
     NapCatLoginOnline,
+    #[serde(rename = "napcat_login_probe_unavailable")]
+    NapCatLoginProbeUnavailable,
     #[serde(rename = "napcat_login_invalidated")]
     NapCatLoginInvalidated,
     #[serde(rename = "snowluma_daemon_state_changed")]
@@ -40,6 +42,8 @@ pub enum DomainEventKind {
     SnowLumaUinDetected,
     #[serde(rename = "snowluma_login_state_changed")]
     SnowLumaLoginStateChanged,
+    #[serde(rename = "snowluma_login_probe_unavailable")]
+    SnowLumaLoginProbeUnavailable,
     #[serde(rename = "snowluma_pid_set_changed")]
     SnowLumaPidSetChanged,
     #[serde(rename = "snowluma_daemon_log")]
@@ -117,6 +121,8 @@ pub enum DomainEvent {
     NapCatLoginQrcodeRemoved { bot_id: BotId },
     #[serde(rename = "napcat_login_online")]
     NapCatLoginOnline { bot_id: BotId, online: bool },
+    #[serde(rename = "napcat_login_probe_unavailable")]
+    NapCatLoginProbeUnavailable { bot_id: BotId },
     #[serde(rename = "napcat_login_invalidated")]
     NapCatLoginInvalidated {
         bot_id: BotId,
@@ -140,6 +146,8 @@ pub enum DomainEvent {
         bot_id: BotId,
         state: SnowLumaLoginState,
     },
+    #[serde(rename = "snowluma_login_probe_unavailable")]
+    SnowLumaLoginProbeUnavailable { bot_id: BotId },
     #[serde(rename = "snowluma_pid_set_changed")]
     SnowLumaPidSetChanged { bot_id: BotId, pids: Vec<u32> },
     #[serde(rename = "snowluma_daemon_log")]
@@ -204,11 +212,17 @@ impl DomainEvent {
             Self::NapCatLoginQrcode { .. } => DomainEventKind::NapCatLoginQrcode,
             Self::NapCatLoginQrcodeRemoved { .. } => DomainEventKind::NapCatLoginQrcodeRemoved,
             Self::NapCatLoginOnline { .. } => DomainEventKind::NapCatLoginOnline,
+            Self::NapCatLoginProbeUnavailable { .. } => {
+                DomainEventKind::NapCatLoginProbeUnavailable
+            }
             Self::NapCatLoginInvalidated { .. } => DomainEventKind::NapCatLoginInvalidated,
             Self::SnowLumaDaemonStateChanged { .. } => DomainEventKind::SnowLumaDaemonStateChanged,
             Self::SnowLumaBotInjected { .. } => DomainEventKind::SnowLumaBotInjected,
             Self::SnowLumaUinDetected { .. } => DomainEventKind::SnowLumaUinDetected,
             Self::SnowLumaLoginStateChanged { .. } => DomainEventKind::SnowLumaLoginStateChanged,
+            Self::SnowLumaLoginProbeUnavailable { .. } => {
+                DomainEventKind::SnowLumaLoginProbeUnavailable
+            }
             Self::SnowLumaPidSetChanged { .. } => DomainEventKind::SnowLumaPidSetChanged,
             Self::SnowLumaDaemonLog { .. } => DomainEventKind::SnowLumaDaemonLog,
             Self::SnowLumaDockerEndpointsReady { .. } => {
@@ -237,11 +251,13 @@ impl DomainEvent {
             Self::NapCatLoginQrcode { .. } => "napcat_login_qrcode",
             Self::NapCatLoginQrcodeRemoved { .. } => "napcat_login_qrcode_removed",
             Self::NapCatLoginOnline { .. } => "napcat_login_online",
+            Self::NapCatLoginProbeUnavailable { .. } => "napcat_login_probe_unavailable",
             Self::NapCatLoginInvalidated { .. } => "napcat_login_invalidated",
             Self::SnowLumaDaemonStateChanged { .. } => "snowluma_daemon_state_changed",
             Self::SnowLumaBotInjected { .. } => "snowluma_bot_injected",
             Self::SnowLumaUinDetected { .. } => "snowluma_uin_detected",
             Self::SnowLumaLoginStateChanged { .. } => "snowluma_login_state_changed",
+            Self::SnowLumaLoginProbeUnavailable { .. } => "snowluma_login_probe_unavailable",
             Self::SnowLumaPidSetChanged { .. } => "snowluma_pid_set_changed",
             Self::SnowLumaDaemonLog { .. } => "snowluma_daemon_log",
             Self::SnowLumaDockerEndpointsReady { .. } => "snowluma_docker_endpoints_ready",
@@ -268,11 +284,13 @@ impl DomainEvent {
             Self::NapCatLoginQrcode { bot_id, .. } => Some(bot_id),
             Self::NapCatLoginQrcodeRemoved { bot_id, .. } => Some(bot_id),
             Self::NapCatLoginOnline { bot_id, .. } => Some(bot_id),
+            Self::NapCatLoginProbeUnavailable { bot_id, .. } => Some(bot_id),
             Self::NapCatLoginInvalidated { bot_id, .. } => Some(bot_id),
             Self::SnowLumaDaemonStateChanged { .. } => None,
             Self::SnowLumaBotInjected { bot_id, .. } => Some(bot_id),
             Self::SnowLumaUinDetected { bot_id, .. } => Some(bot_id),
             Self::SnowLumaLoginStateChanged { bot_id, .. } => Some(bot_id),
+            Self::SnowLumaLoginProbeUnavailable { bot_id } => Some(bot_id),
             Self::SnowLumaPidSetChanged { bot_id, .. } => Some(bot_id),
             Self::SnowLumaDaemonLog { .. } => None,
             Self::SnowLumaDockerEndpointsReady { bot_id, .. } => Some(bot_id),
@@ -395,6 +413,12 @@ impl DomainEvent {
         }
     }
 
+    pub fn napcat_login_probe_unavailable(bot_id: impl Into<BotId>) -> Self {
+        Self::NapCatLoginProbeUnavailable {
+            bot_id: bot_id.into(),
+        }
+    }
+
     pub fn napcat_login_invalidated(
         bot_id: impl Into<BotId>,
         reason: NapCatLoginInvalidationReason,
@@ -442,6 +466,12 @@ impl DomainEvent {
         Self::SnowLumaLoginStateChanged {
             bot_id: bot_id.into(),
             state,
+        }
+    }
+
+    pub fn snowluma_login_probe_unavailable(bot_id: impl Into<BotId>) -> Self {
+        Self::SnowLumaLoginProbeUnavailable {
+            bot_id: bot_id.into(),
         }
     }
 

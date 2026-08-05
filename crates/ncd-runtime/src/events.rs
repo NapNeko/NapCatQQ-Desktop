@@ -99,6 +99,11 @@ mod tests {
     }
 
     #[test]
+    fn napcat_login_probe_unavailable_round_trips() {
+        assert_round_trip(DomainEvent::napcat_login_probe_unavailable("10001"));
+    }
+
+    #[test]
     fn napcat_login_invalidated_round_trips() {
         assert_round_trip(DomainEvent::napcat_login_invalidated(
             "10001",
@@ -124,7 +129,7 @@ mod tests {
 
     #[test]
     fn napcat_login_event_name_literals_are_stable() {
-        let cases: [(DomainEvent, &str); 4] = [
+        let cases: [(DomainEvent, &str); 5] = [
             (
                 DomainEvent::napcat_login_qrcode("10001", "url"),
                 "napcat_login_qrcode",
@@ -136,6 +141,10 @@ mod tests {
             (
                 DomainEvent::napcat_login_online("10001", true),
                 "napcat_login_online",
+            ),
+            (
+                DomainEvent::napcat_login_probe_unavailable("10001"),
+                "napcat_login_probe_unavailable",
             ),
             (
                 DomainEvent::napcat_login_invalidated(
@@ -156,6 +165,7 @@ mod tests {
             "napcat_login_qrcode",
             "napcat_login_qrcode_removed",
             "napcat_login_online",
+            "napcat_login_probe_unavailable",
             "napcat_login_invalidated",
         ];
         for name in &names {
@@ -185,6 +195,7 @@ as a quoted string",
             DomainEvent::napcat_login_qrcode("10001", "url"),
             DomainEvent::napcat_login_qrcode_removed("10001"),
             DomainEvent::napcat_login_online("10001", true),
+            DomainEvent::napcat_login_probe_unavailable("10001"),
             DomainEvent::napcat_login_invalidated("10001", NapCatLoginInvalidationReason::Kicked),
             DomainEvent::snowluma_daemon_state_changed(
                 DaemonState::Ready,
@@ -195,6 +206,7 @@ as a quoted string",
             DomainEvent::snowluma_bot_injected("10001", 12345),
             DomainEvent::snowluma_uin_detected("10001", "100200"),
             DomainEvent::snowluma_login_state_changed("10001", SnowLumaLoginState::LoggedIn),
+            DomainEvent::snowluma_login_probe_unavailable("10001"),
             DomainEvent::snowluma_pid_set_changed("10001", vec![1234, 5678]),
             DomainEvent::snowluma_daemon_log("hello world"),
             DomainEvent::component_action_progress(
@@ -280,6 +292,11 @@ as a quoted string",
     }
 
     #[test]
+    fn snowluma_login_probe_unavailable_round_trips() {
+        assert_round_trip(DomainEvent::snowluma_login_probe_unavailable("10001"));
+    }
+
+    #[test]
     fn snowluma_pid_set_changed_round_trips() {
         assert_round_trip(DomainEvent::snowluma_pid_set_changed(
             "10001",
@@ -295,7 +312,7 @@ as a quoted string",
 
     #[test]
     fn snowluma_event_name_literals_are_stable() {
-        let cases: [(DomainEvent, &str); 6] = [
+        let cases: [(DomainEvent, &str); 7] = [
             (
                 DomainEvent::snowluma_daemon_state_changed(
                     DaemonState::Ready,
@@ -318,6 +335,10 @@ as a quoted string",
                 "snowluma_login_state_changed",
             ),
             (
+                DomainEvent::snowluma_login_probe_unavailable("10001"),
+                "snowluma_login_probe_unavailable",
+            ),
+            (
                 DomainEvent::snowluma_pid_set_changed("10001", vec![1234, 5678]),
                 "snowluma_pid_set_changed",
             ),
@@ -338,6 +359,7 @@ as a quoted string",
             "snowluma_bot_injected",
             "snowluma_uin_detected",
             "snowluma_login_state_changed",
+            "snowluma_login_probe_unavailable",
             "snowluma_pid_set_changed",
             "snowluma_daemon_log",
         ];

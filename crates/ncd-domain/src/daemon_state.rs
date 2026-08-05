@@ -35,8 +35,11 @@ pub enum DaemonState {
 /// - Starting: QQ 进程已起,processes 还未出现自身候选 PID 的条目(注入未生效)
 /// - WaitingForQrScan: processes 命中且 status == Loaded,等待用户扫码
 /// - LoggedIn: processes 命中且 status == Online,OneBot pipe 已连
-/// - Disconnected: processes 命中但 status 属于 {Disconnected, Error}
-///   或 dispose / 连续探测失败兜底
+/// - Disconnected: processes 明确命中上游 Disconnected，或曾在线后连续多轮
+///   成功快照均无任何会话信号
+///
+/// WebUI/隧道请求失败不属于 QQ 登录事实，由独立的
+/// `snowluma_login_probe_unavailable` 事件表达。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
