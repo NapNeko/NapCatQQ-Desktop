@@ -399,13 +399,20 @@
     }
 
     #[test]
-    fn synthesize_state_disconnected_when_all_failed() {
+    fn synthesize_state_disconnected_only_with_explicit_disconnected() {
         let p1 = proc(1, "100200", HookProcessStatus::Error);
         let p2 = proc(2, "100200", HookProcessStatus::Disconnected);
         let matched = vec![&p1, &p2];
         assert_eq!(
             synthesize_state(&matched, false),
             Some(SnowLumaLoginState::Disconnected)
+        );
+
+        let error_only = vec![&p1];
+        assert_eq!(
+            synthesize_state(&error_only, false),
+            None,
+            "上游 Error 是注入异常，不携带已登录后掉线语义"
         );
     }
 
@@ -584,9 +591,20 @@
 
         tick_once(&bot_id, &deps, &mut state).await;
         assert_eq!(state.uin, None);
-        assert_eq!(state.last_state, None);
-        let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
-        assert!(r.is_err(), "no event before UIN is locked");
+        assert_eq!(
+            state.last_state,
+            Some(SnowLumaLoginState::WaitingForQrScan)
+        );
+        let event = tokio::time::timeout(Duration::from_secs(1), sub.next())
+            .await
+            .expect("pre-login state")
+            .expect("subscription open");
+        match event {
+            DomainEvent::SnowLumaLoginStateChanged { state, .. } => {
+                assert_eq!(state, SnowLumaLoginState::WaitingForQrScan);
+            }
+            other => panic!("expected LoginStateChanged, got {other:?}"),
+        }
 
         tick_once(&bot_id, &deps, &mut state).await;
         assert_eq!(state.uin.as_deref(), Some("100200"));
@@ -703,7 +721,7 @@
     }
 
     #[tokio::test]
-    async fn tick_once_consecutive_failures_emit_disconnected_only_once() {
+    async fn tick_once_consecutive_failures_emit_probe_unavailable_only_once() {
         let (client, behavior) = MockClient::new();
         {
             let mut b = behavior.lock().await;
@@ -721,34 +739,36 @@
 
         let bot_id = BotId::new("10001");
         let mut sub = bus.subscribe(EventFilter::kind(
-            DomainEventKind::SnowLumaLoginStateChanged,
+            DomainEventKind::SnowLumaLoginProbeUnavailable,
         ));
         let mut state = PollerState::new(12345);
+        state.last_state = Some(SnowLumaLoginState::LoggedIn);
 
-        // 两次失败:未达门限,不应发任何事件
-        tick_once(&bot_id, &deps, &mut state).await;
+        // 第一次失败:未达门限,不应发任何事件
         tick_once(&bot_id, &deps, &mut state).await;
         let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
         assert!(r.is_err(), "no event before threshold");
 
-        // 第 3 次失败:达到门限,发一次 Disconnected
+        // 第 2 次失败:达到门限,只报告探测不可用
         tick_once(&bot_id, &deps, &mut state).await;
         let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
             .await
-            .expect("disconnected within 1s")
+            .expect("probe unavailable within 1s")
             .expect("subscription open");
         match evt {
-            DomainEvent::SnowLumaLoginStateChanged { state: s, .. } => {
-                assert_eq!(s, SnowLumaLoginState::Disconnected);
+            DomainEvent::SnowLumaLoginProbeUnavailable { bot_id: id } => {
+                assert_eq!(id, bot_id);
             }
-            other => panic!("expected LoginStateChanged, got {other:?}"),
+            other => panic!("expected LoginProbeUnavailable, got {other:?}"),
         }
+        assert_eq!(state.last_state, Some(SnowLumaLoginState::LoggedIn));
 
-        // 第 4 / 5 次失败:last_state == Disconnected,不应再发
+        // 后续失败不重复发，也不能把 last_state 改成 Disconnected
         tick_once(&bot_id, &deps, &mut state).await;
         tick_once(&bot_id, &deps, &mut state).await;
         let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
-        assert!(r.is_err(), "no duplicate Disconnected after threshold");
+        assert!(r.is_err(), "no duplicate probe unavailable after threshold");
+        assert_eq!(state.last_state, Some(SnowLumaLoginState::LoggedIn));
     }
 
     #[tokio::test]
@@ -807,7 +827,41 @@
     }
 
     #[tokio::test]
-    async fn dispose_emits_terminal_disconnected_once() {
+    async fn tick_once_reports_waiting_for_qr_before_uin_is_locked() {
+        let (client, behavior) = MockClient::new();
+        {
+            let mut b = behavior.lock().await;
+            b.processes_responses
+                .push_back(Ok(vec![proc(12346, "0", HookProcessStatus::Loaded)]));
+            b.qq_responses.push_back(Ok(vec![]));
+        }
+        let probe: Arc<dyn ProcessTreeProbe> =
+            Arc::new(MockProcessTreeProbe::with_set([12345u32, 12346u32]));
+        let (deps, bus) = build_test_deps(client, probe);
+        let bot_id = BotId::new("10001");
+        let mut sub = bus.subscribe(EventFilter::kind(
+            DomainEventKind::SnowLumaLoginStateChanged,
+        ));
+        let mut state = PollerState::new(12345);
+
+        tick_once(&bot_id, &deps, &mut state).await;
+
+        let event = tokio::time::timeout(Duration::from_secs(1), sub.next())
+            .await
+            .expect("login state event")
+            .expect("subscription open");
+        match event {
+            DomainEvent::SnowLumaLoginStateChanged { state: next, .. } => {
+                assert_eq!(next, SnowLumaLoginState::WaitingForQrScan);
+            }
+            other => panic!("expected LoginStateChanged, got {other:?}"),
+        }
+        assert_eq!(state.uin, None);
+        assert_eq!(state.last_state, Some(SnowLumaLoginState::WaitingForQrScan));
+    }
+
+    #[tokio::test]
+    async fn recovered_probe_republishes_same_confirmed_state() {
         let bus = Arc::new(BroadcastEventBus::default());
         let mut sub = bus.subscribe(EventFilter::kind(
             DomainEventKind::SnowLumaLoginStateChanged,
@@ -823,20 +877,33 @@
         };
         let bot_id = BotId::new("10001");
 
-        emit_terminal_disconnected_if_needed(&bot_id, &deps, &mut state);
+        state.last_state = Some(SnowLumaLoginState::LoggedIn);
+        state.probe_unavailable_published = true;
+        publish_login_state_if_needed(
+            &bot_id,
+            &deps,
+            &mut state,
+            SnowLumaLoginState::LoggedIn,
+        );
         let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
             .await
-            .expect("terminal Disconnected")
+            .expect("recovered state")
             .expect("open");
         match evt {
             DomainEvent::SnowLumaLoginStateChanged { state: s, .. } => {
-                assert_eq!(s, SnowLumaLoginState::Disconnected);
+                assert_eq!(s, SnowLumaLoginState::LoggedIn);
             }
             o => panic!("{o:?}"),
         }
+        assert!(!state.probe_unavailable_published);
 
-        // 再调一次:last_state == Disconnected,不应重复发
-        emit_terminal_disconnected_if_needed(&bot_id, &deps, &mut state);
+        // 恢复事件已补发，相同状态不再重复。
+        publish_login_state_if_needed(
+            &bot_id,
+            &deps,
+            &mut state,
+            SnowLumaLoginState::LoggedIn,
+        );
         let r = tokio::time::timeout(Duration::from_millis(200), sub.next()).await;
         assert!(r.is_err());
     }

@@ -47,9 +47,9 @@ const START_DELAY: Duration = Duration::from_millis(500);
 /// 主循环 tick 周期
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 
-/// 连续 HTTP 失败门限:达到时最多发一次
-/// Disconnected,恢复前不再发新状态
-const MAX_CONSECUTIVE_FAILURES: u32 = 3;
+/// 连续 HTTP 失败门限：达到时把 UI 登录态降为未知，但绝不据此断言 QQ 掉线。
+/// 请求默认可能等待 5 秒，取 2 可避免旧绿色状态残留十几秒。
+const MAX_CONSECUTIVE_FAILURES: u32 = 2;
 
 /// 曾在线后全信号消失的连续 tick 门限:达到才发 Disconnected。
 /// 远端 hook 信号 (process.uin / status) 可能短暂抖动空值,qq-list 也可能
@@ -87,9 +87,8 @@ impl SnowLumaStatusPoller {
         Self { bot_id, cancel }
     }
 
-    /// 请求主循环退出;多次调用幂等退出前主循环若 last_state ≠ Disconnected
-    /// 会补发一次终止性 SnowLumaLoginStateChanged{Disconnected}
-    ///
+    /// 请求主循环退出；多次调用幂等。取消观察者不等于 QQ 掉线，真实终态由
+    /// Bot 生命周期事件清理，不能在这里伪造 Disconnected。
     pub fn dispose(&self) {
         self.cancel.cancel();
     }
@@ -116,6 +115,8 @@ struct PollerState {
     last_state: Option<SnowLumaLoginState>,
     last_pid_set: BTreeSet<u32>,
     consecutive_failures: u32,
+    /// 已发布探测不可用；恢复到可信状态前不重复发事件。
+    probe_unavailable_published: bool,
     /// 曾在线后连续"全信号消失"的 tick 数,达 NO_SIGNAL_THRESHOLD 才发 Disconnected
     consecutive_no_signal: u32,
 }
@@ -143,7 +144,6 @@ async fn run_poller(
     tokio::select! {
     biased;
     _ = cancel.cancelled() => {
-    emit_terminal_disconnected_if_needed(&bot_id, &deps, &mut state);
     return;
     }
     _ = sleep(START_DELAY) => {}
@@ -157,7 +157,6 @@ async fn run_poller(
         tokio::select! {
         biased;
         _ = cancel.cancelled() => {
-        emit_terminal_disconnected_if_needed(&bot_id, &deps, &mut state);
         break;
         }
         _ = ticker.tick() => {
@@ -167,20 +166,35 @@ async fn run_poller(
     }
 }
 
-/// 退出前补发一次终止性 Disconnected(仅当 last_state ≠ Disconnected)
-fn emit_terminal_disconnected_if_needed(
+fn publish_probe_unavailable_if_needed(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
+    if state.probe_unavailable_published {
+        return;
+    }
+    state.probe_unavailable_published = true;
+    deps.event_bus
+        .publish(DomainEvent::snowluma_login_probe_unavailable(
+            bot_id.clone(),
+        ));
+}
+
+fn publish_login_state_if_needed(
     bot_id: &BotId,
     deps: &PollerDeps,
     state: &mut PollerState,
+    new_state: SnowLumaLoginState,
 ) {
-    if state.last_state != Some(SnowLumaLoginState::Disconnected) {
-        deps.event_bus
-            .publish(DomainEvent::snowluma_login_state_changed(
-                bot_id.clone(),
-                SnowLumaLoginState::Disconnected,
-            ));
-        state.last_state = Some(SnowLumaLoginState::Disconnected);
+    // 探测不可用期间 UI/runtime 已主动清成 unknown；即使状态值与上次相同，
+    // 恢复后也必须重发一次可信快照。
+    if state.last_state == Some(new_state) && !state.probe_unavailable_published {
+        return;
     }
+    deps.event_bus
+        .publish(DomainEvent::snowluma_login_state_changed(
+            bot_id.clone(),
+            new_state,
+        ));
+    state.last_state = Some(new_state);
+    state.probe_unavailable_published = false;
 }
 
 /// 单轮 tick:并发拉 /api/processes + /api/qq-list → UIN 锁定 → 状态合成 →
@@ -192,17 +206,10 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
     let (processes, qq_instances) = match (proc_res, qq_res) {
         (Ok(p), Ok(q)) => (p, q),
         _ => {
-            // 任一失败:累计失败,达到门限发一次 Disconnected(仅一次)
+            // 任一失败只说明 WebUI/隧道探测不可用，不说明 QQ 掉线。
             state.consecutive_failures = state.consecutive_failures.saturating_add(1);
-            if state.consecutive_failures >= MAX_CONSECUTIVE_FAILURES
-                && state.last_state != Some(SnowLumaLoginState::Disconnected)
-            {
-                deps.event_bus
-                    .publish(DomainEvent::snowluma_login_state_changed(
-                        bot_id.clone(),
-                        SnowLumaLoginState::Disconnected,
-                    ));
-                state.last_state = Some(SnowLumaLoginState::Disconnected);
+            if state.consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                publish_probe_unavailable_if_needed(bot_id, deps, state);
             }
             return;
         }
@@ -212,20 +219,26 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
     state.consecutive_failures = 0;
 
     let mut probe_login_evidence: Option<ProbeLoginEvidence> = None;
+    let candidates = if state.uin.is_none() {
+        Some(
+            deps.proc_tree
+                .collect_descendants(state.initial_qq_pid)
+                .await,
+        )
+    } else {
+        None
+    };
 
     // === UIN 锁定(仅 uin == None 时尝试)===
     if state.uin.is_none() {
-        let candidates = deps
-            .proc_tree
-            .collect_descendants(state.initial_qq_pid)
-            .await;
+        let candidates = candidates.as_ref().expect("candidates collected");
         if let Some(locked) = try_lock_uin(
             &processes,
             &qq_instances,
-            &candidates,
+            candidates,
             deps.expected_uin.as_deref(),
         ) {
-            state.locked_pid = find_candidate_pid_for_uin(&processes, &candidates, &locked);
+            state.locked_pid = find_candidate_pid_for_uin(&processes, candidates, &locked);
             if state.locked_pid.is_none() {
                 state.locked_pid = find_pid_for_uin(&processes, &locked);
             }
@@ -245,7 +258,7 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
         } else if let Some(evidence) = probe_candidate_login_info(
             &deps.http,
             &processes,
-            &candidates,
+            candidates,
             deps.expected_uin.as_deref(),
         )
         .await
@@ -268,8 +281,17 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
         }
     }
 
-    // 还没锁定 → 本轮不发布状态 / PID 集合事件
+    // 扫码前 process.uin 通常仍是 "0"，但候选 PID 的 hook status 已经可信。
+    // 原实现直接 return，导致 WaitingForQrScan 永远要等到扫码后才能出现。
     let Some(locked_uin) = state.uin.clone() else {
+        let candidates = candidates.as_ref().expect("candidates collected");
+        let matched: Vec<&HookProcessInfo> = processes
+            .iter()
+            .filter(|process| candidates.contains(&process.pid))
+            .collect();
+        if let Some(new_state) = synthesize_state(&matched, false) {
+            publish_login_state_if_needed(bot_id, deps, state, new_state);
+        }
         return;
     };
 
@@ -353,7 +375,7 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
     };
 
     if let Some(new_state) = new_state
-        && state.last_state != Some(new_state)
+        && (state.last_state != Some(new_state) || state.probe_unavailable_published)
     {
         tracing::info!(
             target: "ncd_runtime::snowluma_status_poller",
@@ -363,12 +385,7 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
             state = ?new_state,
             "SnowLuma login state changed"
         );
-        deps.event_bus
-            .publish(DomainEvent::snowluma_login_state_changed(
-                bot_id.clone(),
-                new_state,
-            ));
-        state.last_state = Some(new_state);
+        publish_login_state_if_needed(bot_id, deps, state, new_state);
     }
 
     // === PID 集合变化通知 ===
@@ -524,8 +541,10 @@ fn try_lock_uin(
 ///    短暂 Disconnected/Error 更能代表账号仍在线。
 /// 3. 否则任一 matched.status == Loaded → WaitingForQrScan
 /// 4. 否则任一 matched.status ∈ {Available, Loading, Connecting} → Starting
-/// 5. 否则 matched 非空 + 全部 ∈ {Error, Disconnected} → Disconnected
+/// 5. 否则任一 matched.status == Disconnected → Disconnected
 /// 6. 否则 → None,本轮不发布
+///
+/// Error 是上游注入/动作的带消息异常，不携带 `wasLoggedIn` 语义，不能当掉线。
 fn synthesize_state(matched: &[&HookProcessInfo], qq_has_uin: bool) -> Option<SnowLumaLoginState> {
     if matched
         .iter()
@@ -552,13 +571,9 @@ fn synthesize_state(matched: &[&HookProcessInfo], qq_has_uin: bool) -> Option<Sn
     }) {
         return Some(SnowLumaLoginState::Starting);
     }
-    if !matched.is_empty()
-        && matched.iter().all(|p| {
-            matches!(
-                p.status,
-                HookProcessStatus::Error | HookProcessStatus::Disconnected
-            )
-        })
+    if matched
+        .iter()
+        .any(|p| p.status == HookProcessStatus::Disconnected)
     {
         return Some(SnowLumaLoginState::Disconnected);
     }
@@ -566,7 +581,6 @@ fn synthesize_state(matched: &[&HookProcessInfo], qq_has_uin: bool) -> Option<Sn
 }
 
 // 单元测试 + 属性测试
-
 
 #[cfg(test)]
 #[path = "tests.rs"]
