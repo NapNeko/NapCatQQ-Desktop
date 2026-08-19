@@ -62,7 +62,7 @@ export function WebhookChannelEditorDialog({
     onExited: () => void;
     onPatchDraft: (patch: Partial<WebhookChannelDraft>) => void;
     onSave: () => void;
-    onTest: (channelId: string) => void;
+    onTest: (channel: WebhookChannelDraft) => void;
 }) {
     const applyPreset = (presetId: WebhookPresetId) => {
         if (!working) return;
@@ -241,27 +241,6 @@ export function WebhookChannelEditorDialog({
                                                 }
                                             />
                                         </DialogField>
-                                        {working.mode === 'edit' ? (
-                                            <Button
-                                                type="button"
-                                                variant="secondary"
-                                                size="sm"
-                                                className="self-start"
-                                                disabled={
-                                                    testingKey ===
-                                                    `webhook:${working.id}` ||
-                                                    !working.draft.url.trim()
-                                                }
-                                                onClick={() =>
-                                                    onTest(working.id)
-                                                }
-                                            >
-                                                {testingKey ===
-                                                    `webhook:${working.id}`
-                                                    ? '发送中…'
-                                                    : '发送测试'}
-                                            </Button>
-                                        ) : null}
                                     </div>
                                 </div>
 
@@ -295,6 +274,21 @@ export function WebhookChannelEditorDialog({
                                 onClick={() => onOpenChange(false)}
                             >
                                 取消
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={
+                                    testingKey ===
+                                    `webhook:${working.draft.id}` ||
+                                    !working.draft.url.trim()
+                                }
+                                onClick={() => onTest(working.draft)}
+                            >
+                                {testingKey === `webhook:${working.draft.id}`
+                                    ? '发送中…'
+                                    : '发送测试'}
                             </Button>
                             <Button type="button" size="sm" onClick={onSave}>
                                 {working.mode === 'create' ? '添加' : '完成'}

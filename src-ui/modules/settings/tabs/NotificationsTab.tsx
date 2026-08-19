@@ -342,16 +342,16 @@ export function NotificationsTab({
         }
     };
 
-    const runWebhookTest = async (channelId: string) => {
-        setTesting(`webhook:${channelId}`);
+    const runWebhookTest = async (channel: WebhookChannelDraft) => {
+        setTesting(`webhook:${channel.id}`);
         try {
-            await settingsService.testWebhook(channelId);
+            await settingsService.testWebhook(channel.id, channel);
             pushInfoBar({
                 key: 'offline-webhook-test',
                 tone: 'success',
                 title: '测试已发送',
                 content:
-                    '请到目标服务确认是否收到。若刚改过配置，请先保存设置。',
+                    '请到目标服务确认是否收到。',
             });
         } catch (err) {
             pushInfoBar({
@@ -827,8 +827,8 @@ export function NotificationsTab({
                 onExited={() => setEditorMount(null)}
                 onPatchDraft={patchEditorDraft}
                 onSave={saveEditor}
-                onTest={(channelId) => {
-                    void runWebhookTest(channelId);
+                onTest={(channel) => {
+                    void runWebhookTest(channel);
                 }}
             />
 
