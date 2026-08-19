@@ -7,7 +7,7 @@
 //! 路径权威性:app-settings.json 落在 LocalConfigStore::config_dir(),即
 //! <data_root>/config/,与 bot.json / servers.json 同级
 
-use ncd_domain::{AppSettings, AppSettingsDto};
+use ncd_domain::{AppSettings, AppSettingsDto, OfflineWebhookChannel};
 use ncd_runtime::{LocalConfigStore, SecretStoreImpl};
 use ncd_traits::{ConfigStore, SecretStore};
 use tauri::{AppHandle, Manager, State};
@@ -176,15 +176,23 @@ pub fn sync_close_action_preference(
         .ok_or_else(|| "serialize close_action failed".to_string())
 }
 
-/// 发送测试 Webhook(使用当前内存/磁盘配置)
-/// channel_id 为空时测第一条有 URL 的通道
+/// 发送测试 Webhook
+///
+/// 优先用前端传入的草稿通道(改完即测,无需先保存);未传时回退到已保存配置。
+/// channel_id 为空且未传 channel 时测第一条有效通道
 #[tauri::command]
 pub async fn test_offline_webhook(
     state: State<'_, AppState>,
     channel_id: Option<String>,
+    channel: Option<OfflineWebhookChannel>,
 ) -> Result<(), String> {
     let settings = state.app_settings.read().await.clone();
-    ncd_runtime::send_test_webhook(&settings.offline_webhook, channel_id.as_deref()).await
+    ncd_runtime::send_test_webhook(
+        &settings.offline_webhook,
+        channel_id.as_deref(),
+        channel.as_ref(),
+    )
+    .await
 }
 
 /// 发送测试邮件(使用当前磁盘配置)

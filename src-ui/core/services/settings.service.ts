@@ -515,10 +515,24 @@ export const settingsService = {
         });
     },
 
-    testWebhook: async (channelId?: string): Promise<void> => {
+    testWebhook: async (
+        channelId?: string,
+        channel?: WebhookChannelDraft,
+    ): Promise<void> => {
         if (isTauri) {
             await invoke<void>('test_offline_webhook', {
                 channelId: channelId ?? null,
+                channel: channel
+                    ? {
+                        id: channel.id,
+                        name: channel.name,
+                        enabled: channel.enabled,
+                        url: channel.url,
+                        secret: channel.secret,
+                        body_template: channel.bodyTemplate,
+                        method: channel.method,
+                    }
+                    : null,
             });
             return;
         }

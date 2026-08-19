@@ -1,9 +1,7 @@
 //! HTTP Webhook 投递(多通道 + 旧扁平字段兼容)
 
-use ncd_domain::{
-    render_template, OfflineAlert, OfflineWebhookChannel, OfflineWebhookSettings,
-};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use ncd_domain::{OfflineAlert, OfflineWebhookChannel, OfflineWebhookSettings, render_template};
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 
 const TIMEOUT_SECS: u64 = 10;
 
@@ -43,10 +41,16 @@ pub async fn send_offline_webhook(
     Ok(())
 }
 
-/// 测试指定通道;channel_id 为空则测第一条有效通道
+/// 测试指定通道
+///
+/// 解析优先级:
+/// 1. `channel` 直接传入(前端编辑中的草稿,跳过已保存配置,改完即测)
+/// 2. `channel_id` 在已保存配置里查
+/// 3. 两者都空则取第一条有效通道
 pub async fn send_test_webhook(
     settings: &OfflineWebhookSettings,
     channel_id: Option<&str>,
+    channel: Option<&OfflineWebhookChannel>,
 ) -> Result<(), String> {
     let alert = OfflineAlert {
         bot_id: ncd_domain::ids::BotId::new("0"),
@@ -57,7 +61,9 @@ pub async fn send_test_webhook(
         at: chrono_local_now(),
     };
 
-    let channel = if let Some(id) = channel_id.filter(|s| !s.is_empty()) {
+    let target: OfflineWebhookChannel = if let Some(ch) = channel {
+        ch.clone()
+    } else if let Some(id) = channel_id.filter(|s| !s.is_empty()) {
         settings
             .channel_by_id(id)
             .ok_or_else(|| format!("未找到 Webhook 通道: {id}"))?
@@ -69,7 +75,7 @@ pub async fn send_test_webhook(
             .ok_or_else(|| "Webhook URL 未配置".to_string())?
     };
 
-    send_channel(&channel, &alert).await
+    send_channel(&target, &alert).await
 }
 
 fn channel_label(ch: &OfflineWebhookChannel) -> &str {
@@ -170,5 +176,42 @@ mod tests {
             .block_on(send_offline_webhook(&settings, &alert))
             .unwrap_err();
         assert!(err.contains("未配置"));
+    }
+
+    // 传入 channel 时优先用它,即使 channel_id 指向不存在的通道也不报"未找到"
+    #[test]
+    fn test_webhook_prefers_inlined_channel() {
+        let settings = OfflineWebhookSettings::default();
+        let inlined = OfflineWebhookChannel {
+            url: String::new(),
+            ..OfflineWebhookChannel::new_blank("draft")
+        };
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let err = rt
+            .block_on(send_test_webhook(
+                &settings,
+                Some("nonexistent"),
+                Some(&inlined),
+            ))
+            .unwrap_err();
+        // 走 send_channel 空 URL 分支,而非"未找到 Webhook 通道"
+        assert_eq!(err, "Webhook URL 未配置");
+    }
+
+    // 未传 channel 时回退到 channel_id 查已保存配置
+    #[test]
+    fn test_webhook_falls_back_to_channel_id() {
+        let settings = OfflineWebhookSettings::default();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let err = rt
+            .block_on(send_test_webhook(&settings, Some("nonexistent"), None))
+            .unwrap_err();
+        assert!(err.contains("未找到 Webhook 通道"));
     }
 }
