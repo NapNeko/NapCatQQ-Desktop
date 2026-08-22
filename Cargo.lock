@@ -3209,6 +3209,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "ts-rs",
+ "windows 0.61.3",
  "zip",
 ]
 

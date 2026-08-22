@@ -8,4 +8,7 @@
 pub mod windows;
 
 #[cfg(windows)]
+pub(crate) mod elevate;
+
+#[cfg(windows)]
 pub use windows::LocalWindowsHost;
