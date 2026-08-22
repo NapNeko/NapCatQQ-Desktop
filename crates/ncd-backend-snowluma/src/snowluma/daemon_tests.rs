@@ -206,9 +206,8 @@ async fn spawn_stdout_reader_forwards_cleaned_line() {
 // - 属性测试 daemon_release_never_underflows:随机 0..50 次 release
 // ref_count 始终 == 0,不 panic
 //
-// Follow-up:watch_exit 真实 child 监听路径无法在 Mock 层构造(child 是
-// tokio::process::Child 句柄),留给真起 node.exe 的端到端集成测试覆盖
-// watch_exit_emits_crashed_when_child_unexpectedly_exits 行为
+// last-ref 杀进程用 sleeper Child 覆盖(watch_exit 已启动 / 句柄丢失 /
+// 非 last-ref 不得杀)。意外退出切 Crashed 仍留给真起 node 的 e2e。
 // -----------------------------------------------------------------------
 
 use ncd_domain::domain_event::DomainEventKind;
@@ -528,6 +527,140 @@ async fn daemon_release_last_ref_shuts_down() {
 
     assert_eq!(daemon.ref_count().await, 0);
     assert_eq!(daemon.state().await, DaemonState::Stopped);
+}
+
+fn spawn_sleeper() -> tokio::process::Child {
+    use std::process::Stdio;
+
+    #[cfg(windows)]
+    let mut cmd = {
+        let mut cmd = tokio::process::Command::new("ping");
+        cmd.args(["-n", "60", "127.0.0.1"]);
+        cmd
+    };
+    #[cfg(not(windows))]
+    let mut cmd = {
+        let mut cmd = tokio::process::Command::new("sleep");
+        cmd.arg("60");
+        cmd
+    };
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    ncd_host::hide_console_window(&mut cmd);
+    cmd.spawn().expect("spawn sleeper")
+}
+
+fn pid_alive(pid: u32) -> bool {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+    let mut sys = System::new();
+    let pid = Pid::from_u32(pid);
+    sys.refresh_processes_specifics(ProcessesToUpdate::Some(&[pid]), ProcessRefreshKind::new());
+    sys.process(pid).is_some()
+}
+
+async fn wait_until_dead(pid: u32, budget: Duration) -> bool {
+    let start = tokio::time::Instant::now();
+    while start.elapsed() < budget {
+        if !pid_alive(pid) {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    !pid_alive(pid)
+}
+
+struct SleeperGuard {
+    pid: u32,
+}
+
+impl Drop for SleeperGuard {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &self.pid.to_string(), "/T", "/F"])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &self.pid.to_string()])
+                .status();
+        }
+    }
+}
+
+/// #132: watch_exit 先跑起来之后,last-ref 仍必须杀掉真实 OS 进程。
+#[tokio::test]
+async fn daemon_release_last_ref_kills_os_process_even_if_watch_exit_started() {
+    let daemon = build_smoke_daemon();
+    let child = spawn_sleeper();
+    let pid = child.id().expect("sleeper pid");
+    let _guard = SleeperGuard { pid };
+    daemon.test_force_ready_with_child(1, child).await;
+    daemon.test_spawn_watch_exit();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    daemon.release().await;
+    daemon.shutdown().await;
+
+    assert_eq!(daemon.ref_count().await, 0);
+    assert_eq!(daemon.state().await, DaemonState::Stopped);
+    assert!(
+        wait_until_dead(pid, Duration::from_secs(2)).await,
+        "last-ref must kill tracked node pid {pid}"
+    );
+}
+
+/// 多 QQ 共享同一份 node:非 last-ref 不准杀;第二次 release 才允许死。
+#[tokio::test]
+async fn daemon_release_non_last_ref_must_not_kill_shared_node() {
+    let daemon = build_smoke_daemon();
+    let child = spawn_sleeper();
+    let pid = child.id().expect("sleeper pid");
+    let _guard = SleeperGuard { pid };
+    daemon.test_force_ready_with_child(2, child).await;
+    daemon.test_spawn_watch_exit();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    daemon.release().await;
+
+    assert_eq!(daemon.ref_count().await, 1);
+    assert_eq!(daemon.state().await, DaemonState::Ready);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(
+        pid_alive(pid),
+        "shared node must stay up while another bot still holds a ref"
+    );
+
+    daemon.release().await;
+    daemon.shutdown().await;
+    assert!(wait_until_dead(pid, Duration::from_secs(2)).await);
+    assert_eq!(daemon.state().await, DaemonState::Stopped);
+}
+
+/// Child 句柄丢失时仍应按记下的 node_pid 杀掉 OS 进程。
+#[tokio::test]
+async fn daemon_release_last_ref_kills_by_pid_when_child_handle_missing() {
+    let daemon = build_smoke_daemon();
+    let child = spawn_sleeper();
+    let pid = child.id().expect("sleeper pid");
+    let _guard = SleeperGuard { pid };
+    daemon.test_force_ready_with_pid_only(1, pid).await;
+
+    daemon.release().await;
+    daemon.shutdown().await;
+
+    assert_eq!(daemon.state().await, DaemonState::Stopped);
+    assert!(
+        wait_until_dead(pid, Duration::from_secs(2)).await,
+        "pid fallback must kill node even without Child"
+    );
+    let _ = child;
 }
 
 /// 最后一引用 release 切入 Stopping 后,并发 ensure_running 不得再复用旧 client

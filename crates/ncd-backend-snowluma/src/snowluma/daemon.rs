@@ -56,8 +56,10 @@ struct DaemonInner {
     /// 再次启动时多开（与远端 RemoteSnowLumaDaemon::release 语义对齐）。
     ref_count: u32,
     node_pid: Option<u32>,
-    /// tokio::process::Child:starter 路径写入;shutdown / watch_exit
-    /// 取出后做 wait / kill
+    /// tokio::process::Child 所有权留在 inner，直到进程已经退出
+    /// （watch_exit 在 try_wait 命中后再 take）或 shutdown / rollback 主动
+    /// take 去杀。watch_exit 不得在 wait 前把句柄拿走，否则 last-ref
+    /// 杀不掉还在跑的 node.exe。
     node_child: Option<tokio::process::Child>,
     webui_client: Option<Arc<dyn SnowLumaWebUiClient>>,
     /// 最近一次启动失败 / crash 的原因;并发 caller 等 ready_notify 唤醒后
@@ -354,10 +356,9 @@ impl SnowLumaDaemon {
             );
         }
 
-        // 把 child 立即移到 inner.node_child,并起一个 early watcher:
-        // 让 wait_ready 期间的 node 早退能 fast-fail 而不是傻等 30s
-        // 这与 Ready 之后的 watcher 是同一份 watch_exit —— 它会自己根据
-        // 当前 state 判断该转 Stopped 还是 Crashed
+        // 把 child 留在 inner.node_child,并起一个 early watcher:
+        // 让 wait_ready 期间的 node 早退能 fast-fail 而不是傻等 30s。
+        // watch_exit 只监视退出,杀进程句柄留给 shutdown / rollback。
         {
             let mut inner = self.inner.lock().await;
             inner.node_pid = node_pid;
@@ -370,8 +371,8 @@ impl SnowLumaDaemon {
         let mut client = match self.http.create(password.clone(), webui_port).await {
             Ok(c) => c,
             Err(err) => {
-                // node 子进程已经 spawn 出来了;rollback 路径会清 inner.node_child
-                // 并 watcher 自己捕到 wait → 切 Stopped,无需在此再 kill
+                // node 已 spawn;必须先 kill_inner_child,再 rollback。
+                // watch_exit 不再提前拿走 Child,rollback 清字段不会杀进程。
                 self.kill_inner_child().await;
                 let mapped: SnowLumaDaemonError = err.into();
                 return Err(self.rollback_to_stopped(mapped).await);
@@ -499,21 +500,19 @@ impl SnowLumaDaemon {
         Ok(client)
     }
 
-    /// 工具:从 inner 中取走 child 并 start_kill,让在跑的 watcher 立即收到 wait
-    /// 返回 + 进入 Crashed/Stopped 转换当 child 不在 inner 时是 no-op
+    /// 从 inner 取走 child 并 start_kill;句柄不在时按记下的 node_pid 强杀。
+    /// watch_exit 看到 child 被取走会自行 return,所以这里必须自己 wait,避免 zombie。
     async fn kill_inner_child(&self) {
-        let child = {
+        let (child, pid) = {
             let mut inner = self.inner.lock().await;
-            inner.node_child.take()
+            (inner.node_child.take(), inner.node_pid)
         };
         if let Some(mut child) = child {
             let _ = child.start_kill();
-            // 不在此处 await wait——交给已经 spawn 的 watcher 处理(它持有
-            // 自己的 child 句柄路径:watch_exit 会从 inner.node_child.take()
-            // 但本函数已经 take 走了,watcher 那边 take 拿到 None 直接 return
-            // 既然如此,本函数也得自己 wait,避免 zombie
             let _ = tokio::time::timeout(SHUTDOWN_WAIT_TIMEOUT, child.wait()).await;
-            // 显式置 dead_flag,让任何还在跑的 wait_ready 立即结束
+            self.dead_flag.store(true, Ordering::Release);
+        } else if let Some(pid) = pid {
+            kill_tracked_node_pid(pid).await;
             self.dead_flag.store(true, Ordering::Release);
         }
     }
@@ -673,10 +672,16 @@ impl SnowLumaDaemon {
 
     /// 调用方已把 state 设为 Stopping；取出句柄、杀进程、落到 Stopped。
     /// release / shutdown 共用，避免两套杀进程逻辑分叉。
+    /// Child 被 watch_exit 或其他路径拿走时,仍按 node_pid 杀,避免只把状态
+    /// 标成 Stopped 而 OS 进程还在占 WebUI 口。
     async fn finish_shutdown_from_stopping(&self) {
-        let (client, child_opt) = {
+        let (client, child_opt, pid_opt) = {
             let mut inner = self.inner.lock().await;
-            (inner.webui_client.take(), inner.node_child.take())
+            (
+                inner.webui_client.take(),
+                inner.node_child.take(),
+                inner.node_pid,
+            )
         };
 
         if let Some(c) = client {
@@ -691,7 +696,11 @@ impl SnowLumaDaemon {
                     let _ = child.kill().await;
                 }
             }
+        } else if let Some(pid) = pid_opt {
+            kill_tracked_node_pid(pid).await;
         }
+
+        self.dead_flag.store(true, Ordering::Release);
 
         {
             let mut inner = self.inner.lock().await;
@@ -731,6 +740,41 @@ impl SnowLumaDaemon {
         inner.state = DaemonState::Ready;
         inner.ref_count = ref_count;
         inner.last_error = None;
+    }
+
+    /// 测试用：Ready + 真实 Child，用来证明 last-ref 会杀掉 OS 进程。
+    #[cfg(test)]
+    pub(crate) async fn test_force_ready_with_child(
+        &self,
+        ref_count: u32,
+        child: tokio::process::Child,
+    ) {
+        let pid = child.id();
+        let mut inner = self.inner.lock().await;
+        inner.state = DaemonState::Ready;
+        inner.ref_count = ref_count;
+        inner.node_pid = pid;
+        inner.node_child = Some(child);
+        inner.last_error = None;
+        inner.webui_client = None;
+    }
+
+    /// 测试用：Ready 但 Child 句柄已丢失，只剩 node_pid（watch_exit 抢句柄后的形态）。
+    #[cfg(test)]
+    pub(crate) async fn test_force_ready_with_pid_only(&self, ref_count: u32, pid: u32) {
+        let mut inner = self.inner.lock().await;
+        inner.state = DaemonState::Ready;
+        inner.ref_count = ref_count;
+        inner.node_pid = Some(pid);
+        inner.node_child = None;
+        inner.last_error = None;
+        inner.webui_client = None;
+    }
+
+    /// 测试用：模拟 starter 在写入 Child 后立刻拉起 watch_exit。
+    #[cfg(test)]
+    pub(crate) fn test_spawn_watch_exit(self: &Arc<Self>) {
+        tokio::spawn(watch_exit(Arc::downgrade(self)));
     }
 
     /// 订阅 daemon 共享的 node.exe stdout 行流
@@ -865,46 +909,67 @@ fn resolve_daemon_entry(runtime_root: &std::path::Path) -> std::path::PathBuf {
     runtime_root.join("index.mjs")
 }
 
-/// 监听 node.exe 子进程退出,按 把 daemon 状态机推进到
-/// Stopped(intentional shutdown 路径)或 Crashed(意外退出路径)
+/// 只杀这份 daemon 记下的 node pid。QQ 不是 node 的子进程,禁止按映像名扫杀。
+async fn kill_tracked_node_pid(pid: u32) {
+    #[cfg(windows)]
+    {
+        use std::process::Stdio;
+        let mut kill_cmd = tokio::process::Command::new("taskkill");
+        kill_cmd
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        hide_console_window(&mut kill_cmd);
+        let _ = kill_cmd.status().await;
+    }
+    #[cfg(not(windows))]
+    {
+        let mut kill_cmd = tokio::process::Command::new("kill");
+        kill_cmd.args(["-9", &pid.to_string()]);
+        let _ = kill_cmd.status().await;
+    }
+}
+
+/// 监听 node.exe 子进程退出,把 daemon 状态机推进到
+/// Stopped(intentional shutdown)或 Crashed(意外退出)
 ///
-/// 为什么用 Weak<SnowLumaDaemon>:daemon 本身持 Arc<Self> 并把 child 句柄
-/// 通过 inner.node_child 持有;如果 watcher 也持 Arc<SnowLumaDaemon>,会与
-/// daemon 内部任何持 watcher 句柄的对象(未来扩展)形成循环引用当下虽未触发
-/// leak,但用 Weak 是显式约定,便于将来 JoinHandle 落到 inner 时不踩坑
+/// Child 句柄必须留在 inner,直到进程已经退出或 shutdown/rollback 主动
+/// take 去杀。这里只 try_wait 轮询,不在 wait 前 take —— 否则 last-ref
+/// 拿不到句柄,node.exe 会残留占 WebUI 口。
 ///
-/// 流程:
-/// 1. daemon.upgrade() 失败 → daemon 已被 drop,直接 return
-/// 2. 锁 inner 取出 node_child(take);若为 None —— 通常是 starter 失败
-///    回滚 / 手动 shutdown 已经把 child 取走 —— 直接 return
-/// 3. child.wait().await 阻塞等子进程退出,捕获 ExitStatus
-/// 4. dead_flag.store(true):任何还在等 wait_ready 的轮询会 fast-fail
-/// 5. 重新锁 inner:根据当前 state 判断 was_intentional:
-///    - Stopping / Stopped → 视为 intentional,目标态 Stopped,不写
-///      last_error(不污染下次 ensure_running 的错误信号)
-///    - 其它(Ready / Starting / Crashed)→ 视为意外退出,目标态 Crashed
-///      last_error = Some(format!("node.exe exited: {exit:?}"))
-/// 6. 清空 node_pid(child 已不在);快照 state / ref_count / last_error
-/// 7. drop lock 后再发 SnowLumaDaemonStateChanged{state, ref_count, reason}
-///    避免在事件订阅者处理回调时持有内部 mutex
-/// 8. ready_notify.notify_waiters():解开任何因 starter 死掉但 ready_notify
-///    没被 starter 喊到的 waiter(fail-safe)
+/// 句柄已被 shutdown 取走时直接 return,杀进程和 wait 由那条路径负责,
+/// 不要把 Ready 改成 Crashed。
 async fn watch_exit(daemon: Weak<SnowLumaDaemon>) {
     let Some(daemon) = daemon.upgrade() else {
         return;
     };
 
-    // 取出 child;starter / shutdown / rollback 都可能先一步把 child 拿走
-    let child = {
-        let mut inner = daemon.inner.lock().await;
-        inner.node_child.take()
+    let exit = loop {
+        let waited = {
+            let mut inner = daemon.inner.lock().await;
+            match inner.node_child.as_mut() {
+                None => {
+                    return;
+                }
+                Some(child) => match child.try_wait() {
+                    Ok(Some(status)) => {
+                        let _ = inner.node_child.take();
+                        Some(Ok(status))
+                    }
+                    Ok(None) => None,
+                    Err(err) => {
+                        let _ = inner.node_child.take();
+                        Some(Err(err))
+                    }
+                },
+            }
+        };
+        match waited {
+            Some(result) => break result,
+            None => tokio::time::sleep(Duration::from_millis(50)).await,
+        }
     };
-    let Some(mut child) = child else {
-        return;
-    };
-
-    // 阻塞等子进程退出child.wait() 不需要 mutable lock,节省锁占用
-    let exit = child.wait().await;
 
     daemon.dead_flag.store(true, Ordering::Release);
 
