@@ -2,9 +2,7 @@
 //!
 //! 混合策略:QQ 已装时用 ldd 检测动态库,未装时用包管理器预检
 
-use ncd_domain::{
-    DetectionMethod, DistroFamily, DistroInfo, PackageStatus, QqDependencyReport,
-};
+use ncd_domain::{DetectionMethod, DistroFamily, DistroInfo, PackageStatus, QqDependencyReport};
 use ncd_host::{Host, HostCommand, HostPath};
 
 use crate::error::ActionError;
@@ -90,15 +88,13 @@ impl QqDependencyDetector {
         _distro: &DistroInfo,
     ) -> Result<(Vec<PackageStatus>, Vec<PackageStatus>), ActionError> {
         let cmd = HostCommand::new("ldd").arg(qq_binary.as_posix());
-        let output = host.run_to_string(cmd).await.map_err(|e| {
-            ActionError::other(format!("ldd command failed: {e}"))
-        })?;
+        let output = host
+            .run_to_string(cmd)
+            .await
+            .map_err(|e| ActionError::other(format!("ldd command failed: {e}")))?;
 
         if !output.success() {
-            return Err(ActionError::other(format!(
-                "ldd failed: {}",
-                output.stderr
-            )));
+            return Err(ActionError::other(format!("ldd failed: {}", output.stderr)));
         }
 
         // 解析 ldd 输出,找 "not found" 的库
@@ -231,7 +227,11 @@ impl QqDependencyDetector {
     }
 
     /// 构建安装命令(用于用户复制粘贴)
-    fn build_install_command(&self, distro: &DistroInfo, missing: &[PackageStatus]) -> Option<String> {
+    fn build_install_command(
+        &self,
+        distro: &DistroInfo,
+        missing: &[PackageStatus],
+    ) -> Option<String> {
         if missing.is_empty() {
             return None;
         }
@@ -239,10 +239,9 @@ impl QqDependencyDetector {
         let pkg_names: Vec<String> = missing.iter().map(|p| p.name.clone()).collect();
 
         match distro.family {
-            DistroFamily::Debian => Some(format!(
-                "sudo apt-get install -y {}",
-                pkg_names.join(" ")
-            )),
+            DistroFamily::Debian => {
+                Some(format!("sudo apt-get install -y {}", pkg_names.join(" ")))
+            }
             DistroFamily::Rhel => Some(format!("sudo dnf install -y {}", pkg_names.join(" "))),
             _ => None,
         }

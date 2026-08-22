@@ -107,7 +107,10 @@ async fn host_path_executable(host: &dyn Host, path: &str) -> bool {
         .is_some_and(|o| o.success())
 }
 
-async fn resolve_node_bin(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Result<String, BotBackendError> {
+async fn resolve_node_bin(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+) -> Result<String, BotBackendError> {
     let portable = paths.node_bin();
     if host_path_executable(host, &portable).await {
         return Ok(portable);
@@ -129,7 +132,9 @@ async fn resolve_node_bin(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Resul
 }
 
 /// 一次探测 home + 路径 + node/qq 可执行文件
-pub async fn probe_remote_snowluma_layout(host: &dyn Host) -> Result<RemoteSnowLumaLayout, BotBackendError> {
+pub async fn probe_remote_snowluma_layout(
+    host: &dyn Host,
+) -> Result<RemoteSnowLumaLayout, BotBackendError> {
     let home = probe_remote_home(host).await?;
     let paths = SnowLumaRemotePaths::from_remote_home(&home);
     let node_bin = resolve_node_bin(host, &paths).await?;
@@ -140,10 +145,9 @@ pub async fn probe_remote_snowluma_layout(host: &dyn Host) -> Result<RemoteSnowL
         )));
     }
     let entry = format!("{}/index.mjs", paths.snowluma_dir);
-    let check = HostCommand::new("sh").arg("-c").arg(format!(
-        "test -f '{}'",
-        entry.replace('\'', "'\"'\"'")
-    ));
+    let check = HostCommand::new("sh")
+        .arg("-c")
+        .arg(format!("test -f '{}'", entry.replace('\'', "'\"'\"'")));
     let ok = host
         .run_to_string(check)
         .await
@@ -175,7 +179,10 @@ mod tests {
         let p = SnowLumaRemotePaths::from_remote_home("/home/u");
         assert_eq!(p.workspace_dir, "/home/u/snowluma-remote/workspace");
         assert_eq!(p.snowluma_dir, "/home/u/snowluma-remote/workspace/snowluma");
-        assert_eq!(p.node_bin(), "/home/u/snowluma-remote/workspace/node/bin/node");
+        assert_eq!(
+            p.node_bin(),
+            "/home/u/snowluma-remote/workspace/node/bin/node"
+        );
     }
 
     #[test]

@@ -20,9 +20,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use ncd_host::{
-    ArchiveKind, Arch, Host, HostCommand, HostError, HostPath, Locality, Os,
-};
+use ncd_host::{Arch, ArchiveKind, Host, HostCommand, HostError, HostPath, Locality, Os};
 
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
@@ -235,7 +233,13 @@ impl Component for NodeJsComponent {
         let helper = DownloadHelper::new()?;
         let mirrors = ncd_network::build_mirror_urls(&url, None);
         helper
-            .download_with_mirrors(&mirrors, &local_tmp, self.expected_sha256.as_deref(), ctx, 1)
+            .download_with_mirrors(
+                &mirrors,
+                &local_tmp,
+                self.expected_sha256.as_deref(),
+                ctx,
+                1,
+            )
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
@@ -262,14 +266,14 @@ impl Component for NodeJsComponent {
             message: "extract tarball".into(),
         })
         .await;
-        let stage_dir = self.tmp_dir.join(format!(
-            "ncd-nodejs-stage-{}",
-            std::process::id()
-        ));
+        let stage_dir = self
+            .tmp_dir
+            .join(format!("ncd-nodejs-stage-{}", std::process::id()));
         // 清理可能存在的旧 stage(忽略错误)
         let _ = host.remove_dir_all(&stage_dir).await;
         host.create_dir_all(&stage_dir).await?;
-        host.extract_archive(&remote_tar, &stage_dir, ArchiveKind::TarXz).await?;
+        host.extract_archive(&remote_tar, &stage_dir, ArchiveKind::TarXz)
+            .await?;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
         // Step 4:把 stage/<root>/* 移到 install_dir
@@ -303,11 +307,7 @@ impl Component for NodeJsComponent {
         Ok(())
     }
 
-    async fn uninstall(
-        &self,
-        host: &dyn Host,
-        ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn uninstall(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 1 }).await;
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
@@ -326,11 +326,8 @@ impl Component for NodeJsComponent {
     async fn verify(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
         let binary = self.node_binary_path();
         let exists = host.exists(&binary).await?;
-        let mut report = VerifyReport::ok().with_check(
-            "node binary exists",
-            exists,
-            Some(format!("{binary}")),
-        );
+        let mut report =
+            VerifyReport::ok().with_check("node binary exists", exists, Some(format!("{binary}")));
         if exists {
             let cmd = HostCommand::new(binary.as_posix()).arg("--version");
             match host.run_to_string(cmd).await {
@@ -355,11 +352,7 @@ impl Component for NodeJsComponent {
                     );
                 }
                 Err(e) => {
-                    report = report.with_check(
-                        "version executable",
-                        false,
-                        Some(format!("{e}")),
-                    );
+                    report = report.with_check("version executable", false, Some(format!("{e}")));
                 }
             }
         }
@@ -390,17 +383,14 @@ mod tests {
         // 然后用 Linux 的占位检查 URL 模板替换逻辑
         let comp = NodeJsComponent::new("20.10.0", HostPath::from_posix("/opt/node"));
         // 简单 path 校验:模板含 {version} / {platform} / {arch}
-        let template = comp
-            .download_url_template
-            .clone()
-            .unwrap_or_else(|| {
-                format!(
-                    "https://nodejs.org/dist/v{ver}/node-v{ver}-{platform}-{arch}.tar.xz",
-                    ver = "{version}",
-                    platform = "{platform}",
-                    arch = "{arch}"
-                )
-            });
+        let template = comp.download_url_template.clone().unwrap_or_else(|| {
+            format!(
+                "https://nodejs.org/dist/v{ver}/node-v{ver}-{platform}-{arch}.tar.xz",
+                ver = "{version}",
+                platform = "{platform}",
+                arch = "{arch}"
+            )
+        });
         assert!(template.contains("{version}"));
         assert!(template.contains("{platform}"));
         assert!(template.contains("{arch}"));

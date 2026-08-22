@@ -13,10 +13,10 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
-use super::launch::{
-    RemoteNapcatLayout, napcat_remote_log_path, probe_remote_napcat_layout,
+use super::launch::{RemoteNapcatLayout, napcat_remote_log_path, probe_remote_napcat_layout};
+use ncd_deploy::{
+    EventBusSink, NapcatLogNoiseFilter, NativeRuntimeEventSink, parse_napcat_webui_line,
 };
-use ncd_deploy::{EventBusSink, NapcatLogNoiseFilter, NativeRuntimeEventSink, parse_napcat_webui_line};
 use ncd_domain::domain_event::DomainEvent;
 use ncd_domain::ids::BotId;
 use ncd_traits::events::{BroadcastEventBus, EventBus};
@@ -25,7 +25,8 @@ use super::decision::{
     PublishedWebui, TunnelAction, decide_tunnel_action, health_force_retunnel, should_republish,
 };
 use super::tunnel_io::{
-    TunnelSlot, ensure_loopback_tunnel, local_forward_healthy, notify_unreachable, scan_latest_webui,
+    TunnelSlot, ensure_loopback_tunnel, local_forward_healthy, notify_unreachable,
+    scan_latest_webui,
 };
 
 const LOG_TAIL_POLL_SECS: u64 = 2;

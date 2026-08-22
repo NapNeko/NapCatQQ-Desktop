@@ -9,13 +9,11 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use ncd_deploy::{DOCKER_NAPCAT_MJS_URI, DockerMetricsOverlay};
-use ncd_domain::bot_config::BotConfig;
 use ncd_domain::BotFlavor;
+use ncd_domain::bot_config::BotConfig;
 use ncd_host::{Host, HostPath};
 
-use super::inject::{
-    apply_metrics_env_vars, build_napcat_load_script_with_env, MetricsInjectPlan,
-};
+use super::inject::{MetricsInjectPlan, apply_metrics_env_vars, build_napcat_load_script_with_env};
 use super::{BotRuntimeMetricsPrefs, ensure_remote_metrics_assets};
 
 /// 准备 Docker metrics：上传探针/nodes，写 NC load 覆盖，返回 compose overlay
@@ -55,11 +53,9 @@ pub async fn prepare_docker_metrics_overlay(
     };
 
     let _ = host
-        .run_to_string(
-            ncd_host::HostCommand::new("sh").arg("-c").arg(format!(
-                "chown -R 1000:1000 {host_metrics_root} 2>/dev/null || true"
-            )),
-        )
+        .run_to_string(ncd_host::HostCommand::new("sh").arg("-c").arg(format!(
+            "chown -R 1000:1000 {host_metrics_root} 2>/dev/null || true"
+        )))
         .await;
 
     Ok(Some(overlay))

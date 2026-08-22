@@ -27,9 +27,7 @@ fn main() {
 
     // 仅对 MSVC linker 有效;mingw 上 cargo 会忽略
     // rustc-link-arg 对该 crate 所有产物(lib / test / bin)生效
-    println!(
-        "cargo:rustc-link-arg=/MANIFEST:EMBED"
-    );
+    println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
     println!(
         "cargo:rustc-link-arg=/MANIFESTINPUT:{}",
         manifest_path.display()

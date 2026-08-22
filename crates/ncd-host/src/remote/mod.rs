@@ -27,9 +27,9 @@ pub use connection::ConnectionConfig;
 pub use credentials::{SshCredentials, SshKey};
 pub use download_progress::{CurlProgressParser, DownloadProgress, WgetProgressParser};
 pub use host_key::{HostKeyCheck, HostKeyPolicy, KnownHostsStore};
-pub use linux::{probe_sudo, RemoteLinuxHost, SudoAccess};
+pub use linux::{RemoteLinuxHost, SudoAccess, probe_sudo};
 pub use tunnel::{TunnelHandle, TunnelSpec};
 pub use url_download::{
-    curl_url_download_command, wget_url_download_command, REMOTE_URL_DOWNLOAD_TIMEOUT,
+    REMOTE_URL_DOWNLOAD_TIMEOUT, curl_url_download_command, wget_url_download_command,
 };
 pub use windows_stub::RemoteWindowsHost;

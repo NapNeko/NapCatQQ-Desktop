@@ -5,13 +5,17 @@ use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 use ncd_watch::config::{NotifyConfig, WatchConfig, WatchPaths};
+use ncd_watch::edge::EdgeTracker;
 use ncd_watch::probe::HostProber;
 use ncd_watch::run::{run_loop, run_once};
-use ncd_watch::edge::EdgeTracker;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
-#[command(name = "ncd-watch", version, about = "Remote host watcher for NapCatQQ Desktop offline webhooks")]
+#[command(
+    name = "ncd-watch",
+    version,
+    about = "Remote host watcher for NapCatQQ Desktop offline webhooks"
+)]
 struct Cli {
     /// 安装根目录(默认 $HOME/ncd-watch)
     #[arg(long, global = true, env = "NCD_WATCH_ROOT")]
@@ -77,7 +81,11 @@ async fn main() {
             let out = run_once(&paths, &watch, &notify, &HostProber, &mut edges).await;
             println!(
                 "probed={} fired={} debounced={} desktop_present_skip={} errors={:?}",
-                out.probed, out.fired, out.debounced, out.skipped_desktop_present, out.webhook_errors
+                out.probed,
+                out.fired,
+                out.debounced,
+                out.skipped_desktop_present,
+                out.webhook_errors
             );
         }
         Commands::Run => {
@@ -91,7 +99,7 @@ async fn main() {
 
             #[cfg(unix)]
             {
-                use tokio::signal::unix::{signal, SignalKind};
+                use tokio::signal::unix::{SignalKind, signal};
                 let mut sigterm = signal(SignalKind::terminate()).expect("sigterm");
                 let mut sigint = signal(SignalKind::interrupt()).expect("sigint");
                 let mut sighup = signal(SignalKind::hangup()).expect("sighup");
@@ -135,7 +143,12 @@ fn init_tracing() {
 }
 
 fn init_layout(paths: &WatchPaths, force: bool) -> Result<(), String> {
-    for d in [&paths.bin_dir, &paths.config_dir, &paths.state_dir, &paths.log_dir] {
+    for d in [
+        &paths.bin_dir,
+        &paths.config_dir,
+        &paths.state_dir,
+        &paths.log_dir,
+    ] {
         std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
     write_if_missing(&paths.watch_json, &WatchConfig::default(), force)?;
@@ -143,7 +156,11 @@ fn init_layout(paths: &WatchPaths, force: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn write_if_missing<T: serde::Serialize>(path: &std::path::Path, value: &T, force: bool) -> Result<(), String> {
+fn write_if_missing<T: serde::Serialize>(
+    path: &std::path::Path,
+    value: &T,
+    force: bool,
+) -> Result<(), String> {
     if path.is_file() && !force {
         return Ok(());
     }

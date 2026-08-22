@@ -367,7 +367,9 @@ mod tests {
             lightweight_scheduler: Arc::clone(&lightweight_scheduler),
             health_probe_cancel: Arc::new(tokio::sync::Mutex::new(None)),
             metrics_collector,
-            migrate_gate: Arc::new(crate::commands::data_root_migrate::DataRootMigrateGate::default()),
+            migrate_gate: Arc::new(
+                crate::commands::data_root_migrate::DataRootMigrateGate::default(),
+            ),
         };
         (state, bus)
     }

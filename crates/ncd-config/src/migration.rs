@@ -9,13 +9,12 @@ use crate::app_migration::{
 use crate::bot_migration::migrate_bot_config;
 use crate::legacy_discovery::{LegacyDiscovery, LegacySelection};
 use ncd_domain::errors::MigrationError;
+use ncd_domain::migration::MigrationReport;
+use ncd_domain::migration::{MigrationSource, MigrationWarning};
 use ncd_server::server_profile_migration::{
     migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
 };
-use ncd_domain::migration::MigrationReport;
-use ncd_domain::migration::{MigrationSource, MigrationWarning};
 use ncd_traits::{ConfigStore, JsonTransaction, PathProbe, SecretStore};
-
 
 pub struct MigrationOrchestrator<'a> {
     store: &'a dyn ConfigStore,

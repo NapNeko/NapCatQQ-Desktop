@@ -22,7 +22,6 @@ pub enum OfflineNoticeKind {
     Recovered,
 }
 
-
 /// 离线通知抽象
 ///
 /// 由 NapCatLoginPoller 在离线分支调用;具体通道(webhook / email / 桌面通知)

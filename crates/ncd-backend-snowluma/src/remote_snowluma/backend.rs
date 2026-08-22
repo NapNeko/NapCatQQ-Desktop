@@ -172,12 +172,7 @@ impl BotBackend for RemoteSnowLumaBackend {
         if let Some(inj) = &self.metrics_injector {
             let home = self.daemon.remote_home();
             if let Some(env) = inj
-                .prepare(
-                    self.daemon.host.as_ref(),
-                    home,
-                    bot_id.as_str(),
-                    config,
-                )
+                .prepare(self.daemon.host.as_ref(), home, bot_id.as_str(), config)
                 .await
             {
                 if let Err(e) = self.daemon.apply_metrics_node_env(Some(env)).await {

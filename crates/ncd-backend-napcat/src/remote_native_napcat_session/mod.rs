@@ -5,8 +5,9 @@ pub mod launch;
 mod session;
 mod tunnel_io;
 
-pub use session::{RemoteNativeNapcatSession, RemoteNativeNapcatSessionRegistry, WebuiUnreachableHook};
+pub use session::{
+    RemoteNativeNapcatSession, RemoteNativeNapcatSessionRegistry, WebuiUnreachableHook,
+};
 
 #[cfg(test)]
 mod tests;
-

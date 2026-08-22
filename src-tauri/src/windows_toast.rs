@@ -32,11 +32,7 @@ pub fn prepare_windows_toast_identity(app: &tauri::AppHandle) {
 #[cfg(windows)]
 pub fn show_desktop_toast(aumid: &str, headline: &str, body: &str) {
     use tauri_winrt_notification::Toast;
-    if let Err(err) = Toast::new(aumid)
-        .title(headline)
-        .text1(body)
-        .show()
-    {
+    if let Err(err) = Toast::new(aumid).title(headline).text1(body).show() {
         tracing::warn!(%err, "winrt toast show failed");
     }
 }
@@ -59,8 +55,8 @@ fn exe_in_cargo_output(exe: &Path) -> bool {
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI: SetCurrentProcessExplicitAppUserModelID 必须用 unsafe
 fn set_process_app_user_model_id(aumid: &str) -> Result<(), windows::core::Error> {
-    use windows::core::HSTRING;
     use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+    use windows::core::HSTRING;
     unsafe { SetCurrentProcessExplicitAppUserModelID(&HSTRING::from(aumid)) }
 }
 

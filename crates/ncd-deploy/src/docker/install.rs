@@ -23,10 +23,22 @@ pub type DockerInstallOutcome = DockerInstallReport;
 pub(crate) const DOCKER_INSTALL_PHASES: &[(&str, &str)] = &[
     ("apt_prep", include_str!("../../scripts/docker/apt_prep.sh")),
     ("apt_repo", include_str!("../../scripts/docker/apt_repo.sh")),
-    ("apt_install", include_str!("../../scripts/docker/apt_install.sh")),
-    ("dnf_install", include_str!("../../scripts/docker/dnf_install.sh")),
-    ("yum_install", include_str!("../../scripts/docker/yum_install.sh")),
-    ("pkgmgr_check", include_str!("../../scripts/docker/pkgmgr_check.sh")),
+    (
+        "apt_install",
+        include_str!("../../scripts/docker/apt_install.sh"),
+    ),
+    (
+        "dnf_install",
+        include_str!("../../scripts/docker/dnf_install.sh"),
+    ),
+    (
+        "yum_install",
+        include_str!("../../scripts/docker/yum_install.sh"),
+    ),
+    (
+        "pkgmgr_check",
+        include_str!("../../scripts/docker/pkgmgr_check.sh"),
+    ),
 ];
 
 /// 安装成功后写入 registry 加速(非交互),仅当尚无 daemon.json 或备份后覆盖

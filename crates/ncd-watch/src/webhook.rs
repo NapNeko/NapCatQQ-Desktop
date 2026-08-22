@@ -1,10 +1,10 @@
 //! Webhook 投递(对齐 Desktop notify 模板变量)
 
+use ncd_domain::ids::BotId;
 use ncd_domain::{
     OfflineAlert, OfflineAlertKind, OfflineAlertSource, OfflineWebhookChannel, render_template,
 };
-use ncd_domain::ids::BotId;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 
 use crate::config::NotifyBotTarget;
 
@@ -51,7 +51,12 @@ pub async fn send_watch_webhooks(
         return Err(errors.join("; "));
     }
     if !errors.is_empty() {
-        tracing::warn!(ok, failed = errors.len(), "partial webhook failure: {}", errors.join("; "));
+        tracing::warn!(
+            ok,
+            failed = errors.len(),
+            "partial webhook failure: {}",
+            errors.join("; ")
+        );
     }
     Ok(())
 }

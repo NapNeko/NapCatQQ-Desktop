@@ -29,12 +29,12 @@ use std::time::Duration;
 
 use ncd_host::{Host, HostCommand, Locality, Os};
 
+use crate::PkgMgr;
 use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
 use crate::error::ActionError;
 use crate::pkg_install_stream::run_pkg_command_with_progress;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
-use crate::PkgMgr;
 
 /// noVNC + 图形栈 component
 #[derive(Debug, Clone)]
@@ -56,10 +56,7 @@ impl NoVncComponent {
 
     /// 探测远端的包管理器
     async fn detect_pkg_manager(&self, host: &dyn Host) -> Result<PkgMgr, ActionError> {
-        for (binary, mgr) in &[
-            ("apt-get", PkgMgr::Apt),
-            ("dnf", PkgMgr::Dnf),
-        ] {
+        for (binary, mgr) in &[("apt-get", PkgMgr::Apt), ("dnf", PkgMgr::Dnf)] {
             let cmd = HostCommand::new("sh")
                 .arg("-c")
                 .arg(format!("command -v {binary}"));
@@ -101,9 +98,9 @@ impl NoVncComponent {
     /// 拼接 apt update / dnf check-update 刷新索引的命令
     fn build_refresh_command(&self, mgr: PkgMgr) -> HostCommand {
         let cmd = match mgr {
-            PkgMgr::Apt => self.maybe_elevated(
-                HostCommand::new("sh").arg("-c").arg("apt-get update"),
-            ),
+            PkgMgr::Apt => {
+                self.maybe_elevated(HostCommand::new("sh").arg("-c").arg("apt-get update"))
+            }
             PkgMgr::Dnf => HostCommand::new("sh").arg("-c").arg("true"),
         };
         cmd.timeout(Duration::from_secs(300))
@@ -112,11 +109,7 @@ impl NoVncComponent {
     /// use_sudo 时给命令打 .elevated() 标(提权细节由 Host 注入的密码决定),否则
     /// 原样返回,Component 不自己拼 sudo,提权逻辑收敛到 Host 层
     fn maybe_elevated(&self, cmd: HostCommand) -> HostCommand {
-        if self.use_sudo {
-            cmd.elevated()
-        } else {
-            cmd
-        }
+        if self.use_sudo { cmd.elevated() } else { cmd }
     }
 
     /// 组件元数据,给 list_components Tauri command 使用
@@ -149,10 +142,7 @@ impl Component for NoVncComponent {
 
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
         // 只在 Linux(Local 也支持但极少用,主要是远端 VNC)
-        &[
-            (Os::Linux, Locality::Local),
-            (Os::Linux, Locality::Remote),
-        ]
+        &[(Os::Linux, Locality::Local), (Os::Linux, Locality::Remote)]
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
@@ -173,7 +163,9 @@ impl Component for NoVncComponent {
         }
 
         // 用 dpkg / rpm 获取 novnc 包版本(尽量给出版本号,失败也不影响 detect)
-        let version = detect_package_version(host).await.unwrap_or_else(|| "installed".to_string());
+        let version = detect_package_version(host)
+            .await
+            .unwrap_or_else(|| "installed".to_string());
         Ok(Some(DetectedVersion {
             version,
             source: "websockify + x11vnc detected via PATH".into(),
@@ -202,26 +194,14 @@ impl Component for NoVncComponent {
         .await;
         let refresh_cmd = self.build_refresh_command(mgr);
         if mgr == PkgMgr::Apt {
-            run_pkg_command_with_progress(
-                host,
-                ctx,
-                refresh_cmd,
-                2,
-                5,
-                25,
-                "apt-get update…",
-            )
-            .await?;
+            run_pkg_command_with_progress(host, ctx, refresh_cmd, 2, 5, 25, "apt-get update…")
+                .await?;
         } else {
             let out = host.run_to_string(refresh_cmd).await?;
             if !out.success() {
                 return Err(ActionError::install_step(
                     "apt_update",
-                    format!(
-                        "exit={:?} stderr={}",
-                        out.exit_code,
-                        out.stderr.trim()
-                    ),
+                    format!("exit={:?} stderr={}", out.exit_code, out.stderr.trim()),
                 ));
             }
         }
@@ -234,26 +214,14 @@ impl Component for NoVncComponent {
         })
         .await;
         let install_cmd = self.build_install_command(mgr);
-        run_pkg_command_with_progress(
-            host,
-            ctx,
-            install_cmd,
-            3,
-            28,
-            95,
-            "apt/dnf install 图形栈…",
-        )
-        .await?;
+        run_pkg_command_with_progress(host, ctx, install_cmd, 3, 28, 95, "apt/dnf install 图形栈…")
+            .await?;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }
 
-    async fn uninstall(
-        &self,
-        host: &dyn Host,
-        ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn uninstall(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         self.check_target(host)?;
         ctx.emit(ProgressKind::Started { total_steps: 1 }).await;
         ctx.emit(ProgressKind::StepBegin {
@@ -350,7 +318,14 @@ mod tests {
         assert_eq!(cmd.program, "sh");
         let arg = cmd.args.last().unwrap();
         assert!(arg.contains("apt-get install"));
-        for pkg in &["dbus-x11", "fluxbox", "xvfb", "x11vnc", "novnc", "websockify"] {
+        for pkg in &[
+            "dbus-x11",
+            "fluxbox",
+            "xvfb",
+            "x11vnc",
+            "novnc",
+            "websockify",
+        ] {
             assert!(arg.contains(pkg), "apt cmd should contain {pkg}: {arg}");
         }
     }
@@ -361,7 +336,13 @@ mod tests {
         let cmd = comp.build_install_command(PkgMgr::Dnf);
         let arg = cmd.args.last().unwrap();
         assert!(arg.contains("dnf install"));
-        for pkg in &["x11vnc", "novnc", "python3-websockify", "fluxbox", "xorg-x11-server-Xvfb"] {
+        for pkg in &[
+            "x11vnc",
+            "novnc",
+            "python3-websockify",
+            "fluxbox",
+            "xorg-x11-server-Xvfb",
+        ] {
             assert!(arg.contains(pkg), "dnf cmd should contain {pkg}: {arg}");
         }
     }
@@ -372,7 +353,10 @@ mod tests {
         let comp = NoVncComponent::new();
         let cmd = comp.build_install_command(PkgMgr::Apt);
         assert!(cmd.elevated, "默认 use_sudo 时必须打 elevated 标");
-        assert!(!cmd.args.last().unwrap().contains("sudo"), "命令体不该再硬编码 sudo");
+        assert!(
+            !cmd.args.last().unwrap().contains("sudo"),
+            "命令体不该再硬编码 sudo"
+        );
     }
 
     #[test]
@@ -405,8 +389,15 @@ mod tests {
     #[test]
     fn supported_targets_only_linux() {
         let comp = NoVncComponent::new();
-        assert!(comp.supported_targets().contains(&(Os::Linux, Locality::Remote)));
-        assert!(!comp.supported_targets().contains(&(Os::Windows, Locality::Local)));
+        assert!(
+            comp.supported_targets()
+                .contains(&(Os::Linux, Locality::Remote))
+        );
+        assert!(
+            !comp
+                .supported_targets()
+                .contains(&(Os::Windows, Locality::Local))
+        );
     }
 
     #[test]
@@ -414,11 +405,12 @@ mod tests {
         // 防止 dpkg 的 menuconfig 阻塞 SSH 命令(legacy 教训)
         let comp = NoVncComponent::new();
         let cmd = comp.build_install_command(PkgMgr::Apt);
-        assert!(cmd
-            .args
-            .last()
-            .unwrap()
-            .contains("DEBIAN_FRONTEND=noninteractive"));
+        assert!(
+            cmd.args
+                .last()
+                .unwrap()
+                .contains("DEBIAN_FRONTEND=noninteractive")
+        );
     }
 
     #[test]

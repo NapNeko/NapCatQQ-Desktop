@@ -47,7 +47,9 @@ pub enum DesktopConsentError {
     },
     #[error("{DESKTOP_CONSENT_VERSION_MISMATCH_PREFIX}: expected {expected}, got {actual}")]
     VersionMismatch { expected: String, actual: String },
-    #[error("{DESKTOP_CONSENT_REQUIRED_PREFIX}: desktop agreements version {version} requires consent")]
+    #[error(
+        "{DESKTOP_CONSENT_REQUIRED_PREFIX}: desktop agreements version {version} requires consent"
+    )]
     ConsentRequired { version: String },
     #[error("serialize consent record: {0}")]
     Serialize(#[from] serde_json::Error),
@@ -112,10 +114,7 @@ fn cached_agreements() -> &'static CachedAgreements {
     CACHE.get_or_init(|| {
         let documents = load_documents_uncached();
         let version = compute_agreements_version(&documents);
-        CachedAgreements {
-            documents,
-            version,
-        }
+        CachedAgreements { documents, version }
     })
 }
 
@@ -355,9 +354,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let err = ensure_accepted(dir.path()).unwrap_err();
         assert!(matches!(err, DesktopConsentError::ConsentRequired { .. }));
-        assert!(err
-            .to_command_string()
-            .starts_with(DESKTOP_CONSENT_REQUIRED_PREFIX));
+        assert!(
+            err.to_command_string()
+                .starts_with(DESKTOP_CONSENT_REQUIRED_PREFIX)
+        );
 
         record_consent(dir.path(), current_version()).unwrap();
         ensure_accepted(dir.path()).unwrap();

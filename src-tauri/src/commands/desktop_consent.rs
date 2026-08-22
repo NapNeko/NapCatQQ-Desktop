@@ -2,8 +2,8 @@
 
 use tauri::State;
 
-use crate::desktop_consent::{self, DesktopAgreementsPayload};
 use crate::AppState;
+use crate::desktop_consent::{self, DesktopAgreementsPayload};
 
 #[tauri::command]
 pub fn get_desktop_agreements(

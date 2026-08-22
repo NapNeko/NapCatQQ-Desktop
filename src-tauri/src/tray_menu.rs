@@ -35,48 +35,24 @@ pub async fn tray_menu_status_line(app: &AppHandle) -> String {
 pub async fn build_tray_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
     let status_text = tray_menu_status_line(app).await;
 
-    let header = MenuItem::with_id(
-        app,
-        MENU_HEADER,
-        "NapCatQQ Desktop",
-        false,
-        None::<&str>,
-    )
-    .map_err(|e| e.to_string())?;
+    let header = MenuItem::with_id(app, MENU_HEADER, "NapCatQQ Desktop", false, None::<&str>)
+        .map_err(|e| e.to_string())?;
 
-    let status = MenuItem::with_id(
-        app,
-        MENU_STATUS,
-        status_text.as_str(),
-        false,
-        None::<&str>,
-    )
-    .map_err(|e| e.to_string())?;
+    let status = MenuItem::with_id(app, MENU_STATUS, status_text.as_str(), false, None::<&str>)
+        .map_err(|e| e.to_string())?;
 
     let sep_top = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
 
     let show = MenuItem::with_id(app, MENU_SHOW, "显示主窗口", true, None::<&str>)
         .map_err(|e| e.to_string())?;
 
-    let lightweight = MenuItem::with_id(
-        app,
-        MENU_LIGHTWEIGHT,
-        "释放界面内存…",
-        true,
-        None::<&str>,
-    )
-    .map_err(|e| e.to_string())?;
+    let lightweight = MenuItem::with_id(app, MENU_LIGHTWEIGHT, "释放界面内存…", true, None::<&str>)
+        .map_err(|e| e.to_string())?;
 
     let sep_bottom = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
 
-    let quit = MenuItem::with_id(
-        app,
-        MENU_QUIT,
-        "退出 NapCatQQ Desktop",
-        true,
-        None::<&str>,
-    )
-    .map_err(|e| e.to_string())?;
+    let quit = MenuItem::with_id(app, MENU_QUIT, "退出 NapCatQQ Desktop", true, None::<&str>)
+        .map_err(|e| e.to_string())?;
 
     let menu = Menu::with_items(
         app,
@@ -101,9 +77,7 @@ pub async fn build_tray_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String
 
 pub async fn refresh_tray_menu_status(app: &AppHandle) -> Result<(), String> {
     let text = tray_menu_status_line(app).await;
-    let guard = TRAY_MENU
-        .lock()
-        .map_err(|_| "托盘菜单锁异常".to_string())?;
+    let guard = TRAY_MENU.lock().map_err(|_| "托盘菜单锁异常".to_string())?;
     let Some(handles) = guard.as_ref() else {
         return Ok(());
     };

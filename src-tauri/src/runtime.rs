@@ -5,13 +5,11 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use ncd_runtime::{
-    BroadcastEventBus, DomainEvent, EventBus,
-};
+use ncd_domain::bot_status::BotStatus;
 #[cfg(test)]
 use ncd_domain::ids::BotId;
 use ncd_domain::kinds::{BackendKind, RuntimeTarget};
-use ncd_domain::bot_status::BotStatus;
+use ncd_runtime::{BroadcastEventBus, DomainEvent, EventBus};
 
 // ============================================================
 // 前端 IPC contract 数据结构(保留——前端 remote.service.ts 依赖这些 shape)

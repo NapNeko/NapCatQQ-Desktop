@@ -96,31 +96,19 @@ impl Component for DesktopSelfComponent {
         }))
     }
 
-    async fn install(
-        &self,
-        _host: &dyn Host,
-        _ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn install(&self, _host: &dyn Host, _ctx: &mut ActionCtx) -> Result<(), ActionError> {
         Err(ActionError::other(
             "DesktopSelfComponent::install must go through ncd-update::UpdateOrchestrator",
         ))
     }
 
-    async fn update(
-        &self,
-        _host: &dyn Host,
-        _ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn update(&self, _host: &dyn Host, _ctx: &mut ActionCtx) -> Result<(), ActionError> {
         Err(ActionError::other(
             "DesktopSelfComponent::update must go through ncd-update::UpdateOrchestrator::install_with_graceful_shutdown",
         ))
     }
 
-    async fn uninstall(
-        &self,
-        _host: &dyn Host,
-        _ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn uninstall(&self, _host: &dyn Host, _ctx: &mut ActionCtx) -> Result<(), ActionError> {
         Err(ActionError::other(
             "DesktopSelfComponent::uninstall is not supported (use OS uninstall flow)",
         ))

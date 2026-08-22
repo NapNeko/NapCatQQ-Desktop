@@ -3,8 +3,8 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use ncd_host::{
-    host_command_wrap_dpkg_wait_for_apt, output_indicates_dpkg_lock_hold, parse_pkg_mgr_line,
-    truncate_pkg_line, CommandOutput, Host, HostCommand, StreamSource,
+    CommandOutput, Host, HostCommand, StreamSource, host_command_wrap_dpkg_wait_for_apt,
+    output_indicates_dpkg_lock_hold, parse_pkg_mgr_line, truncate_pkg_line,
 };
 use tokio::sync::mpsc;
 
@@ -145,11 +145,8 @@ pub async fn run_pkg_command_with_progress(
         } else {
             out.stdout.trim().to_string()
         };
-        ctx.log(
-            ProgressLogLevel::Error,
-            truncate_pkg_line(&detail, 240),
-        )
-        .await;
+        ctx.log(ProgressLogLevel::Error, truncate_pkg_line(&detail, 240))
+            .await;
         let hint = if output_indicates_dpkg_lock_hold(&out) {
             "apt 被系统占用（常见 unattended-upgr）。请稍后在组件页重试，或远端执行: sudo systemctl stop unattended-upgrades"
         } else {

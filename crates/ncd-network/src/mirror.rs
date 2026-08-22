@@ -7,13 +7,13 @@
 
 /// 内置候选镜像前缀(不含末尾 /)空串表示直连前两个最稳,作为 race 初始 racer
 pub const DEFAULT_MIRROR_PREFIXES: &[&str] = &[
-    "",                          // 0. 直连
-    "https://gh.ddlc.top",       // 1. ddlc(国内带宽最优)
-    "https://gh-proxy.com",      // 2. gh-proxy
-    "https://ghfast.top",        // 3. ghfast
-    "https://cors.isteed.cc",    // 4. isteed
-    "https://ghproxy.cc",        // 5. ghproxy
-    "https://github.akams.cn",   // 6. akams
+    "",                        // 0. 直连
+    "https://gh.ddlc.top",     // 1. ddlc(国内带宽最优)
+    "https://gh-proxy.com",    // 2. gh-proxy
+    "https://ghfast.top",      // 3. ghfast
+    "https://cors.isteed.cc",  // 4. isteed
+    "https://ghproxy.cc",      // 5. ghproxy
+    "https://github.akams.cn", // 6. akams
 ];
 
 /// 把原始 URL 展开成 race 用的镜像 URL 列表prefixes None 时用 DEFAULT_MIRROR_PREFIXES

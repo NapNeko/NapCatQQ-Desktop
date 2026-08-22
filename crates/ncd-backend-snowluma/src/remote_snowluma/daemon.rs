@@ -14,7 +14,8 @@ use super::layout::{
     DEFAULT_WEBUI_PORT, RemoteSnowLumaLayout, SnowLumaRemotePaths, probe_remote_snowluma_layout,
 };
 use super::orchestrator::{
-    daemon_start, daemon_stop, remote_daemon_already_ready, wait_webui_tcp, write_status_daemon_json,
+    daemon_start, daemon_stop, remote_daemon_already_ready, wait_webui_tcp,
+    write_status_daemon_json,
 };
 use super::stack::restart_node_with_env;
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
@@ -198,11 +199,8 @@ impl RemoteSnowLumaDaemon {
         ensure_remote_daemon_prereqs(self.host.as_ref(), &self.layout.home, &self.layout.paths)
             .await?;
 
-        if !super::orchestrator::remote_daemon_already_ready(
-            self.host.as_ref(),
-            &self.layout.paths,
-        )
-        .await?
+        if !super::orchestrator::remote_daemon_already_ready(self.host.as_ref(), &self.layout.paths)
+            .await?
         {
             return Err(BotBackendError::InvalidConfig(
                 "bootstrap reconcile: 远端 SnowLuma daemon 未就绪，请手动启动 Bot".into(),

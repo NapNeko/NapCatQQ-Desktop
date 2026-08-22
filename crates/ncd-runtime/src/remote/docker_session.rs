@@ -263,9 +263,13 @@ impl DockerBotSessionRegistry {
         });
 
         // SL Docker 隧道就绪时派生 poller init 参数(容器 WebUI 慢启动,异步 spawn 不阻塞)
-        let snowluma_poller_init = snowluma_eps
-            .as_ref()
-            .map(|eps| (eps.webui_local_port, eps.webui_password.clone(), config.bot.qq_id));
+        let snowluma_poller_init = snowluma_eps.as_ref().map(|eps| {
+            (
+                eps.webui_local_port,
+                eps.webui_password.clone(),
+                config.bot.qq_id,
+            )
+        });
 
         let session = Arc::new(DockerBotSession {
             inner: Mutex::new(SessionInner {
@@ -333,8 +337,8 @@ async fn build_and_spawn_snowluma_poller(
     qq_id: u64,
     event_bus: Arc<BroadcastEventBus>,
 ) -> Result<SnowLumaStatusPoller, String> {
-    let client = ReqwestSnowLumaWebUiClient::new(webui_port, webui_password)
-        .map_err(|e| e.to_string())?;
+    let client =
+        ReqwestSnowLumaWebUiClient::new(webui_port, webui_password).map_err(|e| e.to_string())?;
     client
         .wait_ready(Duration::from_secs(90), Box::new(|| false))
         .await

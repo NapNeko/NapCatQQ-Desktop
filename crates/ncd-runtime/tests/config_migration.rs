@@ -525,23 +525,27 @@ fn orchestrator_seeds_app_settings_from_legacy_webhook_email() {
     };
     let secrets = MockSecretStore::new();
     let snapshot = MigrationOrchestrator::new(&store, &probe, &secrets).bootstrap();
-    assert_eq!(snapshot.report.outcome, ncd_runtime::MigrationOutcome::Updated);
+    assert_eq!(
+        snapshot.report.outcome,
+        ncd_runtime::MigrationOutcome::Updated
+    );
 
     let settings_path = store.config_dir().join("app-settings.json");
     assert!(settings_path.is_file(), "应写出 app-settings.json");
     let settings: Value = store.read_json(&settings_path).unwrap();
     assert_eq!(settings["poller"]["botOfflineWebHookNotice"], true);
     assert_eq!(settings["poller"]["botOfflineEmailNotice"], false);
-    assert_eq!(settings["WebHook"]["WebHookUrl"], "https://hook.example/legacy");
+    assert_eq!(
+        settings["WebHook"]["WebHookUrl"],
+        "https://hook.example/legacy"
+    );
     assert_eq!(settings["Email"]["EmailSender"], "from@example.com");
     assert_eq!(settings["Email"]["EmailStmpServer"], "smtp.example.com");
 
     // 再次 bootstrap 不覆盖已有 app-settings
     let mut existing = settings.clone();
     existing["WebHook"]["WebHookUrl"] = Value::String("https://keep-user".into());
-    store
-        .write_json_atomic(&settings_path, &existing)
-        .unwrap();
+    store.write_json_atomic(&settings_path, &existing).unwrap();
     let _again = MigrationOrchestrator::new(&store, &probe, &secrets).bootstrap();
     let after = store.read_json(&settings_path).unwrap();
     assert_eq!(after["WebHook"]["WebHookUrl"], "https://keep-user");

@@ -14,10 +14,10 @@ pub mod data;
 pub mod deploy;
 pub mod desktop;
 pub mod launch;
+pub mod metrics;
 pub mod remote;
 pub mod snowluma;
 pub mod watch;
-pub mod metrics;
 
 // 配置横切已抽出 ncd-config；旧路径 re-export 保持 API。
 pub mod config {
@@ -179,7 +179,8 @@ pub use data_consolidate::{ConsolidateReport, consolidate_data_root};
 pub use data_paths::{DataPaths, LAYOUT_VERSION};
 pub use data_relocate::{
     RelocateError, STAGING_DIR_NAME, delete_retired_data_root, estimate_copy_bytes,
-    execute_relocate, normalize_root, preflight_relocate, read_retired_marker, target_inside_source,
+    execute_relocate, normalize_root, preflight_relocate, read_retired_marker,
+    target_inside_source,
 };
 pub use deployment_tasks::{
     DeploymentTaskContext, DeploymentTaskManager, DeploymentTaskRequest, DeploymentTaskRunResult,

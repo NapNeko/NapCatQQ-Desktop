@@ -1,6 +1,6 @@
 //! SMTP 邮件投递(对齐 Desktop notify/email,source=watch 场景)
 
-use lettre::message::{header::ContentType, Mailbox, Message};
+use lettre::message::{Mailbox, Message, header::ContentType};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{SmtpTransport, Transport};
@@ -10,7 +10,10 @@ use ncd_domain::{OfflineAlert, OfflineEmailSettings};
 // 与探活周期同量级即可,失败靠下一轮边沿/人工重试。
 const SMTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
-pub fn send_watch_email(settings: &OfflineEmailSettings, alert: &OfflineAlert) -> Result<(), String> {
+pub fn send_watch_email(
+    settings: &OfflineEmailSettings,
+    alert: &OfflineAlert,
+) -> Result<(), String> {
     validate_settings(settings)?;
     let subject = "NapCatQQ-Desktop 机器人离线通知";
     let body = html_body(alert);
@@ -81,8 +84,8 @@ fn send_smtp(settings: &OfflineEmailSettings, subject: &str, html: &str) -> Resu
 
     let mailer = match encryption {
         "TLS" => {
-            let tls = TlsParameters::new(host.to_string())
-                .map_err(|e| format!("TLS 参数失败: {e}"))?;
+            let tls =
+                TlsParameters::new(host.to_string()).map_err(|e| format!("TLS 参数失败: {e}"))?;
             SmtpTransport::starttls_relay(host)
                 .map_err(|e| format!("SMTP STARTTLS 构建失败: {e}"))?
                 .port(port)
@@ -97,8 +100,8 @@ fn send_smtp(settings: &OfflineEmailSettings, subject: &str, html: &str) -> Resu
             .credentials(creds)
             .build(),
         _ => {
-            let tls = TlsParameters::new(host.to_string())
-                .map_err(|e| format!("TLS 参数失败: {e}"))?;
+            let tls =
+                TlsParameters::new(host.to_string()).map_err(|e| format!("TLS 参数失败: {e}"))?;
             SmtpTransport::relay(host)
                 .map_err(|e| format!("SMTP SSL 构建失败: {e}"))?
                 .port(port)

@@ -190,22 +190,14 @@ async fn build_napcat_remote_launch(
         if k.is_empty() || k == "NODE_OPTIONS" {
             continue;
         }
-        env_exports.push_str(&format!(
-            "export {}={}; ",
-            k,
-            shell_single_quote(v)
-        ));
+        env_exports.push_str(&format!("export {}={}; ", k, shell_single_quote(v)));
     }
     // 合并 qq_cmd.environment
     for (k, v) in &qq_cmd.environment {
         if metrics_env.contains_key(k) {
             continue;
         }
-        env_exports.push_str(&format!(
-            "export {}={}; ",
-            k,
-            shell_single_quote(v)
-        ));
+        env_exports.push_str(&format!("export {}={}; ", k, shell_single_quote(v)));
     }
 
     let inner = format!(

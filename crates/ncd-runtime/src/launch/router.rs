@@ -117,10 +117,7 @@ pub(crate) struct RuntimeBackendRouter {
     /// 远端 NC 启动时注入探针（可选；未设则远端永不写 net-stats）
     remote_metrics_injector: Option<Arc<crate::metrics::RuntimeRemoteMetricsInjector>>,
     /// Docker bot 指标：本机 data_root + prefs（可选）
-    docker_metrics: Option<(
-        std::path::PathBuf,
-        crate::metrics::BotRuntimeMetricsPrefs,
-    )>,
+    docker_metrics: Option<(std::path::PathBuf, crate::metrics::BotRuntimeMetricsPrefs)>,
 }
 
 impl RuntimeBackendRouter {
@@ -223,9 +220,11 @@ impl RuntimeBackendRouter {
                         let coordinator = Arc::clone(&self.remote_qq_entry_coordinator);
                         let backend_id = BotId::new(format!("remote-native-{qq_id}"));
                         // 远端指标：上传探针 + 改 loadNapCat + 启动 env（失败不阻断）
-                        let metrics_injector = self.remote_metrics_injector.clone().map(
-                            |inj| inj as Arc<dyn ncd_backend_napcat::remote_native_launch::RemoteMetricsInjector>,
-                        );
+                        let metrics_injector = self.remote_metrics_injector.clone().map(|inj| {
+                            inj as Arc<
+                                dyn ncd_backend_napcat::remote_native_launch::RemoteMetricsInjector,
+                            >
+                        });
                         let translator = Arc::new(RemoteNativeLaunchTranslator::new_with_metrics(
                             Arc::clone(&host),
                             BotFlavor::NapCat,
@@ -298,9 +297,9 @@ impl RuntimeBackendRouter {
             .await?;
         // backend 身份按 server 聚合(多 Bot 共享同一 daemon / 隧道 / poller 表)
         let backend_id = BotId::new(format!("remote-sl-{sid}"));
-        let sl_metrics = self.remote_metrics_injector.clone().map(
-            |inj| inj as Arc<dyn ncd_backend_snowluma::remote_snowluma::RemoteSlMetricsInjector>,
-        );
+        let sl_metrics = self.remote_metrics_injector.clone().map(|inj| {
+            inj as Arc<dyn ncd_backend_snowluma::remote_snowluma::RemoteSlMetricsInjector>
+        });
         let backend = Arc::new(RemoteSnowLumaBackend::new_with_metrics(
             backend_id,
             daemon,

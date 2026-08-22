@@ -46,7 +46,10 @@ impl RemoteSnowLumaTunnelRegistry {
         Self::default()
     }
 
-    pub async fn endpoints_for_server(&self, server_id: &str) -> Option<RemoteSnowLumaTunnelEndpoints> {
+    pub async fn endpoints_for_server(
+        &self,
+        server_id: &str,
+    ) -> Option<RemoteSnowLumaTunnelEndpoints> {
         let guard = self.by_server.lock().await;
         guard.get(server_id).map(|b| RemoteSnowLumaTunnelEndpoints {
             webui_local_port: b.webui.local_port(),
@@ -75,8 +78,10 @@ impl RemoteSnowLumaTunnelRegistry {
             });
         }
 
-        let webui = open_tunnel_preferred(host, PREFERRED_WEBUI_LOCAL_PORT, REMOTE_WEBUI_PORT).await?;
-        let novnc = open_tunnel_preferred(host, PREFERRED_NOVNC_LOCAL_PORT, REMOTE_NOVNC_PORT).await?;
+        let webui =
+            open_tunnel_preferred(host, PREFERRED_WEBUI_LOCAL_PORT, REMOTE_WEBUI_PORT).await?;
+        let novnc =
+            open_tunnel_preferred(host, PREFERRED_NOVNC_LOCAL_PORT, REMOTE_NOVNC_PORT).await?;
 
         let eps = RemoteSnowLumaTunnelEndpoints {
             webui_local_port: webui.local_port(),

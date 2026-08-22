@@ -128,11 +128,7 @@ mod tests {
         }
 
         fn get_sudo_password(&self, server_id: &str) -> Option<String> {
-            self.sudo_passwords
-                .lock()
-                .unwrap()
-                .get(server_id)
-                .cloned()
+            self.sudo_passwords.lock().unwrap().get(server_id).cloned()
         }
 
         fn set_sudo_password(&self, server_id: &str, password: &str) -> Result<(), String> {
@@ -158,10 +154,7 @@ mod tests {
         let sync = CredentialSyncLayer::new(store);
 
         // sudo 专用槽优先
-        assert_eq!(
-            sync.elevation_password("s1"),
-            Some("sudo-pwd".to_string())
-        );
+        assert_eq!(sync.elevation_password("s1"), Some("sudo-pwd".to_string()));
     }
 
     #[test]
@@ -172,10 +165,7 @@ mod tests {
         let sync = CredentialSyncLayer::new(store);
 
         // 无 sudo 槽时回退到 ssh
-        assert_eq!(
-            sync.elevation_password("s1"),
-            Some("ssh-pwd".to_string())
-        );
+        assert_eq!(sync.elevation_password("s1"), Some("ssh-pwd".to_string()));
     }
 
     #[test]
@@ -186,10 +176,7 @@ mod tests {
         let sync = CredentialSyncLayer::new(store.clone());
         sync.migrate_ssh_to_sudo("s1").unwrap();
 
-        assert_eq!(
-            store.get_sudo_password("s1"),
-            Some("ssh-pwd".to_string())
-        );
+        assert_eq!(store.get_sudo_password("s1"), Some("ssh-pwd".to_string()));
 
         // 再次迁移不覆盖
         store.set_sudo_password("s1", "manual-sudo").unwrap();

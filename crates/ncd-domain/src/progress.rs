@@ -14,8 +14,13 @@ use crate::DockerPullLayerSnapshot;
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum ProgressKind {
-    Started { total_steps: u32 },
-    StepBegin { step: u32, message: String },
+    Started {
+        total_steps: u32,
+    },
+    StepBegin {
+        step: u32,
+        message: String,
+    },
     StepProgress {
         step: u32,
         percent: u8,
@@ -31,8 +36,13 @@ pub enum ProgressKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         docker_layers: Option<Vec<DockerPullLayerSnapshot>>,
     },
-    StepEnd { step: u32, ok: bool },
-    Finished { ok: bool },
+    StepEnd {
+        step: u32,
+        ok: bool,
+    },
+    Finished {
+        ok: bool,
+    },
     Log {
         level: ProgressLogLevel,
         message: String,

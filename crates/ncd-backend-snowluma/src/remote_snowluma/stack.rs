@@ -92,7 +92,6 @@ async fn ensure_dirs(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Result<(),
     Ok(())
 }
 
-
 async fn read_pid_file(host: &dyn Host, path: &str) -> Result<Option<u32>, BotBackendError> {
     let p = shell_single_quote(path);
     let script = format!(r#"test -f {p} && cat {p} || true"#);
@@ -109,7 +108,10 @@ async fn read_pid_file(host: &dyn Host, path: &str) -> Result<Option<u32>, BotBa
 }
 
 /// 清理可能占用 VNC 端口的残留 x11vnc(半残留栈场景)
-async fn cleanup_stale_x11vnc(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
+async fn cleanup_stale_x11vnc(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+) -> Result<(), BotBackendError> {
     let paths = &layout.paths;
     let vnc = DEFAULT_VNC_PORT;
     let pid_path = shell_single_quote(&pid_file(paths, "x11vnc"));
@@ -128,7 +130,10 @@ if [ -n "$pids" ]; then kill $pids 2>/dev/null || true; sleep 0.3; fi
 }
 
 /// 清理可能占用 noVNC 端口的残留 websockify(半残留栈场景)
-async fn cleanup_stale_websockify(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
+async fn cleanup_stale_websockify(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+) -> Result<(), BotBackendError> {
     let paths = &layout.paths;
     let novnc = DEFAULT_NOVNC_PORT;
     let pid_path = shell_single_quote(&pid_file(paths, "websockify"));
@@ -161,7 +166,10 @@ fi
     Ok(())
 }
 
-pub async fn ensure_dbus_env(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Result<(), BotBackendError> {
+pub async fn ensure_dbus_env(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+) -> Result<(), BotBackendError> {
     let dbus = shell_single_quote(&paths.dbus_env);
     let script = format!(
         r#"if [ ! -f {dbus} ] || ! pgrep -f 'dbus-daemon.*--config-file' >/dev/null 2>&1; then
@@ -178,7 +186,10 @@ fn source_dbus_prefix(paths: &SnowLumaRemotePaths) -> String {
     format!("# shellcheck disable=SC1090\n. {dbus}\n")
 }
 
-pub async fn start_xvfb(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<u32, BotBackendError> {
+pub async fn start_xvfb(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+) -> Result<u32, BotBackendError> {
     let paths = &layout.paths;
     let display = display_str(DEFAULT_DISPLAY_NUM);
     let log = shell_single_quote(&format!("{}/xvfb.log", paths.log_dir));
@@ -195,7 +206,10 @@ cat {pid_path}
     parse_last_u32(&out, "Xvfb")
 }
 
-pub async fn start_wm(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<u32, BotBackendError> {
+pub async fn start_wm(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+) -> Result<u32, BotBackendError> {
     let paths = &layout.paths;
     let display = display_str(DEFAULT_DISPLAY_NUM);
     let log = shell_single_quote(&format!("{}/wm.log", paths.log_dir));
@@ -218,7 +232,10 @@ cat {pid_path}
     parse_last_u32(&out, "WM")
 }
 
-pub async fn start_x11vnc(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<u32, BotBackendError> {
+pub async fn start_x11vnc(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+) -> Result<u32, BotBackendError> {
     let paths = &layout.paths;
     let display = display_str(DEFAULT_DISPLAY_NUM);
     let vnc = DEFAULT_VNC_PORT;
@@ -238,7 +255,10 @@ cat {pid_path}
     parse_last_u32(&out, "x11vnc")
 }
 
-pub async fn start_websockify(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<u32, BotBackendError> {
+pub async fn start_websockify(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+) -> Result<u32, BotBackendError> {
     let paths = &layout.paths;
     let ws = shell_single_quote(&paths.workspace_dir);
     let log = shell_single_quote(&format!("{}/websockify.log", paths.log_dir));
@@ -261,7 +281,6 @@ cat {pid_path}
     let out = run_remote_bash(host, &script).await?;
     parse_last_u32(&out, "websockify")
 }
-
 
 /// 排障用上一代日志上限（daemon/bot 的 `.prev`）
 pub(crate) const LOG_PREV_MAX_BYTES: u64 = 2 * 1024 * 1024;
@@ -310,7 +329,10 @@ fi
     )
 }
 
-pub async fn start_node(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<u32, BotBackendError> {
+pub async fn start_node(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+) -> Result<u32, BotBackendError> {
     start_node_with_env(host, layout, None).await
 }
 
@@ -339,11 +361,7 @@ pub async fn start_node_with_env(
             if !k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
                 continue;
             }
-            env_exports.push_str(&format!(
-                "export {}={}; ",
-                k,
-                shell_single_quote(v)
-            ));
+            env_exports.push_str(&format!("export {}={}; ", k, shell_single_quote(v)));
         }
     }
     let script = format!(
@@ -379,13 +397,16 @@ pub async fn restart_node_with_env(
 
 fn parse_last_u32(out: &str, label: &str) -> Result<u32, BotBackendError> {
     let line = out.lines().last().unwrap_or("").trim();
-    line.parse::<u32>().map_err(|_| {
-        BotBackendError::Io(format!("{label} 未返回 pid: {out}"))
-    })
+    line.parse::<u32>()
+        .map_err(|_| BotBackendError::Io(format!("{label} 未返回 pid: {out}")))
 }
 
 /// WebUI 端口就绪(bash /dev/tcp,短脚本)
-pub async fn wait_webui_tcp(host: &dyn Host, port: i32, timeout: Duration) -> Result<(), BotBackendError> {
+pub async fn wait_webui_tcp(
+    host: &dyn Host,
+    port: i32,
+    timeout: Duration,
+) -> Result<(), BotBackendError> {
     let secs = timeout.as_secs().max(1);
     let script = format!(
         r#"port={port}
@@ -404,7 +425,10 @@ exit 1
 }
 
 /// daemon 是否已在远端就绪(pid + WebUI),dash-safe 探测
-pub async fn is_stack_ready(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Result<bool, BotBackendError> {
+pub async fn is_stack_ready(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+) -> Result<bool, BotBackendError> {
     let pid_path = shell_single_quote(&paths.pid_daemon);
     let port = DEFAULT_WEBUI_PORT;
     let script = format!(
@@ -428,7 +452,10 @@ exit 1
     Ok(out.success())
 }
 
-pub async fn stack_stop(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Result<(), BotBackendError> {
+pub async fn stack_stop(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+) -> Result<(), BotBackendError> {
     for role in ["node", "websockify", "x11vnc", "fluxbox", "xvfb"] {
         let pf = pid_file(paths, role);
         if let Ok(Some(pid)) = read_pid_file(host, &pf).await {
@@ -471,7 +498,10 @@ done
 }
 
 /// 启动完整图形栈 + node(RemoteSnowlumaStackOrchestrator 入口)
-pub async fn ensure_stack_running(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
+pub async fn ensure_stack_running(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+) -> Result<(), BotBackendError> {
     let paths = &layout.paths;
     if is_stack_ready(host, paths).await? {
         return Ok(());

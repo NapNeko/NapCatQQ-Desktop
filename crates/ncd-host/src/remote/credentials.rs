@@ -10,9 +10,15 @@ use std::path::PathBuf;
 #[derive(Clone)]
 pub enum SshKey {
     /// 从文件路径加载(运行时延迟读取,避免长期持有内存中)
-    Path { path: PathBuf, passphrase: Option<String> },
+    Path {
+        path: PathBuf,
+        passphrase: Option<String>,
+    },
     /// 直接持有 PEM / OpenSSH 字节
-    Pem { bytes: Vec<u8>, passphrase: Option<String> },
+    Pem {
+        bytes: Vec<u8>,
+        passphrase: Option<String>,
+    },
 }
 
 impl fmt::Debug for SshKey {

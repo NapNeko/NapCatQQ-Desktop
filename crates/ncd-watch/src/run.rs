@@ -15,7 +15,7 @@ use crate::config::{NotifyConfig, WatchConfig, WatchPaths};
 use crate::edge::{EdgeAction, EdgeTracker, OfflineEdgeKind};
 use crate::email::send_watch_email;
 use crate::login_probe::{has_webui_probe, probe_login_status};
-use crate::metrics::{sample_metrics_once, MetricsRunState, WatchMetricsConfig};
+use crate::metrics::{MetricsRunState, WatchMetricsConfig, sample_metrics_once};
 use crate::onebot::send_watch_onebot;
 use crate::present::desktop_is_present;
 use crate::probe::{LoginStatus, ProbeStatus, Prober};

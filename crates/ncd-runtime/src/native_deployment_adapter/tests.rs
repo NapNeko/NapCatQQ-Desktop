@@ -334,9 +334,7 @@ async fn docker_tail_log_uses_resolved_running_container_name() {
     let logs_cmd = host
         .commands()
         .into_iter()
-        .find(|cmd| {
-            cmd.program == "docker" && cmd.args.first().map(String::as_str) == Some("logs")
-        })
+        .find(|cmd| cmd.program == "docker" && cmd.args.first().map(String::as_str) == Some("logs"))
         .unwrap();
     assert_eq!(
         logs_cmd.args.last().map(String::as_str),
@@ -362,9 +360,7 @@ async fn docker_tail_log_falls_back_to_flavor_name_when_container_is_absent() {
     let logs_cmd = host
         .commands()
         .into_iter()
-        .find(|cmd| {
-            cmd.program == "docker" && cmd.args.first().map(String::as_str) == Some("logs")
-        })
+        .find(|cmd| cmd.program == "docker" && cmd.args.first().map(String::as_str) == Some("logs"))
         .unwrap();
     assert_eq!(
         logs_cmd.args.last().map(String::as_str),

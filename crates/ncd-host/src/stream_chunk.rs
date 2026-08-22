@@ -60,17 +60,15 @@ mod tests {
     fn carriage_return_emits_progress_updates() {
         let mut buf = Vec::new();
         let mut lines = Vec::new();
-        feed_stream_chunk(
-            &mut buf,
-            b"deadbeef: Downloading [=>   ] 1MB/10MB\r",
-            |s| lines.push(s),
-        );
-        feed_stream_chunk(
-            &mut buf,
-            b"deadbeef: Downloading [====>] 5MB/10MB\r",
-            |s| lines.push(s),
-        );
-        feed_stream_chunk(&mut buf, b"deadbeef: Download complete\n", |s| lines.push(s));
+        feed_stream_chunk(&mut buf, b"deadbeef: Downloading [=>   ] 1MB/10MB\r", |s| {
+            lines.push(s)
+        });
+        feed_stream_chunk(&mut buf, b"deadbeef: Downloading [====>] 5MB/10MB\r", |s| {
+            lines.push(s)
+        });
+        feed_stream_chunk(&mut buf, b"deadbeef: Download complete\n", |s| {
+            lines.push(s)
+        });
         flush_stream_remainder(&mut buf, |s| lines.push(s));
         assert_eq!(lines.len(), 3);
         assert!(lines[0].contains("1MB"));

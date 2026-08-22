@@ -11,7 +11,6 @@ pub use composite::{
 };
 pub use email::{send_offline_email, send_test_email};
 pub use onebot::{
-    LocalHttpServerCandidate, MessengerResolveSkip, OneBotMessenger,
-    resolve_local_onebot_messenger,
+    LocalHttpServerCandidate, MessengerResolveSkip, OneBotMessenger, resolve_local_onebot_messenger,
 };
 pub use webhook::{send_offline_webhook, send_test_webhook};

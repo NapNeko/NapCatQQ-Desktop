@@ -58,9 +58,7 @@ pub fn preview_line(line: &str) -> String {
     let source_text = parts[3].trim();
     let position = parts[4].trim_start_matches('[').trim_end_matches(']');
     let message_text = parts[5];
-    format!(
-        "{time_text} | {level_text} | {source_text} {position} | {message_text}{newline}"
-    )
+    format!("{time_text} | {level_text} | {source_text} {position} | {message_text}{newline}")
 }
 
 #[cfg(test)]

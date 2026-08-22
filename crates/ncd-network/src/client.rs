@@ -14,8 +14,11 @@ use reqwest::Client;
 
 use crate::error::NetworkError;
 
-const DEFAULT_USER_AGENT: &str =
-    concat!("NapCatQQ-Desktop/", env!("CARGO_PKG_VERSION"), " (ncd-network)");
+const DEFAULT_USER_AGENT: &str = concat!(
+    "NapCatQQ-Desktop/",
+    env!("CARGO_PKG_VERSION"),
+    " (ncd-network)"
+);
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -25,11 +28,13 @@ static SHARED: OnceLock<Client> = OnceLock::new();
 /// 拿全工程共享 Client,首次调用构造,之后返回同一实例
 /// 构造失败(rustls root store 加载失败等)直接 panic——HTTP 栈起不来进程没法跑,
 /// 比让每个 caller 处理 Result 更合理
-#[allow(clippy::expect_used, reason = "进程级单例 client 构造失败不可恢复，见 shared_client doc")]
+#[allow(
+    clippy::expect_used,
+    reason = "进程级单例 client 构造失败不可恢复，见 shared_client doc"
+)]
 pub fn shared_client() -> &'static Client {
-    SHARED.get_or_init(|| {
-        build_default_client().expect("ncd-network: 共享 reqwest::Client 构造失败")
-    })
+    SHARED
+        .get_or_init(|| build_default_client().expect("ncd-network: 共享 reqwest::Client 构造失败"))
 }
 
 /// 仅供测试:构造一份独立 client,跳过 OnceLock 缓存

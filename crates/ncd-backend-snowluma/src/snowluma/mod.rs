@@ -5,8 +5,8 @@
 pub mod daemon;
 pub mod error;
 pub mod linux_proc_probe;
-pub mod log_sanitize;
 pub mod log_noise;
+pub mod log_sanitize;
 pub mod proc_tree;
 pub mod qq_login_probe;
 pub mod runtime_backend;
@@ -44,8 +44,10 @@ pub use session::{
 };
 
 // ---- log_sanitize.rs ----
+pub use log_noise::{
+    SnowLumaLogNoiseFilter, filter_snowluma_console_lines, prepare_snowluma_bot_history_lines,
+};
 pub use log_sanitize::sanitize_log_line;
-pub use log_noise::{SnowLumaLogNoiseFilter, filter_snowluma_console_lines, prepare_snowluma_bot_history_lines};
 
 // ---- proc_tree.rs ----
 //

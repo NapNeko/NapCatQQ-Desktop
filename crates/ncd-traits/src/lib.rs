@@ -20,7 +20,7 @@ pub use app_framework::{AppFrameworkError, AppIntegration, AppRuntime};
 pub use backend_config_renderer::{BackendConfigRenderer, RenderError};
 pub use bot_config_repo::BotConfigRepo;
 pub use config_store::{ConfigStore, JsonTransaction, JsonWrite, TransactionReport};
-pub use events::{BroadcastEventBus, EventFilter, EventBus, EventSubscription};
+pub use events::{BroadcastEventBus, EventBus, EventFilter, EventSubscription};
 pub use migration_step::MigrationStep;
 pub use path_probe::PathProbe;
 pub use secret_store::SecretStore;

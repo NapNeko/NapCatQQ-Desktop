@@ -145,13 +145,34 @@ mod tests {
     async fn all_io_methods_return_unsupported() {
         let h = stub();
         let p = HostPath::from_posix("/tmp/x");
-        assert!(matches!(h.read_file(&p).await, Err(HostError::Unsupported { .. })));
-        assert!(matches!(h.write_file(&p, b"").await, Err(HostError::Unsupported { .. })));
-        assert!(matches!(h.list_dir(&p).await, Err(HostError::Unsupported { .. })));
-        assert!(matches!(h.create_dir_all(&p).await, Err(HostError::Unsupported { .. })));
-        assert!(matches!(h.exists(&p).await, Err(HostError::Unsupported { .. })));
+        assert!(matches!(
+            h.read_file(&p).await,
+            Err(HostError::Unsupported { .. })
+        ));
+        assert!(matches!(
+            h.write_file(&p, b"").await,
+            Err(HostError::Unsupported { .. })
+        ));
+        assert!(matches!(
+            h.list_dir(&p).await,
+            Err(HostError::Unsupported { .. })
+        ));
+        assert!(matches!(
+            h.create_dir_all(&p).await,
+            Err(HostError::Unsupported { .. })
+        ));
+        assert!(matches!(
+            h.exists(&p).await,
+            Err(HostError::Unsupported { .. })
+        ));
         let cmd = HostCommand::new("dir");
-        assert!(matches!(h.run_to_string(cmd.clone()).await, Err(HostError::Unsupported { .. })));
-        assert!(matches!(h.spawn(cmd).await, Err(HostError::Unsupported { .. })));
+        assert!(matches!(
+            h.run_to_string(cmd.clone()).await,
+            Err(HostError::Unsupported { .. })
+        ));
+        assert!(matches!(
+            h.spawn(cmd).await,
+            Err(HostError::Unsupported { .. })
+        ));
     }
 }

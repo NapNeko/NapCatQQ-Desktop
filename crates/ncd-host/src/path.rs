@@ -74,7 +74,12 @@ impl HostPath {
         // 形如 /c/... 还原为 C:\...
         if let Some(rest) = self.inner.strip_prefix('/') {
             if let Some((drive, tail)) = rest.split_once('/') {
-                if drive.len() == 1 && drive.bytes().next().is_some_and(|b| b.is_ascii_alphabetic()) {
+                if drive.len() == 1
+                    && drive
+                        .bytes()
+                        .next()
+                        .is_some_and(|b| b.is_ascii_alphabetic())
+                {
                     let upper = drive.to_ascii_uppercase();
                     let tail_win = tail.replace('/', "\\");
                     return format!("{upper}:\\{tail_win}");

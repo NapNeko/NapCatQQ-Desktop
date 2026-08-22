@@ -1,9 +1,9 @@
 // 任务栏 / Alt+Tab / 窗口标题区图标(与通知区托盘无关)
 // 全部 embed,安装包不落 icons 目录。
 
-use tauri::image::Image;
 use tauri::AppHandle;
 use tauri::Manager;
+use tauri::image::Image;
 
 fn embed(name: &str) -> Option<Image<'static>> {
     let bytes: &[u8] = match name {

@@ -15,9 +15,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use ncd_network::{
-    download_smart, download_with_mirror_race, download_with_resume, ChunkedConfig,
-    DownloadConfig, DownloadProgressSink, DownloadStage, MirrorRaceConfig, NetworkError,
-    ProgressUpdate,
+    ChunkedConfig, DownloadConfig, DownloadProgressSink, DownloadStage, MirrorRaceConfig,
+    NetworkError, ProgressUpdate, download_smart, download_with_mirror_race, download_with_resume,
 };
 use sha2::{Digest, Sha256};
 use tokio::fs;
@@ -184,14 +183,8 @@ impl DownloadHelper {
             expected_sha256: expected_sha256.map(|s| s.to_string()),
             ..Default::default()
         };
-        match download_with_mirror_race(
-            mirrors,
-            dest_path,
-            sink,
-            ctx.cancel_token(),
-            race_cfg,
-        )
-        .await
+        match download_with_mirror_race(mirrors, dest_path, sink, ctx.cancel_token(), race_cfg)
+            .await
         {
             Ok(_) => {}
             Err(NetworkError::Cancelled) => return Err(ActionError::Cancelled),
@@ -211,9 +204,9 @@ impl DownloadHelper {
 }
 
 async fn verify_sha256(dest_path: &Path, expected: &str) -> Result<(), ActionError> {
-    let mut file = fs::File::open(dest_path).await.map_err(|e| {
-        ActionError::install_step("open_for_hash", format!("{e}"))
-    })?;
+    let mut file = fs::File::open(dest_path)
+        .await
+        .map_err(|e| ActionError::install_step("open_for_hash", format!("{e}")))?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 256 * 1024];
     loop {

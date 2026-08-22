@@ -179,7 +179,10 @@ mod tests {
     async fn matches_returns_false_when_file_missing() {
         let dir = tempdir().unwrap();
         let store = KnownHostsStore::new(dir.path().join("nonexistent"));
-        let m = store.matches("example.com", 22, "ssh-ed25519", "AAAA").await.unwrap();
+        let m = store
+            .matches("example.com", 22, "ssh-ed25519", "AAAA")
+            .await
+            .unwrap();
         assert!(!m);
     }
 
@@ -190,21 +193,48 @@ mod tests {
         let content = "example.com ssh-ed25519 AAAAB3keyhere\n";
         fs::write(&path, content).await.unwrap();
         let store = KnownHostsStore::new(&path);
-        assert!(store.matches("example.com", 22, "ssh-ed25519", "AAAAB3keyhere").await.unwrap());
+        assert!(
+            store
+                .matches("example.com", 22, "ssh-ed25519", "AAAAB3keyhere")
+                .await
+                .unwrap()
+        );
         // 不同 key b64 不匹配
-        assert!(!store.matches("example.com", 22, "ssh-ed25519", "AAAAdifferent").await.unwrap());
+        assert!(
+            !store
+                .matches("example.com", 22, "ssh-ed25519", "AAAAdifferent")
+                .await
+                .unwrap()
+        );
         // 不同 key 类型不匹配
-        assert!(!store.matches("example.com", 22, "ssh-rsa", "AAAAB3keyhere").await.unwrap());
+        assert!(
+            !store
+                .matches("example.com", 22, "ssh-rsa", "AAAAB3keyhere")
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
     async fn matches_handles_nonstandard_port() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("known_hosts");
-        fs::write(&path, "[example.com]:2222 ssh-ed25519 AAAAkey\n").await.unwrap();
+        fs::write(&path, "[example.com]:2222 ssh-ed25519 AAAAkey\n")
+            .await
+            .unwrap();
         let store = KnownHostsStore::new(&path);
-        assert!(store.matches("example.com", 2222, "ssh-ed25519", "AAAAkey").await.unwrap());
-        assert!(!store.matches("example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
+        assert!(
+            store
+                .matches("example.com", 2222, "ssh-ed25519", "AAAAkey")
+                .await
+                .unwrap()
+        );
+        assert!(
+            !store
+                .matches("example.com", 22, "ssh-ed25519", "AAAAkey")
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -214,7 +244,12 @@ mod tests {
         let content = "# comment line\n\nexample.com ssh-ed25519 AAAAkey\n";
         fs::write(&path, content).await.unwrap();
         let store = KnownHostsStore::new(&path);
-        assert!(store.matches("example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
+        assert!(
+            store
+                .matches("example.com", 22, "ssh-ed25519", "AAAAkey")
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -222,11 +257,19 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("subdir/known_hosts");
         let store = KnownHostsStore::new(&path);
-        store.append("example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap();
+        store
+            .append("example.com", 22, "ssh-ed25519", "AAAAkey")
+            .await
+            .unwrap();
         let content = fs::read_to_string(&path).await.unwrap();
         assert!(content.contains("example.com ssh-ed25519 AAAAkey"));
         // 新加的条目应能 match
-        assert!(store.matches("example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
+        assert!(
+            store
+                .matches("example.com", 22, "ssh-ed25519", "AAAAkey")
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
@@ -234,10 +277,30 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("known_hosts");
         // 多 host 用逗号分隔(OpenSSH 风格)
-        fs::write(&path, "alpha.example.com,beta.example.com ssh-ed25519 AAAAkey\n").await.unwrap();
+        fs::write(
+            &path,
+            "alpha.example.com,beta.example.com ssh-ed25519 AAAAkey\n",
+        )
+        .await
+        .unwrap();
         let store = KnownHostsStore::new(&path);
-        assert!(store.matches("alpha.example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
-        assert!(store.matches("beta.example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
-        assert!(!store.matches("gamma.example.com", 22, "ssh-ed25519", "AAAAkey").await.unwrap());
+        assert!(
+            store
+                .matches("alpha.example.com", 22, "ssh-ed25519", "AAAAkey")
+                .await
+                .unwrap()
+        );
+        assert!(
+            store
+                .matches("beta.example.com", 22, "ssh-ed25519", "AAAAkey")
+                .await
+                .unwrap()
+        );
+        assert!(
+            !store
+                .matches("gamma.example.com", 22, "ssh-ed25519", "AAAAkey")
+                .await
+                .unwrap()
+        );
     }
 }

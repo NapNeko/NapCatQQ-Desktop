@@ -32,10 +32,7 @@ impl PartFile {
         };
 
         let file = if existing_bytes > 0 {
-            fs::OpenOptions::new()
-                .append(true)
-                .open(&path)
-                .await?
+            fs::OpenOptions::new().append(true).open(&path).await?
         } else {
             fs::File::create(&path).await?
         };

@@ -10,8 +10,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 pub use ncd_domain::StopMode;
-pub use ncd_domain::bot_status::{BotStatus, ProcessHandle};
 use ncd_domain::bot_config::{BackendType, BotConfig};
+pub use ncd_domain::bot_status::{BotStatus, ProcessHandle};
 use ncd_domain::ids::BotId;
 use ncd_domain::kinds::{BackendKind, BotFlavor, RuntimeTarget};
 

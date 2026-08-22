@@ -37,11 +37,7 @@ pub trait Component: Send + Sync {
     }
 
     /// 卸载默认实现返回 Other("uninstall not implemented"),各 component 按需 override
-    async fn uninstall(
-        &self,
-        _host: &dyn Host,
-        _ctx: &mut ActionCtx,
-    ) -> Result<(), ActionError> {
+    async fn uninstall(&self, _host: &dyn Host, _ctx: &mut ActionCtx) -> Result<(), ActionError> {
         Err(ActionError::other(format!(
             "uninstall not implemented for {:?}",
             self.id()

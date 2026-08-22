@@ -12,7 +12,9 @@ pub enum OneBotExportError {
 
 /// 从协议 Bot 的 `connect.httpServers` 取第一个 enable 且 port>0 的服务。
 /// host 空 / `0.0.0.0` 规范为 `127.0.0.1`（与 notify 本机 messenger 规则一致）。
-pub fn export_onebot_endpoint(config: &BotConfig) -> Result<OneBotEndpointExport, OneBotExportError> {
+pub fn export_onebot_endpoint(
+    config: &BotConfig,
+) -> Result<OneBotEndpointExport, OneBotExportError> {
     let server = config
         .connect
         .http_servers
@@ -45,11 +47,11 @@ pub fn export_onebot_endpoint(config: &BotConfig) -> Result<OneBotEndpointExport
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ncd_domain::kinds::RuntimeTarget;
     use ncd_domain::{
         AdvancedConfig, AutoRestartSchedule, BotBasicConfig, ConnectConfig, DeploymentType,
         HttpServerConfig, NetworkBaseFields,
     };
-    use ncd_domain::kinds::RuntimeTarget;
 
     fn sample_config(host: &str, port: u16, enable: bool) -> BotConfig {
         BotConfig {

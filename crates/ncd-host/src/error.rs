@@ -53,10 +53,7 @@ pub enum HostError {
 
     /// 归档解压失败(SHA256 不匹配 / tar/zip 损坏 / 路径越界)
     #[error("extract archive failed: {archive}: {reason}")]
-    ExtractFailed {
-        archive: HostPath,
-        reason: String,
-    },
+    ExtractFailed { archive: HostPath, reason: String },
 
     /// 包管理器操作失败(apt / dnf / winget)
     #[error("package manager error ({manager}): {reason}")]

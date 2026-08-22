@@ -115,9 +115,7 @@ fn require_object_mut<'a>(
     payload
         .get_mut(key)
         .and_then(Value::as_object_mut)
-        .ok_or_else(|| {
-            MigrationError::InvalidPayload(format!("bot 配置缺少对象字段: {key}"))
-        })
+        .ok_or_else(|| MigrationError::InvalidPayload(format!("bot 配置缺少对象字段: {key}")))
 }
 
 fn require_array_mut<'a>(
@@ -127,9 +125,7 @@ fn require_array_mut<'a>(
     object
         .get_mut(key)
         .and_then(Value::as_array_mut)
-        .ok_or_else(|| {
-            MigrationError::InvalidPayload(format!("bot 配置缺少数组字段: {key}"))
-        })
+        .ok_or_else(|| MigrationError::InvalidPayload(format!("bot 配置缺少数组字段: {key}")))
 }
 
 fn ensure_connect_shape(payload: &mut Map<String, Value>) -> Result<Vec<String>, MigrationError> {

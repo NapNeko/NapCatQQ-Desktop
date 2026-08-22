@@ -73,7 +73,11 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
     }
 
     if t.starts_with("Get:") || t.starts_with("Ign:") || t.starts_with("Hit:") {
-        let pct = if t.starts_with("Get:") { Some(18u8) } else { Some(12) };
+        let pct = if t.starts_with("Get:") {
+            Some(18u8)
+        } else {
+            Some(12)
+        };
         return Some(PkgLineParse {
             family: PkgMgrFamily::Apt,
             phase: if t.starts_with("Ign:") {

@@ -44,7 +44,6 @@ impl TunnelSlot {
     }
 }
 
-
 pub(crate) fn notify_unreachable(hook: &Option<WebuiUnreachableHook>, bot_id: &BotId) {
     if let Some(h) = hook {
         h(bot_id.clone());
@@ -130,4 +129,3 @@ pub(crate) async fn open_loopback_tunnel(
     };
     host.open_tunnel(spec).await
 }
-

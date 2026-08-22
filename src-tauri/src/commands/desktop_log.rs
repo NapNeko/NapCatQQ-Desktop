@@ -37,9 +37,7 @@ pub fn tail_desktop_log(
     let mut line_vec: Vec<String> = if text.is_empty() {
         Vec::new()
     } else {
-        text.split_inclusive('\n')
-            .map(|s| s.to_string())
-            .collect()
+        text.split_inclusive('\n').map(|s| s.to_string()).collect()
     };
     let take = lines.unwrap_or(800);
     if line_vec.len() > take {

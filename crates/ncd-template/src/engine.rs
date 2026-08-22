@@ -91,9 +91,7 @@ mod tests {
         let mut engine = TemplateEngine::new();
         engine.add_template("test", "Hello {{ name }}!").unwrap();
 
-        let output = engine
-            .render("test", &json!({ "name": "World" }))
-            .unwrap();
+        let output = engine.render("test", &json!({ "name": "World" })).unwrap();
         assert_eq!(output, "Hello World!");
     }
 
@@ -152,7 +150,9 @@ mod tests {
         // tojson 过滤器把字符串渲染成 JSON 字面量(带双引号 + 转义),
         // YAML 兼容 JSON,所以 {{ token|tojson }} 生成的 "value" 在 YAML 里是合法的字符串
         let mut engine = TemplateEngine::new();
-        engine.add_template("test", "TOKEN: {{ token|tojson }}").unwrap();
+        engine
+            .add_template("test", "TOKEN: {{ token|tojson }}")
+            .unwrap();
 
         // 普通 token
         let output = engine
@@ -167,9 +167,7 @@ mod tests {
         assert_eq!(output, "TOKEN: \"secret#comment\"");
 
         // 含引号的 token
-        let output = engine
-            .render("test", &json!({ "token": "a\"b" }))
-            .unwrap();
+        let output = engine.render("test", &json!({ "token": "a\"b" })).unwrap();
         assert_eq!(output, "TOKEN: \"a\\\"b\"");
     }
 

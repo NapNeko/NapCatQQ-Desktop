@@ -1,6 +1,6 @@
 //! SMTP 邮件投递(对齐旧 Desktop Email)
 
-use lettre::message::{header::ContentType, Mailbox, Message};
+use lettre::message::{Mailbox, Message, header::ContentType};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{SmtpTransport, Transport};
@@ -89,8 +89,8 @@ fn send_smtp(settings: &OfflineEmailSettings, subject: &str, html: &str) -> Resu
 
     let mailer = match encryption {
         "TLS" => {
-            let tls = TlsParameters::new(host.to_string())
-                .map_err(|e| format!("TLS 参数失败: {e}"))?;
+            let tls =
+                TlsParameters::new(host.to_string()).map_err(|e| format!("TLS 参数失败: {e}"))?;
             SmtpTransport::starttls_relay(host)
                 .map_err(|e| format!("SMTP STARTTLS 构建失败: {e}"))?
                 .port(port)
@@ -103,8 +103,8 @@ fn send_smtp(settings: &OfflineEmailSettings, subject: &str, html: &str) -> Resu
             .credentials(creds)
             .build(),
         _ => {
-            let tls = TlsParameters::new(host.to_string())
-                .map_err(|e| format!("TLS 参数失败: {e}"))?;
+            let tls =
+                TlsParameters::new(host.to_string()).map_err(|e| format!("TLS 参数失败: {e}"))?;
             SmtpTransport::relay(host)
                 .map_err(|e| format!("SMTP SSL 构建失败: {e}"))?
                 .port(port)

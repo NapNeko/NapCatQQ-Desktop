@@ -74,10 +74,7 @@ pub async fn setup_server_key_auth(
 }
 
 #[tauri::command]
-pub async fn delete_server(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), String> {
+pub async fn delete_server(state: State<'_, AppState>, id: String) -> Result<(), String> {
     state.migrate_gate.ensure_idle()?;
     state.server_manager.delete_server(&id).await
 }

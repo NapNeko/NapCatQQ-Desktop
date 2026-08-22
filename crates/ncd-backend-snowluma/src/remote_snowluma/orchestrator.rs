@@ -15,8 +15,7 @@ use super::layout::{
     RemoteSnowLumaLayout, SnowLumaRemotePaths, shell_single_quote,
 };
 use super::stack::{
-    ensure_stack_running, is_stack_ready, run_remote_bash, stack_stop,
-    LOG_PREV_MAX_BYTES,
+    LOG_PREV_MAX_BYTES, ensure_stack_running, is_stack_ready, run_remote_bash, stack_stop,
     wait_webui_tcp as wait_webui_tcp_on_host,
 };
 
@@ -31,15 +30,25 @@ pub async fn remote_daemon_already_ready(
     is_stack_ready(host, paths).await
 }
 
-pub async fn daemon_start(host: &dyn Host, layout: &RemoteSnowLumaLayout) -> Result<(), BotBackendError> {
+pub async fn daemon_start(
+    host: &dyn Host,
+    layout: &RemoteSnowLumaLayout,
+) -> Result<(), BotBackendError> {
     ensure_stack_running(host, layout).await
 }
 
-pub async fn daemon_stop(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Result<(), BotBackendError> {
+pub async fn daemon_stop(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+) -> Result<(), BotBackendError> {
     stack_stop(host, paths).await
 }
 
-pub async fn wait_webui_tcp(host: &dyn Host, port: i32, timeout: Duration) -> Result<(), BotBackendError> {
+pub async fn wait_webui_tcp(
+    host: &dyn Host,
+    port: i32,
+    timeout: Duration,
+) -> Result<(), BotBackendError> {
     wait_webui_tcp_on_host(host, port, timeout).await
 }
 
@@ -55,7 +64,11 @@ async fn prepare_bot_launch_env(host: &dyn Host) -> Result<Option<String>, BotBa
 	"#;
     let out = run_remote_bash(host, script).await?;
     let line = out.lines().last().unwrap_or("").trim();
-    let ld_preload = if line.is_empty() { None } else { Some(line.to_string()) };
+    let ld_preload = if line.is_empty() {
+        None
+    } else {
+        Some(line.to_string())
+    };
 
     // 2. 关键:放宽 ptrace_scope
     //    旧脚本里用 sudo -n 静默尝试,这里改用 Host 的 elevation 机制(会喂已缓存的 sudo 密码)
@@ -154,11 +167,15 @@ async fn relax_ptrace_scope(host: &dyn Host) -> Result<(), BotBackendError> {
 /// ptrace_scope. Safe to call repeatedly.
 pub async fn try_grant_node_ptrace_cap(host: &dyn Host) {
     // Find node
-    let find = HostCommand::new("sh").arg("-c").arg("command -v node 2>/dev/null || true");
+    let find = HostCommand::new("sh")
+        .arg("-c")
+        .arg("command -v node 2>/dev/null || true");
     let node = match host.run_to_string(find).await {
         Ok(o) if o.success() => {
             let p = o.stdout.trim().to_string();
-            if p.is_empty() { return; }
+            if p.is_empty() {
+                return;
+            }
             p
         }
         _ => return,
@@ -208,13 +225,20 @@ echo 'current user:'; id -a 2>/dev/null || echo 'id failed'
 echo '=== end diagnostics ==='
 "#
     );
-    match host.run_to_string(HostCommand::new("sh").arg("-c").arg(&script)).await {
+    match host
+        .run_to_string(HostCommand::new("sh").arg("-c").arg(&script))
+        .await
+    {
         Ok(o) => o.stdout,
         Err(e) => format!("(diagnostic collection via host failed: {e})"),
     }
 }
 
-async fn bot_pid_if_running(host: &dyn Host, paths: &SnowLumaRemotePaths, qq_id: &str) -> Result<Option<u32>, BotBackendError> {
+async fn bot_pid_if_running(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+    qq_id: &str,
+) -> Result<Option<u32>, BotBackendError> {
     let pidfile = shell_single_quote(&paths.pid_bot_path(qq_id));
     let script = format!(
         r#"pidfile={pidfile}
@@ -285,10 +309,9 @@ fi
         ],
         ..Default::default()
     };
-    launch_args.extra_env.push((
-        "DISPLAY".to_string(),
-        display_str(DEFAULT_DISPLAY_NUM),
-    ));
+    launch_args
+        .extra_env
+        .push(("DISPLAY".to_string(), display_str(DEFAULT_DISPLAY_NUM)));
     let cmd = qq
         .launch_command(host, &launch_args)
         .map_err(|e| BotBackendError::InvalidConfig(e.to_string()))?;
@@ -321,7 +344,8 @@ fi
     // These run in the same shell that will spawn QQ, under the target DISPLAY.
     // We still do the pre-spawn relax on the host (above), but this makes the launch script self-contained
     // like the old .sh.j2, and gives a second chance + better log visibility.
-    let libgcc_fix_and_scope = r#"# libgcc_s.so.1 hardlink fix (for maps visibility on some distros like CentOS/RHEL)
+    let libgcc_fix_and_scope =
+        r#"# libgcc_s.so.1 hardlink fix (for maps visibility on some distros like CentOS/RHEL)
 libgcc_path=$(ldconfig -p 2>/dev/null | grep -m1 'libgcc_s.so.1' | awk '{print $NF}') || true
 if [ -n "$libgcc_path" ] && [ -L "$libgcc_path" ]; then
   real_path=$(readlink -f "$libgcc_path")
@@ -340,7 +364,8 @@ if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then
       echo "warning: could not set ptrace_scope=0 in launcher script" >&2
   fi
 fi
-"#.to_string();
+"#
+        .to_string();
 
     let script = format!(
         r#"umask 077
@@ -399,7 +424,8 @@ async fn write_status_bot_json(
         "running": running,
         "started_at": started_at,
     });
-    let bytes = serde_json::to_vec_pretty(&payload).map_err(|e| BotBackendError::Json(e.to_string()))?;
+    let bytes =
+        serde_json::to_vec_pretty(&payload).map_err(|e| BotBackendError::Json(e.to_string()))?;
     let path = HostPath::from_posix(paths.status_bot_path(qq_id));
     host.write_file(&path, &bytes)
         .await
@@ -407,7 +433,11 @@ async fn write_status_bot_json(
     Ok(())
 }
 
-pub async fn bot_stop(host: &dyn Host, paths: &SnowLumaRemotePaths, qq_id: &str) -> Result<(), BotBackendError> {
+pub async fn bot_stop(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+    qq_id: &str,
+) -> Result<(), BotBackendError> {
     let rt = shell_single_quote(&paths.runtime_dir);
     let qq_id_q = shell_single_quote(qq_id);
     let status = shell_single_quote(&paths.status_bot_path(qq_id));
@@ -448,7 +478,8 @@ pub async fn write_status_daemon_json(
         },
         "display": display_str(DEFAULT_DISPLAY_NUM),
     });
-    let bytes = serde_json::to_vec_pretty(&payload).map_err(|e| BotBackendError::Json(e.to_string()))?;
+    let bytes =
+        serde_json::to_vec_pretty(&payload).map_err(|e| BotBackendError::Json(e.to_string()))?;
     host.write_file(&HostPath::from_posix(&paths.status_daemon), &bytes)
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;

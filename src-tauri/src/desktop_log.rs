@@ -10,17 +10,15 @@ use ncd_log::facet::LogType;
 use ncd_log::format_line;
 use ncd_log::log_source_from_target;
 use ncd_log::short_module_from_target;
-use ncd_runtime::crash_bundle::{write_crash_bundle, CrashBundleInput};
+use ncd_runtime::crash_bundle::{CrashBundleInput, write_crash_bundle};
 use ncd_runtime::desktop_log;
 use tracing::{Event, Subscriber};
+use tracing_subscriber::Registry;
 use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::layer::{Context, Layer};
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::Registry;
 
-use crate::desktop_log_format::{
-    format_tracing_event, map_tracing_level, should_capture_tracing,
-};
+use crate::desktop_log_format::{format_tracing_event, map_tracing_level, should_capture_tracing};
 
 static SESSION: OnceLock<Arc<DesktopLogSession>> = OnceLock::new();
 static PANIC_CTX: OnceLock<PanicContext> = OnceLock::new();
@@ -81,10 +79,7 @@ fn create_session_log_file(data_root: &Path) -> std::io::Result<PathBuf> {
     let _ = desktop_log::purge_stale_logs(data_root, 7);
     let stamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
     let path = dir.join(format!("{stamp}.log"));
-    OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)?;
+    OpenOptions::new().create(true).append(true).open(&path)?;
     Ok(path)
 }
 
@@ -108,11 +103,7 @@ fn install_panic_hook(data_root: PathBuf, app_version: String) {
             .payload()
             .downcast_ref::<&str>()
             .map(|s| (*s).to_string())
-            .or_else(|| {
-                info.payload()
-                    .downcast_ref::<String>()
-                    .map(|s| s.clone())
-            })
+            .or_else(|| info.payload().downcast_ref::<String>().map(|s| s.clone()))
             .unwrap_or_else(|| "panic without message".to_string());
         let location = info
             .location()
@@ -154,11 +145,7 @@ pub fn init_desktop_logging(data_root: &Path, _bus: ncd_runtime::BroadcastEventB
             return;
         }
     };
-    let file = match OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-    {
+    let file = match OpenOptions::new().create(true).append(true).open(&log_path) {
         Ok(f) => f,
         Err(err) => {
             eprintln!("[desktop_log] open session file failed: {err}");
@@ -173,10 +160,7 @@ pub fn init_desktop_logging(data_root: &Path, _bus: ncd_runtime::BroadcastEventB
         session: Arc::clone(&session),
     };
     let filter = default_env_filter();
-    let _ = Registry::default()
-        .with(filter)
-        .with(layer)
-        .try_init();
+    let _ = Registry::default().with(filter).with(layer).try_init();
     let _ = SESSION.set(session);
 
     install_panic_hook(data_root.to_path_buf(), app_version);

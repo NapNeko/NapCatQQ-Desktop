@@ -356,10 +356,7 @@ fn read_root_disk_bytes() -> Option<(u64, u64)> {
 }
 
 fn run_df(args: &[&str]) -> Option<String> {
-    let out = std::process::Command::new("df")
-        .args(args)
-        .output()
-        .ok()?;
+    let out = std::process::Command::new("df").args(args).output().ok()?;
     if !out.status.success() {
         return None;
     }

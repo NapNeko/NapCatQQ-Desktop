@@ -27,10 +27,7 @@ pub async fn set_remote_qq_package_main(
             path.as_posix()
         ));
     }
-    let bytes = host
-        .read_file(&path)
-        .await
-        .map_err(|e| e.to_string())?;
+    let bytes = host.read_file(&path).await.map_err(|e| e.to_string())?;
     let mut json: serde_json::Value =
         serde_json::from_slice(&bytes).map_err(|e| format!("解析 package.json: {e}"))?;
     let Some(obj) = json.as_object_mut() else {

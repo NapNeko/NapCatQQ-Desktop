@@ -7,7 +7,7 @@
 //! $env:NCD_TEST_SSH_USER = "ubuntu"
 //! $env:NCD_TEST_SSH_KEY  = "$env:USERPROFILE\.ssh\id_ed25519"
 //! cargo test -p ncd-host --test remote_linux_smoke -- --ignored --test-threads=1
-//! 
+//!
 //!
 //! 安全约束:
 //! - 所有测试只在 /tmp/ncd-host-test-<pid>-<rand>/ 内操作,Drop 时清理
@@ -73,7 +73,12 @@ async fn smoke_run_to_string_echo() {
     let host = make_host().await;
     let cmd = HostCommand::new("echo").arg("hello-from-ncd-host");
     let out = host.run_to_string(cmd).await.unwrap();
-    assert!(out.success(), "exit_code={:?} stderr={}", out.exit_code, out.stderr);
+    assert!(
+        out.success(),
+        "exit_code={:?} stderr={}",
+        out.exit_code,
+        out.stderr
+    );
     assert!(out.stdout.contains("hello-from-ncd-host"));
 }
 
@@ -122,7 +127,10 @@ async fn smoke_remove_dir_all_refuses_dangerous_paths() {
     use ncd_host::error::HostError;
     let host = make_host().await;
     // 防御性检查:绝对禁止删 /etc /home /tmp 这种保护路径
-    let err = host.remove_dir_all(&HostPath::from_posix("/etc")).await.unwrap_err();
+    let err = host
+        .remove_dir_all(&HostPath::from_posix("/etc"))
+        .await
+        .unwrap_err();
     assert!(matches!(err, HostError::InvalidArgument { .. }));
 }
 
@@ -163,7 +171,9 @@ async fn smoke_run_with_env_and_working_dir() {
 async fn smoke_run_respects_timeout() {
     use ncd_host::error::HostError;
     let host = make_host().await;
-    let cmd = HostCommand::new("sleep").arg("60").timeout(Duration::from_millis(500));
+    let cmd = HostCommand::new("sleep")
+        .arg("60")
+        .timeout(Duration::from_millis(500));
     let err = host.run_to_string(cmd).await.unwrap_err();
     assert!(matches!(err, HostError::Timeout { .. }));
 }
@@ -199,18 +209,18 @@ async fn smoke_extract_tar_gz() {
     host.create_dir_all(&dir).await.unwrap();
     let payload_dir = dir.join("payload");
     host.create_dir_all(&payload_dir).await.unwrap();
-    host.write_file(&payload_dir.join("a.txt"), b"alpha\n").await.unwrap();
+    host.write_file(&payload_dir.join("a.txt"), b"alpha\n")
+        .await
+        .unwrap();
 
     // 在远端打 tar
     let tarball = dir.join("payload.tar.gz");
     let out = host
-        .run_to_string(
-            HostCommand::new("sh").arg("-c").arg(format!(
-                "cd {} && tar -czf {} payload",
-                dir.as_posix(),
-                tarball.as_posix()
-            )),
-        )
+        .run_to_string(HostCommand::new("sh").arg("-c").arg(format!(
+            "cd {} && tar -czf {} payload",
+            dir.as_posix(),
+            tarball.as_posix()
+        )))
         .await
         .unwrap();
     assert!(out.success());

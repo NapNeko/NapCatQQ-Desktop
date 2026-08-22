@@ -3,10 +3,8 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::{
-    AppHandle, Emitter, Manager, WebviewWindow,
-};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 use crate::AppState;
 

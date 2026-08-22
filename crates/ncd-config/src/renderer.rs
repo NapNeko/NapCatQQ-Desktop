@@ -1,6 +1,6 @@
 // 配置渲染器已下沉到 ncd-deploy,此处 re-export 保持向后兼容
 pub use ncd_deploy::backend_config_renderer::{
-    DockerConfigPayload, DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer,
+    DispatchRenderer, DockerConfigPayload, NapCatConfigRenderer, SnowLumaConfigRenderer,
     create_renderer, merge_unknown_top_level, output_paths_for_backend,
     render_napcat_docker_config_payloads, render_snowluma_docker_config_payloads,
 };
