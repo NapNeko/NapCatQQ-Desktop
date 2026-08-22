@@ -1,0 +1,61 @@
+/* 主题切换圆形扩散 — View Transitions 伪元素动画。
+   新主题层从触发点以 clip-path circle 扩张，旧主题层静止垫底被替换。
+   圆心 / 终态半径 / 时长由 themeTransition.ts 在过渡开始前写入
+   --theme-reveal-* 变量；动画全程跑在合成器侧。 */
+
+/* 关掉 UA 默认的交叉淡入：两层动画全部自己控制。 */
+html[data-theme-reveal]::view-transition-old(root),
+html[data-theme-reveal]::view-transition-new(root) {
+    animation-duration: var(--theme-reveal-dur, 1500ms);
+}
+
+/* 旧主题层：静止铺满垫底（空关键帧压掉 UA 默认淡入淡出）。 */
+html[data-theme-reveal]::view-transition-old(root) {
+    animation-name: theme-reveal-old-still;
+    animation-fill-mode: both;
+}
+
+/* 新主题层：圆从圆心扩张到覆盖全屏。缓动先快后缓，点击后立刻有反馈。 */
+html[data-theme-reveal]::view-transition-new(root) {
+    animation-name: theme-reveal-circle;
+    animation-timing-function: cubic-bezier(0.3, 0.75, 0.35, 1);
+    animation-fill-mode: both;
+}
+
+@keyframes theme-reveal-circle {
+    from {
+        clip-path: circle(0px at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%));
+    }
+
+    to {
+        clip-path: circle(var(--theme-reveal-r, 150vmax) at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%));
+    }
+}
+
+@keyframes theme-reveal-old-still {
+
+    from,
+    to {}
+}
+
+/* rich 档：expo-out 缓动（先快后缓收尾），旧主题层轻微缩小降透明做纵深。 */
+html[data-theme-reveal='rich']::view-transition-new(root) {
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html[data-theme-reveal='rich']::view-transition-old(root) {
+    animation-name: theme-reveal-old-depth;
+    transform-origin: center;
+}
+
+@keyframes theme-reveal-old-depth {
+    from {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    to {
+        transform: scale(0.965);
+        opacity: 0.72;
+    }
+}

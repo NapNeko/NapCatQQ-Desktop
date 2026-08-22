@@ -1,16 +1,12 @@
-// 主题切换过渡动画 — html-to-image 截图 + GSAP 水波覆盖层。
+// 主题切换过渡 — View Transitions API 圆形扩散揭示。
 //
-// 原理：
-//   1. 用 html-to-image 截取旧主题页面截图
-//   2. 创建全屏覆盖层，背景 = 截图
-//   3. 在覆盖层下方切换主题
-//   4. GSAP 水波 clip-path 从顶部向底部扫过：
-//      覆盖层（旧截图）从顶部开始逐步消失，露出新主题
-//   5. 动画结束 → 移除覆盖层 → 主题切换完成
+// 原理：document.startViewTransition 让合成器截住旧帧，changeTheme 同步换掉
+// data-theme，新旧两层快照叠放。给「新主题」层播放 clip-path circle 关键帧，
+// 从触发点（默认屏幕中心）扩张到覆盖全屏，旧主题层静止垫底被逐渐替换。
+// 这是 View Transitions 主题切换的标准玩法：JS 只负责写两个 CSS 变量，
+// 动画全程跑在合成器侧，无 DOM 覆盖层、无逐帧计算。
 
-import { gsap } from 'gsap';
-import { toPng } from 'html-to-image';
-import { readSurfaceCanvasColor } from './surfaceCanvas';
+import './themeTransition.css';
 
 /** 主题过渡的动画配置。 */
 export interface ThemeTransitionOptions {
@@ -18,148 +14,93 @@ export interface ThemeTransitionOptions {
     level: 'elegant' | 'standard' | 'rich';
     duration: number;
     easing: string;
+    /** 扩散圆心的视口坐标（px）。缺省取屏幕中心。 */
+    originX?: number;
+    originY?: number;
 }
 
-let running = false;
+// 当前 DOM lib 未收录 View Transitions，这里补最小声明；
+// 只覆盖本项目用到的同步回调形态。
+interface ViewTransition {
+    readonly ready: Promise<void>;
+    readonly finished: Promise<void>;
+}
+
+declare global {
+    interface Document {
+        startViewTransition?(update: () => void): ViewTransition;
+    }
+}
+
+const SUPPORTS_VIEW_TRANSITION =
+    typeof document !== 'undefined' &&
+    typeof document.startViewTransition === 'function';
+
+// 上一次过渡没跑完时直接瞬时切换：叠两个 View Transition 会互相抢伪元素。
+let active = false;
+
+// 最近一次指针按下位置，用来把扩散圆心对准触发点击。键盘触发的保存
+// 没有近期 pointerdown，会自然回落到屏幕中心。
+let lastPointerX = Number.NaN;
+let lastPointerY = Number.NaN;
+let lastPointerAt = 0;
+
+function ensurePointerTracking(): void {
+    if (typeof window === 'undefined' || lastPointerAt !== 0) return;
+    window.addEventListener('pointerdown', (e) => {
+        lastPointerX = e.clientX;
+        lastPointerY = e.clientY;
+        lastPointerAt = Date.now();
+    }, { capture: true, passive: true });
+}
 
 export function playThemeTransition(
     changeTheme: () => void,
     opts: ThemeTransitionOptions,
 ): Promise<void> {
-    if (!opts.enabled || running) {
+    // elegant / 禁用动画 / 过渡进行中走瞬时切换；不支持时也直接切。
+    if (!opts.enabled || opts.level === 'elegant' || !SUPPORTS_VIEW_TRANSITION || active) {
         changeTheme();
         return Promise.resolve();
     }
-    running = true;
 
-    if (opts.level === 'elegant') {
-        changeTheme();
-        running = false;
-        return Promise.resolve();
-    }
+    const rootEl = document.documentElement;
 
-    return new Promise<void>((resolve) => {
-        const done = () => { running = false; resolve(); };
+    // 圆心：优先调用方显式传入，其次 2s 内的指针按下位置（即触发点击），
+    // 都没有则取屏幕中心。
+    ensurePointerTracking();
+    const recentClick = Date.now() - lastPointerAt < 2000;
+    const cx = Number.isFinite(opts.originX)
+        ? (opts.originX as number)
+        : recentClick ? lastPointerX : innerWidth / 2;
+    const cy = Number.isFinite(opts.originY)
+        ? (opts.originY as number)
+        : recentClick ? lastPointerY : innerHeight / 2;
+    // 终态半径要盖住最远的视口角。
+    const endR = Math.hypot(Math.max(cx, innerWidth - cx), Math.max(cy, innerHeight - cy));
 
-        // ① 截取旧主题页面截图（skipFonts + pixelRatio:1 + quality:0.85 兼顾速度与色彩保真）
-        toPng(document.body, {
-            cacheBust: false,
-            skipFonts: true,
-            pixelRatio: 1,
-            quality: 0.85,
-            style: { overflow: 'hidden' },
-        })
-            .then((dataUrl) => runWaveTransition(changeTheme, opts, dataUrl, done))
-            .catch(() => runWaveTransition(changeTheme, opts, null, done));
-    });
-}
+    // 档位与时长必须在 startViewTransition 之前写入 DOM：
+    // ::view-transition-* 伪元素在过渡开始那一刻按当前样式解析，
+    // 事后补属性会有一帧竞态（表现为闪一下 UA 默认交叉淡入）。
+    // duration 沿用 motion 体系的秒单位（GSAP 约定），CSS 动画要 ms。
+    const durMs = Math.max(0, Math.round(opts.duration * 1000));
+    rootEl.style.setProperty('--theme-reveal-dur', `${durMs}ms`);
+    rootEl.style.setProperty('--theme-reveal-x', `${Math.round(cx)}px`);
+    rootEl.style.setProperty('--theme-reveal-y', `${Math.round(cy)}px`);
+    rootEl.style.setProperty('--theme-reveal-r', `${Math.ceil(endR)}px`);
+    rootEl.dataset.themeReveal = opts.level === 'rich' ? 'rich' : 'standard';
+    active = true;
 
-/** 创建覆盖层并播放水波动画。 */
-function runWaveTransition(
-    changeTheme: () => void,
-    opts: ThemeTransitionOptions,
-    screenshot: string | null,
-    done: () => void,
-): void {
-    const vh = innerHeight;
-    const vw = innerWidth;
-
-    // ─── 创建覆盖层 ────────────────────────────────────────────────
-    const overlay = document.createElement('div');
-    const bgColor = readSurfaceCanvasColor();
-
-    const styles: string[] = [
-        'position:fixed',
-        'inset:0',
-        'z-index:2147483647',
-        'pointer-events:none',
-    ];
-
-    if (screenshot) {
-        // 用截图作为背景 → 覆盖层看起来就是旧主题
-        styles.push(
-            `background:url(${screenshot}) center/cover no-repeat`,
-            `background-color:${bgColor}`,
-        );
-    } else {
-        // 降级：纯色背景
-        styles.push(`background:${bgColor}`);
-    }
-
-    overlay.style.cssText = styles.join(';');
-    document.body.appendChild(overlay);
-
-    // 覆盖层瞬间出现（不做淡入，避免半透明期间露出新主题导致白屏闪烁）
-    // 在覆盖层遮挡下切换主题，用户看不到 DOM 变化
-    changeTheme();
-
-    // 不用 document.body 的 filter brightness：整页滤镜强制重绘，且暗色窗易闪。
-    // 水波 clip-path 本身已足够炫；rich 档略加大波幅/采样即可。
-
-    // ─── 波形参数 ──────────────────────────────────────────────────
-    const rich = opts.level === 'rich';
-    const amp = Math.max(rich ? 22 : 18, vh * (rich ? 0.036 : 0.03));
-    const waves = rich ? 2.8 : 2.5;
-    // rich 多几个采样点更顺；standard 少算一点
-    const samples = rich ? 40 : 28;
-
-    // ─── GSAP 驱动水波动画 ─────────────────────────────────────────
-    // yBase 从顶部向底部移动：覆盖层从上方开始消失，新主题从上往下出现
-    const state = { yBase: -amp - 50, phase: 0 };
-    const dur = opts.duration;
-
-    // 预分配数组避免每帧 GC
-    const pts: string[] = new Array(samples + 3);
-
-    const updateClip = () => {
-        for (let i = 0; i <= samples; i++) {
-            const t = i / samples;
-            const x = t * vw;
-            // 双正弦波叠加 → 更复杂的波形，像真实水波
-            const y = state.yBase
-                + amp * Math.sin(t * Math.PI * 2 * waves + state.phase)
-                + amp * 0.3 * Math.sin(t * Math.PI * 2 * waves * 1.7 + state.phase * 1.3);
-            pts[i] = `${x.toFixed(1)}px ${y.toFixed(1)}px`;
+    const cleanup = () => {
+        delete rootEl.dataset.themeReveal;
+        for (const name of ['--theme-reveal-dur', '--theme-reveal-x', '--theme-reveal-y', '--theme-reveal-r']) {
+            rootEl.style.removeProperty(name);
         }
-        pts[samples + 1] = `${vw}px ${vh + 200}px`;
-        pts[samples + 2] = `0px ${vh + 200}px`;
-        overlay.style.clipPath = `polygon(${pts.join(',')})`;
+        active = false;
     };
 
-    // 提示浏览器提前优化 clip-path 合成层
-    overlay.style.willChange = 'clip-path';
+    const vt = document.startViewTransition!(changeTheme);
 
-    // 使用 timeline onUpdate 替代 ticker：只在 tween 值实际变化时才重绘，避免空帧
-    const tl = gsap.timeline({
-        onUpdate: updateClip,
-        onComplete: () => {
-            overlay.style.willChange = 'auto';
-            overlay.remove();
-            done();
-        },
-    });
-
-    // phase 持续变化（波纹涌动）
-    tl.to(state, {
-        phase: Math.PI * 6,
-        duration: dur,
-        ease: 'none',
-    }, 0);
-
-    // 水波从顶部扫到底部（新主题从上往下出现）
-    tl.to(state, {
-        yBase: vh + amp + 50,
-        duration: dur,
-        ease: 'power1.inOut',
-    }, 0);
-
-    // 安全超时清理（防止 GSAP timeline 卡住）
-    setTimeout(() => {
-        if (tl.isActive()) {
-            tl.kill();
-            overlay.style.willChange = 'auto';
-            overlay.remove();
-            done();
-        }
-    }, dur * 1000 + 500);
+    // finished 在跳过 / 出错时也会 reject，统一吞掉保证清理必然执行。
+    return vt.finished.catch(() => undefined).then(cleanup);
 }
