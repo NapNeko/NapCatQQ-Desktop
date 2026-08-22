@@ -3,10 +3,8 @@
 /**
  * 迁移成功结果(指针已写;调用方应重启进程)。
  */
-export type DataRootMigrateResult = {
-    old_root: string, new_root: string,
-    /**
-     * 旧根 retired marker 路径
-     */
-    retired_marker_path?: string | null, restart_required: boolean, warnings: Array<string>,
-};
+export type DataRootMigrateResult = { old_root: string, new_root: string, 
+/**
+ * 旧根 retired marker 路径
+ */
+retired_marker_path?: string | null, restart_required: boolean, warnings: Array<string>, };

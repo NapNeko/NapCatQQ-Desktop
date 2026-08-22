@@ -4,10 +4,8 @@ import type { DataRootMigratePhase } from "./DataRootMigratePhase";
 /**
  * 迁移进度(可经 DomainEvent 或专用 tauri 事件推送)。
  */
-export type DataRootMigrateProgress = {
-    phase: DataRootMigratePhase, bytes_done: bigint, bytes_total: bigint,
-    /**
-     * 相对路径提示;勿含密钥内容
-     */
-    current_rel?: string | null, message?: string | null,
-};
+export type DataRootMigrateProgress = { phase: DataRootMigratePhase, bytes_done: bigint, bytes_total: bigint, 
+/**
+ * 相对路径提示;勿含密钥内容
+ */
+current_rel?: string | null, message?: string | null, };

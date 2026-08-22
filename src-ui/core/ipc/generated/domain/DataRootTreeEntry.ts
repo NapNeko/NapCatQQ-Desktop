@@ -3,18 +3,16 @@
 /**
  * 预检展示用的源树顶层条目(不递归全盘,避免 UI 爆炸)。
  */
-export type DataRootTreeEntry = {
-    name: string,
-    /**
-     * dir | file | skip
-     */
-    kind: string,
-    /**
-     * 目录/文件体积;skip 可为 None
-     */
-    bytes?: bigint | null,
-    /**
-     * 如「不复制(可重建)」
-     */
-    note?: string | null,
-};
+export type DataRootTreeEntry = { name: string, 
+/**
+ * dir | file | skip
+ */
+kind: string, 
+/**
+ * 目录/文件体积;skip 可为 None
+ */
+bytes?: bigint | null, 
+/**
+ * 如「不复制(可重建)」
+ */
+note?: string | null, };
