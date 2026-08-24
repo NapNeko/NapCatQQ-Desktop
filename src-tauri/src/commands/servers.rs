@@ -5,7 +5,7 @@
 
 use tauri::State;
 
-use ncd_runtime::{ProbeReport, ServerProfile};
+use ncd_runtime::{DiscoveredSshHost, ProbeReport, ServerProfile};
 
 use crate::AppState;
 
@@ -77,6 +77,15 @@ pub async fn setup_server_key_auth(
 pub async fn delete_server(state: State<'_, AppState>, id: String) -> Result<(), String> {
     state.migrate_gate.ensure_idle()?;
     state.server_manager.delete_server(&id).await
+}
+
+/// 扫描本机 ~/.ssh/config（含 Include），列出可导入的 Host。
+/// 只读路径与 config 文本，不读私钥内容。
+#[tauri::command]
+pub async fn discover_local_ssh_hosts(
+    state: State<'_, AppState>,
+) -> Result<Vec<DiscoveredSshHost>, String> {
+    state.server_manager.discover_local_ssh_hosts().await
 }
 
 /// 扫描本地 ~/.ssh/ 下的标准命名私钥(id_ed25519 / id_ecdsa / id_rsa / id_dsa)

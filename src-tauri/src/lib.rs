@@ -648,6 +648,7 @@ pub fn run() {
             commands::servers::test_server_connection,
             commands::servers::confirm_server_host_key,
             commands::servers::scan_local_ssh_keys,
+            commands::servers::discover_local_ssh_hosts,
             commands::docker::ops::docker_probe,
             commands::docker::install::docker_install,
             commands::docker::ops::docker_list_containers,
