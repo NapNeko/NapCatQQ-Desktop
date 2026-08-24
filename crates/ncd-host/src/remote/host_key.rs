@@ -80,7 +80,9 @@ impl KnownHostsStore {
         };
 
         let target = format_host(host, port);
-        let mut saw_host = false;
+        // 同一主机多种算法(ed25519 / rsa / ecdsa)是 OpenSSH 常态。
+        // 只有「同算法、不同公钥」才算 mismatch；别的算法当未知，允许再记一条。
+        let mut saw_same_kind = false;
         for raw in content.lines() {
             let line = raw.trim();
             if line.is_empty() || line.starts_with('#') {
@@ -98,13 +100,18 @@ impl KnownHostsStore {
             // 多 host 用逗号分隔
             let host_list: Vec<&str> = hosts.split(',').map(str::trim).collect();
             let host_match = host_list.iter().any(|h| matches_host(h, &target, host));
-            if host_match && kind == key_kind && b64 == key_b64 {
+            if !host_match {
+                continue;
+            }
+            if kind == key_kind && b64 == key_b64 {
                 return Ok(HostKeyCheck::Match);
             }
-            saw_host |= host_match;
+            if kind == key_kind {
+                saw_same_kind = true;
+            }
         }
 
-        if saw_host {
+        if saw_same_kind {
             Ok(HostKeyCheck::Mismatch)
         } else {
             Ok(HostKeyCheck::Unknown)
@@ -249,6 +256,30 @@ mod tests {
                 .matches("example.com", 22, "ssh-ed25519", "AAAAkey")
                 .await
                 .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn check_other_algorithm_is_unknown_not_mismatch() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        fs::write(&path, "example.com ssh-ed25519 AAAAed\n")
+            .await
+            .unwrap();
+        let store = KnownHostsStore::new(&path);
+        assert_eq!(
+            store
+                .check("example.com", 22, "ssh-rsa", "AAAArsa")
+                .await
+                .unwrap(),
+            HostKeyCheck::Unknown
+        );
+        assert_eq!(
+            store
+                .check("example.com", 22, "ssh-ed25519", "AAAAother")
+                .await
+                .unwrap(),
+            HostKeyCheck::Mismatch
         );
     }
 
