@@ -464,6 +464,46 @@ impl ServerManager {
         self.repo.load().await
     }
 
+    /// 添加档案时，若本机 OpenSSH known_hosts 已有该主机明文指纹，抄进应用
+    /// known_hosts。用户用 ssh 信任过的机器，导入后第一次连接不再弹 TOFU。
+    /// 抄不了（哈希主机名 / 没连过）就保持原样，仍走确认框。
+    async fn seed_openssh_host_keys(&self, profile: &ServerProfile) {
+        let Some(home) = dirs::home_dir() else {
+            return;
+        };
+        let openssh = home.join(".ssh").join("known_hosts");
+        let store = KnownHostsStore::new(self.known_hosts_path.clone());
+        let n = crate::openssh_known_hosts::seed_app_known_hosts(
+            &store,
+            &openssh,
+            &profile.host,
+            &[profile.name.as_str()],
+            profile.port,
+        )
+        .await;
+        if n > 0 {
+            info!(
+                target: "ncd_runtime::server_manager",
+                server_id = %profile.id,
+                host = %profile.host,
+                keys = n,
+                "已从本机 OpenSSH known_hosts 写入 host key"
+            );
+        }
+    }
+
+    /// 扫描本机用户 `~/.ssh/config`（含 Include），列出可导入的 Host。
+    /// 不读私钥内容；config 不存在则空列表。
+    pub async fn discover_local_ssh_hosts(
+        &self,
+    ) -> Result<Vec<crate::ssh_config::DiscoveredSshHost>, String> {
+        let home = dirs::home_dir().ok_or_else(|| "无法解析用户主目录".to_string())?;
+        let config = home.join(".ssh").join("config");
+        let existing = self.list_servers().await;
+        let user = crate::ssh_config::default_ssh_username();
+        crate::ssh_config::discover_ssh_hosts(&config, &home, &existing, &user)
+    }
+
     pub async fn add_server(
         &self,
         mut profile: ServerProfile,
@@ -483,6 +523,7 @@ impl ServerManager {
         }
         all.push(profile.clone());
         self.repo.save(&all).await?;
+        self.seed_openssh_host_keys(&profile).await;
         info!(
             target: "ncd_runtime::server_manager",
             server_id = %profile.id,
@@ -786,6 +827,8 @@ impl ServerManager {
             .find(|p| p.id == id)
             .ok_or_else(|| format!("server not found: {id}"))?
             .clone();
+
+        self.seed_openssh_host_keys(&profile).await;
 
         let start = std::time::Instant::now();
         if log_probe {

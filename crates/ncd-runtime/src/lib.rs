@@ -219,6 +219,7 @@ pub use server_manager::{
     AuthMethod, ConnectionHealth, InMemoryCredentialStore, KeyringCredentialStore, ProbeReport,
     ServerCredentialStore, ServerManager, ServerProfile, ServerState,
 };
+pub use ncd_server::DiscoveredSshHost;
 pub use server_profile_migration::{
     SERVER_PROFILE_COMPAT_VERSION, ServerProfileMigrationResult,
     migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
