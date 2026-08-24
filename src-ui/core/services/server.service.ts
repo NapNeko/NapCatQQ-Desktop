@@ -5,6 +5,7 @@
 import { invoke, isTauri } from '../ipc/transport';
 import type { ServerProfile } from '../ipc/generated/domain/ServerProfile';
 import type { ProbeReport } from '../ipc/generated/domain/ProbeReport';
+import type { DiscoveredSshHost } from '../ipc/generated/domain/DiscoveredSshHost';
 
 export const serverService = {
     list: async (): Promise<ServerProfile[]> => {
@@ -55,6 +56,12 @@ export const serverService = {
     /// 扫描 ~/.ssh/ 下标准命名私钥，返回路径列表（id_ed25519 / id_ecdsa / id_rsa / id_dsa）。
     scanLocalSshKeys: async (): Promise<string[]> => {
         if (isTauri) return invoke<string[]>('scan_local_ssh_keys');
+        return [];
+    },
+
+    /// 扫描本机 ~/.ssh/config（含 Include），列出可导入的 Host。不读私钥内容。
+    discoverLocalSshHosts: async (): Promise<DiscoveredSshHost[]> => {
+        if (isTauri) return invoke<DiscoveredSshHost[]>('discover_local_ssh_hosts');
         return [];
     },
 };

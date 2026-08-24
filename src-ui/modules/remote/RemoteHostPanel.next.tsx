@@ -13,7 +13,7 @@
 // 严守 frontend-layering：仅 import hooks / shared/ui / 自身组件。
 
 import React, { useRef, useState } from 'react';
-import { Server, RefreshCw, Plus, Eye, EyeOff, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Server, RefreshCw, Plus, Eye, EyeOff, ShieldCheck, ShieldAlert, Import } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import { animateListChildrenEnter } from '../../shared/ui/motion/listEnter';
 import { Button, Tooltip, TooltipTrigger, TooltipContent } from '../../shared/ui';
@@ -31,6 +31,7 @@ import { useServerManager } from '../../hooks/remote/useServerManager';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { ServerCard, serverCardGridClass } from './ServerCard';
 import { AddServerDialog } from './AddServerDialog';
+import { ImportSshConfigDialog } from './ImportSshConfigDialog';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { HostKeyPrompt } from '../../core/ipc/generated/domain/HostKeyPrompt';
 import { CopyCodeBlock } from '../../shared/ui/CopyCodeBlock';
@@ -65,6 +66,7 @@ export const RemoteHostPanelNext: React.FC = () => {
 
     // 表单弹窗：editingProfile=null 走新增，非空走编辑同一弹窗。
     const [formOpen, setFormOpen] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
     const [editingProfile, setEditingProfile] = useState<ServerProfile | null>(null);
     const [testingId, setTestingId] = useState<string | null>(null);
     const [revealIp, setRevealIp] = useState(false);
@@ -214,6 +216,14 @@ export const RemoteHostPanelNext: React.FC = () => {
                     <Button
                         size="sm"
                         variant="secondary"
+                        onClick={() => setImportOpen(true)}
+                    >
+                        <ActionMotionIcon icon={Import} size={14} />
+                        从 SSH 配置导入
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="secondary"
                         onClick={() => refetch()}
                         disabled={isLoading}
                     >
@@ -231,7 +241,7 @@ export const RemoteHostPanelNext: React.FC = () => {
                 {isLoading && servers.length === 0 ? (
                     <LoadingState />
                 ) : servers.length === 0 ? (
-                    <EmptyState onCreate={openAdd} />
+                    <EmptyState onCreate={openAdd} onImport={() => setImportOpen(true)} />
                 ) : (
                     <ServerGrid
                         servers={servers}
@@ -247,6 +257,8 @@ export const RemoteHostPanelNext: React.FC = () => {
             </div>
 
             <FloatingAddButton onClick={openAdd} />
+
+            <ImportSshConfigDialog open={importOpen} onOpenChange={setImportOpen} />
 
             <AddServerDialog
                 open={formOpen}
@@ -363,7 +375,7 @@ function LoadingState() {
     );
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({ onCreate, onImport }: { onCreate: () => void; onImport: () => void }) {
     return (
         <PagePlaceholder className="gap-4">
             <ActionMotionIcon
@@ -378,12 +390,17 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
                     还没有远端服务器
                 </p>
                 <p className="mt-1 text-xs text-text-secondary">
-                    添加一台 SSH 服务器后，就能在组件页把 NapCat 部署到远端。
+                    添加一台 SSH 服务器后，就能在组件页把 NapCat 部署到远端。也可从本机 ~/.ssh/config 导入。
                 </p>
             </div>
-            <Button size="sm" variant="primary" onClick={onCreate}>
-                添加第一台服务器
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button size="sm" variant="primary" onClick={onCreate}>
+                    添加第一台服务器
+                </Button>
+                <Button size="sm" variant="secondary" onClick={onImport}>
+                    从 SSH 配置导入
+                </Button>
+            </div>
         </PagePlaceholder>
     );
 }

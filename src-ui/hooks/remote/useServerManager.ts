@@ -14,6 +14,11 @@ function serverLabel(p: { name?: string | null; host?: string | null; id?: strin
     return p.name?.trim() || p.host?.trim() || p.id || '远端服务器';
 }
 
+function invalidateServerLists(queryClient: ReturnType<typeof useQueryClient>) {
+    queryClient.invalidateQueries({ queryKey: ['servers'] });
+    queryClient.invalidateQueries({ queryKey: ['ssh-config-hosts'] });
+}
+
 export function useServerManager() {
     const queryClient = useQueryClient();
 
@@ -26,7 +31,7 @@ export function useServerManager() {
         mutationFn: (args: { profile: ServerProfile; password?: string }) =>
             serverService.add(args.profile, args.password),
         onSuccess: (created) => {
-            queryClient.invalidateQueries({ queryKey: ['servers'] });
+            invalidateServerLists(queryClient);
             pushInfoBar({
                 key: `server-add:${created.id}`,
                 tone: 'success',
@@ -43,7 +48,7 @@ export function useServerManager() {
         mutationFn: (args: { profile: ServerProfile; password?: string }) =>
             serverService.update(args.profile, args.password),
         onSuccess: (updated) => {
-            queryClient.invalidateQueries({ queryKey: ['servers'] });
+            invalidateServerLists(queryClient);
             pushInfoBar({
                 key: `server-update:${updated.id}`,
                 tone: 'success',
@@ -70,7 +75,7 @@ export function useServerManager() {
             const label = serverLabel(
                 serversQuery.data?.find((s) => s.id === id) ?? { id },
             );
-            queryClient.invalidateQueries({ queryKey: ['servers'] });
+            invalidateServerLists(queryClient);
             pushInfoBar({
                 key: `server-delete:${id}`,
                 tone: 'success',
