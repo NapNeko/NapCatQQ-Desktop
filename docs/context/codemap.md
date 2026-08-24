@@ -163,6 +163,7 @@ KB：`.claude/kb/snowluma-runtime.md`, `snowluma-docker.md`
 | ServerManager / 健康探活 | `crates/ncd-server/src/server_manager.rs`（`ncd_runtime::server_manager` re-export） |
 | 凭据同步 | `crates/ncd-server/src/credential_sync.rs` |
 | SSH keygen | `crates/ncd-server/src/ssh_keygen.rs` |
+| 本机 SSH config 发现 | `crates/ncd-server/src/ssh_config.rs` + `discover_local_ssh_hosts`；UI `ImportSshConfigDialog` |
 | Host 解析 | `crates/ncd-server/src/host_resolver.rs`, `src-tauri/src/bot_host_resolver.rs` |
 | Host 抽象 | `crates/ncd-host/src/host.rs`, `local/`, `remote/` |
 | Server profile 迁移 | `crates/ncd-server/src/server_profile_migration.rs` |
