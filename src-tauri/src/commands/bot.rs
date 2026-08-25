@@ -1,13 +1,13 @@
 use ncd_domain::{BotConfig, BotId, ImportableRemoteBot};
-use ncd_runtime::config_drift::{ConfigDrift, DriftDecision};
 use ncd_runtime::BotActorSnapshot;
+use ncd_runtime::config_drift::{ConfigDrift, DriftDecision};
 use ncd_traits::runtime_backend::LogSnapshot;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
 
-use crate::desktop_consent;
 use crate::AppState;
+use crate::desktop_consent;
 
 /// 创建 / 启动等关键操作前：未同意当前 Desktop 协议则拒绝。
 fn ensure_desktop_consent(state: &AppState) -> Result<(), String> {
@@ -392,18 +392,18 @@ mod tests {
 
     use async_trait::async_trait;
     use ncd_domain::{
-        domain_event::DomainEventKind, BackendKind, BootstrapSnapshot, BotConfig, BotFlavor, BotId,
-        BotStatus, StopMode,
+        BackendKind, BootstrapSnapshot, BotConfig, BotFlavor, BotId, BotStatus, StopMode,
+        domain_event::DomainEventKind,
     };
     use ncd_runtime::{
         BotActorState, BotManager, BroadcastEventBus, DispatchRenderer, EventBus, EventFilter,
         FileSystemRuntimeLaunchPlanner, LocalBotConfigRepo, LocalConfigStore, SecretStoreImpl,
     };
     use ncd_traits::{
+        ConfigStore, SecretStore,
         runtime_backend::{
             BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts,
         },
-        ConfigStore, SecretStore,
     };
     use tempfile::tempdir;
 
