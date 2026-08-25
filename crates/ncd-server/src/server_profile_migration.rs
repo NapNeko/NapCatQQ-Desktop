@@ -70,6 +70,8 @@ pub fn migrate_legacy_single_server_app_config(
         state: ServerState::Disconnected,
         health: None,
         webui_url: None,
+        path_overrides: None,
+        inventory: None,
     };
 
     let payload = serde_json::to_value(vec![profile.clone()])
@@ -160,6 +162,8 @@ fn migrate_v1_profile_entry(value: Value) -> Option<ServerProfile> {
         state: ServerState::Disconnected,
         health: None,
         webui_url: None,
+        path_overrides: None,
+        inventory: None,
     })
 }
 

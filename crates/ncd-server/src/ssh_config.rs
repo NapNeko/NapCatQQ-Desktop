@@ -585,6 +585,8 @@ mod tests {
             state: crate::server_manager::ServerState::Disconnected,
             health: None,
             webui_url: None,
+            path_overrides: None,
+            inventory: None,
         }
     }
 

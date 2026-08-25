@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use ncd_domain::AppSettings;
+use ncd_domain::{AppSettings, RemoteInventory, RemotePathOverrides};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{MissedTickBehavior, interval};
@@ -67,6 +67,12 @@ pub struct ServerProfile {
     /// WebUI 端点 URL(用户手填的远端 NapCat WebUI 地址)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webui_url: Option<String>,
+    /// 用户手填的远端安装路径覆盖
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path_overrides: Option<RemotePathOverrides>,
+    /// 最近一次安装库存探测快照
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inventory: Option<RemoteInventory>,
 }
 
 /// 认证方式
@@ -590,6 +596,22 @@ impl ServerManager {
         }
 
         Ok(profile)
+    }
+
+    /// 只写库存快照，不碰 SSH 缓存
+    pub async fn set_inventory(
+        &self,
+        id: &str,
+        inventory: RemoteInventory,
+    ) -> Result<ServerProfile, String> {
+        let mut all = self.repo.load().await;
+        let pos = all
+            .iter()
+            .position(|p| p.id == id)
+            .ok_or_else(|| format!("server not found: {id}"))?;
+        all[pos].inventory = Some(inventory);
+        self.repo.save(&all).await?;
+        Ok(all[pos].clone())
     }
 
     /// 密码登录 → 自动配置免密
@@ -1520,6 +1542,8 @@ mod tests {
             state: ServerState::Disconnected,
             health: None,
             webui_url: None,
+            path_overrides: None,
+            inventory: None,
         }
     }
 
@@ -1643,6 +1667,28 @@ mod tests {
         async fn test_prune_expired_cooldowns(&self) {
             self.prune_expired_auto_connect_cooldowns().await;
         }
+    }
+
+    #[test]
+    fn old_profile_json_without_inventory_deserializes() {
+        let json = r#"{
+            "id":"s1","name":"n","host":"1.2.3.4","port":22,"username":"u",
+            "authMethod":"password","rememberCredential":false,"state":"disconnected"
+        }"#;
+        let p: ServerProfile = serde_json::from_str(json).unwrap();
+        assert!(p.inventory.is_none());
+        assert!(p.path_overrides.is_none());
+    }
+
+    #[tokio::test]
+    async fn set_inventory_does_not_drop_other_fields() {
+        let root = tempdir().unwrap();
+        let (mgr, _) = make_mgr(root.path());
+        mgr.add_server(make_profile("s1", "A"), None).await.unwrap();
+        let inv = RemoteInventory::empty("/home/u", "2026-08-25T00:00:00Z");
+        let updated = mgr.set_inventory("s1", inv.clone()).await.unwrap();
+        assert_eq!(updated.name, "A");
+        assert_eq!(updated.inventory.as_ref().unwrap().home, "/home/u");
     }
 
     #[tokio::test]
