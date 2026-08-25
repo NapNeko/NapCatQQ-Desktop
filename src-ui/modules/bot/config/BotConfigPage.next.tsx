@@ -1,21 +1,4 @@
-// 配置页顶层壳。负责：
-//   - header（返回 + 标题副标题 + 删除按钮）
-//   - Tabs（身份 / 连接 / 高级）切换
-//   - 整页表单 state + dirty 检测
-//   - 粘性保存条
-//   - 保存 / 删除 mutation 接全局 InfoBar
-//   - 加载 / 失败态
-//
-// 不做的：
-//   - 不持有连接列表的 inline 编辑态（在 ConnectionsTab 自己内部）
-//   - 不持有 PID picker（HotStart 模式下 backend 自动按 qq_id 匹配 PID）
-//
-// 状态机：
-//   - editMode: botId 非 null
-//   - 加载中（仅编辑模式）→ 拉到 → 同步到 formData
-//   - 用户改字段 → setFormData → dirty=true
-//   - 保存成功 → push 全局 success InfoBar → 留在配置页（同步 pristine / 新建则切到编辑态）
-//   - 删除成功 → 父级 onBack（删除走 dialog 二次确认）
+// Bot 配置页壳：身份 / 连接 / 高级 + 粘性保存。连接编辑态在 ConnectionsTab。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Trash2, Save, AlertCircle, Check } from 'lucide-react';
