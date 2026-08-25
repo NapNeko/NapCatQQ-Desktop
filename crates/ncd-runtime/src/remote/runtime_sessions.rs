@@ -173,7 +173,7 @@ impl<R: BotConfigRepo + 'static> RemoteRuntimeSessions<R> {
         host: Arc<dyn Host>,
     ) {
         let Ok(RuntimeScenario::RemoteNative {
-            server_id: _,
+            server_id,
             backend: BackendType::NapCat,
         }) = RuntimeScenario::from_config(config)
         else {
@@ -182,12 +182,17 @@ impl<R: BotConfigRepo + 'static> RemoteRuntimeSessions<R> {
 
         // 同机可并存多个远端 NC Native Bot(多实例 WebUI 6099/6100+);
         // 只关本 bot 旧会话,不要 stop_other 互踢别人的隧道/log follow。
+        let selected = self
+            .runtime_router
+            .selected_for_server(&server_id, host.as_ref())
+            .await;
         self.remote_native_napcat_sessions
             .start_session(
                 bot_id.clone(),
                 config.clone(),
                 host,
                 Arc::clone(&self.event_bus),
+                selected,
             )
             .await;
     }
@@ -213,12 +218,30 @@ impl<R: BotConfigRepo + 'static> RemoteRuntimeSessions<R> {
         self.stop_other_remote_native_napcat_sessions_on_server(&server_id, Some(config.bot.qq_id))
             .await;
 
-        let log_path = paths.log_bot_path(bot_id.as_str());
+        // 外来安装的真实日志在 framework 自带 logs 目录（日期滚动），
+        // 桌面自装布局才是 workspace/log；按远端存在性解析跟随源
+        let layout_bot_log = paths.log_bot_path(bot_id.as_str());
+        let log_targets =
+            ncd_backend_snowluma::remote_snowluma::resolve_remote_snowluma_log_targets(
+                host.as_ref(),
+                paths,
+                &layout_bot_log,
+            )
+            .await;
+        if log_targets.bot != layout_bot_log || log_targets.daemon != paths.log_daemon {
+            tracing::info!(
+                target: "ncd_runtime::remote_runtime_sessions",
+                bot_id = %bot_id,
+                "远端 SL 日志跟随源解析: bot_log={} daemon_log={}",
+                log_targets.bot,
+                log_targets.daemon
+            );
+        }
         self.remote_bot_log_follow
             .start_bot_log(
                 bot_id.clone(),
                 Arc::clone(&host),
-                log_path,
+                log_targets.bot,
                 Arc::clone(&self.event_bus),
             )
             .await;
@@ -226,7 +249,7 @@ impl<R: BotConfigRepo + 'static> RemoteRuntimeSessions<R> {
             .start_daemon_follow_for_server(
                 &server_id,
                 host,
-                paths.log_daemon.clone(),
+                log_targets.daemon,
                 Arc::clone(&self.event_bus),
             )
             .await;

@@ -8,7 +8,13 @@ use std::time::Duration;
 use ncd_domain::{
     BackendType, DeploymentType, DiscoveredRemoteBot, DiscoveredRemoteBotSource,
     REMOTE_INVENTORY_VERSION, RemoteInventory, RemoteInventoryItem, RemoteInventoryKind,
-    RemoteInventorySource, RemotePathOverrides, RemoteSelectedPaths,
+    RemoteInventorySource, RemotePathOverrides, RemoteSelectedPaths, infer_snowluma_linux_package,
+    qq_bin as join_qq_bin,
+};
+
+pub use ncd_domain::{
+    is_qq_user_data_path, needs_sudo_for_qq, qq_install_base_from_qq_bin,
+    snowluma_workspace_from_dir,
 };
 use ncd_host::{Host, HostCommand};
 
@@ -26,43 +32,6 @@ pub fn snowluma_fingerprint_ok(
     has_webui_json: bool,
 ) -> bool {
     has_index_mjs && (runtime_json_has_webui_port || has_webui_json)
-}
-
-/// `~/.config/QQ` 是用户数据，不是安装根
-pub fn is_qq_user_data_path(path: &str) -> bool {
-    let n = path.replace('\\', "/");
-    n.contains("/.config/QQ") || n.ends_with("/.config/QQ")
-}
-
-/// `{base}/opt/QQ/qq` → base（系统包为 `/`）
-pub fn qq_install_base_from_qq_bin(qq_bin: &str) -> Option<String> {
-    let p = qq_bin.trim_end_matches('/');
-    let suffix = "/opt/QQ/qq";
-    if let Some(prefix) = p.strip_suffix(suffix) {
-        if prefix.is_empty() {
-            return Some("/".into());
-        }
-        if is_qq_user_data_path(prefix) {
-            return None;
-        }
-        return Some(prefix.to_string());
-    }
-    None
-}
-
-/// `{dir}/snowluma` → 父目录为 workspace，否则扁平布局 workspace = dir
-pub fn snowluma_workspace_from_dir(snowluma_dir: &str) -> String {
-    let p = snowluma_dir.trim_end_matches('/');
-    if let Some(parent) = p.strip_suffix("/snowluma") {
-        if !parent.is_empty() {
-            return parent.to_string();
-        }
-    }
-    p.to_string()
-}
-
-pub fn needs_sudo_for_qq(qq_install_base: Option<&str>, qq_bin: Option<&str>) -> bool {
-    qq_install_base == Some("/") || qq_bin == Some("/opt/QQ/qq")
 }
 
 pub fn layout_from_selected(selected: &RemoteSelectedPaths) -> RemoteLayout {
@@ -101,6 +70,7 @@ pub fn inventory_from_stdout(
     let items = dedupe_kind_root(items);
     let selected = select_paths(&home, &items, previous.map(|p| &p.selected));
     let bots = dedupe_discovered_bots(parse_bot_hits(stdout));
+    let snowluma_linux_package = Some(infer_snowluma_linux_package(Some(&selected)));
     Ok(RemoteInventory {
         v: REMOTE_INVENTORY_VERSION,
         probed_at: probed_at.into(),
@@ -108,6 +78,7 @@ pub fn inventory_from_stdout(
         items,
         selected,
         bots,
+        snowluma_linux_package,
     })
 }
 
@@ -242,13 +213,13 @@ fn parse_hit_line(rest: &str) -> Option<RemoteInventoryItem> {
             "kind" => kind = parse_kind(v),
             "source" => source = parse_source(v),
             "verified" => verified = v == "1" || v.eq_ignore_ascii_case("true"),
-            "root" => root = v.to_string(),
-            "qqBin" => qq_bin = Some(v.to_string()),
-            "napcatMjs" => napcat_mjs = Some(v.to_string()),
-            "loadNapcatJs" => load_napcat_js = Some(v.to_string()),
-            "indexMjs" => index_mjs = Some(v.to_string()),
-            "runtimeJson" => runtime_json = Some(v.to_string()),
-            "nodeBin" => node_bin = Some(v.to_string()),
+            "root" => root = normalize_posix_path(v),
+            "qqBin" => qq_bin = Some(normalize_posix_path(v)),
+            "napcatMjs" => napcat_mjs = Some(normalize_posix_path(v)),
+            "loadNapcatJs" => load_napcat_js = Some(normalize_posix_path(v)),
+            "indexMjs" => index_mjs = Some(normalize_posix_path(v)),
+            "runtimeJson" => runtime_json = Some(normalize_posix_path(v)),
+            "nodeBin" => node_bin = Some(normalize_posix_path(v)),
             "dockerName" => docker_name = Some(v.to_string()),
             _ => {}
         }
@@ -349,14 +320,28 @@ pub fn select_paths(
     let qq_bin = qq
         .as_ref()
         .and_then(|i| i.qq_bin.clone())
-        .or_else(|| qq_install_base.as_ref().map(|b| format!("{b}/opt/QQ/qq")));
+        .or_else(|| qq_install_base.as_ref().map(|b| join_qq_bin(b)))
+        .map(|p| normalize_posix_path(&p));
     let napcat_root = napcat.as_ref().map(|i| i.root.clone());
     let snowluma_dir = snowluma.as_ref().map(|i| i.root.clone());
     let snowluma_workspace = snowluma_dir.as_deref().map(snowluma_workspace_from_dir);
-    let node_bin = node
-        .as_ref()
-        .and_then(|i| i.node_bin.clone())
-        .or_else(|| node.as_ref().map(|i| i.root.clone()));
+    let bundled_node = snowluma_dir.as_deref().and_then(|dir| {
+        items.iter().find(|i| {
+            i.kind == RemoteInventoryKind::NodeJs
+                && i.verified
+                && ncd_domain::is_bundled_snowluma_node(
+                    i.node_bin.as_deref().unwrap_or(&i.root),
+                    Some(dir),
+                )
+        })
+    });
+    let node_bin = bundled_node
+        .and_then(|i| i.node_bin.clone().or_else(|| Some(i.root.clone())))
+        .or_else(|| {
+            node.as_ref()
+                .and_then(|i| i.node_bin.clone())
+                .or_else(|| node.as_ref().map(|i| i.root.clone()))
+        });
     let ncd_watch_root = watch.as_ref().map(|i| i.root.clone());
     let needs_sudo = needs_sudo_for_qq(qq_install_base.as_deref(), qq_bin.as_deref());
 
@@ -417,8 +402,38 @@ fn posix_safe(path: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-' | '+' | '~'))
 }
 
+/// 归一化探测回收的远端 POSIX 路径：折叠重复斜杠、去掉尾部斜杠（根路径 "/" 保持）。
+/// 系统包 base 为 "/" 时拼 /opt/QQ/qq 会产出 //opt/QQ/qq，不归一化的话探测脚本里
+/// `[ "$exe" = "$qqbin" ]` 这类字符串比对会永远失配。
+fn normalize_posix_path(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    let mut prev_slash = false;
+    for c in path.chars() {
+        if c == '/' {
+            if prev_slash {
+                continue;
+            }
+            prev_slash = true;
+        } else {
+            prev_slash = false;
+        }
+        out.push(c);
+    }
+    while out.len() > 1 && out.ends_with('/') {
+        out.pop();
+    }
+    out
+}
+
 /// 生成远端探测脚本（不含 find/locate）
 pub fn build_probe_script(overrides: Option<&RemotePathOverrides>) -> String {
+    build_probe_script_with_previous(overrides, None)
+}
+
+fn build_probe_script_with_previous(
+    overrides: Option<&RemotePathOverrides>,
+    previous_snowluma_dir: Option<&str>,
+) -> String {
     let ov = overrides.cloned().unwrap_or_default();
     let emit_ov = |name: &str, val: Option<&str>| {
         val.filter(|p| posix_safe(p))
@@ -431,6 +446,7 @@ pub fn build_probe_script(overrides: Option<&RemotePathOverrides>) -> String {
     s.push_str(&emit_ov("OV_SL", ov.snowluma_dir.as_deref()));
     s.push_str(&emit_ov("OV_NODE", ov.node_bin.as_deref()));
     s.push_str(&emit_ov("OV_WATCH", ov.ncd_watch_root.as_deref()));
+    s.push_str(&emit_ov("PREV_SL", previous_snowluma_dir));
     s.push_str(PROBE_SCRIPT_BODY);
     s
 }
@@ -461,8 +477,10 @@ emit_sl() {
     rt=""
     [ -f "$dir/config/runtime.json" ] && rt=" runtimeJson=$dir/config/runtime.json"
     echo "HIT kind=snowluma source=$src verified=1 root=$dir indexMjs=$dir/index.mjs$rt"
-    if [ -x "$dir/node" ]; then
+    if [ -f "$dir/node" ] && [ -x "$dir/node" ]; then
       emit_node "$dir/node" desktopOwned
+    elif [ -x "$dir/node/bin/node" ]; then
+      emit_node "$dir/node/bin/node" desktopOwned
     fi
     emit_sl_bots "$dir"
   fi
@@ -555,6 +573,8 @@ emit_qq "$HOME/Napcat" officialInstaller
 emit_qq / systemPackage
 emit_sl "$HOME/snowluma-remote/workspace/snowluma" desktopOwned
 emit_sl "$HOME/Napcat/snowluma-workspace/snowluma" desktopOwned
+emit_sl /opt/snowluma systemPackage
+if [ -n "$PREV_SL" ]; then emit_sl "$PREV_SL" pathLookup; fi
 emit_node "$HOME/snowluma-remote/workspace/node/bin/node" desktopOwned
 emit_node "$HOME/Napcat/usr/node/bin/node" desktopOwned
 emit_watch "$HOME/ncd-watch" desktopOwned
@@ -666,7 +686,8 @@ pub async fn probe_remote_inventory(
     overrides: Option<&RemotePathOverrides>,
     previous: Option<&RemoteInventory>,
 ) -> Result<RemoteInventory, String> {
-    let script = build_probe_script(overrides);
+    let prev_sl = previous.and_then(|p| p.selected.snowluma_dir.as_deref());
+    let script = build_probe_script_with_previous(overrides, prev_sl);
     let cmd = HostCommand::new("sh")
         .arg("-c")
         .arg(script)
@@ -812,6 +833,10 @@ mod tests {
             snowluma_workspace_from_dir("/home/u/snowluma-remote/workspace/snowluma"),
             "/home/u/snowluma-remote/workspace"
         );
+        assert_eq!(
+            snowluma_workspace_from_dir("/opt/snowluma"),
+            "/opt/snowluma"
+        );
     }
 
     #[test]
@@ -845,12 +870,30 @@ mod tests {
         );
         assert_eq!(inv.selected.node_bin.as_deref(), Some("/usr/bin/node"));
         assert_eq!(inv.selected.snowluma_dir.as_deref(), Some("/data/sl"));
+        assert_eq!(
+            inv.snowluma_linux_package,
+            Some(ncd_domain::SnowLumaLinuxPackage::Full)
+        );
         assert!(
             inv.items
                 .iter()
                 .any(|i| i.kind == RemoteInventoryKind::DockerContainer)
         );
         assert!(inv.selected.ncd_watch_root.is_none());
+    }
+
+    #[test]
+    fn select_paths_prefers_bundled_snowluma_node_over_path() {
+        let stdout = sample_stdout(
+            "/root",
+            "HIT kind=snowluma source=systemPackage verified=1 root=/opt/snowluma indexMjs=/opt/snowluma/index.mjs\nHIT kind=nodejs source=desktopOwned verified=1 root=/opt/snowluma/node nodeBin=/opt/snowluma/node\nHIT kind=nodejs source=pathLookup verified=1 root=/usr/bin/node nodeBin=/usr/bin/node\n",
+        );
+        let inv = inventory_from_stdout(&stdout, None, "2026-08-25T00:00:00Z").unwrap();
+        assert_eq!(inv.selected.node_bin.as_deref(), Some("/opt/snowluma/node"));
+        assert_eq!(
+            inv.snowluma_linux_package,
+            Some(ncd_domain::SnowLumaLinuxPackage::Full)
+        );
     }
 
     #[test]
@@ -878,10 +921,13 @@ mod tests {
         assert!(script.contains("$HOME/Napcat"));
         assert!(script.contains("/opt/QQ"));
         assert!(script.contains("snowluma-remote/workspace/snowluma"));
+        assert!(script.contains("emit_sl /opt/snowluma systemPackage"));
+        assert!(script.contains("PREV_SL"));
         assert!(script.contains("napcat.mjs"));
         assert!(script.contains("webuiPort"));
         assert!(script.contains("NAPCAT_WORKDIR"));
         assert!(script.contains("$dir/node"));
+        assert!(script.contains("$dir/node/bin/node"));
         assert!(script.contains("onebot11_"));
         assert!(script.contains("onebot_"));
         assert!(script.contains("kind=bot"));
@@ -893,6 +939,22 @@ mod tests {
             ..RemotePathOverrides::default()
         }));
         assert!(with_ov.contains("OV_QQ_BASE='/data/qq'"));
+        let with_prev = build_probe_script_with_previous(None, Some("/opt/snowluma"));
+        assert!(with_prev.contains("PREV_SL='/opt/snowluma'"));
+    }
+
+    #[test]
+    fn opt_snowluma_hit_survives_without_running_process() {
+        let stdout = sample_stdout(
+            "/root",
+            "HIT kind=qq source=systemPackage verified=1 root=/ qqBin=/opt/QQ/qq\nHIT kind=snowluma source=systemPackage verified=1 root=/opt/snowluma indexMjs=/opt/snowluma/index.mjs runtimeJson=/opt/snowluma/config/runtime.json\n",
+        );
+        let inv = inventory_from_stdout(&stdout, None, "2026-08-25T00:00:00Z").unwrap();
+        assert_eq!(inv.selected.snowluma_dir.as_deref(), Some("/opt/snowluma"));
+        assert_eq!(
+            inv.selected.snowluma_workspace.as_deref(),
+            Some("/opt/snowluma")
+        );
     }
 
     #[test]
@@ -903,6 +965,26 @@ mod tests {
         assert!(inventory_is_stale("nope", now));
         assert!(!inventory_is_stale("2026-08-25T10:00:00Z", now));
         assert!(inventory_is_stale("2026-08-24T12:00:00Z", now));
+    }
+
+    #[test]
+    fn system_base_paths_are_normalized_without_double_slash() {
+        // kunming 实测：系统包 base="/" 时探测脚本回吐 qqBin=//opt/QQ/qq，
+        // 不归一化会让 /proc/pid/exe 的字符串比对永远失配
+        let item =
+            parse_hit_line("kind=qq source=systemPackage verified=1 root=/ qqBin=//opt/QQ/qq")
+                .unwrap();
+        assert_eq!(item.root, "/");
+        assert_eq!(item.qq_bin.as_deref(), Some("/opt/QQ/qq"));
+    }
+
+    #[test]
+    fn select_paths_joins_system_base_without_double_slash() {
+        let items = vec![parse_hit_line("kind=qq source=systemPackage verified=1 root=/").unwrap()];
+        let sel = select_paths("/root", &items, None);
+        assert_eq!(sel.qq_install_base.as_deref(), Some("/"));
+        assert_eq!(sel.qq_bin.as_deref(), Some("/opt/QQ/qq"));
+        assert!(sel.needs_sudo);
     }
 
     struct ScriptedHost {

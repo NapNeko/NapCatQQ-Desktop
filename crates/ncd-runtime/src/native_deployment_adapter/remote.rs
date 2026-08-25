@@ -4,8 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use ncd_backend_napcat::remote_native_launch::{
-    RemoteNapcatLayout, napcat_remote_log_path, probe_remote_napcat_layout,
-    remote_napcat_running_pid, stop_remote_napcat_on_host,
+    napcat_remote_log_path, remote_napcat_running_pid, stop_remote_napcat_on_host,
 };
 use ncd_deploy::{Deployment, NativeDeployment};
 use ncd_domain::bot_status::BotStatus;
@@ -94,28 +93,21 @@ impl RemoteNativeDeploymentBackend {
     }
 
     async fn napcat_install_base(&self) -> Result<HostPath, BotBackendError> {
-        if let Some(base) = self
-            .selected
-            .as_ref()
-            .and_then(|s| s.qq_install_base.as_deref())
-        {
+        if let Some(sel) = &self.selected {
+            let base =
+                ncd_domain::require_qq_install_base(sel).map_err(BotBackendError::InvalidConfig)?;
             return Ok(HostPath::from_posix(base));
         }
         let host = self.current_host().await?;
         match crate::remote::inventory::probe_remote_inventory(host.as_ref(), None, None).await {
             Ok(inv) => {
-                if let Some(base) = inv.selected.qq_install_base {
-                    return Ok(HostPath::from_posix(base));
-                }
+                let base = ncd_domain::require_qq_install_base(&inv.selected)
+                    .map_err(BotBackendError::InvalidConfig)?;
+                return Ok(HostPath::from_posix(base));
             }
-            Err(_) => {}
-        }
-        let (home, layout) = probe_remote_napcat_layout(host.as_ref())
-            .await
-            .map_err(BotBackendError::Io)?;
-        match layout {
-            RemoteNapcatLayout::System => Ok(HostPath::from_posix("/")),
-            RemoteNapcatLayout::Rootless => Ok(HostPath::from_posix(format!("{home}/Napcat"))),
+            Err(e) => Err(BotBackendError::InvalidConfig(format!(
+                "远端未发现 QQ 安装树，且库存探测失败: {e}"
+            ))),
         }
     }
 }

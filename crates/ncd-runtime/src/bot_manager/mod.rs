@@ -577,6 +577,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
         // 远端 NC / Docker 启动注入探针：开关开时挂上（失败不阻断启动）
         if let Some(data_root) = self.store.config_dir().parent() {
+            router = router
+                .with_snowluma_data_root(crate::DataPaths::new(data_root).snowluma_data_dir());
             let prefs = Self::load_metrics_prefs(data_root);
             if prefs.enabled {
                 router = router
@@ -597,7 +599,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             self.snowluma_daemon.clone(),
             self.host_resolver.clone(),
             self.runtime_router(),
-            Arc::clone(&self.remote_snowluma_daemons),
         )
     }
 
@@ -635,15 +636,82 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
         let wanted: HashSet<_> = bot_ids.iter().cloned().collect();
         let configs = self.repo.list().await?;
+        // 单主进程归因兜底按全量配置计数，而不是本次导入子集：
+        // 只导 1 个但该主机已配多个 SL Bot 时不允许猜归因
+        let snowluma_counts = crate::bootstrap_reconcile::count_native_snowluma_bots(&configs);
         let subset: Vec<BotConfig> = configs
             .into_iter()
             .filter(|c| wanted.contains(&BotId::new(c.bot.qq_id.to_string())))
             .collect();
         let done = self
             .bootstrap_reconciler()
-            .reconcile_bootstrap_bots(&subset, &[])
+            .reconcile_bootstrap_bots(&subset, &[], &snowluma_counts)
             .await;
         Ok(done.into_iter().collect())
+    }
+
+    /// 绑定在该主机上的所有远端 bot(Docker / Native)补跑一轮运行态恢复。
+    pub async fn reconcile_remote_runtimes_for_server(
+        &self,
+        target_server_id: &str,
+    ) -> Result<Vec<BotId>, BotManagerError> {
+        let all = self.repo.list().await?;
+        let snowluma_counts = crate::bootstrap_reconcile::count_native_snowluma_bots(&all);
+        let subset: Vec<BotConfig> = all
+            .into_iter()
+            .filter(|c| match RuntimeScenario::from_config(c) {
+                Ok(RuntimeScenario::RemoteNative { server_id, .. }) => {
+                    server_id.as_str() == target_server_id
+                }
+                Ok(RuntimeScenario::RemoteDocker { server_id, .. }) => {
+                    server_id.as_str() == target_server_id
+                }
+                _ => false,
+            })
+            .collect();
+        if subset.is_empty() {
+            return Ok(Vec::new());
+        }
+        let done = self
+            .bootstrap_reconciler()
+            .reconcile_bootstrap_bots(&subset, &[], &snowluma_counts)
+            .await;
+        Ok(done.into_iter().collect())
+    }
+
+    /// 监听 HostConnectionRecovered：启动时序里 bootstrap reconcile 先于 SSH 连接完成时，
+    /// 远端运行态恢复会以「主机未连接」跳过；这里在主机连上后把欠的那轮补跑掉。
+    /// 30s 去抖，避免健康探活反复触发全量探测。
+    pub async fn run_host_connection_recovered_listener(self) {
+        let mut subscription = self.event_bus.subscribe(EventFilter::all());
+        let mut last_reconciled: HashMap<String, tokio::time::Instant> = HashMap::new();
+        while let Some(event) = subscription.next().await {
+            let DomainEvent::HostConnectionRecovered { server_id, .. } = event else {
+                continue;
+            };
+            let now = tokio::time::Instant::now();
+            if let Some(prev) = last_reconciled.get(&server_id) {
+                if now.duration_since(*prev) < Duration::from_secs(30) {
+                    continue;
+                }
+            }
+            last_reconciled.insert(server_id.clone(), now);
+            match self.reconcile_remote_runtimes_for_server(&server_id).await {
+                Ok(done) if !done.is_empty() => info!(
+                    target: "ncd_runtime::bot_manager",
+                    server_id = %server_id,
+                    reconciled = done.len(),
+                    "主机连接恢复：已补跑远端运行态接管"
+                ),
+                Ok(_) => {}
+                Err(err) => warn!(
+                    target: "ncd_runtime::bot_manager",
+                    server_id = %server_id,
+                    err = %err,
+                    "主机连接恢复后的远端运行态接管失败"
+                ),
+            }
+        }
     }
 
     /// 按完整 BotConfig 路由 backend。唯一矩阵入口在 RuntimeScenario/RuntimeBackendRouter。
@@ -694,9 +762,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
 
         // 远端 Docker:桌面退出后容器可能仍在跑,先 reconcile attach,避免 auto_start 误 remove
+        let snowluma_counts = crate::bootstrap_reconcile::count_native_snowluma_bots(&configs);
         let reconciled = self
             .bootstrap_reconciler()
-            .reconcile_bootstrap_bots(&configs, &skipped)
+            .reconcile_bootstrap_bots(&configs, &skipped, &snowluma_counts)
             .await;
 
         // 自动启动(只针对已注册的 actor,skipped / 已 reconcile 的不会被启动)
@@ -2152,10 +2221,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .await
     }
 
-    /// SnowLuma 协议预检：只确保 daemon/WebUI 可用，不启动 QQ，也不调用 load_process。
+    /// SnowLuma 协议预检：读安装目录协议文件，不启动 QQ / node，也不 login。
     ///
-    /// 本地与远端 Native 都能在 Bot 启动前准备 WebUI；Docker 的 WebUI 跟容器生命周期
-    /// 绑定，容器创建前没有端点，因此仍走启动后检测路径。
+    /// 本机与远端 Native 都只读 EULA/PRIVACY/consent.json（与本机 daemon.runtime_root 一致）；
+    /// Docker 的 WebUI 跟容器生命周期绑定，仍走启动后检测路径。
     pub async fn prepare_snowluma_agreements(
         &self,
         bot_id: &BotId,

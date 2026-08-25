@@ -446,6 +446,7 @@ mod tests {
                 backend_type: BackendType::NapCat,
                 deployment_type: DeploymentType::Docker,
                 snowluma_start_mode: None,
+                webui_password_takeover: false,
             },
             connect: ConnectConfig {
                 http_servers: vec![],

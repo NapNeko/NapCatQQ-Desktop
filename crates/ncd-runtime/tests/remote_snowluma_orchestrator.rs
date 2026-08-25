@@ -7,6 +7,7 @@ fn sample_layout() -> RemoteSnowLumaLayout {
         paths,
         node_bin: "/home/u/snowluma-remote/workspace/node/bin/node".into(),
         qq_bin: "/home/u/Napcat/opt/QQ/qq".into(),
+        qq_install_base: "/home/u/Napcat".into(),
     }
 }
 

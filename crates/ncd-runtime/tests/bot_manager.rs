@@ -266,6 +266,7 @@ fn bot_config(qq_id: u64, name: &str) -> BotConfig {
             backend_type: BackendType::NapCat,
             deployment_type: ncd_runtime::DeploymentType::Native,
             snowluma_start_mode: None,
+            webui_password_takeover: false,
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),

@@ -97,6 +97,7 @@ mod tests {
                     ..RemoteSelectedPaths::default()
                 },
                 bots,
+                snowluma_linux_package: None,
             }),
         }
     }

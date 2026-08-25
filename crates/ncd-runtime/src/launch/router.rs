@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use rand::RngCore;
@@ -119,6 +120,8 @@ pub(crate) struct RuntimeBackendRouter {
     /// Docker bot 指标：本机 data_root + prefs（可选）
     docker_metrics: Option<(std::path::PathBuf, crate::metrics::BotRuntimeMetricsPrefs)>,
     server_manager: Option<Arc<crate::ServerManager>>,
+    /// 本机 SnowLuma 数据根（app-config 固定密码），远端接管启动时读取
+    snowluma_data_root: Option<PathBuf>,
 }
 
 impl RuntimeBackendRouter {
@@ -147,7 +150,13 @@ impl RuntimeBackendRouter {
             remote_metrics_injector: None,
             docker_metrics: None,
             server_manager: None,
+            snowluma_data_root: None,
         }
+    }
+
+    pub fn with_snowluma_data_root(mut self, path: impl Into<PathBuf>) -> Self {
+        self.snowluma_data_root = Some(path.into());
+        self
     }
 
     pub fn with_server_manager(mut self, mgr: Arc<crate::ServerManager>) -> Self {
@@ -286,15 +295,13 @@ impl RuntimeBackendRouter {
             return Ok(Arc::clone(daemon));
         }
         let daemon = if let Some(inv) = self.ensure_inventory(&sid, host.as_ref()).await.ok() {
-            let mut layout =
-                ncd_backend_snowluma::remote_snowluma_layout::layout_from_selected(&inv.selected)
-                    .map_err(|e| RuntimeRouterError::Render(e.to_string()))?;
-            layout.node_bin = ncd_backend_snowluma::remote_snowluma_layout::resolve_node_bin(
-                host.as_ref(),
-                &layout.paths,
-            )
-            .await
-            .map_err(|e| RuntimeRouterError::Render(e.to_string()))?;
+            let layout =
+                ncd_backend_snowluma::remote_snowluma_layout::layout_from_selected_or_probe(
+                    host.as_ref(),
+                    &inv.selected,
+                )
+                .await
+                .map_err(|e| RuntimeRouterError::Render(e.to_string()))?;
             Arc::new(RemoteSnowLumaDaemon::from_layout(
                 sid.clone(),
                 Arc::clone(&host),
@@ -341,14 +348,18 @@ impl RuntimeBackendRouter {
         let sl_metrics = self.remote_metrics_injector.clone().map(|inj| {
             inj as Arc<dyn ncd_backend_snowluma::remote_snowluma::RemoteSlMetricsInjector>
         });
-        let backend = Arc::new(RemoteSnowLumaBackend::new_with_metrics(
+        let mut backend = RemoteSnowLumaBackend::new_with_metrics(
             backend_id,
             daemon,
             Arc::clone(&self.event_bus),
             Arc::clone(&self.remote_snowluma_tunnels),
             Arc::clone(&self.remote_qq_entry_coordinator),
             sl_metrics,
-        ));
+        );
+        if let Some(root) = &self.snowluma_data_root {
+            backend = backend.with_snowluma_data_root(root.clone());
+        }
+        let backend = Arc::new(backend);
         let mut guard = self.remote_snowluma_backends.lock().await;
         // 双检:并发 start 时先到者胜,后来者复用
         if let Some(existing) = guard.get(&sid) {
@@ -356,6 +367,17 @@ impl RuntimeBackendRouter {
         }
         guard.insert(sid, Arc::clone(&backend));
         Ok(backend)
+    }
+
+    pub async fn selected_for_server(
+        &self,
+        server_id: &str,
+        host: &dyn Host,
+    ) -> Option<ncd_domain::RemoteSelectedPaths> {
+        self.ensure_inventory(server_id, host)
+            .await
+            .ok()
+            .map(|inv| inv.selected)
     }
 
     async fn ensure_inventory(

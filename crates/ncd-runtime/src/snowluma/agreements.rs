@@ -1,8 +1,5 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-
-use tokio::sync::Mutex;
 
 use crate::bot_manager::BotManagerError;
 use crate::host_resolver::HostResolver;
@@ -11,10 +8,13 @@ use crate::snowluma::{
     AgreementsPayload, ReqwestSnowLumaWebUiClient, SnowLumaDaemon, SnowLumaWebUiClient,
 };
 use crate::snowluma_consent_files::{
-    SnowLumaConsentFileError, load_payload_from_runtime_root, record_consent_to_runtime_root,
+    SnowLumaConsentFileError, consent_record_json, load_payload_from_runtime_root,
+    parse_consent_version_json, payload_from_agreement_texts, record_consent_to_runtime_root,
 };
 use ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaDaemon;
+use ncd_backend_snowluma::remote_snowluma_layout::SnowLumaRemotePaths;
 use ncd_domain::{BackendType, BotConfig, RuntimeScenario, RuntimeTarget};
+use ncd_host::{Host, HostPath};
 use ncd_traits::runtime_backend::BotBackendError;
 
 #[derive(Clone)]
@@ -22,7 +22,6 @@ pub(crate) struct SnowLumaAgreementService {
     local_daemon: Option<Arc<SnowLumaDaemon>>,
     host_resolver: Option<Arc<dyn HostResolver>>,
     runtime_router: RuntimeBackendRouter,
-    remote_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
 }
 
 impl SnowLumaAgreementService {
@@ -30,13 +29,11 @@ impl SnowLumaAgreementService {
         local_daemon: Option<Arc<SnowLumaDaemon>>,
         host_resolver: Option<Arc<dyn HostResolver>>,
         runtime_router: RuntimeBackendRouter,
-        remote_daemons: Arc<Mutex<HashMap<String, Arc<RemoteSnowLumaDaemon>>>>,
     ) -> Self {
         Self {
             local_daemon,
             host_resolver,
             runtime_router,
-            remote_daemons,
         }
     }
 
@@ -83,13 +80,11 @@ impl SnowLumaAgreementService {
                 // Bot 的 ref_count，最后一个引用归零时还会杀掉 node.exe。
             }
             RuntimeScenario::RemoteNative {
-                server_id,
                 backend: BackendType::SnowLuma,
+                ..
             } => {
-                // 远端 prepare 会 ensure_running 占引用；取消协议弹窗时必须配对 release。
-                if let Some(daemon) = self.remote_daemon_if_known(&server_id).await {
-                    daemon.release().await;
-                }
+                // 远端 prepare 只读安装目录协议文件，不 ensure_running（与本机一致）。
+                // 不能 release：否则会误减正在跑的 Bot 的 ref_count。
             }
             _ => {}
         }
@@ -121,41 +116,25 @@ impl SnowLumaAgreementService {
         server_id: &str,
     ) -> Result<Option<AgreementsPayload>, BotManagerError> {
         let daemon = self.ensure_remote_daemon(server_id).await?;
-        daemon.ensure_running().await?;
-        let agreements_result = self.remote_agreements(&daemon).await;
-        let agreements = match agreements_result {
-            Ok(agreements) => agreements,
-            Err(err) => {
-                daemon.release().await;
-                return Err(err);
-            }
-        };
-        if agreements.consent_required {
-            return Ok(Some(agreements));
-        }
-        daemon.release().await;
-        Ok(None)
+        let agreements = load_payload_from_remote(daemon.host(), daemon.paths()).await?;
+        Ok(agreements.and_then(|payload| payload.consent_required.then_some(payload)))
     }
 
     async fn record_remote(&self, server_id: &str, version: &str) -> Result<bool, BotManagerError> {
-        let daemon = match self.remote_daemon_if_tunneled(server_id).await {
-            Some(daemon) => daemon,
-            None => {
-                let daemon = self.ensure_remote_daemon(server_id).await?;
-                daemon.ensure_running().await?;
-                daemon
+        let daemon = self.ensure_remote_daemon(server_id).await?;
+        record_consent_on_remote(daemon.host(), daemon.paths(), version).await?;
+        // node 已在跑时再通知进程内 gate；失败不回滚文件（下次启动会读 consent.json）
+        if daemon.tunnel_endpoints().await.is_some() {
+            if let Err(err) = self.remote_record_consent(&daemon, version).await {
+                tracing::warn!(
+                    target: "ncd_runtime::snowluma",
+                    server_id,
+                    %err,
+                    "远端 consent.json 已写入，但未能经 WebUI 通知已运行的 node"
+                );
             }
-        };
-        self.remote_record_consent(&daemon, version).await?;
+        }
         Ok(true)
-    }
-
-    async fn remote_agreements(
-        &self,
-        daemon: &RemoteSnowLumaDaemon,
-    ) -> Result<AgreementsPayload, BotManagerError> {
-        let client = self.remote_client(daemon).await?;
-        client.get_agreements().await.map_err(map_webui_io)
     }
 
     async fn remote_record_consent(
@@ -209,22 +188,6 @@ impl SnowLumaAgreementService {
             .map_err(BotManagerError::from)
     }
 
-    async fn remote_daemon_if_tunneled(
-        &self,
-        server_id: &str,
-    ) -> Option<Arc<RemoteSnowLumaDaemon>> {
-        let daemon = self.remote_daemon_if_known(server_id).await?;
-        if daemon.tunnel_endpoints().await.is_some() {
-            Some(daemon)
-        } else {
-            None
-        }
-    }
-
-    async fn remote_daemon_if_known(&self, server_id: &str) -> Option<Arc<RemoteSnowLumaDaemon>> {
-        self.remote_daemons.lock().await.get(server_id).cloned()
-    }
-
     fn local_daemon(&self) -> Result<Arc<SnowLumaDaemon>, BotManagerError> {
         self.local_daemon
             .clone()
@@ -238,4 +201,64 @@ fn map_webui_io(error: impl std::fmt::Display) -> BotManagerError {
 
 fn map_consent_file_io(error: SnowLumaConsentFileError) -> BotManagerError {
     BotManagerError::Runtime(BotBackendError::Io(error.to_string()))
+}
+
+async fn load_payload_from_remote(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+) -> Result<Option<AgreementsPayload>, BotManagerError> {
+    let eula = read_remote_agreement(host, &paths.snowluma_dir, "EULA.md").await;
+    let privacy = read_remote_agreement(host, &paths.snowluma_dir, "PRIVACY.md").await;
+    let consent_path = format!("{}/consent.json", paths.config_dir);
+    let consent_text = read_remote_optional(host, &consent_path).await;
+    let consent_version = parse_consent_version_json(&consent_text);
+    Ok(payload_from_agreement_texts(
+        &eula,
+        &privacy,
+        consent_version.as_deref(),
+    ))
+}
+
+async fn record_consent_on_remote(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+    version: &str,
+) -> Result<(), BotManagerError> {
+    let current = load_payload_from_remote(host, paths).await?;
+    if let Some(payload) = current.as_ref()
+        && payload.version != version
+    {
+        return Err(map_consent_file_io(
+            SnowLumaConsentFileError::VersionMismatch {
+                expected: payload.version.clone(),
+                actual: version.to_string(),
+            },
+        ));
+    }
+    host.create_dir_all(&HostPath::from_posix(&paths.config_dir))
+        .await
+        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
+    let bytes = consent_record_json(version).map_err(map_consent_file_io)?;
+    let path = format!("{}/consent.json", paths.config_dir);
+    host.write_file(&HostPath::from_posix(&path), &bytes)
+        .await
+        .map_err(|e| BotManagerError::Runtime(BotBackendError::Io(e.to_string())))?;
+    Ok(())
+}
+
+async fn read_remote_agreement(host: &dyn Host, snowluma_dir: &str, file_name: &str) -> String {
+    let primary = format!("{snowluma_dir}/{file_name}");
+    let text = read_remote_optional(host, &primary).await;
+    if !text.trim().is_empty() {
+        return text;
+    }
+    let dist = format!("{snowluma_dir}/dist/{file_name}");
+    read_remote_optional(host, &dist).await
+}
+
+async fn read_remote_optional(host: &dyn Host, path: &str) -> String {
+    match host.read_file(&HostPath::from_posix(path)).await {
+        Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+        Err(_) => String::new(),
+    }
 }

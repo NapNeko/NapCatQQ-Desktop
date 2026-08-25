@@ -17,6 +17,22 @@ use ncd_domain::bot_status::BotStatus;
 use ncd_domain::{BackendType, BotConfig, BotId, RuntimeScenario, RuntimeTarget};
 use ncd_traits::BotConfigRepo;
 
+/// server_id → 该主机上配置的 RemoteNative SnowLuma Bot 数。单 Bot 主机才允许
+/// 「整机唯一 QQ 主进程」归因兜底；多 Bot 主机证据不足时不猜。
+pub(crate) fn count_native_snowluma_bots(configs: &[BotConfig]) -> HashMap<String, usize> {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for config in configs {
+        if let Ok(RuntimeScenario::RemoteNative {
+            server_id,
+            backend: BackendType::SnowLuma,
+        }) = RuntimeScenario::from_config(config)
+        {
+            *counts.entry(server_id).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
 pub(crate) struct BootstrapReconciler<R: BotConfigRepo + 'static> {
     actors: Arc<RwLock<HashMap<BotId, BotActorHandle>>>,
     host_resolver: Option<Arc<dyn HostResolver>>,
@@ -46,6 +62,7 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
         &self,
         configs: &[BotConfig],
         skipped: &[BotId],
+        snowluma_counts: &HashMap<String, usize>,
     ) -> HashSet<BotId> {
         let mut reconciled = HashSet::new();
         let resolver = match &self.host_resolver {
@@ -118,6 +135,7 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
                             config,
                             resolver.as_ref(),
                             &server_id,
+                            snowluma_counts,
                         )
                         .await
                     {
@@ -253,6 +271,7 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
         config: &BotConfig,
         resolver: &dyn HostResolver,
         server_id: &str,
+        snowluma_counts: &HashMap<String, usize>,
     ) -> bool {
         let target = RuntimeTarget::server(server_id.to_string());
         let host = match resolver.resolve(&target).await {
@@ -288,11 +307,15 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
         let pid_hint = sl_backend
             .daemon_paths()
             .pid_bot_path(&config.bot.qq_id.to_string());
+        // 单 Bot 主机才允许「整机唯一 QQ 主进程」归因兜底（实测：systemd 自启的 QQ
+        // 无 -q、ptlogin 未开，任何账号证据都拿不到）；多 Bot 主机不猜
+        let allow_single_main = snowluma_counts.get(server_id).copied().unwrap_or(0) == 1;
         let pid = match remote_qq_running_pid_with_hint(
             host.as_ref(),
             config.bot.qq_id,
             Some(pid_hint.as_str()),
             Some(sl_backend.qq_bin()),
+            allow_single_main,
         )
         .await
         {

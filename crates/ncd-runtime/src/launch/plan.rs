@@ -512,6 +512,7 @@ mod snowluma_plan_tests {
                 backend_type: BackendType::SnowLuma,
                 deployment_type: DeploymentType::Native,
                 snowluma_start_mode: start_mode,
+                webui_password_takeover: false,
             },
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),

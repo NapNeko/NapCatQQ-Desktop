@@ -12,7 +12,10 @@ use ncd_component::{
 };
 use ncd_domain::RemoteSelectedPaths;
 use ncd_domain::SnowLumaLinuxPackage;
+use ncd_domain::desktop_default_install_paths;
 use ncd_domain::release_snapshot::ReleaseSnapshot;
+use ncd_domain::require_qq_install_base;
+use ncd_domain::snowluma_install_candidates;
 use ncd_host::{Arch, Host, HostPath, Os};
 
 use crate::components::action_policy::{
@@ -48,19 +51,17 @@ pub fn build_component_for_host(
     let local_snowluma_version = ctx.local_snowluma_version;
 
     let resolve_napcat_base = || -> Result<HostPath, String> {
-        if let Some(base) = ctx
-            .selected
-            .and_then(|s| s.qq_install_base.as_deref())
-            .filter(|p| !p.is_empty())
-        {
-            return Ok(HostPath::from_posix(base));
-        }
-        Ok(match layout {
-            RemoteLayout::System => HostPath::from_posix("/"),
-            RemoteLayout::Rootless => {
-                HostPath::from_posix(format!("{}/Napcat", require_remote_home(remote_home)?))
+        if let Some(sel) = ctx.selected {
+            if let Ok(base) = require_qq_install_base(sel) {
+                return Ok(HostPath::from_posix(base));
             }
-        })
+        }
+        let home = require_remote_home(remote_home)?;
+        let defaults = desktop_default_install_paths(&home)?;
+        defaults
+            .qq_install_base
+            .map(HostPath::from_posix)
+            .ok_or_else(|| format!("无法派生默认 QQ 安装根（home={home}）"))
     };
 
     let component: Arc<dyn Component> = match id {
@@ -102,18 +103,20 @@ pub fn build_component_for_host(
                 }
                 Arc::new(comp)
             } else {
-                let workspace = if let Some(ws) = ctx
-                    .selected
-                    .and_then(|s| s.snowluma_workspace.as_deref())
-                    .filter(|p| !p.is_empty())
-                {
-                    HostPath::from_posix(ws)
-                } else {
-                    HostPath::from_posix(format!(
-                        "{}/snowluma-remote/workspace",
-                        require_remote_home(remote_home)?
-                    ))
-                };
+                let workspace =
+                    if let Some(ws) = ctx
+                        .selected
+                        .and_then(|s| s.snowluma_workspace.as_deref())
+                        .filter(|p| !p.is_empty())
+                    {
+                        HostPath::from_posix(ws)
+                    } else {
+                        let home = require_remote_home(remote_home)?;
+                        let defaults = desktop_default_install_paths(&home)?;
+                        HostPath::from_posix(defaults.snowluma_workspace.ok_or_else(|| {
+                            format!("无法派生默认 SnowLuma workspace（home={home}）")
+                        })?)
+                    };
                 let latest = snapshot.and_then(|s| s.snowluma_latest.as_ref());
                 let tag = snowluma_github_release_tag(latest, local_snowluma_version);
                 if tag.is_empty() {
@@ -130,6 +133,16 @@ pub fn build_component_for_host(
                 let url =
                     format!("https://github.com/SnowLuma/SnowLuma/releases/download/{tag}/{asset}");
                 let mut comp = SnowLumaComponent::new(workspace, url);
+                if let Some(dir) = ctx
+                    .selected
+                    .and_then(|s| s.snowluma_dir.as_deref())
+                    .filter(|p| !p.is_empty())
+                {
+                    comp = comp.with_snowluma_dir(HostPath::from_posix(dir));
+                }
+                for dir in snowluma_linux_extra_detect_dirs(ctx.selected, remote_home) {
+                    comp = comp.with_extra_detect_dir(dir);
+                }
                 if let Some(sha) = latest.and_then(|info| asset_sha256(info, &asset)) {
                     comp = comp.with_sha256(sha);
                 }
@@ -199,6 +212,28 @@ pub fn build_component_for_host(
     Ok(component)
 }
 
+/// Linux 远端 detect 在默认 workspace 之外再看这些目录（不扫盘）。
+fn snowluma_linux_extra_detect_dirs(
+    selected: Option<&RemoteSelectedPaths>,
+    remote_home: Option<&str>,
+) -> Vec<HostPath> {
+    let mut dirs = Vec::new();
+    if let Some(home) = remote_home.filter(|s| !s.is_empty()) {
+        for dir in snowluma_install_candidates(home) {
+            dirs.push(HostPath::from_posix(dir));
+        }
+    } else {
+        dirs.push(HostPath::from_posix(ncd_domain::SYSTEM_SNOWLUMA_DIR));
+    }
+    if let Some(dir) = selected
+        .and_then(|s| s.snowluma_dir.as_deref())
+        .filter(|p| !p.is_empty())
+    {
+        dirs.push(HostPath::from_posix(dir));
+    }
+    dirs
+}
+
 /// 可复用 Node 的额外探测点：用户覆盖 / 便携安装。不含 SnowLuma 完整包自带的 `{dir}/node`。
 fn nodejs_extra_detect_bin(selected: Option<&RemoteSelectedPaths>) -> Option<HostPath> {
     let sel = selected?;
@@ -221,15 +256,17 @@ fn node_install_dir(
             }
         }
     }
-    Ok(HostPath::from_posix(format!(
-        "{}/snowluma-remote/workspace/node",
-        require_remote_home(remote_home)?
-    )))
+    let home = require_remote_home(remote_home)?;
+    let defaults = desktop_default_install_paths(&home)?;
+    let ws = defaults
+        .snowluma_workspace
+        .ok_or_else(|| format!("无法派生默认 Node 安装目录（home={home}）"))?;
+    Ok(HostPath::from_posix(ncd_domain::join_under(&ws, "node")))
 }
 
 #[cfg(test)]
 mod selected_path_tests {
-    use super::{node_install_dir, nodejs_extra_detect_bin};
+    use super::{node_install_dir, nodejs_extra_detect_bin, snowluma_linux_extra_detect_dirs};
     use ncd_domain::RemoteSelectedPaths;
 
     #[test]
@@ -254,6 +291,15 @@ mod selected_path_tests {
         };
         let dir = node_install_dir(Some(&selected), Some("/home/u")).unwrap();
         assert_eq!(dir.as_posix(), "/home/u/snowluma-remote/workspace/node");
+    }
+
+    #[test]
+    fn snowluma_extra_detect_includes_opt_and_home_layouts() {
+        let dirs = snowluma_linux_extra_detect_dirs(None, Some("/root"));
+        let posix: Vec<_> = dirs.iter().map(|p| p.as_posix().to_string()).collect();
+        assert!(posix.contains(&"/opt/snowluma".to_string()));
+        assert!(posix.contains(&"/root/snowluma-remote/workspace/snowluma".to_string()));
+        assert!(posix.contains(&"/root/Napcat/snowluma-workspace/snowluma".to_string()));
     }
 
     #[test]

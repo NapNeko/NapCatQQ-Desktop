@@ -12,9 +12,9 @@ use ncd_component::{
 };
 use ncd_deploy::StepKind;
 use ncd_domain::DeploymentTaskResource;
-use ncd_domain::RemoteSelectedPaths;
 use ncd_domain::SnowLumaLinuxPackage;
 use ncd_domain::release_snapshot::ReleaseInfo;
+pub use ncd_domain::{infer_snowluma_linux_package, is_bundled_snowluma_node};
 use ncd_host::{Arch, HostPath, Locality, Os};
 
 /// 单步组件任务规格（用于前置闭包与 dedupe）
@@ -146,44 +146,6 @@ fn snowluma_linux_runtime_deps(
         deps.push(ensure(ComponentId::NoVnc));
     }
     deps
-}
-
-/// `{snowluma_dir}/node` 是官方完整包自带的运行时，不是可复用的 Node.js 组件。
-pub(crate) fn is_bundled_snowluma_node(bin: &str, snowluma_dir: Option<&str>) -> bool {
-    let bin = normalize_posix(bin);
-    if let Some(dir) = snowluma_dir.filter(|s| !s.is_empty()) {
-        let bundled = format!("{}/node", normalize_posix(dir));
-        if bin == bundled {
-            return true;
-        }
-    }
-    bin.ends_with("/snowluma/node")
-}
-
-fn normalize_posix(path: &str) -> String {
-    path.replace('\\', "/").trim_end_matches('/').to_string()
-}
-
-/// 已装目录带 `{snowluma}/node` 视为完整包；已装但没有自带 node 视为 lite。
-/// 尚未安装（无 snowluma_dir）时默认完整包。
-pub fn infer_snowluma_linux_package(
-    selected: Option<&RemoteSelectedPaths>,
-) -> SnowLumaLinuxPackage {
-    let Some(sel) = selected else {
-        return SnowLumaLinuxPackage::Full;
-    };
-    let Some(dir) = sel.snowluma_dir.as_deref().filter(|s| !s.is_empty()) else {
-        return SnowLumaLinuxPackage::Full;
-    };
-    if sel
-        .node_bin
-        .as_deref()
-        .is_some_and(|bin| is_bundled_snowluma_node(bin, Some(dir)))
-    {
-        SnowLumaLinuxPackage::Full
-    } else {
-        SnowLumaLinuxPackage::Lite
-    }
 }
 
 pub fn collect_component_runtime_prerequisites(
@@ -503,6 +465,7 @@ pub fn catalog_component_pairs_for_target_check() -> Vec<(ComponentInfo, Arc<dyn
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ncd_domain::RemoteSelectedPaths;
 
     fn component_spec(component_id: ComponentId, kind: StepKind) -> ComponentTaskSpec {
         ComponentTaskSpec { component_id, kind }
@@ -745,7 +708,7 @@ mod tests {
         };
         assert_eq!(
             infer_snowluma_linux_package(Some(&installed_without_node)),
-            SnowLumaLinuxPackage::Lite
+            SnowLumaLinuxPackage::Full
         );
         assert!(is_bundled_snowluma_node(
             "/opt/snowluma/node",

@@ -52,18 +52,50 @@ struct NewConsentRecord<'a> {
 pub(crate) fn load_payload_from_runtime_root(
     runtime_root: &Path,
 ) -> Result<Option<AgreementsPayload>, SnowLumaConsentFileError> {
-    let docs = load_documents(runtime_root)?;
-    if docs.iter().all(|doc| doc.text.trim().is_empty()) {
-        return Ok(None);
-    }
+    let eula = read_agreement_file(runtime_root, "EULA.md")?;
+    let privacy = read_agreement_file(runtime_root, "PRIVACY.md")?;
+    let consent_version = read_consent_version(runtime_root);
+    Ok(payload_from_agreement_texts(
+        &eula,
+        &privacy,
+        consent_version.as_deref(),
+    ))
+}
 
+/// 本机路径与远端 SSH 读到的正文共用：版本哈希、是否需要弹窗。
+pub(crate) fn payload_from_agreement_texts(
+    eula: &str,
+    privacy: &str,
+    consent_version: Option<&str>,
+) -> Option<AgreementsPayload> {
+    let docs = vec![
+        agreement_doc("eula", eula),
+        agreement_doc("privacy", privacy),
+    ];
+    if docs.iter().all(|doc| doc.text.trim().is_empty()) {
+        return None;
+    }
     let version = compute_agreements_version(&docs);
-    let consent_required = read_consent_version(runtime_root).as_deref() != Some(version.as_str());
-    Ok(Some(AgreementsPayload {
+    let consent_required = consent_version != Some(version.as_str());
+    Some(AgreementsPayload {
         version,
         consent_required,
         documents: docs,
-    }))
+    })
+}
+
+pub(crate) fn parse_consent_version_json(text: &str) -> Option<String> {
+    let record: ConsentRecord = serde_json::from_str(text).ok()?;
+    let trimmed = record.version.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
+pub(crate) fn consent_record_json(version: &str) -> Result<Vec<u8>, SnowLumaConsentFileError> {
+    let record = NewConsentRecord {
+        version,
+        accepted_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+    };
+    Ok(serde_json::to_vec_pretty(&record)?)
 }
 
 pub(crate) fn record_consent_to_runtime_root(
@@ -87,11 +119,7 @@ pub(crate) fn record_consent_to_runtime_root(
 
     let path = config_dir.join("consent.json");
     let tmp = config_dir.join("consent.json.tmp");
-    let record = NewConsentRecord {
-        version,
-        accepted_at: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-    };
-    let bytes = serde_json::to_vec_pretty(&record)?;
+    let bytes = consent_record_json(version)?;
     fs::write(&tmp, bytes).map_err(|source| SnowLumaConsentFileError::Write {
         path: tmp.clone(),
         source,
@@ -100,20 +128,14 @@ pub(crate) fn record_consent_to_runtime_root(
     Ok(())
 }
 
-fn load_documents(runtime_root: &Path) -> Result<Vec<AgreementDoc>, SnowLumaConsentFileError> {
-    [("eula", "EULA.md"), ("privacy", "PRIVACY.md")]
-        .into_iter()
-        .map(|(id, file)| {
-            let text = read_agreement_file(runtime_root, file)?;
-            let meta = parse_agreement_meta(&text);
-            Ok(AgreementDoc {
-                id: id.to_string(),
-                title: meta.title,
-                declared_version: meta.declared_version,
-                text,
-            })
-        })
-        .collect()
+fn agreement_doc(id: &str, text: &str) -> AgreementDoc {
+    let meta = parse_agreement_meta(text);
+    AgreementDoc {
+        id: id.to_string(),
+        title: meta.title,
+        declared_version: meta.declared_version,
+        text: text.to_string(),
+    }
 }
 
 fn read_agreement_file(
@@ -157,9 +179,7 @@ fn replace_file(from: &Path, to: &Path) -> Result<(), SnowLumaConsentFileError> 
 fn read_consent_version(runtime_root: &Path) -> Option<String> {
     let path = runtime_root.join("config").join("consent.json");
     let text = fs::read_to_string(path).ok()?;
-    let record: ConsentRecord = serde_json::from_str(&text).ok()?;
-    let trimmed = record.version.trim();
-    (!trimmed.is_empty()).then(|| trimmed.to_string())
+    parse_consent_version_json(&text)
 }
 
 fn compute_agreements_version(docs: &[AgreementDoc]) -> String {
@@ -259,5 +279,25 @@ mod tests {
             err,
             SnowLumaConsentFileError::VersionMismatch { .. }
         ));
+    }
+
+    #[test]
+    fn payload_from_texts_matches_file_loader() {
+        let eula = "# EULA\n\n- **版本 / Version:** 1.0\n\nterms";
+        let privacy = "# Privacy\n\nprivacy";
+        let from_texts = payload_from_agreement_texts(eula, privacy, None).unwrap();
+        assert!(from_texts.consent_required);
+
+        let recorded = parse_consent_version_json(
+            std::str::from_utf8(&consent_record_json(&from_texts.version).unwrap()).unwrap(),
+        );
+        let after = payload_from_agreement_texts(eula, privacy, recorded.as_deref()).unwrap();
+        assert!(!after.consent_required);
+        assert_eq!(after.version, from_texts.version);
+    }
+
+    #[test]
+    fn empty_texts_do_not_require_consent() {
+        assert!(payload_from_agreement_texts("", "  ", None).is_none());
     }
 }

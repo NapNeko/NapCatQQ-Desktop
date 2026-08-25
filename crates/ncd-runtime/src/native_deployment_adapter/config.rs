@@ -29,6 +29,7 @@ pub(crate) fn minimal_bot_config(qq_id: u64, flavor: BotFlavor) -> BotConfig {
             },
             deployment_type: DeploymentType::Native,
             snowluma_start_mode: None,
+            webui_password_takeover: false,
         },
         connect: ConnectConfig::default(),
         advanced: AdvancedConfig::default(),
