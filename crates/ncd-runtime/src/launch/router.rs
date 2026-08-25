@@ -118,6 +118,7 @@ pub(crate) struct RuntimeBackendRouter {
     remote_metrics_injector: Option<Arc<crate::metrics::RuntimeRemoteMetricsInjector>>,
     /// Docker bot 指标：本机 data_root + prefs（可选）
     docker_metrics: Option<(std::path::PathBuf, crate::metrics::BotRuntimeMetricsPrefs)>,
+    server_manager: Option<Arc<crate::ServerManager>>,
 }
 
 impl RuntimeBackendRouter {
@@ -145,7 +146,13 @@ impl RuntimeBackendRouter {
             remote_qq_entry_coordinator,
             remote_metrics_injector: None,
             docker_metrics: None,
+            server_manager: None,
         }
+    }
+
+    pub fn with_server_manager(mut self, mgr: Arc<crate::ServerManager>) -> Self {
+        self.server_manager = Some(mgr);
+        self
     }
 
     pub fn with_remote_metrics_injector(
@@ -225,28 +232,43 @@ impl RuntimeBackendRouter {
                                 dyn ncd_backend_napcat::remote_native_launch::RemoteMetricsInjector,
                             >
                         });
-                        let translator = Arc::new(RemoteNativeLaunchTranslator::new_with_metrics(
+                        let selected = self
+                            .ensure_inventory(server_id, host.as_ref())
+                            .await
+                            .ok()
+                            .map(|inv| inv.selected);
+                        let mut translator = RemoteNativeLaunchTranslator::new_with_metrics(
                             Arc::clone(&host),
                             BotFlavor::NapCat,
                             server_id.to_string(),
                             coordinator,
                             metrics_injector,
-                        ));
+                        );
+                        if let Some(sel) = selected.clone() {
+                            translator = translator.with_selected(sel);
+                        }
                         let event_sink: Arc<dyn ncd_deploy::NativeRuntimeEventSink> =
                             Arc::new(EventBusSink::new(Arc::clone(&self.event_bus)));
-                        let deployment =
-                            Arc::new(NativeDeployment::new(translator, event_sink, None));
+                        let deployment = Arc::new(NativeDeployment::new(
+                            Arc::new(translator),
+                            event_sink,
+                            None,
+                        ));
                         let target = RuntimeTarget::server(server_id.to_string());
                         let resolver = self.host_resolver.as_ref().ok_or_else(|| {
                             RuntimeRouterError::Render("HostResolver 未初始化".to_string())
                         })?;
-                        Ok(Arc::new(RemoteNativeDeploymentBackend::new(
+                        let mut backend = RemoteNativeDeploymentBackend::new(
                             deployment,
                             Arc::clone(resolver),
                             target,
                             backend_id,
                             BotFlavor::NapCat,
-                        )))
+                        );
+                        if let Some(sel) = selected {
+                            backend = backend.with_selected(sel);
+                        }
+                        Ok(Arc::new(backend))
                     }
                 }
             }
@@ -263,16 +285,35 @@ impl RuntimeBackendRouter {
         if let Some(daemon) = guard.get(&sid) {
             return Ok(Arc::clone(daemon));
         }
-        let daemon = Arc::new(
-            RemoteSnowLumaDaemon::new(
+        let daemon = if let Some(inv) = self.ensure_inventory(&sid, host.as_ref()).await.ok() {
+            let mut layout =
+                ncd_backend_snowluma::remote_snowluma_layout::layout_from_selected(&inv.selected)
+                    .map_err(|e| RuntimeRouterError::Render(e.to_string()))?;
+            layout.node_bin = ncd_backend_snowluma::remote_snowluma_layout::resolve_node_bin(
+                host.as_ref(),
+                &layout.paths,
+            )
+            .await
+            .map_err(|e| RuntimeRouterError::Render(e.to_string()))?;
+            Arc::new(RemoteSnowLumaDaemon::from_layout(
                 sid.clone(),
                 Arc::clone(&host),
                 Arc::clone(&self.remote_snowluma_tunnels),
                 Arc::clone(&self.event_bus),
+                layout,
+            ))
+        } else {
+            Arc::new(
+                RemoteSnowLumaDaemon::new(
+                    sid.clone(),
+                    Arc::clone(&host),
+                    Arc::clone(&self.remote_snowluma_tunnels),
+                    Arc::clone(&self.event_bus),
+                )
+                .await
+                .map_err(|e| RuntimeRouterError::Render(e.to_string()))?,
             )
-            .await
-            .map_err(|e| RuntimeRouterError::Render(e.to_string()))?,
-        );
+        };
         guard.insert(sid, Arc::clone(&daemon));
         Ok(daemon)
     }
@@ -315,6 +356,36 @@ impl RuntimeBackendRouter {
         }
         guard.insert(sid, Arc::clone(&backend));
         Ok(backend)
+    }
+
+    async fn ensure_inventory(
+        &self,
+        server_id: &str,
+        host: &dyn Host,
+    ) -> Result<ncd_domain::RemoteInventory, RuntimeRouterError> {
+        let mgr = self.server_manager.as_ref();
+        let profile = if let Some(mgr) = mgr {
+            mgr.list_servers()
+                .await
+                .into_iter()
+                .find(|p| p.id == server_id)
+        } else {
+            None
+        };
+        let overrides = profile.as_ref().and_then(|p| p.path_overrides.as_ref());
+        let previous = profile.as_ref().and_then(|p| p.inventory.as_ref());
+        if let Some(inv) = previous {
+            if !crate::remote::inventory::inventory_is_stale(&inv.probed_at, chrono::Utc::now()) {
+                return Ok(inv.clone());
+            }
+        }
+        let inv = crate::remote::inventory::probe_remote_inventory(host, overrides, previous)
+            .await
+            .map_err(RuntimeRouterError::Render)?;
+        if let Some(mgr) = mgr {
+            let _ = mgr.set_inventory(server_id, inv.clone()).await;
+        }
+        Ok(inv)
     }
 
     async fn resolve_remote_host(
