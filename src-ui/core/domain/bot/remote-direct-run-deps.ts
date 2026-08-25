@@ -1,15 +1,4 @@
-// Bot 配置 · 运行时依赖链定义
-//
-// 区分「远程直接运行」和「本地直接运行」的依赖，因为形态不同：
-//
-// - 远程直接运行（Remote + Native）：
-//   NapCat：QQ + NapCat。
-//   SnowLuma 完整包自带 node，不再要求单独的 Node.js 组件；lite 才要 Node.js + noVNC。
-//
-// - 本地直接运行（Local + Native）：
-//   SnowLuma 本机包自带便携 Node，不探测 nodejs。
-//
-// 组件 ID 与组件页 ComponentId 保持一致。
+// 本机 / 远端直接运行所需组件链。SL 完整包自带 Node；lite 才要 nodejs。
 
 import type { BackendType } from '../../ipc/generated/domain/BackendType';
 import type { ComponentId } from '../../ipc/generated/domain/ComponentId';
