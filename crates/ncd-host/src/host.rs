@@ -245,8 +245,9 @@ pub trait Host: Send + Sync {
     async fn invalidate_connection(&self) {}
 
     /// 廉价活性探测(非权威健康,仅用于自愈触发)
-    /// 成功返回 true;任何错误/超时返回 false默认实现对本地恒 true
-    /// 实现方必须 bounded(建议 2~3s 超时),不得复用长命令超时
+    /// 成功返回 true;会话句柄已失效返回 false。
+    /// 实现方必须 bounded,且不得在会话正被长命令占用时误判为死亡
+    /// (禁止用短超时 exec 去抢同一把 SSH session 锁)。
     async fn is_healthy(&self) -> bool {
         true
     }

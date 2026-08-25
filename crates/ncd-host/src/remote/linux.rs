@@ -760,11 +760,14 @@ impl Host for RemoteLinuxHost {
     }
 
     async fn is_healthy(&self) -> bool {
-        let probe = HostCommand::new("sh")
-            .arg("-c")
-            .arg("echo ok")
-            .timeout(Duration::from_secs(3));
-        matches!(self.run_to_string(probe).await, Ok(out) if out.success())
+        // 不能再 exec `echo ok`：get_live_host / 后台探活每次都会走到这里，
+        // 3s 超时的 exec 会跟正在跑的 SFTP/长命令抢同一把 session 锁。
+        // 超时 drop channel 会让 russh 报 Packet for unknown recipient，
+        // 随后 mark_unhealthy 把还活着的会话毒死，启动就变成 ssh session poisoned。
+        match tokio::time::timeout(Duration::from_millis(200), self.handle.lock()).await {
+            Ok(guard) => session_lock_means_healthy(true, guard.is_some()),
+            Err(_) => session_lock_means_healthy(false, false),
+        }
     }
 
     // ===== 文件操作(基于 SFTP)=====
@@ -1117,6 +1120,16 @@ fn wrap_with_sudo(inner_line: &str, shell: &dyn HostShell, has_password: bool) -
 }
 
 /// sudo -S 读的密码必须以换行结尾调用方已带 \n 就不重复加,否则补一个
+/// `lock_acquired`: 是否在短超时内拿到 session 锁。
+/// 拿不到锁说明有命令正在用这条 SSH，视为活着；拿到锁则看句柄是否还在。
+fn session_lock_means_healthy(lock_acquired: bool, handle_present: bool) -> bool {
+    if lock_acquired {
+        handle_present
+    } else {
+        true
+    }
+}
+
 fn ensure_trailing_newline(pw: &[u8]) -> Vec<u8> {
     if pw.last() == Some(&b'\n') {
         pw.to_vec()
@@ -1495,6 +1508,13 @@ mod tests {
             b"file body"
         );
         assert!(build_elevated_stdin(None, None).is_none());
+    }
+
+    #[test]
+    fn health_busy_session_is_alive() {
+        assert!(session_lock_means_healthy(false, false));
+        assert!(session_lock_means_healthy(true, true));
+        assert!(!session_lock_means_healthy(true, false));
     }
 
     #[test]
