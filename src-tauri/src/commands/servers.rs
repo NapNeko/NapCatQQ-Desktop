@@ -57,7 +57,10 @@ pub(crate) async fn ensure_remote_inventory(
     let overrides = profile.as_ref().and_then(|p| p.path_overrides.clone());
     let previous = profile.as_ref().and_then(|p| p.inventory.clone());
     let inv = probe_remote_inventory(host, overrides.as_ref(), previous.as_ref()).await?;
-    let _ = state.server_manager.set_inventory(server_id, inv.clone()).await;
+    let _ = state
+        .server_manager
+        .set_inventory(server_id, inv.clone())
+        .await;
     state
         .host_probe_cache
         .lock()
@@ -188,4 +191,40 @@ pub async fn scan_local_ssh_keys() -> Result<Vec<String>, String> {
         }
     }
     Ok(found)
+}
+
+/// 导入迁移：按 backend × deployment 拉取远端框架网络配置。
+/// 返回 None 表示远端没有可迁移的 onebot 文件。
+#[tauri::command]
+pub async fn fetch_imported_network(
+    state: State<'_, AppState>,
+    server_id: String,
+    qq_id: String,
+    backend: ncd_domain::BackendType,
+    deployment: ncd_domain::DeploymentType,
+    docker_name: Option<String>,
+) -> Result<Option<ncd_domain::ImportedNetworkConfig>, String> {
+    let profile = state
+        .server_manager
+        .list_servers()
+        .await
+        .into_iter()
+        .find(|p| p.id == server_id)
+        .ok_or_else(|| format!("远端主机不存在: {server_id}"))?;
+    let selected = profile
+        .inventory
+        .as_ref()
+        .map(|inv| &inv.selected)
+        .ok_or_else(|| "尚未发现该主机的安装库存，请先在导入对话框点「重新发现」".to_string())?;
+
+    let host = state.server_manager.get_live_host(&server_id).await?;
+    ncd_runtime::fetch_imported_network(
+        host.as_ref(),
+        selected,
+        backend,
+        deployment,
+        &qq_id,
+        docker_name.as_deref(),
+    )
+    .await
 }

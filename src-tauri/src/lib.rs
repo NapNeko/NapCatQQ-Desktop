@@ -306,6 +306,7 @@ pub fn run() {
     let bot_manager_login_listener = Arc::clone(&bot_manager);
     let bot_manager_snowluma_listener = Arc::clone(&bot_manager);
     let bot_manager_offline_listener = Arc::clone(&bot_manager);
+    let bot_manager_host_recovery_listener = Arc::clone(&bot_manager);
 
     let mut builder = tauri::Builder::default();
     #[cfg(desktop)]
@@ -411,6 +412,13 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 bot_manager_snowluma_listener
                     .run_snowluma_listener(Some(sl_ready_tx))
+                    .await;
+            });
+            // 主机连上后补跑 bootstrap 时因「未连接」被跳过的远端运行态恢复
+            tauri::async_runtime::spawn(async move {
+                (*bot_manager_host_recovery_listener)
+                    .clone()
+                    .run_host_connection_recovered_listener()
                     .await;
             });
             tauri::async_runtime::spawn(async move {
@@ -653,6 +661,7 @@ pub fn run() {
             commands::servers::scan_local_ssh_keys,
             commands::servers::discover_local_ssh_hosts,
             commands::servers::refresh_remote_inventory,
+            commands::servers::fetch_imported_network,
             commands::docker::ops::docker_probe,
             commands::docker::install::docker_install,
             commands::docker::ops::docker_list_containers,
