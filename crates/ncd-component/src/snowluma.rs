@@ -210,7 +210,7 @@ impl SnowLumaComponent {
         crate::types::ComponentInfo {
             id: ComponentId::SnowLuma,
             display_name: "SnowLuma".to_string(),
-            description: "QQ 注入式 OneBot 协议端，保留 QQ 客户端窗口".to_string(),
+            description: "带 QQ 窗口的协议端".to_string(),
             repo_url: Some("https://github.com/SnowLuma/SnowLuma".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
