@@ -7,6 +7,8 @@ import type { BatchResultResponse, BotActorSnapshot } from '../ipc/types';
 import type { BotConfig } from '../ipc/generated/domain/BotConfig';
 import type { ImportableRemoteBot } from '../ipc/generated/domain/ImportableRemoteBot';
 import type { BackendType } from '../ipc/generated/domain/BackendType';
+import type { DeploymentType } from '../ipc/generated/domain/DeploymentType';
+import type { ImportedNetworkConfig } from '../ipc/generated/domain/ImportedNetworkConfig';
 import type { QqLoginInfo } from '../ipc/generated/QqLoginInfo';
 import type { ConfigDrift } from '../ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../ipc/generated/DriftDecision';
@@ -62,6 +64,25 @@ export const botService = {
     reconcileRuntimes: async (botIds: string[]): Promise<string[]> => {
         if (isTauri) return invoke<string[]>('reconcile_bot_runtimes', { botIds });
         return [];
+    },
+
+    /** 导入迁移：按 NC/SL × Native/Docker 拉取远端网络配置；null = 远端无可迁移内容 */
+    fetchImportedNetwork: (
+        serverId: string,
+        qqId: string,
+        backend: BackendType,
+        deployment: DeploymentType,
+        dockerName?: string | null,
+    ): Promise<ImportedNetworkConfig | null> => {
+        if (isTauri)
+            return invoke<ImportedNetworkConfig | null>('fetch_imported_network', {
+                serverId,
+                qqId,
+                backend,
+                deployment,
+                dockerName: dockerName ?? null,
+            });
+        return Promise.resolve(null);
     },
 
     listSnapshots: async (): Promise<BotActorSnapshot[]> => {

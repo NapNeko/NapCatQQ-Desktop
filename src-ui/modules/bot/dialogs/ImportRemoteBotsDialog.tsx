@@ -1,6 +1,6 @@
 // 从远端库存发现的 NC / SL / Docker Bot 勾选导入。
 // 列表走 list_importable_remote_bots（读已缓存库存，不额外 SSH）；
-// 写入走现有 upsert_bot_config。导入只登记身份，不拷密钥。
+// 写入走现有 upsert_bot_config。导入时尝试迁远端 onebot 网络配置，不拷 WebUI 密钥。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -25,9 +25,11 @@ import {
     importableRemoteBotKey,
     importableSourceLabel,
 } from '../../../core/domain/bot/importable-remote';
+import { applyImportedNetwork } from '../../../core/domain/bot/imported-network';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { errorText } from '../../../core/domain/errors';
 import { botSnapshotsKey } from '../../../hooks/bot/useBotSnapshots';
+import { botConfigsKeyPrefix } from '../../../hooks/bot/useBotConfigsMap';
 import { requestDesktopConsent } from '../../../hooks/desktop/desktopConsentHost';
 import type { ImportableRemoteBot } from '../../../core/ipc/generated/domain/ImportableRemoteBot';
 import type { BotConfig } from '../../../core/ipc/generated/domain/BotConfig';
@@ -42,6 +44,7 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [importing, setImporting] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [takeOverWebuiPwd, setTakeOverWebuiPwd] = useState(false);
 
     const { data, isLoading, isError, error, refetch } = useQuery({
         queryKey: ['importable-remote-bots'],
@@ -141,11 +144,32 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
         const failed: { qq: number; message: string }[] = [];
         const seenQq = new Set<number>();
         try {
+            let migratedNetworks = 0;
+            const networkMigrateFailed: string[] = [];
             for (const row of toImport) {
                 if (seenQq.has(row.qqId)) continue;
                 seenQq.add(row.qqId);
                 try {
-                    await botService.upsertConfig(toBotConfig(row));
+                    const cfg = toBotConfig(row, takeOverWebuiPwd);
+                    // 失败不阻断导入，落默认空配置并在提示里说明
+                    try {
+                        const imported = await botService.fetchImportedNetwork(
+                            row.serverId,
+                            String(row.qqId),
+                            row.backend,
+                            row.deployment,
+                            row.dockerName,
+                        );
+                        if (imported) {
+                            applyImportedNetwork(cfg, imported);
+                            migratedNetworks += 1;
+                        }
+                    } catch (err) {
+                        networkMigrateFailed.push(
+                            `${row.qqId}：${errorText(err)}`,
+                        );
+                    }
+                    await botService.upsertConfig(cfg);
                     created.push(row.qqId);
                 } catch (err) {
                     failed.push({ qq: row.qqId, message: errorText(err) });
@@ -168,18 +192,26 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                 }
             }
             await queryClient.invalidateQueries({ queryKey: botSnapshotsKey });
+            await queryClient.invalidateQueries({ queryKey: botConfigsKeyPrefix });
             await refetch();
             if (failed.length === 0) {
                 const attachNote =
                     attached > 0
                         ? `其中 ${attached} 个远端仍在运行，已接到控制台。`
                         : '远端未在跑的实例保持停止，可稍后启动。';
+                const parts: string[] = [attachNote];
+                if (migratedNetworks > 0) {
+                    parts.push(`已迁移 ${migratedNetworks} 个远端网络配置。`);
+                }
+                if (networkMigrateFailed.length > 0) {
+                    parts.push(`网络配置迁移失败：${networkMigrateFailed.join('；')}`);
+                }
                 pushInfoBar({
                     key: 'import-remote-bots',
                     tone: 'success',
                     title: '已导入 Bot',
-                    content: `已登记 ${created.length} 个实例。${attachNote}`,
-                    autoDismissMs: 6000,
+                    content: `已登记 ${created.length} 个实例。${parts.join(' ')}`,
+                    autoDismissMs: 8000,
                 });
                 onOpenChange(false);
             } else {
@@ -233,6 +265,19 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                     />
                 )}
 
+                {rows.length > 0 && (
+                    <div className="rounded-md bg-inset/50 px-3 py-2">
+                        <Checkbox
+                            id="import-bots-webui-takeover"
+                            checked={takeOverWebuiPwd}
+                            disabled={busy || selectedCount === 0}
+                            onCheckedChange={(v) => setTakeOverWebuiPwd(v === true)}
+                            label="接管 WebUI 密码"
+                            hint="勾选后：所选的远端 Native SnowLuma 实例下次「启动」时会生成新密码并写入远端配置，原密码立即失效，打开 WebUI 时自动复制新密码；不勾选则完全不改远端配置。"
+                        />
+                    </div>
+                )}
+
                 <DialogFooter>
                     <Button
                         size="sm"
@@ -263,7 +308,10 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
     );
 };
 
-function toBotConfig(row: ImportableRemoteBot): BotConfig {
+function toBotConfig(
+    row: ImportableRemoteBot,
+    takeOverWebuiPwd: boolean,
+): BotConfig {
     const base = createDefaultBotConfig();
     const backendLabel = importableBackendLabel(row.backend);
     return {
@@ -277,6 +325,7 @@ function toBotConfig(row: ImportableRemoteBot): BotConfig {
             deploymentType: row.deployment,
             snowlumaStartMode:
                 row.backend === 'snowluma' ? { mode: 'cold_start' } : undefined,
+            webuiPasswordTakeover: takeOverWebuiPwd,
         },
     };
 }

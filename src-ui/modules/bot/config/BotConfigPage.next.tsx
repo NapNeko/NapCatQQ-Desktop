@@ -195,12 +195,22 @@ export function BotConfigPageNext({
         },
     });
 
+    const dirty = useMemo(() => {
+        const botDirty = JSON.stringify(formData) !== JSON.stringify(pristine);
+        const snowlumaDirty =
+            JSON.stringify(snowlumaApp) !== JSON.stringify(snowlumaAppPristine);
+        return botDirty || snowlumaDirty;
+    }, [formData, pristine, snowlumaApp, snowlumaAppPristine]);
+    const dirtyRef = useRef(dirty);
+    dirtyRef.current = dirty;
+
     // 引导强制 Tab（演示新建流程）
     useEffect(() => {
         if (tourForceTab) setActiveTab(tourForceTab);
     }, [tourForceTab]);
 
     // 编辑态：每个 botId 只从服务端灌一次表单，避免 invalidate 后把用户未保存的改动盖掉。
+    // 未 dirty 时允许 loadedConfig 更新后再灌（导入后缓存刷新）。
     useEffect(() => {
         if (!isEditMode) {
             formHydratedForBotRef.current = null;
@@ -220,19 +230,19 @@ export function BotConfigPageNext({
             return;
         }
         if (!loadedConfig || botId == null) return;
-        if (formHydratedForBotRef.current === botId) return;
+        if (formHydratedForBotRef.current === botId) {
+            if (!dirtyRef.current) {
+                const normalized = normalizeLoadedConfig(loadedConfig);
+                setFormData(normalized);
+                setPristine(normalized);
+            }
+            return;
+        }
         const normalized = normalizeLoadedConfig(loadedConfig);
         setFormData(normalized);
         setPristine(normalized);
         formHydratedForBotRef.current = botId;
     }, [loadedConfig, isEditMode, botId, tourDemoMode]);
-
-    const dirty = useMemo(() => {
-        const botDirty = JSON.stringify(formData) !== JSON.stringify(pristine);
-        const snowlumaDirty =
-            JSON.stringify(snowlumaApp) !== JSON.stringify(snowlumaAppPristine);
-        return botDirty || snowlumaDirty;
-    }, [formData, pristine, snowlumaApp, snowlumaAppPristine]);
 
     const updateBot = (patch: Partial<BotConfig['bot']>) => {
         setFormData((prev) => ({ ...prev, bot: { ...prev.bot, ...patch } }));
@@ -553,6 +563,10 @@ export function BotConfigPageNext({
                                 backendType={formData.bot.backend_type}
                                 statusCommand={formData.statusCommand ?? null}
                                 onStatusCommandChange={updateStatusCommand}
+                                webuiPasswordTakeover={formData.bot.webuiPasswordTakeover}
+                                onWebuiPasswordTakeoverChange={(v) =>
+                                    updateBot({ webuiPasswordTakeover: v })
+                                }
                                 snowlumaAppConfig={snowlumaApp}
                                 onSnowlumaAppConfigChange={setSnowlumaApp}
                                 snowlumaAppLoadError={snowlumaAppLoadError}
