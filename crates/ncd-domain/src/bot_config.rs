@@ -341,6 +341,30 @@ pub struct ConnectConfig {
     pub plugins: Vec<serde_json::Value>,
 }
 
+/// 从远端框架 onebot 文件反向迁回桌面的网络配置（及同文件附属字段）。
+/// 缺省字段表示远端文件没有对应键，导入时保持桌面默认。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct ImportedNetworkConfig {
+    pub connect: ConnectConfig,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "musicSignUrl")]
+    #[ts(optional, rename = "musicSignUrl")]
+    pub music_sign_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "statusCommand")]
+    #[ts(optional, rename = "statusCommand")]
+    pub status_command: Option<StatusCommandConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "enableLocalFile2Url")]
+    #[ts(optional, rename = "enableLocalFile2Url")]
+    pub enable_local_file_to_url: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "parseMultMsg")]
+    #[ts(optional, rename = "parseMultMsg")]
+    pub parse_mult_msg: Option<bool>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AdvancedConfig {
