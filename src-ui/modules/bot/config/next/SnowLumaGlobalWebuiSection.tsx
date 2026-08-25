@@ -1,4 +1,4 @@
-// SnowLuma 全局 WebUI（daemon 单例）：受控表单项，由配置页右上角统一保存。
+// SnowLuma 全局 WebUI：与 Bot 字段一并由配置页保存。
 
 import { NumberField, TextField, FormSection } from '../../../../shared/ui';
 import type { SnowLumaAppConfig } from '../../../../core/ipc/generated/domain/SnowLumaAppConfig';
@@ -35,13 +35,8 @@ export function SnowLumaGlobalWebuiSection({
     return (
         <FormSection
             title="SnowLuma WebUI（全局）"
-            description="本机 SnowLuma 守护进程共用一个 WebUI；与上方 Bot 字段一并由右上角「保存」写入"
+            description="本机与远端接管共用；留空则本机用 session，远端接管每次生成"
         >
-            <p className="rounded-sm border border-border-subtle bg-canvas/60 px-3 py-2.5 text-2xs leading-relaxed text-text-secondary">
-                本机守护进程与远端 Native「密码接管」共用这里的覆盖值。留空：本机沿用
-                session（首次自动生成）；远端勾选接管时每次启动生成新密码。填写自定义密码：本机下次启动
-                与远端接管启动都会用这个值覆盖写入。未勾选接管时不会改远端已有密码。
-            </p>
             <NumberField
                 label="WebUI 监听端口"
                 value={value.snowlumaWebuiPort}
@@ -50,7 +45,7 @@ export function SnowLumaGlobalWebuiSection({
                 }
                 min={1}
                 max={65535}
-                hint="默认 5099；启动时若被占用会自动改用附近空闲端口（写入 runtime.json），需重启守护进程后生效"
+                hint="被占用时改用附近端口，需重启守护进程"
             />
             <TextField
                 label="WebUI 登录密码（可选覆盖）"
@@ -59,7 +54,7 @@ export function SnowLumaGlobalWebuiSection({
                     onChange({ ...value, snowlumaWebuiPasswordOverride: v })
                 }
                 placeholder="留空 = 本机用 session；远端接管则每次生成"
-                hint="非空时写入 app-config.json，本机与远端接管都优先用这个固定密码"
+                hint="非空时本机与远端接管都用这个固定密码"
             />
         </FormSection>
     );
