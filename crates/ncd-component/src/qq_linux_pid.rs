@@ -26,9 +26,15 @@ allow_single='{allow_single}'
 if [ -n "$pidfile" ] && [ -f "$pidfile" ]; then
   pid=$(cat "$pidfile" 2>/dev/null || true)
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-    echo "$pid"
-    exit 0
+    cmd=$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null || true)
+    case "$cmd" in
+      *"-q $qid"*|*-q"$qid"*|*"--qq $qid"*|*"--qq=$qid"*|*"--qq-id=$qid"*)
+        echo "$pid"
+        exit 0
+        ;;
+    esac
   fi
+  rm -f "$pidfile"
 fi
 alive() {{
   [ -n "$1" ] && [ "$1" != "0" ] && kill -0 "$1" 2>/dev/null
@@ -175,5 +181,27 @@ mod tests {
         assert!(on.contains("mains="));
         let off = linux_qq_running_pid_script(2703401480, None, None, false);
         assert!(off.contains("allow_single='0'"));
+    }
+
+    #[test]
+    fn script_pidfile_requires_account_evidence() {
+        let script = linux_qq_running_pid_script(
+            2707600964,
+            Some("/tmp/pid_bot_2707600964"),
+            Some("/opt/QQ/qq"),
+            false,
+        );
+        let pidfile_block = script
+            .split("alive()")
+            .next()
+            .expect("pidfile block precedes alive()");
+        assert!(
+            pidfile_block.contains("kill -0"),
+            "pidfile still needs a liveness check"
+        );
+        assert!(
+            pidfile_block.contains("-q") || pidfile_block.contains("qid"),
+            "stale pidfile must not win on kill -0 alone; cmdline must match qq id"
+        );
     }
 }
