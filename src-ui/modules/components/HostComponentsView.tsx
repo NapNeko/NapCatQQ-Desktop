@@ -1,9 +1,4 @@
-// 单台主机的组件视图：按「框架 / 运行时依赖 / 桌面端」分组；组内 md 起双列网格满宽。
-//
-// Docker 在这里被当成正常的运行时依赖：
-//   - 运行时依赖组里有一行 Docker（状态来自探测，安装走 docker hook）。
-//   - 框架行（NapCat / SnowLuma）在 docker 就绪时各带一个「拉镜像」按钮，
-//     仅预拉框架镜像；Bot 容器在 Bot 页启动时创建。
+// 单台主机组件：框架 / 运行时依赖 / 桌面端。Docker 行算运行时依赖。
 
 import React from 'react';
 import { PackageX, WifiOff, Wrench } from 'lucide-react';
@@ -202,7 +197,6 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
             <div className="flex w-full flex-col gap-3" data-tour-id="comp-group-framework">
                 <Group
                     title="框架"
-                    description="Bot 框架本体；Docker 就绪时可预拉框架镜像，Bot 启动时再创建容器"
                     rows={machine.framework}
                     hostId={host.host_id}
                     disableActions={isDemo}
@@ -244,7 +238,6 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
 
             <Group
                 title="桌面端"
-                description="NapCatQQ Desktop 本体，以及配套的远端 NCD Watch（Desktop 退出后仍可告警）"
                 rows={machine.selfApp}
                 hostId={host.host_id}
                 disableActions={false}
@@ -388,11 +381,7 @@ const RuntimeDepGroup: React.FC<{
         const hasRows = rows.length > 0 || showDocker;
         if (!hasRows) return null;
         return (
-            <FormSection
-                title="运行时依赖"
-                description="Node.js、QQ 运行时等。SnowLuma 完整包自带 Node；Lite 会自动编排安装 Node.js"
-                layout="none"
-            >
+            <FormSection title="运行时依赖" layout="none">
                 <div className={componentCardGridClass}>
                     {rows.map((row) => (
                         <div
