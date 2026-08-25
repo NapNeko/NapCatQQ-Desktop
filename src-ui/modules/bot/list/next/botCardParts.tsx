@@ -129,7 +129,7 @@ export function InfoChip({
     const node = (
         <span
             className={cn(
-                'inline-flex max-w-full items-center gap-1 rounded-pill border border-border-subtle/80',
+                'inline-flex min-w-0 max-w-full items-center gap-1 rounded-pill border border-border-subtle/80',
                 'bg-inset/80 px-2 py-0.5 text-2xs',
                 muted ? 'text-text-tertiary' : 'text-text-secondary',
             )}
@@ -143,8 +143,13 @@ export function InfoChip({
                     playEnter={false}
                 />
             </span>
-            <span className="text-text-tertiary">{label}</span>
-            <span className={cn('font-medium', muted ? 'text-text-tertiary' : 'text-text')}>
+            <span className="shrink-0 text-text-tertiary">{label}</span>
+            <span
+                className={cn(
+                    'max-w-[8.5rem] truncate font-medium',
+                    muted ? 'text-text-tertiary' : 'text-text',
+                )}
+            >
                 {value}
             </span>
         </span>
