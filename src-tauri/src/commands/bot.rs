@@ -1,13 +1,13 @@
-use ncd_domain::{BotConfig, BotId};
-use ncd_runtime::BotActorSnapshot;
+use ncd_domain::{BotConfig, BotId, ImportableRemoteBot};
 use ncd_runtime::config_drift::{ConfigDrift, DriftDecision};
+use ncd_runtime::BotActorSnapshot;
 use ncd_traits::runtime_backend::LogSnapshot;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
 
-use crate::AppState;
 use crate::desktop_consent;
+use crate::AppState;
 
 /// 创建 / 启动等关键操作前：未同意当前 Desktop 协议则拒绝。
 fn ensure_desktop_consent(state: &AppState) -> Result<(), String> {
@@ -70,6 +70,37 @@ pub async fn list_bot_snapshots(
     state: State<'_, AppState>,
 ) -> Result<Vec<BotActorSnapshot>, String> {
     Ok(state.bot_manager.list_snapshots().await)
+}
+
+/// 对照各主机库存里的 Bot 指纹与本机 bot.json，列出可导入项。不额外 SSH。
+#[tauri::command]
+pub async fn list_importable_remote_bots(
+    state: State<'_, AppState>,
+) -> Result<Vec<ImportableRemoteBot>, String> {
+    let servers = state.server_manager.list_servers().await;
+    let existing = state
+        .bot_manager
+        .list_bot_configs()
+        .await
+        .map_err(map_err)?;
+    Ok(ncd_runtime::collect_importable_remote_bots(
+        &servers, &existing,
+    ))
+}
+
+/// 导入后把仍在远端跑着的 QQ/容器接到 Actor 运行态，不重新启动。
+#[tauri::command]
+pub async fn reconcile_bot_runtimes(
+    state: State<'_, AppState>,
+    bot_ids: Vec<String>,
+) -> Result<Vec<String>, String> {
+    let ids: Vec<BotId> = bot_ids.into_iter().map(BotId::new).collect();
+    let done = state
+        .bot_manager
+        .reconcile_remote_runtime_for(&ids)
+        .await
+        .map_err(map_err)?;
+    Ok(done.into_iter().map(|id| id.to_string()).collect())
 }
 
 #[tauri::command]
@@ -361,18 +392,18 @@ mod tests {
 
     use async_trait::async_trait;
     use ncd_domain::{
-        BackendKind, BootstrapSnapshot, BotConfig, BotFlavor, BotId, BotStatus, StopMode,
-        domain_event::DomainEventKind,
+        domain_event::DomainEventKind, BackendKind, BootstrapSnapshot, BotConfig, BotFlavor, BotId,
+        BotStatus, StopMode,
     };
     use ncd_runtime::{
         BotActorState, BotManager, BroadcastEventBus, DispatchRenderer, EventBus, EventFilter,
         FileSystemRuntimeLaunchPlanner, LocalBotConfigRepo, LocalConfigStore, SecretStoreImpl,
     };
     use ncd_traits::{
-        ConfigStore, SecretStore,
         runtime_backend::{
             BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, LogSnapshot, TailOpts,
         },
+        ConfigStore, SecretStore,
     };
     use tempfile::tempdir;
 

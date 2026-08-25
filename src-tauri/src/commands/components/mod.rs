@@ -15,10 +15,10 @@ use ncd_domain::DeploymentTaskKind;
 use ncd_host::Host;
 use ncd_runtime::{
     ComponentTaskSpec, DeploymentTaskRequest, DeploymentTaskRunResult, DomainEvent, EventBus,
-    RemoteHostProbe, build_component_for_host, collect_component_runtime_prerequisites,
-    component_action_cancellable, component_catalog, component_dedupe_key,
-    component_task_resources, direct_runtime_dependency_ids, parse_remote_host_probe_stdout,
-    release::read_cached_release_snapshot,
+    RemoteHostProbe, RemoteSelectedPaths, SnowLumaLinuxPackage, build_component_for_host,
+    collect_component_runtime_prerequisites_for, component_action_cancellable, component_catalog,
+    component_dedupe_key, component_task_resources, direct_runtime_dependency_ids_for,
+    infer_snowluma_linux_package, probe_from_inventory, release::read_cached_release_snapshot,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -39,13 +39,15 @@ pub async fn detect_component(
     state: State<'_, AppState>,
 ) -> Result<ComponentDetectResult, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let probe = cached_host_probe(&host_id, host.as_ref(), &state).await;
+    let (probe, selected) = cached_host_probe(&host_id, host.as_ref(), &state).await;
     let component = build_component_for_host_from_state(
         component_id,
         &state,
         host.as_ref(),
         probe.home.as_deref(),
         probe.layout,
+        selected.as_ref(),
+        None,
     )?;
     let host_ref: &dyn Host = host.as_ref();
 
@@ -75,14 +77,20 @@ pub async fn run_component_action(
     host_id: String,
     kind: StepKind,
     task_id: Option<String>,
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     ensure_host_idle_for_component_mutation(&host_id, kind, &state).await?;
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let probe = cached_host_probe(&host_id, host.as_ref(), &state).await;
+    let (probe, selected) = cached_host_probe(&host_id, host.as_ref(), &state).await;
     let task_id = task_id
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let sl_pkg = if component_id == ComponentId::SnowLuma {
+        Some(snowluma_linux_package.unwrap_or_else(|| infer_snowluma_linux_package(selected.as_ref())))
+    } else {
+        None
+    };
 
     submit_component_action_with_prerequisites(
         component_id,
@@ -91,6 +99,8 @@ pub async fn run_component_action(
         task_id,
         host,
         &probe,
+        selected.as_ref(),
+        sl_pkg,
         &state,
     )
     .await
@@ -127,6 +137,8 @@ async fn submit_component_action_with_prerequisites(
     task_id: String,
     host: Arc<dyn Host>,
     probe: &RemoteHostProbe,
+    selected: Option<&RemoteSelectedPaths>,
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
     state: &AppState,
 ) -> Result<String, String> {
     let target_dedupe_key = component_dedupe_key(host_id, component_id, kind);
@@ -139,13 +151,17 @@ async fn submit_component_action_with_prerequisites(
     }
 
     let target = ComponentTaskSpec { component_id, kind };
-    let prerequisite_specs =
-        collect_component_runtime_prerequisites(target, host.os(), host.locality());
+    let prerequisite_specs = collect_component_runtime_prerequisites_for(
+        target,
+        host.os(),
+        host.locality(),
+        snowluma_linux_package,
+    );
     let mut submitted: Vec<(ComponentTaskSpec, String)> =
         Vec::with_capacity(prerequisite_specs.len());
 
     for spec in prerequisite_specs {
-        if component_prerequisite_is_installed(spec, &host, probe, state).await? {
+        if component_prerequisite_is_installed(spec, &host, probe, selected, snowluma_linux_package, state).await? {
             tracing::info!(
                 host_id,
                 component = spec.component_id.as_str(),
@@ -154,8 +170,13 @@ async fn submit_component_action_with_prerequisites(
             );
             continue;
         }
-        let depends_on =
-            direct_runtime_dependency_ids(spec, host.os(), host.locality(), &submitted);
+        let depends_on = direct_runtime_dependency_ids_for(
+            spec,
+            host.os(),
+            host.locality(),
+            &submitted,
+            snowluma_linux_package,
+        );
         let submitted_task_id = submit_single_component_task(
             spec.component_id,
             host_id,
@@ -164,13 +185,21 @@ async fn submit_component_action_with_prerequisites(
             depends_on,
             Arc::clone(&host),
             probe,
+            selected,
+            snowluma_linux_package,
             state,
         )
         .await?;
         submitted.push((spec, submitted_task_id));
     }
 
-    let depends_on = direct_runtime_dependency_ids(target, host.os(), host.locality(), &submitted);
+    let depends_on = direct_runtime_dependency_ids_for(
+        target,
+        host.os(),
+        host.locality(),
+        &submitted,
+        snowluma_linux_package,
+    );
     submit_single_component_task(
         component_id,
         host_id,
@@ -179,6 +208,8 @@ async fn submit_component_action_with_prerequisites(
         depends_on,
         host,
         probe,
+        selected,
+        snowluma_linux_package,
         state,
     )
     .await
@@ -188,6 +219,8 @@ async fn component_prerequisite_is_installed(
     spec: ComponentTaskSpec,
     host: &Arc<dyn Host>,
     probe: &RemoteHostProbe,
+    selected: Option<&RemoteSelectedPaths>,
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
     state: &AppState,
 ) -> Result<bool, String> {
     if spec.kind != StepKind::EnsureInstalled {
@@ -200,6 +233,8 @@ async fn component_prerequisite_is_installed(
         host.as_ref(),
         probe.home.as_deref(),
         probe.layout,
+        selected,
+        snowluma_linux_package,
     )?;
 
     if component.check_target(host.as_ref()).is_err() {
@@ -236,6 +271,8 @@ async fn submit_single_component_task(
     mut depends_on: Vec<String>,
     host: Arc<dyn Host>,
     probe: &RemoteHostProbe,
+    selected: Option<&RemoteSelectedPaths>,
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
     state: &AppState,
 ) -> Result<String, String> {
     let component = build_component_for_host_from_state(
@@ -244,6 +281,8 @@ async fn submit_single_component_task(
         host.as_ref(),
         probe.home.as_deref(),
         probe.layout,
+        selected,
+        snowluma_linux_package,
     )?;
 
     let plan = DeployPlan::builder()
@@ -433,36 +472,23 @@ pub async fn cancel_component_action(
     state.deployment_tasks.cancel(&task_id).await
 }
 
-/// 取(或探测并缓存)一台主机的 home + layout
+/// 取(或探测并缓存)一台主机的 home + layout + 库存选中路径
 pub(crate) async fn cached_host_probe(
     host_id: &str,
     host: &dyn Host,
     state: &AppState,
-) -> RemoteHostProbe {
+) -> (RemoteHostProbe, Option<RemoteSelectedPaths>) {
     if !host_id.starts_with("remote:") {
-        return RemoteHostProbe::local_default();
+        return (RemoteHostProbe::local_default(), None);
     }
-    if let Some(cached) = state.host_probe_cache.lock().await.get(host_id) {
-        return cached.clone();
+    let server_id = host_id.trim_start_matches("remote:");
+    match crate::commands::servers::ensure_remote_inventory(server_id, host, state, false).await {
+        Ok(inv) => {
+            let selected = inv.selected.clone();
+            (probe_from_inventory(&inv), Some(selected))
+        }
+        Err(_) => (RemoteHostProbe::local_default(), None),
     }
-    let probe = probe_remote_host(host).await;
-    state
-        .host_probe_cache
-        .lock()
-        .await
-        .insert(host_id.to_string(), probe.clone());
-    probe
-}
-
-async fn probe_remote_host(host: &dyn Host) -> RemoteHostProbe {
-    let script = "echo \"$HOME\"; \
-         test -e /opt/QQ/resources/app/app_launcher/napcat/napcat.mjs && echo 1 || echo 0";
-    let cmd = ncd_host::HostCommand::new("sh").arg("-c").arg(script);
-    let out = match host.run_to_string(cmd).await {
-        Ok(out) if out.success() => out,
-        _ => return RemoteHostProbe::local_default(),
-    };
-    parse_remote_host_probe_stdout(&out.stdout)
 }
 
 fn build_component_for_host_from_state(
@@ -471,6 +497,8 @@ fn build_component_for_host_from_state(
     host: &dyn Host,
     remote_home: Option<&str>,
     layout: ncd_runtime::RemoteLayout,
+    selected: Option<&RemoteSelectedPaths>,
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
 ) -> Result<Arc<dyn Component>, String> {
     let snapshot = read_cached_release_snapshot(&state.data_root);
     let desktop_ver = crate::desktop_update::product_version_str();
@@ -484,6 +512,8 @@ fn build_component_for_host_from_state(
             snapshot: snapshot.as_ref(),
             local_snowluma_version: state.snapshot.local_versions.snowluma.as_deref(),
             desktop_product_version: desktop_ver,
+            selected,
+            snowluma_linux_package,
         },
     )
 }

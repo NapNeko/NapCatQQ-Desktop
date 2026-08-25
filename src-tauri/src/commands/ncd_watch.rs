@@ -52,7 +52,7 @@ pub async fn sync_ncd_watch_notify(
 ) -> Result<(), String> {
     let host_id = format!("remote:{server_id}");
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let probe = cached_host_probe(&host_id, host.as_ref(), &state).await;
+    let (probe, _) = cached_host_probe(&host_id, host.as_ref(), &state).await;
     let home = probe
         .home
         .as_deref()
@@ -96,7 +96,7 @@ pub async fn touch_ncd_watch_present(
 ) -> Result<(), String> {
     let host_id = format!("remote:{server_id}");
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let probe = cached_host_probe(&host_id, host.as_ref(), &state).await;
+    let (probe, _) = cached_host_probe(&host_id, host.as_ref(), &state).await;
     let home = probe
         .home
         .as_deref()
@@ -163,7 +163,7 @@ async fn push_notify_for_server(
             return Err(());
         }
     };
-    let probe = cached_host_probe(&host_id, host.as_ref(), state).await;
+    let (probe, _) = cached_host_probe(&host_id, host.as_ref(), state).await;
     let Some(home) = probe.home.as_deref().filter(|s| !s.is_empty()) else {
         if matches!(mode, NotifyPushMode::AfterSettingsSave) {
             tracing::warn!(server_id = %profile.id, %log_tag, "ncd-watch no $HOME");
@@ -347,7 +347,7 @@ pub async fn clear_present_on_all_remote_servers(state: &AppState) {
             }
         };
         let host_id = format!("remote:{}", profile.id);
-        let probe = cached_host_probe(&host_id, host.as_ref(), state).await;
+        let (probe, _) = cached_host_probe(&host_id, host.as_ref(), state).await;
         let Some(home) = probe.home.as_deref().filter(|s| !s.is_empty()) else {
             continue;
         };

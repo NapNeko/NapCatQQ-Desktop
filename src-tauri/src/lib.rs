@@ -57,7 +57,7 @@ pub struct AppState {
     /// detect_component 对同一台机器的 home/layout 探测结果是稳定的,缓存后
     /// 5 个并发组件 detect 只探一次,不再各跑一遍 echo $HOME + layout 检查
     /// run_component_action 会清掉对应条目,因为安装可能改变布局
-    pub(crate) host_probe_cache: Arc<Mutex<HashMap<String, ncd_runtime::RemoteHostProbe>>>,
+    pub(crate) host_probe_cache: Arc<Mutex<HashMap<String, ncd_runtime::RemoteInventory>>>,
     pub(crate) desktop_notify: Arc<RwLock<DesktopNotifySettings>>,
     pub(crate) app_settings: Arc<RwLock<ncd_domain::AppSettings>>,
     /// 离线告警 fan-out(桌面 Toast / Webhook / Email / OneBot)
@@ -265,6 +265,7 @@ pub fn run() {
             Arc::clone(&desktop_notify),
         )
         .with_host_resolver(host_resolver)
+        .with_server_manager(Arc::clone(&server_manager))
         .with_docker_webui_secret_store(Arc::clone(&secrets)),
     );
 
@@ -608,6 +609,8 @@ pub fn run() {
             commands::deployment_tasks::clear_finished_deployment_tasks,
             commands::bot::bootstrap_bot_manager,
             commands::bot::list_bot_snapshots,
+            commands::bot::list_importable_remote_bots,
+            commands::bot::reconcile_bot_runtimes,
             commands::bot_metrics::get_bot_runtime_metrics,
             commands::bot_metrics::get_bot_runtime_metrics_history,
             commands::bot_metrics::list_bot_runtime_metrics,
@@ -649,6 +652,7 @@ pub fn run() {
             commands::servers::confirm_server_host_key,
             commands::servers::scan_local_ssh_keys,
             commands::servers::discover_local_ssh_hosts,
+            commands::servers::refresh_remote_inventory,
             commands::docker::ops::docker_probe,
             commands::docker::install::docker_install,
             commands::docker::ops::docker_list_containers,

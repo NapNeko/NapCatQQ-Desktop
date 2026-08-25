@@ -70,6 +70,8 @@ pub async fn connect_remote_host(
         state: ncd_runtime::ServerState::Disconnected,
         health: None,
         webui_url: request.webui_url.clone(),
+        path_overrides: None,
+        inventory: None,
     };
 
     // 如果已存在就 update,不存在就 add
