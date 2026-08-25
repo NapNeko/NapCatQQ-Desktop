@@ -6,7 +6,7 @@
 
 mod config;
 mod docker;
-mod docker_helpers;
+pub(crate) mod docker_helpers;
 mod launch;
 mod log_helpers;
 mod native;

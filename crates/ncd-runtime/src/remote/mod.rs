@@ -2,6 +2,7 @@
 
 pub mod bot_log_follow;
 pub mod docker_session;
+pub mod import_network;
 pub mod importable_bots;
 pub mod inventory;
 pub(crate) mod runtime_sessions;

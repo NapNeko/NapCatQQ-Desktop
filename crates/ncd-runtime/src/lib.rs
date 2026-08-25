@@ -79,6 +79,8 @@ pub mod ssh_keygen {
 pub(crate) mod bootstrap_reconcile {
     pub(crate) use crate::bootstrap::reconcile::*;
 }
+/// 导入迁移：远端 NC/SL Native/Docker 网络配置（tauri 命令经此门面调用）
+pub use remote::import_network::fetch_imported_network;
 pub mod component_action_policy {
     pub use crate::components::action_policy::*;
 }
@@ -143,11 +145,11 @@ pub use ncd_domain::{
     AdvancedConfig, AutoRestartSchedule, BackendKind, BackendType, BotBasicConfig, BotConfig,
     BotConfigError, BotFlavor, BotId, BotStatus, ConnectConfig, DeploymentType,
     DesktopNotifySettings, DiscoveredRemoteBot, DiscoveredRemoteBotSource, HttpServerConfig,
-    ImportableRemoteBot, LogLevel, MessagePostFormat, MigrationOutcome, MigrationStage, O3HookMode,
-    PathError, REMOTE_INVENTORY_VERSION, RemoteInventory, RemoteInventoryItem, RemoteInventoryKind,
-    RemoteInventorySource, RemotePathOverrides, RemoteSelectedPaths, RuntimeScenario,
-    RuntimeTarget, SchemaVersion, SnowLumaLinuxPackage, SnowLumaStartMode, StopMode,
-    WebUiPollerSettings, WebsocketServerConfig, WsRole,
+    ImportableRemoteBot, ImportedNetworkConfig, LogLevel, MessagePostFormat, MigrationOutcome,
+    MigrationStage, O3HookMode, PathError, REMOTE_INVENTORY_VERSION, RemoteInventory,
+    RemoteInventoryItem, RemoteInventoryKind, RemoteInventorySource, RemotePathOverrides,
+    RemoteSelectedPaths, RuntimeScenario, RuntimeTarget, SchemaVersion, SnowLumaLinuxPackage,
+    SnowLumaStartMode, StopMode, WebUiPollerSettings, WebsocketServerConfig, WsRole,
 };
 pub use ncd_traits::{
     BotConfigRepo, ConfigStore, JsonTransaction, PathProbe, SecretStore,

@@ -2,9 +2,9 @@
 
 use std::collections::HashMap;
 
-use ncd_deploy::DockerDeployment;
+use ncd_deploy::{DockerCli, DockerCliError, DockerDeployment};
 use ncd_domain::ids::BotId;
-use ncd_domain::{BackendType, BotConfig};
+use ncd_domain::{BackendType, BotConfig, ImportedNetworkConfig};
 use ncd_host::{Host, HostError, HostPath};
 use ncd_traits::runtime_backend::BotBackendError;
 use serde_json::Value;
@@ -126,6 +126,153 @@ async fn read_existing_docker_napcat_config(
         }
     }
     Ok(existing)
+}
+
+/// 导入迁移：从桌面 compose 项目目录或容器内读取网络配置。
+/// NapCat 先读 host bind，没有再 `docker cp`；SnowLuma 以容器 named volume 为权威。
+pub(crate) async fn read_docker_imported_network(
+    host: &dyn Host,
+    home: &str,
+    docker_name: &str,
+    backend: BackendType,
+    qq_id: &str,
+) -> Result<Option<ImportedNetworkConfig>, String> {
+    let project_dir = format!(
+        "{}/.napcat-bots/{}",
+        home.trim_end_matches('/'),
+        docker_name
+    );
+    match backend {
+        BackendType::NapCat => {
+            let host_path = format!("{project_dir}/napcat/config/onebot11_{qq_id}.json");
+            if let Some(value) = read_json_if_exists(host, &host_path).await? {
+                return parse_napcat_file(&host_path, &value);
+            }
+            match copy_container_json(
+                host,
+                docker_name,
+                &format!("/app/napcat/config/onebot11_{qq_id}.json"),
+                qq_id,
+            )
+            .await?
+            {
+                Some(value) => parse_napcat_file(
+                    &format!("docker://{docker_name}/app/napcat/config/onebot11_{qq_id}.json"),
+                    &value,
+                ),
+                None => Ok(None),
+            }
+        }
+        BackendType::SnowLuma => {
+            match copy_container_json(
+                host,
+                docker_name,
+                &format!("/app/snowluma-data/config/onebot_{qq_id}.json"),
+                qq_id,
+            )
+            .await?
+            {
+                Some(value) => {
+                    return parse_snowluma_file(
+                        &format!(
+                            "docker://{docker_name}/app/snowluma-data/config/onebot_{qq_id}.json"
+                        ),
+                        &value,
+                    );
+                }
+                None => {
+                    let host_path =
+                        format!("{project_dir}/snowluma-data/config/onebot_{qq_id}.json");
+                    if let Some(value) = read_json_if_exists(host, &host_path).await? {
+                        return parse_snowluma_file(&host_path, &value);
+                    }
+                    Ok(None)
+                }
+            }
+        }
+    }
+}
+
+async fn read_json_if_exists(host: &dyn Host, path: &str) -> Result<Option<Value>, String> {
+    match host.read_file(&HostPath::from_posix(path)).await {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map(Some)
+            .map_err(|e| format!("解析 {path} 失败: {e}")),
+        Err(HostError::PathNotFound { .. }) => Ok(None),
+        Err(err) => {
+            tracing::info!(
+                target: "ncd_runtime::remote",
+                %path,
+                %err,
+                "远端 Docker 配置不存在或不可读，跳过网络配置迁移"
+            );
+            Ok(None)
+        }
+    }
+}
+
+fn parse_napcat_file(path: &str, value: &Value) -> Result<Option<ImportedNetworkConfig>, String> {
+    ncd_deploy::backend_config_renderer::parse_napcat_onebot_connect(value)
+        .map(Some)
+        .ok_or_else(|| format!("{path} 缺少 network 字段，无法迁移网络配置"))
+}
+
+fn parse_snowluma_file(path: &str, value: &Value) -> Result<Option<ImportedNetworkConfig>, String> {
+    ncd_deploy::backend_config_renderer::parse_snowluma_onebot_connect(value)
+        .map(Some)
+        .ok_or_else(|| format!("{path} 缺少 networks 字段，无法迁移网络配置"))
+}
+
+async fn copy_container_json(
+    host: &dyn Host,
+    docker_name: &str,
+    src: &str,
+    qq_id: &str,
+) -> Result<Option<Value>, String> {
+    let cli = DockerCli::new(host);
+    cli.ensure_daemon_ready()
+        .await
+        .map_err(|e| format!("Docker 未就绪，无法从容器读取网络配置: {e}"))?;
+    let dest = import_tmp_path(docker_name, qq_id);
+    match cli.copy_from_container(docker_name, src, &dest).await {
+        Ok(()) => {
+            let result = match host.read_file(&HostPath::from_posix(&dest)).await {
+                Ok(bytes) => serde_json::from_slice(&bytes)
+                    .map(Some)
+                    .map_err(|e| format!("解析 {dest} 失败: {e}")),
+                Err(HostError::PathNotFound { .. }) => Ok(None),
+                Err(err) => Err(format!("读取 {dest} 失败: {err}")),
+            };
+            cli.remove_copied_file(&dest).await;
+            result
+        }
+        Err(DockerCliError::CommandFailed { stderr, .. }) => {
+            tracing::info!(
+                target: "ncd_runtime::remote",
+                container = %docker_name,
+                %src,
+                %stderr,
+                "容器内没有可迁移的网络配置文件"
+            );
+            Ok(None)
+        }
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn import_tmp_path(docker_name: &str, qq_id: &str) -> String {
+    let safe_name: String = docker_name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let safe_qq: String = qq_id.chars().filter(|c| c.is_ascii_digit()).collect();
+    format!("/tmp/ncd-import-{safe_name}-{safe_qq}.json")
 }
 
 async fn read_existing_docker_snowluma_config(
