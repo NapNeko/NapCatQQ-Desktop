@@ -186,6 +186,89 @@ async fn login_serializes_password_in_request_body() {
     // server.drop 时校验 expect(1),body_partial_json 同时锁定字段名
 }
 
+/// poller 每 tick 并发打 /api/processes 与 /api/qq-list，两边都会在无 token 时 login。
+/// 上游按 IP 计次，5 次 401 就 429 锁 15 分钟；同一客户端必须单飞，只打一次 /api/login。
+#[tokio::test]
+async fn concurrent_authed_calls_only_login_once() {
+    let server = MockServer::start().await;
+    let port = mock_server_port(&server);
+
+    Mock::given(method("POST"))
+        .and(path("/api/login"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({ "token": "tok" }))
+                .set_delay(Duration::from_millis(80)),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/processes"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "list": [] })))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    let client = ReqwestSnowLumaWebUiClient::new(port, "pwd".into()).expect("build client");
+    let (a, b) = tokio::join!(client.list_processes(), client.list_processes());
+    assert!(a.is_ok(), "first list_processes: {a:?}");
+    assert!(b.is_ok(), "second list_processes: {b:?}");
+}
+
+/// 接管换密后旧 poller 仍拿旧密码；401 之后同一客户端不得再打 /api/login，
+/// 否则 2s tick × 双请求会在 10s 内打满 5 次，把新密码也锁死。
+#[tokio::test]
+async fn failed_login_does_not_retry_on_same_client() {
+    let server = MockServer::start().await;
+    let port = mock_server_port(&server);
+
+    Mock::given(method("POST"))
+        .and(path("/api/login"))
+        .respond_with(
+            ResponseTemplate::new(401).set_body_string(r#"{"success":false,"message":"密码错误"}"#),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = ReqwestSnowLumaWebUiClient::new(port, "stale".into()).expect("build client");
+    let first = client.login().await;
+    assert!(first.is_err(), "first login should fail: {first:?}");
+    let second = client.login().await;
+    assert!(second.is_err(), "poisoned login should fail: {second:?}");
+    let listed = client.list_processes().await;
+    assert!(
+        listed.is_err(),
+        "list_processes should not login again: {listed:?}"
+    );
+}
+
+/// 上游 429 后继续 login 只会延长锁；同一客户端必须停手。
+#[tokio::test]
+async fn login_429_blocks_further_attempts() {
+    let server = MockServer::start().await;
+    let port = mock_server_port(&server);
+
+    Mock::given(method("POST"))
+        .and(path("/api/login"))
+        .respond_with(
+            ResponseTemplate::new(429)
+                .set_body_string(r#"{"success":false,"message":"登录尝试过多，请 894 秒后重试"}"#),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = ReqwestSnowLumaWebUiClient::new(port, "pwd".into()).expect("build client");
+    let first = client.login().await;
+    assert!(first.is_err(), "429 should fail login: {first:?}");
+    let msg = first.unwrap_err().to_string();
+    assert!(msg.contains("429"), "error should keep 429: {msg}");
+    let second = client.login().await;
+    assert!(second.is_err(), "429 must poison the client: {second:?}");
+}
+
 /// GET /api/processes 响应是 {"list": [...]} wrapped 形态,需要解包
 #[tokio::test]
 async fn list_processes_unwraps_wrapped_list() {
