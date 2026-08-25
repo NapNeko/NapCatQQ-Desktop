@@ -1,20 +1,7 @@
-// 列表 BotCard（new tree）。
-//
-// 单卡布局（BotManageCard）：
-//   1. Header：[复选框] [Avatar] [名称 + QQ · flavor · 相对时间]
-//   2. meta：补一句副标题（不与底栏状态徽章重复）；错误走 InfoBar
-//   3. Chip：配置摘要单行槽（空也占位）
-//   4. 底栏：进程 + 账号 + 告警（最多 3 枚短徽章），右工具按钮
-//
-// 操作区按钮按状态收缩：日志 / WebUI 只在 running / starting 时显示（停止状态
-// 这俩按了也没意义）；启停 / 配置永远显示。
-//
-// 头像 BotAvatar 把 overflow-hidden 限制在内层 img 包装上，外层留给指示点的
-// absolute 定位，圆点不会被裁。
-//
-// 批量模式下整行变 selectable，左侧出复选框。
+// 列表 Bot 卡。chips 不单独占行，避免有无摘要把同行卡撑成两截高度。
 
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
     Activity,
     Check,
@@ -72,7 +59,14 @@ import {
 } from './botCardParts';
 import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
 import { useBotRuntimeMetrics } from '../../../../hooks/bot/useBotRuntimeMetrics';
-import { isRuntimeTargetLocal, remoteHostIdFromRuntimeTarget } from '../../../../core/domain/bot/runtime-target';
+import { serverService } from '../../../../core/services/server.service';
+import { isTauri } from '../../../../core/ipc/transport';
+import {
+    isRuntimeTargetLocal,
+    remoteHostIdFromRuntimeTarget,
+    runtimeTargetDisplayLabel,
+    runtimeTargetTooltip,
+} from '../../../../core/domain/bot/runtime-target';
 import { BotRuntimeMetricsStrip } from './BotRuntimeMetricsStrip';
 
 interface BotCardProps {
@@ -151,6 +145,13 @@ export function BotCard({
         : null;
     const remoteReachable = useIsHostReachable(remoteHostIdForCheck);
     const transportFailed = isRemoteTarget && remoteHostIdForCheck != null && !remoteReachable;
+    const serversQuery = useQuery({
+        queryKey: ['servers'],
+        queryFn: () => serverService.list(),
+        enabled: isTauri && isRemoteTarget,
+        staleTime: 30_000,
+    });
+    const servers = serversQuery.data ?? [];
 
     // 状态切换反馈:
     //   - 关键状态转移(starting→running 等) → 状态徽章 pop,而不是整张卡 pop
@@ -287,7 +288,8 @@ export function BotCard({
                 key="runtime"
                 icon={Activity}
                 label="运行"
-                value={runtimeTarget}
+                value={runtimeTargetDisplayLabel(runtimeTarget, servers)}
+                tooltip={runtimeTargetTooltip(runtimeTarget, servers)}
             />,
         );
     }
@@ -351,39 +353,46 @@ export function BotCard({
                             displayName={displayName}
                             flavorTone={isSL ? 'info' : 'brand'}
                         />
-                        <div className="min-w-0 flex-1">
-                            <h3
-                                className="truncate font-display text-base font-semibold leading-snug text-text"
-                                title={displayName}
-                            >
-                                {displayName}
-                            </h3>
-                            <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0 text-2xs text-text-tertiary">
-                                <span className="font-mono tabular-nums">QQ {bot.bot_id}</span>
-                                {flavor && (
-                                    <>
-                                        <span aria-hidden className="text-border">
-                                            ·
-                                        </span>
-                                        <span
-                                            className={cn(
-                                                'font-medium',
-                                                isSL ? 'text-info' : 'text-brand',
-                                            )}
-                                        >
-                                            {flavor}
-                                        </span>
-                                    </>
-                                )}
-                                {lastTransitionRel && (
-                                    <>
-                                        <span aria-hidden className="text-border">
-                                            ·
-                                        </span>
-                                        <span className="tabular-nums">{lastTransitionRel}</span>
-                                    </>
-                                )}
-                            </p>
+                        <div className="flex min-w-0 flex-1 items-start gap-2">
+                            <div className="min-w-0 flex-1">
+                                <h3
+                                    className="truncate font-display text-base font-semibold leading-snug text-text"
+                                    title={displayName}
+                                >
+                                    {displayName}
+                                </h3>
+                                <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0 text-2xs text-text-tertiary">
+                                    <span className="font-mono tabular-nums">QQ {bot.bot_id}</span>
+                                    {flavor && (
+                                        <>
+                                            <span aria-hidden className="text-border">
+                                                ·
+                                            </span>
+                                            <span
+                                                className={cn(
+                                                    'font-medium',
+                                                    isSL ? 'text-info' : 'text-brand',
+                                                )}
+                                            >
+                                                {flavor}
+                                            </span>
+                                        </>
+                                    )}
+                                    {lastTransitionRel && (
+                                        <>
+                                            <span aria-hidden className="text-border">
+                                                ·
+                                            </span>
+                                            <span className="tabular-nums">{lastTransitionRel}</span>
+                                        </>
+                                    )}
+                                </p>
+                            </div>
+                            {visibleChips.length > 0 ? (
+                                <div className="flex max-h-[2.75rem] min-w-0 max-w-[58%] flex-wrap items-start justify-end gap-1 overflow-hidden">
+                                    {visibleChips}
+                                </div>
+                            ) : null}
                         </div>
                     </>
                 }
@@ -394,7 +403,6 @@ export function BotCard({
                         </p>
                     ) : null
                 }
-                chips={visibleChips.length > 0 ? visibleChips : undefined}
                 footerActions={
                     isBatchMode ? (
                         <span className="text-2xs text-text-tertiary">点击卡片选择</span>
