@@ -1,4 +1,4 @@
-// Bot 配置页 — 高级 Tab：按底座动态显隐；全局 WebUI 仅 SnowLuma 底座显示。
+// 高级 Tab：按底座显隐；全局 WebUI 仅 SnowLuma。
 
 import { Switch, Select, TextField, NumberField, Checkbox, FormSection } from '../../../../shared/ui';
 import type { AdvancedConfig } from '../../../../core/ipc/generated/domain/AdvancedConfig';
@@ -91,21 +91,18 @@ export function AdvancedTab({
             {isSnowLuma && (
                 <FormSection
                     title="WebUI 密码接管"
-                    description="仅远端 Native 生效；勾选后每次「启动」都会覆盖凭据并让 node 重新加载"
+                    description="仅远端 Native；勾选后每次启动覆盖密码"
                 >
                     <Switch
                         label="启动时覆盖 WebUI 密码"
-                        hint="开启后每次启动会覆盖远端 WebUI 密码：上方填了固定密码就用固定的，否则生成新的。原密码立即失效，已在跑的 SnowLuma node 会在本次启动时重启以加载新哈希；打开 WebUI 时自动复制。关闭则完全不改远端配置，也无法代填密码。"
+                        hint="填了固定密码就用固定的，否则生成新的；原密码立即失效。关闭则不改远端配置。"
                         checked={webuiPasswordTakeover}
                         onCheckedChange={onWebuiPasswordTakeoverChange}
                     />
                 </FormSection>
             )}
 
-            <FormSection
-                title="桌面端集成"
-                description="NapCatQQ Desktop 对此实例的行为；协议端是否消费因底座而异"
-            >
+            <FormSection title="桌面端集成">
                 <Switch
                     label="桌面端启动时自动拉起此 Bot"
                     hint="勾上后软件每次开机就尝试启动这个实例"
@@ -116,8 +113,8 @@ export function AdvancedTab({
                     label="掉线时发送通知"
                     hint={
                         isSnowLuma
-                            ? 'SnowLuma 登录态从已登录变为断开时触发；需同时打开设置里对应通道（桌面 Toast / Webhook / 邮件 / OneBot）。改完后无需重启 daemon，下一轮状态变化即生效。'
-                            : 'NapCat 登录轮询检测到在线→离线边沿时触发；需同时打开设置里对应通道。改完后请重启该 Bot，让 LoginPoller 重新加载开关。'
+                            ? '需同时打开设置里对应通道；改完后无需重启。'
+                            : '需同时打开设置里对应通道；改完后请重启该 Bot。'
                     }
                     checked={data.offlineNotice}
                     onCheckedChange={(v) => onChange({ offlineNotice: v })}
@@ -125,10 +122,7 @@ export function AdvancedTab({
             </FormSection>
 
             {isSnowLuma && (
-                <FormSection
-                    title="SnowLuma 协议与内置命令"
-                    description="写入此 Bot 的 onebot_<QQ>.json；音乐签名在「身份 → 附加服务」"
-                >
+                <FormSection title="SnowLuma 协议与内置命令">
                     <Switch
                         label="启用 #sl 状态命令"
                         hint="收到纯文本 #sl 时回复 SnowLuma 版本与运行信息"
@@ -159,7 +153,7 @@ export function AdvancedTab({
 
             {!isSnowLuma && (
                 <>
-                    <FormSection title="OneBot 行为" description="协议层上报与文件转换开关">
+                    <FormSection title="OneBot 行为">
                         <Switch
                             label="启用本地文件到 URL"
                             hint="OneBot 上报时把本地文件路径转成可访问的 URL"
@@ -174,10 +168,7 @@ export function AdvancedTab({
                         />
                     </FormSection>
 
-                    <FormSection
-                        title="核心配置"
-                        description="控制 NapCat 框架底层的核心行为；修改后需重启 Bot 生效"
-                    >
+                    <FormSection title="核心配置" description="修改后需重启 Bot">
                         <Switch
                             label="文件日志"
                             checked={data.fileLog}
@@ -204,7 +195,7 @@ export function AdvancedTab({
                         </div>
                     </FormSection>
 
-                    <FormSection title="反检测开关" description="Napi2Native 反检测；修改后需重启 Bot 生效">
+                    <FormSection title="反检测开关" description="修改后需重启 Bot">
                         <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
                             {BYPASS_FIELDS.map(({ key, label, description }) => (
                                 <Checkbox
