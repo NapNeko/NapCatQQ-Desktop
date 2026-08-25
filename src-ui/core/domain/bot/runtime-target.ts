@@ -43,3 +43,55 @@ export function serverProfileIdFromRuntimeTarget(runtimeTarget: string): string 
     const id = normalizeRuntimeTargetFromDisk(runtimeTarget);
     return isRuntimeTargetConcreteRemote(id) ? id : null;
 }
+
+type ServerNameSource = {
+    id: string;
+    name?: string | null;
+    host?: string | null;
+    username?: string | null;
+    port?: number | null;
+};
+
+function findServer(
+    runtimeTarget: string,
+    servers: readonly ServerNameSource[],
+): ServerNameSource | undefined {
+    const id = serverProfileIdFromRuntimeTarget(runtimeTarget);
+    if (!id) return undefined;
+    return servers.find((s) => s.id === id);
+}
+
+/** 列表/徽标用的运行位置：档案名或主机地址，不把内部 id 亮给用户。 */
+export function runtimeTargetDisplayLabel(
+    runtimeTarget: string,
+    servers: readonly ServerNameSource[],
+): string {
+    const t = normalizeRuntimeTargetFromDisk(runtimeTarget);
+    if (t === 'local') return '本机';
+    if (t === RUNTIME_TARGET_REMOTE_PLACEHOLDER) return '远程';
+    const profile = findServer(t, servers);
+    const name = profile?.name?.trim();
+    if (name) return name;
+    const host = profile?.host?.trim();
+    if (host) return host;
+    return '远程主机';
+}
+
+/** 悬停补充：名称 · user@host[:port]。 */
+export function runtimeTargetTooltip(
+    runtimeTarget: string,
+    servers: readonly ServerNameSource[],
+): string {
+    const t = normalizeRuntimeTargetFromDisk(runtimeTarget);
+    if (t === 'local') return '运行在本机';
+    if (t === RUNTIME_TARGET_REMOTE_PLACEHOLDER) return '已选远程，尚未指定主机';
+    const profile = findServer(t, servers);
+    if (!profile) return '远程主机档案未找到';
+    const name = profile.name?.trim() || '远程主机';
+    const host = profile.host?.trim();
+    if (!host) return name;
+    const user = profile.username?.trim();
+    const port = profile.port && profile.port !== 22 ? `:${profile.port}` : '';
+    const endpoint = user ? `${user}@${host}${port}` : `${host}${port}`;
+    return `${name} · ${endpoint}`;
+}
