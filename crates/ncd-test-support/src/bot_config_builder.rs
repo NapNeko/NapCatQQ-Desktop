@@ -14,6 +14,7 @@ pub struct BotConfigBuilder {
     backend_type: BackendType,
     deployment_type: DeploymentType,
     snowluma_start_mode: Option<SnowLumaStartMode>,
+    webui_password_takeover: bool,
     connect: ConnectConfig,
     advanced: AdvancedConfig,
     status_command: Option<StatusCommandConfig>,
@@ -31,6 +32,7 @@ impl BotConfigBuilder {
             backend_type: BackendType::NapCat,
             deployment_type: DeploymentType::Native,
             snowluma_start_mode: None,
+            webui_password_takeover: false,
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),
             status_command: None,
@@ -82,6 +84,11 @@ impl BotConfigBuilder {
         self
     }
 
+    pub fn webui_password_takeover(mut self, take_over: bool) -> Self {
+        self.webui_password_takeover = take_over;
+        self
+    }
+
     pub fn connect(mut self, connect: ConnectConfig) -> Self {
         self.connect = connect;
         self
@@ -119,6 +126,7 @@ impl BotConfigBuilder {
                 backend_type: self.backend_type,
                 deployment_type: self.deployment_type,
                 snowluma_start_mode: self.snowluma_start_mode,
+                webui_password_takeover: self.webui_password_takeover,
             },
             connect: self.connect,
             advanced: self.advanced,
