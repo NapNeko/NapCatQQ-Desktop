@@ -186,7 +186,7 @@ impl NapCatComponent {
         crate::types::ComponentInfo {
             id: ComponentId::NapCat,
             display_name: "NapCat".to_string(),
-            description: "Hook QQ 实现的 OneBot 11 协议端，运行时关闭客户端窗口".to_string(),
+            description: "无 QQ 窗口的协议端".to_string(),
             repo_url: Some("https://github.com/NapNeko/NapCatQQ".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
