@@ -1,12 +1,4 @@
-// 推倒重写版 BotLogPage：
-//
-// 视觉：和项目暖白基调对齐（不用 GitHub 黑），日志面板用 surface-inset。
-// 布局：
-//   顶部 一行 返回按钮 + 标题 + 行数 chip
-//   工具栏 一行 搜索框 + 级别 chip + 自动滚动 + 复制 + 清空
-//   主体  flex-1 overflow-auto，每行高 22px 单行，左侧 2px 彩色条表 level
-// 行结构 grid 三列：时间戳 / level 标签 / 文本（文本内 break-all）
-// 历史与增量数据来自 useBotLogStream，不直接调 service。
+// Bot 日志页。数据来自 useBotLogStream，不直接调 service。
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
