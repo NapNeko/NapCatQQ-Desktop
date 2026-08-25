@@ -1,6 +1,4 @@
-// 从远端库存发现的 NC / SL / Docker Bot 勾选导入。
-// 列表走 list_importable_remote_bots（读已缓存库存，不额外 SSH）；
-// 写入走现有 upsert_bot_config。导入时尝试迁远端 onebot 网络配置，不拷 WebUI 密钥。
+// 从远端库存勾选导入已有 Bot；不拷 WebUI 密钥。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -273,7 +271,7 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                             disabled={busy || selectedCount === 0}
                             onCheckedChange={(v) => setTakeOverWebuiPwd(v === true)}
                             label="接管 WebUI 密码"
-                            hint="勾选后：所选的远端 Native SnowLuma 下次「启动」会覆盖 WebUI 密码（配置了固定密码就用固定的，否则生成新的）并重启 node，原密码立即失效，打开 WebUI 时自动复制；不勾选则不改远端配置，启动时可能因不知道原密码而登录失败。"
+                            hint="勾选后，所选远端 Native SnowLuma 下次启动会覆盖 WebUI 密码；不勾选则不改远端配置。"
                         />
                     </div>
                 )}
