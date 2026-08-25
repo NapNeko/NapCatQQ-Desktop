@@ -104,6 +104,39 @@ fn napcat_config_dir(install_base: &HostPath) -> String {
     )
 }
 
+/// 导入迁移：读取 `{napcat_root}/config/onebot11_{qq}.json`。
+/// 文件不存在返回 Ok(None)；存在但缺少 network 返回 Err。
+pub async fn read_remote_napcat_connect(
+    host: &dyn Host,
+    napcat_root: &str,
+    qq_id: &str,
+) -> Result<Option<ncd_domain::ImportedNetworkConfig>, String> {
+    let path = format!(
+        "{}/config/onebot11_{}.json",
+        napcat_root.trim_end_matches('/'),
+        qq_id
+    );
+    let bytes = match host.read_file(&HostPath::from_posix(&path)).await {
+        Ok(bytes) => bytes,
+        Err(ncd_host::HostError::PathNotFound { .. }) => {
+            tracing::info!(
+                target: "ncd_backend_napcat::remote",
+                %path,
+                "远端 NapCat onebot11 配置不存在，跳过网络配置迁移"
+            );
+            return Ok(None);
+        }
+        Err(err) => {
+            return Err(format!("读取 {path} 失败: {err}"));
+        }
+    };
+    let value: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|e| format!("解析 {path} 失败: {e}"))?;
+    ncd_deploy::backend_config_renderer::parse_napcat_onebot_connect(&value)
+        .map(Some)
+        .ok_or_else(|| format!("{path} 缺少 network 字段，无法迁移网络配置"))
+}
+
 pub fn napcat_remote_log_path(install_base: &HostPath, qq_id: u64) -> String {
     format!("{}/log/napcat_{qq_id}.log", install_base.as_posix())
 }
