@@ -9,9 +9,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ncd_component::{Component, LaunchArgs, NapCatComponent};
+use ncd_component::{Component, LaunchArgs, NapCatComponent, linux_qq_running_pid_script};
 use ncd_deploy::{DeploymentError, NativeLaunchCommand, NativeLaunchTranslator};
-use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId};
+use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, RemoteSelectedPaths};
 use ncd_host::{Host, HostCommand, HostPath};
 
 use ncd_deploy::backend_config_renderer::render_napcat_docker_config_payloads;
@@ -56,6 +56,38 @@ pub async fn probe_remote_napcat_layout(
         RemoteNapcatLayout::Rootless
     };
     Ok((home, layout))
+}
+
+#[cfg(test)]
+mod selected_tests {
+    use super::*;
+    use ncd_domain::RemoteSelectedPaths;
+
+    #[test]
+    fn napcat_paths_from_selected_custom_prefix() {
+        let selected = RemoteSelectedPaths {
+            home: "/home/u".into(),
+            qq_install_base: Some("/data/qq".into()),
+            qq_bin: Some("/data/qq/opt/QQ/qq".into()),
+            needs_sudo: false,
+            ..RemoteSelectedPaths::default()
+        };
+        let (home, layout, base) = napcat_paths_from_selected(&selected).unwrap();
+        assert_eq!(home, "/home/u");
+        assert_eq!(layout, RemoteNapcatLayout::Rootless);
+        assert_eq!(base.as_posix(), "/data/qq");
+    }
+
+    #[test]
+    fn napcat_paths_from_selected_missing_qq_errors() {
+        let selected = RemoteSelectedPaths {
+            home: "/home/u".into(),
+            ..RemoteSelectedPaths::default()
+        };
+        let err = napcat_paths_from_selected(&selected).unwrap_err();
+        assert!(err.contains("/home/u"));
+        assert!(err.contains("未发现"));
+    }
 }
 
 fn napcat_install_base(home: &str, layout: RemoteNapcatLayout) -> Result<HostPath, String> {
@@ -246,7 +278,8 @@ pub struct RemoteNativeLaunchTranslator {
     coordinator: Arc<ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator>,
     /// 可选：远端实例指标探针注入（失败不阻断启动）
     metrics_injector: Option<Arc<dyn RemoteMetricsInjector>>,
-    cached_layout: tokio::sync::Mutex<Option<(String, RemoteNapcatLayout)>>,
+    cached_layout: tokio::sync::Mutex<Option<(String, RemoteNapcatLayout, HostPath)>>,
+    selected: Option<RemoteSelectedPaths>,
 }
 
 impl RemoteNativeLaunchTranslator {
@@ -274,20 +307,51 @@ impl RemoteNativeLaunchTranslator {
             coordinator,
             metrics_injector,
             cached_layout: tokio::sync::Mutex::new(None),
+            selected: None,
         }
     }
 
-    async fn layout(&self) -> Result<(String, RemoteNapcatLayout), DeploymentError> {
-        let mut guard = self.cached_layout.lock().await;
-        if let Some(pair) = guard.as_ref() {
-            return Ok(pair.clone());
-        }
-        let pair = probe_remote_napcat_layout(self.host.as_ref())
-            .await
-            .map_err(DeploymentError::LaunchFailed)?;
-        *guard = Some(pair.clone());
-        Ok(pair)
+    pub fn with_selected(mut self, selected: RemoteSelectedPaths) -> Self {
+        self.selected = Some(selected);
+        self
     }
+
+    async fn layout(&self) -> Result<(String, RemoteNapcatLayout, HostPath), DeploymentError> {
+        let mut guard = self.cached_layout.lock().await;
+        if let Some(triple) = guard.as_ref() {
+            return Ok(triple.clone());
+        }
+        let triple = if let Some(sel) = &self.selected {
+            napcat_paths_from_selected(sel).map_err(DeploymentError::LaunchFailed)?
+        } else {
+            let (home, layout) = probe_remote_napcat_layout(self.host.as_ref())
+                .await
+                .map_err(DeploymentError::LaunchFailed)?;
+            let install_base =
+                napcat_install_base(&home, layout).map_err(DeploymentError::LaunchFailed)?;
+            (home, layout, install_base)
+        };
+        *guard = Some(triple.clone());
+        Ok(triple)
+    }
+}
+
+pub fn napcat_paths_from_selected(
+    selected: &RemoteSelectedPaths,
+) -> Result<(String, RemoteNapcatLayout, HostPath), String> {
+    let home = selected.home.clone();
+    let base = selected.qq_install_base.clone().ok_or_else(|| {
+        format!(
+            "远端未发现 QQ 安装树（home={}）。请在组件页安装或填写覆盖路径后重新发现。",
+            home
+        )
+    })?;
+    let layout = if selected.needs_sudo {
+        RemoteNapcatLayout::System
+    } else {
+        RemoteNapcatLayout::Rootless
+    };
+    Ok((home, layout, HostPath::from_posix(base)))
 }
 
 #[async_trait]
@@ -296,9 +360,7 @@ impl NativeLaunchTranslator for RemoteNativeLaunchTranslator {
         match self.flavor {
             BotFlavor::NapCat => {
                 let bot_id = BotId::new(config.bot.qq_id.to_string());
-                let (home, layout) = self.layout().await?;
-                let install_base =
-                    napcat_install_base(&home, layout).map_err(DeploymentError::LaunchFailed)?;
+                let (home, _layout, install_base) = self.layout().await?;
 
                 // Per-bot config files can be rendered without the entry lock.
                 render_native_napcat_config_on_host(
@@ -402,31 +464,23 @@ fi
     Ok(())
 }
 
-/// pgrep 探测远端 NapCat 是否在跑
+/// 探测远端 NapCat/QQ 是否在跑（cmdline `-q` 或 Ptlogin2 当前账号，不写死 WebUI 口）
 pub async fn remote_napcat_running_pid(
     host: &dyn Host,
     qq_id: u64,
 ) -> Result<Option<u32>, BotBackendError> {
-    let script = format!(
-        r#"pid="$(pgrep -f -- "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1)"
-if [ -z "$pid" ]; then
-  pid="$(pgrep -f -- "qq.*-q {qq_id}$" 2>/dev/null | head -n 1)"
-fi
-if [ -n "$pid" ]; then echo "$pid"; fi
-"#
-    );
+    let script = linux_qq_running_pid_script(qq_id, None, None);
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
     let out = host
         .run_to_string(cmd)
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
     if !out.success() {
-        // pgrep 无匹配时常 exit 1;stdout 空视为未运行
         if out.stdout.trim().is_empty() {
             return Ok(None);
         }
         return Err(BotBackendError::Io(format!(
-            "远端 pgrep NapCat 失败: exit={:?} stderr={}",
+            "远端 QQ 进程探测失败: exit={:?} stderr={}",
             out.exit_code,
             out.stderr.trim()
         )));
@@ -437,5 +491,5 @@ if [ -n "$pid" ]; then echo "$pid"; fi
     }
     line.parse()
         .map(Some)
-        .map_err(|_| BotBackendError::InvalidConfig(format!("invalid pgrep pid: {line}")))
+        .map_err(|_| BotBackendError::InvalidConfig(format!("invalid qq pid: {line}")))
 }

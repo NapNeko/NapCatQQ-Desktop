@@ -433,6 +433,20 @@ async fn write_status_bot_json(
     Ok(())
 }
 
+/// 导入接管时记下 QQ pid，后续 stop / status 不再只靠 Desktop 自己拉起时写的文件。
+pub async fn remember_remote_bot_pid(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+    qq_id: &str,
+    pid: u32,
+) -> Result<(), BotBackendError> {
+    let pidfile = HostPath::from_posix(paths.pid_bot_path(qq_id));
+    host.write_file(&pidfile, format!("{pid}\n").as_bytes())
+        .await
+        .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    write_status_bot_json(host, paths, qq_id, qq_id, pid, true).await
+}
+
 pub async fn bot_stop(
     host: &dyn Host,
     paths: &SnowLumaRemotePaths,
@@ -459,6 +473,21 @@ echo '{{"qq_id":"'"$qq_id"'","running":false}}' > {status}
 "#
     );
     let _ = run_remote_bash(host, &script).await;
+    if let Ok(qid) = qq_id.parse::<u64>() {
+        if let Ok(Some(pid)) = super::inject::remote_qq_running_pid(host, qid).await {
+            let kill = format!(
+                r#"pid={pid}
+if kill -0 "$pid" 2>/dev/null; then
+  kill "$pid" 2>/dev/null || true
+  i=0
+  while [ "$i" -lt 10 ] && kill -0 "$pid" 2>/dev/null; do sleep 0.5; i=$((i+1)); done
+  kill -9 "$pid" 2>/dev/null || true
+fi
+"#
+            );
+            let _ = run_remote_bash(host, &kill).await;
+        }
+    }
     Ok(())
 }
 
@@ -467,14 +496,20 @@ pub async fn write_status_daemon_json(
     paths: &SnowLumaRemotePaths,
     running: bool,
     ready: bool,
+    webui_port: u16,
 ) -> Result<(), BotBackendError> {
+    let webui = if webui_port == 0 {
+        DEFAULT_WEBUI_PORT
+    } else {
+        webui_port as i32
+    };
     let payload = json!({
         "running": running,
         "ready": ready,
         "ports": {
             "vnc": DEFAULT_VNC_PORT,
             "novnc": DEFAULT_NOVNC_PORT,
-            "webui": DEFAULT_WEBUI_PORT,
+            "webui": webui,
         },
         "display": display_str(DEFAULT_DISPLAY_NUM),
     });

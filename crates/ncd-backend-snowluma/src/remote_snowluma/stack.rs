@@ -8,9 +8,12 @@ use std::time::Duration;
 use ncd_host::{Host, HostCommand, HostPath};
 
 use super::layout::{
-    DEFAULT_DISPLAY_NUM, DEFAULT_NOVNC_PORT, DEFAULT_VNC_PORT, DEFAULT_WEBUI_PORT,
-    RemoteSnowLumaLayout, SnowLumaRemotePaths, shell_single_quote,
+    DEFAULT_DISPLAY_NUM, DEFAULT_NOVNC_PORT, DEFAULT_VNC_PORT, RemoteSnowLumaLayout,
+    SnowLumaRemotePaths, shell_single_quote,
 };
+use super::probe::wait_remote_webui_ready;
+
+pub use super::probe::is_stack_ready;
 use ncd_traits::runtime_backend::BotBackendError;
 
 fn display_str(num: i32) -> String {
@@ -424,34 +427,6 @@ exit 1
     Ok(())
 }
 
-/// daemon 是否已在远端就绪(pid + WebUI),dash-safe 探测
-pub async fn is_stack_ready(
-    host: &dyn Host,
-    paths: &SnowLumaRemotePaths,
-) -> Result<bool, BotBackendError> {
-    let pid_path = shell_single_quote(&paths.pid_daemon);
-    let port = DEFAULT_WEBUI_PORT;
-    let script = format!(
-        r#"PID_PATH={pid_path}
-port={port}
-if [ -f "$PID_PATH" ]; then
-  pid=$(cat "$PID_PATH" 2>/dev/null || echo "")
-  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-    if command -v bash >/dev/null 2>&1 && bash -c "(: > /dev/tcp/127.0.0.1/$port) 2>/dev/null"; then exit 0; fi
-    if command -v nc >/dev/null 2>&1 && nc -z 127.0.0.1 "$port" 2>/dev/null; then exit 0; fi
-  fi
-fi
-exit 1
-"#
-    );
-    let cmd = HostCommand::new("sh").arg("-c").arg(script);
-    let out = host
-        .run_to_string(cmd)
-        .await
-        .map_err(|e| BotBackendError::Io(e.to_string()))?;
-    Ok(out.success())
-}
-
 pub async fn stack_stop(
     host: &dyn Host,
     paths: &SnowLumaRemotePaths,
@@ -534,6 +509,6 @@ fi
     cleanup_stale_websockify(host, layout).await?;
     start_websockify(host, layout).await?;
     start_node(host, layout).await?;
-    wait_webui_tcp(host, DEFAULT_WEBUI_PORT, Duration::from_secs(60)).await?;
+    wait_remote_webui_ready(host, paths, Duration::from_secs(60)).await?;
     Ok(())
 }

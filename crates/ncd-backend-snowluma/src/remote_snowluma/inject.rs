@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use ncd_component::linux_qq_running_pid_script;
 use ncd_host::{Host, HostCommand};
 use ncd_traits::runtime_backend::BotBackendError;
 
@@ -17,27 +18,30 @@ pub async fn remote_qq_running_pid(
     host: &dyn Host,
     qq_id: u64,
 ) -> Result<Option<u32>, BotBackendError> {
-    let script = format!(
-        r#"pid="$(pgrep -f -- "qq --no-sandbox -q {qq_id}$" 2>/dev/null | head -n 1)"
-if [ -z "$pid" ]; then
-  pid="$(pgrep -f -- "qq.*-q {qq_id}$" 2>/dev/null | head -n 1)"
-fi
-echo "$pid"
-"#
-    );
+    remote_qq_running_pid_with_hint(host, qq_id, None, None).await
+}
+
+/// `pid_file`：Desktop 写下的 `pid_bot_<qq>`，导入接管时优先认。
+/// `qq_bin`：库存/布局里的 QQ 可执行文件，用来对齐 /proc/pid/exe。
+pub async fn remote_qq_running_pid_with_hint(
+    host: &dyn Host,
+    qq_id: u64,
+    pid_file: Option<&str>,
+    qq_bin: Option<&str>,
+) -> Result<Option<u32>, BotBackendError> {
+    let script = linux_qq_running_pid_script(qq_id, pid_file, qq_bin);
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
     let out = host
         .run_to_string(cmd)
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
-    // pgrep 无匹配时常 exit 1;stdout 空视为未运行
     let line = out.stdout.lines().next().unwrap_or("").trim();
     if line.is_empty() {
         return Ok(None);
     }
     line.parse()
         .map(Some)
-        .map_err(|_| BotBackendError::InvalidConfig(format!("invalid pgrep pid: {line}")))
+        .map_err(|_| BotBackendError::InvalidConfig(format!("invalid qq pid: {line}")))
 }
 
 pub(crate) async fn inject_via_tunnel(

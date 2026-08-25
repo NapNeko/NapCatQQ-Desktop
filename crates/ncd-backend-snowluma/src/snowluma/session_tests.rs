@@ -58,6 +58,10 @@ fn build_webui_json_payload_has_5_fields() {
         payload.get("mustChangePassword"),
         Some(&serde_json::Value::Bool(false))
     );
+
+    assert!(verify_webui_password("hello-world-1!", hash, salt));
+    assert!(!verify_webui_password("wrong-password-1!", hash, salt));
+    assert!(!verify_webui_password("", hash, salt));
 }
 
 // ------------------------------------------------------------------------

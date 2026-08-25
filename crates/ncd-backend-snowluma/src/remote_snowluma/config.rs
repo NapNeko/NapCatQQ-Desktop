@@ -10,7 +10,9 @@ use serde_json::{Value, json};
 
 use super::layout::{DEFAULT_WEBUI_PORT, SnowLumaRemotePaths, napcat_layout_qq_executable};
 use super::orchestrator::resolve_remote_bash;
-use crate::snowluma::session::{build_webui_json_payload, generate_strong_password};
+use crate::snowluma::session::{
+    build_webui_json_payload, generate_strong_password, verify_webui_password,
+};
 
 use super::helpers::host_file_nonempty;
 
@@ -18,50 +20,22 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
     host: &dyn Host,
     home: &str,
     paths: &SnowLumaRemotePaths,
+    qq_bin: &str,
 ) -> Result<(), BotBackendError> {
     host.create_dir_all(&HostPath::from_posix(&paths.config_dir))
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
 
-    let runtime_json = serde_json::to_vec_pretty(&json!({ "webuiPort": DEFAULT_WEBUI_PORT }))
-        .map_err(|e| BotBackendError::Json(e.to_string()))?;
-    host.write_file(
-        &HostPath::from_posix(format!("{}/runtime.json", paths.config_dir)),
-        &runtime_json,
-    )
-    .await
-    .map_err(|e| BotBackendError::Io(e.to_string()))?;
-
-    let webui_plain = if host_file_nonempty(host, &paths.webui_secret).await {
-        let bytes = host
-            .read_file(&HostPath::from_posix(&paths.webui_secret))
+    let runtime_path = format!("{}/runtime.json", paths.config_dir);
+    if !host_file_nonempty(host, &runtime_path).await {
+        let runtime_json = serde_json::to_vec_pretty(&json!({ "webuiPort": DEFAULT_WEBUI_PORT }))
+            .map_err(|e| BotBackendError::Json(e.to_string()))?;
+        host.write_file(&HostPath::from_posix(&runtime_path), &runtime_json)
             .await
             .map_err(|e| BotBackendError::Io(e.to_string()))?;
-        String::from_utf8_lossy(&bytes).trim().to_string()
-    } else {
-        let pwd = generate_strong_password(16);
-        host.write_file(&HostPath::from_posix(&paths.webui_secret), pwd.as_bytes())
-            .await
-            .map_err(|e| BotBackendError::Io(e.to_string()))?;
-        pwd
-    };
-
-    if webui_plain.is_empty() {
-        return Err(BotBackendError::InvalidConfig(
-            "远端 webui.secret 为空，无法启动 SnowLuma daemon".into(),
-        ));
     }
 
-    let webui_payload = build_webui_json_payload(&webui_plain, false)
-        .map_err(|e| BotBackendError::Io(e.to_string()))?;
-    let webui_json = serde_json::to_vec_pretty(&webui_payload)
-        .map_err(|e| BotBackendError::Json(e.to_string()))?;
-    host.write_file(
-        &HostPath::from_posix(format!("{}/webui.json", paths.config_dir)),
-        &webui_json,
-    )
-    .await
-    .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    sync_remote_webui_credentials(host, paths).await?;
 
     if !host_file_nonempty(host, &paths.vnc_secret).await {
         let vnc_pwd = generate_strong_password(8);
@@ -88,7 +62,11 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
 
     resolve_remote_bash(host).await?;
 
-    let qq = napcat_layout_qq_executable(home);
+    let qq = if qq_bin.trim().is_empty() {
+        napcat_layout_qq_executable(home)
+    } else {
+        qq_bin.to_string()
+    };
     let qq_check = HostCommand::new("sh")
         .arg("-c")
         .arg(format!("test -x '{}'", qq.replace('\'', "'\"'\"'")));
@@ -98,11 +76,68 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
     if !qq_out.success() {
         return Err(BotBackendError::InvalidConfig(format!(
-            "远端未找到可执行的 QQ（组件页应已安装到 {qq}）。请先在同一 SSH 主机安装 QQ 组件。"
+            "远端未找到可执行的 QQ（期望 {qq}）。请先在同一 SSH 主机安装 QQ 组件。"
         )));
     }
 
     Ok(())
+}
+
+/// 已有 webui.json 时不改写哈希（导入的现成安装）。明文只在 secret 能对上哈希时使用。
+async fn sync_remote_webui_credentials(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+) -> Result<(), BotBackendError> {
+    let webui_json_path = format!("{}/webui.json", paths.config_dir);
+    let existing_hash = read_webui_hash_salt(host, &webui_json_path).await;
+    let secret = if host_file_nonempty(host, &paths.webui_secret).await {
+        let bytes = host
+            .read_file(&HostPath::from_posix(&paths.webui_secret))
+            .await
+            .map_err(|e| BotBackendError::Io(e.to_string()))?;
+        String::from_utf8_lossy(&bytes).trim().to_string()
+    } else {
+        String::new()
+    };
+
+    match existing_hash {
+        Some((hash, salt)) => {
+            if !secret.is_empty() && verify_webui_password(&secret, &hash, &salt) {
+                return Ok(());
+            }
+            Ok(())
+        }
+        None => {
+            let plain = if secret.is_empty() {
+                let pwd = generate_strong_password(16);
+                host.write_file(&HostPath::from_posix(&paths.webui_secret), pwd.as_bytes())
+                    .await
+                    .map_err(|e| BotBackendError::Io(e.to_string()))?;
+                pwd
+            } else {
+                secret
+            };
+            let webui_payload = build_webui_json_payload(&plain, false)
+                .map_err(|e| BotBackendError::Io(e.to_string()))?;
+            let webui_json = serde_json::to_vec_pretty(&webui_payload)
+                .map_err(|e| BotBackendError::Json(e.to_string()))?;
+            host.write_file(&HostPath::from_posix(&webui_json_path), &webui_json)
+                .await
+                .map_err(|e| BotBackendError::Io(e.to_string()))?;
+            Ok(())
+        }
+    }
+}
+
+async fn read_webui_hash_salt(host: &dyn Host, path: &str) -> Option<(String, String)> {
+    let bytes = host.read_file(&HostPath::from_posix(path)).await.ok()?;
+    let v: Value = serde_json::from_slice(&bytes).ok()?;
+    let hash = v.get("passwordHash")?.as_str()?.trim().to_string();
+    let salt = v.get("passwordSalt")?.as_str()?.trim().to_string();
+    if hash.is_empty() || salt.is_empty() {
+        return None;
+    }
+    Some((hash, salt))
 }
 
 pub async fn render_native_snowluma_config_on_host(

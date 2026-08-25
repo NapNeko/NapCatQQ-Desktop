@@ -1,5 +1,7 @@
-//! 远端 SnowLuma Native:SSH 本地转发 WebUI(5099) / noVNC(6081)
+//! 远端 SnowLuma Native:SSH 本地转发 WebUI / noVNC
 //!
+//! WebUI 远端端口由调用方按 runtime.json / 日志 / node 监听口解析后传入，
+//! 不写死 5099。noVNC 仍默认 6081（图形栈由 Desktop 拉起时固定）。
 //! 对齐 legacy SnowLumaTunnelManager:多 Bot 同 server_id 共享隧道,引用计数归零后关闭
 
 use std::collections::HashMap;
@@ -26,6 +28,7 @@ struct TunnelBundle {
     novnc: TunnelHandle,
     webui_password: String,
     vnc_password: String,
+    remote_webui_port: u16,
     refcount: u32,
 }
 
@@ -59,16 +62,27 @@ impl RemoteSnowLumaTunnelRegistry {
         })
     }
 
-    /// 隧道 +1;首次建立双隧道密码由调用方在 daemon 就绪后从远端 secret 读出传入
+    /// 隧道 +1;首次建立双隧道密码由调用方在 daemon 就绪后从远端 secret 读出传入。
+    /// `remote_webui_port` 必须是探测到的实际口，不能假定 5099。
     pub async fn acquire(
         &self,
         server_id: &str,
         host: &dyn Host,
         webui_password: String,
         vnc_password: String,
+        remote_webui_port: u16,
     ) -> Result<RemoteSnowLumaTunnelEndpoints, HostError> {
         let mut guard = self.by_server.lock().await;
         if let Some(bundle) = guard.get_mut(server_id) {
+            if remote_webui_port != 0 && bundle.remote_webui_port != remote_webui_port {
+                tracing::warn!(
+                    target: "ncd_runtime::remote_snowluma",
+                    server_id,
+                    existing = bundle.remote_webui_port,
+                    requested = remote_webui_port,
+                    "SnowLuma WebUI 隧道已按先前探测端口建立，忽略本次端口"
+                );
+            }
             bundle.refcount = bundle.refcount.saturating_add(1);
             return Ok(RemoteSnowLumaTunnelEndpoints {
                 webui_local_port: bundle.webui.local_port(),
@@ -78,8 +92,12 @@ impl RemoteSnowLumaTunnelRegistry {
             });
         }
 
-        let webui =
-            open_tunnel_preferred(host, PREFERRED_WEBUI_LOCAL_PORT, REMOTE_WEBUI_PORT).await?;
+        let remote_webui = if remote_webui_port == 0 {
+            REMOTE_WEBUI_PORT
+        } else {
+            remote_webui_port
+        };
+        let webui = open_tunnel_preferred(host, PREFERRED_WEBUI_LOCAL_PORT, remote_webui).await?;
         let novnc =
             open_tunnel_preferred(host, PREFERRED_NOVNC_LOCAL_PORT, REMOTE_NOVNC_PORT).await?;
 
@@ -96,6 +114,7 @@ impl RemoteSnowLumaTunnelRegistry {
                 novnc,
                 webui_password,
                 vnc_password,
+                remote_webui_port: remote_webui,
                 refcount: 1,
             },
         );

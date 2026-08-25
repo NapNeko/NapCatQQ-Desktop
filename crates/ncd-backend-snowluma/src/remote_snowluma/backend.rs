@@ -13,11 +13,10 @@ use ncd_traits::runtime_backend::{
     BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx, BotStatus, LogSnapshot, StopMode,
     TailOpts,
 };
-use serde_json::Value;
 use tokio::sync::Mutex;
 
 use super::layout::SnowLumaRemotePaths;
-use super::orchestrator::{bot_cold_start, bot_stop};
+use super::orchestrator::{bot_cold_start, bot_stop, remember_remote_bot_pid};
 use super::tunnel::RemoteSnowLumaTunnelRegistry;
 use crate::snowluma::log_noise::prepare_snowluma_bot_history_lines;
 use crate::snowluma::status_poller::{PollerDeps, SnowLumaStatusPoller};
@@ -25,7 +24,7 @@ use crate::snowluma::status_poller::{PollerDeps, SnowLumaStatusPoller};
 use super::config::{render_native_snowluma_config_on_host, resolve_start_mode};
 use super::daemon::RemoteSnowLumaDaemon;
 use super::helpers::{read_remote_log_tail, read_remote_log_tail_lines};
-use super::inject::{inject_via_tunnel, remote_qq_running_pid};
+use super::inject::{inject_via_tunnel, remote_qq_running_pid_with_hint};
 
 /// 远端 SL 指标探针：上传资产并返回应 export 进共享 node 的 env
 #[async_trait]
@@ -99,30 +98,71 @@ impl RemoteSnowLumaBackend {
         self.daemon.paths()
     }
 
-    /// 冷启动后再开桌面:远端 QQ 仍在跑时恢复隧道注入与 status poller
+    pub fn qq_bin(&self) -> &str {
+        &self.daemon.layout().qq_bin
+    }
+
+    /// 冷启动后再开桌面 / 导入：记下 QQ pid；WebUI 注入失败不阻断运行态。
     pub async fn attach_reconciled_running(
         &self,
         bot_id: BotId,
         pid: u32,
         config: &BotConfig,
     ) -> Result<(), BotBackendError> {
-        self.daemon.ensure_running_for_reconcile().await?;
-        let endpoints = self
-            .daemon
-            .tunnel_endpoints()
+        let qq_id = config.bot.qq_id.to_string();
+        if let Err(err) =
+            remember_remote_bot_pid(self.daemon.host.as_ref(), self.daemon.paths(), &qq_id, pid)
+                .await
+        {
+            tracing::warn!(
+                target: "ncd_runtime::remote_snowluma",
+                bot_id = %bot_id,
+                %err,
+                "reconcile: 未能写下 pid_bot（仍按进程认运行）"
+            );
+        }
+
+        self.start_modes
+            .lock()
             .await
-            .ok_or_else(|| BotBackendError::Io("SnowLuma 隧道未建立".into()))?;
-        let http = inject_via_tunnel(&endpoints, pid).await?;
+            .insert(bot_id.clone(), resolve_start_mode(config));
+
+        if let Err(err) = self.daemon.ensure_running_for_reconcile().await {
+            tracing::warn!(
+                target: "ncd_runtime::remote_snowluma",
+                bot_id = %bot_id,
+                %err,
+                "reconcile: SnowLuma 隧道未建立，跳过 WebUI 注入"
+            );
+            return Ok(());
+        }
+        let Some(endpoints) = self.daemon.tunnel_endpoints().await else {
+            tracing::info!(
+                target: "ncd_runtime::remote_snowluma",
+                bot_id = %bot_id,
+                "reconcile: 无 WebUI 隧道（node 未在或端口未解析），仅同步运行态"
+            );
+            return Ok(());
+        };
+        let http = match inject_via_tunnel(&endpoints, pid).await {
+            Ok(c) => c,
+            Err(err) => {
+                tracing::warn!(
+                    target: "ncd_runtime::remote_snowluma",
+                    bot_id = %bot_id,
+                    pid,
+                    %err,
+                    "reconcile: WebUI 注入失败（密码未知或端口刚换），Bot 仍标为运行中"
+                );
+                return Ok(());
+            }
+        };
         self.event_bus
             .publish(DomainEvent::snowluma_bot_injected(bot_id.clone(), pid));
         self.event_bus
             .publish(DomainEvent::SnowLumaDockerEndpointsReady {
                 bot_id: bot_id.clone(),
             });
-        self.start_modes
-            .lock()
-            .await
-            .insert(bot_id.clone(), resolve_start_mode(config));
 
         if self.pollers.lock().await.contains_key(&bot_id) {
             return Ok(());
@@ -133,7 +173,7 @@ impl RemoteSnowLumaBackend {
             proc_tree: Arc::new(crate::snowluma::linux_proc_probe::LinuxSinglePidProbe::new(
                 pid,
             )),
-            expected_uin: Some(config.bot.qq_id.to_string()),
+            expected_uin: Some(qq_id),
         };
         let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
         self.pollers.lock().await.insert(bot_id, poller);
@@ -200,7 +240,14 @@ impl BotBackend for RemoteSnowLumaBackend {
 
         let pid = match start_mode {
             SnowLumaStartMode::HotStart => {
-                if let Some(pid) = remote_qq_running_pid(host, qq_id).await? {
+                if let Some(pid) = remote_qq_running_pid_with_hint(
+                    host,
+                    qq_id,
+                    Some(&paths.pid_bot_path(&qq_id_str)),
+                    Some(&layout.qq_bin),
+                )
+                .await?
+                {
                     pid
                 } else {
                     self.daemon.release().await;
@@ -321,47 +368,20 @@ impl BotBackend for RemoteSnowLumaBackend {
     async fn status(&self, bot_id: BotId) -> Result<BotStatus, BotBackendError> {
         let qq_id = bot_id.as_str();
         let paths = self.daemon.paths();
-        let start_mode = self
-            .start_modes
-            .lock()
-            .await
-            .get(&bot_id)
-            .copied()
-            .unwrap_or(SnowLumaStartMode::ColdStart);
-
-        if start_mode.is_hot() {
-            if let Ok(qq_id_u) = qq_id.parse::<u64>() {
-                if let Some(pid) = remote_qq_running_pid(self.daemon.host.as_ref(), qq_id_u).await?
-                {
-                    return Ok(BotStatus::running(bot_id, pid, 0));
-                }
+        if let Ok(qq_id_u) = qq_id.parse::<u64>() {
+            let pid_file = paths.pid_bot_path(qq_id);
+            if let Some(pid) = remote_qq_running_pid_with_hint(
+                self.daemon.host.as_ref(),
+                qq_id_u,
+                Some(pid_file.as_str()),
+                Some(self.daemon.layout().qq_bin.as_str()),
+            )
+            .await?
+            {
+                return Ok(BotStatus::running(bot_id, pid, 0));
             }
-            return Ok(BotStatus::stopped(bot_id));
         }
-
-        let status_path = paths.status_bot_path(qq_id);
-        match self
-            .daemon
-            .host
-            .read_file(&HostPath::from_posix(&status_path))
-            .await
-        {
-            Ok(bytes) => {
-                let status: Value = serde_json::from_slice(&bytes)
-                    .map_err(|e| BotBackendError::Json(e.to_string()))?;
-                let running = status.get("running").and_then(|v| v.as_bool()) == Some(true);
-                if running {
-                    let pid = status
-                        .get("pid")
-                        .and_then(|v| v.as_u64())
-                        .map(|p| p as u32)
-                        .unwrap_or(0);
-                    return Ok(BotStatus::running(bot_id, pid, 0));
-                }
-                Ok(BotStatus::stopped(bot_id))
-            }
-            Err(_) => Ok(BotStatus::stopped(bot_id)),
-        }
+        Ok(BotStatus::stopped(bot_id))
     }
 
     async fn read_config(&self, bot_id: BotId) -> Result<BotRuntimeConfig, BotBackendError> {

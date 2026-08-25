@@ -211,6 +211,33 @@ pub fn build_webui_json_payload(
     Ok(payload)
 }
 
+/// 用与 `build_webui_json_payload` 相同的 scrypt 参数校验明文是否匹配 webui.json。
+pub fn verify_webui_password(password: &str, hash_hex: &str, salt_hex: &str) -> bool {
+    if password.is_empty() {
+        return false;
+    }
+    let Ok(salt) = hex::decode(salt_hex.trim()) else {
+        return false;
+    };
+    let Ok(expected) = hex::decode(hash_hex.trim()) else {
+        return false;
+    };
+    let Ok(params) = scrypt::Params::new(SCRYPT_LOG_N, SCRYPT_R, SCRYPT_P, SCRYPT_DKLEN) else {
+        return false;
+    };
+    let mut got = vec![0u8; SCRYPT_DKLEN];
+    if scrypt::scrypt(password.as_bytes(), &salt, &params, &mut got).is_err() {
+        return false;
+    }
+    if got.len() != expected.len() {
+        return false;
+    }
+    got.iter()
+        .zip(expected.iter())
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+        == 0
+}
+
 // runtime.json / webui.json 落盘
 
 /// 与上游 SnowLuma `findAvailablePort` 对齐：从 preferred 起最多试 50 个端口。

@@ -9,6 +9,7 @@ mod config;
 mod daemon;
 mod helpers;
 mod inject;
+mod probe;
 
 pub mod layout;
 pub mod log;
@@ -19,4 +20,4 @@ pub mod tunnel;
 pub use backend::{RemoteSlMetricsInjector, RemoteSnowLumaBackend};
 pub use config::{is_remote_native_snowluma_config, render_native_snowluma_config_on_host};
 pub use daemon::RemoteSnowLumaDaemon;
-pub use inject::remote_qq_running_pid;
+pub use inject::{remote_qq_running_pid, remote_qq_running_pid_with_hint};

@@ -10,13 +10,11 @@ use ncd_traits::events::{BroadcastEventBus, EventBus};
 use ncd_traits::runtime_backend::BotBackendError;
 use tokio::sync::Mutex;
 
-use super::layout::{
-    DEFAULT_WEBUI_PORT, RemoteSnowLumaLayout, SnowLumaRemotePaths, probe_remote_snowluma_layout,
-};
+use super::layout::{RemoteSnowLumaLayout, SnowLumaRemotePaths, probe_remote_snowluma_layout};
 use super::orchestrator::{
-    daemon_start, daemon_stop, remote_daemon_already_ready, wait_webui_tcp,
-    write_status_daemon_json,
+    daemon_start, daemon_stop, remote_daemon_already_ready, write_status_daemon_json,
 };
+use super::probe::{resolve_remote_webui_port, wait_remote_webui_ready};
 use super::stack::restart_node_with_env;
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
 use crate::snowluma::daemon::DaemonState;
@@ -47,7 +45,19 @@ impl RemoteSnowLumaDaemon {
         event_bus: Arc<BroadcastEventBus>,
     ) -> Result<Self, BotBackendError> {
         let layout = probe_remote_snowluma_layout(host.as_ref()).await?;
-        Ok(Self {
+        Ok(Self::from_layout(
+            server_id, host, tunnels, event_bus, layout,
+        ))
+    }
+
+    pub fn from_layout(
+        server_id: String,
+        host: Arc<dyn Host>,
+        tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
+        event_bus: Arc<BroadcastEventBus>,
+        layout: RemoteSnowLumaLayout,
+    ) -> Self {
+        Self {
             host,
             layout,
             server_id,
@@ -57,7 +67,7 @@ impl RemoteSnowLumaDaemon {
             event_bus,
             tunnel_eps: Mutex::new(None),
             metrics_node_env: Mutex::new(None),
-        })
+        }
     }
 
     /// 应用 metrics env 到共享 node：与当前已应用 env 不同则重启 node 并等 WebUI。
@@ -73,7 +83,7 @@ impl RemoteSnowLumaDaemon {
         let host = self.host.as_ref();
         let layout = &self.layout;
         restart_node_with_env(host, layout, env.as_ref()).await?;
-        wait_webui_tcp(host, DEFAULT_WEBUI_PORT, Duration::from_secs(60)).await?;
+        wait_remote_webui_ready(host, &layout.paths, Duration::from_secs(60)).await?;
         *guard = env;
         Ok(())
     }
@@ -105,44 +115,34 @@ impl RemoteSnowLumaDaemon {
                 Some(self.server_id.clone()),
             ));
 
-        ensure_remote_daemon_prereqs(self.host.as_ref(), &self.layout.home, &self.layout.paths)
-            .await?;
+        ensure_remote_daemon_prereqs(
+            self.host.as_ref(),
+            &self.layout.home,
+            &self.layout.paths,
+            &self.layout.qq_bin,
+        )
+        .await?;
 
         let stack_up = remote_daemon_already_ready(self.host.as_ref(), &self.layout.paths).await?;
         if !stack_up {
             daemon_start(self.host.as_ref(), &self.layout).await?;
-            wait_webui_tcp(
-                self.host.as_ref(),
-                DEFAULT_WEBUI_PORT,
-                Duration::from_secs(90),
-            )
-            .await?;
-        } else {
-            wait_webui_tcp(
-                self.host.as_ref(),
-                DEFAULT_WEBUI_PORT,
-                Duration::from_secs(30),
-            )
-            .await?;
         }
-        write_status_daemon_json(self.host.as_ref(), &self.layout.paths, true, true).await?;
+        let webui_port = wait_remote_webui_ready(
+            self.host.as_ref(),
+            &self.layout.paths,
+            Duration::from_secs(if stack_up { 30 } else { 90 }),
+        )
+        .await?;
+        write_status_daemon_json(
+            self.host.as_ref(),
+            &self.layout.paths,
+            true,
+            true,
+            webui_port,
+        )
+        .await?;
 
-        let webui_plain =
-            read_remote_file_trimmed(self.host.as_ref(), &self.layout.paths.webui_secret).await?;
-        let vnc_plain =
-            read_remote_file_trimmed(self.host.as_ref(), &self.layout.paths.vnc_secret).await?;
-        if webui_plain.is_empty() {
-            return Err(BotBackendError::InvalidConfig(
-                "远端 webui.secret 为空，无法建立 SnowLuma WebUI 隧道".into(),
-            ));
-        }
-
-        let eps = self
-            .tunnels
-            .acquire(&self.server_id, self.host.as_ref(), webui_plain, vnc_plain)
-            .await
-            .map_err(|e| BotBackendError::Io(format!("SnowLuma SSH 隧道: {e}")))?;
-        *self.tunnel_eps.lock().await = Some(eps);
+        self.open_tunnels(webui_port).await?;
 
         let mut guard = self.refcount.lock().await;
         *guard = guard.saturating_add(1);
@@ -194,37 +194,28 @@ impl RemoteSnowLumaDaemon {
         self.tunnels.release(&self.server_id).await;
     }
 
-    /// 冷启动 reconcile:远端进程已在跑时只补隧道与状态文件,不重复 daemon start shell
+    /// 导入/冷启动 reconcile：只接管已在跑的 node，不新拉图形栈、不写死 WebUI 端口。
+    /// node 不在则跳过隧道（QQ 进程仍可由调用方标成运行中）。
     pub async fn ensure_running_for_reconcile(&self) -> Result<(), BotBackendError> {
-        ensure_remote_daemon_prereqs(self.host.as_ref(), &self.layout.home, &self.layout.paths)
-            .await?;
-
-        if !super::orchestrator::remote_daemon_already_ready(self.host.as_ref(), &self.layout.paths)
-            .await?
-        {
-            return Err(BotBackendError::InvalidConfig(
-                "bootstrap reconcile: 远端 SnowLuma daemon 未就绪，请手动启动 Bot".into(),
-            ));
+        if !remote_daemon_already_ready(self.host.as_ref(), &self.layout.paths).await? {
+            tracing::info!(
+                target: "ncd_runtime::remote_snowluma",
+                server_id = %self.server_id,
+                "reconcile: 远端未发现已运行的 SnowLuma node，跳过 WebUI 隧道"
+            );
+            return Ok(());
         }
 
-        write_status_daemon_json(self.host.as_ref(), &self.layout.paths, true, true).await?;
-
-        let webui_plain =
-            read_remote_file_trimmed(self.host.as_ref(), &self.layout.paths.webui_secret).await?;
-        let vnc_plain =
-            read_remote_file_trimmed(self.host.as_ref(), &self.layout.paths.vnc_secret).await?;
-        if webui_plain.is_empty() {
-            return Err(BotBackendError::InvalidConfig(
-                "远端 webui.secret 为空，无法建立 SnowLuma WebUI 隧道".into(),
-            ));
-        }
-
-        let eps = self
-            .tunnels
-            .acquire(&self.server_id, self.host.as_ref(), webui_plain, vnc_plain)
-            .await
-            .map_err(|e| BotBackendError::Io(format!("SnowLuma SSH 隧道: {e}")))?;
-        *self.tunnel_eps.lock().await = Some(eps);
+        let webui_port = resolve_remote_webui_port(self.host.as_ref(), &self.layout.paths).await?;
+        let _ = write_status_daemon_json(
+            self.host.as_ref(),
+            &self.layout.paths,
+            true,
+            true,
+            webui_port,
+        )
+        .await;
+        self.open_tunnels(webui_port).await?;
 
         let mut guard = self.refcount.lock().await;
         if *guard == 0 {
@@ -239,6 +230,30 @@ impl RemoteSnowLumaDaemon {
                 None,
                 Some(self.server_id.clone()),
             ));
+        Ok(())
+    }
+
+    async fn open_tunnels(&self, webui_port: u16) -> Result<(), BotBackendError> {
+        let webui_plain =
+            read_remote_file_trimmed(self.host.as_ref(), &self.layout.paths.webui_secret)
+                .await
+                .unwrap_or_default();
+        let vnc_plain = read_remote_file_trimmed(self.host.as_ref(), &self.layout.paths.vnc_secret)
+            .await
+            .unwrap_or_default();
+
+        let eps = self
+            .tunnels
+            .acquire(
+                &self.server_id,
+                self.host.as_ref(),
+                webui_plain,
+                vnc_plain,
+                webui_port,
+            )
+            .await
+            .map_err(|e| BotBackendError::Io(format!("SnowLuma SSH 隧道: {e}")))?;
+        *self.tunnel_eps.lock().await = Some(eps);
         Ok(())
     }
 }
