@@ -238,24 +238,35 @@ echo '=== end diagnostics ==='
     }
 }
 
+pub(crate) fn bot_pid_if_running_script(pidfile: &str, qq_id: &str) -> String {
+    let pidfile = shell_single_quote(pidfile);
+    let qid = shell_single_quote(qq_id);
+    format!(
+        r#"pidfile={pidfile}
+qid={qid}
+if [ -f "$pidfile" ]; then
+  existing=$(cat "$pidfile" 2>/dev/null || echo "")
+  if [ -n "$existing" ] && kill -0 "$existing" 2>/dev/null; then
+    cmd=$(tr '\0' ' ' < /proc/$existing/cmdline 2>/dev/null || true)
+    case "$cmd" in
+      *"-q $qid"*|*-q"$qid"*|*"--qq $qid"*|*"--qq=$qid"*|*"--qq-id=$qid"*)
+        echo "$existing"
+        exit 0
+        ;;
+    esac
+  fi
+  rm -f "$pidfile"
+fi
+"#
+    )
+}
+
 async fn bot_pid_if_running(
     host: &dyn Host,
     paths: &SnowLumaRemotePaths,
     qq_id: &str,
 ) -> Result<Option<u32>, BotBackendError> {
-    let pidfile = shell_single_quote(&paths.pid_bot_path(qq_id));
-    let script = format!(
-        r#"pidfile={pidfile}
-if [ -f "$pidfile" ]; then
-  existing=$(cat "$pidfile" 2>/dev/null || echo "")
-  if [ -n "$existing" ] && kill -0 "$existing" 2>/dev/null; then
-    echo "$existing"
-    exit 0
-  fi
-  rm -f "$pidfile"
-fi
-"#
-    );
+    let script = bot_pid_if_running_script(&paths.pid_bot_path(qq_id), qq_id);
     let out = run_remote_bash(host, &script).await?;
     let line = out.lines().last().unwrap_or("").trim();
     if line.is_empty() {
@@ -536,6 +547,23 @@ mod tests {
         assert!(!node_already_has_sys_ptrace(
             "/usr/bin/node cap_net_bind_service=ep"
         ));
+    }
+
+    #[test]
+    fn bot_pid_if_running_script_does_not_trust_kill_zero_alone() {
+        let script = bot_pid_if_running_script("/ws/runtime/pid_bot_2707600964", "2707600964");
+        assert!(
+            script.contains("kill -0"),
+            "dead pidfile still needs liveness"
+        );
+        assert!(
+            script.contains("-q $qid") || script.contains("-q\"$qid\""),
+            "stale pidfile must match qq id before reuse"
+        );
+        assert!(
+            script.contains("rm -f \"$pidfile\""),
+            "unmatched pidfile must be dropped so cold start can spawn"
+        );
     }
 
     #[test]
