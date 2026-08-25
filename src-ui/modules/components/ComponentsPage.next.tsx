@@ -1,14 +1,4 @@
-// Components 页（next）：单机视图 + 主机切换。
-//
-// 交互：页面一次只展示一台机器的组件。顶部一排主机切换标签（本机 / 各远端），
-// 点哪台就在下方铺哪台的组件，按框架 / 运行时依赖 / 桌面端分组成网格。装不了
-// 的组件（平台不支持）不出现。docker 就绪的机器在末尾带 Docker 部署区。
-//
-// 只有一台机器时不显示切换条。这样"组件 × 各主机"被翻成"先选机器、再看这台
-// 机器能装啥"，扫描成本远低于把每台机器堆成一张大卡上下排。
-//
-// 严守 frontend-layering：仅 import hooks / shared/ui / 自身组件 + domain
-// 纯函数，不直接调 service / @tauri-apps。
+// 组件页：先选主机，再看这台机器能装啥。
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, Loader2, RefreshCw } from 'lucide-react';
