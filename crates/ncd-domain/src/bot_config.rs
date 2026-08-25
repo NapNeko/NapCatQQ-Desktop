@@ -9,7 +9,7 @@ use crate::macros::default_true;
 use crate::runtime_scenario::RuntimeScenario;
 use crate::snowluma_start_mode::SnowLumaStartMode;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum BackendType {
@@ -31,7 +31,7 @@ impl From<BackendType> for BotFlavor {
 ///
 /// 与 RuntimeTarget 正交: DeploymentType 决定"怎么跑", runtime_target 决定"在哪跑".
 /// 例如 Docker + Server(id) 表示通过 SSH 在远端跑 docker compose.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum DeploymentType {

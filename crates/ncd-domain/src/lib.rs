@@ -27,7 +27,9 @@ pub mod offline_alert;
 pub mod progress;
 pub mod qq_dependency;
 pub mod release_snapshot;
+pub mod remote_inventory;
 pub mod runtime_scenario;
+pub mod snowluma_linux_package;
 pub mod snowluma_start_mode;
 
 // 向后兼容: 下游 crate 仍可 use ncd_domain::{models::*, report::*}
@@ -45,10 +47,10 @@ pub mod system_resource {
 // 顶层 re-export(对齐旧 ncd-core API, 方便下游 crate 引用)
 
 pub use app_config::{
-    AfterCloseUiBehavior, AppSettings, AppSettingsDto, CloseAction, DesktopNotifySettings,
-    SnowLumaAppConfig, SystemResourceSnapshot, UiModeOnStartup, WebUiPollerSettings,
     clamp_lightweight_delay_secs, default_login_interval, default_perf_monitor_interval,
-    default_snowluma_port,
+    default_snowluma_port, AfterCloseUiBehavior, AppSettings, AppSettingsDto, CloseAction,
+    DesktopNotifySettings, SnowLumaAppConfig, SystemResourceSnapshot, UiModeOnStartup,
+    WebUiPollerSettings,
 };
 pub use app_framework::{
     AppFrameworkId, AppInstance, AppInstanceId, AppInstanceState, AppPlacement,
@@ -60,20 +62,20 @@ pub use bootstrap::{
 };
 pub use bot_actor::{BotActorError, BotActorSnapshot, BotActorState};
 pub use bot_config::{
-    AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
-    BypassConfig, ConnectConfig, DeploymentType, HttpClientConfig, HttpServerConfig,
-    HttpSseServerConfig, LogLevel, MessagePostFormat, NetworkBaseFields, O3HookMode,
-    StatusCommandConfig, TimeUnit, WebsocketClientConfig, WebsocketServerConfig, WsRole,
-    is_remote_docker_config, is_remote_native_napcat_config,
+    is_remote_docker_config, is_remote_native_napcat_config, AdvancedConfig, AutoRestartSchedule,
+    BackendType, BotBasicConfig, BotConfig, BotConfigError, BypassConfig, ConnectConfig,
+    DeploymentType, HttpClientConfig, HttpServerConfig, HttpSseServerConfig, LogLevel,
+    MessagePostFormat, NetworkBaseFields, O3HookMode, StatusCommandConfig, TimeUnit,
+    WebsocketClientConfig, WebsocketServerConfig, WsRole,
 };
 pub use bot_runtime_metrics::{
-    BOT_RUNTIME_METRICS_INTERVAL_MAX_MS, BOT_RUNTIME_METRICS_INTERVAL_MIN_MS,
-    BOT_RUNTIME_METRICS_RETENTION_MAX_DAYS, BOT_RUNTIME_METRICS_RETENTION_MIN_DAYS,
-    BotRuntimeMetrics, MemoryMetrics, MetricsHistoryPoint, MetricsNodeMapEntry, MetricsSource,
-    NetworkNodeKind, NetworkNodeMetrics, NodesRollup, ProbeHealth, ProbeStatsFile,
     clamp_bot_runtime_metrics_interval_ms, clamp_bot_runtime_metrics_retention_days,
     default_bot_runtime_metrics_interval_ms, default_bot_runtime_metrics_retention_days,
-    history_min_interval_ms,
+    history_min_interval_ms, BotRuntimeMetrics, MemoryMetrics, MetricsHistoryPoint,
+    MetricsNodeMapEntry, MetricsSource, NetworkNodeKind, NetworkNodeMetrics, NodesRollup,
+    ProbeHealth, ProbeStatsFile, BOT_RUNTIME_METRICS_INTERVAL_MAX_MS,
+    BOT_RUNTIME_METRICS_INTERVAL_MIN_MS, BOT_RUNTIME_METRICS_RETENTION_MAX_DAYS,
+    BOT_RUNTIME_METRICS_RETENTION_MIN_DAYS,
 };
 pub use bot_status::{BotStatus, ProcessHandle};
 pub use daemon_state::{DaemonState, SnowLumaLoginState};
@@ -91,7 +93,7 @@ pub use docker::{
     DockerPullLayerSnapshot, DockerPullSpec, DockerSpecError, DockerStatus, ImageInfo,
     ImageRemoveOptions, PortMapping,
 };
-pub use domain_event::{DOMAIN_EVENT_ENVELOPE_VERSION, DomainEvent, DomainEventKind};
+pub use domain_event::{DomainEvent, DomainEventKind, DOMAIN_EVENT_ENVELOPE_VERSION};
 pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};
 pub use ids::{BackendId, BotId};
 pub use kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion, StopMode};
@@ -101,10 +103,10 @@ pub use migration::{
 };
 pub use napcat_events::NapCatLoginInvalidationReason;
 pub use offline_alert::{
-    EnsureOneBotMessengerHttpResult, OfflineAlert, OfflineAlertKind, OfflineAlertSource,
-    OfflineDeliveryChannelResult, OfflineDeliveryRecord, OfflineEmailSettings,
-    OfflineNotifyBehavior, OfflineOneBotSettings, OfflineWebhookChannel, OfflineWebhookSettings,
-    OneBotMessengerCandidate, OneBotMessengerScope, default_webhook_body_template, render_template,
+    default_webhook_body_template, render_template, EnsureOneBotMessengerHttpResult, OfflineAlert,
+    OfflineAlertKind, OfflineAlertSource, OfflineDeliveryChannelResult, OfflineDeliveryRecord,
+    OfflineEmailSettings, OfflineNotifyBehavior, OfflineOneBotSettings, OfflineWebhookChannel,
+    OfflineWebhookSettings, OneBotMessengerCandidate, OneBotMessengerScope,
 };
 pub use progress::{ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use qq_dependency::{
@@ -112,5 +114,11 @@ pub use qq_dependency::{
     FailedPackage, InstallDependenciesResult, PackageStatus, QqDependencyReport, SystemDependency,
 };
 pub use release_snapshot::{ReleaseInfo, ReleaseSnapshot};
+pub use remote_inventory::{
+    DiscoveredRemoteBot, DiscoveredRemoteBotSource, ImportableRemoteBot, RemoteInventory,
+    RemoteInventoryItem, RemoteInventoryKind, RemoteInventorySource, RemotePathOverrides,
+    RemoteSelectedPaths, REMOTE_INVENTORY_VERSION,
+};
 pub use runtime_scenario::RuntimeScenario;
+pub use snowluma_linux_package::SnowLumaLinuxPackage;
 pub use snowluma_start_mode::SnowLumaStartMode;

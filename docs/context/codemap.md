@@ -164,6 +164,7 @@ KB：`.claude/kb/snowluma-runtime.md`, `snowluma-docker.md`
 | 凭据同步 | `crates/ncd-server/src/credential_sync.rs` |
 | SSH keygen | `crates/ncd-server/src/ssh_keygen.rs` |
 | 本机 SSH config 发现 | `crates/ncd-server/src/ssh_config.rs` + `discover_local_ssh_hosts`；UI `ImportSshConfigDialog` |
+| 远端 Linux 安装库存 | `ncd-domain/remote_inventory.rs`；探测 `ncd-runtime/src/remote/inventory.rs`；档案字段 `ServerProfile.path_overrides/inventory`；命令 `refresh_remote_inventory`；UI `RemoteInventoryDialog` |
 | Host 解析 | `crates/ncd-server/src/host_resolver.rs`, `src-tauri/src/bot_host_resolver.rs` |
 | Host 抽象 | `crates/ncd-host/src/host.rs`, `local/`, `remote/` |
 | Server profile 迁移 | `crates/ncd-server/src/server_profile_migration.rs` |
