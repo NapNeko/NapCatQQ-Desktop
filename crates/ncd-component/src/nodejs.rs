@@ -183,8 +183,7 @@ impl NodeJsComponent {
         crate::types::ComponentInfo {
             id: ComponentId::NodeJs,
             display_name: "Node.js".to_string(),
-            description: "JavaScript 运行时，可单独安装。SnowLuma Lite 会自动编排；完整包自带 Node，不必装这个"
-                .to_string(),
+            description: "SnowLuma 运行所需".to_string(),
             repo_url: Some("https://nodejs.org/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
