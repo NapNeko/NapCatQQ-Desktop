@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use ncd_domain::{ContainerInfo, ContainerState, DockerPullLayerSnapshot, DockerStatus, ImageInfo};
-use ncd_host::{Host, HostCommand, HostError, StreamSource};
+use ncd_host::{Host, HostCommand, HostError, HostPath, StreamSource};
 use tracing::{info, warn};
 
 /// DockerCli 操作错误
@@ -632,6 +632,57 @@ impl<'h> DockerCli<'h> {
         let cmd = self.docker_cmd().arg("image").arg("inspect").arg(image_ref);
         let out = self.host.run_to_string(cmd).await?;
         Ok(out.success())
+    }
+
+    pub fn is_elevated(&self) -> bool {
+        self.elevated.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// 从容器拷文件到宿主机路径。`docker cp` 对已停止容器可用。
+    /// `src` 是容器内 POSIX 路径；`dest` 是宿主机 POSIX 路径。
+    /// 容器名与路径走独立 arg，不拼进 shell 字符串。
+    ///
+    /// 提权 `docker cp` 写出的文件属主是 root，随后 chmod 644，否则 SFTP 读不到。
+    pub async fn copy_from_container(
+        &self,
+        container: &str,
+        src: &str,
+        dest: &str,
+    ) -> Result<(), DockerCliError> {
+        let spec = format!("{container}:{src}");
+        let cmd = self.docker_cmd().arg("cp").arg(&spec).arg(dest);
+        let out = self.host.run_to_string(cmd).await?;
+        if !out.success() {
+            return Err(DockerCliError::CommandFailed {
+                command: format!("docker cp {container}:{src} {dest}"),
+                exit_code: out.exit_code,
+                stderr: out.stderr.trim().to_string(),
+            });
+        }
+        if self.is_elevated() {
+            let chmod = HostCommand::new("chmod").arg("644").arg(dest).elevated();
+            let chmod_out = self.host.run_to_string(chmod).await?;
+            if !chmod_out.success() {
+                return Err(DockerCliError::CommandFailed {
+                    command: format!("chmod 644 {dest}"),
+                    exit_code: chmod_out.exit_code,
+                    stderr: chmod_out.stderr.trim().to_string(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// 删掉 `copy_from_container` 的临时文件。提权拷出来的要用 sudo rm。
+    pub async fn remove_copied_file(&self, dest: &str) {
+        if self.is_elevated() {
+            let _ = self
+                .host
+                .run_to_string(HostCommand::new("rm").arg("-f").arg(dest).elevated())
+                .await;
+        } else {
+            let _ = self.host.remove_file(&HostPath::from_posix(dest)).await;
+        }
     }
 
     /// docker tag <src> <dst>,给镜像打一个别名引用,不重新拉取

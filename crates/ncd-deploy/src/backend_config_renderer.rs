@@ -318,6 +318,117 @@ pub fn render_snowluma_docker_config_payloads(
     }]
 }
 
+fn nonempty_json_string(raw: &Value, key: &str) -> Option<String> {
+    raw.get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// 「导入迁移」反向映射：把远端 SnowLuma onebot_<qq>.json 转成桌面网络配置。
+/// 键名对齐（accessToken→token、messageFormat→messagePostFormat、
+/// wsServers/wsClients→websocketServers/websocketClients、enabled→enable、
+/// reconnectIntervalMs→reconnectInterval），其余交由 serde 默认值；
+/// 返回 None 表示缺少 networks 结构（不是合法的 SL onebot 配置）。
+pub fn parse_snowluma_onebot_connect(raw: &Value) -> Option<ncd_domain::ImportedNetworkConfig> {
+    let networks = raw.get("networks")?.as_object()?;
+    let rename_arrays = |o: &serde_json::Map<String, Value>| {
+        let mut out = serde_json::Map::new();
+        for (k, v) in o {
+            let nk = match k.as_str() {
+                "wsServers" => "websocketServers",
+                "wsClients" => "websocketClients",
+                other => other,
+            };
+            let nv = match v {
+                Value::Array(items) => Value::Array(
+                    items
+                        .iter()
+                        .map(|item| {
+                            if let Some(obj) = item.as_object() {
+                                let mut m = obj.clone();
+                                if let Some(tok) = m.remove("accessToken") {
+                                    m.insert("token".into(), tok);
+                                }
+                                if let Some(fmt) = m.remove("messageFormat") {
+                                    m.insert("messagePostFormat".into(), fmt);
+                                }
+                                // WsRole 的 serde 是 PascalCase，远端写小写
+                                if let Some(Value::String(role)) = m.get("role") {
+                                    let normalized = match role.as_str() {
+                                        "api" | "Api" | "API" => "Api",
+                                        "event" | "Event" => "Event",
+                                        _ => "Universal",
+                                    };
+                                    m.insert("role".into(), Value::String(normalized.into()));
+                                }
+                                if let Some(v) = m.remove("enableWebSocket") {
+                                    m.insert("enableWebsocket".into(), v);
+                                }
+                                if !m.contains_key("enable") {
+                                    if let Some(en) = m.remove("enabled") {
+                                        m.insert("enable".into(), en);
+                                    }
+                                }
+                                if let Some(ms) = m.remove("reconnectIntervalMs") {
+                                    m.insert("reconnectInterval".into(), ms);
+                                }
+                                Value::Object(m)
+                            } else {
+                                item.clone()
+                            }
+                        })
+                        .collect(),
+                ),
+                other => other.clone(),
+            };
+            out.insert(nk.into(), nv);
+        }
+        Value::Object(out)
+    };
+
+    let converted = rename_arrays(networks);
+    let connect: ncd_domain::ConnectConfig = serde_json::from_value(converted).ok()?;
+
+    let status = raw.get("statusCommand").and_then(|sc| {
+        let enabled = sc.get("enabled")?.as_bool()?;
+        let swallow = sc.get("swallow").and_then(|v| v.as_bool())?;
+        let cooldown = sc
+            .get("cooldownSeconds")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5);
+        Some(ncd_domain::StatusCommandConfig {
+            enabled,
+            swallow,
+            cooldown_seconds: u32::try_from(cooldown).unwrap_or(5),
+        })
+    });
+
+    Some(ncd_domain::ImportedNetworkConfig {
+        connect,
+        music_sign_url: nonempty_json_string(raw, "musicSignUrl"),
+        status_command: status,
+        enable_local_file_to_url: None,
+        parse_mult_msg: None,
+    })
+}
+
+/// NapCat onebot11_<qq>.json 的逆：`.network` 与桌面 ConnectConfig 同名，
+/// 顶层回填 musicSignUrl / enableLocalFile2Url / parseMultMsg。
+/// 返回 None 表示缺少 network 对象。
+pub fn parse_napcat_onebot_connect(raw: &Value) -> Option<ncd_domain::ImportedNetworkConfig> {
+    let network = raw.get("network")?.clone();
+    let connect: ncd_domain::ConnectConfig = serde_json::from_value(network).ok()?;
+    Some(ncd_domain::ImportedNetworkConfig {
+        connect,
+        music_sign_url: nonempty_json_string(raw, "musicSignUrl"),
+        status_command: None,
+        enable_local_file_to_url: raw.get("enableLocalFile2Url").and_then(Value::as_bool),
+        parse_mult_msg: raw.get("parseMultMsg").and_then(Value::as_bool),
+    })
+}
+
 // SnowLuma Renderer
 
 /// SnowLuma onebot_<qq>.json 顶层"已知" key 集合
@@ -613,5 +724,120 @@ impl BackendConfigRenderer for DispatchRenderer {
         let mut paths = self.napcat.output_paths(bot_id);
         paths.extend(self.snowluma.output_paths(bot_id));
         paths
+    }
+}
+
+#[cfg(test)]
+mod onebot_import_tests {
+    use super::*;
+
+    #[test]
+    fn parse_renames_keys_and_maps_status_command() {
+        let raw: Value = json!({
+            "mode": "default",
+            "musicSignUrl": "https://sign.example/api",
+            "networks": {
+                "httpServers": [{
+                    "name": "hs", "accessToken": "tok1", "messageFormat": "array",
+                    "reportSelfMessage": false, "host": "0.0.0.0", "port": 3000,
+                    "path": "/", "enableWebSocket": true, "enabled": false
+                }],
+                "httpClients": [],
+                "wsServers": [{
+                    "name": "ws", "accessToken": "tok2", "messageFormat": "string",
+                    "host": "127.0.0.1", "port": 13106, "path": "/ws",
+                    "role": "universal", "reportSelfMessage": false
+                }],
+                "wsClients": [{
+                    "name": "wsc", "accessToken": "tok3", "messageFormat": "array",
+                    "url": "ws://127.0.0.1:8080", "reconnectIntervalMs": 5000,
+                    "enabled": true
+                }]
+            },
+            "statusCommand": {
+                "enabled": true, "swallow": false, "cooldownSeconds": 7, "trigger": "#sl"
+            }
+        });
+
+        let imported =
+            parse_snowluma_onebot_connect(&raw).expect("kunming 形状的 onebot 配置应可解析");
+        let connect = &imported.connect;
+
+        assert_eq!(connect.http_servers.len(), 1);
+        let hs = &connect.http_servers[0];
+        assert_eq!(hs.base.name, "hs");
+        assert_eq!(hs.base.token, "tok1");
+        assert_eq!(
+            hs.base.message_post_format,
+            ncd_domain::MessagePostFormat::Array
+        );
+        assert!(hs.enable_websocket);
+        assert!(
+            !hs.base.enable,
+            "SL enabled:false 应映射为桌面 enable:false，不能落到默认 true"
+        );
+
+        assert_eq!(connect.websocket_servers.len(), 1);
+        let ws = &connect.websocket_servers[0];
+        assert_eq!(ws.base.token, "tok2");
+        assert_eq!(ws.port, 13106);
+        assert_eq!(ws.role, ncd_domain::WsRole::Universal);
+
+        assert_eq!(connect.websocket_clients.len(), 1);
+        assert_eq!(connect.websocket_clients[0].reconnect_interval, 5000);
+
+        assert_eq!(
+            imported.status_command.as_ref().map(|s| s.cooldown_seconds),
+            Some(7),
+            "statusCommand.trigger 不在桌面模型里，忽略；其余字段迁移"
+        );
+        assert_eq!(
+            imported.music_sign_url.as_deref(),
+            Some("https://sign.example/api")
+        );
+    }
+
+    #[test]
+    fn parse_returns_none_without_networks() {
+        let raw: Value = json!({ "mode": "default" });
+        assert!(parse_snowluma_onebot_connect(&raw).is_none());
+    }
+
+    #[test]
+    fn parse_napcat_network_object_and_top_level_fields() {
+        let raw: Value = json!({
+            "network": {
+                "httpServers": [{
+                    "name": "hs", "enable": true, "token": "ntok",
+                    "host": "0.0.0.0", "port": 3000, "enableCors": true
+                }],
+                "websocketServers": [{
+                    "name": "ws", "token": "wtok",
+                    "host": "127.0.0.1", "port": 3001, "heartInterval": 15000
+                }]
+            },
+            "musicSignUrl": "https://nc.sign",
+            "enableLocalFile2Url": true,
+            "parseMultMsg": true,
+            "imageDownloadProxy": "http://proxy.example"
+        });
+
+        let imported = parse_napcat_onebot_connect(&raw).expect("NC onebot11 形状应可解析");
+        assert_eq!(imported.connect.http_servers.len(), 1);
+        assert_eq!(imported.connect.http_servers[0].base.token, "ntok");
+        assert!(imported.connect.http_servers[0].enable_cors);
+        assert_eq!(imported.connect.websocket_servers.len(), 1);
+        assert_eq!(imported.connect.websocket_servers[0].port, 3001);
+        assert_eq!(imported.connect.http_sse_servers.len(), 0);
+        assert_eq!(imported.music_sign_url.as_deref(), Some("https://nc.sign"));
+        assert_eq!(imported.enable_local_file_to_url, Some(true));
+        assert_eq!(imported.parse_mult_msg, Some(true));
+        assert!(imported.status_command.is_none());
+    }
+
+    #[test]
+    fn parse_napcat_returns_none_without_network() {
+        let raw: Value = json!({ "musicSignUrl": "x" });
+        assert!(parse_napcat_onebot_connect(&raw).is_none());
     }
 }

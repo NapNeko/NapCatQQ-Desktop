@@ -841,6 +841,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn copy_from_container_uses_arg_separated_docker_cp() {
+        let host = MockHost::new();
+        let cli = DockerCli::new(&host);
+        cli.copy_from_container(
+            "slbot-10001",
+            "/app/snowluma-data/config/onebot_10001.json",
+            "/tmp/ncd-import-slbot-10001-10001.json",
+        )
+        .await
+        .unwrap();
+        let cp = host
+            .docker_commands()
+            .into_iter()
+            .find(|c| c.args.first().map(String::as_str) == Some("cp"))
+            .expect("docker cp");
+        assert_eq!(
+            cp.args,
+            [
+                "cp",
+                "slbot-10001:/app/snowluma-data/config/onebot_10001.json",
+                "/tmp/ncd-import-slbot-10001-10001.json",
+            ]
+        );
+        assert!(
+            !host.commands().iter().any(|c| c.program == "chmod"),
+            "未提权时不必 chmod"
+        );
+    }
+
+    #[tokio::test]
+    async fn copy_from_container_chmods_when_docker_needs_sudo() {
+        let host = MockHost::elevated_docker();
+        let cli = DockerCli::new(&host);
+        cli.ensure_daemon_ready().await.unwrap();
+        cli.copy_from_container(
+            "slbot-10001",
+            "/app/snowluma-data/config/onebot_10001.json",
+            "/tmp/ncd-import-slbot-10001-10001.json",
+        )
+        .await
+        .unwrap();
+        let chmod = host
+            .commands()
+            .into_iter()
+            .find(|c| c.program == "chmod")
+            .expect("sudo docker cp 之后要 chmod 644，否则 SFTP 读不到 root 文件");
+        assert!(chmod.elevated);
+        assert_eq!(
+            chmod.args,
+            ["644", "/tmp/ncd-import-slbot-10001-10001.json"]
+        );
+    }
+
+    #[tokio::test]
     async fn resolve_container_name_prefers_current_snowluma_name() {
         let host = MockHost::with_running_snowluma_container();
         let name = resolve_bot_container_name(&host, &BotId::from("10001".to_string()))
