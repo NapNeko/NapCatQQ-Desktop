@@ -71,6 +71,7 @@ export function buildMockBotConfig(botId: string): BotConfig {
             runtime_target: 'local',
             backend_type: 'napcat',
             deploymentType: 'native',
+            webuiPasswordTakeover: false,
         },
         connect: {
             httpServers: [

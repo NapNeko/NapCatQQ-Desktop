@@ -2,6 +2,7 @@
 import type { DiscoveredRemoteBot } from "./DiscoveredRemoteBot";
 import type { RemoteInventoryItem } from "./RemoteInventoryItem";
 import type { RemoteSelectedPaths } from "./RemoteSelectedPaths";
+import type { SnowLumaLinuxPackage } from "./SnowLumaLinuxPackage";
 
 /**
  * 一次探测快照
@@ -10,4 +11,8 @@ export type RemoteInventory = { v: number, probedAt: string, home: string, items
 /**
  * 已知目录 / 容器名里扫到的 Bot；旧快照缺字段当空
  */
-bots?: Array<DiscoveredRemoteBot>, };
+bots?: Array<DiscoveredRemoteBot>, 
+/**
+ * 探测时按 selected 推断；旧档案缺字段为 None（前端按完整包处理）
+ */
+snowlumaLinuxPackage?: SnowLumaLinuxPackage | null, };

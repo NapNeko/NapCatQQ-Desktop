@@ -4,4 +4,9 @@ import type { BackendType } from "./BackendType";
 import type { DeploymentType } from "./DeploymentType";
 import type { SnowLumaStartMode } from "./SnowLumaStartMode";
 
-export type BotBasicConfig = { name: string, QQID: number, musicSignUrl: string, autoRestartSchedule: AutoRestartSchedule, offlineAutoRestart: boolean, runtime_target: string, backend_type: BackendType, deploymentType: DeploymentType, snowlumaStartMode?: SnowLumaStartMode, };
+export type BotBasicConfig = { name: string, QQID: number, musicSignUrl: string, autoRestartSchedule: AutoRestartSchedule, offlineAutoRestart: boolean, runtime_target: string, backend_type: BackendType, deploymentType: DeploymentType, snowlumaStartMode?: SnowLumaStartMode, 
+/**
+ * 接管 WebUI 密码：启动远端 Native SL 时覆盖 webui.json / webui.secret
+ *（全局固定密码优先，否则每次生成），并重启已在跑的 node；未开启则绝不改动远端既有凭据
+ */
+webuiPasswordTakeover: boolean, };

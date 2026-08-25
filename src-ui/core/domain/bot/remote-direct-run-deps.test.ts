@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RemoteInventory } from '../../ipc/generated/domain/RemoteInventory';
 import {
     inferSnowLumaLinuxPackageFromInventory,
-    isBundledSnowlumaNode,
+    inventoryInstalledHints,
     remoteDirectRunChain,
     formatMissingDirectRunNotice,
 } from './remote-direct-run-deps';
@@ -18,17 +18,14 @@ function inventory(partial: Partial<RemoteInventory> & Pick<RemoteInventory, 'se
 }
 
 describe('remote direct-run deps', () => {
-    it('treats {snowluma}/node as bundled full package', () => {
-        expect(isBundledSnowlumaNode('/opt/sl/node', '/opt/sl')).toBe(true);
-        expect(
-            isBundledSnowlumaNode(
-                '/home/u/snowluma-remote/workspace/node/bin/node',
-                '/home/u/snowluma-remote/workspace/snowluma',
-            ),
-        ).toBe(false);
+    it('defaults to full package when inventory is missing', () => {
+        expect(inferSnowLumaLinuxPackageFromInventory(null)).toBe('full');
+        expect(inferSnowLumaLinuxPackageFromInventory(undefined)).toBe('full');
+        expect(remoteDirectRunChain('snowluma', null)).toEqual(['qq', 'novnc', 'snowluma']);
+        expect(remoteDirectRunChain('snowluma', undefined)).not.toContain('nodejs');
     });
 
-    it('infers full from selected bundled node', () => {
+    it('reads snowlumaLinuxPackage from inventory and defaults missing to full', () => {
         const inv = inventory({
             selected: {
                 home: '/root',
@@ -36,6 +33,7 @@ describe('remote direct-run deps', () => {
                 nodeBin: '/opt/snowluma/node',
                 needsSudo: false,
             },
+            snowlumaLinuxPackage: 'full',
         });
         expect(inferSnowLumaLinuxPackageFromInventory(inv)).toBe('full');
         expect(remoteDirectRunChain('snowluma', 'full')).toEqual(['qq', 'novnc', 'snowluma']);
@@ -44,7 +42,7 @@ describe('remote direct-run deps', () => {
         ).toBeNull();
     });
 
-    it('infers full from inventory nodejs item even if selected.nodeBin is portable', () => {
+    it('does not re-infer from items when inventory field is set', () => {
         const inv = inventory({
             selected: {
                 home: '/root',
@@ -52,6 +50,7 @@ describe('remote direct-run deps', () => {
                 nodeBin: '/usr/bin/node',
                 needsSudo: false,
             },
+            snowlumaLinuxPackage: 'full',
             items: [
                 {
                     kind: 'nodejs',
@@ -73,11 +72,28 @@ describe('remote direct-run deps', () => {
                 nodeBin: '/root/snowluma-remote/workspace/node/bin/node',
                 needsSudo: false,
             },
+            snowlumaLinuxPackage: 'lite',
         });
         expect(inferSnowLumaLinuxPackageFromInventory(inv)).toBe('lite');
         expect(remoteDirectRunChain('snowluma', 'lite')).toContain('nodejs');
         expect(
             formatMissingDirectRunNotice('snowluma', { nodejs: false, qq: true, novnc: true, snowluma: true }, 'lite'),
         ).toBe('未安装 Node.js，请安装');
+    });
+
+    it('treats selected qqInstallBase as installed hint even when not $HOME/Napcat', () => {
+        const inv = inventory({
+            selected: {
+                home: '/root',
+                qqInstallBase: '/',
+                qqBin: '/opt/QQ/qq',
+                snowlumaDir: '/opt/snowluma',
+                needsSudo: true,
+            },
+        });
+        expect(inventoryInstalledHints(inv)).toEqual({
+            qq: true,
+            snowluma: true,
+        });
     });
 });

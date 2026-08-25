@@ -56,35 +56,26 @@ const LOCAL_CHAIN: Record<BackendType, readonly DirectRunComponentId[]> = {
     snowluma: ['qq', 'snowluma'],   // 本地 SL 包自带 node，不需要单独装 nodejs
 };
 
-export function isBundledSnowlumaNode(
-    nodeBin?: string | null,
-    snowlumaDir?: string | null,
-): boolean {
-    const bin = (nodeBin ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
-    if (!bin) return false;
-    const dir = (snowlumaDir ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
-    if (dir && bin === `${dir}/node`) return true;
-    return bin.endsWith('/snowluma/node');
-}
-
-/** 对照库存：完整包自带 `{snowluma}/node`，lite 没有。 */
+/** 对照库存字段：探测时由 Rust 写入。旧档案缺字段与未安装一样默认完整包。 */
 export function inferSnowLumaLinuxPackageFromInventory(
     inventory?: RemoteInventory | null,
 ): SnowLumaLinuxPackage | null {
-    if (!inventory) return null;
-    const selected: RemoteSelectedPaths | undefined = inventory.selected;
-    const dir = selected?.snowlumaDir?.replace(/\\/g, '/').replace(/\/+$/, '');
-    if (!dir) return null;
-    if (isBundledSnowlumaNode(selected?.nodeBin, dir)) {
-        return 'full';
-    }
-    const bundled = `${dir}/node`;
-    const hasBundled = (inventory.items ?? []).some((it) => {
-        if (it.kind !== 'nodejs') return false;
-        const p = (it.nodeBin || it.root || '').replace(/\\/g, '/').replace(/\/+$/, '');
-        return p === bundled || p.endsWith('/snowluma/node');
-    });
-    return hasBundled ? 'full' : 'lite';
+    if (!inventory) return 'full';
+    return inventory.snowlumaLinuxPackage ?? 'full';
+}
+
+/** 路径型组件是否已在库存 selected 里发现（noVNC 不在 selected，仍走 detect）。 */
+export function inventoryInstalledHints(
+    inventory?: RemoteInventory | null,
+): Partial<Record<DirectRunComponentId, boolean>> {
+    const sel: RemoteSelectedPaths | undefined = inventory?.selected;
+    if (!sel) return {};
+    const out: Partial<Record<DirectRunComponentId, boolean>> = {};
+    if (sel.qqInstallBase || sel.qqBin) out.qq = true;
+    if (sel.napcatRoot) out.napcat = true;
+    if (sel.snowlumaDir) out.snowluma = true;
+    if (sel.nodeBin) out.nodejs = true;
+    return out;
 }
 
 /** 获取远程直接运行的依赖链 */
@@ -95,10 +86,11 @@ export function remoteDirectRunChain(
     if (backendType === 'napcat') {
         return REMOTE_CHAIN_NAPCAT;
     }
-    if (snowlumaLinuxPackage === 'full') {
-        return REMOTE_CHAIN_SNOWLUMA_FULL;
+    // 仅显式 lite 才要独立 Node.js；未知 / 完整包都不要求。
+    if (snowlumaLinuxPackage === 'lite') {
+        return REMOTE_CHAIN_SNOWLUMA_LITE;
     }
-    return REMOTE_CHAIN_SNOWLUMA_LITE;
+    return REMOTE_CHAIN_SNOWLUMA_FULL;
 }
 
 /** 获取本地直接运行的依赖链（SnowLuma 不要求 nodejs） */

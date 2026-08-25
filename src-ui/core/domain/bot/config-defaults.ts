@@ -21,6 +21,9 @@ export function createDefaultBotConfig(): BotConfig {
             runtime_target: 'local',
             backend_type: 'napcat',
             deploymentType: 'native',
+            // 新建实例默认接管 WebUI 密码：启动即生成并回写，打开 WebUI 才能自动复制；
+            // 导入路径在对话框里单独让用户勾选（默认不接管），存量配置保持 false
+            webuiPasswordTakeover: true,
         },
         connect: {
             httpServers: [],

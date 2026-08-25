@@ -90,6 +90,24 @@ describe('runtime gate matrix', () => {
         });
     });
 
+    it('does not require Node.js when remote SnowLuma package is unknown', () => {
+        const config = botConfig({
+            runtime_target: 'server-a',
+            backend_type: 'snowluma',
+            deploymentType: 'native',
+        });
+        const args = {
+            config,
+            remoteTransport: { reachable: true, label: 'kunming' },
+            remoteDirect: {
+                installed: { nodejs: false, qq: true, novnc: true, snowluma: true },
+                probing: false,
+                snowlumaLinuxPackage: null,
+            },
+        };
+        expect(runtimeStartBlockReason(args)).toBeNull();
+    });
+
     it('does not require Node.js for remote SnowLuma full package', () => {
         const config = botConfig({
             runtime_target: 'server-a',
