@@ -21,7 +21,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'napcat',
         display_name: 'NapCat',
-        description: 'OneBot v11 协议实现，主流 QQ Bot 框架',
+        description: '无 QQ 窗口的协议端',
         repo_url: 'https://github.com/NapNeko/NapCatQQ',
         supported_targets: [
             { os: 'windows', locality: 'local' },
@@ -32,7 +32,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'snowluma',
         display_name: 'SnowLuma',
-        description: 'NTQQ 注入式后端，OneBot 替代实现',
+        description: '带 QQ 窗口的协议端',
         repo_url: 'https://github.com/SnowLuma/SnowLuma',
         supported_targets: [
             { os: 'windows', locality: 'local' },
@@ -43,7 +43,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'qq',
         display_name: 'QQ',
-        description: 'QQ 桌面客户端，NapCat / SnowLuma 注入运行所需的宿主程序',
+        description: '框架运行所需的 QQ 客户端',
         repo_url: 'https://im.qq.com/',
         supported_targets: [
             { os: 'windows', locality: 'local' },
@@ -55,7 +55,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'nodejs',
         display_name: 'Node.js',
-        description: 'JavaScript 运行时（仅 SnowLuma 需要）',
+        description: 'SnowLuma 运行所需',
         repo_url: 'https://nodejs.org',
         supported_targets: [
             { os: 'windows', locality: 'local' },
@@ -66,7 +66,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'novnc',
         display_name: 'noVNC',
-        description: '远端图形栈，便于桌面 QQ 扫码登录',
+        description: '远端扫码用的远程桌面',
         repo_url: 'https://github.com/novnc/noVNC',
         supported_targets: [{ os: 'linux', locality: 'remote' }],
         category: 'runtime_dep',
@@ -74,8 +74,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'ncd_watch',
         display_name: 'NCD Watch',
-        description:
-            '远端常驻探活；Desktop 关闭后仍可告警（Webhook / Email / 同机 OneBot）',
+        description: '本控制台关闭后仍可告警',
 
         repo_url: 'https://github.com/NapNeko/NapCatQQ-Desktop',
         supported_targets: [{ os: 'linux', locality: 'remote' }],
@@ -85,7 +84,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'desktop_self',
         display_name: 'NapCatQQ Desktop',
-        description: '桌面端自身（自更新）',
+        description: '本控制台，可检查更新',
         repo_url: null,
         supported_targets: [
             { os: 'windows', locality: 'local' },
