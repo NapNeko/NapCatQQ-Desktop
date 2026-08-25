@@ -82,8 +82,7 @@ impl NcdWatchComponent {
         crate::types::ComponentInfo {
             id: ComponentId::NcdWatch,
             display_name: "NCD Watch".to_string(),
-            description: "远端常驻探活；Desktop 关闭后仍可告警（Webhook / Email / 同机 OneBot）"
-                .to_string(),
+            description: "本控制台关闭后仍可告警".to_string(),
             repo_url: Some(format!("https://github.com/{RELEASE_REPO}")),
             supported_targets: vec![crate::types::SupportedTarget::new(
                 Os::Linux,
