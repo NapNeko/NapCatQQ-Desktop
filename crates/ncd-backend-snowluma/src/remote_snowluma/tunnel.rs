@@ -153,6 +153,11 @@ impl RemoteSnowLumaTunnelRegistry {
         }
     }
 
+    /// SSH 重连后旧 session 已毒死，必须拆掉本机转发，不能只减引用。
+    pub async fn drop_server(&self, server_id: &str) {
+        self.by_server.lock().await.remove(server_id);
+    }
+
     pub async fn shutdown_all(&self) {
         self.by_server.lock().await.clear();
     }
@@ -204,6 +209,13 @@ mod tests {
         assert_eq!(adopt_incoming_secret("cached", ""), "cached");
         assert_eq!(adopt_incoming_secret("cached", "fresh"), "fresh");
         assert_eq!(adopt_incoming_secret("", "fresh"), "fresh");
+    }
+
+    #[tokio::test]
+    async fn drop_server_is_safe_when_empty() {
+        let registry = super::RemoteSnowLumaTunnelRegistry::new();
+        registry.drop_server("missing").await;
+        assert!(registry.endpoints_for_server("missing").await.is_none());
     }
 
     #[test]
