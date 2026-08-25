@@ -116,13 +116,15 @@ impl SnowLumaAgreementService {
         server_id: &str,
     ) -> Result<Option<AgreementsPayload>, BotManagerError> {
         let daemon = self.ensure_remote_daemon(server_id).await?;
-        let agreements = load_payload_from_remote(daemon.host(), daemon.paths()).await?;
+        let host = daemon.host().await;
+        let agreements = load_payload_from_remote(host.as_ref(), daemon.paths()).await?;
         Ok(agreements.and_then(|payload| payload.consent_required.then_some(payload)))
     }
 
     async fn record_remote(&self, server_id: &str, version: &str) -> Result<bool, BotManagerError> {
         let daemon = self.ensure_remote_daemon(server_id).await?;
-        record_consent_on_remote(daemon.host(), daemon.paths(), version).await?;
+        let host = daemon.host().await;
+        record_consent_on_remote(host.as_ref(), daemon.paths(), version).await?;
         // node 已在跑时再通知进程内 gate；失败不回滚文件（下次启动会读 consent.json）
         if daemon.tunnel_endpoints().await.is_some() {
             if let Err(err) = self.remote_record_consent(&daemon, version).await {
