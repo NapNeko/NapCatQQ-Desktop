@@ -53,7 +53,9 @@ export function useBotMutations({ onMessage }: MutationCallbacks = {}) {
             ) {
                 return;
             }
-            onMessage?.({ type: 'error', text: `启动失败: ${err.message || err}` });
+            // 启动失败会把 actor 标成 crashed 并写入 last_error，列表页 snapshot
+            // 告警已经弹一条。这里再 push 会叠「操作失败」。
+            refetch();
         },
     });
 

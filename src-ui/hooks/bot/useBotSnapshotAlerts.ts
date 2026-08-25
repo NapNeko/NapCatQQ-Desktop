@@ -120,12 +120,13 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
                         content: `${brief} 请到「组件」页按提示一键修复。`,
                         autoDismissMs: 0,
                     });
+                } else if (!crashed) {
+                    pushIfNotSuppressed(keyLastError, {
+                        tone: 'danger',
+                        title: `Bot 异常 · ${label}`,
+                        content: brief,
+                    });
                 }
-                pushIfNotSuppressed(keyLastError, {
-                    tone: 'danger',
-                    title: `Bot 异常 · ${label}`,
-                    content: brief,
-                });
             }
 
             if (kicked && !prev.kicked) {
@@ -140,7 +141,8 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             }
 
             if (crashed && !consentRequired && !prev.crashed) {
-                pushIfNotSuppressed(keyCrashed, {
+                // 与 last_error 共用 key：启动失败会先写错误再标崩溃，顶替成一条。
+                pushIfNotSuppressed(lastError ? keyLastError : keyCrashed, {
                     tone: 'danger',
                     title: `Bot 已崩溃 · ${label}`,
                     content: lastError ? briefError(lastError) : '进程异常退出，请查看日志',

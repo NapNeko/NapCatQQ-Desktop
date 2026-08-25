@@ -14,7 +14,10 @@ import {
     type RemoteTransportStatus,
 } from '../../core/domain/bot/runtime-gate';
 import { useHostComponentInstalled } from '../components/useRemoteHostComponentInstalled';
-import { inferSnowLumaLinuxPackageFromInventory } from '../../core/domain/bot/remote-direct-run-deps';
+import {
+    inferSnowLumaLinuxPackageFromInventory,
+    inventoryInstalledHints,
+} from '../../core/domain/bot/remote-direct-run-deps';
 import { useDockerHosts } from '../docker/useDockerHosts';
 import {
     dockerHostIdForConfig,
@@ -99,9 +102,11 @@ export function useBotRuntimeStartGate(
                     ? req.hostId.slice('remote:'.length)
                     : req.hostId;
                 const profile = servers.find((p) => p.id === serverId);
+                const hints = inventoryInstalledHints(profile?.inventory);
+                const installed = { ...st, ...hints };
                 out.remoteDirect = {
-                    installed: st ?? {},
-                    probing: st ? Object.values(st).some((v) => v === undefined) : true,
+                    installed,
+                    probing: Object.values(installed).some((v) => v === undefined),
                     snowlumaLinuxPackage: inferSnowLumaLinuxPackageFromInventory(
                         profile?.inventory,
                     ),
