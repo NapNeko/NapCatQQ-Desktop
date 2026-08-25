@@ -33,9 +33,7 @@ export const SnowLumaLinuxPackageDialog: React.FC<Props> = ({
             <DialogContent size="md" dismissOnOutsideClick={false}>
                 <DialogHeader>
                     <DialogTitle>选择 SnowLuma 安装包</DialogTitle>
-                    <DialogDescription>
-                        完整版自带 Node，开箱即用。Lite 更小，会先自动安装 Node.js 组件（以后也可单独给别的用途用）。
-                    </DialogDescription>
+                    <DialogDescription>选一种包形态后开始安装。</DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col gap-2">
                     <PackageChoice
