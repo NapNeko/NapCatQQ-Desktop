@@ -1,4 +1,4 @@
-// Bot 列表卡壳：底栏状态组（进程 + 账号 + 告警），对齐全站 StatusBadgeSpec。
+// Bot 列表卡壳：底栏状态组；无 chips 时不占行。
 
 import type { ReactNode, RefObject } from 'react';
 import { cn } from '../../../../shared/utils/cn';
@@ -114,15 +114,13 @@ export function BotManageCard({
                     {metaExtra}
                 </div>
 
-                <div className="min-h-[1.625rem] min-w-0">
-                    {hasChips ? (
+                {hasChips ? (
+                    <div className="min-h-[1.625rem] min-w-0">
                         <div className="flex max-h-[1.625rem] min-w-0 flex-wrap items-center gap-1.5 overflow-hidden">
                             {chips}
                         </div>
-                    ) : (
-                        <div className="h-[1.625rem]" aria-hidden />
-                    )}
-                </div>
+                    </div>
+                ) : null}
             </div>
 
             <footer
