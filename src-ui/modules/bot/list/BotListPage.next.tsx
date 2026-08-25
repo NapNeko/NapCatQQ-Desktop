@@ -1,14 +1,4 @@
-// BotListPage 主壳（next）。
-//
-// 职责：把 6 个 hook 串起来 + 拼装子组件。视觉走暖粉桃色调，沿用 Components
-// 页的设计语言（顶部小工具栏 + 自适应卡片网格 + 浮动菜单 + InfoBar 全局队列）。
-//
-// 跟旧 Fluent BotListPage 的差异：
-//   - 错误反馈走全局 InfoBar（pushInfoBar），不再用本地 actionMessage state +
-//     行内 MessageBar，跟 Components 页一致。
-//   - 批量删除确认改成 shared/ui Dialog，不再行内 Fluent Dialog。
-//   - 浮动菜单拆出 FloatingActions / BatchBottomBar 两个组件，互斥显示。
-//   - 卡片网格用 Tailwind grid auto-fit，按窗口宽度自动 1/2/3 列。
+// Bot 列表：hook 拼装 + 卡片网格。错误走全局 InfoBar。
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
