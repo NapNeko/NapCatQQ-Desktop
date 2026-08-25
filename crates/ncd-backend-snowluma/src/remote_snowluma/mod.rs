@@ -10,6 +10,7 @@ mod daemon;
 mod helpers;
 mod inject;
 mod probe;
+mod remote_bash;
 
 pub mod layout;
 pub mod log;

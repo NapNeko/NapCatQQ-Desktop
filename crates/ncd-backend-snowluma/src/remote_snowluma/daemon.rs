@@ -14,13 +14,42 @@ use super::layout::{RemoteSnowLumaLayout, SnowLumaRemotePaths, probe_remote_snow
 use super::orchestrator::{
     daemon_start, daemon_stop, remote_daemon_already_ready, write_status_daemon_json,
 };
-use super::probe::{resolve_remote_webui_port, wait_remote_webui_ready};
+use super::probe::{resolve_remote_novnc_port, resolve_remote_webui_port, wait_remote_webui_ready};
 use super::stack::restart_node_with_env;
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
 use crate::snowluma::daemon::DaemonState;
 
 use super::config::ensure_remote_daemon_prereqs;
 use super::helpers::read_remote_file_trimmed;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WebuiPortPlan {
+    /// 刚拉起的栈已经等过 WebUI，直接用返回口
+    UseKnown(u16),
+    /// node 刚重启，只等这一次
+    WaitAfterRestart,
+    /// 栈已在跑且没重启，快速解析现有口
+    ResolveExisting,
+}
+
+pub(crate) fn webui_port_plan(
+    stack_just_started: bool,
+    node_restarted: bool,
+    known_port: Option<u16>,
+) -> WebuiPortPlan {
+    // 冷拉栈已经在 ensure_stack_running 里等过 WebUI。接管/metrics 只是启动参数，
+    // 不能当成「已有 node 被重启」再空等 90s。
+    if stack_just_started {
+        if let Some(port) = known_port {
+            return WebuiPortPlan::UseKnown(port);
+        }
+        return WebuiPortPlan::WaitAfterRestart;
+    }
+    if node_restarted {
+        return WebuiPortPlan::WaitAfterRestart;
+    }
+    WebuiPortPlan::ResolveExisting
+}
 
 /// 单台远端主机共享的 SL daemon(单例图形栈 + node);多 Bot 共用,按 qq_id 分别启停 QQ
 pub struct RemoteSnowLumaDaemon {
@@ -71,20 +100,24 @@ impl RemoteSnowLumaDaemon {
     }
 
     /// 应用 metrics env 到共享 node：与当前已应用 env 不同则重启 node 并等 WebUI。
-    /// 调用方应在 ensure_running 之后调用（栈已就绪）。
+    /// 重启后必须按新端口重开隧道，否则 inject 会打到已死的旧口。
     pub async fn apply_metrics_node_env(
         &self,
         env: Option<BTreeMap<String, String>>,
     ) -> Result<(), BotBackendError> {
-        let mut guard = self.metrics_node_env.lock().await;
-        if *guard == env {
-            return Ok(());
+        {
+            let guard = self.metrics_node_env.lock().await;
+            if *guard == env {
+                return Ok(());
+            }
         }
         let host = self.host.as_ref();
         let layout = &self.layout;
         restart_node_with_env(host, layout, env.as_ref()).await?;
-        wait_remote_webui_ready(host, &layout.paths, Duration::from_secs(60)).await?;
-        *guard = env;
+        let webui_port =
+            wait_remote_webui_ready(host, &layout.paths, Duration::from_secs(60)).await?;
+        self.open_tunnels(webui_port, None).await?;
+        *self.metrics_node_env.lock().await = env;
         Ok(())
     }
 
@@ -100,11 +133,39 @@ impl RemoteSnowLumaDaemon {
         &self.layout.paths
     }
 
+    pub fn host(&self) -> &dyn Host {
+        self.host.as_ref()
+    }
+
     pub fn layout(&self) -> &RemoteSnowLumaLayout {
         &self.layout
     }
 
     pub async fn ensure_running(&self) -> Result<(), BotBackendError> {
+        self.ensure_running_ex(false, None, None).await
+    }
+
+    /// 接管刚覆盖 webui.json 之后：已在跑的 node 仍持旧哈希，必须重启再开隧道。
+    pub async fn ensure_running_after_webui_takeover(&self) -> Result<(), BotBackendError> {
+        self.ensure_running_ex(true, None, None).await
+    }
+
+    pub async fn ensure_running_with_metrics(
+        &self,
+        restart_node: bool,
+        metrics_env: Option<BTreeMap<String, String>>,
+        webui_password: Option<String>,
+    ) -> Result<(), BotBackendError> {
+        self.ensure_running_ex(restart_node, metrics_env, webui_password)
+            .await
+    }
+
+    async fn ensure_running_ex(
+        &self,
+        restart_node: bool,
+        metrics_env: Option<BTreeMap<String, String>>,
+        webui_password: Option<String>,
+    ) -> Result<(), BotBackendError> {
         let _stack_guard = self.stack_bootstrap.lock().await;
 
         self.event_bus
@@ -115,7 +176,7 @@ impl RemoteSnowLumaDaemon {
                 Some(self.server_id.clone()),
             ));
 
-        ensure_remote_daemon_prereqs(
+        let creds = ensure_remote_daemon_prereqs(
             self.host.as_ref(),
             &self.layout.home,
             &self.layout.paths,
@@ -124,15 +185,42 @@ impl RemoteSnowLumaDaemon {
         .await?;
 
         let stack_up = remote_daemon_already_ready(self.host.as_ref(), &self.layout.paths).await?;
-        if !stack_up {
-            daemon_start(self.host.as_ref(), &self.layout).await?;
-        }
-        let webui_port = wait_remote_webui_ready(
-            self.host.as_ref(),
-            &self.layout.paths,
-            Duration::from_secs(if stack_up { 30 } else { 90 }),
-        )
-        .await?;
+        let env_changed = {
+            let guard = self.metrics_node_env.lock().await;
+            *guard != metrics_env
+        };
+        let restart_node = restart_node || (creds.wrote && stack_up);
+        let known_port = if !stack_up {
+            Some(daemon_start(self.host.as_ref(), &self.layout, metrics_env.as_ref()).await?)
+        } else {
+            if restart_node || env_changed {
+                if restart_node {
+                    tracing::info!(
+                        target: "ncd_backend_snowluma::remote",
+                        server_id = %self.server_id,
+                        "接管 WebUI 密码后重启已运行的 SnowLuma node，使新哈希生效"
+                    );
+                }
+                restart_node_with_env(self.host.as_ref(), &self.layout, metrics_env.as_ref())
+                    .await?;
+            }
+            None
+        };
+        let node_restarted = stack_up && (restart_node || env_changed);
+        let webui_port = match webui_port_plan(!stack_up, node_restarted, known_port) {
+            WebuiPortPlan::UseKnown(port) => port,
+            WebuiPortPlan::WaitAfterRestart => {
+                wait_remote_webui_ready(
+                    self.host.as_ref(),
+                    &self.layout.paths,
+                    Duration::from_secs(90),
+                )
+                .await?
+            }
+            WebuiPortPlan::ResolveExisting => {
+                resolve_remote_webui_port(self.host.as_ref(), &self.layout.paths).await?
+            }
+        };
         write_status_daemon_json(
             self.host.as_ref(),
             &self.layout.paths,
@@ -142,7 +230,22 @@ impl RemoteSnowLumaDaemon {
         )
         .await?;
 
-        self.open_tunnels(webui_port).await?;
+        let tunnel_password = webui_password
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                let t = creds.plaintext.trim();
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(creds.plaintext.clone())
+                }
+            });
+        self.open_tunnels(webui_port, tunnel_password.as_deref())
+            .await?;
+        *self.metrics_node_env.lock().await = metrics_env;
 
         let mut guard = self.refcount.lock().await;
         *guard = guard.saturating_add(1);
@@ -215,7 +318,7 @@ impl RemoteSnowLumaDaemon {
             webui_port,
         )
         .await;
-        self.open_tunnels(webui_port).await?;
+        self.open_tunnels(webui_port, None).await?;
 
         let mut guard = self.refcount.lock().await;
         if *guard == 0 {
@@ -233,14 +336,23 @@ impl RemoteSnowLumaDaemon {
         Ok(())
     }
 
-    async fn open_tunnels(&self, webui_port: u16) -> Result<(), BotBackendError> {
-        let webui_plain =
-            read_remote_file_trimmed(self.host.as_ref(), &self.layout.paths.webui_secret)
+    async fn open_tunnels(
+        &self,
+        webui_port: u16,
+        webui_password: Option<&str>,
+    ) -> Result<(), BotBackendError> {
+        let webui_plain = match webui_password.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(pwd) => pwd.to_string(),
+            None => read_remote_file_trimmed(self.host.as_ref(), &self.layout.paths.webui_secret)
                 .await
-                .unwrap_or_default();
+                .unwrap_or_default(),
+        };
         let vnc_plain = read_remote_file_trimmed(self.host.as_ref(), &self.layout.paths.vnc_secret)
             .await
             .unwrap_or_default();
+
+        // noVNC 口动态探测：外来图形栈的 websockify 常不在默认 6081
+        let novnc_port = resolve_remote_novnc_port(self.host.as_ref()).await;
 
         let eps = self
             .tunnels
@@ -250,10 +362,48 @@ impl RemoteSnowLumaDaemon {
                 webui_plain,
                 vnc_plain,
                 webui_port,
+                novnc_port,
             )
             .await
             .map_err(|e| BotBackendError::Io(format!("SnowLuma SSH 隧道: {e}")))?;
         *self.tunnel_eps.lock().await = Some(eps);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn webui_port_plan_uses_known_port_when_stack_just_started() {
+        assert_eq!(
+            webui_port_plan(true, false, Some(5103)),
+            WebuiPortPlan::UseKnown(5103)
+        );
+    }
+
+    #[test]
+    fn webui_port_plan_waits_only_after_restart() {
+        assert_eq!(
+            webui_port_plan(false, true, None),
+            WebuiPortPlan::WaitAfterRestart
+        );
+    }
+
+    #[test]
+    fn webui_port_plan_takeover_on_cold_start_does_not_wait_again() {
+        assert_eq!(
+            webui_port_plan(true, true, Some(5099)),
+            WebuiPortPlan::UseKnown(5099)
+        );
+    }
+
+    #[test]
+    fn webui_port_plan_resolves_existing_when_stack_already_up() {
+        assert_eq!(
+            webui_port_plan(false, false, None),
+            WebuiPortPlan::ResolveExisting
+        );
     }
 }

@@ -1,6 +1,7 @@
 //! 远端 SnowLuma BotBackend
 
 use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -47,11 +48,13 @@ pub struct RemoteSnowLumaBackend {
     tunnels: Arc<RemoteSnowLumaTunnelRegistry>,
     start_modes: Arc<Mutex<HashMap<BotId, SnowLumaStartMode>>>,
     pollers: Arc<Mutex<HashMap<BotId, SnowLumaStatusPoller>>>,
-    /// Shared coordinator for flipping the common ~/Napcat/opt/QQ tree entry point.
+    /// Shared coordinator for flipping the selected QQ tree entry point.
     /// Passed from BotManager so that NC and SL cold starts on the same server_id
     /// serialize their package.json main changes.
     qq_entry_coordinator: Arc<ncd_deploy::remote_coordinator::RemoteQqEntryCoordinator>,
     metrics_injector: Option<Arc<dyn RemoteSlMetricsInjector>>,
+    /// 本机 `state/snowluma`，用来读全局 WebUI 固定密码覆盖
+    snowluma_data_root: Option<PathBuf>,
 }
 
 impl RemoteSnowLumaBackend {
@@ -90,6 +93,23 @@ impl RemoteSnowLumaBackend {
             pollers: Arc::new(Mutex::new(HashMap::new())),
             qq_entry_coordinator,
             metrics_injector,
+            snowluma_data_root: None,
+        }
+    }
+
+    pub fn with_snowluma_data_root(mut self, path: impl Into<PathBuf>) -> Self {
+        self.snowluma_data_root = Some(path.into());
+        self
+    }
+
+    fn webui_password_override(&self) -> Option<String> {
+        let root = self.snowluma_data_root.as_ref()?;
+        let cfg = crate::snowluma::session::load_snowluma_app_config(root);
+        let trimmed = cfg.webui_password_override.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
         }
     }
 
@@ -205,25 +225,41 @@ impl BotBackend for RemoteSnowLumaBackend {
         let bot_id = ctx.config.bot_id.clone();
         let start_mode = resolve_start_mode(config);
 
-        self.daemon.ensure_running().await?;
-
-        // 指标探针：上传到 ncd-watch/metrics，并重启共享 node 带上 NCD_* / NODE_OPTIONS
-        // （失败不阻断启动；多 bot 同机时后启动者覆盖 env，与本机 SL daemon 一致）
-        if let Some(inj) = &self.metrics_injector {
+        // 指标资产先上传，再随 node 第一次拉起带上 env，避免先听口再 SIGTERM 重启
+        // 导致隧道打到已死的旧 WebUI 口、界面卡在启动中。
+        let metrics_env = if let Some(inj) = &self.metrics_injector {
             let home = self.daemon.remote_home();
-            if let Some(env) = inj
-                .prepare(self.daemon.host.as_ref(), home, bot_id.as_str(), config)
+            inj.prepare(self.daemon.host.as_ref(), home, bot_id.as_str(), config)
                 .await
-            {
-                if let Err(e) = self.daemon.apply_metrics_node_env(Some(env)).await {
-                    tracing::warn!(
-                        target: "ncd_backend_snowluma::remote",
-                        bot_id = %bot_id,
-                        %e,
-                        "remote SL metrics node env apply failed (start continues)"
-                    );
-                }
-            }
+        } else {
+            None
+        };
+
+        // 接管开关：用户显式勾选后每次启动覆盖远端 WebUI 凭据并落 secret。
+        // 有全局固定密码就用固定的，否则生成新密码。SnowLuma 只在进程启动时
+        // 加载 webui.json，所以覆盖后必须重启已在跑的 node，否则登录 401。
+        // 未勾选绝不碰现有配置。
+        if config.bot.webui_password_takeover {
+            let override_pwd = self.webui_password_override();
+            let takeover_pwd = super::config::take_over_remote_webui_credentials(
+                self.daemon.host.as_ref(),
+                self.daemon.paths(),
+                override_pwd.as_deref(),
+            )
+            .await?;
+            tracing::info!(
+                target: "ncd_backend_snowluma::remote",
+                bot_id = %bot_id,
+                used_override = override_pwd.is_some(),
+                "已按接管设置重写远端 SnowLuma WebUI 凭据"
+            );
+            self.daemon
+                .ensure_running_with_metrics(true, metrics_env, Some(takeover_pwd))
+                .await?;
+        } else {
+            self.daemon
+                .ensure_running_with_metrics(false, metrics_env, None)
+                .await?;
         }
 
         let paths = self.daemon.paths();
@@ -245,6 +281,7 @@ impl BotBackend for RemoteSnowLumaBackend {
                     qq_id,
                     Some(&paths.pid_bot_path(&qq_id_str)),
                     Some(&layout.qq_bin),
+                    false,
                 )
                 .await?
                 {
@@ -262,7 +299,7 @@ impl BotBackend for RemoteSnowLumaBackend {
                 // a plain QQ for the SnowLuma daemon to inject into. This is serialized
                 // per server_id via the coordinator so that a concurrent NC bot start on
                 // the same host cannot race the package.json write.
-                let install_base = HostPath::from_posix(format!("{}/Napcat", layout.home));
+                let install_base = HostPath::from_posix(layout.qq_install_base.clone());
                 if let Err(e) = self
                     .qq_entry_coordinator
                     .ensure_for_native(
@@ -375,6 +412,7 @@ impl BotBackend for RemoteSnowLumaBackend {
                 qq_id_u,
                 Some(pid_file.as_str()),
                 Some(self.daemon.layout().qq_bin.as_str()),
+                false,
             )
             .await?
             {
@@ -407,13 +445,26 @@ impl BotBackend for RemoteSnowLumaBackend {
         // saturating_mul 后下界 800 ≤ 上界 20_000，clamp 不会 panic
         let raw_n = want.saturating_mul(5).clamp(800, 20_000);
         let host = self.daemon.host.as_ref();
-        let bot_path = paths.log_bot_path(qq_id);
-        let daemon_raw: Vec<String> = read_remote_log_tail_lines(host, &paths.log_daemon, raw_n)
+        // 历史快照与实时跟随共用同一解析：外来安装的真实日志在 framework 自带
+        // logs 目录，布局路径可能不存在（空快照会让页面在无增量时永远空白）
+        let resolved = super::probe::resolve_remote_snowluma_log_targets(
+            host,
+            paths,
+            &paths.log_bot_path(qq_id),
+        )
+        .await;
+        let same_source = resolved.bot == resolved.daemon;
+        let daemon_raw: Vec<String> = read_remote_log_tail_lines(host, &resolved.daemon, raw_n)
             .await
             .unwrap_or_default();
-        let bot_raw: Vec<String> = read_remote_log_tail_lines(host, &bot_path, raw_n)
-            .await
-            .unwrap_or_default();
+        let bot_raw: Vec<String> = if same_source {
+            // 两源同文件时只走 daemon 侧（带会话裁剪与 UIN 收窄），避免整段重复
+            Vec::new()
+        } else {
+            read_remote_log_tail_lines(host, &resolved.bot, raw_n)
+                .await
+                .unwrap_or_default()
+        };
         let mut lines = prepare_snowluma_bot_history_lines(bot_raw, daemon_raw, qq_id);
         let total = lines.len();
         if lines.len() > want {

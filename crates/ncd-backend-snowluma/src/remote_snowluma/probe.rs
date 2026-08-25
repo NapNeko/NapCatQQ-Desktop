@@ -1,16 +1,16 @@
 //! 远端 SnowLuma 是否在跑、WebUI 实际端口：看进程和套接字，不写死 5099。
 //!
 //! 栈就绪：Desktop pid 文件，或 node 的 cwd/cmdline 指向本安装的 index.mjs。
-//! WebUI 端口：daemon 日志（SL 换口会打 using N instead / listening）→
-//! node 的 LISTEN 套接字 → runtime.json webuiPort → 默认 5099。
+//! WebUI 端口：日志换口 → runtime.json webuiPort → LISTEN 兜底 → 默认 5099。
 
 use std::time::Duration;
 
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::runtime_backend::BotBackendError;
 
-use super::helpers::read_remote_log_tail_lines;
+use super::helpers::{read_remote_log_tail, read_remote_log_tail_lines};
 use super::layout::{DEFAULT_WEBUI_PORT, SnowLumaRemotePaths, shell_single_quote};
+use super::remote_bash::resolve_remote_bash;
 use crate::snowluma::session::parse_bound_webui_port_from_logs;
 
 /// 生成栈就绪探测脚本（无 WebUI 端口字面量，避免导入安装换口后误判）。
@@ -111,14 +111,12 @@ pub fn pick_remote_webui_port(
         return p;
     }
     if let Some(rt) = runtime_port {
-        if socket_ports.contains(&rt) {
-            return rt;
-        }
+        return rt;
     }
     if let Some(&p) = socket_ports.first() {
         return p;
     }
-    runtime_port.unwrap_or(DEFAULT_WEBUI_PORT as u16)
+    DEFAULT_WEBUI_PORT as u16
 }
 
 fn node_listen_ports_script(paths: &SnowLumaRemotePaths) -> String {
@@ -203,10 +201,20 @@ async fn read_runtime_webui_port(host: &dyn Host, paths: &SnowLumaRemotePaths) -
 }
 
 async fn read_log_webui_port(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Option<u16> {
-    let lines = read_remote_log_tail_lines(host, &paths.log_daemon, 80)
-        .await
-        .ok()?;
-    parse_bound_webui_port_from_logs(&lines)
+    let resolved = resolve_remote_snowluma_log_targets(host, paths, &paths.log_daemon).await;
+    let mut seen = std::collections::HashSet::new();
+    for path in [resolved.daemon, resolved.bot] {
+        if !seen.insert(path.clone()) {
+            continue;
+        }
+        let Ok(lines) = read_remote_log_tail_lines(host, &path, 80).await else {
+            continue;
+        };
+        if let Some(p) = parse_bound_webui_port_from_logs(&lines) {
+            return Some(p);
+        }
+    }
+    None
 }
 
 async fn read_node_listen_ports(host: &dyn Host, paths: &SnowLumaRemotePaths) -> Vec<u16> {
@@ -232,6 +240,90 @@ pub async fn resolve_remote_webui_port(
         &socket_ports,
         runtime_port,
     ))
+}
+
+const NOVNC_LISTEN_PORTS_SCRIPT: &str = r#"
+if command -v ss >/dev/null 2>&1; then
+  ss -ltnp 2>/dev/null | awk '/websockify/ {print $4}' | sed -n 's/.*[:.]\([0-9][0-9]*\)$/\1/p'
+fi
+"#;
+
+/// 解析远端 websockify（noVNC）实际监听口。外来图形栈（systemd 自装等）
+/// 常用自定义端口，隧道不能写死 6081；同机出现多个时优先桌面约定的 6081。
+pub async fn resolve_remote_novnc_port(host: &dyn Host) -> u16 {
+    let cmd = HostCommand::new("sh")
+        .arg("-c")
+        .arg(NOVNC_LISTEN_PORTS_SCRIPT);
+    let Ok(out) = host.run_to_string(cmd).await else {
+        return super::tunnel::REMOTE_NOVNC_PORT;
+    };
+    let ports = parse_port_lines(&out.stdout);
+    if ports.contains(&super::tunnel::REMOTE_NOVNC_PORT) {
+        return super::tunnel::REMOTE_NOVNC_PORT;
+    }
+    ports
+        .first()
+        .copied()
+        .unwrap_or(super::tunnel::REMOTE_NOVNC_PORT)
+}
+
+/// 日志跟随目标：外来安装的真实日志在 framework 自带 logs 目录（日期滚动命名），
+/// 桌面自装布局才是 workspace/log。按远端存在性解析；都没有则回落布局路径。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedSnowLumaLogTargets {
+    pub bot: String,
+    pub daemon: String,
+}
+
+/// 单次 SSH 解析两个跟随源：bot/daemon 布局路径存在则原样沿用，
+/// 缺失时回落 framework 目录里最新的一份 snowluma-*.log。
+pub async fn resolve_remote_snowluma_log_targets(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+    layout_bot_log: &str,
+) -> ResolvedSnowLumaLogTargets {
+    let fallback = ResolvedSnowLumaLogTargets {
+        bot: layout_bot_log.to_string(),
+        daemon: paths.log_daemon.clone(),
+    };
+    let script = format!(
+        r#"BOT={bot}
+DAEMON={daemon}
+FW=$(ls -t {logs}/snowluma-*.log 2>/dev/null | head -n 1)
+[ -f "$BOT" ] && echo "bot_ok=1"
+[ -f "$DAEMON" ] && echo "daemon_ok=1"
+[ -n "$FW" ] && echo "framework=$FW"
+"#,
+        bot = shell_single_quote(layout_bot_log),
+        daemon = shell_single_quote(&paths.log_daemon),
+        logs = shell_single_quote(&format!("{}/logs", paths.snowluma_dir)),
+    );
+    let cmd = HostCommand::new("sh").arg("-c").arg(script);
+    let Ok(out) = host.run_to_string(cmd).await else {
+        return fallback;
+    };
+    let stdout = out.stdout;
+    let framework = stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("framework="))
+        .map(str::trim)
+        .filter(|stripped| !stripped.is_empty())
+        .map(str::to_string);
+    match framework {
+        Some(fw) => ResolvedSnowLumaLogTargets {
+            bot: if stdout.contains("bot_ok=1") {
+                layout_bot_log.to_string()
+            } else {
+                fw.clone()
+            },
+            daemon: if stdout.contains("daemon_ok=1") {
+                paths.log_daemon.clone()
+            } else {
+                fw
+            },
+        },
+        None => fallback,
+    }
 }
 
 fn wait_webui_ready_script(paths: &SnowLumaRemotePaths, timeout: Duration) -> String {
@@ -315,21 +407,47 @@ dump_listen_ports() {{
     done
   done
 }}
-collect_ports() {{
+grep_webui_ports() {{
+  f="$1"
+  [ -f "$f" ] || return 0
+  grep -oE 'is in use, using [0-9]+ instead' "$f" 2>/dev/null | tail -n 1 | grep -oE '[0-9]+$' || true
+  grep -oE 'listening https?://[^[:space:]]+' "$f" 2>/dev/null | tail -n 1 | grep -oE '[0-9]+$' || true
+}}
+preferred_ports() {{
+  grep_webui_ports "$LOG"
+  FW=$(ls -t "$SL"/logs/snowluma-*.log 2>/dev/null | head -n 1)
+  if [ -n "$FW" ] && [ "$FW" != "$LOG" ]; then
+    grep_webui_ports "$FW"
+  fi
   if [ -f "$RT" ]; then
     sed -n 's/.*"webuiPort"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$RT" 2>/dev/null
   fi
-  if [ -f "$LOG" ]; then
-    grep -oE 'is in use, using [0-9]+ instead' "$LOG" 2>/dev/null | tail -n 1 | grep -oE '[0-9]+$' || true
-    grep -oE 'listening https?://[^[:space:]]+' "$LOG" 2>/dev/null | tail -n 1 | grep -oE '[0-9]+$' || true
-  fi
+}}
+uniq_ports() {{
+  awk 'NF && $1 ~ /^[0-9]+$/ && $1+0 > 0 {{print $1+0}}' | awk '!a[$1]++'
+}}
+start=$(date +%s)
+seen_alive=0
+dead_ticks=0
+while [ "$(date +%s)" -lt "$deadline" ]; do
   pid=$(find_node_pid || true)
   if [ -n "$pid" ]; then
-    dump_listen_ports "$pid"
+    seen_alive=1
+    dead_ticks=0
+  elif [ "$seen_alive" = 1 ]; then
+    dead_ticks=$((dead_ticks + 1))
+    if [ "$dead_ticks" -ge 2 ]; then
+      echo "node_exited" >&2
+      exit 2
+    fi
+  else
+    now=$(date +%s)
+    if [ $((now - start)) -ge 8 ]; then
+      echo "node_not_started" >&2
+      exit 2
+    fi
   fi
-}}
-while [ "$(date +%s)" -lt "$deadline" ]; do
-  for p in $(collect_ports | awk 'NF && $1 ~ /^[0-9]+$/ && $1+0 > 0 {{print $1+0}}' | awk '!a[$1]++'); do
+  for p in $(preferred_ports | uniq_ports); do
     if tcp_up "$p"; then
       echo "$p"
       exit 0
@@ -337,6 +455,15 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
   done
   sleep 1
 done
+pid=$(find_node_pid || true)
+if [ -n "$pid" ]; then
+  for p in $(dump_listen_ports "$pid" | uniq_ports); do
+    if tcp_up "$p"; then
+      echo "$p"
+      exit 0
+    fi
+  done
+fi
 exit 1
 "#
     )
@@ -349,37 +476,52 @@ pub async fn wait_remote_webui_ready(
     timeout: Duration,
 ) -> Result<u16, BotBackendError> {
     let script = wait_webui_ready_script(paths, timeout);
-    let bash = {
-        let find = HostCommand::new("sh")
-            .arg("-c")
-            .arg("command -v bash 2>/dev/null || true");
-        match host.run_to_string(find).await {
-            Ok(o) if o.success() => {
-                let line = o.stdout.lines().next().unwrap_or("").trim();
-                if line.is_empty() {
-                    "/bin/bash".to_string()
-                } else {
-                    line.to_string()
-                }
-            }
-            _ => "/bin/bash".into(),
-        }
-    };
-    let cmd = HostCommand::new(bash).arg("-c").arg(script);
+    let bash = resolve_remote_bash(host).await?;
+    let cmd = HostCommand::new(bash)
+        .arg("-c")
+        .arg(script)
+        .timeout(timeout + Duration::from_secs(30));
     let out = host
         .run_to_string(cmd)
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
     if !out.success() {
-        return Err(BotBackendError::Io(
-            "SnowLuma WebUI 在时限内未就绪（已按进程日志/监听口探测，未写死 5099）".into(),
-        ));
+        let hint = match out.exit_code {
+            Some(2) if out.stderr.contains("node_exited") => {
+                "SnowLuma 进程启动后退出，WebUI 未就绪"
+            }
+            Some(2) if out.stderr.contains("node_not_started") => {
+                "SnowLuma 进程未能拉起，WebUI 未就绪"
+            }
+            _ => "SnowLuma WebUI 在时限内未就绪",
+        };
+        let tail = webui_wait_failure_log_tail(host, paths).await;
+        if tail.trim().is_empty() {
+            return Err(BotBackendError::Io(hint.into()));
+        }
+        return Err(BotBackendError::Io(format!(
+            "{hint}\n--- 远端日志末尾 ---\n{tail}"
+        )));
     }
     let line = out.stdout.lines().last().unwrap_or("").trim();
     line.parse::<u16>()
         .ok()
         .filter(|p| *p > 0)
         .ok_or_else(|| BotBackendError::Io(format!("SnowLuma WebUI 就绪但未返回端口: {line}")))
+}
+
+async fn webui_wait_failure_log_tail(host: &dyn Host, paths: &SnowLumaRemotePaths) -> String {
+    let resolved = resolve_remote_snowluma_log_targets(host, paths, &paths.log_daemon).await;
+    let mut chunks = Vec::new();
+    for path in [resolved.daemon, resolved.bot] {
+        if let Ok(text) = read_remote_log_tail(host, &path, 30).await {
+            let t = text.trim();
+            if !t.is_empty() {
+                chunks.push(format!("{path}:\n{t}"));
+            }
+        }
+    }
+    chunks.join("\n\n")
 }
 
 #[cfg(test)]
@@ -418,6 +560,55 @@ mod tests {
     }
 
     #[test]
+    fn wait_script_fails_fast_when_node_dies() {
+        let script = wait_webui_ready_script(&sample_paths(), Duration::from_secs(5));
+        assert!(script.contains("node_exited"));
+        assert!(script.contains("node_not_started"));
+        assert!(script.contains("seen_alive"));
+    }
+
+    #[test]
+    fn wait_script_polls_preferred_ports_before_listen_fallback() {
+        let script = wait_webui_ready_script(&sample_paths(), Duration::from_secs(5));
+        assert!(
+            script.contains("preferred_ports"),
+            "wait loop must poll log/runtime ports, not every node LISTEN socket"
+        );
+        let loop_body = script
+            .split("while [ \"$(date +%s)\" -lt \"$deadline\" ]; do")
+            .nth(1)
+            .and_then(|rest| rest.split("\ndone\n").next())
+            .unwrap_or("");
+        assert!(
+            loop_body.contains("preferred_ports"),
+            "poll loop should only try preferred_ports"
+        );
+        assert!(
+            !loop_body.contains("dump_listen_ports"),
+            "LISTEN dump must not run every second inside the wait loop"
+        );
+        let after_loop = script
+            .split("while [ \"$(date +%s)\" -lt \"$deadline\" ]; do")
+            .nth(1)
+            .and_then(|rest| rest.split("\ndone\n").nth(1))
+            .unwrap_or("");
+        assert!(
+            after_loop.contains("dump_listen_ports"),
+            "LISTEN dump is last-resort after preferred ports time out"
+        );
+    }
+
+    #[test]
+    fn wait_script_greps_framework_log_not_only_desktop_daemon_log() {
+        let script = wait_webui_ready_script(&sample_paths(), Duration::from_secs(5));
+        assert!(
+            script.contains("snowluma-*.log"),
+            "imported/full packages log to framework logs/, not workspace/log/daemon.log"
+        );
+        assert!(script.contains("/logs"));
+    }
+
+    #[test]
     fn parse_runtime_json_number() {
         let bytes = br#"{ "webuiPort": 5103 }"#;
         assert_eq!(parse_webui_port_from_runtime_json(bytes), Some(5103));
@@ -447,6 +638,14 @@ mod tests {
     fn pick_prefers_runtime_when_socket_matches() {
         assert_eq!(
             pick_remote_webui_port(None, &[3000, 5099], Some(5099)),
+            5099
+        );
+    }
+
+    #[test]
+    fn pick_prefers_runtime_over_unrelated_listen_ports() {
+        assert_eq!(
+            pick_remote_webui_port(None, &[3000, 9229], Some(5099)),
             5099
         );
     }

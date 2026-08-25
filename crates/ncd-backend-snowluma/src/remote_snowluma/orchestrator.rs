@@ -1,5 +1,6 @@
 //! 远端 SnowLuma daemon / bot 启停:编排委托 [remote_snowluma_stack],Bot 用 QQComponent + 短 detach
 
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use ncd_component::{Component, LaunchArgs, QQComponent};
@@ -33,8 +34,9 @@ pub async fn remote_daemon_already_ready(
 pub async fn daemon_start(
     host: &dyn Host,
     layout: &RemoteSnowLumaLayout,
-) -> Result<(), BotBackendError> {
-    ensure_stack_running(host, layout).await
+    metrics_env: Option<&BTreeMap<String, String>>,
+) -> Result<u16, BotBackendError> {
+    ensure_stack_running(host, layout, metrics_env).await
 }
 
 pub async fn daemon_stop(
@@ -161,45 +163,47 @@ async fn relax_ptrace_scope(host: &dyn Host) -> Result<(), BotBackendError> {
     )))
 }
 
+pub(crate) fn node_already_has_sys_ptrace(getcap_stdout: &str) -> bool {
+    getcap_stdout
+        .to_ascii_lowercase()
+        .contains("cap_sys_ptrace")
+}
+
 /// Best-effort: grant cap_sys_ptrace+ep to the remote's node binary via elevation.
-/// This allows the SnowLuma node process (even if not root) to ptrace other processes
-/// of the same uid on kernels that support file capabilities. Complements lowering
-/// ptrace_scope. Safe to call repeatedly.
+/// Already granted → skip setcap（避免每次冷启动都 elevated）。
 pub async fn try_grant_node_ptrace_cap(host: &dyn Host) {
-    // Find node
-    let find = HostCommand::new("sh")
-        .arg("-c")
-        .arg("command -v node 2>/dev/null || true");
-    let node = match host.run_to_string(find).await {
-        Ok(o) if o.success() => {
-            let p = o.stdout.trim().to_string();
-            if p.is_empty() {
-                return;
-            }
-            p
-        }
+    let probe = HostCommand::new("sh").arg("-c").arg(
+        r#"node=$(command -v node 2>/dev/null || true)
+[ -n "$node" ] || exit 0
+echo "node=$node"
+getcap "$node" 2>/dev/null || true
+"#,
+    );
+    let out = match host.run_to_string(probe).await {
+        Ok(o) if o.success() => o.stdout,
         _ => return,
     };
+    let node = out
+        .lines()
+        .find_map(|l| l.strip_prefix("node="))
+        .map(str::trim);
+    let Some(node) = node.filter(|p| !p.is_empty()) else {
+        return;
+    };
+    if node_already_has_sys_ptrace(&out) {
+        tracing::info!(
+            target: "ncd_runtime::remote_snowluma",
+            node = %node,
+            "node already has cap_sys_ptrace; skip setcap"
+        );
+        return;
+    }
 
-    // Grant via elevated (will use cached sudo password if the ssh user needs sudo for setcap)
     let set = HostCommand::new("setcap")
         .arg("cap_sys_ptrace+ep")
-        .arg(&node)
+        .arg(node)
         .elevated();
     let _ = host.run_to_string(set).await;
-
-    // Query for visibility in logs (non-fatal)
-    let get = HostCommand::new("getcap").arg(&node);
-    if let Ok(o) = host.run_to_string(get).await {
-        if o.success() {
-            tracing::info!(
-                target: "ncd_runtime::remote_snowluma",
-                node = %node,
-                caps = %o.stdout.trim(),
-                "queried node getcap after grant attempt"
-            );
-        }
-    }
 }
 
 /// Collect live diagnostics on the remote relevant to a PTRACE_ATTACH failure for pid.
@@ -263,6 +267,42 @@ fi
     }
 }
 
+/// 冷启 QQ 的远端脚本。ptrace / libgcc 已在 spawn 前的 host 侧做过，这里不再重复。
+pub(crate) fn bot_cold_start_script(
+    rt: &str,
+    log_dir: &str,
+    log: &str,
+    pidfile: &str,
+    qq_invoke: &str,
+    display: &str,
+    ld_fragment: &str,
+    dbus: &str,
+    qq_bin: &str,
+) -> String {
+    format!(
+        r#"umask 077
+mkdir -p {rt} {log_dir}
+if [ -f {dbus} ]; then . {dbus}; fi
+DISPLAY="{display}" nohup env {ld_fragment}{qq_invoke} > {log} 2>&1 </dev/null &
+echo $! > {pidfile}
+sleep 0.5
+pid=$(cat {pidfile})
+if ! kill -0 "$pid" 2>/dev/null; then
+  echo "bot 启动后立即退出" >&2
+  missing_libs=$(ldd {qq_bin} 2>/dev/null | grep 'not found' | awk '{{print $1}}' | tr '\n' ' ')
+  if [ -n "$missing_libs" ]; then
+    echo "缺少系统依赖库: $missing_libs" >&2
+    echo "请到「组件」页按提示修复 QQ 系统依赖，或手动安装后重试" >&2
+  fi
+  echo "--- 启动日志末尾 ---" >&2
+  tail -n 20 {log} >&2 2>/dev/null || true
+  exit 3
+fi
+echo "$pid"
+"#
+    )
+}
+
 pub async fn bot_cold_start(
     host: &dyn Host,
     layout: &RemoteSnowLumaLayout,
@@ -298,7 +338,7 @@ fi
     );
     run_remote_bash(host, &rotate).await?;
 
-    let install_base = HostPath::from_posix(format!("{}/Napcat", layout.home));
+    let install_base = HostPath::from_posix(layout.qq_install_base.clone());
     let qq = QQComponent::default_v3_2_25(install_base);
     let mut launch_args = LaunchArgs {
         extra_args: vec![
@@ -340,55 +380,16 @@ fi
     let dbus = shell_single_quote(&paths.dbus_env);
     let qq_bin = shell_single_quote(&cmd.program);
 
-    // Replicate legacy launcher logic for libgcc_s.so.1 (symlink → hardlink) and ptrace_scope.
-    // These run in the same shell that will spawn QQ, under the target DISPLAY.
-    // We still do the pre-spawn relax on the host (above), but this makes the launch script self-contained
-    // like the old .sh.j2, and gives a second chance + better log visibility.
-    let libgcc_fix_and_scope =
-        r#"# libgcc_s.so.1 hardlink fix (for maps visibility on some distros like CentOS/RHEL)
-libgcc_path=$(ldconfig -p 2>/dev/null | grep -m1 'libgcc_s.so.1' | awk '{print $NF}') || true
-if [ -n "$libgcc_path" ] && [ -L "$libgcc_path" ]; then
-  real_path=$(readlink -f "$libgcc_path")
-  if [ -f "$real_path" ]; then
-    rm -f "$libgcc_path" 2>/dev/null && ln "$real_path" "$libgcc_path" 2>/dev/null || true
-  fi
-fi
-libgcc_path=$(ldconfig -p 2>/dev/null | grep -m1 'libgcc_s.so.1' | awk '{print $NF}') || true
-
-# ptrace_scope (best effort; prefer elevation from host side, but script also tries)
-if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then
-  cur=$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo "")
-  if [ "$cur" != "0" ]; then
-    sudo -n sysctl -w kernel.yama.ptrace_scope=0 >/dev/null 2>&1 || \
-      echo 0 > /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || \
-      echo "warning: could not set ptrace_scope=0 in launcher script" >&2
-  fi
-fi
-"#
-        .to_string();
-
-    let script = format!(
-        r#"umask 077
-mkdir -p {rt} {log_dir}
-{libgcc_fix_and_scope}
-if [ -f {dbus} ]; then . {dbus}; fi
-DISPLAY="{display}" nohup env {ld_fragment}{qq_invoke} > {log} 2>&1 </dev/null &
-echo $! > {pidfile}
-sleep 0.5
-pid=$(cat {pidfile})
-if ! kill -0 "$pid" 2>/dev/null; then
-  echo "bot 启动后立即退出" >&2
-  missing_libs=$(ldd {qq_bin} 2>/dev/null | grep 'not found' | awk '{{print $1}}' | tr '\n' ' ')
-  if [ -n "$missing_libs" ]; then
-    echo "缺少系统依赖库: $missing_libs" >&2
-    echo "请到「组件」页按提示修复 QQ 系统依赖，或手动安装后重试" >&2
-  fi
-  echo "--- 启动日志末尾 ---" >&2
-  tail -n 20 {log} >&2 2>/dev/null || true
-  exit 3
-fi
-echo "$pid"
-"#
+    let script = bot_cold_start_script(
+        &rt,
+        &log_dir,
+        &log,
+        &pidfile,
+        &qq_invoke,
+        &display,
+        &ld_fragment,
+        &dbus,
+        &qq_bin,
     );
     let out = run_remote_bash(host, &script).await?;
     let pid: u32 = out
@@ -519,4 +520,46 @@ pub async fn write_status_daemon_json(
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_already_has_sys_ptrace_reads_getcap() {
+        assert!(node_already_has_sys_ptrace(
+            "/usr/bin/node cap_sys_ptrace=ep"
+        ));
+        assert!(node_already_has_sys_ptrace("cap_sys_ptrace+ep"));
+        assert!(!node_already_has_sys_ptrace(""));
+        assert!(!node_already_has_sys_ptrace(
+            "/usr/bin/node cap_net_bind_service=ep"
+        ));
+    }
+
+    #[test]
+    fn bot_cold_start_script_does_not_repeat_ptrace_or_libgcc() {
+        let script = bot_cold_start_script(
+            "'/ws/runtime'",
+            "'/ws/log'",
+            "'/ws/log/bot_1.log'",
+            "'/ws/runtime/pid_bot_1'",
+            "'/opt/QQ/qq' --no-sandbox",
+            ":0",
+            "",
+            "'/ws/runtime/dbus.env'",
+            "'/opt/QQ/qq'",
+        );
+        assert!(
+            !script.contains("ptrace_scope"),
+            "ptrace is relaxed on the host before spawn"
+        );
+        assert!(
+            !script.contains("libgcc"),
+            "libgcc hardlink is done on the host before spawn"
+        );
+        assert!(script.contains("nohup env"));
+        assert!(script.contains("echo $!"));
+    }
 }

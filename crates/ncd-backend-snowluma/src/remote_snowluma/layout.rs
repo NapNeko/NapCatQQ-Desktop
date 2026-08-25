@@ -5,7 +5,11 @@
 //! QQ 与 NapCat 组件页相同,装在 $HOME/Napcat/opt/QQ/qq
 
 use ncd_domain::RemoteSelectedPaths;
-use ncd_host::{Host, HostCommand};
+use ncd_domain::{
+    derive_remote_linux_paths, join_under, qq_bin_candidates, qq_install_base_from_qq_bin,
+    require_qq_install_base, require_snowluma_dir, snowluma_workspace_from_dir,
+};
+use ncd_host::{Host, HostCommand, HostPath};
 
 use ncd_traits::runtime_backend::BotBackendError;
 
@@ -79,9 +83,12 @@ impl SnowLumaRemotePaths {
     }
 }
 
-/// NapCat/QQ 组件页 rootless 安装路径
+/// NapCat/QQ 组件页 rootless 安装路径（桌面默认树，不是启动回落）
 pub fn napcat_layout_qq_executable(home: &str) -> String {
-    format!("{home}/Napcat/opt/QQ/qq")
+    qq_bin_candidates(home)
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| ncd_domain::qq_bin(&join_under(home, "Napcat")))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +97,8 @@ pub struct RemoteSnowLumaLayout {
     pub paths: SnowLumaRemotePaths,
     pub node_bin: String,
     pub qq_bin: String,
+    /// 与 `qq_bin` 同一棵树的安装根（`/opt/QQ/qq` → `/`）
+    pub qq_install_base: String,
 }
 
 pub async fn probe_remote_home(host: &dyn Host) -> Result<String, BotBackendError> {
@@ -112,7 +121,7 @@ pub async fn probe_remote_home(host: &dyn Host) -> Result<String, BotBackendErro
 
 async fn host_path_executable(host: &dyn Host, path: &str) -> bool {
     let escaped = path.replace('\'', "'\"'\"'");
-    let script = format!("test -x '{escaped}'");
+    let script = format!("test -f '{escaped}' && test -x '{escaped}'");
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
     host.run_to_string(cmd)
         .await
@@ -124,7 +133,8 @@ pub async fn resolve_node_bin(
     host: &dyn Host,
     paths: &SnowLumaRemotePaths,
 ) -> Result<String, BotBackendError> {
-    for candidate in [paths.bundled_node_bin(), paths.node_bin()] {
+    let bundled_nested = format!("{}/node/bin/node", paths.snowluma_dir);
+    for candidate in [paths.bundled_node_bin(), bundled_nested, paths.node_bin()] {
         if host_path_executable(host, &candidate).await {
             return Ok(candidate);
         }
@@ -146,75 +156,143 @@ pub async fn resolve_node_bin(
     ))
 }
 
+pub use ncd_domain::snowluma_install_candidates;
+
 /// 一次探测 home + 路径 + node/qq 可执行文件
 pub async fn probe_remote_snowluma_layout(
     host: &dyn Host,
 ) -> Result<RemoteSnowLumaLayout, BotBackendError> {
     let home = probe_remote_home(host).await?;
-    let paths = SnowLumaRemotePaths::from_remote_home(&home);
-    let node_bin = resolve_node_bin(host, &paths).await?;
-    let qq_bin = napcat_layout_qq_executable(&home);
-    if !host_path_executable(host, &qq_bin).await {
-        return Err(BotBackendError::InvalidConfig(format!(
-            "远端未找到可执行的 QQ（组件页应已安装到 {qq_bin}）。请先在同一 SSH 主机安装 QQ 组件。"
-        )));
-    }
-    let entry = format!("{}/index.mjs", paths.snowluma_dir);
-    let check = HostCommand::new("sh")
-        .arg("-c")
-        .arg(format!("test -f '{}'", entry.replace('\'', "'\"'\"'")));
-    let ok = host
-        .run_to_string(check)
-        .await
-        .map_err(|e| BotBackendError::Io(e.to_string()))?
-        .success();
-    if !ok {
-        return Err(BotBackendError::InvalidConfig(format!(
-            "远端 SnowLuma framework 未安装（缺少 {entry}）。请先在组件页安装 SnowLuma。"
-        )));
-    }
-    Ok(RemoteSnowLumaLayout {
+    let selected = RemoteSelectedPaths {
         home,
-        paths,
-        node_bin,
-        qq_bin,
-    })
+        ..RemoteSelectedPaths::default()
+    };
+    layout_from_selected_or_probe(host, &selected).await
+}
+
+/// 库存有 snowluma_dir 就用；没有则按固定候选目录探测（进程停了库存会丢路径）。
+pub async fn layout_from_selected_or_probe(
+    host: &dyn Host,
+    selected: &RemoteSelectedPaths,
+) -> Result<RemoteSnowLumaLayout, BotBackendError> {
+    let mut selected = selected.clone();
+    if selected
+        .snowluma_dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none()
+    {
+        let home = if selected.home.trim().is_empty() {
+            probe_remote_home(host).await?
+        } else {
+            selected.home.clone()
+        };
+        selected.home = home.clone();
+        let found = find_snowluma_install(host, &home).await.ok_or_else(|| {
+            BotBackendError::InvalidConfig(format!(
+                "远端未发现 SnowLuma framework（home={home}）。请在组件页安装或填写覆盖路径后重新发现。"
+            ))
+        })?;
+        selected.snowluma_workspace = Some(snowluma_workspace_from_dir(&found));
+        selected.snowluma_dir = Some(found);
+    }
+    if selected
+        .qq_bin
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none()
+    {
+        for qq in qq_bin_candidates(&selected.home) {
+            if host_path_executable(host, &qq).await {
+                if selected
+                    .qq_install_base
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .is_none()
+                {
+                    selected.qq_install_base = qq_install_base_from_qq_bin(&qq);
+                }
+                selected.qq_bin = Some(qq);
+                break;
+            }
+        }
+    }
+    let mut layout = layout_from_selected(&selected)?;
+    if node_bin_needs_reprobe(selected.node_bin.as_deref(), &layout.paths.snowluma_dir) {
+        layout.node_bin = resolve_node_bin(host, &layout.paths).await?;
+    }
+    Ok(layout)
+}
+
+/// 库存里的 `/usr/bin/node` 不能直接拿来启动：完整包自带 Node 22，系统 Node 往往过旧。
+pub(crate) fn node_bin_needs_reprobe(selected_node: Option<&str>, snowluma_dir: &str) -> bool {
+    match selected_node.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(bin)
+            if ncd_domain::is_bundled_snowluma_node(bin, Some(snowluma_dir))
+                || ncd_domain::is_portable_lite_node(bin, Some(snowluma_dir)) =>
+        {
+            false
+        }
+        _ => true,
+    }
+}
+
+async fn find_snowluma_install(host: &dyn Host, home: &str) -> Option<String> {
+    for dir in snowluma_install_candidates(home) {
+        if snowluma_dir_is_install(host, &dir).await {
+            return Some(dir);
+        }
+    }
+    None
+}
+
+async fn snowluma_dir_is_install(host: &dyn Host, dir: &str) -> bool {
+    let entry = HostPath::from_posix(format!("{dir}/index.mjs"));
+    if !host.exists(&entry).await.unwrap_or(false) {
+        return false;
+    }
+    let webui = HostPath::from_posix(format!("{dir}/config/webui.json"));
+    if host.exists(&webui).await.unwrap_or(false) {
+        return true;
+    }
+    let runtime = HostPath::from_posix(format!("{dir}/config/runtime.json"));
+    let Ok(bytes) = host.read_file(&runtime).await else {
+        return false;
+    };
+    String::from_utf8_lossy(&bytes).contains("webuiPort")
 }
 
 /// 用库存选中路径构造布局；缺项带上实际 home / source 线索
 pub fn layout_from_selected(
     selected: &RemoteSelectedPaths,
 ) -> Result<RemoteSnowLumaLayout, BotBackendError> {
-    let home = selected.home.clone();
-    let snowluma_dir = selected.snowluma_dir.clone().ok_or_else(|| {
-        BotBackendError::InvalidConfig(format!(
-            "远端未发现 SnowLuma framework（home={home}）。请在组件页安装或填写覆盖路径后重新发现。"
-        ))
-    })?;
-    let workspace = selected
+    let derived = derive_remote_linux_paths(selected);
+    let qq_install_base =
+        require_qq_install_base(selected).map_err(BotBackendError::InvalidConfig)?;
+    let snowluma_dir = require_snowluma_dir(selected).map_err(BotBackendError::InvalidConfig)?;
+    let workspace = derived
         .snowluma_workspace
         .clone()
-        .unwrap_or_else(|| snowluma_dir.trim_end_matches("/snowluma").to_string());
-    let qq_bin = selected.qq_bin.clone().ok_or_else(|| {
+        .unwrap_or_else(|| snowluma_workspace_from_dir(&snowluma_dir));
+    let qq_bin = derived.qq_bin.clone().ok_or_else(|| {
         BotBackendError::InvalidConfig(format!(
-            "远端未发现 QQ（home={home}）。请在组件页安装 QQ 或填写覆盖路径后重新发现。"
+            "远端未发现 QQ（home={}）。请在组件页安装 QQ 或填写覆盖路径后重新发现。",
+            selected.home
         ))
     })?;
-    let node_bin = selected
-        .snowluma_dir
-        .as_ref()
-        .map(|d| format!("{d}/node"))
-        .or_else(|| selected.node_bin.clone())
-        .ok_or_else(|| {
-            BotBackendError::InvalidConfig(format!(
-                "远端未找到 node（home={home}）。官方完整包应自带 ./node；旧 lite 请安装 Node.js 组件。"
-            ))
-        })?;
+    let node_bin = derived
+        .node_bin
+        .clone()
+        .unwrap_or_else(|| join_under(&snowluma_dir, "node"));
     Ok(RemoteSnowLumaLayout {
-        home,
+        home: derived.home,
         paths: SnowLumaRemotePaths::from_workspace_and_dir(&workspace, &snowluma_dir),
         node_bin,
         qq_bin,
+        qq_install_base,
     })
 }
 
@@ -250,6 +328,35 @@ mod tests {
     }
 
     #[test]
+    fn install_candidates_include_opt_snowluma() {
+        let c = snowluma_install_candidates("/root");
+        assert_eq!(c[0], "/root/snowluma-remote/workspace/snowluma");
+        assert_eq!(c[1], "/root/Napcat/snowluma-workspace/snowluma");
+        assert_eq!(c[2], "/opt/snowluma");
+    }
+
+    #[test]
+    fn system_path_node_must_be_reprobed_for_bundled_runtime() {
+        assert!(node_bin_needs_reprobe(
+            Some("/usr/bin/node"),
+            "/opt/snowluma"
+        ));
+        assert!(node_bin_needs_reprobe(None, "/opt/snowluma"));
+        assert!(!node_bin_needs_reprobe(
+            Some("/opt/snowluma/node"),
+            "/opt/snowluma"
+        ));
+        assert!(!node_bin_needs_reprobe(
+            Some("/opt/snowluma/node/bin/node"),
+            "/opt/snowluma"
+        ));
+        assert!(!node_bin_needs_reprobe(
+            Some("/home/u/snowluma-remote/workspace/node/bin/node"),
+            "/home/u/snowluma-remote/workspace/snowluma"
+        ));
+    }
+
+    #[test]
     fn layout_from_selected_uses_custom_paths() {
         let selected = ncd_domain::RemoteSelectedPaths {
             home: "/home/u".into(),
@@ -264,8 +371,25 @@ mod tests {
         };
         let layout = layout_from_selected(&selected).unwrap();
         assert_eq!(layout.qq_bin, "/data/qq/opt/QQ/qq");
+        assert_eq!(layout.qq_install_base, "/data/qq");
         assert_eq!(layout.paths.snowluma_dir, "/data/sl");
-        assert_eq!(layout.node_bin, "/data/sl/node");
+        assert_eq!(layout.node_bin, "/usr/bin/node");
         assert_eq!(layout.paths.bundled_node_bin(), "/data/sl/node");
+    }
+
+    #[test]
+    fn layout_from_selected_system_qq_does_not_use_home_napcat() {
+        let selected = ncd_domain::RemoteSelectedPaths {
+            home: "/root".into(),
+            qq_bin: Some("/opt/QQ/qq".into()),
+            snowluma_dir: Some("/opt/snowluma".into()),
+            snowluma_workspace: Some("/opt/snowluma".into()),
+            node_bin: Some("/opt/snowluma/node".into()),
+            ..ncd_domain::RemoteSelectedPaths::default()
+        };
+        let layout = layout_from_selected(&selected).unwrap();
+        assert_eq!(layout.qq_install_base, "/");
+        assert_eq!(layout.qq_bin, "/opt/QQ/qq");
+        assert_ne!(layout.qq_install_base, "/root/Napcat");
     }
 }

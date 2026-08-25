@@ -381,6 +381,16 @@ fn parse_bound_webui_port_from_logs_handles_https_and_ipv6_style() {
 }
 
 #[test]
+fn parse_bound_webui_port_from_unknown_level_loopback_line() {
+    let lines = [
+        "[12:21:56] [INFO/UNKNOWN] [App] SnowLuma starting",
+        "[12:21:56] [INFO/UNKNOWN] [WebUI] login rate-limit keyed by: socket peer (default)",
+        "[12:21:56] [INFO/UNKNOWN] [WebUI] listening http://127.0.0.1:13105",
+    ];
+    assert_eq!(parse_bound_webui_port_from_logs(lines), Some(13105));
+}
+
+#[test]
 fn find_available_webui_port_errors_or_advances_when_range_busy() {
     // 占住一段连续端口；函数要么跳到段外空闲口，要么返回 no available
     let mut holders = Vec::new();

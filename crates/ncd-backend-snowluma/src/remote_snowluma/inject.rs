@@ -18,18 +18,21 @@ pub async fn remote_qq_running_pid(
     host: &dyn Host,
     qq_id: u64,
 ) -> Result<Option<u32>, BotBackendError> {
-    remote_qq_running_pid_with_hint(host, qq_id, None, None).await
+    remote_qq_running_pid_with_hint(host, qq_id, None, None, false).await
 }
 
 /// `pid_file`：Desktop 写下的 `pid_bot_<qq>`，导入接管时优先认。
 /// `qq_bin`：库存/布局里的 QQ 可执行文件，用来对齐 /proc/pid/exe。
+/// `allow_single_main_fallback`：无任何账号证据时允许按「整机唯一 QQ 主进程」归因，
+/// 只有 reconcile（导入接管 / 冷启动恢复）传 true；start/status/stop 必须传 false。
 pub async fn remote_qq_running_pid_with_hint(
     host: &dyn Host,
     qq_id: u64,
     pid_file: Option<&str>,
     qq_bin: Option<&str>,
+    allow_single_main_fallback: bool,
 ) -> Result<Option<u32>, BotBackendError> {
-    let script = linux_qq_running_pid_script(qq_id, pid_file, qq_bin);
+    let script = linux_qq_running_pid_script(qq_id, pid_file, qq_bin, allow_single_main_fallback);
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
     let out = host
         .run_to_string(cmd)
@@ -54,7 +57,7 @@ pub(crate) async fn inject_via_tunnel(
     )
     .map_err(|e: SnowLumaWebUiError| BotBackendError::Io(e.to_string()))?;
     client
-        .wait_ready(Duration::from_secs(90), Box::new(|| false))
+        .wait_ready(Duration::from_secs(20), Box::new(|| false))
         .await
         .map_err(|e| BotBackendError::Io(format!("SnowLuma WebUI wait_ready: {e}")))?;
     client
@@ -64,7 +67,7 @@ pub(crate) async fn inject_via_tunnel(
 
     // 冷启动刚 spawn QQ 后,SnowLuma daemon 侧扫描器需要时间把该 PID 识别为 Available
     // 立即 load_process 极大概率拿到 "server rejected"(success=false,error 常为空)
-    wait_process_available(&client, qq_pid, Duration::from_secs(25)).await;
+    wait_process_available(&client, qq_pid, Duration::from_secs(12)).await;
 
     // "already" 视为注入成功;其它拒绝若 error 为空则补 /api/processes 快照
     let load_res = client.load_process(qq_pid).await;

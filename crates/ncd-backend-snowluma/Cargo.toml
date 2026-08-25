@@ -50,3 +50,4 @@ proptest = "1"
 ncd-test-support = { path = "../ncd-test-support" }
 tokio = { version = "1", features = ["test-util"] }
 wiremock = "0.6"
+bytes = "1"
