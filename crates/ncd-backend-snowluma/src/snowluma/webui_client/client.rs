@@ -1,12 +1,13 @@
 //! ReqwestSnowLumaWebUiClient 默认实现
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use reqwest::Method;
 use serde::de::DeserializeOwned;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use super::trait_::SnowLumaWebUiClient;
 use super::types::{
@@ -26,12 +27,16 @@ pub struct ReqwestSnowLumaWebUiClient {
     inner: RwLock<ReqwestInner>,
     port: u16,
     password: String,
+    login_gate: Mutex<()>,
 }
 
 struct ReqwestInner {
     http: reqwest::Client,
     host: String,
     token: Option<String>,
+    // 密码错误 / 429 后同一客户端不得再打 /api/login。
+    // 上游按 IP 计次，5 次失败锁 15 分钟；poller 每 tick 双请求会把新密码也锁死。
+    login_blocked: Option<Arc<SnowLumaWebUiError>>,
 }
 
 impl ReqwestSnowLumaWebUiClient {
@@ -50,9 +55,11 @@ impl ReqwestSnowLumaWebUiClient {
                 http,
                 host: "localhost".into(),
                 token: None,
+                login_blocked: None,
             }),
             port,
             password,
+            login_gate: Mutex::new(()),
         })
     }
 
@@ -217,6 +224,49 @@ pub(crate) fn validate_host(host: &str) -> Result<(), SnowLumaWebUiError> {
     }
 }
 
+fn login_must_stop_retrying(status: u16, message: &str) -> bool {
+    if status == 429 {
+        return true;
+    }
+    if status != 401 && status != 403 {
+        return false;
+    }
+    message.contains("密码错误") || message.contains("\"message\":\"密码错误\"")
+}
+
+fn clone_webui_error(err: &SnowLumaWebUiError) -> SnowLumaWebUiError {
+    match err {
+        SnowLumaWebUiError::Status {
+            endpoint,
+            status,
+            message,
+        } => SnowLumaWebUiError::Status {
+            endpoint: endpoint.clone(),
+            status: *status,
+            message: message.clone(),
+        },
+        SnowLumaWebUiError::Timeout { endpoint } => SnowLumaWebUiError::Timeout {
+            endpoint: endpoint.clone(),
+        },
+        SnowLumaWebUiError::Http { endpoint, cause } => SnowLumaWebUiError::Http {
+            endpoint: endpoint.clone(),
+            cause: cause.clone(),
+        },
+        SnowLumaWebUiError::Decode { endpoint, message } => SnowLumaWebUiError::Decode {
+            endpoint: endpoint.clone(),
+            message: message.clone(),
+        },
+        SnowLumaWebUiError::NotReady(d, errs) => SnowLumaWebUiError::NotReady(*d, errs.clone()),
+        SnowLumaWebUiError::LoginFailed(msg) => SnowLumaWebUiError::LoginFailed(msg.clone()),
+        SnowLumaWebUiError::ServerRejected { endpoint, message } => {
+            SnowLumaWebUiError::ServerRejected {
+                endpoint: endpoint.clone(),
+                message: message.clone(),
+            }
+        }
+    }
+}
+
 async fn decode_record_consent_response(
     path: &str,
     resp: reqwest::Response,
@@ -306,6 +356,17 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
     }
 
     async fn login(&self) -> Result<(), SnowLumaWebUiError> {
+        let _gate = self.login_gate.lock().await;
+        {
+            let inner = self.inner.read().await;
+            if inner.token.is_some() {
+                return Ok(());
+            }
+            if let Some(err) = inner.login_blocked.as_ref() {
+                return Err(clone_webui_error(err));
+            }
+        }
+
         let path = "/api/login";
         let host = self.current_host().await;
         validate_host(&host)?;
@@ -322,25 +383,20 @@ impl SnowLumaWebUiClient for ReqwestSnowLumaWebUiClient {
             .await
             .map_err(|e| Self::classify_reqwest_error(path, e))?;
         let status = resp.status();
-        if status.as_u16() == 401 || status.as_u16() == 403 {
+        if status.as_u16() == 401 || status.as_u16() == 403 || !status.is_success() {
             let message = resp.text().await.unwrap_or_default();
-            return Err(SnowLumaWebUiError::LoginFailed(format!(
-                "status {} {}",
-                status.as_u16(),
-                message
-            )));
-        }
-        if !status.is_success() {
-            let message = resp.text().await.unwrap_or_default();
-            return Err(SnowLumaWebUiError::LoginFailed(format!(
-                "status {} {}",
-                status.as_u16(),
-                message
-            )));
+            let err =
+                SnowLumaWebUiError::LoginFailed(format!("status {} {}", status.as_u16(), message));
+            if login_must_stop_retrying(status.as_u16(), &message) {
+                let mut inner = self.inner.write().await;
+                inner.login_blocked = Some(Arc::new(clone_webui_error(&err)));
+            }
+            return Err(err);
         }
         let body: LoginResponse = Self::decode_json(path, resp).await?;
         let mut inner = self.inner.write().await;
         inner.token = Some(body.token);
+        inner.login_blocked = None;
         Ok(())
     }
 
