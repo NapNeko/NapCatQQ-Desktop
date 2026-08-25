@@ -382,7 +382,7 @@ impl QQComponent {
         crate::types::ComponentInfo {
             id: ComponentId::Qq,
             display_name: "QQ".to_string(),
-            description: "腾讯 QQ 客户端，NapCat / SnowLuma 注入运行所需的宿主程序".to_string(),
+            description: "框架运行所需的 QQ 客户端".to_string(),
             repo_url: Some("https://im.qq.com/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
