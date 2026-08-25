@@ -1,9 +1,4 @@
-// 协议连接通道列表 + Dialog 弹窗编辑 + 底部浮动新增条。
-//
-// UX 决策：
-//   - 列表占满 tab 主体；点行内"编辑" / 底部 chip 都走 Dialog 弹窗
-//   - 底部新增条通过 portal 挂到 BotConfigPage 的 #connections-dock，永远贴底
-//   - 删除走 destructive Dialog 二次确认
+// 协议连接列表：行内编辑走 Dialog，新增条贴底。
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -136,7 +131,6 @@ export function ConnectionsTab({ data, onChange, backendType }: ConnectionsTabPr
                 <div className="flex flex-col gap-8 pb-2">
                     <FormSection
                         title="已配置的连接"
-                        description="Bot 启动后这些通道会同时开启；可以多类型组合"
                         actions={
                             <span className="text-2xs text-text-tertiary">{total} 项</span>
                         }
