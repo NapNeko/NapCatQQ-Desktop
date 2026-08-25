@@ -61,7 +61,7 @@ impl DesktopSelfComponent {
         crate::types::ComponentInfo {
             id: ComponentId::DesktopSelf,
             display_name: "NapCatQQ Desktop".to_string(),
-            description: "桌面端自身（自更新走 ncd-update）".to_string(),
+            description: "本控制台，可检查更新".to_string(),
             repo_url: Some("https://github.com/NapNeko/NapCatQQ-Desktop".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
