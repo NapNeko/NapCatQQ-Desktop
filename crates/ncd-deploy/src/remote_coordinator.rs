@@ -48,7 +48,7 @@ impl RemoteQqEntryCoordinator {
         use ncd_component::remote_qq_entry::{QQ_MAIN_NAPCAT_INJECT, set_remote_qq_package_main};
 
         self.with_server(server_id, || async {
-            let pkg_path = install_base.join("opt/QQ/resources/app/package.json");
+            let pkg_path = ncd_component::remote_qq_entry::qq_package_json_path(install_base);
             let desired = QQ_MAIN_NAPCAT_INJECT;
 
             let mut current = None;
@@ -64,7 +64,7 @@ impl RemoteQqEntryCoordinator {
                     .map_err(|e| format!("patch package.json main to napcat-inject failed: {e}"))?;
             }
 
-            let load_js = install_base.join("opt/QQ/resources/app/loadNapCat.js");
+            let load_js = ncd_component::remote_qq_entry::load_napcat_js_path(install_base);
             if !host.exists(&load_js).await.map_err(|e| e.to_string())? {
                 return Err(format!(
                     "远端未找到 NapCat 注入入口脚本 {}（server_id={}）。\
@@ -74,7 +74,7 @@ impl RemoteQqEntryCoordinator {
                 ));
             }
 
-            let napcat_mjs = install_base.join("opt/QQ/resources/app/app_launcher/napcat/napcat.mjs");
+            let napcat_mjs = ncd_component::remote_qq_entry::napcat_mjs_path(install_base);
             if !host.exists(&napcat_mjs).await.map_err(|e| e.to_string())? {
                 return Err(format!(
                     "远端未找到 NapCat 核心模块 {}。请先在组件页安装 NapCat。",
@@ -99,7 +99,7 @@ impl RemoteQqEntryCoordinator {
         use ncd_component::remote_qq_entry::{QQ_MAIN_NATIVE, set_remote_qq_package_main};
 
         self.with_server(server_id, || async {
-            let pkg_path = install_base.join("opt/QQ/resources/app/package.json");
+            let pkg_path = ncd_component::remote_qq_entry::qq_package_json_path(install_base);
             let desired = QQ_MAIN_NATIVE;
 
             let mut current = None;
@@ -118,5 +118,30 @@ impl RemoteQqEntryCoordinator {
             Ok(())
         })
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ncd_component::remote_qq_entry::{
+        load_napcat_js_path, napcat_mjs_path, qq_package_json_path,
+    };
+    use ncd_host::HostPath;
+
+    #[test]
+    fn coordinator_paths_use_domain_for_system_root() {
+        let base = HostPath::from_posix("/");
+        assert_eq!(
+            qq_package_json_path(&base).as_posix(),
+            "/opt/QQ/resources/app/package.json"
+        );
+        assert_eq!(
+            load_napcat_js_path(&base).as_posix(),
+            "/opt/QQ/resources/app/loadNapCat.js"
+        );
+        assert_eq!(
+            napcat_mjs_path(&base).as_posix(),
+            "/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs"
+        );
     }
 }
