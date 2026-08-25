@@ -270,7 +270,7 @@ mod tests {
         let info = ComponentInfo {
             id: ComponentId::NapCat,
             display_name: "NapCat".to_string(),
-            description: "NapCat 框架（注入 QQ 进程）".to_string(),
+            description: "无 QQ 窗口的协议端".to_string(),
             repo_url: Some("https://github.com/NapNeko/NapCatQQ".to_string()),
             supported_targets: vec![
                 SupportedTarget::new(ncd_host::Os::Windows, ncd_host::Locality::Local),
