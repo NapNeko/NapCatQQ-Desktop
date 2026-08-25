@@ -128,6 +128,7 @@ mod tests {
                 backend_type: backend,
                 deployment_type: deployment,
                 snowluma_start_mode: None,
+                webui_password_takeover: false,
             },
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),

@@ -209,6 +209,12 @@ pub struct BotBasicConfig {
     #[serde(rename = "snowlumaStartMode")]
     #[ts(optional, rename = "snowlumaStartMode")]
     pub snowluma_start_mode: Option<SnowLumaStartMode>,
+    /// 接管 WebUI 密码：启动远端 Native SL 时覆盖 webui.json / webui.secret
+    ///（全局固定密码优先，否则每次生成），并重启已在跑的 node；未开启则绝不改动远端既有凭据
+    #[serde(default)]
+    #[serde(rename = "webuiPasswordTakeover")]
+    #[ts(rename = "webuiPasswordTakeover")]
+    pub webui_password_takeover: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -647,6 +653,7 @@ mod snowluma_start_mode_tests {
             backend_type: BackendType::SnowLuma,
             deployment_type: DeploymentType::Native,
             snowluma_start_mode: start_mode,
+            webui_password_takeover: false,
         }
     }
 
@@ -758,6 +765,7 @@ mod runtime_matrix_tests {
                 backend_type: backend,
                 deployment_type: deployment,
                 snowluma_start_mode: None,
+                webui_password_takeover: false,
             },
             connect: ConnectConfig::default(),
             advanced: AdvancedConfig::default(),

@@ -28,6 +28,7 @@ pub mod progress;
 pub mod qq_dependency;
 pub mod release_snapshot;
 pub mod remote_inventory;
+pub mod remote_paths;
 pub mod runtime_scenario;
 pub mod snowluma_linux_package;
 pub mod snowluma_start_mode;
@@ -118,6 +119,15 @@ pub use remote_inventory::{
     DiscoveredRemoteBot, DiscoveredRemoteBotSource, ImportableRemoteBot, REMOTE_INVENTORY_VERSION,
     RemoteInventory, RemoteInventoryItem, RemoteInventoryKind, RemoteInventorySource,
     RemotePathOverrides, RemoteSelectedPaths,
+};
+pub use remote_paths::{
+    RemoteLinuxDerivedPaths, SYSTEM_QQ_BIN, SYSTEM_SNOWLUMA_DIR, derive_remote_linux_paths,
+    desktop_default_install_paths, infer_snowluma_linux_package, is_bundled_snowluma_node,
+    is_portable_lite_node, is_qq_user_data_path, join_under, load_napcat_js, napcat_config_dir,
+    napcat_mjs, napcat_root_under_qq, needs_sudo_for_qq, normalize_posix, qq_app_dir, qq_bin,
+    qq_bin_candidates, qq_install_base_from_qq_bin, qq_package_json, require_napcat_root,
+    require_qq_install_base, require_snowluma_dir, snowluma_install_candidates,
+    snowluma_workspace_from_dir,
 };
 pub use runtime_scenario::RuntimeScenario;
 pub use snowluma_linux_package::SnowLumaLinuxPackage;

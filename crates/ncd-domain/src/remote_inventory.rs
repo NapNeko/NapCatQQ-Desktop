@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::bot_config::{BackendType, DeploymentType};
+use crate::snowluma_linux_package::SnowLumaLinuxPackage;
 
 /// 库存协议版本（`RemoteInventory.v`）
 pub const REMOTE_INVENTORY_VERSION: u32 = 1;
@@ -179,6 +180,9 @@ pub struct RemoteInventory {
     /// 已知目录 / 容器名里扫到的 Bot；旧快照缺字段当空
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bots: Vec<DiscoveredRemoteBot>,
+    /// 探测时按 selected 推断；旧档案缺字段为 None（前端按完整包处理）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snowluma_linux_package: Option<SnowLumaLinuxPackage>,
 }
 
 impl RemoteInventory {
@@ -194,6 +198,7 @@ impl RemoteInventory {
             home,
             items: Vec::new(),
             bots: Vec::new(),
+            snowluma_linux_package: None,
         }
     }
 }
@@ -242,6 +247,7 @@ mod tests {
                 needs_sudo: false,
             },
             bots: Vec::new(),
+            snowluma_linux_package: None,
         };
         let json = serde_json::to_value(&inv).unwrap();
         assert_eq!(json["items"][0]["kind"], "napcat");
@@ -261,5 +267,6 @@ mod tests {
         });
         let inv: RemoteInventory = serde_json::from_value(json).unwrap();
         assert!(inv.bots.is_empty());
+        assert!(inv.snowluma_linux_package.is_none());
     }
 }
