@@ -1,16 +1,4 @@
-// 远端主机管理页（新树）。
-//
-// 信息架构：服务器档案为单位，每张卡承载一个 ServerProfile 的连接信息和操作。
-// 远端页只管"档案"，不做组件部署——部署走组件页（host_id="remote:<id>"）。
-//
-// 视觉语言对齐 ComponentsPage / BotListPage：
-//   - 头部：2xs uppercase 小标题 + display 大标题 + 副描述
-//   - design token：text-text / text-text-secondary / text-text-tertiary / bg-elevated / bg-inset
-//   - 双列卡片网格（≥768px 两列，与 Bot 列表 botCardGrid 同规则）
-//   - EmptyState 虚线边框卡 + Bot icon
-//   - 添加按钮走右下角悬浮（同 Bot 列表 FloatingActions），添加表单走 Radix Dialog
-//
-// 严守 frontend-layering：仅 import hooks / shared/ui / 自身组件。
+// 远端页只管主机档案；组件部署走组件页。
 
 import React, { useRef, useState } from 'react';
 import { Server, RefreshCw, Plus, Eye, EyeOff, ShieldCheck, ShieldAlert, Import } from 'lucide-react';
@@ -44,8 +32,8 @@ function hostKeyVerifyCommand(prompt: HostKeyPrompt): string {
     const file = kind.includes('ed25519')
         ? '/etc/ssh/ssh_host_ed25519_key.pub'
         : kind.includes('rsa')
-          ? '/etc/ssh/ssh_host_rsa_key.pub'
-          : '/etc/ssh/ssh_host_ecdsa_key.pub';
+            ? '/etc/ssh/ssh_host_rsa_key.pub'
+            : '/etc/ssh/ssh_host_ecdsa_key.pub';
     return `ssh-keygen -lf ${file}`;
 }
 
