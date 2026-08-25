@@ -33,6 +33,7 @@ import { useBotBatchSelection } from '../../../hooks/bot/useBotBatchSelection';
 import { useBotFlavorMap } from '../../../hooks/bot/useBotFlavorMap';
 import { useBotConfigsMap } from '../../../hooks/bot/useBotConfigsMap';
 import { useBotDockerStartGate } from '../../../hooks/bot/useBotDockerStartGate';
+import { useBotRuntimeStartGate } from '../../../hooks/bot/useBotRuntimeStartGate';
 import { useNapcatLogin } from '../../../hooks/webui/useNapcatLogin';
 import { useSnowlumaState } from '../../../hooks/webui/useSnowlumaState';
 import { useOpenWebui } from '../../../hooks/webui/useOpenWebui';
@@ -84,6 +85,7 @@ export function BotListPageNext({
     const configByBot = useBotConfigsMap(botSnapshots);
     useSyncRemoteRuntimes(botSnapshots, configByBot);
     const { startBlock: dockerStartGate } = useBotDockerStartGate(configByBot);
+    const { startBlock: runtimeStartGate } = useBotRuntimeStartGate(configByBot);
     const napcat = useNapcatLogin();
     const snowluma = useSnowlumaState();
     const batch = useBotBatchSelection();
@@ -237,6 +239,17 @@ export function BotListPageNext({
         const allowed = await requestDesktopConsent(async () => {
             clearConsentErrorSuppression(botId);
             setStartingBotId(botId);
+            const runtimeGate = runtimeStartGate(botId);
+            if (runtimeGate) {
+                pushInfoBar({
+                    tone: 'danger',
+                    title: '无法启动',
+                    content: runtimeGate,
+                    key: `bot-start-gate:${botId}`,
+                });
+                setStartingBotId(null);
+                return;
+            }
             const gate = dockerStartGate(botId);
             if (gate) {
                 pushInfoBar({
@@ -263,12 +276,25 @@ export function BotListPageNext({
             startBotDirect(botId).catch(() => undefined);
         });
         if (!allowed) return;
-    }, [clearConsentErrorSuppression, dockerStartGate, startBotDirect]);
+    }, [clearConsentErrorSuppression, dockerStartGate, runtimeStartGate, startBotDirect]);
 
     const handleDriftConfirm = useCallback(async (decisions: DriftDecision[]) => {
         if (!driftBotId) return;
         clearConsentErrorSuppression(driftBotId);
         setStartingBotId(driftBotId);
+        const runtimeGate = runtimeStartGate(driftBotId);
+        if (runtimeGate) {
+            setPendingDrift(null);
+            pushInfoBar({
+                tone: 'danger',
+                title: '无法启动',
+                content: runtimeGate,
+                key: `bot-start-gate:${driftBotId}`,
+            });
+            setDriftBotId(null);
+            setStartingBotId(null);
+            return;
+        }
         const gate = dockerStartGate(driftBotId);
         if (gate) {
             setPendingDrift(null);
@@ -310,7 +336,7 @@ export function BotListPageNext({
         }
         setDriftBotId(null);
         setStartingBotId(null);
-    }, [clearConsentErrorSuppression, driftBotId, dockerStartGate, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
+    }, [clearConsentErrorSuppression, driftBotId, dockerStartGate, runtimeStartGate, openSnowLumaConsent, prepareSnowLumaConsentOrOpen]);
 
     const handleConsentConfirm = useCallback(async () => {
         if (!consentBotId || !consentPayload) return;

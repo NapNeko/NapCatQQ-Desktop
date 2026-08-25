@@ -8,7 +8,7 @@
 // 行结构 grid 三列：时间戳 / level 标签 / 文本（文本内 break-all）
 // 历史与增量数据来自 useBotLogStream，不直接调 service。
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
     ArrowLeft,
@@ -57,18 +57,11 @@ export function BotLogPageNext({ botId, onBack }: BotLogPageNextProps) {
     const [channelFilter] = useState<ChannelFilter>('all');
     const [levelFilter, setLevelFilter] = useState<LevelFilter>('all');
     const [autoScroll, setAutoScroll] = useState(true);
-    const containerRef = useRef<HTMLDivElement>(null);
 
     const filtered = useMemo(
         () => filterLogs(logs, query, channelFilter, levelFilter),
         [logs, query, channelFilter, levelFilter],
     );
-
-    useEffect(() => {
-        if (!autoScroll) return;
-        const el = containerRef.current;
-        if (el) el.scrollTop = el.scrollHeight;
-    }, [filtered.length, autoScroll]);
 
     const onCopy = async () => {
         if (filtered.length === 0) return;
@@ -104,11 +97,7 @@ export function BotLogPageNext({ botId, onBack }: BotLogPageNextProps) {
                     hasLogs={logs.length > 0}
                     hasVisible={filtered.length > 0}
                 />
-                <LogViewport
-                    ref={containerRef}
-                    entries={filtered}
-                    emptyKind={emptyKind}
-                />
+                <LogViewport entries={filtered} emptyKind={emptyKind} autoScroll={autoScroll} />
             </div>
         </div>
     );
@@ -261,10 +250,15 @@ function Toolbar({
 
 const LOG_ROW_HEIGHT_PX = 20;
 
-const LogViewport = forwardRef<
-    HTMLDivElement,
-    { entries: LogEntry[]; emptyKind: 'no-logs' | 'no-match' | 'has' }
->(function LogViewport({ entries, emptyKind }, ref) {
+function LogViewport({
+    entries,
+    emptyKind,
+    autoScroll,
+}: {
+    entries: LogEntry[];
+    emptyKind: 'no-logs' | 'no-match' | 'has';
+    autoScroll: boolean;
+}) {
     if (emptyKind === 'no-logs') {
         return (
             <EmptyState
@@ -284,33 +278,20 @@ const LogViewport = forwardRef<
         );
     }
     return (
-        <VirtualLogList
-            ref={ref}
-            entries={entries}
-            rowHeight={LOG_ROW_HEIGHT_PX}
-        />
+        <VirtualLogList entries={entries} rowHeight={LOG_ROW_HEIGHT_PX} autoScroll={autoScroll} />
     );
-});
+}
 
 function VirtualLogList({
     entries,
     rowHeight,
-    ref: forwardedRef,
+    autoScroll,
 }: {
     entries: LogEntry[];
     rowHeight: number;
-    ref: React.ForwardedRef<HTMLDivElement>;
+    autoScroll: boolean;
 }) {
     const parentRef = useRef<HTMLDivElement | null>(null);
-
-    const setRefs = (el: HTMLDivElement | null) => {
-        parentRef.current = el;
-        if (typeof forwardedRef === 'function') {
-            forwardedRef(el);
-        } else if (forwardedRef) {
-            forwardedRef.current = el;
-        }
-    };
 
     const virtualizer = useVirtualizer({
         count: entries.length,
@@ -319,12 +300,24 @@ function VirtualLogList({
         overscan: 12,
     });
 
+    // 虚拟列表的估算高度与实测高度有偏差，scrollTop=scrollHeight 会停在估算底部；
+    // 用 scrollToIndex 让 tanstack 在测量后自行修正到最后一行
+    useEffect(() => {
+        if (!autoScroll || entries.length === 0) return;
+        const id = requestAnimationFrame(() => {
+            virtualizer.scrollToIndex(entries.length - 1, { align: 'end' });
+        });
+        return () => cancelAnimationFrame(id);
+        // virtualizer 实例随 hooks 稳定，不进依赖
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [entries.length, autoScroll]);
+
     const items = virtualizer.getVirtualItems();
     const totalSize = virtualizer.getTotalSize();
 
     return (
         <div
-            ref={setRefs}
+            ref={parentRef}
             role="log"
             aria-label="实例运行日志"
             aria-live="polite"

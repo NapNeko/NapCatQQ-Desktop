@@ -273,7 +273,7 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                             disabled={busy || selectedCount === 0}
                             onCheckedChange={(v) => setTakeOverWebuiPwd(v === true)}
                             label="接管 WebUI 密码"
-                            hint="勾选后：所选的远端 Native SnowLuma 实例下次「启动」时会生成新密码并写入远端配置，原密码立即失效，打开 WebUI 时自动复制新密码；不勾选则完全不改远端配置。"
+                            hint="勾选后：所选的远端 Native SnowLuma 下次「启动」会覆盖 WebUI 密码（配置了固定密码就用固定的，否则生成新的）并重启 node，原密码立即失效，打开 WebUI 时自动复制；不勾选则不改远端配置，启动时可能因不知道原密码而登录失败。"
                         />
                     </div>
                 )}

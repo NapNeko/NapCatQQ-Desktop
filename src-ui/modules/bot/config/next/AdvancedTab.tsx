@@ -17,6 +17,8 @@ interface AdvancedTabProps {
     onStatusCommandChange: (patch: Partial<StatusCommandConfig>) => void;
     snowlumaAppConfig: SnowLumaAppConfig;
     onSnowlumaAppConfigChange: (next: SnowLumaAppConfig) => void;
+    webuiPasswordTakeover: boolean;
+    onWebuiPasswordTakeoverChange: (v: boolean) => void;
     snowlumaAppLoadError?: string | null;
     snowlumaAppLoading?: boolean;
 }
@@ -65,6 +67,8 @@ export function AdvancedTab({
     onSnowlumaAppConfigChange,
     snowlumaAppLoadError,
     snowlumaAppLoading,
+    webuiPasswordTakeover,
+    onWebuiPasswordTakeoverChange,
 }: AdvancedTabProps) {
     const isSnowLuma = backendType === 'snowluma';
     const sc = statusCommand ?? DEFAULT_STATUS_COMMAND;
@@ -82,6 +86,20 @@ export function AdvancedTab({
                     loadError={snowlumaAppLoadError}
                     loading={snowlumaAppLoading}
                 />
+            )}
+
+            {isSnowLuma && (
+                <FormSection
+                    title="WebUI 密码接管"
+                    description="仅远端 Native 生效；勾选后每次「启动」都会覆盖凭据并让 node 重新加载"
+                >
+                    <Switch
+                        label="启动时覆盖 WebUI 密码"
+                        hint="开启后每次启动会覆盖远端 WebUI 密码：上方填了固定密码就用固定的，否则生成新的。原密码立即失效，已在跑的 SnowLuma node 会在本次启动时重启以加载新哈希；打开 WebUI 时自动复制。关闭则完全不改远端配置，也无法代填密码。"
+                        checked={webuiPasswordTakeover}
+                        onCheckedChange={onWebuiPasswordTakeoverChange}
+                    />
+                </FormSection>
             )}
 
             <FormSection

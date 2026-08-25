@@ -38,9 +38,9 @@ export function SnowLumaGlobalWebuiSection({
             description="本机 SnowLuma 守护进程共用一个 WebUI；与上方 Bot 字段一并由右上角「保存」写入"
         >
             <p className="rounded-sm border border-border-subtle bg-canvas/60 px-3 py-2.5 text-2xs leading-relaxed text-text-secondary">
-                仅作用于本机 SnowLuma 守护进程。远端 SSH「直接运行」的 WebUI 密码由远端主机上的
-                secret 管理，在 Bot 列表打开 WebUI 时复制到剪贴板。本机密码留空时，每次启动守护进程会
-                自动生成并写入 session；若填写自定义密码，则下次启动时用你设置的值覆盖。
+                本机守护进程与远端 Native「密码接管」共用这里的覆盖值。留空：本机沿用
+                session（首次自动生成）；远端勾选接管时每次启动生成新密码。填写自定义密码：本机下次启动
+                与远端接管启动都会用这个值覆盖写入。未勾选接管时不会改远端已有密码。
             </p>
             <NumberField
                 label="WebUI 监听端口"
@@ -58,8 +58,8 @@ export function SnowLumaGlobalWebuiSection({
                 onValueChange={(v) =>
                     onChange({ ...value, snowlumaWebuiPasswordOverride: v })
                 }
-                placeholder="留空 = 每次启动自动生成"
-                hint="非空时写入 app-config.json，优先于自动生成的 session 密码"
+                placeholder="留空 = 本机用 session；远端接管则每次生成"
+                hint="非空时写入 app-config.json，本机与远端接管都优先用这个固定密码"
             />
         </FormSection>
     );
