@@ -1,4 +1,4 @@
-// 身份 Tab：QQ 账号 + 实例名 + 底座选择 + SnowLuma 启动模式 + 运行宿主 + 自愈策略。
+// 身份 Tab：账号、底座、运行宿主与自愈。
 
 import { useMemo, type ReactNode } from 'react';
 import {
@@ -198,10 +198,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     return (
         <div className="flex flex-col gap-14">
             <div data-tour-id="bot-identity-section">
-                <FormSection
-                    title="账号身份"
-                    description="QQ 账号、实例显示名与底座类型"
-                >
+                <FormSection title="账号身份">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <NumberField
                             label="QQ 账号"
@@ -365,10 +362,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                 />
             </FormSection>
 
-            <FormSection
-                title="自愈与定时重启"
-                description="掉线自动恢复与周期重启"
-            >
+            <FormSection title="自愈与定时重启">
                 <Switch
                     label="掉线自动重启"
                     checked={data.offlineAutoRestart}
