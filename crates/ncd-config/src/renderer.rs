@@ -28,6 +28,7 @@ mod tests {
             backend_type: BackendType::NapCat,
             deployment_type: DeploymentType::Native,
             snowluma_start_mode: None,
+            webui_password_takeover: false,
         }
     }
 
