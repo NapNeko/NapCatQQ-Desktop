@@ -1,18 +1,4 @@
-// Bot 运行时启动门禁（本地 / 远程直接运行 / 远程 Docker 统一）。
-//
-// 目标：
-// - 配置页选择底座 + 运行宿主 + 启动方式 时，立即给出是否可运行的提示。
-// - 保存配置前阻断（saveBlock）。
-// - 列表/卡片启动前阻断（startBlock）。
-// - 远程探测有延迟时，显示“正在检测...”中性状态，不阻塞用户继续编辑。
-//
-// 三种启动模式对应探测源：
-// 1. 本地直接运行 (Local + Native)          → hostId = 'local' 的 component detect
-// 2. 远程直接运行 (Remote + Native)        → hostId = 'remote:${id}' 的 component detect
-// 3. 远程 Docker (Remote + Docker)         → Docker 守护 + 镜像（复用 docker-start-gate）
-//
-// 直接运行所需组件由 remoteDirectRunChain 定义（NapCat: qq+napcat；
-// SnowLuma 完整包: qq+novnc+snowluma；lite 才要 nodejs）。
+// Bot 启动门禁：配置页提示、保存阻断、列表启动阻断。组件链见 remoteDirectRunChain。
 
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import type { BackendType } from '../../ipc/generated/domain/BackendType';
