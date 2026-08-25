@@ -1,7 +1,4 @@
-// 从本机 ~/.ssh/config 勾选导入远端档案。
-//
-// 弹窗里是勾选列表，不是远端页主机卡。发现走 discover_local_ssh_hosts；
-// 写入走现有 add_server。导入后不测连接。
+// 从本机 ~/.ssh/config 勾选导入远端档案；导入后不测连接。
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -275,8 +272,8 @@ function HostPickRow({
     const sideNote = host.skipReason
         ? shortSkipReason(host.skipReason)
         : host.identityFileMissing
-          ? '密钥缺失'
-          : null;
+            ? '密钥缺失'
+            : null;
 
     return (
         <li className={cn(divided && 'border-t border-border-subtle/70')}>
