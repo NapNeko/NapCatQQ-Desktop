@@ -357,6 +357,8 @@ function toProfile(host: DiscoveredSshHost): ServerProfile {
         rememberCredential: true,
         state: 'disconnected',
         webuiUrl: null,
+        pathOverrides: null,
+        inventory: null,
     };
 }
 

@@ -28,6 +28,7 @@ import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallPro
 import { HostSwitcher } from './HostSwitcher';
 import { HostComponentsView } from './HostComponentsView';
 import { ReleaseNotesDialog } from './ReleaseNotesDialog';
+import { SnowLumaLinuxPackageDialog } from './SnowLumaLinuxPackageDialog';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
 import { componentMutationBlockedReason, componentLifecycleBlockedReason } from '../../core/domain/components/mutation-gate';
@@ -37,7 +38,12 @@ import {
     subscribeComponentsHostBridge,
 } from '../../hooks/desktop/componentsHostBridge';
 import type { ReleaseInfoView } from '../../core/domain/release/normalize';
-import type { ComponentId, DockerInstallReport } from '../../core/ipc/types';
+import type {
+    ComponentId,
+    DockerInstallReport,
+    SnowLumaLinuxPackage,
+    StepKind,
+} from '../../core/ipc/types';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type { DockerInstallOptions } from '../../core/services/docker.service';
 import { globalInfoBarStore } from '../../hooks/ui/globalInfoBarStore';
@@ -252,11 +258,52 @@ export const ComponentsPageNext: React.FC = () => {
         setReleaseNotesTarget(componentId);
     }, []);
 
+    const [slPkgPrompt, setSlPkgPrompt] = useState<{
+        componentId: ComponentId;
+        hostId: string;
+        stepKind: StepKind;
+    } | null>(null);
+
+    const beginComponentAction = useCallback(
+        async (
+            componentId: ComponentId,
+            hostId: string,
+            stepKind: StepKind,
+            options?: { snowlumaLinuxPackage?: SnowLumaLinuxPackage },
+        ) => {
+            const taskId = await startAction(componentId, hostId, stepKind, options);
+            onTaskTerminal(taskId, (status) => {
+                // 只在成功时刷新状态；失败/取消时不刷新，避免部分删除导致探测返回 None 误显示"未安装"。
+                if (status === 'success') {
+                    refetch();
+                    if (componentId === 'qq') {
+                        void probeQqDependencies(hostId, true);
+                    }
+                }
+            });
+        },
+        [startAction, onTaskTerminal, refetch, probeQqDependencies],
+    );
+
+    const reportActionStartError = useCallback(
+        (componentId: ComponentId, hostId: string, err: unknown) => {
+            globalInfoBarStore.push({
+                key: `component-action-start:${componentId}:${hostId}`,
+                tone: 'danger',
+                title: `组件操作失败 · ${hostNameOf(hostId)}`,
+                content: errorText(err, '组件操作失败，请稍后重试'),
+                autoDismissMs: 0,
+            });
+            console.error('[ComponentsPage] action failed:', err);
+        },
+        [hostNameOf],
+    );
+
     const handleAction = useCallback(
         async (
             componentId: ComponentId,
             hostId: string,
-            payload: { stepKind: import('../../core/ipc/types').StepKind } | { cancelTaskId: string },
+            payload: { stepKind: StepKind } | { cancelTaskId: string },
         ) => {
             try {
                 if ('cancelTaskId' in payload) {
@@ -279,38 +326,50 @@ export const ComponentsPageNext: React.FC = () => {
                     });
                     return;
                 }
-                const taskId = await startAction(componentId, hostId, payload.stepKind);
-                onTaskTerminal(taskId, (status) => {
-                    // 只在成功时刷新状态；失败/取消时不刷新，避免部分删除导致探测返回 None 误显示"未安装"。
-                    if (status === 'success') {
-                        refetch();
-                        if (componentId === 'qq') {
-                            void probeQqDependencies(hostId, true);
-                        }
-                    }
-                });
+                const hostOs = machines.find((m) => m.host.host_id === hostId)?.host.os;
+                if (
+                    componentId === 'snowluma' &&
+                    hostOs === 'linux' &&
+                    (payload.stepKind === 'ensure_installed' || payload.stepKind === 'force_install')
+                ) {
+                    setSlPkgPrompt({
+                        componentId,
+                        hostId,
+                        stepKind: payload.stepKind,
+                    });
+                    return;
+                }
+                await beginComponentAction(componentId, hostId, payload.stepKind);
             } catch (err) {
-                const hostName = hostNameOf(hostId);
-                globalInfoBarStore.push({
-                    key: `component-action-start:${componentId}:${hostId}`,
-                    tone: 'danger',
-                    title: `组件操作失败 · ${hostName}`,
-                    content: errorText(err, '组件操作失败，请稍后重试'),
-                    autoDismissMs: 0,
-                });
-                console.error('[ComponentsPage] action failed:', err);
+                reportActionStartError(componentId, hostId, err);
             }
         },
         [
-            startAction,
+            beginComponentAction,
             cancelAction,
-            onTaskTerminal,
-            refetch,
             hostNameOf,
-            probeQqDependencies,
+            reportActionStartError,
             botSnapshots,
             botConfigs,
+            machines,
         ],
+    );
+
+    const confirmSnowLumaLinuxPackage = useCallback(
+        (pkg: SnowLumaLinuxPackage) => {
+            const pending = slPkgPrompt;
+            if (!pending) return;
+            setSlPkgPrompt(null);
+            void beginComponentAction(
+                pending.componentId,
+                pending.hostId,
+                pending.stepKind,
+                { snowlumaLinuxPackage: pkg },
+            ).catch((err) => {
+                reportActionStartError(pending.componentId, pending.hostId, err);
+            });
+        },
+        [slPkgPrompt, beginComponentAction, reportActionStartError],
     );
 
     const lifecycleBlockedReasonForHost = useCallback(
@@ -608,6 +667,14 @@ export const ComponentsPageNext: React.FC = () => {
                 release={
                     releaseNotesTarget ? latestReleaseFor(releaseNotesTarget) : null
                 }
+            />
+
+            <SnowLumaLinuxPackageDialog
+                open={slPkgPrompt != null}
+                onOpenChange={(open) => {
+                    if (!open) setSlPkgPrompt(null);
+                }}
+                onConfirm={confirmSnowLumaLinuxPackage}
             />
 
             {sudoPrompt && (

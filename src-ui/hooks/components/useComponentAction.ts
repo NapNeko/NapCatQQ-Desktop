@@ -15,7 +15,7 @@ import {
     targetKey,
 } from './componentActionStore';
 import type { ActionProgressView } from '../../core/domain/components/progress';
-import type { ComponentId, StepKind } from '../../core/ipc/types';
+import type { ComponentId, SnowLumaLinuxPackage, StepKind } from '../../core/ipc/types';
 
 export interface UseComponentActionResult {
     /** 启动一次操作，返回 task_id。 */
@@ -23,6 +23,7 @@ export interface UseComponentActionResult {
         componentId: ComponentId,
         hostId: string,
         kind: StepKind,
+        options?: { snowlumaLinuxPackage?: SnowLumaLinuxPackage },
     ) => Promise<string>;
     /** 取消进行中的 task。 */
     cancelAction: (taskId: string) => Promise<void>;
@@ -56,7 +57,12 @@ export function useComponentAction(): UseComponentActionResult {
     );
 
     const startAction = useCallback(
-        async (componentId: ComponentId, hostId: string, kind: StepKind) => {
+        async (
+            componentId: ComponentId,
+            hostId: string,
+            kind: StepKind,
+            options?: { snowlumaLinuxPackage?: SnowLumaLinuxPackage },
+        ) => {
             const taskId = crypto.randomUUID();
             const needsPkgQueue =
                 (componentId === 'novnc' &&
@@ -85,6 +91,7 @@ export function useComponentAction(): UseComponentActionResult {
                     hostId,
                     kind,
                     taskId,
+                    options?.snowlumaLinuxPackage,
                 );
                 return backendTaskId;
             } catch (err) {

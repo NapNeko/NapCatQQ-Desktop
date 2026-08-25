@@ -21,6 +21,7 @@ import {
     remoteDirectRunChain,
     localDirectRunChain,
     componentIdToDisplayName,
+    inferSnowLumaLinuxPackageFromInventory,
 } from '../../../../core/domain/bot/remote-direct-run-deps';
 import { isRuntimeTargetConcreteRemote } from '../../../../core/domain/bot/runtime-target';
 import { dockerReadinessNotice } from '../../../../core/domain/bot/docker-start-gate';
@@ -98,9 +99,20 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     const { statusByHost, probingByHost, imageReadyByHost } =
         useDockerHosts(dockerHostIds);
 
+    const remoteProfileId = useMemo(
+        () => (isRemote ? serverProfileIdFromRuntimeTarget(data.runtime_target) : null),
+        [isRemote, data.runtime_target],
+    );
+    const snowlumaLinuxPackage = useMemo(() => {
+        if (!remoteProfileId || data.backend_type !== 'snowluma') return null;
+        const profile = servers.find((s) => s.id === remoteProfileId);
+        return inferSnowLumaLinuxPackageFromInventory(profile?.inventory);
+    }, [remoteProfileId, data.backend_type, servers]);
+
     const componentInstalled = useHostComponentInstalled(
         remoteHostId,
         data.backend_type,
+        snowlumaLinuxPackage,
     );
 
     const localInstalled = useHostComponentInstalled('local', data.backend_type);
@@ -112,7 +124,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         if (!isRemote || deploymentType !== 'native' || !remoteHostId) {
             return null;
         }
-        const chain = remoteDirectRunChain(data.backend_type);
+        const chain = remoteDirectRunChain(data.backend_type, snowlumaLinuxPackage);
         const missing: string[] = [];
         for (const id of chain) {
             if (componentInstalled[id] === false) {
@@ -127,6 +139,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         remoteHostId,
         data.backend_type,
         componentInstalled,
+        snowlumaLinuxPackage,
     ]);
 
     const onRuntimeModeChange = (mode: string) => {

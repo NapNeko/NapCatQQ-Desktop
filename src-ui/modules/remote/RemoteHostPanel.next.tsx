@@ -32,6 +32,8 @@ import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { ServerCard, serverCardGridClass } from './ServerCard';
 import { AddServerDialog } from './AddServerDialog';
 import { ImportSshConfigDialog } from './ImportSshConfigDialog';
+import { RemoteInventoryDialog } from './RemoteInventoryDialog';
+import type { RemotePathOverrides } from '../../core/ipc/generated/domain/RemotePathOverrides';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { HostKeyPrompt } from '../../core/ipc/generated/domain/HostKeyPrompt';
 import { CopyCodeBlock } from '../../shared/ui/CopyCodeBlock';
@@ -62,6 +64,10 @@ export const RemoteHostPanelNext: React.FC = () => {
         setupKeyAuth,
         isSettingUpKey,
         confirmHostKey,
+        refreshInventory,
+        isRefreshingInventory,
+        inventoryError,
+        updateServerAsync,
     } = useServerManager();
 
     // 表单弹窗：editingProfile=null 走新增，非空走编辑同一弹窗。
@@ -70,6 +76,7 @@ export const RemoteHostPanelNext: React.FC = () => {
     const [editingProfile, setEditingProfile] = useState<ServerProfile | null>(null);
     const [testingId, setTestingId] = useState<string | null>(null);
     const [revealIp, setRevealIp] = useState(false);
+    const [inventoryServer, setInventoryServer] = useState<ServerProfile | null>(null);
 
     const openAdd = () => {
         setEditingProfile(null);
@@ -252,6 +259,7 @@ export const RemoteHostPanelNext: React.FC = () => {
                         openEdit={openEdit}
                         setKeyAuthTarget={setKeyAuthTarget}
                         deleteServer={deleteServer}
+                        onInventory={setInventoryServer}
                     />
                 )}
             </div>
@@ -305,6 +313,32 @@ export const RemoteHostPanelNext: React.FC = () => {
                 onClose={() => setHostKeyConfirm(null)}
                 onTrust={() => void onTrustHostKey()}
             />
+
+            <RemoteInventoryDialog
+                open={!!inventoryServer}
+                server={
+                    inventoryServer
+                        ? (servers.find((s) => s.id === inventoryServer.id) ?? inventoryServer)
+                        : null
+                }
+                isRefreshing={isRefreshingInventory}
+                isSaving={isUpdating}
+                error={inventoryError}
+                onOpenChange={(next) => {
+                    if (!next) setInventoryServer(null);
+                }}
+                onRefresh={() => {
+                    if (inventoryServer) void refreshInventory(inventoryServer.id);
+                }}
+                onSaveOverrides={(overrides: RemotePathOverrides) => {
+                    const current =
+                        servers.find((s) => s.id === inventoryServer?.id) ?? inventoryServer;
+                    if (!current) return;
+                    void updateServerAsync({
+                        profile: { ...current, pathOverrides: overrides },
+                    }).then(() => refreshInventory(current.id));
+                }}
+            />
         </div>
     );
 };
@@ -321,6 +355,7 @@ function ServerGrid({
     openEdit,
     setKeyAuthTarget,
     deleteServer,
+    onInventory,
 }: {
     servers: ServerProfile[];
     isTesting: boolean;
@@ -330,6 +365,7 @@ function ServerGrid({
     openEdit: (s: ServerProfile) => void;
     setKeyAuthTarget: (s: ServerProfile | null) => void;
     deleteServer: (id: string) => void;
+    onInventory: (s: ServerProfile) => void;
 }) {
     const m = useMotion();
     const containerRef = useRef<HTMLDivElement>(null);
@@ -359,6 +395,7 @@ function ServerGrid({
                                 : undefined
                         }
                         onDelete={() => deleteServer(server.id)}
+                        onInventory={() => onInventory(server)}
                     />
                 </ListItem>
             ))}

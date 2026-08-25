@@ -26,21 +26,22 @@ export function BotRuntimeMetricsStrip({
     const clickable = typeof onOpenDetail === 'function';
 
     if (metrics.probe === 'not_injected' || metrics.probe === 'error') {
-        const text =
-            metrics.probe === 'error'
-                ? `指标异常${metrics.probe_error ? ` · ${metrics.probe_error}` : ''}`
-                : metrics.probe_error
-                    ? `未注入 · ${metrics.probe_error}`
-                    : '指标未注入 · 重启后生效';
+        const short =
+            metrics.probe === 'error' ? '指标异常' : '未注入';
+        const detail = metrics.probe_error?.trim() || undefined;
         const Icon = metrics.probe === 'error' ? AlertCircle : Clock3;
         if (!clickable) {
-            return <p className="mt-1.5 truncate text-[11px] text-text-tertiary">{text}</p>;
+            return (
+                <p className="mt-1.5 truncate text-[11px] text-text-tertiary" title={detail}>
+                    {short}
+                </p>
+            );
         }
         return (
             <button
                 type="button"
-                aria-label={`查看运行时指标：${text}`}
-                title={text}
+                aria-label={detail ? `查看运行时指标：${short}。${detail}` : `查看运行时指标：${short}`}
+                title={detail ?? short}
                 className={cn(
                     'mt-1 flex h-6 max-w-full items-center gap-1.5 rounded-sm px-1.5 text-[11.5px]',
                     'transition-[color,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
@@ -54,7 +55,7 @@ export function BotRuntimeMetricsStrip({
                 }}
             >
                 <Icon aria-hidden size={12} strokeWidth={2.2} className="shrink-0" />
-                <span className="truncate">{text}</span>
+                <span className="truncate">{short}</span>
             </button>
         );
     }

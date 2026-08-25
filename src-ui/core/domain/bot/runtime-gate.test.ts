@@ -89,4 +89,26 @@ describe('runtime gate matrix', () => {
             text: '本机不支持 Docker 部署，请改为直接运行或选择远程主机',
         });
     });
+
+    it('does not require Node.js for remote SnowLuma full package', () => {
+        const config = botConfig({
+            runtime_target: 'server-a',
+            backend_type: 'snowluma',
+            deploymentType: 'native',
+        });
+        const args = {
+            config,
+            remoteTransport: { reachable: true, label: 'kunming' },
+            remoteDirect: {
+                installed: { nodejs: false, qq: true, novnc: true, snowluma: true },
+                probing: false,
+                snowlumaLinuxPackage: 'full' as const,
+            },
+        };
+        expect(runtimeStartBlockReason(args)).toBeNull();
+        expect(runtimeReadinessNotice(args)).toEqual({
+            tone: 'ok',
+            text: '远程直接运行依赖已就绪',
+        });
+    });
 });

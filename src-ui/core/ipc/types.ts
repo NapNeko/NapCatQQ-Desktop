@@ -93,6 +93,10 @@ export type { ComponentInfo } from './generated/domain/ComponentInfo';
 export type { SupportedTarget } from './generated/domain/SupportedTarget';
 export type { DetectedVersion } from './generated/domain/DetectedVersion';
 export type { StepKind } from './generated/domain/StepKind';
+export type { SnowLumaLinuxPackage } from './generated/domain/SnowLumaLinuxPackage';
+export type { DiscoveredRemoteBot } from './generated/domain/DiscoveredRemoteBot';
+export type { DiscoveredRemoteBotSource } from './generated/domain/DiscoveredRemoteBotSource';
+export type { ImportableRemoteBot } from './generated/domain/ImportableRemoteBot';
 export type { Os } from './generated/domain/Os';
 export type { Locality } from './generated/domain/Locality';
 

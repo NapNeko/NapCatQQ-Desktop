@@ -6,6 +6,7 @@ import { invoke, isTauri } from '../ipc/transport';
 import type { ServerProfile } from '../ipc/generated/domain/ServerProfile';
 import type { ProbeReport } from '../ipc/generated/domain/ProbeReport';
 import type { DiscoveredSshHost } from '../ipc/generated/domain/DiscoveredSshHost';
+import type { RemoteInventory } from '../ipc/generated/domain/RemoteInventory';
 
 export const serverService = {
     list: async (): Promise<ServerProfile[]> => {
@@ -63,5 +64,10 @@ export const serverService = {
     discoverLocalSshHosts: async (): Promise<DiscoveredSshHost[]> => {
         if (isTauri) return invoke<DiscoveredSshHost[]>('discover_local_ssh_hosts');
         return [];
+    },
+
+    refreshInventory: async (serverId: string): Promise<RemoteInventory> => {
+        if (isTauri) return invoke<RemoteInventory>('refresh_remote_inventory', { serverId });
+        throw new Error('not in Tauri');
     },
 };

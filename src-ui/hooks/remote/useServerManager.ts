@@ -159,6 +159,21 @@ export function useServerManager() {
         },
     });
 
+    const refreshInventoryMutation = useMutation({
+        mutationFn: (serverId: string) => serverService.refreshInventory(serverId),
+        onSuccess: () => {
+            invalidateServerLists(queryClient);
+        },
+        onError: (err: unknown, serverId) => {
+            pushInfoBar({
+                key: `server-inventory:${serverId}`,
+                tone: 'danger',
+                title: '重新发现失败',
+                content: errorText(err),
+            });
+        },
+    });
+
     const confirmHostKeyMutation = useMutation({
         mutationFn: (args: { id: string; keyKind: string; keyB64: string }) =>
             serverService.confirmHostKey(args.id, args.keyKind, args.keyB64),
@@ -174,6 +189,7 @@ export function useServerManager() {
         isAdding: addMutation.isPending,
 
         updateServer: updateMutation.mutate,
+        updateServerAsync: updateMutation.mutateAsync,
         isUpdating: updateMutation.isPending,
 
         deleteServer: deleteMutation.mutate,
@@ -189,5 +205,11 @@ export function useServerManager() {
 
         confirmHostKey: confirmHostKeyMutation.mutateAsync,
         isConfirmingHostKey: confirmHostKeyMutation.isPending,
+
+        refreshInventory: refreshInventoryMutation.mutateAsync,
+        isRefreshingInventory: refreshInventoryMutation.isPending,
+        inventoryError: refreshInventoryMutation.error
+            ? errorText(refreshInventoryMutation.error)
+            : null,
     };
 }

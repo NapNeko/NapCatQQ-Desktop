@@ -27,6 +27,7 @@ import { ListItem, Counter, MotionIcon } from '../../../shared/ui/motion';
 import { PagePlaceholder } from '../../../shared/ui/PagePlaceholder';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
+import { useSyncRemoteRuntimes } from '../../../hooks/bot/useSyncRemoteRuntimes';
 import { useBotMutations, type ActionMessage } from '../../../hooks/bot/useBotMutations';
 import { useBotBatchSelection } from '../../../hooks/bot/useBotBatchSelection';
 import { useBotFlavorMap } from '../../../hooks/bot/useBotFlavorMap';
@@ -52,6 +53,7 @@ import { BotCard } from './next/BotCard';
 import { FloatingActions } from './next/FloatingActions';
 import { BatchBottomBar } from './next/BatchBottomBar';
 import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
+import { ImportRemoteBotsDialog } from '../dialogs/ImportRemoteBotsDialog';
 import { SnowLumaConsentDialog } from '../dialogs/SnowLumaConsentDialog';
 import { requestDesktopConsent } from '../../../hooks/desktop/desktopConsentHost';
 import gridStyles from './next/botCardGrid.module.css';
@@ -80,6 +82,7 @@ export function BotListPageNext({
     const { data: botSnapshots = [], isLoading, error, refetch } = useBotSnapshots();
     const flavorByBot = useBotFlavorMap(botSnapshots);
     const configByBot = useBotConfigsMap(botSnapshots);
+    useSyncRemoteRuntimes(botSnapshots, configByBot);
     const { startBlock: dockerStartGate } = useBotDockerStartGate(configByBot);
     const napcat = useNapcatLogin();
     const snowluma = useSnowlumaState();
@@ -89,6 +92,7 @@ export function BotListPageNext({
     // Desktop 协议门禁统一走 App 级 host，避免本页再挂一份 gate/Dialog 打架
     // 批量删除二次确认
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
 
     // 把 mutation 的 success / error 消息桥接到全局 InfoBar 队列。
     const handleMessage = (msg: ActionMessage) => {
@@ -432,6 +436,11 @@ export function BotListPageNext({
             onConfigureBot(null);
         });
     }, [onConfigureBot]);
+    const onImportBots = useCallback(() => {
+        void requestDesktopConsent(() => {
+            setImportOpen(true);
+        });
+    }, []);
     const onBatchStop = () => {
         if (batch.selectedIds.size === 0) return;
         mutations.batchStop(Array.from(batch.selectedIds));
@@ -487,7 +496,7 @@ export function BotListPageNext({
                 ) : error ? (
                     <ErrorState onRetry={() => refetch()} />
                 ) : botSnapshots.length === 0 ? (
-                    <EmptyState onCreate={onCreateBot} />
+                    <EmptyState onCreate={onCreateBot} onImport={onImportBots} />
                 ) : (
                     <BotListGrid
                         bots={botSnapshots}
@@ -514,6 +523,7 @@ export function BotListPageNext({
                 visible={!batch.isBatchMode}
                 busy={mutations.isPending}
                 onCreate={onCreateBot}
+                onImport={onImportBots}
                 onRefresh={() => refetch()}
                 onEnterBatch={batch.toggleBatch}
             />
@@ -559,6 +569,8 @@ export function BotListPageNext({
                 </DialogContent>
             </Dialog>
 
+            <ImportRemoteBotsDialog open={importOpen} onOpenChange={setImportOpen} />
+
             {/* Config drift 确认 */}
             {pendingDrift && (
                 <ConfigDriftDialog
@@ -603,7 +615,13 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
     );
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({
+    onCreate,
+    onImport,
+}: {
+    onCreate: () => void;
+    onImport: () => void;
+}) {
     return (
         <PagePlaceholder className="gap-4">
             <MotionIcon
@@ -620,17 +638,26 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
                     还没有 Bot 实例
                 </p>
                 <p className="mt-1 text-xs text-text-secondary">
-                    创建第一个配置后，这里就会显示出来。
+                    可以新建，也可以把远端已有的 NapCat / SnowLuma 账号导进来。
                 </p>
             </div>
-            <Button
-                size="sm"
-                variant="primary"
-                onClick={onCreate}
-                data-tour-id="bot-create-empty"
-            >
-                创建第一个实例
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={onImport}
+                >
+                    导入已有 Bot
+                </Button>
+                <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={onCreate}
+                    data-tour-id="bot-create-empty"
+                >
+                    创建第一个实例
+                </Button>
+            </div>
         </PagePlaceholder>
     );
 }

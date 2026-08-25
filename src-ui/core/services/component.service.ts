@@ -10,6 +10,7 @@ import type {
     ComponentDetectResult,
     ComponentId,
     ComponentInfo,
+    SnowLumaLinuxPackage,
     StepKind,
 } from '../ipc/types';
 import type { QqDependencyReport } from '../ipc/generated/qq/QqDependencyReport';
@@ -46,6 +47,7 @@ export const componentService = {
         hostId: string,
         kind: StepKind,
         taskId?: string,
+        snowlumaLinuxPackage?: SnowLumaLinuxPackage | null,
     ): Promise<string> => {
         if (isTauri) {
             return invoke<string>('run_component_action', {
@@ -53,6 +55,7 @@ export const componentService = {
                 hostId,
                 kind,
                 taskId: taskId ?? null,
+                snowlumaLinuxPackage: snowlumaLinuxPackage ?? null,
             });
         }
         return withMockDelay(mockRunAction(componentId, hostId, kind), 50);

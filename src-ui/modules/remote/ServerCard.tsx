@@ -2,6 +2,7 @@
 
 import React from 'react';
 import {
+    FolderSearch,
     Globe,
     KeyRound,
     Pencil,
@@ -21,6 +22,7 @@ import { cn } from '../../shared/utils/cn';
 import { BotManageCard } from '../bot/list/next/BotManageCard';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { ServerState } from '../../core/ipc/generated/domain/ServerState';
+import { inventorySummary } from '../../core/domain/remote-host/inventory-labels';
 import { serverLifecycleBadge } from './serverCardPresentation';
 
 export { serverCardGridClass } from './serverCardGrid';
@@ -32,6 +34,7 @@ interface ServerCardProps {
     onTest: (password?: string) => void;
     onEdit: () => void;
     onSetupKey?: () => void;
+    onInventory?: () => void;
     onDelete: () => void;
 }
 
@@ -42,6 +45,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
     onTest,
     onEdit,
     onSetupKey,
+    onInventory,
     onDelete,
 }) => {
     const displayHost = revealIp ? server.host : maskHost(server.host);
@@ -190,6 +194,14 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                             onClick={stop(onSetupKey)}
                         >
                             <ActionMotionIcon icon={KeyRound} size={16} strokeWidth={2} />
+                        </ServerIconButton>
+                    ) : null}
+                    {onInventory ? (
+                        <ServerIconButton
+                            tooltip={inventorySummary(server.inventory)}
+                            onClick={stop(onInventory)}
+                        >
+                            <ActionMotionIcon icon={FolderSearch} size={16} strokeWidth={2} />
                         </ServerIconButton>
                     ) : null}
                     <ServerIconButton tooltip="编辑" onClick={stop(onEdit)}>

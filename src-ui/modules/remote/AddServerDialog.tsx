@@ -121,6 +121,9 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
             // 编辑时保留原状态（连接态由 test_connection 维护，表单不该重置它）。
             state: initialProfile?.state ?? 'disconnected',
             webuiUrl: initialProfile?.webuiUrl ?? null,
+            health: initialProfile?.health ?? null,
+            pathOverrides: initialProfile?.pathOverrides ?? null,
+            inventory: initialProfile?.inventory ?? null,
         };
         // 密码为空：新增=不存凭据；编辑=不改已存凭据。两种都传 undefined。
         const pw = authMethod === 'password' && password ? password : undefined;

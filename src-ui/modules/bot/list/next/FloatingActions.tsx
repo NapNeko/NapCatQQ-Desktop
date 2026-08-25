@@ -5,7 +5,7 @@
 
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import { Plus, RefreshCw, ListChecks } from 'lucide-react';
+import { Plus, RefreshCw, ListChecks, FolderInput } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../../shared/ui';
 import {
     MotionIcon,
@@ -20,6 +20,7 @@ import { useMotion } from '../../../../hooks/preferences/useMotion';
 interface FloatingActionsProps {
     visible: boolean;
     onCreate: () => void;
+    onImport?: () => void;
     onRefresh: () => void;
     onEnterBatch: () => void;
     busy?: boolean;
@@ -28,6 +29,7 @@ interface FloatingActionsProps {
 export function FloatingActions({
     visible,
     onCreate,
+    onImport,
     onRefresh,
     onEnterBatch,
     busy = false,
@@ -93,6 +95,23 @@ export function FloatingActions({
                         hoverAccent
                     />
                 </CircleButton>
+                {onImport ? (
+                    <CircleButton
+                        tooltip="导入已有 Bot"
+                        onClick={onImport}
+                        disabled={busy}
+                        variant="ghost"
+                    >
+                        <MotionIcon
+                            icon={FolderInput}
+                            motion="none"
+                            size={18}
+                            strokeWidth={2.2}
+                            playEnter={false}
+                            hoverAccent
+                        />
+                    </CircleButton>
+                ) : null}
                 <CircleButton
                     tooltip="新增 Bot"
                     onClick={onCreate}

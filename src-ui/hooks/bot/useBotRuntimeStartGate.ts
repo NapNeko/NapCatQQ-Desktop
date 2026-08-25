@@ -14,6 +14,7 @@ import {
     type RemoteTransportStatus,
 } from '../../core/domain/bot/runtime-gate';
 import { useHostComponentInstalled } from '../components/useRemoteHostComponentInstalled';
+import { inferSnowLumaLinuxPackageFromInventory } from '../../core/domain/bot/remote-direct-run-deps';
 import { useDockerHosts } from '../docker/useDockerHosts';
 import {
     dockerHostIdForConfig,
@@ -47,26 +48,7 @@ export function useBotRuntimeStartGate(
         return [...hosts];
     }, [configByBot]);
 
-    // 2. 顶层为每个 host 取两种 backend 的状态（hook 调用数量 = hosts.length × 2，稳定）
-    const statusByHost: Record<
-        string,
-        Record<BackendType, ReturnType<typeof useHostComponentInstalled>>
-    > = {};
-
-    for (const h of relevantHosts) {
-        // eslint-disable-next-line react-hooks/rules-of-hooks
-        statusByHost[h] = {
-            napcat: useHostComponentInstalled(h, 'napcat'),
-            snowluma: useHostComponentInstalled(h, 'snowluma'),
-        };
-    }
-
-    // 3. Docker 状态（复用）
-    const dockerHostIds = relevantHosts.filter((h) => h.startsWith('remote:'));
-    const { statusByHost: dockerStatusByHost, probingByHost: dockerProbingByHost } =
-        useDockerHosts(dockerHostIds);
-
-    // 4. 服务器档案（用于判断远端 host 的 transport 健康 + 取 label）
+    // 2. 服务器档案（transport + SnowLuma 完整包/lite，须在组件探测之前）
     const serversQuery = useQuery({
         queryKey: ['servers'],
         queryFn: () => serverService.list(),
@@ -74,6 +56,28 @@ export function useBotRuntimeStartGate(
         staleTime: 15_000,
     });
     const servers = serversQuery.data ?? [];
+
+    // 3. 顶层为每个 host 取两种 backend 的状态（hook 调用数量 = hosts.length × 2，稳定）
+    const statusByHost: Record<
+        string,
+        Record<BackendType, ReturnType<typeof useHostComponentInstalled>>
+    > = {};
+
+    for (const h of relevantHosts) {
+        const serverId = h.startsWith('remote:') ? h.slice('remote:'.length) : null;
+        const profile = serverId ? servers.find((p) => p.id === serverId) : undefined;
+        const slPkg = inferSnowLumaLinuxPackageFromInventory(profile?.inventory);
+        // eslint-disable-next-line react-hooks/rules-of-hooks
+        statusByHost[h] = {
+            napcat: useHostComponentInstalled(h, 'napcat'),
+            snowluma: useHostComponentInstalled(h, 'snowluma', slPkg),
+        };
+    }
+
+    // 4. Docker 状态（复用）
+    const dockerHostIds = relevantHosts.filter((h) => h.startsWith('remote:'));
+    const { statusByHost: dockerStatusByHost, probingByHost: dockerProbingByHost } =
+        useDockerHosts(dockerHostIds);
 
     // 5. 构造 gateArgs（纯读 + 计算）
     const gateArgs = useCallback(
@@ -91,16 +95,18 @@ export function useBotRuntimeStartGate(
                 };
             } else if (req.kind === 'remote-direct') {
                 const st = statusByHost[req.hostId]?.[config.bot.backend_type];
-                out.remoteDirect = {
-                    installed: st ?? {},
-                    probing: st ? Object.values(st).some((v) => v === undefined) : true,
-                };
-
-                // 填充 transport 状态
                 const serverId = req.hostId.startsWith('remote:')
                     ? req.hostId.slice('remote:'.length)
                     : req.hostId;
                 const profile = servers.find((p) => p.id === serverId);
+                out.remoteDirect = {
+                    installed: st ?? {},
+                    probing: st ? Object.values(st).some((v) => v === undefined) : true,
+                    snowlumaLinuxPackage: inferSnowLumaLinuxPackageFromInventory(
+                        profile?.inventory,
+                    ),
+                };
+
                 const reachable = profile ? profile.state !== 'failed' : false;
                 const label = profile
                     ? (profile.name?.trim() || profile.host?.trim() || profile.id)

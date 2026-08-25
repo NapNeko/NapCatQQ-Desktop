@@ -390,7 +390,7 @@ const RuntimeDepGroup: React.FC<{
         return (
             <FormSection
                 title="运行时依赖"
-                description="Node.js、QQ 运行时等与框架配套的依赖；远端 Linux 含 Docker"
+                description="Node.js、QQ 运行时等。SnowLuma 完整包自带 Node；Lite 会自动编排安装 Node.js"
                 layout="none"
             >
                 <div className={componentCardGridClass}>

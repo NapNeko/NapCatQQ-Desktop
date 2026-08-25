@@ -11,7 +11,8 @@
 // 2. 远程直接运行 (Remote + Native)        → hostId = 'remote:${id}' 的 component detect
 // 3. 远程 Docker (Remote + Docker)         → Docker 守护 + 镜像（复用 docker-start-gate）
 //
-// 直接运行所需组件由 remoteDirectRunChain 定义（NapCat: qq+napcat；SnowLuma: nodejs+qq+novnc+snowluma）。
+// 直接运行所需组件由 remoteDirectRunChain 定义（NapCat: qq+napcat；
+// SnowLuma 完整包: qq+novnc+snowluma；lite 才要 nodejs）。
 
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import type { BackendType } from '../../ipc/generated/domain/BackendType';
@@ -21,6 +22,7 @@ import {
     componentIdToDisplayName,
     type DirectRunComponentId,
 } from './remote-direct-run-deps';
+import type { SnowLumaLinuxPackage } from '../../ipc/generated/domain/SnowLumaLinuxPackage';
 import { isRuntimeTargetLocal } from './runtime-target';
 
 export type RuntimeRequirement =
@@ -73,6 +75,7 @@ export interface LocalRuntimeStatus {
 export interface RemoteDirectStatus {
     installed: Partial<Record<DirectRunComponentId, boolean | undefined>>;
     probing: boolean;
+    snowlumaLinuxPackage?: SnowLumaLinuxPackage | null;
 }
 
 export interface DockerStatusLite {
@@ -136,7 +139,7 @@ export function runtimeStartBlockReason(args: RuntimeGateArgs): string | null {
     if (req.kind === 'remote-direct') {
         const st = args.remoteDirect;
         if (!st) return '正在检测远程主机组件...';
-        const chain = remoteDirectRunChain(req.backend);
+        const chain = remoteDirectRunChain(req.backend, st.snowlumaLinuxPackage);
         const missing = chain.filter((id) => st.installed[id] === false);
         if (missing.length > 0) {
             return `远程主机缺少 ${missing.map(componentIdToDisplayName).join('、')}，请到「组件」页为该主机安装后再启动`;
@@ -164,8 +167,11 @@ export function runtimeSaveBlockReason(args: RuntimeGateArgs): string | null {
     const req = getRuntimeRequirement(args.config);
     if (req?.kind === 'remote-direct') {
         const st = args.remoteDirect;
-        if (st && Object.values(st.installed).some((v) => v === false)) {
-            return '远程直接运行依赖不完整，保存后也无法启动。请先安装缺失组件。';
+        if (st) {
+            const chain = remoteDirectRunChain(req.backend, st.snowlumaLinuxPackage);
+            if (chain.some((id) => st.installed[id] === false)) {
+                return '远程直接运行依赖不完整，保存后也无法启动。请先安装缺失组件。';
+            }
         }
     }
     return null;
@@ -207,7 +213,7 @@ export function runtimeReadinessNotice(args: RuntimeGateArgs): {
         if (!st || st.probing) {
             return { tone: 'neutral', text: '正在检测远程主机组件...' };
         }
-        const chain = remoteDirectRunChain(req.backend);
+        const chain = remoteDirectRunChain(req.backend, st.snowlumaLinuxPackage);
         const missing = chain.filter((id) => st.installed[id] === false);
         if (missing.length > 0) {
             return {

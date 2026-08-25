@@ -5,6 +5,7 @@
 import { invoke, isTauri } from '../ipc/transport';
 import type { BatchResultResponse, BotActorSnapshot } from '../ipc/types';
 import type { BotConfig } from '../ipc/generated/domain/BotConfig';
+import type { ImportableRemoteBot } from '../ipc/generated/domain/ImportableRemoteBot';
 import type { BackendType } from '../ipc/generated/domain/BackendType';
 import type { QqLoginInfo } from '../ipc/generated/QqLoginInfo';
 import type { ConfigDrift } from '../ipc/generated/ConfigDrift';
@@ -53,6 +54,16 @@ export interface QQProcessInfo {
 
 export const botService = {
     // ── 快照 / 配置 ────────────────────────────────────────────────────────
+    listImportableRemoteBots: async (): Promise<ImportableRemoteBot[]> => {
+        if (isTauri) return invoke<ImportableRemoteBot[]>('list_importable_remote_bots');
+        return [];
+    },
+
+    reconcileRuntimes: async (botIds: string[]): Promise<string[]> => {
+        if (isTauri) return invoke<string[]>('reconcile_bot_runtimes', { botIds });
+        return [];
+    },
+
     listSnapshots: async (): Promise<BotActorSnapshot[]> => {
         if (isTauri) return invoke<BotActorSnapshot[]>('list_bot_snapshots');
         return new Promise((resolve) =>

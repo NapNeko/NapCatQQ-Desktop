@@ -14,6 +14,7 @@ import {
     type DirectRunComponentId,
 } from '../../core/domain/bot/remote-direct-run-deps';
 import type { BackendType } from '../../core/ipc/generated/domain/BackendType';
+import type { SnowLumaLinuxPackage } from '../../core/ipc/generated/domain/SnowLumaLinuxPackage';
 import { useIsHostReachable } from '../remote/useIsHostReachable';
 
 const ALL_PROBE_IDS: DirectRunComponentId[] = [
@@ -41,11 +42,12 @@ function isLocalHost(hostId: string | null): boolean {
  *
  * 重要区分：
  * - 本地直接运行（hostId = 'local'）：SnowLuma 包自带 Node，不探测 'nodejs'。
- * - 远程直接运行：SnowLuma 需要独立的 Node + noVNC。
+ * - 远程 SnowLuma 完整包：自带 node，不探测 'nodejs'；lite 才探测。
  */
 export function useHostComponentInstalled(
     hostId: string | null,
     backendType: BackendType,
+    snowlumaLinuxPackage?: SnowLumaLinuxPackage | null,
 ): Partial<Record<DirectRunComponentId, boolean | undefined>> {
     useQuery({
         queryKey: ['componentCatalog'],
@@ -58,7 +60,7 @@ export function useHostComponentInstalled(
     const isLocal = isLocalHost(hostId);
     const chain = isLocal
         ? localDirectRunChain(backendType)
-        : remoteDirectRunChain(backendType);
+        : remoteDirectRunChain(backendType, snowlumaLinuxPackage);
 
     const queries = useQueries({
         queries: ALL_PROBE_IDS.map((componentId) => ({

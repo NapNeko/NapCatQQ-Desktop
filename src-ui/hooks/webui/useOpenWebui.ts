@@ -23,11 +23,13 @@ export function useOpenWebui() {
         if (flavor === 'snowluma') {
             try {
                 const ep = await snowlumaService.openWebui(botId);
-                try {
-                    await navigator.clipboard.writeText(ep.password);
-                } catch (e) {
-                    // eslint-disable-next-line no-console
-                    console.warn('密码写入剪贴板失败:', e);
+                if (ep.password) {
+                    try {
+                        await navigator.clipboard.writeText(ep.password);
+                    } catch (e) {
+                        // eslint-disable-next-line no-console
+                        console.warn('密码写入剪贴板失败:', e);
+                    }
                 }
                 await openExternalUrl(ep.url);
             } catch (err) {
