@@ -60,6 +60,7 @@ export const DockerRow: React.FC<DockerRowProps> = ({
             accent={isInstalling ? 'brand' : 'none'}
             statusBadge={dockerRowStatusBadge({ ready, probing, inFlight: isInstalling })}
             title="Docker"
+            description="用容器跑框架"
             titleAside={
                 <button
                     type="button"
@@ -70,7 +71,6 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                     <ExternalLink size={11} strokeWidth={2} aria-hidden />
                 </button>
             }
-            description="容器运行时，用于以容器方式部署 NapCat / SnowLuma"
             meta={
                 <DockerMeta
                     ready={ready}
