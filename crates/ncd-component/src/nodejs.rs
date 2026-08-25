@@ -10,7 +10,8 @@
 //!
 //! 探测策略:
 //! 1. 目标安装目录 <install_dir>/bin/node 存在 + node --version 输出
-//! 2. PATH 中有 node(回退到系统 node)
+//! 2. extra_detect_bins（便携安装 / 用户覆盖；不含 SnowLuma 完整包自带的 ./node）
+//! 3. PATH 中有 node，且满足 SnowLuma 要求（22.13+ / 23.4+）
 //!
 //! 默认下载源:
 //! https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz
@@ -29,6 +30,30 @@ use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
+async fn probe_node_bin(
+    host: &dyn Host,
+    path: &str,
+) -> Result<Option<DetectedVersion>, ActionError> {
+    let hp = HostPath::from_posix(path);
+    if !host.exists(&hp).await? {
+        return Ok(None);
+    }
+    let cmd = HostCommand::new(path).arg("--version");
+    match host.run_to_string(cmd).await {
+        Ok(out) if out.success() => {
+            let ver = out.stdout.trim().trim_start_matches('v').to_string();
+            if ver.is_empty() || !NodeJsComponent::version_meets_snowluma(&ver) {
+                return Ok(None);
+            }
+            Ok(Some(DetectedVersion {
+                version: ver,
+                source: path.to_string(),
+            }))
+        }
+        _ => Ok(None),
+    }
+}
+
 /// Node.js component 配置
 #[derive(Debug, Clone)]
 pub struct NodeJsComponent {
@@ -42,6 +67,8 @@ pub struct NodeJsComponent {
     pub expected_sha256: Option<String>,
     /// 临时目录(下载 tarball 用,默认 /tmp/)
     pub tmp_dir: HostPath,
+    /// 额外探测点（不作为安装目标），例如便携 `.../node/bin/node`
+    extra_detect_bins: Vec<HostPath>,
 }
 
 impl NodeJsComponent {
@@ -53,7 +80,15 @@ impl NodeJsComponent {
             download_url_template: None,
             expected_sha256: None,
             tmp_dir: HostPath::from_posix("/tmp"),
+            extra_detect_bins: Vec::new(),
         }
+    }
+
+    pub fn with_extra_detect_bin(mut self, path: HostPath) -> Self {
+        if !self.extra_detect_bins.iter().any(|p| p == &path) {
+            self.extra_detect_bins.push(path);
+        }
+        self
     }
 
     pub fn with_url_template(mut self, template: impl Into<String>) -> Self {
@@ -109,6 +144,24 @@ impl NodeJsComponent {
         self.install_dir.join("bin/node")
     }
 
+    /// 对齐上游 `check-node-version.cjs`：`^22.13.0 || >=23.4.0`
+    pub fn version_meets_snowluma(raw: &str) -> bool {
+        let v = raw.trim().trim_start_matches('v');
+        let mut parts = v.split('.');
+        let Some(major) = parts.next().and_then(|s| s.parse::<u32>().ok()) else {
+            return false;
+        };
+        let minor = parts
+            .next()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0);
+        match major {
+            22 => minor >= 13,
+            23 => minor >= 4,
+            n => n > 23,
+        }
+    }
+
     fn extract_root_subdir(&self, host: &dyn Host) -> String {
         // tar.xz 解压后会有一层 node-v20.10.0-linux-x64/ 子目录,需要去除
         let platform = match host.os() {
@@ -130,7 +183,8 @@ impl NodeJsComponent {
         crate::types::ComponentInfo {
             id: ComponentId::NodeJs,
             display_name: "Node.js".to_string(),
-            description: "JavaScript 运行时（仅 SnowLuma 需要）".to_string(),
+            description: "JavaScript 运行时，可单独安装。SnowLuma Lite 会自动编排；完整包自带 Node，不必装这个"
+                .to_string(),
             repo_url: Some("https://nodejs.org/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
@@ -159,25 +213,17 @@ impl Component for NodeJsComponent {
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
-        // 优先级 1:目标安装目录中的 node binary
         let binary = self.node_binary_path();
-        if host.exists(&binary).await? {
-            let cmd = HostCommand::new(binary.as_posix()).arg("--version");
-            match host.run_to_string(cmd).await {
-                Ok(out) if out.success() => {
-                    let ver = out.stdout.trim().trim_start_matches('v').to_string();
-                    if !ver.is_empty() {
-                        return Ok(Some(DetectedVersion {
-                            version: ver,
-                            source: format!("{}", binary),
-                        }));
-                    }
-                }
-                _ => {}
+        if let Some(detected) = probe_node_bin(host, binary.as_posix()).await? {
+            return Ok(Some(detected));
+        }
+
+        for extra in &self.extra_detect_bins {
+            if let Some(detected) = probe_node_bin(host, extra.as_posix()).await? {
+                return Ok(Some(detected));
             }
         }
 
-        // 优先级 2:回退 PATH 中的 node,但必须 >= v22.5.0(支持 node:sqlite)
         let path_cmd = HostCommand::new("node").arg("--version");
         match host.run_to_string(path_cmd).await {
             Ok(out) if out.success() => {
@@ -185,26 +231,14 @@ impl Component for NodeJsComponent {
                 if ver_str.is_empty() {
                     return Ok(None);
                 }
-
-                // 解析版本号,检查是否 >= 22.5.0
-                if let Some((major, _)) = ver_str.split_once('.') {
-                    if let Ok(major_num) = major.parse::<u32>() {
-                        if major_num >= 22 {
-                            // 系统 node >= 22,可以使用
-                            return Ok(Some(DetectedVersion {
-                                version: ver_str.to_string(),
-                                source: "$PATH/node".into(),
-                            }));
-                        }
-                        // 系统 node < 22,视为未安装(需要安装到指定目录)
-                        return Ok(None);
-                    }
+                if Self::version_meets_snowluma(ver_str) {
+                    return Ok(Some(DetectedVersion {
+                        version: ver_str.to_string(),
+                        source: "$PATH/node".into(),
+                    }));
                 }
-
-                // 无法解析版本号,保守处理视为未安装
                 Ok(None)
             }
-            // 找不到 node 命令视作未安装,不算 detect 失败
             Ok(_) => Ok(None),
             Err(HostError::CommandFailed { .. }) => Ok(None),
             Err(HostError::Io(_)) => Ok(None),
@@ -409,6 +443,17 @@ mod tests {
     fn node_binary_path_joins_correctly() {
         let comp = NodeJsComponent::new("20.10.0", HostPath::from_posix("/opt/node"));
         assert_eq!(comp.node_binary_path().as_posix(), "/opt/node/bin/node");
+    }
+
+    #[test]
+    fn version_meets_snowluma_matches_upstream_range() {
+        assert!(NodeJsComponent::version_meets_snowluma("22.13.0"));
+        assert!(NodeJsComponent::version_meets_snowluma("v22.14.1"));
+        assert!(NodeJsComponent::version_meets_snowluma("23.4.0"));
+        assert!(NodeJsComponent::version_meets_snowluma("24.0.0"));
+        assert!(!NodeJsComponent::version_meets_snowluma("22.12.0"));
+        assert!(!NodeJsComponent::version_meets_snowluma("18.19.1"));
+        assert!(!NodeJsComponent::version_meets_snowluma("23.3.0"));
     }
 
     #[test]

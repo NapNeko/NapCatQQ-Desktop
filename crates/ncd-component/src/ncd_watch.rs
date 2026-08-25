@@ -35,6 +35,8 @@ pub struct NcdWatchComponent {
     pub expected_sha256: Option<String>,
     /// 写入远端的版本标签(detect 失败时展示;成功时以 --version 为准)
     pub version_label: String,
+    /// 覆盖默认 `$HOME/ncd-watch`
+    pub install_root: Option<HostPath>,
 }
 
 impl NcdWatchComponent {
@@ -45,7 +47,13 @@ impl NcdWatchComponent {
             download_url: None,
             expected_sha256: None,
             version_label: env!("CARGO_PKG_VERSION").to_string(),
+            install_root: None,
         }
+    }
+
+    pub fn with_install_root(mut self, root: HostPath) -> Self {
+        self.install_root = Some(root);
+        self
     }
 
     pub fn with_release_tag(mut self, tag: impl Into<String>) -> Self {
@@ -97,6 +105,9 @@ impl NcdWatchComponent {
     }
 
     fn root_path(&self) -> Result<HostPath, ActionError> {
+        if let Some(root) = &self.install_root {
+            return Ok(root.clone());
+        }
         let home = self.require_home()?;
         Ok(HostPath::from_posix(format!("{home}/{INSTALL_DIR_NAME}")))
     }

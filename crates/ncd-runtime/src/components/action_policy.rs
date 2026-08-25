@@ -12,8 +12,10 @@ use ncd_component::{
 };
 use ncd_deploy::StepKind;
 use ncd_domain::DeploymentTaskResource;
+use ncd_domain::RemoteSelectedPaths;
+use ncd_domain::SnowLumaLinuxPackage;
 use ncd_domain::release_snapshot::ReleaseInfo;
-use ncd_host::{HostPath, Locality, Os};
+use ncd_host::{Arch, HostPath, Locality, Os};
 
 /// 单步组件任务规格（用于前置闭包与 dedupe）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +97,16 @@ pub fn component_runtime_prerequisites(
     host_os: Os,
     host_locality: Locality,
 ) -> Vec<ComponentTaskSpec> {
+    component_runtime_prerequisites_for(component_id, kind, host_os, host_locality, None)
+}
+
+pub fn component_runtime_prerequisites_for(
+    component_id: ComponentId,
+    kind: StepKind,
+    host_os: Os,
+    host_locality: Locality,
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
+) -> Vec<ComponentTaskSpec> {
     if !component_action_needs_runtime_closure(kind) {
         return Vec::new();
     }
@@ -112,15 +124,65 @@ pub fn component_runtime_prerequisites(
         ComponentId::SnowLuma => match host_os {
             Os::Windows => vec![ensure(ComponentId::Qq)],
             Os::Linux => {
-                let mut deps = vec![ensure(ComponentId::NodeJs), ensure(ComponentId::Qq)];
-                if host_locality == Locality::Remote {
-                    deps.push(ensure(ComponentId::NoVnc));
-                }
-                deps
+                snowluma_linux_runtime_deps(host_locality, snowluma_linux_package, &ensure)
             }
             _ => Vec::new(),
         },
         _ => Vec::new(),
+    }
+}
+
+fn snowluma_linux_runtime_deps(
+    host_locality: Locality,
+    package: Option<SnowLumaLinuxPackage>,
+    ensure: &impl Fn(ComponentId) -> ComponentTaskSpec,
+) -> Vec<ComponentTaskSpec> {
+    let mut deps = Vec::new();
+    if package == Some(SnowLumaLinuxPackage::Lite) {
+        deps.push(ensure(ComponentId::NodeJs));
+    }
+    deps.push(ensure(ComponentId::Qq));
+    if host_locality == Locality::Remote {
+        deps.push(ensure(ComponentId::NoVnc));
+    }
+    deps
+}
+
+/// `{snowluma_dir}/node` 是官方完整包自带的运行时，不是可复用的 Node.js 组件。
+pub(crate) fn is_bundled_snowluma_node(bin: &str, snowluma_dir: Option<&str>) -> bool {
+    let bin = normalize_posix(bin);
+    if let Some(dir) = snowluma_dir.filter(|s| !s.is_empty()) {
+        let bundled = format!("{}/node", normalize_posix(dir));
+        if bin == bundled {
+            return true;
+        }
+    }
+    bin.ends_with("/snowluma/node")
+}
+
+fn normalize_posix(path: &str) -> String {
+    path.replace('\\', "/").trim_end_matches('/').to_string()
+}
+
+/// 已装目录带 `{snowluma}/node` 视为完整包；已装但没有自带 node 视为 lite。
+/// 尚未安装（无 snowluma_dir）时默认完整包。
+pub fn infer_snowluma_linux_package(
+    selected: Option<&RemoteSelectedPaths>,
+) -> SnowLumaLinuxPackage {
+    let Some(sel) = selected else {
+        return SnowLumaLinuxPackage::Full;
+    };
+    let Some(dir) = sel.snowluma_dir.as_deref().filter(|s| !s.is_empty()) else {
+        return SnowLumaLinuxPackage::Full;
+    };
+    if sel
+        .node_bin
+        .as_deref()
+        .is_some_and(|bin| is_bundled_snowluma_node(bin, Some(dir)))
+    {
+        SnowLumaLinuxPackage::Full
+    } else {
+        SnowLumaLinuxPackage::Lite
     }
 }
 
@@ -129,12 +191,22 @@ pub fn collect_component_runtime_prerequisites(
     host_os: Os,
     host_locality: Locality,
 ) -> Vec<ComponentTaskSpec> {
+    collect_component_runtime_prerequisites_for(target, host_os, host_locality, None)
+}
+
+pub fn collect_component_runtime_prerequisites_for(
+    target: ComponentTaskSpec,
+    host_os: Os,
+    host_locality: Locality,
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
+) -> Vec<ComponentTaskSpec> {
     let mut seen = Vec::new();
     let mut ordered = Vec::new();
     collect_component_runtime_prerequisites_inner(
         target,
         host_os,
         host_locality,
+        snowluma_linux_package,
         &mut seen,
         &mut ordered,
     );
@@ -145,17 +217,29 @@ fn collect_component_runtime_prerequisites_inner(
     target: ComponentTaskSpec,
     host_os: Os,
     host_locality: Locality,
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
     seen: &mut Vec<ComponentTaskSpec>,
     ordered: &mut Vec<ComponentTaskSpec>,
 ) {
-    for dep in
-        component_runtime_prerequisites(target.component_id, target.kind, host_os, host_locality)
-    {
+    for dep in component_runtime_prerequisites_for(
+        target.component_id,
+        target.kind,
+        host_os,
+        host_locality,
+        snowluma_linux_package,
+    ) {
         if seen.contains(&dep) {
             continue;
         }
         seen.push(dep);
-        collect_component_runtime_prerequisites_inner(dep, host_os, host_locality, seen, ordered);
+        collect_component_runtime_prerequisites_inner(
+            dep,
+            host_os,
+            host_locality,
+            snowluma_linux_package,
+            seen,
+            ordered,
+        );
         ordered.push(dep);
     }
 }
@@ -166,15 +250,31 @@ pub fn direct_runtime_dependency_ids(
     host_locality: Locality,
     submitted: &[(ComponentTaskSpec, String)],
 ) -> Vec<String> {
-    component_runtime_prerequisites(target.component_id, target.kind, host_os, host_locality)
-        .into_iter()
-        .filter_map(|dep| {
-            submitted
-                .iter()
-                .find(|(spec, _)| *spec == dep)
-                .map(|(_, task_id)| task_id.clone())
-        })
-        .collect()
+    direct_runtime_dependency_ids_for(target, host_os, host_locality, submitted, None)
+}
+
+pub fn direct_runtime_dependency_ids_for(
+    target: ComponentTaskSpec,
+    host_os: Os,
+    host_locality: Locality,
+    submitted: &[(ComponentTaskSpec, String)],
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
+) -> Vec<String> {
+    component_runtime_prerequisites_for(
+        target.component_id,
+        target.kind,
+        host_os,
+        host_locality,
+        snowluma_linux_package,
+    )
+    .into_iter()
+    .filter_map(|dep| {
+        submitted
+            .iter()
+            .find(|(spec, _)| *spec == dep)
+            .map(|(_, task_id)| task_id.clone())
+    })
+    .collect()
 }
 
 pub fn component_task_resources(
@@ -324,6 +424,23 @@ pub fn normalize_github_release_tag(raw: &str) -> String {
     }
 }
 
+/// 官方 Linux 发行物：完整包自带 node，lite 需用户自备 Node 22.13+。
+pub fn snowluma_linux_release_asset(
+    tag: &str,
+    arch: Arch,
+    package: SnowLumaLinuxPackage,
+) -> String {
+    let triple = match arch {
+        Arch::Aarch64 => "linux-arm64",
+        _ => "linux-x64",
+    };
+    let lite = match package {
+        SnowLumaLinuxPackage::Full => "",
+        SnowLumaLinuxPackage::Lite => "-lite",
+    };
+    format!("SnowLuma-{tag}-{triple}{lite}.tar.gz")
+}
+
 pub fn snowluma_github_release_tag(
     latest: Option<&ReleaseInfo>,
     local_version: Option<&str>,
@@ -453,7 +570,6 @@ mod tests {
                 Locality::Remote,
             ),
             vec![
-                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
                 component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
                 component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
             ]
@@ -490,7 +606,6 @@ mod tests {
                 Locality::Remote,
             ),
             vec![
-                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
                 component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
                 component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
             ]
@@ -507,7 +622,6 @@ mod tests {
                 Locality::Remote,
             ),
             vec![
-                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
                 component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
                 component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
             ]
@@ -534,6 +648,20 @@ mod tests {
         assert_eq!(
             chain,
             vec![
+                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
+                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
+            ]
+        );
+
+        let lite_chain = collect_component_runtime_prerequisites_for(
+            component_spec(ComponentId::SnowLuma, StepKind::EnsureInstalled),
+            Os::Linux,
+            Locality::Remote,
+            Some(SnowLumaLinuxPackage::Lite),
+        );
+        assert_eq!(
+            lite_chain,
+            vec![
                 component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
                 component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
                 component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
@@ -544,10 +672,6 @@ mod tests {
     #[test]
     fn direct_runtime_dependency_ids_return_only_direct_component_tasks() {
         let submitted = vec![
-            (
-                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
-                "node-task".to_string(),
-            ),
             (
                 component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
                 "qq-task".to_string(),
@@ -565,7 +689,103 @@ mod tests {
             &submitted,
         );
 
-        assert_eq!(ids, vec!["node-task", "qq-task", "novnc-task"]);
+        assert_eq!(ids, vec!["qq-task", "novnc-task"]);
+    }
+
+    #[test]
+    fn snowluma_linux_release_asset_is_full_bundle_not_lite() {
+        assert_eq!(
+            snowluma_linux_release_asset("v1.14.13", Arch::X86_64, SnowLumaLinuxPackage::Full),
+            "SnowLuma-v1.14.13-linux-x64.tar.gz"
+        );
+        assert_eq!(
+            snowluma_linux_release_asset("v1.14.13", Arch::Aarch64, SnowLumaLinuxPackage::Full),
+            "SnowLuma-v1.14.13-linux-arm64.tar.gz"
+        );
+        assert_eq!(
+            snowluma_linux_release_asset("v1.14.13", Arch::X86_64, SnowLumaLinuxPackage::Lite),
+            "SnowLuma-v1.14.13-linux-x64-lite.tar.gz"
+        );
+    }
+
+    #[test]
+    fn infer_package_from_bundled_vs_portable_node() {
+        let full = RemoteSelectedPaths {
+            home: "/home/u".into(),
+            snowluma_dir: Some("/opt/snowluma".into()),
+            node_bin: Some("/opt/snowluma/node".into()),
+            needs_sudo: false,
+            ..RemoteSelectedPaths::default()
+        };
+        assert_eq!(
+            infer_snowluma_linux_package(Some(&full)),
+            SnowLumaLinuxPackage::Full
+        );
+        let lite = RemoteSelectedPaths {
+            home: "/home/u".into(),
+            snowluma_dir: Some("/home/u/snowluma-remote/workspace/snowluma".into()),
+            node_bin: Some("/home/u/snowluma-remote/workspace/node/bin/node".into()),
+            needs_sudo: false,
+            ..RemoteSelectedPaths::default()
+        };
+        assert_eq!(
+            infer_snowluma_linux_package(Some(&lite)),
+            SnowLumaLinuxPackage::Lite
+        );
+        assert_eq!(
+            infer_snowluma_linux_package(None),
+            SnowLumaLinuxPackage::Full
+        );
+        let installed_without_node = RemoteSelectedPaths {
+            home: "/home/u".into(),
+            snowluma_dir: Some("/opt/snowluma".into()),
+            node_bin: None,
+            needs_sudo: false,
+            ..RemoteSelectedPaths::default()
+        };
+        assert_eq!(
+            infer_snowluma_linux_package(Some(&installed_without_node)),
+            SnowLumaLinuxPackage::Lite
+        );
+        assert!(is_bundled_snowluma_node(
+            "/opt/snowluma/node",
+            Some("/opt/snowluma")
+        ));
+        assert!(!is_bundled_snowluma_node(
+            "/home/u/snowluma-remote/workspace/node/bin/node",
+            Some("/home/u/snowluma-remote/workspace/snowluma")
+        ));
+    }
+
+    #[test]
+    fn lite_package_pulls_nodejs_prerequisite() {
+        assert_eq!(
+            component_runtime_prerequisites_for(
+                ComponentId::SnowLuma,
+                StepKind::EnsureInstalled,
+                Os::Linux,
+                Locality::Remote,
+                Some(SnowLumaLinuxPackage::Lite),
+            ),
+            vec![
+                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
+                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
+                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
+            ]
+        );
+        assert_eq!(
+            component_runtime_prerequisites_for(
+                ComponentId::SnowLuma,
+                StepKind::EnsureInstalled,
+                Os::Linux,
+                Locality::Remote,
+                Some(SnowLumaLinuxPackage::Full),
+            ),
+            vec![
+                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
+                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
+            ]
+        );
     }
 
     #[test]

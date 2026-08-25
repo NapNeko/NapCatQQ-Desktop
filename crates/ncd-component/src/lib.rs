@@ -25,6 +25,7 @@ pub mod novnc;
 pub mod pkg_install_stream;
 pub mod qq;
 pub mod qq_deps;
+pub mod qq_linux_pid;
 pub mod remote_qq_entry;
 pub mod snowluma;
 pub mod traits;
@@ -48,6 +49,7 @@ pub use qq::{
     LinuxQqRelease, NCLATEST_QQ_VER_URL, QQ_PCCONFIG_URL, QQ_URL_SIGN_URL, QQComponent,
     probe_linux_qq_latest, probe_windows_qq_latest,
 };
+pub use qq_linux_pid::linux_qq_running_pid_script;
 
 pub use remote_qq_entry::{QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, set_remote_qq_package_main};
 pub use snowluma::SnowLumaComponent;

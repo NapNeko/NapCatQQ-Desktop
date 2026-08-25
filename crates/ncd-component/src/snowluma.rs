@@ -1,9 +1,9 @@
-//! SnowLumaComponent:SnowLuma framework lite tarball 部署组件
+//! SnowLumaComponent:SnowLuma framework tarball 部署组件
 //!
 //! 对齐 legacy install_snowluma.sh.j2 L300-L360 的安装步骤
 //!
 //! 安装流程:
-//! 1. 下载 lite tarball(GitHub release + 国内镜像 fallback,本 component 内置 fallback 列表)
+//! 1. 下载官方 tarball（完整包自带 node，lite 需外置 Node；GitHub + 国内镜像）
 //! 2. 上传到 <workspace_dir>/<FRAMEWORK_FILENAME>
 //! 3. tar -xzf $ARCHIVE -C $SNOWLUMA_DIR --strip-components=1(注意 strip-components=1)
 //! 4. 校验 $SNOWLUMA_DIR/index.mjs 存在
@@ -40,7 +40,7 @@ pub const DEFAULT_MIRROR_PREFIXES: &[&str] = &[
 
 /// SnowLuma 部署模式
 ///
-/// Linux 走 lite tarball + tar 解压(legacy install_snowluma.sh.j2 路径),
+/// Linux 走官方 tar.gz + tar 解压（完整包自带 node；lite 由安装时选择并编排 Node）,
 /// Windows 走 SnowLuma-<tag>-win-x64.zip 扁平 zip 解压(legacy
 /// SnowLumaInstall),node.exe / index.mjs / package.json 三件套直
 /// 接落在 install_dir 根下
@@ -58,7 +58,7 @@ pub struct SnowLumaComponent {
     /// framework 解压根(默认 <workspace>/snowluma)
     pub snowluma_dir: HostPath,
     /// GitHub release URL(直连形式),如
-    /// https://github.com/SnowLuma/SnowLuma/releases/download/v1.2.3/SnowLuma-v1.2.3-linux-x64-lite.tar.gz
+    /// https://github.com/SnowLuma/SnowLuma/releases/download/v1.14.13/SnowLuma-v1.14.13-linux-x64.tar.gz
     pub framework_url: String,
     /// 镜像前缀列表(默认使用 [DEFAULT_MIRROR_PREFIXES])
     pub mirror_prefixes: Vec<String>,
@@ -77,7 +77,7 @@ pub struct SnowLumaComponent {
 }
 
 impl SnowLumaComponent {
-    /// 创建一个 Linux framework component 描述(lite tarball)
+    /// 创建一个 Linux framework component 描述（URL 由调用方决定完整包或 lite）
     /// workspace_dir:SL workspace 根;snowluma_dir:framework 解压根
     pub fn new(workspace_dir: HostPath, framework_url: impl Into<String>) -> Self {
         let snowluma_dir = workspace_dir.join("snowluma");
