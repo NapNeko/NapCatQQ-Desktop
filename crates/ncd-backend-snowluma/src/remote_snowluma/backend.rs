@@ -113,6 +113,12 @@ impl RemoteSnowLumaBackend {
         }
     }
 
+    async fn dispose_poller(&self, bot_id: &BotId) {
+        if let Some(poller) = self.pollers.lock().await.remove(bot_id) {
+            poller.dispose();
+        }
+    }
+
     /// 供 bootstrap reconcile 取日志 follow 路径,不暴露整个 daemon
     pub fn daemon_paths(&self) -> &SnowLumaRemotePaths {
         self.daemon.paths()
@@ -130,9 +136,9 @@ impl RemoteSnowLumaBackend {
         config: &BotConfig,
     ) -> Result<(), BotBackendError> {
         let qq_id = config.bot.qq_id.to_string();
+        let host = self.daemon.current_host().await;
         if let Err(err) =
-            remember_remote_bot_pid(self.daemon.host.as_ref(), self.daemon.paths(), &qq_id, pid)
-                .await
+            remember_remote_bot_pid(host.as_ref(), self.daemon.paths(), &qq_id, pid).await
         {
             tracing::warn!(
                 target: "ncd_runtime::remote_snowluma",
@@ -227,13 +233,18 @@ impl BotBackend for RemoteSnowLumaBackend {
 
         // 指标资产先上传，再随 node 第一次拉起带上 env，避免先听口再 SIGTERM 重启
         // 导致隧道打到已死的旧 WebUI 口、界面卡在启动中。
+        let host = self.daemon.current_host().await;
         let metrics_env = if let Some(inj) = &self.metrics_injector {
             let home = self.daemon.remote_home();
-            inj.prepare(self.daemon.host.as_ref(), home, bot_id.as_str(), config)
+            inj.prepare(host.as_ref(), home, bot_id.as_str(), config)
                 .await
         } else {
             None
         };
+
+        // 接管会换密并重启共享 node。旧 poller 仍持上一轮明文，401 会计入
+        // 上游按 IP 的 5 次锁；必须先停掉再写盘。
+        self.dispose_poller(&bot_id).await;
 
         // 接管开关：用户显式勾选后每次启动覆盖远端 WebUI 凭据并落 secret。
         // 有全局固定密码就用固定的，否则生成新密码。SnowLuma 只在进程启动时
@@ -242,7 +253,7 @@ impl BotBackend for RemoteSnowLumaBackend {
         if config.bot.webui_password_takeover {
             let override_pwd = self.webui_password_override();
             let takeover_pwd = super::config::take_over_remote_webui_credentials(
-                self.daemon.host.as_ref(),
+                host.as_ref(),
                 self.daemon.paths(),
                 override_pwd.as_deref(),
             )
@@ -264,20 +275,18 @@ impl BotBackend for RemoteSnowLumaBackend {
 
         let paths = self.daemon.paths();
         if let Err(e) =
-            render_native_snowluma_config_on_host(self.daemon.host.as_ref(), &bot_id, config, paths)
-                .await
+            render_native_snowluma_config_on_host(host.as_ref(), &bot_id, config, paths).await
         {
             self.daemon.release().await;
             return Err(e);
         }
 
-        let host = self.daemon.host.as_ref();
         let layout = self.daemon.layout();
 
         let pid = match start_mode {
             SnowLumaStartMode::HotStart => {
                 if let Some(pid) = remote_qq_running_pid_with_hint(
-                    host,
+                    host.as_ref(),
                     qq_id,
                     Some(&paths.pid_bot_path(&qq_id_str)),
                     Some(&layout.qq_bin),
@@ -302,11 +311,7 @@ impl BotBackend for RemoteSnowLumaBackend {
                 let install_base = HostPath::from_posix(layout.qq_install_base.clone());
                 if let Err(e) = self
                     .qq_entry_coordinator
-                    .ensure_for_native(
-                        self.daemon.host.as_ref(),
-                        self.daemon.server_id(),
-                        &install_base,
-                    )
+                    .ensure_for_native(host.as_ref(), self.daemon.server_id(), &install_base)
                     .await
                 {
                     self.daemon.release().await;
@@ -315,7 +320,7 @@ impl BotBackend for RemoteSnowLumaBackend {
                     )));
                 }
 
-                match bot_cold_start(host, layout, &qq_id_str, &qq_id_str).await {
+                match bot_cold_start(host.as_ref(), layout, &qq_id_str, &qq_id_str).await {
                     Ok(pid) => pid,
                     Err(e) => {
                         self.daemon.release().await;
@@ -334,9 +339,10 @@ impl BotBackend for RemoteSnowLumaBackend {
             Ok(c) => c,
             Err(e) => {
                 if start_mode.is_cold() {
-                    let _ = bot_stop(host, paths, &qq_id_str).await;
+                    let _ = bot_stop(host.as_ref(), paths, &qq_id_str).await;
                     if let Ok(tail) =
-                        read_remote_log_tail(host, &paths.log_bot_path(&qq_id_str), 40).await
+                        read_remote_log_tail(host.as_ref(), &paths.log_bot_path(&qq_id_str), 40)
+                            .await
                     {
                         if !tail.trim().is_empty() {
                             return Err(BotBackendError::Io(format!(
@@ -366,12 +372,9 @@ impl BotBackend for RemoteSnowLumaBackend {
             expected_uin: Some(qq_id_str.clone()),
         };
         {
-            let mut guard = self.pollers.lock().await;
-            if let Some(old) = guard.remove(&bot_id) {
-                old.dispose();
-            }
+            self.dispose_poller(&bot_id).await;
             let poller = SnowLumaStatusPoller::spawn(bot_id.clone(), pid, poller_deps);
-            guard.insert(bot_id.clone(), poller);
+            self.pollers.lock().await.insert(bot_id.clone(), poller);
         }
 
         self.event_bus
@@ -392,11 +395,11 @@ impl BotBackend for RemoteSnowLumaBackend {
             .remove(&bot_id)
             .unwrap_or(SnowLumaStartMode::ColdStart);
 
+        // 先停 poller：否则停 QQ / 释放 daemon 期间它还会拿旧 token 打登录。
+        self.dispose_poller(&bot_id).await;
         if start_mode.is_cold() {
-            let _ = bot_stop(self.daemon.host.as_ref(), paths, qq_id_str).await;
-        }
-        if let Some(poller) = self.pollers.lock().await.remove(&bot_id) {
-            poller.dispose();
+            let host = self.daemon.current_host().await;
+            let _ = bot_stop(host.as_ref(), paths, qq_id_str).await;
         }
         self.daemon.release().await;
         Ok(())
@@ -406,9 +409,10 @@ impl BotBackend for RemoteSnowLumaBackend {
         let qq_id = bot_id.as_str();
         let paths = self.daemon.paths();
         if let Ok(qq_id_u) = qq_id.parse::<u64>() {
+            let host = self.daemon.current_host().await;
             let pid_file = paths.pid_bot_path(qq_id);
             if let Some(pid) = remote_qq_running_pid_with_hint(
-                self.daemon.host.as_ref(),
+                host.as_ref(),
                 qq_id_u,
                 Some(pid_file.as_str()),
                 Some(self.daemon.layout().qq_bin.as_str()),
@@ -444,24 +448,25 @@ impl BotBackend for RemoteSnowLumaBackend {
         let want = if opts.lines > 0 { opts.lines } else { 1000 };
         // saturating_mul 后下界 800 ≤ 上界 20_000，clamp 不会 panic
         let raw_n = want.saturating_mul(5).clamp(800, 20_000);
-        let host = self.daemon.host.as_ref();
+        let host = self.daemon.current_host().await;
         // 历史快照与实时跟随共用同一解析：外来安装的真实日志在 framework 自带
         // logs 目录，布局路径可能不存在（空快照会让页面在无增量时永远空白）
         let resolved = super::probe::resolve_remote_snowluma_log_targets(
-            host,
+            host.as_ref(),
             paths,
             &paths.log_bot_path(qq_id),
         )
         .await;
         let same_source = resolved.bot == resolved.daemon;
-        let daemon_raw: Vec<String> = read_remote_log_tail_lines(host, &resolved.daemon, raw_n)
-            .await
-            .unwrap_or_default();
+        let daemon_raw: Vec<String> =
+            read_remote_log_tail_lines(host.as_ref(), &resolved.daemon, raw_n)
+                .await
+                .unwrap_or_default();
         let bot_raw: Vec<String> = if same_source {
             // 两源同文件时只走 daemon 侧（带会话裁剪与 UIN 收窄），避免整段重复
             Vec::new()
         } else {
-            read_remote_log_tail_lines(host, &resolved.bot, raw_n)
+            read_remote_log_tail_lines(host.as_ref(), &resolved.bot, raw_n)
                 .await
                 .unwrap_or_default()
         };
