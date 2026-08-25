@@ -292,6 +292,7 @@ impl RuntimeBackendRouter {
         let sid = server_id.to_string();
         let mut guard = self.remote_snowluma_daemons.lock().await;
         if let Some(daemon) = guard.get(&sid) {
+            daemon.replace_host(Arc::clone(&host)).await;
             return Ok(Arc::clone(daemon));
         }
         let daemon = if let Some(inv) = self.ensure_inventory(&sid, host.as_ref()).await.ok() {
