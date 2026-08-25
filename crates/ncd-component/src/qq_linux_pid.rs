@@ -4,17 +4,25 @@
 //! 顺序：pid 文件 → cmdline `-q/--qq` → 本机 Ptlogin2（4301/4303/…）→ cmdline 里的 UIN。
 
 /// 生成 dash-safe 探测脚本。stdout 第一行是 pid，没有则空。
+///
+/// `allow_single_main_fallback`：导入接管（reconcile）专用兜底。远端自启的 QQ 常不带
+/// `-q`，ptlogin 口也可能没开，账号证据全拿不到；此时若整机只有一个 QQ 主进程在跑，
+/// 且调用方确认该主机只配置了这一个 native SL Bot，就把它当作目标实例。
+/// start / status / stop 路径必须传 false，不允许猜归因。
 pub fn linux_qq_running_pid_script(
     qq_id: u64,
     pid_file: Option<&str>,
     qq_bin: Option<&str>,
+    allow_single_main_fallback: bool,
 ) -> String {
     let pid_file = pid_file.unwrap_or("").replace('\'', "'\"'\"'");
     let qq_bin = qq_bin.unwrap_or("").replace('\'', "'\"'\"'");
+    let allow_single = if allow_single_main_fallback { "1" } else { "0" };
     format!(
         r#"pidfile='{pid_file}'
 qqbin='{qq_bin}'
 qid='{qq_id}'
+allow_single='{allow_single}'
 if [ -n "$pidfile" ] && [ -f "$pidfile" ]; then
   pid=$(cat "$pidfile" 2>/dev/null || true)
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
@@ -113,6 +121,22 @@ for pid in $(collect_qq_pids | awk 'NF && !a[$1]++'); do
     exit 0
   fi
 done
+# 单主进程兜底（allow_single=1 才启用）：无任何账号证据时，整机只有一个
+# QQ 主进程在跑就认它；多主进程不猜，避免把别的账号挂到目标 Bot 上
+if [ "$allow_single" = "1" ]; then
+  mains=
+  for pid in $(collect_qq_pids | awk 'NF && !a[$1]++'); do
+    alive "$pid" || continue
+    cmd=$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null || true)
+    is_helper "$cmd" && continue
+    mains="$mains $pid"
+  done
+  set -- $mains
+  if [ "$#" -eq 1 ] && alive "$1"; then
+    echo "$1"
+    exit 0
+  fi
+fi
 exit 0
 "#
     )
@@ -128,6 +152,7 @@ mod tests {
             2703401480,
             Some("/tmp/pid_bot_2703401480"),
             Some("/root/Napcat/opt/QQ/qq"),
+            false,
         );
         assert!(script.contains("pt_get_uins"));
         assert!(script.contains("4301"));
@@ -139,7 +164,16 @@ mod tests {
 
     #[test]
     fn script_escapes_quotes_in_paths() {
-        let script = linux_qq_running_pid_script(1, Some("/tmp/a'b"), Some("/opt/x'y"));
+        let script = linux_qq_running_pid_script(1, Some("/tmp/a'b"), Some("/opt/x'y"), false);
         assert!(script.contains("a'\"'\"'b"));
+    }
+
+    #[test]
+    fn script_single_main_fallback_gated_by_flag() {
+        let on = linux_qq_running_pid_script(2703401480, None, None, true);
+        assert!(on.contains("allow_single='1'"));
+        assert!(on.contains("mains="));
+        let off = linux_qq_running_pid_script(2703401480, None, None, false);
+        assert!(off.contains("allow_single='0'"));
     }
 }

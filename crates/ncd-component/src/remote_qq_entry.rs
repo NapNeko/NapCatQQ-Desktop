@@ -10,8 +10,20 @@ pub const QQ_MAIN_NAPCAT_INJECT: &str = "./loadNapCat.js";
 /// QQ 官方默认 main(SnowLuma 冷启 / NapCat 卸载后)
 pub const QQ_MAIN_NATIVE: &str = "./app_launcher/index.js";
 
+pub fn qq_package_json_path(install_base: &HostPath) -> HostPath {
+    HostPath::from_posix(ncd_domain::qq_package_json(install_base.as_posix()))
+}
+
+pub fn load_napcat_js_path(install_base: &HostPath) -> HostPath {
+    HostPath::from_posix(ncd_domain::load_napcat_js(install_base.as_posix()))
+}
+
+pub fn napcat_mjs_path(install_base: &HostPath) -> HostPath {
+    HostPath::from_posix(ncd_domain::napcat_mjs(install_base.as_posix()))
+}
+
 fn qq_package_json(install_base: &HostPath) -> HostPath {
-    install_base.join("opt/QQ/resources/app/package.json")
+    qq_package_json_path(install_base)
 }
 
 /// 把远端 QQ package.json 的 main 设为 main_entry(rootless 走 SFTP,system 布局需调用方 elevated)
@@ -53,5 +65,31 @@ mod tests {
     fn main_constants_match_napcat_uninstall() {
         assert_eq!(QQ_MAIN_NAPCAT_INJECT, "./loadNapCat.js");
         assert_eq!(QQ_MAIN_NATIVE, "./app_launcher/index.js");
+    }
+
+    #[test]
+    fn system_root_install_base_does_not_double_slash() {
+        let base = HostPath::from_posix("/");
+        assert_eq!(
+            qq_package_json(&base).as_posix(),
+            "/opt/QQ/resources/app/package.json"
+        );
+        assert_eq!(
+            load_napcat_js_path(&base).as_posix(),
+            "/opt/QQ/resources/app/loadNapCat.js"
+        );
+        assert_eq!(
+            napcat_mjs_path(&base).as_posix(),
+            "/opt/QQ/resources/app/app_launcher/napcat/napcat.mjs"
+        );
+    }
+
+    #[test]
+    fn rootless_install_base_stays_under_napcat() {
+        let base = HostPath::from_posix("/home/u/Napcat");
+        assert_eq!(
+            qq_package_json(&base).as_posix(),
+            "/home/u/Napcat/opt/QQ/resources/app/package.json"
+        );
     }
 }

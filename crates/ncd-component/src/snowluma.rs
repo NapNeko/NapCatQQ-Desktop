@@ -74,6 +74,8 @@ pub struct SnowLumaComponent {
     /// 2) install 完成后写回 .installed_tag(对齐 legacy
     /// SnowLumaInstall.write_installed_tag)
     windows_tag: Option<String>,
+    /// 主 snowluma_dir 没有入口时再探这些目录（系统包 / 上次库存路径）
+    extra_detect_dirs: Vec<HostPath>,
 }
 
 impl SnowLumaComponent {
@@ -93,6 +95,7 @@ impl SnowLumaComponent {
             preloaded_tarball: None,
             mode: PlatformMode::Linux,
             windows_tag: None,
+            extra_detect_dirs: Vec::new(),
         }
     }
 
@@ -131,11 +134,19 @@ impl SnowLumaComponent {
             } else {
                 Some(tag_str)
             },
+            extra_detect_dirs: Vec::new(),
         }
     }
 
     pub fn with_snowluma_dir(mut self, dir: HostPath) -> Self {
         self.snowluma_dir = dir;
+        self
+    }
+
+    pub fn with_extra_detect_dir(mut self, dir: HostPath) -> Self {
+        if dir != self.snowluma_dir && !self.extra_detect_dirs.iter().any(|p| p == &dir) {
+            self.extra_detect_dirs.push(dir);
+        }
         self
     }
 
@@ -275,13 +286,51 @@ impl SnowLumaComponent {
     /// 同目录的 package.json 读 version 字段拿真实版本号;缺 package.json
     /// 或字段时回退到 "installed" 占位(lite tarball 旧版本可能没有)
     async fn detect_linux(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
-        let entry = self.entry_path();
+        if let Some(found) = self
+            .detect_linux_at(&self.snowluma_dir, host, false)
+            .await?
+        {
+            return Ok(Some(found));
+        }
+        for dir in &self.extra_detect_dirs {
+            if let Some(found) = self.detect_linux_at(dir, host, true).await? {
+                return Ok(Some(found));
+            }
+        }
+        Ok(None)
+    }
+
+    async fn detect_linux_at(
+        &self,
+        dir: &HostPath,
+        host: &dyn Host,
+        require_fingerprint: bool,
+    ) -> Result<Option<DetectedVersion>, ActionError> {
+        let entry = dir.join("index.mjs");
         if !host.exists(&entry).await? {
             return Ok(None);
         }
+        if require_fingerprint {
+            let has_webui = host
+                .exists(&dir.join("config").join("webui.json"))
+                .await
+                .unwrap_or(false);
+            let runtime = dir.join("config").join("runtime.json");
+            let has_port = if host.exists(&runtime).await.unwrap_or(false) {
+                host.read_file(&runtime)
+                    .await
+                    .ok()
+                    .and_then(|b| String::from_utf8(b.to_vec()).ok())
+                    .is_some_and(|s| s.contains("webuiPort"))
+            } else {
+                false
+            };
+            if !has_webui && !has_port {
+                return Ok(None);
+            }
+        }
 
-        // 尝试读 package.json::version
-        let pkg = self.package_json_path();
+        let pkg = dir.join("package.json");
         if host.exists(&pkg).await? {
             if let Ok(bytes) = host.read_file(&pkg).await {
                 if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
@@ -295,7 +344,6 @@ impl SnowLumaComponent {
             }
         }
 
-        // 回退:版本号未知,但确认已装
         Ok(Some(DetectedVersion {
             version: "installed".to_string(),
             source: format!("{entry}"),
@@ -975,6 +1023,17 @@ mod tests {
         let c = comp().with_snowluma_dir(HostPath::from_posix("/custom/snowluma"));
         assert_eq!(c.snowluma_dir.as_posix(), "/custom/snowluma");
         assert_eq!(c.entry_path().as_posix(), "/custom/snowluma/index.mjs");
+    }
+
+    #[test]
+    fn extra_detect_dir_skips_primary() {
+        let c = comp().with_extra_detect_dir(HostPath::from_posix(
+            "/home/test/Napcat/snowluma-workspace/snowluma",
+        ));
+        assert!(c.extra_detect_dirs.is_empty());
+        let c = comp().with_extra_detect_dir(HostPath::from_posix("/opt/snowluma"));
+        assert_eq!(c.extra_detect_dirs.len(), 1);
+        assert_eq!(c.extra_detect_dirs[0].as_posix(), "/opt/snowluma");
     }
 
     #[test]

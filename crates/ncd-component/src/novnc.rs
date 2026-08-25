@@ -146,9 +146,11 @@ impl Component for NoVncComponent {
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
-        // 探测策略:同时检查 websockify + x11vnc 是否存在
+        // 与远端 SL 启动前检查对齐：缺 Xvfb / dbus-launch 时不能报已安装，
+        // 否则「补全依赖」会跳过图形栈，启动却失败。
         let cmd = HostCommand::new("sh").arg("-c").arg(
-            "command -v websockify >/dev/null && command -v x11vnc >/dev/null && \
+            "command -v Xvfb >/dev/null && command -v x11vnc >/dev/null && \
+             command -v websockify >/dev/null && command -v dbus-launch >/dev/null && \
              echo OK && websockify --help 2>&1 | head -1",
         );
         let out = match host.run_to_string(cmd).await {
@@ -168,7 +170,7 @@ impl Component for NoVncComponent {
             .unwrap_or_else(|| "installed".to_string());
         Ok(Some(DetectedVersion {
             version,
-            source: "websockify + x11vnc detected via PATH".into(),
+            source: "Xvfb + x11vnc + websockify + dbus-launch detected via PATH".into(),
         }))
     }
 
@@ -260,7 +262,7 @@ impl Component for NoVncComponent {
     async fn verify(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
         let detected = self.detect(host).await?;
         let mut report = VerifyReport::ok().with_check(
-            "websockify + x11vnc on PATH",
+            "Xvfb + x11vnc + websockify + dbus-launch on PATH",
             detected.is_some(),
             detected.as_ref().map(|v| v.source.clone()),
         );

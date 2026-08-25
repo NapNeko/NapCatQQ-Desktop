@@ -51,7 +51,10 @@ pub use qq::{
 };
 pub use qq_linux_pid::linux_qq_running_pid_script;
 
-pub use remote_qq_entry::{QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, set_remote_qq_package_main};
+pub use remote_qq_entry::{
+    QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, load_napcat_js_path, napcat_mjs_path,
+    qq_package_json_path, set_remote_qq_package_main,
+};
 pub use snowluma::SnowLumaComponent;
 pub use traits::{Action, Component};
 pub use types::{
