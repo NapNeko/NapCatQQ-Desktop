@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use ncd_deploy::backend_config_renderer::render_snowluma_docker_config_payloads;
 use ncd_domain::{BackendType, BotConfig, BotId, RuntimeScenario, SnowLumaStartMode};
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand, HostError, HostPath};
 use ncd_traits::runtime_backend::BotBackendError;
 use serde_json::{Value, json};
 
@@ -138,6 +138,62 @@ async fn read_webui_hash_salt(host: &dyn Host, path: &str) -> Option<(String, St
         return None;
     }
     Some((hash, salt))
+}
+
+/// 接管模式：重新生成 WebUI 密码并同步写入 webui.json 与 webui.secret，
+/// 让「打开 WebUI 自动复制密码」拿到有效明文。仅在用户显式勾选接管后、
+/// 启动该 Bot 前调用；每次调用都换新密码（原密码立即失效）。
+pub async fn take_over_remote_webui_credentials(
+    host: &dyn Host,
+    paths: &SnowLumaRemotePaths,
+) -> Result<String, BotBackendError> {
+    let pwd = generate_strong_password(16);
+    let payload =
+        build_webui_json_payload(&pwd, false).map_err(|e| BotBackendError::Io(e.to_string()))?;
+    let webui_json =
+        serde_json::to_vec_pretty(&payload).map_err(|e| BotBackendError::Json(e.to_string()))?;
+    host.write_file(&HostPath::from_posix(&paths.webui_secret), pwd.as_bytes())
+        .await
+        .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    let webui_json_path = format!("{}/webui.json", paths.config_dir);
+    host.write_file(&HostPath::from_posix(&webui_json_path), &webui_json)
+        .await
+        .map_err(|e| BotBackendError::Io(e.to_string()))?;
+    Ok(pwd)
+}
+
+/// 导入迁移：读取远端 onebot_<qq>.json 并反向映射为桌面网络配置。
+/// 文件不存在返回 Ok(None)（该实例没有可迁移的网络配置）；
+/// 存在但解析失败返回 Err，由上层提示用户。
+pub async fn read_remote_onebot_connect(
+    host: &dyn Host,
+    snowluma_dir: &str,
+    qq_id: &str,
+) -> Result<Option<ncd_domain::ImportedNetworkConfig>, String> {
+    let path = format!(
+        "{}/config/onebot_{}.json",
+        snowluma_dir.trim_end_matches('/'),
+        qq_id
+    );
+    let bytes = match host.read_file(&HostPath::from_posix(&path)).await {
+        Ok(bytes) => bytes,
+        Err(HostError::PathNotFound { .. }) => {
+            tracing::info!(
+                target: "ncd_backend_snowluma::remote",
+                %path,
+                "远端 onebot 配置不存在，跳过网络配置迁移"
+            );
+            return Ok(None);
+        }
+        Err(err) => {
+            return Err(format!("读取 {path} 失败: {err}"));
+        }
+    };
+    let value: Value =
+        serde_json::from_slice(&bytes).map_err(|e| format!("解析 {path} 失败: {e}"))?;
+    ncd_deploy::backend_config_renderer::parse_snowluma_onebot_connect(&value)
+        .map(Some)
+        .ok_or_else(|| format!("{path} 缺少 networks 字段，无法迁移网络配置"))
 }
 
 pub async fn render_native_snowluma_config_on_host(
