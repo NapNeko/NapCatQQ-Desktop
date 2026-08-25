@@ -98,6 +98,7 @@ impl RemoteNativeNapcatSessionRegistry {
         config: BotConfig,
         host: Arc<dyn Host>,
         bus: Arc<BroadcastEventBus>,
+        selected: Option<ncd_domain::RemoteSelectedPaths>,
     ) {
         if !is_remote_native_napcat_config(&config) {
             return;
@@ -108,22 +109,43 @@ impl RemoteNativeNapcatSessionRegistry {
         let qq_id = config.bot.qq_id;
         let unreachable_hook = self.on_webui_unreachable.lock().await.clone();
 
-        let (home, layout) = match probe_remote_napcat_layout(host.as_ref()).await {
-            Ok(p) => p,
-            Err(e) => {
-                warn!(
-                    target: "ncd_backend_napcat::remote_native_napcat_session",
-                    bot_id = %bot_id,
-                    err = %e,
-                    "NapCat 远端 Native: 布局探测失败，跳过会话"
-                );
-                return;
+        let install_base = if let Some(sel) = selected.as_ref() {
+            match ncd_domain::require_qq_install_base(sel) {
+                Ok(base) => HostPath::from_posix(base),
+                Err(e) => {
+                    warn!(
+                        target: "ncd_backend_napcat::remote_native_napcat_session",
+                        bot_id = %bot_id,
+                        err = %e,
+                        "NapCat 远端 Native: 库存无 QQ 安装树，跳过会话"
+                    );
+                    return;
+                }
             }
-        };
-
-        let install_base = match layout {
-            RemoteNapcatLayout::System => HostPath::from_posix("/"),
-            RemoteNapcatLayout::Rootless => HostPath::from_posix(format!("{home}/Napcat")),
+        } else {
+            let (_home, layout) = match probe_remote_napcat_layout(host.as_ref()).await {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!(
+                        target: "ncd_backend_napcat::remote_native_napcat_session",
+                        bot_id = %bot_id,
+                        err = %e,
+                        "NapCat 远端 Native: 布局探测失败，跳过会话"
+                    );
+                    return;
+                }
+            };
+            match layout {
+                RemoteNapcatLayout::System => HostPath::from_posix("/"),
+                RemoteNapcatLayout::Rootless => {
+                    warn!(
+                        target: "ncd_backend_napcat::remote_native_napcat_session",
+                        bot_id = %bot_id,
+                        "NapCat 远端 Native: 无库存 selected 且非 /opt/QQ，跳过猜默认 Napcat 树"
+                    );
+                    return;
+                }
+            }
         };
         let log_path = napcat_remote_log_path(&install_base, qq_id);
 

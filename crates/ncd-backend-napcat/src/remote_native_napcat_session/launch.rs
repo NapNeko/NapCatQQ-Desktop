@@ -87,14 +87,21 @@ mod selected_tests {
         let err = napcat_paths_from_selected(&selected).unwrap_err();
         assert!(err.contains("/home/u"));
         assert!(err.contains("未发现"));
+        assert!(!err.contains("$HOME/Napcat"));
     }
-}
 
-fn napcat_install_base(home: &str, layout: RemoteNapcatLayout) -> Result<HostPath, String> {
-    Ok(match layout {
-        RemoteNapcatLayout::System => HostPath::from_posix("/"),
-        RemoteNapcatLayout::Rootless => HostPath::from_posix(format!("{home}/Napcat")),
-    })
+    #[test]
+    fn napcat_paths_from_selected_derives_base_from_system_qq_bin() {
+        let selected = RemoteSelectedPaths {
+            home: "/root".into(),
+            qq_bin: Some("/opt/QQ/qq".into()),
+            needs_sudo: true,
+            ..RemoteSelectedPaths::default()
+        };
+        let (_home, layout, base) = napcat_paths_from_selected(&selected).unwrap();
+        assert_eq!(base.as_posix(), "/");
+        assert_eq!(layout, RemoteNapcatLayout::System);
+    }
 }
 
 fn napcat_config_dir(install_base: &HostPath) -> String {
@@ -357,12 +364,9 @@ impl RemoteNativeLaunchTranslator {
         let triple = if let Some(sel) = &self.selected {
             napcat_paths_from_selected(sel).map_err(DeploymentError::LaunchFailed)?
         } else {
-            let (home, layout) = probe_remote_napcat_layout(self.host.as_ref())
-                .await
-                .map_err(DeploymentError::LaunchFailed)?;
-            let install_base =
-                napcat_install_base(&home, layout).map_err(DeploymentError::LaunchFailed)?;
-            (home, layout, install_base)
+            return Err(DeploymentError::LaunchFailed(
+                "远端 NapCat 启动缺少库存选中路径。请先发现主机或填写覆盖路径后重新发现。".into(),
+            ));
         };
         *guard = Some(triple.clone());
         Ok(triple)
@@ -372,19 +376,14 @@ impl RemoteNativeLaunchTranslator {
 pub fn napcat_paths_from_selected(
     selected: &RemoteSelectedPaths,
 ) -> Result<(String, RemoteNapcatLayout, HostPath), String> {
-    let home = selected.home.clone();
-    let base = selected.qq_install_base.clone().ok_or_else(|| {
-        format!(
-            "远端未发现 QQ 安装树（home={}）。请在组件页安装或填写覆盖路径后重新发现。",
-            home
-        )
-    })?;
-    let layout = if selected.needs_sudo {
+    let derived = ncd_domain::derive_remote_linux_paths(selected);
+    let base = ncd_domain::require_qq_install_base(selected)?;
+    let layout = if derived.needs_sudo {
         RemoteNapcatLayout::System
     } else {
         RemoteNapcatLayout::Rootless
     };
-    Ok((home, layout, HostPath::from_posix(base)))
+    Ok((derived.home, layout, HostPath::from_posix(base)))
 }
 
 #[async_trait]
@@ -502,7 +501,7 @@ pub async fn remote_napcat_running_pid(
     host: &dyn Host,
     qq_id: u64,
 ) -> Result<Option<u32>, BotBackendError> {
-    let script = linux_qq_running_pid_script(qq_id, None, None);
+    let script = linux_qq_running_pid_script(qq_id, None, None, false);
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
     let out = host
         .run_to_string(cmd)
