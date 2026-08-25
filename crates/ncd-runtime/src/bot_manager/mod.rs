@@ -196,6 +196,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// package.json main between NapCat-injected and vanilla native modes.
     /// See RemoteQqEntryCoordinator for rationale and batch-start safety.
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
+    server_manager: Option<Arc<crate::ServerManager>>,
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<R, S> {
@@ -227,6 +228,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_snowluma_backends: Arc::clone(&self.remote_snowluma_backends),
             remote_snowluma_tunnels: Arc::clone(&self.remote_snowluma_tunnels),
             remote_qq_entry_coordinator: Arc::clone(&self.remote_qq_entry_coordinator),
+            server_manager: self.server_manager.clone(),
         }
     }
 }
@@ -272,7 +274,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_snowluma_backends: Arc::new(Mutex::new(HashMap::new())),
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
             remote_qq_entry_coordinator: Arc::new(RemoteQqEntryCoordinator::default()),
+            server_manager: None,
         }
+    }
+
+    pub fn with_server_manager(mut self, mgr: Arc<crate::ServerManager>) -> Self {
+        self.server_manager = Some(mgr);
+        self
     }
 
     /// 注入 HostResolver(wiring 阶段调用),让启动时按 runtime_target 选本机/远端 host
@@ -564,6 +572,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             Arc::clone(&self.remote_snowluma_tunnels),
             Arc::clone(&self.remote_qq_entry_coordinator),
         );
+        if let Some(mgr) = &self.server_manager {
+            router = router.with_server_manager(Arc::clone(mgr));
+        }
         // 远端 NC / Docker 启动注入探针：开关开时挂上（失败不阻断启动）
         if let Some(data_root) = self.store.config_dir().parent() {
             let prefs = Self::load_metrics_prefs(data_root);
@@ -612,6 +623,27 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             self.runtime_router(),
             self.remote_runtime_sessions(),
         )
+    }
+
+    /// 导入已有远端 Bot 后：若 QQ/容器仍在跑，把 Actor 接到运行态（不重新启动）。
+    pub async fn reconcile_remote_runtime_for(
+        &self,
+        bot_ids: &[BotId],
+    ) -> Result<Vec<BotId>, BotManagerError> {
+        if bot_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let wanted: HashSet<_> = bot_ids.iter().cloned().collect();
+        let configs = self.repo.list().await?;
+        let subset: Vec<BotConfig> = configs
+            .into_iter()
+            .filter(|c| wanted.contains(&BotId::new(c.bot.qq_id.to_string())))
+            .collect();
+        let done = self
+            .bootstrap_reconciler()
+            .reconcile_bootstrap_bots(&subset, &[])
+            .await;
+        Ok(done.into_iter().collect())
     }
 
     /// 按完整 BotConfig 路由 backend。唯一矩阵入口在 RuntimeScenario/RuntimeBackendRouter。

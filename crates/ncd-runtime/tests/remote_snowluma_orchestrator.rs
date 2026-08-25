@@ -21,4 +21,5 @@ fn stack_runtime_paths_contract() {
     let paths = SnowLumaRemotePaths::from_remote_home("/home/u");
     assert!(paths.status_daemon.contains("status_daemon.json"));
     assert!(paths.pid_daemon.contains("pid_daemon"));
+    assert!(paths.pid_node_path().ends_with("/pid_node"));
 }

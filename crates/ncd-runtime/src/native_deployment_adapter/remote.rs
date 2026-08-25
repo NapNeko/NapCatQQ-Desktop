@@ -32,6 +32,7 @@ pub struct RemoteNativeDeploymentBackend {
     target: RuntimeTarget,
     backend_id: BotId,
     flavor: BotFlavor,
+    selected: Option<ncd_domain::RemoteSelectedPaths>,
 }
 
 impl RemoteNativeDeploymentBackend {
@@ -48,7 +49,13 @@ impl RemoteNativeDeploymentBackend {
             target,
             backend_id: backend_id.into(),
             flavor,
+            selected: None,
         }
+    }
+
+    pub fn with_selected(mut self, selected: ncd_domain::RemoteSelectedPaths) -> Self {
+        self.selected = Some(selected);
+        self
     }
 
     /// 便捷方法:通过 resolver 取得当前应活的 host(不触发自愈刷新)
@@ -87,7 +94,22 @@ impl RemoteNativeDeploymentBackend {
     }
 
     async fn napcat_install_base(&self) -> Result<HostPath, BotBackendError> {
+        if let Some(base) = self
+            .selected
+            .as_ref()
+            .and_then(|s| s.qq_install_base.as_deref())
+        {
+            return Ok(HostPath::from_posix(base));
+        }
         let host = self.current_host().await?;
+        match crate::remote::inventory::probe_remote_inventory(host.as_ref(), None, None).await {
+            Ok(inv) => {
+                if let Some(base) = inv.selected.qq_install_base {
+                    return Ok(HostPath::from_posix(base));
+                }
+            }
+            Err(_) => {}
+        }
         let (home, layout) = probe_remote_napcat_layout(host.as_ref())
             .await
             .map_err(BotBackendError::Io)?;

@@ -11,7 +11,7 @@ use crate::host_resolver::HostResolver;
 use crate::remote_runtime_sessions::RemoteRuntimeSessions;
 use crate::runtime_router::RuntimeBackendRouter;
 use ncd_backend_napcat::remote_native_launch::remote_napcat_running_pid;
-use ncd_backend_snowluma::remote_snowluma::remote_qq_running_pid;
+use ncd_backend_snowluma::remote_snowluma::remote_qq_running_pid_with_hint;
 use ncd_deploy::{Deployment, DeploymentState, DockerDeployment};
 use ncd_domain::bot_status::BotStatus;
 use ncd_domain::{BackendType, BotConfig, BotId, RuntimeScenario, RuntimeTarget};
@@ -268,20 +268,6 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
             }
         };
 
-        let pid = match remote_qq_running_pid(host.as_ref(), config.bot.qq_id).await {
-            Ok(Some(pid)) => pid,
-            Ok(None) => return false,
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::bootstrap_reconcile",
-                    bot_id = %bot_id,
-                    err = %err,
-                    "bootstrap reconcile: 远端 QQ pgrep 失败"
-                );
-                return false;
-            }
-        };
-
         let sl_backend = match self
             .runtime_router
             .remote_snowluma_backend_for_server(server_id, Arc::clone(&host))
@@ -299,6 +285,30 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
             }
         };
 
+        let pid_hint = sl_backend
+            .daemon_paths()
+            .pid_bot_path(&config.bot.qq_id.to_string());
+        let pid = match remote_qq_running_pid_with_hint(
+            host.as_ref(),
+            config.bot.qq_id,
+            Some(pid_hint.as_str()),
+            Some(sl_backend.qq_bin()),
+        )
+        .await
+        {
+            Ok(Some(pid)) => pid,
+            Ok(None) => return false,
+            Err(err) => {
+                warn!(
+                    target: "ncd_runtime::bootstrap_reconcile",
+                    bot_id = %bot_id,
+                    err = %err,
+                    "bootstrap reconcile: 远端 QQ 进程探测失败"
+                );
+                return false;
+            }
+        };
+
         let sl_paths = sl_backend.daemon_paths().clone();
         if let Err(err) = sl_backend
             .attach_reconciled_running(bot_id.clone(), pid, config)
@@ -308,9 +318,8 @@ impl<R: BotConfigRepo + 'static> BootstrapReconciler<R> {
                 target: "ncd_runtime::bootstrap_reconcile",
                 bot_id = %bot_id,
                 err = %err,
-                "bootstrap reconcile: 远端 SnowLuma attach 失败"
+                "bootstrap reconcile: 远端 SnowLuma WebUI 接管失败，仍按 QQ 进程标为运行中"
             );
-            return false;
         }
 
         if let Err(err) = self.mark_reconciled_running(bot_id, handle, pid).await {
