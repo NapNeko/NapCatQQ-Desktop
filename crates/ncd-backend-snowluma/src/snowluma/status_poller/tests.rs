@@ -231,6 +231,115 @@ fn probe_info(pid_port: u16, uin: &str, logged_in: bool) -> QqPortLoginInfo {
 
 // 占位:后续追加测试用例
 
+/// 远端 wrapper PID 场景:启动 PID(999)与 WebUI 看到的 QQ PID(7788)无交集,
+/// 候选集应自适配回退到 WebUI 全部进程,从而 UIN 锁定不再被候选集卡住。
+/// 对应根因:bot_cold_start_script 的 nohup ... &;echo $! 拿到的是 shell wrapper
+/// PID,SnowLuma WebUI 枚举的是真实 QQ.exe PID。
+#[tokio::test]
+async fn tick_once_locks_uin_when_launch_pid_diverges_from_webui_pid() {
+    let (client, behavior) = MockClient::new();
+    {
+        let mut b = behavior.lock().await;
+        // 真实 QQ 在 PID 7788 已登录;启动 PID 999 不在列表里
+        b.processes_responses
+            .push_back(Ok(vec![proc(7788, "100200", HookProcessStatus::Online)]));
+        b.qq_responses.push_back(Ok(vec![]));
+    }
+    // 后代集合只含启动 wrapper PID 999,与 WebUI 枚举的 7788 无交集
+    let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::with_set([999u32]));
+    let (deps, bus) = build_test_deps(client, probe);
+
+    let bot_id = BotId::new("10001");
+    let mut sub = bus.subscribe(EventFilter::kind(
+        DomainEventKind::SnowLumaLoginStateChanged,
+    ));
+    let mut state = PollerState::new(999);
+
+    tick_once(&bot_id, &deps, &mut state).await;
+
+    // UIN 被锁上,不再卡在探测登录
+    assert_eq!(state.uin.as_deref(), Some("100200"));
+    assert_eq!(state.locked_pid, Some(7788));
+    assert_eq!(state.last_state, Some(SnowLumaLoginState::LoggedIn));
+
+    let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
+        .await
+        .expect("LoggedIn within 1s")
+        .expect("open");
+    match evt {
+        DomainEvent::SnowLumaLoginStateChanged { state: s, .. } => {
+            assert_eq!(s, SnowLumaLoginState::LoggedIn);
+        }
+        o => panic!("expected LoggedIn, got {o:?}"),
+    }
+}
+
+/// wrapper PID 场景下 pre-scan 状态合成:UIN 还没锁上、hook status 是 Loaded,
+/// 候选集回退后能命中 → 发出 WaitingForQrScan,不再静默卡住。
+#[tokio::test]
+async fn tick_once_emits_waiting_for_qr_when_launch_pid_diverges() {
+    let (client, behavior) = MockClient::new();
+    {
+        let mut b = behavior.lock().await;
+        b.processes_responses
+            .push_back(Ok(vec![proc(7788, "0", HookProcessStatus::Loaded)]));
+        b.qq_responses.push_back(Ok(vec![]));
+    }
+    let probe: Arc<dyn ProcessTreeProbe> = Arc::new(MockProcessTreeProbe::with_set([999u32]));
+    let (deps, bus) = build_test_deps(client, probe);
+
+    let bot_id = BotId::new("10001");
+    let mut sub = bus.subscribe(EventFilter::kind(
+        DomainEventKind::SnowLumaLoginStateChanged,
+    ));
+    let mut state = PollerState::new(999);
+
+    tick_once(&bot_id, &deps, &mut state).await;
+
+    assert_eq!(state.uin, None);
+    assert_eq!(
+        state.last_state,
+        Some(SnowLumaLoginState::WaitingForQrScan)
+    );
+
+    let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
+        .await
+        .expect("WaitingForQrScan within 1s")
+        .expect("open");
+    match evt {
+        DomainEvent::SnowLumaLoginStateChanged { state: s, .. } => {
+            assert_eq!(s, SnowLumaLoginState::WaitingForQrScan);
+        }
+        o => panic!("expected WaitingForQrScan, got {o:?}"),
+    }
+}
+
+/// 候选集自适配保留多 Bot 隔离:后代与 WebUI 有交集时(本机 Windows 正常路径)
+/// 不回退,仍用后代集合,避免把别的账号误锁过来。
+#[tokio::test]
+async fn reconcile_candidates_keeps_descendants_on_intersection() {
+    let descendants: BTreeSet<u32> = [12345, 12346].into_iter().collect();
+    // 12346 在 WebUI 列表里 → 有交集,保留后代集合
+    let processes = vec![
+        proc(12346, "100200", HookProcessStatus::Online),
+        proc(55555, "99999", HookProcessStatus::Online),
+    ];
+    let candidates = reconcile_candidates(descendants, &processes);
+    assert_eq!(candidates, BTreeSet::from([12345, 12346]));
+}
+
+/// 候选集自适配无交集时回退:后代与 WebUI 无交集 → 用 WebUI 全部 PID
+#[tokio::test]
+async fn reconcile_candidates_falls_back_to_webui_pids_when_disjoint() {
+    let descendants: BTreeSet<u32> = [999u32].into_iter().collect();
+    let processes = vec![
+        proc(7788, "100200", HookProcessStatus::Online),
+        proc(7789, "100201", HookProcessStatus::Online),
+    ];
+    let candidates = reconcile_candidates(descendants, &processes);
+    assert_eq!(candidates, BTreeSet::from([7788, 7789]));
+}
+
 // ----- UIN 锁定行为(纯函数 + tick_once 集成) -----
 
 #[test]

@@ -220,11 +220,11 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
 
     let mut probe_login_evidence: Option<ProbeLoginEvidence> = None;
     let candidates = if state.uin.is_none() {
-        Some(
-            deps.proc_tree
-                .collect_descendants(state.initial_qq_pid)
-                .await,
-        )
+        let descendants = deps
+            .proc_tree
+            .collect_descendants(state.initial_qq_pid)
+            .await;
+        Some(reconcile_candidates(descendants, &processes))
     } else {
         None
     };
@@ -336,10 +336,11 @@ async fn tick_once(bot_id: &BotId, deps: &PollerDeps, state: &mut PollerState) {
         let probe_pids: Vec<u32> = match locked_pid {
             Some(pid) => vec![pid],
             None => {
-                let candidates = deps
+                let descendants = deps
                     .proc_tree
                     .collect_descendants(state.initial_qq_pid)
                     .await;
+                let candidates = reconcile_candidates(descendants, &processes);
                 processes
                     .iter()
                     .filter(|p| candidates.contains(&p.pid))
@@ -409,6 +410,22 @@ struct ProbeLoginEvidence {
 /// is_real_uin:非空 + 非 "0" + 全 ASCII 数字 + 长度 ≥ 5
 fn is_real_uin(s: &str) -> bool {
     !s.is_empty() && s != "0" && s.len() >= 5 && s.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// 候选集自适配:proc_tree 后代与 WebUI 实际枚举的进程无交集时,
+/// 视为"启动 PID 与真实 QQ PID 脱钩"场景(远端 native 冷启的 nohup wrapper PID
+/// 与 SnowLuma 看到的 QQ.exe 不是同一个)。此时回退到 WebUI 上的全部进程,
+/// 让 UIN 锁定与 pre-scan 不再因候选集为空而静默卡住。
+///
+/// 本机 Windows 后代枚举正常时,后代与 /api/processes 有交集,走原路径不变,
+/// 多 Bot 场景仍由后续 try_lock_uin 策略做账号隔离,不受影响。
+fn reconcile_candidates(descendants: BTreeSet<u32>, processes: &[HookProcessInfo]) -> BTreeSet<u32> {
+    let has_intersection = processes.iter().any(|p| descendants.contains(&p.pid));
+    if has_intersection {
+        return descendants;
+    }
+    // 无交集:用 WebUI 事实替代过时的启动 PID 候选集
+    processes.iter().map(|p| p.pid).collect()
 }
 
 fn uin_matches_expected(uin: &str, expected_uin: Option<&str>) -> bool {
