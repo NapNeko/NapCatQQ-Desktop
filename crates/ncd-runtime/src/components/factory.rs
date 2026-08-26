@@ -6,9 +6,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use ncd_component::{
+    ncd_watch_asset_name, ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
     Component, ComponentId, DesktopSelfComponent, NapCatComponent, NcdWatchComponent,
-    NoVncComponent, NodeJsComponent, QQComponent, SnowLumaComponent, ncd_watch_asset_name,
-    ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
+    NoVncComponent, NodeJsComponent, QQComponent, SnowLumaComponent,
 };
 use ncd_domain::RemoteSelectedPaths;
 use ncd_domain::SnowLumaLinuxPackage;
@@ -151,8 +151,11 @@ pub fn build_component_for_host(
         }
         ComponentId::Qq => {
             if ctx.host.os() == Os::Windows {
-                let _unused = data_root_host.join("runtime").join("_qq_win_stub");
-                Arc::new(QQComponent::default_v3_2_25(_unused))
+                // 安装包缓存目录:稳定文件名 QQNT-{version}.exe,失败保留可复用。
+                // install_base_dir 在 Windows 上只是占位(detect 走注册表),
+                // 真正生效的是 with_tmp_dir 指到的 cache
+                let cache = data_root_host.join("runtime").join("cache").join("qq");
+                Arc::new(QQComponent::default_v3_2_25(cache.clone()).with_tmp_dir(cache))
             } else {
                 Arc::new(QQComponent::default_v3_2_25(resolve_napcat_base()?))
             }

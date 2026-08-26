@@ -30,13 +30,16 @@
 //! Windows 安装流程:
 //! 1. HTTP GET https://cdn-go.cn/qq-web/im.qq.com_new/latest/rainbow/pcConfig.json
 //! 2. 取 Windows.ntDownloadX64Url;gtimg/QQNTV2 裸链先 UrlSign 再下
-//! 3. 下载 NSIS 安装包到本地临时目录
-//! 4. 跑 installer.exe /s 静默安装,等待退出码 0
-//! 5. 删除本地临时安装包
+//! 3. 下载 NSIS 安装包到 data_root/runtime/cache/qq(工厂接线),文件名
+//!    QQNT-{version}.exe 不含 PID,已存在则跳过下载;切片下载走
+//!    download_with_mirrors(≥16MB 切 4 片,CDN 不支持 Range 自动退单流)
+//! 4. 跑 installer.exe /s 静默安装,elevated 走 UAC 提权并等退出码
+//! 5. 只有安装成功才删安装包;提权失败 / 安装器非 0 / 取消都保留,
+//!    下次安装直接复用不重新下载
 
 use async_trait::async_trait;
 
-use ncd_host::{Arch, Host, HostCommand, HostError, HostPath, Locality, Os};
+use ncd_host::{Arch, Host, HostCommand, HostError, HostPath, Locality, Os, PathStyle};
 
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
@@ -69,6 +72,59 @@ const QQ_REGISTRY_SUBKEY: &str = r"SOFTWARE\WOW6432Node\Tencent\QQNT";
 enum PackageFormat {
     Deb,
     Rpm,
+}
+
+/// UAC 提权失败时给前端的固定文案(InfoBar 直接展示;包已保留,重试不重新下载)
+const QQ_ELEVATION_REQUIRED_MSG: &str = "QQ 安装需要管理员权限。UAC 提权未成功。请退出后右键本程序，选择「以管理员身份运行」，再点一次安装（安装包已保留，不会重新下载）。";
+
+/// 版本号清洗成文件名安全片段:只留 [A-Za-z0-9._-],其它变 _,空串变 unknown
+fn sanitize_qq_version_for_filename(version: &str) -> String {
+    let cleaned: String = version
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if cleaned.chars().all(|c| c == '_') || cleaned.is_empty() {
+        "unknown".to_string()
+    } else {
+        cleaned
+    }
+}
+
+/// 缓存目录下的安装包路径(稳定文件名,跨进程/重启可复用)
+fn windows_installer_cache_path(tmp_dir: &HostPath, version: &str) -> HostPath {
+    tmp_dir.join(format!(
+        "QQNT-{}.exe",
+        sanitize_qq_version_for_filename(version)
+    ))
+}
+
+/// 缓存安装包的本地文件系统路径(Windows host 上 tokio::fs 直接可用)
+fn windows_installer_local_path(tmp_dir: &HostPath, version: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(
+        windows_installer_cache_path(tmp_dir, version).render(PathStyle::Windows),
+    )
+}
+
+/// HostError → ActionError:提权失败换成固定中文文案,其余原样转 Host 变体
+fn map_windows_install_error(err: HostError) -> ActionError {
+    match err {
+        HostError::ElevationFailed { .. } => ActionError::other(QQ_ELEVATION_REQUIRED_MSG),
+        other => other.into(),
+    }
+}
+
+/// Windows QQNT 卸载器相对安装根的固定文件名(NSIS,实测在安装根目录下)
+const WINDOWS_UNINSTALLER_NAME: &str = "Uninstall.exe";
+
+/// 安装根拼出卸载器完整路径(与 detect 的注册表 Install 值同源)
+fn windows_uninstaller_path(install_root: &HostPath) -> HostPath {
+    install_root.join(WINDOWS_UNINSTALLER_NAME)
 }
 
 /// Linux QQ 一次安装解析到的发布信息
@@ -812,7 +868,8 @@ impl QQComponent {
     }
 
     /// Windows install:拉 pcConfig.json 拿 NSIS 安装包地址 → UrlSign(如需)
-    /// → 下载 → 跑 installer.exe /s 静默安装(对齐 legacy QQInstall)
+    /// → 缓存目录切片下载(已有完整包则跳过)→ UAC 提权跑 installer.exe /s
+    /// → 只有安装成功才删缓存包(对齐 legacy QQInstall,包不丢)
     async fn install_windows(
         &self,
         host: &dyn Host,
@@ -832,25 +889,37 @@ impl QQComponent {
             .await;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // Step 2:下载 NSIS 安装包到本地临时目录
+        // Step 2:下载 NSIS 安装包到稳定缓存;已有完整 exe 直接复用
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
             message: "download QQ installer".into(),
         })
         .await;
-        let local_exe = std::env::temp_dir().join(format!(
-            "ncd-qq-setup-{}-{}.exe",
-            qq_version,
-            std::process::id()
-        ));
-        let helper = DownloadHelper::new()?;
-        // Windows 安装包是腾讯 CDN，单 URL 直下（不经 GitHub 镜像）
-        helper
-            .download_to_file(&download_url, &local_exe, None, ctx, 2)
-            .await?;
+        let local_exe = windows_installer_local_path(&self.tmp_dir, &qq_version);
+        if let Some(parent) = local_exe.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| ActionError::other(format!("创建 QQ 安装包缓存目录失败: {e}")))?;
+        }
+        if local_exe.is_file() {
+            ctx.info(format!("复用已下载的 QQ 安装包 {}", local_exe.display()))
+                .await;
+        } else {
+            // Windows 安装包是腾讯 CDN,单 URL 切片下载(≥16MB 切 4 片;
+            // CDN 不支持 Range 时 download_smart 自动退单流)
+            DownloadHelper::new()?
+                .download_with_mirrors(
+                    std::slice::from_ref(&download_url),
+                    &local_exe,
+                    None,
+                    ctx,
+                    2,
+                )
+                .await?;
+        }
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // Step 3:静默安装
+        // Step 3:UAC 提权静默安装
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
             message: "run installer /s".into(),
@@ -860,20 +929,26 @@ impl QQComponent {
         ctx.info(format!("运行 QQ 静默安装器: {installer}")).await;
         let cmd = HostCommand::new(installer)
             .arg("/s")
+            .elevated()
             .timeout(std::time::Duration::from_secs(600));
         let run_result = host.run_to_string(cmd).await;
-        // 不管装成功与否都尽量清掉安装包,避免占 %TEMP%
-        let _ = tokio::fs::remove_file(&local_exe).await;
-        let out = run_result?;
-        if !out.success() {
-            return Err(ActionError::install_step(
-                "qq_silent_install",
-                format!(
-                    "installer exit={:?} stderr={}",
-                    out.exit_code,
-                    out.stderr.trim()
-                ),
-            ));
+        match run_result {
+            Ok(out) if out.success() => {
+                // 只有装成功才清缓存;.part 半成品由下载层 rename 掉
+                let _ = tokio::fs::remove_file(&local_exe).await;
+            }
+            Ok(out) => {
+                // 安装器非 0:保留安装包原样报错,用户重试不用重新下载
+                return Err(ActionError::install_step(
+                    "qq_silent_install",
+                    format!(
+                        "installer exit={:?} stderr={}",
+                        out.exit_code,
+                        out.stderr.trim()
+                    ),
+                ));
+            }
+            Err(e) => return Err(map_windows_install_error(e)),
         }
         ctx.info("QQ Windows 静默安装完成").await;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
@@ -881,16 +956,77 @@ impl QQComponent {
         Ok(())
     }
 
-    /// Windows uninstall:QQ 官方安装包没有可靠的静默卸载入口,让用户走
-    /// 系统“应用和功能”卸载,这里直接拒绝而不是装作成功
+    /// Windows uninstall:注册表拿安装根 → 提权跑 NSIS 卸载器 Uninstall.exe
+    /// `/S _?=<root>` 静默卸载并等退出码。_?=<root> 让卸载器在原路径原地执行
+    /// (NSIS 默认复制自身到 %TEMP% 异步跑,原进程秒退、退出码不可靠),
+    /// 与 install 的 elevated /s 链路对称。未装(注册表无 Install)按幂等成功
     async fn uninstall_windows(
         &self,
-        _host: &dyn Host,
-        _ctx: &mut ActionCtx,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
     ) -> Result<(), ActionError> {
-        Err(ActionError::other(
-            "Windows QQ 请在系统“应用和功能”里卸载；本工程不接管 QQ 官方卸载流程",
-        ))
+        ctx.emit(ProgressKind::Started { total_steps: 2 }).await;
+
+        // Step 1:注册表定位安装根与卸载器
+        ctx.emit(ProgressKind::StepBegin {
+            step: 1,
+            message: "locate QQNT uninstaller".into(),
+        })
+        .await;
+        let Some(install_root) = self.query_windows_install_root(host).await? else {
+            // 没装过:卸载目标态已满足,按成功返回(幂等)
+            ctx.info("QQ 未安装(注册表无 QQNT Install 项),无需卸载")
+                .await;
+            ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
+            ctx.emit(ProgressKind::Finished { ok: true }).await;
+            return Ok(());
+        };
+        let uninstaller = windows_uninstaller_path(&install_root);
+        let uninstaller_local = std::path::PathBuf::from(uninstaller.render(PathStyle::Windows));
+        if !uninstaller_local.is_file() {
+            return Err(ActionError::other(format!(
+                "QQNT 安装目录存在但找不到卸载器: {}",
+                uninstaller_local.display()
+            )));
+        }
+        ctx.info(format!("定位到 QQ 卸载器: {}", uninstaller_local.display()))
+            .await;
+        ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
+
+        // Step 2:提权静默卸载;_?=<root> 保证原进程执行、退出码真实
+        ctx.emit(ProgressKind::StepBegin {
+            step: 2,
+            message: "run uninstaller /S".into(),
+        })
+        .await;
+        let root_str = install_root.render(PathStyle::Windows);
+        let cmd = HostCommand::new(uninstaller_local.to_string_lossy().to_string())
+            .arg("/S")
+            .arg(format!("_?={root_str}"))
+            .elevated()
+            .timeout(std::time::Duration::from_secs(600));
+        let run_result = host.run_to_string(cmd).await;
+        match run_result {
+            Ok(out) if out.success() => {
+                // NSIS 卸载器退出后目录可能还剩少量延迟删除的残留,不阻塞流程;
+                // 注册表键由卸载器自己清理,detect 会随之变未安装
+                ctx.info("QQ Windows 静默卸载完成").await;
+            }
+            Ok(out) => {
+                return Err(ActionError::install_step(
+                    "qq_silent_uninstall",
+                    format!(
+                        "uninstaller exit={:?} stderr={}",
+                        out.exit_code,
+                        out.stderr.trim()
+                    ),
+                ));
+            }
+            Err(e) => return Err(map_windows_install_error(e)),
+        }
+        ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
+        ctx.emit(ProgressKind::Finished { ok: true }).await;
+        Ok(())
     }
 
     /// Windows verify:注册表能查到 Install,且 detect 能解析出真实版本号
@@ -1345,28 +1481,24 @@ mod tests {
     #[test]
     fn supported_targets_include_windows_and_linux() {
         let c = comp();
-        assert!(
-            c.supported_targets()
-                .contains(&(Os::Linux, Locality::Local))
-        );
-        assert!(
-            c.supported_targets()
-                .contains(&(Os::Linux, Locality::Remote))
-        );
-        assert!(
-            c.supported_targets()
-                .contains(&(Os::Windows, Locality::Local))
-        );
+        assert!(c
+            .supported_targets()
+            .contains(&(Os::Linux, Locality::Local)));
+        assert!(c
+            .supported_targets()
+            .contains(&(Os::Linux, Locality::Remote)));
+        assert!(c
+            .supported_targets()
+            .contains(&(Os::Windows, Locality::Local)));
     }
 
     #[test]
     fn info_lists_windows_local_in_supported_targets() {
         let info = QQComponent::info();
-        assert!(
-            info.supported_targets
-                .iter()
-                .any(|t| { t.os == Os::Windows && t.locality == Locality::Local })
-        );
+        assert!(info
+            .supported_targets
+            .iter()
+            .any(|t| { t.os == Os::Windows && t.locality == Locality::Local }));
     }
 
     #[test]
@@ -1397,6 +1529,46 @@ mod tests {
     fn parse_windows_qq_release_errors_without_x64_url() {
         let body = r#"{"Windows":{"version":"9.9.31"}}"#;
         assert!(parse_windows_qq_release(body).is_err());
+    }
+
+    #[test]
+    fn sanitize_qq_version_strips_path_chars() {
+        assert_eq!(sanitize_qq_version_for_filename("9.9.31"), "9.9.31");
+        assert_eq!(sanitize_qq_version_for_filename(r"9.9/31\x"), "9.9_31_x");
+        // 全部字符都不安全时按 unknown 处理,避免出现纯下划线的歧义文件名
+        assert_eq!(sanitize_qq_version_for_filename("   "), "unknown");
+    }
+
+    #[test]
+    fn windows_installer_cache_path_is_stable_across_pids() {
+        let dir = HostPath::from_windows(r"C:\ProgramData\NapCatQQ Desktop\runtime\cache\qq");
+        let a = windows_installer_cache_path(&dir, "9.9.31");
+        let b = windows_installer_cache_path(&dir, "9.9.31");
+        assert_eq!(a, b);
+        assert!(a.as_posix().ends_with("QQNT-9.9.31.exe"));
+        assert!(!a.as_posix().contains(&std::process::id().to_string()));
+    }
+
+    #[test]
+    fn map_elevation_failed_uses_admin_relaunch_copy() {
+        let err = map_windows_install_error(HostError::ElevationFailed {
+            locality: "local",
+            reason: "user cancelled UAC".into(),
+        });
+        let text = err.to_string();
+        assert!(text.contains("以管理员身份运行"));
+        assert!(text.contains("不会重新下载"));
+    }
+
+    #[test]
+    fn windows_uninstaller_path_joins_under_install_root() {
+        let root = HostPath::from_windows(r"C:\Program Files\Tencent\QQNT");
+        let p = windows_uninstaller_path(&root);
+        assert!(p.as_posix().ends_with("/Uninstall.exe"));
+        assert_eq!(
+            p.render(PathStyle::Windows),
+            r"C:\Program Files\Tencent\QQNT\Uninstall.exe"
+        );
     }
 
     #[test]

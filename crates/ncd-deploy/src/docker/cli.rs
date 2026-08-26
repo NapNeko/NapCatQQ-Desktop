@@ -140,6 +140,13 @@ impl<'h> DockerCli<'h> {
             }
         }
 
+        // sudo fallback 只对 Linux 远端有意义(刚装完 PATH 未刷新 / docker 组未生效);
+        // Windows 本机没有 sudo 语义,裸 docker 失败就该直接判未装,
+        // 再发 elevated 会真的去 ShellExecute "docker",找不到文件只会白弹提权链路
+        if self.host.os() == ncd_host::Os::Windows {
+            return None;
+        }
+
         // fallback: 尝试 sudo(刚安装完 PATH 可能未刷新)
         let cmd_sudo = HostCommand::new("docker")
             .arg("version")
@@ -163,6 +170,11 @@ impl<'h> DockerCli<'h> {
     /// 说明用户已在 docker 组且会话已刷新,置 elevated=false;两者都不过才是 daemon 真没起
     async fn probe_daemon_with_elevation(&self) -> bool {
         use std::sync::atomic::Ordering;
+
+        // Windows 没有 sudo/组权限这套,直接裸探一次即可,避免多余的 elevated 命令
+        if self.host.os() == ncd_host::Os::Windows {
+            return self.docker_info_once(false).await;
+        }
 
         // 优先尝试 sudo(针对刚安装完的情况:用户已加入 docker 组,
         // 但当前 SSH 会话的组信息未刷新,需要重登才生效)
@@ -422,8 +434,8 @@ impl<'h> DockerCli<'h> {
         cancel: Option<tokio_util::sync::CancellationToken>,
         mut on_line: impl FnMut(StreamSource, String) + Send + 'static,
     ) -> Result<(), DockerCliError> {
-        use std::sync::Arc;
         use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+        use std::sync::Arc;
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let now_ms = || {

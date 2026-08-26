@@ -9,8 +9,8 @@
 //! - 解压 tar.gz:tar + flate2
 //! - 解压 tar.xz:HostError::Unsupported(暂不实装,后续按需补)
 //! - 解压 msi:走 msiexec /a 静默提取(简化版)
-//! - 提权:HostCommand::elevated 走 ShellExecuteW("runas") —— 暂返回
-//!   Unsupported,完整提权链留给 ncd-update crate 的 DesktopSelfComponent::SelfUpdate
+//! - 提权:HostCommand::elevated 走 local::elevate::run_elevated_wait
+//!   (ShellExecuteExW + 等待退出码;spawn+elevate 不提供异步句柄,返回 Unsupported)
 //!
 //! 注意:
 //! - 本实装只在 target_os = "windows" 下编译(由 local/mod.rs 的 #[cfg(windows)] 控制)
@@ -26,7 +26,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 
-use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand, HostProcessWaitPolicy};
+use crate::command::{CommandOutput, HostCommand, HostProcessWaitPolicy, DEFAULT_COMMAND_TIMEOUT};
 use crate::error::HostError;
 use crate::host::{Arch, Host, Locality, Os};
 use crate::package_manager::PackageManager;
@@ -326,10 +326,10 @@ impl Host for LocalWindowsHost {
 
     async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
         if cmd.elevated {
-            // 提权链路留给 ncd-update 的 SelfUpdate Action,Host trait 这层不实装
-            return Err(HostError::ElevationFailed {
-                locality: "local",
-                reason: "elevation via UAC must go through ncd-update::desktop_self".into(),
+            // 提权进程拿不到可异步轮询的句柄,HostProcess 语义撑不起来;
+            // QQ 安装走 run_to_string,这里保持显式拒绝
+            return Err(HostError::Unsupported {
+                operation: "spawn_elevated",
             });
         }
 
@@ -368,10 +368,7 @@ impl Host for LocalWindowsHost {
 
     async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
         if cmd.elevated {
-            return Err(HostError::ElevationFailed {
-                locality: "local",
-                reason: "elevation via UAC must go through ncd-update::desktop_self".into(),
-            });
+            return crate::local::elevate::run_elevated_wait(cmd).await;
         }
         let mut tokio_cmd = build_tokio_command(&cmd, self)?;
         tokio_cmd
@@ -419,10 +416,7 @@ impl Host for LocalWindowsHost {
         use crate::host::StreamSource;
 
         if cmd.elevated {
-            return Err(HostError::ElevationFailed {
-                locality: "local",
-                reason: "elevation via UAC must go through ncd-update::desktop_self".into(),
-            });
+            return crate::local::elevate::run_elevated_wait(cmd).await;
         }
 
         let mut tokio_cmd = build_tokio_command(&cmd, self)?;
@@ -926,12 +920,22 @@ mod tests {
         assert!(out.stdout.contains("hello"));
     }
 
+    // elevated 的行为测试放 local::elevate(纯函数映射,不弹 UAC);
+    // 这里只验证 spawn+elevate 显式拒绝,不真正发起提权。
     #[tokio::test]
-    async fn elevated_command_returns_unsupported_for_now() {
+    async fn elevated_spawn_unsupported() {
         let host = LocalWindowsHost::new();
         let cmd = HostCommand::new("cmd.exe").arg("/c").arg("echo").elevated();
-        let err = host.run_to_string(cmd).await.unwrap_err();
-        assert!(matches!(err, HostError::ElevationFailed { .. }));
+        let err = match host.spawn(cmd).await {
+            Err(e) => e,
+            Ok(_) => panic!("spawn with elevated should be rejected"),
+        };
+        assert!(matches!(
+            err,
+            HostError::Unsupported {
+                operation: "spawn_elevated"
+            }
+        ));
     }
 
     #[tokio::test]
