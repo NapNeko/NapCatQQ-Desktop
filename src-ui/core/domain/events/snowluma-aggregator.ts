@@ -21,6 +21,8 @@ export interface SnowlumaBotState {
     loginState: SnowLumaLoginState | null;
     /** 远端 Docker 隧道就绪后可开 WebUI */
     dockerEndpointsReady: boolean;
+    /** 连续探测失败：WebUI/隧道不可用，loginState 已回到 unknown */
+    probeUnavailable: boolean;
 }
 
 export interface SnowlumaState {
@@ -38,6 +40,7 @@ const emptyBot: SnowlumaBotState = {
     uin: null,
     loginState: null,
     dockerEndpointsReady: false,
+    probeUnavailable: false,
 };
 
 function ensureBot(s: SnowlumaState, id: string): SnowlumaBotState {
@@ -84,7 +87,11 @@ export function reduceSnowluma(s: SnowlumaState, event: DomainEvent): SnowlumaSt
                 ...s,
                 byBot: {
                     ...s.byBot,
-                    [event.bot_id]: { ...ensureBot(s, event.bot_id), loginState: event.state },
+                    [event.bot_id]: {
+                        ...ensureBot(s, event.bot_id),
+                        loginState: event.state,
+                        probeUnavailable: false,
+                    },
                 },
             };
 
@@ -105,7 +112,11 @@ export function reduceSnowluma(s: SnowlumaState, event: DomainEvent): SnowlumaSt
                 ...s,
                 byBot: {
                     ...s.byBot,
-                    [event.bot_id]: { ...ensureBot(s, event.bot_id), loginState: null },
+                    [event.bot_id]: {
+                        ...ensureBot(s, event.bot_id),
+                        loginState: null,
+                        probeUnavailable: true,
+                    },
                 },
             };
 

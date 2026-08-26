@@ -69,6 +69,7 @@ async function hydrateFromBackend(): Promise<void> {
                 uin: row.uin,
                 loginState: isLoginState(row.login_state) ? row.login_state : null,
                 dockerEndpointsReady: row.endpoints_ready,
+                probeUnavailable: false,
             };
         }
 

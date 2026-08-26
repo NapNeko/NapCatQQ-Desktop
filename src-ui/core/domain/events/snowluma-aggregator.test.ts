@@ -38,7 +38,25 @@ describe('reduceSnowluma', () => {
         });
 
         expect(state.byBot['10001']?.loginState).toBeNull();
+        expect(state.byBot['10001']?.probeUnavailable).toBe(true);
         expect(state.byBot['10002']?.loginState).toBe('logged_in');
+        expect(state.byBot['10002']?.probeUnavailable).toBe(false);
+    });
+
+    it('恢复登录态时清除 probeUnavailable 标志', () => {
+        let state = reduceSnowluma(initialSnowlumaState, {
+            kind: 'snowluma_login_probe_unavailable',
+            bot_id: '10001',
+        });
+        expect(state.byBot['10001']?.probeUnavailable).toBe(true);
+
+        state = reduceSnowluma(state, {
+            kind: 'snowluma_login_state_changed',
+            bot_id: '10001',
+            state: 'logged_in',
+        });
+        expect(state.byBot['10001']?.loginState).toBe('logged_in');
+        expect(state.byBot['10001']?.probeUnavailable).toBe(false);
     });
 
     it('Bot 停止后清掉上个进程的登录状态', () => {
