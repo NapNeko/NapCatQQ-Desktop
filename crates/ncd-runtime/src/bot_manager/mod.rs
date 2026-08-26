@@ -714,6 +714,38 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
     }
 
+    /// 监听 HostConnectionLost：SSH 断开时立刻拆掉该主机的 SSH 隧道并清 daemon 的
+    /// tunnel_eps 缓存。否则旧 TunnelHandle 的 accept 循环会一直对已 poison 的 session
+    /// 打 channel_open_direct_tcpip，刷 "tunnel open skipped: session poisoned"，
+    /// 且热推送若拿到死隧道端点会直接连失败。
+    /// 恢复路径(run_host_connection_recovered_listener → replace_host)会重开隧道。
+    pub async fn run_host_connection_lost_listener(self) {
+        let mut subscription = self.event_bus.subscribe(EventFilter::all());
+        while let Some(event) = subscription.next().await {
+            let DomainEvent::HostConnectionLost { server_id, .. } = event else {
+                continue;
+            };
+            // 1. 拆掉隧道注册表里该主机的所有隧道句柄(drop 会停 accept 循环)
+            self.remote_snowluma_tunnels.drop_server(&server_id).await;
+            // 2. 清共享 daemon 的 tunnel_eps 缓存,让下次热推送/ensure 走重建
+            let daemon = {
+                let daemons = self.remote_snowluma_daemons.lock().await;
+                daemons.get(&server_id).cloned()
+            };
+            if let Some(daemon) = daemon {
+                daemon.detach_local_sessions().await;
+            }
+            // 3. 远端 NapCat native:每 Bot 独立 session,tunnel_slot 在 session 内
+            // 自行管理(收到 unreachable hook 已清 endpoint+poller),这里不重复处理
+            info!(
+                target: "ncd_runtime::bot_manager",
+                server_id = %server_id,
+                "主机连接丢失：已拆远端 SnowLuma 隧道并清 tunnel_eps"
+            );
+        }
+    }
+
+
     /// 按完整 BotConfig 路由 backend。唯一矩阵入口在 RuntimeScenario/RuntimeBackendRouter。
     async fn backend_for_config(
         &self,
@@ -1307,43 +1339,29 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                     Ok(snapshot)
                 } else {
                     // 同 backend 运行中:派生文件已写盘(step 2),尝试通过 WebUI 热推送
-                    // NapCat: POST /api/OB11Config/SetConfig (需要 port + auth,当前实装延后)
-                    // SnowLuma: POST /api/config/:uin (用 daemon 共享 client)
+                    // NapCat: POST /api/OB11Config/SetConfig (需 port + token,端点表已含远端隧道口)
+                    // SnowLuma: POST /api/config/:uin (本机 daemon 共享 client;远端走 SSH 隧道 client)
                     // 热推送失败不阻塞保存流程,只给前端一个 warning;下次重启生效
                     if target_backend == BackendType::SnowLuma {
-                        if let Some(daemon) = &self.snowluma_daemon {
-                            if let Ok(client) = daemon.current_client().await {
-                                let uin = config.bot.qq_id.to_string();
-                                let payload = self
-                                    .renderer
-                                    .render(&bot_id, &config)
-                                    .ok()
-                                    .and_then(|txn| txn.writes.into_iter().next())
-                                    .map(|w| w.payload);
-                                if let Some(payload) = payload {
-                                    match client.update_onebot_config(&uin, &payload).await {
-                                        Ok(reloaded) => {
-                                            let msg = if reloaded {
-                                                "config_hot_reloaded"
-                                            } else {
-                                                "config_saved_pending_reload"
-                                            };
-                                            self.event_bus.publish(DomainEvent::bot_state_changed(
-                                                current.clone(),
-                                                msg,
-                                            ));
-                                        }
-                                        Err(_) => {
-                                            // 热推送失败,配置已写盘下次重启生效
-                                            self.event_bus.publish(DomainEvent::bot_state_changed(
-                                                current.clone(),
-                                                "config_updated",
-                                            ));
-                                        }
-                                    }
-                                }
+                        let uin = config.bot.qq_id.to_string();
+                        let payload = self
+                            .renderer
+                            .render(&bot_id, &config)
+                            .ok()
+                            .and_then(|txn| txn.writes.into_iter().next())
+                            .map(|w| w.payload);
+                        let reason = match payload {
+                            Some(payload) => {
+                                self.push_snowluma_hot_reload(&config, &uin, &payload)
+                                    .await
                             }
-                        }
+                            // 渲染失败也算 pending_reload:配置已落盘,等下次重启生效
+                            None => "config_saved_pending_reload",
+                        };
+                        self.event_bus.publish(DomainEvent::bot_state_changed(
+                            current.clone(),
+                            reason,
+                        ));
                     } else {
                         // NapCat 热推送:endpoint 表里有 (port, token) 才能继续
                         // (bot 已经把 WebUI 端点报到 stdout 上)没有就只写盘
@@ -2330,6 +2348,95 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         });
 
         Ok(())
+    }
+    /// 把一份 OneBot 配置 payload 通过 SnowLuma WebUI 热推送给运行中的 bot。
+    /// 本机与远端共用同一条 reason 语义:
+    /// - config_hot_reloaded:推送成功(上游返回 reloaded=true,在线热重载)
+    /// - config_saved_pending_reload:离线 / 网络 / 鉴权 / 业务错误,等下次重启生效
+    /// 本机走 snowluma_daemon 的共享 client;远端按 server_id 查 remote_snowluma_daemons,
+    /// 从隧道端点构造临时 ReqwestSnowLumaWebUiClient 再调 update_onebot_config。
+    async fn push_snowluma_hot_reload(
+        &self,
+        config: &BotConfig,
+        uin: &str,
+        payload: &serde_json::Value,
+    ) -> &'static str {
+        // 本机:daemon Ready 时直接用共享 client,client 内部已 login 持 token
+        if config.bot.runtime_target.is_local() {
+            let Some(daemon) = &self.snowluma_daemon else {
+                return "config_saved_pending_reload";
+            };
+            let client = match daemon.current_client().await {
+                Ok(c) => c,
+                Err(err) => {
+                    tracing::warn!(error = ?err, "snowluma hot reload: daemon not ready");
+                    return "config_saved_pending_reload";
+                }
+            };
+            return match client.update_onebot_config(uin, payload).await {
+                Ok(true) => "config_hot_reloaded",
+                Ok(false) => "config_saved_pending_reload",
+                Err(err) => {
+                    tracing::warn!(error = ?err, "snowluma hot reload: update_onebot_config failed");
+                    "config_saved_pending_reload"
+                }
+            };
+        }
+
+        // 远端:按 server_id 查共享 daemon。隧道可能因 SSH 断开被 drop_server 清掉
+        // (tunnel_eps=None),此时用 daemon.current_host() 重开隧道;host 句柄若也被
+        // poison,走 ensure_running_for_reconcile 路径会触发 daemon.ensure_running
+        // 走通后才更新 tunnel_eps。拿到隧道端点后构造临时 client 调 update_onebot_config。
+        let Some(server_id) = config.bot.runtime_target.server_id() else {
+            return "config_saved_pending_reload";
+        };
+        let daemon = {
+            let daemons = self.remote_snowluma_daemons.lock().await;
+            daemons.get(server_id).cloned()
+        };
+        let Some(daemon) = daemon else {
+            tracing::warn!(server_id, "snowluma hot reload: remote daemon not registered");
+            return "config_saved_pending_reload";
+        };
+
+        // tunnel_eps 缓存可能在 SSH 重连后被打成 None;ensure_running_for_reconcile 会
+        // 用 daemon 当前 host(被 ServerManager replace 过的 live host)探测远端 node,
+        // 在跑则重开隧道并把端点写回 tunnel_eps。node 不在就当离线,等下次重启生效。
+        if daemon.tunnel_endpoints().await.is_none() {
+            if let Err(err) = daemon.ensure_running_for_reconcile().await {
+                tracing::warn!(
+                    error = ?err,
+                    server_id,
+                    "snowluma hot reload: ensure_running_for_reconcile failed"
+                );
+                return "config_saved_pending_reload";
+            }
+        }
+        let Some(eps) = daemon.tunnel_endpoints().await else {
+            tracing::warn!(server_id, "snowluma hot reload: tunnel endpoints unavailable");
+            return "config_saved_pending_reload";
+        };
+        let client = match ReqwestSnowLumaWebUiClient::new(eps.webui_local_port, eps.webui_password)
+        {
+            Ok(c) => c,
+            Err(err) => {
+                tracing::warn!(error = ?err, "snowluma hot reload: build tunnel client failed");
+                return "config_saved_pending_reload";
+            }
+        };
+        // 远端临时 client 需先 login 拿 token,再 update
+        if let Err(err) = client.login().await {
+            tracing::warn!(error = ?err, "snowluma hot reload: tunnel client login failed");
+            return "config_saved_pending_reload";
+        }
+        match client.update_onebot_config(uin, payload).await {
+            Ok(true) => "config_hot_reloaded",
+            Ok(false) => "config_saved_pending_reload",
+            Err(err) => {
+                tracing::warn!(error = ?err, "snowluma hot reload: tunnel update_onebot_config failed");
+                "config_saved_pending_reload"
+            }
+        }
     }
 
     /// 把一份 OneBot 配置 payload 通过 NapCat WebUI 热推送给运行中的 bot

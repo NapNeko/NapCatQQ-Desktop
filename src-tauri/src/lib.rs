@@ -307,6 +307,7 @@ pub fn run() {
     let bot_manager_snowluma_listener = Arc::clone(&bot_manager);
     let bot_manager_offline_listener = Arc::clone(&bot_manager);
     let bot_manager_host_recovery_listener = Arc::clone(&bot_manager);
+    let bot_manager_host_lost_listener = Arc::clone(&bot_manager);
 
     let mut builder = tauri::Builder::default();
     #[cfg(desktop)]
@@ -419,6 +420,13 @@ pub fn run() {
                 (*bot_manager_host_recovery_listener)
                     .clone()
                     .run_host_connection_recovered_listener()
+                    .await;
+            });
+            // SSH 断开时立刻拆远端隧道,避免死隧道 accept 循环刷 session poisoned
+            tauri::async_runtime::spawn(async move {
+                (*bot_manager_host_lost_listener)
+                    .clone()
+                    .run_host_connection_lost_listener()
                     .await;
             });
             tauri::async_runtime::spawn(async move {

@@ -432,7 +432,8 @@ pub fn parse_napcat_onebot_connect(raw: &Value) -> Option<ncd_domain::ImportedNe
 // SnowLuma Renderer
 
 /// SnowLuma onebot_<qq>.json 顶层"已知" key 集合
-const SNOWLUMA_ONEBOT_KNOWN_KEYS: &[&str] = &["networks", "musicSignUrl", "statusCommand"];
+const SNOWLUMA_ONEBOT_KNOWN_KEYS: &[&str] =
+    &["networks", "musicSignUrl", "statusCommand", "historySync"];
 
 fn snowluma_message_format(fmt: MessagePostFormat) -> &'static str {
     match fmt {
@@ -446,6 +447,9 @@ fn snowluma_status_command_json(sc: &ncd_domain::bot_config::StatusCommandConfig
         "enabled": sc.enabled,
         "swallow": sc.swallow,
         "cooldownSeconds": sc.cooldown_seconds,
+        // 上游默认 "#sl";Desktop 模型暂不暴露 trigger,写默认值让校验通过
+        // (assertValidOneBotConfig 要求非空、单行、<=32 字符)
+        "trigger": "#sl",
     })
 }
 
@@ -603,9 +607,16 @@ impl SnowLumaConfigRenderer {
         let mut obj = serde_json::Map::new();
         obj.insert("networks".into(), Self::build_networks(&config.connect));
         obj.insert("musicSignUrl".into(), json!(config.bot.music_sign_url));
-        if let Some(sc) = &config.status_command {
-            obj.insert("statusCommand".into(), snowluma_status_command_json(sc));
-        }
+        // SnowLuma assertValidOneBotConfig 强制要求 statusCommand / historySync 存在
+        // (is-object 校验,缺字段直接 400)。写盘走 loadOneBotConfig 会补默认,但
+        // WebUI POST /api/config/:uin 走 assertValidOneBotConfig 严格校验原始 body,
+        // 不补默认 → 缺字段就 success:false。这里始终输出,让两条路径格式同源。
+        let sc = config
+            .status_command
+            .clone()
+            .unwrap_or_default();
+        obj.insert("statusCommand".into(), snowluma_status_command_json(&sc));
+        obj.insert("historySync".into(), json!({ "enabled": false }));
         Value::Object(obj)
     }
 }
