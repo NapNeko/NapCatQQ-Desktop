@@ -8,5 +8,4 @@ export type {
 export {
     botProcessBadge as botLifecycleBadge,
     buildBotListCardStatus,
-    botListCardMetaLine,
 } from '../../../../core/domain/bot/bot-status-presentation';

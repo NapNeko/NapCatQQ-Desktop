@@ -69,6 +69,8 @@ const SESSION_LABELS = {
     preparing: '登录准备',
     probing: '探测登录',
     disconnected: 'QQ 已掉线',
+    webuiDown: 'WebUI 不可用',
+    waitWebui: '等待 WebUI',
 } as const;
 
 function napcatSessionBadge(args: {
@@ -99,6 +101,8 @@ function snowlumaSessionBadge(args: {
     loginState: SnowLumaLoginState | null | undefined;
     needsQrLogin: boolean;
     daemonState: DaemonState | null | undefined;
+    probeUnavailable?: boolean;
+    dockerEndpointsReady?: boolean;
 }): StatusBadgeSpec | null {
     if (args.state !== 'running' && args.state !== 'starting') {
         return null;
@@ -114,8 +118,14 @@ function snowlumaSessionBadge(args: {
     }
     const ls = args.loginState;
     if (!ls) {
-        if (args.state === 'running') {
+        if (args.probeUnavailable) {
+            return { tone: 'warning', label: SESSION_LABELS.webuiDown };
+        }
+        if (args.state === 'running' && args.dockerEndpointsReady) {
             return { tone: 'info', label: SESSION_LABELS.probing };
+        }
+        if (args.state === 'running') {
+            return { tone: 'brand', label: SESSION_LABELS.waitWebui };
         }
         return { tone: 'brand', label: SESSION_LABELS.preparing };
     }
@@ -144,6 +154,8 @@ export function botSessionBadge(args: {
     isOnline?: boolean | null;
     snowlumaLoginState?: SnowLumaLoginState | null;
     snowlumaDaemonState?: DaemonState | null;
+    snowlumaProbeUnavailable?: boolean;
+    snowlumaDockerEndpointsReady?: boolean;
 }): StatusBadgeSpec | null {
     if (args.flavor === 'napcat') {
         return napcatSessionBadge({
@@ -158,6 +170,8 @@ export function botSessionBadge(args: {
             loginState: args.snowlumaLoginState,
             needsQrLogin: args.needsQrLogin,
             daemonState: args.snowlumaDaemonState,
+            probeUnavailable: args.snowlumaProbeUnavailable,
+            dockerEndpointsReady: args.snowlumaDockerEndpointsReady,
         });
     }
     if (args.needsQrLogin) {
@@ -180,6 +194,8 @@ export function buildBotListCardStatus(args: {
     isOnline?: boolean | null;
     snowlumaLoginState?: SnowLumaLoginState | null;
     snowlumaDaemonState?: DaemonState | null;
+    snowlumaProbeUnavailable?: boolean;
+    snowlumaDockerEndpointsReady?: boolean;
 }): BotListCardStatus {
     return {
         lifecycle: botProcessBadge(args.state),
@@ -190,22 +206,9 @@ export function buildBotListCardStatus(args: {
             isOnline: args.isOnline,
             snowlumaLoginState: args.snowlumaLoginState,
             snowlumaDaemonState: args.snowlumaDaemonState,
+            snowlumaProbeUnavailable: args.snowlumaProbeUnavailable,
+            snowlumaDockerEndpointsReady: args.snowlumaDockerEndpointsReady,
         }),
         alert: botAlertBadge(args.pendingRestart),
     };
-}
-
-/** meta 副标题：只放账号 UIN 等补充信息，不重复底栏会话文案。 */
-export function botListCardMetaLine(args: {
-    flavor: Flavor | null;
-    state: BotActorState;
-    snowlumaLoginState: SnowLumaLoginState | null | undefined;
-    snowlumaUin: string | null | undefined;
-}): string | null {
-    if (args.flavor !== 'snowluma') return null;
-    if (args.state !== 'running') return null;
-    if (args.snowlumaLoginState !== 'logged_in') return null;
-    const uin = args.snowlumaUin?.trim();
-    if (!uin) return null;
-    return `UIN ${uin}`;
 }

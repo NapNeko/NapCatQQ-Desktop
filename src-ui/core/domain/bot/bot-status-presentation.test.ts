@@ -36,6 +36,7 @@ describe('buildBotListCardStatus', () => {
             needsQrLogin: false,
             snowlumaLoginState: 'logged_in',
             snowlumaDaemonState: 'ready',
+            snowlumaDockerEndpointsReady: true,
         });
         expect(s.session?.label).toBe('QQ 已登录');
         expect(s.session?.dot).toBe(true);
@@ -49,8 +50,36 @@ describe('buildBotListCardStatus', () => {
             needsQrLogin: false,
             snowlumaLoginState: null,
             snowlumaDaemonState: 'ready',
+            snowlumaDockerEndpointsReady: true,
         });
         expect(s.session?.label).toBe('探测登录');
+    });
+
+    it('SL running 探测不可用时显示 WebUI 不可用', () => {
+        const s = buildBotListCardStatus({
+            state: 'running',
+            flavor: 'snowluma',
+            pendingRestart: false,
+            needsQrLogin: false,
+            snowlumaLoginState: null,
+            snowlumaDaemonState: 'ready',
+            snowlumaProbeUnavailable: true,
+            snowlumaDockerEndpointsReady: true,
+        });
+        expect(s.session?.label).toBe('WebUI 不可用');
+    });
+
+    it('SL running 隧道未就绪时显示等待 WebUI', () => {
+        const s = buildBotListCardStatus({
+            state: 'running',
+            flavor: 'snowluma',
+            pendingRestart: false,
+            needsQrLogin: false,
+            snowlumaLoginState: null,
+            snowlumaDaemonState: 'ready',
+            snowlumaDockerEndpointsReady: false,
+        });
+        expect(s.session?.label).toBe('等待 WebUI');
     });
 
     it('SL 已停止时不受共享 Daemon 状态影响', () => {
@@ -61,6 +90,7 @@ describe('buildBotListCardStatus', () => {
             needsQrLogin: false,
             snowlumaLoginState: 'logged_in',
             snowlumaDaemonState: 'crashed',
+            snowlumaDockerEndpointsReady: true,
         });
         expect(s.lifecycle.label).toBe('已停止');
         expect(s.session).toBeNull();

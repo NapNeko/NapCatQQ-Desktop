@@ -783,8 +783,10 @@ function BotListGrid({
                             snowlumaDockerEndpointsReady={
                                 snowlumaBot?.dockerEndpointsReady ?? false
                             }
-                            snowlumaUin={snowlumaBot?.uin ?? null}
                             snowlumaLoginState={snowlumaBot?.loginState ?? null}
+                            snowlumaProbeUnavailable={
+                                snowlumaBot?.probeUnavailable ?? false
+                            }
                             isBatchMode={batch.isBatchMode}
                             isSelected={batch.selectedIds.has(bot.bot_id)}
                             actionPending={startingBotId === bot.bot_id}

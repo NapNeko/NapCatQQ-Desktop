@@ -46,7 +46,7 @@ import { cn } from '../../../../shared/utils/cn';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { QrCodeDialog } from './QrCodeDialog';
 import { BotManageCard } from './BotManageCard';
-import { buildBotListCardStatus, botListCardMetaLine } from './botCardPresentation';
+import { buildBotListCardStatus } from './botCardPresentation';
 import {
     BotAvatar,
     IconButton,
@@ -81,8 +81,8 @@ interface BotCardProps {
     snowlumaDaemonState?: DaemonState | null;
     /** 远端 SnowLuma Docker：隧道就绪（Native 远端用 daemon + 同套 IPC） */
     snowlumaDockerEndpointsReady?: boolean;
-    snowlumaUin?: string | null;
     snowlumaLoginState?: SnowLumaLoginState | null;
+    snowlumaProbeUnavailable?: boolean;
 
     isBatchMode: boolean;
     isSelected: boolean;
@@ -114,8 +114,8 @@ export function BotCard({
     napcatBinding,
     snowlumaDaemonState,
     snowlumaDockerEndpointsReady,
-    snowlumaUin,
     snowlumaLoginState,
+    snowlumaProbeUnavailable,
     isBatchMode,
     isSelected,
     actionPending = false,
@@ -222,13 +222,8 @@ export function BotCard({
         isOnline,
         snowlumaLoginState,
         snowlumaDaemonState,
-    });
-
-    const metaText = botListCardMetaLine({
-        flavor: flavor ?? null,
-        state: bot.state,
-        snowlumaLoginState,
-        snowlumaUin,
+        snowlumaProbeUnavailable,
+        snowlumaDockerEndpointsReady: snowlumaDockerEndpointsReady ?? false,
     });
 
     const cardAccent =
@@ -396,13 +391,7 @@ export function BotCard({
                         </div>
                     </>
                 }
-                meta={
-                    metaText ? (
-                        <p className="truncate font-mono text-xs text-text-secondary tabular-nums">
-                            {metaText}
-                        </p>
-                    ) : null
-                }
+                meta={null}
                 footerActions={
                     isBatchMode ? (
                         <span className="text-2xs text-text-tertiary">点击卡片选择</span>
