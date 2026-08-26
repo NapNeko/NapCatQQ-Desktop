@@ -14,7 +14,11 @@ use super::layout::{RemoteSnowLumaLayout, SnowLumaRemotePaths, probe_remote_snow
 use super::orchestrator::{
     daemon_start, daemon_stop, remote_daemon_already_ready, write_status_daemon_json,
 };
-use super::probe::{resolve_remote_novnc_port, resolve_remote_webui_port, wait_remote_webui_ready};
+use super::probe::{
+    resolve_remote_novnc_port, resolve_remote_vnc_secret_from_x11vnc,
+    resolve_remote_webui_port, resolve_remote_webui_secret_near_snowluma_dir,
+    wait_remote_webui_ready,
+};
 use super::stack::restart_node_with_env;
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
 use crate::snowluma::daemon::DaemonState;
@@ -352,13 +356,55 @@ impl RemoteSnowLumaDaemon {
         let host = self.current_host().await;
         let webui_plain = match webui_password.map(str::trim).filter(|s| !s.is_empty()) {
             Some(pwd) => pwd.to_string(),
-            None => read_remote_file_trimmed(host.as_ref(), &self.layout.paths.webui_secret)
-                .await
-                .unwrap_or_default(),
+            None => {
+                let primary = read_remote_file_trimmed(host.as_ref(), &self.layout.paths.webui_secret)
+                    .await
+                    .unwrap_or_default();
+                if primary.is_empty() {
+                    // 外来安装（systemd 自启等）常把 webui.secret 放在 snowluma_dir 父目录，
+                    // 不在 Desktop 假设的 {workspace}/webui.secret 下；以实际文件为准回退。
+                    let fallback = resolve_remote_webui_secret_near_snowluma_dir(
+                        host.as_ref(),
+                        &self.layout.paths.snowluma_dir,
+                    )
+                    .await?;
+                    match fallback {
+                        Some(p) => {
+                            tracing::info!(
+                                target: "ncd_backend_snowluma::remote",
+                                server_id = %self.server_id,
+                                fallback = %p,
+                                "webui.secret 不在预期路径，已回退到 snowluma_dir 父目录"
+                            );
+                            read_remote_file_trimmed(host.as_ref(), &p)
+                                .await
+                                .unwrap_or_default()
+                        }
+                        None => String::new(),
+                    }
+                } else {
+                    primary
+                }
+            }
         };
-        let vnc_plain = read_remote_file_trimmed(host.as_ref(), &self.layout.paths.vnc_secret)
+        let mut vnc_plain = read_remote_file_trimmed(host.as_ref(), &self.layout.paths.vnc_secret)
             .await
             .unwrap_or_default();
+        if vnc_plain.is_empty() {
+            // x11vnc -passwdfile 指向的才是实际 VNC 密码文件；外来启动脚本可能把它放在
+            // 任意目录，从进程 cmdline 读最可靠。
+            if let Some(actual) = resolve_remote_vnc_secret_from_x11vnc(host.as_ref()).await? {
+                tracing::info!(
+                    target: "ncd_backend_snowluma::remote",
+                    server_id = %self.server_id,
+                    fallback = %actual,
+                    "vnc.secret 不在预期路径，已从 x11vnc -passwdfile 回退"
+                );
+                vnc_plain = read_remote_file_trimmed(host.as_ref(), &actual)
+                    .await
+                    .unwrap_or_default();
+            }
+        }
 
         // noVNC 口动态探测：外来图形栈的 websockify 常不在默认 6081
         let novnc_port = resolve_remote_novnc_port(host.as_ref()).await;

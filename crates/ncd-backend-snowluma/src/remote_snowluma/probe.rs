@@ -267,6 +267,43 @@ pub async fn resolve_remote_novnc_port(host: &dyn Host) -> u16 {
         .unwrap_or(super::tunnel::REMOTE_NOVNC_PORT)
 }
 
+/// 从正在跑的 x11vnc 进程 cmdline 提取 `-passwdfile` 指向的实际密码文件路径。
+/// 外来安装（systemd 自启）常把 vnc.secret 放在 snowluma_dir 父目录，不在 Desktop
+/// 假设的 `{workspace}/vnc.secret` 下；这里以进程事实为准回退读取。
+pub async fn resolve_remote_vnc_secret_from_x11vnc(
+    host: &dyn Host,
+) -> Result<Option<String>, BotBackendError> {
+    // 只取第一个 x11vnc 主进程的 -passwdfile 参数值；多实例场景由调用方上层隔离
+    let script = r#"ps -eo pid,args 2>/dev/null | awk '/x11vnc/ && !/awk/ {print; exit}' \
+| grep -oE '\-passwdfile[[:space:]]+[^[:space:]]+' | awk '{print $2}'"#;
+    let cmd = HostCommand::new("sh").arg("-c").arg(script);
+    let out = host.run_to_string(cmd).await.map_err(|e| BotBackendError::Io(e.to_string()))?;
+    let path = out.stdout.trim();
+    if path.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(path.to_string()))
+}
+
+/// 在 snowluma_dir 父目录下探测 webui.secret。外来安装常把 secret/log 放在 framework
+/// 根的上一级（systemd 启动脚本的工作目录），Desktop 假设的 `{workspace}/webui.secret`
+/// 在扁平布局下不存在；这里以实际文件为准。
+pub async fn resolve_remote_webui_secret_near_snowluma_dir(
+    host: &dyn Host,
+    snowluma_dir: &str,
+) -> Result<Option<String>, BotBackendError> {
+    // snowluma_dir 形如 /opt/snowluma，父目录 /opt 是外来启动脚本的常见工作目录
+    let parent = snowluma_dir.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+    if parent.is_empty() {
+        return Ok(None);
+    }
+    let candidate = format!("{parent}/webui.secret");
+    if host.exists(&HostPath::from_posix(&candidate)).await.unwrap_or(false) {
+        return Ok(Some(candidate));
+    }
+    Ok(None)
+}
+
 /// 日志跟随目标：外来安装的真实日志在 framework 自带 logs 目录（日期滚动命名），
 /// 桌面自装布局才是 workspace/log。按远端存在性解析；都没有则回落布局路径。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -669,5 +706,15 @@ mod tests {
             parse_port_lines("5099\n5099\n5100\nbad\n"),
             vec![5099, 5100]
         );
+    }
+
+    #[test]
+    fn parent_dir_of_snowluma_dir_is_extracted_for_webui_secret_fallback() {
+        // snowluma_dir=/opt/snowluma → 父目录 /opt 是外来启动脚本常见工作目录
+        let parent = "/opt/snowluma".rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+        assert_eq!(parent, "/opt");
+        // 扁平系统目录根场景：/snowluma → 父目录空，不回退
+        let root = "/snowluma".rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+        assert_eq!(root, "");
     }
 }

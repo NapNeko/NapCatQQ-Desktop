@@ -27,4 +27,5 @@ pub use daemon::RemoteSnowLumaDaemon;
 pub use inject::{remote_qq_running_pid, remote_qq_running_pid_with_hint};
 pub use probe::{
     ResolvedSnowLumaLogTargets, resolve_remote_novnc_port, resolve_remote_snowluma_log_targets,
+    resolve_remote_vnc_secret_from_x11vnc, resolve_remote_webui_secret_near_snowluma_dir,
 };
