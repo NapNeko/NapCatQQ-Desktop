@@ -496,8 +496,10 @@ export function BotListPageNext({
                         管理本机和远端 Bot 配置、生命周期与登录态。
                     </p>
                 </div>
-                <div className="text-xs text-text-tertiary tabular-nums">
-                    共 <Counter value={botSnapshots.length} className="font-semibold text-text" /> 个实例
+                <div className="flex items-baseline gap-1 text-xs text-text-tertiary tabular-nums">
+                    <span>共</span>
+                    <Counter value={botSnapshots.length} className="font-medium text-text-secondary" />
+                    <span>个实例</span>
                 </div>
             </header>
 

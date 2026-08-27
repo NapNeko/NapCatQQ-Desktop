@@ -64,7 +64,7 @@ export const SnowLumaNodeChoiceDialog: React.FC<Props> = ({
                         className={cn(
                             'rounded-sm border px-3 py-2.5 text-left transition-colors',
                             mode === 'component'
-                                ? 'border-brand bg-brand-soft'
+                                ? 'border-brand bg-brand-soft ring-1 ring-brand/35'
                                 : 'border-border-subtle bg-inset hover:border-border',
                         )}
                     >
@@ -81,7 +81,7 @@ export const SnowLumaNodeChoiceDialog: React.FC<Props> = ({
                             className={cn(
                                 'rounded-sm border px-3 py-2.5 text-left transition-colors cursor-pointer',
                                 mode === 'reuse'
-                                    ? 'border-brand bg-brand-soft'
+                                    ? 'border-brand bg-brand-soft ring-1 ring-brand/35'
                                     : 'border-border-subtle bg-inset hover:border-border',
                             )}
                         >

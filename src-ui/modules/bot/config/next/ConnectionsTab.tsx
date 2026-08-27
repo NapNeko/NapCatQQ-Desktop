@@ -331,31 +331,40 @@ function ConnectionRow({ kind, item, onStartEdit, onDelete }: ConnectionRowProps
     const summary = summarizeConnection(kind, item);
 
     return (
-        <div className="rounded-sm bg-field ring-1 ring-border-subtle">
-            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+        <div className="group rounded-md border border-border-subtle/80 bg-field/40 transition-all hover:border-border hover:bg-field/70">
+            <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
                 <button
                     type="button"
                     onClick={onStartEdit}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    className="flex min-w-0 flex-1 flex-col gap-1 text-left cursor-pointer select-none"
                 >
-                    <Badge tone="info" appearance="soft" className="font-mono">
-                        {KIND_BADGE[kind]}
-                    </Badge>
-                    <span className="truncate text-sm font-medium text-text">{item.name}</span>
-                    {item.enable ? (
-                        <Badge tone="success" appearance="soft" dot>
-                            启用
+                    {/* 第一行：协议标识 + 连接名称 + 运行状态 */}
+                    <div className="flex items-center gap-2 min-w-0">
+                        <Badge tone="info" appearance="soft" className="font-mono text-[11px] shrink-0">
+                            {KIND_BADGE[kind]}
                         </Badge>
-                    ) : (
-                        <Badge tone="neutral" appearance="soft">
-                            禁用
-                        </Badge>
-                    )}
-                    <span className="ml-1 truncate text-xs text-text-tertiary font-mono">
-                        {summary}
-                    </span>
+                        <span className="truncate text-sm font-semibold text-text">
+                            {item.name}
+                        </span>
+                        {item.enable ? (
+                            <Badge tone="success" appearance="soft" dot className="shrink-0">
+                                启用
+                            </Badge>
+                        ) : (
+                            <Badge tone="neutral" appearance="soft" className="shrink-0">
+                                禁用
+                            </Badge>
+                        )}
+                    </div>
+
+                    {/* 第二行：端点 URL 与配置参数 */}
+                    <div className="flex items-center gap-2 text-2xs font-mono text-text-tertiary">
+                        <span className="truncate text-text-secondary" title={summary}>
+                            {summary}
+                        </span>
+                    </div>
                 </button>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex shrink-0 items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button
