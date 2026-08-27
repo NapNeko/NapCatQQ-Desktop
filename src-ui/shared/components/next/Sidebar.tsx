@@ -128,13 +128,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={cn(
                 'relative z-20 flex shrink-0 flex-col bg-sidebar',
                 'transition-[width] duration-200 ease-out',
-                collapsed ? 'w-14' : 'w-52',
+                collapsed ? 'w-14' : 'w-56',
             )}
         >
             <div
                 className={cn(
-                    'flex h-12 shrink-0 items-center',
-                    collapsed ? 'justify-center px-0' : 'gap-2.5 px-3',
+                    'flex h-12 shrink-0 items-center overflow-hidden',
+                    collapsed ? 'justify-center px-0' : 'gap-2 px-3',
                 )}
             >
                 {collapsed ? (
@@ -144,7 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         aria-label="展开侧栏"
                         title="展开侧栏"
                         className={cn(
-                            'group relative inline-flex h-9 w-9 items-center justify-center rounded-sm',
+                            'group relative inline-flex h-9 w-9 items-center justify-center rounded-sm cursor-pointer',
                             'transition-colors hover:bg-text/5',
                             'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
                         )}
@@ -168,25 +168,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </button>
                 ) : (
                     <>
-                        <img
-                            src={logoSidebar}
-                            alt="NapCatQQ-Desktop logo"
-                            width={24}
-                            height={24}
-                            className={cn('h-6 w-6 shrink-0', LOGO_IMG_CLASS)}
-                            draggable={false}
-                        />
-                        <span className="whitespace-nowrap font-display text-[13.5px] font-semibold leading-none tracking-tight text-text">
-                            NapCatQQ-Desktop
-                        </span>
-                        <div className="h-full flex-1" data-tauri-drag-region />
+                        <div className="flex min-w-0 flex-1 items-center gap-2" data-tauri-drag-region>
+                            <img
+                                src={logoSidebar}
+                                alt="NapCatQQ-Desktop logo"
+                                width={24}
+                                height={24}
+                                className={cn('h-6 w-6 shrink-0', LOGO_IMG_CLASS)}
+                                draggable={false}
+                            />
+                            <span className="truncate whitespace-nowrap font-display text-[13.5px] font-semibold leading-none tracking-tight text-text select-none">
+                                NapCatQQ-Desktop
+                            </span>
+                        </div>
                         <button
                             type="button"
                             onClick={onToggleCollapse}
                             aria-label="折叠侧栏"
                             title="折叠侧栏"
                             className={cn(
-                                'inline-flex h-6 w-6 items-center justify-center rounded-xs',
+                                'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-xs cursor-pointer',
                                 'text-text-disabled transition-colors hover:bg-text/5 hover:text-text-secondary',
                                 'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
                             )}
