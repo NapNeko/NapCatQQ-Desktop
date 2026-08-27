@@ -92,7 +92,9 @@ impl SnowLumaAgreementService {
     }
 
     async fn prepare_local(&self) -> Result<Option<AgreementsPayload>, BotManagerError> {
-        let daemon = self.local_daemon()?;
+        let Some(daemon) = self.local_daemon.as_ref() else {
+            return Ok(None);
+        };
         let agreements =
             load_payload_from_runtime_root(daemon.runtime_root()).map_err(map_consent_file_io)?;
         Ok(agreements.and_then(|payload| payload.consent_required.then_some(payload)))
