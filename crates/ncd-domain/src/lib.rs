@@ -23,6 +23,7 @@ pub mod ids;
 pub mod kinds;
 pub mod migration;
 pub mod napcat_events;
+pub mod node_environment;
 pub mod offline_alert;
 pub mod progress;
 pub mod qq_dependency;
@@ -129,6 +130,7 @@ pub use remote_paths::{
     require_qq_install_base, require_snowluma_dir, snowluma_install_candidates,
     snowluma_workspace_from_dir,
 };
+pub use node_environment::{NodeEnvironmentCandidate, NodeProbeResult, NodeSourceKind};
 pub use runtime_scenario::RuntimeScenario;
-pub use snowluma_linux_package::SnowLumaLinuxPackage;
+pub use snowluma_linux_package::{SnowLumaLinuxPackage, SnowLumaPackage};
 pub use snowluma_start_mode::SnowLumaStartMode;

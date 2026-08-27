@@ -375,6 +375,9 @@ pub struct AppSettings {
     /// 外观偏好
     #[serde(rename = "uiPreferences", default)]
     pub ui_preferences: AppUiPreferences,
+    /// SnowLuma 本地 Node.js 运行环境指定路径（None 或空表示自动按优先级解析：自定义 > 内置 > 组件 > PATH）
+    #[serde(rename = "snowlumaNodePath", default)]
+    pub snowluma_node_path: Option<String>,
 }
 
 /// 桌面通知开关集合
@@ -425,6 +428,7 @@ impl Default for AppSettings {
             notify_on_bot_crashed: true,
             notify_on_login_kicked: true,
             ui_preferences: AppUiPreferences::default(),
+            snowluma_node_path: None,
         }
     }
 }

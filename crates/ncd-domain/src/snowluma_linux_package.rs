@@ -15,6 +15,9 @@ pub enum SnowLumaLinuxPackage {
     Lite,
 }
 
+/// 全平台 SnowLuma 发行物类型别名（Windows & Linux 对齐）
+pub type SnowLumaPackage = SnowLumaLinuxPackage;
+
 #[cfg(test)]
 mod tests {
     use super::*;
