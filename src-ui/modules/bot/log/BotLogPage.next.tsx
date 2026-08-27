@@ -6,12 +6,26 @@ import {
     ArrowLeft,
     Brush,
     Copy,
+    Filter,
     Search,
     ScrollText,
     Pause,
     Play,
 } from 'lucide-react';
-import { Badge, Button } from '../../../shared/ui';
+import {
+    Badge,
+    Button,
+    ContextMenu,
+    ContextMenuTrigger,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuSub,
+    ContextMenuSubTrigger,
+    ContextMenuSubContent,
+    ContextMenuRadioGroup,
+    ContextMenuRadioItem,
+} from '../../../shared/ui';
 import { ActionMotionIcon, LIVE_MOTION } from '../../../shared/ui/motion';
 import {
     filterLogs,
@@ -27,6 +41,8 @@ import {
     lineTextColor,
 } from '../../../shared/log/log-level-display';
 import { useBotLogStream } from '../../../hooks/bot/useBotLogStream';
+import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { cn } from '../../../shared/utils/cn';
 
 interface BotLogPageNextProps {
     botId: string;
@@ -50,15 +66,95 @@ export function BotLogPageNext({ botId, onBack }: BotLogPageNextProps) {
     const [levelFilter, setLevelFilter] = useState<LevelFilter>('all');
     const [autoScroll, setAutoScroll] = useState(true);
 
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+    const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
+    const [contextEntry, setContextEntry] = useState<LogEntry | null>(null);
+
     const filtered = useMemo(
         () => filterLogs(logs, query, channelFilter, levelFilter),
         [logs, query, channelFilter, levelFilter],
     );
 
-    const onCopy = async () => {
+    const handleRowClick = (index: number, entry: LogEntry, e: React.MouseEvent) => {
+        if (e.shiftKey && lastClickedIndex !== null) {
+            const start = Math.min(lastClickedIndex, index);
+            const end = Math.max(lastClickedIndex, index);
+            const newSet = new Set<string>();
+            for (let i = start; i <= end; i++) {
+                const item = filtered[i];
+                if (item) newSet.add(item.id);
+            }
+            setSelectedIds(newSet);
+        } else if (e.ctrlKey || e.metaKey) {
+            setSelectedIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(entry.id)) {
+                    next.delete(entry.id);
+                } else {
+                    next.add(entry.id);
+                }
+                return next;
+            });
+            setLastClickedIndex(index);
+        } else {
+            setSelectedIds(new Set([entry.id]));
+            setLastClickedIndex(index);
+        }
+        setContextEntry(entry);
+    };
+
+    const handleRowContextMenu = (index: number, entry: LogEntry) => {
+        setContextEntry(entry);
+        if (!selectedIds.has(entry.id)) {
+            setSelectedIds(new Set([entry.id]));
+            setLastClickedIndex(index);
+        }
+    };
+
+    const onCopySelected = async () => {
+        const selectedLogs = filtered.filter((l) => selectedIds.has(l.id));
+        if (selectedLogs.length === 0) return;
+        try {
+            await navigator.clipboard.writeText(serializeLogs(selectedLogs));
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制选中日志',
+                content: `共复制 ${selectedLogs.length} 行日志`,
+                autoDismissMs: 2000,
+            });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('复制日志失败:', err);
+        }
+    };
+
+    const onCopyCurrentLine = async () => {
+        const target = contextEntry || filtered[0];
+        if (!target) return;
+        try {
+            await navigator.clipboard.writeText(serializeLogs([target]));
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制单行日志',
+                content: target.text,
+                autoDismissMs: 2000,
+            });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('复制日志失败:', err);
+        }
+    };
+
+    const onCopyAll = async () => {
         if (filtered.length === 0) return;
         try {
             await navigator.clipboard.writeText(serializeLogs(filtered));
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制全部日志',
+                content: `共复制 ${filtered.length} 条日志记录`,
+                autoDismissMs: 2000,
+            });
         } catch (err) {
             // eslint-disable-next-line no-console
             console.warn('复制日志失败:', err);
@@ -76,21 +172,87 @@ export function BotLogPageNext({ botId, onBack }: BotLogPageNextProps) {
                 total={logs.length}
                 shown={filtered.length}
             />
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md ring-1 ring-border-subtle">
-                <Toolbar
-                    query={query}
-                    onQuery={setQuery}
-                    levelFilter={levelFilter}
-                    onLevelFilter={setLevelFilter}
-                    autoScroll={autoScroll}
-                    onToggleAutoScroll={() => setAutoScroll((p) => !p)}
-                    onClear={clear}
-                    onCopy={onCopy}
-                    hasLogs={logs.length > 0}
-                    hasVisible={filtered.length > 0}
-                />
-                <LogViewport entries={filtered} emptyKind={emptyKind} autoScroll={autoScroll} />
-            </div>
+            <ContextMenu>
+                <ContextMenuTrigger asChild>
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md ring-1 ring-border-subtle">
+                        <Toolbar
+                            query={query}
+                            onQuery={setQuery}
+                            levelFilter={levelFilter}
+                            onLevelFilter={setLevelFilter}
+                            autoScroll={autoScroll}
+                            onToggleAutoScroll={() => setAutoScroll((p) => !p)}
+                            onClear={clear}
+                            onCopy={selectedIds.size > 1 ? onCopySelected : onCopyAll}
+                            hasLogs={logs.length > 0}
+                            hasVisible={filtered.length > 0}
+                        />
+                        <LogViewport
+                            entries={filtered}
+                            emptyKind={emptyKind}
+                            autoScroll={autoScroll}
+                            selectedIds={selectedIds}
+                            onRowClick={handleRowClick}
+                            onRowContextMenu={handleRowContextMenu}
+                        />
+                    </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent className="w-52">
+                    {selectedIds.size > 1 && (
+                        <ContextMenuItem onClick={onCopySelected}>
+                            <Copy size={13} className="text-brand" />
+                            <span>复制选中日志 ({selectedIds.size} 行)</span>
+                        </ContextMenuItem>
+                    )}
+                    <ContextMenuItem
+                        onClick={onCopyCurrentLine}
+                        disabled={!contextEntry && filtered.length === 0}
+                    >
+                        <Copy size={13} />
+                        <span>复制当前行日志</span>
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={onCopyAll} disabled={filtered.length === 0}>
+                        <Copy size={13} />
+                        <span>复制全部日志 ({filtered.length} 行)</span>
+                    </ContextMenuItem>
+
+                    <ContextMenuSeparator />
+
+                    <ContextMenuItem onClick={() => setAutoScroll((p) => !p)}>
+                        {autoScroll ? <Pause size={13} /> : <Play size={13} />}
+                        <span>{autoScroll ? '暂停自动滚动' : '开启自动滚动'}</span>
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                        tone="danger"
+                        onClick={clear}
+                        disabled={logs.length === 0}
+                    >
+                        <Brush size={13} />
+                        <span>清空当前日志</span>
+                    </ContextMenuItem>
+
+                    <ContextMenuSeparator />
+
+                    <ContextMenuSub>
+                        <ContextMenuSubTrigger>
+                            <Filter size={13} className="mr-2 text-text-secondary" />
+                            <span>日志等级过滤</span>
+                        </ContextMenuSubTrigger>
+                        <ContextMenuSubContent className="w-36">
+                            <ContextMenuRadioGroup
+                                value={levelFilter}
+                                onValueChange={(val) => setLevelFilter(val as LevelFilter)}
+                            >
+                                {LEVEL_FILTERS.map((f) => (
+                                    <ContextMenuRadioItem key={f.value} value={f.value}>
+                                        <span>{f.label}</span>
+                                    </ContextMenuRadioItem>
+                                ))}
+                            </ContextMenuRadioGroup>
+                        </ContextMenuSubContent>
+                    </ContextMenuSub>
+                </ContextMenuContent>
+            </ContextMenu>
         </div>
     );
 }
@@ -246,10 +408,16 @@ function LogViewport({
     entries,
     emptyKind,
     autoScroll,
+    selectedIds,
+    onRowClick,
+    onRowContextMenu,
 }: {
     entries: LogEntry[];
     emptyKind: 'no-logs' | 'no-match' | 'has';
     autoScroll: boolean;
+    selectedIds: Set<string>;
+    onRowClick: (index: number, entry: LogEntry, e: React.MouseEvent) => void;
+    onRowContextMenu: (index: number, entry: LogEntry, e: React.MouseEvent) => void;
 }) {
     if (emptyKind === 'no-logs') {
         return (
@@ -270,7 +438,14 @@ function LogViewport({
         );
     }
     return (
-        <VirtualLogList entries={entries} rowHeight={LOG_ROW_HEIGHT_PX} autoScroll={autoScroll} />
+        <VirtualLogList
+            entries={entries}
+            rowHeight={LOG_ROW_HEIGHT_PX}
+            autoScroll={autoScroll}
+            selectedIds={selectedIds}
+            onRowClick={onRowClick}
+            onRowContextMenu={onRowContextMenu}
+        />
     );
 }
 
@@ -278,10 +453,16 @@ function VirtualLogList({
     entries,
     rowHeight,
     autoScroll,
+    selectedIds,
+    onRowClick,
+    onRowContextMenu,
 }: {
     entries: LogEntry[];
     rowHeight: number;
     autoScroll: boolean;
+    selectedIds: Set<string>;
+    onRowClick: (index: number, entry: LogEntry, e: React.MouseEvent) => void;
+    onRowContextMenu: (index: number, entry: LogEntry, e: React.MouseEvent) => void;
 }) {
     const parentRef = useRef<HTMLDivElement | null>(null);
 
@@ -322,6 +503,7 @@ function VirtualLogList({
                 {items.map((virtualRow) => {
                     const entry = entries[virtualRow.index];
                     if (!entry) return null;
+                    const isSelected = selectedIds.has(entry.id);
                     return (
                         <div
                             key={entry.id}
@@ -331,7 +513,12 @@ function VirtualLogList({
                                 transform: `translateY(${virtualRow.start}px)`,
                             }}
                         >
-                            <LogLine entry={entry} />
+                            <LogLine
+                                entry={entry}
+                                isSelected={isSelected}
+                                onClick={(e) => onRowClick(virtualRow.index, entry, e)}
+                                onContextMenu={(e) => onRowContextMenu(virtualRow.index, entry, e)}
+                            />
                         </div>
                     );
                 })}
@@ -340,9 +527,28 @@ function VirtualLogList({
     );
 }
 
-function LogLine({ entry }: { entry: LogEntry }) {
+function LogLine({
+    entry,
+    isSelected,
+    onClick,
+    onContextMenu,
+}: {
+    entry: LogEntry;
+    isSelected: boolean;
+    onClick: (e: React.MouseEvent) => void;
+    onContextMenu: (e: React.MouseEvent) => void;
+}) {
     return (
-        <div className="group flex h-[20px] items-center gap-2 px-2 hover:bg-elevated">
+        <div
+            onClick={onClick}
+            onContextMenu={onContextMenu}
+            className={cn(
+                'group flex h-[20px] cursor-pointer items-center gap-2 px-2 transition-colors select-none',
+                isSelected
+                    ? 'bg-brand/15 text-text font-medium border-l-2 border-brand pl-[6px]'
+                    : 'hover:bg-elevated/70',
+            )}
+        >
             <span
                 className="h-[12px] w-[3px] shrink-0"
                 style={{ background: levelBarColor(entry.level) }}

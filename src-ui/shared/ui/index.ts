@@ -60,3 +60,23 @@ export {
     type TimeValue,
 } from './TimePicker';
 export { MonthCalendar, type MonthCalendarProps } from './MonthCalendar';
+export {
+    ContextMenu,
+    ContextMenuTrigger,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuCheckboxItem,
+    ContextMenuRadioItem,
+    ContextMenuLabel,
+    ContextMenuSeparator,
+    ContextMenuShortcut,
+    ContextMenuGroup,
+    ContextMenuPortal,
+    ContextMenuSub,
+    ContextMenuSubContent,
+    ContextMenuSubTrigger,
+    ContextMenuRadioGroup,
+    type ContextMenuItemProps,
+} from './ContextMenu';
+export { GlobalTitleTooltip } from './GlobalTitleTooltip';
+

@@ -1,10 +1,17 @@
-// 运行时依赖里的 Docker 行（视觉对齐 ComponentManageCard）。
-
 import React from 'react';
-import { ExternalLink, Loader2 } from 'lucide-react';
-import { Button } from '../../shared/ui';
+import { Copy, Download, ExternalLink, Loader2 } from 'lucide-react';
+import {
+    Button,
+    ContextMenu,
+    ContextMenuTrigger,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuLabel,
+    ContextMenuSeparator,
+} from '../../shared/ui';
 import { MotionIcon } from '../../shared/ui/motion';
 import { useOpenExternal } from '../../hooks/useOpenExternal';
+import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { DockerStatus, Os } from '../../core/ipc/types';
@@ -55,39 +62,99 @@ export const DockerRow: React.FC<DockerRowProps> = ({
             </Button>
         );
 
+    const handleCopyVersion = async (v: string) => {
+        try {
+            await navigator.clipboard.writeText(v);
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制 Docker 版本号',
+                content: v,
+                autoDismissMs: 2000,
+            });
+        } catch {
+            // ignore
+        }
+    };
+
     return (
-        <ComponentManageCard
-            accent={isInstalling ? 'brand' : 'none'}
-            statusBadge={dockerRowStatusBadge({ ready, probing, inFlight: isInstalling })}
-            title="Docker"
-            description="用容器跑框架"
-            titleAside={
-                <button
-                    type="button"
-                    onClick={() => openExternal('https://www.docker.com/')}
-                    className="inline-flex items-center gap-0.5 text-2xs text-text-tertiary transition-colors hover:text-brand"
-                >
-                    官网
-                    <ExternalLink size={11} strokeWidth={2} aria-hidden />
-                </button>
-            }
-            meta={
-                <DockerMeta
-                    ready={ready}
-                    summary={summary}
-                    probing={probing}
-                    isInstalling={isInstalling}
-                    installHint={installHint}
-                    installProgress={installProgress}
-                />
-            }
-            footer={footer}
-            progressOverlay={
-                isInstalling && installProgress && shouldShowProgressBar(installProgress) ? (
-                    <ProgressBarOverlay progress={installProgress} determinate />
-                ) : undefined
-            }
-        />
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div className="min-w-0">
+                    <ComponentManageCard
+                        accent={isInstalling ? 'brand' : 'none'}
+                        statusBadge={dockerRowStatusBadge({ ready, probing, inFlight: isInstalling })}
+                        title="Docker"
+                        description="用容器跑框架"
+                        titleAside={
+                            <button
+                                type="button"
+                                onClick={() => openExternal('https://www.docker.com/')}
+                                className="inline-flex items-center gap-0.5 text-2xs text-text-tertiary transition-colors hover:text-brand"
+                            >
+                                官网
+                                <ExternalLink size={11} strokeWidth={2} aria-hidden />
+                            </button>
+                        }
+                        meta={
+                            <DockerMeta
+                                ready={ready}
+                                summary={summary}
+                                probing={probing}
+                                isInstalling={isInstalling}
+                                installHint={installHint}
+                                installProgress={installProgress}
+                            />
+                        }
+                        footer={footer}
+                        progressOverlay={
+                            isInstalling && installProgress && shouldShowProgressBar(installProgress) ? (
+                                <ProgressBarOverlay progress={installProgress} determinate />
+                            ) : undefined
+                        }
+                    />
+                </div>
+            </ContextMenuTrigger>
+
+            <ContextMenuContent className="w-52">
+                <ContextMenuLabel className="font-mono text-2xs truncate">
+                    Docker 运行环境
+                </ContextMenuLabel>
+                <ContextMenuSeparator />
+
+                {!ready && autoInstallable && (
+                    <ContextMenuItem
+                        tone="brand"
+                        disabled={isInstalling}
+                        onClick={onInstall}
+                    >
+                        <Download size={13} className="text-brand" />
+                        <span>自动安装 Docker</span>
+                    </ContextMenuItem>
+                )}
+
+                {!ready && !autoInstallable && (
+                    <ContextMenuItem onClick={onOpenDownload}>
+                        <ExternalLink size={13} />
+                        <span>去官网下载安装</span>
+                    </ContextMenuItem>
+                )}
+
+                <ContextMenuItem onClick={() => openExternal('https://www.docker.com/')}>
+                    <ExternalLink size={13} />
+                    <span>访问 Docker 官网</span>
+                </ContextMenuItem>
+
+                {ready && status?.version && (
+                    <>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem onClick={() => handleCopyVersion(status.version!)}>
+                            <Copy size={13} />
+                            <span>复制 Docker 版本 ({status.version})</span>
+                        </ContextMenuItem>
+                    </>
+                )}
+            </ContextMenuContent>
+        </ContextMenu>
     );
 };
 

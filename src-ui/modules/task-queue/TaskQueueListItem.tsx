@@ -1,12 +1,19 @@
-// 任务队列列表行（左侧任务轨）。
-
 import React from 'react';
-import { Trash2 } from 'lucide-react';
+import { Copy, Trash2, XCircle } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
-import { Badge } from '../../shared/ui';
+import {
+    Badge,
+    ContextMenu,
+    ContextMenuTrigger,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuLabel,
+    ContextMenuSeparator,
+} from '../../shared/ui';
 import { ActionMotionIcon, LIVE_MOTION, RESOURCE_MOTION } from '../../shared/ui/motion';
 import type { TaskQueueItem } from '../../core/domain/task-queue/types';
 import {
+    canCancelTaskItem,
     formatElapsedCompact,
     getTaskEndedAt,
     isActiveTaskStatus,
@@ -16,6 +23,8 @@ import {
     statusTone,
 } from '../../core/domain/task-queue/display';
 import { useNowMs } from '../../hooks/ui/useNowMs';
+import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
+import { deploymentTaskService } from '../../core/services/deployment-task.service';
 import { TASK_KIND_VISUAL, taskKindIconClasses } from './taskQueueKindVisual';
 
 const KIND_MOTION: Record<TaskQueueItem['kind'], typeof RESOURCE_MOTION> = {
@@ -69,86 +78,171 @@ export const TaskQueueListItem: React.FC<TaskQueueListItemProps> = ({
             : '';
     const { tile } = taskKindIconClasses(item.kind, selected);
     const canDelete = isTerminalTaskStatus(item.status) && onDelete;
+    const canCancel = canCancelTaskItem(item);
+
+    const handleCancel = async () => {
+        try {
+            await deploymentTaskService.cancel(item.id);
+            pushInfoBar({
+                tone: 'info',
+                title: '已请求取消任务',
+                content: item.title,
+                autoDismissMs: 2000,
+            });
+        } catch (err) {
+            pushInfoBar({
+                tone: 'danger',
+                title: '取消任务失败',
+                content: err instanceof Error ? err.message : String(err),
+                autoDismissMs: 3000,
+            });
+        }
+    };
+
+    const handleCopyTaskId = async () => {
+        try {
+            await navigator.clipboard.writeText(item.id);
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制任务 ID',
+                content: item.id,
+                autoDismissMs: 2000,
+            });
+        } catch {
+            // ignore
+        }
+    };
+
+    const handleCopyTitle = async () => {
+        try {
+            await navigator.clipboard.writeText(item.title);
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制任务标题',
+                content: item.title,
+                autoDismissMs: 2000,
+            });
+        } catch {
+            // ignore
+        }
+    };
 
     return (
-        <div
-            aria-current={selected ? 'true' : undefined}
-            className={cn(
-                'group relative flex w-full items-center gap-1.5 rounded-md transition-colors',
-                selected ? 'bg-elevated/50' : 'hover:bg-elevated/25',
-            )}
-        >
-            <span
-                aria-hidden
-                className={cn(
-                    'absolute bottom-2 left-0 top-2 w-[2px] rounded-r-pill transition-opacity',
-                    selected
-                        ? 'bg-brand opacity-100'
-                        : 'bg-border-default opacity-0 group-hover:opacity-50',
-                )}
-            />
-            <button
-                type="button"
-                onClick={onSelect}
-                className={cn(
-                    'flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
-                )}
-            >
-                <span
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div
+                    aria-current={selected ? 'true' : undefined}
                     className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors',
-                        tile,
+                        'group relative flex w-full items-center gap-1.5 rounded-md transition-colors',
+                        selected ? 'bg-elevated/50' : 'hover:bg-elevated/25',
                     )}
                 >
-                    <KindIcon kind={item.kind} selected={selected} busy={busy} />
-                </span>
-                <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-medium leading-tight text-text">
-                        {item.title}
-                    </div>
-                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-text-tertiary">
-                        <span className="truncate">{item.hostLabel}</span>
-                        <span aria-hidden>·</span>
-                        <span className="shrink-0">{kindLabel(item.kind)}</span>
-                        {elapsed ? (
-                            <>
-                                <span aria-hidden>·</span>
-                                <span className="shrink-0 tabular-nums">{elapsed}</span>
-                            </>
-                        ) : null}
-                    </div>
-                </div>
-            </button>
-            <div className="relative mr-1 flex h-7 w-12 shrink-0 items-center justify-center">
-                <Badge
-                    tone={statusTone(item.status)}
-                    appearance="soft"
-                    className={cn(
-                        'absolute max-w-full shrink-0 justify-center text-[10px] transition-opacity',
-                        canDelete && 'group-hover:opacity-0 group-focus-within:opacity-0',
-                    )}
-                >
-                    {statusShort(item.status)}
-                </Badge>
-                {canDelete && (
+                    <span
+                        aria-hidden
+                        className={cn(
+                            'absolute bottom-2 left-0 top-2 w-[2px] rounded-r-pill transition-opacity',
+                            selected
+                                ? 'bg-brand opacity-100'
+                                : 'bg-border-default opacity-0 group-hover:opacity-50',
+                        )}
+                    />
                     <button
                         type="button"
-                        aria-label={`删除任务 ${item.title}`}
-                        title="删除任务"
-                        onClick={onDelete}
+                        onClick={onSelect}
                         className={cn(
-                            'absolute flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary opacity-0 transition-colors',
-                            'pointer-events-none hover:bg-danger-soft hover:text-danger',
-                            'focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
-                            'group-hover:pointer-events-auto group-hover:opacity-80 group-focus-within:pointer-events-auto group-focus-within:opacity-80',
-                            selected && 'group-hover:opacity-100',
+                            'flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
                         )}
                     >
-                        <Trash2 size={13} strokeWidth={2} />
+                        <span
+                            className={cn(
+                                'flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors',
+                                tile,
+                            )}
+                        >
+                            <KindIcon kind={item.kind} selected={selected} busy={busy} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13px] font-medium leading-tight text-text">
+                                {item.title}
+                            </div>
+                            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-text-tertiary">
+                                <span className="truncate">{item.hostLabel}</span>
+                                <span aria-hidden>·</span>
+                                <span className="shrink-0">{kindLabel(item.kind)}</span>
+                                {elapsed ? (
+                                    <>
+                                        <span aria-hidden>·</span>
+                                        <span className="shrink-0 tabular-nums">{elapsed}</span>
+                                    </>
+                                ) : null}
+                            </div>
+                        </div>
                     </button>
+                    <div className="relative mr-1 flex h-7 w-12 shrink-0 items-center justify-center">
+                        <Badge
+                            tone={statusTone(item.status)}
+                            appearance="soft"
+                            className={cn(
+                                'absolute max-w-full shrink-0 justify-center text-[10px] transition-opacity',
+                                canDelete && 'group-hover:opacity-0 group-focus-within:opacity-0',
+                            )}
+                        >
+                            {statusShort(item.status)}
+                        </Badge>
+                        {canDelete && (
+                            <button
+                                type="button"
+                                aria-label={`删除任务 ${item.title}`}
+                                title="删除任务"
+                                onClick={onDelete}
+                                className={cn(
+                                    'absolute flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary opacity-0 transition-colors',
+                                    'pointer-events-none hover:bg-danger-soft hover:text-danger',
+                                    'focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
+                                    'group-hover:pointer-events-auto group-hover:opacity-80 group-focus-within:pointer-events-auto group-focus-within:opacity-80',
+                                    selected && 'group-hover:opacity-100',
+                                )}
+                            >
+                                <Trash2 size={13} strokeWidth={2} />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </ContextMenuTrigger>
+
+            <ContextMenuContent className="w-52">
+                <ContextMenuLabel className="font-mono text-2xs truncate">
+                    {item.title} ({item.hostLabel})
+                </ContextMenuLabel>
+                <ContextMenuSeparator />
+
+                {canCancel && (
+                    <ContextMenuItem tone="danger" onClick={handleCancel}>
+                        <XCircle size={13} className="text-danger" />
+                        <span>强制停止 / 取消排队</span>
+                    </ContextMenuItem>
                 )}
-            </div>
-        </div>
+
+                <ContextMenuItem onClick={handleCopyTaskId}>
+                    <Copy size={13} />
+                    <span>复制任务 ID</span>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={handleCopyTitle}>
+                    <Copy size={13} />
+                    <span>复制任务标题</span>
+                </ContextMenuItem>
+
+                {canDelete && (
+                    <>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem tone="danger" onClick={onDelete}>
+                            <Trash2 size={13} className="text-danger" />
+                            <span>删除此记录</span>
+                        </ContextMenuItem>
+                    </>
+                )}
+            </ContextMenuContent>
+        </ContextMenu>
     );
 };

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
     Activity,
     Check,
+    Copy,
     FileText,
     Globe,
     LinkIcon,
@@ -16,6 +17,14 @@ import {
     Settings,
     Square,
 } from 'lucide-react';
+import {
+    ContextMenu,
+    ContextMenuTrigger,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuLabel,
+    ContextMenuSeparator,
+} from '../../../../shared/ui';
 import { ActionMotionIcon } from '../../../../shared/ui/motion';
 import { useMotion } from '../../../../hooks/preferences/useMotion';
 import type {
@@ -29,7 +38,6 @@ import {
     canStartBot,
     canStopBot,
     isBotActive,
-    isBotRunning,
     isBotStarting,
 } from '../../../../core/domain/bot/status';
 import {
@@ -317,205 +325,318 @@ export function BotCard({
             onOpenDetail={() => onViewMetrics(bot.bot_id)}
         />
     );
+    const handleCopyQqid = async () => {
+        try {
+            await navigator.clipboard.writeText(bot.bot_id);
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制 QQ 号',
+                content: bot.bot_id,
+                autoDismissMs: 2000,
+            });
+        } catch {
+            // ignore
+        }
+    };
 
     return (
-        <>
-            <BotManageCard
-                status={cardStatus}
-                selected={isSelected}
-                batchMode={isBatchMode}
-                accent={cardAccent}
-                onRowClick={isBatchMode ? handleRowClick : undefined}
-                processBadgeRef={badgeRef}
-                metaExtra={metricsStrip}
-                header={
-                    <>
-                        {isBatchMode && (
-                            <span
-                                aria-hidden
-                                className={cn(
-                                    'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border',
-                                    isSelected
-                                        ? 'border-brand bg-brand text-white'
-                                        : 'border-border bg-canvas',
+        <ContextMenu>
+            <ContextMenuTrigger asChild disabled={isBatchMode}>
+                <div className="min-w-0">
+                    <BotManageCard
+                        status={cardStatus}
+                        selected={isSelected}
+                        batchMode={isBatchMode}
+                        accent={cardAccent}
+                        onRowClick={isBatchMode ? handleRowClick : undefined}
+                        processBadgeRef={badgeRef}
+                        metaExtra={metricsStrip}
+                        header={
+                            <>
+                                {isBatchMode && (
+                                    <span
+                                        aria-hidden
+                                        className={cn(
+                                            'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border',
+                                            isSelected
+                                                ? 'border-brand bg-brand text-white'
+                                                : 'border-border bg-canvas',
+                                        )}
+                                    >
+                                        {isSelected && <Check size={10} strokeWidth={3} />}
+                                    </span>
                                 )}
-                            >
-                                {isSelected && <Check size={10} strokeWidth={3} />}
-                            </span>
-                        )}
-                        <BotAvatar
-                            qqid={bot.bot_id}
-                            displayName={displayName}
-                            flavorTone={isSL ? 'info' : 'brand'}
-                        />
-                        <div className="flex min-w-0 flex-1 items-start gap-2">
-                            <div className="min-w-0 flex-1">
-                                <h3
-                                    className="truncate font-display text-base font-semibold leading-snug text-text"
-                                    title={displayName}
-                                >
-                                    {displayName}
-                                </h3>
-                                <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0 text-2xs text-text-tertiary">
-                                    <span className="font-mono tabular-nums">QQ {bot.bot_id}</span>
-                                    {flavor && (
-                                        <>
-                                            <span aria-hidden className="text-border">
-                                                ·
-                                            </span>
-                                            <span
-                                                className={cn(
-                                                    'font-medium',
-                                                    isSL ? 'text-info' : 'text-brand',
-                                                )}
-                                            >
-                                                {flavor}
-                                            </span>
-                                        </>
-                                    )}
-                                    {lastTransitionRel && (
-                                        <>
-                                            <span aria-hidden className="text-border">
-                                                ·
-                                            </span>
-                                            <span className="tabular-nums">{lastTransitionRel}</span>
-                                        </>
-                                    )}
-                                </p>
-                            </div>
-                            {visibleChips.length > 0 ? (
-                                <div className="flex max-h-[2.75rem] min-w-0 max-w-[58%] flex-wrap items-start justify-end gap-1 overflow-hidden">
-                                    {visibleChips}
+                                <BotAvatar
+                                    qqid={bot.bot_id}
+                                    displayName={displayName}
+                                    flavorTone={isSL ? 'info' : 'brand'}
+                                />
+                                <div className="flex min-w-0 flex-1 items-start gap-2">
+                                    <div className="min-w-0 flex-1">
+                                        <h3
+                                            className="truncate font-display text-base font-semibold leading-snug text-text"
+                                            title={displayName}
+                                        >
+                                            {displayName}
+                                        </h3>
+                                        <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0 text-2xs text-text-tertiary">
+                                            <span className="font-mono tabular-nums">QQ {bot.bot_id}</span>
+                                            {flavor && (
+                                                <>
+                                                    <span aria-hidden className="text-border">
+                                                        ·
+                                                    </span>
+                                                    <span
+                                                        className={cn(
+                                                            'font-medium',
+                                                            isSL ? 'text-info' : 'text-brand',
+                                                        )}
+                                                    >
+                                                        {flavor}
+                                                    </span>
+                                                </>
+                                            )}
+                                            {lastTransitionRel && (
+                                                <>
+                                                    <span aria-hidden className="text-border">
+                                                        ·
+                                                    </span>
+                                                    <span className="tabular-nums">{lastTransitionRel}</span>
+                                                </>
+                                            )}
+                                        </p>
+                                    </div>
+                                    {visibleChips.length > 0 ? (
+                                        <div className="flex max-h-[2.75rem] min-w-0 max-w-[58%] flex-wrap items-start justify-end gap-1 overflow-hidden">
+                                            {visibleChips}
+                                        </div>
+                                    ) : null}
                                 </div>
-                            ) : null}
-                        </div>
-                    </>
-                }
-                meta={null}
-                footerActions={
-                    isBatchMode ? (
-                        <span className="text-2xs text-text-tertiary">点击卡片选择</span>
-                    ) : (
-                        <>
-                            <IconButton
-                                visible={hasQrcode}
-                                tooltip="扫码登录"
-                                onClick={() => setQrOpen(true)}
-                                tone="brand"
-                            >
-                                <ToolbarMotionIcon
-                                    icon={QrCode}
-                                    size={16}
-                                    strokeWidth={2.2}
-                                    hoverAccent
-                                />
-                            </IconButton>
-                            <IconButton
-                                visible={isActive}
-                                tooltip="停止 Bot"
-                                onClick={stopAction(() => onStop(bot.bot_id))}
-                                disabled={!canStopBot(bot.state)}
-                                tone="danger"
-                            >
-                                <ActionMotionIcon
-                                    icon={Square}
-                                    size={14}
-                                    strokeWidth={2.6}
-                                    motion="none"
-                                />
-                            </IconButton>
-                            <IconButton
-                                visible={!isActive && canStartBot(bot.state)}
-                                tooltip={
-                                    startPending
-                                        ? '正在准备启动'
-                                        : transportFailed
-                                            ? '远端主机不可达，无法启动'
-                                            : '启动 Bot'
-                                }
-                                onClick={stopAction(() => onStart(bot.bot_id))}
-                                disabled={!canStartBot(bot.state) || transportFailed || startPending}
-                                tone="success"
-                            >
-                                {startPending ? (
-                                    <ActionMotionIcon
-                                        icon={RefreshCw}
-                                        size={14}
-                                        strokeWidth={2.4}
-                                        motion="spin"
-                                    />
-                                ) : (
-                                    <ToolbarMotionIcon
-                                        icon={Play}
-                                        size={14}
-                                        strokeWidth={2.6}
-                                        hoverAccent
-                                    />
-                                )}
-                            </IconButton>
-                            <IconButton
-                                visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
-                                tooltip="查看日志"
-                                onClick={stopAction(() => onViewLogs(bot.bot_id))}
-                            >
-                                <ToolbarMotionIcon
-                                    icon={FileText}
-                                    size={14}
-                                    strokeWidth={2.2}
-                                    hoverAccent
-                                />
-                            </IconButton>
-                            <IconButton
-                                visible={novncAvailable}
-                                tooltip={
-                                    isSnowlumaRemoteNativeConfig(config ?? null)
-                                        ? '打开远端 noVNC 扫码页（SSH 隧道至主机 6081）'
-                                        : '打开 noVNC 扫码页（容器内 QQ 图形界面）'
-                                }
-                                onClick={stopAction(() => onOpenNovnc?.(bot.bot_id))}
-                            >
-                                <ToolbarMotionIcon
-                                    icon={Monitor}
-                                    size={14}
-                                    strokeWidth={2.2}
-                                    hoverAccent
-                                />
-                            </IconButton>
-                            <IconButton
-                                visible={isBotRunning(bot.state) || isBotStarting(bot.state)}
-                                tooltip={webuiTip}
-                                disabled={!webuiAvailable}
-                                onClick={stopAction(() =>
-                                    onOpenWebui({
-                                        botId: bot.bot_id,
-                                        flavor,
-                                        napcat: napcatBinding ?? null,
-                                    }),
-                                )}
-                            >
-                                <ToolbarMotionIcon
-                                    icon={Globe}
-                                    size={14}
-                                    strokeWidth={2.2}
-                                    hoverAccent
-                                />
-                            </IconButton>
-                            <IconButton
-                                visible={true}
-                                tooltip="配置"
-                                onClick={stopAction(() => onConfigure(bot.bot_id))}
-                            >
-                                <ToolbarMotionIcon
-                                    icon={Settings}
-                                    size={14}
-                                    strokeWidth={2.2}
-                                    hoverAccent
-                                />
-                            </IconButton>
-                        </>
-                    )
-                }
-            />
+                            </>
+                        }
+                        meta={null}
+                        footerActions={
+                            isBatchMode ? (
+                                <span className="text-2xs text-text-tertiary">点击卡片选择</span>
+                            ) : (
+                                <>
+                                    <IconButton
+                                        visible={hasQrcode}
+                                        tooltip="扫码登录"
+                                        onClick={() => setQrOpen(true)}
+                                        tone="brand"
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={QrCode}
+                                            size={16}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                    <IconButton
+                                        visible={isActive}
+                                        tooltip="停止 Bot"
+                                        onClick={stopAction(() => onStop(bot.bot_id))}
+                                        disabled={!canStopBot(bot.state)}
+                                        tone="danger"
+                                    >
+                                        <ActionMotionIcon
+                                            icon={Square}
+                                            size={14}
+                                            strokeWidth={2.6}
+                                            motion="none"
+                                        />
+                                    </IconButton>
+                                    <IconButton
+                                        visible={!isActive && canStartBot(bot.state)}
+                                        tooltip={
+                                            startPending
+                                                ? '正在准备启动'
+                                                : transportFailed
+                                                    ? '远端主机不可达，无法启动'
+                                                    : '启动 Bot'
+                                        }
+                                        onClick={stopAction(() => onStart(bot.bot_id))}
+                                        disabled={!canStartBot(bot.state) || transportFailed || startPending}
+                                        tone="success"
+                                    >
+                                        {startPending ? (
+                                            <ActionMotionIcon
+                                                icon={RefreshCw}
+                                                size={14}
+                                                strokeWidth={2.4}
+                                                motion="spin"
+                                            />
+                                        ) : (
+                                            <ToolbarMotionIcon
+                                                icon={Play}
+                                                size={14}
+                                                strokeWidth={2.2}
+                                                hoverAccent
+                                            />
+                                        )}
+                                    </IconButton>
+                                    <IconButton
+                                        visible={webuiAvailable}
+                                        tooltip={webuiTip}
+                                        onClick={stopAction(() =>
+                                            onOpenWebui({
+                                                botId: bot.bot_id,
+                                                flavor,
+                                                napcat: napcatBinding ?? null,
+                                            }),
+                                        )}
+                                        tone="brand"
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={Globe}
+                                            size={14}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                    {novncAvailable && onOpenNovnc && (
+                                        <IconButton
+                                            visible={true}
+                                            tooltip={
+                                                isSnowlumaRemoteNativeConfig(config ?? null)
+                                                    ? '打开远端 noVNC 扫码页（SSH 隧道至主机 6081）'
+                                                    : '打开 noVNC 扫码页（容器内 QQ 图形界面）'
+                                            }
+                                            onClick={stopAction(() => onOpenNovnc(bot.bot_id))}
+                                            tone="brand"
+                                        >
+                                            <ToolbarMotionIcon
+                                                icon={Monitor}
+                                                size={14}
+                                                strokeWidth={2.2}
+                                                hoverAccent
+                                            />
+                                        </IconButton>
+                                    )}
+                                    <IconButton
+                                        visible={true}
+                                        tooltip="查看监控"
+                                        onClick={stopAction(() => onViewMetrics(bot.bot_id))}
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={Activity}
+                                            size={14}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                    <IconButton
+                                        visible={true}
+                                        tooltip="日志"
+                                        onClick={stopAction(() => onViewLogs(bot.bot_id))}
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={FileText}
+                                            size={14}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                    <IconButton
+                                        visible={true}
+                                        tooltip="配置"
+                                        onClick={stopAction(() => onConfigure(bot.bot_id))}
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={Settings}
+                                            size={14}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                </>
+                            )
+                        }
+                    />
+                </div>
+            </ContextMenuTrigger>
+
+            <ContextMenuContent className="w-52">
+                <ContextMenuLabel className="font-mono text-2xs truncate">
+                    QQ {bot.bot_id} {displayName !== bot.bot_id ? `(${displayName})` : ''}
+                </ContextMenuLabel>
+                <ContextMenuSeparator />
+
+                {/* 运行控制 */}
+                {!isActive && canStartBot(bot.state) && (
+                    <ContextMenuItem
+                        tone="brand"
+                        disabled={startPending || transportFailed}
+                        onClick={() => onStart(bot.bot_id)}
+                    >
+                        <Play size={13} className="text-brand" />
+                        <span>启动实例</span>
+                    </ContextMenuItem>
+                )}
+                {isActive && (
+                    <ContextMenuItem
+                        tone="danger"
+                        disabled={!canStopBot(bot.state)}
+                        onClick={() => onStop(bot.bot_id)}
+                    >
+                        <Square size={13} className="text-danger" />
+                        <span>停止实例</span>
+                    </ContextMenuItem>
+                )}
+                {webuiAvailable && (
+                    <ContextMenuItem
+                        onClick={() =>
+                            onOpenWebui({
+                                botId: bot.bot_id,
+                                flavor,
+                                napcat: napcatBinding ?? null,
+                            })
+                        }
+                    >
+                        <Globe size={13} className="text-brand" />
+                        <span>打开 WebUI</span>
+                    </ContextMenuItem>
+                )}
+                {novncAvailable && onOpenNovnc && (
+                    <ContextMenuItem
+                        onClick={() => onOpenNovnc(bot.bot_id)}
+                    >
+                        <Monitor size={13} className="text-brand" />
+                        <span>打开 noVNC 桌面</span>
+                    </ContextMenuItem>
+                )}
+                {hasQrcode && (
+                    <ContextMenuItem onClick={() => setQrOpen(true)}>
+                        <QrCode size={13} />
+                        <span>扫码登录</span>
+                    </ContextMenuItem>
+                )}
+
+                <ContextMenuSeparator />
+
+                {/* 导航跳转 */}
+                <ContextMenuItem onClick={() => onConfigure(bot.bot_id)}>
+                    <Settings size={13} />
+                    <span>配置参数</span>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => onViewLogs(bot.bot_id)}>
+                    <FileText size={13} />
+                    <span>查看日志</span>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => onViewMetrics(bot.bot_id)}>
+                    <Monitor size={13} />
+                    <span>运行监控</span>
+                </ContextMenuItem>
+
+                <ContextMenuSeparator />
+
+                {/* 快捷复制 */}
+                <ContextMenuItem onClick={handleCopyQqid}>
+                    <Copy size={13} />
+                    <span>复制 QQ 号</span>
+                </ContextMenuItem>
+            </ContextMenuContent>
 
             <QrCodeDialog
                 open={qrOpen}
@@ -538,7 +659,6 @@ export function BotCard({
                     setQrOpen(false);
                 }}
             />
-        </>
+        </ContextMenu>
     );
 }
-

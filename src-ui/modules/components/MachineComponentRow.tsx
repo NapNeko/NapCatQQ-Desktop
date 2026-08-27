@@ -1,9 +1,18 @@
 // 机器卡里的一行：一个组件在这台机器上的状态 + 操作。
 
 import React, { useEffect, useState } from 'react';
-import { ExternalLink, ScrollText, X } from 'lucide-react';
-import { Button } from '../../shared/ui';
+import { Copy, Download, ExternalLink, RefreshCw, ScrollText, Trash2, X, Zap } from 'lucide-react';
+import {
+    Button,
+    ContextMenu,
+    ContextMenuTrigger,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuLabel,
+    ContextMenuSeparator,
+} from '../../shared/ui';
 import { useOpenExternal } from '../../hooks/useOpenExternal';
+import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import type { MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import {
@@ -146,30 +155,164 @@ export const MachineComponentRowView: React.FC<Props> = ({
         </button>
     ) : undefined;
 
+    const updatable =
+        status.state === 'installed' &&
+        !!latestRemoteVersion &&
+        !isExternalNodeSource(status.detected.source) &&
+        compareSemver(status.detected.version, latestRemoteVersion) > 0;
+
+    const external = status.state === 'installed' && isExternalNodeSource(status.detected.source);
+
+    const handleCopyVersion = async (v: string, label: string) => {
+        try {
+            await navigator.clipboard.writeText(v);
+            pushInfoBar({
+                tone: 'info',
+                title: `已复制${label}`,
+                content: v,
+                autoDismissMs: 2000,
+            });
+        } catch {
+            // ignore
+        }
+    };
+
     return (
-        <ComponentManageCard
-            accent={inFlight ? 'brand' : 'none'}
-            statusBadge={hostComponentStatusBadge(status, {
-                hasUpdate: hasUpdate(status, latestRemoteVersion),
-                inFlight,
-            })}
-            title={info.display_name}
-            titleAside={titleAside}
-            description={info.description || undefined}
-            meta={
-                <StatusMeta
-                    status={status}
-                    latestRemoteVersion={latestRemoteVersion}
-                    activeProgress={activeProgress}
-                />
-            }
-            footer={footer}
-            progressOverlay={
-                showProgressBar ? (
-                    <ProgressBarOverlay progress={activeProgress!.progress} />
-                ) : undefined
-            }
-        />
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div className="min-w-0">
+                    <ComponentManageCard
+                        accent={inFlight ? 'brand' : 'none'}
+                        statusBadge={hostComponentStatusBadge(status, {
+                            hasUpdate: hasUpdate(status, latestRemoteVersion),
+                            inFlight,
+                        })}
+                        title={info.display_name}
+                        titleAside={titleAside}
+                        description={info.description || undefined}
+                        meta={
+                            <StatusMeta
+                                status={status}
+                                latestRemoteVersion={latestRemoteVersion}
+                                activeProgress={activeProgress}
+                            />
+                        }
+                        footer={footer}
+                        progressOverlay={
+                            showProgressBar ? (
+                                <ProgressBarOverlay progress={activeProgress!.progress} />
+                            ) : undefined
+                        }
+                    />
+                </div>
+            </ContextMenuTrigger>
+
+            <ContextMenuContent className="w-52">
+                <ContextMenuLabel className="font-mono text-2xs truncate">
+                    {info.display_name}
+                </ContextMenuLabel>
+                <ContextMenuSeparator />
+
+                {isCancelable && (
+                    <ContextMenuItem
+                        tone="danger"
+                        onClick={() => handle({ kind: 'cancel', taskId: activeProgress!.taskId })}
+                    >
+                        <X size={13} className="text-danger" />
+                        <span>取消当前任务</span>
+                    </ContextMenuItem>
+                )}
+
+                {!inFlight && status.state === 'installed' && updatable && (
+                    <ContextMenuItem
+                        tone="brand"
+                        disabled={disabled || !!lifecycleBlockedReason}
+                        onClick={() => handle({ kind: 'update' })}
+                    >
+                        <Zap size={13} className="text-brand" />
+                        <span>更新至 {latestRemoteVersion}</span>
+                    </ContextMenuItem>
+                )}
+
+                {!inFlight && status.state === 'installed' && external && (
+                    <ContextMenuItem
+                        disabled={disabled}
+                        onClick={() => handle({ kind: 'install_independent' })}
+                    >
+                        <Download size={13} />
+                        <span>安装独立版</span>
+                    </ContextMenuItem>
+                )}
+
+                {!inFlight && status.state === 'installed' && !external && (
+                    <ContextMenuItem
+                        tone="danger"
+                        disabled={disabled || !!lifecycleBlockedReason}
+                        onClick={() => handle({ kind: 'uninstall' })}
+                    >
+                        <Trash2 size={13} className="text-danger" />
+                        <span>卸载组件</span>
+                    </ContextMenuItem>
+                )}
+
+                {!inFlight && status.state === 'not_installed' && (
+                    <ContextMenuItem
+                        tone="brand"
+                        disabled={disabled}
+                        onClick={() => handle({ kind: 'install' })}
+                    >
+                        <Download size={13} className="text-brand" />
+                        <span>安装组件</span>
+                    </ContextMenuItem>
+                )}
+
+                {!inFlight && status.state === 'unknown' && (
+                    <ContextMenuItem
+                        disabled={disabled}
+                        onClick={() => handle({ kind: 'retry_detect' })}
+                    >
+                        <RefreshCw size={13} />
+                        <span>重新探测</span>
+                    </ContextMenuItem>
+                )}
+
+                {canShowNotes && (
+                    <ContextMenuItem onClick={onShowReleaseNotes}>
+                        <ScrollText size={13} />
+                        <span>查看发版日志</span>
+                    </ContextMenuItem>
+                )}
+
+                {info.repo_url && (
+                    <ContextMenuItem onClick={() => openExternal(info.repo_url!)}>
+                        <ExternalLink size={13} />
+                        <span>打开项目仓库</span>
+                    </ContextMenuItem>
+                )}
+
+                {(status.state === 'installed' || latestRemoteVersion) && <ContextMenuSeparator />}
+
+                {status.state === 'installed' && (
+                    <ContextMenuItem
+                        onClick={() =>
+                            handleCopyVersion(status.detected.version, '当前版本号')
+                        }
+                    >
+                        <Copy size={13} />
+                        <span>复制当前版本 (v{status.detected.version})</span>
+                    </ContextMenuItem>
+                )}
+
+                {latestRemoteVersion && (
+                    <ContextMenuItem
+                        onClick={() => handleCopyVersion(latestRemoteVersion, '最新版本号')}
+                    >
+                        <Copy size={13} />
+                        <span>复制最新版本 ({latestRemoteVersion})</span>
+                    </ContextMenuItem>
+                )}
+            </ContextMenuContent>
+        </ContextMenu>
     );
 };
 

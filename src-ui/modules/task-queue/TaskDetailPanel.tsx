@@ -2,7 +2,16 @@
 
 import React from 'react';
 import { cn } from '../../shared/utils/cn';
-import { Badge, Button } from '../../shared/ui';
+import {
+    Badge,
+    Button,
+    ContextMenu,
+    ContextMenuTrigger,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuLabel,
+    ContextMenuSeparator,
+} from '../../shared/ui';
 import type { TaskQueueItem } from '../../core/domain/task-queue/types';
 import {
     canCancelTaskItem,
@@ -18,13 +27,14 @@ import {
     statusTone,
 } from '../../core/domain/task-queue/display';
 import { useNowMs } from '../../hooks/ui/useNowMs';
-import { Loader2, Trash2, XCircle } from 'lucide-react';
+import { Copy, Loader2, Trash2, XCircle } from 'lucide-react';
 import { MotionIcon } from '../../shared/ui/motion';
 import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../components/progressView';
 import { DockerPullLayersPanel } from '../components/DockerPullLayersPanel';
 import { shouldShowDockerPullLayersInTaskDetail, shouldShowStepLogsInTaskDetail } from '../../core/domain/components/dockerPullProgress';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import { deploymentTaskService } from '../../core/services/deployment-task.service';
+import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 
 function DockerDeployProgressBlock({
     item,
@@ -197,6 +207,46 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
         });
     };
 
+    const handleCopyLogs = async () => {
+        if (!progress?.logs.length) return;
+        const text = progress.logs
+            .map((l) => {
+                const time = new Date(l.timestamp_ms).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                });
+                return `[${time}] ${l.message}`;
+            })
+            .join('\n');
+        try {
+            await navigator.clipboard.writeText(text);
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制步骤日志',
+                content: `共复制 ${progress.logs.length} 行日志`,
+                autoDismissMs: 2000,
+            });
+        } catch {
+            // ignore
+        }
+    };
+
+    const handleCopyTaskId = async () => {
+        try {
+            await navigator.clipboard.writeText(item.id);
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制任务 ID',
+                content: item.id,
+                autoDismissMs: 2000,
+            });
+        } catch {
+            // ignore
+        }
+    };
+
     const cancelling =
         cancelBusy ||
         (active &&
@@ -204,144 +254,187 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
             (item.logHint.includes('正在取消') || item.logHint.includes('取消中')));
 
     return (
-        <div className="flex h-full min-h-0 flex-1 flex-col">
-            <div className="shrink-0 border-b border-border-subtle/70 px-4 py-4 sm:px-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="font-display text-lg font-semibold leading-tight text-text">
-                                {item.title}
-                            </h2>
-                            <Badge tone={kindBadgeTone(item.kind)} appearance="soft" className="text-[11px]">
-                                {kindLabel(item.kind)}
-                            </Badge>
-                            <Badge tone={statusTone(item.status)} appearance="soft" className="text-[11px]">
-                                {statusLabel(item.status)}
-                            </Badge>
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div className="flex h-full min-h-0 flex-1 flex-col">
+                    <div className="shrink-0 border-b border-border-subtle/70 px-4 py-4 sm:px-5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h2 className="font-display text-lg font-semibold leading-tight text-text">
+                                        {item.title}
+                                    </h2>
+                                    <Badge tone={kindBadgeTone(item.kind)} appearance="soft" className="text-[11px]">
+                                        {kindLabel(item.kind)}
+                                    </Badge>
+                                    <Badge tone={statusTone(item.status)} appearance="soft" className="text-[11px]">
+                                        {statusLabel(item.status)}
+                                    </Badge>
+                                </div>
+                                <p className="mt-2 text-[12px] text-text-secondary">
+                                    <span className="text-text-tertiary">主机</span>{' '}
+                                    <span className="font-medium text-text">{item.hostLabel}</span>
+                                    <span className="mx-2 text-text-disabled">|</span>
+                                    <span className="text-text-tertiary">耗时</span>{' '}
+                                    <span className="tabular-nums">
+                                        {formatElapsedLong(
+                                            item.startedAt,
+                                            endedAt,
+                                            endedAt === undefined ? nowMs : undefined,
+                                        )}
+                                    </span>
+                                </p>
+                            </div>
+                            {(active || canDelete) && (
+                                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                                    {running && item.cancellable !== true && (
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            disabled
+                                            title={nonCancellableHint(item.kind)}
+                                        >
+                                            <XCircle size={13} />
+                                            不可停止
+                                        </Button>
+                                    )}
+                                    {canCancel && (
+                                        <Button
+                                            size="sm"
+                                            variant={item.status === 'pending' || item.status === 'paused' ? 'secondary' : 'danger'}
+                                            disabled={cancelling}
+                                            onClick={handleCancel}
+                                        >
+                                            <XCircle size={13} />
+                                            {cancelling ? '正在停止…' : stopButtonLabel(item.status)}
+                                        </Button>
+                                    )}
+                                    {canDelete && (
+                                        <Button size="sm" variant="ghost" onClick={handleDelete}>
+                                            <Trash2 size={13} />
+                                            删除
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
                         </div>
-                        <p className="mt-2 text-[12px] text-text-secondary">
-                            <span className="text-text-tertiary">主机</span>{' '}
-                            <span className="font-medium text-text">{item.hostLabel}</span>
-                            <span className="mx-2 text-text-disabled">|</span>
-                            <span className="text-text-tertiary">耗时</span>{' '}
-                            <span className="tabular-nums">
-                                {formatElapsedLong(
-                                    item.startedAt,
-                                    endedAt,
-                                    endedAt === undefined ? nowMs : undefined,
+
+                        {failure && (
+                            <div className="mt-3 rounded-md border border-danger/30 bg-danger-soft/35 px-3 py-2.5 text-[12px] leading-relaxed text-danger">
+                                {failure}
+                            </div>
+                        )}
+
+                        {cancelError && (
+                            <div className="mt-3 rounded-md border border-danger/30 bg-danger-soft/35 px-3 py-2.5 text-[12px] leading-relaxed text-danger">
+                                停止失败：{cancelError}
+                            </div>
+                        )}
+
+                        {cancelling && !cancelError && (
+                            <div className="mt-3 rounded-md border border-warning/30 bg-warning-soft/30 px-3 py-2.5 text-[12px] leading-relaxed text-text-secondary">
+                                正在取消…若远端 docker pull 卡住，可能需数秒结束
+                            </div>
+                        )}
+
+                        {item.kind === 'docker_install' && !progress && (
+                            <div className="mt-3 rounded-md border border-border-subtle bg-inset/50 px-3 py-2.5 text-[12px] text-text-secondary">
+                                {item.logHint ?? '正在安装 Docker…'}
+                            </div>
+                        )}
+
+                        {progress && !dockerPullExpanded && (
+                            <div className="mt-3 overflow-hidden rounded-md border border-border-subtle/80 bg-surface/60 px-3 pb-3 pt-2">
+                                {item.kind === 'docker_deploy' ? (
+                                    <DockerDeployProgressBlock item={item} progress={progress} />
+                                ) : (
+                                    <>
+                                        <ProgressLine progress={progress} />
+                                        {shouldShowProgressBar(progress) && (
+                                            <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-pill bg-inset/60">
+                                                <ProgressBarOverlay progress={progress} determinate />
+                                            </div>
+                                        )}
+                                    </>
                                 )}
-                            </span>
-                        </p>
+                            </div>
+                        )}
                     </div>
-                    {(active || canDelete) && (
-                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                            {running && item.cancellable !== true && (
-                                <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    disabled
-                                    title={nonCancellableHint(item.kind)}
-                                >
-                                    <XCircle size={13} />
-                                    不可停止
-                                </Button>
-                            )}
-                            {canCancel && (
-                                <Button
-                                    size="sm"
-                                    variant={item.status === 'pending' || item.status === 'paused' ? 'secondary' : 'danger'}
-                                    disabled={cancelling}
-                                    onClick={handleCancel}
-                                >
-                                    <XCircle size={13} />
-                                    {cancelling ? '正在停止…' : stopButtonLabel(item.status)}
-                                </Button>
-                            )}
-                            {canDelete && (
-                                <Button size="sm" variant="ghost" onClick={handleDelete}>
-                                    <Trash2 size={13} />
-                                    删除
-                                </Button>
-                            )}
+
+                    {dockerPullExpanded && progress && (
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5">
+                            <div
+                                className={cn(
+                                    'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/50 px-3 pb-3 pt-2.5',
+                                    LOG_SURFACE,
+                                )}
+                            >
+                                <DockerDeployProgressBlock item={item} progress={progress} expanded />
+                            </div>
+                        </div>
+                    )}
+
+                    {showStepLogs && (
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5">
+                            <div className="flex shrink-0 pb-2">
+                                <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
+                                    步骤日志
+                                </span>
+                            </div>
+
+                            <div
+                                className={cn(
+                                    'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/50',
+                                    LOG_SURFACE,
+                                )}
+                            >
+                                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                                    <StepLogBody item={item} />
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>
+            </ContextMenuTrigger>
 
-                {failure && (
-                    <div className="mt-3 rounded-md border border-danger/30 bg-danger-soft/35 px-3 py-2.5 text-[12px] leading-relaxed text-danger">
-                        {failure}
-                    </div>
+            <ContextMenuContent className="w-52">
+                <ContextMenuLabel className="font-mono text-2xs truncate">
+                    {item.title}
+                </ContextMenuLabel>
+                <ContextMenuSeparator />
+
+                {progress?.logs && progress.logs.length > 0 && (
+                    <ContextMenuItem onClick={handleCopyLogs}>
+                        <Copy size={13} />
+                        <span>复制步骤日志</span>
+                    </ContextMenuItem>
                 )}
 
-                {cancelError && (
-                    <div className="mt-3 rounded-md border border-danger/30 bg-danger-soft/35 px-3 py-2.5 text-[12px] leading-relaxed text-danger">
-                        停止失败：{cancelError}
-                    </div>
-                )}
+                <ContextMenuItem onClick={handleCopyTaskId}>
+                    <Copy size={13} />
+                    <span>复制任务 ID</span>
+                </ContextMenuItem>
 
-                {cancelling && !cancelError && (
-                    <div className="mt-3 rounded-md border border-warning/30 bg-warning-soft/30 px-3 py-2.5 text-[12px] leading-relaxed text-text-secondary">
-                        正在取消…若远端 docker pull 卡住，可能需数秒结束
-                    </div>
-                )}
+                {(canCancel || canDelete) && <ContextMenuSeparator />}
 
-                {item.kind === 'docker_install' && !progress && (
-                    <div className="mt-3 rounded-md border border-border-subtle bg-inset/50 px-3 py-2.5 text-[12px] text-text-secondary">
-                        {item.logHint ?? '正在安装 Docker…'}
-                    </div>
-                )}
-
-                {progress && !dockerPullExpanded && (
-                    <div className="mt-3 overflow-hidden rounded-md border border-border-subtle/80 bg-surface/60 px-3 pb-3 pt-2">
-                        {item.kind === 'docker_deploy' ? (
-                            <DockerDeployProgressBlock item={item} progress={progress} />
-                        ) : (
-                            <>
-                                <ProgressLine progress={progress} />
-                                {shouldShowProgressBar(progress) && (
-                                    <div className="relative mt-2 h-1.5 w-full overflow-hidden rounded-pill bg-inset/60">
-                                        <ProgressBarOverlay progress={progress} determinate />
-                                    </div>
-                                )}
-                            </>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {dockerPullExpanded && progress && (
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5">
-                    <div
-                        className={cn(
-                            'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/50 px-3 pb-3 pt-2.5',
-                            LOG_SURFACE,
-                        )}
+                {canCancel && (
+                    <ContextMenuItem
+                        tone="danger"
+                        disabled={cancelling}
+                        onClick={handleCancel}
                     >
-                        <DockerDeployProgressBlock item={item} progress={progress} expanded />
-                    </div>
-                </div>
-            )}
+                        <XCircle size={13} className="text-danger" />
+                        <span>{cancelling ? '正在停止…' : stopButtonLabel(item.status)}</span>
+                    </ContextMenuItem>
+                )}
 
-            {showStepLogs && (
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 sm:px-5">
-                    <div className="flex shrink-0 pb-2">
-                        <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
-                            步骤日志
-                        </span>
-                    </div>
-
-                    <div
-                        className={cn(
-                            'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/50',
-                            LOG_SURFACE,
-                        )}
-                    >
-                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                            <StepLogBody item={item} />
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+                {canDelete && (
+                    <ContextMenuItem tone="danger" onClick={handleDelete}>
+                        <Trash2 size={13} className="text-danger" />
+                        <span>删除任务记录</span>
+                    </ContextMenuItem>
+                )}
+            </ContextMenuContent>
+        </ContextMenu>
     );
 };
