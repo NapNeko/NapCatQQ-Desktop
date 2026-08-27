@@ -69,6 +69,8 @@ pub async fn set_app_settings(
     let path = store.config_dir().join(APP_SETTINGS_FILE);
 
     let mut settings = dto.settings;
+    // 包类型由组件安装/卸载流程维护，不允许设置页的旧草稿覆盖当前安装状态。
+    settings.snowluma_package = state.app_settings.read().await.snowluma_package;
     settings.normalize_performance_monitor();
     settings.normalize_bot_runtime_metrics();
     settings.normalize_task_queue_cleanup();

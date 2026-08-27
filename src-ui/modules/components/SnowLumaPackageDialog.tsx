@@ -39,13 +39,13 @@ export const SnowLumaPackageDialog: React.FC<Props> = ({
                     <PackageChoice
                         selected={pkg === 'full'}
                         title="完整版（推荐）"
-                        detail="自带内置 Node 22.13，开箱即用。已有安装若带内置 Node，更新也会走完整包。"
+                        detail="自带 SnowLuma 所需的运行时，开箱即用。升级时会沿用当前包类型。"
                         onSelect={() => setPkg('full')}
                     />
                     <PackageChoice
                         selected={pkg === 'lite'}
                         title="Lite 精简版"
-                        detail="体积小，不含 Node。需搭配已有合规 Node.js 环境或自动安装独立 Node.js 组件。"
+                        detail="体积小，不含 Node。安装任务会自动编排独立 Node.js 组件作为运行依赖。"
                         onSelect={() => setPkg('lite')}
                     />
                 </div>
@@ -94,4 +94,3 @@ function PackageChoice({
         </button>
     );
 }
-

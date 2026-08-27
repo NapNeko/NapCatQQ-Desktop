@@ -54,4 +54,5 @@ export const mockBackendSettings: BackendSettings = {
     offlineDebounceSeconds: 0,
     offlineDeliveryHistoryLimit: 50,
     snowlumaNodePath: null,
+    snowlumaPackage: null,
 };

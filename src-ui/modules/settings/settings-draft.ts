@@ -108,6 +108,7 @@ export function draftFromBackendAndPrefs(
         offlineDebounceSeconds: backend.offlineDebounceSeconds,
         offlineDeliveryHistoryLimit: backend.offlineDeliveryHistoryLimit,
         snowlumaNodePath: backend.snowlumaNodePath,
+        snowlumaPackage: backend.snowlumaPackage,
         theme: client.theme,
         showMascot: client.showMascot,
         motionEnabled: client.motionEnabled,
@@ -190,6 +191,7 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
         offlineDebounceSeconds: draft.offlineDebounceSeconds,
         offlineDeliveryHistoryLimit: draft.offlineDeliveryHistoryLimit,
         snowlumaNodePath: draft.snowlumaNodePath || null,
+        snowlumaPackage: draft.snowlumaPackage || null,
     };
 }
 

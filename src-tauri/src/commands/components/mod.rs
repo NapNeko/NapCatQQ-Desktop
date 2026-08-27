@@ -20,6 +20,7 @@ use ncd_runtime::{
     component_dedupe_key, component_task_resources, direct_runtime_dependency_ids_for,
     infer_snowluma_linux_package, probe_from_inventory, release::read_cached_release_snapshot,
 };
+use ncd_traits::ConfigStore;
 use tauri::State;
 use uuid::Uuid;
 
@@ -88,7 +89,16 @@ pub async fn run_component_action(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
     let sl_pkg = if component_id == ComponentId::SnowLuma {
-        Some(snowluma_linux_package.unwrap_or_else(|| infer_snowluma_linux_package(selected.as_ref())))
+        let persisted_local = if host.locality() == Locality::Local {
+            state.app_settings.read().await.snowluma_package
+        } else {
+            None
+        };
+        Some(
+            snowluma_linux_package
+                .or(persisted_local)
+                .unwrap_or_else(|| infer_snowluma_linux_package(selected.as_ref())),
+        )
     } else {
         None
     };
@@ -309,6 +319,8 @@ async fn submit_single_component_task(
     let probe_cache_key = host_id_owned.clone();
     let event_bus = state.event_bus.clone();
     let active_tasks = Arc::clone(&state.active_tasks);
+    let app_settings = Arc::clone(&state.app_settings);
+    let data_root = state.data_root.clone();
     let server_manager = Arc::clone(&state.server_manager);
     let deployment_tasks = state.deployment_tasks.clone();
     let dedupe_key = Some(component_dedupe_key(&host_id_owned, component_id, kind));
@@ -423,7 +435,31 @@ async fn submit_single_component_task(
                     host_probe_cache.lock().await.remove(&probe_cache_key);
 
                     match outcome {
-                        Ok(outcome) if outcome.ok => DeploymentTaskRunResult::ok("组件操作完成"),
+                        Ok(outcome) if outcome.ok => {
+                            if component_id == ComponentId::SnowLuma
+                                && host.locality() == Locality::Local
+                                && matches!(kind, StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Update | StepKind::Uninstall)
+                            {
+                                let next = if kind == StepKind::Uninstall {
+                                    None
+                                } else {
+                                    snowluma_linux_package
+                                };
+                                if let Err(err) = persist_local_snowluma_package(
+                                    &data_root,
+                                    &app_settings,
+                                    next,
+                                )
+                                .await
+                                {
+                                    tracing::error!(error = %err, "failed to persist SnowLuma package state");
+                                    return DeploymentTaskRunResult::failed(format!(
+                                        "组件操作已完成，但保存 SnowLuma 包类型失败: {err}"
+                                    ));
+                                }
+                            }
+                            DeploymentTaskRunResult::ok("组件操作完成")
+                        }
                         Ok(outcome) => {
                             let err = outcome
                                 .steps
@@ -461,6 +497,21 @@ async fn submit_single_component_task(
         .await;
 
     Ok(submitted_task_id)
+}
+
+async fn persist_local_snowluma_package(
+    data_root: &std::path::Path,
+    app_settings: &Arc<tokio::sync::RwLock<ncd_domain::AppSettings>>,
+    package: Option<SnowLumaLinuxPackage>,
+) -> Result<(), String> {
+    let mut settings = app_settings.read().await.clone();
+    settings.snowluma_package = package;
+    let store = ncd_runtime::LocalConfigStore::new(data_root);
+    let path = store.config_dir().join("app-settings.json");
+    let payload = serde_json::to_value(&settings).map_err(|e| e.to_string())?;
+    store.write_json_atomic(&path, &payload).map_err(|e| e.to_string())?;
+    *app_settings.write().await = settings;
+    Ok(())
 }
 
 #[tauri::command]
@@ -505,6 +556,13 @@ async fn build_component_for_host_from_state(
 ) -> Result<Arc<dyn Component>, String> {
     let snapshot = read_cached_release_snapshot(&state.data_root);
     let desktop_ver = crate::desktop_update::product_version_str();
+    let effective_package = if snowluma_linux_package.is_some() {
+        snowluma_linux_package
+    } else if host.locality() == Locality::Local && id == ComponentId::SnowLuma {
+        state.app_settings.read().await.snowluma_package
+    } else {
+        None
+    };
     let snowluma_node_path = if host.locality() == Locality::Local {
         state.app_settings.read().await.snowluma_node_path.clone()
     } else {
@@ -521,7 +579,7 @@ async fn build_component_for_host_from_state(
             local_snowluma_version: state.snapshot.local_versions.snowluma.as_deref(),
             desktop_product_version: desktop_ver,
             selected,
-            snowluma_linux_package,
+            snowluma_linux_package: effective_package,
             snowluma_node_path: snowluma_node_path.as_deref(),
         },
     )
@@ -533,14 +591,6 @@ pub async fn probe_local_node_candidates(
 ) -> Result<Vec<NodeEnvironmentCandidate>, String> {
     let host = LocalWindowsHost::new();
     let data_root = &state.data_root;
-    let bundled_node = HostPath::from_windows(
-        data_root
-            .join("components")
-            .join("SnowLuma")
-            .join("node.exe")
-            .to_str()
-            .unwrap_or_default(),
-    );
     let comp_node = HostPath::from_windows(
         data_root
             .join("components")
@@ -555,7 +605,6 @@ pub async fn probe_local_node_candidates(
     };
     let candidates = ncd_component::nodejs::probe_local_system_nodes(
         &host,
-        Some(&bundled_node),
         Some(&comp_node),
         custom.as_deref(),
     )

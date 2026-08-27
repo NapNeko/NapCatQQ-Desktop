@@ -4,6 +4,7 @@ import {
     inferSnowLumaLinuxPackageFromInventory,
     inventoryInstalledHints,
     remoteDirectRunChain,
+    localDirectRunChain,
     formatMissingDirectRunNotice,
 } from './remote-direct-run-deps';
 
@@ -79,6 +80,11 @@ describe('remote direct-run deps', () => {
         expect(
             formatMissingDirectRunNotice('snowluma', { nodejs: false, qq: true, novnc: true, snowluma: true }, 'lite'),
         ).toBe('未安装 Node.js，请安装');
+    });
+
+    it('requires external Node only for local Lite SnowLuma', () => {
+        expect(localDirectRunChain('snowluma', 'full')).toEqual(['qq', 'snowluma']);
+        expect(localDirectRunChain('snowluma', 'lite')).toEqual(['nodejs', 'qq', 'snowluma']);
     });
 
     it('treats selected qqInstallBase as installed hint even when not $HOME/Napcat', () => {

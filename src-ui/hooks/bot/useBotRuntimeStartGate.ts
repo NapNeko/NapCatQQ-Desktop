@@ -26,6 +26,7 @@ import { isRuntimeTargetLocal } from '../../core/domain/bot/runtime-target';
 import { useQuery } from '@tanstack/react-query';
 import { serverService } from '../../core/services/server.service';
 import { isTauri } from '../../core/ipc/transport';
+import { settingsService } from '../../core/services/settings.service';
 
 export function useBotRuntimeStartGate(
     configByBot: Record<string, BotConfig | undefined | null>,
@@ -59,6 +60,13 @@ export function useBotRuntimeStartGate(
         staleTime: 15_000,
     });
     const servers = serversQuery.data ?? [];
+    const settingsQuery = useQuery({
+        queryKey: ['appSettings'],
+        queryFn: settingsService.get,
+        enabled: isTauri,
+        staleTime: 15_000,
+    });
+    const localSnowlumaPackage = settingsQuery.data?.snowlumaPackage ?? null;
 
     // 3. 顶层为每个 host 取两种 backend 的状态（hook 调用数量 = hosts.length × 2，稳定）
     const statusByHost: Record<
@@ -73,7 +81,11 @@ export function useBotRuntimeStartGate(
         // eslint-disable-next-line react-hooks/rules-of-hooks
         statusByHost[h] = {
             napcat: useHostComponentInstalled(h, 'napcat'),
-            snowluma: useHostComponentInstalled(h, 'snowluma', slPkg),
+            snowluma: useHostComponentInstalled(
+                h,
+                'snowluma',
+                h === 'local' ? localSnowlumaPackage : slPkg,
+            ),
         };
     }
 

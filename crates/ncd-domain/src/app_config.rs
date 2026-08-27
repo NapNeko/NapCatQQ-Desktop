@@ -380,7 +380,7 @@ pub struct AppSettings {
     /// SnowLuma 本地 Node.js 运行环境指定路径（None 或空表示自动按优先级解析：自定义 > 内置 > 组件 > PATH）
     #[serde(rename = "snowlumaNodePath", default)]
     pub snowluma_node_path: Option<String>,
-    /// SnowLuma 本地 Linux 包类型偏好
+    /// SnowLuma 本地安装包类型偏好
     #[serde(rename = "snowlumaPackage", default)]
     pub snowluma_package: Option<SnowLumaLinuxPackage>,
 }

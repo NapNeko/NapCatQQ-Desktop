@@ -98,6 +98,6 @@ uiPreferences: AppUiPreferences,
  */
 snowlumaNodePath: string | null, 
 /**
- * SnowLuma 本地 Linux 包类型偏好
+ * SnowLuma 本地安装包类型偏好
  */
 snowlumaPackage: SnowLumaLinuxPackage | null, };

@@ -41,7 +41,7 @@ function isLocalHost(hostId: string | null): boolean {
  * 返回该主机上对应 backend 启动**直接运行**模式所需的组件安装状态。
  *
  * 重要区分：
- * - 本地直接运行（hostId = 'local'）：SnowLuma 包自带 Node，不探测 'nodejs'。
+ * - 本地直接运行（hostId = 'local'）：SnowLuma Full 自带 Node，Lite 探测独立 'nodejs'。
  * - 远程 SnowLuma 完整包：自带 node，不探测 'nodejs'；lite 才探测。
  */
 export function useHostComponentInstalled(
@@ -59,7 +59,7 @@ export function useHostComponentInstalled(
 
     const isLocal = isLocalHost(hostId);
     const chain = isLocal
-        ? localDirectRunChain(backendType)
+        ? localDirectRunChain(backendType, snowlumaLinuxPackage)
         : remoteDirectRunChain(backendType, snowlumaLinuxPackage);
 
     const queries = useQueries({

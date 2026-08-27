@@ -24,6 +24,7 @@ import {
 } from '../domain/settings/offline-notify-defaults';
 import { invoke, isTauri } from '../ipc/transport';
 import type { AppSettingsDto } from '../ipc/types';
+import type { SnowLumaLinuxPackage } from '../ipc/types';
 import type { AppUiPreferences } from '../ipc/generated/domain/AppUiPreferences';
 import type { OfflineDeliveryRecord } from '../ipc/generated/domain/OfflineDeliveryRecord';
 import type { EnsureOneBotMessengerHttpResult } from '../ipc/generated/domain/EnsureOneBotMessengerHttpResult';
@@ -107,6 +108,7 @@ export interface BackendSettings {
     offlineDeliveryHistoryLimit: number;
     /** SnowLuma Node.js 自定义/指定运行环境路径 */
     snowlumaNodePath: string | null;
+    snowlumaPackage: SnowLumaLinuxPackage | null;
 }
 
 /** 由 BackendSettings 派生的客户端偏好（与 preferencesStore 一致）。 */
@@ -243,6 +245,7 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
             dto.settings.poller.offlineNotifyBehavior?.deliveryHistoryLimit ?? 50,
         ),
         snowlumaNodePath: dto.settings.snowlumaNodePath ?? null,
+        snowlumaPackage: dto.settings.snowlumaPackage ?? null,
     };
 }
 
@@ -315,6 +318,7 @@ type AppSettingsDtoInvoke = {
             onebotMessageTemplate: string;
         };
         snowlumaNodePath: string | null;
+        snowlumaPackage: SnowLumaLinuxPackage | null;
     };
     githubPat: string;
 };
@@ -414,6 +418,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
                 onebotMessageTemplate: s.onebotMessageTemplate || DEFAULT_ONEBOT_MESSAGE,
             },
             snowlumaNodePath: s.snowlumaNodePath || null,
+            snowlumaPackage: s.snowlumaPackage || null,
         },
         githubPat: s.githubPat.trim(),
     };

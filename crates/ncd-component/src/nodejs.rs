@@ -506,7 +506,6 @@ fn _ensure_send_sync(_: Arc<NodeJsComponent>) {}
 
 pub async fn probe_local_system_nodes(
     host: &dyn Host,
-    bundled_path: Option<&HostPath>,
     component_path: Option<&HostPath>,
     custom_path: Option<&str>,
 ) -> Vec<NodeEnvironmentCandidate> {
@@ -533,25 +532,7 @@ pub async fn probe_local_system_nodes(
         }
     }
 
-    // 2. Bundled in SnowLuma dir
-    if let Some(bp) = bundled_path {
-        if let Ok(Some(ver)) = probe_node_raw_version(host, bp).await {
-            let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
-            let path_str = bp.render(ncd_host::PathStyle::Windows);
-            if !seen_paths.contains(&path_str.to_lowercase()) {
-                seen_paths.insert(path_str.to_lowercase());
-                results.push(NodeEnvironmentCandidate {
-                    path: path_str,
-                    version: ver.clone(),
-                    source_kind: NodeSourceKind::Bundled,
-                    label: format!("SnowLuma 内置 (v{ver})"),
-                    is_valid,
-                });
-            }
-        }
-    }
-
-    // 3. NodeJs component
+    // 2. Independent NodeJs component
     if let Some(cp) = component_path {
         if let Ok(Some(ver)) = probe_node_raw_version(host, cp).await {
             let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
@@ -569,7 +550,7 @@ pub async fn probe_local_system_nodes(
         }
     }
 
-    // 4. System PATH
+    // 3. System PATH
     #[cfg(windows)]
     {
         if let Ok(output) = std::process::Command::new("where.exe").arg("node").output() {
@@ -601,7 +582,7 @@ pub async fn probe_local_system_nodes(
         }
     }
 
-    // 5. Common Version Managers / Paths (NVM, fnm, Volta, Program Files)
+    // 4. Common Version Managers / Paths (NVM, fnm, Volta, Program Files)
     #[cfg(windows)]
     {
         let mut check_dirs = Vec::new();

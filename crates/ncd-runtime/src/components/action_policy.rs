@@ -745,6 +745,19 @@ mod tests {
             component_runtime_prerequisites_for(
                 ComponentId::SnowLuma,
                 StepKind::EnsureInstalled,
+                Os::Windows,
+                Locality::Local,
+                Some(SnowLumaLinuxPackage::Lite),
+            ),
+            vec![
+                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
+                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
+            ]
+        );
+        assert_eq!(
+            component_runtime_prerequisites_for(
+                ComponentId::SnowLuma,
+                StepKind::EnsureInstalled,
                 Os::Linux,
                 Locality::Remote,
                 Some(SnowLumaLinuxPackage::Lite),

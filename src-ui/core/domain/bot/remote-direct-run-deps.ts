@@ -37,13 +37,17 @@ const REMOTE_CHAIN_SNOWLUMA_LITE: readonly DirectRunComponentId[] = [
 ];
 
 /**
- * 本地直接运行需要的组件链。
- * 注意：本地 SnowLuma 包通常自带 Node 运行时，因此不包含 'nodejs'。
+ * 本地直接运行需要的组件链。SnowLuma Lite 需要独立 Node.js，Full 不需要。
  */
-const LOCAL_CHAIN: Record<BackendType, readonly DirectRunComponentId[]> = {
+const LOCAL_CHAIN_FULL: Record<BackendType, readonly DirectRunComponentId[]> = {
     napcat: ['qq', 'napcat'],
-    snowluma: ['qq', 'snowluma'],   // 本地 SL 包自带 node，不需要单独装 nodejs
+    snowluma: ['qq', 'snowluma'],
 };
+const LOCAL_CHAIN_SNOWLUMA_LITE: readonly DirectRunComponentId[] = [
+    'nodejs',
+    'qq',
+    'snowluma',
+];
 
 /** 对照库存字段：探测时由 Rust 写入。旧档案缺字段与未安装一样默认完整包。 */
 export function inferSnowLumaLinuxPackageFromInventory(
@@ -82,11 +86,15 @@ export function remoteDirectRunChain(
     return REMOTE_CHAIN_SNOWLUMA_FULL;
 }
 
-/** 获取本地直接运行的依赖链（SnowLuma 不要求 nodejs） */
+/** 获取本地直接运行的依赖链。 */
 export function localDirectRunChain(
     backendType: BackendType,
+    snowlumaPackage?: SnowLumaLinuxPackage | null,
 ): readonly DirectRunComponentId[] {
-    return LOCAL_CHAIN[backendType];
+    if (backendType === 'snowluma' && snowlumaPackage === 'lite') {
+        return LOCAL_CHAIN_SNOWLUMA_LITE;
+    }
+    return LOCAL_CHAIN_FULL[backendType];
 }
 
 /**
