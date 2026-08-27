@@ -598,7 +598,7 @@ async fn build_component_for_host_from_state(
     )
 }
 
-fn infer_local_snowluma_package(data_root: &std::path::Path) -> SnowLumaLinuxPackage {
+pub(crate) fn infer_local_snowluma_package(data_root: &std::path::Path) -> SnowLumaLinuxPackage {
     let install_dir = data_root.join("components").join("SnowLuma");
     if !install_dir.is_dir() {
         return SnowLumaLinuxPackage::Full;

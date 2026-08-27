@@ -38,7 +38,18 @@ pub async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettingsD
     let store = config_store(&state);
     let path = store.config_dir().join(APP_SETTINGS_FILE);
 
-    let settings = load_app_settings_from(&store, &path);
+    let mut settings = load_app_settings_from(&store, &path);
+    if settings.snowluma_package.is_none() {
+        let install_dir = state.data_root.join("components").join("SnowLuma");
+        if install_dir.is_dir() {
+            settings.snowluma_package = Some(
+                crate::commands::components::infer_local_snowluma_package(&state.data_root),
+            );
+            if let Ok(payload) = serde_json::to_value(&settings) {
+                let _ = store.write_json_atomic(&path, &payload);
+            }
+        }
+    }
 
     let github_pat = secret_store(&state)
         .get(GITHUB_PAT_SECRET_KEY)
