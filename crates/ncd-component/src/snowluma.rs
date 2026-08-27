@@ -19,6 +19,7 @@
 
 use async_trait::async_trait;
 
+use ncd_domain::SnowLumaLinuxPackage;
 use ncd_host::{Host, HostCommand, HostError, HostPath, Locality, Os};
 
 use crate::context::{ActionCtx, ProgressKind};
@@ -69,6 +70,8 @@ pub struct SnowLumaComponent {
     /// 平台模式,决定 detect / install / verify 走 Linux tarball 还是
     /// Windows zip 路径
     mode: PlatformMode,
+    /// 完整包 (内置 Node) 还是精简包 (外置 Node)
+    pub package: SnowLumaLinuxPackage,
     /// Windows 模式下的 release tag(如 v1.7.5),Linux 模式下为 None
     /// 用于:1) 探测 install_dir 下的 .installed_tag 是否一致;
     /// 2) install 完成后写回 .installed_tag(对齐 legacy
@@ -94,6 +97,7 @@ impl SnowLumaComponent {
             expected_sha256: None,
             preloaded_tarball: None,
             mode: PlatformMode::Linux,
+            package: SnowLumaLinuxPackage::Lite,
             windows_tag: None,
             extra_detect_dirs: Vec::new(),
         }
@@ -101,22 +105,24 @@ impl SnowLumaComponent {
 
     /// 创建 Windows 扁平 zip 部署的 SnowLuma component(legacy
     /// SnowLumaInstall 同款)
-    ///
-    /// install_dir:扁平 zip 解压根(典型 <data_root>/snowluma/),
-    /// node.exe / index.mjs / package.json 直接落在该目录之下
-    /// tag:GitHub release tag 含 v 前缀(如 "v1.7.5"),用于:
-    ///   1) 拼接默认 zip 文件名 / URL(SnowLuma-<tag>-win-x64.zip);
-    ///   2) install 完成后写 .installed_tag,detect 走该文件优先,
-    ///      legacy 同款
-    ///
-    /// 调用方应该传入与 release service 一致的 tag(例如从 GitHub releases
-    /// 拉到的最新版),不要自己拼接,如果只是想 detect 已装版本,
-    /// 给个空 tag 也能跑(只会让 install 路径不可用,detect 不影响)
     pub fn for_windows(install_dir: HostPath, tag: impl Into<String>) -> Self {
+        Self::for_windows_with_package(install_dir, tag, SnowLumaLinuxPackage::Full)
+    }
+
+    pub fn for_windows_with_package(
+        install_dir: HostPath,
+        tag: impl Into<String>,
+        package: SnowLumaLinuxPackage,
+    ) -> Self {
         let tag_str = tag.into();
+        let asset_suffix = match package {
+            SnowLumaLinuxPackage::Full => "-win-x64.zip",
+            SnowLumaLinuxPackage::Lite => "-win-x64-lite.zip",
+        };
         let url = format!(
-            "https://github.com/SnowLuma/SnowLuma/releases/download/{tag}/SnowLuma-{tag}-win-x64.zip",
-            tag = tag_str
+            "https://github.com/SnowLuma/SnowLuma/releases/download/{tag}/SnowLuma-{tag}{suffix}",
+            tag = tag_str,
+            suffix = asset_suffix
         );
         Self {
             workspace_dir: install_dir.clone(),
@@ -129,6 +135,7 @@ impl SnowLumaComponent {
             expected_sha256: None,
             preloaded_tarball: None,
             mode: PlatformMode::Windows,
+            package,
             windows_tag: if tag_str.is_empty() {
                 None
             } else {
@@ -136,6 +143,11 @@ impl SnowLumaComponent {
             },
             extra_detect_dirs: Vec::new(),
         }
+    }
+
+    pub fn with_package(mut self, package: SnowLumaLinuxPackage) -> Self {
+        self.package = package;
+        self
     }
 
     pub fn with_snowluma_dir(mut self, dir: HostPath) -> Self {
@@ -525,10 +537,8 @@ impl SnowLumaComponent {
         Ok(())
     }
 
-    /// Windows detect:扁平 zip 部署优先读 .installed_tag(legacy
-    /// SnowLumaInstall.write_installed_tag 写的),fallback 读
-    /// package.json 的 version 字段,entry / node.exe / package.json
-    /// 任一缺失都视为未安装
+    /// Windows detect:优先读 .installed_tag(与 legacy 对齐);次选
+    /// package.json 的 version 字段;Full 模式下校验 node.exe
     async fn detect_windows(
         &self,
         host: &dyn Host,
@@ -536,8 +546,11 @@ impl SnowLumaComponent {
         let entry = self.entry_path();
         let pkg = self.package_json_path();
         let node = self.node_exe_path();
-        // 三件套都在才视为"装好的 SnowLuma 发布包"
-        if !host.exists(&entry).await? || !host.exists(&pkg).await? || !host.exists(&node).await? {
+        // entry 与 package.json 必须在
+        if !host.exists(&entry).await? || !host.exists(&pkg).await? {
+            return Ok(None);
+        }
+        if self.package == SnowLumaLinuxPackage::Full && !host.exists(&node).await? {
             return Ok(None);
         }
 
@@ -574,14 +587,14 @@ impl SnowLumaComponent {
             }
         }
 
-        // 三件套齐了但版本都没解析出 → 标 unknown,UI 仍可显示"已安装"
+        // 核心文件齐了但版本都没解析出 → 标 unknown,UI 仍可显示"已安装"
         Ok(Some(DetectedVersion {
             version: "unknown".to_string(),
             source: format!("{entry} (no .installed_tag, package.json missing version)"),
         }))
     }
 
-    /// Windows verify:校验 entry / node.exe / package.json 三件套 + 版本号
+    /// Windows verify:校验核心产物 + 版本号
     async fn verify_windows(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
         let entry = self.entry_path();
         let pkg = self.package_json_path();
@@ -594,15 +607,18 @@ impl SnowLumaComponent {
                 Some(format!("{entry}")),
             )
             .with_check(
-                "node.exe exists",
-                host.exists(&node).await?,
-                Some(format!("{node}")),
-            )
-            .with_check(
                 "package.json exists",
                 host.exists(&pkg).await?,
                 Some(format!("{pkg}")),
             );
+
+        if self.package == SnowLumaLinuxPackage::Full {
+            report = report.with_check(
+                "node.exe exists",
+                host.exists(&node).await?,
+                Some(format!("{node}")),
+            );
+        }
 
         if let Ok(Some(v)) = self.detect(host).await {
             report = report.with_check(
@@ -729,13 +745,17 @@ impl SnowLumaComponent {
         ctx.info("SnowLuma 文件已复制，临时目录已清理").await;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
-        // Step 4:校验三件套
+        // Step 4:校验安装产物
         ctx.emit(ProgressKind::StepBegin {
             step: 4,
             message: "verify install artifacts".into(),
         })
         .await;
-        for required in &["index.mjs", "node.exe", "package.json"] {
+        let required_files: &[&str] = match self.package {
+            SnowLumaLinuxPackage::Full => &["index.mjs", "node.exe", "package.json"],
+            SnowLumaLinuxPackage::Lite => &["index.mjs", "package.json"],
+        };
+        for required in required_files {
             let p = self.snowluma_dir.join(*required);
             if !host.exists(&p).await? {
                 return Err(ActionError::install_step(
