@@ -337,17 +337,82 @@ samp,
     }
 }
 
+@keyframes splash-orbit-spin {
+    0% {
+        transform: translate(-50%, -50%) rotate(0deg);
+    }
+
+    100% {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+@keyframes splash-laser-flow {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    100% {
+        background-position: 200% 50%;
+    }
+}
+
+@keyframes splash-pulse-dot {
+
+    0%,
+    100% {
+        opacity: 0.4;
+        transform: scale(0.85);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.15);
+    }
+}
+
+.ndf-splash-orbit-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 9999px;
+    border: 1px dashed color-mix(in srgb, var(--brand-400) 25%, transparent);
+    pointer-events: none;
+}
+
+.ndf-splash-orbit-ring--solid {
+    border-style: solid;
+    border-color: color-mix(in srgb, var(--accent-400) 18%, transparent);
+}
+
+.ndf-splash-laser-bar {
+    background: linear-gradient(90deg, var(--brand-600), var(--accent-400), var(--brand-300), var(--brand-600));
+    background-size: 200% 100%;
+    animation: splash-laser-flow 2.2s linear infinite;
+}
+
+.ndf-splash-pulse-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--brand-400);
+    box-shadow: 0 0 8px var(--brand-400);
+    animation: splash-pulse-dot 1.8s ease-in-out infinite;
+}
+
 .ndf-splash-particle {
     position: absolute;
     border-radius: 9999px;
     pointer-events: none;
-    background: color-mix(in srgb, var(--brand-400) 55%, transparent);
-    box-shadow: 0 0 12px color-mix(in srgb, var(--accent-400) 35%, transparent);
+    background: color-mix(in srgb, var(--brand-400) 65%, transparent);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--accent-400) 45%, transparent);
     animation: splash-particle-drift 4.5s ease-in-out infinite;
 }
 
 .ndf-splash-particle--accent {
-    background: color-mix(in srgb, var(--accent-400) 50%, transparent);
+    background: color-mix(in srgb, var(--accent-400) 60%, transparent);
 }
 
 .ndf-splash-logo-shine {
@@ -364,12 +429,12 @@ samp,
     position: absolute;
     top: -50%;
     left: -120%;
-    width: 45%;
+    width: 50%;
     height: 200%;
-    transform: skewX(-18deg);
+    transform: skewX(-20deg);
     background: linear-gradient(90deg,
             transparent,
-            color-mix(in srgb, var(--text-primary) 18%, transparent),
+            rgba(255, 255, 255, 0.45),
             transparent);
     opacity: 0;
     pointer-events: none;
@@ -378,7 +443,7 @@ samp,
 .ndf-splash-bar-shine {
     background: linear-gradient(90deg,
             transparent,
-            color-mix(in srgb, var(--text-primary) 22%, transparent),
+            color-mix(in srgb, var(--text-primary) 35%, transparent),
             transparent);
 }
 
@@ -386,6 +451,62 @@ samp,
     .ndf-splash-particle {
         animation: none;
         opacity: 0.25;
+    }
+}
+
+/* 主界面就绪入场律动展开动效 */
+@keyframes shell-slide-in-left {
+    from {
+        transform: translateX(-24px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes shell-slide-in-top {
+    from {
+        transform: translateY(-14px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes shell-pop-in-main {
+    from {
+        transform: scale(0.98) translateY(16px);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+    }
+}
+
+.ndf-shell-enter-sidebar {
+    animation: shell-slide-in-left 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.ndf-shell-enter-titlebar {
+    animation: shell-slide-in-top 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.04s both;
+}
+
+.ndf-shell-enter-main {
+    animation: shell-pop-in-main 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ndf-shell-enter-sidebar,
+    .ndf-shell-enter-titlebar,
+    .ndf-shell-enter-main {
+        animation: none;
+        opacity: 1;
+        transform: none;
     }
 }
 

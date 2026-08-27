@@ -329,15 +329,17 @@ export const AppNext: React.FC = () => {
         <TooltipProvider>
             <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas">
                 <div className="relative flex flex-1 overflow-hidden">
-                    <Sidebar
-                        active={route}
-                        onChange={navigate}
-                        onPrefetch={prefetchRoute}
-                        collapsed={collapsed}
-                        onToggleCollapse={() => setCollapsed((v) => !v)}
-                        showDocker={showDocker}
-                        taskQueueActiveCount={taskQueue.activeCount}
-                    />
+                    <div className={motion.enabled ? 'ndf-shell-enter-sidebar flex h-full' : 'flex h-full'}>
+                        <Sidebar
+                            active={route}
+                            onChange={navigate}
+                            onPrefetch={prefetchRoute}
+                            collapsed={collapsed}
+                            onToggleCollapse={() => setCollapsed((v) => !v)}
+                            showDocker={showDocker}
+                            taskQueueActiveCount={taskQueue.activeCount}
+                        />
+                    </div>
 
                     <div className="relative flex flex-1 flex-col overflow-hidden">
                         <div
@@ -351,9 +353,16 @@ export const AppNext: React.FC = () => {
                             }
                         />
 
-                        <CustomTitleBar />
+                        <div className={motion.enabled ? 'ndf-shell-enter-titlebar' : ''}>
+                            <CustomTitleBar />
+                        </div>
 
-                        <main className="relative z-10 flex min-w-0 flex-1 overflow-hidden">
+                        <main
+                            className={
+                                'relative z-10 flex min-w-0 flex-1 overflow-hidden ' +
+                                (motion.enabled ? 'ndf-shell-enter-main' : '')
+                            }
+                        >
                             <div className="flex min-w-0 w-full max-w-full flex-col px-4 pb-6 pt-2 sm:px-6 lg:px-8 xl:mx-auto xl:max-w-[1280px]">
                                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                     <PageTransition

@@ -4,8 +4,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import './index.css';
 import { StartupSplash } from './StartupSplash';
 import { AppNext } from './AppNext';
-import { SplashConfetti } from '../shared/ui/motion';
-import { useMotion } from '../hooks/preferences/useMotion';
 import { hydrateAppUiPreferencesFromDisk } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { applySideEffects } from '../hooks/preferences/preferencesStore';
 import { syncRootChromeBackground } from '../core/design/surfaceCanvas';
@@ -16,9 +14,7 @@ import { perfMark, perfMeasure } from '../core/domain/performance/perfMarks';
 export const AppBootGate: React.FC = () => {
     const [prefsReady, setPrefsReady] = useState(false);
     const [shellReady, setShellReady] = useState(false);
-    const [showApp, setShowApp] = useState(false);
-    const [confetti, setConfetti] = useState(false);
-    const { enabled, level } = useMotion();
+    const [splashDone, setSplashDone] = useState(false);
 
     useEffect(() => {
         applySideEffects();
@@ -37,10 +33,7 @@ export const AppBootGate: React.FC = () => {
     }, [prefsReady]);
 
     const handleSplashFinished = useCallback(() => {
-        setShowApp(true);
-        if (enabled && level !== 'elegant') {
-            setConfetti(true);
-        }
+        setSplashDone(true);
         document.getElementById('root')?.removeAttribute('aria-busy');
         perfMark('splash_exit', { once: true });
         perfMeasure('boot_prefs_to_splash_exit', 'prefs_ready', 'splash_exit');
@@ -49,7 +42,7 @@ export const AppBootGate: React.FC = () => {
         void invoke('show_main_window').catch((err) => {
             console.error('[AppBootGate] 显示主窗口失败:', err);
         });
-    }, [enabled, level]);
+    }, []);
 
     if (!prefsReady) {
         return (
@@ -63,19 +56,17 @@ export const AppBootGate: React.FC = () => {
     }
 
     return (
-        <div className="relative h-full min-h-0 w-full">
-            {showApp ? (
-                <div className="relative z-0 h-full min-h-0 w-full">
-                    <RouteErrorBoundary title="主界面渲染失败">
-                        <AppNext />
-                    </RouteErrorBoundary>
-                </div>
-            ) : null}
-            {!showApp ? (
+        <div className="relative h-full min-h-0 w-full overflow-hidden bg-canvas">
+            {/* 主界面预先挂载于底层，杜绝硬切闪白与布局跳动 */}
+            <div className="relative z-0 h-full min-h-0 w-full">
+                <RouteErrorBoundary title="主界面渲染失败">
+                    <AppNext />
+                </RouteErrorBoundary>
+            </div>
+
+            {/* 启动层：执行完毕后平滑透明度溶图淡出 */}
+            {!splashDone ? (
                 <StartupSplash shellReady={shellReady} onFinished={handleSplashFinished} />
-            ) : null}
-            {confetti ? (
-                <SplashConfetti onDone={() => setConfetti(false)} />
             ) : null}
         </div>
     );
