@@ -50,6 +50,18 @@ const ADAPTERS: Record<string, Adapter> = {
     'network.httpClients': connectionsAdapter('HTTP Webhook', 'Webhook'),
     'network.websocketServers': connectionsAdapter('WebSocket 服务器', 'WS-Server'),
     'network.websocketClients': connectionsAdapter('WebSocket 客户端', 'WS-Client'),
+    'historySync': jsonAdapter('历史消息同步'),
+    'historySync.enable': boolAdapter('历史消息同步'),
+    'historySync.enabled': boolAdapter('历史消息同步'),
+    'trigger': scalarAdapter('指令触发前缀'),
+    'reportSelfMessage': boolAdapter('上报自身消息'),
+    'messagePostFormat': scalarAdapter('消息上报格式'),
+    'heartInterval': scalarAdapter('心跳上报间隔'),
+    'token': scalarAdapter('访问令牌 (Token)'),
+    'ffmpegPath': scalarAdapter('FFmpeg 路径'),
+    'debug': boolAdapter('调试日志模式'),
+    'qrCodeLogin': boolAdapter('二维码登录'),
+    'protocol': scalarAdapter('通信协议'),
     'musicSignUrl': scalarAdapter('音乐签名接口'),
     'enableLocalFile2Url': boolAdapter('本地文件转 URL'),
     'parseMultMsg': boolAdapter('合并消息解析'),
@@ -146,7 +158,7 @@ function formatScalar(v: unknown): string {
     if (v === null || v === undefined) return '(空)';
     if (typeof v === 'boolean') return v ? '开启' : '关闭';
     if (typeof v === 'number') return String(v);
-    if (typeof v === 'string') return v || '(空字符串)';
+    if (typeof v === 'string') return v || '(空)';
     return JSON.stringify(v);
 }
 
