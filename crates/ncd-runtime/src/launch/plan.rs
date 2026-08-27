@@ -239,13 +239,8 @@ async fn build_snowluma_launch_plan(
         .snowluma_start_mode
         .unwrap_or(SnowLumaStartMode::ColdStart);
 
-    // node.exe 是 daemon 的二进制入口,任何模式下都必须存在
-    // 注意:这里读的是 SnowLuma 自己的安装根(<data_root>/runtime/snowluma)
-    // 与 NapCat 的 runtime_root 严格分离
-    let node_path = snowluma_runtime_root.join("node.exe");
-    if !is_regular_file(&node_path).await {
-        return Err(RuntimeLaunchPlanError::SnowLumaNodeMissing(node_path));
-    }
+    // node.exe 是 daemon 的二进制入口，检查可用 node (内置 / 独立组件 / 系统 PATH)
+    let _node_path = resolve_snowluma_node_exe(snowluma_runtime_root).await?;
 
     let qq_install_path = match start_mode {
         SnowLumaStartMode::ColdStart => Some(resolve_qq_install_path()?),
@@ -263,6 +258,30 @@ async fn build_snowluma_launch_plan(
         qq_install_path,
         bot_qq_id: config.bot.qq_id,
     }))
+}
+
+async fn resolve_snowluma_node_exe(snowluma_runtime_root: &Path) -> Result<PathBuf, RuntimeLaunchPlanError> {
+    let bundled = snowluma_runtime_root.join("node.exe");
+    if is_regular_file(&bundled).await {
+        return Ok(bundled);
+    }
+    if let Some(parent) = snowluma_runtime_root.parent() {
+        let comp_node = parent.join("NodeJs").join("node.exe");
+        if is_regular_file(&comp_node).await {
+            return Ok(comp_node);
+        }
+    }
+
+    if let Ok(path_var) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join("node.exe");
+            if is_regular_file(&candidate).await {
+                return Ok(candidate);
+            }
+        }
+    }
+
+    Err(RuntimeLaunchPlanError::SnowLumaNodeMissing(bundled))
 }
 
 async fn is_regular_file(path: &Path) -> bool {
@@ -520,10 +539,9 @@ mod snowluma_plan_tests {
         }
     }
 
-    /// node.exe 缺失(runtime_root 是空目录):必须立即返回 SnowLumaNodeMissing
-    /// 携带的路径精确指向缺失的 <runtime_root>/node.exe
+    /// runtime_root 没有内置 node.exe 时，允许从系统 PATH 解析 Node.js。
     #[tokio::test]
-    async fn snowluma_plan_rejects_missing_node_exe() {
+    async fn snowluma_plan_accepts_node_exe_from_path() {
         let runtime_root_dir = tempdir().unwrap();
         let data_root_dir = tempdir().unwrap();
         let runtime_root = runtime_root_dir.path();
@@ -535,12 +553,7 @@ mod snowluma_plan_tests {
             build_runtime_launch_plan(&bot_id, &config, runtime_root, runtime_root, data_root)
                 .await;
 
-        match result {
-            Err(RuntimeLaunchPlanError::SnowLumaNodeMissing(path)) => {
-                assert_eq!(path, runtime_root.join("node.exe"));
-            }
-            other => panic!("expected SnowLumaNodeMissing, got {other:?}"),
-        }
+        assert!(result.is_ok(), "PATH Node.js should satisfy the launch plan: {result:?}");
     }
 
     /// HotStart 路径:跳过 QQ install path 解析(即便 Windows 注册表查询失败也应该 OK)
