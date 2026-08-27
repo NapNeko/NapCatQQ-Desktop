@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::snowluma_linux_package::SnowLumaLinuxPackage;
+
 use crate::macros::default_true;
 use crate::offline_alert::{
     OfflineEmailSettings, OfflineNotifyBehavior, OfflineOneBotSettings, OfflineWebhookSettings,
@@ -378,6 +380,9 @@ pub struct AppSettings {
     /// SnowLuma 本地 Node.js 运行环境指定路径（None 或空表示自动按优先级解析：自定义 > 内置 > 组件 > PATH）
     #[serde(rename = "snowlumaNodePath", default)]
     pub snowluma_node_path: Option<String>,
+    /// SnowLuma 本地 Linux 包类型偏好
+    #[serde(rename = "snowlumaPackage", default)]
+    pub snowluma_package: Option<SnowLumaLinuxPackage>,
 }
 
 /// 桌面通知开关集合
@@ -429,6 +434,7 @@ impl Default for AppSettings {
             notify_on_login_kicked: true,
             ui_preferences: AppUiPreferences::default(),
             snowluma_node_path: None,
+            snowluma_package: None,
         }
     }
 }
@@ -715,5 +721,35 @@ mod tests {
         assert_eq!(parsed.performance_monitor_interval_ms, 5000);
         assert!(parsed.performance_monitor_enabled);
         assert_eq!(parsed.poller, WebUiPollerSettings::default());
+    }
+
+    #[test]
+    fn app_settings_snowluma_package_round_trips_full() {
+        let cfg = AppSettings {
+            snowluma_package: Some(SnowLumaLinuxPackage::Full),
+            ..AppSettings::default()
+        };
+        let json = serde_json::to_string(&cfg).expect("serialize 不应失败");
+        assert!(json.contains(r#""snowlumaPackage":"full""#));
+        let back: AppSettings = serde_json::from_str(&json).expect("反序列化失败");
+        assert_eq!(back.snowluma_package, Some(SnowLumaLinuxPackage::Full));
+    }
+
+    #[test]
+    fn app_settings_snowluma_package_round_trips_lite() {
+        let cfg = AppSettings {
+            snowluma_package: Some(SnowLumaLinuxPackage::Lite),
+            ..AppSettings::default()
+        };
+        let json = serde_json::to_string(&cfg).expect("serialize 不应失败");
+        assert!(json.contains(r#""snowlumaPackage":"lite""#));
+        let back: AppSettings = serde_json::from_str(&json).expect("反序列化失败");
+        assert_eq!(back.snowluma_package, Some(SnowLumaLinuxPackage::Lite));
+    }
+
+    #[test]
+    fn app_settings_missing_snowluma_package_defaults_to_none() {
+        let parsed: AppSettings = serde_json::from_str("{}").expect("缺字段应能反序列化");
+        assert_eq!(parsed.snowluma_package, None);
     }
 }

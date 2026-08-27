@@ -5,6 +5,7 @@ import type { CloseAction } from "./CloseAction";
 import type { OfflineEmailSettings } from "./OfflineEmailSettings";
 import type { OfflineOneBotSettings } from "./OfflineOneBotSettings";
 import type { OfflineWebhookSettings } from "./OfflineWebhookSettings";
+import type { SnowLumaLinuxPackage } from "./SnowLumaLinuxPackage";
 import type { UiModeOnStartup } from "./UiModeOnStartup";
 import type { WebUiPollerSettings } from "./WebUiPollerSettings";
 
@@ -95,4 +96,8 @@ uiPreferences: AppUiPreferences,
 /**
  * SnowLuma 本地 Node.js 运行环境指定路径（None 或空表示自动按优先级解析：自定义 > 内置 > 组件 > PATH）
  */
-snowlumaNodePath: string | null, };
+snowlumaNodePath: string | null, 
+/**
+ * SnowLuma 本地 Linux 包类型偏好
+ */
+snowlumaPackage: SnowLumaLinuxPackage | null, };
