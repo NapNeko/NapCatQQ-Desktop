@@ -24,6 +24,7 @@ export function useDesktopLogStream(
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const firstLoad = useRef(true);
+    const lastLinesRef = useRef<string[]>([]);
 
     const reload = useCallback(
         async (opts?: { showSpinner?: boolean }) => {
@@ -35,12 +36,20 @@ export function useDesktopLogStream(
                     TAIL_LINES,
                     desktopLevelToIpcFilter(levelFilter),
                 );
-                setLogs(buildDesktopHistoryEntries(snap.lines));
+                const lines = snap.lines;
+                const isSame =
+                    lines.length === lastLinesRef.current.length &&
+                    lines.every((l, i) => l === lastLinesRef.current[i]);
+                if (!isSame) {
+                    lastLinesRef.current = lines;
+                    setLogs(buildDesktopHistoryEntries(lines));
+                }
                 setError(null);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
                 setError(msg);
                 setLogs([]);
+                lastLinesRef.current = [];
             } finally {
                 if (showSpinner) setLoading(false);
             }

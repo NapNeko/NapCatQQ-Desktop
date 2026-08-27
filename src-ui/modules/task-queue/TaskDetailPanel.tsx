@@ -134,6 +134,10 @@ function nonCancellableHint(kind: TaskQueueItem['kind']): string {
 
 function StepLogBody({ item }: { item: TaskQueueItem }) {
     const progress = item.progress;
+    const [selectedIndices, setSelectedIndices] = React.useState<Set<number>>(() => new Set());
+    const [lastClickedIndex, setLastClickedIndex] = React.useState<number | null>(null);
+    const [contextIndex, setContextIndex] = React.useState<number | null>(null);
+
     if (!progress) {
         return (
             <p className="py-8 text-center text-[12px] text-text-tertiary">等待任务启动…</p>
@@ -146,26 +150,186 @@ function StepLogBody({ item }: { item: TaskQueueItem }) {
             </p>
         );
     }
+
+    const formatLogLine = (log: { timestamp_ms: number; message: string }) => {
+        const time = new Date(log.timestamp_ms).toLocaleTimeString('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+        });
+        return `[${time}] ${log.message}`;
+    };
+
+    const handleRowClick = (idx: number, e: React.MouseEvent) => {
+        if (e.shiftKey && lastClickedIndex !== null) {
+            const start = Math.min(lastClickedIndex, idx);
+            const end = Math.max(lastClickedIndex, idx);
+            const nextSet = new Set<number>();
+            for (let i = start; i <= end; i++) {
+                nextSet.add(i);
+            }
+            setSelectedIndices(nextSet);
+        } else if (e.ctrlKey || e.metaKey) {
+            setSelectedIndices((prev) => {
+                const next = new Set(prev);
+                if (next.has(idx)) {
+                    next.delete(idx);
+                } else {
+                    next.add(idx);
+                }
+                return next;
+            });
+            setLastClickedIndex(idx);
+        } else {
+            setSelectedIndices(new Set([idx]));
+            setLastClickedIndex(idx);
+        }
+        setContextIndex(idx);
+    };
+
+    const handleRowContextMenu = (idx: number) => {
+        setContextIndex(idx);
+        if (!selectedIndices.has(idx)) {
+            setSelectedIndices(new Set([idx]));
+            setLastClickedIndex(idx);
+        }
+    };
+
+    const onCopySelected = async () => {
+        const selected = progress.logs
+            .filter((_, idx) => selectedIndices.has(idx))
+            .map(formatLogLine)
+            .join('\n');
+        if (!selected) return;
+        try {
+            await navigator.clipboard.writeText(selected);
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制选中步骤日志',
+                content: `共复制 ${selectedIndices.size} 行步骤日志`,
+                autoDismissMs: 2000,
+            });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('复制失败:', err);
+        }
+    };
+
+    const onCopyCurrentLine = async () => {
+        const idx = contextIndex ?? 0;
+        const target = progress.logs[idx];
+        if (!target) return;
+        try {
+            await navigator.clipboard.writeText(formatLogLine(target));
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制单行步骤日志',
+                content: target.message,
+                autoDismissMs: 2000,
+            });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('复制失败:', err);
+        }
+    };
+
+    const onCopyAll = async () => {
+        const allText = progress.logs.map(formatLogLine).join('\n');
+        if (!allText) return;
+        try {
+            await navigator.clipboard.writeText(allText);
+            pushInfoBar({
+                tone: 'info',
+                title: '已复制全部步骤日志',
+                content: `共复制 ${progress.logs.length} 行步骤日志`,
+                autoDismissMs: 2000,
+            });
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('复制失败:', err);
+        }
+    };
+
     return (
-        <div className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-3 py-3 font-mono text-[12px] leading-[1.55] antialiased">
-            {progress.logs.map((log, idx) => {
-                const time = new Date(log.timestamp_ms).toLocaleTimeString('zh-CN', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false,
-                });
-                return (
-                    <div
-                        key={`${log.timestamp_ms}-${idx}`}
-                        className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 py-0.5 text-text-secondary"
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                <div
+                    role="log"
+                    aria-live="off"
+                    aria-label="任务执行步骤日志"
+                    className="scrollbar-hide min-h-0 flex-1 overflow-y-auto px-3 py-3 font-mono text-[12px] leading-[1.55] antialiased select-none"
+                    style={{
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                    }}
+                >
+                    {progress.logs.map((log, idx) => {
+                        const time = new Date(log.timestamp_ms).toLocaleTimeString('zh-CN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: false,
+                        });
+                        const isSelected = selectedIndices.has(idx);
+                        return (
+                            <div
+                                key={`${log.timestamp_ms}-${idx}`}
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    window.getSelection()?.removeAllRanges();
+                                }}
+                                onClick={(e) => handleRowClick(idx, e)}
+                                onContextMenu={() => handleRowContextMenu(idx)}
+                                className={cn(
+                                    'grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 px-1 py-0.5 cursor-pointer select-none rounded-xs transition-colors',
+                                    isSelected
+                                        ? 'bg-brand-soft/40 ring-1 ring-inset ring-brand/30 text-text'
+                                        : 'hover:bg-elevated/70 text-text-secondary',
+                                )}
+                                style={{
+                                    userSelect: 'none',
+                                    WebkitUserSelect: 'none',
+                                }}
+                            >
+                                <span className="tabular-nums text-[11px] text-text-tertiary select-none">{time}</span>
+                                <span className="min-w-0 break-words text-text select-none">{log.message}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-56">
+                {selectedIndices.size > 1 ? (
+                    <ContextMenuItem
+                        onClick={onCopySelected}
+                        className="flex items-center gap-2"
                     >
-                        <span className="tabular-nums text-[11px] text-text-tertiary">{time}</span>
-                        <span className="min-w-0 break-words text-text">{log.message}</span>
-                    </div>
-                );
-            })}
-        </div>
+                        <Copy size={13} className="text-brand" />
+                        <span>复制选中日志</span>
+                        <span className="ml-auto text-2xs text-text-tertiary">
+                            {selectedIndices.size} 行
+                        </span>
+                    </ContextMenuItem>
+                ) : (
+                    <ContextMenuItem
+                        onClick={onCopyCurrentLine}
+                        disabled={progress.logs.length === 0}
+                        className="flex items-center gap-2"
+                    >
+                        <Copy size={13} className="text-text-tertiary" />
+                        <span>复制当前行</span>
+                    </ContextMenuItem>
+                )}
+                <ContextMenuItem onClick={onCopyAll} disabled={progress.logs.length === 0} className="flex items-center gap-2">
+                    <Copy size={13} className="text-text-tertiary" />
+                    <span>复制全部步骤日志</span>
+                    <span className="ml-auto text-2xs text-text-tertiary">
+                        {progress.logs.length} 行
+                    </span>
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     );
 }
 

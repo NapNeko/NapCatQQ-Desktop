@@ -8,6 +8,7 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { cn } from '../utils/cn';
 
 interface TooltipState {
     text: string;
@@ -32,12 +33,20 @@ export const GlobalTitleTooltip: React.FC = () => {
         const findTarget = (start: Element | null): HTMLElement | null => {
             if (!start || !(start instanceof Element)) return null;
 
-            // 忽略显式接入 Radix Tooltip 的组件
-            if (start.closest('[data-radix-tooltip-trigger]')) return null;
+            // 忽略显式接入 Radix Tooltip、日志区域或带有 data-no-tooltip 的容器
+            if (
+                start.closest(
+                    '[data-radix-tooltip-trigger], [data-no-tooltip], [role="log"], [data-log-viewer]',
+                )
+            ) {
+                return null;
+            }
 
             const el = start.closest('[title], [data-tooltip], [data-native-title]') as HTMLElement | null;
             if (!el || el === document.body || el === document.documentElement) return null;
-            if (el.hasAttribute('data-no-tooltip')) return null;
+            if (el.hasAttribute('data-no-tooltip') || el.closest('[role="log"], [data-no-tooltip]')) {
+                return null;
+            }
 
             return el;
         };
@@ -208,13 +217,13 @@ export const GlobalTitleTooltip: React.FC = () => {
                 zIndex: 9999,
                 willChange: 'transform, opacity',
             }}
-            className={`select-none whitespace-nowrap rounded-sm bg-text/95 px-2.5 py-1 text-2xs font-medium text-canvas shadow-popover backdrop-blur-xs transition-opacity duration-150 ease-out ${state.visible ? 'opacity-100' : 'opacity-0'
-                }`}
+            className={cn(
+                'select-none whitespace-nowrap rounded-sm bg-text/95 px-2.5 py-1 text-2xs font-medium text-canvas shadow-popover backdrop-blur-xs transition-opacity duration-150 ease-out',
+                state.visible ? 'opacity-100' : 'opacity-0',
+            )}
         >
             {state.text}
         </div>,
         document.body,
     );
 };
-
-

@@ -207,9 +207,9 @@
       --surface-canvas: #211f1d;
       --surface-card: #2e2b28;
       --surface-elevated: #3a3734;
-      --surface-inset: #282523;
+      --surface-inset: #1a1817;
       --surface-muted: #33302d;
-      --surface-field: #373431;
+      --surface-field: #1a1817;
       --surface-sidebar: #292725;
       --surface-hero: color-mix(in srgb, var(--surface-elevated) 90%, var(--brand-500) 10%);
       --text-hero-title: #f5d8b5;
@@ -272,9 +272,9 @@
    --surface-canvas: #211f1d;
    --surface-card: #2e2b28;
    --surface-elevated: #3a3734;
-   --surface-inset: #282523;
+   --surface-inset: #1a1817;
    --surface-muted: #33302d;
-   --surface-field: #373431;
+   --surface-field: #1a1817;
    --surface-sidebar: #292725;
    --surface-hero: color-mix(in srgb, var(--surface-elevated) 90%, var(--brand-500) 10%);
    --text-hero-title: #f5d8b5;
@@ -343,10 +343,10 @@
    /* surface */
    --surface-canvas: #eff1f5;
    /* base   */
-   --surface-card: #e6e9ef;
-   /* mantle */
-   --surface-elevated: #dce0e8;
-   /* crust  */
+   --surface-card: #ffffff;
+   /* pure white card */
+   --surface-elevated: #ffffff;
+   /* surface0 */
    --surface-inset: #e6e9ef;
    /* mantle */
    --surface-muted: #ccd0da;
@@ -447,12 +447,12 @@
    /* mantle */
    --surface-elevated: #414559;
    /* surface0 */
-   --surface-inset: #292c3c;
-   /* mantle */
+   --surface-inset: #232634;
+   /* crust  */
    --surface-muted: #414559;
    /* surface0 */
-   --surface-field: #292c3c;
-   /* mantle */
+   --surface-field: #232634;
+   /* crust  */
    --surface-sidebar: #292c3c;
    /* mantle */
    --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
@@ -548,12 +548,12 @@
    /* mantle */
    --surface-elevated: #363a4f;
    /* surface0 */
-   --surface-inset: #1e2030;
-   /* mantle */
+   --surface-inset: #181926;
+   /* crust  */
    --surface-muted: #363a4f;
    /* surface0 */
-   --surface-field: #1e2030;
-   /* mantle */
+   --surface-field: #181926;
+   /* crust  */
    --surface-sidebar: #1e2030;
    /* mantle */
    --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
@@ -649,12 +649,12 @@
    /* mantle */
    --surface-elevated: #313244;
    /* surface0 */
-   --surface-inset: #181825;
-   /* mantle */
+   --surface-inset: #11111b;
+   /* crust  */
    --surface-muted: #313244;
    /* surface0 */
-   --surface-field: #181825;
-   /* mantle */
+   --surface-field: #11111b;
+   /* crust  */
    --surface-sidebar: #181825;
    /* mantle */
    --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);

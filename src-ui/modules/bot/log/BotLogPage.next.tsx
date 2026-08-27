@@ -198,19 +198,20 @@ export function BotLogPageNext({ botId, onBack }: BotLogPageNextProps) {
                     </div>
                 </ContextMenuTrigger>
                 <ContextMenuContent className="w-52">
-                    {selectedIds.size > 1 && (
+                    {selectedIds.size > 1 ? (
                         <ContextMenuItem onClick={onCopySelected}>
                             <Copy size={13} className="text-brand" />
                             <span>复制选中日志 ({selectedIds.size} 行)</span>
                         </ContextMenuItem>
+                    ) : (
+                        <ContextMenuItem
+                            onClick={onCopyCurrentLine}
+                            disabled={!contextEntry && filtered.length === 0}
+                        >
+                            <Copy size={13} />
+                            <span>复制当前行日志</span>
+                        </ContextMenuItem>
                     )}
-                    <ContextMenuItem
-                        onClick={onCopyCurrentLine}
-                        disabled={!contextEntry && filtered.length === 0}
-                    >
-                        <Copy size={13} />
-                        <span>复制当前行日志</span>
-                    </ContextMenuItem>
                     <ContextMenuItem onClick={onCopyAll} disabled={filtered.length === 0}>
                         <Copy size={13} />
                         <span>复制全部日志 ({filtered.length} 行)</span>
@@ -540,6 +541,10 @@ function LogLine({
 }) {
     return (
         <div
+            onMouseDown={(e) => {
+                e.preventDefault();
+                window.getSelection()?.removeAllRanges();
+            }}
             onClick={onClick}
             onContextMenu={onContextMenu}
             className={cn(
@@ -548,6 +553,10 @@ function LogLine({
                     ? 'bg-brand/15 text-text font-medium border-l-2 border-brand pl-[6px]'
                     : 'hover:bg-elevated/70',
             )}
+            style={{
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+            }}
         >
             <span
                 className="h-[12px] w-[3px] shrink-0"
@@ -565,7 +574,6 @@ function LogLine({
             <span
                 className="min-w-0 flex-1 overflow-hidden truncate"
                 style={{ color: lineTextColor(entry.level) }}
-                title={entry.text}
             >
                 <HighlightedLogBody text={entry.text} level={entry.level} />
             </span>

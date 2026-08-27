@@ -263,10 +263,10 @@ function SegmentControl<T extends string>({
                         title={it.title}
                         onClick={() => onChange(it.value)}
                         className={cn(
-                            'flex h-6 min-w-0 flex-1 items-center justify-center rounded-sm px-2 text-[12px] font-medium transition-colors',
+                            'flex h-6 min-w-0 flex-1 items-center justify-center rounded-sm px-2 text-[12px] font-medium transition-all',
                             selected
-                                ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
-                                : 'text-text-tertiary hover:text-text',
+                                ? 'border border-border/50 bg-surface text-text shadow-sm'
+                                : 'border border-transparent text-text-tertiary hover:text-text',
                         )}
                     >
                         {it.label}

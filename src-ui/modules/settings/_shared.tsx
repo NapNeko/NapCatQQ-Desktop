@@ -417,27 +417,30 @@ export function MotionLevelSegment({
                 (disabled ? 'pointer-events-none opacity-60' : '')
             }
         >
-            {items.map((it) => (
-                <button
-                    key={it.value}
-                    type="button"
-                    onClick={() => onChange(it.value)}
-                    disabled={disabled}
-                    className={
-                        'flex h-6 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium transition-colors ' +
-                        (value === it.value
-                            ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
-                            : 'text-text-tertiary hover:text-text')
-                    }
-                >
-                    <SegmentMotionIcon
-                        icon={it.icon}
-                        selected={value === it.value}
-                        segmentKey={`motion-level-${it.value}`}
-                    />
-                    <span>{it.label}</span>
-                </button>
-            ))}
+            {items.map((it) => {
+                const selected = value === it.value;
+                return (
+                    <button
+                        key={it.value}
+                        type="button"
+                        onClick={() => onChange(it.value)}
+                        disabled={disabled}
+                        className={
+                            'flex h-6 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium transition-all ' +
+                            (selected
+                                ? 'border border-border/50 bg-surface text-text shadow-sm'
+                                : 'border border-transparent text-text-tertiary hover:text-text')
+                        }
+                    >
+                        <SegmentMotionIcon
+                            icon={it.icon}
+                            selected={selected}
+                            segmentKey={`motion-level-${it.value}`}
+                        />
+                        <span>{it.label}</span>
+                    </button>
+                );
+            })}
         </div>
     );
 }
@@ -807,26 +810,29 @@ export function RadiusStyleSegment({
         ];
     return (
         <div className="flex h-7 items-center rounded-md bg-inset p-0.5">
-            {items.map((it) => (
-                <button
-                    key={it.value}
-                    type="button"
-                    onClick={() => onChange(it.value)}
-                    className={
-                        'flex h-6 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium transition-colors ' +
-                        (value === it.value
-                            ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
-                            : 'text-text-tertiary hover:text-text')
-                    }
-                >
-                    <SegmentMotionIcon
-                        icon={it.icon}
-                        selected={value === it.value}
-                        segmentKey={`radius-${it.value}`}
-                    />
-                    <span>{it.label}</span>
-                </button>
-            ))}
+            {items.map((it) => {
+                const selected = value === it.value;
+                return (
+                    <button
+                        key={it.value}
+                        type="button"
+                        onClick={() => onChange(it.value)}
+                        className={
+                            'flex h-6 items-center gap-1 rounded-sm px-2.5 text-[12px] font-medium transition-all ' +
+                            (selected
+                                ? 'border border-border/50 bg-surface text-text shadow-sm'
+                                : 'border border-transparent text-text-tertiary hover:text-text')
+                        }
+                    >
+                        <SegmentMotionIcon
+                            icon={it.icon}
+                            selected={selected}
+                            segmentKey={`radius-${it.value}`}
+                        />
+                        <span>{it.label}</span>
+                    </button>
+                );
+            })}
         </div>
     );
 }

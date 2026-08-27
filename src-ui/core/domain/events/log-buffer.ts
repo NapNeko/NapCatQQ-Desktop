@@ -216,14 +216,28 @@ export function parseDesktopLogLevel(line: string): LogLevel {
     return desktopLegacyLevelToLogLevel(`[${m[1]}]`);
 }
 
+function fnv1a32(str: string): number {
+    let hash = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+}
+
 export function buildDesktopHistoryEntries(lines: string[]): LogEntry[] {
     const out: LogEntry[] = [];
+    const seen = new Map<string, number>();
     for (let idx = 0; idx < lines.length; idx++) {
         const raw = lines[idx];
         if (!raw || !raw.trim()) continue;
         const parsed = parseDesktopLogLine(raw);
+        const baseKey = `dlog-${parsed.timestamp.replace(/\s+/g, '_') || idx}-${fnv1a32(raw).toString(36)}`;
+        const count = seen.get(baseKey) ?? 0;
+        seen.set(baseKey, count + 1);
+        const id = count === 0 ? baseKey : `${baseKey}-${count}`;
         out.push({
-            id: `hist-${idx}-${counter++}`,
+            id,
             text: parsed.message,
             channel: 'unknown' as const,
             level: parsed.level,
