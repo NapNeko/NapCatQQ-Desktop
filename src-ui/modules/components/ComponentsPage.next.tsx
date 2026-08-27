@@ -18,11 +18,13 @@ import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallPro
 import { HostSwitcher } from './HostSwitcher';
 import { HostComponentsView } from './HostComponentsView';
 import { ReleaseNotesDialog } from './ReleaseNotesDialog';
-import { SnowLumaLinuxPackageDialog } from './SnowLumaLinuxPackageDialog';
+import { SnowLumaPackageDialog } from './SnowLumaPackageDialog';
+import { SnowLumaNodeChoiceDialog } from './SnowLumaNodeChoiceDialog';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
 import { componentMutationBlockedReason, componentLifecycleBlockedReason } from '../../core/domain/components/mutation-gate';
 import { buildDemoRemoteMachine } from '../../core/domain/onboarding/demoRemoteMachine';
+import { settingsService } from '../../core/services/settings.service';
 import {
     getComponentsHostBridge,
     subscribeComponentsHostBridge,
@@ -31,7 +33,8 @@ import type { ReleaseInfoView } from '../../core/domain/release/normalize';
 import type {
     ComponentId,
     DockerInstallReport,
-    SnowLumaLinuxPackage,
+    NodeEnvironmentCandidate,
+    SnowLumaPackage,
     StepKind,
 } from '../../core/ipc/types';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
@@ -254,12 +257,22 @@ export const ComponentsPageNext: React.FC = () => {
         stepKind: StepKind;
     } | null>(null);
 
+    const [nodeChoicePrompt, setNodeChoicePrompt] = useState<{
+        pendingAction: {
+            componentId: ComponentId;
+            hostId: string;
+            stepKind: StepKind;
+            pkg: SnowLumaPackage;
+        };
+        candidates: NodeEnvironmentCandidate[];
+    } | null>(null);
+
     const beginComponentAction = useCallback(
         async (
             componentId: ComponentId,
             hostId: string,
             stepKind: StepKind,
-            options?: { snowlumaLinuxPackage?: SnowLumaLinuxPackage },
+            options?: { snowlumaLinuxPackage?: SnowLumaPackage },
         ) => {
             const taskId = await startAction(componentId, hostId, stepKind, options);
             onTaskTerminal(taskId, (status) => {
@@ -316,10 +329,8 @@ export const ComponentsPageNext: React.FC = () => {
                     });
                     return;
                 }
-                const hostOs = machines.find((m) => m.host.host_id === hostId)?.host.os;
                 if (
                     componentId === 'snowluma' &&
-                    hostOs === 'linux' &&
                     (payload.stepKind === 'ensure_installed' || payload.stepKind === 'force_install')
                 ) {
                     setSlPkgPrompt({
@@ -341,15 +352,51 @@ export const ComponentsPageNext: React.FC = () => {
             reportActionStartError,
             botSnapshots,
             botConfigs,
-            machines,
         ],
     );
 
-    const confirmSnowLumaLinuxPackage = useCallback(
-        (pkg: SnowLumaLinuxPackage) => {
+    const confirmSnowLumaPackage = useCallback(
+        async (pkg: SnowLumaPackage) => {
             const pending = slPkgPrompt;
             if (!pending) return;
             setSlPkgPrompt(null);
+
+            if (pkg === 'full') {
+                void beginComponentAction(
+                    pending.componentId,
+                    pending.hostId,
+                    pending.stepKind,
+                    { snowlumaLinuxPackage: pkg },
+                ).catch((err) => {
+                    reportActionStartError(pending.componentId, pending.hostId, err);
+                });
+                return;
+            }
+
+            // Lite 版：若在本机环境，探测是否有可用 node
+            const isLocal = pending.hostId === 'local' || !pending.hostId.startsWith('remote:');
+            if (isLocal) {
+                try {
+                    const candidates = await componentService.probeLocalNodeCandidates();
+                    const valid = candidates.filter((c) => c.isValid);
+                    if (valid.length > 0) {
+                        setNodeChoicePrompt({
+                            pendingAction: {
+                                componentId: pending.componentId,
+                                hostId: pending.hostId,
+                                stepKind: pending.stepKind,
+                                pkg,
+                            },
+                            candidates: valid,
+                        });
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Failed to probe local node candidates:', e);
+                }
+            }
+
+            // 无合规 node 或远端环境，跳过选择直接自动编排安装
             void beginComponentAction(
                 pending.componentId,
                 pending.hostId,
@@ -360,6 +407,34 @@ export const ComponentsPageNext: React.FC = () => {
             });
         },
         [slPkgPrompt, beginComponentAction, reportActionStartError],
+    );
+
+    const confirmSnowLumaNodeChoice = useCallback(
+        async (selectedPath: string | null) => {
+            const pending = nodeChoicePrompt?.pendingAction;
+            if (!pending) return;
+            setNodeChoicePrompt(null);
+
+            if (selectedPath) {
+                try {
+                    const currentSettings = await settingsService.get();
+                    currentSettings.snowlumaNodePath = selectedPath;
+                    await settingsService.set(currentSettings);
+                } catch (e) {
+                    console.error('Failed to save snowlumaNodePath:', e);
+                }
+            }
+
+            void beginComponentAction(
+                pending.componentId,
+                pending.hostId,
+                pending.stepKind,
+                { snowlumaLinuxPackage: pending.pkg },
+            ).catch((err) => {
+                reportActionStartError(pending.componentId, pending.hostId, err);
+            });
+        },
+        [nodeChoicePrompt, beginComponentAction, reportActionStartError],
     );
 
     const lifecycleBlockedReasonForHost = useCallback(
@@ -659,12 +734,21 @@ export const ComponentsPageNext: React.FC = () => {
                 }
             />
 
-            <SnowLumaLinuxPackageDialog
+            <SnowLumaPackageDialog
                 open={slPkgPrompt != null}
                 onOpenChange={(open) => {
                     if (!open) setSlPkgPrompt(null);
                 }}
-                onConfirm={confirmSnowLumaLinuxPackage}
+                onConfirm={confirmSnowLumaPackage}
+            />
+
+            <SnowLumaNodeChoiceDialog
+                open={nodeChoicePrompt != null}
+                onOpenChange={(open) => {
+                    if (!open) setNodeChoicePrompt(null);
+                }}
+                candidates={nodeChoicePrompt?.candidates ?? []}
+                onConfirm={confirmSnowLumaNodeChoice}
             />
 
             {sudoPrompt && (

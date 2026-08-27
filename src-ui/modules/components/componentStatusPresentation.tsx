@@ -5,6 +5,10 @@ import type { StatusBadgeSpec } from '../../core/domain/bot/bot-status-presentat
 
 export type { StatusBadgeSpec as StatusBadgeSpec };
 
+export function isExternalNodeSource(source: string): boolean {
+    return source.trim().toLowerCase().startsWith('$path');
+}
+
 export function hostComponentStatusBadge(
     status: HostComponentStatus,
     opts: { hasUpdate: boolean; inFlight: boolean },
@@ -14,6 +18,9 @@ export function hostComponentStatusBadge(
     }
     switch (status.state) {
         case 'installed':
+            if (status.detected.source && isExternalNodeSource(status.detected.source)) {
+                return { tone: 'neutral', label: '系统环境', dot: true };
+            }
             if (opts.hasUpdate) return { tone: 'warning', label: '可更新' };
             return { tone: 'success', label: '已安装', dot: true };
         case 'not_installed':

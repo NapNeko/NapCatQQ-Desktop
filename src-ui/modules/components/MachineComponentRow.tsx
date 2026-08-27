@@ -12,11 +12,15 @@ import {
 } from '../../core/domain/release/normalize';
 import { ProgressLine, ProgressBarOverlay, shouldShowProgressBar } from './progressView';
 import { ComponentManageCard } from './ComponentEntityCard';
-import { hostComponentStatusBadge } from './componentStatusPresentation';
+import {
+    hostComponentStatusBadge,
+    isExternalNodeSource,
+} from './componentStatusPresentation';
 import type { StepKind } from '../../core/ipc/types';
 
 export type RowAction =
     | { kind: 'install' }
+    | { kind: 'install_independent' }
     | { kind: 'update' }
     | { kind: 'uninstall' }
     | { kind: 'retry_detect' }
@@ -26,6 +30,8 @@ export function rowActionToStepKind(action: RowAction): StepKind | null {
     switch (action.kind) {
         case 'install':
             return 'ensure_installed';
+        case 'install_independent':
+            return 'force_install';
         case 'update':
             return 'update';
         case 'uninstall':
@@ -169,6 +175,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
 
 function hasUpdate(status: MachineComponentRow['status'], latest: string | null): boolean {
     if (status.state !== 'installed' || !latest) return false;
+    if (isExternalNodeSource(status.detected.source)) return false;
     return compareSemver(status.detected.version, latest) > 0;
 }
 
@@ -228,10 +235,13 @@ const StatusMeta: React.FC<{
         case 'installed': {
             const local = status.detected.version;
             const updatable =
-                !!latestRemoteVersion && compareSemver(local, latestRemoteVersion) > 0;
+                !!latestRemoteVersion &&
+                !isExternalNodeSource(status.detected.source) &&
+                compareSemver(local, latestRemoteVersion) > 0;
+            const isSystemPath = isExternalNodeSource(status.detected.source);
             return (
                 <p className="truncate font-mono text-xs tabular-nums text-text-tertiary">
-                    本地 {local}
+                    {isSystemPath ? `系统 PATH (v${local})` : `本地 ${local}`}
                     {updatable && (
                         <span className="ml-1.5 text-warning">最新 {latestRemoteVersion}</span>
                     )}
@@ -273,7 +283,9 @@ const ActionButtons: React.FC<{
         case 'installed': {
             const updatable =
                 !!latestRemoteVersion &&
+                !isExternalNodeSource(status.detected.source) &&
                 compareSemver(status.detected.version, latestRemoteVersion) > 0;
+            const external = isExternalNodeSource(status.detected.source);
             return (
                 <>
                     {updatable && (
@@ -287,15 +299,26 @@ const ActionButtons: React.FC<{
                             更新
                         </Button>
                     )}
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={lifecycleDisabled}
-                        title={lifecycleBlockedReason ?? undefined}
-                        onClick={() => onAction({ kind: 'uninstall' })}
-                    >
-                        卸载
-                    </Button>
+                    {external ? (
+                        <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={disabled}
+                            onClick={() => onAction({ kind: 'install_independent' })}
+                        >
+                            安装独立版
+                        </Button>
+                    ) : (
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={lifecycleDisabled}
+                            title={lifecycleBlockedReason ?? undefined}
+                            onClick={() => onAction({ kind: 'uninstall' })}
+                        >
+                            卸载
+                        </Button>
+                    )}
                 </>
             );
         }
