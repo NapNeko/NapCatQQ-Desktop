@@ -138,7 +138,7 @@ pub fn build_component_for_host(
                 let asset = snowluma_linux_release_asset(&tag, ctx.host.arch(), package);
                 let url =
                     format!("https://github.com/SnowLuma/SnowLuma/releases/download/{tag}/{asset}");
-                let mut comp = SnowLumaComponent::new(workspace, url);
+                let mut comp = SnowLumaComponent::new(workspace, url).with_package(package);
                 if let Some(dir) = ctx
                     .selected
                     .and_then(|s| s.snowluma_dir.as_deref())

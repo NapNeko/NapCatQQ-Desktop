@@ -97,7 +97,13 @@ pub async fn run_component_action(
         Some(
             snowluma_linux_package
                 .or(persisted_local)
-                .unwrap_or_else(|| infer_snowluma_linux_package(selected.as_ref())),
+                .unwrap_or_else(|| {
+                    if host.locality() == Locality::Local {
+                        infer_local_snowluma_package(&state.data_root)
+                    } else {
+                        infer_snowluma_linux_package(selected.as_ref())
+                    }
+                }),
         )
     } else {
         None
@@ -559,7 +565,14 @@ async fn build_component_for_host_from_state(
     let effective_package = if snowluma_linux_package.is_some() {
         snowluma_linux_package
     } else if host.locality() == Locality::Local && id == ComponentId::SnowLuma {
-        state.app_settings.read().await.snowluma_package
+        Some(
+            state
+                .app_settings
+                .read()
+                .await
+                .snowluma_package
+                .unwrap_or_else(|| infer_local_snowluma_package(&state.data_root)),
+        )
     } else {
         None
     };
@@ -583,6 +596,20 @@ async fn build_component_for_host_from_state(
             snowluma_node_path: snowluma_node_path.as_deref(),
         },
     )
+}
+
+fn infer_local_snowluma_package(data_root: &std::path::Path) -> SnowLumaLinuxPackage {
+    let install_dir = data_root.join("components").join("SnowLuma");
+    if !install_dir.is_dir() {
+        return SnowLumaLinuxPackage::Full;
+    }
+    let bundled_node = install_dir
+        .join("node.exe");
+    if bundled_node.is_file() {
+        SnowLumaLinuxPackage::Full
+    } else {
+        SnowLumaLinuxPackage::Lite
+    }
 }
 
 #[tauri::command]
