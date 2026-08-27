@@ -13,5 +13,6 @@ pub use action_policy::{
     data_root_to_host_path, direct_runtime_dependency_ids, direct_runtime_dependency_ids_for,
     infer_snowluma_linux_package, normalize_github_release_tag, parse_remote_host_probe_stdout,
     require_remote_home, snowluma_github_release_tag, snowluma_linux_release_asset,
+    snowluma_windows_release_asset,
 };
 pub use factory::{BuildComponentCtx, build_component_for_host};

@@ -21,7 +21,7 @@ use ncd_host::{Arch, Host, HostPath, Os};
 use crate::components::action_policy::{
     RemoteLayout, asset_sha256, data_root_to_host_path, infer_snowluma_linux_package,
     is_bundled_snowluma_node, require_remote_home, snowluma_github_release_tag,
-    snowluma_linux_release_asset,
+    snowluma_linux_release_asset, snowluma_windows_release_asset,
 };
 
 /// 实例化 Component 时的上下文（避免过长参数列表）。
@@ -37,6 +37,8 @@ pub struct BuildComponentCtx<'a> {
     pub selected: Option<&'a RemoteSelectedPaths>,
     /// 安装/更新时显式选择的 Linux 包；None 则按库存推断
     pub snowluma_linux_package: Option<SnowLumaLinuxPackage>,
+    /// 本机 SnowLuma Node 覆盖路径；远端路径走 selected.node_bin
+    pub snowluma_node_path: Option<&'a str>,
 }
 
 /// 把 component_id 实例化成具体 Component
@@ -95,9 +97,13 @@ pub fn build_component_for_host(
                             .to_string(),
                     );
                 }
-                let mut comp = SnowLumaComponent::for_windows(install, tag.clone());
+                let package = ctx
+                    .snowluma_linux_package
+                    .unwrap_or_else(|| infer_snowluma_linux_package(ctx.selected));
+                let asset = snowluma_windows_release_asset(&tag, package);
+                let mut comp = SnowLumaComponent::for_windows_with_package(install, tag.clone(), package);
                 if let Some(sha) = latest
-                    .and_then(|info| asset_sha256(info, &format!("SnowLuma-{tag}-win-x64.zip")))
+                    .and_then(|info| asset_sha256(info, &asset))
                 {
                     comp = comp.with_sha256(sha);
                 }
@@ -161,12 +167,24 @@ pub fn build_component_for_host(
             }
         }
         ComponentId::NodeJs => {
-            let install_dir = node_install_dir(ctx.selected, remote_home)?;
-            let mut comp = NodeJsComponent::new("22.13.0", install_dir);
-            if let Some(bin) = nodejs_extra_detect_bin(ctx.selected) {
-                comp = comp.with_extra_detect_bin(bin);
+            if ctx.host.os() == Os::Windows {
+                let install_dir = data_root_host.join("components").join("NodeJs");
+                let mut comp = NodeJsComponent::new("22.13.0", install_dir);
+                if let Some(bin) = nodejs_extra_detect_bin(ctx.selected) {
+                    comp = comp.with_extra_detect_bin(bin);
+                }
+                if let Some(path) = ctx.snowluma_node_path.filter(|p| !p.trim().is_empty()) {
+                    comp = comp.with_extra_detect_bin(HostPath::from_windows(path.trim()));
+                }
+                Arc::new(comp)
+            } else {
+                let install_dir = node_install_dir(ctx.selected, remote_home)?;
+                let mut comp = NodeJsComponent::new("22.13.0", install_dir);
+                if let Some(bin) = nodejs_extra_detect_bin(ctx.selected) {
+                    comp = comp.with_extra_detect_bin(bin);
+                }
+                Arc::new(comp)
             }
-            Arc::new(comp)
         }
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
         ComponentId::NcdWatch => {

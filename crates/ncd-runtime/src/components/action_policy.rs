@@ -122,7 +122,14 @@ pub fn component_runtime_prerequisites_for(
             _ => Vec::new(),
         },
         ComponentId::SnowLuma => match host_os {
-            Os::Windows => vec![ensure(ComponentId::Qq)],
+            Os::Windows => {
+                let mut deps = Vec::new();
+                if snowluma_linux_package == Some(SnowLumaLinuxPackage::Lite) {
+                    deps.push(ensure(ComponentId::NodeJs));
+                }
+                deps.push(ensure(ComponentId::Qq));
+                deps
+            }
             Os::Linux => {
                 snowluma_linux_runtime_deps(host_locality, snowluma_linux_package, &ensure)
             }
@@ -401,6 +408,18 @@ pub fn snowluma_linux_release_asset(
         SnowLumaLinuxPackage::Lite => "-lite",
     };
     format!("SnowLuma-{tag}-{triple}{lite}.tar.gz")
+}
+
+/// 官方 Windows 发行物：完整包自带 node.exe，lite 需用户自备或由桌面端安装 Node 22.13+。
+pub fn snowluma_windows_release_asset(
+    tag: &str,
+    package: SnowLumaLinuxPackage,
+) -> String {
+    let lite = match package {
+        SnowLumaLinuxPackage::Full => "",
+        SnowLumaLinuxPackage::Lite => "-lite",
+    };
+    format!("SnowLuma-{tag}-win-x64{lite}.zip")
 }
 
 pub fn snowluma_github_release_tag(
