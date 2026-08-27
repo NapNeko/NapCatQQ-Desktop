@@ -120,6 +120,12 @@
    --action-secondary: var(--accent-500);
    --action-secondary-hover: var(--accent-600);
 
+   /* semantic: 柔和品牌/点缀背景（高亮卡片、badge、选中项等） */
+   --brand-soft: var(--brand-100);
+   --brand-tint: var(--brand-50);
+   --accent-soft: var(--accent-100);
+   --accent-tint: var(--accent-50);
+
    /* semantic: 圆角 */
    --radius-xs: 4px;
    --radius-sm: 8px;
@@ -232,6 +238,12 @@
       --brand-500: #ff8a57;
       --brand-600: #e87040;
 
+      /* semantic: 柔和品牌/点缀背景（深底微透/调和，保证浅色文字可读性） */
+      --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
+      --brand-tint: color-mix(in srgb, var(--brand-500) 8%, transparent);
+      --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
+      --accent-tint: color-mix(in srgb, var(--accent-500) 8%, transparent);
+
       /* scrollbar */
       --scrollbar-thumb-rest: rgba(255, 245, 235, 0.12);
       --scrollbar-thumb-hover: rgba(255, 245, 235, 0.24);
@@ -290,6 +302,12 @@
    --brand-400: #ff9a6b;
    --brand-500: #ff8a57;
    --brand-600: #e87040;
+
+   /* semantic: 柔和品牌/点缀背景（深底微透/调和，保证浅色文字可读性） */
+   --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
+   --brand-tint: color-mix(in srgb, var(--brand-500) 8%, transparent);
+   --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
+   --accent-tint: color-mix(in srgb, var(--accent-500) 8%, transparent);
 
    /* scrollbar */
    --scrollbar-thumb-rest: rgba(255, 245, 235, 0.12);
@@ -361,7 +379,7 @@
    --border-default: rgba(76, 79, 105, 0.12);
    --border-strong: rgba(76, 79, 105, 0.22);
 
-      /* brand → mauve */
+   /* brand → mauve */
    --brand-50: #f6f0ff;
    --brand-100: #ede4ff;
    --brand-200: #dcc8ff;
@@ -387,6 +405,10 @@
    --action-secondary: var(--accent-500);
    --action-secondary-hover: var(--accent-600);
    --border-focus: var(--brand-500);
+   --brand-soft: var(--brand-100);
+   --brand-tint: var(--brand-50);
+   --accent-soft: var(--accent-100);
+   --accent-tint: var(--accent-50);
    --surface-sidebar: color-mix(in srgb, var(--accent-100) 22%, var(--surface-canvas));
    --surface-hero: color-mix(in srgb, var(--surface-canvas) 42%, var(--brand-50) 58%);
 
@@ -458,7 +480,7 @@
    --border-default: rgba(198, 208, 245, 0.14);
    --border-strong: rgba(198, 208, 245, 0.24);
 
-      /* brand → mauve */
+   /* brand → mauve */
    --brand-50: #f8f2ff;
    --brand-100: #f5eeff;
    --brand-200: #e8dcfc;
@@ -484,8 +506,12 @@
    --action-secondary: var(--accent-500);
    --action-secondary-hover: var(--accent-600);
    --border-focus: var(--brand-500);
+   --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
+   --brand-tint: color-mix(in srgb, var(--brand-500) 10%, transparent);
+   --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
+   --accent-tint: color-mix(in srgb, var(--accent-500) 10%, transparent);
    --surface-sidebar: color-mix(in srgb, var(--accent-100) 16%, var(--surface-canvas));
-      --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
+   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
 
    /* state */
    --state-success: #a6d189;
@@ -555,7 +581,7 @@
    --border-default: rgba(202, 211, 245, 0.14);
    --border-strong: rgba(202, 211, 245, 0.24);
 
-      /* brand → mauve */
+   /* brand → mauve */
    --brand-50: #f5f0fe;
    --brand-100: #f4edfe;
    --brand-200: #e8dcfc;
@@ -581,8 +607,12 @@
    --action-secondary: var(--accent-500);
    --action-secondary-hover: var(--accent-600);
    --border-focus: var(--brand-500);
+   --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
+   --brand-tint: color-mix(in srgb, var(--brand-500) 10%, transparent);
+   --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
+   --accent-tint: color-mix(in srgb, var(--accent-500) 10%, transparent);
    --surface-sidebar: color-mix(in srgb, var(--accent-100) 14%, var(--surface-canvas));
-      --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
+   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
 
    /* state */
    --state-success: #a6da95;
@@ -652,7 +682,7 @@
    --border-default: rgba(205, 214, 244, 0.14);
    --border-strong: rgba(205, 214, 244, 0.24);
 
-      /* brand → mauve */
+   /* brand → mauve */
    --brand-50: #f8f2ff;
    --brand-100: #f5edfe;
    --brand-200: #e8dcfc;
@@ -678,8 +708,12 @@
    --action-secondary: var(--accent-500);
    --action-secondary-hover: var(--accent-600);
    --border-focus: var(--brand-500);
+   --brand-soft: color-mix(in srgb, var(--brand-500) 16%, var(--surface-card));
+   --brand-tint: color-mix(in srgb, var(--brand-500) 10%, transparent);
+   --accent-soft: color-mix(in srgb, var(--accent-500) 16%, var(--surface-card));
+   --accent-tint: color-mix(in srgb, var(--accent-500) 10%, transparent);
    --surface-sidebar: color-mix(in srgb, var(--accent-100) 14%, var(--surface-canvas));
-      --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
+   --surface-hero: color-mix(in srgb, var(--surface-elevated) 88%, var(--brand-500) 12%);
 
    /* state */
    --state-success: #a6e3a1;

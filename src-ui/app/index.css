@@ -31,11 +31,11 @@
 
     --color-brand: var(--brand-500);
     --color-brand-hover: var(--brand-600);
-    --color-brand-soft: var(--brand-100);
-    --color-brand-tint: var(--brand-50);
+    --color-brand-soft: var(--brand-soft);
+    --color-brand-tint: var(--brand-tint);
 
     --color-accent: var(--accent-500);
-    --color-accent-soft: var(--accent-100);
+    --color-accent-soft: var(--accent-soft);
 
     --color-success: var(--state-success);
     --color-success-soft: var(--state-success-bg);

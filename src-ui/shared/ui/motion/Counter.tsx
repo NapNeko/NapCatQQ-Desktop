@@ -72,7 +72,7 @@ export function Counter({ value, className }: CounterProps) {
     return (
         <span
             ref={containerRef}
-            className={`relative inline-block tabular-nums ${className ?? ''}`}
+            className={`relative inline-flex items-baseline align-baseline tabular-nums ${className ?? ''}`}
             style={{ overflow: 'hidden' }}
         >
             <span data-digit="current" className="inline-block">
