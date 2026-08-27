@@ -1975,7 +1975,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                         );
                         let hint = match &err {
                             RuntimeLaunchPlanError::SnowLumaNodeMissing(path) => Some(format!(
-                                "未在 {} 找到 SnowLuma daemon 二进制。请安装 SnowLuma 运行时组件，或在 Bot 配置中把后端类型切换为 NapCat。",
+                                "未在 {} 找到 SnowLuma 所需 Node.js 运行时。Full 包应包含内置 node.exe，Lite 包需要独立 Node.js 组件；请先安装对应组件或在设置中配置 Node.js 环境。",
                                 path.display()
                             )),
                             RuntimeLaunchPlanError::SnowLumaInvalidStartMode(detail) => {

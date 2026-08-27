@@ -193,7 +193,7 @@ impl SnowLumaDaemon {
         }
 
         Err(SnowLumaDaemonError::Spawn(format!(
-            "未找到可用的 Node.js 运行时 (需 ^22.13.0 || >=23.4.0)。请在组件管理中安装 Node.js 组件，或在高级设置中配置 Node.js 运行环境路径。搜索路径: {}",
+            "未找到可用的 Node.js 运行时 (需 ^22.13.0 || >=23.4.0)。SnowLuma Full 应使用包内置 Node，Lite 需要独立 Node.js 组件；请在组件管理中安装 Node.js，或在高级设置中配置运行环境路径。搜索路径: {}",
             bundled.display()
         )))
     }
