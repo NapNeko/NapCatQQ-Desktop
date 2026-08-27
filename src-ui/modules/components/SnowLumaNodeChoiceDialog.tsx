@@ -57,7 +57,7 @@ export const SnowLumaNodeChoiceDialog: React.FC<Props> = ({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col gap-2.5">
-                    {/* 选项 1：安装独立 Node.js 组件 */}
+                    {/* 选项 1：自动安装 Node.js */}
                     <button
                         type="button"
                         onClick={() => setMode('component')}
@@ -68,9 +68,9 @@ export const SnowLumaNodeChoiceDialog: React.FC<Props> = ({
                                 : 'border-border-subtle bg-inset hover:border-border',
                         )}
                     >
-                        <div className="text-sm font-medium text-text">自动安装独立 Node.js 组件（推荐）</div>
+                        <div className="text-sm font-medium text-text">自动安装 Node.js（推荐）</div>
                         <p className="mt-0.5 text-2xs leading-snug text-text-secondary">
-                            由桌面端自动下载并安装隔离的 Node.js 运行时，不影响系统现有开发环境。
+                            由桌面端自动下载并安装，不影响系统现有开发环境。
                         </p>
                     </button>
 
@@ -129,4 +129,3 @@ export const SnowLumaNodeChoiceDialog: React.FC<Props> = ({
         </Dialog>
     );
 };
-

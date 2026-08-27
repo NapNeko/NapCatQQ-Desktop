@@ -100,7 +100,7 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
             >
                 <FieldRow
                     label="Node.js 运行环境"
-                    description="默认按优先级自动选择（内置 > 独立组件 > 系统 PATH）。"
+                    description="默认按优先级自动选择（内置 > Node.js 组件 > 系统 PATH）。"
                     isLast
                 >
                     <div className="flex items-center gap-2 max-w-md w-full">

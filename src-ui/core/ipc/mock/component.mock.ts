@@ -55,7 +55,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'nodejs',
         display_name: 'Node.js',
-        description: 'SnowLuma 运行所需',
+        description: '供 SnowLuma Lite 使用的 Node.js 环境',
         repo_url: 'https://nodejs.org',
         supported_targets: [
             { os: 'windows', locality: 'local' },

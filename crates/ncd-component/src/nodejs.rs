@@ -210,7 +210,7 @@ impl NodeJsComponent {
         crate::types::ComponentInfo {
             id: ComponentId::NodeJs,
             display_name: "Node.js".to_string(),
-            description: "SnowLuma 运行所需".to_string(),
+            description: "供 SnowLuma Lite 使用的 Node.js 环境".to_string(),
             repo_url: Some("https://nodejs.org/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
@@ -428,7 +428,7 @@ impl Component for NodeJsComponent {
         if let Some(detected) = self.detect(host).await? {
             if !self.source_is_managed(host, &detected.source) {
                 return Err(ActionError::other(format!(
-                    "检测到的是外部 Node.js（{}），不能通过组件更新；请先安装独立 Node.js 组件。",
+                    "检测到的是外部 Node.js（{}），不能通过组件更新；请先安装 Node.js 组件。",
                     detected.source
                 )));
             }
@@ -543,7 +543,7 @@ pub async fn probe_local_system_nodes(
                     path: path_str,
                     version: ver.clone(),
                     source_kind: NodeSourceKind::Component,
-                    label: format!("独立 Node.js 组件 (v{ver})"),
+                    label: format!("Node.js 组件 (v{ver})"),
                     is_valid,
                 });
             }

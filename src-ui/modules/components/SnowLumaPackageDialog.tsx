@@ -45,7 +45,7 @@ export const SnowLumaPackageDialog: React.FC<Props> = ({
                     <PackageChoice
                         selected={pkg === 'lite'}
                         title="Lite 精简版"
-                        detail="体积小，不含 Node。安装任务会自动编排独立 Node.js 组件作为运行依赖。"
+                        detail="体积小，不含 Node。安装任务会自动安装 Node.js 作为运行依赖。"
                         onSelect={() => setPkg('lite')}
                     />
                 </div>

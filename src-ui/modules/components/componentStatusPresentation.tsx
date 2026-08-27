@@ -9,6 +9,10 @@ export function isExternalNodeSource(source: string): boolean {
     return source.trim().toLowerCase().startsWith('$path');
 }
 
+export function shouldOfferManagedNodeInstall(status: HostComponentStatus): boolean {
+    return !(status.state === 'installed' && isExternalNodeSource(status.detected.source));
+}
+
 export function hostComponentStatusBadge(
     status: HostComponentStatus,
     opts: { hasUpdate: boolean; inFlight: boolean },

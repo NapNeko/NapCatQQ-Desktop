@@ -24,6 +24,7 @@ import { ComponentManageCard } from './ComponentEntityCard';
 import {
     hostComponentStatusBadge,
     isExternalNodeSource,
+    shouldOfferManagedNodeInstall,
 } from './componentStatusPresentation';
 import type { StepKind } from '../../core/ipc/types';
 
@@ -234,16 +235,6 @@ export const MachineComponentRowView: React.FC<Props> = ({
                     </ContextMenuItem>
                 )}
 
-                {!inFlight && status.state === 'installed' && external && (
-                    <ContextMenuItem
-                        disabled={disabled}
-                        onClick={() => handle({ kind: 'install_independent' })}
-                    >
-                        <Download size={13} />
-                        <span>安装独立版</span>
-                    </ContextMenuItem>
-                )}
-
                 {!inFlight && status.state === 'installed' && !external && (
                     <ContextMenuItem
                         tone="danger"
@@ -428,7 +419,6 @@ const ActionButtons: React.FC<{
                 !!latestRemoteVersion &&
                 !isExternalNodeSource(status.detected.source) &&
                 compareSemver(status.detected.version, latestRemoteVersion) > 0;
-            const external = isExternalNodeSource(status.detected.source);
             return (
                 <>
                     {updatable && (
@@ -442,16 +432,7 @@ const ActionButtons: React.FC<{
                             更新
                         </Button>
                     )}
-                    {external ? (
-                        <Button
-                            size="sm"
-                            variant="primary"
-                            disabled={disabled}
-                            onClick={() => onAction({ kind: 'install_independent' })}
-                        >
-                            安装独立版
-                        </Button>
-                    ) : (
+                    {shouldOfferManagedNodeInstall(status) && (
                         <Button
                             size="sm"
                             variant="ghost"
