@@ -21,9 +21,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use ncd_domain::{NodeEnvironmentCandidate, NodeSourceKind};
 use ncd_host::{Arch, ArchiveKind, Host, HostCommand, HostError, HostPath, Locality, Os};
 
-use crate::context::{ActionCtx, ProgressKind};
+use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
 use crate::shell_quote;
@@ -34,21 +35,38 @@ async fn probe_node_bin(
     host: &dyn Host,
     path: &str,
 ) -> Result<Option<DetectedVersion>, ActionError> {
-    let hp = HostPath::from_posix(path);
-    if !host.exists(&hp).await? {
+    let hp = if host.os() == Os::Windows {
+        HostPath::from_windows(path)
+    } else {
+        HostPath::from_posix(path)
+    };
+    if let Some(ver) = probe_node_raw_version(host, &hp).await? {
+        if NodeJsComponent::version_meets_snowluma(&ver) {
+            return Ok(Some(DetectedVersion {
+                version: ver,
+                source: path.to_string(),
+            }));
+        }
+    }
+    Ok(None)
+}
+
+pub async fn probe_node_raw_version(
+    host: &dyn Host,
+    path: &HostPath,
+) -> Result<Option<String>, ActionError> {
+    if !host.exists(path).await? {
         return Ok(None);
     }
-    let cmd = HostCommand::new(path).arg("--version");
+    let cmd = HostCommand::new(path.as_posix()).arg("--version");
     match host.run_to_string(cmd).await {
         Ok(out) if out.success() => {
             let ver = out.stdout.trim().trim_start_matches('v').to_string();
-            if ver.is_empty() || !NodeJsComponent::version_meets_snowluma(&ver) {
-                return Ok(None);
+            if ver.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(ver))
             }
-            Ok(Some(DetectedVersion {
-                version: ver,
-                source: path.to_string(),
-            }))
         }
         _ => Ok(None),
     }
@@ -108,24 +126,10 @@ impl NodeJsComponent {
 
     /// 推算下载 URL(根据 host 的 OS / arch)
     fn build_download_url(&self, host: &dyn Host) -> Result<String, ActionError> {
-        let template = self.download_url_template.clone().unwrap_or_else(|| {
-            format!(
-                "https://nodejs.org/dist/v{ver}/node-v{ver}-{platform}-{arch}.tar.xz",
-                ver = "{version}",
-                platform = "{platform}",
-                arch = "{arch}"
-            )
-        });
-        let platform = match host.os() {
-            Os::Linux => "linux",
-            Os::MacOs => "darwin",
-            Os::Windows => {
-                return Err(ActionError::UnsupportedTarget {
-                    component: "nodejs".into(),
-                    os: Os::Windows,
-                    locality: host.locality(),
-                });
-            }
+        let (platform, ext) = match host.os() {
+            Os::Linux => ("linux", "tar.xz"),
+            Os::MacOs => ("darwin", "tar.xz"),
+            Os::Windows => ("win", "zip"),
         };
         let arch = match host.arch() {
             Arch::X86_64 => "x64",
@@ -133,15 +137,39 @@ impl NodeJsComponent {
             Arch::Armv7 => "armv7l",
             Arch::X86 => "x86",
         };
+        let template = self.download_url_template.clone().unwrap_or_else(|| {
+            format!(
+                "https://nodejs.org/dist/v{ver}/node-v{ver}-{platform}-{arch}.{ext}",
+                ver = "{version}",
+                platform = "{platform}",
+                arch = "{arch}",
+                ext = "{ext}"
+            )
+        });
         let url = template
             .replace("{version}", &self.version)
             .replace("{platform}", platform)
-            .replace("{arch}", arch);
+            .replace("{arch}", arch)
+            .replace("{ext}", ext);
         Ok(url)
     }
 
-    fn node_binary_path(&self) -> HostPath {
-        self.install_dir.join("bin/node")
+    pub fn node_binary_path_for_os(install_dir: &HostPath, os: Os) -> HostPath {
+        match os {
+            Os::Windows => install_dir.join("node.exe"),
+            _ => install_dir.join("bin/node"),
+        }
+    }
+
+    pub fn node_binary_path(&self, host: &dyn Host) -> HostPath {
+        Self::node_binary_path_for_os(&self.install_dir, host.os())
+    }
+
+    fn source_is_managed(&self, host: &dyn Host, source: &str) -> bool {
+        let expected = self.node_binary_path(host);
+        let normalize = |path: &str| path.replace('\\', "/").trim_end_matches('/').to_lowercase();
+        normalize(source) == normalize(expected.as_posix())
+            || normalize(source) == normalize(&expected.render(ncd_host::PathStyle::Windows))
     }
 
     /// 对齐上游 `check-node-version.cjs`：`^22.13.0 || >=23.4.0`
@@ -163,11 +191,10 @@ impl NodeJsComponent {
     }
 
     fn extract_root_subdir(&self, host: &dyn Host) -> String {
-        // tar.xz 解压后会有一层 node-v20.10.0-linux-x64/ 子目录,需要去除
         let platform = match host.os() {
             Os::Linux => "linux",
             Os::MacOs => "darwin",
-            _ => "linux",
+            Os::Windows => "win",
         };
         let arch = match host.arch() {
             Arch::X86_64 => "x64",
@@ -186,6 +213,7 @@ impl NodeJsComponent {
             description: "SnowLuma 运行所需".to_string(),
             repo_url: Some("https://nodejs.org/".to_string()),
             supported_targets: vec![
+                crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Local),
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
                 crate::types::SupportedTarget::new(Os::MacOs, Locality::Local),
@@ -202,9 +230,8 @@ impl Component for NodeJsComponent {
     }
 
     fn supported_targets(&self) -> &'static [(Os, Locality)] {
-        // 当前实装:Linux 本地 / 远端,macOS 本地
-        // Windows 上 tar.xz 解压尚未支持
         &[
+            (Os::Windows, Locality::Local),
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),
             (Os::MacOs, Locality::Local),
@@ -212,7 +239,7 @@ impl Component for NodeJsComponent {
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
-        let binary = self.node_binary_path();
+        let binary = self.node_binary_path(host);
         if let Some(detected) = probe_node_bin(host, binary.as_posix()).await? {
             return Ok(Some(detected));
         }
@@ -249,18 +276,20 @@ impl Component for NodeJsComponent {
         self.check_target(host)?;
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
 
-        // Step 1:下载 tarball
+        // Step 1: 下载归档
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
-            message: "download node.js tarball".into(),
+            message: "download node.js archive".into(),
         })
         .await;
 
         let url = self.build_download_url(host)?;
+        let archive_ext = if host.os() == Os::Windows { "zip" } else { "tar.xz" };
         let local_tmp = std::env::temp_dir().join(format!(
-            "ncd-nodejs-{}-{}.tar.xz",
+            "ncd-nodejs-{}-{}.{}",
             self.version,
-            std::process::id()
+            std::process::id(),
+            archive_ext
         ));
 
         let helper = DownloadHelper::new()?;
@@ -276,65 +305,74 @@ impl Component for NodeJsComponent {
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
-        // Step 2:上传到目标 host
+        // Step 2: 上传到目标 host
         ctx.emit(ProgressKind::StepBegin {
             step: 2,
-            message: "upload tarball to host".into(),
+            message: "upload archive to host".into(),
         })
         .await;
-        let remote_tar = self.tmp_dir.join(format!(
-            "ncd-nodejs-{}-{}.tar.xz",
+        let remote_archive = self.tmp_dir.join(format!(
+            "ncd-nodejs-{}-{}.{}",
             self.version,
-            std::process::id()
+            std::process::id(),
+            archive_ext
         ));
         host.create_dir_all(&self.tmp_dir).await?;
-        host.upload(&local_tmp, &remote_tar).await?;
-        // 删本地 tmp(已经传过去了)
+        host.upload(&local_tmp, &remote_archive).await?;
         let _ = tokio::fs::remove_file(&local_tmp).await;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // Step 3:解压到临时位置
+        // Step 3: 解压到临时位置
         ctx.emit(ProgressKind::StepBegin {
             step: 3,
-            message: "extract tarball".into(),
+            message: "extract archive".into(),
         })
         .await;
         let stage_dir = self
             .tmp_dir
             .join(format!("ncd-nodejs-stage-{}", std::process::id()));
-        // 清理可能存在的旧 stage(忽略错误)
         let _ = host.remove_dir_all(&stage_dir).await;
         host.create_dir_all(&stage_dir).await?;
-        host.extract_archive(&remote_tar, &stage_dir, ArchiveKind::TarXz)
+
+        let kind = if host.os() == Os::Windows {
+            ArchiveKind::Zip
+        } else {
+            ArchiveKind::TarXz
+        };
+        host.extract_archive(&remote_archive, &stage_dir, kind)
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
 
-        // Step 4:把 stage/<root>/* 移到 install_dir
+        // Step 4: 把 stage/<root>/* 移到 install_dir
         ctx.emit(ProgressKind::StepBegin {
             step: 4,
             message: "install to target dir".into(),
         })
         .await;
-        // 清理旧的 install_dir(可能是更老版本)
         let _ = host.remove_dir_all(&self.install_dir).await;
         host.create_dir_all(&self.install_dir).await?;
         let root_subdir = stage_dir.join(self.extract_root_subdir(host));
-        // 用 shell 把内容 mv 过去:mv stage/root_subdir/* install_dir/
-        let root = shell_quote(root_subdir.as_posix());
-        let dest = shell_quote(self.install_dir.as_posix());
-        let mv_cmd = HostCommand::new("sh").arg("-c").arg(format!(
-            "mv {root}/* {dest}/ && mv {root}/.* {dest}/ 2>/dev/null; true",
-        ));
-        let mv_out = host.run_to_string(mv_cmd).await?;
-        if !mv_out.success() {
-            return Err(ActionError::install_step(
-                "mv_install",
-                format!("exit={:?}: {}", mv_out.exit_code, mv_out.stderr.trim()),
+
+        if host.os() == Os::Windows {
+            copy_dir_all(host, &root_subdir, &self.install_dir).await?;
+        } else {
+            let root = shell_quote(root_subdir.as_posix());
+            let dest = shell_quote(self.install_dir.as_posix());
+            let mv_cmd = HostCommand::new("sh").arg("-c").arg(format!(
+                "mv {root}/* {dest}/ && mv {root}/.* {dest}/ 2>/dev/null; true",
             ));
+            let mv_out = host.run_to_string(mv_cmd).await?;
+            if !mv_out.success() {
+                return Err(ActionError::install_step(
+                    "mv_install",
+                    format!("exit={:?}: {}", mv_out.exit_code, mv_out.stderr.trim()),
+                ));
+            }
         }
-        // 清理 stage 与 tarball
+
+        // 清理 stage 与 archive
         let _ = host.remove_dir_all(&stage_dir).await;
-        let _ = host.remove_file(&remote_tar).await;
+        let _ = host.remove_file(&remote_archive).await;
         ctx.emit(ProgressKind::StepEnd { step: 4, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
@@ -347,17 +385,59 @@ impl Component for NodeJsComponent {
             message: format!("remove {}", self.install_dir.as_posix()),
         })
         .await;
-        // install_dir 不存在视为已卸载,幂等成功
-        if host.exists(&self.install_dir).await? {
-            host.remove_dir_all(&self.install_dir).await?;
+
+        if let Some(detected) = self.detect(host).await? {
+            if !self.source_is_managed(host, &detected.source) {
+                ctx.info(format!(
+                    "检测到的是外部 Node.js（{}），不会删除独立组件目录。",
+                    detected.source
+                ))
+                .await;
+                ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
+                ctx.emit(ProgressKind::Finished { ok: true }).await;
+                return Ok(());
+            }
         }
+
+        if !host.exists(&self.install_dir).await? {
+            ctx.info("Node.js 独立组件在目标路径未安装（当前环境为外部或系统 PATH），无需删除目录。")
+                .await;
+            ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
+            ctx.emit(ProgressKind::Finished { ok: true }).await;
+            return Ok(());
+        }
+
+        if let Err(err) = host.remove_dir_all(&self.install_dir).await {
+            let msg = format!(
+                "删除 Node.js 组件目录失败 ({}): {err}。若有正在运行的 SnowLuma 实例，请先停止 Bot 释放文件锁定后再试。",
+                self.install_dir.as_posix()
+            );
+            ctx.log(ProgressLogLevel::Error, msg.clone()).await;
+            ctx.emit(ProgressKind::StepEnd { step: 1, ok: false }).await;
+            ctx.emit(ProgressKind::Finished { ok: false }).await;
+            return Err(ActionError::other(msg));
+        }
+
+        ctx.info("Node.js 独立组件目录已成功清理").await;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }
 
+    async fn update(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+        if let Some(detected) = self.detect(host).await? {
+            if !self.source_is_managed(host, &detected.source) {
+                return Err(ActionError::other(format!(
+                    "检测到的是外部 Node.js（{}），不能通过组件更新；请先安装独立 Node.js 组件。",
+                    detected.source
+                )));
+            }
+        }
+        self.install(host, ctx).await
+    }
+
     async fn verify(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
-        let binary = self.node_binary_path();
+        let binary = self.node_binary_path(host);
         let exists = host.exists(&binary).await?;
         let mut report =
             VerifyReport::ok().with_check("node binary exists", exists, Some(format!("{binary}")));
@@ -394,17 +474,179 @@ impl Component for NodeJsComponent {
 
     fn launch_command(
         &self,
-        _host: &dyn Host,
+        host: &dyn Host,
         args: &LaunchArgs,
     ) -> Result<HostCommand, ActionError> {
-        let binary = self.node_binary_path();
+        let binary = self.node_binary_path(host);
         Ok(args.apply_to(HostCommand::new(binary.as_posix())))
     }
 }
 
-// 防止 Component 内部 fields 没用到的 dead_code 报警(_arc/_template 是 future-proof)
+async fn copy_dir_all(host: &dyn Host, src: &HostPath, dst: &HostPath) -> Result<(), ActionError> {
+    let mut stack = vec![(src.clone(), dst.clone())];
+    while let Some((s, d)) = stack.pop() {
+        let entries = host.list_dir(&s).await?;
+        for entry in entries {
+            let s_child = s.join(&entry.name);
+            let d_child = d.join(&entry.name);
+            if entry.is_dir {
+                host.create_dir_all(&d_child).await?;
+                stack.push((s_child, d_child));
+            } else {
+                let bytes = host.read_file(&s_child).await?;
+                host.write_file(&d_child, &bytes).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
 #[allow(dead_code)]
 fn _ensure_send_sync(_: Arc<NodeJsComponent>) {}
+
+pub async fn probe_local_system_nodes(
+    host: &dyn Host,
+    bundled_path: Option<&HostPath>,
+    component_path: Option<&HostPath>,
+    custom_path: Option<&str>,
+) -> Vec<NodeEnvironmentCandidate> {
+    let mut results = Vec::new();
+    let mut seen_paths = std::collections::HashSet::new();
+
+    // 1. Custom configured path
+    if let Some(cp) = custom_path {
+        let trimmed = cp.trim();
+        if !trimmed.is_empty() {
+            let hp = HostPath::from_windows(trimmed);
+            if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
+                let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
+                let path_str = hp.render(ncd_host::PathStyle::Windows);
+                seen_paths.insert(path_str.to_lowercase());
+                results.push(NodeEnvironmentCandidate {
+                    path: path_str,
+                    version: ver.clone(),
+                    source_kind: NodeSourceKind::Custom,
+                    label: format!("自定义路径 (v{ver})"),
+                    is_valid,
+                });
+            }
+        }
+    }
+
+    // 2. Bundled in SnowLuma dir
+    if let Some(bp) = bundled_path {
+        if let Ok(Some(ver)) = probe_node_raw_version(host, bp).await {
+            let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
+            let path_str = bp.render(ncd_host::PathStyle::Windows);
+            if !seen_paths.contains(&path_str.to_lowercase()) {
+                seen_paths.insert(path_str.to_lowercase());
+                results.push(NodeEnvironmentCandidate {
+                    path: path_str,
+                    version: ver.clone(),
+                    source_kind: NodeSourceKind::Bundled,
+                    label: format!("SnowLuma 内置 (v{ver})"),
+                    is_valid,
+                });
+            }
+        }
+    }
+
+    // 3. NodeJs component
+    if let Some(cp) = component_path {
+        if let Ok(Some(ver)) = probe_node_raw_version(host, cp).await {
+            let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
+            let path_str = cp.render(ncd_host::PathStyle::Windows);
+            if !seen_paths.contains(&path_str.to_lowercase()) {
+                seen_paths.insert(path_str.to_lowercase());
+                results.push(NodeEnvironmentCandidate {
+                    path: path_str,
+                    version: ver.clone(),
+                    source_kind: NodeSourceKind::Component,
+                    label: format!("独立 Node.js 组件 (v{ver})"),
+                    is_valid,
+                });
+            }
+        }
+    }
+
+    // 4. System PATH
+    #[cfg(windows)]
+    {
+        if let Ok(output) = std::process::Command::new("where.exe").arg("node").output() {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    let hp = HostPath::from_windows(trimmed);
+                    let path_str = hp.render(ncd_host::PathStyle::Windows);
+                    if seen_paths.contains(&path_str.to_lowercase()) {
+                        continue;
+                    }
+                    if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
+                        let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
+                        seen_paths.insert(path_str.to_lowercase());
+                        results.push(NodeEnvironmentCandidate {
+                            path: path_str,
+                            version: ver.clone(),
+                            source_kind: NodeSourceKind::SystemPath,
+                            label: format!("系统 PATH (v{ver})"),
+                            is_valid,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Common Version Managers / Paths (NVM, fnm, Volta, Program Files)
+    #[cfg(windows)]
+    {
+        let mut check_dirs = Vec::new();
+        if let Ok(nvm_home) = std::env::var("NVM_HOME") {
+            check_dirs.push(std::path::PathBuf::from(nvm_home));
+        }
+        if let Ok(nvm_symlink) = std::env::var("NVM_SYMLINK") {
+            check_dirs.push(std::path::PathBuf::from(nvm_symlink));
+        }
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let fnm = std::path::PathBuf::from(&local_app_data).join("fnm_multishells");
+            let volta = std::path::PathBuf::from(&local_app_data).join("Volta").join("bin");
+            let pnpm = std::path::PathBuf::from(&local_app_data).join("pnpm");
+            check_dirs.push(fnm);
+            check_dirs.push(volta);
+            check_dirs.push(pnpm);
+        }
+        if let Ok(program_files) = std::env::var("ProgramFiles") {
+            check_dirs.push(std::path::PathBuf::from(&program_files).join("nodejs"));
+        }
+
+        for base_dir in check_dirs {
+            let node_exe = base_dir.join("node.exe");
+            if node_exe.is_file() {
+                let hp = HostPath::from_windows(node_exe.to_string_lossy().trim());
+                let path_str = hp.render(ncd_host::PathStyle::Windows);
+                if !seen_paths.contains(&path_str.to_lowercase()) {
+                    if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
+                        let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
+                        seen_paths.insert(path_str.to_lowercase());
+                        results.push(NodeEnvironmentCandidate {
+                            path: path_str,
+                            version: ver.clone(),
+                            source_kind: NodeSourceKind::VersionManager,
+                            label: format!("版本管理器/已安装 (v{ver})"),
+                            is_valid,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    results
+}
 
 #[cfg(test)]
 mod tests {
@@ -412,16 +654,14 @@ mod tests {
 
     #[test]
     fn build_download_url_substitutes_version_and_arch() {
-        // 只能用 mock host 做测试,这里用最简单的方式:用 LocalWindowsHost(Windows)看是否拒绝
-        // 然后用 Linux 的占位检查 URL 模板替换逻辑
-        let comp = NodeJsComponent::new("20.10.0", HostPath::from_posix("/opt/node"));
-        // 简单 path 校验:模板含 {version} / {platform} / {arch}
+        let comp = NodeJsComponent::new("22.13.0", HostPath::from_posix("/opt/node"));
         let template = comp.download_url_template.clone().unwrap_or_else(|| {
             format!(
-                "https://nodejs.org/dist/v{ver}/node-v{ver}-{platform}-{arch}.tar.xz",
+                "https://nodejs.org/dist/v{ver}/node-v{ver}-{platform}-{arch}.{ext}",
                 ver = "{version}",
                 platform = "{platform}",
-                arch = "{arch}"
+                arch = "{arch}",
+                ext = "{ext}"
             )
         });
         assert!(template.contains("{version}"));
@@ -431,17 +671,22 @@ mod tests {
 
     #[test]
     fn extract_root_subdir_uses_correct_format() {
-        let comp = NodeJsComponent::new("20.10.0", HostPath::from_posix("/opt/node"));
-        // 测试函数本身的字符串生成不依赖 host 实例,
-        // 这里通过模拟代替 —— 我们在 mod 内只测纯字符串拼接逻辑
-        // 真实集成测试在 deploy 阶段做
-        assert_eq!(comp.version, "20.10.0");
+        let comp = NodeJsComponent::new("22.13.0", HostPath::from_posix("/opt/node"));
+        assert_eq!(comp.version, "22.13.0");
     }
 
     #[test]
     fn node_binary_path_joins_correctly() {
-        let comp = NodeJsComponent::new("20.10.0", HostPath::from_posix("/opt/node"));
-        assert_eq!(comp.node_binary_path().as_posix(), "/opt/node/bin/node");
+        let install = HostPath::from_posix("/opt/node");
+        assert_eq!(
+            NodeJsComponent::node_binary_path_for_os(&install, Os::Linux).as_posix(),
+            "/opt/node/bin/node"
+        );
+        let win_install = HostPath::from_windows(r"C:\Napcat\node");
+        assert_eq!(
+            NodeJsComponent::node_binary_path_for_os(&win_install, Os::Windows).render(ncd_host::PathStyle::Windows),
+            r"C:\Napcat\node\node.exe"
+        );
     }
 
     #[test]
@@ -456,8 +701,8 @@ mod tests {
     }
 
     #[test]
-    fn supported_targets_includes_linux_remote() {
-        let comp = NodeJsComponent::new("20.10.0", HostPath::from_posix("/x"));
+    fn supported_targets_includes_linux_remote_and_windows_local() {
+        let comp = NodeJsComponent::new("22.13.0", HostPath::from_posix("/x"));
         let targets = comp.supported_targets();
         assert!(targets.contains(&(Os::Linux, Locality::Local)));
         assert!(targets.contains(&(Os::Linux, Locality::Remote)));
