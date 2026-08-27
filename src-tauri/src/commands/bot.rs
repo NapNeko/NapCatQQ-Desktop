@@ -532,6 +532,12 @@ mod tests {
                 root,
                 Arc::new(ncd_runtime::InMemoryCredentialStore::default()),
             )),
+            snowluma_daemon: ncd_runtime::SnowLumaDaemon::new(
+                root.join("data").join("snowluma"),
+                root.join("runtime").join("snowluma"),
+                Arc::new(bus.clone()),
+                Arc::new(ncd_runtime::ReqwestSnowLumaWebUiClientFactory::new()),
+            ),
             active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
             deployment_tasks: ncd_runtime::DeploymentTaskManager::new(bus.clone()),
             host_probe_cache: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),

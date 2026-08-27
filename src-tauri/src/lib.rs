@@ -48,6 +48,7 @@ pub struct AppState {
     pub(crate) runtime: runtime::AppRuntime,
     pub(crate) bot_manager: Arc<AppBotManager>,
     pub(crate) server_manager: Arc<ncd_runtime::ServerManager>,
+    pub(crate) snowluma_daemon: Arc<ncd_runtime::SnowLumaDaemon>,
     /// Components 页活跃 task 注册表,task_id → CancellationToken
     /// run_component_action 启动时插入;plan 完成 / 取消时移除
     pub(crate) active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
@@ -283,6 +284,9 @@ pub fn run() {
         Arc::new(event_bus.clone()),
         snowluma_factory,
     );
+    if let Some(custom_node) = app_settings.snowluma_node_path.as_deref().filter(|s| !s.trim().is_empty()) {
+        snowluma_daemon.set_node_bin_override(Some(std::path::PathBuf::from(custom_node.trim())));
+    }
     let snowluma_backend: Arc<dyn ncd_traits::runtime_backend::BotBackend> =
         Arc::new(ncd_runtime::SnowLumaRuntimeBackend::new(
             ncd_domain::ids::BotId::new("snowluma-backend-local"),
@@ -328,6 +332,7 @@ pub fn run() {
             runtime,
             bot_manager,
             server_manager,
+            snowluma_daemon: Arc::clone(&snowluma_daemon),
             active_tasks: Arc::new(Mutex::new(HashMap::new())),
             deployment_tasks: ncd_runtime::DeploymentTaskManager::new(event_bus.clone()),
             host_probe_cache: Arc::new(Mutex::new(HashMap::new())),
@@ -608,6 +613,8 @@ pub fn run() {
             commands::config_transfer::preview_config_import,
             commands::components::list_components,
             commands::components::detect_component,
+            commands::components::probe_local_node_candidates,
+            commands::components::probe_node_binary_version,
             commands::components::qq_deps::detect_qq_dependencies,
             commands::components::qq_deps::install_qq_dependencies,
             commands::components::qq_deps::remember_sudo_password,

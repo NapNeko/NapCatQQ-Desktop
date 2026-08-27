@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use ncd_component::{Component, ComponentDetectResult, ComponentId, ComponentInfo, ProgressKind};
 use ncd_deploy::{DeployPlan, StepKind};
-use ncd_domain::DeploymentTaskKind;
-use ncd_host::Host;
+use ncd_domain::{DeploymentTaskKind, NodeEnvironmentCandidate, NodeProbeResult};
+use ncd_host::{Host, HostPath, Locality, local::LocalWindowsHost};
 use ncd_runtime::{
     ComponentTaskSpec, DeploymentTaskRequest, DeploymentTaskRunResult, DomainEvent, EventBus,
     RemoteHostProbe, RemoteSelectedPaths, SnowLumaLinuxPackage, build_component_for_host,
@@ -48,7 +48,8 @@ pub async fn detect_component(
         probe.layout,
         selected.as_ref(),
         None,
-    )?;
+    )
+    .await?;
     let host_ref: &dyn Host = host.as_ref();
 
     if component.check_target(host_ref).is_err() {
@@ -235,7 +236,8 @@ async fn component_prerequisite_is_installed(
         probe.layout,
         selected,
         snowluma_linux_package,
-    )?;
+    )
+    .await?;
 
     if component.check_target(host.as_ref()).is_err() {
         return Ok(false);
@@ -283,7 +285,8 @@ async fn submit_single_component_task(
         probe.layout,
         selected,
         snowluma_linux_package,
-    )?;
+    )
+    .await?;
 
     let plan = DeployPlan::builder()
         .step("single", kind, Arc::clone(&component))
@@ -491,7 +494,7 @@ pub(crate) async fn cached_host_probe(
     }
 }
 
-fn build_component_for_host_from_state(
+async fn build_component_for_host_from_state(
     id: ComponentId,
     state: &AppState,
     host: &dyn Host,
@@ -502,6 +505,11 @@ fn build_component_for_host_from_state(
 ) -> Result<Arc<dyn Component>, String> {
     let snapshot = read_cached_release_snapshot(&state.data_root);
     let desktop_ver = crate::desktop_update::product_version_str();
+    let snowluma_node_path = if host.locality() == Locality::Local {
+        state.app_settings.read().await.snowluma_node_path.clone()
+    } else {
+        None
+    };
     build_component_for_host(
         id,
         &ncd_runtime::BuildComponentCtx {
@@ -514,6 +522,79 @@ fn build_component_for_host_from_state(
             desktop_product_version: desktop_ver,
             selected,
             snowluma_linux_package,
+            snowluma_node_path: snowluma_node_path.as_deref(),
         },
     )
+}
+
+#[tauri::command]
+pub async fn probe_local_node_candidates(
+    state: State<'_, AppState>,
+) -> Result<Vec<NodeEnvironmentCandidate>, String> {
+    let host = LocalWindowsHost::new();
+    let data_root = &state.data_root;
+    let bundled_node = HostPath::from_windows(
+        data_root
+            .join("components")
+            .join("SnowLuma")
+            .join("node.exe")
+            .to_str()
+            .unwrap_or_default(),
+    );
+    let comp_node = HostPath::from_windows(
+        data_root
+            .join("components")
+            .join("NodeJs")
+            .join("node.exe")
+            .to_str()
+            .unwrap_or_default(),
+    );
+    let custom = {
+        let settings = state.app_settings.read().await;
+        settings.snowluma_node_path.clone()
+    };
+    let candidates = ncd_component::nodejs::probe_local_system_nodes(
+        &host,
+        Some(&bundled_node),
+        Some(&comp_node),
+        custom.as_deref(),
+    )
+    .await;
+    Ok(candidates)
+}
+
+#[tauri::command]
+pub async fn probe_node_binary_version(path: String) -> Result<NodeProbeResult, String> {
+    let host = LocalWindowsHost::new();
+    let hp = HostPath::from_windows(path.trim());
+    match ncd_component::nodejs::probe_node_raw_version(&host, &hp).await {
+        Ok(Some(raw_ver)) => {
+            let is_valid = ncd_component::NodeJsComponent::version_meets_snowluma(&raw_ver);
+            Ok(NodeProbeResult {
+                path,
+                exists: true,
+                version: Some(raw_ver),
+                is_valid,
+                error: if is_valid {
+                    None
+                } else {
+                    Some("版本不满足要求（需 ^22.13.0 || >=23.4.0）".to_string())
+                },
+            })
+        }
+        Ok(None) => Ok(NodeProbeResult {
+            path,
+            exists: false,
+            version: None,
+            is_valid: false,
+            error: Some("无法执行或未找到 node.exe".to_string()),
+        }),
+        Err(err) => Ok(NodeProbeResult {
+            path,
+            exists: false,
+            version: None,
+            is_valid: false,
+            error: Some(format!("{err}")),
+        }),
+    }
 }
