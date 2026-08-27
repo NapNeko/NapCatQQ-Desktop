@@ -10,6 +10,8 @@ import type {
     ComponentDetectResult,
     ComponentId,
     ComponentInfo,
+    NodeEnvironmentCandidate,
+    NodeProbeResult,
     SnowLumaLinuxPackage,
     StepKind,
 } from '../ipc/types';
@@ -108,5 +110,23 @@ export const componentService = {
             serverId,
             password,
         });
+    },
+
+    // 扫描本地 Node.js 运行环境候选
+    probeLocalNodeCandidates: async (): Promise<NodeEnvironmentCandidate[]> => {
+        if (isTauri) return invoke<NodeEnvironmentCandidate[]>('probe_local_node_candidates');
+        return [];
+    },
+
+    // 探测单个 Node 可执行文件
+    probeNodeBinaryVersion: async (path: string): Promise<NodeProbeResult> => {
+        if (isTauri) return invoke<NodeProbeResult>('probe_node_binary_version', { path });
+        return {
+            path,
+            exists: false,
+            version: null,
+            isValid: false,
+            error: 'Mock: not running in Tauri',
+        };
     },
 };

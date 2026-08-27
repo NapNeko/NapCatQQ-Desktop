@@ -91,4 +91,8 @@ onebotOfflineNotice: OfflineOneBotSettings,
 /**
  * 外观偏好
  */
-uiPreferences: AppUiPreferences, };
+uiPreferences: AppUiPreferences, 
+/**
+ * SnowLuma 本地 Node.js 运行环境指定路径（None 或空表示自动按优先级解析：自定义 > 内置 > 组件 > PATH）
+ */
+snowlumaNodePath: string | null, };

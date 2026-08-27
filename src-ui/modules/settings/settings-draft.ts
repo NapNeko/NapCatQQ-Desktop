@@ -107,6 +107,7 @@ export function draftFromBackendAndPrefs(
         notifyOnRecovered: backend.notifyOnRecovered,
         offlineDebounceSeconds: backend.offlineDebounceSeconds,
         offlineDeliveryHistoryLimit: backend.offlineDeliveryHistoryLimit,
+        snowlumaNodePath: backend.snowlumaNodePath,
         theme: client.theme,
         showMascot: client.showMascot,
         motionEnabled: client.motionEnabled,
@@ -188,6 +189,7 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
         notifyOnRecovered: draft.notifyOnRecovered,
         offlineDebounceSeconds: draft.offlineDebounceSeconds,
         offlineDeliveryHistoryLimit: draft.offlineDeliveryHistoryLimit,
+        snowlumaNodePath: draft.snowlumaNodePath || null,
     };
 }
 
@@ -255,7 +257,8 @@ export function isSettingsDirty(
         draft.onebotMessageTemplate !== baseline.onebotMessageTemplate ||
         draft.notifyOnRecovered !== baseline.notifyOnRecovered ||
         draft.offlineDebounceSeconds !== baseline.offlineDebounceSeconds ||
-        draft.offlineDeliveryHistoryLimit !== baseline.offlineDeliveryHistoryLimit
+        draft.offlineDeliveryHistoryLimit !== baseline.offlineDeliveryHistoryLimit ||
+        (draft.snowlumaNodePath || null) !== (baseline.snowlumaNodePath || null)
     );
 }
 

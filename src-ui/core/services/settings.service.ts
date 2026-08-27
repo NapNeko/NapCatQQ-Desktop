@@ -105,6 +105,8 @@ export interface BackendSettings {
     offlineDebounceSeconds: number;
     /** 内存投递历史容量;0=不记 */
     offlineDeliveryHistoryLimit: number;
+    /** SnowLuma Node.js 自定义/指定运行环境路径 */
+    snowlumaNodePath: string | null;
 }
 
 /** 由 BackendSettings 派生的客户端偏好（与 preferencesStore 一致）。 */
@@ -240,6 +242,7 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
         offlineDeliveryHistoryLimit: Number(
             dto.settings.poller.offlineNotifyBehavior?.deliveryHistoryLimit ?? 50,
         ),
+        snowlumaNodePath: dto.settings.snowlumaNodePath ?? null,
     };
 }
 
@@ -311,6 +314,7 @@ type AppSettingsDtoInvoke = {
             onebotTargetIds: number[];
             onebotMessageTemplate: string;
         };
+        snowlumaNodePath: string | null;
     };
     githubPat: string;
 };
@@ -409,6 +413,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
                 onebotTargetType: s.onebotTargetType || 'private',
                 onebotMessageTemplate: s.onebotMessageTemplate || DEFAULT_ONEBOT_MESSAGE,
             },
+            snowlumaNodePath: s.snowlumaNodePath || null,
         },
         githubPat: s.githubPat.trim(),
     };
