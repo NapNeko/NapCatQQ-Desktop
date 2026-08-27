@@ -107,6 +107,8 @@ pub struct SnowLumaDaemon {
     recent_log: Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
     /// Desktop 指标探针：仅在 spawn node 时注入子进程 env（不改安装树）
     metrics_child_env: std::sync::Mutex<Option<std::collections::BTreeMap<String, String>>>,
+    /// 用户配置/指定的 Node.js 运行路径覆盖（None 表示走内置/组件/系统优先级推导）
+    node_bin_override: std::sync::RwLock<Option<PathBuf>>,
 }
 
 /// stdout 广播容量订阅滞后会被 broadcast 通道 overwrite
@@ -148,7 +150,52 @@ impl SnowLumaDaemon {
                 std::collections::VecDeque::with_capacity(RECENT_LOG_CAPACITY),
             )),
             metrics_child_env: std::sync::Mutex::new(None),
+            node_bin_override: std::sync::RwLock::new(None),
         })
+    }
+
+    /// 设置/更新用户指定的 Node.js 运行路径
+    pub fn set_node_bin_override(&self, path: Option<PathBuf>) {
+        if let Ok(mut g) = self.node_bin_override.write() {
+            *g = path;
+        }
+    }
+
+    /// 解析可用的 node.exe 路径（自定义 > 内置 > 独立组件）
+    pub fn resolve_node_exe(&self) -> Result<PathBuf, SnowLumaDaemonError> {
+        if let Ok(guard) = self.node_bin_override.read() {
+            if let Some(ref custom) = *guard {
+                if custom.is_file() {
+                    return Ok(custom.clone());
+                }
+            }
+        }
+
+        let bundled = self.runtime_root.join("node.exe");
+        if bundled.is_file() {
+            return Ok(bundled);
+        }
+
+        if let Some(parent) = self.runtime_root.parent() {
+            let comp_node = parent.join("NodeJs").join("node.exe");
+            if comp_node.is_file() {
+                return Ok(comp_node);
+            }
+        }
+
+        if let Ok(path_var) = std::env::var("PATH") {
+            for dir in std::env::split_paths(&path_var) {
+                let candidate = dir.join("node.exe");
+                if candidate.is_file() {
+                    return Ok(candidate);
+                }
+            }
+        }
+
+        Err(SnowLumaDaemonError::Spawn(format!(
+            "未找到可用的 Node.js 运行时 (需 ^22.13.0 || >=23.4.0)。请在组件管理中安装 Node.js 组件，或在高级设置中配置 Node.js 运行环境路径。搜索路径: {}",
+            bundled.display()
+        )))
     }
 
     /// 设置/清除 node 子进程指标 env；None 表示不注入（与指标开关关一致）
@@ -298,11 +345,11 @@ impl SnowLumaDaemon {
         };
 
         // === 3. spawn node.exe entry.js ===
-        // TODO( / SnowLuma 安装布局对齐): 实际入口应来自 PathProbe /
-        // runtime_launch_plan;当前 task 阶段无 wiring,按"runtime_root 下的
-        // entry.js"硬编码一个占位入口,正式落地由 wiring task 修正
-        let node_exe = self.runtime_root.join("node.exe");
         let entry_js = resolve_daemon_entry(&self.runtime_root);
+        let node_exe = match self.resolve_node_exe() {
+            Ok(p) => p,
+            Err(err) => return Err(self.rollback_to_stopped(err).await),
+        };
         let mut node_cmd = Command::new(&node_exe);
         node_cmd
             .arg(&entry_js)
