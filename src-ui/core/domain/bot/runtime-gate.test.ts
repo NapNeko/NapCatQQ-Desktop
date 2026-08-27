@@ -129,4 +129,28 @@ describe('runtime gate matrix', () => {
             text: '远程直接运行依赖已就绪',
         });
     });
+
+    it('requires external Node.js for local SnowLuma Lite only', () => {
+        const config = botConfig({ backend_type: 'snowluma' });
+        expect(
+            runtimeStartBlockReason({
+                config,
+                local: {
+                    installed: { nodejs: false, qq: true, snowluma: true },
+                    probing: false,
+                    snowlumaLinuxPackage: 'lite',
+                },
+            }),
+        ).toContain('Node.js');
+        expect(
+            runtimeStartBlockReason({
+                config,
+                local: {
+                    installed: { nodejs: false, qq: true, snowluma: true },
+                    probing: false,
+                    snowlumaLinuxPackage: 'full',
+                },
+            }),
+        ).toBeNull();
+    });
 });

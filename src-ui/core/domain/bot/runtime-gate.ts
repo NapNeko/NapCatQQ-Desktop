@@ -56,6 +56,7 @@ export function describeRuntimeRequirement(req: RuntimeRequirement): string {
 export interface LocalRuntimeStatus {
     installed: Partial<Record<DirectRunComponentId, boolean | undefined>>;
     probing: boolean;
+    snowlumaLinuxPackage?: SnowLumaLinuxPackage | null;
 }
 
 export interface RemoteDirectStatus {
@@ -111,7 +112,7 @@ export function runtimeStartBlockReason(args: RuntimeGateArgs): string | null {
     if (req.kind === 'local-direct') {
         const st = args.local;
         if (!st) return '正在检测本机运行时状态...';
-        const chain = localDirectRunChain(req.backend);
+        const chain = localDirectRunChain(req.backend, st.snowlumaLinuxPackage);
         const missing = chain.filter((id) => st.installed[id] === false);
         if (missing.length > 0) {
             return `本机缺少 ${missing.map(componentIdToDisplayName).join('、')}，请到「组件」页安装后再启动`;
@@ -183,7 +184,7 @@ export function runtimeReadinessNotice(args: RuntimeGateArgs): {
         if (!st || st.probing) {
             return { tone: 'neutral', text: '正在检测本机运行时组件...' };
         }
-        const chain = localDirectRunChain(req.backend);
+        const chain = localDirectRunChain(req.backend, st.snowlumaLinuxPackage);
         const missing = chain.filter((id) => st.installed[id] === false);
         if (missing.length > 0) {
             return {

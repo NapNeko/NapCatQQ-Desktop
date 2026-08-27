@@ -107,6 +107,7 @@ export function useBotRuntimeStartGate(
                 out.local = {
                     installed: st ?? {},
                     probing: st ? Object.values(st).some((v) => v === undefined) : true,
+                    snowlumaLinuxPackage: localSnowlumaPackage,
                 };
             } else if (req.kind === 'remote-direct') {
                 const st = statusByHost[req.hostId]?.[config.bot.backend_type];

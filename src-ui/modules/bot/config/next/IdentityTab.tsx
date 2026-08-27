@@ -16,6 +16,7 @@ import { GsapPresence } from '../../../../shared/ui/motion/GsapPresence';
 import { useServerManager } from '../../../../hooks/remote/useServerManager';
 import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
 import { useHostComponentInstalled } from '../../../../hooks/components/useRemoteHostComponentInstalled';
+import { useBackendSettings } from '../../../../hooks/preferences/useBackendSettings';
 import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
 import {
     remoteDirectRunChain,
@@ -70,6 +71,7 @@ const TIME_UNIT_ITEMS = [
 
 export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityTabProps) {
     const { servers, isLoading: serversLoading } = useServerManager();
+    const { settings: appSettings } = useBackendSettings();
 
     const isRemote = !isRuntimeTargetLocal(data.runtime_target);
     const runtimeMode = runtimeModeForTarget(data.runtime_target);
@@ -115,7 +117,13 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         snowlumaLinuxPackage,
     );
 
-    const localInstalled = useHostComponentInstalled('local', data.backend_type);
+    const localSnowlumaPackage =
+        data.backend_type === 'snowluma' ? appSettings?.snowlumaPackage ?? null : null;
+    const localInstalled = useHostComponentInstalled(
+        'local',
+        data.backend_type,
+        localSnowlumaPackage,
+    );
 
     const remoteReachable = useIsHostReachable(remoteHostId);
     const remoteTransportFailed = isRemote && remoteHostId != null && !remoteReachable;
@@ -323,7 +331,10 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
                     {!isRemote && (
                         (() => {
-                            const chain = localDirectRunChain(data.backend_type);
+                            const chain = localDirectRunChain(
+                                data.backend_type,
+                                localSnowlumaPackage,
+                            );
                             const missing = chain.filter((id) => localInstalled[id] === false);
                             if (missing.length > 0) {
                                 return (
