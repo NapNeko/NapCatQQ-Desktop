@@ -150,7 +150,7 @@ export function DesktopConsentDialog({
                 </DialogHeader>
 
                 {/* 融合一体的主体卡片容器：使用 rounded-lg 与 theme border/bg tokens */}
-                <div className="relative flex flex-col overflow-hidden rounded-lg border border-border bg-surface">
+                <div className="relative flex flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-card">
                     {/* 顶栏：Tab 切换与阅读进度 */}
                     <div className="flex items-center justify-between border-b border-border-subtle bg-inset px-3 py-2">
                         <div className="flex items-center gap-1.5">
@@ -165,7 +165,7 @@ export function DesktopConsentDialog({
                                         className={cn(
                                             'group relative flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-150 active:scale-[0.98]',
                                             selected
-                                                ? 'border border-border bg-surface text-text font-medium'
+                                                ? 'border border-border bg-surface text-text shadow-card font-medium'
                                                 : 'border border-transparent text-text-secondary hover:border-border-subtle hover:bg-elevated hover:text-text',
                                         )}
                                     >
