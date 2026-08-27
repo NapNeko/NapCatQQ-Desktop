@@ -1,4 +1,4 @@
-// CPU / RAM 占用率折线图（显示池 + 可选滚入动画）。
+// CPU / RAM 占用率折线图（高质感渐变光晕 + 实时呼吸端点 + 滚入平滑动画）。
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
@@ -27,7 +27,7 @@ interface OccupancyChartProps {
 }
 
 const Y_TICKS = [100, 75, 50, 25, 0];
-const PADDING = { top: 8, right: 8, bottom: 8, left: 44 } as const;
+const PADDING = { top: 8, right: 8, bottom: 8, left: 38 } as const;
 
 export const OccupancyChart: React.FC<OccupancyChartProps> = ({
     title,
@@ -41,6 +41,7 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
     className,
 }) => {
     const gradientId = `occupancy-gradient-${title.toLowerCase()}`;
+    const filterId = `occupancy-glow-${title.toLowerCase()}`;
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const [size, setSize] = useState({ w: 0, h: 0 });
     const [hoverX, setHoverX] = useState<number | null>(null);
@@ -109,26 +110,44 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
     const hoverInfo =
         hoverX !== null ? pickHover(clipped, renderValues, hoverX) : null;
     const headerValueText = hoverInfo ? `${Math.round(hoverInfo.value)}%` : valueText;
+    const latestPoint = clipped.length > 0 ? clipped[clipped.length - 1] : null;
 
     return (
         <Card padding="md" className={`flex flex-col ${className ?? ''}`.trim()}>
-            <div className="mb-2 flex shrink-0 items-center gap-2">
-                <Icon size={14} strokeWidth={1.75} className="text-text-secondary" />
-                <span className="flex-1 text-[13px] font-medium text-text-secondary">{title}</span>
-                <span
-                    className="font-mono text-[14px] font-semibold tabular-nums"
-                    style={{ color: accentColor }}
-                >
-                    {headerValueText}
-                </span>
+            {/* 卡片头部：图标 + 标题 + 醒目大字号当前负载 */}
+            <div className="mb-2 flex shrink-0 items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <div
+                        className="grid h-7 w-7 place-items-center rounded-sm"
+                        style={{ backgroundColor: `color-mix(in srgb, ${accentColor} 14%, transparent)` }}
+                    >
+                        <Icon size={14} strokeWidth={2} style={{ color: accentColor }} />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-text">{title}</span>
+                        <span
+                            className="h-1.5 w-1.5 rounded-full animate-pulse"
+                            style={{ backgroundColor: accentColor }}
+                        />
+                    </div>
+                </div>
+                <div className="flex items-baseline gap-1">
+                    <span
+                        className="font-mono text-lg font-bold tabular-nums tracking-tight"
+                        style={{ color: accentColor }}
+                    >
+                        {headerValueText}
+                    </span>
+                </div>
             </div>
 
             <div
                 ref={wrapperRef}
-                className="relative min-h-[140px] flex-1"
+                className="relative min-h-[135px] flex-1 cursor-crosshair"
                 onPointerMove={handlePointerMove}
                 onPointerLeave={() => setHoverX(null)}
             >
+                {/* 刻度虚线 */}
                 {size.h > 0 && (
                     <div
                         aria-hidden
@@ -141,21 +160,22 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                                 <div
                                     key={tick}
                                     className="absolute left-0 right-0 flex items-center"
-                                    style={{ top: `calc(${yRatio * 100}% - 7px)` }}
+                                    style={{ top: `calc(${yRatio * 100}% - 6px)` }}
                                 >
                                     <span
-                                        className="shrink-0 pr-2 text-right font-mono text-[11px] tabular-nums text-text-disabled"
+                                        className="shrink-0 pr-1.5 text-right font-mono text-[10px] tabular-nums text-text-tertiary/60 select-none"
                                         style={{ width: PADDING.left - 4 }}
                                     >
                                         {tick}%
                                     </span>
-                                    <div className="flex-1 border-t border-dashed border-border-subtle/70" />
+                                    <div className="flex-1 border-t border-dashed border-border-subtle/40" />
                                 </div>
                             );
                         })}
                     </div>
                 )}
 
+                {/* 图表主体 */}
                 {size.w > 0 && size.h > 0 && renderValues.length > 0 && (
                     <svg
                         width={size.w}
@@ -163,25 +183,68 @@ export const OccupancyChart: React.FC<OccupancyChartProps> = ({
                         className="absolute inset-0 overflow-hidden"
                     >
                         <defs>
+                            {/* 渐变遮罩 */}
                             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor={accentColor} stopOpacity={0.32} />
-                                <stop offset="100%" stopColor={accentColor} stopOpacity={0.02} />
+                                <stop offset="0%" stopColor={accentColor} stopOpacity={0.36} />
+                                <stop offset="45%" stopColor={accentColor} stopOpacity={0.12} />
+                                <stop offset="100%" stopColor={accentColor} stopOpacity={0.00} />
                             </linearGradient>
+
+                            {/* 霓虹发光滤镜：使用 userSpaceOnUse 避免水平直线时 height=0 导致整条线被浏览器裁切消失 */}
+                            <filter
+                                id={filterId}
+                                x="0"
+                                y="0"
+                                width={size.w}
+                                height={size.h}
+                                filterUnits="userSpaceOnUse"
+                            >
+                                <feDropShadow
+                                    dx="0"
+                                    dy="1.5"
+                                    stdDeviation="2.5"
+                                    floodColor={accentColor}
+                                    floodOpacity="0.4"
+                                />
+                            </filter>
                         </defs>
 
                         <g transform={`translate(${PADDING.left}, ${PADDING.top})`}>
+                            {/* 面积渐变填充 */}
                             {areaPath && <path d={areaPath} fill={`url(#${gradientId})`} />}
+
+                            {/* 发光曲线 */}
                             {linePath && (
                                 <path
                                     d={linePath}
                                     fill="none"
                                     stroke={accentColor}
-                                    strokeWidth={2}
+                                    strokeWidth={2.2}
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
+                                    filter={`url(#${filterId})`}
                                 />
                             )}
 
+                            {/* 实时最新数据点发光指示 */}
+                            {!hoverInfo && latestPoint && (
+                                <g transform={`translate(${latestPoint.x}, ${latestPoint.y})`}>
+                                    <circle
+                                        r={6}
+                                        fill={accentColor}
+                                        fillOpacity={0.25}
+                                        className={motionEnabled ? 'animate-pulse' : undefined}
+                                    />
+                                    <circle
+                                        r={3.5}
+                                        fill={accentColor}
+                                        stroke="var(--surface-card)"
+                                        strokeWidth={1.8}
+                                    />
+                                </g>
+                            )}
+
+                            {/* 鼠标悬停十字标尺 */}
                             {hoverInfo && (
                                 <HoverIndicator
                                     point={hoverInfo.p}
@@ -214,11 +277,11 @@ const HoverIndicator: React.FC<{
                 y1={pillY + pillHeight + 2}
                 y2={chartHeight}
                 stroke={accentColor}
-                strokeOpacity={0.3}
+                strokeOpacity={0.4}
                 strokeWidth={1}
                 strokeDasharray="3 3"
             />
-            <circle cx={point.x} cy={point.y} r={6} fill={accentColor} fillOpacity={0.18} />
+            <circle cx={point.x} cy={point.y} r={7} fill={accentColor} fillOpacity={0.2} />
             <circle
                 cx={point.x}
                 cy={point.y}
@@ -239,7 +302,7 @@ const PillLabel: React.FC<{
     color: string;
     text: string;
 }> = ({ x, y, height, color, text }) => {
-    const pillWidth = text.length * 6.8 + 12;
+    const pillWidth = text.length * 6.8 + 14;
     return (
         <g pointerEvents="none">
             <rect
@@ -249,6 +312,7 @@ const PillLabel: React.FC<{
                 height={height}
                 rx={height / 2}
                 fill={color}
+                className="drop-shadow-xs"
             />
             <text
                 x={x}
@@ -256,7 +320,7 @@ const PillLabel: React.FC<{
                 textAnchor="middle"
                 dominantBaseline="central"
                 fontFamily="var(--font-mono)"
-                fontSize={11}
+                fontSize={10.5}
                 fontWeight={600}
                 fill="#fff"
             >

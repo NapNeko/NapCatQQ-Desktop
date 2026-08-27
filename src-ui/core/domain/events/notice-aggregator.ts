@@ -32,12 +32,18 @@ export interface NoticeItem {
     title: string;
     detail: string;
     tone: NoticeTone;
-    /// 可选时间戳（Unix ms），缺失时 UI 不显示日期。
+    /// 可选时间戳（Unix ms 或 s），缺失时 UI 不显示日期。
     timestamp?: number;
     /// 可选：来源分类（迁移诊断 / 版本更新 / 运行时事件）。
     source: 'migration' | 'update' | 'runtime' | 'system';
     /// 可选：点击跳转 URL（version update 通常带）。
     url?: string;
+    /// 可选：快捷操作文案（如 "去升级"、"管理实例"）。
+    actionText?: string;
+    /// 可选：快捷操作跳转路由。
+    actionRoute?: string;
+    /// 可选：关联的 Bot ID。
+    botId?: string;
 }
 
 export interface NoticeAggregatorInput {
@@ -142,6 +148,8 @@ function collectUpdateNotices(
             tone: 'info' as const,
             source: 'update' as const,
             url: u.htmlUrl,
+            actionText: '去升级',
+            actionRoute: 'components',
         };
     });
 }
@@ -174,6 +182,9 @@ function describeRuntimeEvent(event: DomainEvent): NoticeItem | null {
                 detail: `${reasonText}，请重新扫码登录。`,
                 tone: event.reason === 'kicked' ? 'warning' : 'info',
                 source: 'runtime',
+                actionText: '管理实例',
+                actionRoute: 'bots',
+                botId: event.bot_id,
             };
         }
         case 'bot_process_exited': {
@@ -186,6 +197,9 @@ function describeRuntimeEvent(event: DomainEvent): NoticeItem | null {
                 detail: event.reason ?? `退出码 ${exit ?? 'unknown'}`,
                 tone: 'danger',
                 source: 'runtime',
+                actionText: '管理实例',
+                actionRoute: 'bots',
+                botId: event.bot_id,
             };
         }
         case 'bot_error': {
@@ -195,6 +209,9 @@ function describeRuntimeEvent(event: DomainEvent): NoticeItem | null {
                 detail: event.hint ? `${event.message}（${event.hint}）` : event.message,
                 tone: 'danger',
                 source: 'runtime',
+                actionText: '查看实例',
+                actionRoute: 'bots',
+                botId: event.bot_id,
             };
         }
         case 'snowluma_daemon_state_changed': {

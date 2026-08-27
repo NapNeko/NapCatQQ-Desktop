@@ -20,7 +20,6 @@ import {
     computeBotFleetStats,
     listActionableBots,
 } from '../../../core/domain/overview/glance';
-import { botProcessBadge } from '../../../core/domain/bot/bot-status-presentation';
 import { OccupancyChart } from './OccupancyChart';
 import type { ResourceUsage } from '../../../hooks/diagnostics/useResourceMonitor';
 
@@ -57,37 +56,28 @@ export function OverviewCommandColumn({
     configs: Record<string, BotConfig | null>;
     onNavigate: OverviewNavigate;
 }) {
+    return (
+        <BotFleetOverviewCard
+            snapshots={snapshots}
+            configs={configs}
+            onNavigate={onNavigate}
+        />
+    );
+}
+
+export function BotFleetOverviewCard({
+    snapshots,
+    configs,
+    onNavigate,
+}: {
+    snapshots: BotActorSnapshot[];
+    configs: Record<string, BotConfig | null>;
+    onNavigate: OverviewNavigate;
+}) {
     const stats = computeBotFleetStats(snapshots);
     const actionable = listActionableBots(snapshots);
     const runningList = snapshots.filter((s) => s.state === 'running').slice(0, 4);
 
-    return (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <FleetGlanceCard stats={stats} actionableCount={actionable.length} />
-            <BotCommandCenterCard
-                stats={stats}
-                actionable={actionable}
-                runningList={runningList}
-                configs={configs}
-                onNavigate={onNavigate}
-            />
-        </div>
-    );
-}
-
-function BotCommandCenterCard({
-    stats,
-    actionable,
-    runningList,
-    configs,
-    onNavigate,
-}: {
-    stats: ReturnType<typeof computeBotFleetStats>;
-    actionable: ReturnType<typeof listActionableBots>;
-    runningList: BotActorSnapshot[];
-    configs: Record<string, BotConfig | null>;
-    onNavigate: OverviewNavigate;
-}) {
     const subtitle =
         stats.total === 0
             ? '暂无已注册实例'
@@ -95,142 +85,34 @@ function BotCommandCenterCard({
               ? `异常 ${stats.crashed} · 待重启 ${stats.pendingRestart}`
               : stats.running > 0
                 ? `${stats.running} 个实例运行中`
-                : '当前无运行中实例';
+                : '所有实例已停止';
 
     return (
-        <Card padding="md" className="flex min-h-0 flex-1 flex-col">
-            <div className="mb-3 flex shrink-0 items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                    <div className="grid h-9 w-9 place-items-center rounded-md bg-brand-soft text-brand">
-                        <MotionIcon icon={Bot} motion="bob" playEnter={false} size={18} />
+        <Card padding="md" className="flex flex-col gap-3.5">
+            {/* 卡片头部 */}
+            <div className="flex shrink-0 items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                    <div className="grid h-8 w-8 place-items-center rounded-md bg-brand-soft text-brand">
+                        <MotionIcon icon={Bot} motion="bob" playEnter={false} size={16} />
                     </div>
                     <div>
-                        <h3 className="font-display text-[15px] font-semibold text-text">
-                            实例运行台
+                        <h3 className="font-display text-[14.5px] font-semibold text-text">
+                            实例运行态势
                         </h3>
-                        <p className="text-[12px] text-text-tertiary">{subtitle}</p>
+                        <p className="text-[11.5px] text-text-tertiary">{subtitle}</p>
                     </div>
                 </div>
                 <button
                     type="button"
                     onClick={() => onNavigate('bots')}
-                    className="flex shrink-0 items-center gap-0.5 text-[12px] font-medium text-brand hover:underline"
+                    className="flex shrink-0 items-center gap-0.5 text-xs font-medium text-brand hover:underline cursor-pointer select-none"
                 >
                     管理实例
-                    <MotionIcon icon={ChevronRight} motion="nudge" playEnter={false} size={14} />
+                    <MotionIcon icon={ChevronRight} motion="nudge" playEnter={false} size={13} />
                 </button>
             </div>
 
-            <div className="mb-3 shrink-0">
-                <p className="font-mono text-3xl font-semibold tabular-nums text-text">
-                    {stats.running}
-                    <span className="text-lg font-normal text-text-tertiary">
-                        {' '}
-                        / {stats.total}
-                    </span>
-                </p>
-                <p className="sr-only">
-                    运行中 {stats.running}，已注册 {stats.total}
-                </p>
-                <p className="text-[11.5px] text-text-tertiary">运行中 / 已注册</p>
-            </div>
-
-            {stats.total === 0 ? (
-                <div className="flex flex-1 flex-col items-center justify-center gap-3 py-6 text-center">
-                    <p className="text-[13px] text-text-secondary">
-                        在实例页创建配置后即可在此查看运行态势
-                    </p>
-                    <Button variant="primary" size="sm" onClick={() => onNavigate('bots')}>
-                        前往实例页
-                    </Button>
-                </div>
-            ) : (
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-0.5">
-                    {actionable.length > 0 && (
-                        <section aria-labelledby="overview-actionable-heading">
-                            <h4
-                                id="overview-actionable-heading"
-                                className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning"
-                            >
-                                待处置
-                            </h4>
-                            <ul className="space-y-1">
-                                {actionable.map((item) => (
-                                    <li key={item.botId}>
-                                        <button
-                                            type="button"
-                                            onClick={() => onNavigate('bots')}
-                                            className="flex w-full items-center justify-between gap-2 rounded-sm bg-warning/5 px-2.5 py-2 text-left transition-colors hover:bg-warning/10"
-                                        >
-                                            <span className="truncate text-[12.5px] font-medium text-text">
-                                                {displayBotName(item.botId, configs)}
-                                            </span>
-                                            <span className="shrink-0 text-[11px] text-text-tertiary">
-                                                {item.detail}
-                                            </span>
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </section>
-                    )}
-
-                    {runningList.length > 0 && (
-                        <section aria-labelledby="overview-running-heading">
-                            <h4
-                                id="overview-running-heading"
-                                className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary"
-                            >
-                                运行中实例
-                            </h4>
-                            <ul className="space-y-1">
-                                {runningList.map((snap) => {
-                                    const badge = botProcessBadge(snap.state);
-                                    return (
-                                        <li key={snap.bot_id}>
-                                            <button
-                                                type="button"
-                                                onClick={() => onNavigate('bots')}
-                                                className="flex w-full items-center justify-between gap-2 rounded-sm px-2.5 py-2 text-left transition-colors hover:bg-inset/80"
-                                            >
-                                                <span className="truncate text-[12.5px] font-medium text-text">
-                                                    {displayBotName(snap.bot_id, configs)}
-                                                </span>
-                                                <span className="shrink-0 text-[11px] text-success">
-                                                    {badge.label}
-                                                </span>
-                                            </button>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        </section>
-                    )}
-                </div>
-            )}
-        </Card>
-    );
-}
-
-function FleetGlanceCard({
-    stats,
-    actionableCount,
-}: {
-    stats: ReturnType<typeof computeBotFleetStats>;
-    actionableCount: number;
-}) {
-    const attentionTone =
-        stats.crashed > 0
-            ? 'danger'
-            : actionableCount > 0
-              ? 'warning'
-              : 'success';
-
-    return (
-        <Card padding="md" className="shrink-0">
-            <h3 className="mb-3 font-display text-[13px] font-semibold text-text">
-                实例态势
-            </h3>
+            {/* 三列关键指标 */}
             <div className="grid grid-cols-3 gap-2">
                 <GlanceCell
                     label="运行中"
@@ -245,22 +127,111 @@ function FleetGlanceCard({
                     }
                 />
                 <GlanceCell
-                    label="已注册"
-                    value={String(stats.total)}
-                    srSummary={`共 ${stats.total} 个已注册实例`}
+                    label="已停止"
+                    value={String(stats.stopped)}
+                    srSummary={`共 ${stats.stopped} 个已停止实例`}
                     tone="neutral"
                 />
                 <GlanceCell
                     label="待处置"
-                    value={String(actionableCount)}
+                    value={String(actionable.length)}
                     srSummary={
-                        actionableCount === 0
+                        actionable.length === 0
                             ? '无异常或待重启项'
-                            : `${actionableCount} 项需进入实例页处理`
+                            : `${actionable.length} 项需进入实例页处理`
                     }
-                    tone={attentionTone}
+                    tone={
+                        stats.crashed > 0
+                            ? 'danger'
+                            : actionable.length > 0
+                              ? 'warning'
+                              : 'success'
+                    }
                 />
             </div>
+
+            {/* 列表内容区 */}
+            {stats.total === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-4 text-center rounded-md bg-inset/40 border border-dashed border-border-subtle/80">
+                    <p className="text-xs text-text-secondary">
+                        尚未创建任何 Bot 实例
+                    </p>
+                    <Button variant="primary" size="sm" onClick={() => onNavigate('bots')} className="text-2xs h-7">
+                        前往实例页创建
+                    </Button>
+                </div>
+            ) : (
+                <div className="space-y-2.5">
+                    {/* 待处置列表 */}
+                    {actionable.length > 0 && (
+                        <section aria-labelledby="overview-actionable-heading" className="space-y-1">
+                            <h4
+                                id="overview-actionable-heading"
+                                className="text-[11px] font-semibold uppercase tracking-wide text-warning"
+                            >
+                                待处置
+                            </h4>
+                            <div className="space-y-1">
+                                {actionable.map((item) => (
+                                    <button
+                                        key={item.botId}
+                                        type="button"
+                                        onClick={() => onNavigate('bots')}
+                                        className="flex w-full items-center justify-between gap-2 rounded-md bg-warning/10 border border-warning/20 px-3 py-2 text-left transition-colors hover:bg-warning/15 cursor-pointer"
+                                    >
+                                        <span className="truncate text-xs font-medium text-text">
+                                            {displayBotName(item.botId, configs)}
+                                        </span>
+                                        <span className="shrink-0 text-2xs text-warning font-medium">
+                                            {item.detail}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
+                    {/* 运行中实例列表 */}
+                    {runningList.length > 0 && (
+                        <section aria-labelledby="overview-running-heading" className="space-y-1">
+                            <h4
+                                id="overview-running-heading"
+                                className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary"
+                            >
+                                活跃实例
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {runningList.map((snap) => {
+                                    const cfg = configs[snap.bot_id];
+                                    const backend = cfg?.bot?.backend_type ?? 'napcat';
+                                    return (
+                                        <div
+                                            key={snap.bot_id}
+                                            onClick={() => onNavigate('bots')}
+                                            className="flex items-center justify-between gap-2 rounded-md bg-field/50 border border-border-subtle/70 px-3 py-2 transition-all hover:bg-field hover:border-border cursor-pointer select-none"
+                                        >
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="h-2 w-2 shrink-0 rounded-full bg-success shadow-glow-success" />
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-xs font-semibold text-text">
+                                                        {displayBotName(snap.bot_id, configs)}
+                                                    </p>
+                                                    <p className="font-mono text-[10px] text-text-tertiary truncate">
+                                                        {backend === 'snowluma' ? 'SnowLuma' : 'NapCat'} · {snap.bot_id}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <span className="shrink-0 text-[11px] text-success font-mono font-medium">
+                                                运行中
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </section>
+                    )}
+                </div>
+            )}
         </Card>
     );
 }
