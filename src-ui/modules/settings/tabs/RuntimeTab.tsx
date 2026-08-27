@@ -1,11 +1,13 @@
-// 运行 Tab：Bot 轮询与远程主机后台探活。
-
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import {
     clampRemoteHostHealthProbeIntervalMs,
     REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX,
     REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN,
 } from '../../../core/domain/remote-host/healthProbeSettings';
-import { NumberField, Switch } from '../../../shared/ui';
+import { Button, NumberField, Select, Switch } from '../../../shared/ui';
+import type { NodeEnvironmentCandidate } from '../../../core/ipc/types';
+import { componentService } from '../../../core/services/component.service';
 import type { SettingsDraft } from '../settings-draft';
 import {
     FieldRow,
@@ -20,6 +22,53 @@ interface Props {
 }
 
 export function RuntimeTab({ draft, patchDraft }: Props) {
+    const [candidates, setCandidates] = useState<NodeEnvironmentCandidate[]>([]);
+    const [probing, setProbing] = useState(false);
+    const [probeComplete, setProbeComplete] = useState(false);
+
+    const loadCandidates = useCallback(async () => {
+        setProbing(true);
+        setProbeComplete(false);
+        try {
+            const list = await componentService.probeLocalNodeCandidates();
+            setCandidates(list.filter((c) => c.isValid));
+        } catch (err) {
+            console.error('[RuntimeTab] probe node candidates error:', err);
+        } finally {
+            setProbing(false);
+            setProbeComplete(true);
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadCandidates();
+    }, [loadCandidates]);
+
+    const configuredNode = draft?.snowlumaNodePath?.trim() ?? '';
+    const configuredNodeIsValid = candidates.some(
+        (candidate) => candidate.path.toLowerCase() === configuredNode.toLowerCase(),
+    );
+
+    useEffect(() => {
+        if (!probeComplete || !configuredNode || configuredNodeIsValid) return;
+        patchDraft({ snowlumaNodePath: null });
+    }, [configuredNode, configuredNodeIsValid, patchDraft, probeComplete]);
+
+    const nodeSelectItems = useMemo(() => {
+        const items = [
+            { value: '__auto__', label: '自动选择（默认优先级）' },
+        ];
+        for (const cand of candidates) {
+            items.push({
+                value: cand.path,
+                label: `${cand.label} — ${cand.path}`,
+            });
+        }
+        return items;
+    }, [candidates]);
+
+    const currentNodeValue = configuredNodeIsValid ? configuredNode : '__auto__';
+
     if (!draft) {
         return (
             <p className="text-[13px] text-text-tertiary">正在加载设置…</p>
@@ -42,6 +91,40 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
                         onChange={(v) => patchDraft({ botLoginCheckIntervalMs: v })}
                         suffix="ms"
                     />
+                </FieldRow>
+            </SettingsSection>
+
+            <SettingsSection
+                title="SnowLuma 运行环境"
+                description="配置 SnowLuma 启动所使用的 Node.js 运行时（需 ^22.13.0 || >=23.4.0）。"
+            >
+                <FieldRow
+                    label="Node.js 运行环境"
+                    description="默认按优先级自动选择（内置 > 独立组件 > 系统 PATH）。"
+                    isLast
+                >
+                    <div className="flex items-center gap-2 max-w-md w-full">
+                        <div className="flex-1 min-w-0">
+                            <Select
+                                items={nodeSelectItems}
+                                value={currentNodeValue}
+                                onValueChange={(val) => {
+                                    patchDraft({
+                                        snowlumaNodePath: val === '__auto__' ? null : val,
+                                    });
+                                }}
+                            />
+                        </div>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={probing}
+                            onClick={() => void loadCandidates()}
+                            title="重新探测本机环境"
+                        >
+                            <RefreshCw size={13} className={probing ? 'animate-spin' : ''} />
+                        </Button>
+                    </div>
                 </FieldRow>
             </SettingsSection>
 
