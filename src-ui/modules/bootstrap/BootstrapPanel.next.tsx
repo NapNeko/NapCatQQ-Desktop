@@ -395,8 +395,8 @@ const NoticeRow: React.FC<{
                             {timeInfo && (
                                 <span
                                     className={`shrink-0 font-mono text-[10px] tabular-nums ${timeInfo.isRecent
-                                            ? 'text-success font-semibold flex items-center gap-1'
-                                            : 'text-text-tertiary'
+                                        ? 'text-success font-semibold flex items-center gap-1'
+                                        : 'text-text-tertiary'
                                         }`}
                                 >
                                     {timeInfo.isRecent && (
@@ -518,14 +518,15 @@ interface CoreCardProps {
 
 const CoreCard: React.FC<CoreCardProps> = ({ kind, label, version, update, onNavigate }) => {
     const installed = version !== null;
-    const dotClass = installed ? 'bg-success shadow-glow-success' : 'bg-text-disabled';
+    const hasUpdate = installed && update !== null;
+    const dotClass = installed ? 'bg-success shadow-glow-success' : 'bg-text-disabled/80';
 
     return (
         <Card
             padding="md"
             hover="lift"
             onClick={() => onNavigate('components')}
-            className={`flex items-center gap-3.5 transition-all cursor-pointer ${installed ? '' : 'opacity-65'}`}
+            className="flex items-center gap-3.5 transition-all cursor-pointer hover:shadow-popover"
         >
             <div
                 className={`grid h-10 w-10 shrink-0 place-items-center rounded-md border border-border-subtle/40 ${kind === 'napcat' ? 'bg-brand-soft/80' : 'bg-info-soft/80'
@@ -549,7 +550,7 @@ const CoreCard: React.FC<CoreCardProps> = ({ kind, label, version, update, onNav
                             {label}
                         </p>
                     </div>
-                    {update && (
+                    {hasUpdate && (
                         <Badge tone="warning" appearance="soft" className="text-[10px] px-1 py-0 font-normal">
                             可更新
                         </Badge>
@@ -559,7 +560,7 @@ const CoreCard: React.FC<CoreCardProps> = ({ kind, label, version, update, onNav
                     className={`mt-1.5 truncate text-[11.5px] tabular-nums ${installed ? 'font-mono text-text-secondary' : 'text-text-tertiary'
                         }`}
                 >
-                    {installed ? formatVersion(version!) : '未安装'}
+                    {installed ? formatVersion(version) : '未安装'}
                 </p>
             </div>
         </Card>
