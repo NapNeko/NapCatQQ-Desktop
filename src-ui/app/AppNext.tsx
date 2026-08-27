@@ -17,7 +17,7 @@ import React, {
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
 import { Sidebar, type AppRoute } from '../shared/components/next/Sidebar';
-import { InfoBarStack, TooltipProvider } from '../shared/ui';
+import { GlobalTitleTooltip, InfoBarStack, TooltipProvider } from '../shared/ui';
 // fallback 直引，避免只为 Spinner 再钉死整个 shared/ui barrel 图。
 import { PagePlaceholder } from '../shared/ui/PagePlaceholder';
 import { Spinner } from '../shared/ui/Spinner';
@@ -422,6 +422,8 @@ export const AppNext: React.FC = () => {
                     onContinueBots={() => void handleContinueToBots()}
                     onFinish={handleContinueFinish}
                 />
+
+                <GlobalTitleTooltip />
             </div>
         </TooltipProvider>
     );

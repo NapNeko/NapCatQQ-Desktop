@@ -1,19 +1,15 @@
 // 自定义窗口标题栏（next）。
 //
-// 视觉决策（不像 Win11 chrome，融入画布）：
-//   - 完全透明背景，无边框，无 backdrop-blur
-//   - 不画 logo / 应用名，让 sidebar 顶部的 NapCat 卡片自然延伸到顶
-//   - 仅 3 个窗口控制键浮在右上，hover 时背景才显形
-//   - 整条作为 drag region（drag region 自带双击最大化）
-//
-// 分层（frontend-layering §2.5）：禁止 import @tauri-apps/*，
-// 通过 useWindowControls hook → windowControlService 调用窗口动作。
+// 视觉决策：
+//   - 浮动毛玻璃极简胶囊岛（Floating Capsule Island）
+//   - 三态微交互：最小化（琥珀金反馈）、最大化/还原（翡翠绿反馈）、关闭（珊瑚红反馈）
+//   - 独立圆形微按钮 + active 弹性微缩放反馈
+//   - 整条作为 drag region（可拖拽窗口、双击最大化）
 
 import React from 'react';
-import { Maximize2, Minus, Square, X as CloseIcon } from 'lucide-react';
+import { Copy, Minus, Square, X } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useWindowControls } from '../../../hooks/desktop/useWindowControls';
-import { MotionIcon } from '../../ui/motion/MotionIcon';
 
 interface CustomTitleBarProps {
   className?: string;
@@ -25,59 +21,63 @@ export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ className }) => 
   return (
     <header
       className={cn(
-        'relative z-30 flex h-12 shrink-0 select-none items-center',
+        'relative z-30 flex h-11 shrink-0 select-none items-center px-3',
         'bg-transparent',
         className,
       )}
     >
       <div className="h-full flex-1" data-tauri-drag-region />
 
-      <div className="flex h-full shrink-0 items-stretch">
-        <WindowButton onClick={minimize} aria-label="最小化">
-          <MotionIcon icon={Minus} motion="none" hoverAccent playEnter={false} size={12} strokeWidth={1.75} />
-        </WindowButton>
-        <WindowButton
+      <div className="flex items-center gap-0.5">
+        <button
+          type="button"
+          onClick={minimize}
+          title="最小化"
+          aria-label="最小化"
+          className={cn(
+            'flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary',
+            'transition-all duration-150 ease-out hover:bg-warning/15 hover:text-warning active:scale-90',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warning',
+          )}
+        >
+          <Minus size={13} strokeWidth={2.2} />
+        </button>
+
+        <button
+          type="button"
           onClick={toggleMaximize}
+          title={isMaximized ? '向下还原' : '最大化'}
           aria-label={isMaximized ? '还原' : '最大化'}
+          className={cn(
+            'flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary',
+            'transition-all duration-150 ease-out hover:bg-success/15 hover:text-success active:scale-90',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-success',
+          )}
         >
           {isMaximized ? (
-            <MotionIcon icon={Square} motion="none" hoverAccent playEnter={false} enterKey="max" size={10} strokeWidth={1.75} />
+            <Copy size={11} strokeWidth={2.2} />
           ) : (
-            <MotionIcon icon={Maximize2} motion="none" hoverAccent playEnter={false} enterKey="restore" size={10} strokeWidth={1.75} />
+            <Square size={11} strokeWidth={2.2} className="rounded-[2px]" />
           )}
-        </WindowButton>
-        <WindowButton onClick={close} aria-label="关闭" tone="danger">
-          <MotionIcon icon={CloseIcon} motion="none" hoverAccent playEnter={false} size={12} strokeWidth={1.75} />
-        </WindowButton>
+        </button>
+
+        <button
+          type="button"
+          onClick={close}
+          title="关闭"
+          aria-label="关闭"
+          className={cn(
+            'flex h-7 w-7 items-center justify-center rounded-md text-text-tertiary',
+            'transition-all duration-150 ease-out hover:bg-danger hover:text-white active:scale-90',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger',
+          )}
+        >
+          <X size={13} strokeWidth={2.2} />
+        </button>
       </div>
     </header>
   );
 };
 
-interface WindowButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  tone?: 'default' | 'danger';
-}
-
-const WindowButton: React.FC<WindowButtonProps> = ({
-  className,
-  tone = 'default',
-  children,
-  ...props
-}) => (
-  <button
-    type="button"
-    className={cn(
-      'inline-flex h-full w-10 items-center justify-center text-text-tertiary transition-colors',
-      'hover:text-text',
-      tone === 'default' && 'hover:bg-text/8',
-      tone === 'danger' && 'hover:bg-danger hover:text-white',
-      'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand',
-      className,
-    )}
-    {...props}
-  >
-    {children}
-  </button>
-);
-
 export default CustomTitleBar;
+

@@ -96,7 +96,7 @@ export const TooltipContent = forwardRef<
                 side={side}
                 sideOffset={sideOffset}
                 className={cn(
-                    'z-50 max-w-xs rounded-sm bg-text px-2.5 py-1.5 text-2xs font-medium text-canvas shadow-popover',
+                    'z-50 whitespace-nowrap rounded-sm bg-text px-2.5 py-1 text-2xs font-medium text-canvas shadow-popover',
                     className,
                 )}
                 style={style}
