@@ -1452,10 +1452,12 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     // ─── 查询 ─────────────────────────────────────────────────────────────
 
-    /// 获取所有 Bot 的当前快照
+    /// 获取所有 Bot 的当前快照（按 bot_id 稳定升序）
     pub async fn list_snapshots(&self) -> Vec<BotActorSnapshot> {
         let actors = self.actors.read().await;
-        actors.values().map(|h| h.snapshot()).collect()
+        let mut list: Vec<BotActorSnapshot> = actors.values().map(|h| h.snapshot()).collect();
+        list.sort_by(|a, b| a.bot_id.cmp(&b.bot_id));
+        list
     }
 
     /// 获取指定 Bot 的当前快照
