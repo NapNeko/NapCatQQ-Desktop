@@ -1,9 +1,9 @@
 // 系统托盘与主窗口显隐/退出收口
-// 对齐旧版 SystemTrayIcon:左键显示主窗口,右键菜单「显示主窗口」「退出程序」
+// 左键显示主窗口,右键弹自绘托盘面板(tray_panel.rs),取代旧原生菜单
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 use crate::AppState;
@@ -11,9 +11,6 @@ use crate::AppState;
 static TRAY_ATTACHED: AtomicBool = AtomicBool::new(false);
 
 pub const TRAY_ID: &str = "main-tray";
-pub const MENU_SHOW: &str = "tray-show";
-pub const MENU_LIGHTWEIGHT: &str = "tray-lightweight";
-pub const MENU_QUIT: &str = "tray-quit";
 
 fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     app.get_webview_window("main")
@@ -67,57 +64,19 @@ pub async fn count_local_active_bots(state: tauri::State<'_, AppState>) -> Resul
         .map_err(|e| e.to_string())
 }
 
-/// 在 setup 中注册托盘(幂等)菜单在阻塞线程构建,避免 async setup 里缺 runtime
+/// 在 setup 中注册托盘(幂等)。不再附原生菜单,右键走自绘面板;面板窗口在退出轻量模式后补建。
 pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
     if TRAY_ATTACHED.swap(true, Ordering::SeqCst) {
         return Ok(());
     }
 
-    let app_menu = app.clone();
-    let menu = tauri::async_runtime::block_on(async move {
-        crate::tray_menu::build_tray_menu(&app_menu).await
-    })?;
-
     let icon = crate::tray_icon::idle_tray_icon(app)?;
 
-    let app_handle = app.clone();
     let _tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .title("NapCatQQ Desktop")
         .tooltip("NapCatQQ Desktop")
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .on_menu_event(move |_app, event| {
-            if event.id.as_ref() == MENU_SHOW {
-                let app = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = window_show(app).await;
-                });
-            } else if event.id.as_ref() == MENU_LIGHTWEIGHT {
-                let app = app_handle.clone();
-                let _ = crate::lightweight::enter_lightweight_mode(&app);
-            } else if event.id.as_ref() == MENU_QUIT {
-                let app = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(err) = quit_from_tray(app).await {
-                        eprintln!("[tray] quit failed: {err}");
-                    }
-                });
-            }
-        })
-        .on_tray_icon_event(move |tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                let app = tray.app_handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = window_show(app).await;
-                });
-            }
-        })
+        .on_tray_icon_event(crate::tray_panel::handle_tray_icon_event)
         .build(app)
         .map_err(|e| e.to_string())?;
 
@@ -128,6 +87,21 @@ pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
     crate::tray_summary::spawn_tray_tooltip_refresh_loop(app.clone());
 
     Ok(())
+}
+
+/// 退出前校验:有本机 Bot 在跑则拦截并拉起主窗;否则停 Bot、关 runtime、退出进程。
+/// 供自绘托盘面板的「退出」按钮调用(面板先隐藏,再走与旧托盘退出一致的流程)。
+#[tauri::command]
+pub async fn tray_panel_quit(app: AppHandle) -> Result<(), String> {
+    crate::tray_panel::hide_tray_panel(&app);
+    quit_from_tray(app).await
+}
+
+/// 自绘托盘面板的「释放界面内存」:先收起面板再进轻量模式销毁主 WebView。
+#[tauri::command]
+pub async fn tray_panel_enter_lightweight(app: AppHandle) -> Result<(), String> {
+    crate::tray_panel::hide_tray_panel(&app);
+    crate::lightweight::enter_lightweight_mode(&app)
 }
 
 async fn quit_from_tray(app: AppHandle) -> Result<(), String> {

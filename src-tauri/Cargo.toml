@@ -50,7 +50,6 @@ winreg = "0.52"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-
 [dev-dependencies]
 async-trait = "0.1"
 tempfile = "3"

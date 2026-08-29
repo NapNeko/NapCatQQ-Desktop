@@ -32,7 +32,7 @@ pub mod runtime;
 pub mod single_instance;
 pub mod snowluma_offline_listener;
 pub mod tray_icon;
-pub mod tray_menu;
+pub mod tray_panel;
 pub mod tray_summary;
 pub mod window_icon;
 pub mod windows_toast;
@@ -690,6 +690,9 @@ pub fn run() {
             commands::tray::window_show,
             commands::tray::window_hide_to_tray,
             commands::tray::count_local_active_bots,
+            commands::tray::tray_panel_quit,
+            commands::tray::tray_panel_enter_lightweight,
+            tray_panel::tray_panel_resize,
             commands::exit::prepare_exit_desktop,
             commands::exit::request_exit_app,
             commands::window::show_main_window,

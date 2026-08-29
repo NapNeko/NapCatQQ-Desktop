@@ -32,8 +32,7 @@ pub async fn refresh_tray_tooltip(app: &AppHandle) -> Result<(), String> {
         .tray_by_id(TRAY_ID)
         .ok_or_else(|| "托盘未初始化".to_string())?;
     tray.set_tooltip(Some(text)).map_err(|e| e.to_string())?;
-    crate::tray_icon::refresh_tray_icon(app).await?;
-    crate::tray_menu::refresh_tray_menu_status(app).await
+    crate::tray_icon::refresh_tray_icon(app).await
 }
 
 pub fn spawn_tray_tooltip_refresh_loop(app: AppHandle) {
