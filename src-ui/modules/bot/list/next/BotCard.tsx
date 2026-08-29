@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
     Activity,
-    Check,
     Copy,
     FileText,
     Globe,
@@ -353,19 +352,6 @@ export function BotCard({
                         metaExtra={metricsStrip}
                         header={
                             <>
-                                {isBatchMode && (
-                                    <span
-                                        aria-hidden
-                                        className={cn(
-                                            'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border',
-                                            isSelected
-                                                ? 'border-brand bg-brand text-white'
-                                                : 'border-border bg-canvas',
-                                        )}
-                                    >
-                                        {isSelected && <Check size={10} strokeWidth={3} />}
-                                    </span>
-                                )}
                                 <BotAvatar
                                     qqid={bot.bot_id}
                                     displayName={displayName}

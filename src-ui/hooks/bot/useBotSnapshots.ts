@@ -10,7 +10,7 @@ import type { BotActorSnapshot } from '../../core/ipc/types';
 
 const BOT_SNAPSHOTS_KEY = ['botSnapshots'] as const;
 
-export function useBotSnapshots() {
+export function useBotSnapshots(options?: { disablePolling?: boolean }) {
     const queryClient = useQueryClient();
     const mountedAt = useRef(Date.now());
     const firstDataMarked = useRef(false);
@@ -20,7 +20,11 @@ export function useBotSnapshots() {
         queryFn: botService.listSnapshots,
         // bootstrap 在 setup 里异步 reconcile；首屏 list 常早于 Running，短时轮询对齐卡片
         refetchInterval: () =>
-            Date.now() - mountedAt.current < 30_000 ? 2_500 : false,
+            options?.disablePolling
+                ? false
+                : Date.now() - mountedAt.current < 30_000
+                    ? 2_500
+                    : false,
     });
 
     useEffect(() => {

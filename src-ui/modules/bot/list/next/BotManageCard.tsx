@@ -7,7 +7,7 @@ import type { BotListCardStatus } from './botCardPresentation';
 import type { StatusBadgeSpec } from '../../../../core/domain/bot/bot-status-presentation';
 
 const SHELL =
-    'group relative isolate flex h-full w-full min-w-0 flex-col overflow-hidden ' +
+    'group relative isolate flex h-[148px] min-h-[148px] w-full min-w-0 flex-col justify-between overflow-hidden ' +
     'rounded-md border border-border-subtle bg-surface shadow-card ' +
     'transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-popover';
 
@@ -53,7 +53,7 @@ export function BotManageCard({
     compact?: boolean;
     onRowClick?: () => void;
     header: ReactNode;
-    meta: ReactNode;
+    meta?: ReactNode;
     /** 可选：meta 下方附加行（如运行时指标） */
     metaExtra?: ReactNode;
     chips?: ReactNode;
@@ -62,6 +62,7 @@ export function BotManageCard({
     processBadgeRef?: RefObject<HTMLSpanElement>;
 }) {
     const showMeta = meta != null && meta !== false;
+    const showMetaExtra = metaExtra != null && metaExtra !== false;
     const hasChips = chips != null && chips !== false;
 
     return (
@@ -91,28 +92,18 @@ export function BotManageCard({
 
             <div
                 className={cn(
-                    'flex min-h-0 flex-1 flex-col gap-2',
-                    compact ? 'px-3.5 pb-1.5 pt-2.5' : 'px-3.5 pb-2 pt-3',
+                    'flex min-h-0 flex-1 flex-col justify-between',
+                    compact ? 'px-3.5 pb-2 pt-2.5' : 'px-4 pb-2.5 pt-3.5',
                 )}
             >
                 <div className="flex items-start gap-3">{header}</div>
 
-                <div
-                    className={cn(
-                        'min-h-[1.25rem] min-w-0 text-xs leading-snug',
-                        !showMeta && 'select-none',
-                    )}
-                    aria-hidden={!showMeta}
-                >
-                    {showMeta ? (
-                        meta
-                    ) : (
-                        <p className="truncate text-transparent" aria-hidden>
-                            —
-                        </p>
-                    )}
-                    {metaExtra}
-                </div>
+                {showMeta || showMetaExtra ? (
+                    <div className="min-w-0 text-xs leading-snug">
+                        {showMeta ? meta : null}
+                        {showMetaExtra ? metaExtra : null}
+                    </div>
+                ) : null}
 
                 {hasChips ? (
                     <div className="min-h-[1.625rem] min-w-0">
@@ -125,8 +116,8 @@ export function BotManageCard({
 
             <footer
                 className={cn(
-                    'flex shrink-0 items-center gap-2 border-t border-border-subtle bg-inset/35',
-                    compact ? 'min-h-[2.5rem] px-3 py-1.5' : 'min-h-[2.75rem] px-3 py-2',
+                    'flex h-11 shrink-0 items-center gap-2 border-t border-border-subtle bg-inset/35',
+                    compact ? 'px-3.5 py-1' : 'px-4 py-1.5',
                 )}
                 onClick={(e) => e.stopPropagation()}
             >

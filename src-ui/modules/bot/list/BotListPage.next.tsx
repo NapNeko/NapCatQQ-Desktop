@@ -1,7 +1,6 @@
-// Bot 列表：hook 拼装 + 卡片网格。错误走全局 InfoBar。
-
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Bot } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
+import gsap from 'gsap';
+import { Bot, GripVertical } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import { animateListChildrenEnterAfterPaint } from '../../../shared/ui/motion/listEnter';
 import {
@@ -15,8 +14,10 @@ import {
 } from '../../../shared/ui';
 import { ListItem, Counter, MotionIcon } from '../../../shared/ui/motion';
 import { PagePlaceholder } from '../../../shared/ui/PagePlaceholder';
+import { cn } from '../../../shared/utils/cn';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
+import { useSortedBots } from '../../../hooks/bot/useBotSort';
 import { useSyncRemoteRuntimes } from '../../../hooks/bot/useSyncRemoteRuntimes';
 import { useBotMutations, type ActionMessage } from '../../../hooks/bot/useBotMutations';
 import { useBotBatchSelection } from '../../../hooks/bot/useBotBatchSelection';
@@ -70,10 +71,11 @@ export function BotListPageNext({
     onViewLogs,
     onViewMetrics,
 }: BotListPageNextProps) {
-    const { data: botSnapshots = [], isLoading, error, refetch } = useBotSnapshots();
-    const flavorByBot = useBotFlavorMap(botSnapshots);
-    const configByBot = useBotConfigsMap(botSnapshots);
-    useSyncRemoteRuntimes(botSnapshots, configByBot);
+    const { data: rawBotSnapshots = [], isLoading, error, refetch } = useBotSnapshots();
+    const flavorByBot = useBotFlavorMap(rawBotSnapshots);
+    const configByBot = useBotConfigsMap(rawBotSnapshots);
+    const { sortedBots: botSnapshots, reorderBots } = useSortedBots(rawBotSnapshots);
+    useSyncRemoteRuntimes(rawBotSnapshots, configByBot);
     const { startBlock: dockerStartGate } = useBotDockerStartGate(configByBot);
     const { startBlock: runtimeStartGate } = useBotRuntimeStartGate(configByBot);
     const napcat = useNapcatLogin();
@@ -530,6 +532,7 @@ export function BotListPageNext({
                         onViewLogs={onViewLogs}
                         onViewMetrics={onViewMetrics}
                         onStartBot={handleStartBot}
+                        onReorderBots={reorderBots}
                         startingBotId={startingBotId}
                     />
                 )}
@@ -700,8 +703,19 @@ type GridProps = {
     onViewLogs: (botId: string) => void;
     onViewMetrics: (botId: string) => void;
     onStartBot: (botId: string) => void;
+    onReorderBots: (sourceBotId: string, targetBotId: string) => void;
     startingBotId: string | null;
 };
+
+interface CardRect {
+    id: string;
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    centerX: number;
+    centerY: number;
+}
 
 function BotListGrid({
     bots,
@@ -717,10 +731,240 @@ function BotListGrid({
     onViewLogs,
     onViewMetrics,
     onStartBot,
+    onReorderBots,
     startingBotId,
 }: GridProps) {
     const m = useMotion();
     const containerRef = useRef<HTMLDivElement>(null);
+    const ghostRef = useRef<HTMLDivElement>(null);
+    const [draggedId, setDraggedId] = useState<string | null>(null);
+    const [hoverTargetId, setHoverTargetId] = useState<string | null>(null);
+
+    const isDraggingRef = useRef(false);
+    const startPosRef = useRef<{ x: number; y: number; id: string } | null>(null);
+    const cardRectsRef = useRef<CardRect[]>([]);
+    const rafIdRef = useRef<number | null>(null);
+    const lastHoverTargetRef = useRef<string | null>(null);
+
+    const ghostTiltDeg = !m.enabled
+        ? 0
+        : m.level === 'rich'
+            ? 3.5
+            : m.level === 'standard'
+                ? 2.0
+                : 0.8;
+
+    const ghostScale = !m.enabled
+        ? 1.0
+        : m.level === 'rich'
+            ? 1.06
+            : m.level === 'standard'
+                ? 1.03
+                : 1.01;
+
+    const measureCards = useCallback(() => {
+        if (!containerRef.current) return [];
+        const elements = containerRef.current.querySelectorAll<HTMLElement>('[data-bot-card-id]');
+        const rects: CardRect[] = [];
+        elements.forEach((el) => {
+            const id = el.getAttribute('data-bot-card-id');
+            if (id) {
+                const r = el.getBoundingClientRect();
+                rects.push({
+                    id,
+                    left: r.left,
+                    right: r.right,
+                    top: r.top,
+                    bottom: r.bottom,
+                    centerX: r.left + r.width / 2,
+                    centerY: r.top + r.height / 2,
+                });
+            }
+        });
+        return rects;
+    }, []);
+
+    const handlePointerDown = (e: React.PointerEvent, botId: string) => {
+        if (batch.isBatchMode || e.button !== 0) return;
+        const target = e.target as HTMLElement;
+        const isHandle = !!target.closest('[data-drag-handle]');
+        if (!isHandle && target.closest('button, input, [role="button"], a, select, [tabindex], [data-no-drag]')) {
+            return;
+        }
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        startPosRef.current = { x: startX, y: startY, id: botId };
+
+        if (isHandle) {
+            // 点击手柄：0 毫秒立即启动拖拽
+            isDraggingRef.current = true;
+            cardRectsRef.current = measureCards();
+            lastHoverTargetRef.current = botId;
+            setDraggedId(botId);
+            setHoverTargetId(botId);
+            if (ghostRef.current) {
+                ghostRef.current.style.display = 'flex';
+                ghostRef.current.style.transform = `translate3d(${startX + 14}px, ${startY + 14}px, 0) rotate(${ghostTiltDeg}deg) scale(${ghostScale})`;
+            }
+        }
+    };
+
+    useEffect(() => {
+        const onPointerMove = (e: PointerEvent) => {
+            const start = startPosRef.current;
+            if (!start) return;
+
+            if (!isDraggingRef.current) {
+                const dist = Math.hypot(e.clientX - start.x, e.clientY - start.y);
+                if (dist > 4) {
+                    isDraggingRef.current = true;
+                    cardRectsRef.current = measureCards();
+                    lastHoverTargetRef.current = start.id;
+                    setDraggedId(start.id);
+                    setHoverTargetId(start.id);
+                    if (ghostRef.current) {
+                        ghostRef.current.style.display = 'flex';
+                    }
+                } else {
+                    return;
+                }
+            }
+
+            // 零 React 开销：GPU 直接位移跟随 + 动态姿态微倾角
+            if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = requestAnimationFrame(() => {
+                if (ghostRef.current) {
+                    ghostRef.current.style.transform = `translate3d(${e.clientX + 14}px, ${e.clientY + 14}px, 0) rotate(${ghostTiltDeg}deg) scale(${ghostScale})`;
+                }
+            });
+
+            // 智能边界盒命中判定（解决对角线穿行时相邻卡片反复震荡乱跳）：
+            // 只有当光标明确进入某个卡片区域时才切换插槽，缝隙过渡时平稳保持。
+            let targetId = lastHoverTargetRef.current || start.id;
+            for (const rect of cardRectsRef.current) {
+                if (
+                    e.clientX >= rect.left &&
+                    e.clientX <= rect.right &&
+                    e.clientY >= rect.top &&
+                    e.clientY <= rect.bottom
+                ) {
+                    targetId = rect.id;
+                    break;
+                }
+            }
+
+            if (targetId !== lastHoverTargetRef.current) {
+                lastHoverTargetRef.current = targetId;
+                setHoverTargetId(targetId);
+            }
+        };
+
+        const onPointerUp = () => {
+            if (rafIdRef.current) {
+                cancelAnimationFrame(rafIdRef.current);
+                rafIdRef.current = null;
+            }
+
+            const currentDragged = startPosRef.current?.id;
+            const currentTarget = lastHoverTargetRef.current;
+
+            if (isDraggingRef.current && currentDragged && currentTarget && currentDragged !== currentTarget) {
+                onReorderBots(currentDragged, currentTarget);
+                // 放置成功时播放符合当前动效档位的微回弹反馈
+                if (m.enabled && containerRef.current) {
+                    const droppedEl = containerRef.current.querySelector<HTMLElement>(
+                        `[data-bot-card-id="${currentDragged}"]`,
+                    );
+                    if (droppedEl) {
+                        m.pop(droppedEl, { ease: 'release' });
+                    }
+                }
+            }
+
+            isDraggingRef.current = false;
+            startPosRef.current = null;
+            lastHoverTargetRef.current = null;
+            setDraggedId(null);
+            setHoverTargetId(null);
+            if (ghostRef.current) {
+                ghostRef.current.style.display = 'none';
+            }
+        };
+
+        window.addEventListener('pointermove', onPointerMove, { passive: true });
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('pointercancel', onPointerUp);
+        return () => {
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerUp);
+        };
+    }, [ghostScale, ghostTiltDeg, m, measureCards, onReorderBots]);
+
+    // 计算拖拽中的实时预览（两两对调模式：对角线移动时仅对调目标卡片，其余卡片保持静止）
+    const displayBots = useMemo(() => {
+        if (!draggedId || !hoverTargetId || draggedId === hoverTargetId) {
+            return bots;
+        }
+        const srcIdx = bots.findIndex((b) => b.bot_id === draggedId);
+        const dstIdx = bots.findIndex((b) => b.bot_id === hoverTargetId);
+        if (srcIdx === -1 || dstIdx === -1) return bots;
+
+        const next = [...bots];
+        const temp = next[srcIdx];
+        next[srcIdx] = next[dstIdx];
+        next[dstIdx] = temp;
+        return next;
+    }, [bots, draggedId, hoverTargetId]);
+
+    // FLIP (First-Last-Invert-Play) 实时滑动让位动效：
+    // 用户移动卡片时，其他被挤压/替换的卡片会丝滑滑向新位置，视觉极其直观。
+    const prevRectsRef = useRef<Map<string, DOMRect>>(new Map());
+
+    useLayoutEffect(() => {
+        if (!containerRef.current) return;
+        const elements = containerRef.current.querySelectorAll<HTMLElement>('[data-bot-card-id]');
+        const currentRects = new Map<string, DOMRect>();
+
+        elements.forEach((el) => {
+            const id = el.getAttribute('data-bot-card-id');
+            if (id) {
+                currentRects.set(id, el.getBoundingClientRect());
+            }
+        });
+
+        elements.forEach((el) => {
+            const id = el.getAttribute('data-bot-card-id');
+            if (!id || id === draggedId) return;
+
+            const prev = prevRectsRef.current.get(id);
+            const current = currentRects.get(id);
+
+            if (prev && current) {
+                const deltaX = prev.left - current.left;
+                const deltaY = prev.top - current.top;
+
+                if (deltaX !== 0 || deltaY !== 0) {
+                    if (m.enabled) {
+                        gsap.fromTo(
+                            el,
+                            { x: deltaX, y: deltaY },
+                            {
+                                x: 0,
+                                y: 0,
+                                duration: Math.max(0.2, m.duration('fast') * 1.1),
+                                ease: 'power2.out',
+                                overwrite: 'auto',
+                            },
+                        );
+                    }
+                }
+            }
+        });
+
+        prevRectsRef.current = currentRects;
+    }, [displayBots, draggedId, m]);
 
     const alertRows = useMemo(
         () =>
@@ -745,8 +989,7 @@ function BotListGrid({
     );
     useBotSnapshotAlerts(alertRows);
 
-    // 列表 stagger: 只对新出现的子节点播放动画。
-    // 路由切换时组件 mount，所有子节点都是"新的"，会自动播放。
+    // 列表 stagger: 只对初次加载播放动画
     useGSAP(
         () => {
             const root = containerRef.current;
@@ -756,73 +999,129 @@ function BotListGrid({
         { scope: containerRef, dependencies: [bots.length, m.enabled, m.level, m.speed, m.stagger] },
     );
 
+    const draggedConfig = draggedId ? configByBot[draggedId] : null;
+    const draggedDisplayName =
+        draggedConfig?.bot.name?.trim() || (draggedId ? `Bot ${draggedId}` : '');
+
     return (
-        <div ref={containerRef} className={gridStyles.botCardGrid}>
-            {bots.map((bot) => {
-                const flavor = flavorByBot[bot.bot_id] ?? null;
-                const config = configByBot[bot.bot_id] ?? null;
-                const napcatBot = napcat.byBot[bot.bot_id];
-                const snowlumaBot = snowluma.byBot[bot.bot_id];
-                const snowlumaDaemonState = snowlumaDaemonStateForConfig(
-                    config,
-                    snowluma.daemonStates,
-                );
-                const isSnowlumaRemoteTunnelUi =
-                    isSnowLumaFlavor(flavor) &&
-                    (isSnowlumaRemoteDockerConfig(config) ||
-                        isSnowlumaRemoteNativeConfig(config));
-                return (
-                    <ListItem key={bot.bot_id} hoverable>
-                        <BotCard
-                            bot={bot}
-                            config={config}
-                            flavor={flavor}
-                            qrcodeUrl={napcatBot?.qrcodeUrl ?? null}
-                            isOnline={napcatBot?.online ?? null}
-                            invalidationReason={napcatBot?.invalidationReason ?? null}
-                            napcatBinding={napcatBot?.webui ?? null}
-                            snowlumaDaemonState={snowlumaDaemonState}
-                            snowlumaDockerEndpointsReady={
-                                snowlumaBot?.dockerEndpointsReady ?? false
-                            }
-                            snowlumaLoginState={snowlumaBot?.loginState ?? null}
-                            snowlumaProbeUnavailable={
-                                snowlumaBot?.probeUnavailable ?? false
-                            }
-                            isBatchMode={batch.isBatchMode}
-                            isSelected={batch.selectedIds.has(bot.bot_id)}
-                            actionPending={startingBotId === bot.bot_id}
-                            onStart={onStartBot}
-                            onStop={mutations.stopBot}
-                            onConfigure={onConfigureBot}
-                            onViewLogs={onViewLogs}
-                            onViewMetrics={onViewMetrics}
-                            onToggleSelect={batch.toggleSelect}
-                            onOpenWebui={(params) => {
-                                openWebui(params).catch((err: unknown) => {
-                                    pushInfoBar({
-                                        key: `webui-open:${params.botId}`,
-                                        tone: 'danger',
-                                        title: '打开 WebUI 失败',
-                                        content: String(err),
-                                    });
-                                });
-                            }}
-                            isSnowlumaRemoteTunnelUi={isSnowlumaRemoteTunnelUi}
-                            onOpenNovnc={(id) => {
-                                openSnowlumaNovnc(id).catch((err: unknown) => {
-                                    pushInfoBar({
-                                        key: `novnc-open:${id}`,
-                                        tone: 'danger',
-                                        title: '打开 noVNC 失败',
-                                        content: String(err),
-                                    });
-                                });
-                            }}
-                        />
-                    </ListItem>
-                );
-            })}
-        </div>
+        <>
+            <div ref={containerRef} className={gridStyles.botCardGrid}>
+                {displayBots.map((bot) => {
+                    const flavor = flavorByBot[bot.bot_id] ?? null;
+                    const config = configByBot[bot.bot_id] ?? null;
+                    const napcatBot = napcat.byBot[bot.bot_id];
+                    const snowlumaBot = snowluma.byBot[bot.bot_id];
+                    const snowlumaDaemonState = snowlumaDaemonStateForConfig(
+                        config,
+                        snowluma.daemonStates,
+                    );
+                    const isSnowlumaRemoteTunnelUi =
+                        isSnowLumaFlavor(flavor) &&
+                        (isSnowlumaRemoteDockerConfig(config) ||
+                            isSnowlumaRemoteNativeConfig(config));
+
+                    // 当前拖拽项在网格中呈现高质感的虚线落位槽
+                    if (draggedId === bot.bot_id) {
+                        return (
+                            <ListItem key={bot.bot_id}>
+                                <div
+                                    data-bot-card-id={bot.bot_id}
+                                    className="flex h-[148px] min-h-[148px] w-full items-center justify-center rounded-xl border-2 border-dashed border-brand/50 bg-brand-soft/20 text-xs font-medium text-brand select-none"
+                                >
+                                    <span className="flex items-center gap-1.5 animate-pulse font-medium">
+                                        <GripVertical size={15} /> 放置于此处
+                                    </span>
+                                </div>
+                            </ListItem>
+                        );
+                    }
+
+                    return (
+                        <ListItem key={bot.bot_id} hoverable={!draggedId}>
+                            <div
+                                data-bot-card-id={bot.bot_id}
+                                onPointerDown={(e) => handlePointerDown(e, bot.bot_id)}
+                                className={cn(
+                                    'h-[148px] min-h-[148px] select-none rounded-xl',
+                                    !batch.isBatchMode && 'cursor-grab active:cursor-grabbing',
+                                )}
+                            >
+                                <BotCard
+                                    bot={bot}
+                                    config={config}
+                                    flavor={flavor}
+                                    qrcodeUrl={napcatBot?.qrcodeUrl ?? null}
+                                    isOnline={napcatBot?.online ?? null}
+                                    invalidationReason={napcatBot?.invalidationReason ?? null}
+                                    napcatBinding={napcatBot?.webui ?? null}
+                                    snowlumaDaemonState={snowlumaDaemonState}
+                                    snowlumaDockerEndpointsReady={
+                                        snowlumaBot?.dockerEndpointsReady ?? false
+                                    }
+                                    snowlumaLoginState={snowlumaBot?.loginState ?? null}
+                                    snowlumaProbeUnavailable={
+                                        snowlumaBot?.probeUnavailable ?? false
+                                    }
+                                    isBatchMode={batch.isBatchMode}
+                                    isSelected={batch.selectedIds.has(bot.bot_id)}
+                                    actionPending={startingBotId === bot.bot_id}
+                                    onStart={onStartBot}
+                                    onStop={mutations.stopBot}
+                                    onConfigure={onConfigureBot}
+                                    onViewLogs={onViewLogs}
+                                    onViewMetrics={onViewMetrics}
+                                    onToggleSelect={batch.toggleSelect}
+                                    onOpenWebui={(params) => {
+                                        openWebui(params).catch((err: unknown) => {
+                                            pushInfoBar({
+                                                key: `webui-open:${params.botId}`,
+                                                tone: 'danger',
+                                                title: '打开 WebUI 失败',
+                                                content: String(err),
+                                            });
+                                        });
+                                    }}
+                                    isSnowlumaRemoteTunnelUi={isSnowlumaRemoteTunnelUi}
+                                    onOpenNovnc={(id) => {
+                                        openSnowlumaNovnc(id).catch((err: unknown) => {
+                                            pushInfoBar({
+                                                key: `novnc-open:${id}`,
+                                                tone: 'danger',
+                                                title: '打开 noVNC 失败',
+                                                content: String(err),
+                                            });
+                                        });
+                                    }}
+                                />
+                            </div>
+                        </ListItem>
+                    );
+                })}
+            </div>
+
+            {/* 拖拽时的全局跟随浮动卡片（脱离 React 渲染树，纯 GPU 120Hz 变换） */}
+            <div
+                ref={ghostRef}
+                style={{ display: 'none' }}
+                className={cn(
+                    'pointer-events-none fixed top-0 left-0 z-[9999] will-change-transform flex items-center gap-2.5 rounded-xl border border-brand/60 bg-surface/95 px-4 py-3 backdrop-blur-md select-none text-text',
+                    !m.enabled
+                        ? 'shadow-none ring-0'
+                        : m.level === 'rich'
+                            ? 'shadow-[0_24px_48px_-12px_rgba(0,0,0,0.45)] ring-2 ring-brand/60'
+                            : 'shadow-2xl ring-1 ring-border-subtle',
+                )}
+            >
+                <GripVertical size={16} className="text-brand shrink-0" />
+                <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-semibold text-text truncate max-w-[160px]">
+                        {draggedDisplayName}
+                    </span>
+                    <span className="font-mono text-2xs text-text-tertiary">
+                        QQ {draggedId}
+                    </span>
+                </div>
+            </div>
+        </>
     );
 }
