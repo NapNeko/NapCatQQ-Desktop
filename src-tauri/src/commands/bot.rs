@@ -103,6 +103,19 @@ pub async fn reconcile_bot_runtimes(
     Ok(done.into_iter().map(|id| id.to_string()).collect())
 }
 
+/// 远端 SnowLuma WebUI/noVNC 隧道失败后的手动重试，不重启远端 Bot。
+#[tauri::command]
+pub async fn retry_snowluma_ui(
+    state: State<'_, AppState>,
+    bot_id: String,
+) -> Result<(), String> {
+    state
+        .bot_manager
+        .retry_snowluma_ui(&BotId::new(bot_id))
+        .await
+        .map_err(map_err)
+}
+
 #[tauri::command]
 pub async fn get_bot_snapshot(
     state: State<'_, AppState>,

@@ -634,6 +634,7 @@ pub fn run() {
             commands::bot::list_bot_snapshots,
             commands::bot::list_importable_remote_bots,
             commands::bot::reconcile_bot_runtimes,
+            commands::bot::retry_snowluma_ui,
             commands::bot_metrics::get_bot_runtime_metrics,
             commands::bot_metrics::get_bot_runtime_metrics_history,
             commands::bot_metrics::list_bot_runtime_metrics,
