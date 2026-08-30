@@ -23,6 +23,7 @@ use crate::remote_runtime_sessions::RemoteRuntimeSessions;
 use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
 use crate::runtime_router::{DockerSecretProvider, RuntimeBackendRouter, RuntimeRouterError};
 // SnowLumaWebUiClient: wait_ready/login/get_agreements 的 trait 方法解析需要 in scope。
+use crate::remote::snowluma_qr_login::SnowlumaQrCaptureService;
 use crate::snowluma::{AgreementsPayload, ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
 use crate::snowluma_agreements::SnowLumaAgreementService;
 use ncd_backend_napcat::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
@@ -197,6 +198,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// See RemoteQqEntryCoordinator for rationale and batch-start safety.
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
     server_manager: Option<Arc<crate::ServerManager>>,
+    qr_capture_service: Arc<SnowlumaQrCaptureService>,
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<R, S> {
@@ -228,6 +230,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_snowluma_backends: Arc::clone(&self.remote_snowluma_backends),
             remote_snowluma_tunnels: Arc::clone(&self.remote_snowluma_tunnels),
             remote_qq_entry_coordinator: Arc::clone(&self.remote_qq_entry_coordinator),
+            qr_capture_service: Arc::clone(&self.qr_capture_service),
             server_manager: self.server_manager.clone(),
         }
     }
@@ -275,6 +278,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
             remote_qq_entry_coordinator: Arc::new(RemoteQqEntryCoordinator::default()),
             server_manager: None,
+            qr_capture_service: Arc::new(SnowlumaQrCaptureService::new(Arc::new(
+                crate::remote::snowluma_qr_login::UnavailableQrDecoder,
+            ))),
         }
     }
 
@@ -290,6 +296,14 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         resolver: Arc<dyn crate::host_resolver::HostResolver>,
     ) -> Self {
         self.host_resolver = Some(resolver);
+        self
+    }
+
+    pub fn with_snowluma_qr_capture_service(
+        mut self,
+        service: Arc<SnowlumaQrCaptureService>,
+    ) -> Self {
+        self.qr_capture_service = service;
         self
     }
 
@@ -653,8 +667,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     /// 远端 SnowLuma UI 失败后的手动恢复：复用运行中的 QQ/容器，重建 WebUI 与 noVNC 隧道。
     pub async fn retry_snowluma_ui(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
         let config = self.get_required_bot_config(bot_id).await?;
-        if config.bot.backend_type != BackendType::SnowLuma
-            || config.bot.runtime_target.is_local()
+        if config.bot.backend_type != BackendType::SnowLuma || config.bot.runtime_target.is_local()
         {
             return Err(BotManagerError::Render(
                 "仅远端 SnowLuma 支持手动重建 WebUI/noVNC 隧道".to_string(),
@@ -681,6 +694,48 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 "远端 SnowLuma WebUI/noVNC 隧道仍未就绪，请检查主机连接与远端日志".to_string(),
             ))
         }
+    }
+
+    pub async fn start_snowluma_qr_login(
+        &self,
+        bot_id: &BotId,
+    ) -> Result<ncd_domain::SnowlumaQrLoginResult, BotManagerError> {
+        let config = self.get_required_bot_config(bot_id).await?;
+        let scenario = RuntimeScenario::from_config(&config)?;
+        let RuntimeScenario::RemoteNative {
+            backend: BackendType::SnowLuma,
+            ref server_id,
+        } = scenario
+        else {
+            return Err(BotManagerError::Render(
+                "仅远端 Linux Native SnowLuma 支持 QQ 二维码旁路".to_string(),
+            ));
+        };
+        let resolver = self.host_resolver.as_ref().ok_or_else(|| {
+            BotManagerError::Render("HostResolver 未初始化，无法采集远端 QQ 二维码".to_string())
+        })?;
+        let host = resolver
+            .resolve(&RuntimeTarget::server(server_id.clone()))
+            .await
+            .map_err(|err| BotManagerError::Render(err.to_string()))?;
+        let session_id = ncd_domain::QrLoginSessionId::new(format!(
+            "qr-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| BotManagerError::Render("system clock is before UNIX epoch".into()))?
+                .as_nanos()
+        ))
+        .ok_or_else(|| BotManagerError::Render("failed to allocate QR session".to_string()))?;
+        let session = ncd_domain::SnowlumaQrLoginSession {
+            server_id: server_id.clone(),
+            bot_id: bot_id.to_string(),
+            session_id,
+            capture_generation: 0,
+        };
+        Ok(self
+            .qr_capture_service
+            .capture_current_variant(&*host, session)
+            .await)
     }
 
     /// 绑定在该主机上的所有远端 bot(Docker / Native)补跑一轮运行态恢复。
@@ -777,7 +832,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             );
         }
     }
-
 
     /// 按完整 BotConfig 路由 backend。唯一矩阵入口在 RuntimeScenario/RuntimeBackendRouter。
     async fn backend_for_config(
@@ -1385,16 +1439,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                             .map(|w| w.payload);
                         let reason = match payload {
                             Some(payload) => {
-                                self.push_snowluma_hot_reload(&config, &uin, &payload)
-                                    .await
+                                self.push_snowluma_hot_reload(&config, &uin, &payload).await
                             }
                             // 渲染失败也算 pending_reload:配置已落盘,等下次重启生效
                             None => "config_saved_pending_reload",
                         };
-                        self.event_bus.publish(DomainEvent::bot_state_changed(
-                            current.clone(),
-                            reason,
-                        ));
+                        self.event_bus
+                            .publish(DomainEvent::bot_state_changed(current.clone(), reason));
                     } else {
                         // NapCat 热推送:endpoint 表里有 (port, token) 才能继续
                         // (bot 已经把 WebUI 端点报到 stdout 上)没有就只写盘
@@ -2430,7 +2481,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             daemons.get(server_id).cloned()
         };
         let Some(daemon) = daemon else {
-            tracing::warn!(server_id, "snowluma hot reload: remote daemon not registered");
+            tracing::warn!(
+                server_id,
+                "snowluma hot reload: remote daemon not registered"
+            );
             return "config_saved_pending_reload";
         };
 
@@ -2448,7 +2502,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             }
         }
         let Some(eps) = daemon.tunnel_endpoints().await else {
-            tracing::warn!(server_id, "snowluma hot reload: tunnel endpoints unavailable");
+            tracing::warn!(
+                server_id,
+                "snowluma hot reload: tunnel endpoints unavailable"
+            );
             return "config_saved_pending_reload";
         };
         let client = match ReqwestSnowLumaWebUiClient::new(eps.webui_local_port, eps.webui_password)

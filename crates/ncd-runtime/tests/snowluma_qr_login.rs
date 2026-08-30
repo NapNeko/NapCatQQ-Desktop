@@ -1,7 +1,7 @@
 use ncd_domain::{SnowlumaQrFailureCategory, SnowlumaQrLoginStatus};
 use ncd_runtime::remote::snowluma_qr_login::{
-    calibrated_click_points, validate_display, QrDecoder, QrLoginPoint, QrLoginWindowGeometry,
-    UnavailableQrDecoder,
+    QrDecoder, QrLoginPoint, QrLoginWindowGeometry, UnavailableQrDecoder, calibrated_click_points,
+    validate_display,
 };
 
 #[test]
@@ -32,5 +32,21 @@ fn display_validation_rejects_command_injection() {
 fn missing_decoder_is_an_explicit_novnc_fallback() {
     let error = UnavailableQrDecoder.decode(&[]).unwrap_err();
     assert_eq!(error, SnowlumaQrFailureCategory::DecoderUnavailable);
-    assert_eq!(SnowlumaQrLoginStatus::FallbackNoVnc as u8, 3);
+}
+
+#[test]
+fn serialized_fallback_keeps_the_reason_visible() {
+    let session = ncd_domain::SnowlumaQrLoginSession {
+        server_id: "srv".into(),
+        bot_id: "10001".into(),
+        session_id: ncd_domain::QrLoginSessionId::new("session").unwrap(),
+        capture_generation: 0,
+    };
+    let result = ncd_domain::SnowlumaQrLoginResult::FallbackNoVnc {
+        session,
+        reason: SnowlumaQrFailureCategory::DecoderUnavailable,
+    };
+    let json = serde_json::to_value(result).unwrap();
+    assert_eq!(json["status"], "fallback_no_vnc");
+    assert_eq!(json["reason"], "decoder_unavailable");
 }
