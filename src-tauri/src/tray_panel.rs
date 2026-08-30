@@ -3,8 +3,8 @@
 
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition,
-    WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
 use crate::commands::tray::window_show;
@@ -28,6 +28,16 @@ fn last_content_height() -> f64 {
 
 // 托盘点击坐标,resize 命令回来精调时按此重新定位。保持最新锚点，绝不丢弃。
 static LAST_ANCHOR: std::sync::Mutex<Option<(f64, f64)>> = std::sync::Mutex::new(None);
+
+fn clamp_panel_axis(value: f64, work_start: f64, work_size: f64, panel_size: f64) -> f64 {
+    let min = work_start + EDGE_GAP;
+    let max = work_start + work_size - panel_size - EDGE_GAP;
+    if max < min {
+        min
+    } else {
+        value.clamp(min, max)
+    }
+}
 
 /// 面板即托盘唯一入口,轻量模式下也必须可用,所以随 app 常驻,不走 WebView 销毁。
 pub fn ensure_tray_panel_window(app: &AppHandle) -> Result<WebviewWindow, String> {
@@ -69,20 +79,43 @@ fn position_tray_panel(
     click: PhysicalPosition<f64>,
     height: f64,
 ) -> Result<(), String> {
-    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    let monitor = window
+        .monitor_from_point(click.x, click.y)
+        .map_err(|e| e.to_string())?
+        .or(window.current_monitor().map_err(|e| e.to_string())?);
+    let scale = monitor
+        .as_ref()
+        .map(|m| m.scale_factor())
+        .unwrap_or(window.scale_factor().map_err(|e| e.to_string())?);
     let click_x = click.x / scale;
     let click_y = click.y / scale;
-    let x = click_x - PANEL_WIDTH / 2.0;
+    let mut x = click_x - PANEL_WIDTH / 2.0;
     let mut y = click_y - height - EDGE_GAP;
-    if let Some(monitor) = window.current_monitor().map_err(|e| e.to_string())? {
-        let mon_y = monitor.position().y as f64 / scale;
-        let mon_h = monitor.size().height as f64 / scale;
-        if click_y < mon_y + mon_h / 2.0 {
+    if let Some(monitor) = monitor {
+        let work = monitor.work_area();
+        let work_x = work.position.x as f64 / scale;
+        let work_y = work.position.y as f64 / scale;
+        let work_w = work.size.width as f64 / scale;
+        let work_h = work.size.height as f64 / scale;
+        x = clamp_panel_axis(x, work_x, work_w, PANEL_WIDTH);
+        if click_y < work_y + work_h / 2.0 {
             y = click_y + EDGE_GAP;
         }
+        y = clamp_panel_axis(y, work_y, work_h, height);
     }
     let _ = window.set_position(LogicalPosition::new(x, y));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_panel_axis;
+
+    #[test]
+    fn clamps_panel_to_monitor_work_area() {
+        assert_eq!(clamp_panel_axis(1900.0, 0.0, 1920.0, 260.0), 1650.0);
+        assert_eq!(clamp_panel_axis(-40.0, 0.0, 1920.0, 260.0), 10.0);
+    }
 }
 
 /// 右键展开:记下锚点,先按上次的内容高摆位显示,前端展开前量好真实高再 resize 精调。
