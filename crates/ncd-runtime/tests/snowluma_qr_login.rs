@@ -1,7 +1,7 @@
 use ncd_domain::SnowlumaQrFailureCategory;
 use ncd_runtime::remote::snowluma_qr_login::{
-    QrDecoder, QrLoginPoint, QrLoginWindowGeometry, UnavailableQrDecoder, calibrated_click_points,
-    validate_display,
+    QrDecoder, QrLoginPoint, QrLoginWindowGeometry, QuircsQrDecoder, UnavailableQrDecoder,
+    calibrated_click_points, validate_display,
 };
 
 #[test]
@@ -49,4 +49,13 @@ fn serialized_fallback_keeps_the_reason_visible() {
     let json = serde_json::to_value(result).unwrap();
     assert_eq!(json["status"], "fallback_no_vnc");
     assert_eq!(json["reason"], "decoder_unavailable");
+}
+
+#[test]
+fn quircs_decoder_decodes_synthetic_png_in_memory() {
+    let frame = include_bytes!("fixtures/synthetic-qr.png");
+    assert_eq!(
+        QuircsQrDecoder.decode(frame).unwrap(),
+        "https://example.test/qr-fixture"
+    );
 }

@@ -14,6 +14,7 @@ import type { ConfigDrift } from '../ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../ipc/generated/DriftDecision';
 import type { BotRuntimeMetrics } from '../ipc/generated/domain/BotRuntimeMetrics';
 import type { MetricsHistoryPoint } from '../ipc/generated/domain/MetricsHistoryPoint';
+import type { SnowlumaQrLoginResult } from '../ipc/generated/domain/SnowlumaQrLoginResult';
 
 export interface SnowLumaAgreementDoc {
     id: string;
@@ -413,5 +414,14 @@ export const botService = {
 
     releaseSnowLumaAgreementSession: async (botId: string): Promise<void> => {
         if (isTauri) return invoke<void>('release_snowluma_agreement_session', { botId });
+    },
+
+    startSnowlumaQrLogin: async (botId: string): Promise<SnowlumaQrLoginResult> => {
+        if (isTauri) return invoke<SnowlumaQrLoginResult>('start_snowluma_qr_login', { botId });
+        return {
+            status: 'fallback_no_vnc',
+            session: { serverId: 'mock', botId, sessionId: `mock-${botId}`, captureGeneration: 0n },
+            reason: 'capability_unavailable',
+        };
     },
 };

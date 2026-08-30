@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,6 +8,32 @@ use thiserror::Error;
 
 const BASE_WIDTH: u32 = 320;
 const BASE_HEIGHT: u32 = 460;
+const MAX_FRAME_BYTES: u64 = 4 * 1024 * 1024;
+const CAPTURE_SCRIPT: &str = r#"
+import ctypes, os, sys, time
+from PIL import ImageGrab
+
+display, xauthority, path = sys.argv[1:4]
+x, y, width, height, action, delay_ms = (int(value) for value in sys.argv[4:10])
+os.environ['DISPLAY'] = display
+os.environ['XAUTHORITY'] = xauthority
+if action >= 0:
+    x11 = ctypes.CDLL('libX11.so.6')
+    xtst = ctypes.CDLL('libXtst.so.6')
+    handle = x11.XOpenDisplay(display.encode())
+    if not handle: raise RuntimeError('x11 display unavailable')
+    try:
+        points = ((width // 2, height * 280 // 460), (width * 120 // 320, height * 424 // 460), (width * 120 // 320, height * 422 // 460))
+        click_x, click_y = points[action]
+        xtst.XTestFakeMotionEvent(handle, 0, x + click_x, y + click_y, 0)
+        xtst.XTestFakeButtonEvent(handle, 1, 1, 0)
+        xtst.XTestFakeButtonEvent(handle, 1, 0, 0)
+        x11.XFlush(handle)
+        time.sleep(delay_ms / 1000.0)
+    finally:
+        x11.XCloseDisplay(handle)
+ImageGrab.grab(bbox=(x, y, x + width, y + height)).save(path, 'PNG')
+"#;
 
 pub trait QrDecoder: Send + Sync {
     fn decode(&self, frame: &[u8]) -> Result<String, SnowlumaQrFailureCategory>;
@@ -20,6 +47,32 @@ impl QrDecoder for UnavailableQrDecoder {
     }
 }
 
+pub struct QuircsQrDecoder;
+
+impl QrDecoder for QuircsQrDecoder {
+    fn decode(&self, frame: &[u8]) -> Result<String, SnowlumaQrFailureCategory> {
+        let image = image::load_from_memory(frame)
+            .map_err(|_| SnowlumaQrFailureCategory::DecodeFailed)?
+            .into_luma8();
+        let mut decoder = quircs::Quirc::default();
+        for code in decoder.identify(
+            image.width() as usize,
+            image.height() as usize,
+            image.as_raw(),
+        ) {
+            let decoded = code
+                .map_err(|_| SnowlumaQrFailureCategory::DecodeFailed)?
+                .decode()
+                .map_err(|_| SnowlumaQrFailureCategory::DecodeFailed)?;
+            let payload = String::from_utf8(decoded.payload)
+                .map_err(|_| SnowlumaQrFailureCategory::DecodeFailed)?;
+            if valid_payload(&payload) {
+                return Ok(payload);
+            }
+        }
+        Err(SnowlumaQrFailureCategory::DecodeFailed)
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct QrLoginPoint {
     pub x: u32,
@@ -200,11 +253,11 @@ fn parse_runtime_env(output: &str) -> Option<(String, String)> {
 fn validate_xauthority(value: &str) -> bool {
     value.starts_with('/') && !value.chars().any(char::is_control) && value.len() <= 4096
 }
-
 pub struct SnowlumaQrCaptureRequest {
     pub session: SnowlumaQrLoginSession,
     pub display: String,
     pub xauthority: String,
+    pub expected_pid: u32,
 }
 
 pub struct SnowlumaQrCaptureService {
@@ -260,22 +313,129 @@ impl SnowlumaQrCaptureService {
                 session,
                 display,
                 xauthority,
+                expected_pid,
             },
         )
         .await
     }
     pub async fn capture_and_decode(
         &self,
-        _host: &dyn Host,
+        host: &dyn Host,
         request: SnowlumaQrCaptureRequest,
     ) -> SnowlumaQrLoginResult {
-        // OCR/accessibility anchors for the Chinese/light QQ build are not exposed by Host.
-        // Refuse to send any input until an anchor-aware implementation is available.
-        SnowlumaQrLoginResult::FallbackNoVnc {
-            session: request.session,
-            reason: SnowlumaQrFailureCategory::CapabilityUnavailable,
+        let fallback = |reason| SnowlumaQrLoginResult::FallbackNoVnc {
+            session: request.session.clone(),
+            reason,
+        };
+        let remote_dir = temporary_remote_dir(host.id());
+        let remote_png = remote_dir.join("frame.png");
+        let local_path = temporary_frame_path();
+        if !matches!(host.run_to_string(HostCommand::new("mkdir").arg("-m").arg("700").arg(remote_dir.as_posix())).await, Ok(output) if output.success())
+        {
+            return fallback(SnowlumaQrFailureCategory::CapabilityUnavailable);
+        }
+        let Some(mut previous) =
+            capture_frame(host, &request, &remote_png, &local_path, -1, 0).await
+        else {
+            cleanup_capture(host, &remote_dir, &local_path).await;
+            return fallback(SnowlumaQrFailureCategory::CaptureFailed);
+        };
+        for (action, wait_ms) in [(0, 1200), (1, 1000), (2, 1000)] {
+            let Some(window) = resolve_unique_window(host, request.expected_pid).await else {
+                cleanup_capture(host, &remote_dir, &local_path).await;
+                return fallback(SnowlumaQrFailureCategory::AmbiguousBinding);
+            };
+            if calibrated_click_points(window.geometry).is_err() {
+                cleanup_capture(host, &remote_dir, &local_path).await;
+                return fallback(SnowlumaQrFailureCategory::UnsupportedVariant);
+            }
+            let Some(frame) =
+                capture_frame(host, &request, &remote_png, &local_path, action, wait_ms).await
+            else {
+                cleanup_capture(host, &remote_dir, &local_path).await;
+                return fallback(SnowlumaQrFailureCategory::CaptureFailed);
+            };
+            if frame == previous {
+                cleanup_capture(host, &remote_dir, &local_path).await;
+                return fallback(SnowlumaQrFailureCategory::CaptureFailed);
+            }
+            previous = frame;
+        }
+        cleanup_capture(host, &remote_dir, &local_path).await;
+        match self._decoder.decode(&previous) {
+            Ok(payload) if valid_payload(&payload) => SnowlumaQrLoginResult::Payload {
+                session: request.session,
+                payload,
+            },
+            Ok(_) => fallback(SnowlumaQrFailureCategory::DecodeFailed),
+            Err(reason) => fallback(reason),
         }
     }
+}
+
+async fn capture_frame(
+    host: &dyn Host,
+    request: &SnowlumaQrCaptureRequest,
+    remote: &HostPath,
+    local: &std::path::Path,
+    action: i32,
+    wait_ms: i32,
+) -> Option<Vec<u8>> {
+    let window = resolve_unique_window(host, request.expected_pid).await?;
+    calibrated_click_points(window.geometry).ok()?;
+    let _ = tokio::fs::remove_file(local).await;
+    let output = host
+        .run_to_string(
+            HostCommand::new("python3")
+                .arg("-c")
+                .arg(CAPTURE_SCRIPT)
+                .arg(&request.display)
+                .arg(&request.xauthority)
+                .arg(remote.as_posix())
+                .args([
+                    window.geometry.x.to_string(),
+                    window.geometry.y.to_string(),
+                    window.geometry.width.to_string(),
+                    window.geometry.height.to_string(),
+                    action.to_string(),
+                    wait_ms.to_string(),
+                ])
+                .timeout(Duration::from_secs(12)),
+        )
+        .await
+        .ok()?;
+    if !output.success() || host.download(remote, local).await.is_err() {
+        return None;
+    }
+    let metadata = tokio::fs::metadata(local).await.ok()?;
+    if metadata.len() == 0 || metadata.len() > MAX_FRAME_BYTES {
+        return None;
+    }
+    tokio::fs::read(local).await.ok()
+}
+
+async fn cleanup_capture(host: &dyn Host, remote_dir: &HostPath, local_path: &std::path::Path) {
+    let _ = tokio::fs::remove_file(local_path).await;
+    let _ = host.remove_dir_all(remote_dir).await;
+}
+
+fn temporary_frame_path() -> PathBuf {
+    std::env::temp_dir().join(format!("ncd-qr-{}.png", rand::random::<u128>()))
+}
+
+fn temporary_remote_dir(host_id: &str) -> HostPath {
+    let safe_host = host_id
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '-')
+        .collect::<String>();
+    HostPath::from_posix(format!(
+        "/tmp/ncd-qr-{safe_host}-{}",
+        rand::random::<u128>()
+    ))
+}
+
+fn valid_payload(payload: &str) -> bool {
+    !payload.is_empty() && payload.len() <= 4096 && !payload.chars().any(char::is_control)
 }
 
 #[cfg(test)]

@@ -279,10 +279,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_snowluma_backends: Arc::new(Mutex::new(HashMap::new())),
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
             remote_qq_entry_coordinator: Arc::new(RemoteQqEntryCoordinator::default()),
-            server_manager: None,
             qr_capture_service: Arc::new(SnowlumaQrCaptureService::new(Arc::new(
-                crate::remote::snowluma_qr_login::UnavailableQrDecoder,
+                crate::remote::snowluma_qr_login::QuircsQrDecoder,
             ))),
+            server_manager: None,
         }
     }
 
