@@ -30,8 +30,6 @@ const DOMAIN_EVENT_NAMES = [
     'snowluma_uin_detected',
     'snowluma_login_state_changed',
     'snowluma_login_probe_unavailable',
-    'snowluma_qr_login_status',
-    'snowluma_qr_payload',
     'snowluma_pid_set_changed',
     'snowluma_daemon_log',
     'snowluma_docker_endpoints_ready',

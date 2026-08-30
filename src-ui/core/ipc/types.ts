@@ -213,8 +213,6 @@ export type { SnowLumaAppConfig } from './generated/domain/SnowLumaAppConfig';
 import type { DaemonState } from './generated/DaemonState';
 import type { SnowLumaLoginState } from './generated/SnowLumaLoginState';
 
-import type { SnowlumaQrFailureCategory } from './generated/domain/SnowlumaQrFailureCategory';
-import type { SnowlumaQrLoginStatus } from './generated/domain/SnowlumaQrLoginStatus';
 
 // 按 kind 区分的判别联合(payload body)。统一通过下方 DomainEvent 带上 v envelope。
 type DomainEventBody =
@@ -307,26 +305,6 @@ type DomainEventBody =
     | {
         kind: 'snowluma_login_probe_unavailable';
         bot_id: string;
-    }
-    | {
-        kind: 'snowluma_qr_login_status';
-        server_id: string;
-        bot_id: string;
-        session_id: string;
-        capture_generation: number;
-        status: SnowlumaQrLoginStatus;
-        expires_at?: number | null;
-        failure_category?: SnowlumaQrFailureCategory | null;
-    }
-    | {
-        kind: 'snowluma_qr_payload';
-        server_id: string;
-        bot_id: string;
-        session_id: string;
-        capture_generation: number;
-        status: SnowlumaQrLoginStatus;
-        expires_at?: number | null;
-        payload: string;
     }
     | {
         kind: 'snowluma_pid_set_changed';
