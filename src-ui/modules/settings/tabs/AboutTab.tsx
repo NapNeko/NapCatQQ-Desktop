@@ -219,9 +219,10 @@ export function AboutTab() {
                     <Button
                         variant="secondary"
                         size="sm"
+                        className="min-w-[80px]"
                         onClick={() => openExternal(APP_GITHUB_URL)}
                     >
-                        在 GitHub 打开
+                        打开
                         <ExternalLink size={12} strokeWidth={2} className="opacity-70" />
                     </Button>
                 </FieldRow>
@@ -229,6 +230,7 @@ export function AboutTab() {
                     <Button
                         variant="secondary"
                         size="sm"
+                        className="min-w-[80px]"
                         onClick={() => openExternal(APP_RELEASES_URL)}
                     >
                         查看
@@ -239,9 +241,10 @@ export function AboutTab() {
                     <Button
                         variant="secondary"
                         size="sm"
+                        className="min-w-[80px]"
                         onClick={() => openExternal(APP_LICENSE_URL)}
                     >
-                        查看 LICENSE
+                        查看
                         <ExternalLink size={12} strokeWidth={2} className="opacity-70" />
                     </Button>
                 </FieldRow>
@@ -252,6 +255,7 @@ export function AboutTab() {
                     <Button
                         variant="secondary"
                         size="sm"
+                        className="min-w-[80px]"
                         onClick={() => void consent.openViewer()}
                     >
                         查看
@@ -265,11 +269,12 @@ export function AboutTab() {
                     <Button
                         variant="secondary"
                         size="sm"
+                        className="min-w-[80px]"
                         disabled={openingGuide}
                         onClick={() => void handleOpenOnboarding()}
                     >
                         {openingGuide ? <Spinner size="xs" tone="brand" /> : null}
-                        {openingGuide ? '打开中…' : '重新查看入门'}
+                        {openingGuide ? '打开中…' : '重新引导'}
                     </Button>
                 </FieldRow>
             </SettingsSection>
@@ -293,6 +298,7 @@ export function AboutTab() {
                                 <Button
                                     variant="secondary"
                                     size="sm"
+                                    className="min-w-[80px]"
                                     onClick={() => openExternal(item.url!)}
                                 >
                                     主页
