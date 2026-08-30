@@ -66,6 +66,10 @@ export const botService = {
         return [];
     },
 
+    retrySnowlumaUi: async (botId: string): Promise<void> => {
+        if (isTauri) await invoke('retry_snowluma_ui', { botId });
+    },
+
     /** 导入迁移：按 NC/SL × Native/Docker 拉取远端网络配置；null = 远端无可迁移内容 */
     fetchImportedNetwork: (
         serverId: string,

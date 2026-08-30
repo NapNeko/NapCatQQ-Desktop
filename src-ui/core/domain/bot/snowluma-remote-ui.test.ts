@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import {
+    isSnowlumaRemoteUiRetryAvailable,
     snowlumaDaemonScope,
     snowlumaDaemonStateForConfig,
 } from './snowluma-remote-ui';
@@ -35,5 +36,36 @@ describe('SnowLuma daemon scope', () => {
                 { 'server-a': 'crashed' },
             ),
         ).toBeNull();
+    });
+
+    it('远端运行中的 SnowLuma 始终提供 UI 隧道重试入口', () => {
+        expect(
+            isSnowlumaRemoteUiRetryAvailable({
+                config: config('server-a', 'native'),
+                active: true,
+                transportFailed: false,
+            }),
+        ).toBe(true);
+        expect(
+            isSnowlumaRemoteUiRetryAvailable({
+                config: config('server-a', 'docker'),
+                active: true,
+                transportFailed: false,
+            }),
+        ).toBe(true);
+        expect(
+            isSnowlumaRemoteUiRetryAvailable({
+                config: config('server-a', 'native'),
+                active: false,
+                transportFailed: false,
+            }),
+        ).toBe(false);
+        expect(
+            isSnowlumaRemoteUiRetryAvailable({
+                config: config('server-a', 'native'),
+                active: true,
+                transportFailed: true,
+            }),
+        ).toBe(false);
     });
 });

@@ -47,6 +47,7 @@ import {
 import { isSnowLumaFlavor, type Flavor } from '../../../../core/domain/bot/flavor';
 import {
     isSnowlumaRemoteNativeConfig,
+    isSnowlumaRemoteUiRetryAvailable,
     isSnowlumaTunnelReady,
 } from '../../../../core/domain/bot/snowluma-remote-ui';
 import { cn } from '../../../../shared/utils/cn';
@@ -109,6 +110,8 @@ interface BotCardProps {
     /** 远端 SnowLuma：Docker 或 Native 下展示 noVNC（扫码） */
     isSnowlumaRemoteTunnelUi?: boolean;
     onOpenNovnc?: (botId: string) => void;
+    /** 远端 SnowLuma 隧道失效时重建 WebUI/noVNC，不重启 Bot。 */
+    onRetrySnowlumaUi?: (botId: string) => Promise<void>;
 }
 
 export function BotCard({
@@ -135,8 +138,10 @@ export function BotCard({
     onOpenWebui,
     isSnowlumaRemoteTunnelUi = false,
     onOpenNovnc,
+    onRetrySnowlumaUi,
 }: BotCardProps) {
     const [qrOpen, setQrOpen] = useState(false);
+    const [retryingSnowlumaUi, setRetryingSnowlumaUi] = useState(false);
     const {
         enabled: metricsEnabled,
         metrics: runtimeMetrics,
@@ -251,6 +256,21 @@ export function BotCard({
         isSnowlumaRemoteTunnelUi &&
         snowlumaTunnelReady &&
         isActive;
+    const snowlumaUiRetryAvailable = isSnowlumaRemoteUiRetryAvailable({
+        config: config ?? null,
+        active: bot.state === 'running',
+        transportFailed,
+    });
+
+    const runSnowlumaUiRetry = async () => {
+        if (!onRetrySnowlumaUi || retryingSnowlumaUi) return;
+        setRetryingSnowlumaUi(true);
+        try {
+            await onRetrySnowlumaUi(bot.bot_id);
+        } finally {
+            setRetryingSnowlumaUi(false);
+        }
+    };
 
     const chips: React.ReactNode[] = [];
     if (!isSL && enabledChannels !== null) {
@@ -590,6 +610,15 @@ export function BotCard({
                     >
                         <Monitor size={13} className="text-brand" />
                         <span>打开 noVNC 桌面</span>
+                    </ContextMenuItem>
+                )}
+                {snowlumaUiRetryAvailable && onRetrySnowlumaUi && (
+                    <ContextMenuItem
+                        disabled={retryingSnowlumaUi}
+                        onClick={() => void runSnowlumaUiRetry()}
+                    >
+                        <RefreshCw size={13} className="text-brand" />
+                        <span>重建 WebUI / noVNC 连接</span>
                     </ContextMenuItem>
                 )}
                 {hasQrcode && (

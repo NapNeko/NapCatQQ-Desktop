@@ -1092,6 +1092,24 @@ function BotListGrid({
                                             });
                                         });
                                     }}
+                                    onRetrySnowlumaUi={async (id) => {
+                                        try {
+                                            await botService.retrySnowlumaUi(id);
+                                            pushInfoBar({
+                                                key: `snowluma-ui-retry:${id}`,
+                                                tone: 'success',
+                                                title: '连接已重建',
+                                                content: 'SnowLuma WebUI 与 noVNC 隧道已重新建立。',
+                                            });
+                                        } catch (err: unknown) {
+                                            pushInfoBar({
+                                                key: `snowluma-ui-retry:${id}`,
+                                                tone: 'danger',
+                                                title: '连接重建失败',
+                                                content: String(err),
+                                            });
+                                        }
+                                    }}
                                 />
                             </div>
                         </ListItem>

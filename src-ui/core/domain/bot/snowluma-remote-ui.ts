@@ -39,6 +39,19 @@ export function isSnowlumaRemoteDockerConfig(config: BotConfig | null | undefine
     return config.bot.deploymentType === 'docker';
 }
 
+/** 远端 SnowLuma 运行中时始终保留一次隧道重建入口，避免失效缓存只能靠重启恢复。 */
+export function isSnowlumaRemoteUiRetryAvailable(args: {
+    config: BotConfig | null | undefined;
+    active: boolean;
+    transportFailed: boolean;
+}): boolean {
+    if (!args.active || args.transportFailed) return false;
+    return (
+        isSnowlumaRemoteNativeConfig(args.config) ||
+        isSnowlumaRemoteDockerConfig(args.config)
+    );
+}
+
 /** WebUI / noVNC 隧道是否可认为就绪（Docker 事件或远端 Native 全局 daemon Ready）。 */
 export function isSnowlumaTunnelReady(args: {
     config: BotConfig | null | undefined;
