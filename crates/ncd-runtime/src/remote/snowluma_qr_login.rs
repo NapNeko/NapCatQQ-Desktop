@@ -17,21 +17,31 @@ display, xauthority, path = sys.argv[1:4]
 x, y, width, height, action, delay_ms = (int(value) for value in sys.argv[4:10])
 os.environ['DISPLAY'] = display
 os.environ['XAUTHORITY'] = xauthority
-if action >= 0:
-    x11 = ctypes.CDLL('libX11.so.6')
-    xtst = ctypes.CDLL('libXtst.so.6')
-    handle = x11.XOpenDisplay(display.encode())
-    if not handle: raise RuntimeError('x11 display unavailable')
-    try:
-        points = ((width // 2, height * 280 // 460), (width * 120 // 320, height * 424 // 460), (width * 120 // 320, height * 422 // 460))
+x11 = ctypes.CDLL('libX11.so.6')
+xtst = ctypes.CDLL('libXtst.so.6')
+x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+x11.XOpenDisplay.restype = ctypes.c_void_p
+x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+x11.XCloseDisplay.restype = ctypes.c_int
+x11.XFlush.argtypes = [ctypes.c_void_p]
+x11.XFlush.restype = ctypes.c_int
+xtst.XTestFakeMotionEvent.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_ulong]
+xtst.XTestFakeMotionEvent.restype = ctypes.c_int
+xtst.XTestFakeButtonEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
+xtst.XTestFakeButtonEvent.restype = ctypes.c_int
+handle = x11.XOpenDisplay(display.encode())
+if not handle: raise RuntimeError('x11 display unavailable')
+try:
+    points = ((width // 2, height * 280 // 460), (width * 120 // 320, height * 424 // 460), (width * 120 // 320, height * 422 // 460))
+    if action >= 0:
         click_x, click_y = points[action]
-        xtst.XTestFakeMotionEvent(handle, 0, x + click_x, y + click_y, 0)
-        xtst.XTestFakeButtonEvent(handle, 1, 1, 0)
-        xtst.XTestFakeButtonEvent(handle, 1, 0, 0)
-        x11.XFlush(handle)
+        if xtst.XTestFakeMotionEvent(handle, 0, x + click_x, y + click_y, 0) == 0: raise RuntimeError('x11 motion failed')
+        if xtst.XTestFakeButtonEvent(handle, 1, 1, 0) == 0: raise RuntimeError('x11 press failed')
+        if xtst.XTestFakeButtonEvent(handle, 1, 0, 0) == 0: raise RuntimeError('x11 release failed')
+        if x11.XFlush(handle) == 0: raise RuntimeError('x11 flush failed')
         time.sleep(delay_ms / 1000.0)
-    finally:
-        x11.XCloseDisplay(handle)
+finally:
+    x11.XCloseDisplay(handle)
 ImageGrab.grab(bbox=(x, y, x + width, y + height)).save(path, 'PNG')
 "#;
 
@@ -207,6 +217,10 @@ fn parse_xprop_identity(output: &str) -> Option<(u32, String, String)> {
     ))
 }
 
+fn window_matches_identity(output: &str, expected_pid: u32) -> bool {
+    parse_xprop_identity(output).is_some_and(|(pid, _, _)| pid == expected_pid)
+}
+
 async fn resolve_unique_window(host: &dyn Host, expected_pid: u32) -> Option<WindowCandidate> {
     let tree = host
         .run_to_string(
@@ -232,10 +246,8 @@ async fn resolve_unique_window(host: &dyn Host, expected_pid: u32) -> Option<Win
             )
             .await
             .ok()?;
-        if let Some((pid, title, _)) = parse_xprop_identity(&output.stdout) {
-            if pid == expected_pid && title == "QQ" {
-                matches.push(candidate);
-            }
+        if window_matches_identity(&output.stdout, expected_pid) {
+            matches.push(candidate);
         }
     }
     (matches.len() == 1).then(|| matches[0])
@@ -318,7 +330,8 @@ impl SnowlumaQrCaptureService {
         )
         .await
     }
-    pub async fn capture_and_decode(
+    // Kept private so callers cannot bypass the host, environment, and window identity gates above.
+    async fn capture_and_decode(
         &self,
         host: &dyn Host,
         request: SnowlumaQrCaptureRequest,
@@ -471,13 +484,14 @@ mod tests {
             parse_xprop_identity(output),
             Some((1234, "QQ".into(), "QQ".into()))
         );
-        assert!(parse_xprop_identity(&output.replace("1234", "1235")).is_some());
-        assert!(
-            parse_xprop_identity(
-                &output.replace("WM_NAME(STRING) = \"QQ\"", "WM_NAME(STRING) = \"Other\"")
-            )
-            .is_none()
-        );
+        assert!(!window_matches_identity(
+            &output.replace("1234", "1235"),
+            1234
+        ));
+        assert!(!window_matches_identity(
+            &output.replace("WM_NAME(STRING) = \"QQ\"", "WM_NAME(STRING) = \"Other\""),
+            1234,
+        ));
     }
 
     #[test]
