@@ -28,6 +28,7 @@ import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
 import type { Flavor } from '../../core/domain/bot/flavor';
 import { cn } from '../../shared/utils/cn';
 import logoMark from '../../assets/logo.png';
+import { trayActionErrorMessage } from './trayPanelActions';
 
 const PAGE_SIZE = 2;
 let lastReportedHeight = 0;
@@ -290,6 +291,7 @@ export const TrayPanel: React.FC = () => {
     const openWebui = useOpenWebui();
     const openSnowlumaNovnc = useOpenSnowlumaNovnc();
     const [mutatingBotIds, setMutatingBotIds] = useState<Record<string, boolean>>({});
+    const [actionError, setActionError] = useState<string | null>(null);
     const [page, setPage] = useState(1);
 
     const runningCount = botSnapshots.filter((s) => s.state === 'running').length;
@@ -303,11 +305,14 @@ export const TrayPanel: React.FC = () => {
     );
 
     const handleStart = async (botId: string) => {
+        setActionError(null);
         setMutatingBotIds((prev) => ({ ...prev, [botId]: true }));
         try {
             await botService.start(botId);
         } catch (e) {
+            const message = trayActionErrorMessage(e);
             console.error('启动 Bot 失败:', e);
+            setActionError(`启动 Bot 失败: ${message}`);
         } finally {
             setMutatingBotIds((prev) => ({ ...prev, [botId]: false }));
             void refetch();
@@ -315,11 +320,14 @@ export const TrayPanel: React.FC = () => {
     };
 
     const handleStop = async (botId: string) => {
+        setActionError(null);
         setMutatingBotIds((prev) => ({ ...prev, [botId]: true }));
         try {
             await botService.stop(botId);
         } catch (e) {
+            const message = trayActionErrorMessage(e);
             console.error('停止 Bot 失败:', e);
+            setActionError(`停止 Bot 失败: ${message}`);
         } finally {
             setMutatingBotIds((prev) => ({ ...prev, [botId]: false }));
             void refetch();
@@ -347,6 +355,7 @@ export const TrayPanel: React.FC = () => {
     };
 
     const refreshAndResize = useCallback(() => {
+        setActionError(null);
         botSortStore.refresh();
         void refetch();
         const el = cardRef.current;
@@ -458,6 +467,15 @@ export const TrayPanel: React.FC = () => {
                         </span>
                     </div>
                 </div>
+
+                {actionError ? (
+                    <div
+                        role="alert"
+                        className="mx-2 mb-1 rounded-md bg-danger-soft px-2 py-1 text-[11px] leading-snug text-danger"
+                    >
+                        {actionError}
+                    </div>
+                ) : null}
 
                 {/* Bot 快捷卡片列表 (单页最多展示 2 个，超出提供翻页) */}
                 {totalCount > 0 && (
