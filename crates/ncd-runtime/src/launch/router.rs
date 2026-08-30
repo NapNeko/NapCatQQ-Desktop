@@ -335,15 +335,17 @@ impl RuntimeBackendRouter {
         host: Arc<dyn Host>,
     ) -> Result<Arc<RemoteSnowLumaBackend>, RuntimeRouterError> {
         let sid = server_id.to_string();
+        // Even a cached backend owns the daemon's SSH session. Refresh it before
+        // returning so reconnect/retry paths never reuse a poisoned Host handle.
+        let daemon = self
+            .remote_snowluma_daemon_for_server(server_id, Arc::clone(&host))
+            .await?;
         {
             let guard = self.remote_snowluma_backends.lock().await;
             if let Some(backend) = guard.get(&sid) {
                 return Ok(Arc::clone(backend));
             }
         }
-        let daemon = self
-            .remote_snowluma_daemon_for_server(server_id, host)
-            .await?;
         // backend 身份按 server 聚合(多 Bot 共享同一 daemon / 隧道 / poller 表)
         let backend_id = BotId::new(format!("remote-sl-{sid}"));
         let sl_metrics = self.remote_metrics_injector.clone().map(|inj| {

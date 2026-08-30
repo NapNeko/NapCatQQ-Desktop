@@ -650,6 +650,39 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         Ok(done.into_iter().collect())
     }
 
+    /// 远端 SnowLuma UI 失败后的手动恢复：复用运行中的 QQ/容器，重建 WebUI 与 noVNC 隧道。
+    pub async fn retry_snowluma_ui(&self, bot_id: &BotId) -> Result<(), BotManagerError> {
+        let config = self.get_required_bot_config(bot_id).await?;
+        if config.bot.backend_type != BackendType::SnowLuma
+            || config.bot.runtime_target.is_local()
+        {
+            return Err(BotManagerError::Render(
+                "仅远端 SnowLuma 支持手动重建 WebUI/noVNC 隧道".to_string(),
+            ));
+        }
+
+        self.reconcile_remote_runtime_for(std::slice::from_ref(bot_id))
+            .await?;
+
+        let ready = match RuntimeScenario::from_config(&config)? {
+            RuntimeScenario::RemoteDocker { .. } => {
+                self.snowluma_docker_endpoints(bot_id).await.is_some()
+            }
+            RuntimeScenario::RemoteNative { ref server_id, .. } => self
+                .snowluma_native_endpoints_for_server(server_id)
+                .await
+                .is_some(),
+            _ => false,
+        };
+        if ready {
+            Ok(())
+        } else {
+            Err(BotManagerError::Render(
+                "远端 SnowLuma WebUI/noVNC 隧道仍未就绪，请检查主机连接与远端日志".to_string(),
+            ))
+        }
+    }
+
     /// 绑定在该主机上的所有远端 bot(Docker / Native)补跑一轮运行态恢复。
     pub async fn reconcile_remote_runtimes_for_server(
         &self,
