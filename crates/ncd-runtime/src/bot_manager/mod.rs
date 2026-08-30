@@ -27,7 +27,9 @@ use crate::remote::snowluma_qr_login::SnowlumaQrCaptureService;
 use crate::snowluma::{AgreementsPayload, ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
 use crate::snowluma_agreements::SnowLumaAgreementService;
 use ncd_backend_napcat::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
-use ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaDaemon;
+use ncd_backend_snowluma::remote_snowluma::{
+    RemoteSnowLumaDaemon, remote_qq_running_pid_with_hint,
+};
 use ncd_backend_snowluma::remote_snowluma_log::RemoteSnowLumaLogRegistry;
 use ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelRegistry;
 use ncd_domain::app_config::WebUiPollerSettings;
@@ -718,6 +720,13 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             .resolve(&RuntimeTarget::server(server_id.clone()))
             .await
             .map_err(|err| BotManagerError::Render(err.to_string()))?;
+        let expected_pid =
+            remote_qq_running_pid_with_hint(host.as_ref(), config.bot.qq_id, None, None, false)
+                .await
+                .map_err(|err| BotManagerError::Render(err.to_string()))?
+                .ok_or_else(|| {
+                    BotManagerError::Render("未找到当前 Bot 对应的 QQ 进程".to_string())
+                })?;
         let session_id = ncd_domain::QrLoginSessionId::new(format!(
             "qr-{}",
             std::time::SystemTime::now()
@@ -734,7 +743,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         };
         Ok(self
             .qr_capture_service
-            .capture_current_variant(&*host, session)
+            .capture_current_variant(&*host, session, expected_pid)
             .await)
     }
 

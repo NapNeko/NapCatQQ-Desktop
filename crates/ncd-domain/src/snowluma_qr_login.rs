@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(transparent)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -16,16 +15,6 @@ impl QrLoginSessionId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
-pub enum SnowlumaQrLoginStatus {
-    Preparing,
-    WaitingForScan,
-    Succeeded,
-    FallbackNoVnc,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

@@ -32,8 +32,8 @@ pub mod remote_inventory;
 pub mod remote_paths;
 pub mod runtime_scenario;
 pub mod snowluma_linux_package;
-pub mod snowluma_start_mode;
 pub mod snowluma_qr_login;
+pub mod snowluma_start_mode;
 
 // 向后兼容: 下游 crate 仍可 use ncd_domain::{models::*, report::*}
 pub use migration as models;
@@ -105,6 +105,7 @@ pub use migration::{
     MigrationStage, MigrationWarning,
 };
 pub use napcat_events::NapCatLoginInvalidationReason;
+pub use node_environment::{NodeEnvironmentCandidate, NodeProbeResult, NodeSourceKind};
 pub use offline_alert::{
     EnsureOneBotMessengerHttpResult, OfflineAlert, OfflineAlertKind, OfflineAlertSource,
     OfflineDeliveryChannelResult, OfflineDeliveryRecord, OfflineEmailSettings,
@@ -131,11 +132,9 @@ pub use remote_paths::{
     require_qq_install_base, require_snowluma_dir, snowluma_install_candidates,
     snowluma_workspace_from_dir,
 };
-pub use node_environment::{NodeEnvironmentCandidate, NodeProbeResult, NodeSourceKind};
 pub use runtime_scenario::RuntimeScenario;
 pub use snowluma_linux_package::{SnowLumaLinuxPackage, SnowLumaPackage};
 pub use snowluma_qr_login::{
-    QrLoginSessionId, SnowlumaQrFailureCategory, SnowlumaQrLoginResult,
-    SnowlumaQrLoginSession, SnowlumaQrLoginStatus,
+    QrLoginSessionId, SnowlumaQrFailureCategory, SnowlumaQrLoginResult, SnowlumaQrLoginSession,
 };
 pub use snowluma_start_mode::SnowLumaStartMode;

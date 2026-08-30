@@ -1,4 +1,4 @@
-use ncd_domain::{SnowlumaQrFailureCategory, SnowlumaQrLoginStatus};
+use ncd_domain::SnowlumaQrFailureCategory;
 use ncd_runtime::remote::snowluma_qr_login::{
     QrDecoder, QrLoginPoint, QrLoginWindowGeometry, UnavailableQrDecoder, calibrated_click_points,
     validate_display,
