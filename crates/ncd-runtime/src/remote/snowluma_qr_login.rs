@@ -309,8 +309,14 @@ impl SnowlumaQrCaptureService {
         let Some((display, xauthority)) = env else {
             return fallback(SnowlumaQrFailureCategory::CapabilityUnavailable);
         };
-        if validate_display(&display).is_err() || !validate_xauthority(&xauthority) {
-            return fallback(SnowlumaQrFailureCategory::CapabilityUnavailable);
+        if let Err(reason) = validate_capture_preflight(
+            host.os(),
+            host.locality(),
+            &display,
+            &xauthority,
+            expected_pid,
+        ) {
+            return fallback(reason);
         }
         let xauth_path = HostPath::from_posix(xauthority.clone());
         if !matches!(host.exists(&xauth_path).await, Ok(true)) {
@@ -345,6 +351,7 @@ impl SnowlumaQrCaptureService {
         let local_path = temporary_frame_path();
         if !matches!(host.run_to_string(HostCommand::new("mkdir").arg("-m").arg("700").arg(remote_dir.as_posix())).await, Ok(output) if output.success())
         {
+            cleanup_capture(host, &remote_dir, &local_path).await;
             return fallback(SnowlumaQrFailureCategory::CapabilityUnavailable);
         }
         let Some(mut previous) =
@@ -353,6 +360,7 @@ impl SnowlumaQrCaptureService {
             cleanup_capture(host, &remote_dir, &local_path).await;
             return fallback(SnowlumaQrFailureCategory::CaptureFailed);
         };
+        let baseline = previous.clone();
         for (action, wait_ms) in [(0, 1200), (1, 1000), (2, 1000)] {
             let Some(window) = resolve_unique_window(host, request.expected_pid).await else {
                 cleanup_capture(host, &remote_dir, &local_path).await;
@@ -375,12 +383,11 @@ impl SnowlumaQrCaptureService {
             previous = frame;
         }
         cleanup_capture(host, &remote_dir, &local_path).await;
-        match self._decoder.decode(&previous) {
-            Ok(payload) if valid_payload(&payload) => SnowlumaQrLoginResult::Payload {
+        match decode_changed_frame(self._decoder.as_ref(), &baseline, &previous) {
+            Ok(payload) => SnowlumaQrLoginResult::Payload {
                 session: request.session,
                 payload,
             },
-            Ok(_) => fallback(SnowlumaQrFailureCategory::DecodeFailed),
             Err(reason) => fallback(reason),
         }
     }
@@ -417,7 +424,27 @@ async fn capture_frame(
         )
         .await
         .ok()?;
-    if !output.success() || host.download(remote, local).await.is_err() {
+    if !output.success() {
+        return None;
+    }
+    let remote_size = host
+        .run_to_string(
+            HostCommand::new("stat")
+                .arg("-c")
+                .arg("%s")
+                .arg(remote.as_posix())
+                .timeout(Duration::from_secs(2)),
+        )
+        .await
+        .ok()?
+        .stdout
+        .trim()
+        .parse::<u64>()
+        .ok()?;
+    if remote_size == 0
+        || remote_size > MAX_FRAME_BYTES
+        || host.download(remote, local).await.is_err()
+    {
         return None;
     }
     let metadata = tokio::fs::metadata(local).await.ok()?;
@@ -449,6 +476,36 @@ fn temporary_remote_dir(host_id: &str) -> HostPath {
 
 fn valid_payload(payload: &str) -> bool {
     !payload.is_empty() && payload.len() <= 4096 && !payload.chars().any(char::is_control)
+}
+
+fn validate_capture_preflight(
+    os: Os,
+    locality: Locality,
+    display: &str,
+    xauthority: &str,
+    expected_pid: u32,
+) -> Result<(), SnowlumaQrFailureCategory> {
+    if expected_pid == 0 || os != Os::Linux || locality != Locality::Remote {
+        return Err(SnowlumaQrFailureCategory::UnsupportedVariant);
+    }
+    if validate_display(display).is_err() || !validate_xauthority(xauthority) {
+        return Err(SnowlumaQrFailureCategory::CapabilityUnavailable);
+    }
+    Ok(())
+}
+
+fn decode_changed_frame(
+    decoder: &dyn QrDecoder,
+    previous: &[u8],
+    current: &[u8],
+) -> Result<String, SnowlumaQrFailureCategory> {
+    if previous == current {
+        return Err(SnowlumaQrFailureCategory::CaptureFailed);
+    }
+    let payload = decoder.decode(current)?;
+    valid_payload(&payload)
+        .then_some(payload)
+        .ok_or(SnowlumaQrFailureCategory::DecodeFailed)
 }
 
 #[cfg(test)]
@@ -502,5 +559,45 @@ mod tests {
         );
         assert!(parse_runtime_env(":0\n").is_none());
         assert!(!validate_xauthority("relative/.Xauthority"));
+    }
+    struct TestDecoder;
+    impl QrDecoder for TestDecoder {
+        fn decode(&self, frame: &[u8]) -> Result<String, SnowlumaQrFailureCategory> {
+            (frame == b"new-frame")
+                .then_some("https://example.test/login".to_string())
+                .ok_or(SnowlumaQrFailureCategory::DecodeFailed)
+        }
+    }
+
+    #[test]
+    fn changed_frame_with_injected_decoder_returns_payload() {
+        let result = decode_changed_frame(&TestDecoder, b"old-frame", b"new-frame");
+        assert!(matches!(result, Ok(payload) if payload == "https://example.test/login"));
+    }
+
+    #[test]
+    fn unchanged_frame_is_terminal_before_decoder() {
+        let result = decode_changed_frame(&TestDecoder, b"same", b"same");
+        assert_eq!(result, Err(SnowlumaQrFailureCategory::CaptureFailed));
+    }
+
+    #[test]
+    fn preflight_rejects_wrong_host_and_invalid_x11_facts() {
+        assert_eq!(
+            validate_capture_preflight(Os::Windows, Locality::Remote, ":0", "/tmp/xauth", 1),
+            Err(SnowlumaQrFailureCategory::UnsupportedVariant)
+        );
+        assert_eq!(
+            validate_capture_preflight(Os::Linux, Locality::Local, ":0", "/tmp/xauth", 1),
+            Err(SnowlumaQrFailureCategory::UnsupportedVariant)
+        );
+        assert_eq!(
+            validate_capture_preflight(Os::Linux, Locality::Remote, "bad", "/tmp/xauth", 1),
+            Err(SnowlumaQrFailureCategory::CapabilityUnavailable)
+        );
+        assert_eq!(
+            validate_capture_preflight(Os::Linux, Locality::Remote, ":0", "relative", 1),
+            Err(SnowlumaQrFailureCategory::CapabilityUnavailable)
+        );
     }
 }
