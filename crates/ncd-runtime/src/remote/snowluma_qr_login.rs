@@ -107,6 +107,9 @@ pub enum QrCaptureError {
     AmbiguousWindow,
 }
 
+/// Accepts only the X11 display form used by the validated SnowLuma runtime (`:0`,
+/// `:1`, ...). Unix socket, host-qualified, and screen-suffixed forms are rejected
+/// because the calibrated remote capture contract does not cover them.
 pub fn validate_display(display: &str) -> Result<(), QrCaptureError> {
     let valid = display.len() >= 2
         && display.starts_with(':')

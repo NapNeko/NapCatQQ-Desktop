@@ -23,8 +23,11 @@ fn current_variant_recalculates_clicks_from_window_geometry() {
 }
 
 #[test]
-fn display_validation_rejects_command_injection() {
+fn display_validation_accepts_only_numeric_x11_display() {
     assert!(validate_display(":0").is_ok());
+    assert!(validate_display(":12").is_ok());
+    assert!(validate_display(":0.0").is_err());
+    assert!(validate_display("unix/:0").is_err());
     assert!(validate_display(":0; touch /tmp/pwned").is_err());
 }
 
