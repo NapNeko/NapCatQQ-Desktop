@@ -1,7 +1,7 @@
 # 远端 Native SnowLuma QQ 二维码登录
 
 日期：2026-08-30  
-状态：已批准，按此设计实施  
+状态：设计范围已获批准；实施前须通过动态校准闸门  
 范围：仅远端 Linux Native SnowLuma；不修改 SnowLuma 运行时、Hook、WebUI 或远端资产
 
 ## 1. 问题与边界
@@ -34,7 +34,7 @@
 
 ## 3. 架构与数据流
 
-新增能力放在 Desktop 的 domain/traits/runtime/Tauri/UI 边界内。`ncd-backend-snowluma` 仅提供既有 daemon、Host、进程和隧道事实；本功能不编辑该 crate。
+新增能力放在 Desktop 自有的 domain/traits/runtime/Tauri/UI 边界内。这里“不得修改 SnowLuma”特指不改 `ncd-backend-snowluma` 的既有实现、不改 SnowLuma 远端运行时/Hook/WebUI/配置资产，也不新增 SnowLuma 协议；Desktop 侧只读消费既有 daemon、Host、进程和隧道事实，新增的截图、输入、解码与会话编排由 Desktop 自己持有。
 
 ```mermaid
 flowchart TB
