@@ -550,13 +550,15 @@ pub async fn probe_local_system_nodes(
         }
     }
 
-    // 3. System PATH
+    // 通过 Host 执行 where.exe，LocalWindowsHost 会统一设置 CREATE_NO_WINDOW。
     #[cfg(windows)]
     {
-        if let Ok(output) = std::process::Command::new("where.exe").arg("node").output() {
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                for line in stdout.lines() {
+        if let Ok(output) = host
+            .run_to_string(HostCommand::new("where.exe").arg("node"))
+            .await
+        {
+            if output.success() {
+                for line in output.stdout.lines() {
                     let trimmed = line.trim();
                     if trimmed.is_empty() {
                         continue;
@@ -665,7 +667,8 @@ mod tests {
         );
         let win_install = HostPath::from_windows(r"C:\Napcat\node");
         assert_eq!(
-            NodeJsComponent::node_binary_path_for_os(&win_install, Os::Windows).render(ncd_host::PathStyle::Windows),
+            NodeJsComponent::node_binary_path_for_os(&win_install, Os::Windows)
+                .render(ncd_host::PathStyle::Windows),
             r"C:\Napcat\node\node.exe"
         );
     }
@@ -687,5 +690,146 @@ mod tests {
         let targets = comp.supported_targets();
         assert!(targets.contains(&(Os::Linux, Locality::Local)));
         assert!(targets.contains(&(Os::Linux, Locality::Remote)));
+    }
+    #[cfg(windows)]
+    mod system_path_probe_tests {
+        use super::*;
+        use std::path::Path;
+        use std::sync::Arc;
+
+        use async_trait::async_trait;
+        use bytes::Bytes;
+        use ncd_host::shell::PowerShellShell;
+        use ncd_host::{
+            ArchiveKind, CommandOutput, DirEntry, HostCommand, HostError, HostPath, HostProcess,
+            HostShell, PackageManager, PathStyle,
+        };
+        use tokio::sync::Mutex;
+
+        struct RecordingHost {
+            commands: Arc<Mutex<Vec<HostCommand>>>,
+            shell: PowerShellShell,
+        }
+
+        impl RecordingHost {
+            fn new() -> Self {
+                Self {
+                    commands: Arc::new(Mutex::new(Vec::new())),
+                    shell: PowerShellShell,
+                }
+            }
+        }
+
+        #[async_trait]
+        impl Host for RecordingHost {
+            fn os(&self) -> Os {
+                Os::Windows
+            }
+
+            fn arch(&self) -> Arch {
+                Arch::X86_64
+            }
+
+            fn locality(&self) -> Locality {
+                Locality::Local
+            }
+
+            fn id(&self) -> &str {
+                "test"
+            }
+
+            fn shell(&self) -> &dyn HostShell {
+                &self.shell
+            }
+
+            fn pkg_manager(&self) -> Option<&dyn PackageManager> {
+                None
+            }
+
+            async fn read_file(&self, _path: &HostPath) -> Result<Bytes, HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+
+            async fn write_file(&self, _path: &HostPath, _bytes: &[u8]) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+
+            async fn list_dir(&self, _path: &HostPath) -> Result<Vec<DirEntry>, HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+
+            async fn create_dir_all(&self, _path: &HostPath) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+
+            async fn remove_file(&self, _path: &HostPath) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+
+            async fn remove_dir_all(&self, _path: &HostPath) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+
+            async fn exists(&self, path: &HostPath) -> Result<bool, HostError> {
+                Ok(path
+                    .render(PathStyle::Windows)
+                    .eq_ignore_ascii_case(r"C:\fake\node.exe"))
+            }
+
+            async fn upload(&self, _local: &Path, _remote: &HostPath) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+
+            async fn download(&self, _remote: &HostPath, _local: &Path) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+
+            async fn extract_archive(
+                &self,
+                _archive: &HostPath,
+                _dest: &HostPath,
+                _kind: ArchiveKind,
+            ) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+
+            async fn spawn(&self, _cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+
+            async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
+                self.commands.lock().await.push(cmd.clone());
+                if cmd.program == "where.exe" && cmd.args == ["node"] {
+                    return Ok(CommandOutput {
+                        exit_code: Some(0),
+                        stdout: "C:\\fake\\node.exe\r\n".to_string(),
+                        stderr: String::new(),
+                    });
+                }
+                if cmd.program.ends_with("node.exe") && cmd.args == ["--version"] {
+                    return Ok(CommandOutput {
+                        exit_code: Some(0),
+                        stdout: "v22.13.0\r\n".to_string(),
+                        stderr: String::new(),
+                    });
+                }
+                Err(HostError::Unsupported {
+                    operation: "unexpected test command",
+                })
+            }
+        }
+
+        #[tokio::test]
+        async fn system_path_probe_runs_where_through_host() {
+            let host = RecordingHost::new();
+            let commands = Arc::clone(&host.commands);
+
+            let candidates = probe_local_system_nodes(&host, None, None).await;
+
+            assert_eq!(candidates.len(), 1);
+            assert_eq!(candidates[0].path, r"C:\fake\node.exe");
+            assert_eq!(candidates[0].source_kind, NodeSourceKind::SystemPath);
+            assert_eq!(commands.lock().await[0].program, "where.exe");
+        }
     }
 }
