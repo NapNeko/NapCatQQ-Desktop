@@ -1,4 +1,4 @@
-// 列表 Bot 卡。chips 不单独占行，避免有无摘要把同行卡撑成两截高度。
+// 列表 Bot 卡：头像/标题行 + 中间配置 Chip/指标行 + 底栏状态与操作。
 
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -13,8 +13,10 @@ import {
     Power,
     QrCode,
     RefreshCw,
+    Server,
     Settings,
     Square,
+    WifiOff,
 } from 'lucide-react';
 import {
     ContextMenu,
@@ -273,22 +275,55 @@ export function BotCard({
     };
 
     const chips: React.ReactNode[] = [];
+    if (runtimeTarget && runtimeTarget !== 'local') {
+        const hostLabel = runtimeTargetDisplayLabel(runtimeTarget, servers);
+        if (transportFailed) {
+            chips.push(
+                <InfoChip
+                    key="runtime"
+                    icon={WifiOff}
+                    tone="danger"
+                    tooltip={`远端主机不可达：${hostLabel}（请检查网络或主机状态）`}
+                />,
+            );
+        } else {
+            chips.push(
+                <InfoChip
+                    key="runtime"
+                    icon={Server}
+                    tooltip={`运行位置：${runtimeTargetTooltip(runtimeTarget, servers)}`}
+                />,
+            );
+        }
+    } else if (transportFailed) {
+        chips.push(
+            <InfoChip
+                key="remote-unreachable"
+                icon={WifiOff}
+                tone="danger"
+                tooltip="远端主机不可达，请检查网络或主机连接"
+            />,
+        );
+    }
+    if (isSL && slStartMode) {
+        chips.push(
+            <InfoChip
+                key="sl-mode"
+                icon={Power}
+                tooltip={slStartMode.mode === 'cold_start' ? '启动方式：冷启动' : '启动方式：热启动'}
+            />,
+        );
+    }
     if (!isSL && enabledChannels !== null) {
         chips.push(
             <InfoChip
                 key="channels"
                 icon={LinkIcon}
-                label="对外"
-                value={
-                    enabledChannels.total > 0
-                        ? `${enabledChannels.total} 路`
-                        : '未配置'
-                }
                 muted={enabledChannels.total === 0}
                 tooltip={
                     enabledChannels.total > 0
-                        ? channelDetailLabel(enabledChannels)
-                        : '在配置页中添加 HTTP / WebSocket / 反向连接以接入业务'
+                        ? `对外连接：${channelDetailLabel(enabledChannels)}`
+                        : '对外连接：未配置'
                 }
             />,
         );
@@ -299,44 +334,11 @@ export function BotCard({
                 key="restart"
                 icon={RefreshCw}
                 iconMotion={isActive ? 'breathe' : 'none'}
-                label="自启"
-                value={restartHint}
+                tooltip={`自动重启：${restartHint}`}
             />,
         );
     }
-    if (runtimeTarget && runtimeTarget !== 'local') {
-        chips.push(
-            <InfoChip
-                key="runtime"
-                icon={Activity}
-                label="运行"
-                value={runtimeTargetDisplayLabel(runtimeTarget, servers)}
-                tooltip={runtimeTargetTooltip(runtimeTarget, servers)}
-            />,
-        );
-    }
-    if (isSL && slStartMode) {
-        chips.push(
-            <InfoChip
-                key="sl-mode"
-                icon={Power}
-                label="启动"
-                value={slStartMode.mode === 'cold_start' ? '冷启动' : '热启动'}
-            />,
-        );
-    }
-    if (transportFailed) {
-        chips.unshift(
-            <InfoChip
-                key="remote-unreachable"
-                icon={Activity}
-                label="远端"
-                value="主机不可达"
-                muted={false}
-            />,
-        );
-    }
-    const visibleChips = chips.slice(0, 3);
+    const visibleChips = chips.slice(0, 4);
     const metricsStrip = (
         <BotRuntimeMetricsStrip
             enabled={metricsEnabled}
@@ -377,7 +379,7 @@ export function BotCard({
                                     displayName={displayName}
                                     flavorTone={isSL ? 'info' : 'brand'}
                                 />
-                                <div className="flex min-w-0 flex-1 items-start gap-2">
+                                <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
                                     <div className="min-w-0 flex-1">
                                         <h3
                                             className="truncate font-display text-base font-semibold leading-snug text-text"
@@ -413,7 +415,7 @@ export function BotCard({
                                         </p>
                                     </div>
                                     {visibleChips.length > 0 ? (
-                                        <div className="flex max-h-[2.75rem] min-w-0 max-w-[58%] flex-wrap items-start justify-end gap-1 overflow-hidden">
+                                        <div className="flex shrink-0 items-center justify-end gap-1 flex-nowrap overflow-hidden pt-0.5">
                                             {visibleChips}
                                         </div>
                                     ) : null}

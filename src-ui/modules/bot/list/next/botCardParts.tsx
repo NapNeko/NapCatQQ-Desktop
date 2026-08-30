@@ -118,48 +118,72 @@ export function InfoChip({
     value,
     muted,
     tooltip,
+    tone = 'neutral',
 }: {
     icon: ComponentType<LucideProps>;
     iconMotion?: MotionIconPreset;
-    label: string;
-    value: React.ReactNode;
+    label?: string;
+    value?: React.ReactNode;
     muted?: boolean;
     tooltip?: string;
+    tone?: 'neutral' | 'brand' | 'warning' | 'danger' | 'info';
 }) {
-    const node = (
+    const isIconOnly = !value && !label;
+
+    return (
         <span
+            title={tooltip}
+            data-tooltip={tooltip}
             className={cn(
-                'inline-flex min-w-0 max-w-full items-center gap-1 rounded-pill border border-border-subtle/80',
-                'bg-inset/80 px-2 py-0.5 text-2xs',
-                muted ? 'text-text-tertiary' : 'text-text-secondary',
+                'inline-flex min-w-0 items-center justify-center transition-colors',
+                isIconOnly
+                    ? 'h-5 w-5 shrink-0 rounded-full border cursor-default'
+                    : 'max-w-full gap-1 rounded-pill border px-1.5 py-0.5 text-2xs',
+                tone === 'neutral' && [
+                    'border-border-subtle/80 bg-inset/80',
+                    muted ? 'text-text-tertiary' : 'text-text-secondary',
+                ],
+                tone === 'brand' && 'border-brand/30 bg-brand-soft/50 text-brand font-medium',
+                tone === 'danger' && 'border-danger/30 bg-danger-soft/50 text-danger font-medium',
+                tone === 'warning' && 'border-warning/30 bg-warning-soft/50 text-warning font-medium',
+                tone === 'info' && 'border-info/30 bg-info-soft/50 text-info font-medium',
             )}
         >
-            <span className="inline-flex text-text-tertiary">
+            <span
+                className={cn(
+                    'inline-flex shrink-0 items-center justify-center',
+                    tone === 'neutral' ? 'text-text-tertiary' : 'currentColor',
+                )}
+            >
                 <ActionMotionIcon
                     icon={icon}
                     motion={iconMotion}
-                    size={11}
-                    strokeWidth={2.4}
+                    size={isIconOnly ? 11 : 10}
+                    strokeWidth={2.2}
                     playEnter={false}
                 />
             </span>
-            <span className="shrink-0 text-text-tertiary">{label}</span>
-            <span
-                className={cn(
-                    'max-w-[8.5rem] truncate font-medium',
-                    muted ? 'text-text-tertiary' : 'text-text',
-                )}
-            >
-                {value}
-            </span>
+            {label ? (
+                <span
+                    className={cn(
+                        'shrink-0',
+                        tone === 'neutral' ? 'text-text-tertiary' : 'opacity-80',
+                    )}
+                >
+                    {label}
+                </span>
+            ) : null}
+            {value ? (
+                <span
+                    className={cn(
+                        'max-w-[7.5rem] truncate font-medium',
+                        tone === 'neutral' ? (muted ? 'text-text-tertiary' : 'text-text') : 'currentColor',
+                    )}
+                >
+                    {value}
+                </span>
+            ) : null}
         </span>
-    );
-    if (!tooltip) return node;
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>{node}</TooltipTrigger>
-            <TooltipContent>{tooltip}</TooltipContent>
-        </Tooltip>
     );
 }
 

@@ -43,7 +43,7 @@ export function BotRuntimeMetricsStrip({
                 aria-label={detail ? `查看运行时指标：${short}。${detail}` : `查看运行时指标：${short}`}
                 title={detail ?? short}
                 className={cn(
-                    'mt-1 flex h-6 max-w-full items-center gap-1.5 rounded-sm px-1.5 text-[11.5px]',
+                    'flex h-5.5 max-w-full items-center gap-1.5 rounded-sm px-1.5 text-[11px]',
                     'transition-[color,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
                     metrics.probe === 'error'
                         ? 'text-danger hover:bg-danger-soft/35'
@@ -65,7 +65,7 @@ export function BotRuntimeMetricsStrip({
     const line = `内存 ${formatBytes(rss)}，出站 ${formatCompactCount(totals.eventsOut)}，入站 ${formatCompactCount(totals.actionsIn)}${metrics.probe === 'stale' ? '，数据陈旧' : ''}`;
 
     if (!clickable) {
-        return <p className="mt-1.5 truncate font-mono text-[11px] text-text-secondary">{line}</p>;
+        return <p className="truncate font-mono text-[11px] text-text-secondary">{line}</p>;
     }
 
     return (
@@ -78,7 +78,7 @@ export function BotRuntimeMetricsStrip({
                 onOpenDetail();
             }}
             className={cn(
-                'mt-1 flex h-6 max-w-full items-center gap-1.5 rounded-sm px-1.5 text-[11.5px] text-text-tertiary',
+                'flex h-5.5 max-w-full items-center gap-1.5 rounded-sm px-1.5 text-[11px] text-text-tertiary',
                 'transition-[color,background-color] hover:bg-inset/45 hover:text-text-secondary',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
             )}

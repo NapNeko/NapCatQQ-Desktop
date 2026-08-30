@@ -93,24 +93,25 @@ export function BotManageCard({
             <div
                 className={cn(
                     'flex min-h-0 flex-1 flex-col justify-between',
-                    compact ? 'px-3.5 pb-2 pt-2.5' : 'px-4 pb-2.5 pt-3.5',
+                    compact ? 'px-3.5 pb-2 pt-2.5' : 'px-4 pb-2.5 pt-3',
                 )}
             >
                 <div className="flex items-start gap-3">{header}</div>
 
-                {showMeta || showMetaExtra ? (
-                    <div className="min-w-0 text-xs leading-snug">
-                        {showMeta ? meta : null}
-                        {showMetaExtra ? metaExtra : null}
-                    </div>
+                {showMeta ? (
+                    <div className="min-w-0 text-xs leading-snug">{meta}</div>
                 ) : null}
 
                 {hasChips ? (
-                    <div className="min-h-[1.625rem] min-w-0">
-                        <div className="flex max-h-[1.625rem] min-w-0 flex-wrap items-center gap-1.5 overflow-hidden">
+                    <div className="min-h-[1.5rem] min-w-0">
+                        <div className="flex max-h-[1.5rem] min-w-0 items-center gap-1.5 overflow-hidden">
                             {chips}
                         </div>
                     </div>
+                ) : null}
+
+                {showMetaExtra ? (
+                    <div className="min-w-0 text-xs leading-snug">{metaExtra}</div>
                 ) : null}
             </div>
 
