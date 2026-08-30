@@ -132,15 +132,16 @@ export interface MotionEnv {
 
 function useReducedMotion(): boolean {
     const [reduced, setReduced] = useState<boolean>(() => {
-        if (typeof window === 'undefined' || !window.matchMedia) return false;
-        return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+        return !!window.matchMedia('(prefers-reduced-motion: reduce)')?.matches;
     });
     useEffect(() => {
-        if (typeof window === 'undefined' || !window.matchMedia) return;
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
         const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
-        const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
-        mql.addEventListener('change', handler);
-        return () => mql.removeEventListener('change', handler);
+        if (!mql) return;
+        const handler = (e: MediaQueryListEvent) => setReduced(!!e?.matches);
+        mql.addEventListener?.('change', handler);
+        return () => mql.removeEventListener?.('change', handler);
     }, []);
     return reduced;
 }
@@ -181,15 +182,15 @@ export function useMotion(): MotionEnv {
                 opts?.duration !== undefined
                     ? opts.duration / Math.max(0.5, env.speed)
                     : (() => {
-                          const k = opts?.kind ?? 'base';
-                          const base =
-                              k === 'fast'
-                                  ? t.durationFast
-                                  : k === 'slow'
-                                      ? t.durationSlow
-                                      : t.durationBase;
-                          return scaleDuration(base, env.speed);
-                      })();
+                        const k = opts?.kind ?? 'base';
+                        const base =
+                            k === 'fast'
+                                ? t.durationFast
+                                : k === 'slow'
+                                    ? t.durationSlow
+                                    : t.durationBase;
+                        return scaleDuration(base, env.speed);
+                    })();
             const easeStr =
                 opts?.easeStr ?? t.ease[opts?.ease ?? defaultEase];
             return {
@@ -269,7 +270,7 @@ export function useMotion(): MotionEnv {
                 gsap.to(el, vars);
             };
             const env = envRef.current;
-            if (!env.enabled) return () => {};
+            if (!env.enabled) return () => { };
             el.addEventListener('mouseenter', onEnter);
             el.addEventListener('mouseleave', onLeave);
             return () => {
@@ -325,7 +326,7 @@ export function useMotion(): MotionEnv {
                 releaseTo(1);
             };
             const env = envRef.current;
-            if (!env.enabled) return () => {};
+            if (!env.enabled) return () => { };
             el.addEventListener('mouseenter', onEnter);
             el.addEventListener('mouseleave', onLeave);
             el.addEventListener('mousedown', onDown);

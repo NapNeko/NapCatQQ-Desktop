@@ -510,6 +510,71 @@ samp,
     }
 }
 
+/* ContextMenu 进出场动效：根据 data-state=open / data-state=closed 驱动。
+   配合 Radix Presence 的 animationend 事件自动等待退场完成再 unmount。 */
+@keyframes context-menu-in {
+    from {
+        opacity: 0;
+        transform: scale(var(--cm-scale-from, 0.92));
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes context-menu-in-rich {
+    0% {
+        opacity: 0;
+        transform: scale(var(--cm-scale-from, 0.88));
+    }
+    70% {
+        opacity: 1;
+        transform: scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes context-menu-out {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(var(--cm-scale-to, 0.95));
+    }
+}
+
+.ndf-context-menu-content {
+    transform-origin: var(--radix-context-menu-content-transform-origin, top left);
+    will-change: transform, opacity;
+}
+
+.ndf-context-menu-content[data-state="open"] {
+    animation-name: var(--cm-anim-in-name, context-menu-in);
+    animation-duration: var(--cm-duration-in, 140ms);
+    animation-timing-function: var(--cm-ease-in, cubic-bezier(0.16, 1, 0.3, 1));
+    animation-fill-mode: both;
+}
+
+.ndf-context-menu-content[data-state="closed"] {
+    animation-name: context-menu-out;
+    animation-duration: var(--cm-duration-out, 100ms);
+    animation-timing-function: var(--cm-ease-out, cubic-bezier(0.4, 0, 1, 1));
+    animation-fill-mode: both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ndf-context-menu-content[data-state="open"],
+    .ndf-context-menu-content[data-state="closed"] {
+        animation: none !important;
+    }
+}
+
 /* 全局滚动条：默认隐藏，悬停滚动区域时纤细显现，拖拽拇指时加深。
    WebKit 用 thumb 透明 + 祖先 :hover；Firefox 用 scrollbar-color 两档。 */
 * {

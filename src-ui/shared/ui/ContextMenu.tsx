@@ -11,6 +11,69 @@ import * as React from 'react';
 import * as RadixContextMenu from '@radix-ui/react-context-menu';
 import { Check, ChevronRight, Circle } from 'lucide-react';
 import { cn } from '../utils/cn';
+import { useMotion } from '../../hooks/preferences/useMotion';
+
+function useContextMenuMotionStyle(userStyle?: React.CSSProperties): React.CSSProperties {
+    const m = useMotion();
+
+    if (!m.enabled) {
+        return {
+            transformOrigin: 'var(--radix-context-menu-content-transform-origin)',
+            animation: 'none',
+            ...userStyle,
+        };
+    }
+
+    let durIn: number;
+    let durOut: number;
+    let animInName: string;
+    let scaleFrom: string;
+    let scaleTo: string;
+    let easeIn: string;
+    let easeOut: string;
+
+    if (m.level === 'elegant') {
+        durIn = m.duration('fast');
+        durOut = durIn * 0.75;
+        animInName = 'context-menu-in';
+        scaleFrom = '0.96';
+        scaleTo = '0.98';
+        easeIn = 'cubic-bezier(0.16, 1, 0.3, 1)';
+        easeOut = 'cubic-bezier(0.4, 0, 1, 1)';
+    } else if (m.level === 'rich') {
+        durIn = m.duration('base');
+        durOut = m.duration('fast') * 0.75;
+        animInName = 'context-menu-in-rich';
+        scaleFrom = '0.88';
+        scaleTo = '0.92';
+        easeIn = 'cubic-bezier(0.16, 1, 0.3, 1)';
+        easeOut = 'cubic-bezier(0.4, 0, 0.2, 1)';
+    } else {
+        // standard
+        durIn = m.duration('fast');
+        durOut = durIn * 0.72;
+        animInName = 'context-menu-in';
+        scaleFrom = '0.92';
+        scaleTo = '0.95';
+        easeIn = 'cubic-bezier(0.16, 1, 0.3, 1)';
+        easeOut = 'cubic-bezier(0.4, 0, 1, 1)';
+    }
+
+    const durInMs = Math.max(10, Math.round(durIn * 1000));
+    const durOutMs = Math.max(10, Math.round(durOut * 1000));
+
+    return {
+        transformOrigin: 'var(--radix-context-menu-content-transform-origin)',
+        ['--cm-anim-in-name' as string]: animInName,
+        ['--cm-scale-from' as string]: scaleFrom,
+        ['--cm-scale-to' as string]: scaleTo,
+        ['--cm-duration-in' as string]: `${durInMs}ms`,
+        ['--cm-duration-out' as string]: `${durOutMs}ms`,
+        ['--cm-ease-in' as string]: easeIn,
+        ['--cm-ease-out' as string]: easeOut,
+        ...userStyle,
+    };
+}
 
 export function ContextMenu({
     modal = false,
@@ -49,47 +112,45 @@ ContextMenuSubTrigger.displayName = RadixContextMenu.SubTrigger.displayName;
 export const ContextMenuSubContent = React.forwardRef<
     React.ElementRef<typeof RadixContextMenu.SubContent>,
     React.ComponentPropsWithoutRef<typeof RadixContextMenu.SubContent>
->(({ className, collisionPadding = 8, style, ...props }, ref) => (
-    <RadixContextMenu.Portal>
-        <RadixContextMenu.SubContent
-            ref={ref}
-            collisionPadding={collisionPadding}
-            style={{
-                transformOrigin: 'var(--radix-context-menu-content-transform-origin)',
-                ...style,
-            }}
-            className={cn(
-                'z-50 min-w-[160px] overflow-hidden rounded-md border border-border-subtle/80 bg-elevated/95 p-1 text-text shadow-popover backdrop-blur-md',
-                'animate-in fade-in-0 duration-100',
-                className,
-            )}
-            {...props}
-        />
-    </RadixContextMenu.Portal>
-));
+>(({ className, collisionPadding = 8, style, ...props }, ref) => {
+    const motionStyle = useContextMenuMotionStyle(style);
+    return (
+        <RadixContextMenu.Portal>
+            <RadixContextMenu.SubContent
+                ref={ref}
+                collisionPadding={collisionPadding}
+                style={motionStyle}
+                className={cn(
+                    'ndf-context-menu-content z-50 min-w-[160px] overflow-hidden rounded-md border border-border-subtle/80 bg-elevated/95 p-1 text-text shadow-popover backdrop-blur-md',
+                    className,
+                )}
+                {...props}
+            />
+        </RadixContextMenu.Portal>
+    );
+});
 ContextMenuSubContent.displayName = RadixContextMenu.SubContent.displayName;
 
 export const ContextMenuContent = React.forwardRef<
     React.ElementRef<typeof RadixContextMenu.Content>,
     React.ComponentPropsWithoutRef<typeof RadixContextMenu.Content>
->(({ className, collisionPadding = 8, style, ...props }, ref) => (
-    <RadixContextMenu.Portal>
-        <RadixContextMenu.Content
-            ref={ref}
-            collisionPadding={collisionPadding}
-            style={{
-                transformOrigin: 'var(--radix-context-menu-content-transform-origin)',
-                ...style,
-            }}
-            className={cn(
-                'z-50 min-w-[180px] overflow-hidden rounded-md border border-border-subtle/80 bg-elevated/95 p-1 text-text shadow-popover backdrop-blur-md',
-                'animate-in fade-in-0 duration-100',
-                className,
-            )}
-            {...props}
-        />
-    </RadixContextMenu.Portal>
-));
+>(({ className, collisionPadding = 8, style, ...props }, ref) => {
+    const motionStyle = useContextMenuMotionStyle(style);
+    return (
+        <RadixContextMenu.Portal>
+            <RadixContextMenu.Content
+                ref={ref}
+                collisionPadding={collisionPadding}
+                style={motionStyle}
+                className={cn(
+                    'ndf-context-menu-content z-50 min-w-[180px] overflow-hidden rounded-md border border-border-subtle/80 bg-elevated/95 p-1 text-text shadow-popover backdrop-blur-md',
+                    className,
+                )}
+                {...props}
+            />
+        </RadixContextMenu.Portal>
+    );
+});
 ContextMenuContent.displayName = RadixContextMenu.Content.displayName;
 
 export interface ContextMenuItemProps
