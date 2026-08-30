@@ -16,6 +16,7 @@ pub mod ncd_watch;
 pub mod release;
 pub mod servers;
 pub mod snowluma;
+pub mod snowluma_qr;
 pub mod system_metrics;
 pub mod tray;
 pub mod window;

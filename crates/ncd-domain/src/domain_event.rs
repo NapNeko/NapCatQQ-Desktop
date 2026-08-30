@@ -9,9 +9,10 @@ use crate::bot_actor::BotActorSnapshot;
 use crate::bot_status::BotStatus;
 use crate::daemon_state::{DaemonState, SnowLumaLoginState};
 use crate::deployment_task::DeploymentTaskSnapshot;
+use crate::progress::ProgressEvent;
 use crate::ids::BotId;
 use crate::napcat_events::NapCatLoginInvalidationReason;
-use crate::progress::ProgressEvent;
+use crate::snowluma_qr_login::{SnowlumaQrFailureCategory, SnowlumaQrLoginStatus};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -44,6 +45,10 @@ pub enum DomainEventKind {
     SnowLumaLoginStateChanged,
     #[serde(rename = "snowluma_login_probe_unavailable")]
     SnowLumaLoginProbeUnavailable,
+    #[serde(rename = "snowluma_qr_login_status")]
+    SnowLumaQrLoginStatus,
+    #[serde(rename = "snowluma_qr_payload")]
+    SnowLumaQrPayload,
     #[serde(rename = "snowluma_pid_set_changed")]
     SnowLumaPidSetChanged,
     #[serde(rename = "snowluma_daemon_log")]
@@ -154,6 +159,29 @@ pub enum DomainEvent {
     SnowLumaDaemonLog { line: String },
     #[serde(rename = "snowluma_docker_endpoints_ready")]
     SnowLumaDockerEndpointsReady { bot_id: BotId },
+    #[serde(rename = "snowluma_qr_login_status")]
+    SnowlumaQrLoginStatus {
+        server_id: String,
+        bot_id: BotId,
+        session_id: String,
+        capture_generation: u64,
+        status: SnowlumaQrLoginStatus,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expires_at: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        failure_category: Option<SnowlumaQrFailureCategory>,
+    },
+    #[serde(rename = "snowluma_qr_payload")]
+    SnowlumaQrPayload {
+        server_id: String,
+        bot_id: BotId,
+        session_id: String,
+        capture_generation: u64,
+        status: SnowlumaQrLoginStatus,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expires_at: Option<u64>,
+        payload: String,
+    },
     #[serde(rename = "component_action_progress")]
     ComponentActionProgress {
         task_id: String,
@@ -224,6 +252,8 @@ impl DomainEvent {
                 DomainEventKind::SnowLumaLoginProbeUnavailable
             }
             Self::SnowLumaPidSetChanged { .. } => DomainEventKind::SnowLumaPidSetChanged,
+            Self::SnowlumaQrLoginStatus { .. } => DomainEventKind::SnowLumaQrLoginStatus,
+            Self::SnowlumaQrPayload { .. } => DomainEventKind::SnowLumaQrPayload,
             Self::SnowLumaDaemonLog { .. } => DomainEventKind::SnowLumaDaemonLog,
             Self::SnowLumaDockerEndpointsReady { .. } => {
                 DomainEventKind::SnowLumaDockerEndpointsReady
@@ -257,6 +287,8 @@ impl DomainEvent {
             Self::SnowLumaBotInjected { .. } => "snowluma_bot_injected",
             Self::SnowLumaUinDetected { .. } => "snowluma_uin_detected",
             Self::SnowLumaLoginStateChanged { .. } => "snowluma_login_state_changed",
+            Self::SnowlumaQrLoginStatus { .. } => "snowluma_qr_login_status",
+            Self::SnowlumaQrPayload { .. } => "snowluma_qr_payload",
             Self::SnowLumaLoginProbeUnavailable { .. } => "snowluma_login_probe_unavailable",
             Self::SnowLumaPidSetChanged { .. } => "snowluma_pid_set_changed",
             Self::SnowLumaDaemonLog { .. } => "snowluma_daemon_log",
@@ -291,6 +323,8 @@ impl DomainEvent {
             Self::SnowLumaUinDetected { bot_id, .. } => Some(bot_id),
             Self::SnowLumaLoginStateChanged { bot_id, .. } => Some(bot_id),
             Self::SnowLumaLoginProbeUnavailable { bot_id } => Some(bot_id),
+            Self::SnowlumaQrLoginStatus { bot_id, .. } => Some(bot_id),
+            Self::SnowlumaQrPayload { bot_id, .. } => Some(bot_id),
             Self::SnowLumaPidSetChanged { bot_id, .. } => Some(bot_id),
             Self::SnowLumaDaemonLog { .. } => None,
             Self::SnowLumaDockerEndpointsReady { bot_id, .. } => Some(bot_id),
@@ -479,6 +513,46 @@ impl DomainEvent {
         Self::SnowLumaPidSetChanged {
             bot_id: bot_id.into(),
             pids,
+        }
+    }
+
+    pub fn snowluma_qr_login_status(
+        server_id: impl Into<String>,
+        bot_id: impl Into<BotId>,
+        session_id: impl Into<String>,
+        capture_generation: u64,
+        status: SnowlumaQrLoginStatus,
+        expires_at: Option<u64>,
+        failure_category: Option<SnowlumaQrFailureCategory>,
+    ) -> Self {
+        Self::SnowlumaQrLoginStatus {
+            server_id: server_id.into(),
+            bot_id: bot_id.into(),
+            session_id: session_id.into(),
+            capture_generation,
+            status,
+            expires_at,
+            failure_category,
+        }
+    }
+
+    pub fn snowluma_qr_payload(
+        server_id: impl Into<String>,
+        bot_id: impl Into<BotId>,
+        session_id: impl Into<String>,
+        capture_generation: u64,
+        status: SnowlumaQrLoginStatus,
+        expires_at: Option<u64>,
+        payload: impl Into<String>,
+    ) -> Self {
+        Self::SnowlumaQrPayload {
+            server_id: server_id.into(),
+            bot_id: bot_id.into(),
+            session_id: session_id.into(),
+            capture_generation,
+            status,
+            expires_at,
+            payload: payload.into(),
         }
     }
 

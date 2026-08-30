@@ -72,6 +72,11 @@ export type { WebUiPollerSettings } from './generated/domain/WebUiPollerSettings
 export type { ConfigExportResult } from './generated/ConfigExportResult';
 export type { ConfigImportResult } from './generated/ConfigImportResult';
 export type { ConfigImportPreview } from './generated/ConfigImportPreview';
+export type { QrLoginSessionId } from './generated/domain/QrLoginSessionId';
+export type { SnowlumaQrFailureCategory } from './generated/domain/SnowlumaQrFailureCategory';
+export type { SnowlumaQrLoginResult } from './generated/domain/SnowlumaQrLoginResult';
+export type { SnowlumaQrLoginSession } from './generated/domain/SnowlumaQrLoginSession';
+export type { SnowlumaQrLoginStatus } from './generated/domain/SnowlumaQrLoginStatus';
 
 // ProgressEvent / ProgressKind / LogLevel 由 ts-rs 自动生成，re-export 保证
 // wire format 与后端一致。注意 ProgressEvent.timestamp_ms 是 bigint
@@ -208,6 +213,9 @@ export type { SnowLumaAppConfig } from './generated/domain/SnowLumaAppConfig';
 import type { DaemonState } from './generated/DaemonState';
 import type { SnowLumaLoginState } from './generated/SnowLumaLoginState';
 
+import type { SnowlumaQrFailureCategory } from './generated/domain/SnowlumaQrFailureCategory';
+import type { SnowlumaQrLoginStatus } from './generated/domain/SnowlumaQrLoginStatus';
+
 // 按 kind 区分的判别联合(payload body)。统一通过下方 DomainEvent 带上 v envelope。
 type DomainEventBody =
     | {
@@ -299,6 +307,26 @@ type DomainEventBody =
     | {
         kind: 'snowluma_login_probe_unavailable';
         bot_id: string;
+    }
+    | {
+        kind: 'snowluma_qr_login_status';
+        server_id: string;
+        bot_id: string;
+        session_id: string;
+        capture_generation: number;
+        status: SnowlumaQrLoginStatus;
+        expires_at?: number | null;
+        failure_category?: SnowlumaQrFailureCategory | null;
+    }
+    | {
+        kind: 'snowluma_qr_payload';
+        server_id: string;
+        bot_id: string;
+        session_id: string;
+        capture_generation: number;
+        status: SnowlumaQrLoginStatus;
+        expires_at?: number | null;
+        payload: string;
     }
     | {
         kind: 'snowluma_pid_set_changed';

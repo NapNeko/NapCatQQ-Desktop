@@ -6,6 +6,7 @@ pub mod import_network;
 pub mod importable_bots;
 pub mod inventory;
 pub(crate) mod runtime_sessions;
+pub mod snowluma_qr_login;
 
 pub use bot_log_follow::RemoteBotLogFollowRegistry;
 pub use docker_session::{

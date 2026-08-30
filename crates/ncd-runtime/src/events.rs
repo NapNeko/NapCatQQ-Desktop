@@ -23,6 +23,7 @@ mod tests {
         DeploymentTaskKind, DeploymentTaskSnapshot, DeploymentTaskStatus,
     };
     use ncd_domain::progress::ProgressEvent as NcdProgressEvent;
+    use ncd_domain::snowluma_qr_login::{SnowlumaQrFailureCategory, SnowlumaQrLoginStatus};
     use ncd_domain::progress::ProgressKind as NcdProgressKind;
 
     #[test]
@@ -455,6 +456,102 @@ as a quoted string",
         assert_eq!(sv["v"], DOMAIN_EVENT_ENVELOPE_VERSION);
         assert_eq!(sv["kind"], "bot_status_changed");
         assert!(sv["status"].is_object());
+    }
+    #[test]
+    fn snowluma_qr_status_event_round_trips_as_metadata_only() {
+        let event = DomainEvent::snowluma_qr_login_status(
+            "srv-1",
+            "10001",
+            "session-1",
+            3,
+            SnowlumaQrLoginStatus::WaitingForScan,
+            Some(1_725_000_000_000),
+            None,
+        );
+        assert_round_trip(event.clone());
+
+        let value = serde_json::to_value(&event).expect("serialize");
+        assert_eq!(value["kind"], "snowluma_qr_login_status");
+        assert_eq!(value["server_id"], "srv-1");
+        assert_eq!(value["bot_id"], "10001");
+        assert_eq!(value["session_id"], "session-1");
+        assert_eq!(value["capture_generation"], 3);
+        assert_eq!(value["status"], "waiting_for_scan");
+        assert_eq!(value["expires_at"], 1_725_000_000_000u64);
+        for forbidden in ["payload", "png", "png_base64", "base64", "screenshot_path"] {
+            assert!(value.get(forbidden).is_none(), "metadata event contains {forbidden}");
+        }
+    }
+
+    #[test]
+    fn snowluma_qr_payload_event_round_trips_with_volatile_payload_only() {
+        let event = DomainEvent::snowluma_qr_payload(
+            "srv-1",
+            "10001",
+            "session-1",
+            4,
+            SnowlumaQrLoginStatus::WaitingForScan,
+            Some(1_725_000_000_000),
+            "qq://login/session-token",
+        );
+        assert_round_trip(event.clone());
+
+        let value = serde_json::to_value(&event).expect("serialize");
+        assert_eq!(value["kind"], "snowluma_qr_payload");
+        assert_eq!(value["payload"], "qq://login/session-token");
+        assert!(value.get("png").is_none());
+        assert!(value.get("png_base64").is_none());
+        assert!(value.get("base64").is_none());
+        assert!(value.get("screenshot_path").is_none());
+    }
+
+    #[test]
+    fn snowluma_qr_event_names_and_bot_association_are_stable() {
+        let status = DomainEvent::snowluma_qr_login_status(
+            "srv-1",
+            "10001",
+            "session-1",
+            1,
+            SnowlumaQrLoginStatus::Preparing,
+            None,
+            None,
+        );
+        let payload = DomainEvent::snowluma_qr_payload(
+            "srv-1",
+            "10001",
+            "session-1",
+            1,
+            SnowlumaQrLoginStatus::Succeeded,
+            None,
+            "qq://login/session-token",
+        );
+        assert_eq!(status.kind(), DomainEventKind::SnowLumaQrLoginStatus);
+        assert_eq!(status.tauri_event_name(), "snowluma_qr_login_status");
+        assert_eq!(payload.kind(), DomainEventKind::SnowLumaQrPayload);
+        assert_eq!(payload.tauri_event_name(), "snowluma_qr_payload");
+        assert_eq!(status.bot_id().map(|id| id.as_str()), Some("10001"));
+        assert_eq!(payload.bot_id().map(|id| id.as_str()), Some("10001"));
+    }
+
+    #[test]
+    fn snowluma_qr_envelope_carries_version_without_payload_storage_fields() {
+        let event = DomainEvent::snowluma_qr_login_status(
+            "srv-1",
+            "10001",
+            "session-1",
+            1,
+            SnowlumaQrLoginStatus::FallbackNoVnc,
+            None,
+            Some(SnowlumaQrFailureCategory::CapabilityUnavailable),
+        );
+        let value: serde_json::Value =
+            serde_json::from_str(&event.to_envelope_json().expect("envelope")).unwrap();
+        assert_eq!(value["v"], DOMAIN_EVENT_ENVELOPE_VERSION);
+        assert_eq!(value["failure_category"], "capability_unavailable");
+        assert!(value.get("payload").is_none());
+        assert!(value.get("png").is_none());
+        assert!(value.get("base64").is_none());
+        assert!(value.get("screenshot_path").is_none());
     }
 
     #[test]
