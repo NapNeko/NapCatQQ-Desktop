@@ -3269,6 +3269,7 @@ dependencies = [
  "ncd-traits",
  "ncd-watch",
  "netstat2",
+ "parking_lot",
  "proptest",
  "quircs",
  "rand 0.8.6",
