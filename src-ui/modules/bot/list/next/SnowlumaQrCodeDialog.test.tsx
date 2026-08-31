@@ -6,6 +6,21 @@ import { SnowlumaQrCodeDialog } from './SnowlumaQrCodeDialog';
 vi.mock('../../../../hooks/theme/useThemeTokens', () => ({
     useThemeTokens: () => ({ foreground: '#1a120d', background: '#ffffff' }),
 }));
+vi.mock('../../../../hooks/preferences/useMotion', () => ({
+    useMotion: () => ({
+        enabled: false,
+        level: 'elegant',
+        speed: 1,
+        preset: {
+            feel: { hoverScale: 1, tapScale: 1 },
+            timing: { ease: { pop: 'none', hover: 'none' } },
+        },
+        duration: () => 0,
+        ease: { enter: 'none', exit: 'none', damped: 'none' },
+        bindHover: () => () => {},
+        bindPress: () => () => {},
+    }),
+}));
 
 function session() {
     return {
