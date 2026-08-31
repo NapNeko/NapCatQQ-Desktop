@@ -7,6 +7,9 @@ docs/dev/
 .claude/
 .codex/
 .codesearch.db/
+work/
+docs/superpowers/
+docs/dev/
 CLAUDE.md
 
 # Copilot / agent 个性化（本机自管，不入库）
