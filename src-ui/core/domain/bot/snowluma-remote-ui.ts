@@ -2,6 +2,7 @@
 
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import type { DaemonState } from '../../ipc/generated/DaemonState';
+import type { SnowLumaLoginState } from '../../ipc/generated/SnowLumaLoginState';
 import { isSnowLumaFlavor } from './flavor';
 import {
     isRuntimeTargetConcreteRemote,
@@ -31,6 +32,14 @@ export function isSnowlumaRemoteNativeConfig(config: BotConfig | null | undefine
     if (!isSnowLumaFlavor(config.bot.backend_type)) return false;
     if (config.bot.deploymentType !== 'native') return false;
     return isRuntimeTargetConcreteRemote(config.bot.runtime_target);
+}
+
+export function isSnowlumaQrActionAvailable(
+    config: BotConfig | null | undefined,
+    active: boolean,
+    loginState: SnowLumaLoginState | null | undefined,
+): boolean {
+    return active && loginState !== 'logged_in' && isSnowlumaRemoteNativeConfig(config);
 }
 
 export function isSnowlumaRemoteDockerConfig(config: BotConfig | null | undefined): boolean {

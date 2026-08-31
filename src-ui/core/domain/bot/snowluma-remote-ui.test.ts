@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import {
+    isSnowlumaQrActionAvailable,
     isSnowlumaRemoteUiRetryAvailable,
     snowlumaDaemonScope,
     snowlumaDaemonStateForConfig,
@@ -67,5 +68,15 @@ describe('SnowLuma daemon scope', () => {
                 transportFailed: true,
             }),
         ).toBe(false);
+    });
+});
+
+describe('SnowLuma QR action availability', () => {
+    it('只对运行中的远端 Native 且未登录 Bot 开放', () => {
+        expect(isSnowlumaQrActionAvailable(config('server-a', 'native'), true, 'waiting_for_qr_scan')).toBe(true);
+        expect(isSnowlumaQrActionAvailable(config('server-a', 'native'), true, null)).toBe(true);
+        expect(isSnowlumaQrActionAvailable(config('server-a', 'native'), false, 'waiting_for_qr_scan')).toBe(false);
+        expect(isSnowlumaQrActionAvailable(config('server-a', 'docker'), true, 'waiting_for_qr_scan')).toBe(false);
+        expect(isSnowlumaQrActionAvailable(config('server-a', 'native'), true, 'logged_in')).toBe(false);
     });
 });
