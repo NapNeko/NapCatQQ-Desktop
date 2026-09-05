@@ -342,6 +342,69 @@ mod tests {
         );
     }
 
+    /// 模拟 SnowLuma onebot/config.ts toJsonObject 的稀疏规范形：enabled 为 true 省略、
+    /// accessToken 为空省略、丢 musicSignUrl、补 mode / notifications / enableWebSocket。
+    fn snowluma_canonical_save(mut payload: serde_json::Value) -> serde_json::Value {
+        use serde_json::{Value, json};
+        let root = payload.as_object_mut().unwrap();
+        root.remove("musicSignUrl");
+        root.insert("mode".into(), json!("snapshot"));
+        root.insert("notifications".into(), json!({ "channelIds": [] }));
+        let networks = root["networks"].as_object_mut().unwrap();
+        for (kind, adapters) in networks.iter_mut() {
+            let adapters = adapters.as_array_mut().unwrap();
+            for adapter in adapters.iter_mut().filter_map(Value::as_object_mut) {
+                if adapter.get("enabled") == Some(&json!(true)) {
+                    adapter.remove("enabled");
+                }
+                if adapter
+                    .get("accessToken")
+                    .and_then(Value::as_str)
+                    .is_some_and(str::is_empty)
+                {
+                    adapter.remove("accessToken");
+                }
+                if kind == "httpServers" {
+                    adapter.insert("enableWebSocket".into(), json!(false));
+                }
+            }
+        }
+        payload
+    }
+
+    #[tokio::test]
+    async fn snowluma_webui_save_of_desktop_render_is_drift_clean() {
+        for connect in [ConnectConfig::default(), make_connect_with_http_server()] {
+            let dir = tempfile::tempdir().unwrap();
+            let renderer = SnowLumaConfigRenderer::new(dir.path());
+            let bot_id = make_bot_id();
+            let config = BotConfig {
+                bot: BotBasicConfig {
+                    backend_type: BackendType::SnowLuma,
+                    ..make_basic_config()
+                },
+                connect,
+                advanced: make_advanced_config(),
+                status_command: None,
+            };
+
+            let txn = renderer.render(&bot_id, &config).unwrap();
+            let write = &txn.writes[0];
+            let on_disk = snowluma_canonical_save(write.payload.clone());
+            std::fs::write(&write.path, serde_json::to_vec_pretty(&on_disk).unwrap()).unwrap();
+
+            let drift = crate::drift::detect_drift(&bot_id, &config, &renderer)
+                .await
+                .unwrap();
+            assert!(
+                drift.is_clean(),
+                "SnowLuma WebUI 回写不应被当成用户改动: added={:?} modified={:?}",
+                drift.added,
+                drift.modified
+            );
+        }
+    }
+
     #[test]
     fn snowluma_ws_client_reconnect_interval_clamped() {
         let renderer = SnowLumaConfigRenderer::new("/tmp/snowluma");

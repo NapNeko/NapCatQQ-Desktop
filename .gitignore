@@ -1,6 +1,9 @@
 ### 开发环境 ###
 docs/dev/
 
+### Git worktrees（本机隔离 checkout，不入库）###
+.worktrees/
+
 
 ### AI / 助手本地产物（不进版本库，可本机重装 skills）###
 .agents/

@@ -100,8 +100,8 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
 
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
-            <DialogContent size="sheet" className="max-w-3xl max-h-[85vh] flex flex-col">
-                <DialogHeader>
+            <DialogContent size="sheet" className="max-w-3xl max-h-[85vh] flex min-h-0 flex-col overflow-hidden">
+                <DialogHeader className="shrink-0">
                     <DialogTitle className="flex items-center gap-2">
                         <ActionMotionIcon
                             icon={AlertTriangle}
@@ -118,7 +118,7 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
 
                 {/* 扁平化顶部工具栏 */}
                 {totalModified > 0 && (
-                    <div className="flex items-center justify-between border-b border-border-subtle/80 pb-2.5 pt-0.5 text-xs">
+                    <div className="flex shrink-0 items-center justify-between border-b border-border-subtle/80 pb-2.5 pt-0.5 text-xs">
                         <div className="flex items-center gap-2">
                             <span className="font-medium text-text">
                                 共 {totalModified} 处配置差异
@@ -156,8 +156,11 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
                     </div>
                 )}
 
-                {/* 滚动容器增加 px-1.5 避免选中态 ring 裁剪 */}
-                <div className="flex-1 overflow-y-auto px-1.5 py-1 scrollbar-hide divide-y divide-border-subtle/60">
+                {/* min-h-0：sheet 内层 overflow hidden 后，flex 子项才能收缩出滚动条 */}
+                <div
+                    data-testid="config-drift-conflict-list"
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 py-1 divide-y divide-border-subtle/60"
+                >
                     {/* 差异列表（扁平分割线，无外框嵌套） */}
                     {modifiedDisplay.map((item) => (
                         <FlatConflictRow
@@ -221,7 +224,7 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
                     )}
                 </div>
 
-                <DialogFooter className="flex items-center justify-between sm:justify-between border-t border-border-subtle pt-3">
+                <DialogFooter className="flex shrink-0 items-center justify-between sm:justify-between border-t border-border-subtle pt-3">
                     <div className="text-xs text-text-secondary">
                         {allDecided ? (
                             <span className="inline-flex items-center gap-1 text-success font-medium">

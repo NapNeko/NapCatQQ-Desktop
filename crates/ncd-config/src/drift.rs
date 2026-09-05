@@ -96,6 +96,12 @@ pub async fn detect_drift(
         let mut actual_norm = actual.clone();
         normalize_values_for_drift(&mut expected_norm);
         normalize_values_for_drift(&mut actual_norm);
+        align_backend_shape(
+            config.bot.backend_type,
+            &file_name,
+            &expected_norm,
+            &mut actual_norm,
+        );
         diff_json(
             config.bot.backend_type,
             &file_name,
@@ -139,6 +145,9 @@ fn diff_json(
                 let p = jp(prefix, k);
                 match act.get(k) {
                     Some(av) => diff_json(backend_type, file, &p, ev, av, added, modified),
+                    // 键缺失和值为 null 对白名单字段是同一件事（WebUI 会直接省略空 token / url）
+                    None if empty_equivalence_allowed(backend_type, file, &p, ev, &Value::Null) => {
+                    }
                     None => modified.push(DriftEntry {
                         file: file.into(),
                         path: p,
@@ -393,6 +402,67 @@ fn adapter_sort_key(v: &Value) -> String {
         .to_string()
 }
 
+fn align_backend_shape(
+    backend_type: BackendType,
+    file: &str,
+    expected: &Value,
+    actual: &mut Value,
+) {
+    if backend_type == BackendType::SnowLuma && wildcard_match("onebot_*.json", file) {
+        align_snowluma_onebot_actual(expected, actual);
+    }
+}
+
+const SNOWLUMA_ADAPTER_KINDS: &[&str] = &["httpServers", "httpClients", "wsServers", "wsClients"];
+
+/// SnowLuma saveOneBotConfig 落盘的是稀疏规范形：enabled 为 true 时省略、accessToken 为空时
+/// 省略、不写 musicSignUrl，另外补 mode / notifications / enableWebSocket。Desktop 渲染的是
+/// 显式形。不对齐的话 WebUI 保存一次，整份文件就会被报成冲突。
+fn align_snowluma_onebot_actual(expected: &Value, actual: &mut Value) {
+    let Some(root) = actual.as_object_mut() else {
+        return;
+    };
+    root.remove("mode");
+    if root
+        .get("notifications")
+        .is_some_and(is_empty_notifications)
+    {
+        root.remove("notifications");
+    }
+    // per-UIN 文件里的 musicSignUrl 对 SnowLuma 是只读 legacy 字段（已迁到 snowluma.json），
+    // 它不会写回；缺键不携带用户意图，只有键在且值不同才算改过。
+    if !root.contains_key("musicSignUrl") {
+        if let Some(v) = expected.get("musicSignUrl") {
+            root.insert("musicSignUrl".into(), v.clone());
+        }
+    }
+    let Some(Value::Object(networks)) = root.get_mut("networks") else {
+        return;
+    };
+    for kind in SNOWLUMA_ADAPTER_KINDS {
+        let Some(Value::Array(adapters)) = networks.get_mut(*kind) else {
+            continue;
+        };
+        for adapter in adapters.iter_mut().filter_map(Value::as_object_mut) {
+            adapter.entry("enabled").or_insert(Value::Bool(true));
+            adapter
+                .entry("accessToken")
+                .or_insert_with(|| Value::String(String::new()));
+            if adapter.get("enableWebSocket") == Some(&Value::Bool(false)) {
+                adapter.remove("enableWebSocket");
+            }
+        }
+    }
+}
+
+fn is_empty_notifications(v: &Value) -> bool {
+    let Some(obj) = v.as_object() else {
+        return false;
+    };
+    obj.iter()
+        .all(|(k, v)| k == "channelIds" && v.as_array().is_some_and(Vec::is_empty))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -558,5 +628,167 @@ mod tests {
                 .iter()
                 .any(|entry| entry.path == "networks.httpClients.0.url")
         );
+    }
+
+    #[test]
+    fn diff_treats_missing_allowlisted_key_as_equivalent_to_empty() {
+        let expected = json!({
+            "network": {
+                "httpServers": [{ "name": "http", "token": "" }]
+            }
+        });
+        let actual = json!({
+            "network": {
+                "httpServers": [{ "name": "http" }]
+            }
+        });
+        let mut added = Vec::new();
+        let mut modified = Vec::new();
+        diff_json(
+            BackendType::NapCat,
+            "onebot11_10001.json",
+            "",
+            &expected,
+            &actual,
+            &mut added,
+            &mut modified,
+        );
+        assert!(added.is_empty() && modified.is_empty(), "{modified:?}");
+    }
+
+    /// Desktop 渲染的显式形（左）与 SnowLuma saveOneBotConfig 回写的稀疏形（右）。
+    fn snowluma_explicit_and_sparse() -> (Value, Value) {
+        let explicit = json!({
+            "networks": {
+                "httpServers": [{
+                    "name": "http-default", "enabled": true, "messageFormat": "array",
+                    "accessToken": "", "reportSelfMessage": false,
+                    "host": "127.0.0.1", "port": 3000, "path": "/"
+                }],
+                "httpClients": [],
+                "wsServers": [{
+                    "name": "ws-default", "enabled": true, "messageFormat": "array",
+                    "accessToken": "tok", "reportSelfMessage": false,
+                    "host": "127.0.0.1", "port": 3001, "path": "/", "role": "Universal"
+                }],
+                "wsClients": [{
+                    "name": "ws-client", "enabled": true, "messageFormat": "array",
+                    "accessToken": "", "reportSelfMessage": false,
+                    "url": "ws://127.0.0.1:8080", "reconnectIntervalMs": 5000, "role": "Universal"
+                }]
+            },
+            "musicSignUrl": "",
+            "statusCommand": { "enabled": true, "swallow": false, "cooldownSeconds": 5, "trigger": "#sl" },
+            "historySync": { "enabled": false }
+        });
+        let sparse = json!({
+            "mode": "snapshot",
+            "networks": {
+                "httpServers": [{
+                    "name": "http-default", "messageFormat": "array", "reportSelfMessage": false,
+                    "host": "127.0.0.1", "port": 3000, "path": "/", "enableWebSocket": false
+                }],
+                "httpClients": [],
+                "wsServers": [{
+                    "name": "ws-default", "accessToken": "tok", "messageFormat": "array",
+                    "reportSelfMessage": false,
+                    "host": "127.0.0.1", "port": 3001, "path": "/", "role": "Universal"
+                }],
+                "wsClients": [{
+                    "name": "ws-client", "messageFormat": "array", "reportSelfMessage": false,
+                    "url": "ws://127.0.0.1:8080", "role": "Universal", "reconnectIntervalMs": 5000
+                }]
+            },
+            "statusCommand": { "enabled": true, "swallow": false, "cooldownSeconds": 5, "trigger": "#sl" },
+            "historySync": { "enabled": false },
+            "notifications": { "channelIds": [] }
+        });
+        (explicit, sparse)
+    }
+
+    fn diff_snowluma(expected: &Value, actual: &Value) -> (Vec<DriftEntry>, Vec<DriftEntry>) {
+        const FILE: &str = "onebot_10001.json";
+        let mut expected = expected.clone();
+        let mut actual = actual.clone();
+        normalize_values_for_drift(&mut expected);
+        normalize_values_for_drift(&mut actual);
+        align_backend_shape(BackendType::SnowLuma, FILE, &expected, &mut actual);
+        let mut added = Vec::new();
+        let mut modified = Vec::new();
+        diff_json(
+            BackendType::SnowLuma,
+            FILE,
+            "",
+            &expected,
+            &actual,
+            &mut added,
+            &mut modified,
+        );
+        (added, modified)
+    }
+
+    #[test]
+    fn snowluma_canonical_sparse_save_is_not_drift() {
+        let (explicit, sparse) = snowluma_explicit_and_sparse();
+        let (added, modified) = diff_snowluma(&explicit, &sparse);
+        assert!(
+            added.is_empty() && modified.is_empty(),
+            "added={added:?} modified={modified:?}"
+        );
+    }
+
+    #[test]
+    fn snowluma_alignment_keeps_real_changes() {
+        let (mut explicit, mut sparse) = snowluma_explicit_and_sparse();
+        explicit["musicSignUrl"] = json!("http://sign.example");
+        // WebUI 里关掉 http、清掉 ws token、开 enableWebSocket、加通知频道
+        sparse["networks"]["httpServers"][0]["enabled"] = json!(false);
+        sparse["networks"]["httpServers"][0]["enableWebSocket"] = json!(true);
+        sparse["networks"]["wsServers"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("accessToken");
+        sparse["notifications"] = json!({ "channelIds": ["ops"] });
+
+        let (added, modified) = diff_snowluma(&explicit, &sparse);
+
+        let mut modified_paths: Vec<&str> = modified.iter().map(|e| e.path.as_str()).collect();
+        modified_paths.sort_unstable();
+        assert_eq!(
+            modified_paths,
+            vec![
+                "networks.httpServers.0.enabled",
+                "networks.wsServers.0.accessToken",
+            ],
+            "{modified:?}"
+        );
+        let cleared = modified
+            .iter()
+            .find(|e| e.path == "networks.wsServers.0.accessToken")
+            .unwrap();
+        assert_eq!(cleared.external, json!(""));
+        assert_eq!(cleared.internal, json!("tok"));
+
+        let mut added_paths: Vec<&str> = added.iter().map(|e| e.path.as_str()).collect();
+        added_paths.sort_unstable();
+        assert_eq!(
+            added_paths,
+            vec!["networks.httpServers.0.enableWebSocket", "notifications"],
+            "{added:?}"
+        );
+    }
+
+    #[test]
+    fn snowluma_missing_music_sign_url_adopts_desktop_value() {
+        let (mut explicit, sparse) = snowluma_explicit_and_sparse();
+        explicit["musicSignUrl"] = json!("http://sign.example");
+        let (added, modified) = diff_snowluma(&explicit, &sparse);
+        assert!(added.is_empty() && modified.is_empty(), "{modified:?}");
+
+        let mut present = sparse;
+        present["musicSignUrl"] = json!("http://other.example");
+        let (_, modified) = diff_snowluma(&explicit, &present);
+        assert_eq!(modified.len(), 1);
+        assert_eq!(modified[0].path, "musicSignUrl");
     }
 }
