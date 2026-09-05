@@ -166,7 +166,10 @@ pub use backend_config_renderer::{
 };
 pub use bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
 pub use bot_config_repo_impl::LocalBotConfigRepo;
-pub use bot_manager::{BatchResult, BootstrapResult, BotManager, BotManagerError};
+pub use bot_manager::{
+    BatchResult, BootstrapResult, BotManager, BotManagerError, RuntimeReadinessGate,
+    describe_not_ready, framework_component_for,
+};
 pub use component_action_policy::{
     RemoteHostProbe, RemoteLayout, asset_sha256, component_action_cancellable,
     component_action_needs_runtime_closure, component_catalog, component_dedupe_key,
@@ -180,7 +183,7 @@ pub use components::{
     ClosureNode, ComponentActionRequest, ComponentBuildInputs, ComponentBuilder,
     ComponentExecutor, GRAPH_COMPONENT_IDS, ResolveCtx, catalog_version_reqs_for,
     graph_component, infer_local_snowluma_package, render_dependency_graph, requirement_closure,
-    resolve_dependencies,
+    resolve_dependencies, resolve_runtime_readiness,
 };
 pub use config_store_impl::LocalConfigStore;
 pub use crash_bundle::{CrashBundleInput, desktop_output_dir, write_crash_bundle};

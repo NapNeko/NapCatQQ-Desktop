@@ -43,7 +43,9 @@ use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
 
 mod helpers;
 mod listeners;
+pub mod runtime_gate;
 use helpers::{is_remote_transport_error, set_value_at_dot_path};
+pub use runtime_gate::{RuntimeReadinessGate, describe_not_ready, framework_component_for};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
 
@@ -81,6 +83,10 @@ pub enum BotManagerError {
 
     #[error("runtime backend error: {0}")]
     Runtime(#[from] BotBackendError),
+
+    /// 框架或其运行依赖没装好;在进入 Starting 之前拦下,不标 Crashed
+    #[error("RUNTIME_NOT_READY: {0}")]
+    RuntimeNotReady(String),
 
     #[error("task join failed: {0}")]
     TaskJoinFailed(String),
@@ -201,6 +207,8 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
     server_manager: Option<Arc<crate::ServerManager>>,
     qr_capture_service: Arc<SnowlumaQrCaptureService>,
+    /// 启动前的框架 / 依赖预检;None 不检查(测试与纯本机 wiring)
+    runtime_gate: Option<Arc<dyn RuntimeReadinessGate>>,
 }
 
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<R, S> {
@@ -234,6 +242,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_qq_entry_coordinator: Arc::clone(&self.remote_qq_entry_coordinator),
             qr_capture_service: Arc::clone(&self.qr_capture_service),
             server_manager: self.server_manager.clone(),
+            runtime_gate: self.runtime_gate.clone(),
         }
     }
 }
@@ -283,11 +292,17 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 crate::remote::snowluma_qr_login::QuircsQrDecoder,
             ))),
             server_manager: None,
+            runtime_gate: None,
         }
     }
 
     pub fn with_server_manager(mut self, mgr: Arc<crate::ServerManager>) -> Self {
         self.server_manager = Some(mgr);
+        self
+    }
+
+    pub fn with_runtime_gate(mut self, gate: Arc<dyn RuntimeReadinessGate>) -> Self {
+        self.runtime_gate = Some(gate);
         self
     }
 
@@ -1001,6 +1016,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let config = self.get_required_bot_config(bot_id).await?;
         // 协议门禁必须在 request_start 之前：未同意不应进入 Starting，更不能 mark_crashed
         self.ensure_snowluma_agreements_ready(&config).await?;
+        self.ensure_runtime_ready(&config).await?;
         self.render_backend_config(bot_id, &config, &overrides)
             .await?;
 
@@ -1024,6 +1040,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let config = self.get_required_bot_config(bot_id).await?;
         // 协议门禁必须在 request_start 之前：未同意不应进入 Starting，更不能 mark_crashed
         self.ensure_snowluma_agreements_ready(&config).await?;
+        self.ensure_runtime_ready(&config).await?;
         self.render_backend_config(bot_id, &config, &std::collections::HashMap::new())
             .await?;
 
@@ -1946,6 +1963,30 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             return Err(Self::snowluma_consent_required_error(&payload.version));
         }
         Ok(())
+    }
+
+    /// 框架 + Run 依赖预检。探测失败不拦(交给真正启动去报错),只有确认缺东西才拦
+    async fn ensure_runtime_ready(&self, config: &BotConfig) -> Result<(), BotManagerError> {
+        let Some(gate) = self.runtime_gate.as_ref() else {
+            return Ok(());
+        };
+        let readiness = match gate.check(config).await {
+            Ok(Some(r)) => r,
+            Ok(None) => return Ok(()),
+            Err(err) => {
+                warn!(
+                    target: "ncd_runtime::bot_manager",
+                    error = %err,
+                    "runtime readiness probe failed; continuing start"
+                );
+                return Ok(());
+            }
+        };
+        let local = matches!(config.bot.runtime_target, RuntimeTarget::Local);
+        match describe_not_ready(&readiness, local) {
+            Some(reason) => Err(BotManagerError::RuntimeNotReady(reason)),
+            None => Ok(()),
+        }
     }
 
     fn snowluma_consent_required_error(version: &str) -> BotManagerError {

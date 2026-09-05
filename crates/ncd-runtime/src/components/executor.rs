@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ncd_component::{
-    ActionCtx, Component, ComponentId, DependencyTarget, ProgressEvent, ProgressKind,
-    ProgressLogLevel, RequirementPhase,
+    ActionCtx, Component, ComponentId, DependencyPlan, DependencyTarget, ProgressEvent,
+    ProgressKind, ProgressLogLevel, RequirementPhase, RuntimeReadiness,
 };
 use ncd_deploy::{DeployOutcome, DeployPlan, StepKind};
 use ncd_domain::release_snapshot::ReleaseSnapshot;
@@ -31,7 +31,7 @@ use crate::components::action_policy::{
     component_dedupe_key, component_task_resources,
 };
 use crate::components::factory::{BuildComponentCtx, build_component_for_host};
-use crate::components::resolver::{ResolveCtx, resolve_dependencies};
+use crate::components::resolver::{ResolveCtx, resolve_dependencies, resolve_runtime_readiness};
 use crate::components::system_package::{
     qq_install_failure_message, run_qq_dependency_install_for_command, run_system_package_task,
     system_package_group, system_package_title,
@@ -74,6 +74,45 @@ impl ComponentBuildInputs {
                 snowluma_node_path: self.snowluma_node_path.as_deref(),
             },
         )
+    }
+
+    /// root 在 host 上按 phase 的依赖状态;root 自己构建失败才 Err
+    pub async fn resolve(
+        &self,
+        root: ComponentId,
+        host: &dyn Host,
+        phase: RequirementPhase,
+    ) -> Result<DependencyPlan, String> {
+        let root = self.build(root, host)?;
+        let build = |id: ComponentId| self.build(id, host);
+        Ok(resolve_dependencies(
+            root.as_ref(),
+            &ResolveCtx {
+                host,
+                phase,
+                build: &build,
+            },
+        )
+        .await)
+    }
+
+    /// root 现在能不能跑(root 自己 + Run 依赖)
+    pub async fn readiness(
+        &self,
+        root: ComponentId,
+        host: &dyn Host,
+    ) -> Result<RuntimeReadiness, String> {
+        let root = self.build(root, host)?;
+        let build = |id: ComponentId| self.build(id, host);
+        Ok(resolve_runtime_readiness(
+            root.as_ref(),
+            &ResolveCtx {
+                host,
+                phase: RequirementPhase::Run,
+                build: &build,
+            },
+        )
+        .await)
     }
 }
 
@@ -141,16 +180,9 @@ impl ComponentExecutor {
         let mut submitted: HashMap<DependencyTarget, String> = HashMap::new();
 
         if component_action_needs_runtime_closure(kind) {
-            let build = |id: ComponentId| inputs.build(id, host.as_ref());
-            let plan = resolve_dependencies(
-                root.as_ref(),
-                &ResolveCtx {
-                    host: host.as_ref(),
-                    phase: RequirementPhase::Install,
-                    build: &build,
-                },
-            )
-            .await;
+            let plan = inputs
+                .resolve(component_id, host.as_ref(), RequirementPhase::Install)
+                .await?;
 
             for node in &plan.nodes {
                 if !node.status.needs_action() {

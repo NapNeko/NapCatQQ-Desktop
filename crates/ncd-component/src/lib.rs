@@ -58,7 +58,7 @@ pub use remote_qq_entry::{
 };
 pub use requirement::{
     DependencyNode, DependencyPlan, DependencyTarget, HostPackageGroup, Requirement,
-    RequirementPhase, RequirementStatus, VersionReq,
+    RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
 };
 pub use snowluma::SnowLumaComponent;
 pub use traits::{Action, Component};

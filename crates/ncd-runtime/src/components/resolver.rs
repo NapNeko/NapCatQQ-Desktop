@@ -9,7 +9,7 @@ use std::sync::Arc;
 use ncd_component::qq_deps::{QqDependencyDetector, qq_qqnt_dependencies_v3_2_25};
 use ncd_component::{
     Component, ComponentId, DependencyNode, DependencyPlan, DependencyTarget, DetectOutcome,
-    HostPackageGroup, RequirementPhase, RequirementStatus, VersionReq,
+    HostPackageGroup, RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
 };
 use ncd_host::Host;
 
@@ -49,6 +49,29 @@ pub async fn resolve_dependencies(root: &dyn Component, ctx: &ResolveCtx<'_>) ->
     }
 }
 
+/// root 自己装没装 + Run 依赖;ctx.phase 会被忽略,固定按 Run 解析
+pub async fn resolve_runtime_readiness(
+    root: &dyn Component,
+    ctx: &ResolveCtx<'_>,
+) -> RuntimeReadiness {
+    let run_ctx = ResolveCtx {
+        host: ctx.host,
+        phase: RequirementPhase::Run,
+        build: ctx.build,
+    };
+    let status = probe_built_component(root, &[], run_ctx.host).await;
+    let plan = resolve_dependencies(root, &run_ctx).await;
+    RuntimeReadiness {
+        root: DependencyNode {
+            target: DependencyTarget::Component { id: root.id() },
+            required_by: Vec::new(),
+            version_reqs: Vec::new(),
+            status,
+        },
+        plan,
+    }
+}
+
 async fn probe_node(node: &ClosureNode, ctx: &ResolveCtx<'_>) -> RequirementStatus {
     match &node.target {
         DependencyTarget::Component { id } => {
@@ -77,10 +100,18 @@ async fn probe_component(
         Ok(c) => c,
         Err(error) => return RequirementStatus::Unknown { error },
     };
-    if component.check_target(ctx.host).is_err() {
+    probe_built_component(component.as_ref(), version_reqs, ctx.host).await
+}
+
+async fn probe_built_component(
+    component: &dyn Component,
+    version_reqs: &[VersionReq],
+    host: &dyn Host,
+) -> RequirementStatus {
+    if component.check_target(host).is_err() {
         return RequirementStatus::Unsupported;
     }
-    match component.detect_outcome(ctx.host).await {
+    match component.detect_outcome(host).await {
         Ok(DetectOutcome::Installed(found)) => {
             // 组件自己(如注入了 accept 的 Node)一般已按约束挑过候选;
             // 这里再核一遍,兜住没做内部过滤的组件
@@ -398,6 +429,49 @@ mod tests {
                 reason: "v18.0.0 不满足 >=22".into(),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn runtime_readiness_includes_root_and_forces_run_phase() {
+        let root = FakeComponent {
+            id: ComponentId::NapCat,
+            reqs: vec![
+                Requirement::component(ComponentId::Qq),
+                Requirement::host_command("unzip", "unzip"),
+            ],
+            outcome: Ok(DetectOutcome::NotInstalled),
+        };
+        let deps = registry(vec![FakeComponent {
+            id: ComponentId::Qq,
+            reqs: vec![],
+            outcome: installed("3.2.25"),
+        }]);
+        let host = ScriptedHost {
+            commands: vec![],
+            shell: BashShell,
+        };
+        let build = |id: ComponentId| deps.get(&id).cloned().ok_or_else(|| "x".to_string());
+        let readiness = resolve_runtime_readiness(
+            &root,
+            &ResolveCtx {
+                host: &host,
+                // 传 Install 也按 Run 解析:unzip 这条安装期边不该出现
+                phase: RequirementPhase::Install,
+                build: &build,
+            },
+        )
+        .await;
+        assert_eq!(readiness.plan.phase, RequirementPhase::Run);
+        assert_eq!(readiness.root.status, RequirementStatus::Missing);
+        assert_eq!(
+            readiness.root.target,
+            DependencyTarget::Component { id: ComponentId::NapCat }
+        );
+        let labels: Vec<String> = readiness.plan.nodes.iter().map(|n| n.target.label()).collect();
+        assert_eq!(labels, vec!["qq_dependencies", "qq"]);
+        assert!(!readiness.ready());
+        let blocking: Vec<String> = readiness.blocking().iter().map(|n| n.target.label()).collect();
+        assert_eq!(blocking, vec!["napcat", "qq_dependencies"]);
     }
 
     #[tokio::test]

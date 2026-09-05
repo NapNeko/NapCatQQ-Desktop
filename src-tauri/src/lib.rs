@@ -16,6 +16,7 @@ use tokio_util::sync::CancellationToken;
 pub mod autostart;
 pub mod bootstrap;
 pub mod bot_host_resolver;
+pub mod bot_runtime_gate;
 pub mod commands;
 pub mod desktop_consent;
 pub mod desktop_log;
@@ -252,6 +253,18 @@ pub fn run() {
             Arc::clone(&server_manager),
             Arc::clone(&local_host),
         ));
+    // 远端库存缓存:组件页探测与 Bot 启动预检共用一份,安装完成后由 executor 清掉
+    let host_probe_cache: Arc<Mutex<HashMap<String, ncd_runtime::RemoteInventory>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+    let runtime_gate: Arc<dyn ncd_runtime::RuntimeReadinessGate> =
+        Arc::new(bot_runtime_gate::TauriRuntimeGate::new(
+            Arc::clone(&host_resolver),
+            Arc::clone(&server_manager),
+            Arc::clone(&host_probe_cache),
+            Arc::clone(&app_settings_shared),
+            data_root.clone(),
+            snapshot.local_versions.snowluma.clone(),
+        ));
     let bot_manager = Arc::new(
         BotManager::new(
             repo,
@@ -267,6 +280,7 @@ pub fn run() {
         )
         .with_host_resolver(host_resolver)
         .with_server_manager(Arc::clone(&server_manager))
+        .with_runtime_gate(runtime_gate)
         .with_docker_webui_secret_store(Arc::clone(&secrets)),
     );
 
@@ -335,7 +349,7 @@ pub fn run() {
             snowluma_daemon: Arc::clone(&snowluma_daemon),
             active_tasks: Arc::new(Mutex::new(HashMap::new())),
             deployment_tasks: ncd_runtime::DeploymentTaskManager::new(event_bus.clone()),
-            host_probe_cache: Arc::new(Mutex::new(HashMap::new())),
+            host_probe_cache,
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings_shared),
             offline_notifier: Arc::clone(&offline_notifier),
@@ -620,6 +634,8 @@ pub fn run() {
             commands::components::qq_deps::remember_sudo_password,
             commands::components::run_component_action,
             commands::components::cancel_component_action,
+            commands::components::resolve_component_dependencies,
+            commands::components::resolve_runtime_readiness,
             commands::desktop_update::check_desktop_update,
             commands::desktop_update::precheck_desktop_update,
             commands::desktop_update::install_desktop_update,

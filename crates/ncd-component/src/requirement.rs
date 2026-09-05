@@ -311,6 +311,29 @@ impl DependencyPlan {
     }
 }
 
+/// 「root 现在能不能跑」:root 自己的状态 + 它 Run 阶段的依赖。Bot 启动门禁消费
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct RuntimeReadiness {
+    /// target 一定是 Component { root };required_by 为空
+    pub root: DependencyNode,
+    pub plan: DependencyPlan,
+}
+
+impl RuntimeReadiness {
+    pub fn ready(&self) -> bool {
+        self.root.status.is_satisfied() && self.plan.ready()
+    }
+
+    /// 阻断节点,root 在前
+    pub fn blocking(&self) -> Vec<&DependencyNode> {
+        std::iter::once(&self.root)
+            .filter(|n| !n.status.is_satisfied())
+            .chain(self.plan.blocking())
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

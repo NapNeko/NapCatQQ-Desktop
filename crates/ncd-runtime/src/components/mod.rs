@@ -24,4 +24,6 @@ pub use graph::{
     ClosureNode, GRAPH_COMPONENT_IDS, catalog_version_reqs_for, graph_component,
     render_dependency_graph, requirement_closure,
 };
-pub use resolver::{ComponentBuilder, ResolveCtx, resolve_dependencies};
+pub use resolver::{
+    ComponentBuilder, ResolveCtx, resolve_dependencies, resolve_runtime_readiness,
+};

@@ -7,7 +7,10 @@ pub mod qq_deps;
 
 use std::sync::Arc;
 
-use ncd_component::{ComponentDetectResult, ComponentId, ComponentInfo, DetectOutcome};
+use ncd_component::{
+    ComponentDetectResult, ComponentId, ComponentInfo, DependencyPlan, DetectOutcome,
+    RequirementPhase, RuntimeReadiness,
+};
 use ncd_deploy::StepKind;
 use ncd_domain::{NodeEnvironmentCandidate, NodeProbeResult};
 use ncd_host::{Host, HostPath, Locality, local::LocalWindowsHost};
@@ -173,7 +176,7 @@ pub(crate) async fn cached_host_probe(
     }
 }
 
-/// 从 AppState 收集一次构建输入;本机 SnowLuma 的包类型与 Node 覆盖路径来自设置
+/// 从 AppState 收集一次构建输入
 pub(crate) async fn build_inputs(
     state: &AppState,
     host: &dyn Host,
@@ -181,29 +184,84 @@ pub(crate) async fn build_inputs(
     selected: Option<RemoteSelectedPaths>,
     snowluma_linux_package: Option<SnowLumaLinuxPackage>,
 ) -> ComponentBuildInputs {
+    build_inputs_with(
+        &state.data_root,
+        &state.app_settings,
+        state.snapshot.local_versions.snowluma.as_deref(),
+        host,
+        probe,
+        selected,
+        snowluma_linux_package,
+    )
+    .await
+}
+
+/// 不依赖 AppState 的版本;本机 SnowLuma 的包类型与 Node 覆盖路径来自设置
+pub(crate) async fn build_inputs_with(
+    data_root: &std::path::Path,
+    app_settings: &tokio::sync::RwLock<ncd_domain::AppSettings>,
+    local_snowluma_version: Option<&str>,
+    host: &dyn Host,
+    probe: &RemoteHostProbe,
+    selected: Option<RemoteSelectedPaths>,
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
+) -> ComponentBuildInputs {
     let local = host.locality() == Locality::Local;
     let (persisted_package, snowluma_node_path) = if local {
-        let settings = state.app_settings.read().await;
+        let settings = app_settings.read().await;
         (settings.snowluma_package, settings.snowluma_node_path.clone())
     } else {
         (None, None)
     };
     let snowluma_linux_package = snowluma_linux_package.or_else(|| {
-        local.then(|| {
-            persisted_package.unwrap_or_else(|| infer_local_snowluma_package(&state.data_root))
-        })
+        local.then(|| persisted_package.unwrap_or_else(|| infer_local_snowluma_package(data_root)))
     });
     ComponentBuildInputs {
-        data_root: state.data_root.clone(),
+        data_root: data_root.to_path_buf(),
         remote_home: probe.home.clone(),
         layout: probe.layout,
-        snapshot: read_cached_release_snapshot(&state.data_root),
-        local_snowluma_version: state.snapshot.local_versions.snowluma.clone(),
+        snapshot: read_cached_release_snapshot(data_root),
+        local_snowluma_version: local_snowluma_version.map(str::to_string),
         desktop_product_version: crate::desktop_update::product_version_str().to_string(),
         selected,
         snowluma_linux_package,
         snowluma_node_path,
     }
+}
+
+/// 组件在某台主机上按阶段的依赖状态(组件页「为什么不可用」/ 装前预览)
+#[tauri::command]
+pub async fn resolve_component_dependencies(
+    component_id: ComponentId,
+    host_id: String,
+    phase: RequirementPhase,
+    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
+    state: State<'_, AppState>,
+) -> Result<DependencyPlan, String> {
+    let host = resolve_host_with_autoconnect(&host_id, &state).await?;
+    let (probe, selected) = cached_host_probe(&host_id, host.as_ref(), &state).await;
+    build_inputs(&state, host.as_ref(), &probe, selected, snowluma_linux_package)
+        .await
+        .resolve(component_id, host.as_ref(), phase)
+        .await
+}
+
+/// 组件自己 + Run 依赖是否都在(Bot 启动 / 保存门禁)。
+/// SnowLuma 包类型不由前端传:本机读设置,远端读库存
+#[tauri::command]
+pub async fn resolve_runtime_readiness(
+    component_id: ComponentId,
+    host_id: String,
+    state: State<'_, AppState>,
+) -> Result<RuntimeReadiness, String> {
+    let host = resolve_host_with_autoconnect(&host_id, &state).await?;
+    let (probe, selected) = cached_host_probe(&host_id, host.as_ref(), &state).await;
+    let package = (host.locality() != Locality::Local)
+        .then(|| infer_snowluma_linux_package(selected.as_ref()));
+    build_inputs(&state, host.as_ref(), &probe, selected, package)
+        .await
+        .readiness(component_id, host.as_ref())
+        .await
 }
 
 #[tauri::command]
