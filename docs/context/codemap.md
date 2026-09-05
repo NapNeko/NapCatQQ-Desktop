@@ -295,6 +295,9 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | 日志 crate | `crates/ncd-log/src/**` |
 | 系统指标 command | `src-tauri/src/commands/system_metrics.rs` |
 | 服务 | `system-metrics.service.ts` |
+| Bot 运行时指标（内存/OneBot 收发） | `crates/ncd-runtime/src/metrics/`（collector/inject/remote/docker/history）+ `ncd-domain/bot_runtime_metrics.rs` + `src-tauri/src/commands/bot_metrics.rs` + UI `src-ui/modules/bot/metrics/` |
+| OneBot 流量探针 | `src-tauri/resources/metrics/ncd-ob11-stats.cjs`（`include_str!` 进 `metrics/inject.rs`；只挂 node 核心模块，改动跑 `pnpm run test:probe`） |
+| 远端续采 | `crates/ncd-watch/src/metrics.rs` + `ncd-runtime/src/watch/sync.rs` |
 | 外链打开 | `src-ui/hooks/useOpenExternal.ts`（R4：走 opener 插件） |
 
 ---

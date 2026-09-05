@@ -77,6 +77,10 @@ jobs:
       - name: Unit tests
         run: pnpm run test:unit
 
+      # OneBot 探针是注入用户 Bot 进程的脚本，只能靠线级回归守住
+      - name: Probe tests
+        run: pnpm run test:probe
+
   rust:
     name: Rust (Windows)
     if: >-
