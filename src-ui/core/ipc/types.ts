@@ -72,10 +72,6 @@ export type { WebUiPollerSettings } from './generated/domain/WebUiPollerSettings
 export type { ConfigExportResult } from './generated/ConfigExportResult';
 export type { ConfigImportResult } from './generated/ConfigImportResult';
 export type { ConfigImportPreview } from './generated/ConfigImportPreview';
-export type { QrLoginSessionId } from './generated/domain/QrLoginSessionId';
-export type { SnowlumaQrFailureCategory } from './generated/domain/SnowlumaQrFailureCategory';
-export type { SnowlumaQrLoginResult } from './generated/domain/SnowlumaQrLoginResult';
-export type { SnowlumaQrLoginSession } from './generated/domain/SnowlumaQrLoginSession';
 
 // ProgressEvent / ProgressKind / LogLevel 由 ts-rs 自动生成，re-export 保证
 // wire format 与后端一致。注意 ProgressEvent.timestamp_ms 是 bigint
