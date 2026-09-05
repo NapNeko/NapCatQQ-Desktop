@@ -25,6 +25,7 @@ use ncd_host::{Host, HostCommand, HostError, HostPath, Locality, Os};
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
+use crate::requirement::Requirement;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
@@ -82,6 +83,10 @@ pub struct SnowLumaComponent {
 }
 
 impl SnowLumaComponent {
+    /// Lite 包对外置 Node 的要求,对齐上游 `check-node-version.cjs`。
+    /// 全仓唯一字面量;Node 组件自己不知道这个范围,由本组件的依赖边带过去
+    pub const NODE_VERSION_RANGE: &'static str = "^22.13.0 || >=23.4.0";
+
     /// 创建一个 Linux framework component 描述（URL 由调用方决定完整包或 lite）
     /// workspace_dir:SL workspace 根;snowluma_dir:framework 解压根
     pub fn new(workspace_dir: HostPath, framework_url: impl Into<String>) -> Self {
@@ -248,6 +253,26 @@ impl Component for SnowLumaComponent {
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),
         ]
+    }
+
+    fn requirements(&self, os: Os, locality: Locality) -> Vec<Requirement> {
+        let mut reqs = Vec::new();
+        // 完整包自带 node;只有 lite 才要外置 Node,版本按上游脚本
+        if self.package == SnowLumaLinuxPackage::Lite {
+            reqs.push(Requirement::component_version(
+                ComponentId::NodeJs,
+                Self::NODE_VERSION_RANGE,
+            ));
+        }
+        reqs.push(Requirement::component(ComponentId::Qq));
+        if os == Os::Linux {
+            // 远端无显示器,QQ 扫码登录靠 noVNC 看画面
+            if locality == Locality::Remote {
+                reqs.push(Requirement::component(ComponentId::NoVnc));
+            }
+            reqs.push(Requirement::host_command("tar", "tar"));
+        }
+        reqs
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
@@ -999,6 +1024,45 @@ mod tests {
         assert!(
             c.supported_targets()
                 .contains(&(Os::Windows, Locality::Local))
+        );
+    }
+
+    // 依赖边只在这里声明;Lite 才要 Node,远端 Linux 才要 noVNC,Linux 装包要 tar
+    #[test]
+    fn requirements_follow_package_and_target() {
+        let node = Requirement::component_version(
+            ComponentId::NodeJs,
+            SnowLumaComponent::NODE_VERSION_RANGE,
+        );
+        let qq = Requirement::component(ComponentId::Qq);
+        let novnc = Requirement::component(ComponentId::NoVnc);
+        let tar = Requirement::host_command("tar", "tar");
+
+        let full = comp().with_package(SnowLumaLinuxPackage::Full);
+        assert_eq!(
+            full.requirements(Os::Linux, Locality::Remote),
+            vec![qq.clone(), novnc.clone(), tar.clone()]
+        );
+        assert_eq!(
+            full.requirements(Os::Linux, Locality::Local),
+            vec![qq.clone(), tar.clone()]
+        );
+
+        let lite = comp().with_package(SnowLumaLinuxPackage::Lite);
+        assert_eq!(
+            lite.requirements(Os::Linux, Locality::Remote),
+            vec![node.clone(), qq.clone(), novnc, tar]
+        );
+
+        let win_full = SnowLumaComponent::for_windows(HostPath::from_windows(r"C:\sl"), "v1");
+        assert_eq!(
+            win_full.requirements(Os::Windows, Locality::Local),
+            vec![qq.clone()]
+        );
+        let win_lite = win_full.with_package(SnowLumaLinuxPackage::Lite);
+        assert_eq!(
+            win_lite.requirements(Os::Windows, Locality::Local),
+            vec![node, qq]
         );
     }
 

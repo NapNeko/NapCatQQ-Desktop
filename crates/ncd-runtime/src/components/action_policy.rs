@@ -1,14 +1,16 @@
 //! 组件动作策略（纯逻辑）
 //!
-//! 从 Layer4 command 下沉：前置依赖闭包、任务资源、包管理前置、catalog 顺序、
-//! release tag / sha 辅助、远端布局探测结果解析。不含 Host I/O 与 task 提交。
+//! 从 Layer4 command 下沉：任务资源、catalog 顺序、release tag / sha 辅助、远端布局
+//! 探测结果解析。依赖相关的函数只是 Component::requirements() 的适配器,不再自己
+//! 维护表。不含 Host I/O 与 task 提交。
 
 use std::path::Path;
 use std::sync::Arc;
 
 use ncd_component::{
-    Component, ComponentId, ComponentInfo, DesktopSelfComponent, NapCatComponent,
-    NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent, SnowLumaComponent,
+    Component, ComponentId, ComponentInfo, DesktopSelfComponent, HostPackageGroup,
+    NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent,
+    Requirement, RequirementPhase, SnowLumaComponent,
 };
 use ncd_deploy::StepKind;
 use ncd_domain::DeploymentTaskResource;
@@ -16,6 +18,8 @@ use ncd_domain::SnowLumaLinuxPackage;
 use ncd_domain::release_snapshot::ReleaseInfo;
 pub use ncd_domain::{infer_snowluma_linux_package, is_bundled_snowluma_node};
 use ncd_host::{Arch, HostPath, Locality, Os};
+
+use crate::components::graph::graph_component;
 
 /// 单步组件任务规格（用于前置闭包与 dedupe）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,10 +56,7 @@ impl RemoteHostProbe {
 /// Linux 上组件安装前可能需要的系统包前置
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SystemPackagePrerequisite {
-    ArchiveTool {
-        command: &'static str,
-        package: &'static str,
-    },
+    ArchiveTool { command: String, package: String },
     QqDependencies,
 }
 
@@ -100,6 +101,8 @@ pub fn component_runtime_prerequisites(
     component_runtime_prerequisites_for(component_id, kind, host_os, host_locality, None)
 }
 
+/// 直接组件依赖 → EnsureInstalled 任务。只是 requirements() 的适配;
+/// `snowluma_linux_package` None 按 Full(完整包自带 node,不拉 Node)
 pub fn component_runtime_prerequisites_for(
     component_id: ComponentId,
     kind: StepKind,
@@ -110,49 +113,16 @@ pub fn component_runtime_prerequisites_for(
     if !component_action_needs_runtime_closure(kind) {
         return Vec::new();
     }
-
-    let ensure = |component_id| ComponentTaskSpec {
-        component_id,
-        kind: StepKind::EnsureInstalled,
-    };
-
-    match component_id {
-        ComponentId::NapCat => match host_os {
-            Os::Windows | Os::Linux => vec![ensure(ComponentId::Qq)],
-            _ => Vec::new(),
-        },
-        ComponentId::SnowLuma => match host_os {
-            Os::Windows => {
-                let mut deps = Vec::new();
-                if snowluma_linux_package == Some(SnowLumaLinuxPackage::Lite) {
-                    deps.push(ensure(ComponentId::NodeJs));
-                }
-                deps.push(ensure(ComponentId::Qq));
-                deps
-            }
-            Os::Linux => {
-                snowluma_linux_runtime_deps(host_locality, snowluma_linux_package, &ensure)
-            }
-            _ => Vec::new(),
-        },
-        _ => Vec::new(),
-    }
-}
-
-fn snowluma_linux_runtime_deps(
-    host_locality: Locality,
-    package: Option<SnowLumaLinuxPackage>,
-    ensure: &impl Fn(ComponentId) -> ComponentTaskSpec,
-) -> Vec<ComponentTaskSpec> {
-    let mut deps = Vec::new();
-    if package == Some(SnowLumaLinuxPackage::Lite) {
-        deps.push(ensure(ComponentId::NodeJs));
-    }
-    deps.push(ensure(ComponentId::Qq));
-    if host_locality == Locality::Remote {
-        deps.push(ensure(ComponentId::NoVnc));
-    }
-    deps
+    graph_component(component_id, snowluma_linux_package.unwrap_or_default())
+        .requirements(host_os, host_locality)
+        .into_iter()
+        .filter(|req| req.applies_to(RequirementPhase::Install))
+        .filter_map(|req| req.component_id())
+        .map(|component_id| ComponentTaskSpec {
+            component_id,
+            kind: StepKind::EnsureInstalled,
+        })
+        .collect()
 }
 
 pub fn collect_component_runtime_prerequisites(
@@ -313,34 +283,30 @@ pub fn component_action_cancellable(
     !component_needs_package_manager(component_id, kind, host_os, host_locality)
 }
 
+/// 直接主机级依赖(命令 / 系统包组)→ 系统包任务。只是 requirements() 的适配
 pub fn component_package_prerequisites(
     component_id: ComponentId,
     kind: StepKind,
     host_os: Os,
 ) -> Vec<SystemPackagePrerequisite> {
-    if host_os != Os::Linux
-        || !matches!(
-            kind,
-            StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Update
-        )
-    {
+    if !component_action_needs_runtime_closure(kind) {
         return Vec::new();
     }
-
-    match component_id {
-        ComponentId::NapCat => vec![SystemPackagePrerequisite::ArchiveTool {
-            command: "unzip",
-            package: "unzip",
-        }],
-        ComponentId::NodeJs | ComponentId::SnowLuma => {
-            vec![SystemPackagePrerequisite::ArchiveTool {
-                command: "tar",
-                package: "tar",
-            }]
-        }
-        ComponentId::Qq => vec![SystemPackagePrerequisite::QqDependencies],
-        _ => Vec::new(),
-    }
+    // 系统包前置只对 Linux 有意义;locality 不影响这类边,取 Remote 即可
+    graph_component(component_id, SnowLumaLinuxPackage::default())
+        .requirements(host_os, Locality::Remote)
+        .into_iter()
+        .filter(|req| req.applies_to(RequirementPhase::Install))
+        .filter_map(|req| match req {
+            Requirement::HostCommand { command, package } => {
+                Some(SystemPackagePrerequisite::ArchiveTool { command, package })
+            }
+            Requirement::HostPackages {
+                group: HostPackageGroup::QqDependencies,
+            } => Some(SystemPackagePrerequisite::QqDependencies),
+            Requirement::Component { .. } => None,
+        })
+        .collect()
 }
 
 /// 组件元数据：Framework → RuntimeDep → SelfApp
@@ -792,15 +758,15 @@ mod tests {
                 Os::Linux
             ),
             vec![SystemPackagePrerequisite::ArchiveTool {
-                command: "unzip",
-                package: "unzip",
+                command: "unzip".into(),
+                package: "unzip".into(),
             }]
         );
         assert_eq!(
             component_package_prerequisites(ComponentId::NodeJs, StepKind::Update, Os::Linux),
             vec![SystemPackagePrerequisite::ArchiveTool {
-                command: "tar",
-                package: "tar",
+                command: "tar".into(),
+                package: "tar".into(),
             }]
         );
         assert!(

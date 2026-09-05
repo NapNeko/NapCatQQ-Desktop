@@ -11,10 +11,12 @@
 //! 探测策略:
 //! 1. 目标安装目录 <install_dir>/bin/node 存在 + node --version 输出
 //! 2. extra_detect_bins（便携安装 / 用户覆盖；不含 SnowLuma 完整包自带的 ./node）
-//! 3. PATH 中有 node，且满足 SnowLuma 要求（22.13+ / 23.4+）
+//! 3. PATH 中有 node
 //!
-//! 可用的候选优先；都不可用时 detect_outcome 带回第一处「找到但不能用」
-//! 的原因（版本不符 / 二进制跑不起来），detect() 对这种情况仍返回 None。
+//! 每个候选都要过 `accept` 里的版本约束。约束不是 Node 自己的:谁依赖 Node
+//! 谁在自己的 Requirement 边上声明,由 factory / 解析器注入进来;accept 为空
+//! 就任何版本都算装好。可用的候选优先;都不可用时 detect_outcome 带回第一处
+//! 「找到但不能用」的原因(版本不符 / 二进制跑不起来),detect() 对这种情况仍返回 None。
 //!
 //! 默认下载源:
 //! https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz
@@ -30,14 +32,12 @@ use ncd_host::{Arch, ArchiveKind, Host, HostCommand, HostError, HostPath, Locali
 use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
+use crate::requirement::{Requirement, VersionReq};
 use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{
     ComponentId, DetectOutcome, DetectedVersion, LaunchArgs, UnusableInstall, VerifyReport,
 };
-
-/// 对齐上游 `check-node-version.cjs` 的 semver 范围
-pub const SNOWLUMA_NODE_RANGE: &str = "^22.13.0 || >=23.4.0";
 
 /// 单个候选二进制的探测结果;「在但跑不起来」与「不存在」分开,后者才是未安装
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,19 +86,27 @@ pub async fn probe_node_raw_version(
     })
 }
 
-fn version_mismatch_reason(ver: &str) -> String {
-    format!("v{ver} 不满足 {SNOWLUMA_NODE_RANGE}")
+/// 「v18 不满足 ^22.13.0 || >=23.4.0」;多条约束用「且」连
+pub fn version_mismatch_reason(ver: &str, accept: &[VersionReq]) -> String {
+    let ranges = accept
+        .iter()
+        .filter(|r| !r.is_any())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(" 且 ");
+    format!("v{ver} 不满足 {ranges}")
 }
 
 /// 候选归类:Missing → None;可用 → Installed;版本不符 / 跑不起来 → Unusable
 async fn classify_node_candidate(
     host: &dyn Host,
     path: &HostPath,
+    accept: &[VersionReq],
 ) -> Result<Option<DetectOutcome>, ActionError> {
     let source = path.as_posix().to_string();
     Ok(match probe_node_bin_status(host, path).await? {
         NodeBinProbe::Missing => None,
-        NodeBinProbe::Version(ver) if NodeJsComponent::version_meets_snowluma(&ver) => {
+        NodeBinProbe::Version(ver) if VersionReq::all_match(accept, &ver) => {
             Some(DetectOutcome::Installed(DetectedVersion {
                 version: ver,
                 source,
@@ -106,7 +114,7 @@ async fn classify_node_candidate(
         }
         NodeBinProbe::Version(ver) => Some(DetectOutcome::Unusable(UnusableInstall {
             source,
-            reason: version_mismatch_reason(&ver),
+            reason: version_mismatch_reason(&ver, accept),
             version: Some(ver),
         })),
         NodeBinProbe::Broken(detail) => Some(DetectOutcome::Unusable(UnusableInstall {
@@ -135,6 +143,8 @@ pub struct NodeJsComponent {
     pub tmp_dir: HostPath,
     /// 额外探测点（不作为安装目标），例如便携 `.../node/bin/node`
     extra_detect_bins: Vec<HostPath>,
+    /// 消费方注入的版本约束;候选全满足才算已装。空 = 任何版本
+    accept: Vec<VersionReq>,
 }
 
 impl NodeJsComponent {
@@ -147,6 +157,7 @@ impl NodeJsComponent {
             expected_sha256: None,
             tmp_dir: HostPath::from_posix("/tmp"),
             extra_detect_bins: Vec::new(),
+            accept: Vec::new(),
         }
     }
 
@@ -155,6 +166,22 @@ impl NodeJsComponent {
             self.extra_detect_bins.push(path);
         }
         self
+    }
+
+    /// 追加一条消费方的版本约束(Any 忽略,重复忽略)
+    pub fn with_version_req(mut self, req: VersionReq) -> Self {
+        if !req.is_any() && !self.accept.contains(&req) {
+            self.accept.push(req);
+        }
+        self
+    }
+
+    pub fn with_version_reqs(self, reqs: impl IntoIterator<Item = VersionReq>) -> Self {
+        reqs.into_iter().fold(self, Self::with_version_req)
+    }
+
+    pub fn accepted_versions(&self) -> &[VersionReq] {
+        &self.accept
     }
 
     pub fn with_url_template(mut self, template: impl Into<String>) -> Self {
@@ -220,24 +247,6 @@ impl NodeJsComponent {
             || normalize(source) == normalize(&expected.render(ncd_host::PathStyle::Windows))
     }
 
-    /// 对齐上游 `check-node-version.cjs`：`^22.13.0 || >=23.4.0`
-    pub fn version_meets_snowluma(raw: &str) -> bool {
-        let v = raw.trim().trim_start_matches('v');
-        let mut parts = v.split('.');
-        let Some(major) = parts.next().and_then(|s| s.parse::<u32>().ok()) else {
-            return false;
-        };
-        let minor = parts
-            .next()
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0);
-        match major {
-            22 => minor >= 13,
-            23 => minor >= 4,
-            n => n > 23,
-        }
-    }
-
     fn extract_root_subdir(&self, host: &dyn Host) -> String {
         let platform = match host.os() {
             Os::Linux => "linux",
@@ -258,7 +267,7 @@ impl NodeJsComponent {
         crate::types::ComponentInfo {
             id: ComponentId::NodeJs,
             display_name: "Node.js".to_string(),
-            description: "供 SnowLuma Lite 使用的 Node.js 环境".to_string(),
+            description: "框架精简包所需的 Node.js 运行环境".to_string(),
             repo_url: Some("https://nodejs.org/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),
@@ -286,6 +295,15 @@ impl Component for NodeJsComponent {
         ]
     }
 
+    fn requirements(&self, os: Os, _locality: Locality) -> Vec<Requirement> {
+        if os == Os::Linux {
+            // 官方 tar.xz 用 tar 解
+            vec![Requirement::host_command("tar", "tar")]
+        } else {
+            Vec::new()
+        }
+    }
+
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
         Ok(self.detect_outcome(host).await?.into_installed())
     }
@@ -295,7 +313,7 @@ impl Component for NodeJsComponent {
         let mut first_unusable: Option<UnusableInstall> = None;
         let managed = self.node_binary_path(host);
         for path in std::iter::once(&managed).chain(self.extra_detect_bins.iter()) {
-            match classify_node_candidate(host, path).await? {
+            match classify_node_candidate(host, path, &self.accept).await? {
                 Some(DetectOutcome::Installed(v)) => return Ok(DetectOutcome::Installed(v)),
                 Some(DetectOutcome::Unusable(u)) => {
                     first_unusable.get_or_insert(u);
@@ -309,13 +327,13 @@ impl Component for NodeJsComponent {
             Ok(out) if out.success() => {
                 let ver = out.stdout.trim().trim_start_matches('v').to_string();
                 if !ver.is_empty() {
-                    if Self::version_meets_snowluma(&ver) {
+                    if VersionReq::all_match(&self.accept, &ver) {
                         return Ok(DetectOutcome::Installed(DetectedVersion {
                             version: ver,
                             source: "$PATH/node".into(),
                         }));
                     }
-                    let reason = version_mismatch_reason(&ver);
+                    let reason = version_mismatch_reason(&ver, &self.accept);
                     first_unusable.get_or_insert(UnusableInstall {
                         source: "$PATH/node".into(),
                         version: Some(ver),
@@ -563,10 +581,12 @@ async fn copy_dir_all(host: &dyn Host, src: &HostPath, dst: &HostPath) -> Result
 #[allow(dead_code)]
 fn _ensure_send_sync(_: Arc<NodeJsComponent>) {}
 
+/// 枚举本机可复用的 Node 候选;`accept` 是消费方(要用这个 Node 的组件)的版本约束
 pub async fn probe_local_system_nodes(
     host: &dyn Host,
     component_path: Option<&HostPath>,
     custom_path: Option<&str>,
+    accept: &[VersionReq],
 ) -> Vec<NodeEnvironmentCandidate> {
     let mut results = Vec::new();
     let mut seen_paths = std::collections::HashSet::new();
@@ -577,7 +597,7 @@ pub async fn probe_local_system_nodes(
         if !trimmed.is_empty() {
             let hp = HostPath::from_windows(trimmed);
             if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
-                let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
+                let is_valid = VersionReq::all_match(accept, &ver);
                 let path_str = hp.render(ncd_host::PathStyle::Windows);
                 seen_paths.insert(path_str.to_lowercase());
                 results.push(NodeEnvironmentCandidate {
@@ -594,7 +614,7 @@ pub async fn probe_local_system_nodes(
     // 2. Independent NodeJs component
     if let Some(cp) = component_path {
         if let Ok(Some(ver)) = probe_node_raw_version(host, cp).await {
-            let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
+            let is_valid = VersionReq::all_match(accept, &ver);
             let path_str = cp.render(ncd_host::PathStyle::Windows);
             if !seen_paths.contains(&path_str.to_lowercase()) {
                 seen_paths.insert(path_str.to_lowercase());
@@ -628,7 +648,7 @@ pub async fn probe_local_system_nodes(
                         continue;
                     }
                     if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
-                        let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
+                        let is_valid = VersionReq::all_match(accept, &ver);
                         seen_paths.insert(path_str.to_lowercase());
                         results.push(NodeEnvironmentCandidate {
                             path: path_str,
@@ -672,7 +692,7 @@ pub async fn probe_local_system_nodes(
                 let path_str = hp.render(ncd_host::PathStyle::Windows);
                 if !seen_paths.contains(&path_str.to_lowercase()) {
                     if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
-                        let is_valid = NodeJsComponent::version_meets_snowluma(&ver);
+                        let is_valid = VersionReq::all_match(accept, &ver);
                         seen_paths.insert(path_str.to_lowercase());
                         results.push(NodeEnvironmentCandidate {
                             path: path_str,
@@ -733,14 +753,22 @@ mod tests {
     }
 
     #[test]
-    fn version_meets_snowluma_matches_upstream_range() {
-        assert!(NodeJsComponent::version_meets_snowluma("22.13.0"));
-        assert!(NodeJsComponent::version_meets_snowluma("v22.14.1"));
-        assert!(NodeJsComponent::version_meets_snowluma("23.4.0"));
-        assert!(NodeJsComponent::version_meets_snowluma("24.0.0"));
-        assert!(!NodeJsComponent::version_meets_snowluma("22.12.0"));
-        assert!(!NodeJsComponent::version_meets_snowluma("18.19.1"));
-        assert!(!NodeJsComponent::version_meets_snowluma("23.3.0"));
+    fn version_req_injection_dedupes_and_ignores_any() {
+        let comp = NodeJsComponent::new("22.13.0", HostPath::from_posix("/x"))
+            .with_version_req(VersionReq::Any)
+            .with_version_req(VersionReq::semver(">=20"))
+            .with_version_req(VersionReq::semver(">=20"));
+        assert_eq!(comp.accepted_versions(), &[VersionReq::semver(">=20")]);
+    }
+
+    #[test]
+    fn linux_install_needs_tar_windows_needs_nothing() {
+        let comp = NodeJsComponent::new("22.13.0", HostPath::from_posix("/x"));
+        assert_eq!(
+            comp.requirements(Os::Linux, Locality::Remote),
+            vec![Requirement::host_command("tar", "tar")]
+        );
+        assert!(comp.requirements(Os::Windows, Locality::Local).is_empty());
     }
 
     #[test]
@@ -861,8 +889,12 @@ mod tests {
             }
         }
 
+        const RANGE: &str = "^22.13.0 || >=23.4.0";
+
+        // 约束由消费方注入;这里模拟 SnowLuma Lite 的那条边
         fn comp() -> NodeJsComponent {
             NodeJsComponent::new("22.13.0", HostPath::from_posix(MANAGED_DIR))
+                .with_version_req(VersionReq::semver(RANGE))
         }
 
         #[tokio::test]
@@ -906,7 +938,25 @@ mod tests {
                 DetectOutcome::Unusable(UnusableInstall {
                     source: "$PATH/node".into(),
                     version: Some("18.19.1".into()),
-                    reason: format!("v18.19.1 不满足 {SNOWLUMA_NODE_RANGE}"),
+                    reason: format!("v18.19.1 不满足 {RANGE}"),
+                })
+            );
+        }
+
+        // 没有任何消费方约束时,找到什么版本都算装好
+        #[tokio::test]
+        async fn without_constraints_any_version_is_installed() {
+            let host = ScriptedHost::new(
+                &[],
+                vec![("node", Scripted::Output(0, "v18.19.1\r\n", ""))],
+            );
+            let unconstrained =
+                NodeJsComponent::new("22.13.0", HostPath::from_posix(MANAGED_DIR));
+            assert_eq!(
+                unconstrained.detect_outcome(&host).await.unwrap(),
+                DetectOutcome::Installed(DetectedVersion {
+                    version: "18.19.1".into(),
+                    source: "$PATH/node".into(),
                 })
             );
         }
@@ -1080,7 +1130,7 @@ mod tests {
             let host = RecordingHost::new();
             let commands = Arc::clone(&host.commands);
 
-            let candidates = probe_local_system_nodes(&host, None, None).await;
+            let candidates = probe_local_system_nodes(&host, None, None, &[]).await;
 
             assert_eq!(candidates.len(), 1);
             assert_eq!(candidates[0].path, r"C:\fake\node.exe");

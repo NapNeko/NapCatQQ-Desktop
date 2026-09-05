@@ -134,7 +134,7 @@ async fn run_system_package_task(
 ) -> DeploymentTaskRunResult {
     match task {
         SystemPackagePrerequisite::ArchiveTool { command, package } => {
-            ensure_archive_tool_task(command, package, host, task_ctx).await
+            ensure_archive_tool_task(&command, &package, host, task_ctx).await
         }
         SystemPackagePrerequisite::QqDependencies => {
             install_qq_dependencies_task(host, Vec::new(), None, task_ctx).await

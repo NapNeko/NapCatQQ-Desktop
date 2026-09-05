@@ -9,6 +9,7 @@ use ncd_host::{Host, HostCommand, Locality, Os};
 
 use crate::context::ActionCtx;
 use crate::error::ActionError;
+use crate::requirement::Requirement;
 use crate::types::{ComponentId, DetectOutcome, DetectedVersion, LaunchArgs, VerifyReport};
 
 /// Component trait:可装可启的"组件"统一接口
@@ -22,6 +23,14 @@ pub trait Component: Send + Sync {
     ///     QQ 支持 (Windows, Local) + (Linux, Local) + (Linux, Remote)
     ///     DesktopSelf 仅支持 (*, Local)
     fn supported_targets(&self) -> &'static [(Os, Locality)];
+
+    /// 本组件在该 (os, locality) 下直接依赖什么。这是依赖图唯一的声明处:
+    /// 装前闭包、Bot 启动门禁、组件页状态都由 ncd-runtime 从这里解析出来,
+    /// 不再另写表。变体(如 SnowLuma Full / Lite)从 self 读,不穿参数。
+    /// 只声明直接依赖,间接依赖由解析器递归;不依赖 host 路径,占位实例也能答
+    fn requirements(&self, _os: Os, _locality: Locality) -> Vec<Requirement> {
+        Vec::new()
+    }
 
     /// 探测目标 Host 上是否已装,装的是哪个版本
     /// Ok(None) 表示未安装,Ok(Some(_)) 表示已装,Err(_) 是探测出错

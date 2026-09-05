@@ -179,6 +179,10 @@ pub use component_action_policy::{
     snowluma_windows_release_asset,
 };
 pub use component_factory::{BuildComponentCtx, build_component_for_host};
+pub use components::{
+    ClosureNode, ComponentBuilder, GRAPH_COMPONENT_IDS, ResolveCtx, catalog_version_reqs_for,
+    graph_component, render_dependency_graph, requirement_closure, resolve_dependencies,
+};
 pub use config_store_impl::LocalConfigStore;
 pub use crash_bundle::{CrashBundleInput, desktop_output_dir, write_crash_bundle};
 pub use credential_sync::{CredentialSyncLayer, PasswordSlot};

@@ -23,6 +23,7 @@ use crate::components::action_policy::{
     is_bundled_snowluma_node, require_remote_home, snowluma_github_release_tag,
     snowluma_linux_release_asset, snowluma_windows_release_asset,
 };
+use crate::components::graph::catalog_version_reqs_for;
 
 /// 实例化 Component 时的上下文（避免过长参数列表）。
 pub struct BuildComponentCtx<'a> {
@@ -167,9 +168,13 @@ pub fn build_component_for_host(
             }
         }
         ComponentId::NodeJs => {
+            // Node 自己不知道谁要它;版本约束来自这台主机上所有可能依赖 Node 的组件
+            let accept =
+                catalog_version_reqs_for(ComponentId::NodeJs, ctx.host.os(), ctx.host.locality());
             if ctx.host.os() == Os::Windows {
                 let install_dir = data_root_host.join("components").join("NodeJs");
-                let mut comp = NodeJsComponent::new("22.13.0", install_dir);
+                let mut comp =
+                    NodeJsComponent::new("22.13.0", install_dir).with_version_reqs(accept);
                 if let Some(bin) = nodejs_extra_detect_bin(ctx.selected) {
                     comp = comp.with_extra_detect_bin(bin);
                 }
@@ -179,7 +184,8 @@ pub fn build_component_for_host(
                 Arc::new(comp)
             } else {
                 let install_dir = node_install_dir(ctx.selected, remote_home)?;
-                let mut comp = NodeJsComponent::new("22.13.0", install_dir);
+                let mut comp =
+                    NodeJsComponent::new("22.13.0", install_dir).with_version_reqs(accept);
                 if let Some(bin) = nodejs_extra_detect_bin(ctx.selected) {
                     comp = comp.with_extra_detect_bin(bin);
                 }

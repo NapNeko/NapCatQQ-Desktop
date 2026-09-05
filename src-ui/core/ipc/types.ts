@@ -98,6 +98,15 @@ export type { SupportedTarget } from './generated/domain/SupportedTarget';
 export type { DetectedVersion } from './generated/domain/DetectedVersion';
 export type { UnusableInstall } from './generated/domain/UnusableInstall';
 export type { StepKind } from './generated/domain/StepKind';
+// 依赖图：组件 requirements() 声明与 runtime 解析结果（crates/ncd-component/src/requirement.rs）
+export type { Requirement } from './generated/domain/Requirement';
+export type { RequirementPhase } from './generated/domain/RequirementPhase';
+export type { RequirementStatus } from './generated/domain/RequirementStatus';
+export type { VersionReq } from './generated/domain/VersionReq';
+export type { HostPackageGroup } from './generated/domain/HostPackageGroup';
+export type { DependencyTarget } from './generated/domain/DependencyTarget';
+export type { DependencyNode } from './generated/domain/DependencyNode';
+export type { DependencyPlan } from './generated/domain/DependencyPlan';
 import type { SnowLumaLinuxPackage } from './generated/domain/SnowLumaLinuxPackage';
 export type { SnowLumaLinuxPackage };
 export type SnowLumaPackage = SnowLumaLinuxPackage;

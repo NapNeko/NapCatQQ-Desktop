@@ -44,6 +44,7 @@ use ncd_host::{Arch, Host, HostCommand, HostError, HostPath, Locality, Os, PathS
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
+use crate::requirement::{HostPackageGroup, Requirement};
 use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
@@ -464,6 +465,14 @@ impl Component for QQComponent {
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),
         ]
+    }
+
+    fn requirements(&self, os: Os, _locality: Locality) -> Vec<Requirement> {
+        if os == Os::Linux {
+            vec![Requirement::host_packages(HostPackageGroup::QqDependencies)]
+        } else {
+            Vec::new()
+        }
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {

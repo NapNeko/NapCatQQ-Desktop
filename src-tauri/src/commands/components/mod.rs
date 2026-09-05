@@ -637,10 +637,13 @@ pub async fn probe_local_node_candidates(
         let settings = state.app_settings.read().await;
         settings.snowluma_node_path.clone()
     };
+    // 版本约束来自本机上要用 Node 的组件声明,不在这里写死
+    let accept = ncd_runtime::catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
     let candidates = ncd_component::nodejs::probe_local_system_nodes(
         &host,
         Some(&comp_node),
         custom.as_deref(),
+        &accept,
     )
     .await;
     Ok(candidates)
@@ -650,19 +653,18 @@ pub async fn probe_local_node_candidates(
 pub async fn probe_node_binary_version(path: String) -> Result<NodeProbeResult, String> {
     let host = LocalWindowsHost::new();
     let hp = HostPath::from_windows(path.trim());
+    let accept = ncd_runtime::catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
     match ncd_component::nodejs::probe_node_raw_version(&host, &hp).await {
         Ok(Some(raw_ver)) => {
-            let is_valid = ncd_component::NodeJsComponent::version_meets_snowluma(&raw_ver);
+            let is_valid = ncd_component::VersionReq::all_match(&accept, &raw_ver);
+            let error = (!is_valid)
+                .then(|| ncd_component::nodejs::version_mismatch_reason(&raw_ver, &accept));
             Ok(NodeProbeResult {
                 path,
                 exists: true,
                 version: Some(raw_ver),
                 is_valid,
-                error: if is_valid {
-                    None
-                } else {
-                    Some("版本不满足要求（需 ^22.13.0 || >=23.4.0）".to_string())
-                },
+                error,
             })
         }
         Ok(None) => Ok(NodeProbeResult {

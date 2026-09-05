@@ -25,6 +25,7 @@ use ncd_network::build_mirror_urls;
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
+use crate::requirement::Requirement;
 use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
@@ -314,6 +315,15 @@ impl Component for NapCatComponent {
             (Os::Linux, Locality::Local),
             (Os::Linux, Locality::Remote),
         ]
+    }
+
+    fn requirements(&self, os: Os, _locality: Locality) -> Vec<Requirement> {
+        let mut reqs = vec![Requirement::component(ComponentId::Qq)];
+        if os == Os::Linux {
+            // NapCat.Shell.zip 在远端用 unzip 解
+            reqs.push(Requirement::host_command("unzip", "unzip"));
+        }
+        reqs
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
