@@ -33,7 +33,6 @@ import type {
     DaemonState,
     NapCatLoginInvalidationReason,
     SnowLumaLoginState,
-    SnowlumaQrLoginResult,
 } from '../../../../core/ipc/types';
 import type { BotConfig } from '../../../../core/ipc/generated/domain/BotConfig';
 import {
@@ -49,7 +48,6 @@ import {
 } from '../../../../core/domain/webui/availability';
 import { isSnowLumaFlavor, type Flavor } from '../../../../core/domain/bot/flavor';
 import {
-    isSnowlumaQrActionAvailable,
     isSnowlumaRemoteNativeConfig,
     isSnowlumaRemoteUiRetryAvailable,
     isSnowlumaTunnelReady,
@@ -57,7 +55,6 @@ import {
 import { cn } from '../../../../shared/utils/cn';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { QrCodeDialog } from './QrCodeDialog';
-import { SnowlumaQrCodeDialog } from './SnowlumaQrCodeDialog';
 import { BotManageCard } from './BotManageCard';
 import { buildBotListCardStatus } from './botCardPresentation';
 import {
@@ -115,8 +112,6 @@ interface BotCardProps {
     /** 远端 SnowLuma：Docker 或 Native 下展示 noVNC（扫码） */
     isSnowlumaRemoteTunnelUi?: boolean;
     onOpenNovnc?: (botId: string) => void;
-    /** 远端 Native SnowLuma：启动一次性二维码提取。 */
-    onStartSnowlumaQr?: (botId: string) => Promise<SnowlumaQrLoginResult>;
     /** 远端 SnowLuma 隧道失效时重建 WebUI/noVNC，不重启 Bot。 */
     onRetrySnowlumaUi?: (botId: string) => Promise<void>;
 }
@@ -145,13 +140,9 @@ export function BotCard({
     onOpenWebui,
     isSnowlumaRemoteTunnelUi = false,
     onOpenNovnc,
-    onStartSnowlumaQr,
     onRetrySnowlumaUi,
 }: BotCardProps) {
     const [qrOpen, setQrOpen] = useState(false);
-    const [snowlumaQrOpen, setSnowlumaQrOpen] = useState(false);
-    const [snowlumaQrPending, setSnowlumaQrPending] = useState(false);
-    const [snowlumaQrResult, setSnowlumaQrResult] = useState<SnowlumaQrLoginResult | null>(null);
     const [retryingSnowlumaUi, setRetryingSnowlumaUi] = useState(false);
     const {
         enabled: metricsEnabled,
@@ -255,37 +246,6 @@ export function BotCard({
             : (isBotStarting(bot.state) || bot.state === 'repairing' ? 'brand' : 'none');
 
     const isActive = isBotActive(bot.state);
-    const snowlumaQrAvailable = isSnowlumaQrActionAvailable(
-        config,
-        isActive,
-        snowlumaLoginState,
-    );
-
-    const startSnowlumaQr = async () => {
-        if (!onStartSnowlumaQr || snowlumaQrPending) return;
-        setSnowlumaQrOpen(true);
-        setSnowlumaQrResult(null);
-        setSnowlumaQrPending(true);
-        try {
-            const result = await onStartSnowlumaQr(bot.bot_id);
-            setSnowlumaQrResult(result);
-        } catch (err: unknown) {
-            setSnowlumaQrOpen(false);
-            pushInfoBar({
-                key: `snowluma-qr:${bot.bot_id}`,
-                tone: 'danger',
-                title: 'SnowLuma 二维码提取失败',
-                content: err instanceof Error ? err.message : String(err),
-            });
-        } finally {
-            setSnowlumaQrPending(false);
-        }
-    };
-
-    const closeSnowlumaQr = (open: boolean) => {
-        setSnowlumaQrOpen(open);
-        if (!open) setSnowlumaQrResult(null);
-    };
     const startPending = actionPending && !isActive;
 
     const snowlumaTunnelReady = isSnowlumaTunnelReady({
@@ -482,15 +442,6 @@ export function BotCard({
                                         />
                                     </IconButton>
                                     <IconButton
-                                        visible={snowlumaQrAvailable && !!onStartSnowlumaQr}
-                                        tooltip="SnowLuma 原生扫码登录"
-                                        onClick={stopAction(() => void startSnowlumaQr())}
-                                        disabled={snowlumaQrPending}
-                                        tone="brand"
-                                    >
-                                        <ToolbarMotionIcon icon={QrCode} size={16} strokeWidth={2.2} hoverAccent />
-                                    </IconButton>
-                                    <IconButton
                                         visible={isActive}
                                         tooltip="停止 Bot"
                                         onClick={stopAction(() => onStop(bot.bot_id))}
@@ -678,12 +629,6 @@ export function BotCard({
                         <span>扫码登录</span>
                     </ContextMenuItem>
                 )}
-                {snowlumaQrAvailable && onStartSnowlumaQr && (
-                    <ContextMenuItem disabled={snowlumaQrPending} onClick={() => void startSnowlumaQr()}>
-                        <QrCode size={13} />
-                        <span>SnowLuma 原生扫码登录</span>
-                    </ContextMenuItem>
-                )}
 
                 <ContextMenuSeparator />
 
@@ -710,14 +655,6 @@ export function BotCard({
                     <span>复制 QQ 号</span>
                 </ContextMenuItem>
             </ContextMenuContent>
-
-            <SnowlumaQrCodeDialog
-                open={snowlumaQrOpen}
-                onOpenChange={closeSnowlumaQr}
-                botId={bot.bot_id}
-                result={snowlumaQrResult}
-                onOpenNovnc={onOpenNovnc ? () => onOpenNovnc(bot.bot_id) : undefined}
-            />
 
             <QrCodeDialog
                 open={qrOpen}

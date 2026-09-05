@@ -528,7 +528,6 @@ export function BotListPageNext({
                         mutations={mutations}
                         openWebui={openWebui}
                         openSnowlumaNovnc={openSnowlumaNovnc}
-                        onStartSnowlumaQr={botService.startSnowlumaQrLogin}
                         onConfigureBot={onConfigureBot}
                         onViewLogs={onViewLogs}
                         onViewMetrics={onViewMetrics}
@@ -700,7 +699,6 @@ type GridProps = {
     mutations: ReturnType<typeof useBotMutations>;
     openWebui: ReturnType<typeof useOpenWebui>;
     openSnowlumaNovnc: ReturnType<typeof useOpenSnowlumaNovnc>;
-    onStartSnowlumaQr: typeof botService.startSnowlumaQrLogin;
     onConfigureBot: (botId: string | null) => void;
     onViewLogs: (botId: string) => void;
     onViewMetrics: (botId: string) => void;
@@ -729,7 +727,6 @@ function BotListGrid({
     mutations,
     openWebui,
     openSnowlumaNovnc,
-    onStartSnowlumaQr,
     onConfigureBot,
     onViewLogs,
     onViewMetrics,
@@ -1084,7 +1081,6 @@ function BotListGrid({
                                             });
                                         });
                                     }}
-                                    onStartSnowlumaQr={onStartSnowlumaQr}
                                     isSnowlumaRemoteTunnelUi={isSnowlumaRemoteTunnelUi}
                                     onOpenNovnc={(id) => {
                                         openSnowlumaNovnc(id).catch((err: unknown) => {
