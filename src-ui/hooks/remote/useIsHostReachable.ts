@@ -1,7 +1,7 @@
 // 判断给定 hostId（'local' 或 'remote:xxx'）当前传输层是否可达。
 //
 // 用途：
-// - 作为 useHostComponentInstalled 等 detect queries 的 enabled 条件，transport 失败时不发探测请求。
+// - 作为 useRuntimeReadiness 等探测 queries 的 enabled 条件，transport 失败时不发探测请求。
 // - UI 层（BotCard、IdentityTab、HostComponentsView、ComponentsPage）优先用这个来区分“主机不可达”与“组件缺失”。
 //
 // 数据源：复用 ['servers'] 查询缓存（由 useServerManager / useComponents 预热）。

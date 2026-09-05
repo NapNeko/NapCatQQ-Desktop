@@ -10,8 +10,11 @@ import type {
     ComponentDetectResult,
     ComponentId,
     ComponentInfo,
+    DependencyPlan,
     NodeEnvironmentCandidate,
     NodeProbeResult,
+    RequirementPhase,
+    RuntimeReadiness,
     SnowLumaLinuxPackage,
     StepKind,
 } from '../ipc/types';
@@ -20,8 +23,10 @@ import type { InstallDependenciesResult } from '../ipc/generated/qq/InstallDepen
 import {
     mockCancelAction,
     mockComponentCatalog,
+    mockDependencyPlan,
     mockDetect,
     mockRunAction,
+    mockRuntimeReadiness,
 } from '../ipc/mock/component.mock';
 import { withMockDelay } from '../ipc/mock/bootstrap.mock';
 
@@ -68,6 +73,38 @@ export const componentService = {
             return invoke<void>('cancel_component_action', { taskId });
         }
         mockCancelAction(taskId);
+    },
+
+    // 组件在某主机上按阶段的依赖状态（装前预览 / 「为什么不可用」）
+    resolveDependencies: async (
+        componentId: ComponentId,
+        hostId: string,
+        phase: RequirementPhase,
+        snowlumaLinuxPackage?: SnowLumaLinuxPackage | null,
+    ): Promise<DependencyPlan> => {
+        if (isTauri) {
+            return invoke<DependencyPlan>('resolve_component_dependencies', {
+                componentId,
+                hostId,
+                phase,
+                snowlumaLinuxPackage: snowlumaLinuxPackage ?? null,
+            });
+        }
+        return withMockDelay(mockDependencyPlan(componentId, hostId, phase), 150);
+    },
+
+    // 组件自己 + Run 依赖是否都在；SnowLuma 包类型由后端按设置 / 库存决定
+    resolveRuntimeReadiness: async (
+        componentId: ComponentId,
+        hostId: string,
+    ): Promise<RuntimeReadiness> => {
+        if (isTauri) {
+            return invoke<RuntimeReadiness>('resolve_runtime_readiness', {
+                componentId,
+                hostId,
+            });
+        }
+        return withMockDelay(mockRuntimeReadiness(componentId, hostId), 150);
     },
 
     // QQ 系统依赖检测（仅 Linux 远端）。

@@ -34,6 +34,7 @@ import { mockHosts } from '../../core/ipc/mock/component.mock';
 import type { Os, ComponentInfo, ComponentDetectResult } from '../../core/ipc/types';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import { isHostReachableFromCache } from '../remote/useIsHostReachable';
+import { RUNTIME_READINESS_QUERY_KEY } from './useRuntimeReadiness';
 
 type DetectQuery = UseQueryResult<ComponentDetectResult, Error>;
 
@@ -167,6 +168,7 @@ function useComponentsData(options: ComponentsDataOptions = {}): ComponentsData 
                     if (report.success) {
                         autoConnectCooldownUntil.delete(profile.id);
                         queryClient.invalidateQueries({ queryKey: ['componentDetect'] });
+                        queryClient.invalidateQueries({ queryKey: [RUNTIME_READINESS_QUERY_KEY] });
                         queryClient.invalidateQueries({ queryKey: ['servers'] });
                     } else {
                         autoConnectCooldownUntil.set(
@@ -222,6 +224,7 @@ function useComponentsData(options: ComponentsDataOptions = {}): ComponentsData 
             void queryClient.invalidateQueries({ queryKey: ['servers'] });
             void queryClient.invalidateQueries({ queryKey: ['docker'] });
             void queryClient.invalidateQueries({ queryKey: ['docker', 'containers'] });
+            void queryClient.invalidateQueries({ queryKey: [RUNTIME_READINESS_QUERY_KEY] });
             void catalogQuery.refetch();
             for (const q of detectQueries) void q.refetch();
         },

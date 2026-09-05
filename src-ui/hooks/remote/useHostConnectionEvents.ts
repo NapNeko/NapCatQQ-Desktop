@@ -15,6 +15,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { subscribeDomainEvents } from '../../core/services/domain-event-hub';
 import type { DomainEvent } from '../../core/ipc/types';
+import { RUNTIME_READINESS_QUERY_KEY } from '../components/useRuntimeReadiness';
 
 /**
  * 常驻监听远端主机连接健康事件。
@@ -59,6 +60,10 @@ export function useHostConnectionEvents(): void {
                         );
                     },
                 });
+                // ['runtimeReadiness', hostId, componentId]
+                queryClient.invalidateQueries({
+                    queryKey: [RUNTIME_READINESS_QUERY_KEY, remoteHostId],
+                });
 
                 // 恢复链路增强（核心修复用户报告的问题）：
                 // 只 invalidate 有时不够（尤其当相关 observer 有 staleTime、或 Bot 列表/配置页
@@ -83,6 +88,9 @@ export function useHostConnectionEvents(): void {
                                 key[2] === remoteHostId
                             );
                         },
+                    });
+                    void queryClient.refetchQueries({
+                        queryKey: [RUNTIME_READINESS_QUERY_KEY, remoteHostId],
                     });
                 }
 

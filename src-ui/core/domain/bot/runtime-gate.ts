@@ -1,14 +1,15 @@
-// Bot 启动门禁：配置页提示、保存阻断、列表启动阻断。组件链见 remoteDirectRunChain。
+// Bot 启动门禁：配置页提示、保存阻断、列表启动阻断。
+// 直接运行的组件状态来自后端 RuntimeReadiness，这里只决定文案与阻断。
 
 import type { BotConfig } from '../../ipc/generated/domain/BotConfig';
 import type { BackendType } from '../../ipc/generated/domain/BackendType';
+import type { RuntimeReadiness } from '../../ipc/generated/domain/RuntimeReadiness';
 import {
-    remoteDirectRunChain,
-    localDirectRunChain,
-    componentIdToDisplayName,
-    type DirectRunComponentId,
-} from './remote-direct-run-deps';
-import type { SnowLumaLinuxPackage } from '../../ipc/generated/domain/SnowLumaLinuxPackage';
+    describeBlocking,
+    targetDisplayName,
+    unknownNodes,
+    type ComponentNames,
+} from '../components/readiness';
 import { isRuntimeTargetLocal } from './runtime-target';
 
 export type RuntimeRequirement =
@@ -53,16 +54,10 @@ export function describeRuntimeRequirement(req: RuntimeRequirement): string {
 
 // ========== 状态聚合 ==========
 
-export interface LocalRuntimeStatus {
-    installed: Partial<Record<DirectRunComponentId, boolean | undefined>>;
+/** 直接运行（本机 / 远端）的框架 + 依赖状态 */
+export interface DirectRuntimeStatus {
+    readiness?: RuntimeReadiness | null;
     probing: boolean;
-    snowlumaLinuxPackage?: SnowLumaLinuxPackage | null;
-}
-
-export interface RemoteDirectStatus {
-    installed: Partial<Record<DirectRunComponentId, boolean | undefined>>;
-    probing: boolean;
-    snowlumaLinuxPackage?: SnowLumaLinuxPackage | null;
 }
 
 export interface DockerStatusLite {
@@ -85,11 +80,28 @@ export interface RemoteTransportStatus {
 
 export interface RuntimeGateArgs {
     config: BotConfig;
-    local?: LocalRuntimeStatus;
-    remoteDirect?: RemoteDirectStatus; // 仅当 remote-direct 时使用
+    local?: DirectRuntimeStatus;
+    remoteDirect?: DirectRuntimeStatus; // 仅当 remote-direct 时使用
     docker?: DockerStatusLite;         // 仅当 remote-docker 时使用
     /** 仅当涉及远端主机时提供；useBotRuntimeStartGate 负责填充。 */
     remoteTransport?: RemoteTransportStatus;
+    /** 组件 id → 显示名（catalog）；缺省显示 id */
+    componentNames?: ComponentNames;
+}
+
+function directBlockReason(
+    st: DirectRuntimeStatus | undefined,
+    where: '本机' | '远程主机',
+    names: ComponentNames | undefined,
+): string | null {
+    if (!st) return `正在检测${where}运行时状态...`;
+    if (!st.readiness) {
+        return st.probing ? `正在确认${where}运行时组件，请稍后再启动` : null;
+    }
+    const blocking = describeBlocking(st.readiness, names);
+    if (!blocking) return null;
+    const hint = where === '本机' ? '请到「组件」页安装后再启动' : '请到「组件」页为该主机安装后再启动';
+    return `${where}${blocking}，${hint}`;
 }
 
 /** 计算启动阻断原因（返回非空字符串表示不能启动）。 */
@@ -110,31 +122,11 @@ export function runtimeStartBlockReason(args: RuntimeGateArgs): string | null {
     }
 
     if (req.kind === 'local-direct') {
-        const st = args.local;
-        if (!st) return '正在检测本机运行时状态...';
-        const chain = localDirectRunChain(req.backend, st.snowlumaLinuxPackage);
-        const missing = chain.filter((id) => st.installed[id] === false);
-        if (missing.length > 0) {
-            return `本机缺少 ${missing.map(componentIdToDisplayName).join('、')}，请到「组件」页安装后再启动`;
-        }
-        if (chain.some((id) => st.installed[id] === undefined)) {
-            return '正在确认本机运行时组件，请稍后再启动';
-        }
-        return null;
+        return directBlockReason(args.local, '本机', args.componentNames);
     }
 
     if (req.kind === 'remote-direct') {
-        const st = args.remoteDirect;
-        if (!st) return '正在检测远程主机组件...';
-        const chain = remoteDirectRunChain(req.backend, st.snowlumaLinuxPackage);
-        const missing = chain.filter((id) => st.installed[id] === false);
-        if (missing.length > 0) {
-            return `远程主机缺少 ${missing.map(componentIdToDisplayName).join('、')}，请到「组件」页为该主机安装后再启动`;
-        }
-        if (chain.some((id) => st.installed[id] === undefined)) {
-            return '正在确认远程主机组件，请稍后再启动';
-        }
-        return null;
+        return directBlockReason(args.remoteDirect, '远程主机', args.componentNames);
     }
 
     // remote-docker 复用现有 docker 逻辑（这里只做简单兜底，真实阻断仍由 docker 门禁主负责）
@@ -153,12 +145,9 @@ export function runtimeSaveBlockReason(args: RuntimeGateArgs): string | null {
 
     const req = getRuntimeRequirement(args.config);
     if (req?.kind === 'remote-direct') {
-        const st = args.remoteDirect;
-        if (st) {
-            const chain = remoteDirectRunChain(req.backend, st.snowlumaLinuxPackage);
-            if (chain.some((id) => st.installed[id] === false)) {
-                return '远程直接运行依赖不完整，保存后也无法启动。请先安装缺失组件。';
-            }
+        const readiness = args.remoteDirect?.readiness;
+        if (readiness && describeBlocking(readiness, args.componentNames)) {
+            return '远程直接运行依赖不完整，保存后也无法启动。请先安装缺失组件。';
         }
     }
     return null;
@@ -179,36 +168,27 @@ export function runtimeReadinessNotice(args: RuntimeGateArgs): {
         };
     }
 
-    if (req.kind === 'local-direct') {
-        const st = args.local;
-        if (!st || st.probing) {
-            return { tone: 'neutral', text: '正在检测本机运行时组件...' };
+    if (req.kind === 'local-direct' || req.kind === 'remote-direct') {
+        const where = req.kind === 'local-direct' ? '本机' : '远程主机';
+        const st = req.kind === 'local-direct' ? args.local : args.remoteDirect;
+        if (!st || st.probing || !st.readiness) {
+            return { tone: 'neutral', text: `正在检测${where}运行时组件...` };
         }
-        const chain = localDirectRunChain(req.backend, st.snowlumaLinuxPackage);
-        const missing = chain.filter((id) => st.installed[id] === false);
-        if (missing.length > 0) {
-            return {
-                tone: 'warn',
-                text: `本机缺少 ${missing.map(componentIdToDisplayName).join('、')}，请到「组件」页安装后再启动`,
-            };
+        const blocking = describeBlocking(st.readiness, args.componentNames);
+        if (blocking) {
+            return { tone: 'warn', text: `${where}${blocking}，请到「组件」页安装` };
         }
-        return { tone: 'ok', text: '本机运行时组件已就绪' };
-    }
-
-    if (req.kind === 'remote-direct') {
-        const st = args.remoteDirect;
-        if (!st || st.probing) {
-            return { tone: 'neutral', text: '正在检测远程主机组件...' };
+        const unknown = unknownNodes(st.readiness);
+        if (unknown.length) {
+            const names = unknown
+                .map((n) => targetDisplayName(n.target, args.componentNames))
+                .join('、');
+            return { tone: 'neutral', text: `${where}未能确认 ${names}，启动时再检查` };
         }
-        const chain = remoteDirectRunChain(req.backend, st.snowlumaLinuxPackage);
-        const missing = chain.filter((id) => st.installed[id] === false);
-        if (missing.length > 0) {
-            return {
-                tone: 'warn',
-                text: `远程主机缺少 ${missing.map(componentIdToDisplayName).join('、')}，请到「组件」页安装`,
-            };
-        }
-        return { tone: 'ok', text: '远程直接运行依赖已就绪' };
+        return {
+            tone: 'ok',
+            text: where === '本机' ? '本机运行时组件已就绪' : '远程直接运行依赖已就绪',
+        };
     }
 
     // docker 由 dockerReadinessNotice 主导，这里只做兜底

@@ -1,7 +1,5 @@
-// Bot 运行时启动/保存门禁 hook（最终正确实现版）。
-//
-// 所有 hooks 在顶层调用，数量由本轮涉及的 host 集合决定（稳定）。
-// 然后 gateArgs / startBlock / saveBlock 只是读 map + 纯计算。
+// Bot 运行时启动/保存门禁 hook。
+// 直接运行的框架 + 依赖状态由后端 resolve_runtime_readiness 给出，这里只按 (host, backend) 取一次。
 
 import { useCallback, useMemo } from 'react';
 import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
@@ -13,20 +11,13 @@ import {
     type RuntimeGateArgs,
     type RemoteTransportStatus,
 } from '../../core/domain/bot/runtime-gate';
-import { useHostComponentInstalled } from '../components/useRemoteHostComponentInstalled';
-import {
-    inferSnowLumaLinuxPackageFromInventory,
-    inventoryInstalledHints,
-} from '../../core/domain/bot/remote-direct-run-deps';
+import { useComponentNames, useRuntimeReadinessMany } from '../components/useRuntimeReadiness';
 import { useDockerHosts } from '../docker/useDockerHosts';
-import {
-    dockerHostIdForConfig,
-} from '../../core/domain/bot/docker-start-gate';
-import { isRuntimeTargetLocal } from '../../core/domain/bot/runtime-target';
+import { dockerHostIdForConfig } from '../../core/domain/bot/docker-start-gate';
 import { useQuery } from '@tanstack/react-query';
 import { serverService } from '../../core/services/server.service';
 import { isTauri } from '../../core/ipc/transport';
-import { settingsService } from '../../core/services/settings.service';
+import { isHostReachableFromCache } from '../remote/useIsHostReachable';
 
 export function useBotRuntimeStartGate(
     configByBot: Record<string, BotConfig | undefined | null>,
@@ -34,25 +25,6 @@ export function useBotRuntimeStartGate(
     startBlock: (botId: string) => string | null;
     saveBlock: (config: BotConfig) => string | null;
 } {
-    // 1. 收集本轮所有涉及的主机（'local' + remote:*）
-    const relevantHosts = useMemo(() => {
-        const hosts = new Set<string>();
-        for (const c of Object.values(configByBot)) {
-            if (!c) continue;
-            if (isRuntimeTargetLocal(c.bot.runtime_target)) {
-                hosts.add('local');
-            } else {
-                const rt: any = c.bot.runtime_target;
-                const sid = rt?.server_id ?? rt;
-                if (sid) hosts.add(`remote:${sid}`);
-            }
-            const dHost = dockerHostIdForConfig(c);
-            if (dHost) hosts.add(dHost);
-        }
-        return [...hosts];
-    }, [configByBot]);
-
-    // 2. 服务器档案（transport + SnowLuma 完整包/lite，须在组件探测之前）
     const serversQuery = useQuery({
         queryKey: ['servers'],
         queryFn: () => serverService.list(),
@@ -60,125 +32,95 @@ export function useBotRuntimeStartGate(
         staleTime: 15_000,
     });
     const servers = serversQuery.data ?? [];
-    const settingsQuery = useQuery({
-        queryKey: ['appSettings'],
-        queryFn: settingsService.get,
-        enabled: isTauri,
-        staleTime: 15_000,
-    });
-    const localSnowlumaPackage = settingsQuery.data?.snowlumaPackage ?? null;
 
-    // 3. 顶层为每个 host 取两种 backend 的状态（hook 调用数量 = hosts.length × 2，稳定）
-    const statusByHost: Record<
-        string,
-        Record<BackendType, ReturnType<typeof useHostComponentInstalled>>
-    > = {};
+    // 直接运行的 (host, backend) 对；主机不可达时不发探测
+    const directTargets = useMemo(() => {
+        const seen = new Map<string, { hostId: string; backend: BackendType; enabled: boolean }>();
+        for (const c of Object.values(configByBot)) {
+            if (!c) continue;
+            const req = getRuntimeRequirement(c);
+            if (!req) continue;
+            const hostId =
+                req.kind === 'local-direct' ? 'local' : req.kind === 'remote-direct' ? req.hostId : null;
+            if (!hostId) continue;
+            const key = `${hostId}|${req.backend}`;
+            if (!seen.has(key)) {
+                seen.set(key, {
+                    hostId,
+                    backend: req.backend,
+                    enabled: isHostReachableFromCache(hostId, servers),
+                });
+            }
+        }
+        return [...seen.values()];
+    }, [configByBot, servers]);
+    const readinessByTarget = useRuntimeReadinessMany(directTargets);
+    const componentNames = useComponentNames();
 
-    for (const h of relevantHosts) {
-        const serverId = h.startsWith('remote:') ? h.slice('remote:'.length) : null;
-        const profile = serverId ? servers.find((p) => p.id === serverId) : undefined;
-        const slPkg = inferSnowLumaLinuxPackageFromInventory(profile?.inventory);
-        // eslint-disable-next-line react-hooks/rules-of-hooks
-        statusByHost[h] = {
-            napcat: useHostComponentInstalled(h, 'napcat'),
-            snowluma: useHostComponentInstalled(
-                h,
-                'snowluma',
-                h === 'local' ? localSnowlumaPackage : slPkg,
-            ),
-        };
-    }
-
-    // 4. Docker 状态（复用）
-    const dockerHostIds = relevantHosts.filter((h) => h.startsWith('remote:'));
+    const dockerHostIds = useMemo(() => {
+        const hosts = new Set<string>();
+        for (const c of Object.values(configByBot)) {
+            const h = c ? dockerHostIdForConfig(c) : null;
+            if (h) hosts.add(h);
+        }
+        return [...hosts];
+    }, [configByBot]);
     const { statusByHost: dockerStatusByHost, probingByHost: dockerProbingByHost } =
         useDockerHosts(dockerHostIds);
 
-    // 5. 构造 gateArgs（纯读 + 计算）
+    const transportFor = useCallback(
+        (hostId: string): RemoteTransportStatus => {
+            const serverId = hostId.startsWith('remote:') ? hostId.slice('remote:'.length) : hostId;
+            const profile = servers.find((p) => p.id === serverId);
+            return {
+                reachable: profile ? profile.state !== 'failed' : false,
+                label: profile
+                    ? profile.name?.trim() || profile.host?.trim() || profile.id
+                    : serverId,
+            };
+        },
+        [servers],
+    );
+
     const gateArgs = useCallback(
         (config: BotConfig): RuntimeGateArgs => {
             const req = getRuntimeRequirement(config);
-            const out: RuntimeGateArgs = { config };
-
+            const out: RuntimeGateArgs = { config, componentNames };
             if (!req) return out;
 
             if (req.kind === 'local-direct') {
-                const st = statusByHost['local']?.[config.bot.backend_type];
-                out.local = {
-                    installed: st ?? {},
-                    probing: st ? Object.values(st).some((v) => v === undefined) : true,
-                    snowlumaLinuxPackage: localSnowlumaPackage,
-                };
+                const st = readinessByTarget[`local|${req.backend}`];
+                out.local = { readiness: st?.readiness, probing: st?.probing ?? true };
             } else if (req.kind === 'remote-direct') {
-                const st = statusByHost[req.hostId]?.[config.bot.backend_type];
-                const serverId = req.hostId.startsWith('remote:')
-                    ? req.hostId.slice('remote:'.length)
-                    : req.hostId;
-                const profile = servers.find((p) => p.id === serverId);
-                const hints = inventoryInstalledHints(profile?.inventory);
-                const installed = { ...st, ...hints };
-                out.remoteDirect = {
-                    installed,
-                    probing: Object.values(installed).some((v) => v === undefined),
-                    snowlumaLinuxPackage: inferSnowLumaLinuxPackageFromInventory(
-                        profile?.inventory,
-                    ),
-                };
-
-                const reachable = profile ? profile.state !== 'failed' : false;
-                const label = profile
-                    ? (profile.name?.trim() || profile.host?.trim() || profile.id)
-                    : serverId;
-                out.remoteTransport = {
-                    reachable,
-                    label,
-                } satisfies RemoteTransportStatus;
+                const st = readinessByTarget[`${req.hostId}|${req.backend}`];
+                out.remoteDirect = { readiness: st?.readiness, probing: st?.probing ?? true };
+                out.remoteTransport = transportFor(req.hostId);
             } else if (req.kind === 'remote-docker') {
-                const hostId = req.hostId;
-                const dockerStatus = dockerStatusByHost[hostId];
-                const probing = dockerProbingByHost[hostId] ?? false;
+                const dockerStatus = dockerStatusByHost[req.hostId];
                 out.docker = {
                     installed: !!dockerStatus?.installed,
                     daemonRunning: !!dockerStatus?.daemonRunning,
                     composeAvailable: !!dockerStatus?.composeAvailable,
-                    probing,
+                    probing: dockerProbingByHost[req.hostId] ?? false,
                 };
-
-                // remote-docker 也需要 transport 检查
-                const serverId = hostId.startsWith('remote:')
-                    ? hostId.slice('remote:'.length)
-                    : hostId;
-                const profile = servers.find((p) => p.id === serverId);
-                const reachable = profile ? profile.state !== 'failed' : false;
-                const label = profile
-                    ? (profile.name?.trim() || profile.host?.trim() || profile.id)
-                    : serverId;
-                out.remoteTransport = {
-                    reachable,
-                    label,
-                } satisfies RemoteTransportStatus;
+                out.remoteTransport = transportFor(req.hostId);
             }
-
             return out;
         },
-        [statusByHost, dockerStatusByHost, dockerProbingByHost, servers],
+        [readinessByTarget, componentNames, dockerStatusByHost, dockerProbingByHost, transportFor],
     );
 
     const startBlock = useCallback(
         (botId: string) => {
             const config = configByBot[botId];
             if (!config) return null;
-            const args = gateArgs(config);
-            return runtimeStartBlockReason(args);
+            return runtimeStartBlockReason(gateArgs(config));
         },
         [configByBot, gateArgs],
     );
 
     const saveBlock = useCallback(
-        (config: BotConfig) => {
-            const args = gateArgs(config);
-            return runtimeSaveBlockReason(args);
-        },
+        (config: BotConfig) => runtimeSaveBlockReason(gateArgs(config)),
         [gateArgs],
     );
 

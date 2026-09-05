@@ -15,15 +15,12 @@ import {
 import { GsapPresence } from '../../../../shared/ui/motion/GsapPresence';
 import { useServerManager } from '../../../../hooks/remote/useServerManager';
 import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
-import { useHostComponentInstalled } from '../../../../hooks/components/useRemoteHostComponentInstalled';
-import { useBackendSettings } from '../../../../hooks/preferences/useBackendSettings';
-import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
 import {
-    remoteDirectRunChain,
-    localDirectRunChain,
-    componentIdToDisplayName,
-    inferSnowLumaLinuxPackageFromInventory,
-} from '../../../../core/domain/bot/remote-direct-run-deps';
+    useComponentNames,
+    useRuntimeReadiness,
+} from '../../../../hooks/components/useRuntimeReadiness';
+import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
+import { describeBlocking } from '../../../../core/domain/components/readiness';
 import { isRuntimeTargetConcreteRemote } from '../../../../core/domain/bot/runtime-target';
 import { dockerReadinessNotice } from '../../../../core/domain/bot/docker-start-gate';
 import {
@@ -71,7 +68,6 @@ const TIME_UNIT_ITEMS = [
 
 export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityTabProps) {
     const { servers, isLoading: serversLoading } = useServerManager();
-    const { settings: appSettings } = useBackendSettings();
 
     const isRemote = !isRuntimeTargetLocal(data.runtime_target);
     const runtimeMode = runtimeModeForTarget(data.runtime_target);
@@ -101,29 +97,13 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
     const { statusByHost, probingByHost, imageReadyByHost } =
         useDockerHosts(dockerHostIds);
 
-    const remoteProfileId = useMemo(
-        () => (isRemote ? serverProfileIdFromRuntimeTarget(data.runtime_target) : null),
-        [isRemote, data.runtime_target],
-    );
-    const snowlumaLinuxPackage = useMemo(() => {
-        if (!remoteProfileId || data.backend_type !== 'snowluma') return null;
-        const profile = servers.find((s) => s.id === remoteProfileId);
-        return inferSnowLumaLinuxPackageFromInventory(profile?.inventory);
-    }, [remoteProfileId, data.backend_type, servers]);
-
-    const componentInstalled = useHostComponentInstalled(
-        remoteHostId,
+    // 直接运行的框架 + 依赖状态由后端解析；SnowLuma Full/Lite 也由后端按设置 / 库存判定
+    const remoteReadiness = useRuntimeReadiness(
+        isRemote && deploymentType === 'native' ? remoteHostId : null,
         data.backend_type,
-        snowlumaLinuxPackage,
     );
-
-    const localSnowlumaPackage =
-        data.backend_type === 'snowluma' ? appSettings?.snowlumaPackage ?? null : null;
-    const localInstalled = useHostComponentInstalled(
-        'local',
-        data.backend_type,
-        localSnowlumaPackage,
-    );
+    const localReadiness = useRuntimeReadiness(isRemote ? null : 'local', data.backend_type);
+    const componentNames = useComponentNames();
 
     const remoteReachable = useIsHostReachable(remoteHostId);
     const remoteTransportFailed = isRemote && remoteHostId != null && !remoteReachable;
@@ -132,23 +112,10 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         if (!isRemote || deploymentType !== 'native' || !remoteHostId) {
             return null;
         }
-        const chain = remoteDirectRunChain(data.backend_type, snowlumaLinuxPackage);
-        const missing: string[] = [];
-        for (const id of chain) {
-            if (componentInstalled[id] === false) {
-                missing.push(componentIdToDisplayName(id));
-            }
-        }
-        if (missing.length === 0) return null;
-        return `未安装 ${missing.join('、')}，请安装`;
-    }, [
-        isRemote,
-        deploymentType,
-        remoteHostId,
-        data.backend_type,
-        componentInstalled,
-        snowlumaLinuxPackage,
-    ]);
+        if (!remoteReadiness.readiness) return null;
+        const blocking = describeBlocking(remoteReadiness.readiness, componentNames);
+        return blocking ? `远程主机${blocking}，请到「组件」页安装` : null;
+    }, [isRemote, deploymentType, remoteHostId, remoteReadiness.readiness, componentNames]);
 
     const onRuntimeModeChange = (mode: string) => {
         if (mode === 'local') {
@@ -331,20 +298,21 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
                     {!isRemote && (
                         (() => {
-                            const chain = localDirectRunChain(
-                                data.backend_type,
-                                localSnowlumaPackage,
+                            if (!localReadiness.readiness) {
+                                return localReadiness.probing ? (
+                                    <InlineNotice tone="neutral">正在检测本机运行时组件…</InlineNotice>
+                                ) : null;
+                            }
+                            const blocking = describeBlocking(
+                                localReadiness.readiness,
+                                componentNames,
                             );
-                            const missing = chain.filter((id) => localInstalled[id] === false);
-                            if (missing.length > 0) {
+                            if (blocking) {
                                 return (
                                     <InlineNotice tone="warn">
-                                        本机缺少 {missing.map(componentIdToDisplayName).join('、')}，请到「组件」页安装后再使用本机直接运行
+                                        本机{blocking}，请到「组件」页安装后再使用本机直接运行
                                     </InlineNotice>
                                 );
-                            }
-                            if (chain.some((id) => localInstalled[id] === undefined)) {
-                                return <InlineNotice tone="neutral">正在检测本机运行时组件…</InlineNotice>;
                             }
                             return null;
                         })()

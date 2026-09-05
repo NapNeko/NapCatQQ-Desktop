@@ -9,8 +9,12 @@ import type {
     ComponentDetectResult,
     ComponentId,
     ComponentInfo,
+    DependencyNode,
+    DependencyPlan,
     DomainEvent,
     ProgressEvent,
+    RequirementPhase,
+    RuntimeReadiness,
     StepKind,
 } from '../types';
 import { emitMockEvent } from './events.mock';
@@ -193,6 +197,49 @@ export function mockDetect(
         host_id: hostId,
         detected: entry,
         supported: true,
+    };
+}
+
+// ─── 依赖解析假数据 ───────────────────────────────────────────────────
+//
+// 真依赖图在 Rust Component::requirements()；这里只给浏览器预览一张够用的假边表。
+
+const mockEdges: Partial<Record<ComponentId, ComponentId[]>> = {
+    napcat: ['qq'],
+    snowluma: ['qq', 'novnc'],
+};
+
+function mockNode(id: ComponentId, hostId: string, requiredBy: ComponentId[]): DependencyNode {
+    const detect = mockDetect(id, hostId);
+    const status: DependencyNode['status'] = !detect.supported
+        ? { state: 'unsupported' }
+        : detect.detected
+          ? { state: 'satisfied', version: detect.detected.version, source: detect.detected.source }
+          : { state: 'missing' };
+    return {
+        target: { kind: 'component', id },
+        required_by: requiredBy,
+        version_reqs: [],
+        status,
+    };
+}
+
+export function mockDependencyPlan(
+    root: ComponentId,
+    hostId: string,
+    phase: RequirementPhase,
+): DependencyPlan {
+    const host = mockHosts.find((h) => h.host_id === hostId);
+    const nodes = (mockEdges[root] ?? [])
+        .filter((id) => id !== 'novnc' || host?.locality === 'remote')
+        .map((id) => mockNode(id, hostId, [root]));
+    return { root, host_id: hostId, phase, nodes };
+}
+
+export function mockRuntimeReadiness(root: ComponentId, hostId: string): RuntimeReadiness {
+    return {
+        root: mockNode(root, hostId, []),
+        plan: mockDependencyPlan(root, hostId, 'run'),
     };
 }
 
