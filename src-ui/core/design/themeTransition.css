@@ -1,25 +1,267 @@
-/* 主题切换圆形扩散 — View Transitions 伪元素动画。
-   新主题层从触发点以 clip-path circle 扩张，旧主题层静止垫底被替换。
-   圆心 / 终态半径 / 时长由 themeTransition.ts 在过渡开始前写入
-   --theme-reveal-* 变量；动画全程跑在合成器侧。 */
+/* 主题切换光波揭示 — View Transitions 伪元素动画。
+   所有半径绑同一个注册属性 --theme-reveal-hole（当前主波前半径）：
+     new  层：柔边圆从圆心撑开；主波后面固定距离处挖两道半透明回声环；整层从"发热"冷却回正常色
+     old  层：在波前外侧让出一圈空隙再渐显；随过渡褪色变暗
+     group 背景：跟着半径跑的光环（白热芯线 + 品牌色晕）和两道回声带，只在上面两层让出的地方可见
+   回声环用固定落后距离而不是比例：起步时它们从圆心依次冒出，收尾时跟主波一起出屏，不会半路被截断。
+   圆心 / 终态半径 / 时长由 themeTransition.ts 在过渡开始前写入 --theme-reveal-* 变量。 */
 
-/* 关掉 UA 默认的交叉淡入：两层动画全部自己控制。 */
+@property --theme-reveal-hole {
+    syntax: '<length>';
+    inherits: true;
+    initial-value: 0px;
+}
+
+/* 档位参数全部收在这两条 html 规则里，伪元素规则只引用变量。
+   不要在 html[data-theme-reveal='rich']::view-transition-*(root) 上直接覆盖属性：
+   下面通用规则带 :not([data-theme-reveal='basic'])，特异性比单个属性选择器高，rich 覆盖会静默失效。 */
+html[data-theme-reveal] {
+    --theme-reveal-inner: 28px;
+    --theme-reveal-outer: 72px;
+    --theme-reveal-core: 5px;
+    --theme-reveal-echo1: 80px;
+    --theme-reveal-echo2: 170px;
+    --theme-reveal-echo-w: 12px;
+    --theme-reveal-echo-a: 0.6;
+    --theme-reveal-ease: cubic-bezier(0.3, 0.75, 0.35, 1);
+    --theme-reveal-new-anim: theme-reveal-hole, theme-reveal-new-heat;
+    --theme-reveal-old-anim: theme-reveal-hole, theme-reveal-old-dim;
+}
+
+html[data-theme-reveal='rich'] {
+    --theme-reveal-inner: 44px;
+    --theme-reveal-outer: 120px;
+    --theme-reveal-core: 6px;
+    --theme-reveal-echo1: 100px;
+    --theme-reveal-echo2: 210px;
+    --theme-reveal-echo-w: 16px;
+    --theme-reveal-echo-a: 0.42;
+    --theme-reveal-ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --theme-reveal-new-anim: theme-reveal-hole, theme-reveal-new-heat-rich;
+    --theme-reveal-old-anim: theme-reveal-hole, theme-reveal-old-dim-rich;
+}
+
+/* 兜底定义；themeTransition.ts 每次过渡前会用字面量终值的同名 @keyframes 覆盖它 */
+@keyframes theme-reveal-hole {
+    from {
+        --theme-reveal-hole: 0px;
+    }
+
+    to {
+        --theme-reveal-hole: var(--theme-reveal-r, 150vmax);
+    }
+}
+
+/* 三层同一时长、同一缓动，否则光环会跟波前脱开。蓄力已经做完铺垫，这里直接释放：快出慢收。 */
+html[data-theme-reveal]::view-transition-group(root),
 html[data-theme-reveal]::view-transition-old(root),
 html[data-theme-reveal]::view-transition-new(root) {
-    animation-duration: var(--theme-reveal-dur, 1500ms);
+    animation-duration: var(--theme-reveal-dur, 1100ms);
+    animation-timing-function: var(--theme-reveal-ease);
+    animation-fill-mode: both;
 }
 
-/* 旧主题层：静止铺满垫底（空关键帧压掉 UA 默认淡入淡出）。 */
-html[data-theme-reveal]::view-transition-old(root) {
+/* 光环 + 回声带。品牌色变量从 html 继承，此时 data-theme 已是新主题，所以晕色跟新主题走。 */
+html[data-theme-reveal]:not([data-theme-reveal='basic'])::view-transition-group(root) {
+    animation-name: theme-reveal-hole;
+    background: radial-gradient(circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
+            transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) - var(--theme-reveal-echo-w)),
+            color-mix(in srgb, var(--accent-400) 70%, var(--brand-300)) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2)),
+            transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) + var(--theme-reveal-echo-w)),
+            transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) - var(--theme-reveal-echo-w)),
+            var(--brand-300) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1)),
+            transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) + var(--theme-reveal-echo-w)),
+            transparent calc(var(--theme-reveal-hole) - var(--theme-reveal-inner)),
+            color-mix(in srgb, var(--brand-400) 55%, transparent) calc(var(--theme-reveal-hole) - var(--theme-reveal-core)),
+            var(--brand-50) var(--theme-reveal-hole),
+            var(--brand-300) calc(var(--theme-reveal-hole) + var(--theme-reveal-core)),
+            color-mix(in srgb, var(--brand-400) 60%, transparent) calc(var(--theme-reveal-hole) + var(--theme-reveal-outer) * 0.3),
+            color-mix(in srgb, var(--accent-400) 25%, transparent) calc(var(--theme-reveal-hole) + var(--theme-reveal-outer) * 0.65),
+            transparent calc(var(--theme-reveal-hole) + var(--theme-reveal-outer)));
+}
+
+/* 新主题层：圆内实、靠波前一段渐隐让光环从内侧透出来；两道回声环处半透明，露出下面 group 的回声带。
+   同时整层从高亮高饱和冷却回正常：刚被揭开的区域像被光波"烫"过。 */
+html[data-theme-reveal]:not([data-theme-reveal='basic'])::view-transition-new(root) {
+    animation-name: var(--theme-reveal-new-anim);
+    -webkit-mask-image: radial-gradient(circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
+            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) - var(--theme-reveal-echo-w)),
+            rgb(0 0 0 / var(--theme-reveal-echo-a)) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2)),
+            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) + var(--theme-reveal-echo-w)),
+            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) - var(--theme-reveal-echo-w)),
+            rgb(0 0 0 / var(--theme-reveal-echo-a)) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1)),
+            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) + var(--theme-reveal-echo-w)),
+            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-inner)),
+            transparent var(--theme-reveal-hole));
+    mask-image: radial-gradient(circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
+            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) - var(--theme-reveal-echo-w)),
+            rgb(0 0 0 / var(--theme-reveal-echo-a)) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2)),
+            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo2) + var(--theme-reveal-echo-w)),
+            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) - var(--theme-reveal-echo-w)),
+            rgb(0 0 0 / var(--theme-reveal-echo-a)) calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1)),
+            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-echo1) + var(--theme-reveal-echo-w)),
+            #000 calc(var(--theme-reveal-hole) - var(--theme-reveal-inner)),
+            transparent var(--theme-reveal-hole));
+}
+
+@keyframes theme-reveal-new-heat {
+    from {
+        filter: brightness(1.16) saturate(1.25);
+    }
+
+    to {
+        filter: brightness(1) saturate(1);
+    }
+}
+
+@keyframes theme-reveal-new-heat-rich {
+    0% {
+        filter: brightness(1.32) saturate(1.5);
+    }
+
+    45% {
+        filter: brightness(1.1) saturate(1.2);
+    }
+
+    100% {
+        filter: brightness(1) saturate(1);
+    }
+}
+
+/* 旧主题层：波前外侧先让出一小圈纯光，再随光晕渐显回旧内容；整层随过渡褪色变暗，像被新主题"挤走" */
+html[data-theme-reveal]:not([data-theme-reveal='basic'])::view-transition-old(root) {
+    animation-name: var(--theme-reveal-old-anim);
+    -webkit-mask-image: radial-gradient(circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
+            transparent calc(var(--theme-reveal-hole) + var(--theme-reveal-core)),
+            #000 calc(var(--theme-reveal-hole) + var(--theme-reveal-outer)));
+    mask-image: radial-gradient(circle at var(--theme-reveal-x, 50%) var(--theme-reveal-y, 50%),
+            transparent calc(var(--theme-reveal-hole) + var(--theme-reveal-core)),
+            #000 calc(var(--theme-reveal-hole) + var(--theme-reveal-outer)));
+}
+
+@keyframes theme-reveal-old-dim {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0.9;
+    }
+}
+
+@keyframes theme-reveal-old-dim-rich {
+    from {
+        opacity: 1;
+        filter: saturate(1) brightness(1);
+    }
+
+    to {
+        opacity: 0.78;
+        filter: saturate(0.55) brightness(0.92);
+    }
+}
+
+/* 点击点：themeTransition.ts 在换主题的同一帧挂三个带 view-transition-name 的元素，
+   它们只存在于新状态、只有 new 快照。1 号是一团光晕接住蓄力的闪光，2/3 号是错开时间炸开的涟漪环。 */
+html[data-theme-reveal]::view-transition-group(theme-origin-1),
+html[data-theme-reveal]::view-transition-group(theme-origin-2),
+html[data-theme-reveal]::view-transition-group(theme-origin-3) {
+    animation: none;
+}
+
+html[data-theme-reveal]::view-transition-new(theme-origin-1) {
+    animation: theme-origin-bloom calc(var(--theme-reveal-dur, 1100ms) * 0.5) cubic-bezier(0.16, 1, 0.3, 1) both;
+    transform-origin: center;
+}
+
+html[data-theme-reveal]::view-transition-new(theme-origin-2) {
+    animation: theme-origin-burst calc(var(--theme-reveal-dur, 1100ms) * 0.6) cubic-bezier(0.16, 1, 0.3, 1) calc(var(--theme-reveal-dur, 1100ms) * 0.05) both;
+    transform-origin: center;
+}
+
+html[data-theme-reveal]::view-transition-new(theme-origin-3) {
+    animation: theme-origin-burst calc(var(--theme-reveal-dur, 1100ms) * 0.66) cubic-bezier(0.16, 1, 0.3, 1) calc(var(--theme-reveal-dur, 1100ms) * 0.14) both;
+    transform-origin: center;
+}
+
+@keyframes theme-origin-bloom {
+    from {
+        transform: scale(0.5);
+        opacity: 1;
+    }
+
+    to {
+        transform: scale(2.4);
+        opacity: 0;
+    }
+}
+
+@keyframes theme-origin-burst {
+    0% {
+        transform: scale(0.3);
+        opacity: 0;
+    }
+
+    12% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(3.2);
+        opacity: 0;
+    }
+}
+
+.ndf-theme-origin-ring {
+    position: fixed;
+    z-index: 2147483000;
+    width: 120px;
+    height: 120px;
+    margin: -60px;
+    border-radius: 9999px;
+    border: 2px solid var(--brand-300);
+    box-shadow:
+        0 0 24px color-mix(in srgb, var(--brand-400) 70%, transparent),
+        inset 0 0 20px color-mix(in srgb, var(--accent-400) 45%, transparent);
+    pointer-events: none;
+}
+
+.ndf-theme-origin-ring[data-ring='1'] {
+    width: 240px;
+    height: 240px;
+    margin: -120px;
+    border: none;
+    box-shadow: none;
+    background: radial-gradient(circle,
+            var(--brand-50) 0,
+            color-mix(in srgb, var(--brand-300) 75%, transparent) 22%,
+            color-mix(in srgb, var(--brand-400) 35%, transparent) 48%,
+            transparent 72%);
+}
+
+.ndf-theme-origin-ring[data-ring='3'] {
+    border-width: 1.5px;
+    border-color: var(--accent-400);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent-400) 60%, transparent);
+}
+
+/* 蓄力画布：全屏盖在最上面，只画不接事件；themeTransition.ts 在截旧帧之前摘掉 */
+.ndf-theme-charge-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2147483000;
+    pointer-events: none;
+}
+
+/* basic：宿主不支持 @property 时退回硬边圆扩散（无光环、无蓄力） */
+html[data-theme-reveal='basic']::view-transition-old(root) {
     animation-name: theme-reveal-old-still;
-    animation-fill-mode: both;
 }
 
-/* 新主题层：圆从圆心扩张到覆盖全屏。缓动先快后缓，点击后立刻有反馈。 */
-html[data-theme-reveal]::view-transition-new(root) {
+html[data-theme-reveal='basic']::view-transition-new(root) {
     animation-name: theme-reveal-circle;
-    animation-timing-function: cubic-bezier(0.3, 0.75, 0.35, 1);
-    animation-fill-mode: both;
 }
 
 @keyframes theme-reveal-circle {
@@ -36,26 +278,4 @@ html[data-theme-reveal]::view-transition-new(root) {
 
     from,
     to {}
-}
-
-/* rich 档：expo-out 缓动（先快后缓收尾），旧主题层轻微缩小降透明做纵深。 */
-html[data-theme-reveal='rich']::view-transition-new(root) {
-    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-html[data-theme-reveal='rich']::view-transition-old(root) {
-    animation-name: theme-reveal-old-depth;
-    transform-origin: center;
-}
-
-@keyframes theme-reveal-old-depth {
-    from {
-        transform: scale(1);
-        opacity: 1;
-    }
-
-    to {
-        transform: scale(0.965);
-        opacity: 0.72;
-    }
 }

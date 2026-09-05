@@ -273,9 +273,9 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
         const level = draft.motionLevel;
         const speed = draft.motionSpeed;
 
-        // 圆形扩散揭示比旧水波扫屏轻量，基准取「体感 1× 下约 1.1s / 1.7s」；
-        // scaleDuration 在体感 1×（内部 speed 0.5）时会 ×2，所以这里的
-        // 字面量是目标秒数的一半。
+        // 这里是光波本体时长，基准取「体感 1× 下约 1.0s / 1.4s」；前面还有约 24% 的蓄力
+        // 由 playThemeTransition 自己按比例加。scaleDuration 在体感 1×（内部 speed 0.5）
+        // 时会 ×2，所以字面量是目标秒数的一半。
         let duration: number;
         let easing: string;
         if (!enabled) {
@@ -285,10 +285,10 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
             duration = 0;
             easing = 'ease-in-out';
         } else if (level === 'standard') {
-            duration = scaleDuration(0.55, speed);
+            duration = scaleDuration(0.5, speed);
             easing = 'ease-in-out';
         } else {
-            duration = scaleDuration(0.85, speed);
+            duration = scaleDuration(0.7, speed);
             easing = 'ease-in-out';
         }
 
