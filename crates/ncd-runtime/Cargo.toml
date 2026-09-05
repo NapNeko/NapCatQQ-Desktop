@@ -46,6 +46,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 ] }
 sha2 = "0.10"
 hex = "0.4"
+uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 quircs = "0.10.3"

@@ -43,7 +43,7 @@ pub async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettingsD
         let install_dir = state.data_root.join("components").join("SnowLuma");
         if install_dir.is_dir() {
             settings.snowluma_package = Some(
-                crate::commands::components::infer_local_snowluma_package(&state.data_root),
+                ncd_runtime::infer_local_snowluma_package(&state.data_root),
             );
             if let Ok(payload) = serde_json::to_value(&settings) {
                 let _ = store.write_json_atomic(&path, &payload);

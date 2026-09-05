@@ -168,20 +168,19 @@ pub use bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorSta
 pub use bot_config_repo_impl::LocalBotConfigRepo;
 pub use bot_manager::{BatchResult, BootstrapResult, BotManager, BotManagerError};
 pub use component_action_policy::{
-    ComponentTaskSpec, RemoteHostProbe, RemoteLayout, SystemPackagePrerequisite, asset_sha256,
-    collect_component_runtime_prerequisites, collect_component_runtime_prerequisites_for,
-    component_action_cancellable, component_action_needs_runtime_closure, component_catalog,
-    component_dedupe_key, component_needs_download_slot, component_needs_package_manager,
-    component_package_prerequisites, component_runtime_prerequisites, component_task_resources,
-    data_root_to_host_path, direct_runtime_dependency_ids, direct_runtime_dependency_ids_for,
-    infer_snowluma_linux_package, normalize_github_release_tag, parse_remote_host_probe_stdout,
-    require_remote_home, snowluma_github_release_tag, snowluma_linux_release_asset,
-    snowluma_windows_release_asset,
+    RemoteHostProbe, RemoteLayout, asset_sha256, component_action_cancellable,
+    component_action_needs_runtime_closure, component_catalog, component_dedupe_key,
+    component_needs_download_slot, component_needs_package_manager, component_task_resources,
+    data_root_to_host_path, infer_snowluma_linux_package, normalize_github_release_tag,
+    parse_remote_host_probe_stdout, require_remote_home, snowluma_github_release_tag,
+    snowluma_linux_release_asset, snowluma_windows_release_asset,
 };
 pub use component_factory::{BuildComponentCtx, build_component_for_host};
 pub use components::{
-    ClosureNode, ComponentBuilder, GRAPH_COMPONENT_IDS, ResolveCtx, catalog_version_reqs_for,
-    graph_component, render_dependency_graph, requirement_closure, resolve_dependencies,
+    ClosureNode, ComponentActionRequest, ComponentBuildInputs, ComponentBuilder,
+    ComponentExecutor, GRAPH_COMPONENT_IDS, ResolveCtx, catalog_version_reqs_for,
+    graph_component, infer_local_snowluma_package, render_dependency_graph, requirement_closure,
+    resolve_dependencies,
 };
 pub use config_store_impl::LocalConfigStore;
 pub use crash_bundle::{CrashBundleInput, desktop_output_dir, write_crash_bundle};

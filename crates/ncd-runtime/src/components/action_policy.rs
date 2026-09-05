@@ -1,16 +1,14 @@
 //! 组件动作策略（纯逻辑）
 //!
 //! 从 Layer4 command 下沉：任务资源、catalog 顺序、release tag / sha 辅助、远端布局
-//! 探测结果解析。依赖相关的函数只是 Component::requirements() 的适配器,不再自己
-//! 维护表。不含 Host I/O 与 task 提交。
+//! 探测结果解析。依赖闭包不在这里(见 graph.rs / resolver.rs)。不含 Host I/O 与 task 提交。
 
 use std::path::Path;
 use std::sync::Arc;
 
 use ncd_component::{
-    Component, ComponentId, ComponentInfo, DesktopSelfComponent, HostPackageGroup,
-    NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent,
-    Requirement, RequirementPhase, SnowLumaComponent,
+    Component, ComponentId, ComponentInfo, DesktopSelfComponent, NapCatComponent,
+    NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent, SnowLumaComponent,
 };
 use ncd_deploy::StepKind;
 use ncd_domain::DeploymentTaskResource;
@@ -18,15 +16,6 @@ use ncd_domain::SnowLumaLinuxPackage;
 use ncd_domain::release_snapshot::ReleaseInfo;
 pub use ncd_domain::{infer_snowluma_linux_package, is_bundled_snowluma_node};
 use ncd_host::{Arch, HostPath, Locality, Os};
-
-use crate::components::graph::graph_component;
-
-/// 单步组件任务规格（用于前置闭包与 dedupe）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ComponentTaskSpec {
-    pub component_id: ComponentId,
-    pub kind: StepKind,
-}
 
 /// 远端 NapCat / QQ 安装布局
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,29 +42,6 @@ impl RemoteHostProbe {
     }
 }
 
-/// Linux 上组件安装前可能需要的系统包前置
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SystemPackagePrerequisite {
-    ArchiveTool { command: String, package: String },
-    QqDependencies,
-}
-
-impl SystemPackagePrerequisite {
-    pub fn package_group(&self) -> String {
-        match self {
-            Self::ArchiveTool { command, .. } => format!("archive_tool:{command}"),
-            Self::QqDependencies => "qq_dependencies".to_string(),
-        }
-    }
-
-    pub fn title(&self) -> String {
-        match self {
-            Self::ArchiveTool { command, .. } => format!("准备系统工具 {command}"),
-            Self::QqDependencies => "安装 QQ 系统依赖".to_string(),
-        }
-    }
-}
-
 pub fn component_dedupe_key(host_id: &str, component_id: ComponentId, kind: StepKind) -> String {
     format!(
         "component:{}:{}:{}",
@@ -85,135 +51,12 @@ pub fn component_dedupe_key(host_id: &str, component_id: ComponentId, kind: Step
     )
 }
 
+/// 装 / 更新前要先把依赖闭包补齐;卸载 / 校验 / 单独装依赖不需要
 pub fn component_action_needs_runtime_closure(kind: StepKind) -> bool {
     matches!(
         kind,
         StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Update
     )
-}
-
-pub fn component_runtime_prerequisites(
-    component_id: ComponentId,
-    kind: StepKind,
-    host_os: Os,
-    host_locality: Locality,
-) -> Vec<ComponentTaskSpec> {
-    component_runtime_prerequisites_for(component_id, kind, host_os, host_locality, None)
-}
-
-/// 直接组件依赖 → EnsureInstalled 任务。只是 requirements() 的适配;
-/// `snowluma_linux_package` None 按 Full(完整包自带 node,不拉 Node)
-pub fn component_runtime_prerequisites_for(
-    component_id: ComponentId,
-    kind: StepKind,
-    host_os: Os,
-    host_locality: Locality,
-    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
-) -> Vec<ComponentTaskSpec> {
-    if !component_action_needs_runtime_closure(kind) {
-        return Vec::new();
-    }
-    graph_component(component_id, snowluma_linux_package.unwrap_or_default())
-        .requirements(host_os, host_locality)
-        .into_iter()
-        .filter(|req| req.applies_to(RequirementPhase::Install))
-        .filter_map(|req| req.component_id())
-        .map(|component_id| ComponentTaskSpec {
-            component_id,
-            kind: StepKind::EnsureInstalled,
-        })
-        .collect()
-}
-
-pub fn collect_component_runtime_prerequisites(
-    target: ComponentTaskSpec,
-    host_os: Os,
-    host_locality: Locality,
-) -> Vec<ComponentTaskSpec> {
-    collect_component_runtime_prerequisites_for(target, host_os, host_locality, None)
-}
-
-pub fn collect_component_runtime_prerequisites_for(
-    target: ComponentTaskSpec,
-    host_os: Os,
-    host_locality: Locality,
-    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
-) -> Vec<ComponentTaskSpec> {
-    let mut seen = Vec::new();
-    let mut ordered = Vec::new();
-    collect_component_runtime_prerequisites_inner(
-        target,
-        host_os,
-        host_locality,
-        snowluma_linux_package,
-        &mut seen,
-        &mut ordered,
-    );
-    ordered
-}
-
-fn collect_component_runtime_prerequisites_inner(
-    target: ComponentTaskSpec,
-    host_os: Os,
-    host_locality: Locality,
-    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
-    seen: &mut Vec<ComponentTaskSpec>,
-    ordered: &mut Vec<ComponentTaskSpec>,
-) {
-    for dep in component_runtime_prerequisites_for(
-        target.component_id,
-        target.kind,
-        host_os,
-        host_locality,
-        snowluma_linux_package,
-    ) {
-        if seen.contains(&dep) {
-            continue;
-        }
-        seen.push(dep);
-        collect_component_runtime_prerequisites_inner(
-            dep,
-            host_os,
-            host_locality,
-            snowluma_linux_package,
-            seen,
-            ordered,
-        );
-        ordered.push(dep);
-    }
-}
-
-pub fn direct_runtime_dependency_ids(
-    target: ComponentTaskSpec,
-    host_os: Os,
-    host_locality: Locality,
-    submitted: &[(ComponentTaskSpec, String)],
-) -> Vec<String> {
-    direct_runtime_dependency_ids_for(target, host_os, host_locality, submitted, None)
-}
-
-pub fn direct_runtime_dependency_ids_for(
-    target: ComponentTaskSpec,
-    host_os: Os,
-    host_locality: Locality,
-    submitted: &[(ComponentTaskSpec, String)],
-    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
-) -> Vec<String> {
-    component_runtime_prerequisites_for(
-        target.component_id,
-        target.kind,
-        host_os,
-        host_locality,
-        snowluma_linux_package,
-    )
-    .into_iter()
-    .filter_map(|dep| {
-        submitted
-            .iter()
-            .find(|(spec, _)| *spec == dep)
-            .map(|(_, task_id)| task_id.clone())
-    })
-    .collect()
 }
 
 pub fn component_task_resources(
@@ -281,32 +124,6 @@ pub fn component_action_cancellable(
     host_locality: Locality,
 ) -> bool {
     !component_needs_package_manager(component_id, kind, host_os, host_locality)
-}
-
-/// 直接主机级依赖(命令 / 系统包组)→ 系统包任务。只是 requirements() 的适配
-pub fn component_package_prerequisites(
-    component_id: ComponentId,
-    kind: StepKind,
-    host_os: Os,
-) -> Vec<SystemPackagePrerequisite> {
-    if !component_action_needs_runtime_closure(kind) {
-        return Vec::new();
-    }
-    // 系统包前置只对 Linux 有意义;locality 不影响这类边,取 Remote 即可
-    graph_component(component_id, SnowLumaLinuxPackage::default())
-        .requirements(host_os, Locality::Remote)
-        .into_iter()
-        .filter(|req| req.applies_to(RequirementPhase::Install))
-        .filter_map(|req| match req {
-            Requirement::HostCommand { command, package } => {
-                Some(SystemPackagePrerequisite::ArchiveTool { command, package })
-            }
-            Requirement::HostPackages {
-                group: HostPackageGroup::QqDependencies,
-            } => Some(SystemPackagePrerequisite::QqDependencies),
-            Requirement::Component { .. } => None,
-        })
-        .collect()
 }
 
 /// 组件元数据：Framework → RuntimeDep → SelfApp
@@ -452,10 +269,6 @@ mod tests {
     use super::*;
     use ncd_domain::RemoteSelectedPaths;
 
-    fn component_spec(component_id: ComponentId, kind: StepKind) -> ComponentTaskSpec {
-        ComponentTaskSpec { component_id, kind }
-    }
-
     #[test]
     fn normalize_github_release_tag_adds_v_prefix() {
         assert_eq!(normalize_github_release_tag("1.9.5"), "v1.9.5");
@@ -482,162 +295,21 @@ mod tests {
     }
 
     #[test]
-    fn component_runtime_prerequisites_match_native_runtime_chains() {
-        assert_eq!(
-            component_runtime_prerequisites(
-                ComponentId::NapCat,
-                StepKind::EnsureInstalled,
-                Os::Windows,
-                Locality::Local,
-            ),
-            vec![component_spec(ComponentId::Qq, StepKind::EnsureInstalled)]
-        );
-        assert_eq!(
-            component_runtime_prerequisites(
-                ComponentId::SnowLuma,
-                StepKind::EnsureInstalled,
-                Os::Windows,
-                Locality::Local,
-            ),
-            vec![component_spec(ComponentId::Qq, StepKind::EnsureInstalled)]
-        );
-        assert_eq!(
-            component_runtime_prerequisites(
-                ComponentId::NapCat,
-                StepKind::EnsureInstalled,
-                Os::Linux,
-                Locality::Remote,
-            ),
-            vec![component_spec(ComponentId::Qq, StepKind::EnsureInstalled)]
-        );
-        assert_eq!(
-            component_runtime_prerequisites(
-                ComponentId::SnowLuma,
-                StepKind::EnsureInstalled,
-                Os::Linux,
-                Locality::Remote,
-            ),
-            vec![
-                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
-                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
-            ]
-        );
-    }
-
-    #[test]
-    fn component_runtime_prerequisites_only_apply_to_install_like_actions() {
+    fn runtime_closure_only_for_install_like_actions() {
+        for kind in [
+            StepKind::EnsureInstalled,
+            StepKind::ForceInstall,
+            StepKind::Update,
+        ] {
+            assert!(component_action_needs_runtime_closure(kind), "{kind:?}");
+        }
         for kind in [
             StepKind::Verify,
             StepKind::Uninstall,
             StepKind::EnsureDependencies,
         ] {
-            assert!(
-                component_runtime_prerequisites(
-                    ComponentId::SnowLuma,
-                    kind,
-                    Os::Linux,
-                    Locality::Remote,
-                )
-                .is_empty(),
-                "{kind:?} must not auto-submit runtime prerequisites"
-            );
+            assert!(!component_action_needs_runtime_closure(kind), "{kind:?}");
         }
-    }
-
-    #[test]
-    fn force_install_keeps_runtime_prerequisites_as_ensure_installed() {
-        assert_eq!(
-            component_runtime_prerequisites(
-                ComponentId::SnowLuma,
-                StepKind::ForceInstall,
-                Os::Linux,
-                Locality::Remote,
-            ),
-            vec![
-                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
-                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
-            ]
-        );
-    }
-
-    #[test]
-    fn update_keeps_runtime_prerequisites_as_ensure_installed() {
-        assert_eq!(
-            component_runtime_prerequisites(
-                ComponentId::SnowLuma,
-                StepKind::Update,
-                Os::Linux,
-                Locality::Remote,
-            ),
-            vec![
-                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
-                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
-            ]
-        );
-        assert_eq!(
-            component_runtime_prerequisites(
-                ComponentId::NapCat,
-                StepKind::Update,
-                Os::Windows,
-                Locality::Local,
-            ),
-            vec![component_spec(ComponentId::Qq, StepKind::EnsureInstalled)]
-        );
-    }
-
-    #[test]
-    fn collected_snowluma_remote_prerequisites_are_deduped_in_dependency_order() {
-        let chain = collect_component_runtime_prerequisites(
-            component_spec(ComponentId::SnowLuma, StepKind::EnsureInstalled),
-            Os::Linux,
-            Locality::Remote,
-        );
-
-        assert_eq!(
-            chain,
-            vec![
-                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
-                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
-            ]
-        );
-
-        let lite_chain = collect_component_runtime_prerequisites_for(
-            component_spec(ComponentId::SnowLuma, StepKind::EnsureInstalled),
-            Os::Linux,
-            Locality::Remote,
-            Some(SnowLumaLinuxPackage::Lite),
-        );
-        assert_eq!(
-            lite_chain,
-            vec![
-                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
-                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
-                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
-            ]
-        );
-    }
-
-    #[test]
-    fn direct_runtime_dependency_ids_return_only_direct_component_tasks() {
-        let submitted = vec![
-            (
-                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
-                "qq-task".to_string(),
-            ),
-            (
-                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
-                "novnc-task".to_string(),
-            ),
-        ];
-
-        let ids = direct_runtime_dependency_ids(
-            component_spec(ComponentId::SnowLuma, StepKind::EnsureInstalled),
-            Os::Linux,
-            Locality::Remote,
-            &submitted,
-        );
-
-        assert_eq!(ids, vec!["qq-task", "novnc-task"]);
     }
 
     #[test]
@@ -703,92 +375,6 @@ mod tests {
             "/home/u/snowluma-remote/workspace/node/bin/node",
             Some("/home/u/snowluma-remote/workspace/snowluma")
         ));
-    }
-
-    #[test]
-    fn lite_package_pulls_nodejs_prerequisite() {
-        assert_eq!(
-            component_runtime_prerequisites_for(
-                ComponentId::SnowLuma,
-                StepKind::EnsureInstalled,
-                Os::Windows,
-                Locality::Local,
-                Some(SnowLumaLinuxPackage::Lite),
-            ),
-            vec![
-                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
-                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
-            ]
-        );
-        assert_eq!(
-            component_runtime_prerequisites_for(
-                ComponentId::SnowLuma,
-                StepKind::EnsureInstalled,
-                Os::Linux,
-                Locality::Remote,
-                Some(SnowLumaLinuxPackage::Lite),
-            ),
-            vec![
-                component_spec(ComponentId::NodeJs, StepKind::EnsureInstalled),
-                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
-                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
-            ]
-        );
-        assert_eq!(
-            component_runtime_prerequisites_for(
-                ComponentId::SnowLuma,
-                StepKind::EnsureInstalled,
-                Os::Linux,
-                Locality::Remote,
-                Some(SnowLumaLinuxPackage::Full),
-            ),
-            vec![
-                component_spec(ComponentId::Qq, StepKind::EnsureInstalled),
-                component_spec(ComponentId::NoVnc, StepKind::EnsureInstalled),
-            ]
-        );
-    }
-
-    #[test]
-    fn linux_archive_component_actions_create_visible_package_prerequisites() {
-        assert_eq!(
-            component_package_prerequisites(
-                ComponentId::NapCat,
-                StepKind::EnsureInstalled,
-                Os::Linux
-            ),
-            vec![SystemPackagePrerequisite::ArchiveTool {
-                command: "unzip".into(),
-                package: "unzip".into(),
-            }]
-        );
-        assert_eq!(
-            component_package_prerequisites(ComponentId::NodeJs, StepKind::Update, Os::Linux),
-            vec![SystemPackagePrerequisite::ArchiveTool {
-                command: "tar".into(),
-                package: "tar".into(),
-            }]
-        );
-        assert!(
-            component_package_prerequisites(
-                ComponentId::NapCat,
-                StepKind::EnsureInstalled,
-                Os::Windows
-            )
-            .is_empty()
-        );
-        assert!(
-            component_package_prerequisites(ComponentId::NapCat, StepKind::Verify, Os::Linux)
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn linux_qq_install_creates_dependency_prerequisite() {
-        assert_eq!(
-            component_package_prerequisites(ComponentId::Qq, StepKind::ForceInstall, Os::Linux),
-            vec![SystemPackagePrerequisite::QqDependencies]
-        );
     }
 
     #[test]

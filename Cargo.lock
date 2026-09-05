@@ -3287,6 +3287,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ts-rs",
+ "uuid",
  "winreg 0.52.0",
  "wiremock",
  "zip",
