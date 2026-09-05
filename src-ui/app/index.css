@@ -322,31 +322,8 @@ samp,
     }
 }
 
-/* 开屏粒子：静态样式 + 缓慢漂移（具体位移由 GSAP 进场覆盖） */
-@keyframes splash-particle-drift {
-
-    0%,
-    100% {
-        transform: translate(0, 0) scale(1);
-        opacity: 0.35;
-    }
-
-    50% {
-        transform: translate(6px, -10px) scale(1.15);
-        opacity: 0.7;
-    }
-}
-
-@keyframes splash-orbit-spin {
-    0% {
-        transform: translate(-50%, -50%) rotate(0deg);
-    }
-
-    100% {
-        transform: translate(-50%, -50%) rotate(360deg);
-    }
-}
-
+/* 开屏：粒子 / 轨道环 / 冲击波的位移全部交给 GSAP，这里只放静态外观。
+   CSS animation 会盖过 inline transform，所以这些元素上不能再挂 transform 关键帧。 */
 @keyframes splash-laser-flow {
     0% {
         background-position: 0% 50%;
@@ -375,15 +352,192 @@ samp,
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
     border-radius: 9999px;
-    border: 1px dashed color-mix(in srgb, var(--brand-400) 25%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--brand-400) 42%, transparent);
     pointer-events: none;
 }
 
 .ndf-splash-orbit-ring--solid {
     border-style: solid;
-    border-color: color-mix(in srgb, var(--accent-400) 18%, transparent);
+    border-color: color-mix(in srgb, var(--accent-400) 30%, transparent);
+}
+
+.ndf-splash-orbit-dot {
+    position: absolute;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    border-radius: 9999px;
+    background: var(--brand-400);
+    box-shadow: 0 0 10px var(--brand-400), 0 0 2px var(--neutral-0);
+}
+
+.ndf-splash-orbit-dot--accent {
+    background: var(--accent-400);
+    box-shadow: 0 0 10px var(--accent-400), 0 0 2px var(--neutral-0);
+}
+
+.ndf-splash-shockwave {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 96px;
+    height: 96px;
+    border-radius: 9999px;
+    border: 2px solid color-mix(in srgb, var(--brand-400) 85%, transparent);
+    box-shadow:
+        0 0 24px color-mix(in srgb, var(--brand-400) 55%, transparent),
+        inset 0 0 18px color-mix(in srgb, var(--accent-400) 40%, transparent);
+    pointer-events: none;
+}
+
+/* 开场向内收拢的蓄力环：细、无光晕，只负责把视线聚到火种上 */
+.ndf-splash-shockwave--thin {
+    border-width: 1px;
+    border-color: color-mix(in srgb, var(--brand-400) 60%, transparent);
+    box-shadow: none;
+}
+
+/* 揭示时贴着圆洞边缘跑的光边，让主界面像是被一圈光"烫"出来的 */
+.ndf-splash-shockwave--rim {
+    border-width: 2px;
+    border-color: color-mix(in srgb, var(--brand-300) 95%, transparent);
+    box-shadow:
+        0 0 28px color-mix(in srgb, var(--brand-400) 75%, transparent),
+        0 0 64px color-mix(in srgb, var(--accent-400) 45%, transparent);
+}
+
+/* 火种：logo 诞生前中心那一粒光 */
+.ndf-splash-spark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 12px;
+    height: 12px;
+    margin: -6px;
+    border-radius: 9999px;
+    background: radial-gradient(circle, var(--neutral-0) 0%, var(--brand-300) 45%, transparent 72%);
+    box-shadow:
+        0 0 18px var(--brand-400),
+        0 0 48px color-mix(in srgb, var(--brand-400) 60%, transparent),
+        0 0 90px color-mix(in srgb, var(--accent-400) 35%, transparent);
+    pointer-events: none;
+}
+
+/* 极光底色：三团大模糊色斑缓慢游走，只动 transform，独占合成层。
+   Catppuccin 主题按规范保持纯色画布，直接关掉。 */
+@keyframes splash-aurora-a {
+
+    0%,
+    100% {
+        transform: translate(-8%, -6%) scale(1);
+    }
+
+    50% {
+        transform: translate(6%, 8%) scale(1.12);
+    }
+}
+
+@keyframes splash-aurora-b {
+
+    0%,
+    100% {
+        transform: translate(6%, 4%) scale(1.05);
+    }
+
+    50% {
+        transform: translate(-10%, -8%) scale(0.95);
+    }
+}
+
+@keyframes splash-aurora-c {
+
+    0%,
+    100% {
+        transform: translate(0, 10%) scale(0.98);
+    }
+
+    50% {
+        transform: translate(-6%, -4%) scale(1.1);
+    }
+}
+
+.ndf-splash-aurora-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* 整层淡入淡出由 GSAP 控 layer 的 opacity；单个色斑的 opacity 留给主题规则，互不覆盖。 */
+.ndf-splash-aurora {
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+    filter: blur(64px);
+    will-change: transform;
+}
+
+.ndf-splash-aurora--a {
+    top: -20%;
+    left: -12%;
+    width: 58vw;
+    height: 58vw;
+    background: radial-gradient(circle, color-mix(in srgb, var(--brand-400) 34%, transparent) 0%, transparent 68%);
+}
+
+.ndf-splash-aurora--b {
+    top: -10%;
+    right: -18%;
+    width: 52vw;
+    height: 52vw;
+    background: radial-gradient(circle, color-mix(in srgb, var(--accent-400) 30%, transparent) 0%, transparent 68%);
+}
+
+.ndf-splash-aurora--c {
+    bottom: -30%;
+    left: 22%;
+    width: 60vw;
+    height: 60vw;
+    background: radial-gradient(circle, color-mix(in srgb, var(--brand-300) 22%, transparent) 0%, transparent 70%);
+}
+
+.ndf-splash-aurora.is-live.ndf-splash-aurora--a {
+    animation: splash-aurora-a 11s ease-in-out infinite;
+}
+
+.ndf-splash-aurora.is-live.ndf-splash-aurora--b {
+    animation: splash-aurora-b 13s ease-in-out infinite;
+}
+
+.ndf-splash-aurora.is-live.ndf-splash-aurora--c {
+    animation: splash-aurora-c 15s ease-in-out infinite;
+}
+
+:root[data-theme="dark"] .ndf-splash-aurora--a,
+:root[data-theme="dark"] .ndf-splash-aurora--b,
+:root[data-theme="dark"] .ndf-splash-aurora--c {
+    opacity: 0.55;
+}
+
+@media (prefers-color-scheme: dark) {
+
+    :root:not([data-theme="light"]) .ndf-splash-aurora--a,
+    :root:not([data-theme="light"]) .ndf-splash-aurora--b,
+    :root:not([data-theme="light"]) .ndf-splash-aurora--c {
+        opacity: 0.55;
+    }
+}
+
+:root:is([data-theme="latte"], [data-theme="frappe"], [data-theme="macchiato"], [data-theme="mocha"]) .ndf-splash-aurora {
+    display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ndf-splash-aurora.is-live {
+        animation: none;
+    }
 }
 
 .ndf-splash-laser-bar {
@@ -406,13 +560,14 @@ samp,
     position: absolute;
     border-radius: 9999px;
     pointer-events: none;
-    background: color-mix(in srgb, var(--brand-400) 65%, transparent);
-    box-shadow: 0 0 14px color-mix(in srgb, var(--accent-400) 45%, transparent);
-    animation: splash-particle-drift 4.5s ease-in-out infinite;
+    background: color-mix(in srgb, var(--brand-400) 75%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--brand-400) 55%, transparent);
+    will-change: transform, opacity;
 }
 
 .ndf-splash-particle--accent {
-    background: color-mix(in srgb, var(--accent-400) 60%, transparent);
+    background: color-mix(in srgb, var(--accent-400) 75%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--accent-400) 55%, transparent);
 }
 
 .ndf-splash-logo-shine {
@@ -447,14 +602,9 @@ samp,
             transparent);
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .ndf-splash-particle {
-        animation: none;
-        opacity: 0.25;
-    }
-}
-
-/* 主界面就绪入场律动展开动效 */
+/* 主界面就绪入场律动展开动效。
+   AppBootGate 在 splash 揭示前把外层标成 data-boot-reveal="off"，动画停在首帧（both 填充），
+   揭示开始才 running，保证这段是在用户眼前播的。没有该属性时（其它宿主）照常立刻播。 */
 @keyframes shell-slide-in-left {
     from {
         transform: translateX(-24px);
@@ -498,6 +648,12 @@ samp,
 
 .ndf-shell-enter-main {
     animation: shell-pop-in-main 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+}
+
+[data-boot-reveal="off"] .ndf-shell-enter-sidebar,
+[data-boot-reveal="off"] .ndf-shell-enter-titlebar,
+[data-boot-reveal="off"] .ndf-shell-enter-main {
+    animation-play-state: paused;
 }
 
 @media (prefers-reduced-motion: reduce) {
