@@ -12,8 +12,8 @@ use crate::kinds::RuntimeTarget;
 
 /// 应用端框架标识（稳定字符串，如 "nonebot2" / "astrbot"）。
 /// 产品未选定前允许任意非空 id；禁止与 BackendType 变体混用。
+// 不加 `#[serde(transparent)]`：ts-rs 解析不了会报 warning，而 newtype 在 serde_json 下本就按裸字符串收发（有 round-trip 测试锁定）。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[serde(transparent)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AppFrameworkId(String);
 
@@ -42,8 +42,8 @@ impl From<&str> for AppFrameworkId {
 }
 
 /// 应用端实例 id（控制台侧，非 QQ 号）。
+// 同 AppFrameworkId，不加 `serde(transparent)`。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-#[serde(transparent)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AppInstanceId(String);
 
@@ -185,6 +185,24 @@ mod tests {
     fn app_placement_subset_is_local_native_and_remote_docker() {
         assert_eq!(AppPlacement::LocalNative.as_str(), "local_native");
         assert_eq!(AppPlacement::RemoteDocker.as_str(), "remote_docker");
+    }
+
+    #[test]
+    fn id_newtypes_serialize_as_bare_json_strings() {
+        // 无 serde(transparent) 也必须是裸字符串，否则前端 `type X = string` 绑定失真。
+        let framework = AppFrameworkId::new("nonebot2");
+        assert_eq!(serde_json::to_value(&framework).unwrap(), "nonebot2");
+        assert_eq!(
+            serde_json::from_str::<AppFrameworkId>("\"nonebot2\"").unwrap(),
+            framework
+        );
+
+        let instance = AppInstanceId::new("app-1");
+        assert_eq!(serde_json::to_value(&instance).unwrap(), "app-1");
+        assert_eq!(
+            serde_json::from_str::<AppInstanceId>("\"app-1\"").unwrap(),
+            instance
+        );
     }
 
     #[test]
