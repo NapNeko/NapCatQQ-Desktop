@@ -223,9 +223,11 @@ export function reduceActionProgress(
                 event.level === 'error' || event.level === 'warn'
                     ? event.message
                     : event.message.trim();
+            if (hint.length === 0) return next;
+            // pending 阶段唯一能到的 log 是后端的排队提示（等前置 / 等包管理器），直接当主文案
+            if (prev.status === 'pending') return { ...next, message: hint };
             const messagePatch =
                 prev.status === 'running' &&
-                hint.length > 0 &&
                 (event.level === 'error' || event.level === 'warn' || prev.message.trim() === '')
                     ? { message: hint }
                     : {};

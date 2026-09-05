@@ -28,7 +28,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::components::action_policy::{
     RemoteLayout, component_action_cancellable, component_action_needs_runtime_closure,
-    component_dedupe_key, component_task_resources,
+    component_dedupe_key, component_needs_package_manager, component_task_resources,
+    dependency_target_display_name,
 };
 use crate::components::factory::{BuildComponentCtx, build_component_for_host};
 use crate::components::resolver::{ResolveCtx, resolve_dependencies, resolve_runtime_readiness};
@@ -230,23 +231,47 @@ impl ComponentExecutor {
             }
         }
 
-        let depends_on: Vec<String> = root
+        // root 直接依赖里被排了任务的:既是 depends_on,也是给 UI 看的「在等谁」
+        let waiting_on: Vec<(DependencyTarget, String)> = root
             .requirements(host.os(), host.locality())
             .into_iter()
             .filter(|req| req.applies_to(RequirementPhase::Install))
-            .filter_map(|req| submitted.get(&req.target()).cloned())
+            .filter_map(|req| {
+                let target = req.target();
+                submitted.get(&target).cloned().map(|id| (target, id))
+            })
             .collect();
+        let depends_on: Vec<String> = waiting_on.iter().map(|(_, id)| id.clone()).collect();
+        let queue_note = queue_note(
+            &waiting_on,
+            component_needs_package_manager(component_id, kind, host.os(), host.locality()),
+        );
 
-        self.submit_component_task(
-            component_id,
-            &host_id,
-            kind,
-            task_id,
-            depends_on,
-            host,
-            &inputs,
-        )
-        .await
+        let requested = task_id.clone();
+        let submitted_id = self
+            .submit_component_task(
+                component_id,
+                &host_id,
+                kind,
+                task_id,
+                depends_on,
+                host,
+                &inputs,
+            )
+            .await?;
+
+        // dedupe 命中已有任务时不补写,免得往别人的日志里塞排队提示
+        let fresh = requested.as_deref().is_none_or(|t| t == submitted_id);
+        if let (true, Some(message)) = (fresh, queue_note) {
+            self.event_bus.publish(DomainEvent::component_action_progress(
+                submitted_id.clone(),
+                ProgressEvent::new(ProgressKind::Log {
+                    level: ProgressLogLevel::Info,
+                    message,
+                }),
+            ));
+        }
+        Ok(submitted_id)
     }
 
     pub async fn cancel(&self, task_id: &str) -> Result<(), String> {
@@ -676,9 +701,48 @@ fn uuid_v4() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+/// root 任务刚入队、还没开跑时给 UI 的一句话;没什么可等就 None。
+/// 前置任务优先于包管理器锁:有前置时锁的等待藏在前置之后,不值得同时说
+fn queue_note(waiting_on: &[(DependencyTarget, String)], needs_package_manager: bool) -> Option<String> {
+    if !waiting_on.is_empty() {
+        let labels: Vec<String> = waiting_on
+            .iter()
+            .map(|(t, _)| dependency_target_display_name(t))
+            .collect();
+        return Some(format!("等待前置:{}", labels.join("、")));
+    }
+    needs_package_manager.then(|| "排队等待包管理器空闲".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn queue_note_prefers_prerequisites_over_package_manager() {
+        assert_eq!(queue_note(&[], false), None);
+        assert_eq!(
+            queue_note(&[], true).as_deref(),
+            Some("排队等待包管理器空闲")
+        );
+        let waiting = vec![
+            (
+                DependencyTarget::Component { id: ComponentId::Qq },
+                "t1".to_string(),
+            ),
+            (
+                DependencyTarget::HostCommand {
+                    command: "tar".to_string(),
+                    package: "tar".to_string(),
+                },
+                "t2".to_string(),
+            ),
+        ];
+        assert_eq!(
+            queue_note(&waiting, true).as_deref(),
+            Some("等待前置:QQ、tar")
+        );
+    }
 
     #[test]
     fn infer_local_package_defaults_to_full_when_not_installed() {

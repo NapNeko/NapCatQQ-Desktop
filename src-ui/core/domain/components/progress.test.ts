@@ -73,4 +73,25 @@ describe('reduceActionProgress', () => {
         expect(progress.percent).toBe(40);
         expect(progress.overallPercent).toBe(40);
     });
+
+    it('shows the backend queue note while still pending, then yields to started', () => {
+        let progress = initialActionProgress;
+
+        progress = reduceActionProgress(progress, event(1000, {
+            kind: 'log',
+            level: 'info',
+            message: '等待前置:QQ、noVNC',
+        }));
+
+        expect(progress.status).toBe('pending');
+        expect(progress.message).toBe('等待前置:QQ、noVNC');
+
+        progress = reduceActionProgress(progress, event(1100, {
+            kind: 'started',
+            total_steps: 1,
+        }));
+
+        expect(progress.status).toBe('running');
+        expect(progress.message).toBe('准备中…');
+    });
 });

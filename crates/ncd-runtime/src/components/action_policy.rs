@@ -7,8 +7,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use ncd_component::{
-    Component, ComponentId, ComponentInfo, DesktopSelfComponent, NapCatComponent,
-    NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent, SnowLumaComponent,
+    Component, ComponentId, ComponentInfo, DependencyTarget, DesktopSelfComponent,
+    HostPackageGroup, NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent,
+    QQComponent, SnowLumaComponent,
 };
 use ncd_deploy::StepKind;
 use ncd_domain::DeploymentTaskResource;
@@ -137,6 +138,21 @@ pub fn component_catalog() -> Vec<ComponentInfo> {
         NcdWatchComponent::info(),
         DesktopSelfComponent::info(),
     ]
+}
+
+/// 依赖目标给用户看的名字:组件取 catalog 显示名,命令就是命令本身
+pub fn dependency_target_display_name(target: &DependencyTarget) -> String {
+    match target {
+        DependencyTarget::Component { id } => component_catalog()
+            .into_iter()
+            .find(|info| info.id == *id)
+            .map(|info| info.display_name)
+            .unwrap_or_else(|| id.as_str().to_string()),
+        DependencyTarget::HostCommand { command, .. } => command.clone(),
+        DependencyTarget::HostPackages {
+            group: HostPackageGroup::QqDependencies,
+        } => "QQ 系统依赖".to_string(),
+    }
 }
 
 /// 解析 `probe_remote_host` 的 shell 输出（两行：HOME、system 标记）

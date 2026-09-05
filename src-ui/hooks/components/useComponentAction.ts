@@ -64,14 +64,8 @@ export function useComponentAction(): UseComponentActionResult {
             options?: { snowlumaLinuxPackage?: SnowLumaLinuxPackage },
         ) => {
             const taskId = crypto.randomUUID();
-            const needsPkgQueue =
-                (componentId === 'novnc' &&
-                    (kind === 'ensure_installed' || kind === 'force_install')) ||
-                (componentId === 'qq' && kind === 'ensure_dependencies');
-            const queueHint = needsPkgQueue
-                ? '排队等待包管理器（Docker 等 apt 任务完成后自动开始）…'
-                : undefined;
-            componentActionStore.started(taskId, componentId, hostId, queueHint);
+            // 排队提示（等前置 / 等包管理器）由后端入队时以 log 事件推来，这里不猜
+            componentActionStore.started(taskId, componentId, hostId);
             try {
                 // Desktop 自身更新走 ncd-update MSI 路径，不走 DeployPlan/Component::update
                 if (componentId === 'desktop_self' && kind === 'update') {

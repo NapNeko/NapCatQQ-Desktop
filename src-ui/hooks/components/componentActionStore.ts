@@ -153,23 +153,8 @@ export const componentActionStore = {
     },
 
     /** 启动一个 task：注册到 active 表，初始化进度视图为 pending。 */
-    started(
-        taskId: string,
-        componentId: ComponentId,
-        hostId: string,
-        queueMessage?: string,
-    ): void {
+    started(taskId: string, componentId: ComponentId, hostId: string): void {
         this.registerTarget(taskId, componentId, hostId);
-        if (!queueMessage?.trim()) return;
-        const current = store.getSnapshot();
-        const prev = current.tasks[taskId] ?? initialActionProgress;
-        store.setState({
-            ...current,
-            tasks: {
-                ...current.tasks,
-                [taskId]: { ...prev, message: queueMessage.trim() },
-            },
-        });
     },
 
     /** invoke 失败时把任务标为 failed，避免队列里一直 pending。 */
