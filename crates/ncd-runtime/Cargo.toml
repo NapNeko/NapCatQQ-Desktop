@@ -48,8 +48,6 @@ sha2 = "0.10"
 hex = "0.4"
 uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
-image = { version = "0.25", default-features = false, features = ["png"] }
-quircs = "0.10.3"
 chrono = "0.4"
 # SSH 密钥生成已下沉 ncd-server（ssh-key 依赖随 ncd-server）。
 # SnowLuma backend runtime 依赖（spec: snowluma-backend-runtime, task 1.1）
@@ -87,7 +85,6 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 tokio = { version = "1", features = ["test-util"] }
 # `proptest` 用于 `napcat_login_poller` 的属性测试 (Property 1/2/3/4/6/7)。
 proptest = "1"
-parking_lot = "0.12"
 
 [lints]
 workspace = true

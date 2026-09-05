@@ -23,13 +23,10 @@ use crate::remote_runtime_sessions::RemoteRuntimeSessions;
 use crate::runtime_launch_plan::{RuntimeLaunchPlanError, RuntimeLaunchPlanner};
 use crate::runtime_router::{DockerSecretProvider, RuntimeBackendRouter, RuntimeRouterError};
 // SnowLumaWebUiClient: wait_ready/login/get_agreements 的 trait 方法解析需要 in scope。
-use crate::remote::snowluma_qr_login::SnowlumaQrCaptureService;
 use crate::snowluma::{AgreementsPayload, ReqwestSnowLumaWebUiClient, SnowLumaWebUiClient};
 use crate::snowluma_agreements::SnowLumaAgreementService;
 use ncd_backend_napcat::remote_native_napcat_session::RemoteNativeNapcatSessionRegistry;
-use ncd_backend_snowluma::remote_snowluma::{
-    RemoteSnowLumaDaemon, remote_qq_running_pid_with_hint,
-};
+use ncd_backend_snowluma::remote_snowluma::RemoteSnowLumaDaemon;
 use ncd_backend_snowluma::remote_snowluma_log::RemoteSnowLumaLogRegistry;
 use ncd_backend_snowluma::remote_snowluma_tunnel::RemoteSnowLumaTunnelRegistry;
 use ncd_domain::app_config::WebUiPollerSettings;
@@ -206,7 +203,6 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// See RemoteQqEntryCoordinator for rationale and batch-start safety.
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
     server_manager: Option<Arc<crate::ServerManager>>,
-    qr_capture_service: Arc<SnowlumaQrCaptureService>,
     /// 启动前的框架 / 依赖预检;None 不检查(测试与纯本机 wiring)
     runtime_gate: Option<Arc<dyn RuntimeReadinessGate>>,
 }
@@ -240,7 +236,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_snowluma_backends: Arc::clone(&self.remote_snowluma_backends),
             remote_snowluma_tunnels: Arc::clone(&self.remote_snowluma_tunnels),
             remote_qq_entry_coordinator: Arc::clone(&self.remote_qq_entry_coordinator),
-            qr_capture_service: Arc::clone(&self.qr_capture_service),
             server_manager: self.server_manager.clone(),
             runtime_gate: self.runtime_gate.clone(),
         }
@@ -288,9 +283,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_snowluma_backends: Arc::new(Mutex::new(HashMap::new())),
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
             remote_qq_entry_coordinator: Arc::new(RemoteQqEntryCoordinator::default()),
-            qr_capture_service: Arc::new(SnowlumaQrCaptureService::new(Arc::new(
-                crate::remote::snowluma_qr_login::QuircsQrDecoder,
-            ))),
             server_manager: None,
             runtime_gate: None,
         }
@@ -313,14 +305,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         resolver: Arc<dyn crate::host_resolver::HostResolver>,
     ) -> Self {
         self.host_resolver = Some(resolver);
-        self
-    }
-
-    pub fn with_snowluma_qr_capture_service(
-        mut self,
-        service: Arc<SnowlumaQrCaptureService>,
-    ) -> Self {
-        self.qr_capture_service = service;
         self
     }
 
@@ -711,55 +695,6 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 "远端 SnowLuma WebUI/noVNC 隧道仍未就绪，请检查主机连接与远端日志".to_string(),
             ))
         }
-    }
-
-    pub async fn start_snowluma_qr_login(
-        &self,
-        bot_id: &BotId,
-    ) -> Result<ncd_domain::SnowlumaQrLoginResult, BotManagerError> {
-        let config = self.get_required_bot_config(bot_id).await?;
-        let scenario = RuntimeScenario::from_config(&config)?;
-        let RuntimeScenario::RemoteNative {
-            backend: BackendType::SnowLuma,
-            ref server_id,
-        } = scenario
-        else {
-            return Err(BotManagerError::Render(
-                "仅远端 Linux Native SnowLuma 支持 QQ 二维码旁路".to_string(),
-            ));
-        };
-        let resolver = self.host_resolver.as_ref().ok_or_else(|| {
-            BotManagerError::Render("HostResolver 未初始化，无法采集远端 QQ 二维码".to_string())
-        })?;
-        let host = resolver
-            .resolve(&RuntimeTarget::server(server_id.clone()))
-            .await
-            .map_err(|err| BotManagerError::Render(err.to_string()))?;
-        let expected_pid =
-            remote_qq_running_pid_with_hint(host.as_ref(), config.bot.qq_id, None, None, false)
-                .await
-                .map_err(|err| BotManagerError::Render(err.to_string()))?
-                .ok_or_else(|| {
-                    BotManagerError::Render("未找到当前 Bot 对应的 QQ 进程".to_string())
-                })?;
-        let session_id = ncd_domain::QrLoginSessionId::new(format!(
-            "qr-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| BotManagerError::Render("system clock is before UNIX epoch".into()))?
-                .as_nanos()
-        ))
-        .ok_or_else(|| BotManagerError::Render("failed to allocate QR session".to_string()))?;
-        let session = ncd_domain::SnowlumaQrLoginSession {
-            server_id: server_id.clone(),
-            bot_id: bot_id.to_string(),
-            session_id,
-            capture_generation: 0,
-        };
-        Ok(self
-            .qr_capture_service
-            .capture_current_variant(&*host, session, expected_pid)
-            .await)
     }
 
     /// 绑定在该主机上的所有远端 bot(Docker / Native)补跑一轮运行态恢复。

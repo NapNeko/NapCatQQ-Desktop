@@ -3254,7 +3254,6 @@ dependencies = [
  "encoding_rs",
  "futures-util",
  "hex",
- "image",
  "lettre",
  "ncd-backend-napcat",
  "ncd-backend-snowluma",
@@ -3270,9 +3269,7 @@ dependencies = [
  "ncd-traits",
  "ncd-watch",
  "netstat2",
- "parking_lot",
  "proptest",
- "quircs",
  "rand 0.8.6",
  "reqwest 0.12.28",
  "scrypt",
@@ -3470,7 +3467,7 @@ dependencies = [
  "bitflags 1.3.2",
  "byteorder",
  "libc",
- "num-derive 0.3.3",
+ "num-derive",
  "num-traits",
  "thiserror 1.0.69",
 ]
@@ -3599,17 +3596,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "num-derive"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed3955f1a9c7c0c15e092f9c887db08b1fc683305fdf6eb6684f22555355e202"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]
@@ -4502,17 +4488,6 @@ dependencies = [
  "socket2 0.6.3",
  "tracing",
  "windows-sys 0.60.2",
-]
-
-[[package]]
-name = "quircs"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d71dee9e56835add6f9c26227e6c690b19eda9414f5affc666c3ec833ba140dc"
-dependencies = [
- "num-derive 0.4.2",
- "num-traits",
- "thiserror 2.0.18",
 ]
 
 [[package]]
