@@ -307,21 +307,12 @@ export function DesktopConsentDialog({
 
                 {/* 底部操作区 */}
                 <DialogFooter className="mt-1 pt-1">
-                    {active?.declared_version || payload?.version ? (
+                    {active?.declared_version ? (
                         <span
                             className="mr-auto select-all font-mono text-2xs tracking-wider text-text-tertiary"
-                            title="协议正文指纹（内容变更时将自动要求重新确认）"
+                            title="协议版本号；升版时才会要求重新确认"
                         >
-                            {[
-                                active?.declared_version
-                                    ? `v${active.declared_version}`
-                                    : null,
-                                payload?.version
-                                    ? payload.version.slice(0, 8)
-                                    : null,
-                            ]
-                                .filter(Boolean)
-                                .join(' · ')}
+                            v{active.declared_version}
                         </span>
                     ) : null}
                     <Button variant="ghost" size="sm" disabled={submitting} onClick={onClose}>
