@@ -60,6 +60,44 @@ pub struct DetectedVersion {
     pub source: String,
 }
 
+/// 找到了安装但不能用:版本不满足要求,或二进制在却跑不起来
+///
+/// 与「未安装」分开表达,否则用户装过 Node 也会看到同一个「未安装」徽章;
+/// 但 detect() 对此仍返回 None,依赖判断 / ensure_installed 不把它当已装
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct UnusableInstall {
+    /// 定位到的二进制 / 目录(与 DetectedVersion.source 同口径)
+    pub source: String,
+    /// 探测到的版本;跑不起来时为 None
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// 为什么不能用,直接给 UI 显示
+    pub reason: String,
+}
+
+/// Component::detect_outcome 返回值:比 detect 多一档「找到但不可用」
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DetectOutcome {
+    NotInstalled,
+    Installed(DetectedVersion),
+    Unusable(UnusableInstall),
+}
+
+impl DetectOutcome {
+    /// 折回 detect() 的二值语义:只有 Installed 算装上
+    pub fn into_installed(self) -> Option<DetectedVersion> {
+        match self {
+            Self::Installed(v) => Some(v),
+            Self::NotInstalled | Self::Unusable(_) => None,
+        }
+    }
+
+    pub fn from_detected(detected: Option<DetectedVersion>) -> Self {
+        detected.map_or(Self::NotInstalled, Self::Installed)
+    }
+}
+
 /// 校验报告(Component::verify 返回值)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VerifyReport {
@@ -201,6 +239,9 @@ pub struct ComponentDetectResult {
     /// None 表示未安装;Some 表示已装
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detected: Option<DetectedVersion>,
+    /// detected 为 None 时可能有值:找到了但不可用(版本不符 / 无法执行)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unusable: Option<UnusableInstall>,
     /// 当前 host 是否在 component 的 supported_targets 中;不支持时
     /// detected 始终为 None
     pub supported: bool,
@@ -298,6 +339,44 @@ mod tests {
             serde_json::to_string(&ComponentCategory::Framework).unwrap(),
             "\"framework\""
         );
+    }
+
+    #[test]
+    fn detect_outcome_only_installed_counts_as_detected() {
+        let v = DetectedVersion {
+            version: "22.13.0".into(),
+            source: "/opt/node/bin/node".into(),
+        };
+        assert_eq!(
+            DetectOutcome::Installed(v.clone()).into_installed(),
+            Some(v.clone())
+        );
+        assert_eq!(DetectOutcome::NotInstalled.into_installed(), None);
+        assert_eq!(
+            DetectOutcome::Unusable(UnusableInstall {
+                source: "$PATH/node".into(),
+                version: Some("18.19.1".into()),
+                reason: "too old".into(),
+            })
+            .into_installed(),
+            None
+        );
+        assert_eq!(
+            DetectOutcome::from_detected(Some(v.clone())),
+            DetectOutcome::Installed(v)
+        );
+        assert_eq!(DetectOutcome::from_detected(None), DetectOutcome::NotInstalled);
+    }
+
+    /// unusable 缺省不落盘,老前端 / 旧 JSON 照常解析
+    #[test]
+    fn detect_result_unusable_is_optional_on_wire() {
+        let json = r#"{"component_id":"nodejs","host_id":"local","supported":true}"#;
+        let decoded: ComponentDetectResult = serde_json::from_str(json).unwrap();
+        assert_eq!(decoded.detected, None);
+        assert_eq!(decoded.unusable, None);
+        let encoded = serde_json::to_string(&decoded).unwrap();
+        assert!(!encoded.contains("unusable"));
     }
 
     #[test]

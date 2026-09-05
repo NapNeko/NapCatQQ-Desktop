@@ -96,6 +96,7 @@ export type { ComponentCategory } from './generated/domain/ComponentCategory';
 export type { ComponentInfo } from './generated/domain/ComponentInfo';
 export type { SupportedTarget } from './generated/domain/SupportedTarget';
 export type { DetectedVersion } from './generated/domain/DetectedVersion';
+export type { UnusableInstall } from './generated/domain/UnusableInstall';
 export type { StepKind } from './generated/domain/StepKind';
 import type { SnowLumaLinuxPackage } from './generated/domain/SnowLumaLinuxPackage';
 export type { SnowLumaLinuxPackage };

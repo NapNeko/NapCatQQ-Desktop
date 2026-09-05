@@ -120,6 +120,24 @@ impl HostPath {
     pub fn is_absolute(&self) -> bool {
         self.inner.starts_with('/')
     }
+
+    /// 把 HostCommand.program 落到 Windows CreateProcess 能认的形式。
+    ///
+    /// 组件层统一用 `as_posix()`(`/c/ProgramData/.../node.exe`)填 program,
+    /// 文件操作走 to_local 会还原盘符,但进程启动之前没有,导致文件在、却
+    /// 拉不起来。只改写 `/x/...` 盘符形;裸命令名(`node`、`where.exe`)与
+    /// 已是 Windows 风格的路径原样返回。
+    pub fn windows_program_from_posix(program: &str) -> String {
+        let mut bytes = program.bytes();
+        let is_drive_form = bytes.next() == Some(b'/')
+            && bytes.next().is_some_and(|b| b.is_ascii_alphabetic())
+            && bytes.next() == Some(b'/');
+        if is_drive_form {
+            Self::from_posix(program).render_windows()
+        } else {
+            program.to_string()
+        }
+    }
 }
 
 impl fmt::Display for HostPath {
@@ -218,5 +236,25 @@ mod tests {
     fn is_absolute_detects_leading_slash() {
         assert!(HostPath::from_posix("/etc").is_absolute());
         assert!(!HostPath::from_posix("etc/local").is_absolute());
+    }
+
+    #[test]
+    fn windows_program_from_posix_path_converts_drive_form() {
+        assert_eq!(
+            HostPath::windows_program_from_posix(
+                "/c/ProgramData/NapCatQQ Desktop/components/NodeJs/node.exe"
+            ),
+            r"C:\ProgramData\NapCatQQ Desktop\components\NodeJs\node.exe"
+        );
+    }
+
+    #[test]
+    fn windows_program_from_posix_keeps_bare_exe_names() {
+        assert_eq!(HostPath::windows_program_from_posix("node"), "node");
+        assert_eq!(HostPath::windows_program_from_posix("where.exe"), "where.exe");
+        assert_eq!(
+            HostPath::windows_program_from_posix(r"C:\Program Files\nodejs\node.exe"),
+            r"C:\Program Files\nodejs\node.exe"
+        );
     }
 }

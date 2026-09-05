@@ -9,7 +9,7 @@ use ncd_host::{Host, HostCommand, Locality, Os};
 
 use crate::context::ActionCtx;
 use crate::error::ActionError;
-use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
+use crate::types::{ComponentId, DetectOutcome, DetectedVersion, LaunchArgs, VerifyReport};
 
 /// Component trait:可装可启的"组件"统一接口
 #[async_trait]
@@ -26,6 +26,13 @@ pub trait Component: Send + Sync {
     /// 探测目标 Host 上是否已装,装的是哪个版本
     /// Ok(None) 表示未安装,Ok(Some(_)) 表示已装,Err(_) 是探测出错
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError>;
+
+    /// detect 的三态版:多出「找到但不可用」(版本不符 / 二进制跑不起来),
+    /// 给 UI 与「未安装」区分。依赖判断仍只看 detect(),Unusable 不算已装。
+    /// 默认只包一层 detect;能给出原因的 component 覆写并让 detect 折回本方法
+    async fn detect_outcome(&self, host: &dyn Host) -> Result<DetectOutcome, ActionError> {
+        Ok(DetectOutcome::from_detected(self.detect(host).await?))
+    }
 
     /// 装(可能涉及下载 + 校验 + 解压 + 启动初始化)
     async fn install(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError>;

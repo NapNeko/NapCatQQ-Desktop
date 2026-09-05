@@ -9,7 +9,9 @@ mod sys_pkg;
 
 use std::sync::Arc;
 
-use ncd_component::{Component, ComponentDetectResult, ComponentId, ComponentInfo, ProgressKind};
+use ncd_component::{
+    Component, ComponentDetectResult, ComponentId, ComponentInfo, DetectOutcome, ProgressKind,
+};
 use ncd_deploy::{DeployPlan, StepKind};
 use ncd_domain::{DeploymentTaskKind, NodeEnvironmentCandidate, NodeProbeResult};
 use ncd_host::{Host, HostPath, Locality, local::LocalWindowsHost};
@@ -58,19 +60,24 @@ pub async fn detect_component(
             component_id,
             host_id,
             detected: None,
+            unusable: None,
             supported: false,
         });
     }
 
-    match component.detect(host_ref).await {
-        Ok(detected) => Ok(ComponentDetectResult {
-            component_id,
-            host_id,
-            detected,
-            supported: true,
-        }),
-        Err(err) => Err(format!("detect failed: {err}")),
-    }
+    let (detected, unusable) = match component.detect_outcome(host_ref).await {
+        Ok(DetectOutcome::Installed(v)) => (Some(v), None),
+        Ok(DetectOutcome::Unusable(u)) => (None, Some(u)),
+        Ok(DetectOutcome::NotInstalled) => (None, None),
+        Err(err) => return Err(format!("detect failed: {err}")),
+    };
+    Ok(ComponentDetectResult {
+        component_id,
+        host_id,
+        detected,
+        unusable,
+        supported: true,
+    })
 }
 
 #[tauri::command]

@@ -58,8 +58,8 @@ pub use remote_qq_entry::{
 pub use snowluma::SnowLumaComponent;
 pub use traits::{Action, Component};
 pub use types::{
-    ComponentCategory, ComponentDetectResult, ComponentId, ComponentInfo, DetectedVersion,
-    LaunchArgs, SupportedTarget, VerifyReport,
+    ComponentCategory, ComponentDetectResult, ComponentId, ComponentInfo, DetectOutcome,
+    DetectedVersion, LaunchArgs, SupportedTarget, UnusableInstall, VerifyReport,
 };
 
 // Linux 包管理器,novnc / qq_deps 共用

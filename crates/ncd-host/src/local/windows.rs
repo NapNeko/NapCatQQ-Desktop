@@ -591,7 +591,9 @@ fn build_tokio_command(cmd: &HostCommand, host: &LocalWindowsHost) -> Result<Com
             reason: "program is empty".into(),
         });
     }
-    let mut tokio_cmd = Command::new(&cmd.program);
+    // program 可能是 HostPath::as_posix() 的 /c/... 形;working_dir 走 to_local
+    // 会还原盘符,program 也必须还原,否则文件在、CreateProcess 却找不到
+    let mut tokio_cmd = Command::new(HostPath::windows_program_from_posix(&cmd.program));
     tokio_cmd.args(&cmd.args);
 
     if let Some(wd) = &cmd.working_dir {
@@ -859,6 +861,23 @@ mod tests {
         let out = host.run_to_string(cmd).await.unwrap();
         assert!(out.success());
         assert!(out.stdout.contains("hello"));
+    }
+
+    // 组件层用 as_posix() 填 program(/c/Windows/System32/cmd.exe),
+    // 曾直接喂给 CreateProcess 导致「文件在、跑不起来」被当成未安装
+    #[tokio::test]
+    async fn run_to_string_accepts_posix_drive_form_program() {
+        let host = LocalWindowsHost::new();
+        let system_root = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
+        let cmd_exe = HostPath::from_windows(&format!(r"{system_root}\System32\cmd.exe"));
+        assert!(cmd_exe.as_posix().starts_with('/'));
+        let cmd = HostCommand::new(cmd_exe.as_posix())
+            .arg("/c")
+            .arg("echo")
+            .arg("posix-program");
+        let out = host.run_to_string(cmd).await.unwrap();
+        assert!(out.success());
+        assert!(out.stdout.contains("posix-program"));
     }
 
     #[tokio::test]

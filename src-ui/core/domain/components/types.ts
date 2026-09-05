@@ -16,6 +16,7 @@ import type {
     Locality,
     Os,
     SupportedTarget,
+    UnusableInstall,
 } from '../../ipc/types';
 
 /// 主机简化视图，前端只关心 host_id + 显示名 + 平台属性。
@@ -47,6 +48,8 @@ export type HostComponentStatus =
     | { state: 'not_installed' }
     /// 已安装；如果有远端 release，可外部派生 hasUpdate
     | { state: 'installed'; detected: DetectedVersion }
+    /// 找到了但不能用（版本不符 / 二进制跑不起来）；不算已装，但也不能和未安装同一徽章
+    | { state: 'unusable'; unusable: UnusableInstall }
     /// 探测失败 / 主机断连等异常
     | { state: 'unknown'; reason: string };
 
@@ -164,6 +167,9 @@ export function deriveStatus(
     }
     if (detect.detected) {
         return { state: 'installed', detected: detect.detected };
+    }
+    if (detect.unusable) {
+        return { state: 'unusable', unusable: detect.unusable };
     }
     return { state: 'not_installed' };
 }

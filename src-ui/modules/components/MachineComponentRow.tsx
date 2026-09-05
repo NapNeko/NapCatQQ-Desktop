@@ -246,7 +246,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
                     </ContextMenuItem>
                 )}
 
-                {!inFlight && status.state === 'not_installed' && (
+                {!inFlight && (status.state === 'not_installed' || status.state === 'unusable') && (
                     <ContextMenuItem
                         tone="brand"
                         disabled={disabled}
@@ -257,7 +257,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
                     </ContextMenuItem>
                 )}
 
-                {!inFlight && status.state === 'unknown' && (
+                {!inFlight && (status.state === 'unknown' || status.state === 'unusable') && (
                     <ContextMenuItem
                         disabled={disabled}
                         onClick={() => handle({ kind: 'retry_detect' })}
@@ -390,6 +390,17 @@ const StatusMeta: React.FC<{
             ) : (
                 <p className="truncate text-xs text-text-disabled">暂无远端版本信息</p>
             );
+        case 'unusable': {
+            const where = isExternalNodeSource(status.unusable.source) ? '系统 PATH' : '本地';
+            return (
+                <p
+                    className="truncate text-xs text-warning"
+                    title={`${status.unusable.source}\n${status.unusable.reason}`}
+                >
+                    {where}：{status.unusable.reason}
+                </p>
+            );
+        }
         case 'unsupported':
             return (
                 <p className="truncate text-xs text-text-disabled">当前系统不支持此组件</p>
@@ -447,6 +458,7 @@ const ActionButtons: React.FC<{
             );
         }
         case 'not_installed':
+        case 'unusable':
             return (
                 <Button
                     size="sm"

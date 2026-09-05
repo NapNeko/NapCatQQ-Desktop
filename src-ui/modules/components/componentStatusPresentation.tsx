@@ -29,6 +29,12 @@ export function hostComponentStatusBadge(
             return { tone: 'success', label: '已安装', dot: true };
         case 'not_installed':
             return { tone: 'neutral', label: '未安装', dot: true };
+        case 'unusable':
+            return {
+                tone: 'warning',
+                label: status.unusable.version ? '版本不符' : '无法运行',
+                dot: true,
+            };
         case 'unsupported':
             return { tone: 'neutral', label: '不支持' };
         case 'unknown':

@@ -22,7 +22,7 @@ use windows::core::PCWSTR;
 
 use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand};
 use crate::error::HostError;
-use crate::path::PathStyle;
+use crate::path::{HostPath, PathStyle};
 
 /// 单次 WaitForSingleObject 的轮询切片,给取消信号和超时判断留出响应窗口
 const WAIT_SLICE_MS: u32 = 200;
@@ -183,7 +183,8 @@ pub(crate) async fn run_elevated_wait(cmd: HostCommand) -> Result<CommandOutput,
     }
 
     let budget = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
-    let program = cmd.program.clone();
+    // lpFile 同样不认 /c/... 盘符形,与 build_tokio_command 保持一致
+    let program = HostPath::windows_program_from_posix(&cmd.program);
     let args = cmd.args.clone();
     let working_dir = cmd
         .working_dir

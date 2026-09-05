@@ -13,6 +13,9 @@
 //! 2. extra_detect_bins（便携安装 / 用户覆盖；不含 SnowLuma 完整包自带的 ./node）
 //! 3. PATH 中有 node，且满足 SnowLuma 要求（22.13+ / 23.4+）
 //!
+//! 可用的候选优先；都不可用时 detect_outcome 带回第一处「找到但不能用」
+//! 的原因（版本不符 / 二进制跑不起来），detect() 对这种情况仍返回 None。
+//!
 //! 默认下载源:
 //! https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz
 //! 可通过 NodeJsComponent::with_url(...) 覆盖镜像
@@ -29,47 +32,92 @@ use crate::download::DownloadHelper;
 use crate::error::ActionError;
 use crate::shell_quote;
 use crate::traits::Component;
-use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
+use crate::types::{
+    ComponentId, DetectOutcome, DetectedVersion, LaunchArgs, UnusableInstall, VerifyReport,
+};
 
-async fn probe_node_bin(
-    host: &dyn Host,
-    path: &str,
-) -> Result<Option<DetectedVersion>, ActionError> {
-    let hp = if host.os() == Os::Windows {
-        HostPath::from_windows(path)
-    } else {
-        HostPath::from_posix(path)
-    };
-    if let Some(ver) = probe_node_raw_version(host, &hp).await? {
-        if NodeJsComponent::version_meets_snowluma(&ver) {
-            return Ok(Some(DetectedVersion {
-                version: ver,
-                source: path.to_string(),
-            }));
-        }
-    }
-    Ok(None)
+/// 对齐上游 `check-node-version.cjs` 的 semver 范围
+pub const SNOWLUMA_NODE_RANGE: &str = "^22.13.0 || >=23.4.0";
+
+/// 单个候选二进制的探测结果;「在但跑不起来」与「不存在」分开,后者才是未安装
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NodeBinProbe {
+    Missing,
+    /// 无 v 前缀的版本号
+    Version(String),
+    /// 文件在但 --version 失败,携带 exit / stderr 或 IO 错误摘要
+    Broken(String),
 }
 
-pub async fn probe_node_raw_version(
+pub async fn probe_node_bin_status(
     host: &dyn Host,
     path: &HostPath,
-) -> Result<Option<String>, ActionError> {
+) -> Result<NodeBinProbe, ActionError> {
     if !host.exists(path).await? {
-        return Ok(None);
+        return Ok(NodeBinProbe::Missing);
     }
     let cmd = HostCommand::new(path.as_posix()).arg("--version");
     match host.run_to_string(cmd).await {
         Ok(out) if out.success() => {
             let ver = out.stdout.trim().trim_start_matches('v').to_string();
             if ver.is_empty() {
-                Ok(None)
+                Ok(NodeBinProbe::Broken("--version 无输出".into()))
             } else {
-                Ok(Some(ver))
+                Ok(NodeBinProbe::Version(ver))
             }
         }
-        _ => Ok(None),
+        Ok(out) => Ok(NodeBinProbe::Broken(format!(
+            "exit={:?}: {}",
+            out.exit_code,
+            out.stderr.trim()
+        ))),
+        Err(e) => Ok(NodeBinProbe::Broken(e.to_string())),
     }
+}
+
+/// 二值视图:只有能跑出版本号才算 Some(不存在 / 跑不起来都是 None)
+pub async fn probe_node_raw_version(
+    host: &dyn Host,
+    path: &HostPath,
+) -> Result<Option<String>, ActionError> {
+    Ok(match probe_node_bin_status(host, path).await? {
+        NodeBinProbe::Version(ver) => Some(ver),
+        NodeBinProbe::Missing | NodeBinProbe::Broken(_) => None,
+    })
+}
+
+fn version_mismatch_reason(ver: &str) -> String {
+    format!("v{ver} 不满足 {SNOWLUMA_NODE_RANGE}")
+}
+
+/// 候选归类:Missing → None;可用 → Installed;版本不符 / 跑不起来 → Unusable
+async fn classify_node_candidate(
+    host: &dyn Host,
+    path: &HostPath,
+) -> Result<Option<DetectOutcome>, ActionError> {
+    let source = path.as_posix().to_string();
+    Ok(match probe_node_bin_status(host, path).await? {
+        NodeBinProbe::Missing => None,
+        NodeBinProbe::Version(ver) if NodeJsComponent::version_meets_snowluma(&ver) => {
+            Some(DetectOutcome::Installed(DetectedVersion {
+                version: ver,
+                source,
+            }))
+        }
+        NodeBinProbe::Version(ver) => Some(DetectOutcome::Unusable(UnusableInstall {
+            source,
+            reason: version_mismatch_reason(&ver),
+            version: Some(ver),
+        })),
+        NodeBinProbe::Broken(detail) => Some(DetectOutcome::Unusable(UnusableInstall {
+            source,
+            version: None,
+            reason: format!(
+                "{} 存在但无法执行:{detail}",
+                path.file_name().unwrap_or("node")
+            ),
+        })),
+    })
 }
 
 /// Node.js component 配置
@@ -239,37 +287,48 @@ impl Component for NodeJsComponent {
     }
 
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
-        let binary = self.node_binary_path(host);
-        if let Some(detected) = probe_node_bin(host, binary.as_posix()).await? {
-            return Ok(Some(detected));
-        }
+        Ok(self.detect_outcome(host).await?.into_installed())
+    }
 
-        for extra in &self.extra_detect_bins {
-            if let Some(detected) = probe_node_bin(host, extra.as_posix()).await? {
-                return Ok(Some(detected));
+    async fn detect_outcome(&self, host: &dyn Host) -> Result<DetectOutcome, ActionError> {
+        // 可用的候选立即返回;都不可用时带回第一处原因(组件目录 > 额外探测点 > PATH)
+        let mut first_unusable: Option<UnusableInstall> = None;
+        let managed = self.node_binary_path(host);
+        for path in std::iter::once(&managed).chain(self.extra_detect_bins.iter()) {
+            match classify_node_candidate(host, path).await? {
+                Some(DetectOutcome::Installed(v)) => return Ok(DetectOutcome::Installed(v)),
+                Some(DetectOutcome::Unusable(u)) => {
+                    first_unusable.get_or_insert(u);
+                }
+                Some(DetectOutcome::NotInstalled) | None => {}
             }
         }
 
         let path_cmd = HostCommand::new("node").arg("--version");
         match host.run_to_string(path_cmd).await {
             Ok(out) if out.success() => {
-                let ver_str = out.stdout.trim().trim_start_matches('v');
-                if ver_str.is_empty() {
-                    return Ok(None);
-                }
-                if Self::version_meets_snowluma(ver_str) {
-                    return Ok(Some(DetectedVersion {
-                        version: ver_str.to_string(),
+                let ver = out.stdout.trim().trim_start_matches('v').to_string();
+                if !ver.is_empty() {
+                    if Self::version_meets_snowluma(&ver) {
+                        return Ok(DetectOutcome::Installed(DetectedVersion {
+                            version: ver,
+                            source: "$PATH/node".into(),
+                        }));
+                    }
+                    let reason = version_mismatch_reason(&ver);
+                    first_unusable.get_or_insert(UnusableInstall {
                         source: "$PATH/node".into(),
-                    }));
+                        version: Some(ver),
+                        reason,
+                    });
                 }
-                Ok(None)
             }
-            Ok(_) => Ok(None),
-            Err(HostError::CommandFailed { .. }) => Ok(None),
-            Err(HostError::Io(_)) => Ok(None),
-            Err(e) => Err(ActionError::Host(e)),
+            // PATH 里没有 node 是常态,不算探测出错
+            Ok(_) | Err(HostError::CommandFailed { .. }) | Err(HostError::Io(_)) => {}
+            Err(e) => return Err(ActionError::Host(e)),
         }
+
+        Ok(first_unusable.map_or(DetectOutcome::NotInstalled, DetectOutcome::Unusable))
     }
 
     async fn install(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
@@ -690,6 +749,203 @@ mod tests {
         let targets = comp.supported_targets();
         assert!(targets.contains(&(Os::Linux, Locality::Local)));
         assert!(targets.contains(&(Os::Linux, Locality::Remote)));
+    }
+
+    mod detect_outcome_tests {
+        use super::*;
+        use std::collections::HashMap;
+        use std::path::Path;
+
+        use async_trait::async_trait;
+        use bytes::Bytes;
+        use ncd_host::shell::PowerShellShell;
+        use ncd_host::{
+            ArchiveKind, CommandOutput, DirEntry, HostCommand, HostError, HostPath, HostProcess,
+            HostShell, PackageManager,
+        };
+
+        const MANAGED_DIR: &str = "/c/ProgramData/NapCatQQ Desktop/components/NodeJs";
+        const MANAGED_BIN: &str = "/c/ProgramData/NapCatQQ Desktop/components/NodeJs/node.exe";
+
+        enum Scripted {
+            Output(i32, &'static str, &'static str),
+            NotFound,
+        }
+
+        struct ScriptedHost {
+            exists: Vec<&'static str>,
+            responses: HashMap<&'static str, Scripted>,
+            shell: PowerShellShell,
+        }
+
+        impl ScriptedHost {
+            fn new(exists: &[&'static str], responses: Vec<(&'static str, Scripted)>) -> Self {
+                Self {
+                    exists: exists.to_vec(),
+                    responses: responses.into_iter().collect(),
+                    shell: PowerShellShell,
+                }
+            }
+        }
+
+        #[async_trait]
+        impl Host for ScriptedHost {
+            fn os(&self) -> Os {
+                Os::Windows
+            }
+            fn arch(&self) -> Arch {
+                Arch::X86_64
+            }
+            fn locality(&self) -> Locality {
+                Locality::Local
+            }
+            fn id(&self) -> &str {
+                "scripted"
+            }
+            fn shell(&self) -> &dyn HostShell {
+                &self.shell
+            }
+            fn pkg_manager(&self) -> Option<&dyn PackageManager> {
+                None
+            }
+            async fn read_file(&self, _: &HostPath) -> Result<Bytes, HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+            async fn write_file(&self, _: &HostPath, _: &[u8]) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+            async fn list_dir(&self, _: &HostPath) -> Result<Vec<DirEntry>, HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+            async fn create_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+            async fn remove_file(&self, _: &HostPath) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+            async fn remove_dir_all(&self, _: &HostPath) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+            async fn exists(&self, path: &HostPath) -> Result<bool, HostError> {
+                Ok(self.exists.contains(&path.as_posix()))
+            }
+            async fn upload(&self, _: &Path, _: &HostPath) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+            async fn download(&self, _: &HostPath, _: &Path) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+            async fn extract_archive(
+                &self,
+                _: &HostPath,
+                _: &HostPath,
+                _: ArchiveKind,
+            ) -> Result<(), HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+            async fn spawn(&self, _: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
+                Err(HostError::Unsupported { operation: "test" })
+            }
+            async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
+                assert_eq!(cmd.args, ["--version"], "unexpected args for {}", cmd.program);
+                match self.responses.get(cmd.program.as_str()) {
+                    Some(Scripted::Output(code, stdout, stderr)) => Ok(CommandOutput {
+                        exit_code: Some(*code),
+                        stdout: (*stdout).to_string(),
+                        stderr: (*stderr).to_string(),
+                    }),
+                    Some(Scripted::NotFound) | None => Err(HostError::Io(
+                        std::io::Error::from(std::io::ErrorKind::NotFound),
+                    )),
+                }
+            }
+        }
+
+        fn comp() -> NodeJsComponent {
+            NodeJsComponent::new("22.13.0", HostPath::from_posix(MANAGED_DIR))
+        }
+
+        #[tokio::test]
+        async fn nothing_found_is_not_installed() {
+            let host = ScriptedHost::new(&[], vec![("node", Scripted::NotFound)]);
+            assert_eq!(
+                comp().detect_outcome(&host).await.unwrap(),
+                DetectOutcome::NotInstalled
+            );
+        }
+
+        // 组件目录里 node.exe 在、但 --version 跑不起来:曾被吞成「未安装」
+        #[tokio::test]
+        async fn managed_binary_that_cannot_run_is_unusable_not_missing() {
+            let host = ScriptedHost::new(
+                &[MANAGED_BIN],
+                vec![
+                    (MANAGED_BIN, Scripted::Output(-1073741515, "", "")),
+                    ("node", Scripted::NotFound),
+                ],
+            );
+            let outcome = comp().detect_outcome(&host).await.unwrap();
+            let DetectOutcome::Unusable(u) = outcome else {
+                panic!("expected Unusable, got {outcome:?}");
+            };
+            assert_eq!(u.source, MANAGED_BIN);
+            assert_eq!(u.version, None);
+            assert!(u.reason.contains("node.exe 存在但无法执行"), "{}", u.reason);
+            assert!(comp().detect(&host).await.unwrap().is_none());
+        }
+
+        #[tokio::test]
+        async fn path_node_below_range_is_unusable_with_version() {
+            let host = ScriptedHost::new(
+                &[],
+                vec![("node", Scripted::Output(0, "v18.19.1\r\n", ""))],
+            );
+            let outcome = comp().detect_outcome(&host).await.unwrap();
+            assert_eq!(
+                outcome,
+                DetectOutcome::Unusable(UnusableInstall {
+                    source: "$PATH/node".into(),
+                    version: Some("18.19.1".into()),
+                    reason: format!("v18.19.1 不满足 {SNOWLUMA_NODE_RANGE}"),
+                })
+            );
+        }
+
+        // 组件目录版本不够但 PATH 上有可用的:可用者优先,不报 Unusable
+        #[tokio::test]
+        async fn usable_candidate_wins_over_unusable_one() {
+            let host = ScriptedHost::new(
+                &[MANAGED_BIN],
+                vec![
+                    (MANAGED_BIN, Scripted::Output(0, "v20.10.0\n", "")),
+                    ("node", Scripted::Output(0, "v22.13.0\n", "")),
+                ],
+            );
+            assert_eq!(
+                comp().detect_outcome(&host).await.unwrap(),
+                DetectOutcome::Installed(DetectedVersion {
+                    version: "22.13.0".into(),
+                    source: "$PATH/node".into(),
+                })
+            );
+        }
+
+        // 多个都不可用时,报组件目录那一处(排在 PATH 前面)
+        #[tokio::test]
+        async fn first_unusable_prefers_managed_over_path() {
+            let host = ScriptedHost::new(
+                &[MANAGED_BIN],
+                vec![
+                    (MANAGED_BIN, Scripted::Output(0, "v20.10.0\n", "")),
+                    ("node", Scripted::Output(0, "v18.19.1\n", "")),
+                ],
+            );
+            let DetectOutcome::Unusable(u) = comp().detect_outcome(&host).await.unwrap() else {
+                panic!("expected Unusable");
+            };
+            assert_eq!(u.source, MANAGED_BIN);
+            assert_eq!(u.version.as_deref(), Some("20.10.0"));
+        }
     }
     #[cfg(windows)]
     mod system_path_probe_tests {
