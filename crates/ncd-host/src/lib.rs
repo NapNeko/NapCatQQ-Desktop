@@ -29,6 +29,7 @@ pub mod apt_lock;
 pub mod command;
 pub mod error;
 pub mod host;
+pub mod linux_pkg;
 pub mod local;
 pub mod package_manager;
 pub mod path;
@@ -46,6 +47,7 @@ pub use apt_lock::{
 pub use command::{CommandOutput, HostCommand};
 pub use error::HostError;
 pub use host::{Arch, Host, Locality, Os, StreamSource};
+pub use linux_pkg::LinuxPackageManager;
 pub use package_manager::{PackageInfo, PackageManager, PackageManagerKind};
 pub use path::{ArchiveKind, DirEntry, HostPath, PathStyle};
 pub use pkg_output::{

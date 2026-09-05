@@ -4,9 +4,8 @@
 
 use ncd_domain::{FailedPackage, InstallDependenciesResult};
 use ncd_host::remote::SudoAccess;
-use ncd_host::{Host, HostCommand, HostError};
+use ncd_host::{Host, HostError, LinuxPackageManager};
 
-use crate::PkgMgr;
 use crate::context::ActionCtx;
 use crate::error::ActionError;
 
@@ -157,54 +156,32 @@ impl QqDependencyInstaller {
         Ok(ncd_host::remote::probe_sudo(host).await)
     }
 
-    /// 探测包管理器类型(一次性探测,避免重复)
-    async fn detect_package_manager(&self, host: &dyn Host) -> Result<PkgMgr, ActionError> {
-        let cmd_check_apt = HostCommand::new("command").arg("-v").arg("apt-get");
-        if host
-            .run_to_string(cmd_check_apt)
-            .await
-            .is_ok_and(|o| o.success())
-        {
-            return Ok(PkgMgr::Apt);
+    /// 依赖清单只按 deb / rpm 两族维护(detector 的包名解析同此),其它包管理器报不支持
+    async fn detect_package_manager(
+        &self,
+        host: &dyn Host,
+    ) -> Result<LinuxPackageManager, ActionError> {
+        match LinuxPackageManager::detect(host).await {
+            Some(pm @ (LinuxPackageManager::Apt | LinuxPackageManager::Dnf)) => Ok(pm),
+            Some(other) => Err(ActionError::install_step(
+                "detect_package_manager",
+                format!("QQ 依赖清单只覆盖 apt / dnf,当前主机是 {other}"),
+            )),
+            None => Err(ActionError::install_step(
+                "detect_package_manager",
+                "neither apt-get nor dnf found on host",
+            )),
         }
-
-        let cmd_check_dnf = HostCommand::new("command").arg("-v").arg("dnf");
-        if host
-            .run_to_string(cmd_check_dnf)
-            .await
-            .is_ok_and(|o| o.success())
-        {
-            return Ok(PkgMgr::Dnf);
-        }
-
-        Err(ActionError::install_step(
-            "detect_package_manager",
-            "neither apt-get nor dnf found on host",
-        ))
     }
 
-    /// 刷新包索引
+    /// 刷新包索引;dnf 装包自带刷新,无事可做
     async fn refresh_package_index(
         &self,
         host: &dyn Host,
-        pkg_mgr: PkgMgr,
+        pkg_mgr: LinuxPackageManager,
     ) -> Result<(), HostError> {
-        match pkg_mgr {
-            PkgMgr::Apt => {
-                let cmd = HostCommand::new("apt-get")
-                    .arg("update")
-                    .arg("-y")
-                    .arg("-qq")
-                    .elevated();
-                host.run_to_string(cmd).await?;
-            }
-            PkgMgr::Dnf => {
-                let cmd = HostCommand::new("dnf")
-                    .arg("makecache")
-                    .arg("--refresh")
-                    .elevated();
-                host.run_to_string(cmd).await?;
-            }
+        if let Some(cmd) = pkg_mgr.refresh_command() {
+            host.run_to_string(cmd.elevated()).await?;
         }
         Ok(())
     }
@@ -214,7 +191,7 @@ impl QqDependencyInstaller {
         &self,
         host: &dyn Host,
         package: &str,
-        pkg_mgr: PkgMgr,
+        pkg_mgr: LinuxPackageManager,
         ctx: &mut ActionCtx,
     ) -> Result<(), HostError> {
         const MAX_RETRIES: u32 = 3;
@@ -255,40 +232,17 @@ impl QqDependencyInstaller {
         &self,
         host: &dyn Host,
         package: &str,
-        pkg_mgr: PkgMgr,
+        pkg_mgr: LinuxPackageManager,
     ) -> Result<(), HostError> {
-        match pkg_mgr {
-            PkgMgr::Apt => {
-                let cmd = HostCommand::new("apt-get")
-                    .arg("install")
-                    .arg("-y")
-                    .arg("-qq")
-                    .arg(package)
-                    .elevated();
-                let output = host.run_to_string(cmd).await?;
-                if !output.success() {
-                    return Err(HostError::CommandFailed {
-                        program: "apt-get".to_string(),
-                        exit_code: output.exit_code,
-                        stderr: output.stderr,
-                    });
-                }
-            }
-            PkgMgr::Dnf => {
-                let cmd = HostCommand::new("dnf")
-                    .arg("install")
-                    .arg("-y")
-                    .arg(package)
-                    .elevated();
-                let output = host.run_to_string(cmd).await?;
-                if !output.success() {
-                    return Err(HostError::CommandFailed {
-                        program: "dnf".to_string(),
-                        exit_code: output.exit_code,
-                        stderr: output.stderr,
-                    });
-                }
-            }
+        let output = host
+            .run_to_string(pkg_mgr.install_command(&[package]).elevated())
+            .await?;
+        if !output.success() {
+            return Err(HostError::CommandFailed {
+                program: pkg_mgr.binary().to_string(),
+                exit_code: output.exit_code,
+                stderr: output.stderr,
+            });
         }
         Ok(())
     }

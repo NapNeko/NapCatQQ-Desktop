@@ -27,9 +27,8 @@ use async_trait::async_trait;
 
 use std::time::Duration;
 
-use ncd_host::{Host, HostCommand, Locality, Os};
+use ncd_host::{Host, HostCommand, LinuxPackageManager, Locality, Os};
 
-use crate::PkgMgr;
 use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
 use crate::error::ActionError;
 use crate::pkg_install_stream::run_pkg_command_with_progress;
@@ -54,56 +53,50 @@ impl NoVncComponent {
         self
     }
 
-    /// 探测远端的包管理器
-    async fn detect_pkg_manager(&self, host: &dyn Host) -> Result<PkgMgr, ActionError> {
-        for (binary, mgr) in &[("apt-get", PkgMgr::Apt), ("dnf", PkgMgr::Dnf)] {
-            let cmd = HostCommand::new("sh")
-                .arg("-c")
-                .arg(format!("command -v {binary}"));
-            if let Ok(out) = host.run_to_string(cmd).await {
-                if out.success() && !out.stdout.trim().is_empty() {
-                    return Ok(*mgr);
-                }
-            }
+    /// 图形栈的包名只按 deb / rpm 两族维护,其它包管理器直接报不支持
+    async fn detect_pkg_manager(&self, host: &dyn Host) -> Result<LinuxPackageManager, ActionError> {
+        match LinuxPackageManager::detect(host).await {
+            Some(pm @ (LinuxPackageManager::Apt | LinuxPackageManager::Dnf)) => Ok(pm),
+            Some(other) => Err(ActionError::install_step(
+                "detect_pkg_manager",
+                format!("noVNC 图形栈只支持 apt / dnf,当前主机是 {other}"),
+            )),
+            None => Err(ActionError::install_step(
+                "detect_pkg_manager",
+                "neither apt-get nor dnf found on host",
+            )),
         }
-        Err(ActionError::install_step(
-            "detect_pkg_manager",
-            "neither apt-get nor dnf found on host",
-        ))
     }
 
-    /// 拼接 apt / dnf install 命令提权交给 Host:use_sudo 时打 .elevated() 标,
-    /// Host 层按注入的提权密码决定 sudo -S(有密码)还是 sudo -n(免密),命令体本身
-    /// 不含 sudo,不再写死 sudo -n——那在无免密 sudo 的机器上必败
-    fn build_install_command(&self, mgr: PkgMgr) -> HostCommand {
+    /// 图形栈安装命令。不用 LinuxPackageManager::install_command 的通用形式:
+    /// apt 要 --no-install-recommends 防拖一堆桌面包;dnf 要 --allowerasing
+    /// --setopt=strict=0(legacy install_snowluma.sh.j2 L112),否则单包匹配失败
+    /// 会 abort 整个 transaction。提权交给 Host:use_sudo 时打 .elevated() 标
+    fn build_install_command(&self, mgr: LinuxPackageManager) -> HostCommand {
         let pkgs_apt = "dbus-x11 fluxbox xvfb x11vnc novnc websockify";
         let pkgs_dnf =
             "dbus-x11 fluxbox openbox xorg-x11-server-Xvfb x11vnc novnc python3-websockify";
 
         let cmd_str = match mgr {
-            PkgMgr::Apt => format!(
+            LinuxPackageManager::Apt => format!(
                 "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends {pkgs_apt}"
             ),
-            PkgMgr::Dnf => {
-                // legacy install_snowluma.sh.j2 L112 等价:
-                // --allowerasing --setopt=strict=0 防止某个包匹配失败导致全 transaction abort
-                format!("dnf install --allowerasing --setopt=strict=0 -y {pkgs_dnf}")
-            }
+            _ => format!("dnf install --allowerasing --setopt=strict=0 -y {pkgs_dnf}"),
         };
 
         self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(cmd_str))
             .timeout(Duration::from_secs(600))
     }
 
-    /// 拼接 apt update / dnf check-update 刷新索引的命令
-    fn build_refresh_command(&self, mgr: PkgMgr) -> HostCommand {
-        let cmd = match mgr {
-            PkgMgr::Apt => {
-                self.maybe_elevated(HostCommand::new("sh").arg("-c").arg("apt-get update"))
-            }
-            PkgMgr::Dnf => HostCommand::new("sh").arg("-c").arg("true"),
-        };
-        cmd.timeout(Duration::from_secs(300))
+    /// 刷新索引;dnf 装包自带刷新,返回 no-op
+    fn build_refresh_command(&self, mgr: LinuxPackageManager) -> HostCommand {
+        match mgr.refresh_command() {
+            Some(cmd) => self.maybe_elevated(cmd),
+            None => HostCommand::new("sh")
+                .arg("-c")
+                .arg("true")
+                .timeout(Duration::from_secs(300)),
+        }
     }
 
     /// use_sudo 时给命令打 .elevated() 标(提权细节由 Host 注入的密码决定),否则
@@ -195,7 +188,7 @@ impl Component for NoVncComponent {
         })
         .await;
         let refresh_cmd = self.build_refresh_command(mgr);
-        if mgr == PkgMgr::Apt {
+        if mgr == LinuxPackageManager::Apt {
             run_pkg_command_with_progress(host, ctx, refresh_cmd, 2, 5, 25, "apt-get update…")
                 .await?;
         } else {
@@ -232,15 +225,18 @@ impl Component for NoVncComponent {
         })
         .await;
         let mgr = self.detect_pkg_manager(host).await?;
-        let pkgs_apt = "novnc websockify x11vnc fluxbox xvfb";
-        let pkgs_dnf = "novnc python3-websockify x11vnc fluxbox openbox xorg-x11-server-Xvfb";
-        let cmd_str = match mgr {
-            PkgMgr::Apt => {
-                format!("DEBIAN_FRONTEND=noninteractive apt-get remove -y {pkgs_apt}")
-            }
-            PkgMgr::Dnf => format!("dnf remove -y {pkgs_dnf}"),
+        let pkgs: &[&str] = match mgr {
+            LinuxPackageManager::Apt => &["novnc", "websockify", "x11vnc", "fluxbox", "xvfb"],
+            _ => &[
+                "novnc",
+                "python3-websockify",
+                "x11vnc",
+                "fluxbox",
+                "openbox",
+                "xorg-x11-server-Xvfb",
+            ],
         };
-        let cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(cmd_str));
+        let cmd = self.maybe_elevated(mgr.remove_command(pkgs));
         let out = host.run_to_string(cmd).await?;
         if !out.success() {
             // 卸载失败一般是某个包未安装;不视为致命错误,只记录
@@ -316,7 +312,7 @@ mod tests {
     #[test]
     fn install_command_apt_includes_required_packages() {
         let comp = NoVncComponent::new();
-        let cmd = comp.build_install_command(PkgMgr::Apt);
+        let cmd = comp.build_install_command(LinuxPackageManager::Apt);
         assert_eq!(cmd.program, "sh");
         let arg = cmd.args.last().unwrap();
         assert!(arg.contains("apt-get install"));
@@ -335,7 +331,7 @@ mod tests {
     #[test]
     fn install_command_dnf_includes_required_packages() {
         let comp = NoVncComponent::new();
-        let cmd = comp.build_install_command(PkgMgr::Dnf);
+        let cmd = comp.build_install_command(LinuxPackageManager::Dnf);
         let arg = cmd.args.last().unwrap();
         assert!(arg.contains("dnf install"));
         for pkg in &[
@@ -353,7 +349,7 @@ mod tests {
     fn install_command_uses_sudo_by_default() {
         // 提权改走 .elevated() 标志,命令体本身不含 sudo(由 Host 层注入 sudo -S/-n)
         let comp = NoVncComponent::new();
-        let cmd = comp.build_install_command(PkgMgr::Apt);
+        let cmd = comp.build_install_command(LinuxPackageManager::Apt);
         assert!(cmd.elevated, "默认 use_sudo 时必须打 elevated 标");
         assert!(
             !cmd.args.last().unwrap().contains("sudo"),
@@ -364,7 +360,7 @@ mod tests {
     #[test]
     fn install_command_skips_sudo_when_disabled() {
         let comp = NoVncComponent::new().with_sudo(false);
-        let cmd = comp.build_install_command(PkgMgr::Apt);
+        let cmd = comp.build_install_command(LinuxPackageManager::Apt);
         assert!(!cmd.elevated, "use_sudo=false 不打 elevated 标");
         assert!(!cmd.args.last().unwrap().contains("sudo"));
     }
@@ -372,14 +368,14 @@ mod tests {
     #[test]
     fn refresh_command_for_dnf_is_noop() {
         let comp = NoVncComponent::new();
-        let cmd = comp.build_refresh_command(PkgMgr::Dnf);
+        let cmd = comp.build_refresh_command(LinuxPackageManager::Dnf);
         assert_eq!(cmd.args.last().unwrap(), "true");
     }
 
     #[test]
     fn refresh_command_for_apt_uses_apt_get_update() {
         let comp = NoVncComponent::new();
-        let cmd = comp.build_refresh_command(PkgMgr::Apt);
+        let cmd = comp.build_refresh_command(LinuxPackageManager::Apt);
         assert!(cmd.args.last().unwrap().contains("apt-get update"));
     }
 
@@ -406,7 +402,7 @@ mod tests {
     fn apt_install_uses_noninteractive_frontend() {
         // 防止 dpkg 的 menuconfig 阻塞 SSH 命令(legacy 教训)
         let comp = NoVncComponent::new();
-        let cmd = comp.build_install_command(PkgMgr::Apt);
+        let cmd = comp.build_install_command(LinuxPackageManager::Apt);
         assert!(
             cmd.args
                 .last()
@@ -419,7 +415,7 @@ mod tests {
     fn dnf_install_uses_allow_erasing() {
         // legacy install_snowluma.sh.j2 L112 强制要求(否则单包匹配失败 abort 全部)
         let comp = NoVncComponent::new();
-        let cmd = comp.build_install_command(PkgMgr::Dnf);
+        let cmd = comp.build_install_command(LinuxPackageManager::Dnf);
         assert!(cmd.args.last().unwrap().contains("--allowerasing"));
         assert!(cmd.args.last().unwrap().contains("--setopt=strict=0"));
     }
