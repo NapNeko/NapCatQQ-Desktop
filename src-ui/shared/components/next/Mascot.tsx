@@ -29,7 +29,7 @@ interface MascotProps {
 const LEGACY_PRIMARY = '#6a95aa';
 const LEGACY_SECONDARY = '#527388';
 
-function recolor(svgText: string, primary: string, secondary: string): string {
+export function recolorMascot(svgText: string, primary: string, secondary: string): string {
     return svgText
         .replaceAll(LEGACY_PRIMARY, primary)
         .replaceAll(LEGACY_PRIMARY.toUpperCase(), primary)
@@ -44,7 +44,7 @@ export const Mascot: React.FC<MascotProps> = ({
     label,
 }) => {
     const svgMarkup = useMemo(
-        () => recolor(rawCatGirl, primaryColor, secondaryColor),
+        () => recolorMascot(rawCatGirl, primaryColor, secondaryColor),
         [primaryColor, secondaryColor],
     );
 

@@ -205,10 +205,11 @@ export function BotFleetOverviewCard({
                                     const cfg = configs[snap.bot_id];
                                     const backend = cfg?.bot?.backend_type ?? 'napcat';
                                     return (
-                                        <div
+                                        <button
                                             key={snap.bot_id}
+                                            type="button"
                                             onClick={() => onNavigate('bots')}
-                                            className="flex items-center justify-between gap-2 rounded-md bg-field/50 border border-border-subtle/70 px-3 py-2 transition-all hover:bg-field hover:border-border cursor-pointer select-none"
+                                            className="flex w-full items-center justify-between gap-2 rounded-md bg-field/50 border border-border-subtle/70 px-3 py-2 text-left transition-all hover:bg-field hover:border-border cursor-pointer select-none"
                                         >
                                             <div className="flex items-center gap-2 min-w-0">
                                                 <span className="h-2 w-2 shrink-0 rounded-full bg-success shadow-glow-success" />
@@ -224,7 +225,7 @@ export function BotFleetOverviewCard({
                                             <span className="shrink-0 text-[11px] text-success font-mono font-medium">
                                                 运行中
                                             </span>
-                                        </div>
+                                        </button>
                                     );
                                 })}
                             </div>

@@ -227,15 +227,45 @@ samp,
 
 /* 角落柔光：只用 brand / accent 暖色，避免右上冰蓝与标题栏区域抢戏。
    三层径向：左上桃粉、右上淡暖杏（原 blue 已改）、底部居中轻橙。 */
+/* 三个角的颜色抽成变量，概览页在 :root 上挂 data-day-phase 时整页跟着 Hello 卡的天色走。
+   暗色 / Catppuccin 各自有整条 background 覆写，不受这里影响。 */
+:root {
+    --glow-a: color-mix(in srgb, var(--accent-300) 28%, transparent);
+    --glow-b: color-mix(in srgb, var(--brand-200) 18%, transparent);
+    --glow-c: color-mix(in srgb, var(--brand-300) 12%, transparent);
+}
+
+:root[data-day-phase="morning"] {
+    --glow-a: color-mix(in srgb, #ffd7a3 34%, transparent);
+    --glow-b: color-mix(in srgb, var(--accent-200) 26%, transparent);
+}
+
+:root[data-day-phase="afternoon"] {
+    --glow-a: color-mix(in srgb, #ffc77a 30%, transparent);
+    --glow-b: color-mix(in srgb, #ffd7a3 24%, transparent);
+}
+
+:root[data-day-phase="evening"] {
+    --glow-a: color-mix(in srgb, #c9b4e8 34%, transparent);
+    --glow-b: color-mix(in srgb, #f6b0c8 28%, transparent);
+    --glow-c: color-mix(in srgb, #ffcf9a 14%, transparent);
+}
+
+:root[data-day-phase="night"] {
+    --glow-a: color-mix(in srgb, #8d7bb0 24%, transparent);
+    --glow-b: color-mix(in srgb, #56497e 16%, transparent);
+    --glow-c: color-mix(in srgb, #8d7bb0 10%, transparent);
+}
+
 .ndf-canvas-glow {
     position: absolute;
     inset: 0;
     pointer-events: none;
     z-index: 0;
     background:
-        radial-gradient(65% 45% at -8% -8%, color-mix(in srgb, var(--accent-300) 28%, transparent), transparent 62%),
-        radial-gradient(55% 40% at 108% -5%, color-mix(in srgb, var(--brand-200) 18%, transparent), transparent 58%),
-        radial-gradient(75% 55% at 50% 108%, color-mix(in srgb, var(--brand-300) 12%, transparent), transparent 65%);
+        radial-gradient(65% 45% at -8% -8%, var(--glow-a), transparent 62%),
+        radial-gradient(55% 40% at 108% -5%, var(--glow-b), transparent 58%),
+        radial-gradient(75% 55% at 50% 108%, var(--glow-c), transparent 65%);
 }
 
 /* rich 档独享:角落柔光呼吸。BootstrapPanel.next mount 时把 is-breathing 类
@@ -271,6 +301,350 @@ samp,
 /* Catppuccin 规范：纯色平面背景，禁用角落柔光渐变。 */
 :root:is([data-theme="latte"], [data-theme="frappe"], [data-theme="macchiato"], [data-theme="mocha"]) .ndf-canvas-glow {
     background: none;
+}
+
+/* 概览 Hello 卡「此刻天色」。整卡天幕：--sky-top 天顶、--sky-mid 半空、--sky-low 地平线。
+   文字区在左，上面压一层 --surface-hero 的雾（__haze），天色浓淡不影响可读性。
+   具体色值只在这里出现。 */
+.ndf-hero-sky {
+    /* 云的横飘距离用 cqw 按卡宽算，卡多宽就飘多远。 */
+    container-type: inline-size;
+    --sky-strength: 1;
+    --sky-top: var(--brand-100);
+    --sky-mid: var(--brand-50);
+    --sky-low: var(--surface-hero);
+    /* 月亮 / 星星的墨色：浅底用暖金才看得见，深底换回奶白（见下方暗色覆写）。 */
+    --sky-ink: #ffb93d;
+    --sky-ink-glow: rgba(255, 190, 80, 0.55);
+    --sky-cloud: rgba(255, 255, 255, 0.92);
+}
+
+.ndf-hero-sky--morning {
+    --sky-top: color-mix(in srgb, #ffd09a 82%, var(--surface-hero));
+    --sky-mid: color-mix(in srgb, var(--accent-200) 62%, var(--surface-hero));
+    --sky-low: color-mix(in srgb, #fff0dc 70%, var(--surface-hero));
+}
+
+.ndf-hero-sky--noon {
+    --sky-top: color-mix(in srgb, #ffd66e 78%, var(--surface-hero));
+    --sky-mid: color-mix(in srgb, #ffeeb8 74%, var(--surface-hero));
+    --sky-low: color-mix(in srgb, var(--brand-100) 45%, var(--surface-hero));
+}
+
+.ndf-hero-sky--afternoon {
+    --sky-top: color-mix(in srgb, #ffb75e 80%, var(--surface-hero));
+    --sky-mid: color-mix(in srgb, #ffd39a 68%, var(--surface-hero));
+    --sky-low: color-mix(in srgb, var(--accent-200) 45%, var(--surface-hero));
+    --sky-cloud: rgba(255, 244, 226, 0.9);
+}
+
+.ndf-hero-sky--evening {
+    --sky-top: color-mix(in srgb, #8f7ccf 78%, var(--surface-hero));
+    --sky-mid: color-mix(in srgb, #ee9fc0 72%, var(--surface-hero));
+    --sky-low: color-mix(in srgb, #ffc39a 62%, var(--surface-hero));
+    --sky-cloud: rgba(255, 214, 226, 0.75);
+}
+
+.ndf-hero-sky--night {
+    --sky-top: color-mix(in srgb, #2c2846 80%, var(--surface-hero));
+    --sky-mid: color-mix(in srgb, #56497e 62%, var(--surface-hero));
+    --sky-low: color-mix(in srgb, #8d7bb0 36%, var(--surface-hero));
+}
+
+.ndf-hero-sky__gradient {
+    opacity: var(--sky-strength);
+    background:
+        linear-gradient(178deg, var(--sky-top) 0%, var(--sky-mid) 52%, var(--sky-low) 100%);
+}
+
+/* 左侧文字区的雾：从卡片左缘往右淡出，标题正文都落在接近本色的底上。 */
+.ndf-hero-sky__haze {
+    background:
+        radial-gradient(64% 150% at 4% 72%, var(--surface-hero) 20%, color-mix(in srgb, var(--surface-hero) 65%, transparent) 44%, transparent 70%);
+}
+
+/* 云：两个叠着的胶囊，边缘微糊、底下一点暖影，在浅色天上也立得住。
+   位置由 top 定，横向全靠动画从左外飘到右外。 */
+.ndf-hero-cloud {
+    left: -30%;
+    border-radius: 999px;
+    background: var(--sky-cloud);
+    filter: blur(2.5px);
+    box-shadow: 0 4px 12px -3px rgba(236, 150, 96, 0.28);
+    transform: translateX(0);
+}
+
+.ndf-hero-cloud::before {
+    content: '';
+    position: absolute;
+    left: 20%;
+    top: -58%;
+    width: 48%;
+    height: 125%;
+    border-radius: 999px;
+    background: inherit;
+}
+
+.ndf-hero-cloud::after {
+    content: '';
+    position: absolute;
+    left: 52%;
+    top: -30%;
+    width: 30%;
+    height: 90%;
+    border-radius: 999px;
+    background: inherit;
+}
+
+@keyframes hero-cloud-drift {
+    from {
+        transform: translateX(0);
+    }
+
+    to {
+        transform: translateX(calc(100cqw + 160%));
+    }
+}
+
+.ndf-hero-sky.is-live .ndf-hero-cloud {
+    animation-name: hero-cloud-drift;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+}
+
+/* 不动效时云停在各自的位置上，不堆在左外。 */
+.ndf-hero-sky:not(.is-live) .ndf-hero-cloud:nth-child(1 of .ndf-hero-cloud) {
+    left: 58%;
+}
+
+.ndf-hero-sky:not(.is-live) .ndf-hero-cloud:nth-child(2 of .ndf-hero-cloud) {
+    left: 78%;
+}
+
+.ndf-hero-sky:not(.is-live) .ndf-hero-cloud:nth-child(3 of .ndf-hero-cloud) {
+    left: 40%;
+}
+
+/* 流星：每 23 s 从右上划向左下一次，只亮 0.8 s。 */
+.ndf-hero-shooting-star {
+    left: 88%;
+    top: 4%;
+    width: 90px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--sky-ink), transparent);
+    box-shadow: 0 0 6px var(--sky-ink-glow);
+    transform-origin: 0 50%;
+    transform: rotate(150deg) translateX(0);
+    opacity: 0;
+}
+
+@keyframes hero-shooting-star {
+
+    0%,
+    96% {
+        opacity: 0;
+        transform: rotate(150deg) translateX(0);
+    }
+
+    96.5% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+        transform: rotate(150deg) translateX(240px);
+    }
+}
+
+.ndf-hero-sky.is-live .ndf-hero-shooting-star {
+    animation: hero-shooting-star 23s linear 4s infinite;
+}
+
+/* 太阳 = 一圈大而软的光晕 + 中间一枚小而实的日轮，光晕像天气、日轮像太阳。 */
+.ndf-hero-sun {
+    width: 280px;
+    height: 280px;
+    border-radius: 50%;
+    background:
+        radial-gradient(closest-side, rgba(255, 236, 170, 0.75) 0%, rgba(255, 208, 120, 0.42) 18%, rgba(255, 176, 90, 0.14) 40%, transparent 64%);
+    opacity: var(--sky-strength);
+}
+
+.ndf-hero-sun::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: #fff5d6;
+    box-shadow:
+        0 0 0 6px rgba(255, 236, 170, 0.45),
+        0 0 28px 10px rgba(255, 200, 110, 0.55);
+}
+
+.ndf-hero-sky--noon .ndf-hero-sun {
+    background:
+        radial-gradient(closest-side, rgba(255, 250, 225, 0.85) 0%, rgba(255, 232, 160, 0.42) 16%, rgba(255, 210, 120, 0.12) 38%, transparent 62%);
+}
+
+.ndf-hero-sky--afternoon .ndf-hero-sun {
+    background:
+        radial-gradient(closest-side, rgba(255, 226, 170, 0.8) 0%, rgba(255, 186, 100, 0.48) 18%, rgba(255, 150, 70, 0.16) 42%, transparent 66%);
+}
+
+.ndf-hero-sky--afternoon .ndf-hero-sun::after {
+    background: #ffe9b8;
+    box-shadow:
+        0 0 0 6px rgba(255, 205, 130, 0.45),
+        0 0 28px 10px rgba(255, 160, 80, 0.55);
+}
+
+.ndf-hero-moon {
+    width: 38px;
+    height: 38px;
+    fill: var(--sky-ink);
+    filter: drop-shadow(0 0 5px var(--sky-ink-glow)) drop-shadow(0 0 18px var(--sky-ink-glow));
+}
+
+.ndf-hero-sky--evening .ndf-hero-moon {
+    opacity: 0.9;
+}
+
+.ndf-hero-star {
+    background: var(--sky-ink);
+    box-shadow: 0 0 5px 1px var(--sky-ink-glow);
+    opacity: 0.95;
+}
+
+.ndf-hero-sky--evening .ndf-hero-star {
+    opacity: 0.6;
+}
+
+@keyframes hero-star-twinkle {
+
+    0%,
+    100% {
+        opacity: 0.25;
+        transform: scale(0.75);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.ndf-hero-sky.is-live .ndf-hero-star {
+    animation-name: hero-star-twinkle;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+}
+
+/* 点天空炸出来的小星星：GSAP 控位移与消散，这里只管长相。 */
+.ndf-hero-spark {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 50%;
+    background: var(--sky-ink);
+    box-shadow: 0 0 6px 1px var(--sky-ink-glow);
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .ndf-hero-sky.is-live .ndf-hero-star,
+    .ndf-hero-sky.is-live .ndf-hero-cloud,
+    .ndf-hero-sky.is-live .ndf-hero-shooting-star {
+        animation: none;
+    }
+}
+
+/* 深底上天色压一半，月亮星星换奶白。 */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .ndf-hero-sky {
+        --sky-strength: 0.55;
+        --sky-ink: #fff6df;
+        --sky-ink-glow: rgba(255, 236, 190, 0.6);
+        --sky-cloud: rgba(255, 245, 230, 0.32);
+    }
+}
+
+:root:is([data-theme="dark"], [data-theme="frappe"], [data-theme="macchiato"], [data-theme="mocha"]) .ndf-hero-sky {
+    --sky-strength: 0.55;
+    --sky-ink: #fff6df;
+    --sky-ink-glow: rgba(255, 236, 190, 0.6);
+    --sky-cloud: rgba(255, 245, 230, 0.32);
+}
+
+/* Catppuccin 纯色平面：不铺渐变，只留日月星辰这类「画上去的东西」。 */
+:root:is([data-theme="latte"], [data-theme="frappe"], [data-theme="macchiato"], [data-theme="mocha"]) .ndf-hero-sky__gradient {
+    display: none;
+}
+
+/* 没通知时铃铛打瞌睡：两个 z 轮流飘起来消失。 */
+@keyframes notice-snore {
+    0% {
+        opacity: 0;
+        transform: translate(0, 4px) scale(0.7);
+    }
+
+    30% {
+        opacity: 0.9;
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(10px, -14px) scale(1.1);
+    }
+}
+
+.ndf-snore {
+    position: absolute;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--text-tertiary);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ndf-snore.is-live {
+    animation: notice-snore 2.6s ease-out infinite;
+}
+
+.ndf-snore.is-live:nth-child(3) {
+    animation-delay: 1.3s;
+    font-size: 9px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ndf-snore.is-live {
+        animation: none;
+        opacity: 0.6;
+        transform: none;
+    }
+}
+
+/* 吉祥物气泡的小尾巴，指向右侧的她。 */
+.ndf-mascot-bubble::after {
+    content: '';
+    position: absolute;
+    right: -5px;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    background: inherit;
+    border-right: inherit;
+    border-top: inherit;
+    transform: translateY(-50%) rotate(45deg);
+    border-radius: 2px;
 }
 
 /*

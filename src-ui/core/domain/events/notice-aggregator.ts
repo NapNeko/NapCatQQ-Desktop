@@ -1,16 +1,15 @@
 // Home 页 NoticeTimeline 的派生层。
 //
-// 把 4 个数据源合成一份按重要性排序的 NoticeItem 列表（取最近 N 条）：
+// 把 3 个数据源合成一份按重要性排序的 NoticeItem 列表（取最近 N 条）：
 //   - bootstrap.report.warnings：迁移诊断告警（静态，不变）
 //   - bootstrap.local_versions vs releases：版本更新提示
 //   - DomainEvent 流：登录失效 / 进程崩溃 / daemon 崩溃 等运行时通知
-//   - 静态条件：未安装 NapCat / 暂无 Bot 实例（可选，目前先不做）
 //
-// 严守 frontend-layering：纯函数 + 类型化输入输出，零 React / 零 IPC。
+// 纯函数 + 类型化输入输出，零 React / 零 IPC。
 //
-// legacy 对照：`legacy-python/src/core/home/notice_service.py`
+// legacy 对照：`.references/NapCatQQ-Desktop-main/src/core/home/notice_service.py`
 // HomeNoticeService 把通知分 reminder / runtime / update 三 section，
-// 这里做了 v1 简化：合成单一 list，section 由 UI 层决定怎么分组展示。
+// 这里合成单一 list，section 由 UI 层决定怎么分组展示。
 
 import type {
     BootstrapSnapshot,
@@ -32,7 +31,7 @@ export interface NoticeItem {
     title: string;
     detail: string;
     tone: NoticeTone;
-    /// 可选时间戳（Unix ms 或 s），缺失时 UI 不显示日期。
+    /// Unix 秒；缺失时 UI 不显示时间（迁移 / 更新类通知没有发生时刻）。
     timestamp?: number;
     /// 可选：来源分类（迁移诊断 / 版本更新 / 运行时事件）。
     source: 'migration' | 'update' | 'runtime' | 'system';
@@ -46,12 +45,17 @@ export interface NoticeItem {
     botId?: string;
 }
 
+export interface NoticeEventRecord {
+    payload: DomainEvent;
+    /// 收到事件的本地时刻（Unix ms）。
+    at?: number;
+}
+
 export interface NoticeAggregatorInput {
     bootstrap: BootstrapSnapshot | null | undefined;
     releases: ReleaseSnapshotView | null | undefined;
-    /// 来自 useEventStream 的最近事件，**最新在前**。
-    /// 这里只看 payload，不依赖 UiEventRecord 的 timestamp 字符串。
-    recentEvents: { payload: DomainEvent }[];
+    /// 最近事件，最新在前（见 noticeEventStore）。
+    recentEvents: NoticeEventRecord[];
     /// 可选：当前 Bot 列表，目前未消费，预留给"暂无 Bot 实例"提醒。
     bots?: BotActorSnapshot[];
 }
@@ -156,17 +160,24 @@ function collectUpdateNotices(
 
 // ─── source: runtime（DomainEvent 流） ──────────────────────────────────
 
+/// 事件流里日志 / 指标 / 进度类事件占绝大多数，存储层用它先过滤，
+/// 免得 100 条环形缓冲被日志行冲掉真正的崩溃 / 掉线通知。
+export function isNoticeEvent(event: DomainEvent): boolean {
+    return describeRuntimeEvent(event) !== null;
+}
+
 /// 同一个 (kind, bot_id) 短时间内可能多次触发，去重保留最新一条。
-function collectRuntimeNotices(events: { payload: DomainEvent }[]): NoticeItem[] {
+function collectRuntimeNotices(events: NoticeEventRecord[]): NoticeItem[] {
     const seen = new Set<string>();
     const out: NoticeItem[] = [];
-    for (const { payload } of events) {
+    for (const { payload, at } of events) {
         const item = describeRuntimeEvent(payload);
         if (!item) continue;
         // 同一 dedupKey 只保留第一条（list 是 newest first，第一条就是最新）
         const dedupKey = item.id;
         if (seen.has(dedupKey)) continue;
         seen.add(dedupKey);
+        if (at !== undefined) item.timestamp = Math.floor(at / 1000);
         out.push(item);
     }
     return out;
