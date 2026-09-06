@@ -326,6 +326,7 @@ pub fn run() {
     let bot_manager_offline_listener = Arc::clone(&bot_manager);
     let bot_manager_host_recovery_listener = Arc::clone(&bot_manager);
     let bot_manager_host_lost_listener = Arc::clone(&bot_manager);
+    let bot_manager_auto_restart = Arc::clone(&bot_manager);
 
     let mut builder = tauri::Builder::default();
     #[cfg(desktop)]
@@ -447,6 +448,10 @@ pub fn run() {
                     .clone()
                     .run_host_connection_lost_listener()
                     .await;
+            });
+            // 定时自动重启（间隔 / cron）：须在 bootstrap 前订阅，reattach 的 Running 事件才能落锚点
+            tauri::async_runtime::spawn(async move {
+                bot_manager_auto_restart.run_auto_restart_scheduler().await;
             });
             tauri::async_runtime::spawn(async move {
                 if login_ready_rx.await.is_err() {
@@ -660,6 +665,7 @@ pub fn run() {
             commands::bot::get_bot_snapshot,
             commands::bot::get_bot_config,
             commands::bot::upsert_bot_config,
+            commands::bot::preview_auto_restart_cron,
             commands::bot::delete_bot_config,
             commands::bot::start_bot,
             commands::bot::detect_bot_config_drift,

@@ -234,6 +234,22 @@ pub async fn upsert_bot_config(
         .map_err(map_err)
 }
 
+/// 定时重启 cron 的即时校验 + 预览：Ok = 接下来几次触发时刻（本地时区 RFC3339），
+/// Err = 解析错误文案。纯计算，不碰状态。
+#[tauri::command]
+pub fn preview_auto_restart_cron(expr: String) -> Result<Vec<String>, String> {
+    ncd_runtime::preview_auto_restart_cron(
+        &expr,
+        &chrono::Local::now(),
+        ncd_runtime::AUTO_RESTART_PREVIEW_COUNT,
+    )
+    .map(|times| times.iter().map(|t| t.to_rfc3339()).collect())
+    .map_err(|err| match err {
+        ncd_domain::BotConfigError::InvalidCron(detail) => format!("表达式无效：{detail}"),
+        other => other.to_string(),
+    })
+}
+
 #[tauri::command]
 pub async fn delete_bot_config(state: State<'_, AppState>, bot_id: String) -> Result<(), String> {
     state.migrate_gate.ensure_idle()?;

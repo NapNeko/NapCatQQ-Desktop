@@ -142,8 +142,8 @@ pub mod bot_config {
 }
 
 pub use ncd_domain::{
-    AdvancedConfig, AutoRestartSchedule, BackendKind, BackendType, BotBasicConfig, BotConfig,
-    BotConfigError, BotFlavor, BotId, BotStatus, ConnectConfig, DeploymentType,
+    AdvancedConfig, AutoRestartMode, AutoRestartSchedule, BackendKind, BackendType,
+    BotBasicConfig, BotConfig, BotConfigError, BotFlavor, BotId, BotStatus, ConnectConfig, DeploymentType,
     DesktopNotifySettings, DiscoveredRemoteBot, DiscoveredRemoteBotSource, HttpServerConfig,
     ImportableRemoteBot, ImportedNetworkConfig, LogLevel, MessagePostFormat, MigrationOutcome,
     MigrationStage, O3HookMode, PathError, REMOTE_INVENTORY_VERSION, RemoteInventory,
@@ -169,6 +169,10 @@ pub use bot_config_repo_impl::LocalBotConfigRepo;
 pub use bot_manager::{
     BatchResult, BootstrapResult, BotManager, BotManagerError, RuntimeReadinessGate,
     describe_not_ready, framework_component_for,
+};
+pub use bot_manager::auto_restart::{
+    PREVIEW_COUNT as AUTO_RESTART_PREVIEW_COUNT, preview_cron as preview_auto_restart_cron,
+    validate_schedule as validate_auto_restart_schedule,
 };
 pub use component_action_policy::{
     RemoteHostProbe, RemoteLayout, asset_sha256, component_action_cancellable,

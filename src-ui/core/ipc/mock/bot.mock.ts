@@ -66,7 +66,7 @@ export function buildMockBotConfig(botId: string): BotConfig {
             name: `Bot-${botId.slice(-2)}`,
             QQID: Number(botId),
             musicSignUrl: 'http://sign.example.com/api',
-            autoRestartSchedule: { enable: false, time_unit: 'h', duration: 6 },
+            autoRestartSchedule: { enable: false, mode: 'interval', time_unit: 'h', duration: 6, cron: '' },
             offlineAutoRestart: false,
             runtime_target: 'local',
             backend_type: 'napcat',

@@ -20,6 +20,7 @@ import {
 } from '../../../../shared/ui/motion';
 import { useMotion } from '../../../../hooks/preferences/useMotion';
 import type { BotConfig } from '../../../../core/ipc/generated/domain/BotConfig';
+import { describeAutoRestartSchedule } from '../../../../core/domain/bot/auto-restart';
 import { cn } from '../../../../shared/utils/cn';
 
 export function BotAvatar({
@@ -305,30 +306,12 @@ export function channelDetailLabel(c: ChannelCount): string {
 }
 
 export function formatRestartHint(config: BotConfig): string | null {
-    const sched = config.bot.autoRestartSchedule;
-    const offline = config.bot.offlineAutoRestart;
     const parts: string[] = [];
-    if (sched.enable) parts.push(`每 ${sched.duration}${formatTimeUnit(sched.time_unit)}`);
-    if (offline) parts.push('离线时');
+    const scheduled = describeAutoRestartSchedule(config.bot.autoRestartSchedule);
+    if (scheduled) parts.push(scheduled);
+    if (config.bot.offlineAutoRestart) parts.push('离线时');
     if (parts.length === 0) return null;
     return parts.join(' · ');
-}
-
-function formatTimeUnit(unit: BotConfig['bot']['autoRestartSchedule']['time_unit']): string {
-    switch (unit) {
-        case 'm':
-            return '分钟';
-        case 'h':
-            return '小时';
-        case 'd':
-            return '天';
-        case 'mon':
-            return '个月';
-        case 'year':
-            return '年';
-        default:
-            return String(unit);
-    }
 }
 
 export function formatRelativeTime(iso: string): string | null {

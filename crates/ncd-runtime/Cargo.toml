@@ -49,6 +49,8 @@ hex = "0.4"
 uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 chrono = "0.4"
+# 定时自动重启的 cron 解析 / 下次触发计算（bot_manager/auto_restart.rs）
+croner = "4"
 # SSH 密钥生成已下沉 ncd-server（ssh-key 依赖随 ncd-server）。
 # SnowLuma backend runtime 依赖（spec: snowluma-backend-runtime, task 1.1）
 # - sysinfo: Windows 子进程树枚举 (proc_tree.rs / commands/snowluma.rs)

@@ -143,24 +143,66 @@ impl<'de> Deserialize<'de> for O3HookMode {
     }
 }
 
+/// 定时重启的触发方式：Interval 沿用 legacy「运行满 N 单位重启一次」；
+/// Cron 走本地时区的 5 段表达式（可选前置秒段），能落到具体时刻。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AutoRestartMode {
+    #[default]
+    Interval,
+    Cron,
+}
+
+/// 字段名对齐 legacy bot.json；mode / cron 缺省时按 Interval 读，旧配置无需迁移。
+/// cron 表达式的解析与下次触发计算在 ncd-runtime（domain 不带 cron 依赖）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AutoRestartSchedule {
     #[serde(default)]
     pub enable: bool,
     #[serde(default)]
+    pub mode: AutoRestartMode,
+    #[serde(default)]
     pub time_unit: TimeUnit,
     #[serde(default = "default_auto_restart_duration")]
     pub duration: u32,
+    #[serde(default)]
+    pub cron: String,
 }
 
 impl Default for AutoRestartSchedule {
     fn default() -> Self {
         Self {
             enable: false,
+            mode: AutoRestartMode::Interval,
             time_unit: TimeUnit::Hour,
             duration: default_auto_restart_duration(),
+            cron: String::new(),
         }
+    }
+}
+
+impl TimeUnit {
+    /// legacy 口径：月 = 30 天、年 = 365 天，不按日历对齐（要精确落点请用 cron）。
+    pub const fn seconds(self) -> u64 {
+        match self {
+            Self::Minute => 60,
+            Self::Hour => 3_600,
+            Self::Day => 86_400,
+            Self::Month => 30 * 86_400,
+            Self::Year => 365 * 86_400,
+        }
+    }
+}
+
+impl AutoRestartSchedule {
+    /// Interval 模式的周期秒数；duration 为 0 视为无计划。
+    pub fn interval_seconds(&self) -> Option<u64> {
+        if self.duration == 0 {
+            return None;
+        }
+        u64::from(self.duration).checked_mul(self.time_unit.seconds())
     }
 }
 
@@ -542,6 +584,8 @@ pub enum BotConfigError {
     InvalidPort(u16),
     #[error("invalid URL: {0}")]
     InvalidUrl(String),
+    #[error("invalid cron expression: {0}")]
+    InvalidCron(String),
     #[error("bot config migration failed: {0}")]
     Migration(String),
     #[error("bot config JSON failed: {0}")]
@@ -746,6 +790,49 @@ mod snowluma_start_mode_tests {
         }"#;
         let decoded: BotBasicConfig = serde_json::from_str(legacy).unwrap();
         assert_eq!(decoded.deployment_type, DeploymentType::Native);
+    }
+
+    /// legacy autoRestartSchedule 没有 mode / cron：按 Interval 读，字段原值保留
+    #[test]
+    fn auto_restart_schedule_legacy_shape_reads_as_interval() {
+        let legacy = r#"{"enable": true, "duration": 12, "time_unit": "h"}"#;
+        let decoded: AutoRestartSchedule = serde_json::from_str(legacy).unwrap();
+        assert_eq!(
+            decoded,
+            AutoRestartSchedule {
+                enable: true,
+                mode: AutoRestartMode::Interval,
+                time_unit: TimeUnit::Hour,
+                duration: 12,
+                cron: String::new(),
+            }
+        );
+        assert_eq!(decoded.interval_seconds(), Some(12 * 3_600));
+    }
+
+    #[test]
+    fn auto_restart_schedule_cron_round_trips_lowercase_mode() {
+        let sched = AutoRestartSchedule {
+            enable: true,
+            mode: AutoRestartMode::Cron,
+            time_unit: TimeUnit::Hour,
+            duration: 6,
+            cron: "0 4 * * *".to_string(),
+        };
+        let json = serde_json::to_string(&sched).unwrap();
+        assert!(json.contains(r#""mode":"cron""#), "实际 JSON: {json}");
+        assert!(json.contains(r#""cron":"0 4 * * *""#), "实际 JSON: {json}");
+        let decoded: AutoRestartSchedule = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, sched);
+    }
+
+    #[test]
+    fn interval_seconds_zero_duration_is_none() {
+        let sched = AutoRestartSchedule {
+            duration: 0,
+            ..AutoRestartSchedule::default()
+        };
+        assert_eq!(sched.interval_seconds(), None);
     }
 }
 

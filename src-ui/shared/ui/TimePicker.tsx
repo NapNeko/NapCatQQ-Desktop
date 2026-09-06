@@ -21,6 +21,8 @@ export interface TimePickerProps {
     className?: string;
     /** 分钟步进，默认 1 */
     minuteStep?: number;
+    /** 弹层相对触发器的对齐；默认 end（图标按钮靠右的场景） */
+    align?: 'start' | 'center' | 'end';
     'aria-label'?: string;
 }
 
@@ -175,6 +177,7 @@ export function TimePicker({
     variant = 'icon',
     className,
     minuteStep = 1,
+    align = 'end',
     'aria-label': ariaLabel = '选择时刻',
 }: TimePickerProps) {
     const [open, setOpen] = useState(false);
@@ -201,6 +204,7 @@ export function TimePicker({
                 className={cn(
                     'inline-flex h-8 items-center gap-1.5 rounded-sm border border-border-subtle bg-field px-2 font-mono text-[12px] tabular-nums text-text transition-colors',
                     'hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
+                    'data-[state=open]:border-brand data-[state=open]:ring-2 data-[state=open]:ring-brand data-[state=open]:ring-inset',
                     'disabled:cursor-not-allowed disabled:opacity-50',
                     className,
                 )}
@@ -231,7 +235,7 @@ export function TimePicker({
             <PopoverTrigger asChild>{trigger}</PopoverTrigger>
             <PopoverContent
                 side="bottom"
-                align="end"
+                align={align}
                 sideOffset={6}
                 className="w-auto p-2"
                 // 嵌在其它 Popover 内时：不要抢焦点、不要因外层 dismiss 逻辑抖动

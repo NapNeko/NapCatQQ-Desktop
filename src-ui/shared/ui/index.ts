@@ -60,6 +60,7 @@ export {
     type TimeValue,
 } from './TimePicker';
 export { MonthCalendar, type MonthCalendarProps } from './MonthCalendar';
+export { DayOfMonthPicker, type DayOfMonthPickerProps } from './DayOfMonthPicker';
 export {
     ContextMenu,
     ContextMenuTrigger,

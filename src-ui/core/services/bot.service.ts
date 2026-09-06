@@ -314,6 +314,12 @@ export const botService = {
         return mockDeleteBotConfig(botId);
     },
 
+    /// 定时重启 cron 校验 + 预览：resolve 接下来几次触发（本地时区 ISO），reject = 解析错误文案。
+    previewAutoRestartCron: async (expr: string): Promise<string[]> => {
+        if (isTauri) return invoke<string[]>('preview_auto_restart_cron', { expr });
+        return [];
+    },
+
     // ── 日志快照 ─────────────────────────────────────────────────────────
     /// 拉取 Bot 最近 `lines` 行历史日志。BotLogPage 开页一次调用。
     tailLog: async (botId: string, lines = 1000): Promise<LogSnapshot> => {

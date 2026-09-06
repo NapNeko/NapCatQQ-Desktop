@@ -64,8 +64,8 @@ pub use bootstrap::{
 };
 pub use bot_actor::{BotActorError, BotActorSnapshot, BotActorState};
 pub use bot_config::{
-    AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, BotConfigError,
-    BypassConfig, ConnectConfig, DeploymentType, HttpClientConfig, HttpServerConfig,
+    AdvancedConfig, AutoRestartMode, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig,
+    BotConfigError, BypassConfig, ConnectConfig, DeploymentType, HttpClientConfig, HttpServerConfig,
     HttpSseServerConfig, ImportedNetworkConfig, LogLevel, MessagePostFormat, NetworkBaseFields,
     O3HookMode, StatusCommandConfig, TimeUnit, WebsocketClientConfig, WebsocketServerConfig,
     WsRole, is_remote_docker_config, is_remote_native_napcat_config,

@@ -37,7 +37,7 @@ function botConfig(overrides: Partial<BotConfig['bot']> = {}): BotConfig {
             name: 'bot',
             QQID: 10001,
             musicSignUrl: '',
-            autoRestartSchedule: { enable: false, time_unit: 'd', duration: 1 },
+            autoRestartSchedule: { enable: false, mode: 'interval', time_unit: 'd', duration: 1, cron: '' },
             offlineAutoRestart: false,
             runtime_target: 'local',
             backend_type: 'napcat',

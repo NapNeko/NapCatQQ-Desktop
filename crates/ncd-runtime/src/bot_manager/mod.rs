@@ -38,6 +38,7 @@ use ncd_traits::backend_config_renderer::BackendConfigRenderer;
 use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig, BotStartCtx};
 use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
 
+pub mod auto_restart;
 mod helpers;
 mod listeners;
 pub mod runtime_gate;
@@ -1299,6 +1300,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 return Err(BotManagerError::BotLimitReached);
             }
         }
+
+        // cron 解析依赖在 runtime，domain validate 不覆盖；坏表达式在这里挡住不落盘
+        auto_restart::validate_schedule(&config.bot.auto_restart_schedule)?;
 
         // 0. 读旧 config 拿原 backend_type,用于检测 backend 切换走特殊路径
         //    新建 bot 没有旧 config,这步返回 None

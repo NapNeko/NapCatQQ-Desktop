@@ -16,7 +16,7 @@ export function createDefaultBotConfig(): BotConfig {
             name: '',
             QQID: 0,
             musicSignUrl: '',
-            autoRestartSchedule: { enable: false, time_unit: 'h', duration: 6 },
+            autoRestartSchedule: { enable: false, mode: 'interval', time_unit: 'h', duration: 6, cron: '' },
             offlineAutoRestart: false,
             runtime_target: 'local',
             backend_type: 'napcat',
@@ -73,6 +73,11 @@ export function validateBotConfig(config: BotConfig): ValidationResult {
     // Docker 启动方式只允许配合远程 SSH 主机。
     if (config.bot.deploymentType === 'docker' && config.bot.runtime_target === 'local') {
         return { ok: false, reason: '本机暂不支持 Docker 部署，请改用「直接运行」，或把运行宿主切换为远程 SSH 主机。' };
+    }
+    // cron 语法由后端解析并回报错误；这里只挡空表达式
+    const sched = config.bot.autoRestartSchedule;
+    if (sched.enable && sched.mode === 'cron' && !sched.cron.trim()) {
+        return { ok: false, reason: '定时自动重启已选 cron，请填写表达式！' };
     }
     // SnowLuma HotStart 不再持久化 attach_pid，PID 由 backend 启动时自动按 qq_id 匹配。
     // 如果 qq_id 缺失上面已挡掉；这里不再有额外校验。

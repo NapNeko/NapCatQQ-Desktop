@@ -13,6 +13,7 @@ import {
     PopoverContent,
 } from '../../../../shared/ui';
 import { GsapPresence } from '../../../../shared/ui/motion/GsapPresence';
+import { AutoRestartScheduleEditor } from './AutoRestartScheduleEditor';
 import { useServerManager } from '../../../../hooks/remote/useServerManager';
 import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
 import {
@@ -33,7 +34,7 @@ import {
 import type { BotBasicConfig } from '../../../../core/ipc/generated/domain/BotBasicConfig';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
 import type { DeploymentType } from '../../../../core/ipc/generated/domain/DeploymentType';
-import type { TimeUnit } from '../../../../core/ipc/generated/domain/TimeUnit';
+import type { AutoRestartSchedule } from '../../../../core/ipc/generated/domain/AutoRestartSchedule';
 import type { SnowLumaStartMode } from '../../../../core/ipc/generated/domain/SnowLumaStartMode';
 
 interface IdentityTabProps {
@@ -56,14 +57,6 @@ const RUNTIME_ITEMS = [
 const DEPLOYMENT_ITEMS = [
     { value: 'native' as DeploymentType, label: '直接运行' },
     { value: 'docker' as DeploymentType, label: 'Docker' },
-];
-
-const TIME_UNIT_ITEMS = [
-    { value: 'm' as TimeUnit, label: '分钟' },
-    { value: 'h' as TimeUnit, label: '小时' },
-    { value: 'd' as TimeUnit, label: '天' },
-    { value: 'mon' as TimeUnit, label: '月' },
-    { value: 'year' as TimeUnit, label: '年' },
 ];
 
 export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityTabProps) {
@@ -136,6 +129,9 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
         }
         return '例如：Bot-01';
     }, [data.QQID]);
+
+    const patchSchedule = (patch: Partial<AutoRestartSchedule>) =>
+        onChange({ autoRestartSchedule: { ...data.autoRestartSchedule, ...patch } });
 
     const remoteHostSelectValue: string | undefined = (() => {
         const profileId = serverProfileIdFromRuntimeTarget(data.runtime_target);
@@ -350,42 +346,13 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                 <Switch
                     label="定时自动重启"
                     checked={data.autoRestartSchedule.enable}
-                    onCheckedChange={(v) =>
-                        onChange({
-                            autoRestartSchedule: {
-                                ...data.autoRestartSchedule,
-                                enable: v,
-                            },
-                        })
-                    }
+                    onCheckedChange={(v) => patchSchedule({ enable: v })}
                 />
                 {data.autoRestartSchedule.enable && (
-                    <div className="ml-7 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <NumberField
-                            label="重启间隔"
-                            value={data.autoRestartSchedule.duration}
-                            onValueChange={(v) =>
-                                onChange({
-                                    autoRestartSchedule: {
-                                        ...data.autoRestartSchedule,
-                                        duration: v ?? 0,
-                                    },
-                                })
-                            }
-                            min={1}
-                        />
-                        <Select
-                            label="时间单位"
-                            items={TIME_UNIT_ITEMS}
-                            value={data.autoRestartSchedule.time_unit}
-                            onValueChange={(v) =>
-                                onChange({
-                                    autoRestartSchedule: {
-                                        ...data.autoRestartSchedule,
-                                        time_unit: v,
-                                    },
-                                })
-                            }
+                    <div className="ml-7">
+                        <AutoRestartScheduleEditor
+                            schedule={data.autoRestartSchedule}
+                            onChange={patchSchedule}
                         />
                     </div>
                 )}
