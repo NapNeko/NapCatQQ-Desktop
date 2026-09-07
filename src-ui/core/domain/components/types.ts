@@ -196,6 +196,8 @@ export function splitByCategory(rows: ComponentRow[]): ComponentsView {
 // 字面量工具
 const CATEGORY_LABEL: Record<ComponentCategory, string> = {
     framework: '框架',
+    // 应用端框架（Karin 等）按实例安装，不进组件页目录；标签仅供任务队列等处兜底
+    app_framework: '应用端',
     runtime_dep: '运行时依赖',
     // 含本机 Desktop + 远端 ncd-watch（产品侧配套，非框架运行时依赖）
     self_app: '桌面端',

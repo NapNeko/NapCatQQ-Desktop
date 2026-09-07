@@ -10,6 +10,9 @@ const COMPONENT_DISPLAY_NAME: Record<ComponentId, string> = {
     novnc: 'noVNC',
     ncd_watch: 'NCD Watch',
     desktop_self: 'Desktop',
+    karin: 'Karin',
+    uv: 'uv',
+    nonebot2: 'NoneBot2',
 };
 
 const STEP_KIND_LABEL: Record<string, string> = {

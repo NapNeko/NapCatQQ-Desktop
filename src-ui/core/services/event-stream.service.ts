@@ -42,6 +42,9 @@ const DOMAIN_EVENT_NAMES = [
     // Host 连接健康事件（不绑 bot，绑 server_id）
     'host_connection_lost',
     'host_connection_recovered',
+    // 应用端实例（Karin 等）
+    'app_instance_changed',
+    'app_instance_log_appended',
 ] as const;
 
 export const eventStreamService = {
