@@ -28,10 +28,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::components::action_policy::{
     RemoteLayout, component_action_cancellable, component_action_needs_runtime_closure,
-    component_dedupe_key, component_needs_package_manager, component_task_resources,
-    dependency_target_display_name,
+    component_dedupe_key, component_needs_package_manager, component_target_label,
+    component_task_resources, dependency_target_display_name,
 };
-use crate::components::factory::{BuildComponentCtx, build_component_for_host};
+use crate::components::factory::{AppComponentHint, BuildComponentCtx, build_component_for_host};
 use crate::components::resolver::{ResolveCtx, resolve_dependencies, resolve_runtime_readiness};
 use crate::components::system_package::{
     qq_install_failure_message, run_qq_dependency_install_for_command, run_system_package_task,
@@ -56,6 +56,8 @@ pub struct ComponentBuildInputs {
     /// 本次动作明确的 SnowLuma 包;None 交给 factory 按库存推断
     pub snowluma_linux_package: Option<SnowLumaLinuxPackage>,
     pub snowluma_node_path: Option<String>,
+    /// 应用端实例（Karin 等）的目录 / 端口；组件页动作为 None
+    pub app_component: Option<AppComponentHint>,
 }
 
 impl ComponentBuildInputs {
@@ -73,8 +75,18 @@ impl ComponentBuildInputs {
                 selected: self.selected.as_ref(),
                 snowluma_linux_package: self.snowluma_linux_package,
                 snowluma_node_path: self.snowluma_node_path.as_deref(),
+                app_component: self.app_component.as_ref(),
             },
         )
+    }
+
+    /// 任务去重 / 资源的实例作用域：只有应用端组件带
+    fn scope_for(&self, id: ComponentId) -> Option<&str> {
+        if id.is_app_framework() {
+            self.app_component.as_ref().map(|h| h.instance_id.as_str())
+        } else {
+            None
+        }
     }
 
     /// root 在 host 上按 phase 的依赖状态;root 自己构建失败才 Err
@@ -172,7 +184,8 @@ impl ComponentExecutor {
             inputs,
         } = req;
 
-        let dedupe = component_dedupe_key(&host_id, component_id, kind);
+        let dedupe =
+            component_dedupe_key(&host_id, component_id, kind, inputs.scope_for(component_id));
         if let Some(existing) = self.deployment_tasks.active_task_by_dedupe_key(&dedupe).await {
             return Ok(existing);
         }
@@ -424,7 +437,8 @@ impl ComponentExecutor {
         host: Arc<dyn Host>,
         inputs: &ComponentBuildInputs,
     ) -> Result<String, String> {
-        let dedupe_key = component_dedupe_key(host_id, component_id, kind);
+        let scope = inputs.scope_for(component_id);
+        let dedupe_key = component_dedupe_key(host_id, component_id, kind, scope);
         if let Some(existing) = self
             .deployment_tasks
             .active_task_by_dedupe_key(&dedupe_key)
@@ -457,10 +471,15 @@ impl ComponentExecutor {
             kind,
             host.os(),
             host.locality(),
+            scope,
         );
         let cancellable =
             component_action_cancellable(component_id, kind, host.os(), host.locality());
-        let title = format!("{} {}", component_id.as_str(), kind.as_str());
+        let title = format!(
+            "{} {}",
+            component_target_label(component_id, scope),
+            kind.as_str()
+        );
 
         let runner = ComponentTaskRunner {
             component_id,

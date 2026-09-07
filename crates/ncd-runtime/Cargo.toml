@@ -8,6 +8,7 @@ rust-version.workspace = true
 ncd-domain = { path = "../ncd-domain" }
 ncd-traits = { path = "../ncd-traits" }
 ncd-component = { path = "../ncd-component" }
+ncd-appframework = { path = "../ncd-appframework" }
 ncd-deploy = { path = "../ncd-deploy" }
 ncd-host = { path = "../ncd-host" }
 ncd-server = { path = "../ncd-server" }
