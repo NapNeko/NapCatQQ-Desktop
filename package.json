@@ -30,6 +30,9 @@
     "release:prepare": "node scripts/release.mjs prepare"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/state": "^6.7.4",
+    "@codemirror/view": "^6.43.11",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",

@@ -80,4 +80,9 @@ export {
     type ContextMenuItemProps,
 } from './ContextMenu';
 export { GlobalTitleTooltip } from './GlobalTitleTooltip';
+export {
+    SyntaxTextEditor,
+    type SyntaxTextEditorProps,
+    type SyntaxMode,
+} from './SyntaxTextEditor';
 
