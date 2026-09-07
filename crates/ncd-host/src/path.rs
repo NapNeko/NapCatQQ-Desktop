@@ -13,6 +13,8 @@
 
 use std::fmt;
 
+use crate::host::Os;
+
 /// 路径风格(给 Host 实装做内部转换用)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PathStyle {
@@ -20,6 +22,16 @@ pub enum PathStyle {
     Posix,
     /// Windows:\ 分隔符,可能带 C: 盘符
     Windows,
+}
+
+impl PathStyle {
+    /// 主机 OS 对应的本地路径风格
+    pub fn for_os(os: Os) -> Self {
+        match os {
+            Os::Windows => Self::Windows,
+            Os::Linux | Os::MacOs => Self::Posix,
+        }
+    }
 }
 
 /// 跨平台路径,内部统一 POSIX 风格存储
@@ -68,6 +80,16 @@ impl HostPath {
             PathStyle::Posix => self.inner.clone(),
             PathStyle::Windows => self.render_windows(),
         }
+    }
+
+    /// 按主机 OS 渲染成本地字符串。
+    ///
+    /// 凡是把路径交给**被启动的进程**去解释的地方(命令行参数、环境变量值、
+    /// 写进配置文件)都要用这个,而不是 `as_posix()`:Host 实装只会还原
+    /// `HostCommand.program` 和文件操作的路径,参数是原样透传的,Windows 上
+    /// `/e/x/y.js` 会被目标进程当成当前盘下的 `\e\x\y.js`。
+    pub fn render_for(&self, os: Os) -> String {
+        self.render(PathStyle::for_os(os))
     }
 
     fn render_windows(&self) -> String {
@@ -246,6 +268,18 @@ mod tests {
             ),
             r"C:\ProgramData\NapCatQQ Desktop\components\NodeJs\node.exe"
         );
+    }
+
+    #[test]
+    fn render_for_follows_host_os() {
+        let p = HostPath::from_windows(r"E:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js");
+        assert_eq!(
+            p.render_for(Os::Windows),
+            r"E:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js"
+        );
+        let q = HostPath::from_posix("/home/u/ncd/apps/karin/k1");
+        assert_eq!(q.render_for(Os::Linux), "/home/u/ncd/apps/karin/k1");
+        assert_eq!(q.render_for(Os::MacOs), "/home/u/ncd/apps/karin/k1");
     }
 
     #[test]
