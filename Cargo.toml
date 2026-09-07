@@ -6,6 +6,7 @@ members = [
     "crates/ncd-host",
     "crates/ncd-network",
     "crates/ncd-component",
+    "crates/ncd-appframework",
     "crates/ncd-deploy",
     "crates/ncd-update",
     "crates/ncd-runtime",
