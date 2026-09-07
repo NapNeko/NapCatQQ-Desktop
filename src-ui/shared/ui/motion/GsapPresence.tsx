@@ -62,8 +62,10 @@ export function GsapPresence({
     /** ref 挂上 DOM 后再触发 useGSAP，避免首屏 PageTransition 一直 visibility:hidden */
     const [refReady, setRefReady] = useState(0);
 
+    // 只在「要显示且已挂上」时重绑 ref。visible 变 false 也 bump 的话，
+    // useGSAP 会立刻 kill 刚起的 exit，onInterrupt → finishExit，收起动画直接没了。
     useLayoutEffect(() => {
-        if (!mounted) return;
+        if (!mounted || !visible) return;
         setRefReady((n) => n + 1);
     }, [mounted, visible]);
 
@@ -93,8 +95,12 @@ export function GsapPresence({
                 onExited?.();
             };
 
-            activeAnimRef.current?.kill();
-            activeAnimRef.current = null;
+            const prev = activeAnimRef.current;
+            if (prev) {
+                prev.eventCallback('onInterrupt', null);
+                prev.kill();
+                activeAnimRef.current = null;
+            }
 
             if (visible) {
                 if (!env.enabled || !onEnter) {
@@ -121,6 +127,7 @@ export function GsapPresence({
             return () => {
                 const anim = activeAnimRef.current;
                 if (anim) {
+                    anim.eventCallback('onInterrupt', null);
                     anim.kill();
                     activeAnimRef.current = null;
                     if (!visible && mounted) {

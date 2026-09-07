@@ -1,0 +1,32 @@
+[package]
+name = "ncd-appframework"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+# 应用端框架适配器（Karin / NoneBot2 …）：manifest + Component + Integration。
+# 只依赖 domain / traits / component / host；禁止依赖 ncd-backend-*。
+[dependencies]
+ncd-domain = { path = "../ncd-domain" }
+ncd-traits = { path = "../ncd-traits" }
+ncd-component = { path = "../ncd-component" }
+ncd-host = { path = "../ncd-host" }
+async-trait = "0.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.10"
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["rt", "sync"] }
+toml = "0.8"
+tracing = "0.1"
+ts-rs = { version = "12", features = ["serde-compat"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tempfile = "3"
+
+[lints]
+workspace = true

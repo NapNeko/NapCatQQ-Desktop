@@ -1,4 +1,5 @@
-// 单台主机组件：框架 / 运行时依赖 / 桌面端。Docker 行算运行时依赖。
+// 单台主机组件：协议端 / 应用端 / 运行时依赖 / 桌面端。Docker 行算运行时依赖；
+// 应用端行是合成行（按实例安装，数据来自 useAppFrameworks / useAppInstances）。
 
 import React from 'react';
 import { PackageX, WifiOff, Wrench } from 'lucide-react';
@@ -7,14 +8,18 @@ import { PagePlaceholder } from '../../shared/ui/PagePlaceholder';
 import { MachineComponentRowView } from './MachineComponentRow';
 import { componentCardGridClass } from './ComponentEntityCard';
 import { DockerRow } from './DockerRow';
+import { AppFrameworkRow, runtimeDepsFor } from './AppFrameworkRow';
 import { FrameworkDockerDeployButton } from './FrameworkDockerDeploy';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import { isHostConnectivityFailureReason } from '../../core/domain/components/types';
+import { componentDisplayName } from '../../core/domain/task-queue/labels';
 import type { MachineView, MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { ReleaseInfoView } from '../../core/domain/release/normalize';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type {
+    AppFrameworkManifest,
+    AppInstance,
     ComponentId,
     ContainerInfo,
     DeployedContainer,
@@ -25,6 +30,10 @@ import type {
 } from '../../core/ipc/types';
 interface HostComponentsViewProps {
     machine: MachineView;
+    // 应用端（按实例安装的合成行）
+    appFrameworks: AppFrameworkManifest[];
+    appInstances: AppInstance[];
+    onCreateAppInstance: (manifest: AppFrameworkManifest, hostId: string) => void;
     latestVersionFor: (id: ComponentId) => string | null;
     /** 远端 release 全文（含更新日志）；无则不显示「日志」按钮 */
     latestReleaseFor: (id: ComponentId) => ReleaseInfoView | null;
@@ -67,6 +76,9 @@ interface HostComponentsViewProps {
 
 export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     machine,
+    appFrameworks,
+    appInstances,
+    onCreateAppInstance,
     latestVersionFor,
     latestReleaseFor,
     getProgress,
@@ -196,7 +208,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
             ) : null}
             <div className="flex w-full flex-col gap-3" data-tour-id="comp-group-framework">
                 <Group
-                    title="框架"
+                    title="协议端"
                     rows={machine.framework}
                     hostId={host.host_id}
                     disableActions={isDemo}
@@ -210,6 +222,14 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                     trailingFor={isDemo ? undefined : deployButtonFor}
                 />
             </div>
+
+            <AppFrameworkGroup
+                manifests={appFrameworks}
+                instances={appInstances}
+                machine={machine}
+                disableActions={isDemo}
+                onCreate={(manifest) => onCreateAppInstance(manifest, host.host_id)}
+            />
 
             <div data-tour-id="comp-group-runtime">
                 <RuntimeDepGroup
@@ -250,6 +270,46 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 onShowReleaseNotes={onShowReleaseNotes}
             />
 
+        </div>
+    );
+};
+
+/// 应用端组：每个框架一张卡，只列这台主机上的实例；不支持该主机 placement 的框架也保留卡片但标「不支持」。
+const AppFrameworkGroup: React.FC<{
+    manifests: AppFrameworkManifest[];
+    instances: AppInstance[];
+    machine: MachineView;
+    disableActions: boolean;
+    onCreate: (manifest: AppFrameworkManifest) => void;
+}> = ({ manifests, instances, machine, disableActions, onCreate }) => {
+    if (manifests.length === 0) return null;
+    const { host } = machine;
+    return (
+        <div data-tour-id="comp-group-app">
+            <FormSection
+                title="应用端"
+                description="按实例安装；实例的启停、对接协议 Bot、日志在「应用端」页"
+                layout="none"
+            >
+                <div className={componentCardGridClass}>
+                    {manifests.map((manifest) => (
+                        <div key={manifest.id} data-tour-id={`comp-row-${manifest.component_id}`} className="min-w-0">
+                            <AppFrameworkRow
+                                manifest={manifest}
+                                host={host}
+                                instances={instances.filter(
+                                    (i) => i.host_id === host.host_id && i.framework_id === manifest.id,
+                                )}
+                                runtimeDeps={runtimeDepsFor(manifest, machine.runtimeDep, (id) =>
+                                    componentDisplayName(id as ComponentId),
+                                )}
+                                disabled={disableActions}
+                                onCreate={() => onCreate(manifest)}
+                            />
+                        </div>
+                    ))}
+                </div>
+            </FormSection>
         </div>
     );
 };

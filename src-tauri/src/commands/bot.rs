@@ -551,6 +551,11 @@ mod tests {
             poller_settings,
             Arc::clone(&desktop_notify),
         ));
+        let app_manager = crate::commands::app_framework::test_app_manager(
+            root,
+            &bus,
+            Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::BotConfigPort>,
+        );
         let state = AppState {
             data_root: root.to_path_buf(),
             snapshot: BootstrapSnapshot::ready(),
@@ -579,6 +584,7 @@ mod tests {
             migrate_gate: Arc::new(
                 crate::commands::data_root_migrate::DataRootMigrateGate::default(),
             ),
+            app_manager,
         };
         (state, bus)
     }

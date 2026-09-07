@@ -67,6 +67,41 @@ export type { AppInstanceId } from './generated/domain/AppInstanceId';
 export type { AppInstance } from './generated/domain/AppInstance';
 export type { AppInstanceState } from './generated/domain/AppInstanceState';
 export type { AppPlacement } from './generated/domain/AppPlacement';
+export type { AppFrameworkManifest } from './generated/domain/AppFrameworkManifest';
+export type { AppLinkRecord } from './generated/domain/AppLinkRecord';
+export type { AppConfigWrite } from './generated/domain/AppConfigWrite';
+export type { CreateAppInstanceRequest } from './generated/domain/CreateAppInstanceRequest';
+export type { OneBotLinkMode } from './generated/domain/OneBotLinkMode';
+export type { OneBotLinkPlan } from './generated/domain/OneBotLinkPlan';
+export type { AppInstanceWebUi } from './generated/AppInstanceWebUi';
+export type { AppConfigDocument } from './generated/domain/AppConfigDocument';
+export type { AppConfigFormat } from './generated/domain/AppConfigFormat';
+export type { AppConfigText } from './generated/domain/AppConfigText';
+export type { AppConfigIssue } from './generated/domain/AppConfigIssue';
+export type { AppConfigDocumentRevision } from './generated/domain/AppConfigDocumentRevision';
+export type { AppInstanceConfig } from './generated/domain/AppInstanceConfig';
+export type { AppInstanceConfigEnvelope } from './generated/domain/AppInstanceConfigEnvelope';
+export type { AppConfigWriteResult } from './generated/domain/AppConfigWriteResult';
+export type { AppConfigError } from './generated/AppConfigError';
+export type { AppConfigErrorKind } from './generated/AppConfigErrorKind';
+export type { KarinInstanceConfig } from './generated/domain/KarinInstanceConfig';
+export type { KarinEnv } from './generated/domain/KarinEnv';
+export type { KarinEnvEntry } from './generated/domain/KarinEnvEntry';
+export type { KarinCoreConfig } from './generated/domain/KarinCoreConfig';
+export type { KarinEventScope } from './generated/domain/KarinEventScope';
+export type { KarinUserScope } from './generated/domain/KarinUserScope';
+export type { KarinAdapterConfig } from './generated/domain/KarinAdapterConfig';
+export type { KarinConsoleAdapter } from './generated/domain/KarinConsoleAdapter';
+export type { KarinOneBotAdapter } from './generated/domain/KarinOneBotAdapter';
+export type { KarinOneBotWsServer } from './generated/domain/KarinOneBotWsServer';
+export type { KarinOneBotWsClient } from './generated/domain/KarinOneBotWsClient';
+export type { KarinOneBotHttpServer } from './generated/domain/KarinOneBotHttpServer';
+export type { KarinScopeRule } from './generated/domain/KarinScopeRule';
+export type { KarinRenderConfig } from './generated/domain/KarinRenderConfig';
+export type { KarinRenderWsServer } from './generated/domain/KarinRenderWsServer';
+export type { KarinRenderWsClient } from './generated/domain/KarinRenderWsClient';
+export type { KarinRenderHttpServer } from './generated/domain/KarinRenderHttpServer';
+export type { KarinRedisConfig } from './generated/domain/KarinRedisConfig';
 export type { OneBotEndpointExport } from './generated/domain/OneBotEndpointExport';
 export type { WebUiPollerSettings } from './generated/domain/WebUiPollerSettings';
 export type { ConfigExportResult } from './generated/ConfigExportResult';
@@ -145,6 +180,7 @@ import type { BotActorState } from './generated/BotActorState';
 import type { BotActorSnapshot } from './generated/BotActorSnapshot';
 import type { ProgressEvent } from './generated/domain/ProgressEvent';
 import type { DeploymentTaskSnapshot } from './generated/domain/DeploymentTaskSnapshot';
+import type { AppInstance } from './generated/domain/AppInstance';
 
 export type BotFlavor = 'napcat' | 'snowluma';
 
@@ -363,6 +399,17 @@ type DomainEventBody =
         kind: 'host_connection_recovered';
         server_id: string;
         latency_ms: number;
+    }
+    // 应用端实例（Karin 等）快照变化 / 进程日志；不进协议 Bot 事件
+    | {
+        kind: 'app_instance_changed';
+        instance: AppInstance;
+        reason?: string | null;
+    }
+    | {
+        kind: 'app_instance_log_appended';
+        instance_id: string;
+        line: string;
     };
 
 // 所有发到 webview 的 IPC 事件 payload 都带顶层 v 版本号 envelope(R14:版本化)。

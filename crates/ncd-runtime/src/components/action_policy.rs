@@ -9,7 +9,7 @@ use std::sync::Arc;
 use ncd_component::{
     Component, ComponentId, ComponentInfo, DependencyTarget, DesktopSelfComponent,
     HostPackageGroup, NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent,
-    QQComponent, SnowLumaComponent,
+    QQComponent, SnowLumaComponent, UvComponent,
 };
 use ncd_deploy::StepKind;
 use ncd_domain::DeploymentTaskResource;
@@ -43,11 +43,27 @@ impl RemoteHostProbe {
     }
 }
 
-pub fn component_dedupe_key(host_id: &str, component_id: ComponentId, kind: StepKind) -> String {
+/// 任务里的组件标识：协议组件一台 host 一份（`napcat`）；应用端组件按实例（`karin@<instance_id>`），
+/// 这样同机两个 Karin 实例的安装互不去重、互不串行
+pub fn component_target_label(component_id: ComponentId, scope: Option<&str>) -> String {
+    match scope {
+        Some(scope) if component_id.is_app_framework() => {
+            format!("{}@{scope}", component_id.as_str())
+        }
+        _ => component_id.as_str().to_string(),
+    }
+}
+
+pub fn component_dedupe_key(
+    host_id: &str,
+    component_id: ComponentId,
+    kind: StepKind,
+    scope: Option<&str>,
+) -> String {
     format!(
         "component:{}:{}:{}",
         host_id,
-        component_id.as_str(),
+        component_target_label(component_id, scope),
         kind.as_str()
     )
 }
@@ -66,12 +82,13 @@ pub fn component_task_resources(
     kind: StepKind,
     host_os: Os,
     host_locality: Locality,
+    scope: Option<&str>,
 ) -> Vec<DeploymentTaskResource> {
     let mut resources = Vec::new();
     if !matches!(kind, StepKind::Verify) {
         resources.push(DeploymentTaskResource::InstallTarget {
             host_id: host_id.to_string(),
-            target: component_id.as_str().to_string(),
+            target: component_target_label(component_id, scope),
         });
     }
     if component_needs_download_slot(component_id, kind) {
@@ -94,8 +111,11 @@ pub fn component_needs_download_slot(component_id: ComponentId, kind: StepKind) 
         ComponentId::NapCat
             | ComponentId::SnowLuma
             | ComponentId::NodeJs
+            | ComponentId::Uv
             | ComponentId::Qq
             | ComponentId::NcdWatch
+            | ComponentId::Karin
+            | ComponentId::NoneBot2
     )
 }
 
@@ -133,6 +153,7 @@ pub fn component_catalog() -> Vec<ComponentInfo> {
         NapCatComponent::info(),
         SnowLumaComponent::info(),
         NodeJsComponent::info(),
+        UvComponent::info(),
         QQComponent::info(),
         NoVncComponent::info(),
         NcdWatchComponent::info(),
@@ -302,12 +323,15 @@ mod tests {
                 ComponentId::NapCat,
                 ComponentId::SnowLuma,
                 ComponentId::NodeJs,
+                ComponentId::Uv,
                 ComponentId::Qq,
                 ComponentId::NoVnc,
                 ComponentId::NcdWatch,
                 ComponentId::DesktopSelf,
             ]
         );
+        // 应用端框架按实例装，不进 catalog
+        assert!(list.iter().all(|info| !info.id.is_app_framework()));
     }
 
     #[test]
@@ -401,6 +425,7 @@ mod tests {
             StepKind::Uninstall,
             Os::Linux,
             Locality::Remote,
+            None,
         );
         assert!(resources.contains(&DeploymentTaskResource::PackageManager {
             host_id: "remote:a".to_string(),
@@ -412,6 +437,7 @@ mod tests {
             StepKind::EnsureInstalled,
             Os::Linux,
             Locality::Remote,
+            None,
         );
         assert!(
             !resources.contains(&DeploymentTaskResource::PackageManager {
@@ -425,10 +451,37 @@ mod tests {
             StepKind::EnsureDependencies,
             Os::Linux,
             Locality::Remote,
+            None,
         );
         assert!(resources.contains(&DeploymentTaskResource::PackageManager {
             host_id: "remote:a".to_string(),
         }));
+    }
+
+    #[test]
+    fn app_framework_components_are_scoped_per_instance() {
+        assert_eq!(
+            component_dedupe_key("local", ComponentId::Karin, StepKind::EnsureInstalled, Some("k1")),
+            "component:local:karin@k1:ensure_installed"
+        );
+        // 协议组件忽略 scope：一台 host 只有一份 NapCat
+        assert_eq!(
+            component_dedupe_key("local", ComponentId::NapCat, StepKind::EnsureInstalled, Some("k1")),
+            component_dedupe_key("local", ComponentId::NapCat, StepKind::EnsureInstalled, None),
+        );
+        let resources = component_task_resources(
+            ComponentId::Karin,
+            "local",
+            StepKind::EnsureInstalled,
+            Os::Windows,
+            Locality::Local,
+            Some("k1"),
+        );
+        assert!(resources.contains(&DeploymentTaskResource::InstallTarget {
+            host_id: "local".to_string(),
+            target: "karin@k1".to_string(),
+        }));
+        assert!(resources.contains(&DeploymentTaskResource::GlobalDownloadSlot));
     }
 
     #[test]
@@ -477,8 +530,8 @@ mod tests {
     }
 
     #[test]
-    fn list_components_returns_seven_items() {
-        assert_eq!(component_catalog().len(), 7);
+    fn list_components_returns_eight_items() {
+        assert_eq!(component_catalog().len(), 8);
     }
 
     #[test]

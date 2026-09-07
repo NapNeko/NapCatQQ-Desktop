@@ -5,23 +5,28 @@
 
 use std::sync::Arc;
 
+use ncd_appframework::{KarinComponent, NoneBot2Component};
 use ncd_component::{
     Component, ComponentId, DependencyTarget, DesktopSelfComponent, NapCatComponent,
     NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent, Requirement,
-    RequirementPhase, SnowLumaComponent, VersionReq,
+    RequirementPhase, SnowLumaComponent, UvComponent, VersionReq,
 };
 use ncd_domain::SnowLumaLinuxPackage;
 use ncd_host::{HostPath, Locality, Os};
 
-/// catalog 顺序(与 component_catalog 一致)
-pub const GRAPH_COMPONENT_IDS: [ComponentId; 7] = [
+/// catalog 顺序(与 component_catalog 一致)+ 应用端组件（不进 catalog，但参与依赖图：
+/// Node / uv 的可接受版本要把 Karin / NoneBot2 的约束也算上）
+pub const GRAPH_COMPONENT_IDS: [ComponentId; 10] = [
     ComponentId::NapCat,
     ComponentId::SnowLuma,
     ComponentId::NodeJs,
+    ComponentId::Uv,
     ComponentId::Qq,
     ComponentId::NoVnc,
     ComponentId::NcdWatch,
     ComponentId::DesktopSelf,
+    ComponentId::Karin,
+    ComponentId::NoneBot2,
 ];
 
 /// 只为调 requirements() 的占位实例;路径都是假的,别拿去 detect / install
@@ -33,10 +38,13 @@ pub fn graph_component(id: ComponentId, package: SnowLumaLinuxPackage) -> Arc<dy
             SnowLumaComponent::new(x, "https://example.invalid/x.tar.gz").with_package(package),
         ),
         ComponentId::NodeJs => Arc::new(NodeJsComponent::new("0.0.0", x)),
+        ComponentId::Uv => Arc::new(UvComponent::new("0.0.0", x)),
         ComponentId::Qq => Arc::new(QQComponent::default_v3_2_25(x)),
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
         ComponentId::NcdWatch => Arc::new(NcdWatchComponent::new(None)),
         ComponentId::DesktopSelf => Arc::new(DesktopSelfComponent::new("0.0.0", x)),
+        ComponentId::Karin => Arc::new(KarinComponent::new(x, 0)),
+        ComponentId::NoneBot2 => Arc::new(NoneBot2Component::new(x, 0)),
     }
 }
 
@@ -208,8 +216,13 @@ Windows/Local snowluma[lite]
   component nodejs ^22.13.0 || >=23.4.0 (Both)
   component qq (Both)
 Windows/Local nodejs
+Windows/Local uv
 Windows/Local qq
 Windows/Local desktop_self
+Windows/Local karin
+  component nodejs >=18 (Both)
+Windows/Local nonebot2
+  component uv >=0.4 (Both)
 Linux/Local napcat
   component qq (Both)
   host_command unzip <- unzip (Install)
@@ -222,10 +235,16 @@ Linux/Local snowluma[lite]
   host_command tar <- tar (Install)
 Linux/Local nodejs
   host_command tar <- tar (Install)
+Linux/Local uv
+  host_command tar <- tar (Install)
 Linux/Local qq
   host_packages qq_dependencies (Both)
 Linux/Local novnc
 Linux/Local desktop_self
+Linux/Local karin
+  component nodejs >=18 (Both)
+Linux/Local nonebot2
+  component uv >=0.4 (Both)
 Linux/Remote napcat
   component qq (Both)
   host_command unzip <- unzip (Install)
@@ -240,10 +259,16 @@ Linux/Remote snowluma[lite]
   host_command tar <- tar (Install)
 Linux/Remote nodejs
   host_command tar <- tar (Install)
+Linux/Remote uv
+  host_command tar <- tar (Install)
 Linux/Remote qq
   host_packages qq_dependencies (Both)
 Linux/Remote novnc
 Linux/Remote ncd_watch
+Linux/Remote karin
+  component nodejs >=18 (Both)
+Linux/Remote nonebot2
+  component uv >=0.4 (Both)
 ";
 
     #[test]
@@ -298,11 +323,26 @@ Linux/Remote ncd_watch
 
     #[test]
     fn node_constraints_come_from_consumers_not_node_itself() {
+        // 先按 full 包遍历（Karin 的约束先进），再 lite 包（SnowLuma lite 才要 Node）
         let reqs = catalog_version_reqs_for(ComponentId::NodeJs, Os::Windows, Locality::Local);
         assert_eq!(
             reqs,
-            vec![VersionReq::semver(SnowLumaComponent::NODE_VERSION_RANGE)]
+            vec![
+                VersionReq::semver(">=18"),
+                VersionReq::semver(SnowLumaComponent::NODE_VERSION_RANGE),
+            ]
         );
         assert!(catalog_version_reqs_for(ComponentId::Qq, Os::Linux, Locality::Remote).is_empty());
+    }
+
+    #[test]
+    fn uv_constraints_come_from_nonebot2_only() {
+        let reqs = catalog_version_reqs_for(ComponentId::Uv, Os::Linux, Locality::Remote);
+        assert_eq!(reqs, vec![VersionReq::semver(">=0.4")]);
+        // Python 系框架不拖 Node，Node 系框架不拖 uv
+        let nb2 = graph_component(ComponentId::NoneBot2, SnowLumaLinuxPackage::Full);
+        let nodes = requirement_closure(nb2.as_ref(), Os::Linux, Locality::Remote, RequirementPhase::Install);
+        let labels: Vec<String> = nodes.iter().map(|n| n.target.label()).collect();
+        assert_eq!(labels, vec!["tar", "uv"]);
     }
 }

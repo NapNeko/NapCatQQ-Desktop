@@ -159,7 +159,11 @@ pub use ncd_traits::{
 };
 
 pub use app_framework::{
-    OneBotExportError, StubAppIntegration, StubAppRuntime, export_onebot_endpoint,
+    AppInstanceStore, AppManager, BotConfigPort, NativeAppRuntime, OneBotExportError,
+    app_link_connections, export_onebot_endpoint,
+};
+pub use ncd_appframework::{
+    AppConfigWriteResult, AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope,
 };
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,

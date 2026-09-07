@@ -31,6 +31,7 @@ pub mod requirement;
 pub mod snowluma;
 pub mod traits;
 pub mod types;
+pub mod uv;
 
 pub use context::{ActionCtx, ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use desktop_self::DesktopSelfComponent;
@@ -66,6 +67,7 @@ pub use types::{
     ComponentCategory, ComponentDetectResult, ComponentId, ComponentInfo, DetectOutcome,
     DetectedVersion, LaunchArgs, SupportedTarget, UnusableInstall, VerifyReport,
 };
+pub use uv::{UV_DEFAULT_VERSION, UvComponent};
 
 // sh -c 命令手动拼路径时用,委托 ncd_host::BashShell 的单引号转义
 pub(crate) fn shell_quote(s: &str) -> String {

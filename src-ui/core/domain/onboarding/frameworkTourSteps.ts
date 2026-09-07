@@ -20,8 +20,8 @@ export const LOCAL_FRAMEWORK_STEPS: readonly FrameworkTourStep[] = [
         id: 'local-framework-group',
         phase: 'local',
         target: TOUR_IDS.groupFramework,
-        title: '两个框架',
-        body: 'Bot 跑在 NapCat 或 SnowLuma 上。Windows 本机两边都只要 QQ。',
+        title: '两个协议端',
+        body: 'Bot 跑在 NapCat 或 SnowLuma 上。Windows 本机两边都只要 QQ。下面的「应用端」是接在协议端后面的插件框架，按实例安装。',
         selectHostId: 'local',
     },
     {

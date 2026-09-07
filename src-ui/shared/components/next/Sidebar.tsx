@@ -7,6 +7,7 @@
 
 import React, { useLayoutEffect, useRef } from 'react';
 import {
+    Blocks,
     Bot,
     ChevronsLeft,
     ChevronsRight,
@@ -29,6 +30,7 @@ import logoSidebarCollapsed from '../../../assets/logo-48.png?inline';
 export type AppRoute =
     | 'overview'
     | 'bots'
+    | 'apps'
     | 'components'
     | 'docker'
     | 'remote'
@@ -56,6 +58,7 @@ interface NavItem {
 const MAIN_NAV: NavItem[] = [
     { id: 'overview', label: '概览', icon: LayoutDashboard },
     { id: 'bots', label: '机器人', icon: Bot },
+    { id: 'apps', label: '应用端', icon: Blocks },
     { id: 'components', label: '组件', icon: Package },
     { id: 'docker', label: '容器', icon: Container },
     { id: 'remote', label: '远端', icon: Server },

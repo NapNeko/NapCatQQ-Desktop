@@ -40,10 +40,9 @@ function nextId(prefix = 'log'): string {
     return `${prefix}-${Date.now()}-${counter}`;
 }
 
-// 匹配 [info] / [INFO] / [Warn] 这种括号包裹的级别标签，对齐 legacy LogHighlighter
-// 的 `\[(trace|debug|info|warn|warning|error|fatal|success)\]` 规则。
+// Karin chalk：`[Karin][20:16:22.716][MARK]`。MARK 是灰标，对到 trace。
 const BRACKET_LEVEL_PATTERN =
-    /\[(trace|debug|info|warn|warning|error|fatal|success)\]/i;
+    /\[(trace|debug|info|warn|warning|error|fatal|success|mark)\]/i;
 
 // 匹配 NCD `2026-03-20 22:02:45 | INFO |` 这种竖线分隔级别。
 const PIPE_LEVEL_PATTERN =
@@ -54,18 +53,91 @@ const PIPE_LEVEL_PATTERN =
 const STANDALONE_LEVEL_PATTERN =
     /(?:^|\W)(SUCCESS|FATAL|ERROR|WARNING|WARN|TRACE|DEBUG|INFO)(?:\W|$)/;
 
+/// 剥 CSI / OSC / 残余 ESC。Karin chalk、NC 颜色码都走这里再解析等级。
+export function stripAnsiEscapes(input: string): string {
+    let out = '';
+    let i = 0;
+    const n = input.length;
+    while (i < n) {
+        const c = input.charCodeAt(i);
+        if (c === 0x1b) {
+            const next = i + 1 < n ? input.charCodeAt(i + 1) : 0;
+            if (next === 0x5b) {
+                i = consumeCsi(input, i + 2);
+                continue;
+            }
+            if (next === 0x5d || next === 0x50 || next === 0x58 || next === 0x5e || next === 0x5f) {
+                i = consumeStringSeq(input, i + 2);
+                continue;
+            }
+            i += next ? 2 : 1;
+            continue;
+        }
+        if (c === 0x9b) {
+            i = consumeCsi(input, i + 1);
+            continue;
+        }
+        if (c === 0x7f || (c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d)) {
+            i += 1;
+            continue;
+        }
+        out += input[i];
+        i += 1;
+    }
+    return out;
+}
+
+function consumeCsi(input: string, start: number): number {
+    let i = start;
+    const n = input.length;
+    while (i < n) {
+        const b = input.charCodeAt(i);
+        if (b >= 0x30 && b <= 0x3f) {
+            i += 1;
+            continue;
+        }
+        break;
+    }
+    while (i < n) {
+        const b = input.charCodeAt(i);
+        if (b >= 0x20 && b <= 0x2f) {
+            i += 1;
+            continue;
+        }
+        break;
+    }
+    if (i < n) {
+        const b = input.charCodeAt(i);
+        if (b >= 0x40 && b <= 0x7e) i += 1;
+    }
+    return i;
+}
+
+function consumeStringSeq(input: string, start: number): number {
+    let i = start;
+    const n = input.length;
+    while (i < n) {
+        const b = input.charCodeAt(i);
+        if (b === 0x07) return i + 1;
+        if (b === 0x1b && i + 1 < n && input.charCodeAt(i + 1) === 0x5c) return i + 2;
+        i += 1;
+    }
+    return i;
+}
+
 /// 从单行日志文本中提取级别。识别不到时返回 `'unknown'`。
 /// 顺序：方括号 -> 竖线 -> 独立词，命中即停。
 export function parseLogLevel(line: string): LogLevel {
-    const bracket = line.match(BRACKET_LEVEL_PATTERN);
+    const cleaned = stripAnsiEscapes(line);
+    const bracket = cleaned.match(BRACKET_LEVEL_PATTERN);
     if (bracket) {
         return normalizeLevel(bracket[1]);
     }
-    const pipe = line.match(PIPE_LEVEL_PATTERN);
+    const pipe = cleaned.match(PIPE_LEVEL_PATTERN);
     if (pipe) {
         return normalizeLevel(pipe[1]);
     }
-    const standalone = line.match(STANDALONE_LEVEL_PATTERN);
+    const standalone = cleaned.match(STANDALONE_LEVEL_PATTERN);
     if (standalone) {
         return normalizeLevel(standalone[1]);
     }
@@ -74,6 +146,7 @@ export function parseLogLevel(line: string): LogLevel {
 
 function normalizeLevel(raw: string): LogLevel {
     switch (raw.toLowerCase()) {
+        case 'mark':
         case 'trace':
             return 'trace';
         case 'debug':
@@ -106,7 +179,11 @@ const SNOWLUMA_TS_PREFIX =
 
 // 行首等级标签；UI 已有 INF/ERR 列，正文里再显示会重复
 const LEADING_LEVEL_TAG =
-    /^\[(?:trace|debug|info|warn|warning|error|fatal|success)\]\s*/i;
+    /^\[(?:trace|debug|info|warn|warning|error|fatal|success|mark)\]\s*/i;
+
+// `[Karin][20:16:22.716][INFO] body` — 时分秒给时间列，LEVEL 给色条，信封不进正文
+const FRAMEWORK_TS_LEVEL =
+    /^\[([^\]]+)\]\[(\d{1,2}:\d{2}:\d{2})(?:\.\d+)?\]\[([A-Za-z]+)\]\s*(.*)$/;
 
 /** 列表时间列只放 HH:mm:ss；整段 `MM-DD HH:mm:ss` 塞 20px 行会折成只剩日期 */
 function normalizeClock(ts: string): string {
@@ -125,24 +202,32 @@ export function splitLogTimestamp(
     line: string,
     fallbackTs: string,
 ): { timestamp: string; body: string } {
-    const m = line.match(NAPCAT_TS_PREFIX);
+    const cleaned = stripAnsiEscapes(line);
+    const fw = cleaned.match(FRAMEWORK_TS_LEVEL);
+    if (fw) {
+        return {
+            timestamp: normalizeClock(fw[2]),
+            body: fw[4],
+        };
+    }
+    const m = cleaned.match(NAPCAT_TS_PREFIX);
     if (m) {
         return {
             timestamp: normalizeClock(m[2]),
             body: stripLeadingLevelTag(m[3]),
         };
     }
-    const sl = line.match(SNOWLUMA_TS_PREFIX);
+    const sl = cleaned.match(SNOWLUMA_TS_PREFIX);
     if (sl) {
         const body = (sl[3] ?? '').trimStart();
         return {
             timestamp: normalizeClock(sl[1]),
-            body: stripLeadingLevelTag(body || line),
+            body: stripLeadingLevelTag(body || cleaned),
         };
     }
     return {
         timestamp: normalizeClock(fallbackTs),
-        body: stripLeadingLevelTag(line),
+        body: stripLeadingLevelTag(cleaned),
     };
 }
 
@@ -280,19 +365,34 @@ export function appendLine(
     channel: LogChannel = 'stdout',
     now = new Date().toLocaleTimeString(),
 ): LogEntry[] {
-    if (!line || !line.trim()) return logs;
-    const { timestamp, body } = splitLogTimestamp(line, now);
+    const cleaned = stripAnsiEscapes(line);
+    if (!cleaned || !cleaned.trim()) return logs;
+    const { timestamp, body } = splitLogTimestamp(cleaned, now);
     const entry: LogEntry = {
         id: nextId(),
         text: body,
         channel,
-        level: parseLogLevel(line),
+        level: parseLogLevel(cleaned),
         timestamp,
     };
     const next =
         logs.length >= MAX_LINES ? logs.slice(logs.length - MAX_LINES + 1) : logs.slice();
     next.push(entry);
     return next;
+}
+
+/// 会话里已经进过缓冲的脏行（未剥 ANSI / 还带着 Karin 信封）再洗一遍。
+export function canonicalizeLogEntry(entry: LogEntry): LogEntry {
+    const cleaned = stripAnsiEscapes(entry.text);
+    if (cleaned === entry.text && !FRAMEWORK_TS_LEVEL.test(cleaned)) {
+        return entry;
+    }
+    const { timestamp, body } = splitLogTimestamp(cleaned, entry.timestamp);
+    const level = parseLogLevel(cleaned);
+    if (body === entry.text && level === entry.level && timestamp === entry.timestamp) {
+        return entry;
+    }
+    return { ...entry, text: body, level, timestamp };
 }
 
 /// 把 `event.channel` 字符串收敛到 stdout / stderr / unknown 三档。

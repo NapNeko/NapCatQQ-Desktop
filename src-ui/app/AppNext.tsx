@@ -61,6 +61,7 @@ import { perfMark } from '../core/domain/performance/perfMarks';
 const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
     'overview',
     'bots',
+    'apps',
     'components',
     'docker',
     'remote',
@@ -71,6 +72,8 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
 // 与 lazy 共用同一 import 工厂，侧栏预取与首点加载同一 chunk。
 const loadBotPage = () =>
     import('../modules/bot/BotPage.next').then((m) => ({ default: m.BotPageNext }));
+const loadAppsPage = () =>
+    import('../modules/apps/AppsPage.next').then((m) => ({ default: m.AppsPageNext }));
 const loadComponentsPage = () =>
     import('../modules/components/ComponentsPage.next').then((m) => ({
         default: m.ComponentsPageNext,
@@ -91,6 +94,7 @@ const loadTaskQueuePage = () =>
     }));
 
 const BotPageNext = lazy(loadBotPage);
+const AppsPageNext = lazy(loadAppsPage);
 const ComponentsPageNext = lazy(loadComponentsPage);
 const DockerPageNext = lazy(loadDockerPage);
 const RemoteHostPanelNext = lazy(loadRemotePage);
@@ -99,6 +103,7 @@ const TaskQueuePageNext = lazy(loadTaskQueuePage);
 
 const ROUTE_PRELOAD: Partial<Record<AppRoute, () => Promise<unknown>>> = {
     bots: loadBotPage,
+    apps: loadAppsPage,
     components: loadComponentsPage,
     docker: loadDockerPage,
     remote: loadRemotePage,
@@ -451,6 +456,9 @@ const RouteContent: React.FC<{
             break;
         case 'bots':
             body = <BotPageNext />;
+            break;
+        case 'apps':
+            body = <AppsPageNext onNavigate={onNavigate} />;
             break;
         case 'components':
             body = <ComponentsPageNext />;

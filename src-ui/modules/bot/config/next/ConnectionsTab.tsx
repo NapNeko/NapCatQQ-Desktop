@@ -1,8 +1,8 @@
 // 协议连接列表：行内编辑走 Dialog，新增条贴底。
 
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Pencil, Lock } from 'lucide-react';
+import { Plus, Trash2, Pencil, Lock, Link2 } from 'lucide-react';
 import {
     ActionMotionIcon,
     EMPHASIS_MOTION,
@@ -31,15 +31,24 @@ import {
     summarizeConnection,
     collectAllNames,
     getKindMeta,
+    isAppLinkConnectionName,
 } from '../../../../core/domain/bot/connections';
 import type { ConnectConfig } from '../../../../core/ipc/generated/domain/ConnectConfig';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
+import type { WebsocketClientConfig } from '../../../../core/ipc/generated/domain/WebsocketClientConfig';
 import { ConnectionEditor } from './ConnectionEditor';
+
+// 对接对话框与应用端页共用；按需加载，不让 Bot 配置页首屏背上应用端 chunk。
+const AppLinkDialog = lazy(() =>
+    import('../../../apps/AppLinkDialog').then((m) => ({ default: m.AppLinkDialog })),
+);
 
 interface ConnectionsTabProps {
     data: ConnectConfig;
     onChange: (patch: Partial<ConnectConfig>) => void;
     backendType: BackendType;
+    /** 已保存 Bot 的 QQ 号；新建（尚未保存）时为 null，「对接应用端」入口不可用。 */
+    botId?: string | null;
 }
 
 type EditingKey =
@@ -61,11 +70,27 @@ const KIND_BADGE: Record<ConnectionKind, string> = {
     websocketClient: 'WS-Client',
 };
 
-export function ConnectionsTab({ data, onChange, backendType }: ConnectionsTabProps) {
+export function ConnectionsTab({ data, onChange, backendType, botId = null }: ConnectionsTabProps) {
     const [editing, setEditing] = useState<EditingKey>(null);
     /// 退场动画结束后再清，避免 open=false 时立刻卸掉表单导致收起动画闪空。
     const [editingMount, setEditingMount] = useState<EditingKey>(null);
     const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+    const [linkOpen, setLinkOpen] = useState(false);
+    /// 首次打开后保持挂载，让关闭时的退场动画能播完。
+    const [linkMounted, setLinkMounted] = useState(false);
+    useEffect(() => {
+        if (linkOpen) setLinkMounted(true);
+    }, [linkOpen]);
+
+    /// 对接由后端直接落盘 + 热推；这里把同一条连接同步进未保存的表单草稿，
+    /// 否则用户随后点「保存」会用旧草稿把它覆盖掉。
+    const syncLinkedConnection = (connection: WebsocketClientConfig) => {
+        const list = data.websocketClients.slice();
+        const idx = list.findIndex((c) => c.name === connection.name);
+        if (idx < 0) list.push(connection);
+        else list[idx] = connection;
+        onChange({ websocketClients: list });
+    };
 
     useEffect(() => {
         if (editing !== null) {
@@ -145,7 +170,23 @@ export function ConnectionsTab({ data, onChange, backendType }: ConnectionsTabPr
             )}
 
             {/* 浮动新增条：portal 到 BotConfigPage 提供的 dock，永远贴底 */}
-            <FloatingAddBarPortal backendType={backendType} onPick={startCreate} />
+            <FloatingAddBarPortal
+                backendType={backendType}
+                onPick={startCreate}
+                canLinkApp={botId !== null}
+                onLinkApp={() => setLinkOpen(true)}
+            />
+
+            {botId !== null && linkMounted && (
+                <Suspense fallback={null}>
+                    <AppLinkDialog
+                        open={linkOpen}
+                        onOpenChange={setLinkOpen}
+                        botId={botId}
+                        onApplied={(plan) => syncLinkedConnection(plan.connection)}
+                    />
+                </Suspense>
+            )}
 
             {/* 新建 / 编辑 共用同一个 Dialog */}
             <Dialog
@@ -238,21 +279,40 @@ function totalCount(c: ConnectConfig): number {
 interface FloatingAddBarProps {
     backendType: BackendType;
     onPick: (kind: ConnectionKind) => void;
+    canLinkApp: boolean;
+    onLinkApp: () => void;
 }
 
-function FloatingAddBarPortal({ backendType, onPick }: FloatingAddBarProps) {
+function FloatingAddBarPortal(props: FloatingAddBarProps) {
     const [dock, setDock] = useState<HTMLElement | null>(null);
     useEffect(() => {
         setDock(document.getElementById('connections-add-dock'));
     }, []);
     if (!dock) return null;
-    return createPortal(<FloatingAddBar backendType={backendType} onPick={onPick} />, dock);
+    return createPortal(<FloatingAddBar {...props} />, dock);
 }
 
-function FloatingAddBar({ backendType, onPick }: FloatingAddBarProps) {
+function FloatingAddBar({ backendType, onPick, canLinkApp, onLinkApp }: FloatingAddBarProps) {
+    const linkBtn = (
+        <Button variant="ghost" size="sm" disabled={!canLinkApp} onClick={onLinkApp}>
+            <ActionMotionIcon icon={Link2} size={12} strokeWidth={2.4} motion={EMPHASIS_MOTION} />
+            <span>对接应用端</span>
+        </Button>
+    );
     return (
         <div className="flex justify-center px-6 pb-3">
             <div className="inline-flex items-center gap-1 rounded-pill bg-elevated/95 px-2 py-1 shadow-popover ring-1 ring-border-subtle backdrop-blur-sm">
+                {canLinkApp ? (
+                    linkBtn
+                ) : (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span>{linkBtn}</span>
+                        </TooltipTrigger>
+                        <TooltipContent>先保存 Bot，再对接应用端</TooltipContent>
+                    </Tooltip>
+                )}
+                <span className="mx-0.5 h-4 w-px bg-border-subtle" aria-hidden />
                 <span className="px-1 text-2xs font-medium uppercase tracking-wide text-text-tertiary">
                     新增
                 </span>
@@ -346,6 +406,11 @@ function ConnectionRow({ kind, item, onStartEdit, onDelete }: ConnectionRowProps
                         <span className="truncate text-sm font-semibold text-text">
                             {item.name}
                         </span>
+                        {isAppLinkConnectionName(item.name) && (
+                            <Badge tone="brand" appearance="soft" className="shrink-0">
+                                应用端
+                            </Badge>
+                        )}
                         {item.enable ? (
                             <Badge tone="success" appearance="soft" dot className="shrink-0">
                                 启用

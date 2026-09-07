@@ -13,6 +13,9 @@ use ts_rs::TS;
 /// - NoVnc → novnc
 /// - DesktopSelf → desktop_self
 /// - NcdWatch → ncd_watch
+/// - Karin → karin（应用端框架；按实例目录安装，不进组件页 catalog）
+/// - Uv → uv（Python 工具链，单二进制，可自带装 Python；NoneBot2 的运行时依赖）
+/// - NoneBot2 → nonebot2（应用端框架；同 Karin 按实例目录安装）
 ///
 /// 与项目内 napcat_* / snowluma_* 事件名风格保持一致;不直接走 serde
 /// 的 rename_all = "snake_case",因为它会把 NapCat 切成 nap_cat,
@@ -34,6 +37,12 @@ pub enum ComponentId {
     DesktopSelf,
     #[serde(rename = "ncd_watch")]
     NcdWatch,
+    #[serde(rename = "karin")]
+    Karin,
+    #[serde(rename = "uv")]
+    Uv,
+    #[serde(rename = "nonebot2")]
+    NoneBot2,
 }
 
 impl ComponentId {
@@ -46,7 +55,20 @@ impl ComponentId {
             Self::NoVnc => "novnc",
             Self::DesktopSelf => "desktop_self",
             Self::NcdWatch => "ncd_watch",
+            Self::Karin => "karin",
+            Self::Uv => "uv",
+            Self::NoneBot2 => "nonebot2",
         }
+    }
+
+    /// 应用端框架组件：每个应用实例一个安装目录，由应用端页面按实例装，不进组件页 catalog
+    pub const fn is_app_framework(&self) -> bool {
+        matches!(self, Self::Karin | Self::NoneBot2)
+    }
+
+    /// 从跨边界字面量还原（与 serde rename 同源）；未知返回 None
+    pub fn parse(value: &str) -> Option<Self> {
+        serde_json::from_value(serde_json::Value::String(value.to_string())).ok()
     }
 }
 
@@ -169,9 +191,10 @@ impl LaunchArgs {
 
 /// 组件分类
 ///
-/// - Framework:用户主动选择安装的 Bot 框架(NapCat / SnowLuma)
+/// - Framework:用户主动选择安装的协议框架(NapCat / SnowLuma)
 /// - RuntimeDep:Framework 依赖的运行时(QQ / NodeJs / NoVnc)
 /// - SelfApp:Desktop 产品侧(本机 Desktop 自更新;远端 ncd-watch 脱管监控)
+/// - AppFramework:应用端框架(Karin / NoneBot2),消费 OneBot,按实例安装
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -179,6 +202,7 @@ pub enum ComponentCategory {
     Framework,
     RuntimeDep,
     SelfApp,
+    AppFramework,
 }
 
 /// (Os, Locality) 组合的强类型表达
@@ -268,6 +292,33 @@ mod tests {
     /// 同时锁定 round-trip 等价任何 typo(包括误用 serde 默认 snake_case
     /// 把 NapCat 切成 nap_cat)都会让此测试失败
     #[test]
+    fn component_id_parse_round_trips_as_str() {
+        for id in [
+            ComponentId::NapCat,
+            ComponentId::SnowLuma,
+            ComponentId::Qq,
+            ComponentId::NodeJs,
+            ComponentId::NoVnc,
+            ComponentId::DesktopSelf,
+            ComponentId::NcdWatch,
+            ComponentId::Karin,
+            ComponentId::Uv,
+            ComponentId::NoneBot2,
+        ] {
+            assert_eq!(ComponentId::parse(id.as_str()), Some(id));
+        }
+        assert_eq!(ComponentId::parse("nope"), None);
+    }
+
+    #[test]
+    fn app_framework_flag_marks_only_frameworks() {
+        assert!(ComponentId::Karin.is_app_framework());
+        assert!(ComponentId::NoneBot2.is_app_framework());
+        assert!(!ComponentId::Uv.is_app_framework());
+        assert!(!ComponentId::NodeJs.is_app_framework());
+    }
+
+    #[test]
     fn component_id_serde_aligns_with_as_str() {
         for id in [
             ComponentId::NapCat,
@@ -277,6 +328,9 @@ mod tests {
             ComponentId::NoVnc,
             ComponentId::DesktopSelf,
             ComponentId::NcdWatch,
+            ComponentId::Karin,
+            ComponentId::Uv,
+            ComponentId::NoneBot2,
         ] {
             let s = serde_json::to_string(&id).unwrap();
             let expected = format!("\"{}\"", id.as_str());

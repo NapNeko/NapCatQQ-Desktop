@@ -5,10 +5,12 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use ncd_appframework::{AppComponentSpec, AppFrameworkRegistry};
 use ncd_component::{
     ncd_watch_asset_name, ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
     Component, ComponentId, DesktopSelfComponent, NapCatComponent, NcdWatchComponent,
-    NoVncComponent, NodeJsComponent, QQComponent, SnowLumaComponent,
+    NoVncComponent, NodeJsComponent, QQComponent, SnowLumaComponent, UV_DEFAULT_VERSION,
+    UvComponent,
 };
 use ncd_domain::RemoteSelectedPaths;
 use ncd_domain::SnowLumaLinuxPackage;
@@ -40,6 +42,17 @@ pub struct BuildComponentCtx<'a> {
     pub snowluma_linux_package: Option<SnowLumaLinuxPackage>,
     /// 本机 SnowLuma Node 覆盖路径；远端路径走 selected.node_bin
     pub snowluma_node_path: Option<&'a str>,
+    /// 应用端组件（Karin 等）按实例安装，必须带实例目录 / 端口；协议组件忽略
+    pub app_component: Option<&'a AppComponentHint>,
+}
+
+/// 应用端组件的实例级输入（组件页 catalog 不列应用端，只有应用端页面会填）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppComponentHint {
+    pub instance_id: String,
+    pub install_dir: HostPath,
+    pub port: u16,
+    pub npm_registry: Option<String>,
 }
 
 /// 把 component_id 实例化成具体 Component
@@ -234,6 +247,58 @@ pub fn build_component_for_host(
             Arc::new(DesktopSelfComponent::from_env(ver).unwrap_or_else(|_| {
                 DesktopSelfComponent::new(ver, HostPath::from_posix("NapCatQQ-Desktop"))
             }))
+        }
+        ComponentId::Uv => {
+            let install_dir = if ctx.host.os() == Os::Windows {
+                data_root_host.join("components").join("Uv")
+            } else {
+                let home = require_remote_home(remote_home)?;
+                UvComponent::default_remote_install_dir(home)
+            };
+            Arc::new(UvComponent::new(UV_DEFAULT_VERSION, install_dir))
+        }
+        ComponentId::Karin | ComponentId::NoneBot2 => {
+            let hint = ctx.app_component.ok_or_else(|| {
+                "应用端组件按实例安装，请从「应用端」页面操作".to_string()
+            })?;
+            let adapter = AppFrameworkRegistry::with_builtin()
+                .by_component_id(id.as_str())
+                .ok_or_else(|| format!("应用端框架未注册: {}", id.as_str()))?;
+            // 工具链取值口径与其他远端组件一致：用户 path_overrides 优先，其次桌面端管理的
+            // 组件落点（NodeJs / Uv 组件同一目录），都没有再由框架组件回退到实例标记 / PATH。
+            // 两条都算出来交给适配器，Node 系只用 node_bin，Python 系只用 uv_bin。
+            let node_bin = if ctx.host.os() == Os::Windows {
+                Some(NodeJsComponent::node_binary_path_for_os(
+                    &data_root_host.join("components").join("NodeJs"),
+                    Os::Windows,
+                ))
+            } else {
+                nodejs_extra_detect_bin(ctx.selected).or_else(|| {
+                    node_install_dir(ctx.selected, remote_home)
+                        .ok()
+                        .map(|dir| NodeJsComponent::node_binary_path_for_os(&dir, ctx.host.os()))
+                })
+            };
+            let uv_bin = if ctx.host.os() == Os::Windows {
+                Some(UvComponent::uv_binary_path_for_os(
+                    &data_root_host.join("components").join("Uv"),
+                    Os::Windows,
+                ))
+            } else {
+                remote_home.map(|home| {
+                    UvComponent::uv_binary_path_for_os(
+                        &UvComponent::default_remote_install_dir(home),
+                        ctx.host.os(),
+                    )
+                })
+            };
+            adapter.component(&AppComponentSpec {
+                install_dir: hint.install_dir.clone(),
+                port: hint.port,
+                node_bin,
+                uv_bin,
+                npm_registry: hint.npm_registry.clone(),
+            })
         }
     };
     Ok(component)

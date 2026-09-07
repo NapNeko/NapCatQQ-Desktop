@@ -226,6 +226,7 @@ pub(crate) async fn build_inputs_with(
         selected,
         snowluma_linux_package,
         snowluma_node_path,
+        app_component: None,
     }
 }
 

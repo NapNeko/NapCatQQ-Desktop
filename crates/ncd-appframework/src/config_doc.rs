@@ -1,0 +1,290 @@
+//! 应用端配置文档的框架无关部分：文档清单、内容哈希版本号、原始文本读写、类型化配置信封。
+//!
+//! 版本号 = 文件内容 sha256 十六进制前 16 位（缺文件为 `"missing"`）；多文件取「id=rev」拼接后的哈希。
+//! 写回必须带读时的版本号，不一致视为别处改过（Karin WebUI / 手改），交给 UI 决定重载还是覆盖。
+
+use ncd_domain::{AppConfigDocument, AppConfigFormat, AppConfigIssue, AppConfigText};
+use ncd_host::{Host, HostPath};
+use ncd_traits::AppFrameworkError;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use ts_rs::TS;
+
+use crate::adapter::apply_with_backup;
+use crate::karin::config::KarinInstanceConfig;
+
+pub const MISSING_REVISION: &str = "missing";
+
+/// 类型化配置：按框架分流（`framework` 标签与 `AppFrameworkId` 字面量一致）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "framework", content = "data", rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AppInstanceConfig {
+    Karin(KarinInstanceConfig),
+}
+
+impl AppInstanceConfig {
+    /// WebUI 登录密钥；空串表示不用复制。
+    pub fn webui_auth_key(&self) -> &str {
+        match self {
+            Self::Karin(c) => c.env.http_auth_key.as_str(),
+        }
+    }
+}
+
+/// 单个文档的版本信息（信封里逐文件列出，UI 据此判断哪些改动要重启）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppConfigDocumentRevision {
+    pub doc_id: String,
+    pub revision: String,
+    pub hot_reload: bool,
+}
+
+/// 类型化配置 + 版本号
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppInstanceConfigEnvelope {
+    pub config: AppInstanceConfig,
+    /// 所有文档的合并版本号；`write_config` 的 `base_revision` 传这个
+    pub revision: String,
+    pub documents: Vec<AppConfigDocumentRevision>,
+}
+
+/// 类型化写入结果（编排层在信封之上补的联动信息）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppConfigWriteResult {
+    pub config: AppInstanceConfig,
+    pub revision: String,
+    pub documents: Vec<AppConfigDocumentRevision>,
+    /// 改到了应用端不热加载的文件且实例正在运行
+    pub restart_required: bool,
+    /// 端口 / 反向 WS 秘钥变了且已对接 → 已重新写协议 Bot 侧连接
+    pub relinked: bool,
+    /// 实例端口已随 HTTP_PORT 同步
+    pub port_changed: bool,
+}
+
+/// 校验结果的便捷收集器
+#[derive(Debug, Default)]
+pub struct IssueSink {
+    issues: Vec<AppConfigIssue>,
+}
+
+impl IssueSink {
+    pub fn push(&mut self, path: impl Into<String>, message: impl Into<String>) {
+        self.issues.push(AppConfigIssue::new(path, message));
+    }
+
+    pub fn into_vec(self) -> Vec<AppConfigIssue> {
+        self.issues
+    }
+}
+
+pub fn revision_of(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let hex = format!("{digest:x}");
+    hex[..16].to_string()
+}
+
+/// 多文档合并版本号：对 `id=rev\n` 逐条拼接再哈希，与文档顺序有关（调用方保证顺序稳定）
+pub fn combined_revision<'a>(parts: impl IntoIterator<Item = (&'a str, &'a str)>) -> String {
+    let mut hasher = Sha256::new();
+    for (id, rev) in parts {
+        hasher.update(id.as_bytes());
+        hasher.update(b"=");
+        hasher.update(rev.as_bytes());
+        hasher.update(b"\n");
+    }
+    let hex = format!("{:x}", hasher.finalize());
+    hex[..16].to_string()
+}
+
+pub fn document_path(install_dir: &HostPath, doc: &AppConfigDocument) -> HostPath {
+    install_dir.join(&doc.rel_path)
+}
+
+/// 读到的一份文档（缺文件 `text = None`）
+#[derive(Debug, Clone)]
+pub struct DocumentSnapshot {
+    pub doc: AppConfigDocument,
+    pub text: Option<String>,
+    pub revision: String,
+}
+
+impl DocumentSnapshot {
+    pub fn revision_entry(&self) -> AppConfigDocumentRevision {
+        AppConfigDocumentRevision {
+            doc_id: self.doc.id.clone(),
+            revision: self.revision.clone(),
+            hot_reload: self.doc.hot_reload,
+        }
+    }
+}
+
+pub async fn read_document(
+    host: &dyn Host,
+    install_dir: &HostPath,
+    doc: &AppConfigDocument,
+) -> Result<DocumentSnapshot, AppFrameworkError> {
+    let path = document_path(install_dir, doc);
+    let exists = host
+        .exists(&path)
+        .await
+        .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    if !exists {
+        return Ok(DocumentSnapshot {
+            doc: doc.clone(),
+            text: None,
+            revision: MISSING_REVISION.to_string(),
+        });
+    }
+    let bytes = host
+        .read_file(&path)
+        .await
+        .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    Ok(DocumentSnapshot {
+        doc: doc.clone(),
+        revision: revision_of(&bytes),
+        text: Some(String::from_utf8_lossy(&bytes).into_owned()),
+    })
+}
+
+pub async fn read_documents(
+    host: &dyn Host,
+    install_dir: &HostPath,
+    docs: &[AppConfigDocument],
+) -> Result<Vec<DocumentSnapshot>, AppFrameworkError> {
+    let mut out = Vec::with_capacity(docs.len());
+    for doc in docs {
+        out.push(read_document(host, install_dir, doc).await?);
+    }
+    Ok(out)
+}
+
+pub fn combined_revision_of(snapshots: &[DocumentSnapshot]) -> String {
+    combined_revision(
+        snapshots
+            .iter()
+            .map(|s| (s.doc.id.as_str(), s.revision.as_str())),
+    )
+}
+
+/// 原始文本写前预检：JSON / TOML 必须能解析；dotenv 不限
+pub fn validate_text(format: AppConfigFormat, text: &str) -> Result<(), AppFrameworkError> {
+    let err = match format {
+        AppConfigFormat::Json => serde_json::from_str::<serde_json::Value>(text)
+            .err()
+            .map(|e| format!("JSON 语法错误: {e}")),
+        AppConfigFormat::Toml => toml::from_str::<toml::Value>(text)
+            .err()
+            .map(|e| format!("TOML 语法错误: {e}")),
+        AppConfigFormat::DotEnv => None,
+    };
+    match err {
+        Some(message) => Err(AppFrameworkError::ConfigInvalid(vec![AppConfigIssue::new(
+            "text", message,
+        )])),
+        None => Ok(()),
+    }
+}
+
+/// 写一份文档原文：预检 → 建父目录 → 备份写入 → 返回新版本号。
+/// `base_revision` 为 Some 时先比对当前版本，不一致返回 `ConfigConflict`。
+pub async fn write_document_text(
+    host: &dyn Host,
+    install_dir: &HostPath,
+    doc: &AppConfigDocument,
+    text: &str,
+    base_revision: Option<&str>,
+) -> Result<AppConfigText, AppFrameworkError> {
+    validate_text(doc.format, text)?;
+    if let Some(base) = base_revision {
+        let current = read_document(host, install_dir, doc).await?;
+        if current.revision != base {
+            return Err(AppFrameworkError::ConfigConflict(doc.id.clone()));
+        }
+    }
+    let path = document_path(install_dir, doc);
+    ensure_parent_dir(host, &path).await?;
+    let bytes = text.as_bytes().to_vec();
+    apply_with_backup(host, std::slice::from_ref(&path), || async {
+        host.write_file(&path, &bytes)
+            .await
+            .map_err(|e| AppFrameworkError::Integration(e.to_string()))
+    })
+    .await?;
+    Ok(AppConfigText {
+        doc_id: doc.id.clone(),
+        text: text.to_string(),
+        revision: revision_of(&bytes),
+    })
+}
+
+pub async fn ensure_parent_dir(host: &dyn Host, path: &HostPath) -> Result<(), AppFrameworkError> {
+    if let Some(parent) = path.parent() {
+        let exists = host
+            .exists(&parent)
+            .await
+            .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+        if !exists {
+            host.create_dir_all(&parent)
+                .await
+                .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+        }
+    }
+    Ok(())
+}
+
+/// 把 JSON Value 渲染成 Karin / 人手都好读的两空格缩进 + 末尾换行
+pub fn render_json_pretty<T: Serialize>(value: &T) -> Result<String, AppFrameworkError> {
+    serde_json::to_string_pretty(value)
+        .map(|s| format!("{s}\n"))
+        .map_err(|e| AppFrameworkError::Integration(format!("序列化配置失败: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::karin::config::KarinInstanceConfig;
+
+    #[test]
+    fn webui_auth_key_reads_karin_http_auth() {
+        let mut cfg = KarinInstanceConfig::upstream_default();
+        assert_eq!(AppInstanceConfig::Karin(cfg.clone()).webui_auth_key(), "");
+        cfg.env.http_auth_key = "secret-1".into();
+        assert_eq!(AppInstanceConfig::Karin(cfg).webui_auth_key(), "secret-1");
+    }
+
+    #[test]
+    fn revision_is_stable_and_short() {
+        let a = revision_of(b"hello");
+        assert_eq!(a.len(), 16);
+        assert_eq!(a, revision_of(b"hello"));
+        assert_ne!(a, revision_of(b"hello\n"));
+    }
+
+    #[test]
+    fn combined_revision_depends_on_each_part() {
+        let base = combined_revision([("env", "aaaa"), ("config", "bbbb")]);
+        assert_eq!(base, combined_revision([("env", "aaaa"), ("config", "bbbb")]));
+        assert_ne!(base, combined_revision([("env", "aaaa"), ("config", "cccc")]));
+        assert_ne!(base, combined_revision([("config", "bbbb"), ("env", "aaaa")]));
+    }
+
+    #[test]
+    fn validate_text_checks_json_and_toml_only() {
+        assert!(validate_text(AppConfigFormat::Json, "{\"a\":1}").is_ok());
+        assert!(matches!(
+            validate_text(AppConfigFormat::Json, "{oops"),
+            Err(AppFrameworkError::ConfigInvalid(_))
+        ));
+        assert!(validate_text(AppConfigFormat::Toml, "[tool]\nname = \"x\"\n").is_ok());
+        assert!(matches!(
+            validate_text(AppConfigFormat::Toml, "= broken"),
+            Err(AppFrameworkError::ConfigInvalid(_))
+        ));
+        assert!(validate_text(AppConfigFormat::DotEnv, "whatever = = =").is_ok());
+    }
+}

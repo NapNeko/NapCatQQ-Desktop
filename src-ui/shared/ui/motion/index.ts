@@ -2,6 +2,7 @@
 // 业务页面只 import { GsapPresence, PageTransition, ListItem, ... } from 'shared/ui/motion'。
 
 export { GsapPresence, type EnterFn, type ExitFn } from './GsapPresence';
+export { ExpandPresence, ExpandChevron } from './ExpandPresence';
 export { DialogStepTransition } from './DialogStepTransition';
 export { PageTransition } from './PageTransition';
 export { ListItem } from './ListItem';

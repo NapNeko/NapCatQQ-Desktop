@@ -260,3 +260,21 @@ export function validateConnection(
 
     return { ok: true };
 }
+
+/// 与后端 `app_link_connection_name` 一致。
+export const APP_LINK_CONNECTION_PREFIX = 'ncd-app:';
+
+export function isAppLinkConnectionName(name: string): boolean {
+    return name.startsWith(APP_LINK_CONNECTION_PREFIX);
+}
+
+/// 对接连接以服务端为准，用户手改的其它连接保留。
+/// 解绑 / 再对接后，脏表单不会把旧的 `ncd-app:*` 写回去。
+export function replaceAppLinkClients(
+    draft: WebsocketClientConfig[],
+    server: WebsocketClientConfig[],
+): WebsocketClientConfig[] {
+    const keep = draft.filter((c) => !isAppLinkConnectionName(c.name));
+    const linked = server.filter((c) => isAppLinkConnectionName(c.name));
+    return [...keep, ...linked];
+}

@@ -55,8 +55,12 @@ pub use app_config::{
     default_snowluma_port,
 };
 pub use app_framework::{
-    AppFrameworkId, AppInstance, AppInstanceId, AppInstanceState, AppPlacement,
-    OneBotEndpointExport,
+    APP_LINK_CONNECTION_PREFIX, AppConfigDocument, AppConfigFormat, AppConfigIssue, AppConfigText,
+    AppConfigWrite, AppFrameworkId, AppFrameworkManifest, AppInstance, AppInstanceId,
+    AppInstanceState, AppLinkRecord, AppPlacement, CreateAppInstanceRequest, LOCAL_HOST_ID,
+    OneBotEndpointExport, OneBotLinkMode, OneBotLinkPlan, REMOTE_HOST_ID_PREFIX,
+    app_link_connection_name, is_app_link_connection_name, runtime_target_matches_host,
+    server_id_of_host,
 };
 pub use bootstrap::{
     BootstrapSnapshot, BootstrapStatus, DataLayoutConsolidateSnapshot, LocalVersionSnapshot,
