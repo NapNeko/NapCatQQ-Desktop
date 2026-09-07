@@ -51,7 +51,8 @@ flowchart TB
 | `crates/ncd-backend-snowluma/` | SnowLuma daemon/poller + remote stack/tunnel |
 | `crates/ncd-host/` | 本机 Windows / 远端 Linux SSH 主机抽象 |
 | `crates/ncd-watch/` | 远端主机侧监控 bin：探活 + Webhook（Desktop 退出后） |
-| `crates/ncd-component/` | 组件：Node/QQ/NoVnc/NapCat/SnowLuma/DesktopSelf（规划中：NcdWatch） |
+| `crates/ncd-component/` | 组件：Node/uv/QQ/NoVnc/NapCat/SnowLuma/DesktopSelf/NcdWatch + 应用端框架组件 id（Karin/NoneBot2，按实例装） |
+| `crates/ncd-appframework/` | 应用端框架适配器：registry + `karin/`、`nonebot2/`（manifest / Component / Integration / 写配置备份还原） |
 | `crates/ncd-deploy/` | 部署计划、Docker/Native、配置渲染、RemoteQq 协调 |
 | `crates/ncd-network/` | HTTP/下载/代理等 |
 | `crates/ncd-update/` | 应用自更新 |
@@ -183,7 +184,8 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 
 | 关注点 | 主路径 |
 |--------|--------|
-| 组件实现 | `crates/ncd-component/src/{nodejs,qq,novnc,napcat,snowluma,desktop_self}.rs` |
+| 组件实现 | `crates/ncd-component/src/{nodejs,uv,qq,novnc,napcat,snowluma,desktop_self,ncd_watch}.rs`；应用端框架组件在 `ncd-appframework`（见 14） |
+| ComponentId 穷尽点 | `ncd-runtime/src/components/{factory,graph,action_policy}.rs`（新组件必碰：工厂臂 / 依赖图黄金 / 下载槽·catalog） |
 | 上下文 / 进度 | `crates/ncd-component/src/context.rs`, `ncd-domain/progress.rs` |
 | QQ 系统依赖 | `ncd-component/qq_deps/`, `ncd-domain/qq_dependency.rs` |
 | 远端 QQ 入口 | `ncd-component/remote_qq_entry.rs` + `ncd-deploy/remote_coordinator.rs` |
@@ -308,10 +310,34 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 |--------|--------|
 | 根应用 | `src-ui/app/AppNext.tsx` |
 | 路由枚举 / 侧栏 | `src-ui/shared/components/next/Sidebar.tsx` |
-| 路由：overview / bots / components / docker / remote / tasks / settings | 各 `src-ui/modules/*` |
+| 路由：overview / bots / apps / components / docker / remote / tasks / settings | 各 `src-ui/modules/*` |
 | 设计 token / 主题 | `src-ui/core/design/`, `hooks/theme/` |
 | 共享 UI | `src-ui/shared/ui/`, `shared/components/` |
 | 入口 | `src-ui/main.tsx`, `src-ui/index.html` |
+
+---
+
+### 14) 应用端框架（AppFramework：安装 / 启停 / 对接协议 Bot）
+
+| 关注点 | 主路径 |
+|--------|--------|
+| 领域模型 | `crates/ncd-domain/src/app_framework.rs`（`AppInstance` / `AppFrameworkManifest` / `OneBotLinkPlan` / `AppLinkRecord`；配置文档 `AppConfigDocument` / `AppConfigFormat` / `AppConfigText` / `AppConfigIssue`）；事件 `AppInstanceChanged` / `AppInstanceLogAppended` |
+| 契约 | `crates/ncd-traits/src/app_framework.rs`（`AppIntegration` 纯计划 / `AppRuntime`；错误 `ConfigConflict` / `ConfigInvalid` / `ConfigUnsupported`）；碰 Host 的 `apply_link/unlink/rollback` + `config_documents/read_config/write_config/read_config_text/write_config_text` 在 `ncd-appframework/src/adapter.rs::AppFrameworkAdapter`（默认 `ConfigUnsupported`） |
+| 框架适配器 | `crates/ncd-appframework/src/{karin,nonebot2}/{manifest,component,integration,mod}.rs`；`registry.rs::with_builtin` 注册；`env_file.rs` 保序 dotenv（`entries/remove/set_with_comment` 连注释）；`node_tooling.rs` / `uv_tooling.rs` 工具链解析 + 实例标记 `.ncd-node` / `.ncd-uv` |
+| 配置模型 | `crates/ncd-appframework/src/config_doc.rs`（框架无关：`AppInstanceConfig` tagged enum、`AppInstanceConfigEnvelope`、`AppConfigWriteResult`、revision sha256 前 16 位、`read_document(s)` / `write_document_text` 走 `apply_with_backup`）；`karin/config.rs`（`KarinInstanceConfig { env, config, adapter, groups, privates, render, redis }`，ts-rs 导出，未知键 flatten 保留，`validate()` 路径与前端一致，`plan_karin_writes` 只写变化文档） |
+| 编排 | `crates/ncd-runtime/src/app_framework/{manager,instances,native_runtime,export}.rs`（`AppManager`：实例表 `config/app-instances.json`、起停 pid/日志、对接调 `BotManager::upsert_bot_config`、同机校验、失败回滚；`read_config / write_config`：`base_revision` 冲突 → 端口占用检查 → 写 → `sync_after_config_write`（端口同步 + `port_changed`、linked 且端口/`WS_SERVER_AUTH_KEY` 变则 `apply_link`、运行中非热加载文档变则 `restart_required`）；原文写入 `write_config_text` 对 Karin 也做 best-effort 同步） |
+| 运行时依赖 | `ncd-component/src/{nodejs,uv}.rs`；工厂 `components/factory.rs`（`Karin \| NoneBot2` 臂按 `AppComponentHint` 实例化） |
+| Tauri | `src-tauri/src/commands/app_framework.rs`（12 条实例命令 + 5 条配置命令 `read/write_app_instance_config`、`list_app_config_documents`、`read/write_app_config_text`；配置命令返回结构化 `AppConfigError { kind, message, issues }`）；退出 `shutdown_local`；启动 `reconcile_all` |
+| 前端页 | 安装入口在组件页：`modules/components/AppFrameworkRow.tsx`（「应用端」分组合成行，按主机新建实例）+ `modules/apps/CreateInstanceDialog.tsx`；应用端页 `modules/apps/AppsPage.next.tsx` 浅路由 列表 → 详情（`PageTransition`）：列表 `modules/apps/list/AppInstanceListPage.tsx`（行可点；起停 / 对接 / 删除；「配置 / 查看日志」直达 Tab）、详情 `modules/apps/detail/AppInstancePage.next.tsx`（头部操作 + Tabs + 粘性保存 + `ConfigConflictDialog`；Karin：`detail/karin/{KarinBasicTab,KarinPermissionsTab,KarinConnectionsTab,KarinRulesTab+ScopedRuleEditor,KarinRenderStorageTab}` + `useKarinConfigForm`；任何框架：`RawFilesTab`（JSON 预检）+ `InstanceLogTab`；`FieldHints.tsx` 对接依赖 / 重启生效 / 端口联动 徽章）；Bot 连接页入口 `modules/bot/config/next/ConnectionsTab.tsx`（`ncd-app:` 徽章） |
+| hooks / 服务 / mock | `src-ui/hooks/apps/{useAppInstances,useAppInstanceConfig}.ts`、`core/domain/apps/{karinConfig,appConfigError}.ts`（常量 / 工厂 / `validateKarinConfig` / `toAppConfigError`）、`core/services/app-framework.service.ts`、`core/ipc/mock/{app-framework,app-config}.mock.ts`（`__ncdMock.appConfigConflictOnce()` 模拟冲突）；共享原子 `shared/ui/{StringListField,KeyValueListEditor,EndpointListEditor}.tsx` |
+| 上游事实 | `.references/Karin/`（只读）；键名 / 路径锁在各 `manifest.rs` 头注释；配置默认值 / 热加载列表见 `karin/config.rs` 头注释 |
+| 活 plan | `.claude/plan/app-framework-d2-karin.md`（实例 / 起停 / 对接）、`.claude/plan/app-instance-config-karin.md`（详情页 + 类型化配置） |
+
+铁律：应用端不进 `BackendType` / 协议 Bot 列表；对接只往协议 Bot 的 `websocket_clients` 按名（`ncd-app:<instance_id>`）upsert 再走既有热推，不新写推送链路；接新框架只加子目录 + 注册一行 + `ComponentId` 变体。
+
+页面分工：**组件页装、应用端页管**。应用端按实例安装（每个实例自带 `node_modules` / `.venv`），没有主机级「已安装 Karin」状态，所以组件页的应用端卡片展示的是「这台主机上的实例数 / 运行数 / 对接数 + 运行时依赖是否就绪」，主操作「新建实例」= 创建 + 安装（依赖闭包一并装）；`AppFrameworkManifest.runtime_component_ids` 供卡片显示依赖，注册表测试保证它与 `Component::requirements()` 一致。
+
+配置页规则：类型化配置只写有变化的文档；前后端校验路径同名（`env/http_port`、`adapter/onebot/ws_client/{i}/url` …）；`base_revision` 不一致返回 `ConfigConflict`，UI 给「重新加载 / 覆盖」；`HTTP_PORT` / `WS_SERVER_AUTH_KEY` / `adapter.onebot.ws_server.enable` 在 UI 标「对接依赖」，改后由 `AppManager` 复用 `apply_link` 重新对接，不新写链路；`redis.json` 不热加载，改后 `restart_required`。接新框架的类型化配置：实现 `read_config / write_config` + 加 `AppInstanceConfig` 变体 + 前端一组 Tab；不实现则自动只有「原始文件」Tab（靠 `config_documents`）。
 
 
 ---
