@@ -5,6 +5,7 @@ import type { MotionIconPreset } from './MotionIcon';
 type NavRouteId =
     | 'overview'
     | 'bots'
+    | 'apps'
     | 'components'
     | 'docker'
     | 'remote'
@@ -15,6 +16,7 @@ type NavRouteId =
 export const NAV_ROUTE_MOTION: Record<NavRouteId, MotionIconPreset> = {
     overview: 'bob',
     bots: 'pulse',
+    apps: 'nudge',
     components: 'nudge',
     docker: 'breathe',
     remote: 'breathe',
