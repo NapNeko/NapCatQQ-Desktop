@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::app_framework::{AppInstance, AppInstanceId};
 use crate::bot_actor::BotActorSnapshot;
 use crate::bot_status::BotStatus;
 use crate::daemon_state::{DaemonState, SnowLumaLoginState};
@@ -66,6 +67,10 @@ pub enum DomainEventKind {
     HostConnectionLost,
     #[serde(rename = "host_connection_recovered")]
     HostConnectionRecovered,
+    #[serde(rename = "app_instance_changed")]
+    AppInstanceChanged,
+    #[serde(rename = "app_instance_log_appended")]
+    AppInstanceLogAppended,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -184,6 +189,15 @@ pub enum DomainEvent {
     },
     #[serde(rename = "host_connection_recovered")]
     HostConnectionRecovered { server_id: String, latency_ms: u64 },
+    /// 应用端实例快照变化（安装/启停/对接）；应用端不进协议 Bot 事件
+    #[serde(rename = "app_instance_changed")]
+    AppInstanceChanged {
+        instance: AppInstance,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    #[serde(rename = "app_instance_log_appended")]
+    AppInstanceLogAppended { instance_id: AppInstanceId, line: String },
 }
 
 pub const DOMAIN_EVENT_ENVELOPE_VERSION: u32 = 1;
@@ -236,6 +250,8 @@ impl DomainEvent {
             Self::DesktopLogAppended { .. } => DomainEventKind::DesktopLogAppended,
             Self::HostConnectionLost { .. } => DomainEventKind::HostConnectionLost,
             Self::HostConnectionRecovered { .. } => DomainEventKind::HostConnectionRecovered,
+            Self::AppInstanceChanged { .. } => DomainEventKind::AppInstanceChanged,
+            Self::AppInstanceLogAppended { .. } => DomainEventKind::AppInstanceLogAppended,
         }
     }
 
@@ -269,6 +285,8 @@ impl DomainEvent {
             Self::DesktopLogAppended { .. } => "desktop_log_appended",
             Self::HostConnectionLost { .. } => "host_connection_lost",
             Self::HostConnectionRecovered { .. } => "host_connection_recovered",
+            Self::AppInstanceChanged { .. } => "app_instance_changed",
+            Self::AppInstanceLogAppended { .. } => "app_instance_log_appended",
         }
     }
 
@@ -302,10 +320,26 @@ impl DomainEvent {
             Self::DesktopLogAppended { .. } => None,
             Self::HostConnectionLost { .. } => None,
             Self::HostConnectionRecovered { .. } => None,
+            Self::AppInstanceChanged { .. } => None,
+            Self::AppInstanceLogAppended { .. } => None,
         }
     }
 
     // -- helper constructors --
+
+    pub fn app_instance_changed(instance: AppInstance, reason: impl Into<String>) -> Self {
+        Self::AppInstanceChanged {
+            instance,
+            reason: Some(reason.into()),
+        }
+    }
+
+    pub fn app_instance_log(instance_id: AppInstanceId, line: impl Into<String>) -> Self {
+        Self::AppInstanceLogAppended {
+            instance_id,
+            line: line.into(),
+        }
+    }
 
     pub fn bot_state_changed(snapshot: BotActorSnapshot, reason: impl Into<String>) -> Self {
         Self::BotStateChanged {
