@@ -72,6 +72,8 @@ pub struct AppState {
     pub(crate) metrics_collector: ncd_runtime::metrics::MetricsCollector,
     /// 数据根整树迁移闸门(进行中拒绝其它写盘 command)
     pub(crate) migrate_gate: Arc<commands::data_root_migrate::DataRootMigrateGate>,
+    /// 应用端框架（Karin 等）实例表 + 起停 + 对接编排
+    pub(crate) app_manager: Arc<ncd_runtime::AppManager>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -253,6 +255,7 @@ pub fn run() {
             Arc::clone(&server_manager),
             Arc::clone(&local_host),
         ));
+    let host_resolver_for_apps = Arc::clone(&host_resolver);
     // 远端库存缓存:组件页探测与 Bot 启动预检共用一份,安装完成后由 executor 清掉
     let host_probe_cache: Arc<Mutex<HashMap<String, ncd_runtime::RemoteInventory>>> =
         Arc::new(Mutex::new(HashMap::new()));
@@ -318,6 +321,35 @@ pub fn run() {
         onebot_endpoint_resolver::BotManagerOneBotEndpointResolver::new(Arc::clone(&bot_manager)),
     )));
 
+    // 应用端框架：实例表 + 进程骨架 + 对接编排（对接热推复用 BotManager::upsert_bot_config）
+    let app_manager = {
+        let store = match ncd_runtime::AppInstanceStore::load(&data_root) {
+            Ok(s) => Arc::new(s),
+            Err(err) => {
+                desktop_log::write_session_line(
+                    "EROR",
+                    "ncd::app_framework",
+                    &format!("app-instances.json unreadable, starting empty: {err}"),
+                );
+                Arc::new(ncd_runtime::AppInstanceStore::empty(&data_root))
+            }
+        };
+        let app_runtime = Arc::new(ncd_runtime::NativeAppRuntime::new(
+            Arc::new(event_bus.clone()),
+            Arc::clone(&store),
+        ));
+        Arc::new(ncd_runtime::AppManager::new(
+            Arc::new(ncd_runtime::AppFrameworkRegistry::with_builtin()),
+            store,
+            app_runtime,
+            Arc::clone(&host_resolver_for_apps),
+            Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::BotConfigPort>,
+            Arc::new(event_bus.clone()),
+            &data_root,
+        ))
+    };
+    let app_manager_reconcile = Arc::clone(&app_manager);
+
     let bot_manager_bootstrap = Arc::clone(&bot_manager);
     let data_root_for_bootstrap = data_root.clone();
     let bot_manager_listener = Arc::clone(&bot_manager);
@@ -358,6 +390,7 @@ pub fn run() {
             health_probe_cancel: Arc::new(Mutex::new(None)),
             metrics_collector: metrics_collector.clone(),
             migrate_gate: Arc::new(commands::data_root_migrate::DataRootMigrateGate::default()),
+            app_manager,
         })
         .setup(move |app| {
             if startup_tray_only {
@@ -537,6 +570,10 @@ pub fn run() {
                     &format!("attach failed: {err}"),
                 );
             }
+            // 应用端实例冷启动对账：按 pid 文件判 Running / Stopped；连不上的远端跳过
+            tauri::async_runtime::spawn(async move {
+                app_manager_reconcile.reconcile_all().await;
+            });
             // 远端 ncd-watch:周期写 desktop_present + 同步 notify.json
             commands::ncd_watch::spawn_ncd_watch_heartbeat(app.handle().clone());
             // 本机实例指标：读 net-stats 并节流写 history（远端 history 由 ncd-watch）
@@ -641,6 +678,23 @@ pub fn run() {
             commands::components::cancel_component_action,
             commands::components::resolve_component_dependencies,
             commands::components::resolve_runtime_readiness,
+            commands::app_framework::list_app_frameworks,
+            commands::app_framework::list_app_instances,
+            commands::app_framework::create_app_instance,
+            commands::app_framework::install_app_instance,
+            commands::app_framework::refresh_app_instance,
+            commands::app_framework::start_app_instance,
+            commands::app_framework::stop_app_instance,
+            commands::app_framework::delete_app_instance,
+            commands::app_framework::preview_app_link,
+            commands::app_framework::apply_app_link,
+            commands::app_framework::unlink_app_instance,
+            commands::app_framework::get_app_instance_webui,
+            commands::app_framework::read_app_instance_config,
+            commands::app_framework::write_app_instance_config,
+            commands::app_framework::list_app_config_documents,
+            commands::app_framework::read_app_config_text,
+            commands::app_framework::write_app_config_text,
             commands::desktop_update::check_desktop_update,
             commands::desktop_update::precheck_desktop_update,
             commands::desktop_update::install_desktop_update,
