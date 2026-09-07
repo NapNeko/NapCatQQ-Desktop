@@ -59,10 +59,22 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'nodejs',
         display_name: 'Node.js',
-        description: '供 SnowLuma Lite 使用的 Node.js 环境',
+        description: 'SnowLuma 精简包与 Node 系应用端（Karin）所需的 Node.js 运行环境',
         repo_url: 'https://nodejs.org',
         supported_targets: [
             { os: 'windows', locality: 'local' },
+            { os: 'linux', locality: 'remote' },
+        ],
+        category: 'runtime_dep',
+    },
+    {
+        id: 'uv',
+        display_name: 'uv',
+        description: 'Python 系应用端（NoneBot2）所需的包管理与解释器工具链',
+        repo_url: 'https://github.com/astral-sh/uv',
+        supported_targets: [
+            { os: 'windows', locality: 'local' },
+            { os: 'linux', locality: 'local' },
             { os: 'linux', locality: 'remote' },
         ],
         category: 'runtime_dep',
@@ -160,6 +172,22 @@ const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>
     },
     desktop_self: {
         local: { version: '0.1.0-alpha.1', source: 'package.json' },
+        'remote:production': null,
+        'remote:dev': null,
+    },
+    uv: {
+        local: null,
+        'remote:production': null,
+        'remote:dev': null,
+    },
+    // 应用端组件按实例安装，不进组件页目录；这里只为类型穷尽
+    karin: {
+        local: null,
+        'remote:production': null,
+        'remote:dev': null,
+    },
+    nonebot2: {
+        local: null,
         'remote:production': null,
         'remote:dev': null,
     },

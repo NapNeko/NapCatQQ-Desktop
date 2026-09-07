@@ -2,17 +2,26 @@
 import type { AppFrameworkId } from "./AppFrameworkId";
 import type { AppInstanceId } from "./AppInstanceId";
 import type { AppInstanceState } from "./AppInstanceState";
+import type { AppLinkRecord } from "./AppLinkRecord";
 import type { AppPlacement } from "./AppPlacement";
 
 /**
- * 应用端实例快照（控制台列表/状态用）。
+ * 应用端实例快照（控制台列表/状态用；持久化在 data_root/config/app-instances.json）。
  */
-export type AppInstance = { id: AppInstanceId, framework_id: AppFrameworkId, display_name: string, placement: AppPlacement, state: AppInstanceState, 
+export type AppInstance = { id: AppInstanceId, framework_id: AppFrameworkId, display_name: string, placement: AppPlacement, 
+/**
+ * `local` / `remote:<server_id>`
+ */
+host_id: string, 
+/**
+ * 实例目录（HostPath POSIX 字面量）
+ */
+install_dir: string, 
+/**
+ * 应用端监听端口（反向 WS / WebUI 共用）
+ */
+port: number, state: AppInstanceState, 
 /**
  * 已对接的协议 Bot；未对接为 None
  */
-linked_bot_id?: string, 
-/**
- * 远端 Docker 时的 server profile id；本机 Native 为 None
- */
-server_id?: string | null, last_error?: string | null, };
+link?: AppLinkRecord, installed_version?: string, last_error?: string, created_at_ms: number, };
