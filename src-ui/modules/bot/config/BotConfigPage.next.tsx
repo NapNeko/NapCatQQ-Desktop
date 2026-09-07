@@ -44,6 +44,7 @@ import {
     ActionMotionIcon,
     infoToneMotion,
 } from '../../../shared/ui/motion';
+import { replaceAppLinkClients } from '../../../core/domain/bot/connections';
 import { IdentityTab } from './next/IdentityTab';
 import { ConnectionsTab } from './next/ConnectionsTab';
 import { AdvancedTab } from './next/AdvancedTab';
@@ -67,6 +68,22 @@ const defaultSnowlumaAppConfig = (): SnowLumaAppConfig => ({
     snowlumaWebuiPasswordOverride: '',
     snowlumaWebuiPort: 5099,
 });
+
+function applyServerAppLinks(draft: BotConfig, server: BotConfig): BotConfig {
+    const nextClients = replaceAppLinkClients(
+        draft.connect.websocketClients,
+        server.connect.websocketClients,
+    );
+    if (
+        nextClients.length === draft.connect.websocketClients.length &&
+        nextClients.every(
+            (c, i) => JSON.stringify(c) === JSON.stringify(draft.connect.websocketClients[i]),
+        )
+    ) {
+        return draft;
+    }
+    return { ...draft, connect: { ...draft.connect, websocketClients: nextClients } };
+}
 
 export function BotConfigPageNext({
     botId,
@@ -213,15 +230,19 @@ export function BotConfigPageNext({
             return;
         }
         if (!loadedConfig || botId == null) return;
+        const normalized = normalizeLoadedConfig(loadedConfig);
         if (formHydratedForBotRef.current === botId) {
             if (!dirtyRef.current) {
-                const normalized = normalizeLoadedConfig(loadedConfig);
                 setFormData(normalized);
                 setPristine(normalized);
+            } else {
+                // 对接 / 解绑由后端落盘；脏表单只把 ncd-app:* 跟服务端对齐，
+                // 避免随后点保存把已解除的连接写回去，或丢掉刚对接上的那条。
+                setFormData((prev) => applyServerAppLinks(prev, normalized));
+                setPristine((prev) => applyServerAppLinks(prev, normalized));
             }
             return;
         }
-        const normalized = normalizeLoadedConfig(loadedConfig);
         setFormData(normalized);
         setPristine(normalized);
         formHydratedForBotRef.current = botId;
@@ -536,6 +557,7 @@ export function BotConfigPageNext({
                                     data={formData.connect}
                                     onChange={updateConnect}
                                     backendType={formData.bot.backend_type}
+                                    botId={tourDemoMode ? null : botId}
                                 />
                             </div>
                         </TabsContent>

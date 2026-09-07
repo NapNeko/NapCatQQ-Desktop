@@ -16,11 +16,14 @@ import { componentActionStore } from '../../hooks/components/componentActionStor
 import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { useDockerHosts } from '../../hooks/docker/useDockerHosts';
 import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallProgress';
+import { useAppFrameworks, useAppInstances } from '../../hooks/apps/useAppInstances';
+import { useServerManager } from '../../hooks/remote/useServerManager';
 import { HostSwitcher } from './HostSwitcher';
 import { HostComponentsView } from './HostComponentsView';
 import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { SnowLumaPackageDialog } from './SnowLumaPackageDialog';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
+import { CreateInstanceDialog, type CreateInstanceRequest } from '../apps/CreateInstanceDialog';
 import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
 import { componentMutationBlockedReason, componentLifecycleBlockedReason } from '../../core/domain/components/mutation-gate';
 import { buildDemoRemoteMachine } from '../../core/domain/onboarding/demoRemoteMachine';
@@ -30,6 +33,7 @@ import {
 } from '../../hooks/desktop/componentsHostBridge';
 import type { ReleaseInfoView } from '../../core/domain/release/normalize';
 import type {
+    AppFrameworkManifest,
     ComponentId,
     DockerInstallReport,
     SnowLumaPackage,
@@ -68,6 +72,12 @@ export const ComponentsPageNext: React.FC = () => {
 
     const hostIds = useMemo(() => hosts.map((h) => h.host_id), [hosts]);
     const dockerHosts = useDockerHosts(hostIds);
+
+    // 应用端：框架清单 + 实例（按实例安装，只在这页提供「新建实例」入口）
+    const appFrameworks = useAppFrameworks();
+    const apps = useAppInstances();
+    const { servers } = useServerManager();
+    const [createAppRequest, setCreateAppRequest] = useState<CreateInstanceRequest | null>(null);
 
     // 组件主导矩阵 → 主机主导，再剔掉这台机器一个组件都装不了的空机器。
     const allRows = useMemo<ComponentRow[]>(
@@ -250,6 +260,13 @@ export const ComponentsPageNext: React.FC = () => {
         setReleaseNotesTarget(componentId);
     }, []);
 
+    const handleCreateAppInstance = useCallback(
+        (manifest: AppFrameworkManifest, hostId: string) => {
+            setCreateAppRequest({ manifest, lockedHostId: hostId });
+        },
+        [],
+    );
+
     const [slPkgPrompt, setSlPkgPrompt] = useState<{
         componentId: ComponentId;
         hostId: string;
@@ -394,14 +411,16 @@ export const ComponentsPageNext: React.FC = () => {
         [startAction, onTaskTerminal, refetch, hostNameOf, probeQqDependencies],
     );
 
+    const refetchApps = apps.refetch;
     const handleRefresh = useCallback(() => {
         refetch();
+        void refetchApps();
         // 远端版本必须 force，否则 1h 磁盘缓存会挡住中转/GitHub 重拉
         refetchReleases();
         if (activeMachine) {
             void probeQqDependencies(activeMachine.host.host_id, true);
         }
-    }, [refetch, refetchReleases, activeMachine, probeQqDependencies]);
+    }, [refetch, refetchApps, refetchReleases, activeMachine, probeQqDependencies]);
 
     const handleRetryDetect = useCallback(
         (hostId: string) => {
@@ -570,7 +589,7 @@ export const ComponentsPageNext: React.FC = () => {
                     </p>
                     <h1 className="font-display text-xl font-semibold text-text">组件管理</h1>
                     <p className="mt-1 text-sm text-text-secondary">
-                        选一台机器，管理它上面的 Bot 框架与运行时依赖：安装、更新、卸载、容器部署。
+                        选一台机器，管理它上面的协议端、应用端与运行时依赖：安装、更新、卸载、容器部署。
                     </p>
                 </div>
                 <Button
@@ -614,6 +633,9 @@ export const ComponentsPageNext: React.FC = () => {
                 ) : activeMachine ? (
                     <HostComponentsView
                         machine={activeMachine}
+                        appFrameworks={appFrameworks.data ?? []}
+                        appInstances={apps.instances}
+                        onCreateAppInstance={handleCreateAppInstance}
                         latestVersionFor={latestVersionFor}
                         latestReleaseFor={latestReleaseFor}
                         getProgress={getProgressFor}
@@ -668,6 +690,32 @@ export const ComponentsPageNext: React.FC = () => {
                     if (!open) setSlPkgPrompt(null);
                 }}
                 onConfirm={confirmSnowLumaPackage}
+            />
+
+            <CreateInstanceDialog
+                request={createAppRequest}
+                servers={servers}
+                isCreating={apps.isCreating}
+                onClose={() => setCreateAppRequest(null)}
+                onSubmit={async (draft) => {
+                    const created = await apps.create({
+                        framework_id: draft.frameworkId,
+                        host_id: draft.hostId,
+                        display_name: draft.displayName,
+                        port: draft.port ?? undefined,
+                    });
+                    if (draft.installNow) apps.install(created.id);
+                    setCreateAppRequest(null);
+                    globalInfoBarStore.push({
+                        key: `app-instance-created:${created.id}`,
+                        tone: 'success',
+                        title: `已创建 ${created.display_name} · ${hostNameOf(draft.hostId)}`,
+                        content: draft.installNow
+                            ? '安装进度见任务队列；装好后到「应用端」页启动并对接协议 Bot。'
+                            : '实例已登记但未安装；到「应用端」页可随时安装。',
+                        autoDismissMs: 8_000,
+                    });
+                }}
             />
 
             {sudoPrompt && (
