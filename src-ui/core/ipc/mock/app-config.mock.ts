@@ -11,6 +11,7 @@ import type {
     AppInstanceConfig,
     AppInstanceConfigEnvelope,
     KarinInstanceConfig,
+    NoneBot2InstanceConfig,
 } from '../types';
 import {
     karinDefaultConfig,
@@ -18,6 +19,11 @@ import {
     karinLinkInputsChanged,
     validateKarinConfig,
 } from '../../domain/apps/karinConfig';
+import {
+    nonebot2DefaultConfig,
+    nonebot2LinkInputsChanged,
+    validateNoneBot2Config,
+} from '../../domain/apps/nonebot2Config';
 import { makeAppConfigError } from '../../domain/apps/appConfigError';
 import { withMockDelay } from './bootstrap.mock';
 
@@ -53,6 +59,7 @@ interface KarinState {
 }
 
 const karinStates = new Map<string, KarinState>();
+const nbStates = new Map<string, { config: NoneBot2InstanceConfig; docRev: Record<string, number> }>();
 const rawStates = new Map<string, { text: Record<string, string>; rev: Record<string, number> }>();
 let conflictOnce = false;
 
@@ -114,6 +121,30 @@ function karinState(instance: AppInstance): KarinState {
 
 function combined(docRev: Record<string, number>, docs: AppConfigDocument[]): string {
     return `mock-${docs.map((d) => `${d.id}${docRev[d.id] ?? 0}`).join('.')}`;
+}
+
+function nbState(instance: AppInstance) {
+    let s = nbStates.get(instance.id);
+    if (!s) {
+        const docRev: Record<string, number> = {};
+        for (const d of NONEBOT2_DOCS) docRev[d.id] = 1;
+        s = { config: nonebot2DefaultConfig(instance.port), docRev };
+        if (instance.link) s.config.env_prod.onebot_access_token = 'mock';
+        nbStates.set(instance.id, s);
+    }
+    return s;
+}
+
+function nbEnvelope(s: { config: NoneBot2InstanceConfig; docRev: Record<string, number> }): AppInstanceConfigEnvelope {
+    return {
+        config: { framework: 'nonebot2', data: structuredClone(s.config) },
+        revision: combined(s.docRev, NONEBOT2_DOCS),
+        documents: NONEBOT2_DOCS.map((d) => ({
+            doc_id: d.id,
+            revision: rev(s.docRev[d.id] ?? 0),
+            hot_reload: d.hot_reload,
+        })),
+    };
 }
 
 function envelope(s: KarinState): AppInstanceConfigEnvelope {
@@ -183,6 +214,9 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
     return {
         readConfig: async (instanceId: string): Promise<AppInstanceConfigEnvelope> => {
             const inst = requireInstalled(instanceId);
+            if (inst.framework_id === 'nonebot2') {
+                return withMockDelay(nbEnvelope(nbState(inst)));
+            }
             if (inst.framework_id !== 'karin') {
                 throw makeAppConfigError('unsupported', `该应用端暂不支持类型化配置: ${inst.framework_id}`);
             }
@@ -195,6 +229,44 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             baseRevision: string | null,
         ): Promise<AppConfigWriteResult> => {
             const inst = requireInstalled(instanceId);
+            if (inst.framework_id === 'nonebot2' && config.framework === 'nonebot2') {
+                const s = nbState(inst);
+                if (baseRevision != null && baseRevision !== combined(s.docRev, NONEBOT2_DOCS)) {
+                    throw makeAppConfigError('conflict', '配置已被修改（config），请重新加载后再保存');
+                }
+                const next = structuredClone(config.data);
+                const issues = validateNoneBot2Config(next);
+                if (issues.length) {
+                    throw makeAppConfigError(
+                        'invalid',
+                        `配置校验未通过：${issues.map((i) => `${i.path}: ${i.message}`).join('; ')}`,
+                        issues,
+                    );
+                }
+                const before = s.config;
+                if (JSON.stringify(before.env_prod) !== JSON.stringify(next.env_prod)) {
+                    s.docRev.env_prod = (s.docRev.env_prod ?? 0) + 1;
+                }
+                s.config = next;
+                let portChanged = false;
+                let relinked = false;
+                if (next.env_prod.port !== inst.port) {
+                    deps.publish({ ...inst, port: next.env_prod.port }, 'port_changed');
+                    portChanged = true;
+                }
+                if (inst.link && nonebot2LinkInputsChanged(before.env_prod, next.env_prod)) {
+                    relinked = true;
+                }
+                const env = nbEnvelope(s);
+                return withMockDelay({
+                    config: env.config,
+                    revision: env.revision,
+                    documents: env.documents,
+                    restart_required: inst.state === 'running',
+                    relinked,
+                    port_changed: portChanged,
+                });
+            }
             if (inst.framework_id !== 'karin' || config.framework !== 'karin') {
                 throw makeAppConfigError('unsupported', `该应用端暂不支持类型化配置: ${inst.framework_id}`);
             }
@@ -351,6 +423,7 @@ export const mockAppConfigControls = {
     },
     reset: () => {
         karinStates.clear();
+        nbStates.clear();
         rawStates.clear();
         conflictOnce = false;
     },

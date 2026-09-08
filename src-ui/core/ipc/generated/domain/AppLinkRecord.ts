@@ -4,4 +4,8 @@ import type { OneBotLinkMode } from "./OneBotLinkMode";
 /**
  * 已生效的对接记录（落在 AppInstance 上）
  */
-export type AppLinkRecord = { bot_id: string, mode: OneBotLinkMode, connection_name: string, linked_at_ms: number, };
+export type AppLinkRecord = { bot_id: string, mode: OneBotLinkMode, connection_name: string, linked_at_ms: number, 
+/**
+ * 两台远端常驻隧道在 Bot 机上的 loopback 听口；P0/P1 / 同机为 None
+ */
+resident_forward_port?: number, };

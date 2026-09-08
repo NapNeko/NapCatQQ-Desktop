@@ -8,12 +8,16 @@ import type {
     AppInstance,
     AppInstanceWebUi,
     AppPluginAction,
+    AppStoreInstalled,
+    AppStoreMarketEntry,
+    AppStoreResource,
     CreateAppInstanceRequest,
     KarinPluginInstalled,
     KarinPluginMarketEntry,
     OneBotLinkPlan,
 } from '../types';
 import { karinDefaultConfig } from '../../domain/apps/karinConfig';
+import { nonebot2DefaultConfig } from '../../domain/apps/nonebot2Config';
 import { emitMockEvent } from './events.mock';
 import { withMockDelay } from './bootstrap.mock';
 import { createMockAppConfigApi, peekKarinHttpAuthKey, syncKarinLinkToken } from './app-config.mock';
@@ -87,10 +91,16 @@ let instances: AppInstance[] = [
         host_id: 'local',
         install_dir: 'D:/NapCatQQ/apps/nonebot2/n9b8c7d6',
         port: 8080,
-        state: 'stopped',
+        state: 'running',
+        link: {
+            bot_id: '10001',
+            mode: 'reverse_ws',
+            connection_name: 'ncd-app:n9b8c7d6',
+            linked_at_ms: Date.now() - 1_800_000,
+        },
         installed_version: '2.4.2',
         created_at_ms: Date.now() - 7_200_000,
-        install_renderer: true,
+        install_renderer: false,
     },
 ];
 
@@ -131,7 +141,7 @@ export const mockAppFrameworkApi = {
                 (req.host_id === 'local'
                     ? `D:/NapCatQQ/apps/${req.framework_id}/${id}`
                     : `/home/ubuntu/ncd/apps/${req.framework_id}/${id}`),
-            port: req.port ?? manifest?.default_port ?? 7777,
+            port: req.port ?? 20000 + Math.floor(Math.random() * 29152),
             state: 'not_installed',
             created_at_ms: Date.now(),
             install_renderer: req.install_renderer ?? true,
@@ -246,7 +256,18 @@ export const mockAppFrameworkApi = {
         instanceId: string,
         pluginName: string,
     ): Promise<AppConfigDocument[]> => {
-        require(instanceId);
+        const inst = require(instanceId);
+        if (inst.framework_id === 'nonebot2') {
+            return withMockDelay([
+                {
+                    id: 'env_prod',
+                    label: '.env.prod',
+                    rel_path: '.env.prod',
+                    format: 'dot_env',
+                    hot_reload: false,
+                },
+            ]);
+        }
         const dir = pluginName.replaceAll('/', '-');
         return withMockDelay([
             {
@@ -261,6 +282,27 @@ export const mockAppFrameworkApi = {
 
     listPluginMarket: () => withMockDelay(mockPluginMarket.slice()),
 
+    listStore: async (frameworkId: string, resource: AppStoreResource): Promise<AppStoreMarketEntry[]> => {
+        if (frameworkId === 'karin' && resource === 'plugin') {
+            return withMockDelay(mockPluginMarket.map(karinToStore));
+        }
+        if (frameworkId === 'nonebot2' && resource === 'adapter') {
+            return withMockDelay(mockNoneBotAdapters.slice());
+        }
+        if (frameworkId === 'nonebot2' && resource === 'plugin') {
+            return withMockDelay(mockNoneBotPlugins.slice());
+        }
+        return withMockDelay([]);
+    },
+
+    listStoreInstalled: async (
+        instanceId: string,
+        resource: AppStoreResource,
+    ): Promise<AppStoreInstalled[]> => {
+        require(instanceId);
+        return withMockDelay(mockStoreInstalledFor(instanceId, resource));
+    },
+
     listPlugins: async (instanceId: string): Promise<KarinPluginInstalled[]> => {
         require(instanceId);
         return withMockDelay(mockInstalledFor(instanceId));
@@ -270,9 +312,14 @@ export const mockAppFrameworkApi = {
         instanceId: string,
         pluginName: string,
         action: AppPluginAction,
+        resource?: AppStoreResource,
     ): Promise<string> => {
         require(instanceId);
-        applyMockPluginOp(instanceId, pluginName, action);
+        if (require(instanceId).framework_id === 'nonebot2') {
+            applyMockStoreOp(instanceId, pluginName, action, resource ?? 'plugin');
+        } else {
+            applyMockPluginOp(instanceId, pluginName, action);
+        }
         return withMockDelay(`mock-plugin-${instanceId}-${pluginName}`);
     },
 
@@ -281,12 +328,30 @@ export const mockAppFrameworkApi = {
         pluginName: string,
         enabled: boolean,
         _overwrite?: boolean,
+        resource?: AppStoreResource,
     ): Promise<AppConfigWriteResult> => {
-        require(instanceId);
+        const inst = require(instanceId);
+        if (inst.framework_id === 'nonebot2') {
+            const key = storeKey(instanceId, resource ?? 'plugin');
+            const list = mockStoreInstalledFor(instanceId, resource ?? 'plugin');
+            mockStoreInstalled.set(
+                key,
+                list.map((p) => (p.id === pluginName || p.name === pluginName ? { ...p, enabled } : p)),
+            );
+            const config = nonebot2DefaultConfig(inst.port);
+            return withMockDelay({
+                config: { framework: 'nonebot2', data: config },
+                revision: 'mock-r-plugin',
+                documents: [],
+                restart_required: inst.state === 'running',
+                relinked: false,
+                port_changed: false,
+            });
+        }
         const list = mockInstalledFor(instanceId);
         const next = list.map((p) => (p.name === pluginName ? { ...p, enabled } : p));
         mockInstalled.set(instanceId, next);
-        const config = karinDefaultConfig(require(instanceId).port);
+        const config = karinDefaultConfig(inst.port);
         return withMockDelay({
             config: { framework: 'karin', data: config },
             revision: 'mock-r-plugin',
@@ -366,6 +431,213 @@ function mockInstalledFor(instanceId: string): KarinPluginInstalled[] {
         ]);
     }
     return mockInstalled.get(instanceId) ?? [];
+}
+
+function karinToStore(entry: KarinPluginMarketEntry): AppStoreMarketEntry {
+    return {
+        resource: 'plugin',
+        id: entry.name,
+        name: entry.name,
+        description: entry.description,
+        version: '',
+        author: entry.author[0]?.name ?? '',
+        homepage: entry.home,
+        time: entry.time,
+        package: entry.name,
+        module_name: entry.name,
+        flavor: entry.type === 'git' ? 'git' : entry.type === 'app' ? 'app' : 'npm',
+        is_official: false,
+        valid: true,
+        tags: [],
+        supported_adapters: [],
+        authors: entry.author,
+        repos: entry.repo,
+        files: entry.files,
+        allow_build: entry.allowBuild,
+    };
+}
+
+const mockNoneBotAdapters: AppStoreMarketEntry[] = [
+    {
+        resource: 'adapter',
+        id: 'nonebot.adapters.onebot.v11',
+        name: 'OneBot V11',
+        description: 'OneBot 协议',
+        version: '2.4.6',
+        author: 'yanyongyu',
+        homepage: 'https://onebot.adapters.nonebot.dev',
+        time: '',
+        package: 'nonebot-adapter-onebot',
+        module_name: 'nonebot.adapters.onebot.v11',
+        flavor: 'pypi',
+        is_official: true,
+        valid: true,
+        tags: [],
+        supported_adapters: [],
+        authors: [],
+        repos: [],
+        files: [],
+        allow_build: [],
+    },
+    {
+        resource: 'adapter',
+        id: 'nonebot.adapters.console',
+        name: 'Console',
+        description: '控制台适配器',
+        version: '',
+        author: '',
+        homepage: '',
+        time: '',
+        package: 'nonebot-adapter-console',
+        module_name: 'nonebot.adapters.console',
+        flavor: 'pypi',
+        is_official: true,
+        valid: true,
+        tags: [],
+        supported_adapters: [],
+        authors: [],
+        repos: [],
+        files: [],
+        allow_build: [],
+    },
+    {
+        resource: 'adapter',
+        id: 'nonebot.adapters.onebot.v12',
+        name: 'OneBot V12',
+        description: 'OneBot V12，与 V11 共用 nonebot-adapter-onebot',
+        version: '',
+        author: 'yanyongyu',
+        homepage: '',
+        time: '',
+        package: 'nonebot-adapter-onebot',
+        module_name: 'nonebot.adapters.onebot.v12',
+        flavor: 'pypi',
+        is_official: true,
+        valid: true,
+        tags: [],
+        supported_adapters: [],
+        authors: [],
+        repos: [],
+        files: [],
+        allow_build: [],
+    },
+];
+
+const mockNoneBotPlugins: AppStoreMarketEntry[] = [
+    {
+        resource: 'plugin',
+        id: 'nonebot_plugin_status',
+        name: 'Status',
+        description: '运行状态',
+        version: '',
+        author: '',
+        homepage: '',
+        time: '',
+        package: 'nonebot-plugin-status',
+        module_name: 'nonebot_plugin_status',
+        flavor: 'pypi',
+        is_official: false,
+        valid: true,
+        tags: [],
+        supported_adapters: ['nonebot.adapters.onebot.v11'],
+        authors: [],
+        repos: [],
+        files: [],
+        allow_build: [],
+    },
+    {
+        resource: 'plugin',
+        id: 'nonebot_plugin_htmlrender',
+        name: 'htmlrender',
+        description: 'HTML 渲染',
+        version: '',
+        author: '',
+        homepage: '',
+        time: '',
+        package: 'nonebot-plugin-htmlrender',
+        module_name: 'nonebot_plugin_htmlrender',
+        flavor: 'pypi',
+        is_official: false,
+        valid: true,
+        tags: [],
+        supported_adapters: [],
+        authors: [],
+        repos: [],
+        files: [],
+        allow_build: [],
+    },
+];
+
+const mockStoreInstalled = new Map<string, AppStoreInstalled[]>();
+
+function storeKey(instanceId: string, resource: AppStoreResource): string {
+    return `${instanceId}:${resource}`;
+}
+
+function mockStoreInstalledFor(instanceId: string, resource: AppStoreResource): AppStoreInstalled[] {
+    const key = storeKey(instanceId, resource);
+    if (!mockStoreInstalled.has(key)) {
+        mockStoreInstalled.set(
+            key,
+            resource === 'adapter'
+                ? [
+                      {
+                          id: 'nonebot.adapters.onebot.v11',
+                          name: 'OneBot V11',
+                          resource: 'adapter',
+                          flavor: 'pypi',
+                          version: '2.4.6',
+                          enabled: true,
+                          package: 'nonebot-adapter-onebot',
+                      },
+                  ]
+                : [
+                      {
+                          id: 'nonebot_plugin_status',
+                          name: 'Status',
+                          resource: 'plugin',
+                          flavor: 'pypi',
+                          version: '0.9.0',
+                          enabled: true,
+                          package: 'nonebot-plugin-status',
+                      },
+                  ],
+        );
+    }
+    return mockStoreInstalled.get(key) ?? [];
+}
+
+function applyMockStoreOp(
+    instanceId: string,
+    pluginName: string,
+    action: AppPluginAction,
+    resource: AppStoreResource,
+) {
+    const key = storeKey(instanceId, resource);
+    const current = mockStoreInstalledFor(instanceId, resource);
+    if (action === 'uninstall') {
+        mockStoreInstalled.set(
+            key,
+            current.filter((p) => p.id !== pluginName && p.name !== pluginName),
+        );
+        return;
+    }
+    if (current.some((p) => p.id === pluginName || p.name === pluginName)) return;
+    const market = (resource === 'adapter' ? mockNoneBotAdapters : mockNoneBotPlugins).find(
+        (e) => e.id === pluginName || e.name === pluginName,
+    );
+    mockStoreInstalled.set(key, [
+        ...current,
+        {
+            id: market?.id ?? pluginName,
+            name: market?.name ?? pluginName,
+            resource,
+            flavor: 'pypi',
+            version: '1.0.0',
+            enabled: true,
+            package: market?.package ?? '',
+        },
+    ]);
 }
 
 function applyMockPluginOp(instanceId: string, pluginName: string, action: AppPluginAction) {

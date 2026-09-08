@@ -6,7 +6,7 @@ import type { AppFrameworkId } from "./AppFrameworkId";
  */
 export type CreateAppInstanceRequest = { framework_id: AppFrameworkId, host_id: string, display_name: string, 
 /**
- * None 则取 manifest 默认端口并避让同机已有实例
+ * None 则随机分配高位端口，并避开同机已有实例（本机再探 bind）
  */
 port?: number, 
 /**

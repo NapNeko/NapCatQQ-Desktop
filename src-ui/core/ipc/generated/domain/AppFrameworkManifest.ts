@@ -20,7 +20,7 @@ description: string, repo_url?: string | null, docs_url?: string | null,
  */
 supported_placements: Array<AppPlacement>, 
 /**
- * 新实例默认监听端口（同机多实例时由编排层递增避让）
+ * 框架惯例端口（Karin 7777 / NoneBot 8080）。新建实例不再使用，只作文档兼容。
  */
 default_port: number, 
 /**
