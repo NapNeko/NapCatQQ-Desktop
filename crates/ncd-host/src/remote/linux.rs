@@ -4,7 +4,7 @@
 //! - 密码 / 私钥认证(ed25519 + RSA)
 //! - exec channel(短命令 + 长流式)
 //! - SFTP 文件 IO
-//! - 端口转发(direct-tcpip)
+//! - 端口转发(direct-tcpip `-L` + tcpip-forward `-R`)
 //! - 连接复用(单一 SSH session 复用)+ Keepalive
 //!
 //! 安全:
@@ -14,24 +14,26 @@
 //! - SFTP 路径不做"路径越界"检查 —— 远端 Linux 上调用方有完整 POSIX 权限,
 //!   越界由远端 OS 拒绝(权限不足 → HostError::PermissionDenied)
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
+use russh::Channel;
 use russh::ChannelMsg;
 use russh::Sig;
-use russh::client::{self, Handle as ClientHandle, Handler};
+use russh::client::{self, Handle as ClientHandle, Handler, Msg};
 use russh::keys::{PublicKeyBase64, key};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Mutex, Notify};
 use tracing::info;
 
 use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand, HostProcessWaitPolicy};
 use crate::error::HostError;
-use crate::host::{Arch, Host, Locality, Os};
+use crate::host::{Arch, Host, Locality, Os, SshDialTarget};
 use crate::package_manager::PackageManager;
 use crate::path::{ArchiveKind, DirEntry, HostPath, PathStyle};
 use crate::process::{ExitStatus, HostProcess, ProcessId};
@@ -40,14 +42,18 @@ use crate::shell::{BashShell, HostShell};
 use super::connection::ConnectionConfig;
 use super::credentials::{SshCredentials, SshKey};
 use super::host_key::{HostKeyCheck, HostKeyPolicy, KnownHostsStore};
-use super::tunnel::{TunnelHandle, TunnelSpec};
+use super::tunnel::{TunnelDirection, TunnelHandle, TunnelSpec};
 
-/// russh client handler:用于 host key 校验
+/// `(远端听地址, 远端听口)` → `(本机目标 host, 本机目标口)`
+type RemoteForwardTable = Arc<Mutex<HashMap<(String, u16), (String, u16)>>>;
+
+/// russh client handler: host key 校验 + `-R` 进来的 forwarded-tcpip
 struct ClientCallback {
     policy: HostKeyPolicy,
     host: String,
     port: u16,
     host_key_error: Arc<Mutex<Option<HostError>>>,
+    remote_forwards: RemoteForwardTable,
 }
 
 #[async_trait]
@@ -93,6 +99,57 @@ impl Handler for ClientCallback {
             }
         }
     }
+
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        channel: Channel<Msg>,
+        connected_address: &str,
+        connected_port: u32,
+        _originator_address: &str,
+        _originator_port: u32,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let port = connected_port as u16;
+        let target = {
+            let table = self.remote_forwards.lock().await;
+            table
+                .get(&(connected_address.to_string(), port))
+                .cloned()
+                .or_else(|| {
+                    table
+                        .iter()
+                        .find_map(|((_, p), dest)| (*p == port).then(|| dest.clone()))
+                })
+        };
+        let Some((local_host, local_port)) = target else {
+            tracing::warn!(
+                target: "ncd_host::tunnel",
+                connected_address,
+                connected_port,
+                "forwarded-tcpip 没有对应的 -R 登记"
+            );
+            return Ok(());
+        };
+        tokio::spawn(async move {
+            let mut local = match TcpStream::connect((local_host.as_str(), local_port)).await {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!(
+                        target: "ncd_host::tunnel",
+                        local_host,
+                        local_port,
+                        "-R 连本机失败: {e}"
+                    );
+                    return;
+                }
+            };
+            let mut remote = channel.into_stream();
+            if let Err(e) = tokio::io::copy_bidirectional(&mut local, &mut remote).await {
+                tracing::debug!(target: "ncd_host::tunnel", "remote-forward pump finished: {e}");
+            }
+        });
+        Ok(())
+    }
 }
 
 /// 远端 sudo 提权能力探测结果上层(ncd-deploy)据此决定要不要向用户要密码:
@@ -129,10 +186,9 @@ pub struct RemoteLinuxHost {
     /// 用 Mutex 包,因为 set_elevation_password 是 &self 异步方法(trait 约束),
     /// 且密码可能在连接生命周期内被 docker 弹框更新
     elevation_password: Arc<Mutex<Option<String>>>,
-    /// 连接配置当前断线后由上层 ServerManager 重新 connect,本结构体内部
-    /// 还没用到它重连,先留着等断线自愈实装
-    #[allow(dead_code)]
+    /// 连接配置:拨号身份给跨机常驻隧道;`connect` 后由上层重连
     config: ConnectionConfig,
+    remote_forwards: RemoteForwardTable,
 }
 
 impl RemoteLinuxHost {
@@ -142,11 +198,13 @@ impl RemoteLinuxHost {
         config: ConnectionConfig,
     ) -> Result<Self, HostError> {
         let host_key_error = Arc::new(Mutex::new(None));
+        let remote_forwards = Arc::new(Mutex::new(HashMap::new()));
         let cb = ClientCallback {
             policy: config.host_key_policy.clone(),
             host: config.host.clone(),
             port: config.port,
             host_key_error: Arc::clone(&host_key_error),
+            remote_forwards: Arc::clone(&remote_forwards),
         };
         // 长任务(apt 等锁,流式安装)需要更长的会话空闲上限;仅靠 keepalive 时
         // 默认 inactivity=2×keepalive 在部分 sshd/中间设备上仍可能被掐断
@@ -229,6 +287,7 @@ impl RemoteLinuxHost {
             sftp: Arc::new(Mutex::new(None)),
             elevation_password: Arc::new(Mutex::new(None)),
             config,
+            remote_forwards,
         })
     }
 
@@ -444,6 +503,14 @@ async fn load_key(key: &SshKey) -> Result<key::KeyPair, HostError> {
     }
 }
 
+fn ssh_dial_target_from_config(config: &ConnectionConfig) -> SshDialTarget {
+    SshDialTarget {
+        host: config.host.clone(),
+        port: config.port,
+        username: config.credentials.username().to_string(),
+    }
+}
+
 // Host trait 实装
 
 #[async_trait]
@@ -465,6 +532,10 @@ impl Host for RemoteLinuxHost {
 
     fn id(&self) -> &str {
         &self.id
+    }
+
+    fn ssh_dial_target(&self) -> Option<SshDialTarget> {
+        Some(ssh_dial_target_from_config(&self.config))
     }
 
     fn shell(&self) -> &dyn HostShell {
@@ -1337,8 +1408,15 @@ impl HostProcess for RemoteHostProcess {
 // Tunnel (端口转发, direct-tcpip)
 
 impl RemoteLinuxHost {
-    /// 打开端口转发隧道:本地 spec.local_port → 远端 spec.remote_host:spec.remote_port
+    /// 打开端口转发：`-L` 本机听、`-R` 远端听
     pub async fn open_tunnel(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
+        match spec.direction {
+            TunnelDirection::LocalToRemote => self.open_local_to_remote(spec).await,
+            TunnelDirection::RemoteToLocal => self.open_remote_to_local(spec).await,
+        }
+    }
+
+    async fn open_local_to_remote(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
         let local_addr = format!("{}:{}", spec.local_host, spec.local_port);
         let listener = TcpListener::bind(&local_addr)
             .await
@@ -1416,6 +1494,70 @@ impl RemoteLinuxHost {
 
         Ok(TunnelHandle {
             local_port: actual_port,
+            remote_listen_port: 0,
+            shutdown,
+            _task: task,
+        })
+    }
+
+    async fn open_remote_to_local(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
+        if spec.local_port == 0 {
+            return Err(HostError::InvalidArgument {
+                reason: "remote-forward 本机目标端口无效".into(),
+            });
+        }
+        let requested = spec.remote_port as u32;
+        let replied = {
+            let mut guard = self.handle.lock().await;
+            let session = guard
+                .as_mut()
+                .ok_or_else(|| HostError::RemoteConnection {
+                    reason: "ssh session poisoned".into(),
+                })?;
+            session
+                .tcpip_forward(spec.remote_host.clone(), requested)
+                .await
+                .map_err(|e| HostError::RemoteConnection {
+                    reason: format!("tcpip-forward（检查 sshd AllowTcpForwarding）: {e}"),
+                })?
+        };
+        let remote_listen = if requested == 0 {
+            replied as u16
+        } else {
+            spec.remote_port
+        };
+        if remote_listen == 0 {
+            return Err(HostError::RemoteConnection {
+                reason: "sshd 未分配远端转发端口（检查 AllowTcpForwarding）".into(),
+            });
+        }
+        self.remote_forwards.lock().await.insert(
+            (spec.remote_host.clone(), remote_listen),
+            (spec.local_host.clone(), spec.local_port),
+        );
+
+        let shutdown = Arc::new(Notify::new());
+        let shutdown_for_task = shutdown.clone();
+        let handle = self.handle.clone();
+        let table = self.remote_forwards.clone();
+        let addr = spec.remote_host.clone();
+        let task = tokio::spawn(async move {
+            shutdown_for_task.notified().await;
+            table.lock().await.remove(&(addr.clone(), remote_listen));
+            let guard = handle.lock().await;
+            if let Some(session) = guard.as_ref() {
+                if let Err(e) = session
+                    .cancel_tcpip_forward(addr, remote_listen as u32)
+                    .await
+                {
+                    tracing::debug!(target: "ncd_host::tunnel", "cancel tcpip-forward: {e}");
+                }
+            }
+        });
+
+        Ok(TunnelHandle {
+            local_port: spec.local_port,
+            remote_listen_port: remote_listen,
             shutdown,
             _task: task,
         })
@@ -1536,6 +1678,22 @@ mod tests {
             PackageManagerKindLite::Pacman.install_command("tar"),
             "pacman -Sy --noconfirm tar"
         );
+    }
+
+    #[test]
+    fn ssh_dial_target_exposes_endpoint_not_secrets() {
+        let cfg = ConnectionConfig::new(
+            "bot.example",
+            2222,
+            SshCredentials::password("alice", "secret"),
+            HostKeyPolicy::Insecure,
+        );
+        let dial = ssh_dial_target_from_config(&cfg);
+        assert_eq!(dial.host, "bot.example");
+        assert_eq!(dial.port, 2222);
+        assert_eq!(dial.username, "alice");
+        let dbg = format!("{dial:?}");
+        assert!(!dbg.contains("secret"), "{dbg}");
     }
 
     #[test]

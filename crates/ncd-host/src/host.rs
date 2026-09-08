@@ -64,6 +64,14 @@ pub enum StreamSource {
     Stderr,
 }
 
+/// 其它主机 SSH 到这台机时用的拨号身份,不含密码或私钥
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SshDialTarget {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+}
+
 /// 跨平台主机统一接口
 ///
 /// 调用方使用模式:
@@ -94,6 +102,13 @@ pub trait Host: Send + Sync {
 
     /// 主机标识(local / remote-<server-id>),用于跨主机区分日志,进程 ID
     fn id(&self) -> &str;
+
+    /// 其它主机 SSH 到这台机时用的 host:port + 用户名
+    ///
+    /// 本机 / Windows stub 没有公网拨号身份,返回 None;禁止带出密码或私钥
+    fn ssh_dial_target(&self) -> Option<SshDialTarget> {
+        None
+    }
 
     /// 拿到 shell 抽象(用于命令拼接 / SSH 远端)
     fn shell(&self) -> &dyn HostShell;

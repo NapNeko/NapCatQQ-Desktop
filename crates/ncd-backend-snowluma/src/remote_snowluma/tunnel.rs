@@ -191,13 +191,8 @@ async fn open_tunnel_preferred(
     if let Ok(h) = host.open_tunnel(spec_fixed).await {
         return Ok(h);
     }
-    let spec_ephemeral = TunnelSpec {
-        local_host: "127.0.0.1".to_string(),
-        local_port: 0,
-        remote_host: "127.0.0.1".to_string(),
-        remote_port,
-    };
-    host.open_tunnel(spec_ephemeral).await
+    host.open_tunnel(TunnelSpec::local_to_remote(0, remote_port))
+        .await
 }
 
 #[cfg(test)]

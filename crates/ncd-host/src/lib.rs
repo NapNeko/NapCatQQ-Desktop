@@ -46,7 +46,7 @@ pub use apt_lock::{
 };
 pub use command::{CommandOutput, HostCommand};
 pub use error::HostError;
-pub use host::{Arch, Host, Locality, Os, StreamSource};
+pub use host::{Arch, Host, Locality, Os, SshDialTarget, StreamSource};
 pub use linux_pkg::LinuxPackageManager;
 pub use package_manager::{PackageInfo, PackageManager, PackageManagerKind};
 pub use path::{ArchiveKind, DirEntry, HostPath, PathStyle};

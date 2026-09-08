@@ -317,13 +317,8 @@ async fn open_loopback_tunnel(
     host: &dyn Host,
     remote_port: u16,
 ) -> Result<TunnelHandle, HostError> {
-    let spec = TunnelSpec {
-        local_host: "127.0.0.1".to_string(),
-        local_port: 0,
-        remote_host: "127.0.0.1".to_string(),
-        remote_port,
-    };
-    host.open_tunnel(spec).await
+    host.open_tunnel(TunnelSpec::local_to_remote(0, remote_port))
+        .await
 }
 
 /// 构造 SnowLuma WebUI client(隧道本地端口 + bootstrap 密码)→ wait_ready → login →
