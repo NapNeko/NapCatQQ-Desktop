@@ -59,11 +59,13 @@ function tokenField(mode: SyntaxMode) {
 const editorTheme = EditorView.theme({
     '&': {
         height: '100%',
+        overflow: 'hidden',
         backgroundColor: 'transparent',
         fontSize: '12px',
     },
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': {
+        overflow: 'auto',
         fontFamily: 'var(--font-mono)',
         lineHeight: '1.6',
         fontFeatureSettings: '"liga" 0, "calt" 0',
@@ -160,7 +162,10 @@ export function SyntaxTextEditor({
             }),
         });
         viewRef.current = view;
+        const ro = new ResizeObserver(() => view.requestMeasure());
+        ro.observe(host);
         return () => {
+            ro.disconnect();
             view.destroy();
             viewRef.current = null;
         };
@@ -190,7 +195,9 @@ export function SyntaxTextEditor({
     return (
         <div
             className={cn(
-                'relative min-h-0 w-full flex-1 overflow-hidden rounded-sm bg-inset',
+                // h-0 flex-1：给 CodeMirror 一个确定高度。否则文档把 .cm-editor 撑开，
+                // 外层 overflow-hidden 直接裁掉，滚动条出不来。
+                'relative h-0 min-h-0 w-full flex-1 overflow-hidden rounded-sm bg-inset',
                 'border outline-none transition-colors duration-150',
                 invalid
                     ? 'border-danger focus-within:border-danger focus-within:ring-2 focus-within:ring-danger focus-within:ring-inset'
@@ -199,7 +206,7 @@ export function SyntaxTextEditor({
                 className,
             )}
         >
-            <div ref={hostRef} className="h-full min-h-0 w-full" />
+            <div ref={hostRef} className="absolute inset-0 overflow-hidden" />
         </div>
     );
 }
