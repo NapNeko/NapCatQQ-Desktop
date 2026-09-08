@@ -1,7 +1,7 @@
 // 「对接应用端」对话框：选协议 Bot / 应用实例 → 预览 OneBotLinkPlan → 应用。
 //
 // 应用端页面预填实例、Bot 配置页预填 Bot；两处共用同一份对话框。
-// 首发只允许同机对接（Bot 的 runtime_target 与实例 host_id 同机），不同机的选项置灰。
+// 同机可对接；本机 Bot↔远端应用、远端 Bot↔本机应用经桌面 SSH；两台远端走主机常驻隧道。
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -28,12 +28,20 @@ import { useAppInstances, invalidateBotConfigAfterLink } from '../../hooks/apps/
 import { appConfigKey } from '../../hooks/apps/useAppInstanceConfig';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
+import { pushAppErrorBar } from '../../hooks/apps/pushAppErrorBar';
 import {
     remoteHostIdFromRuntimeTarget,
     isRuntimeTargetLocal,
     runtimeTargetDisplayLabel,
 } from '../../core/domain/bot/runtime-target';
 import { hostIdDisplayLabel } from './hostLabel';
+import {
+    appLinkPairEnabled,
+    appLinkPairNote,
+    classifyAppLink,
+    isDesktopSshLink,
+    isResidentLink,
+} from './appLinkTopology';
 import type { AppInstance, OneBotLinkPlan } from '../../core/ipc/types';
 
 interface AppLinkDialogProps {
@@ -88,13 +96,12 @@ export function AppLinkDialog({
         () =>
             instances.map((i) => {
                 const installed = i.state !== 'not_installed' && i.state !== 'installing';
-                const sameHost = botHost ? i.host_id === botHost : true;
+                const allowed = appLinkPairEnabled(botHost, i.host_id);
+                const note = !installed ? '（未安装）' : appLinkPairNote(botHost, i.host_id);
                 return {
                     value: i.id,
-                    label: `${i.display_name} · ${hostIdDisplayLabel(i.host_id, servers)}${
-                        !installed ? '（未安装）' : !sameHost ? '（不同机）' : ''
-                    }`,
-                    disabled: !installed || !sameHost,
+                    label: `${i.display_name} · ${hostIdDisplayLabel(i.host_id, servers)}${note}`,
+                    disabled: !installed || !allowed,
                 };
             }),
         [instances, botHost, servers],
@@ -106,14 +113,14 @@ export function AppLinkDialog({
                 const cfg = configs[s.bot_id];
                 const name = cfg?.bot.name?.trim();
                 const host = cfg ? botHostId(cfg.bot.runtime_target) : null;
-                const sameHost = instance && host ? host === instance.host_id : true;
+                const allowed =
+                    !instance || !host ? true : appLinkPairEnabled(host, instance.host_id);
+                const note = instance && host ? appLinkPairNote(host, instance.host_id) : '';
                 const where = cfg ? runtimeTargetDisplayLabel(cfg.bot.runtime_target, servers) : '';
                 return {
                     value: s.bot_id,
-                    label: `${name ? `${name} (${s.bot_id})` : s.bot_id}${where ? ` · ${where}` : ''}${
-                        !sameHost ? '（不同机）' : ''
-                    }`,
-                    disabled: !sameHost,
+                    label: `${name ? `${name} (${s.bot_id})` : s.bot_id}${where ? ` · ${where}` : ''}${note}`,
+                    disabled: !allowed,
                 };
             }),
         [snapshots, configs, instance, servers],
@@ -135,7 +142,13 @@ export function AppLinkDialog({
             .catch((err) => {
                 if (!cancelled) {
                     setPlan(null);
-                    setPreviewError(errorText(err));
+                    const raw = errorText(err);
+                    setPreviewError('无法生成对接计划，详情见日志');
+                    pushAppErrorBar({
+                        key: `app-link-preview:${instanceId}:${botId}`,
+                        title: '无法生成对接计划',
+                        raw,
+                    });
                 }
             })
             .finally(() => {
@@ -165,11 +178,10 @@ export function AppLinkDialog({
             onApplied?.(plan, next);
             onOpenChange(false);
         } catch (err) {
-            pushInfoBar({
+            pushAppErrorBar({
                 key: `app-link:${instanceId}`,
-                tone: 'danger',
                 title: '对接失败',
-                content: errorText(err),
+                raw: errorText(err),
             });
         } finally {
             setApplying(false);
@@ -220,7 +232,11 @@ export function AppLinkDialog({
                     )}
 
                     {plan && !previewing && (
-                        <PlanPreview plan={plan} rebindingFrom={rebinding} />
+                        <PlanPreview
+                            plan={plan}
+                            rebindingFrom={rebinding}
+                            topology={classifyAppLink(botHost, instance?.host_id ?? '')}
+                        />
                     )}
                 </div>
 
@@ -247,8 +263,21 @@ export function AppLinkDialog({
     );
 }
 
-function PlanPreview({ plan, rebindingFrom }: { plan: OneBotLinkPlan; rebindingFrom: string | null }) {
+function PlanPreview({
+    plan,
+    rebindingFrom,
+    topology,
+}: {
+    plan: OneBotLinkPlan;
+    rebindingFrom: string | null;
+    topology: ReturnType<typeof classifyAppLink>;
+}) {
     const c = plan.connection;
+    const tunnelNote = isDesktopSshLink(topology)
+        ? ' 经 SSH 隧道，需桌面端在线。'
+        : isResidentLink(topology)
+          ? ' 隧道留在应用所在机，桌面退出仍连。'
+          : '';
     return (
         <div className="flex flex-col gap-3 rounded-md border border-border-subtle bg-inset/40 p-3">
             <div>
@@ -267,6 +296,7 @@ function PlanPreview({ plan, rebindingFrom }: { plan: OneBotLinkPlan; rebindingF
                 <p className="mt-1 break-all font-mono text-2xs text-text-secondary">{c.url}</p>
                 <p className="mt-0.5 text-2xs text-text-tertiary">
                     token 已生成；同名连接会被替换。
+                    {tunnelNote}
                 </p>
             </div>
             <div>
