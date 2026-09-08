@@ -62,3 +62,11 @@ export function dockerDeployTitle(hostLabel: string, flavor?: string): string {
     if (fw) return `拉取镜像 · ${fw} · ${label}`;
     return `拉取镜像 · ${label}`;
 }
+
+export function appPluginTitle(action: string, pluginName: string, fallback: string): string {
+    const verb =
+        action === 'install' ? '安装' : action === 'update' ? '更新' : action === 'uninstall' ? '卸载' : action;
+    const name = pluginName?.trim();
+    if (name) return `Karin · ${verb} ${name}`;
+    return fallback?.trim() || `Karin · ${verb}`;
+}

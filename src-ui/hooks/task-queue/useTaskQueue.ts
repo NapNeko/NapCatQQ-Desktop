@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 
 import {
+    appPluginTitle,
     componentActionTitle,
     dockerDeployTitle,
     dockerInstallTitle,
@@ -152,6 +153,20 @@ function taskToItem(
                 id: task.taskId,
                 kind: 'docker_deploy',
                 title: dockerDeployTitle(hostLabel, task.kind.flavor),
+                hostId: task.hostId,
+                hostLabel,
+                status,
+                startedAt,
+                endedAt,
+                progress,
+                logHint: task.message ?? null,
+                cancellable: task.cancellable,
+            };
+        case 'app_plugin':
+            return {
+                id: task.taskId,
+                kind: 'component_action',
+                title: appPluginTitle(task.kind.action, task.kind.plugin_name, task.title),
                 hostId: task.hostId,
                 hostLabel,
                 status,

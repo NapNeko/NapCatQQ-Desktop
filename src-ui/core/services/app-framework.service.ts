@@ -11,7 +11,10 @@ import type {
     AppInstanceConfig,
     AppInstanceConfigEnvelope,
     AppInstanceWebUi,
+    AppPluginAction,
     CreateAppInstanceRequest,
+    KarinPluginInstalled,
+    KarinPluginMarketEntry,
     OneBotLinkPlan,
 } from '../ipc/types';
 import { mockAppFrameworkApi } from '../ipc/mock/app-framework.mock';
@@ -30,6 +33,11 @@ export const appFrameworkService = {
     create: async (request: CreateAppInstanceRequest): Promise<AppInstance> => {
         if (!isTauri) return mockAppFrameworkApi.create(request);
         return invoke<AppInstance>('create_app_instance', { request });
+    },
+
+    previewInstallDir: async (hostId: string, frameworkId: string): Promise<string> => {
+        if (!isTauri) return mockAppFrameworkApi.previewInstallDir(hostId, frameworkId);
+        return invoke<string>('preview_app_install_dir', { hostId, frameworkId });
     },
 
     /** 提交安装任务到部署队列，返回 task_id；完成后后端自动刷实例状态。 */
@@ -123,6 +131,53 @@ export const appFrameworkService = {
             docId,
             text,
             baseRevision,
+        });
+    },
+
+    listPluginMarket: async (): Promise<KarinPluginMarketEntry[]> => {
+        if (!isTauri) return mockAppFrameworkApi.listPluginMarket();
+        return invoke<KarinPluginMarketEntry[]>('list_karin_plugin_market');
+    },
+
+    listPluginConfigDocs: async (
+        instanceId: string,
+        pluginName: string,
+    ): Promise<AppConfigDocument[]> => {
+        if (!isTauri) return mockAppFrameworkApi.listPluginConfigDocs(instanceId, pluginName);
+        return invoke<AppConfigDocument[]>('list_app_plugin_config_docs', {
+            instanceId,
+            pluginName,
+        });
+    },
+
+    listPlugins: async (instanceId: string): Promise<KarinPluginInstalled[]> => {
+        if (!isTauri) return mockAppFrameworkApi.listPlugins(instanceId);
+        return invoke<KarinPluginInstalled[]>('list_app_instance_plugins', { instanceId });
+    },
+
+    submitPluginOp: async (
+        instanceId: string,
+        pluginName: string,
+        action: AppPluginAction,
+    ): Promise<string> => {
+        if (!isTauri) return mockAppFrameworkApi.submitPluginOp(instanceId, pluginName, action);
+        return invoke<string>('submit_app_plugin_op', { instanceId, pluginName, action });
+    },
+
+    setPluginEnabled: async (
+        instanceId: string,
+        pluginName: string,
+        enabled: boolean,
+        overwrite?: boolean,
+    ): Promise<AppConfigWriteResult> => {
+        if (!isTauri) {
+            return mockAppFrameworkApi.setPluginEnabled(instanceId, pluginName, enabled, overwrite);
+        }
+        return invoke<AppConfigWriteResult>('set_app_plugin_enabled', {
+            instanceId,
+            pluginName,
+            enabled,
+            overwrite: overwrite ?? null,
         });
     },
 };
