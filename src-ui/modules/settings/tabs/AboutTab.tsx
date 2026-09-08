@@ -22,6 +22,8 @@ import { useDesktopConsentGate } from '../../../hooks/desktop/useDesktopConsentG
 import { requestOnboardingFromSettings } from '../../../hooks/desktop/onboardingHost';
 import { useOpenExternal } from '../../../hooks/useOpenExternal';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
+import { errorText } from '../../../core/domain/errors';
 import { DesktopConsentDialog } from '../../../shared/components/next/DesktopConsentDialog';
 import { Button, Spinner } from '../../../shared/ui';
 import { cn } from '../../../shared/utils/cn';
@@ -54,11 +56,10 @@ export function AboutTab() {
             // 整条引导：Dialog 认路 → 组件页遮罩（同一流程，无第二入口）
             await requestOnboardingFromSettings();
         } catch (err) {
-            pushInfoBar({
+            pushErrorBar({
                 key: 'about-onboarding',
-                tone: 'danger',
                 title: '无法打开入门引导',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         } finally {
             setOpeningGuide(false);
@@ -90,11 +91,10 @@ export function AboutTab() {
             });
         } catch (err) {
             setCheckState('error');
-            pushInfoBar({
+            pushErrorBar({
                 key: 'about-desktop-update',
-                tone: 'danger',
                 title: '检查更新失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         }
     }, []);
@@ -118,11 +118,10 @@ export function AboutTab() {
                 content: '若应用未自动退出，请手动关闭后等待安装完成。',
             });
         } catch (err) {
-            pushInfoBar({
+            pushErrorBar({
                 key: 'about-desktop-update',
-                tone: 'danger',
                 title: '无法开始更新',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         }
     }, [available, installing, startAction]);

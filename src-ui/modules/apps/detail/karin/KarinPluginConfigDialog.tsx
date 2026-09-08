@@ -18,6 +18,8 @@ import { ActionMotionIcon } from '../../../../shared/ui/motion';
 import { useAppConfigText } from '../../../../hooks/apps/useAppInstanceConfig';
 import { appFrameworkService } from '../../../../core/services/app-framework.service';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
+import { pushAppErrorBar } from '../../../../hooks/apps/pushAppErrorBar';
+import { errorText } from '../../../../core/domain/errors';
 import { cn } from '../../../../shared/utils/cn';
 import { ConfigConflictDialog } from '../ConfigConflictDialog';
 import type { AppConfigDocument, AppConfigError } from '../../../../core/ipc/types';
@@ -58,7 +60,13 @@ export const KarinPluginConfigDialog: React.FC<{
             })
             .catch((e) => {
                 if (cancelled) return;
-                setDocsError(e instanceof Error ? e.message : String(e));
+                const raw = errorText(e);
+                setDocsError(raw);
+                pushAppErrorBar({
+                    key: `plugin-cfg-docs:${instanceId}:${pluginName}`,
+                    title: '读取插件配置失败',
+                    raw,
+                });
             })
             .finally(() => {
                 if (!cancelled) setDocsLoading(false);
@@ -90,13 +98,12 @@ export const KarinPluginConfigDialog: React.FC<{
                     </div>
                 ) : docsError ? (
                     <div className={cn(WORKSPACE, 'items-center justify-center px-2')}>
-                        <p className="text-sm text-danger">{docsError}</p>
+                        <p className="text-sm text-text-secondary">读取失败</p>
                     </div>
                 ) : docs.length === 0 ? (
                     <div className={cn(WORKSPACE, 'items-center justify-center gap-2 text-center')}>
                         <ActionMotionIcon icon={FileCode} size={28} className="text-text-tertiary" />
                         <p className="text-sm text-text-secondary">还没有配置文件</p>
-                        <p className="text-2xs text-text-tertiary">启动实例后 Karin 会生成</p>
                     </div>
                 ) : (
                     <PluginConfigWorkspace
@@ -139,6 +146,15 @@ const PluginConfigWorkspace: React.FC<{
         setSyntaxError(null);
     }, [active?.id]);
 
+    useEffect(() => {
+        if (!text.error) return;
+        pushAppErrorBar({
+            key: `plugin-cfg-read:${instanceId}:${active?.id ?? ''}`,
+            title: '读取插件配置失败',
+            raw: text.error.message,
+        });
+    }, [active?.id, instanceId, text.error]);
+
     const precheck = (): boolean => {
         if (!active) return false;
         if (active.format === 'json') {
@@ -164,10 +180,10 @@ const PluginConfigWorkspace: React.FC<{
             setLoaded({ docId: saved.doc_id, revision: saved.revision });
             setConflict(false);
             pushInfoBar({
-                key: `karin-plugin-cfg:${instanceId}:${active.id}`,
+                key: `plugin-cfg:${instanceId}:${active.id}`,
                 tone: 'success',
                 title: `${active.label} 已保存`,
-                content: 'Karin 会热加载',
+                content: active.hot_reload ? undefined : '改完需重启',
                 autoDismissMs: 3000,
             });
         } catch (e) {
@@ -180,7 +196,11 @@ const PluginConfigWorkspace: React.FC<{
                 setSyntaxError(err.issues[0]?.message ?? err.message);
                 return;
             }
-            setSyntaxError(err.issues?.[0]?.message ?? err.message);
+            pushAppErrorBar({
+                key: `plugin-cfg-save:${instanceId}:${active.id}`,
+                title: '保存失败',
+                raw: err.message,
+            });
         }
     };
 
@@ -211,9 +231,6 @@ const PluginConfigWorkspace: React.FC<{
                             </button>
                         ))}
                     </div>
-                )}
-                {text.error && (
-                    <p className="mb-2 shrink-0 text-xs text-danger">读取失败：{text.error.message}</p>
                 )}
                 {syntaxError && <p className="mb-2 shrink-0 text-xs text-danger">{syntaxError}</p>}
                 <SyntaxTextEditor

@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppInstanceConfig } from '../../../hooks/apps/useAppInstanceConfig';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { pushAppErrorBar } from '../../../hooks/apps/pushAppErrorBar';
 import { issuesByPath, validateKarinConfig } from '../../../core/domain/apps/karinConfig';
 import type {
     AppConfigError,
@@ -42,6 +43,15 @@ export function useKarinConfigForm(instanceId: string, enabled: boolean, instanc
     );
     const dirtyRef = useRef(dirty);
     dirtyRef.current = dirty;
+
+    useEffect(() => {
+        if (!remote.error) return;
+        pushAppErrorBar({
+            key: `app-config-load:${instanceId}`,
+            title: '读取配置失败',
+            raw: remote.error.message,
+        });
+    }, [instanceId, remote.error]);
 
     useEffect(() => {
         const env = remote.envelope;
@@ -134,11 +144,10 @@ export function useKarinConfigForm(instanceId: string, enabled: boolean, instanc
                     });
                     return { kind: 'invalid', issues: err.issues };
                 }
-                pushInfoBar({
+                pushAppErrorBar({
                     key: `app-config-save-failed:${instanceId}`,
-                    tone: 'danger',
                     title: '保存失败',
-                    content: err.message,
+                    raw: err.message,
                 });
                 // 写可能部分成功（例如重新对接失败），拉一次最新避免本地版本号过期
                 void remote.reload();

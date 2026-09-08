@@ -35,6 +35,7 @@ import { shouldShowDockerPullLayersInTaskDetail, shouldShowStepLogsInTaskDetail 
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import { deploymentTaskService } from '../../core/services/deployment-task.service';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 
 function DockerDeployProgressBlock({
     item,
@@ -358,7 +359,10 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
             .catch((err) => {
                 const msg = err instanceof Error ? err.message : String(err);
                 setCancelError(msg || '取消失败');
-                console.error('[TaskQueue] cancel failed:', err);
+                pushErrorBar({
+                    title: '取消任务失败',
+                    raw: msg || '取消失败',
+                });
             })
             .finally(() => {
                 setCancelBusy(false);
@@ -491,7 +495,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
 
                         {cancelError && (
                             <div className="mt-3 rounded-md border border-danger/30 bg-danger-soft/35 px-3 py-2.5 text-[12px] leading-relaxed text-danger">
-                                停止失败：{cancelError}
+                                停止失败，详情见日志
                             </div>
                         )}
 

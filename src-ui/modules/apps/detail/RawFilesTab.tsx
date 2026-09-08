@@ -6,6 +6,7 @@ import { Button, Spinner, SyntaxTextEditor, type SyntaxMode } from '../../../sha
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import { useAppConfigDocuments, useAppConfigText } from '../../../hooks/apps/useAppInstanceConfig';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { pushAppErrorBar } from '../../../hooks/apps/pushAppErrorBar';
 import { cn } from '../../../shared/utils/cn';
 import { ConfigConflictDialog } from './ConfigConflictDialog';
 import type { AppConfigDocument, AppConfigError, AppInstance } from '../../../core/ipc/types';
@@ -50,6 +51,24 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
         setSyntaxError(null);
     }, [activeId]);
 
+    useEffect(() => {
+        if (!docsQuery.error) return;
+        pushAppErrorBar({
+            key: `app-raw-docs:${instance.id}`,
+            title: '读取配置文件列表失败',
+            raw: docsQuery.error.message,
+        });
+    }, [docsQuery.error, instance.id]);
+
+    useEffect(() => {
+        if (!text.error) return;
+        pushAppErrorBar({
+            key: `app-raw-read:${instance.id}:${activeId ?? ''}`,
+            title: '读取配置文件失败',
+            raw: text.error.message,
+        });
+    }, [activeId, instance.id, text.error]);
+
     const precheck = (): boolean => {
         if (!activeDoc) return false;
         if (activeDoc.format === 'json') {
@@ -93,11 +112,10 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
                 setSyntaxError(err.issues[0]?.message ?? err.message);
                 return;
             }
-            pushInfoBar({
+            pushAppErrorBar({
                 key: `app-raw-save-failed:${instance.id}`,
-                tone: 'danger',
                 title: '保存失败',
-                content: err.message,
+                raw: err.message,
             });
         }
     };
@@ -169,7 +187,6 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
                         </Button>
                     </div>
                 </div>
-                {text.error && <p className="shrink-0 text-xs text-danger">读取失败：{text.error.message}</p>}
                 {syntaxError && <p className="shrink-0 text-xs text-danger">{syntaxError}</p>}
                 <SyntaxTextEditor
                     mode={activeDoc ? editorMode(activeDoc.format) : 'plain'}

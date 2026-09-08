@@ -24,6 +24,7 @@ import {
 } from '../../core/domain/task-queue/display';
 import { useNowMs } from '../../hooks/ui/useNowMs';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 import { deploymentTaskService } from '../../core/services/deployment-task.service';
 import { TASK_KIND_VISUAL, taskKindIconClasses } from './taskQueueKindVisual';
 
@@ -90,10 +91,9 @@ export const TaskQueueListItem: React.FC<TaskQueueListItemProps> = ({
                 autoDismissMs: 2000,
             });
         } catch (err) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '取消任务失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: err instanceof Error ? err.message : String(err),
                 autoDismissMs: 3000,
             });
         }

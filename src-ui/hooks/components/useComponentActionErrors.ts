@@ -9,7 +9,7 @@
 //   - 一个 task 只推一次。seen 必须是模块级：componentActionStore 跨路由存活，
 //     若用组件 useRef，切走再回来会清空 seen，同一 failed task 会再弹一条。
 //   - 用户 dismiss 之后即使 store 里 task 仍在，也不会再次弹出。
-//   - banner 持有完整错误文本（title + content），不截断；点 close 才消失。
+//   - InfoBar 只留短句，完整日志在任务进度 / 桌面日志。
 //   - banner 的 dismiss 由全局 store 处理（InfoBarStack 调
 //     globalInfoBarStore.dismiss）；本 hook 只负责"什么时候 push"。
 
@@ -18,6 +18,7 @@ import { componentActionStore } from './componentActionStore';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { ComponentRow } from '../../core/domain/components/types';
 import type { ComponentId } from '../../core/ipc/types';
+import { errorBarContent } from '../../core/domain/ui/errorBarCopy';
 import { globalInfoBarStore } from '../ui/globalInfoBarStore';
 
 // 已推过 banner 的 task_id。模块级，对齐 componentActionStore 生命周期。
@@ -92,14 +93,13 @@ export function useComponentActionErrors(rows: ComponentRow[]): void {
             const isCancelled = status === 'cancelled';
             // 走 store.push 直接调用而非 hook，避免在 useEffect 里依赖
             // useGlobalInfoBars().push 引用稳定性。
+            const raw = pickErrorMessage(progress);
+            console.error(`[components] ${heading}:`, raw);
             globalInfoBarStore.push({
-                // task_id 当 banner id 直接传进 push 走"同 key 顶替"，
-                // 防止开发模式 strict mode 重 effect 也只推一条。
                 key: `component-action:${taskId}`,
                 tone: isCancelled ? 'warning' : 'danger',
                 title: `${heading} · ${isCancelled ? '已取消' : '失败'}`,
-                content: pickErrorMessage(progress),
-                // 取消条时长由设置页「警告类」控制；失败条 danger 不自动关。
+                content: errorBarContent(raw),
                 autoDismissMs: isCancelled ? undefined : 0,
             });
         }

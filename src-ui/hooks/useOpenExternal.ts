@@ -6,15 +6,15 @@
 
 import { useCallback } from 'react';
 import { openExternalUrl } from '../core/ipc/transport';
-import { pushInfoBar } from './ui/globalInfoBarStore';
+import { pushErrorBar } from './ui/pushErrorBar';
+import { errorText } from '../core/domain/errors';
 
 export function useOpenExternal() {
     return useCallback((url: string) => {
         void openExternalUrl(url).catch((err) => {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '无法打开链接',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         });
     }, []);

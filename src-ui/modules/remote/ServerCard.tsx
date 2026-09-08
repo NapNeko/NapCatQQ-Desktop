@@ -87,8 +87,6 @@ export const ServerCard: React.FC<ServerCardProps> = ({
 
     const authLabel = server.authMethod === 'key' ? 'SSH 密钥' : '密码登录';
 
-    // 健康状态摘要：failed 或有连续失败时在 meta 区展示，便于用户在远端页卡片上一眼看到问题。
-    // 优先展示 "连接中断"（当 state=failed），其次连续失败计数，最后失败原因（截断 + title 完整）。
     const healthLine = (() => {
         const h = server.health;
         if (!h) return null;
@@ -97,7 +95,6 @@ export const ServerCard: React.FC<ServerCardProps> = ({
             const parts: string[] = [];
             if (server.state === 'failed') parts.push('连接中断');
             if (fails > 0) parts.push(`连续失败 ${fails} 次`);
-            if (h.lastFailureReason) parts.push(h.lastFailureReason);
             return parts.join(' · ');
         }
         return null;
@@ -211,7 +208,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                                                 'truncate text-[10px] leading-tight',
                                                 server.state === 'failed' ? 'text-danger' : 'text-warning',
                                             )}
-                                            title={server.health?.lastFailureReason || undefined}
+                                            title={healthLine}
                                         >
                                             {healthLine}
                                         </p>

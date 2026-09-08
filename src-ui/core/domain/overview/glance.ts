@@ -48,7 +48,7 @@ export function listActionableBots(snapshots: BotActorSnapshot[]): ActionableBot
             out.push({
                 botId: s.bot_id,
                 title: s.bot_id,
-                detail: s.last_error?.trim() || '进程异常退出',
+                detail: '进程异常退出',
             });
             continue;
         }
@@ -64,7 +64,7 @@ export function listActionableBots(snapshots: BotActorSnapshot[]): ActionableBot
             out.push({
                 botId: s.bot_id,
                 title: s.bot_id,
-                detail: s.last_error.trim(),
+                detail: '运行异常',
             });
         }
     }

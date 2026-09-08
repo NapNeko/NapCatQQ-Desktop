@@ -4,7 +4,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { serverService } from '../../core/services/server.service';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import { errorText } from '../../core/domain/errors';
+import { SEE_LOGS_HINT } from '../../core/domain/ui/errorBarCopy';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { ProbeReport } from '../../core/ipc/generated/domain/ProbeReport';
 
@@ -58,11 +60,10 @@ export function useServerManager() {
             });
         },
         onError: (err: unknown, args) => {
-            pushInfoBar({
+            pushErrorBar({
                 key: `server-update:${args.profile.id}`,
-                tone: 'danger',
                 title: '更新服务器失败',
-                content: errorText(err),
+                raw: errorText(err),
             });
         },
     });
@@ -85,11 +86,10 @@ export function useServerManager() {
             });
         },
         onError: (err: unknown, id) => {
-            pushInfoBar({
+            pushErrorBar({
                 key: `server-delete:${id}`,
-                tone: 'danger',
                 title: '删除服务器失败',
-                content: errorText(err),
+                raw: errorText(err),
             });
         },
     });
@@ -122,31 +122,28 @@ export function useServerManager() {
                 });
             } else if (report.hostKeyMismatch) {
                 // 已记录的 host key 与本次不一致:疑似中间人。危险红条阻断,不自动信任。
+                console.error(`[servers] host key mismatch · ${label}:`, report.error);
                 pushInfoBar({
                     key: `server-test:${args.id}`,
                     tone: 'danger',
                     title: '主机指纹不一致 · 疑似中间人',
-                    content: `${label}：${report.error ?? '远端 host key 与记录不符,已阻断连接'}`,
+                    content: `${label}：远端 host key 与记录不符，已阻断连接。${SEE_LOGS_HINT}`,
                 });
             } else if (report.hostKeyPrompt) {
                 // 首次连接需确认指纹:不是失败,交给面板弹确认框,这里不出红条。
             } else {
-                pushInfoBar({
+                pushErrorBar({
                     key: `server-test:${args.id}`,
-                    tone: 'danger',
                     title: '连接失败',
-                    content: report.error
-                        ? `${label}：${report.error}`
-                        : `${label}：无法建立 SSH 连接`,
+                    raw: report.error ? `${label}：${report.error}` : `${label}：无法建立 SSH 连接`,
                 });
             }
         },
         onError: (err: unknown, args) => {
-            pushInfoBar({
+            pushErrorBar({
                 key: `server-test:${args.id}`,
-                tone: 'danger',
                 title: '连接失败',
-                content: errorText(err),
+                raw: errorText(err),
             });
         },
     });
@@ -165,11 +162,10 @@ export function useServerManager() {
             invalidateServerLists(queryClient);
         },
         onError: (err: unknown, serverId) => {
-            pushInfoBar({
+            pushErrorBar({
                 key: `server-inventory:${serverId}`,
-                tone: 'danger',
                 title: '重新发现失败',
-                content: errorText(err),
+                raw: errorText(err),
             });
         },
     });

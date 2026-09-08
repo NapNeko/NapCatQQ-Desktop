@@ -14,6 +14,7 @@ import {
     DialogFooter,
 } from '../../shared/ui';
 import { componentService } from '../../core/services/component.service';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type { InstallDependenciesResult } from '../../core/ipc/generated/qq/InstallDependenciesResult';
@@ -67,8 +68,10 @@ export function QqDependencyDialog({
             setPhase(res.success ? 'done' : 'error');
             onInstalled?.(res);
         } catch (e) {
-            setErrorMsg(String(e));
+            const raw = String(e);
+            setErrorMsg(raw);
             setPhase('error');
+            pushErrorBar({ title: 'QQ 依赖安装失败', raw });
         }
     };
 
@@ -97,6 +100,12 @@ export function QqDependencyDialog({
             setPhase(res.success ? 'done' : 'error');
             onInstalled?.(res);
             setShowSudoDialog(false);
+        } catch (e) {
+            const raw = String(e);
+            setErrorMsg(raw);
+            setPhase('error');
+            setShowSudoDialog(false);
+            pushErrorBar({ title: 'QQ 依赖安装失败', raw });
         } finally {
             setIsSubmittingSudo(false);
         }
@@ -229,9 +238,11 @@ function QqDependencyBody({
                     <X size={18} className="text-danger" />
                     <span className="text-sm font-medium text-danger">安装失败</span>
                 </div>
-                <pre className="text-xs text-text-secondary whitespace-pre-wrap break-words max-h-[200px] overflow-y-auto">
-                    {errorMsg}
-                </pre>
+                {errorMsg === '密码错误，请重新输入' ? (
+                    <p className="text-xs text-danger">{errorMsg}</p>
+                ) : (
+                    <p className="text-xs text-text-secondary">安装失败，详情见日志</p>
+                )}
                 {result && result.failed.length > 0 && (
                     <div className="space-y-2 mt-2">
                         <p className="text-sm font-medium text-warning">

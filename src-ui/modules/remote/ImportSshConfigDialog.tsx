@@ -16,7 +16,9 @@ import {
 import { cn } from '../../shared/utils/cn';
 import { serverService } from '../../core/services/server.service';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 import { errorText } from '../../core/domain/errors';
+import { SEE_LOGS_HINT } from '../../core/domain/ui/errorBarCopy';
 import type { DiscoveredSshHost } from '../../core/ipc/generated/domain/DiscoveredSshHost';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 
@@ -46,6 +48,15 @@ export const ImportSshConfigDialog: React.FC<ImportSshConfigDialogProps> = ({
         if (!open) return;
         void refetch();
     }, [open, refetch]);
+
+    useEffect(() => {
+        if (!open || !isError) return;
+        pushErrorBar({
+            key: 'ssh-config-read',
+            title: '读取 SSH 配置失败',
+            raw: errorText(error),
+        });
+    }, [error, isError, open]);
 
     const hosts = useMemo(() => {
         const raw = data ?? [];
@@ -110,14 +121,21 @@ export const ImportSshConfigDialog: React.FC<ImportSshConfigDialogProps> = ({
                 });
                 onOpenChange(false);
             } else {
-                pushInfoBar({
-                    key: 'ssh-config-import',
-                    tone: created.length > 0 ? 'warning' : 'danger',
-                    title: created.length > 0 ? '部分主机没有加进去' : '没有加进去',
-                    content:
-                        (created.length > 0 ? `成功 ${created.length} 台。` : '') +
-                        failed.map((f) => `${f.alias}：${f.message}`).join(' '),
-                });
+                console.error('[ssh-import] failed hosts', failed);
+                if (created.length > 0) {
+                    pushInfoBar({
+                        key: 'ssh-config-import',
+                        tone: 'warning',
+                        title: '部分主机没有加进去',
+                        content: `成功 ${created.length} 台，失败 ${failed.length} 台。${SEE_LOGS_HINT}`,
+                    });
+                } else {
+                    pushErrorBar({
+                        key: 'ssh-config-import',
+                        title: '没有加进去',
+                        raw: `失败 ${failed.length} 台`,
+                    });
+                }
                 if (created.length > 0) {
                     void refetch();
                     setSelected(new Set());
@@ -143,7 +161,7 @@ export const ImportSshConfigDialog: React.FC<ImportSshConfigDialogProps> = ({
                         正在读取本机 SSH 配置…
                     </p>
                 ) : isError ? (
-                    <p className="py-5 text-center text-sm text-danger">{errorText(error)}</p>
+                    <p className="py-5 text-center text-sm text-text-secondary">读取失败，详情见日志</p>
                 ) : hosts.length === 0 ? (
                     <p className="py-5 text-center text-sm text-text-secondary">
                         本机还没有可用的 SSH 主机条目。仍可手动添加服务器。

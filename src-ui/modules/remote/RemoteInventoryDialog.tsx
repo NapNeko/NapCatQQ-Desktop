@@ -90,7 +90,7 @@ export const RemoteInventoryDialog: React.FC<RemoteInventoryDialogProps> = ({
                 </DialogHeader>
 
                 <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto">
-                    {error ? <p className="text-sm text-danger">{error}</p> : null}
+                    {error ? <p className="text-sm text-text-secondary">重新发现失败，详情见日志</p> : null}
                     {overrideError ? <p className="text-sm text-danger">{overrideError}</p> : null}
 
                     <section className="flex flex-col gap-2">

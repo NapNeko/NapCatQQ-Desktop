@@ -8,8 +8,11 @@ import { openExternalUrl } from '../../core/ipc/transport';
 import { useDomainEvents } from '../events/useDomainEvents';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
+import { pushAppErrorBar } from './pushAppErrorBar';
+import { useAppInstanceAlerts } from './useAppInstanceAlerts';
 import { botConfigKey } from '../bot/useBotConfigsMap';
 import { dropAppInstanceLogs, ensureAppInstanceLogStore } from './appInstanceLogStore';
+import { matchesAppInstallTask } from '../../modules/apps/instanceState';
 import type {
     AppFrameworkManifest,
     AppInstance,
@@ -47,15 +50,35 @@ export function useAppInstances() {
     });
 
     useDomainEvents((event) => {
-        if (event.kind !== 'app_instance_changed') return;
-        queryClient.setQueryData<AppInstance[]>(APP_INSTANCES_KEY, (old) =>
-            upsertInstance(old, event.instance),
-        );
-        const reason = event.reason ?? '';
-        if (reason === 'linked' || reason === 'unlinked' || reason === 'port_changed') {
-            queryClient.invalidateQueries({ queryKey: ['appInstanceConfig', event.instance.id] });
-            queryClient.invalidateQueries({ queryKey: ['appConfigText', event.instance.id] });
+        if (event.kind === 'app_instance_changed') {
+            queryClient.setQueryData<AppInstance[]>(APP_INSTANCES_KEY, (old) =>
+                upsertInstance(old, event.instance),
+            );
+            const reason = event.reason ?? '';
+            if (reason === 'linked' || reason === 'unlinked' || reason === 'port_changed') {
+                queryClient.invalidateQueries({ queryKey: ['appInstanceConfig', event.instance.id] });
+                queryClient.invalidateQueries({ queryKey: ['appConfigText', event.instance.id] });
+            }
+            return;
         }
+        if (event.kind !== 'deployment_task_changed') return;
+        const { task } = event;
+        if (task.status !== 'success' && task.status !== 'failed' && task.status !== 'cancelled') {
+            return;
+        }
+        queryClient.setQueryData<AppInstance[]>(APP_INSTANCES_KEY, (old) => {
+            if (!old?.length) return old;
+            const hit = old.find((instance) => matchesAppInstallTask(task, instance));
+            if (!hit || hit.state !== 'installing') return old;
+            if (task.status === 'success') {
+                return upsertInstance(old, { ...hit, state: 'installed', last_error: undefined });
+            }
+            return upsertInstance(old, {
+                ...hit,
+                state: 'not_installed',
+                last_error: task.error ?? hit.last_error,
+            });
+        });
     });
 
     const patch = useCallback(
@@ -67,8 +90,10 @@ export function useAppInstances() {
         [queryClient],
     );
 
+    useAppInstanceAlerts(query.data ?? [], query.error ? errorText(query.error) : null);
+
     const fail = (title: string, key: string) => (err: unknown) => {
-        pushInfoBar({ key, tone: 'danger', title, content: errorText(err) });
+        pushAppErrorBar({ key, title, raw: errorText(err) });
     };
 
     const createMutation = useMutation({
@@ -95,14 +120,6 @@ export function useAppInstances() {
         mutationFn: (id: string) => appFrameworkService.start(id),
         onSuccess: (inst) => {
             patch(inst);
-            if (inst.state !== 'running' && inst.last_error) {
-                pushInfoBar({
-                    key: `app-start:${inst.id}`,
-                    tone: 'danger',
-                    title: `${inst.display_name} 启动失败`,
-                    content: inst.last_error,
-                });
-            }
         },
         onError: (err, id) => fail('启动失败', `app-start:${id}`)(err),
     });
@@ -176,11 +193,10 @@ export function useAppInstances() {
             }
             await openExternalUrl(url);
         } catch (err) {
-            pushInfoBar({
+            pushAppErrorBar({
                 key: `app-webui:${id}`,
-                tone: 'danger',
                 title: '打开 WebUI 失败',
-                content: errorText(err),
+                raw: errorText(err),
             });
         }
     }, []);

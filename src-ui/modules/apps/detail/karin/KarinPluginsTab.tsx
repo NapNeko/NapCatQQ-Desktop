@@ -24,10 +24,10 @@ import { useKarinPlugins } from '../../../../hooks/apps/useKarinPlugins';
 import { cn } from '../../../../shared/utils/cn';
 import styles from './karinPluginsGrid.module.css';
 import { KarinPluginConfigDialog } from './KarinPluginConfigDialog';
-import { pluginCatalogErrorCopy, type VisiblePlugin } from './karinPluginsModel';
+import { type VisiblePlugin } from './karinPluginsModel';
 import type { AppInstance } from '../../../../core/ipc/types';
 
-const TOOLBAR_SLOT_ID = 'karin-plugins-toolbar-slot';
+const TOOLBAR_SLOT_ID = 'app-store-toolbar-slot';
 
 const KIND_ITEMS = [
     { value: 'all', label: '全部类型' },
@@ -57,7 +57,6 @@ export const KarinPluginsTab: React.FC<{ instance: AppInstance }> = ({ instance 
     const p = useKarinPlugins(instance);
     const [uninstall, setUninstall] = useState<string | null>(null);
     const [configName, setConfigName] = useState<string | null>(null);
-    const err = p.error ? pluginCatalogErrorCopy(p.error) : null;
     const count = p.loading && p.rows.length === 0 ? '…' : String(p.rows.length);
 
     return (
@@ -106,15 +105,7 @@ export const KarinPluginsTab: React.FC<{ instance: AppInstance }> = ({ instance 
                 </div>
             </PluginsToolbarPortal>
 
-            {err ? (
-                <PagePlaceholder className="gap-3 py-16">
-                    <p className="font-display text-md font-semibold text-text">{err.title}</p>
-                    {err.detail && <p className="max-w-md text-sm text-text-secondary">{err.detail}</p>}
-                    <Button size="sm" variant="primary" onClick={() => void p.reload()}>
-                        重试
-                    </Button>
-                </PagePlaceholder>
-            ) : p.loading && p.rows.length === 0 ? (
+            {p.loading && p.rows.length === 0 ? (
                 <PagePlaceholder className="gap-3 py-16">
                     <Spinner size="lg" tone="brand" label="读取插件" />
                     <p className="text-sm text-text-tertiary">正在读取插件…</p>
@@ -122,7 +113,9 @@ export const KarinPluginsTab: React.FC<{ instance: AppInstance }> = ({ instance 
             ) : p.rows.length === 0 ? (
                 <PagePlaceholder className="gap-2 py-16">
                     <ActionMotionIcon icon={Blocks} size={28} className="text-text-tertiary" />
-                    <p className="text-sm text-text-secondary">没有匹配的插件</p>
+                    <p className="text-sm text-text-secondary">
+                        {p.error ? '目录未加载' : '没有匹配的插件'}
+                    </p>
                 </PagePlaceholder>
             ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto px-0.5 pb-4">

@@ -29,7 +29,9 @@ import { dockerService } from '../../core/services/docker.service';
 import { dockerActionStore } from './dockerActionStore';
 import { dockerInstallProgressStore } from './dockerInstallProgressStore';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import { errorText } from '../../core/domain/errors';
+import { SEE_LOGS_HINT } from '../../core/domain/ui/errorBarCopy';
 import { imageRemoveFailureHint } from '../../core/domain/docker/status';
 import type {
     ContainerAction,
@@ -99,11 +101,10 @@ export function useDocker(hostId: string, activeTab: 'containers' | 'images' = '
             });
         },
         onError: (err: unknown, { name, action }) => {
-            pushInfoBar({
+            pushErrorBar({
                 key: `container-action:${hostId}:${name}`,
-                tone: 'danger',
                 title: `容器${ACTION_VERB[action]}失败`,
-                content: `${name}：${errorText(err)}`,
+                raw: `${name}：${errorText(err)}`,
             });
         },
     });
@@ -123,11 +124,12 @@ export function useDocker(hostId: string, activeTab: 'containers' | 'images' = '
         },
         onError: (err: unknown, { imageRef }) => {
             const raw = errorText(err);
-            pushInfoBar({
+            const hint = imageRemoveFailureHint(raw);
+            pushErrorBar({
                 key: `image-remove:${hostId}:${imageRef}`,
-                tone: 'danger',
                 title: '删除镜像失败',
-                content: `${imageRef}：${imageRemoveFailureHint(raw)}`,
+                raw: `${imageRef}：${raw}`,
+                content: hint ? `${hint} ${SEE_LOGS_HINT}` : undefined,
             });
         },
     });

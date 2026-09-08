@@ -8,7 +8,8 @@ import {
 } from '../../core/services/desktop-consent.service';
 import { requestExitApp } from '../../core/services/exit.service';
 import { isTauri } from '../../core/ipc/transport';
-import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { pushErrorBar } from '../ui/pushErrorBar';
+import { errorText } from '../../core/domain/errors';
 
 export type DesktopConsentMode = 'gate' | 'view';
 
@@ -29,10 +30,9 @@ export function useDesktopConsentGate() {
         try {
             await requestExitApp();
         } catch (err: unknown) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '无法退出应用',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         }
     }, []);
@@ -64,10 +64,9 @@ export function useDesktopConsentGate() {
             pendingRef.current = null;
             setOpen(true);
         } catch (err: unknown) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '读取用户协议失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         }
     }, []);
@@ -98,10 +97,9 @@ export function useDesktopConsentGate() {
             setPayload(null);
             setBlocking(true);
             setOpen(true);
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '检查用户协议失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
             return false;
         }
@@ -122,10 +120,9 @@ export function useDesktopConsentGate() {
             setOpen(true);
             return false;
         } catch (err: unknown) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '检查用户协议失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
             return false;
         }
@@ -143,10 +140,9 @@ export function useDesktopConsentGate() {
             pendingRef.current = null;
             if (pending) await pending();
         } catch (err: unknown) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '保存协议同意失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         } finally {
             setSubmitting(false);

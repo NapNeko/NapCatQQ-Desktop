@@ -25,7 +25,9 @@ import {
 } from '../../../core/domain/bot/importable-remote';
 import { applyImportedNetwork } from '../../../core/domain/bot/imported-network';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { errorText } from '../../../core/domain/errors';
+import { SEE_LOGS_HINT } from '../../../core/domain/ui/errorBarCopy';
 import { botSnapshotsKey } from '../../../hooks/bot/useBotSnapshots';
 import { botConfigsKeyPrefix } from '../../../hooks/bot/useBotConfigsMap';
 import { requestDesktopConsent } from '../../../hooks/desktop/desktopConsentHost';
@@ -56,6 +58,15 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
         if (!open) return;
         void refetch();
     }, [open, refetch]);
+
+    useEffect(() => {
+        if (!open || !isError) return;
+        pushErrorBar({
+            key: 'importable-remote-bots-read',
+            title: '读取可导入列表失败',
+            raw: errorText(error),
+        });
+    }, [error, isError, open]);
 
     const rows = data ?? [];
     const selectableKeys = useMemo(
@@ -114,11 +125,11 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
             await queryClient.invalidateQueries({ queryKey: ['servers'] });
             await refetch();
             if (failed.length > 0) {
-                pushInfoBar({
+                console.error('[import-remote-bots] refresh failed', failed);
+                pushErrorBar({
                     key: 'import-remote-bots-refresh',
-                    tone: 'warning',
                     title: '部分主机重新发现失败',
-                    content: failed.join(' '),
+                    raw: `${failed.length} 台主机重新发现失败`,
                 });
             }
         } finally {
@@ -181,11 +192,10 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                     );
                     attached = attachedIds.length;
                 } catch (err) {
-                    pushInfoBar({
+                    pushErrorBar({
                         key: 'import-remote-bots-reconcile',
-                        tone: 'warning',
                         title: '已导入，但未能接管运行态',
-                        content: errorText(err),
+                        raw: errorText(err),
                     });
                 }
             }
@@ -202,7 +212,8 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                     parts.push(`已迁移 ${migratedNetworks} 个远端网络配置。`);
                 }
                 if (networkMigrateFailed.length > 0) {
-                    parts.push(`网络配置迁移失败：${networkMigrateFailed.join('；')}`);
+                    console.error('[import-remote-bots] network migrate failed', networkMigrateFailed);
+                    parts.push(`部分网络配置未迁出，详情见日志。`);
                 }
                 pushInfoBar({
                     key: 'import-remote-bots',
@@ -213,14 +224,21 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                 });
                 onOpenChange(false);
             } else {
-                pushInfoBar({
-                    key: 'import-remote-bots',
-                    tone: created.length > 0 ? 'warning' : 'danger',
-                    title: created.length > 0 ? '部分 Bot 没有导入' : '没有导入',
-                    content:
-                        (created.length > 0 ? `成功 ${created.length} 个。` : '') +
-                        failed.map((f) => `${f.qq}：${f.message}`).join(' '),
-                });
+                console.error('[import-remote-bots] import failed', failed);
+                if (created.length > 0) {
+                    pushInfoBar({
+                        key: 'import-remote-bots',
+                        tone: 'warning',
+                        title: '部分 Bot 没有导入',
+                        content: `成功 ${created.length} 个，失败 ${failed.length} 个。${SEE_LOGS_HINT}`,
+                    });
+                } else {
+                    pushErrorBar({
+                        key: 'import-remote-bots',
+                        title: '没有导入',
+                        raw: `失败 ${failed.length} 个`,
+                    });
+                }
             }
         } finally {
             setImporting(false);
@@ -245,7 +263,7 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                         正在对照远端库存…
                     </p>
                 ) : isError ? (
-                    <p className="py-5 text-center text-sm text-danger">{errorText(error)}</p>
+                    <p className="py-5 text-center text-sm text-text-secondary">读取失败，详情见日志</p>
                 ) : rows.length === 0 ? (
                     <p className="py-5 text-center text-sm text-text-secondary">
                         还没有发现可导入的 Bot。请先在远端页添加主机并刷新库存，或点下面重新发现。

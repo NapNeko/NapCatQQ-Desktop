@@ -6,7 +6,8 @@ import {
     desktopOnboardingService,
     type DesktopOnboardingPayload,
 } from '../../core/services/desktop-onboarding.service';
-import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { pushErrorBar } from '../ui/pushErrorBar';
+import { errorText } from '../../core/domain/errors';
 
 export type OnboardingDialogMode = 'choice' | 'guide';
 
@@ -45,10 +46,9 @@ export function useOnboardingGate() {
                 setOpen(true);
             }
         } catch (err: unknown) {
-            pushInfoBar({
-                tone: 'warning',
+            pushErrorBar({
                 title: '无法加载入门引导状态',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         }
     }, []);
@@ -62,10 +62,9 @@ export function useOnboardingGate() {
             setMode('guide');
             setOpen(true);
         } catch (err: unknown) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '无法打开入门引导',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         } finally {
             setSubmitting(false);
@@ -80,10 +79,9 @@ export function useOnboardingGate() {
             setPayload(next);
             setMode('guide');
         } catch (err: unknown) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '无法开始入门引导',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         } finally {
             setSubmitting(false);
@@ -98,10 +96,9 @@ export function useOnboardingGate() {
             setPayload(next);
             setOpen(false);
         } catch (err: unknown) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '无法保存「跳过」',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         } finally {
             setSubmitting(false);
@@ -117,10 +114,9 @@ export function useOnboardingGate() {
                 setPayload(next);
                 setOpen(false);
             } catch (err: unknown) {
-                pushInfoBar({
-                    tone: 'danger',
+                pushErrorBar({
                     title: '无法保存入门进度',
-                    content: err instanceof Error ? err.message : String(err),
+                    raw: errorText(err),
                 });
             } finally {
                 setSubmitting(false);

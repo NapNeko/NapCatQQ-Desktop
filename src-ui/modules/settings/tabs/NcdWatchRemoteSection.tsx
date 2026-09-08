@@ -14,6 +14,7 @@ import {
 } from '../../../hooks/settings/useNcdWatchServers';
 import { useReleases } from '../../../hooks/diagnostics/useReleases';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { Badge, Button, Spinner } from '../../../shared/ui';
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import { cn } from '../../../shared/utils/cn';
@@ -107,11 +108,10 @@ export function NcdWatchRemoteSection({
             });
             window.setTimeout(() => refetchAll(), 2500);
         } catch (err) {
-            pushInfoBar({
+            pushErrorBar({
                 key: `ncd-watch-install-${row.serverId}`,
-                tone: 'danger',
                 title: '安装失败',
-                content: `${row.name}：${errorText(err, '未知错误')}`,
+                raw: `${row.name}：${errorText(err, '未知错误')}`,
             });
         } finally {
             setRowBusy(row.serverId, undefined);
@@ -134,11 +134,10 @@ export function NcdWatchRemoteSection({
             });
             window.setTimeout(() => refetchAll(), 2500);
         } catch (err) {
-            pushInfoBar({
+            pushErrorBar({
                 key: `ncd-watch-update-${row.serverId}`,
-                tone: 'danger',
                 title: '更新失败',
-                content: `${row.name}：${errorText(err, '未知错误')}`,
+                raw: `${row.name}：${errorText(err, '未知错误')}`,
             });
         } finally {
             setRowBusy(row.serverId, undefined);
@@ -166,11 +165,10 @@ export function NcdWatchRemoteSection({
             });
             refetchAll();
         } catch (err) {
-            pushInfoBar({
+            pushErrorBar({
                 key: `ncd-watch-sync-${row.serverId}`,
-                tone: 'danger',
                 title: '同步失败',
-                content: `${row.name}：${errorText(err, '未知错误')}`,
+                raw: `${row.name}：${errorText(err, '未知错误')}`,
             });
         } finally {
             setRowBusy(row.serverId, undefined);

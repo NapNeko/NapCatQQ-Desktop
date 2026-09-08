@@ -18,6 +18,7 @@ import {
     Spinner,
 } from '../../../shared/ui';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { useBotConfig } from '../../../hooks/bot/useBotConfig';
 import { useBotSnapshots } from '../../../hooks/bot/useBotSnapshots';
 import {
@@ -128,7 +129,15 @@ export function BotConfigPageNext({
                 setSnowlumaApp(loaded);
                 setSnowlumaAppPristine(loaded);
             } catch (e) {
-                if (!cancelled) setSnowlumaAppLoadError(String(e));
+                if (!cancelled) {
+                    const raw = String(e);
+                    setSnowlumaAppLoadError(raw);
+                    pushErrorBar({
+                        key: 'snowluma-app-load',
+                        title: '无法加载全局 WebUI 配置',
+                        raw,
+                    });
+                }
             } finally {
                 if (!cancelled) setSnowlumaAppLoading(false);
             }
@@ -186,11 +195,10 @@ export function BotConfigPageNext({
         },
         onError: (msg) => {
             setDeleteDialogOpen(false);
-            pushInfoBar({
-                tone: 'danger',
-                title: '操作失败',
-                content: msg,
+            pushErrorBar({
                 key: 'bot-config-error',
+                title: '操作失败',
+                raw: msg,
             });
         },
     });
@@ -203,6 +211,15 @@ export function BotConfigPageNext({
     }, [formData, pristine, snowlumaApp, snowlumaAppPristine]);
     const dirtyRef = useRef(dirty);
     dirtyRef.current = dirty;
+
+    useEffect(() => {
+        if (!error) return;
+        pushErrorBar({
+            key: 'bot-config-load',
+            title: '读取配置失败',
+            raw: error.message,
+        });
+    }, [error]);
 
     // 引导强制 Tab（演示新建流程）
     useEffect(() => {
@@ -365,11 +382,10 @@ export function BotConfigPageNext({
         try {
             await commitSnowlumaIfDirty();
         } catch (e) {
-            pushInfoBar({
-                tone: 'danger',
-                title: '保存失败',
-                content: `全局 WebUI 配置写入失败：${String(e)}`,
+            pushErrorBar({
                 key: 'bot-config-error',
+                title: '保存失败',
+                raw: `全局 WebUI 配置写入失败：${String(e)}`,
             });
             return;
         }
@@ -410,11 +426,10 @@ export function BotConfigPageNext({
             try {
                 await commitSnowlumaIfDirty();
             } catch (e) {
-                pushInfoBar({
-                    tone: 'danger',
-                    title: '保存失败',
-                    content: `全局 WebUI 配置写入失败：${String(e)}`,
+                pushErrorBar({
                     key: 'bot-config-error',
+                    title: '保存失败',
+                    raw: `全局 WebUI 配置写入失败：${String(e)}`,
                 });
                 return;
             }
@@ -451,8 +466,8 @@ export function BotConfigPageNext({
         return (
             <div className="flex h-full items-center justify-center">
                 <Card className="flex max-w-md flex-col gap-3 px-6 py-5" variant="outlined">
-                    <h3 className="font-display text-md font-semibold text-danger">读取配置失败</h3>
-                    <p className="text-sm text-text-secondary">{error.message}</p>
+                    <h3 className="font-display text-md font-semibold text-text">读取配置失败</h3>
+                    <p className="text-sm text-text-secondary">详情见日志</p>
                     <div>
                         <Button variant="secondary" size="sm" onClick={onBack}>
                             返回列表

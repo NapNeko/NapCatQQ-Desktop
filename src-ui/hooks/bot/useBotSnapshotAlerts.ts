@@ -7,6 +7,7 @@ import type {
     DaemonState,
     NapCatLoginInvalidationReason,
 } from '../../core/ipc/types';
+import { errorBarContent } from '../../core/domain/ui/errorBarCopy';
 import { dismissInfoBar, pushInfoBar } from '../ui/globalInfoBarStore';
 import { isQqSystemDependencyError } from '../components/useQqDependencyAlerts';
 import {
@@ -40,23 +41,6 @@ function isSnowLumaConsentError(raw: string): boolean {
     );
 }
 
-/** InfoBar 展示用：截取首行摘要，避免 Python traceback 等长文本撑爆横幅。 */
-function briefError(raw: string): string {
-    const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-    if (lines.length === 0) return raw;
-    const first = lines[0];
-    // 从尾部找 Python/shell 报出的最终错误行（如 OSError: ...）
-    let lastMeaningful: string | undefined;
-    for (let i = lines.length - 1; i >= 0; i--) {
-        if (/^[A-Z]\w*(Error|Exception|Failure):/i.test(lines[i]) || lines[i].startsWith('OSError:')) {
-            lastMeaningful = lines[i];
-            break;
-        }
-    }
-    const summary = lastMeaningful ?? first;
-    if (summary.length <= 120) return summary;
-    return summary.slice(0, 117) + '...';
-}
 
 function pushIfNotSuppressed(
     alertKey: string,
@@ -112,20 +96,21 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             }
 
             if (lastError && !consentRequired && lastError !== prev.lastError) {
-                const brief = briefError(lastError);
                 if (isQqSystemDependencyError(lastError)) {
                     pushIfNotSuppressed(`bot-qq-deps:${id}`, {
                         tone: 'warning',
                         title: `QQ 系统依赖缺失 · ${label}`,
-                        content: `${brief} 请到「组件」页按提示一键修复。`,
+                        content: '请到「组件」页按提示一键修复。详情见日志',
                         autoDismissMs: 0,
                     });
+                    console.error(`[bots] QQ deps · ${label}:`, lastError);
                 } else if (!crashed) {
                     pushIfNotSuppressed(keyLastError, {
                         tone: 'danger',
                         title: `Bot 异常 · ${label}`,
-                        content: brief,
+                        content: errorBarContent(lastError),
                     });
+                    console.error(`[bots] ${label}:`, lastError);
                 }
             }
 
@@ -141,11 +126,11 @@ export function useBotSnapshotAlerts(rows: BotSnapshotAlertRow[]): void {
             }
 
             if (crashed && !consentRequired && !prev.crashed) {
-                // 与 last_error 共用 key：启动失败会先写错误再标崩溃，顶替成一条。
+                if (lastError) console.error(`[bots] crashed · ${label}:`, lastError);
                 pushIfNotSuppressed(lastError ? keyLastError : keyCrashed, {
                     tone: 'danger',
                     title: `Bot 已崩溃 · ${label}`,
-                    content: lastError ? briefError(lastError) : '进程异常退出，请查看日志',
+                    content: lastError ? errorBarContent(lastError) : '进程异常退出。详情见日志',
                 });
             }
 

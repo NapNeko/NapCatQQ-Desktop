@@ -11,6 +11,7 @@ import {
     DialogTitle,
     Button,
 } from '../../shared/ui';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 
 interface ContainerLogsDialogProps {
     name: string;
@@ -34,7 +35,9 @@ export const ContainerLogsDialog: React.FC<ContainerLogsDialogProps> = ({
             const text = await fetchLogs(name, 400);
             setLogs(text || '（暂无日志）');
         } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
+            const raw = e instanceof Error ? e.message : String(e);
+            setError(raw);
+            pushErrorBar({ title: '取容器日志失败', raw });
         } finally {
             setLoading(false);
         }
@@ -67,7 +70,7 @@ export const ContainerLogsDialog: React.FC<ContainerLogsDialogProps> = ({
                 </DialogHeader>
 
                 {error ? (
-                    <p className="text-sm text-danger">取日志失败：{error}</p>
+                    <p className="text-sm text-text-secondary">取日志失败，详情见日志</p>
                 ) : loading && !logs ? (
                     <div className="flex items-center gap-2 py-10 text-text-tertiary">
                         <ActionMotionIcon icon={RefreshCw} size={16} motion="spin" />

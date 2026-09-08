@@ -85,15 +85,10 @@ export function imageRemoveConflictNeedsForce(message: string): boolean {
     return m.includes('must be forced') || m.includes('conflict: unable to delete');
 }
 
-/// 给用户看的删除失败文案(冲突时补操作指引)。
+/// 冲突时给用户看的操作指引；其它失败走 InfoBar 短句 + 日志。
 export function imageRemoveFailureHint(raw: string): string {
-    if (!imageRemoveConflictNeedsForce(raw)) {
-        return raw;
-    }
-    return (
-        `${raw}\n\n该镜像仍被容器引用。可勾选「强制删除」再试（` +
-        `docker rmi -f，不保证能删掉仍被占用的层），或到「容器」页先删/停相关容器。`
-    );
+    if (!imageRemoveConflictNeedsForce(raw)) return '';
+    return '该镜像仍被容器引用。可勾选「强制删除」再试，或到「容器」页先删/停相关容器。';
 }
 
 /// 判断镜像仓库是否为本工程 NapCat / SnowLuma 官方镜像。

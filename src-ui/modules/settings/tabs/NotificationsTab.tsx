@@ -12,6 +12,8 @@ import {
 } from '../../../core/domain/settings/offline-notify-defaults';
 import { settingsService } from '../../../core/services/settings.service';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
+import { errorText } from '../../../core/domain/errors';
 import {
     Badge,
     Button,
@@ -331,11 +333,10 @@ export function NotificationsTab({
                 content: `${result.candidate.name || botId} · 端口 ${result.port}。${scopeHint}`,
             });
         } catch (err) {
-            pushInfoBar({
+            pushErrorBar({
                 key: 'onebot-enable-http',
-                tone: 'danger',
                 title: '自动配置 HTTP 失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         } finally {
             setOneBotEnablingId(null);
@@ -354,11 +355,10 @@ export function NotificationsTab({
                     '请到目标服务确认是否收到。',
             });
         } catch (err) {
-            pushInfoBar({
+            pushErrorBar({
                 key: 'offline-webhook-test',
-                tone: 'danger',
                 title: '测试失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         } finally {
             setTesting(null);

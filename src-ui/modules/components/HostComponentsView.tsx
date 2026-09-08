@@ -141,12 +141,15 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
             (r) => r.status.state === 'unknown' && isHostConnectivityFailureReason((r.status as { state: 'unknown'; reason: string }).reason),
         );
         const sample = found?.status.state === 'unknown' ? found.status.reason : '连接失败';
+        if (sample && sample !== '连接失败') {
+            console.error('[components] host unreachable', host.host_id, sample);
+        }
         return (
             <div className="flex min-w-0 w-full max-w-full flex-col gap-6">
                 <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-md border border-border-subtle bg-surface/40 px-6 py-10 text-center">
                     <WifiOff size={28} className="text-text-tertiary" strokeWidth={1.5} />
                     <p className="text-sm text-text-secondary">{host.display_name} 主机不可达</p>
-                    <p className="max-w-[48ch] text-xs text-text-tertiary break-words">{sample}</p>
+                    <p className="max-w-[48ch] text-xs text-text-tertiary">连接失败，详情见日志</p>
                     <p className="text-2xs text-text-tertiary">请在「远端」页手动测试连接，或检查网络/防火墙/SSH 配置。</p>
                     <div className="mt-1">
                         <Button size="sm" variant="primary" onClick={() => onRetryDetect(host.host_id)}>

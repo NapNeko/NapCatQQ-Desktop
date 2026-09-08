@@ -42,6 +42,7 @@ import type {
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type { DockerInstallOptions } from '../../core/services/docker.service';
 import { globalInfoBarStore } from '../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 
 // componentActionStore 跨路由存活，提权提示的去重状态也必须保持同样生命周期。
 const qqSudoPromptedTaskIds = new Set<string>();
@@ -299,14 +300,11 @@ export const ComponentsPageNext: React.FC = () => {
 
     const reportActionStartError = useCallback(
         (componentId: ComponentId, hostId: string, err: unknown) => {
-            globalInfoBarStore.push({
+            pushErrorBar({
                 key: `component-action-start:${componentId}:${hostId}`,
-                tone: 'danger',
                 title: `组件操作失败 · ${hostNameOf(hostId)}`,
-                content: errorText(err, '组件操作失败，请稍后重试'),
-                autoDismissMs: 0,
+                raw: errorText(err, '组件操作失败，请稍后重试'),
             });
-            console.error('[ComponentsPage] action failed:', err);
         },
         [hostNameOf],
     );
@@ -399,12 +397,10 @@ export const ComponentsPageNext: React.FC = () => {
                     }
                 });
             } catch (err) {
-                globalInfoBarStore.push({
+                pushErrorBar({
                     key: `qq-deps-repair:${hostId}`,
-                    tone: 'danger',
                     title: `QQ 依赖修复失败 · ${hostNameOf(hostId)}`,
-                    content: errorText(err, '无法启动修复任务'),
-                    autoDismissMs: 0,
+                    raw: errorText(err, '无法启动修复任务'),
                 });
             }
         },
@@ -528,12 +524,10 @@ export const ComponentsPageNext: React.FC = () => {
                     });
                 }
             } catch (err) {
-                globalInfoBarStore.push({
+                pushErrorBar({
                     key: `docker-install:${hostId}`,
-                    tone: 'danger',
                     title: `Docker 安装失败 · ${hostNameOf(hostId)}`,
-                    content: errorText(err, 'Docker 安装失败，请手动安装后重试'),
-                    autoDismissMs: 0,
+                    raw: errorText(err, 'Docker 安装失败，请手动安装后重试'),
                 });
             }
         },
@@ -543,12 +537,10 @@ export const ComponentsPageNext: React.FC = () => {
     const handleDockerDeployError = useCallback(
         (hostId: string, flavor: import('../../core/ipc/types').DockerFlavor, err: unknown) => {
             const framework = flavor === 'napcat' ? 'NapCat' : 'SnowLuma';
-            globalInfoBarStore.push({
+            pushErrorBar({
                 key: `docker-deploy:${hostId}:${flavor}`,
-                tone: 'danger',
                 title: `${framework} Docker 部署失败 · ${hostNameOf(hostId)}`,
-                content: errorText(err, 'Docker 部署失败，请检查 Docker 状态、镜像源与端口占用后重试'),
-                autoDismissMs: 0,
+                raw: errorText(err, 'Docker 部署失败，请检查 Docker 状态、镜像源与端口占用后重试'),
             });
         },
         [hostNameOf],

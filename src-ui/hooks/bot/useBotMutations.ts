@@ -24,13 +24,15 @@ function applySnapshotUpdate(
 function describeBatch(verb: string, res: BatchResultResponse): ActionMessage {
     const sCount = res.succeeded.length;
     const fCount = res.failed.length;
-    const failDetail =
-        fCount > 0
-            ? ` 失败项: ${res.failed.map(([id, reason]) => `${id}(${reason})`).join(', ')}`
-            : '';
+    if (fCount > 0) {
+        console.error(`[bots] ${verb} 失败项`, res.failed);
+    }
     return {
         type: fCount === 0 ? 'success' : 'error',
-        text: `${verb}指令执行完毕。成功: ${sCount} 个, 失败: ${fCount} 个。${failDetail}`,
+        text:
+            fCount === 0
+                ? `${verb}指令执行完毕。成功: ${sCount} 个`
+                : `${verb}完成，${sCount} 个成功，${fCount} 个失败`,
     };
 }
 
@@ -98,13 +100,13 @@ export function useBotMutations({ onMessage }: MutationCallbacks = {}) {
             refetch();
             const sCount = res.succeeded.length;
             const fCount = res.failed.length;
-            const failDetail =
-                fCount > 0
-                    ? ` 失败项: ${res.failed.map(([id, reason]) => `${id}(${reason})`).join(', ')}`
-                    : '';
+            if (fCount > 0) console.error('[bots] 批量删除失败项', res.failed);
             onMessage?.({
                 type: fCount === 0 ? 'success' : 'error',
-                text: `批量删除执行完毕。成功删除: ${sCount} 个实例, 失败: ${fCount} 个。${failDetail}`,
+                text:
+                    fCount === 0
+                        ? `批量删除执行完毕。成功删除: ${sCount} 个实例`
+                        : `批量删除完成，${sCount} 个成功，${fCount} 个失败`,
             });
         },
         onError: (err: any) => {

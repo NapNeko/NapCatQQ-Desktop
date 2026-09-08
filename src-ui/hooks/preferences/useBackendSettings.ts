@@ -11,6 +11,7 @@ import {
     type SettingsDraft,
 } from '../../modules/settings/settings-draft';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import { reloadBotRuntimeMetricsCatalogSettings } from '../bot/botRuntimeMetricsCatalog';
 
 const backendSettingsKey = ['appSettings'] as const;
@@ -46,11 +47,10 @@ export function useBackendSettings(cb: Callbacks = {}) {
             cb.onSaved?.();
         },
         onError: (err: Error) => {
-            pushInfoBar({
+            pushErrorBar({
                 key: 'app-settings-save',
-                tone: 'danger',
                 title: '设置保存失败',
-                content: err.message || String(err),
+                raw: err.message || String(err),
             });
         },
     });

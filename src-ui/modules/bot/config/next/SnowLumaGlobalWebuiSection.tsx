@@ -19,7 +19,7 @@ export function SnowLumaGlobalWebuiSection({
     if (loadError) {
         return (
             <FormSection title="SnowLuma WebUI（全局）">
-                <p className="text-2xs text-danger">无法加载全局 WebUI 配置：{loadError}</p>
+                <p className="text-2xs text-text-secondary">无法加载全局 WebUI 配置，详情见日志</p>
             </FormSection>
         );
     }

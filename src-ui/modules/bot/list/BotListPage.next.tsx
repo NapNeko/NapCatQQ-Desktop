@@ -30,6 +30,8 @@ import { useSnowlumaState } from '../../../hooks/webui/useSnowlumaState';
 import { useOpenWebui } from '../../../hooks/webui/useOpenWebui';
 import { useOpenSnowlumaNovnc } from '../../../hooks/webui/useOpenSnowlumaNovnc';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
+import { errorText } from '../../../core/domain/errors';
 import { useBotSnapshotAlerts } from '../../../hooks/bot/useBotSnapshotAlerts';
 import { isSnowLumaFlavor } from '../../../core/domain/bot/flavor';
 import {
@@ -90,15 +92,15 @@ export function BotListPageNext({
 
     // 把 mutation 的 success / error 消息桥接到全局 InfoBar 队列。
     const handleMessage = (msg: ActionMessage) => {
-        pushInfoBar({
-            // 不传 key：每条 mutation 反馈都独立显示。批量动作的 partial-success
-            // 通常想全部留住看清楚。
-            tone: msg.type === 'success' ? 'success' : 'danger',
-            title: msg.type === 'success' ? '操作完成' : '操作失败',
-            content: msg.text,
-            autoDismissMs: msg.type === 'success' ? undefined : 0,
-        });
-        // 批量动作完成后退出批量模式（对齐旧版交互）。
+        if (msg.type === 'success') {
+            pushInfoBar({
+                tone: 'success',
+                title: '操作完成',
+                content: msg.text,
+            });
+        } else {
+            pushErrorBar({ title: '操作失败', raw: msg.text });
+        }
         if (msg.text.startsWith('批量')) batch.exitBatch();
     };
 
@@ -161,10 +163,9 @@ export function BotListPageNext({
             }
             setConsentBotId(null);
             setConsentRetryDecisions(null);
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '读取 SnowLuma 协议失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         } finally {
             if (openingConsentBotRef.current === botId) {
@@ -189,10 +190,9 @@ export function BotListPageNext({
                 await openSnowLumaConsent(botId, decisions);
                 return false;
             }
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: 'SnowLuma 启动前检查失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
             return false;
         }
@@ -320,10 +320,9 @@ export function BotListPageNext({
                 setDriftBotId(null);
                 return;
             }
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '启动失败',
-                content: String(err),
+                raw: errorText(err),
             });
         }
         setDriftBotId(null);
@@ -339,10 +338,9 @@ export function BotListPageNext({
             await botService.acceptSnowLumaAgreements(retryBotId, consentPayload.version);
             suppressCurrentConsentError(retryBotId);
         } catch (err: unknown) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: 'SnowLuma 协议确认失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
             setConsentSubmitting(false);
             return;
@@ -370,10 +368,9 @@ export function BotListPageNext({
                     autoDismissMs: 4000,
                 });
             } catch (err: unknown) {
-                pushInfoBar({
-                    tone: 'danger',
+                pushErrorBar({
                     title: '启动失败',
-                    content: err instanceof Error ? err.message : String(err),
+                    raw: errorText(err),
                 });
             } finally {
                 setStartingBotId(null);
@@ -422,11 +419,10 @@ export function BotListPageNext({
     // 推一次，避免 react-query 重试反复推。
     useEffect(() => {
         if (!error) return;
-        pushInfoBar({
+        pushErrorBar({
             key: 'bot-list-fetch-error',
-            tone: 'danger',
             title: 'Bot 列表加载失败',
-            content: error.message,
+            raw: error.message,
         });
     }, [error]);
 
@@ -1073,22 +1069,20 @@ function BotListGrid({
                                     onToggleSelect={batch.toggleSelect}
                                     onOpenWebui={(params) => {
                                         openWebui(params).catch((err: unknown) => {
-                                            pushInfoBar({
+                                            pushErrorBar({
                                                 key: `webui-open:${params.botId}`,
-                                                tone: 'danger',
                                                 title: '打开 WebUI 失败',
-                                                content: String(err),
+                                                raw: errorText(err),
                                             });
                                         });
                                     }}
                                     isSnowlumaRemoteTunnelUi={isSnowlumaRemoteTunnelUi}
                                     onOpenNovnc={(id) => {
                                         openSnowlumaNovnc(id).catch((err: unknown) => {
-                                            pushInfoBar({
+                                            pushErrorBar({
                                                 key: `novnc-open:${id}`,
-                                                tone: 'danger',
                                                 title: '打开 noVNC 失败',
-                                                content: String(err),
+                                                raw: errorText(err),
                                             });
                                         });
                                     }}
@@ -1102,11 +1096,10 @@ function BotListGrid({
                                                 content: 'SnowLuma WebUI 与 noVNC 隧道已重新建立。',
                                             });
                                         } catch (err: unknown) {
-                                            pushInfoBar({
+                                            pushErrorBar({
                                                 key: `snowluma-ui-retry:${id}`,
-                                                tone: 'danger',
                                                 title: '连接重建失败',
-                                                content: String(err),
+                                                raw: errorText(err),
                                             });
                                         }
                                     }}

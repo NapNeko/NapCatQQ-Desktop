@@ -1,5 +1,6 @@
 // 市场条目 + 已装扫描 → 卡片列表。字段名跟 ts-rs 生成走（type / author / allowBuild）。
 
+import { SEE_LOGS_HINT } from '../../../../core/domain/ui/errorBarCopy';
 import type {
     AppPluginAction,
     DeploymentTaskStatus,
@@ -50,23 +51,20 @@ function formatRelativeTime(iso: string): string | null {
     return `${year} 年前`;
 }
 
-export function pluginCatalogErrorCopy(raw: string): { title: string; detail: string | null } {
+export function pluginCatalogErrorCopy(raw: string): { title: string; content: string } {
     const stripped = raw
         .replace(/^写入应用端配置失败:\s*/g, '')
         .replace(/^拉取插件目录失败:\s*/g, '')
         .replace(/^读取插件目录失败:\s*/g, '')
         .trim();
     if (/error sending request|timed out|connection refused|dns|network|proxy/i.test(raw)) {
-        return { title: '无法连接官方插件目录', detail: '检查网络或代理后重试' };
+        return { title: '无法连接官方插件目录', content: `检查网络或代理后重试。${SEE_LOGS_HINT}` };
     }
     if (/HTTP\s+[45]\d\d/.test(raw)) {
-        return { title: '官方插件目录暂时不可用', detail: '稍后重试' };
+        return { title: '官方插件目录暂时不可用', content: `稍后重试。${SEE_LOGS_HINT}` };
     }
-    if (!stripped) return { title: '插件目录加载失败', detail: null };
-    return {
-        title: '插件目录加载失败',
-        detail: stripped.length > 120 ? `${stripped.slice(0, 120)}…` : stripped,
-    };
+    if (!stripped) return { title: '插件目录加载失败', content: SEE_LOGS_HINT };
+    return { title: '插件目录加载失败', content: SEE_LOGS_HINT };
 }
 
 export function appFileBasename(url: string): string {

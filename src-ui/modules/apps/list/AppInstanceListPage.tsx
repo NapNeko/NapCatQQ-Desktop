@@ -109,7 +109,13 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
                     {apps.isLoading ? (
                         <Loading text="加载实例列表…" />
                     ) : apps.error ? (
-                        <p className="text-sm text-danger">读取实例失败：{apps.error}</p>
+                        <PagePlaceholder className="gap-2 py-10">
+                            <p className="text-sm text-text-secondary">读取实例失败</p>
+                            <Button size="sm" variant="secondary" onClick={() => void apps.refetch()}>
+                                <ActionMotionIcon icon={RefreshCw} size={13} />
+                                重试
+                            </Button>
+                        </PagePlaceholder>
                     ) : apps.instances.length === 0 ? (
                         <PagePlaceholder className="gap-2 py-10">
                             <ActionMotionIcon
@@ -295,11 +301,6 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                     ) : !installed ? (
                         <p className="truncate text-text-tertiary">安装后才能启动与配置</p>
                     ) : null}
-                    {i.last_error && (
-                        <p className="mt-0.5 truncate text-2xs text-danger" title={i.last_error}>
-                            {i.last_error}
-                        </p>
-                    )}
                 </div>
             </div>
 

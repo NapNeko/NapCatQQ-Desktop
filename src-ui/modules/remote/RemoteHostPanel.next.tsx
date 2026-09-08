@@ -17,6 +17,8 @@ import { ListItem, ActionMotionIcon, RESOURCE_MOTION, refreshMotion } from '../.
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useServerManager } from '../../hooks/remote/useServerManager';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
+import { errorText } from '../../core/domain/errors';
 import { ServerCard, serverCardGridClass } from './ServerCard';
 import { AddServerDialog } from './AddServerDialog';
 import { ImportSshConfigDialog } from './ImportSshConfigDialog';
@@ -142,10 +144,9 @@ export const RemoteHostPanelNext: React.FC = () => {
                 autoDismissMs: 5000,
             });
         } catch (err) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '配置免密登录失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
         }
     };
@@ -162,10 +163,9 @@ export const RemoteHostPanelNext: React.FC = () => {
                 keyB64: ctx.prompt.keyB64,
             });
         } catch (err) {
-            pushInfoBar({
-                tone: 'danger',
+            pushErrorBar({
                 title: '信任主机指纹失败',
-                content: err instanceof Error ? err.message : String(err),
+                raw: errorText(err),
             });
             return;
         }
@@ -276,10 +276,9 @@ export const RemoteHostPanelNext: React.FC = () => {
                             }
                         })
                         .catch((err) => {
-                            pushInfoBar({
-                                tone: 'danger',
+                            pushErrorBar({
                                 title: '添加服务器失败',
-                                content: err instanceof Error ? err.message : String(err),
+                                raw: errorText(err),
                             });
                         });
                 }}

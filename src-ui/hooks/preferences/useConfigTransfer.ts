@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { configTransferService } from '../../core/services/config-transfer.service';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { pushErrorBar } from '../ui/pushErrorBar';
 
 export function useConfigTransfer() {
     const [importOpen, setImportOpen] = useState(false);
@@ -21,11 +22,10 @@ export function useConfigTransfer() {
             });
         },
         onError: (err: Error) => {
-            pushInfoBar({
+            pushErrorBar({
                 key: 'config-export',
-                tone: 'danger',
                 title: '导出失败',
-                content: err.message || String(err),
+                raw: err.message || String(err),
             });
         },
     });

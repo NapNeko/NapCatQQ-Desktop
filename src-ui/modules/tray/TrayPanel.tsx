@@ -28,8 +28,6 @@ import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
 import type { Flavor } from '../../core/domain/bot/flavor';
 import { cn } from '../../shared/utils/cn';
 import logoMark from '../../assets/logo.png';
-import { trayActionErrorMessage } from './trayPanelActions';
-
 const PAGE_SIZE = 2;
 let lastReportedHeight = 0;
 
@@ -310,9 +308,8 @@ export const TrayPanel: React.FC = () => {
         try {
             await botService.start(botId);
         } catch (e) {
-            const message = trayActionErrorMessage(e);
             console.error('启动 Bot 失败:', e);
-            setActionError(`启动 Bot 失败: ${message}`);
+            setActionError('启动失败，详情见日志');
         } finally {
             setMutatingBotIds((prev) => ({ ...prev, [botId]: false }));
             void refetch();
@@ -325,9 +322,8 @@ export const TrayPanel: React.FC = () => {
         try {
             await botService.stop(botId);
         } catch (e) {
-            const message = trayActionErrorMessage(e);
             console.error('停止 Bot 失败:', e);
-            setActionError(`停止 Bot 失败: ${message}`);
+            setActionError('停止失败，详情见日志');
         } finally {
             setMutatingBotIds((prev) => ({ ...prev, [botId]: false }));
             void refetch();
@@ -343,6 +339,7 @@ export const TrayPanel: React.FC = () => {
             });
         } catch (e) {
             console.error('打开 WebUI 失败:', e);
+            setActionError('打开失败，详情见日志');
         }
     };
 
@@ -351,6 +348,7 @@ export const TrayPanel: React.FC = () => {
             await openSnowlumaNovnc(botId);
         } catch (e) {
             console.error('打开 noVNC 失败:', e);
+            setActionError('打开失败，详情见日志');
         }
     };
 

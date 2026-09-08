@@ -3,10 +3,12 @@ import { appFrameworkService } from '../../core/services/app-framework.service';
 import { isAppConfigError } from '../../core/domain/apps/appConfigError';
 import { errorText } from '../../core/domain/errors';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
+import { pushAppErrorBar } from './pushAppErrorBar';
 import { deploymentTaskStore } from '../task-queue/deploymentTaskStore';
 import {
     filterKarinPlugins,
     overlayInstalledFromTasks,
+    pluginCatalogErrorCopy,
     type KarinPluginKindFilter,
     type PluginTaskHint,
 } from '../../modules/apps/detail/karin/karinPluginsModel';
@@ -71,7 +73,15 @@ export function useKarinPlugins(instance: AppInstance) {
             setMarket(nextMarket);
             setInstalled(nextInstalled);
         } catch (e) {
-            setError(errorText(e));
+            const raw = errorText(e);
+            setError(raw);
+            const copy = pluginCatalogErrorCopy(raw);
+            pushAppErrorBar({
+                key: `karin-plugin-catalog:${instance.id}`,
+                title: copy.title,
+                raw,
+                content: copy.content,
+            });
         } finally {
             setLoading(false);
         }
@@ -85,7 +95,9 @@ export function useKarinPlugins(instance: AppInstance) {
         () =>
             Object.values(taskState.tasks).filter(
                 (task): task is AppPluginTask =>
-                    isAppPluginTask(task) && task.kind.instance_id === instance.id,
+                    isAppPluginTask(task)
+                    && task.kind.instance_id === instance.id
+                    && (task.kind.resource ?? 'plugin') === 'plugin',
             ),
         [instance.id, taskState.tasks],
     );
@@ -151,11 +163,10 @@ export function useKarinPlugins(instance: AppInstance) {
                     autoDismissMs: 4000,
                 });
             } else if (task.status === 'failed') {
-                pushInfoBar({
+                pushAppErrorBar({
                     key: `karin-plugin-fail:${task.taskId}`,
-                    tone: 'danger',
                     title: `${verb}失败`,
-                    content: task.error ?? undefined,
+                    raw: task.error,
                 });
             }
         }
@@ -176,11 +187,10 @@ export function useKarinPlugins(instance: AppInstance) {
                     await reload();
                 }
             } catch (e) {
-                pushInfoBar({
+                pushAppErrorBar({
                     key: `karin-plugin-op:${instance.id}:${pluginName}`,
-                    tone: 'danger',
                     title: '插件操作失败',
-                    content: errorText(e),
+                    raw: errorText(e),
                 });
             } finally {
                 setLocalBusy((prev) => {
@@ -204,11 +214,10 @@ export function useKarinPlugins(instance: AppInstance) {
                     setConflict({ name: pluginName, enabled });
                     return;
                 }
-                pushInfoBar({
+                pushAppErrorBar({
                     key: `karin-plugin-enable:${instance.id}:${pluginName}`,
-                    tone: 'danger',
                     title: '切换启用失败',
-                    content: errorText(e),
+                    raw: errorText(e),
                 });
             }
         },

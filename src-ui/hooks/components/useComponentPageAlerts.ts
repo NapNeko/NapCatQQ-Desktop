@@ -5,6 +5,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { ComponentRow } from '../../core/domain/components/types';
+import { errorBarContent } from '../../core/domain/ui/errorBarCopy';
 import { pushInfoBar, dismissInfoBar } from '../ui/globalInfoBarStore';
 import {
     clearComponentPageAlertSuppression,
@@ -64,7 +65,7 @@ export function useComponentPageAlerts(
         pushIfNotSuppressed(key, {
             tone: 'danger',
             title: '组件清单加载失败',
-            content: `${message}。可点击页面右上角「刷新」重试。`,
+            content: errorBarContent(message),
             autoDismissMs: 0,
         });
         console.error('[ComponentsPage] catalog failed:', catalogError);
@@ -87,7 +88,7 @@ export function useComponentPageAlerts(
                     pushIfNotSuppressed(key, {
                         tone: 'danger',
                         title: `${heading} · 探测失败`,
-                        content: status.reason,
+                        content: errorBarContent(status.reason),
                         autoDismissMs: 0,
                     });
                     console.warn(

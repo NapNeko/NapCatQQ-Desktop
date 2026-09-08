@@ -90,6 +90,7 @@ describe('pluginCatalogErrorCopy', () => {
             '写入应用端配置失败: 拉取插件目录失败: error sending request for url (https://registry.npmjs.com/@karinjs/plugins-list/latest)',
         );
         expect(copy.title).toBe('无法连接官方插件目录');
-        expect(copy.detail).toBe('检查网络或代理后重试');
+        expect(copy.content).toContain('检查网络或代理后重试');
+        expect(copy.content).toContain('详情见日志');
     });
 });
