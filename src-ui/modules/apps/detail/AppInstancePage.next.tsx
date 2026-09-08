@@ -47,11 +47,12 @@ import { KarinBasicTab } from './karin/KarinBasicTab';
 import { KarinConnectionsTab } from './karin/KarinConnectionsTab';
 import { KarinPermissionsTab } from './karin/KarinPermissionsTab';
 import { KarinRenderStorageTab } from './karin/KarinRenderStorageTab';
+import { KarinPluginsTab } from './karin/KarinPluginsTab';
 import { KarinRulesTab } from './karin/KarinRulesTab';
 import type { DetailTabHint } from '../list/AppInstanceListPage';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
 
-type KarinTab = 'basic' | 'permissions' | 'connections' | 'rules' | 'render';
+type KarinTab = 'basic' | 'permissions' | 'connections' | 'rules' | 'render' | 'plugins';
 type TabValue = KarinTab | 'raw' | 'log';
 
 const KARIN_TABS: ReadonlyArray<{ value: KarinTab; label: string }> = [
@@ -60,9 +61,10 @@ const KARIN_TABS: ReadonlyArray<{ value: KarinTab; label: string }> = [
     { value: 'connections', label: '连接' },
     { value: 'rules', label: '响应规则' },
     { value: 'render', label: '渲染与存储' },
+    { value: 'plugins', label: '插件' },
 ];
 
-const TYPED_TABS = new Set<string>(KARIN_TABS.map((t) => t.value));
+const TYPED_TABS = new Set<string>(['basic', 'permissions', 'connections', 'rules', 'render']);
 
 /** 校验 issue 的 path 前缀 → 所在 Tab，保存被驳回时跳过去。 */
 function tabForIssuePath(path: string): KarinTab {
@@ -163,7 +165,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
 
     const busy = apps.pendingId === instance.id || instance.state === 'installing';
     const showSaveBar = typedEnabled && TYPED_TABS.has(activeTab);
-    const fillPane = activeTab === 'raw' || activeTab === 'log';
+    const fillPane = activeTab === 'raw' || activeTab === 'log' || activeTab === 'plugins';
 
     return (
         <TooltipProvider delayDuration={200}>
@@ -272,18 +274,32 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                                     <TabsTrigger value="raw">原始文件</TabsTrigger>
                                     <TabsTrigger value="log">日志</TabsTrigger>
                                 </TabsList>
-                                {showSaveBar && (
-                                    <SaveActions
-                                        dirty={form.dirty}
-                                        saving={form.saving}
-                                        issueCount={form.clientIssues.length}
-                                        onSave={() => void handleSave()}
-                                        onCancel={form.reset}
+                                <div className="ml-auto flex min-w-0 items-center justify-end gap-2">
+                                    <div
+                                        id="karin-plugins-toolbar-slot"
+                                        className="flex min-w-0 items-center justify-end"
                                     />
-                                )}
+                                    {showSaveBar && (
+                                        <SaveActions
+                                            dirty={form.dirty}
+                                            saving={form.saving}
+                                            issueCount={form.clientIssues.length}
+                                            onSave={() => void handleSave()}
+                                            onCancel={form.reset}
+                                        />
+                                    )}
+                                </div>
                             </div>
 
                             {typedEnabled && <TypedTabs instance={instance} form={form} />}
+                            {typedEnabled && (
+                                <TabsContent
+                                    value="plugins"
+                                    className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+                                >
+                                    <KarinPluginsTab instance={instance} />
+                                </TabsContent>
+                            )}
 
                             <TabsContent value="raw" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
                                 <RawFilesTab instance={instance} />
@@ -350,20 +366,33 @@ const TypedTabs: React.FC<{
 }> = ({ instance, form }) => {
     if (form.isLoading && !form.form) {
         return (
-            <div className="flex items-center gap-2 py-10 text-sm text-text-tertiary">
-                <Spinner size="sm" /> 读取配置…
-            </div>
+            <>
+                {(['basic', 'permissions', 'connections', 'rules', 'render'] as const).map((value) => (
+                    <TabsContent key={value} value={value} className="pb-8 pt-2">
+                        <div className="flex items-center gap-2 py-10 text-sm text-text-tertiary">
+                            <Spinner size="sm" /> 读取配置…
+                        </div>
+                    </TabsContent>
+                ))}
+            </>
         );
     }
     if (form.loadError && !form.form) {
+        const loadError = form.loadError;
         return (
-            <div className="flex flex-col items-start gap-2 py-10">
-                <p className="text-sm text-danger">读取配置失败：{form.loadError.message}</p>
-                <Button size="sm" variant="secondary" onClick={() => void form.reloadDiscard()}>
-                    <ActionMotionIcon icon={RefreshCw} size={13} />
-                    重试
-                </Button>
-            </div>
+            <>
+                {(['basic', 'permissions', 'connections', 'rules', 'render'] as const).map((value) => (
+                    <TabsContent key={value} value={value} className="pb-8 pt-2">
+                        <div className="flex flex-col items-start gap-2 py-10">
+                            <p className="text-sm text-danger">读取配置失败：{loadError.message}</p>
+                            <Button size="sm" variant="secondary" onClick={() => void form.reloadDiscard()}>
+                                <ActionMotionIcon icon={RefreshCw} size={13} />
+                                重试
+                            </Button>
+                        </div>
+                    </TabsContent>
+                ))}
+            </>
         );
     }
     if (!form.form) return null;

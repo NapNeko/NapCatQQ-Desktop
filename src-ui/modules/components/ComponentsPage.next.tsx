@@ -703,6 +703,9 @@ export const ComponentsPageNext: React.FC = () => {
                         host_id: draft.hostId,
                         display_name: draft.displayName,
                         port: draft.port ?? undefined,
+                        install_dir: draft.installDirOverride || undefined,
+                        install_renderer:
+                            draft.frameworkId === 'karin' ? draft.installRenderer : undefined,
                     });
                     if (draft.installNow) apps.install(created.id);
                     setCreateAppRequest(null);

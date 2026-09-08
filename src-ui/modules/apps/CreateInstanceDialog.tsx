@@ -2,7 +2,7 @@
 // 传 lockedHostId 时安装位置固定为该主机（组件页是主机主导视图）。
 
 import React, { useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { FolderOpen, Plus } from 'lucide-react';
 import {
     Button,
     Checkbox,
@@ -20,6 +20,8 @@ import {
 } from '../../shared/ui';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
 import type { useServerManager } from '../../hooks/remote/useServerManager';
+import { pickDirectory } from '../../core/ipc/transport';
+import { appFrameworkService } from '../../core/services/app-framework.service';
 import { hostIdDisplayLabel } from './hostLabel';
 import type { AppFrameworkManifest } from '../../core/ipc/types';
 
@@ -29,6 +31,8 @@ export interface CreateInstanceDraft {
     displayName: string;
     port: number | null;
     installNow: boolean;
+    installDirOverride: string | null;
+    installRenderer: boolean;
 }
 
 export interface CreateInstanceRequest {
@@ -49,6 +53,7 @@ export const CreateInstanceDialog: React.FC<{
     const [draft, setDraft] = useState<CreateInstanceDraft | null>(null);
     // 关闭动画期间保留内容，避免对话框在退场时先变空
     const [mounted, setMounted] = useState<CreateInstanceRequest | null>(null);
+    const [previewParent, setPreviewParent] = useState('');
 
     useEffect(() => {
         if (!request) return;
@@ -59,13 +64,33 @@ export const CreateInstanceDialog: React.FC<{
             displayName: '',
             port: request.manifest.default_port,
             installNow: true,
+            installDirOverride: null,
+            installRenderer: request.manifest.id === 'karin',
         });
     }, [request]);
+
+    useEffect(() => {
+        if (!draft) return;
+        let cancelled = false;
+        void appFrameworkService
+            .previewInstallDir(draft.hostId, draft.frameworkId)
+            .then((dir) => {
+                if (!cancelled) setPreviewParent(dir);
+            })
+            .catch(() => {
+                if (!cancelled) setPreviewParent('');
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [draft?.hostId, draft?.frameworkId]);
 
     const manifest = mounted?.manifest ?? null;
     const locked = mounted?.lockedHostId ?? null;
     const supportsLocal = manifest?.supported_placements.includes('local_native') ?? false;
     const supportsRemote = manifest?.supported_placements.includes('remote_native') ?? false;
+    const isRemote = draft?.hostId.startsWith('remote:') ?? false;
+    const isKarin = draft?.frameworkId === 'karin';
 
     const hostItems: SelectItem[] = locked
         ? [{ value: locked, label: hostIdDisplayLabel(locked, servers) }]
@@ -80,6 +105,13 @@ export const CreateInstanceDialog: React.FC<{
           ];
 
     const portInvalid = draft?.port != null && (draft.port < 1 || draft.port > 65535);
+    const remoteDirInvalid =
+        isRemote &&
+        draft?.installDirOverride != null &&
+        draft.installDirOverride.trim() !== '' &&
+        !draft.installDirOverride.trim().startsWith('/');
+
+    const defaultDisplay = previewParent ? `${previewParent}/<自动编号>` : '';
 
     return (
         <Dialog open={request !== null} onOpenChange={(o) => !o && !isCreating && onClose()}>
@@ -97,7 +129,9 @@ export const CreateInstanceDialog: React.FC<{
                                 label="安装位置"
                                 items={hostItems}
                                 value={draft.hostId}
-                                onValueChange={(v) => setDraft({ ...draft, hostId: v })}
+                                onValueChange={(v) =>
+                                    setDraft({ ...draft, hostId: v, installDirOverride: null })
+                                }
                                 disabled={locked !== null}
                                 hint={
                                     !locked && supportsRemote && servers.length === 0
@@ -121,6 +155,86 @@ export const CreateInstanceDialog: React.FC<{
                                 error={portInvalid ? '端口需在 1–65535 之间' : undefined}
                                 hint="留空则取默认端口，并自动避让同机已有实例"
                             />
+                            {isRemote ? (
+                                <TextField
+                                    label="安装目录"
+                                    placeholder={defaultDisplay}
+                                    value={draft.installDirOverride ?? ''}
+                                    onValueChange={(v) =>
+                                        setDraft({
+                                            ...draft,
+                                            installDirOverride: v.trim() === '' ? null : v,
+                                        })
+                                    }
+                                    error={remoteDirInvalid ? '远端路径必须是绝对路径' : undefined}
+                                    hint="目录必须为空或不存在；装完不能改路径"
+                                />
+                            ) : (
+                                <div className="flex flex-col gap-1.5">
+                                    <span className="text-xs font-medium text-text-secondary">
+                                        安装目录
+                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                        <TextField
+                                            className="min-w-0 flex-1"
+                                            aria-label="安装目录"
+                                            value={draft.installDirOverride ?? defaultDisplay}
+                                            readOnly
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="md"
+                                            className="shrink-0"
+                                            disabled={isCreating}
+                                            onClick={() => {
+                                                void pickDirectory('选择实例安装目录').then((dir) => {
+                                                    if (dir) {
+                                                        setDraft({
+                                                            ...draft,
+                                                            installDirOverride: dir,
+                                                        });
+                                                    }
+                                                });
+                                            }}
+                                        >
+                                            <FolderOpen size={14} strokeWidth={2.2} />
+                                            选择
+                                        </Button>
+                                    </div>
+                                    <p className="text-2xs leading-snug text-text-tertiary">
+                                        目录必须为空或不存在；装完不能改路径
+                                        {draft.installDirOverride != null && (
+                                            <>
+                                                {' · '}
+                                                <button
+                                                    type="button"
+                                                    disabled={isCreating}
+                                                    className="text-text-secondary underline-offset-2 hover:text-text hover:underline disabled:opacity-50"
+                                                    onClick={() =>
+                                                        setDraft({
+                                                            ...draft,
+                                                            installDirOverride: null,
+                                                        })
+                                                    }
+                                                >
+                                                    恢复默认
+                                                </button>
+                                            </>
+                                        )}
+                                    </p>
+                                </div>
+                            )}
+                            {isKarin && (
+                                <Checkbox
+                                    label="一并安装插件版渲染器"
+                                    hint="会额外下载 Chromium，体积较大"
+                                    checked={draft.installRenderer}
+                                    onCheckedChange={(c) =>
+                                        setDraft({ ...draft, installRenderer: c })
+                                    }
+                                />
+                            )}
                             <Checkbox
                                 label="创建后立即安装"
                                 hint={
@@ -139,7 +253,9 @@ export const CreateInstanceDialog: React.FC<{
                             <Button
                                 variant="primary"
                                 size="sm"
-                                disabled={isCreating || !draft.hostId || portInvalid}
+                                disabled={
+                                    isCreating || !draft.hostId || portInvalid || remoteDirInvalid
+                                }
                                 onClick={() => void onSubmit(draft).catch(() => undefined)}
                             >
                                 {isCreating ? (
