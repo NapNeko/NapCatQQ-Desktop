@@ -4,11 +4,13 @@
 use ncd_component::ComponentId;
 use ncd_deploy::StepKind;
 use ncd_domain::{
-    AppConfigDocument, AppConfigIssue, AppConfigText, AppFrameworkManifest, AppInstance,
-    AppInstanceId, BotId, CreateAppInstanceRequest, OneBotLinkPlan,
+    AppConfigDocument, AppConfigIssue, AppConfigText, AppFrameworkId, AppFrameworkManifest,
+    AppInstance, AppInstanceId, AppPluginAction, BotId, CreateAppInstanceRequest,
+    DeploymentTaskKind, DeploymentTaskResource, OneBotLinkPlan,
 };
 use ncd_runtime::{
     AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope, ComponentActionRequest,
+    DeploymentTaskRequest, KarinPluginInstalled, KarinPluginMarketEntry, run_app_plugin_task,
 };
 use ncd_traits::AppFrameworkError;
 use serde::Serialize;
@@ -95,6 +97,20 @@ pub async fn create_app_instance(
         .app_manager
         .create_instance(request)
         .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn preview_app_install_dir(
+    host_id: String,
+    framework_id: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    state
+        .app_manager
+        .preview_install_dir(&host_id, &AppFrameworkId::new(framework_id))
+        .await
+        .map(|p| p.as_posix().to_string())
         .map_err(|e| e.to_string())
 }
 
@@ -337,4 +353,133 @@ pub async fn get_app_instance_webui(
         .ok_or_else(|| "该应用端没有 WebUI".to_string())?;
     let auth_key = state.app_manager.webui_auth_key(&instance.id).await;
     Ok(AppInstanceWebUi { url, auth_key })
+}
+
+#[tauri::command]
+pub async fn list_karin_plugin_market(
+    state: State<'_, AppState>,
+) -> Result<Vec<KarinPluginMarketEntry>, String> {
+    state
+        .app_manager
+        .list_karin_plugin_market()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_app_plugin_config_docs(
+    instance_id: String,
+    plugin_name: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AppConfigDocument>, String> {
+    let id = AppInstanceId::new(instance_id);
+    let instance = state
+        .app_manager
+        .get_instance(&id)
+        .await
+        .map_err(|e| e.to_string())?;
+    let _ = resolve_host_with_autoconnect(&instance.host_id, &state).await?;
+    state
+        .app_manager
+        .list_plugin_config_docs(&id, &plugin_name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_app_instance_plugins(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<KarinPluginInstalled>, String> {
+    let id = AppInstanceId::new(instance_id);
+    let instance = state
+        .app_manager
+        .get_instance(&id)
+        .await
+        .map_err(|e| e.to_string())?;
+    let _ = resolve_host_with_autoconnect(&instance.host_id, &state).await?;
+    state
+        .app_manager
+        .list_plugins(&id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn submit_app_plugin_op(
+    instance_id: String,
+    plugin_name: String,
+    action: AppPluginAction,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let id = AppInstanceId::new(instance_id);
+    let instance = state
+        .app_manager
+        .get_instance(&id)
+        .await
+        .map_err(|e| e.to_string())?;
+    let _ = resolve_host_with_autoconnect(&instance.host_id, &state).await?;
+    let verb = match action {
+        AppPluginAction::Install => "安装",
+        AppPluginAction::Update => "更新",
+        AppPluginAction::Uninstall => "卸载",
+    };
+    let action_key = match action {
+        AppPluginAction::Install => "install",
+        AppPluginAction::Update => "update",
+        AppPluginAction::Uninstall => "uninstall",
+    };
+    let app_manager = std::sync::Arc::clone(&state.app_manager);
+    let run_id = instance.id.clone();
+    let run_name = plugin_name.clone();
+    let submitted = state
+        .deployment_tasks
+        .submit(DeploymentTaskRequest {
+            task_id: uuid::Uuid::new_v4().to_string(),
+            kind: DeploymentTaskKind::AppPlugin {
+                instance_id: instance.id.as_str().to_string(),
+                plugin_name: plugin_name.clone(),
+                action,
+            },
+            host_id: instance.host_id.clone(),
+            title: format!("Karin · {verb} {plugin_name}"),
+            resources: vec![DeploymentTaskResource::InstallTarget {
+                host_id: instance.host_id.clone(),
+                target: instance.install_dir.clone(),
+            }],
+            depends_on: vec![],
+            dedupe_key: Some(format!(
+                "app-plugin:{}:{}:{action_key}",
+                instance.id.as_str(),
+                plugin_name
+            )),
+            cancellable: true,
+            runner: Box::new(move |ctx| {
+                Box::pin(async move {
+                    run_app_plugin_task(app_manager, run_id, run_name, action, ctx).await
+                })
+            }),
+        })
+        .await;
+    Ok(submitted)
+}
+
+#[tauri::command]
+pub async fn set_app_plugin_enabled(
+    instance_id: String,
+    plugin_name: String,
+    enabled: bool,
+    overwrite: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<AppConfigWriteResult, AppConfigError> {
+    state
+        .app_manager
+        .set_plugin_enabled(
+            &AppInstanceId::new(instance_id),
+            &plugin_name,
+            enabled,
+            overwrite.unwrap_or(false),
+        )
+        .await
+        .map_err(AppConfigError::from)
 }
