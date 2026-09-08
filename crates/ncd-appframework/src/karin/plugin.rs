@@ -1138,7 +1138,7 @@ mod tests {
         let host = ncd_host::local::LocalWindowsHost::new();
         let inst = sample_instance(HostPath::from_windows(root.to_str().unwrap()));
         let list = KarinAdapter::new()
-            .list_installed(&host, &inst)
+            .list_installed(&host, &inst, ncd_domain::AppStoreResource::Plugin)
             .await
             .unwrap();
         let names: Vec<_> = list.iter().map(|p| p.name.as_str()).collect();
@@ -1178,7 +1178,7 @@ mod tests {
         let host = ncd_host::local::LocalWindowsHost::new();
         let inst = sample_instance(HostPath::from_windows(root.to_str().unwrap()));
         let list = KarinAdapter::new()
-            .list_installed(&host, &inst)
+            .list_installed(&host, &inst, ncd_domain::AppStoreResource::Plugin)
             .await
             .unwrap();
         assert!(list.iter().any(|p| p.name == "@karinjs/plugin-basic"));

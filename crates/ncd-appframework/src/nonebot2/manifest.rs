@@ -2,8 +2,8 @@
 //!
 //! - PyPI 包 `nonebot2[fastapi]`（ReverseDriver，默认驱动）+ `nonebot-adapter-onebot`；Python `>=3.9`
 //! - 项目 = `pyproject.toml`（`[tool.nonebot]` 声明适配器 / 插件）+ `bot.py` 入口
-//! - `.env` 只放 `ENVIRONMENT=prod`，其余进 `.env.prod`：`DRIVER=~fastapi`、`HOST`（默认 127.0.0.1）、
-//!   `PORT`（默认 8080）、`ONEBOT_ACCESS_TOKEN`（别名 `ONEBOT_V11_ACCESS_TOKEN`）
+//! - `.env` 只放 `ENVIRONMENT=prod`，其余进 `.env.prod`：`DRIVER=~fastapi`（正向适配器再并 `~httpx+~websockets`）、
+//!   `HOST`（默认 127.0.0.1）、`PORT`（默认 8080）、`ONEBOT_ACCESS_TOKEN`（别名 `ONEBOT_V11_ACCESS_TOKEN`）
 //! - OneBot V11 反向 WS 路径：`/onebot/v11/`、`/onebot/v11/ws`、`/onebot/v11/ws/` 三者等价
 //! - 没有 WebUI；正向 WS 需 `ONEBOT_WS_URLS`，首发不开
 //! - 桌面端不引入 nb-cli：脚手架文件很少，直接写；依赖用 `uv sync` 装进实例目录 `.venv`
@@ -23,7 +23,11 @@ pub const NONEBOT2_UV_VERSION_RANGE: &str = ">=0.4";
 
 /// PyPI 依赖（写进 pyproject.toml）
 pub const PYPI_NONEBOT2: &str = "nonebot2[fastapi]";
+/// 官方 QQ 等正向适配器要 HTTPClient / WebSocketClient mixin
+pub const PYPI_NONEBOT2_FORWARD: &str = "nonebot2[fastapi,httpx,websockets]";
 pub const PYPI_ADAPTER_ONEBOT: &str = "nonebot-adapter-onebot";
+/// `bot.py` 用 tomllib 读 toml；3.10 没有标准库 tomllib
+pub const PYPI_TOMLI: &str = "tomli; python_version < '3.11'";
 /// `uv.lock` 里的规范包名（用于探测版本）
 pub const LOCK_PACKAGE_NONEBOT2: &str = "nonebot2";
 
@@ -41,6 +45,8 @@ pub const ENV_HOST: &str = "HOST";
 pub const ENV_PORT: &str = "PORT";
 pub const ENV_ONEBOT_ACCESS_TOKEN: &str = "ONEBOT_ACCESS_TOKEN";
 pub const DRIVER_FASTAPI: &str = "~fastapi";
+pub const DRIVER_HTTPX: &str = "~httpx";
+pub const DRIVER_WEBSOCKETS: &str = "~websockets";
 
 /// 反向 WS 路径（三条等价，用带 ws 语义且与 Karin 一致的那条）
 pub const NONEBOT2_REVERSE_WS_PATH: &str = "/onebot/v11/ws";

@@ -8,7 +8,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
-    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, OneBotLinkPlan,
+    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppStoreResource,
+    OneBotLinkPlan,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
@@ -16,9 +17,8 @@ use ncd_traits::{AppFrameworkError, AppIntegration};
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, read_document, write_document_text,
 };
-use crate::karin::plugin::{
-    KarinPluginInstalled, KarinPluginKind, KarinPluginMarketEntry, PluginLogSink,
-};
+use crate::karin::plugin::PluginLogSink;
+use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 
 /// 为某个应用实例构造 Component 所需的输入（编排层填）
 #[derive(Debug, Clone)]
@@ -170,17 +170,18 @@ pub trait AppFrameworkAdapter: Send + Sync {
         &self,
         _host: &dyn Host,
         instance: &AppInstance,
-    ) -> Result<Vec<KarinPluginInstalled>, AppFrameworkError> {
+        _resource: AppStoreResource,
+    ) -> Result<Vec<AppStoreInstalled>, AppFrameworkError> {
         Err(AppFrameworkError::PluginUnsupported(
             instance.framework_id.as_str().to_string(),
         ))
     }
 
-    async fn install_plugin(
+    async fn install_store_item(
         &self,
         _host: &dyn Host,
         instance: &AppInstance,
-        _entry: &KarinPluginMarketEntry,
+        _entry: &AppStoreMarketEntry,
         _log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
         Err(AppFrameworkError::PluginUnsupported(
@@ -188,11 +189,11 @@ pub trait AppFrameworkAdapter: Send + Sync {
         ))
     }
 
-    async fn update_plugin(
+    async fn update_store_item(
         &self,
         _host: &dyn Host,
         instance: &AppInstance,
-        _entry: &KarinPluginMarketEntry,
+        _entry: &AppStoreMarketEntry,
         _log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
         Err(AppFrameworkError::PluginUnsupported(
@@ -200,13 +201,28 @@ pub trait AppFrameworkAdapter: Send + Sync {
         ))
     }
 
-    async fn uninstall_plugin(
+    async fn uninstall_store_item(
         &self,
         _host: &dyn Host,
         instance: &AppInstance,
-        _name: &str,
-        _kind: KarinPluginKind,
+        _id: &str,
+        _flavor: AppStoreFlavor,
+        _resource: AppStoreResource,
         _log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        Err(AppFrameworkError::PluginUnsupported(
+            instance.framework_id.as_str().to_string(),
+        ))
+    }
+
+    async fn set_store_enabled(
+        &self,
+        _host: &dyn Host,
+        instance: &AppInstance,
+        _id: &str,
+        _resource: AppStoreResource,
+        _enabled: bool,
+        _overwrite: bool,
     ) -> Result<(), AppFrameworkError> {
         Err(AppFrameworkError::PluginUnsupported(
             instance.framework_id.as_str().to_string(),

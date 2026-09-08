@@ -11,7 +11,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
-    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, OneBotLinkPlan,
+    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppStoreResource,
+    OneBotLinkPlan,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
@@ -29,6 +30,7 @@ pub use plugin::{
 use crate::adapter::{
     AppComponentSpec, AppFrameworkAdapter, apply_with_backup, restore_from_backup,
 };
+use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, MISSING_REVISION,
     combined_revision_of, read_document,
@@ -257,7 +259,11 @@ impl AppFrameworkAdapter for KarinAdapter {
         instance: &AppInstance,
         config: &AppInstanceConfig,
     ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        let AppInstanceConfig::Karin(karin) = config;
+        let AppInstanceConfig::Karin(karin) = config else {
+            return Err(AppFrameworkError::Validation(
+                "写入的不是 Karin 配置".to_string(),
+            ));
+        };
         let install_dir = HostPath::from_posix(&instance.install_dir);
         let (_, current) = config::read_karin_config(host, &install_dir).await?;
         let (config, snaps) =
@@ -269,39 +275,57 @@ impl AppFrameworkAdapter for KarinAdapter {
         &self,
         host: &dyn Host,
         instance: &AppInstance,
-    ) -> Result<Vec<plugin::KarinPluginInstalled>, AppFrameworkError> {
-        plugin::list_installed(host, instance).await
+        resource: AppStoreResource,
+    ) -> Result<Vec<AppStoreInstalled>, AppFrameworkError> {
+        if resource != AppStoreResource::Plugin {
+            return Ok(Vec::new());
+        }
+        Ok(plugin::list_installed(host, instance)
+            .await?
+            .into_iter()
+            .map(AppStoreInstalled::from_karin)
+            .collect())
     }
 
-    async fn install_plugin(
+    async fn install_store_item(
         &self,
         host: &dyn Host,
         instance: &AppInstance,
-        entry: &plugin::KarinPluginMarketEntry,
+        entry: &AppStoreMarketEntry,
         log: Option<&plugin::PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
-        plugin::install_plugin(host, instance, entry, log).await
+        let karin = entry.to_karin().ok_or_else(|| {
+            AppFrameworkError::Validation("Karin 不能安装 PyPI 条目".to_string())
+        })?;
+        plugin::install_plugin(host, instance, &karin, log).await
     }
 
-    async fn update_plugin(
+    async fn update_store_item(
         &self,
         host: &dyn Host,
         instance: &AppInstance,
-        entry: &plugin::KarinPluginMarketEntry,
+        entry: &AppStoreMarketEntry,
         log: Option<&plugin::PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
-        plugin::update_plugin(host, instance, entry, log).await
+        let karin = entry.to_karin().ok_or_else(|| {
+            AppFrameworkError::Validation("Karin 不能更新 PyPI 条目".to_string())
+        })?;
+        plugin::update_plugin(host, instance, &karin, log).await
     }
 
-    async fn uninstall_plugin(
+    async fn uninstall_store_item(
         &self,
         host: &dyn Host,
         instance: &AppInstance,
-        name: &str,
-        kind: plugin::KarinPluginKind,
+        id: &str,
+        flavor: AppStoreFlavor,
+        _resource: AppStoreResource,
         log: Option<&plugin::PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
-        plugin::uninstall_plugin(host, instance, name, kind, log).await
+        let kind = flavor.to_karin().ok_or_else(|| {
+            AppFrameworkError::Validation("Karin 不能卸载 PyPI 条目".to_string())
+        })?;
+        plugin::uninstall_plugin(host, instance, id, kind, log).await
     }
 
     async fn list_plugin_config_docs(

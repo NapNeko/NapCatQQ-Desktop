@@ -1,33 +1,49 @@
-//! NoneBot2 适配器：manifest + Component + Integration + `.env.prod` 写入。
-//!
-//! 第二个框架，验证「只加一个子目录 + 注册一行」：不碰 AppManager / BotManager / UI。
+//! NoneBot2 适配器：manifest + Component + Integration + 窄配置 + 官方商店。
 
 mod component;
+pub mod config;
+mod driver;
 mod integration;
 pub mod manifest;
+pub mod store;
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
-    AppConfigDocument, AppConfigFormat, AppFrameworkManifest, AppInstance, OneBotLinkPlan,
+    AppConfigDocument, AppFrameworkManifest, AppInstance, AppStoreResource, OneBotLinkPlan,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 pub use component::NoneBot2Component;
+pub use config::{NoneBot2EnvEntry, NoneBot2EnvProd, NoneBot2InstanceConfig};
 pub use integration::NoneBot2Integration;
 pub use manifest::{NONEBOT2_FRAMEWORK_ID, nonebot2_manifest};
+pub use store::{
+    ONEBOT_V11_MODULE, parse_nonebot_adapters_json, parse_nonebot_plugins_json,
+};
 
 use crate::adapter::{
     AppComponentSpec, AppFrameworkAdapter, apply_with_backup, restore_from_backup,
 };
-use crate::env_file::EnvFile;
-use manifest::{
-    ENV_ONEBOT_ACCESS_TOKEN, NONEBOT2_ENV_FILE, NONEBOT2_ENV_PROD_FILE, NONEBOT2_PYPROJECT,
-    NONEBOT2_STDOUT_LOG,
+use crate::config_doc::{
+    AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
 };
+use crate::env_file::EnvFile;
+use crate::karin::plugin::PluginLogSink;
+use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
+use config::nonebot2_config_documents;
+use manifest::{ENV_ONEBOT_ACCESS_TOKEN, NONEBOT2_ENV_PROD_FILE, NONEBOT2_STDOUT_LOG};
+
+fn envelope(config: NoneBot2InstanceConfig, snaps: &[DocumentSnapshot]) -> AppInstanceConfigEnvelope {
+    AppInstanceConfigEnvelope {
+        config: AppInstanceConfig::NoneBot2(config),
+        revision: combined_revision_of(snaps),
+        documents: snaps.iter().map(DocumentSnapshot::revision_entry).collect(),
+    }
+}
 
 pub struct NoneBot2Adapter {
     integration: NoneBot2Integration,
@@ -91,6 +107,8 @@ impl AppFrameworkAdapter for NoneBot2Adapter {
         spec: &AppComponentSpec,
         args: &LaunchArgs,
     ) -> Result<HostCommand, AppFrameworkError> {
+        store::ensure_dynamic_bot_py_at(host, &spec.install_dir, None).await?;
+        store::ensure_forward_driver_at(host, &spec.install_dir, None).await?;
         Self::component_for(spec)
             .resolve_launch_command(host, args)
             .await
@@ -146,19 +164,107 @@ impl AppFrameworkAdapter for NoneBot2Adapter {
         Some(HostPath::from_posix(&instance.install_dir).join(NONEBOT2_STDOUT_LOG))
     }
 
-    /// 首版只开原始文件（类型化模型留后续）；NoneBot2 三个文件都不热加载，改完要重启
     fn config_documents(&self, _instance: &AppInstance) -> Vec<AppConfigDocument> {
-        let d = |id: &str, rel: &str, format: AppConfigFormat| AppConfigDocument {
-            id: id.to_string(),
-            label: rel.to_string(),
-            rel_path: rel.to_string(),
-            format,
-            hot_reload: false,
+        nonebot2_config_documents()
+    }
+
+    async fn read_config(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
+        let install_dir = HostPath::from_posix(&instance.install_dir);
+        let (config, snaps) = config::read_nonebot2_config(host, &install_dir).await?;
+        Ok(envelope(config, &snaps))
+    }
+
+    async fn write_config(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        config: &AppInstanceConfig,
+    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
+        let AppInstanceConfig::NoneBot2(nb) = config else {
+            return Err(AppFrameworkError::Validation(
+                "写入的不是 NoneBot2 配置".to_string(),
+            ));
         };
-        vec![
-            d("env", NONEBOT2_ENV_FILE, AppConfigFormat::DotEnv),
-            d("env_prod", NONEBOT2_ENV_PROD_FILE, AppConfigFormat::DotEnv),
-            d("pyproject", NONEBOT2_PYPROJECT, AppConfigFormat::Toml),
-        ]
+        let install_dir = HostPath::from_posix(&instance.install_dir);
+        let (_, current) = config::read_nonebot2_config(host, &install_dir).await?;
+        let (config, snaps) =
+            config::write_nonebot2_config(host, &install_dir, nb, &current).await?;
+        Ok(envelope(config, &snaps))
+    }
+
+    async fn list_installed(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        resource: AppStoreResource,
+    ) -> Result<Vec<AppStoreInstalled>, AppFrameworkError> {
+        store::list_installed(host, instance, resource).await
+    }
+
+    async fn install_store_item(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        entry: &AppStoreMarketEntry,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        if entry.flavor != AppStoreFlavor::Pypi {
+            return Err(AppFrameworkError::Validation(
+                "NoneBot2 只能安装 PyPI 条目".into(),
+            ));
+        }
+        store::install_item(host, instance, entry, log).await
+    }
+
+    async fn update_store_item(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        entry: &AppStoreMarketEntry,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        if entry.flavor != AppStoreFlavor::Pypi {
+            return Err(AppFrameworkError::Validation(
+                "NoneBot2 只能更新 PyPI 条目".into(),
+            ));
+        }
+        store::update_item(host, instance, entry, log).await
+    }
+
+    async fn uninstall_store_item(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        id: &str,
+        _flavor: AppStoreFlavor,
+        resource: AppStoreResource,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        store::uninstall_item(host, instance, id, resource, log).await
+    }
+
+    async fn set_store_enabled(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        id: &str,
+        resource: AppStoreResource,
+        enabled: bool,
+        overwrite: bool,
+    ) -> Result<(), AppFrameworkError> {
+        store::set_enabled(host, instance, id, resource, enabled, overwrite).await
+    }
+
+    async fn list_plugin_config_docs(
+        &self,
+        _host: &dyn Host,
+        _instance: &AppInstance,
+        _plugin_name: &str,
+    ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
+        Ok(store::plugin_config_docs())
     }
 }

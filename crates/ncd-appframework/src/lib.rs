@@ -15,6 +15,7 @@ pub mod karin;
 pub mod node_tooling;
 pub mod nonebot2;
 pub mod registry;
+pub mod store;
 pub mod uv_tooling;
 
 pub use adapter::{AppComponentSpec, AppFrameworkAdapter, apply_with_backup, restore_from_backup};
@@ -32,7 +33,9 @@ pub use karin::plugin::{
 };
 pub use karin::{KARIN_FRAMEWORK_ID, KarinAdapter, KarinComponent, KarinIntegration, karin_manifest};
 pub use nonebot2::{
-    NONEBOT2_FRAMEWORK_ID, NoneBot2Adapter, NoneBot2Component, NoneBot2Integration,
-    nonebot2_manifest,
+    NONEBOT2_FRAMEWORK_ID, NoneBot2Adapter, NoneBot2Component, NoneBot2EnvEntry, NoneBot2EnvProd,
+    NoneBot2InstanceConfig, NoneBot2Integration, nonebot2_manifest, parse_nonebot_adapters_json,
+    parse_nonebot_plugins_json,
 };
 pub use registry::AppFrameworkRegistry;
+pub use store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};

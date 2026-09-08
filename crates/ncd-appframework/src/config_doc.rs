@@ -12,6 +12,7 @@ use ts_rs::TS;
 
 use crate::adapter::apply_with_backup;
 use crate::karin::config::KarinInstanceConfig;
+use crate::nonebot2::config::NoneBot2InstanceConfig;
 
 pub const MISSING_REVISION: &str = "missing";
 
@@ -21,6 +22,8 @@ pub const MISSING_REVISION: &str = "missing";
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum AppInstanceConfig {
     Karin(KarinInstanceConfig),
+    #[serde(rename = "nonebot2")]
+    NoneBot2(NoneBot2InstanceConfig),
 }
 
 impl AppInstanceConfig {
@@ -28,6 +31,7 @@ impl AppInstanceConfig {
     pub fn webui_auth_key(&self) -> &str {
         match self {
             Self::Karin(c) => c.env.http_auth_key.as_str(),
+            Self::NoneBot2(_) => "",
         }
     }
 }
@@ -248,6 +252,15 @@ pub fn render_json_pretty<T: Serialize>(value: &T) -> Result<String, AppFramewor
 mod tests {
     use super::*;
     use crate::karin::config::KarinInstanceConfig;
+
+    #[test]
+    fn nonebot2_framework_tag_is_literal_id() {
+        let cfg = AppInstanceConfig::NoneBot2(crate::nonebot2::config::NoneBot2InstanceConfig {
+            env_prod: crate::nonebot2::config::NoneBot2EnvProd::default(),
+        });
+        let v = serde_json::to_value(&cfg).unwrap();
+        assert_eq!(v["framework"], "nonebot2");
+    }
 
     #[test]
     fn webui_auth_key_reads_karin_http_auth() {

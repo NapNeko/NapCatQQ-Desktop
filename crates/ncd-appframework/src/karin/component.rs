@@ -360,10 +360,8 @@ impl KarinComponent {
             .map_err(|e| ActionError::install_step("write-env", e.to_string()))?;
         let mut env = EnvFile::parse(&text);
         env.set(ENV_HTTP_PORT, &self.port.to_string());
-        if host.locality() == Locality::Local {
-            // 本机只需同机对接 + 本机 WebUI，不暴露到局域网
-            env.set(ENV_HTTP_HOST, "127.0.0.1");
-        }
+        // 本机 / 远端都只绑 loopback：跨机对接走 SSH 隧道，WebUI 也走同一条
+        env.set(ENV_HTTP_HOST, "127.0.0.1");
         host.write_file(&env_path, env.render().as_bytes()).await?;
         Ok(())
     }

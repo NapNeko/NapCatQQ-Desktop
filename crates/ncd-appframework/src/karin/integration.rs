@@ -37,7 +37,7 @@ impl KarinIntegration {
         }
     }
 
-    /// 同机对接：协议 Bot 与 Karin 在同一台机器，走 loopback
+    /// 计划里的 loopback URL；跨机由 AppManager 改写成隧道口
     pub fn reverse_ws_url(instance: &AppInstance) -> String {
         format!("ws://127.0.0.1:{}{KARIN_REVERSE_WS_PATH}", instance.port)
     }

@@ -19,10 +19,31 @@ use std::time::Duration;
 use super::manifest::{
     DRIVER_FASTAPI, ENV_DRIVER, ENV_HOST, ENV_PORT, LOCK_PACKAGE_NONEBOT2, NONEBOT2_BOT_PY,
     NONEBOT2_ENV_FILE, NONEBOT2_ENV_PROD_FILE, NONEBOT2_PYPROJECT, NONEBOT2_PYTHON_REQUIRES,
-    NONEBOT2_UV_LOCK, NONEBOT2_UV_VERSION_RANGE, PYPI_ADAPTER_ONEBOT, PYPI_NONEBOT2,
+    NONEBOT2_UV_LOCK, NONEBOT2_UV_VERSION_RANGE, PYPI_ADAPTER_ONEBOT, PYPI_NONEBOT2, PYPI_TOMLI,
 };
 use crate::env_file::EnvFile;
 use crate::uv_tooling::{read_uv_marker, resolve_uv, venv_python, write_uv_marker};
+
+pub fn is_legacy_bot_py(text: &str) -> bool {
+    text.contains("from nonebot.adapters.onebot.v11 import")
+        || (text.contains("OneBotV11Adapter") && !text.contains("importlib"))
+}
+
+fn managed_bot_py_rev(text: &str) -> Option<u32> {
+    text.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix("# ncd-managed-bot-py:")?
+            .trim()
+            .parse()
+            .ok()
+    })
+}
+
+fn looks_like_ncd_dynamic_bot_py(text: &str) -> bool {
+    text.contains("def _register_adapters")
+        && text.contains("importlib.import_module")
+        && text.contains("load_from_toml")
+}
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
@@ -249,6 +270,7 @@ requires-python = "{NONEBOT2_PYTHON_REQUIRES}"
 dependencies = [
     "{PYPI_NONEBOT2}",
     "{PYPI_ADAPTER_ONEBOT}",
+    "{PYPI_TOMLI}",
 ]
 
 [tool.nonebot]
@@ -262,15 +284,56 @@ builtin_plugins = ["echo"]
         )
     }
 
+    /// 旧硬编码 V11、无版本戳的动态入口、或 `# ncd-managed-bot-py` 落后于当前模板，启动时重写
+    pub fn bot_py_needs_rewrite(text: &str) -> bool {
+        const BOT_PY_REV: u32 = 2;
+        if is_legacy_bot_py(text) {
+            return true;
+        }
+        match managed_bot_py_rev(text) {
+            Some(rev) => rev < BOT_PY_REV,
+            None => looks_like_ncd_dynamic_bot_py(text),
+        }
+    }
+
     pub fn render_bot_py() -> &'static str {
-        r#"import nonebot
-from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
+        // load_from_toml 只装插件;适配器按 toml 注册;非 V11 失败只跳过,避免一个适配器拖死对接
+        r#"# ncd-managed-bot-py:2
+import importlib
+import sys
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
+import nonebot
+
+_CRITICAL = frozenset({"nonebot.adapters.onebot.v11"})
+
+
+def _register_adapters(driver):
+    with open("pyproject.toml", "rb") as f:
+        data = tomllib.load(f)
+    for item in data.get("tool", {}).get("nonebot", {}).get("adapters", []):
+        module_name = item.get("module_name") if isinstance(item, dict) else None
+        if not module_name:
+            continue
+        try:
+            module = importlib.import_module(module_name)
+            adapter = getattr(module, "Adapter", None)
+            if adapter is None:
+                raise AttributeError("module has no Adapter")
+            driver.register_adapter(adapter)
+        except Exception as exc:
+            if module_name in _CRITICAL:
+                raise
+            print(f"[ncd] skip adapter {module_name}: {exc}", file=sys.stderr)
+
 
 nonebot.init()
-
 driver = nonebot.get_driver()
-driver.register_adapter(OneBotV11Adapter)
-
+_register_adapters(driver)
 nonebot.load_from_toml("pyproject.toml")
 
 if __name__ == "__main__":
@@ -290,9 +353,17 @@ if __name__ == "__main__":
             ),
         ];
         for (path, body) in files {
-            if !host.exists(&path).await? {
-                host.write_file(&path, body.as_bytes()).await?;
+            if host.exists(&path).await? {
+                if path.as_posix().ends_with(NONEBOT2_BOT_PY) {
+                    let current = host.read_file(&path).await?;
+                    let text = String::from_utf8_lossy(&current);
+                    if Self::bot_py_needs_rewrite(&text) {
+                        host.write_file(&path, body.as_bytes()).await?;
+                    }
+                }
+                continue;
             }
+            host.write_file(&path, body.as_bytes()).await?;
         }
         let plugins = self.install_dir.join("plugins");
         if !host.exists(&plugins).await? {
@@ -309,14 +380,18 @@ if __name__ == "__main__":
             .map(|b| String::from_utf8_lossy(&b).into_owned())
             .map_err(|e| ActionError::install_step("write-env", e.to_string()))?;
         let mut env = EnvFile::parse(&text);
-        env.set(ENV_DRIVER, DRIVER_FASTAPI);
-        env.set(ENV_PORT, &self.port.to_string());
-        if host.locality() == Locality::Local {
-            // 本机只需同机对接，不暴露到局域网（上游默认也是 127.0.0.1，这里显式写死）
-            env.set(ENV_HOST, "127.0.0.1");
-        }
+        Self::apply_listen_env(&mut env, self.port);
         host.write_file(&path, env.render().as_bytes()).await?;
         Ok(())
+    }
+
+    /// 只补 PORT / HOST;已有 DRIVER(含正向适配器并上的 httpx)不覆盖
+    pub fn apply_listen_env(env: &mut EnvFile, port: u16) {
+        if env.get(ENV_DRIVER).is_none_or(|v| v.trim().is_empty()) {
+            env.set(ENV_DRIVER, DRIVER_FASTAPI);
+        }
+        env.set(ENV_PORT, &port.to_string());
+        env.set(ENV_HOST, "127.0.0.1");
     }
 
     /// 从 `uv.lock` 取某包版本：`[[package]]` 块里 `name = "<pkg>"` 之后的 `version = "…"`
@@ -495,8 +570,15 @@ mod tests {
         assert!(text.contains("\"nonebot2[fastapi]\""));
         assert!(text.contains("\"nonebot-adapter-onebot\""));
         assert!(text.contains("module_name = \"nonebot.adapters.onebot.v11\""));
+        assert!(text.contains("tomli; python_version < '3.11'"));
         assert!(!text.contains("[build-system]"), "无 build-system → uv 视为虚拟项目，不打包");
-        assert!(NoneBot2Component::render_bot_py().contains("register_adapter(OneBotV11Adapter)"));
+        let bot = NoneBot2Component::render_bot_py();
+        assert!(bot.contains("# ncd-managed-bot-py:2"));
+        assert!(bot.contains("importlib.import_module"));
+        assert!(bot.contains("skip adapter"));
+        assert!(bot.contains("_CRITICAL"));
+        assert!(bot.contains("nonebot.adapters.onebot.v11"));
+        assert!(!bot.contains("from nonebot.adapters.onebot.v11 import"));
     }
 
     #[test]
@@ -531,5 +613,17 @@ version = "2.4.6"
         );
         assert_eq!(NoneBot2Component::lock_package_version(lock, "httpx"), None);
         assert_eq!(NoneBot2Component::lock_package_version("", "nonebot2"), None);
+    }
+
+    #[test]
+    fn listen_env_keeps_existing_driver() {
+        let mut env = EnvFile::parse("DRIVER=~fastapi+~httpx\nPORT=1\n");
+        NoneBot2Component::apply_listen_env(&mut env, 8081);
+        assert_eq!(env.get("DRIVER").as_deref(), Some("~fastapi+~httpx"));
+        assert_eq!(env.get("PORT").as_deref(), Some("8081"));
+        assert_eq!(env.get("HOST").as_deref(), Some("127.0.0.1"));
+        let mut empty = EnvFile::parse("");
+        NoneBot2Component::apply_listen_env(&mut empty, 9);
+        assert_eq!(empty.get("DRIVER").as_deref(), Some("~fastapi"));
     }
 }
