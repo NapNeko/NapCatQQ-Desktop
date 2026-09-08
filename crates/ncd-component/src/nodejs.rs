@@ -267,7 +267,7 @@ impl NodeJsComponent {
         crate::types::ComponentInfo {
             id: ComponentId::NodeJs,
             display_name: "Node.js".to_string(),
-            description: "SnowLuma 精简包与 Node 系应用端（Karin）所需的 Node.js 运行环境".to_string(),
+            description: "JavaScript 运行环境".to_string(),
             repo_url: Some("https://nodejs.org/".to_string()),
             supported_targets: vec![
                 crate::types::SupportedTarget::new(Os::Windows, Locality::Local),

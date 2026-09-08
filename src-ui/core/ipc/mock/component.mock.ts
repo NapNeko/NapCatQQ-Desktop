@@ -59,7 +59,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'nodejs',
         display_name: 'Node.js',
-        description: 'SnowLuma 精简包与 Node 系应用端（Karin）所需的 Node.js 运行环境',
+        description: 'JavaScript 运行环境',
         repo_url: 'https://nodejs.org',
         supported_targets: [
             { os: 'windows', locality: 'local' },
@@ -70,7 +70,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
     {
         id: 'uv',
         display_name: 'uv',
-        description: 'Python 系应用端（NoneBot2）所需的包管理与解释器工具链',
+        description: 'Python 包管理与解释器工具链',
         repo_url: 'https://github.com/astral-sh/uv',
         supported_targets: [
             { os: 'windows', locality: 'local' },

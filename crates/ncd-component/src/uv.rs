@@ -153,7 +153,7 @@ impl UvComponent {
         crate::types::ComponentInfo {
             id: ComponentId::Uv,
             display_name: "uv".to_string(),
-            description: "Python 系应用端（NoneBot2）所需的包管理与解释器工具链".to_string(),
+            description: "Python 包管理与解释器工具链".to_string(),
             repo_url: Some("https://github.com/astral-sh/uv".to_string()),
             supported_targets: SUPPORTED
                 .iter()
