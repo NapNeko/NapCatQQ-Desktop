@@ -59,7 +59,8 @@ pub use app_framework::{
     AppConfigWrite, AppFrameworkId, AppFrameworkManifest, AppInstance, AppInstanceId,
     AppInstanceState, AppLinkRecord, AppPlacement, CreateAppInstanceRequest, LOCAL_HOST_ID,
     OneBotEndpointExport, OneBotLinkMode, OneBotLinkPlan, REMOTE_HOST_ID_PREFIX,
-    app_link_connection_name, is_app_link_connection_name, runtime_target_matches_host,
+    AppLinkTopology, app_link_connection_name, classify_app_link, host_id_of_runtime_target,
+    is_app_link_connection_name, rewrite_ws_loopback_port, runtime_target_matches_host,
     server_id_of_host,
 };
 pub use bootstrap::{
@@ -90,8 +91,8 @@ pub use data_root_migrate::{
     DataRootRetiredMarker, DataRootTreeEntry,
 };
 pub use deployment_task::{
-    AppPluginAction, DeploymentTaskKind, DeploymentTaskList, DeploymentTaskResource,
-    DeploymentTaskSnapshot, DeploymentTaskStatus,
+    AppPluginAction, AppStoreResource, DeploymentTaskKind, DeploymentTaskList,
+    DeploymentTaskResource, DeploymentTaskSnapshot, DeploymentTaskStatus,
 };
 pub use docker::{
     ContainerAction, ContainerInfo, ContainerState, DeployedContainer, DockerDeploySpec,

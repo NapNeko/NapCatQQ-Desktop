@@ -18,6 +18,16 @@ pub enum AppPluginAction {
     Uninstall,
 }
 
+/// 商店资源：插件或适配器。缺省按插件，兼容旧任务快照。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AppStoreResource {
+    #[default]
+    Plugin,
+    Adapter,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -37,6 +47,8 @@ pub enum DeploymentTaskKind {
         instance_id: String,
         plugin_name: String,
         action: AppPluginAction,
+        #[serde(default)]
+        resource: AppStoreResource,
     },
 }
 
@@ -133,10 +145,29 @@ mod tests {
             instance_id: "k1".into(),
             plugin_name: "@karinjs/plugin-basic".into(),
             action: AppPluginAction::Install,
+            resource: AppStoreResource::Plugin,
         };
         let v = serde_json::to_value(&kind).unwrap();
         assert_eq!(v["kind"], "app_plugin");
         assert_eq!(v["action"], "install");
         assert_eq!(v["plugin_name"], "@karinjs/plugin-basic");
+        assert_eq!(v["resource"], "plugin");
+
+        let old = serde_json::json!({
+            "kind": "app_plugin",
+            "instance_id": "k1",
+            "plugin_name": "x",
+            "action": "update"
+        });
+        let back: DeploymentTaskKind = serde_json::from_value(old).unwrap();
+        assert_eq!(
+            back,
+            DeploymentTaskKind::AppPlugin {
+                instance_id: "k1".into(),
+                plugin_name: "x".into(),
+                action: AppPluginAction::Update,
+                resource: AppStoreResource::Plugin,
+            }
+        );
     }
 }

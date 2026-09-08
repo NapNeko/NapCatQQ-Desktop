@@ -163,12 +163,67 @@ pub fn server_id_of_host(host_id: &str) -> Option<&str> {
     host_id.strip_prefix(REMOTE_HOST_ID_PREFIX)
 }
 
-/// 协议 Bot 的 runtime_target 与应用实例 host_id 是否同机。首发只允许同机对接。
+/// 协议 Bot 的 runtime_target 与应用实例 host_id 是否同机。
 pub fn runtime_target_matches_host(target: &RuntimeTarget, host_id: &str) -> bool {
     match server_id_of_host(host_id) {
         None => target.is_local(),
         Some(server_id) => target.server_id() == Some(server_id),
     }
+}
+
+/// 对接拓扑。不看 `BackendType`：NapCat / SnowLuma 都走同一份 `websocket_clients`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppLinkTopology {
+    SameHost,
+    /// 本机协议 Bot → 远端应用：Desktop SSH `-L`
+    LocalBotRemoteApp,
+    /// 远端协议 Bot → 本机应用：Desktop SSH `-R`
+    RemoteBotLocalApp,
+    /// 远端协议 Bot → 另一台远端应用：应用机常驻 `ssh -R`（Desktop 只编排）
+    RemoteBotRemoteApp,
+}
+
+pub fn classify_app_link(bot_target: &RuntimeTarget, app_host_id: &str) -> Option<AppLinkTopology> {
+    if runtime_target_matches_host(bot_target, app_host_id) {
+        return Some(AppLinkTopology::SameHost);
+    }
+    if bot_target.is_local() && server_id_of_host(app_host_id).is_some() {
+        return Some(AppLinkTopology::LocalBotRemoteApp);
+    }
+    if !bot_target.is_local() && server_id_of_host(app_host_id).is_none() {
+        return Some(AppLinkTopology::RemoteBotLocalApp);
+    }
+    if !bot_target.is_local() && server_id_of_host(app_host_id).is_some() {
+        return Some(AppLinkTopology::RemoteBotRemoteApp);
+    }
+    None
+}
+
+/// `RuntimeTarget` → 实例 `host_id`（`local` / `remote:<id>`）
+pub fn host_id_of_runtime_target(target: &RuntimeTarget) -> String {
+    match target.server_id() {
+        Some(id) => format!("{REMOTE_HOST_ID_PREFIX}{id}"),
+        None => LOCAL_HOST_ID.to_string(),
+    }
+}
+
+/// 把 `ws://host:port/path` 改到 `127.0.0.1:<port>`；路径保留（Karin / NoneBot 各自的 /onebot/v11/ws）。
+pub fn rewrite_ws_loopback_port(url: &str, local_port: u16) -> Result<String, String> {
+    let (scheme, rest) = if let Some(rest) = url.strip_prefix("wss://") {
+        ("wss", rest)
+    } else if let Some(rest) = url.strip_prefix("ws://") {
+        ("ws", rest)
+    } else {
+        return Err("对接地址不是 WebSocket URL".into());
+    };
+    let (path, _authority) = match rest.split_once('/') {
+        Some((authority, path)) => (format!("/{path}"), authority),
+        None => (String::new(), rest),
+    };
+    if local_port == 0 {
+        return Err("隧道本地端口无效".into());
+    }
+    Ok(format!("{scheme}://127.0.0.1:{local_port}{path}"))
 }
 
 /// 写入协议 Bot 的连接名前缀；全名 `ncd-app:<instance_id>`，重复对接按名替换，解绑按名删。
@@ -198,7 +253,7 @@ pub struct AppFrameworkManifest {
     pub docs_url: Option<String>,
     /// 已开的 placement 子集
     pub supported_placements: Vec<AppPlacement>,
-    /// 新实例默认监听端口（同机多实例时由编排层递增避让）
+    /// 框架惯例端口（Karin 7777 / NoneBot 8080）。新建实例不再使用，只作文档兼容。
     #[ts(type = "number")]
     pub default_port: u16,
     /// 是否有可打开的 WebUI
@@ -247,6 +302,10 @@ pub struct AppLinkRecord {
     pub connection_name: String,
     #[ts(type = "number")]
     pub linked_at_ms: u64,
+    /// 两台远端常驻隧道在 Bot 机上的 loopback 听口；P0/P1 / 同机为 None
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub resident_forward_port: Option<u16>,
 }
 
 /// 应用端实例快照（控制台列表/状态用；持久化在 data_root/config/app-instances.json）。
@@ -304,7 +363,7 @@ pub struct CreateAppInstanceRequest {
     pub framework_id: AppFrameworkId,
     pub host_id: String,
     pub display_name: String,
-    /// None 则取 manifest 默认端口并避让同机已有实例
+    /// None 则随机分配高位端口，并避开同机已有实例（本机再探 bind）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub port: Option<u16>,
@@ -457,6 +516,46 @@ mod tests {
     }
 
     #[test]
+    fn classify_allows_local_bot_to_remote_app() {
+        assert_eq!(
+            classify_app_link(&RuntimeTarget::Local, "local"),
+            Some(AppLinkTopology::SameHost)
+        );
+        assert_eq!(
+            classify_app_link(&RuntimeTarget::Local, "remote:vps"),
+            Some(AppLinkTopology::LocalBotRemoteApp)
+        );
+        assert_eq!(
+            classify_app_link(&RuntimeTarget::server("vps"), "local"),
+            Some(AppLinkTopology::RemoteBotLocalApp)
+        );
+        assert_eq!(
+            classify_app_link(&RuntimeTarget::server("a"), "remote:b"),
+            Some(AppLinkTopology::RemoteBotRemoteApp)
+        );
+    }
+
+    #[test]
+    fn classify_same_remote_host_is_not_p2() {
+        assert_eq!(
+            classify_app_link(&RuntimeTarget::server("vps"), "remote:vps"),
+            Some(AppLinkTopology::SameHost)
+        );
+    }
+
+    #[test]
+    fn rewrite_ws_keeps_framework_path() {
+        assert_eq!(
+            rewrite_ws_loopback_port("ws://127.0.0.1:32100/onebot/v11/ws", 47011).unwrap(),
+            "ws://127.0.0.1:47011/onebot/v11/ws"
+        );
+        assert_eq!(
+            rewrite_ws_loopback_port("ws://127.0.0.1:8080/", 9).unwrap(),
+            "ws://127.0.0.1:9/"
+        );
+    }
+
+    #[test]
     fn app_instance_round_trips_and_omits_empty_optionals() {
         let inst = AppInstance {
             id: AppInstanceId::new("k1"),
@@ -480,6 +579,30 @@ mod tests {
         assert_eq!(back, inst);
         assert!(back.is_local());
         assert_eq!(back.server_id(), None);
+    }
+
+    #[test]
+    fn link_record_omits_resident_port_and_accepts_legacy_json() {
+        let rec = AppLinkRecord {
+            bot_id: BotId::new("10001"),
+            mode: OneBotLinkMode::ReverseWs,
+            connection_name: "ncd-app:k1".into(),
+            linked_at_ms: 1,
+            resident_forward_port: None,
+        };
+        let json = serde_json::to_string(&rec).unwrap();
+        assert!(!json.contains("resident_forward_port"));
+        let legacy: AppLinkRecord = serde_json::from_str(
+            r#"{"bot_id":"10001","mode":"reverse_ws","connection_name":"ncd-app:k1","linked_at_ms":1}"#,
+        )
+        .unwrap();
+        assert_eq!(legacy, rec);
+        let with_port = AppLinkRecord {
+            resident_forward_port: Some(21001),
+            ..rec.clone()
+        };
+        let v = serde_json::to_value(&with_port).unwrap();
+        assert_eq!(v["resident_forward_port"], 21001);
     }
 
     #[test]
