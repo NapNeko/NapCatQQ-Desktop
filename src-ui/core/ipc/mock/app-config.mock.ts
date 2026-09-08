@@ -256,6 +256,14 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
 
         readConfigText: async (instanceId: string, docId: string): Promise<AppConfigText> => {
             const inst = requireInstalled(instanceId);
+            if (docId.startsWith('plugin:')) {
+                const s = karinState(inst);
+                return withMockDelay({
+                    doc_id: docId,
+                    text: s.rawOverride[docId] ?? '{\n  \n}\n',
+                    revision: rev(s.docRev[docId] ?? 0),
+                });
+            }
             if (inst.framework_id === 'karin') {
                 const s = karinState(inst);
                 return withMockDelay({ doc_id: docId, text: karinDocText(s, docId), revision: rev(s.docRev[docId] ?? 0) });
@@ -275,6 +283,23 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             baseRevision: string | null,
         ): Promise<AppConfigText> => {
             const inst = requireInstalled(instanceId);
+            if (docId.startsWith('plugin:')) {
+                try {
+                    JSON.parse(text);
+                } catch (e) {
+                    throw makeAppConfigError('invalid', `JSON 语法错误: ${(e as Error).message}`, [
+                        { path: 'text', message: `JSON 语法错误: ${(e as Error).message}` },
+                    ]);
+                }
+                const s = karinState(inst);
+                const current = rev(s.docRev[docId] ?? 0);
+                if (baseRevision != null && baseRevision !== current) {
+                    throw makeAppConfigError('conflict', `配置已被修改（${docId}），请重新加载后再保存`);
+                }
+                s.docRev[docId] = (s.docRev[docId] ?? 0) + 1;
+                s.rawOverride[docId] = text;
+                return withMockDelay({ doc_id: docId, text, revision: rev(s.docRev[docId]) });
+            }
             const docs = inst.framework_id === 'karin' ? KARIN_DOCS : NONEBOT2_DOCS;
             const doc = docs.find((d) => d.id === docId);
             if (!doc) throw makeAppConfigError('other', `未知的配置文档: ${docId}`);

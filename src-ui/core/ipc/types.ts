@@ -71,6 +71,13 @@ export type { AppFrameworkManifest } from './generated/domain/AppFrameworkManife
 export type { AppLinkRecord } from './generated/domain/AppLinkRecord';
 export type { AppConfigWrite } from './generated/domain/AppConfigWrite';
 export type { CreateAppInstanceRequest } from './generated/domain/CreateAppInstanceRequest';
+export type { AppPluginAction } from './generated/domain/AppPluginAction';
+export type { KarinPluginKind } from './generated/domain/KarinPluginKind';
+export type { KarinPluginAuthor } from './generated/domain/KarinPluginAuthor';
+export type { KarinPluginRepo } from './generated/domain/KarinPluginRepo';
+export type { KarinPluginAppFile } from './generated/domain/KarinPluginAppFile';
+export type { KarinPluginMarketEntry } from './generated/domain/KarinPluginMarketEntry';
+export type { KarinPluginInstalled } from './generated/domain/KarinPluginInstalled';
 export type { OneBotLinkMode } from './generated/domain/OneBotLinkMode';
 export type { OneBotLinkPlan } from './generated/domain/OneBotLinkPlan';
 export type { AppInstanceWebUi } from './generated/AppInstanceWebUi';

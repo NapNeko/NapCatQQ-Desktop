@@ -2,12 +2,18 @@
 // 真 IPC 实装在 core/services/app-framework.service.ts。
 
 import type {
+    AppConfigDocument,
+    AppConfigWriteResult,
     AppFrameworkManifest,
     AppInstance,
     AppInstanceWebUi,
+    AppPluginAction,
     CreateAppInstanceRequest,
+    KarinPluginInstalled,
+    KarinPluginMarketEntry,
     OneBotLinkPlan,
 } from '../types';
+import { karinDefaultConfig } from '../../domain/apps/karinConfig';
 import { emitMockEvent } from './events.mock';
 import { withMockDelay } from './bootstrap.mock';
 import { createMockAppConfigApi, peekKarinHttpAuthKey, syncKarinLinkToken } from './app-config.mock';
@@ -59,6 +65,7 @@ let instances: AppInstance[] = [
         },
         installed_version: '1.17.0',
         created_at_ms: Date.now() - 86_400_000,
+        install_renderer: true,
     },
     {
         id: 'd5e6f7a8',
@@ -70,6 +77,7 @@ let instances: AppInstance[] = [
         port: 7777,
         state: 'not_installed',
         created_at_ms: Date.now() - 600_000,
+        install_renderer: true,
     },
     {
         id: 'n9b8c7d6',
@@ -82,6 +90,7 @@ let instances: AppInstance[] = [
         state: 'stopped',
         installed_version: '2.4.2',
         created_at_ms: Date.now() - 7_200_000,
+        install_renderer: true,
     },
 ];
 
@@ -100,6 +109,13 @@ export const mockAppFrameworkApi = {
     listFrameworks: () => withMockDelay(mockAppFrameworks),
     listInstances: () => withMockDelay(instances.slice()),
 
+    previewInstallDir: async (hostId: string, frameworkId: string): Promise<string> =>
+        withMockDelay(
+            hostId === 'local'
+                ? `D:/NapCatQQ/apps/${frameworkId}`
+                : `/home/ubuntu/ncd/apps/${frameworkId}`,
+        ),
+
     create: async (req: CreateAppInstanceRequest): Promise<AppInstance> => {
         const id = Math.random().toString(16).slice(2, 10);
         const manifest = mockAppFrameworks.find((m) => m.id === req.framework_id);
@@ -111,12 +127,14 @@ export const mockAppFrameworkApi = {
             placement: req.host_id === 'local' ? 'local_native' : 'remote_native',
             host_id: req.host_id,
             install_dir:
-                req.host_id === 'local'
+                req.install_dir ||
+                (req.host_id === 'local'
                     ? `D:/NapCatQQ/apps/${req.framework_id}/${id}`
-                    : `/home/ubuntu/ncd/apps/${req.framework_id}/${id}`,
+                    : `/home/ubuntu/ncd/apps/${req.framework_id}/${id}`),
             port: req.port ?? manifest?.default_port ?? 7777,
             state: 'not_installed',
             created_at_ms: Date.now(),
+            install_renderer: req.install_renderer ?? true,
         };
         instances = [...instances, created];
         emitMockEvent({ kind: 'app_instance_changed', instance: created, reason: 'created' });
@@ -223,4 +241,151 @@ export const mockAppFrameworkApi = {
     },
 
     ...createMockAppConfigApi({ require, publish }),
+
+    listPluginConfigDocs: async (
+        instanceId: string,
+        pluginName: string,
+    ): Promise<AppConfigDocument[]> => {
+        require(instanceId);
+        const dir = pluginName.replaceAll('/', '-');
+        return withMockDelay([
+            {
+                id: `plugin:${pluginName}:config/config.json`,
+                label: 'config.json',
+                rel_path: `@karinjs/${dir}/config/config.json`,
+                format: 'json',
+                hot_reload: true,
+            },
+        ]);
+    },
+
+    listPluginMarket: () => withMockDelay(mockPluginMarket.slice()),
+
+    listPlugins: async (instanceId: string): Promise<KarinPluginInstalled[]> => {
+        require(instanceId);
+        return withMockDelay(mockInstalledFor(instanceId));
+    },
+
+    submitPluginOp: async (
+        instanceId: string,
+        pluginName: string,
+        action: AppPluginAction,
+    ): Promise<string> => {
+        require(instanceId);
+        applyMockPluginOp(instanceId, pluginName, action);
+        return withMockDelay(`mock-plugin-${instanceId}-${pluginName}`);
+    },
+
+    setPluginEnabled: async (
+        instanceId: string,
+        pluginName: string,
+        enabled: boolean,
+        _overwrite?: boolean,
+    ): Promise<AppConfigWriteResult> => {
+        require(instanceId);
+        const list = mockInstalledFor(instanceId);
+        const next = list.map((p) => (p.name === pluginName ? { ...p, enabled } : p));
+        mockInstalled.set(instanceId, next);
+        const config = karinDefaultConfig(require(instanceId).port);
+        return withMockDelay({
+            config: { framework: 'karin', data: config },
+            revision: 'mock-r-plugin',
+            documents: [],
+            restart_required: false,
+            relinked: false,
+            port_changed: false,
+        });
+    },
 };
+
+const mockPluginMarket: KarinPluginMarketEntry[] = [
+    {
+        name: '@karinjs/plugin-basic',
+        type: 'npm',
+        description: 'Karin 基础插件',
+        time: '2025-01-19 10:00:00',
+        home: 'https://github.com/karinjs/karin-plugin-basic',
+        author: [{ name: 'shijin', home: 'https://github.com/sj817' }],
+        repo: [
+            {
+                url: 'https://github.com/karinjs/karin-plugin-basic',
+                type: 'github',
+                branch: 'main',
+            },
+        ],
+        files: [],
+        allowBuild: [],
+    },
+    {
+        name: 'karin-plugin-example-git',
+        type: 'git',
+        description: '示例 git 插件',
+        time: '2025-03-01 12:00:00',
+        home: 'https://github.com/karinjs/karin-plugin-example',
+        author: [{ name: 'KarinJS', home: 'https://github.com/KarinJS' }],
+        repo: [
+            {
+                url: 'https://github.com/karinjs/karin-plugin-example',
+                type: 'github',
+                branch: 'main',
+            },
+        ],
+        files: [],
+        allowBuild: [],
+    },
+    {
+        name: '@karinjs/plugin-puppeteer',
+        type: 'npm',
+        description: '插件版渲染器',
+        time: '2025-04-01 09:00:00',
+        home: 'https://github.com/karinjs/plugin-puppeteer',
+        author: [{ name: 'KarinJS', home: 'https://github.com/KarinJS' }],
+        repo: [
+            {
+                url: 'https://github.com/karinjs/plugin-puppeteer',
+                type: 'github',
+                branch: 'main',
+            },
+        ],
+        files: [],
+        allowBuild: [],
+    },
+];
+
+const mockInstalled = new Map<string, KarinPluginInstalled[]>();
+
+function mockInstalledFor(instanceId: string): KarinPluginInstalled[] {
+    if (!mockInstalled.has(instanceId)) {
+        mockInstalled.set(instanceId, [
+            {
+                name: '@karinjs/plugin-puppeteer',
+                kind: 'npm',
+                version: '1.2.0',
+                enabled: true,
+            },
+        ]);
+    }
+    return mockInstalled.get(instanceId) ?? [];
+}
+
+function applyMockPluginOp(instanceId: string, pluginName: string, action: AppPluginAction) {
+    const current = mockInstalledFor(instanceId);
+    const market = mockPluginMarket.find((e) => e.name === pluginName);
+    if (action === 'uninstall') {
+        mockInstalled.set(
+            instanceId,
+            current.filter((p) => p.name !== pluginName),
+        );
+        return;
+    }
+    if (current.some((p) => p.name === pluginName)) return;
+    mockInstalled.set(instanceId, [
+        ...current,
+        {
+            name: pluginName,
+            kind: market?.type ?? 'npm',
+            version: action === 'update' ? 'latest' : '1.0.0',
+            enabled: true,
+        },
+    ]);
+}

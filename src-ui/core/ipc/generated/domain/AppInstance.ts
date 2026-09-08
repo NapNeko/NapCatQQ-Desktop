@@ -24,4 +24,8 @@ port: number, state: AppInstanceState,
 /**
  * 已对接的协议 Bot；未对接为 None
  */
-link?: AppLinkRecord, installed_version?: string, last_error?: string, created_at_ms: number, };
+link?: AppLinkRecord, installed_version?: string, last_error?: string, created_at_ms: number, 
+/**
+ * Karin：创建时是否一并装 `@karinjs/plugin-puppeteer`。旧快照缺字段视为 true。
+ */
+install_renderer: boolean, };

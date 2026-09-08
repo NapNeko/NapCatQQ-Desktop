@@ -8,4 +8,12 @@ export type CreateAppInstanceRequest = { framework_id: AppFrameworkId, host_id: 
 /**
  * None 则取 manifest 默认端口并避让同机已有实例
  */
-port?: number, };
+port?: number, 
+/**
+ * 实例根（HostPath POSIX 或本机 Windows 路径，由编排层规范化）。None = 默认根。
+ */
+install_dir?: string, 
+/**
+ * 仅 Karin 有意义；None 视为 true。
+ */
+install_renderer?: boolean, };
