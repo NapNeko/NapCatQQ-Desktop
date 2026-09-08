@@ -91,6 +91,9 @@ pub enum AppFrameworkError {
     /// 该框架没有类型化配置（只能走原始文件）
     #[error("该应用端暂不支持类型化配置: {0}")]
     ConfigUnsupported(String),
+
+    #[error("该应用端暂不支持插件代管: {0}")]
+    PluginUnsupported(String),
 }
 
 fn format_issues(issues: &[AppConfigIssue]) -> String {
