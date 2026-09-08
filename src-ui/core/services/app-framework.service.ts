@@ -12,6 +12,9 @@ import type {
     AppInstanceConfigEnvelope,
     AppInstanceWebUi,
     AppPluginAction,
+    AppStoreInstalled,
+    AppStoreMarketEntry,
+    AppStoreResource,
     CreateAppInstanceRequest,
     KarinPluginInstalled,
     KarinPluginMarketEntry,
@@ -139,6 +142,22 @@ export const appFrameworkService = {
         return invoke<KarinPluginMarketEntry[]>('list_karin_plugin_market');
     },
 
+    listStore: async (
+        frameworkId: string,
+        resource: AppStoreResource,
+    ): Promise<AppStoreMarketEntry[]> => {
+        if (!isTauri) return mockAppFrameworkApi.listStore(frameworkId, resource);
+        return invoke<AppStoreMarketEntry[]>('list_app_store', { frameworkId, resource });
+    },
+
+    listStoreInstalled: async (
+        instanceId: string,
+        resource: AppStoreResource,
+    ): Promise<AppStoreInstalled[]> => {
+        if (!isTauri) return mockAppFrameworkApi.listStoreInstalled(instanceId, resource);
+        return invoke<AppStoreInstalled[]>('list_app_store_installed', { instanceId, resource });
+    },
+
     listPluginConfigDocs: async (
         instanceId: string,
         pluginName: string,
@@ -159,9 +178,17 @@ export const appFrameworkService = {
         instanceId: string,
         pluginName: string,
         action: AppPluginAction,
+        resource?: AppStoreResource,
     ): Promise<string> => {
-        if (!isTauri) return mockAppFrameworkApi.submitPluginOp(instanceId, pluginName, action);
-        return invoke<string>('submit_app_plugin_op', { instanceId, pluginName, action });
+        if (!isTauri) {
+            return mockAppFrameworkApi.submitPluginOp(instanceId, pluginName, action, resource);
+        }
+        return invoke<string>('submit_app_plugin_op', {
+            instanceId,
+            pluginName,
+            action,
+            resource: resource ?? null,
+        });
     },
 
     setPluginEnabled: async (
@@ -169,15 +196,23 @@ export const appFrameworkService = {
         pluginName: string,
         enabled: boolean,
         overwrite?: boolean,
+        resource?: AppStoreResource,
     ): Promise<AppConfigWriteResult> => {
         if (!isTauri) {
-            return mockAppFrameworkApi.setPluginEnabled(instanceId, pluginName, enabled, overwrite);
+            return mockAppFrameworkApi.setPluginEnabled(
+                instanceId,
+                pluginName,
+                enabled,
+                overwrite,
+                resource,
+            );
         }
         return invoke<AppConfigWriteResult>('set_app_plugin_enabled', {
             instanceId,
             pluginName,
             enabled,
             overwrite: overwrite ?? null,
+            resource: resource ?? null,
         });
     },
 };

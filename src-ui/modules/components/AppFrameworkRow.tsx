@@ -90,8 +90,6 @@ export const AppFrameworkRow: React.FC<AppFrameworkRowProps> = ({
     if (instances.length > 0) {
         if (running > 0) metaParts.push(`运行中 ${running}`);
         if (linked > 0) metaParts.push(`已对接 ${linked}`);
-    } else {
-        metaParts.push(`默认端口 ${manifest.default_port}`);
     }
     for (const dep of runtimeDeps) {
         metaParts.push(

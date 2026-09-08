@@ -62,7 +62,7 @@ export const CreateInstanceDialog: React.FC<{
             frameworkId: request.manifest.id,
             hostId: request.lockedHostId ?? 'local',
             displayName: '',
-            port: request.manifest.default_port,
+            port: null,
             installNow: true,
             installDirOverride: null,
             installRenderer: request.manifest.id === 'karin',
@@ -153,7 +153,7 @@ export const CreateInstanceDialog: React.FC<{
                                 value={draft.port}
                                 onValueChange={(v) => setDraft({ ...draft, port: v })}
                                 error={portInvalid ? '端口需在 1–65535 之间' : undefined}
-                                hint="留空则取默认端口，并自动避让同机已有实例"
+                                hint="留空则随机分配高位端口，并避开同机已有实例"
                             />
                             {isRemote ? (
                                 <TextField

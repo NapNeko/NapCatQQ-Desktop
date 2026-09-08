@@ -1,4 +1,4 @@
-// 应用端实例详情：头部 + Tabs + 粘性保存。Karin 走类型化 Tab，其它框架只有原始文件 / 日志。
+// 应用端实例详情：头部 + Tabs + 粘性保存。Karin 走类型化 Tab；NoneBot2 走适配器/插件店 + 窄连接。
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -49,11 +49,21 @@ import { KarinPermissionsTab } from './karin/KarinPermissionsTab';
 import { KarinRenderStorageTab } from './karin/KarinRenderStorageTab';
 import { KarinPluginsTab } from './karin/KarinPluginsTab';
 import { KarinRulesTab } from './karin/KarinRulesTab';
+import { NoneBot2ConnectionsTab } from './nonebot2/NoneBot2ConnectionsTab';
+import { NoneBot2StoreTab } from './nonebot2/NoneBot2StoreTab';
+import { useNoneBot2ConfigForm } from './useNoneBot2ConfigForm';
 import type { DetailTabHint } from '../list/AppInstanceListPage';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
 
 type KarinTab = 'basic' | 'permissions' | 'connections' | 'rules' | 'render' | 'plugins';
-type TabValue = KarinTab | 'raw' | 'log';
+type NoneBotTab = 'adapters' | 'plugins' | 'connections';
+type TabValue = KarinTab | NoneBotTab | 'raw' | 'log';
+
+const NONEBOT_TABS: ReadonlyArray<{ value: NoneBotTab; label: string }> = [
+    { value: 'adapters', label: '适配器' },
+    { value: 'plugins', label: '插件' },
+    { value: 'connections', label: '连接' },
+];
 
 const KARIN_TABS: ReadonlyArray<{ value: KarinTab; label: string }> = [
     { value: 'basic', label: '基础' },
@@ -64,10 +74,12 @@ const KARIN_TABS: ReadonlyArray<{ value: KarinTab; label: string }> = [
     { value: 'plugins', label: '插件' },
 ];
 
-const TYPED_TABS = new Set<string>(['basic', 'permissions', 'connections', 'rules', 'render']);
+const KARIN_TYPED_TABS = new Set<string>(['basic', 'permissions', 'connections', 'rules', 'render']);
+const NONEBOT_TYPED_TABS = new Set<string>(['connections']);
 
 /** 校验 issue 的 path 前缀 → 所在 Tab，保存被驳回时跳过去。 */
-function tabForIssuePath(path: string): KarinTab {
+function tabForIssuePath(path: string, nonebot: boolean): TabValue {
+    if (nonebot) return 'connections';
     const root = path.split('/')[0];
     switch (root) {
         case 'config':
@@ -111,21 +123,26 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
     );
 
     const isKarin = instance?.framework_id === 'karin';
+    const isNoneBot2 = instance?.framework_id === 'nonebot2';
     const installed = !!instance && isInstalled(instance);
     const running = instance?.state === 'running';
-    const typedEnabled = isKarin && installed;
+    const karinTyped = isKarin && installed;
+    const nonebotTyped = isNoneBot2 && installed;
 
-    const form = useKarinConfigForm(instanceId, typedEnabled, instance?.display_name ?? '');
+    const form = useKarinConfigForm(instanceId, karinTyped, instance?.display_name ?? '');
+    const nbForm = useNoneBot2ConfigForm(instanceId, nonebotTyped, instance?.display_name ?? '');
 
     const defaultTab: TabValue =
-        initialTab === 'log' ? 'log' : typedEnabled ? 'basic' : 'raw';
+        initialTab === 'log' ? 'log' : karinTyped ? 'basic' : nonebotTyped ? 'adapters' : 'raw';
     const [activeTab, setActiveTab] = useState<TabValue>(defaultTab);
     // 详情页刚打开时实例列表可能还没到；到了之后按框架修正默认 Tab（仅在用户没手动切过时）
     const [userSwitched, setUserSwitched] = useState(false);
     useEffect(() => {
         if (userSwitched || !instance) return;
-        setActiveTab(initialTab === 'log' ? 'log' : typedEnabled ? 'basic' : 'raw');
-    }, [instance, typedEnabled, initialTab, userSwitched]);
+        setActiveTab(
+            initialTab === 'log' ? 'log' : karinTyped ? 'basic' : nonebotTyped ? 'adapters' : 'raw',
+        );
+    }, [instance, karinTyped, nonebotTyped, initialTab, userSwitched]);
 
     const [linkOpen, setLinkOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -134,11 +151,11 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
         const first = issues[0];
         if (!first) return;
         setUserSwitched(true);
-        setActiveTab(tabForIssuePath(first.path));
+        setActiveTab(tabForIssuePath(first.path, isNoneBot2));
     };
 
     const handleSave = async (overwrite = false) => {
-        const outcome = await form.save(overwrite);
+        const outcome = isNoneBot2 ? await nbForm.save(overwrite) : await form.save(overwrite);
         if (outcome.kind === 'invalid') jumpToFirstIssue(outcome.issues);
     };
 
@@ -164,8 +181,15 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
     }
 
     const busy = apps.pendingId === instance.id || instance.state === 'installing';
-    const showSaveBar = typedEnabled && TYPED_TABS.has(activeTab);
-    const fillPane = activeTab === 'raw' || activeTab === 'log' || activeTab === 'plugins';
+    const activeForm = isNoneBot2 ? nbForm : form;
+    const showSaveBar =
+        (karinTyped && KARIN_TYPED_TABS.has(activeTab))
+        || (nonebotTyped && NONEBOT_TYPED_TABS.has(activeTab));
+    const fillPane =
+        activeTab === 'raw'
+        || activeTab === 'log'
+        || activeTab === 'plugins'
+        || activeTab === 'adapters';
 
     return (
         <TooltipProvider delayDuration={200}>
@@ -194,11 +218,6 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                                     .filter(Boolean)
                                     .join(' · ')}
                             </p>
-                            {instance.last_error && (
-                                <p className="text-2xs text-danger" title={instance.last_error}>
-                                    {instance.last_error}
-                                </p>
-                            )}
                         </div>
                     </div>
 
@@ -265,8 +284,14 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                         >
                             <div className="sticky top-0 z-[5] flex items-center justify-between gap-2 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
                                 <TabsList className="scrollbar-hide min-w-0 shrink overflow-x-auto border-b-0">
-                                    {typedEnabled &&
+                                    {karinTyped &&
                                         KARIN_TABS.map((t) => (
+                                            <TabsTrigger key={t.value} value={t.value}>
+                                                {t.label}
+                                            </TabsTrigger>
+                                        ))}
+                                    {nonebotTyped &&
+                                        NONEBOT_TABS.map((t) => (
                                             <TabsTrigger key={t.value} value={t.value}>
                                                 {t.label}
                                             </TabsTrigger>
@@ -276,29 +301,46 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                                 </TabsList>
                                 <div className="ml-auto flex min-w-0 items-center justify-end gap-2">
                                     <div
-                                        id="karin-plugins-toolbar-slot"
+                                        id="app-store-toolbar-slot"
                                         className="flex min-w-0 items-center justify-end"
                                     />
                                     {showSaveBar && (
                                         <SaveActions
-                                            dirty={form.dirty}
-                                            saving={form.saving}
-                                            issueCount={form.clientIssues.length}
+                                            dirty={activeForm.dirty}
+                                            saving={activeForm.saving}
+                                            issueCount={activeForm.clientIssues.length}
                                             onSave={() => void handleSave()}
-                                            onCancel={form.reset}
+                                            onCancel={activeForm.reset}
                                         />
                                     )}
                                 </div>
                             </div>
 
-                            {typedEnabled && <TypedTabs instance={instance} form={form} />}
-                            {typedEnabled && (
+                            {karinTyped && <TypedTabs instance={instance} form={form} />}
+                            {karinTyped && (
                                 <TabsContent
                                     value="plugins"
                                     className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
                                 >
                                     <KarinPluginsTab instance={instance} />
                                 </TabsContent>
+                            )}
+                            {nonebotTyped && (
+                                <>
+                                    <TabsContent
+                                        value="adapters"
+                                        className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+                                    >
+                                        <NoneBot2StoreTab instance={instance} resource="adapter" />
+                                    </TabsContent>
+                                    <TabsContent
+                                        value="plugins"
+                                        className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
+                                    >
+                                        <NoneBot2StoreTab instance={instance} resource="plugin" />
+                                    </TabsContent>
+                                    <NoneBot2TypedTab instance={instance} form={nbForm} />
+                                </>
                             )}
 
                             <TabsContent value="raw" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
@@ -331,10 +373,10 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                 />
 
                 <ConfigConflictDialog
-                    open={form.conflict}
-                    busy={form.saving}
-                    onCancel={form.dismissConflict}
-                    onReload={() => void form.reloadDiscard()}
+                    open={activeForm.conflict}
+                    busy={activeForm.saving}
+                    onCancel={activeForm.dismissConflict}
+                    onReload={() => void activeForm.reloadDiscard()}
                     onOverwrite={() => void handleSave(true)}
                 />
             </div>
@@ -360,6 +402,46 @@ const NotInstalledBody: React.FC<{ instance: AppInstance; busy: boolean; onInsta
     </PagePlaceholder>
 );
 
+const NoneBot2TypedTab: React.FC<{
+    instance: AppInstance;
+    form: ReturnType<typeof useNoneBot2ConfigForm>;
+}> = ({ instance, form }) => {
+    if (form.isLoading && !form.form) {
+        return (
+            <TabsContent value="connections" className="pb-8 pt-2">
+                <div className="flex items-center gap-2 py-10 text-sm text-text-tertiary">
+                    <Spinner size="sm" /> 读取配置…
+                </div>
+            </TabsContent>
+        );
+    }
+    if (form.loadError && !form.form) {
+        return (
+            <TabsContent value="connections" className="pb-8 pt-2">
+                <div className="flex flex-col items-start gap-2 py-10">
+                    <p className="text-sm text-text-secondary">读取配置失败</p>
+                    <Button size="sm" variant="secondary" onClick={() => void form.reloadDiscard()}>
+                        <ActionMotionIcon icon={RefreshCw} size={13} />
+                        重试
+                    </Button>
+                </div>
+            </TabsContent>
+        );
+    }
+    if (!form.form) return null;
+    return (
+        <TabsContent value="connections" className="pb-8 pt-2">
+            <NoneBot2ConnectionsTab
+                config={form.form}
+                onChange={form.setForm}
+                errors={form.errors}
+                linked={!!instance.link}
+                disabled={form.saving}
+            />
+        </TabsContent>
+    );
+};
+
 const TypedTabs: React.FC<{
     instance: AppInstance;
     form: ReturnType<typeof useKarinConfigForm>;
@@ -378,13 +460,12 @@ const TypedTabs: React.FC<{
         );
     }
     if (form.loadError && !form.form) {
-        const loadError = form.loadError;
         return (
             <>
                 {(['basic', 'permissions', 'connections', 'rules', 'render'] as const).map((value) => (
                     <TabsContent key={value} value={value} className="pb-8 pt-2">
                         <div className="flex flex-col items-start gap-2 py-10">
-                            <p className="text-sm text-danger">读取配置失败：{loadError.message}</p>
+                            <p className="text-sm text-text-secondary">读取配置失败</p>
                             <Button size="sm" variant="secondary" onClick={() => void form.reloadDiscard()}>
                                 <ActionMotionIcon icon={RefreshCw} size={13} />
                                 重试

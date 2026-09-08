@@ -64,9 +64,11 @@ export function dockerDeployTitle(hostLabel: string, flavor?: string): string {
 }
 
 export function appPluginTitle(action: string, pluginName: string, fallback: string): string {
+    const trimmed = fallback?.trim();
+    if (trimmed) return trimmed;
     const verb =
         action === 'install' ? '安装' : action === 'update' ? '更新' : action === 'uninstall' ? '卸载' : action;
     const name = pluginName?.trim();
-    if (name) return `Karin · ${verb} ${name}`;
-    return fallback?.trim() || `Karin · ${verb}`;
+    if (name) return `${verb} ${name}`;
+    return verb;
 }
