@@ -11,7 +11,7 @@ use ncd_traits::AppFrameworkError;
 use serde::Deserialize;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, InlineTable, Item, Table, Value};
 
-use super::component::{NoneBot2Component, is_legacy_bot_py};
+use super::component::NoneBot2Component;
 use super::config::{DOC_ENV_PROD, nonebot2_config_documents};
 use super::driver::{merge_driver, required_forward_mixins};
 use super::manifest::{
@@ -1305,6 +1305,7 @@ fn host_err(e: HostError) -> AppFrameworkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::component::is_legacy_bot_py;
     use ncd_domain::{AppFrameworkId, AppInstanceId, AppInstanceState, AppLinkRecord, AppPlacement};
 
     const SCAFFOLD: &str = r#"[project]

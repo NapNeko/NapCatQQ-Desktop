@@ -64,9 +64,6 @@ fn main() {
             )
         });
         write_if_changed(&out_path, &content);
-        println!(
-            "cargo:warning=ncd-network: proxy constants not injected (missing env); GitHub direct only"
-        );
         return;
     }
 
@@ -81,9 +78,6 @@ fn main() {
          pub const PROXY_SHARED_SECRET: &str = {secret};\n"
     );
     write_if_changed(&out_path, &generated);
-    println!(
-        "cargo:warning=ncd-network: proxy constants injected (base_url set, secret len hidden)"
-    );
 }
 
 /// 简易 .env 文件解析器逐行读 KEY=VALUE(忽略注释,空行,引号包裹),
