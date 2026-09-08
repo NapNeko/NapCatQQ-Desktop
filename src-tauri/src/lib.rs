@@ -697,6 +697,8 @@ pub fn run() {
             commands::app_framework::read_app_config_text,
             commands::app_framework::write_app_config_text,
             commands::app_framework::list_karin_plugin_market,
+            commands::app_framework::list_app_store,
+            commands::app_framework::list_app_store_installed,
             commands::app_framework::list_app_plugin_config_docs,
             commands::app_framework::list_app_instance_plugins,
             commands::app_framework::submit_app_plugin_op,

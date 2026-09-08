@@ -5,12 +5,13 @@ use ncd_component::ComponentId;
 use ncd_deploy::StepKind;
 use ncd_domain::{
     AppConfigDocument, AppConfigIssue, AppConfigText, AppFrameworkId, AppFrameworkManifest,
-    AppInstance, AppInstanceId, AppPluginAction, BotId, CreateAppInstanceRequest,
+    AppInstance, AppInstanceId, AppPluginAction, AppStoreResource, BotId, CreateAppInstanceRequest,
     DeploymentTaskKind, DeploymentTaskResource, OneBotLinkPlan,
 };
 use ncd_runtime::{
-    AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope, ComponentActionRequest,
-    DeploymentTaskRequest, KarinPluginInstalled, KarinPluginMarketEntry, run_app_plugin_task,
+    AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreInstalled,
+    AppStoreMarketEntry, ComponentActionRequest, DeploymentTaskRequest, KarinPluginInstalled,
+    KarinPluginMarketEntry, run_app_plugin_task,
 };
 use ncd_traits::AppFrameworkError;
 use serde::Serialize;
@@ -19,7 +20,7 @@ use ts_rs::TS;
 
 use crate::AppState;
 use crate::commands::components::{build_inputs, cached_host_probe, executor};
-use crate::commands::host_resolve::{host_display_address, resolve_host_with_autoconnect};
+use crate::commands::host_resolve::resolve_host_with_autoconnect;
 
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -335,7 +336,7 @@ pub(crate) fn test_app_manager(
     ))
 }
 
-/// WebUI 地址（前端用 opener 打开）：本机 127.0.0.1，远端用 ServerProfile.host
+/// WebUI 地址（前端用 opener 打开）：一律本机 loopback；远端经 SSH 隧道。
 #[tauri::command]
 pub async fn get_app_instance_webui(
     instance_id: String,
@@ -346,10 +347,16 @@ pub async fn get_app_instance_webui(
         .get_instance(&AppInstanceId::new(instance_id))
         .await
         .map_err(|e| e.to_string())?;
-    let public_host = host_display_address(&instance.host_id, &state).await;
+    let port = state
+        .app_manager
+        .desktop_loopback_port(&instance)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut view = instance.clone();
+    view.port = port;
     let url = state
         .app_manager
-        .webui_url(&instance, &public_host)
+        .webui_url(&view, "127.0.0.1")
         .ok_or_else(|| "该应用端没有 WebUI".to_string())?;
     let auth_key = state.app_manager.webui_auth_key(&instance.id).await;
     Ok(AppInstanceWebUi { url, auth_key })
@@ -362,6 +369,39 @@ pub async fn list_karin_plugin_market(
     state
         .app_manager
         .list_karin_plugin_market()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_app_store(
+    framework_id: String,
+    resource: AppStoreResource,
+    state: State<'_, AppState>,
+) -> Result<Vec<AppStoreMarketEntry>, String> {
+    state
+        .app_manager
+        .list_store(&AppFrameworkId::new(framework_id), resource)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_app_store_installed(
+    instance_id: String,
+    resource: AppStoreResource,
+    state: State<'_, AppState>,
+) -> Result<Vec<AppStoreInstalled>, String> {
+    let id = AppInstanceId::new(instance_id);
+    let instance = state
+        .app_manager
+        .get_instance(&id)
+        .await
+        .map_err(|e| e.to_string())?;
+    let _ = resolve_host_with_autoconnect(&instance.host_id, &state).await?;
+    state
+        .app_manager
+        .list_store_installed(&id, resource)
         .await
         .map_err(|e| e.to_string())
 }
@@ -410,6 +450,7 @@ pub async fn submit_app_plugin_op(
     instance_id: String,
     plugin_name: String,
     action: AppPluginAction,
+    resource: Option<AppStoreResource>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let id = AppInstanceId::new(instance_id);
@@ -419,6 +460,7 @@ pub async fn submit_app_plugin_op(
         .await
         .map_err(|e| e.to_string())?;
     let _ = resolve_host_with_autoconnect(&instance.host_id, &state).await?;
+    let resource = resource.unwrap_or(AppStoreResource::Plugin);
     let verb = match action {
         AppPluginAction::Install => "安装",
         AppPluginAction::Update => "更新",
@@ -428,6 +470,15 @@ pub async fn submit_app_plugin_op(
         AppPluginAction::Install => "install",
         AppPluginAction::Update => "update",
         AppPluginAction::Uninstall => "uninstall",
+    };
+    let kind_label = match resource {
+        AppStoreResource::Adapter => "适配器",
+        AppStoreResource::Plugin => "插件",
+    };
+    let fw = match instance.framework_id.as_str() {
+        "karin" => "Karin",
+        "nonebot2" => "NoneBot2",
+        other => other,
     };
     let app_manager = std::sync::Arc::clone(&state.app_manager);
     let run_id = instance.id.clone();
@@ -440,23 +491,28 @@ pub async fn submit_app_plugin_op(
                 instance_id: instance.id.as_str().to_string(),
                 plugin_name: plugin_name.clone(),
                 action,
+                resource,
             },
             host_id: instance.host_id.clone(),
-            title: format!("Karin · {verb} {plugin_name}"),
+            title: format!("{fw} · {verb}{kind_label} {plugin_name}"),
             resources: vec![DeploymentTaskResource::InstallTarget {
                 host_id: instance.host_id.clone(),
                 target: instance.install_dir.clone(),
             }],
             depends_on: vec![],
             dedupe_key: Some(format!(
-                "app-plugin:{}:{}:{action_key}",
+                "app-plugin:{}:{}:{}:{action_key}",
                 instance.id.as_str(),
+                match resource {
+                    AppStoreResource::Adapter => "adapter",
+                    AppStoreResource::Plugin => "plugin",
+                },
                 plugin_name
             )),
             cancellable: true,
             runner: Box::new(move |ctx| {
                 Box::pin(async move {
-                    run_app_plugin_task(app_manager, run_id, run_name, action, ctx).await
+                    run_app_plugin_task(app_manager, run_id, run_name, action, resource, ctx).await
                 })
             }),
         })
@@ -470,13 +526,15 @@ pub async fn set_app_plugin_enabled(
     plugin_name: String,
     enabled: bool,
     overwrite: Option<bool>,
+    resource: Option<AppStoreResource>,
     state: State<'_, AppState>,
 ) -> Result<AppConfigWriteResult, AppConfigError> {
     state
         .app_manager
-        .set_plugin_enabled(
+        .set_store_enabled(
             &AppInstanceId::new(instance_id),
             &plugin_name,
+            resource.unwrap_or(AppStoreResource::Plugin),
             enabled,
             overwrite.unwrap_or(false),
         )
