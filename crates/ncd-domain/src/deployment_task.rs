@@ -9,6 +9,15 @@ use ts_rs::TS;
 use crate::docker::DockerFlavor;
 use crate::progress::ProgressEvent;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AppPluginAction {
+    Install,
+    Update,
+    Uninstall,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -23,6 +32,11 @@ pub enum DeploymentTaskKind {
     DockerInstall,
     DockerImagePull {
         flavor: DockerFlavor,
+    },
+    AppPlugin {
+        instance_id: String,
+        plugin_name: String,
+        action: AppPluginAction,
     },
 }
 
@@ -106,5 +120,23 @@ impl DeploymentTaskStatus {
 
     pub const fn is_terminal(self) -> bool {
         matches!(self, Self::Success | Self::Failed | Self::Cancelled)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_plugin_kind_serde_tag() {
+        let kind = DeploymentTaskKind::AppPlugin {
+            instance_id: "k1".into(),
+            plugin_name: "@karinjs/plugin-basic".into(),
+            action: AppPluginAction::Install,
+        };
+        let v = serde_json::to_value(&kind).unwrap();
+        assert_eq!(v["kind"], "app_plugin");
+        assert_eq!(v["action"], "install");
+        assert_eq!(v["plugin_name"], "@karinjs/plugin-basic");
     }
 }

@@ -90,8 +90,8 @@ pub use data_root_migrate::{
     DataRootRetiredMarker, DataRootTreeEntry,
 };
 pub use deployment_task::{
-    DeploymentTaskKind, DeploymentTaskList, DeploymentTaskResource, DeploymentTaskSnapshot,
-    DeploymentTaskStatus,
+    AppPluginAction, DeploymentTaskKind, DeploymentTaskList, DeploymentTaskResource,
+    DeploymentTaskSnapshot, DeploymentTaskStatus,
 };
 pub use docker::{
     ContainerAction, ContainerInfo, ContainerState, DeployedContainer, DockerDeploySpec,

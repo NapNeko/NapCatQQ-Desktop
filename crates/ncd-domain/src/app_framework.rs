@@ -278,6 +278,13 @@ pub struct AppInstance {
     #[serde(default)]
     #[ts(type = "number")]
     pub created_at_ms: u64,
+    /// Karin：创建时是否一并装 `@karinjs/plugin-puppeteer`。旧快照缺字段视为 true。
+    #[serde(default = "default_true")]
+    pub install_renderer: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl AppInstance {
@@ -301,6 +308,14 @@ pub struct CreateAppInstanceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub port: Option<u16>,
+    /// 实例根（HostPath POSIX 或本机 Windows 路径，由编排层规范化）。None = 默认根。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub install_dir: Option<String>,
+    /// 仅 Karin 有意义；None 视为 true。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub install_renderer: Option<bool>,
 }
 
 /// 配置文件格式（原始文件 Tab 决定预检与高亮）
@@ -456,6 +471,7 @@ mod tests {
             installed_version: Some("1.17.0".into()),
             last_error: None,
             created_at_ms: 1,
+            install_renderer: true,
         };
         let json = serde_json::to_string(&inst).unwrap();
         assert!(!json.contains("\"link\""));
@@ -464,6 +480,35 @@ mod tests {
         assert_eq!(back, inst);
         assert!(back.is_local());
         assert_eq!(back.server_id(), None);
+    }
+
+    #[test]
+    fn create_request_optional_dir_and_renderer_round_trip() {
+        let req = CreateAppInstanceRequest {
+            framework_id: AppFrameworkId::new("karin"),
+            host_id: "local".into(),
+            display_name: "k".into(),
+            port: None,
+            install_dir: Some("/d/bots/karin-main".into()),
+            install_renderer: Some(false),
+        };
+        let v = serde_json::to_value(&req).unwrap();
+        assert_eq!(v["install_dir"], "/d/bots/karin-main");
+        assert_eq!(v["install_renderer"], false);
+        let back: CreateAppInstanceRequest = serde_json::from_value(v).unwrap();
+        assert_eq!(back, req);
+    }
+
+    #[test]
+    fn app_instance_missing_install_renderer_defaults_true() {
+        let json = r#"{
+            "id":"k1","framework_id":"karin","display_name":"K",
+            "placement":"local_native","host_id":"local",
+            "install_dir":"/c/apps/k1","port":7777,"state":"installed",
+            "created_at_ms":1
+        }"#;
+        let inst: AppInstance = serde_json::from_str(json).unwrap();
+        assert!(inst.install_renderer);
     }
 
     #[test]
