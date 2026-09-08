@@ -53,6 +53,7 @@ pub struct AppComponentHint {
     pub install_dir: HostPath,
     pub port: u16,
     pub npm_registry: Option<String>,
+    pub install_renderer: bool,
 }
 
 /// 把 component_id 实例化成具体 Component
@@ -298,6 +299,7 @@ pub fn build_component_for_host(
                 node_bin,
                 uv_bin,
                 npm_registry: hint.npm_registry.clone(),
+                install_renderer: hint.install_renderer,
             })
         }
     };

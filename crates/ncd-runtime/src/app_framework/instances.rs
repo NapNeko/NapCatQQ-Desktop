@@ -144,6 +144,7 @@ mod tests {
             installed_version: None,
             last_error: None,
             created_at_ms: 1,
+            install_renderer: true,
         }
     }
 

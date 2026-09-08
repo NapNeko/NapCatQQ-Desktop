@@ -14,17 +14,18 @@ use std::time::Duration;
 use ncd_appframework::karin::config::link_inputs_changed;
 use ncd_appframework::{
     AppComponentSpec, AppConfigWriteResult, AppFrameworkAdapter, AppFrameworkRegistry,
-    AppInstanceConfig, AppInstanceConfigEnvelope,
+    AppInstanceConfig, AppInstanceConfigEnvelope, KarinPluginInstalled, KarinPluginMarketEntry,
+    PluginLogSink, apply_plugin_enabled, app_file_basename, confirm_plugin_on_disk,
 };
 use ncd_component::{DetectOutcome, LaunchArgs};
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkId, AppFrameworkManifest, AppInstance,
-    AppInstanceId, AppInstanceState, AppLinkRecord, AppPlacement, BotConfig, BotId,
-    CreateAppInstanceRequest, DomainEventKind, LOCAL_HOST_ID, OneBotLinkMode, OneBotLinkPlan,
-    RuntimeTarget, app_link_connection_name, is_app_link_connection_name,
+    AppInstanceId, AppInstanceState, AppLinkRecord, AppPlacement, AppPluginAction, BotConfig,
+    BotId, CreateAppInstanceRequest, DomainEventKind, LOCAL_HOST_ID, OneBotLinkMode,
+    OneBotLinkPlan, RuntimeTarget, app_link_connection_name, is_app_link_connection_name,
     runtime_target_matches_host, server_id_of_host,
 };
-use ncd_host::{Host, HostCommand, HostPath, Locality};
+use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
 use ncd_server::HostResolver;
 use ncd_traits::{AppFrameworkError, EventBus, EventFilter};
 use rand::Rng;
@@ -41,6 +42,29 @@ use crate::metrics::now_ms;
 const LOCAL_APPS_DIR: &str = "apps";
 /// 远端实例目录：`$HOME/ncd/apps/<framework>/<instance>`
 const REMOTE_APPS_REL: &str = "ncd/apps";
+
+pub fn parse_user_install_dir(raw: &str, os: Os) -> Result<HostPath, AppFrameworkError> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return Err(AppFrameworkError::Validation("安装目录为空".into()));
+    }
+    let path = match os {
+        Os::Windows => {
+            if t.starts_with('/') {
+                HostPath::from_posix(t)
+            } else {
+                HostPath::from_windows(t)
+            }
+        }
+        _ => HostPath::from_posix(t),
+    };
+    if !path.is_absolute() {
+        return Err(AppFrameworkError::Validation(
+            "安装目录必须是绝对路径".into(),
+        ));
+    }
+    Ok(path)
+}
 
 /// AppManager 对协议 Bot 侧唯一的依赖：读配置 + 走 `upsert_bot_config` 热推。
 /// 抽成 trait 是为了不把 BotManager 的两个泛型参数带进来，也方便测试。
@@ -133,6 +157,7 @@ impl AppManager {
             install_dir: HostPath::from_posix(&instance.install_dir),
             port: instance.port,
             npm_registry: self.npm_registry.clone(),
+            install_renderer: instance.install_renderer,
         }
     }
 
@@ -184,7 +209,13 @@ impl AppManager {
         let host = self.resolve_host(&req.host_id).await?;
         let id = AppInstanceId::new(short_id());
         let install_dir = self
-            .install_dir_for(host.as_ref(), &req.framework_id, &id)
+            .resolve_install_dir(
+                host.as_ref(),
+                &req.host_id,
+                &req.framework_id,
+                &id,
+                req.install_dir.as_deref(),
+            )
             .await?;
         let display_name = if req.display_name.trim().is_empty() {
             format!("{} {}", manifest.display_name, id.as_str())
@@ -205,6 +236,7 @@ impl AppManager {
             installed_version: None,
             last_error: None,
             created_at_ms: now_ms(),
+            install_renderer: req.install_renderer.unwrap_or(true),
         };
         let saved = self.store.upsert(instance).await?;
         self.publish(&saved, "created");
@@ -752,6 +784,185 @@ impl AppManager {
         Ok(written)
     }
 
+    // ---- Karin 插件代管 ----
+
+    pub async fn list_karin_plugin_market(
+        &self,
+    ) -> Result<Vec<KarinPluginMarketEntry>, AppFrameworkError> {
+        super::plugin_market::fetch_karin_plugin_market().await
+    }
+
+    pub async fn list_plugins(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Vec<KarinPluginInstalled>, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let adapter = self.registry.get(&instance.framework_id)?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        adapter.list_installed(host.as_ref(), &instance).await
+    }
+
+    pub async fn list_plugin_config_docs(
+        &self,
+        id: &AppInstanceId,
+        plugin_name: &str,
+    ) -> Result<Vec<ncd_domain::AppConfigDocument>, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        if !instance.state.is_installed() {
+            return Err(AppFrameworkError::Validation(
+                "应用实例尚未安装".to_string(),
+            ));
+        }
+        let adapter = self.registry.get(&instance.framework_id)?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        adapter
+            .list_plugin_config_docs(host.as_ref(), &instance, plugin_name)
+            .await
+    }
+
+    pub async fn run_plugin_op(
+        &self,
+        id: &AppInstanceId,
+        name: &str,
+        action: AppPluginAction,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        if !instance.state.is_installed() {
+            return Err(AppFrameworkError::Validation(
+                "应用实例尚未安装".to_string(),
+            ));
+        }
+        let adapter = self.registry.get(&instance.framework_id)?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        if let Some(sink) = log {
+            sink("读取官方插件目录".into());
+        }
+        match action {
+            AppPluginAction::Install | AppPluginAction::Update => {
+                let market = super::plugin_market::fetch_karin_plugin_market().await?;
+                let entry = market.iter().find(|e| e.name == name).ok_or_else(|| {
+                    AppFrameworkError::Validation(format!("插件目录没有 {name}"))
+                })?;
+                self.dispatch_plugin_write(
+                    host.as_ref(),
+                    adapter.as_ref(),
+                    &instance,
+                    entry,
+                    action,
+                    log,
+                )
+                .await?;
+                confirm_plugin_on_disk(host.as_ref(), &instance, entry).await
+            }
+            AppPluginAction::Uninstall => {
+                let installed = adapter.list_installed(host.as_ref(), &instance).await?;
+                if let Some(found) = installed.iter().find(|p| p.name == name) {
+                    return adapter
+                        .uninstall_plugin(host.as_ref(), &instance, name, found.kind, log)
+                        .await;
+                }
+                let market = super::plugin_market::fetch_karin_plugin_market().await?;
+                let entry = market.iter().find(|e| e.name == name).ok_or_else(|| {
+                    AppFrameworkError::Validation(format!("未安装且目录中没有 {name}"))
+                })?;
+                self.uninstall_market_entry(host.as_ref(), adapter.as_ref(), &instance, entry, log)
+                    .await
+            }
+        }
+    }
+
+    pub async fn set_plugin_enabled(
+        &self,
+        id: &AppInstanceId,
+        name: &str,
+        enabled: bool,
+        overwrite: bool,
+    ) -> Result<AppConfigWriteResult, AppFrameworkError> {
+        let envelope = self.read_config(id).await?;
+        let AppInstanceConfig::Karin(mut cfg) = envelope.config;
+        apply_plugin_enabled(&mut cfg, name, enabled)?;
+        let base = if overwrite {
+            None
+        } else {
+            Some(envelope.revision)
+        };
+        self.write_config(id, AppInstanceConfig::Karin(cfg), base)
+            .await
+    }
+
+    async fn dispatch_plugin_write(
+        &self,
+        host: &dyn Host,
+        adapter: &dyn AppFrameworkAdapter,
+        instance: &AppInstance,
+        entry: &KarinPluginMarketEntry,
+        action: AppPluginAction,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        match entry.kind {
+            ncd_appframework::KarinPluginKind::App => {
+                self.install_app_files(host, instance, entry, log).await
+            }
+            _ => match action {
+                AppPluginAction::Update => adapter.update_plugin(host, instance, entry, log).await,
+                _ => adapter.install_plugin(host, instance, entry, log).await,
+            },
+        }
+    }
+
+    async fn install_app_files(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        entry: &KarinPluginMarketEntry,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        let root = HostPath::from_posix(&instance.install_dir);
+        for file in &entry.files {
+            let basename = app_file_basename(&file.url)?;
+            if let Some(sink) = log {
+                sink(format!("下载 {basename}"));
+            }
+            let dest = root.join("plugins/karin-plugin-example").join(&basename);
+            super::download::download_url_to_host(host, &file.url, &dest).await?;
+            if let Some(sink) = log {
+                sink(format!("已写入 {basename}"));
+            }
+        }
+        Ok(())
+    }
+
+    async fn uninstall_market_entry(
+        &self,
+        host: &dyn Host,
+        adapter: &dyn AppFrameworkAdapter,
+        instance: &AppInstance,
+        entry: &KarinPluginMarketEntry,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        match entry.kind {
+            ncd_appframework::KarinPluginKind::App => {
+                for file in &entry.files {
+                    let basename = app_file_basename(&file.url)?;
+                    adapter
+                        .uninstall_plugin(
+                            host,
+                            instance,
+                            &basename,
+                            ncd_appframework::KarinPluginKind::App,
+                            log,
+                        )
+                        .await?;
+                }
+                Ok(())
+            }
+            kind => adapter
+                .uninstall_plugin(host, instance, &entry.name, kind, log)
+                .await,
+        }
+    }
+
     async fn config_context(
         &self,
         id: &AppInstanceId,
@@ -884,6 +1095,7 @@ impl AppManager {
                 .managed_component_dir(host, "Uv")
                 .map(|dir| ncd_component::UvComponent::uv_binary_path_for_os(&dir, host.os())),
             npm_registry: self.npm_registry.clone(),
+            install_renderer: instance.install_renderer,
         }
     }
 
@@ -913,17 +1125,67 @@ impl AppManager {
             .map_err(|e| AppFrameworkError::Runtime(e.to_string()))
     }
 
-    async fn install_dir_for(
+    pub async fn preview_install_dir(
+        &self,
+        host_id: &str,
+        framework_id: &AppFrameworkId,
+    ) -> Result<HostPath, AppFrameworkError> {
+        let host = self.resolve_host(host_id).await?;
+        self.apps_root_for(host.as_ref(), framework_id).await
+    }
+
+    pub async fn resolve_install_dir(
+        &self,
+        host: &dyn Host,
+        host_id: &str,
+        framework: &AppFrameworkId,
+        id: &AppInstanceId,
+        override_dir: Option<&str>,
+    ) -> Result<HostPath, AppFrameworkError> {
+        let path = match override_dir.map(str::trim).filter(|s| !s.is_empty()) {
+            None => self.install_dir_for(host, framework, id).await?,
+            Some(raw) => parse_user_install_dir(raw, host.os())?,
+        };
+        let posix = path.as_posix();
+        let taken = self.store.list().await.into_iter().any(|i| {
+            i.host_id == host_id && i.id != *id && i.install_dir == posix
+        });
+        if taken {
+            return Err(AppFrameworkError::Validation(
+                "该目录已被其它实例占用".to_string(),
+            ));
+        }
+        let exists = host
+            .exists(&path)
+            .await
+            .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+        if exists {
+            match host.list_dir(&path).await {
+                Ok(entries) if entries.is_empty() => {}
+                Ok(_) => {
+                    return Err(AppFrameworkError::Validation(
+                        "目录非空，请选空文件夹或不存在的路径".to_string(),
+                    ));
+                }
+                Err(_) => {
+                    return Err(AppFrameworkError::Validation(
+                        "安装路径必须是目录".to_string(),
+                    ));
+                }
+            }
+        }
+        Ok(path)
+    }
+
+    async fn apps_root_for(
         &self,
         host: &dyn Host,
         framework: &AppFrameworkId,
-        id: &AppInstanceId,
     ) -> Result<HostPath, AppFrameworkError> {
         match host.locality() {
             Locality::Local => Ok(data_root_to_host_path(&self.data_root, host.os())
                 .join(LOCAL_APPS_DIR)
-                .join(framework.as_str())
-                .join(id.as_str())),
+                .join(framework.as_str())),
             Locality::Remote => {
                 let out = host
                     .run_to_string(
@@ -942,10 +1204,31 @@ impl AppManager {
                 }
                 Ok(HostPath::from_posix(home)
                     .join(REMOTE_APPS_REL)
-                    .join(framework.as_str())
-                    .join(id.as_str()))
+                    .join(framework.as_str()))
             }
         }
+    }
+
+    async fn install_dir_for(
+        &self,
+        host: &dyn Host,
+        framework: &AppFrameworkId,
+        id: &AppInstanceId,
+    ) -> Result<HostPath, AppFrameworkError> {
+        Ok(self.apps_root_for(host, framework).await?.join(id.as_str()))
+    }
+
+    #[cfg(test)]
+    async fn resolve_install_dir_for_test(
+        &self,
+        host_id: &str,
+        framework: &AppFrameworkId,
+        id: &AppInstanceId,
+        override_dir: Option<&str>,
+    ) -> Result<HostPath, AppFrameworkError> {
+        let host = self.resolve_host(host_id).await?;
+        self.resolve_install_dir(host.as_ref(), host_id, framework, id, override_dir)
+            .await
     }
 
     fn publish(&self, instance: &AppInstance, reason: &str) {
@@ -1201,6 +1484,7 @@ mod tests {
                     installed_version: Some("1.0.0".into()),
                     last_error: None,
                     created_at_ms: 1,
+                    install_renderer: true,
                 })
                 .await
                 .unwrap();
@@ -1398,6 +1682,110 @@ mod tests {
             )
             .unwrap();
             assert_eq!(adapter["onebot"]["ws_server"]["enable"], true);
+        }
+    }
+
+    #[test]
+    fn parse_user_install_dir_windows_and_posix() {
+        let p = parse_user_install_dir(r"D:\bots\karin-a", Os::Windows).unwrap();
+        assert!(p.is_absolute());
+        assert_eq!(p.as_posix(), "/d/bots/karin-a");
+        assert!(parse_user_install_dir("relative/path", Os::Windows).is_err());
+        let nix = parse_user_install_dir("/home/u/ncd/apps/karin/x", Os::Linux).unwrap();
+        assert_eq!(nix.as_posix(), "/home/u/ncd/apps/karin/x");
+    }
+
+    #[cfg(windows)]
+    mod custom_install_dir {
+        use super::*;
+        use crate::events::BroadcastEventBus;
+        use ncd_appframework::AppFrameworkRegistry;
+        use ncd_host::local::LocalWindowsHost;
+
+        async fn dir_manager(root: &std::path::Path) -> Arc<AppManager> {
+            let bus = Arc::new(BroadcastEventBus::default());
+            let store = Arc::new(AppInstanceStore::empty(root));
+            let local: Arc<dyn Host> = Arc::new(LocalWindowsHost::new());
+            Arc::new(AppManager::new(
+                Arc::new(AppFrameworkRegistry::with_builtin()),
+                Arc::clone(&store),
+                Arc::new(NativeAppRuntime::new(Arc::clone(&bus), Arc::clone(&store))),
+                Arc::new(ncd_server::LocalOnlyHostResolver::new(local)),
+                Arc::new(MemoryBotsStub),
+                bus,
+                root,
+            ))
+        }
+
+        struct MemoryBotsStub;
+
+        #[async_trait::async_trait]
+        impl BotConfigPort for MemoryBotsStub {
+            async fn bot_config(&self, _: &BotId) -> Result<Option<BotConfig>, String> {
+                Ok(None)
+            }
+            async fn upsert_bot_config(&self, _: BotConfig) -> Result<(), String> {
+                Ok(())
+            }
+        }
+
+        #[tokio::test]
+        async fn custom_install_dir_rejects_relative_and_nonempty() {
+            let tmp = tempfile::tempdir().unwrap();
+            let root = tmp.path().join("data");
+            std::fs::create_dir_all(&root).unwrap();
+            let manager = dir_manager(&root).await;
+
+            let rel = manager
+                .resolve_install_dir_for_test(
+                    "local",
+                    &AppFrameworkId::new("karin"),
+                    &AppInstanceId::new("x"),
+                    Some("apps/foo"),
+                )
+                .await;
+            assert!(matches!(rel, Err(AppFrameworkError::Validation(m)) if m.contains("绝对")));
+
+            let occupied = tmp.path().join("taken");
+            std::fs::create_dir_all(&occupied).unwrap();
+            std::fs::write(occupied.join("keep.txt"), b"x").unwrap();
+            let err = manager
+                .resolve_install_dir_for_test(
+                    "local",
+                    &AppFrameworkId::new("karin"),
+                    &AppInstanceId::new("x"),
+                    Some(occupied.to_str().unwrap()),
+                )
+                .await;
+            assert!(matches!(err, Err(AppFrameworkError::Validation(m)) if m.contains("非空")));
+        }
+
+        #[tokio::test]
+        async fn custom_install_dir_rejects_collision() {
+            let tmp = tempfile::tempdir().unwrap();
+            let root = tmp.path().join("data");
+            std::fs::create_dir_all(&root).unwrap();
+            let manager = dir_manager(&root).await;
+            let created = manager
+                .create_instance(CreateAppInstanceRequest {
+                    framework_id: AppFrameworkId::new("karin"),
+                    host_id: "local".into(),
+                    display_name: "a".into(),
+                    port: Some(7777),
+                    install_dir: None,
+                    install_renderer: None,
+                })
+                .await
+                .unwrap();
+            let err = manager
+                .resolve_install_dir_for_test(
+                    "local",
+                    &AppFrameworkId::new("karin"),
+                    &AppInstanceId::new("other"),
+                    Some(&created.install_dir),
+                )
+                .await;
+            assert!(matches!(err, Err(AppFrameworkError::Validation(m)) if m.contains("占用")));
         }
     }
 }

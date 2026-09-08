@@ -160,10 +160,11 @@ pub use ncd_traits::{
 
 pub use app_framework::{
     AppInstanceStore, AppManager, BotConfigPort, NativeAppRuntime, OneBotExportError,
-    app_link_connections, export_onebot_endpoint,
+    app_link_connections, export_onebot_endpoint, run_app_plugin_task,
 };
 pub use ncd_appframework::{
     AppConfigWriteResult, AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope,
+    KarinPluginInstalled, KarinPluginMarketEntry,
 };
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
