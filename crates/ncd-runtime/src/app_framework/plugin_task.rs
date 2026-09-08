@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use ncd_appframework::PluginLogSink;
 use ncd_domain::{
-    AppInstanceId, AppPluginAction, ProgressEvent, ProgressKind, ProgressLogLevel,
+    AppInstanceId, AppPluginAction, AppStoreResource, ProgressEvent, ProgressKind, ProgressLogLevel,
 };
 
 use super::manager::AppManager;
@@ -15,6 +15,7 @@ pub async fn run_app_plugin_task(
     instance_id: AppInstanceId,
     plugin_name: String,
     action: AppPluginAction,
+    resource: AppStoreResource,
     ctx: DeploymentTaskContext,
 ) -> DeploymentTaskRunResult {
     if ctx.is_cancelled() {
@@ -50,7 +51,7 @@ pub async fn run_app_plugin_task(
     });
 
     let result = app_manager
-        .run_plugin_op(&instance_id, &plugin_name, action, Some(&sink))
+        .run_store_op(&instance_id, &plugin_name, action, resource, Some(&sink))
         .await;
     drop(sink);
     let _ = drain.await;

@@ -2,29 +2,36 @@
 //!
 //! 对接 = 往 Bot 的 `connect.websocket_clients` 按名 upsert 一条反向 WS 连接，再调
 //! `BotManager::upsert_bot_config`（持久化 + 渲染 + 热推）。不新写推送链路。
-//! 首发只允许同机：Bot 的 `runtime_target` 与实例 `host_id` 必须落在同一台机器。
+//! 拓扑按主机分、不看 BackendType：同机走实例口；本机 Bot→远端应用 SSH `-L`；远端 Bot→本机应用 SSH `-R`；
+//! 两台远端走应用机常驻 `ssh -R`（Desktop 只编排）。
 //!
 //! 安装本身走既有 ComponentExecutor（R12），这里只给 hint、置 Installing、盯任务结束后
 //! 用 detect 对账；框架差异全部封在 `ncd_appframework::AppFrameworkAdapter` 后面。
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ncd_appframework::karin::config::link_inputs_changed;
+use ncd_appframework::nonebot2::config::link_inputs_changed as nonebot2_link_inputs_changed;
 use ncd_appframework::{
     AppComponentSpec, AppConfigWriteResult, AppFrameworkAdapter, AppFrameworkRegistry,
-    AppInstanceConfig, AppInstanceConfigEnvelope, KarinPluginInstalled, KarinPluginMarketEntry,
-    PluginLogSink, apply_plugin_enabled, app_file_basename, confirm_plugin_on_disk,
+    AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor, AppStoreInstalled,
+    AppStoreMarketEntry, KARIN_FRAMEWORK_ID, KarinPluginInstalled, KarinPluginMarketEntry,
+    PluginLogSink, apply_plugin_enabled, app_file_basename,
+    confirm_plugin_on_disk,
 };
 use ncd_component::{DetectOutcome, LaunchArgs};
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkId, AppFrameworkManifest, AppInstance,
-    AppInstanceId, AppInstanceState, AppLinkRecord, AppPlacement, AppPluginAction, BotConfig,
-    BotId, CreateAppInstanceRequest, DomainEventKind, LOCAL_HOST_ID, OneBotLinkMode,
-    OneBotLinkPlan, RuntimeTarget, app_link_connection_name, is_app_link_connection_name,
-    runtime_target_matches_host, server_id_of_host,
+    AppInstanceId, AppInstanceState, AppLinkRecord, AppLinkTopology, AppPlacement, AppPluginAction,
+    AppStoreResource, BotConfig, BotId, CreateAppInstanceRequest, DomainEventKind, LOCAL_HOST_ID,
+    OneBotLinkMode, OneBotLinkPlan, RuntimeTarget, app_link_connection_name, classify_app_link,
+    host_id_of_runtime_target, is_app_link_connection_name, rewrite_ws_loopback_port,
+    server_id_of_host,
 };
+use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
 use ncd_server::HostResolver;
 use ncd_traits::{AppFrameworkError, EventBus, EventFilter};
@@ -32,7 +39,9 @@ use rand::Rng;
 use rand::distributions::Alphanumeric;
 
 use super::instances::AppInstanceStore;
+use super::listen_port::{allocate_listen_port, local_port_free};
 use super::native_runtime::{AppLaunchSpec, NativeAppRuntime};
+use super::resident_link::{self, ResidentLinkSpec};
 use crate::bot_manager::BotManager;
 use crate::components::{AppComponentHint, data_root_to_host_path};
 use crate::events::{BroadcastEventBus, DomainEvent};
@@ -94,6 +103,27 @@ where
     }
 }
 
+struct AppInstanceTunnel {
+    app_port: u16,
+    topology: AppLinkTopology,
+    handle: TunnelHandle,
+}
+
+fn needs_desktop_ssh_tunnel(topology: AppLinkTopology) -> bool {
+    matches!(
+        topology,
+        AppLinkTopology::LocalBotRemoteApp | AppLinkTopology::RemoteBotLocalApp
+    )
+}
+
+fn unsupported_link_topology(bot_target: &RuntimeTarget, app_host_id: &str) -> AppFrameworkError {
+    AppFrameworkError::Validation(format!(
+        "不支持该对接拓扑：Bot 在 {}，应用实例在 {}",
+        describe_target(bot_target),
+        describe_host(app_host_id)
+    ))
+}
+
 pub struct AppManager {
     registry: Arc<AppFrameworkRegistry>,
     store: Arc<AppInstanceStore>,
@@ -103,6 +133,8 @@ pub struct AppManager {
     event_bus: Arc<BroadcastEventBus>,
     data_root: PathBuf,
     npm_registry: Option<String>,
+    /// Desktop 握着的跨机隧道。key = instance id；解绑 / 删实例 / 改端口时释放。
+    tunnels: tokio::sync::Mutex<HashMap<String, AppInstanceTunnel>>,
 }
 
 impl AppManager {
@@ -124,6 +156,7 @@ impl AppManager {
             event_bus,
             data_root: data_root.to_path_buf(),
             npm_registry: None,
+            tunnels: tokio::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -166,6 +199,14 @@ impl AppManager {
         adapter.integration().webui_url(instance, public_host)
     }
 
+    /// 桌面端打开 WebUI 用的本机口：本机即实例口，远端是 SSH `-L` 分配口。
+    pub async fn desktop_loopback_port(
+        &self,
+        instance: &AppInstance,
+    ) -> Result<u16, AppFrameworkError> {
+        self.ensure_local_to_remote_tunnel(instance).await
+    }
+
     /// 读盘拿到的 WebUI 登录密钥；配置读失败或没有密钥时返回空串。
     pub async fn webui_auth_key(&self, id: &AppInstanceId) -> String {
         match self.read_config(id).await {
@@ -190,21 +231,15 @@ impl AppManager {
                 placement.as_str()
             )));
         }
-        let port = req.port.unwrap_or(manifest.default_port);
-        if port == 0 {
-            return Err(AppFrameworkError::Validation("端口不能为 0".to_string()));
-        }
-        let taken = self
-            .store
-            .list()
-            .await
-            .into_iter()
-            .any(|i| i.host_id == req.host_id && i.port == port);
-        if taken {
-            return Err(AppFrameworkError::Validation(format!(
-                "该主机上已有应用实例占用端口 {port}"
-            )));
-        }
+        let siblings = self.store.list().await;
+        let taken: Vec<u16> = siblings
+            .iter()
+            .filter(|i| i.host_id == req.host_id)
+            .map(|i| i.port)
+            .collect();
+        let probe_local = req.host_id == LOCAL_HOST_ID;
+        let port = allocate_listen_port(req.port, &taken, probe_local)
+            .map_err(AppFrameworkError::Validation)?;
 
         let host = self.resolve_host(&req.host_id).await?;
         let id = AppInstanceId::new(short_id());
@@ -264,26 +299,48 @@ impl AppManager {
             .event_bus
             .subscribe(EventFilter::kind(DomainEventKind::DeploymentTaskChanged));
         tokio::spawn(async move {
-            while let Some(event) = sub.next().await {
-                let DomainEvent::DeploymentTaskChanged { task } = event else {
-                    continue;
-                };
-                if task.task_id != task_id || !task.status.is_terminal() {
-                    continue;
+            let deadline = Instant::now() + Duration::from_mins(30);
+            loop {
+                tokio::select! {
+                    event = sub.next() => {
+                        let Some(event) = event else {
+                            return;
+                        };
+                        let DomainEvent::DeploymentTaskChanged { task } = event else {
+                            continue;
+                        };
+                        if task.task_id != task_id || !task.status.is_terminal() {
+                            continue;
+                        }
+                        let failure = (!matches!(
+                            task.status,
+                            ncd_domain::DeploymentTaskStatus::Success
+                        ))
+                        .then(|| {
+                            task.error
+                                .clone()
+                                .unwrap_or_else(|| "安装任务未成功结束".to_string())
+                        });
+                        if let Err(e) = this.refresh_after_install(&id, failure).await {
+                            tracing::warn!(instance = id.as_str(), error = %e, "refresh after install");
+                        }
+                        return;
+                    }
+                    _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                        if Instant::now() > deadline {
+                            return;
+                        }
+                        match this.refresh_instance(&id).await {
+                            Ok(inst) if inst.state != AppInstanceState::Installing => return,
+                            Err(e) => tracing::warn!(
+                                instance = id.as_str(),
+                                error = %e,
+                                "poll after install"
+                            ),
+                            _ => {}
+                        }
+                    }
                 }
-                let failure = (!matches!(
-                    task.status,
-                    ncd_domain::DeploymentTaskStatus::Success
-                ))
-                .then(|| {
-                    task.error
-                        .clone()
-                        .unwrap_or_else(|| "安装任务未成功结束".to_string())
-                });
-                if let Err(e) = this.refresh_after_install(&id, failure).await {
-                    tracing::warn!(instance = id.as_str(), error = %e, "refresh after install");
-                }
-                return;
             }
         });
         Ok(updated)
@@ -294,8 +351,39 @@ impl AppManager {
         id: &AppInstanceId,
         failure: Option<String>,
     ) -> Result<AppInstance, AppFrameworkError> {
+        // 任务成功先改状态，避免 UI 卡在「安装中」等 detect 读刚写完的 uv.lock / .venv
+        if failure.is_none() {
+            let instant = self
+                .store
+                .update(id, |i| {
+                    if matches!(
+                        i.state,
+                        AppInstanceState::Installing | AppInstanceState::NotInstalled
+                    ) {
+                        i.state = AppInstanceState::Installed;
+                    }
+                    i.last_error = None;
+                })
+                .await?;
+            self.publish(&instant, "installed");
+        }
+
         let instance = self.store.require(id).await?;
-        let host = self.resolve_host(&instance.host_id).await?;
+        let host = match self.resolve_host(&instance.host_id).await {
+            Ok(host) => host,
+            Err(e) if failure.is_some() => {
+                let updated = self
+                    .store
+                    .update(id, |i| {
+                        i.state = AppInstanceState::NotInstalled;
+                        i.last_error = Some(failure.clone().unwrap_or_else(|| e.to_string()));
+                    })
+                    .await?;
+                self.publish(&updated, "install_failed");
+                return Ok(updated);
+            }
+            Err(_) => return Ok(instance),
+        };
         let detected = self.detect(host.as_ref(), &instance).await;
         let updated = self
             .store
@@ -305,28 +393,34 @@ impl AppManager {
                     i.installed_version = Some(v.version.clone());
                     i.last_error = failure.clone();
                 }
-                Ok(DetectOutcome::Unusable(u)) => {
+                Ok(DetectOutcome::Unusable(u)) if failure.is_some() => {
                     i.state = AppInstanceState::NotInstalled;
                     i.last_error = Some(failure.clone().unwrap_or_else(|| u.reason.clone()));
                 }
-                Ok(DetectOutcome::NotInstalled) => {
+                Ok(DetectOutcome::NotInstalled) if failure.is_some() => {
                     i.state = AppInstanceState::NotInstalled;
                     i.last_error = failure.clone();
                 }
-                Err(e) => {
+                Err(e) if failure.is_some() => {
                     i.state = AppInstanceState::NotInstalled;
                     i.last_error = Some(failure.clone().unwrap_or_else(|| e.to_string()));
                 }
+                Ok(DetectOutcome::Unusable(u)) => {
+                    i.last_error = Some(u.reason.clone());
+                }
+                _ => {}
             })
             .await?;
-        self.publish(
-            &updated,
-            if failure.is_some() {
-                "install_failed"
-            } else {
-                "installed"
-            },
-        );
+        if updated != instance {
+            self.publish(
+                &updated,
+                if failure.is_some() {
+                    "install_failed"
+                } else {
+                    "installed"
+                },
+            );
+        }
         Ok(updated)
     }
 
@@ -337,6 +431,23 @@ impl AppManager {
     ) -> Result<AppInstance, AppFrameworkError> {
         let instance = self.store.require(id).await?;
         if instance.state == AppInstanceState::Installing {
+            let host = self.resolve_host(&instance.host_id).await?;
+            let detected = self.detect(host.as_ref(), &instance).await?;
+            if let DetectOutcome::Installed(v) = detected {
+                let updated = self
+                    .store
+                    .update(id, |i| {
+                        if i.state == AppInstanceState::Installing {
+                            i.state = AppInstanceState::Installed;
+                            i.installed_version = Some(v.version.clone());
+                        }
+                    })
+                    .await?;
+                if updated.state != instance.state {
+                    self.publish(&updated, "installed");
+                }
+                return Ok(updated);
+            }
             return Ok(instance);
         }
         let host = self.resolve_host(&instance.host_id).await?;
@@ -390,6 +501,30 @@ impl AppManager {
         for instance in self.store.list().await {
             if let Err(e) = self.refresh_instance(&instance.id).await {
                 tracing::info!(instance = instance.id.as_str(), error = %e, "app reconcile skipped");
+            }
+            let current = match self.store.require(&instance.id).await {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
+            if current
+                .link
+                .as_ref()
+                .and_then(|l| l.resident_forward_port)
+                .is_some()
+            {
+                if let Err(e) = self.reconcile_resident_link(&current).await {
+                    tracing::info!(
+                        instance = instance.id.as_str(),
+                        error = %e,
+                        "app resident link reconcile skipped"
+                    );
+                }
+            } else if let Err(e) = self.reconcile_link_tunnel(&current).await {
+                tracing::info!(
+                    instance = instance.id.as_str(),
+                    error = %e,
+                    "app link tunnel reconcile skipped"
+                );
             }
         }
     }
@@ -480,6 +615,7 @@ impl AppManager {
                 tracing::warn!(instance = id.as_str(), error = %e, "unlink before delete");
             }
         }
+        self.drop_instance_tunnel(id).await;
         if remove_files {
             let host = host?;
             let dir = HostPath::from_posix(&instance.install_dir);
@@ -513,15 +649,52 @@ impl AppManager {
         bot_id: &BotId,
     ) -> Result<AppInstance, AppFrameworkError> {
         let (instance, mut bot, adapter, host) = self.link_context(instance_id, bot_id).await?;
+        let topology = classify_app_link(&bot.bot.runtime_target, &instance.host_id).ok_or_else(
+            || unsupported_link_topology(&bot.bot.runtime_target, &instance.host_id),
+        )?;
+        if let Some(old) = instance.link.as_ref() {
+            if old.resident_forward_port.is_some() {
+                self.teardown_resident_best_effort(&instance, &old.bot_id).await;
+            }
+        }
+        if !needs_desktop_ssh_tunnel(topology) {
+            self.drop_instance_tunnel(instance_id).await;
+        }
         let token = self.pick_access_token(host.as_ref(), &instance, &bot, adapter.as_ref()).await?;
-        let plan = adapter.integration().plan_link(&instance, &bot, &token)?;
+        let mut plan = adapter.integration().plan_link(&instance, &bot, &token)?;
 
-        adapter.apply_link(host.as_ref(), &instance, &plan).await?;
+        let mut resident_forward_port = None;
+        if topology == AppLinkTopology::RemoteBotRemoteApp {
+            let fwd = self.ensure_resident_link(&instance, &bot, bot_id).await?;
+            plan.connection.url = rewrite_ws_loopback_port(&plan.connection.url, fwd)
+                .map_err(AppFrameworkError::Validation)?;
+            resident_forward_port = Some(fwd);
+        } else if needs_desktop_ssh_tunnel(topology) {
+            let loopback = self.ensure_link_tunnel(&instance, &bot).await?;
+            plan.connection.url = rewrite_ws_loopback_port(&plan.connection.url, loopback)
+                .map_err(AppFrameworkError::Validation)?;
+        }
+
+        if let Err(e) = adapter.apply_link(host.as_ref(), &instance, &plan).await {
+            if resident_forward_port.is_some() {
+                self.teardown_resident_best_effort(&instance, bot_id).await;
+            }
+            if needs_desktop_ssh_tunnel(topology) {
+                self.drop_instance_tunnel(instance_id).await;
+            }
+            return Err(e);
+        }
 
         upsert_ws_client(&mut bot, plan.connection.clone());
         if let Err(e) = self.bot_manager.upsert_bot_config(bot).await {
             if let Err(rb) = adapter.rollback_link(host.as_ref(), &instance).await {
                 tracing::error!(instance = instance_id.as_str(), error = %rb, "rollback app-side link");
+            }
+            if resident_forward_port.is_some() {
+                self.teardown_resident_best_effort(&instance, bot_id).await;
+            }
+            if needs_desktop_ssh_tunnel(topology) {
+                self.drop_instance_tunnel(instance_id).await;
             }
             return Err(AppFrameworkError::Integration(format!(
                 "写入协议 Bot 连接失败，应用端配置已还原：{e}"
@@ -543,6 +716,7 @@ impl AppManager {
                     mode: OneBotLinkMode::ReverseWs,
                     connection_name: plan.connection.base.name.clone(),
                     linked_at_ms: now_ms(),
+                    resident_forward_port,
                 });
                 i.last_error = None;
             })
@@ -565,6 +739,10 @@ impl AppManager {
         {
             tracing::warn!(instance = instance_id.as_str(), error = %e, "app-side unlink");
         }
+        if link.resident_forward_port.is_some() {
+            self.teardown_resident_best_effort(&instance, &link.bot_id).await;
+        }
+        self.drop_instance_tunnel(instance_id).await;
         let updated = self
             .store
             .update(instance_id, |i| {
@@ -608,12 +786,11 @@ impl AppManager {
             .ok_or_else(|| {
                 AppFrameworkError::Validation(format!("协议 Bot {} 不存在", bot_id.as_str()))
             })?;
-        if !runtime_target_matches_host(&bot.bot.runtime_target, &instance.host_id) {
-            return Err(AppFrameworkError::Validation(format!(
-                "首发只支持同机对接：Bot 在 {}，应用实例在 {}",
-                describe_target(&bot.bot.runtime_target),
-                describe_host(&instance.host_id)
-            )));
+        if classify_app_link(&bot.bot.runtime_target, &instance.host_id).is_none() {
+            return Err(unsupported_link_topology(
+                &bot.bot.runtime_target,
+                &instance.host_id,
+            ));
         }
         let host = self.resolve_host(&instance.host_id).await?;
         Ok((instance, bot, adapter, host))
@@ -784,7 +961,7 @@ impl AppManager {
         Ok(written)
     }
 
-    // ---- Karin 插件代管 ----
+    // ---- 应用端商店（Karin 插件 / NoneBot 适配器+插件）----
 
     pub async fn list_karin_plugin_market(
         &self,
@@ -792,14 +969,37 @@ impl AppManager {
         super::plugin_market::fetch_karin_plugin_market().await
     }
 
+    pub async fn list_store(
+        &self,
+        framework_id: &AppFrameworkId,
+        resource: AppStoreResource,
+    ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+        super::plugin_market::fetch_store(framework_id.as_str(), resource).await
+    }
+
     pub async fn list_plugins(
         &self,
         id: &AppInstanceId,
     ) -> Result<Vec<KarinPluginInstalled>, AppFrameworkError> {
+        Ok(self
+            .list_store_installed(id, AppStoreResource::Plugin)
+            .await?
+            .into_iter()
+            .filter_map(|item| item.to_karin())
+            .collect())
+    }
+
+    pub async fn list_store_installed(
+        &self,
+        id: &AppInstanceId,
+        resource: AppStoreResource,
+    ) -> Result<Vec<AppStoreInstalled>, AppFrameworkError> {
         let instance = self.store.require(id).await?;
         let adapter = self.registry.get(&instance.framework_id)?;
         let host = self.resolve_host(&instance.host_id).await?;
-        adapter.list_installed(host.as_ref(), &instance).await
+        adapter
+            .list_installed(host.as_ref(), &instance, resource)
+            .await
     }
 
     pub async fn list_plugin_config_docs(
@@ -827,6 +1027,18 @@ impl AppManager {
         action: AppPluginAction,
         log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
+        self.run_store_op(id, name, action, AppStoreResource::Plugin, log)
+            .await
+    }
+
+    pub async fn run_store_op(
+        &self,
+        id: &AppInstanceId,
+        name: &str,
+        action: AppPluginAction,
+        resource: AppStoreResource,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
         let instance = self.store.require(id).await?;
         if !instance.state.is_installed() {
             return Err(AppFrameworkError::Validation(
@@ -836,34 +1048,60 @@ impl AppManager {
         let adapter = self.registry.get(&instance.framework_id)?;
         let host = self.resolve_host(&instance.host_id).await?;
         if let Some(sink) = log {
-            sink("读取官方插件目录".into());
+            sink("读取官方目录".into());
         }
         match action {
             AppPluginAction::Install | AppPluginAction::Update => {
-                let market = super::plugin_market::fetch_karin_plugin_market().await?;
-                let entry = market.iter().find(|e| e.name == name).ok_or_else(|| {
-                    AppFrameworkError::Validation(format!("插件目录没有 {name}"))
-                })?;
-                self.dispatch_plugin_write(
+                let entry = self
+                    .resolve_store_entry(
+                        host.as_ref(),
+                        adapter.as_ref(),
+                        &instance,
+                        name,
+                        action,
+                        resource,
+                        log,
+                    )
+                    .await?;
+                self.dispatch_store_write(
                     host.as_ref(),
                     adapter.as_ref(),
                     &instance,
-                    entry,
+                    &entry,
                     action,
                     log,
                 )
                 .await?;
-                confirm_plugin_on_disk(host.as_ref(), &instance, entry).await
+                if let Some(karin) = entry.to_karin() {
+                    confirm_plugin_on_disk(host.as_ref(), &instance, &karin).await?;
+                }
+                Ok(())
             }
             AppPluginAction::Uninstall => {
-                let installed = adapter.list_installed(host.as_ref(), &instance).await?;
-                if let Some(found) = installed.iter().find(|p| p.name == name) {
+                let installed = adapter
+                    .list_installed(host.as_ref(), &instance, resource)
+                    .await?;
+                if let Some(found) = installed
+                    .iter()
+                    .find(|p| p.id == name || p.name == name)
+                {
                     return adapter
-                        .uninstall_plugin(host.as_ref(), &instance, name, found.kind, log)
+                        .uninstall_store_item(
+                            host.as_ref(),
+                            &instance,
+                            &found.id,
+                            found.flavor,
+                            resource,
+                            log,
+                        )
                         .await;
                 }
-                let market = super::plugin_market::fetch_karin_plugin_market().await?;
-                let entry = market.iter().find(|e| e.name == name).ok_or_else(|| {
+                let market = super::plugin_market::fetch_store(
+                    instance.framework_id.as_str(),
+                    resource,
+                )
+                .await?;
+                let entry = find_store_entry(&market, name).ok_or_else(|| {
                     AppFrameworkError::Validation(format!("未安装且目录中没有 {name}"))
                 })?;
                 self.uninstall_market_entry(host.as_ref(), adapter.as_ref(), &instance, entry, log)
@@ -879,35 +1117,104 @@ impl AppManager {
         enabled: bool,
         overwrite: bool,
     ) -> Result<AppConfigWriteResult, AppFrameworkError> {
-        let envelope = self.read_config(id).await?;
-        let AppInstanceConfig::Karin(mut cfg) = envelope.config;
-        apply_plugin_enabled(&mut cfg, name, enabled)?;
-        let base = if overwrite {
-            None
-        } else {
-            Some(envelope.revision)
-        };
-        self.write_config(id, AppInstanceConfig::Karin(cfg), base)
+        self.set_store_enabled(id, name, AppStoreResource::Plugin, enabled, overwrite)
             .await
     }
 
-    async fn dispatch_plugin_write(
+    pub async fn set_store_enabled(
+        &self,
+        id: &AppInstanceId,
+        name: &str,
+        resource: AppStoreResource,
+        enabled: bool,
+        overwrite: bool,
+    ) -> Result<AppConfigWriteResult, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        if instance.framework_id.as_str() == KARIN_FRAMEWORK_ID {
+            let envelope = self.read_config(id).await?;
+            let AppInstanceConfig::Karin(mut cfg) = envelope.config else {
+                return Err(AppFrameworkError::Validation(
+                    "写入的不是 Karin 配置".into(),
+                ));
+            };
+            apply_plugin_enabled(&mut cfg, name, enabled)?;
+            let base = if overwrite {
+                None
+            } else {
+                Some(envelope.revision)
+            };
+            return self.write_config(id, AppInstanceConfig::Karin(cfg), base).await;
+        }
+
+        let adapter = self.registry.get(&instance.framework_id)?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        adapter
+            .set_store_enabled(host.as_ref(), &instance, name, resource, enabled, overwrite)
+            .await?;
+        let envelope = adapter.read_config(host.as_ref(), &instance).await?;
+        Ok(AppConfigWriteResult {
+            config: envelope.config,
+            revision: envelope.revision,
+            documents: envelope.documents,
+            restart_required: instance.state == AppInstanceState::Running,
+            relinked: false,
+            port_changed: false,
+        })
+    }
+
+    async fn resolve_store_entry(
         &self,
         host: &dyn Host,
         adapter: &dyn AppFrameworkAdapter,
         instance: &AppInstance,
-        entry: &KarinPluginMarketEntry,
+        name: &str,
+        action: AppPluginAction,
+        resource: AppStoreResource,
+        log: Option<&PluginLogSink>,
+    ) -> Result<AppStoreMarketEntry, AppFrameworkError> {
+        let market = super::plugin_market::fetch_store(instance.framework_id.as_str(), resource).await;
+        let market_failed = market.is_err();
+        let fallback_err = match market {
+            Ok(list) => {
+                if let Some(entry) = find_store_entry(&list, name) {
+                    return Ok(entry.clone());
+                }
+                AppFrameworkError::Validation(format!("目录没有 {name}"))
+            }
+            Err(err) => err,
+        };
+        if action == AppPluginAction::Install {
+            return Err(fallback_err);
+        }
+        // 目录挂了或条目下架时，NoneBot 还能用已装 PyPI 包名 `uv add pkg@latest`。
+        // Karin git/app 缺 repo/url，不能合成空壳。
+        let installed = adapter.list_installed(host, instance, resource).await?;
+        let Some(found) = installed.iter().find(|p| {
+            (p.id == name || p.name == name) && p.flavor == AppStoreFlavor::Pypi
+        }) else {
+            return Err(fallback_err);
+        };
+        if market_failed && let Some(sink) = log {
+            sink("官方目录不可用，使用已装包名更新".into());
+        }
+        installed_to_market_entry(found, resource)
+    }
+
+    async fn dispatch_store_write(
+        &self,
+        host: &dyn Host,
+        adapter: &dyn AppFrameworkAdapter,
+        instance: &AppInstance,
+        entry: &AppStoreMarketEntry,
         action: AppPluginAction,
         log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
-        match entry.kind {
-            ncd_appframework::KarinPluginKind::App => {
-                self.install_app_files(host, instance, entry, log).await
-            }
-            _ => match action {
-                AppPluginAction::Update => adapter.update_plugin(host, instance, entry, log).await,
-                _ => adapter.install_plugin(host, instance, entry, log).await,
-            },
+        if entry.flavor == AppStoreFlavor::App {
+            return self.install_app_files(host, instance, entry, log).await;
+        }
+        match action {
+            AppPluginAction::Update => adapter.update_store_item(host, instance, entry, log).await,
+            _ => adapter.install_store_item(host, instance, entry, log).await,
         }
     }
 
@@ -915,7 +1222,7 @@ impl AppManager {
         &self,
         host: &dyn Host,
         instance: &AppInstance,
-        entry: &KarinPluginMarketEntry,
+        entry: &AppStoreMarketEntry,
         log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
         let root = HostPath::from_posix(&instance.install_dir);
@@ -938,29 +1245,35 @@ impl AppManager {
         host: &dyn Host,
         adapter: &dyn AppFrameworkAdapter,
         instance: &AppInstance,
-        entry: &KarinPluginMarketEntry,
+        entry: &AppStoreMarketEntry,
         log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
-        match entry.kind {
-            ncd_appframework::KarinPluginKind::App => {
-                for file in &entry.files {
-                    let basename = app_file_basename(&file.url)?;
-                    adapter
-                        .uninstall_plugin(
-                            host,
-                            instance,
-                            &basename,
-                            ncd_appframework::KarinPluginKind::App,
-                            log,
-                        )
-                        .await?;
-                }
-                Ok(())
+        if entry.flavor == AppStoreFlavor::App {
+            for file in &entry.files {
+                let basename = app_file_basename(&file.url)?;
+                adapter
+                    .uninstall_store_item(
+                        host,
+                        instance,
+                        &basename,
+                        AppStoreFlavor::App,
+                        entry.resource,
+                        log,
+                    )
+                    .await?;
             }
-            kind => adapter
-                .uninstall_plugin(host, instance, &entry.name, kind, log)
-                .await,
+            return Ok(());
         }
+        adapter
+            .uninstall_store_item(
+                host,
+                instance,
+                &entry.id,
+                entry.flavor,
+                entry.resource,
+                log,
+            )
+            .await
     }
 
     async fn config_context(
@@ -1012,6 +1325,11 @@ impl AppManager {
         if taken {
             return Err(AppFrameworkError::Validation(format!(
                 "该主机上已有应用实例占用端口 {port}"
+            )));
+        }
+        if instance.host_id == LOCAL_HOST_ID && !local_port_free(port) {
+            return Err(AppFrameworkError::Validation(format!(
+                "本机端口 {port} 已被其它程序占用"
             )));
         }
         Ok(())
@@ -1067,6 +1385,288 @@ impl AppManager {
     }
 
     // ---- 内部 ----
+
+    async fn ensure_link_tunnel(
+        &self,
+        instance: &AppInstance,
+        bot: &BotConfig,
+    ) -> Result<u16, AppFrameworkError> {
+        match classify_app_link(&bot.bot.runtime_target, &instance.host_id) {
+            Some(AppLinkTopology::SameHost) => Ok(instance.port),
+            Some(AppLinkTopology::LocalBotRemoteApp) => {
+                self.ensure_local_to_remote_tunnel(instance).await
+            }
+            Some(AppLinkTopology::RemoteBotLocalApp) => {
+                self.ensure_remote_to_local_tunnel(instance, bot).await
+            }
+            Some(AppLinkTopology::RemoteBotRemoteApp) => Err(AppFrameworkError::Validation(
+                "两台远端对接不走桌面隧道".into(),
+            )),
+            None => Err(unsupported_link_topology(
+                &bot.bot.runtime_target,
+                &instance.host_id,
+            )),
+        }
+    }
+
+    async fn ensure_local_to_remote_tunnel(
+        &self,
+        instance: &AppInstance,
+    ) -> Result<u16, AppFrameworkError> {
+        if server_id_of_host(&instance.host_id).is_none() {
+            return Ok(instance.port);
+        }
+        if instance.port == 0 {
+            return Err(AppFrameworkError::Validation("应用实例端口无效".into()));
+        }
+        let key = instance.id.as_str().to_string();
+        {
+            let mut map = self.tunnels.lock().await;
+            if let Some(existing) = map.get(&key) {
+                if existing.app_port == instance.port
+                    && existing.topology == AppLinkTopology::LocalBotRemoteApp
+                {
+                    return Ok(existing.handle.local_port());
+                }
+            }
+            map.remove(&key);
+        }
+        let host = self.resolve_host(&instance.host_id).await?;
+        let handle = host
+            .open_tunnel(TunnelSpec::local_to_remote(0, instance.port))
+            .await
+            .map_err(host_err)?;
+        let local_port = handle.local_port();
+        if local_port == 0 {
+            return Err(AppFrameworkError::Host("SSH 隧道未分配本地端口".into()));
+        }
+        let mut map = self.tunnels.lock().await;
+        if let Some(existing) = map.get(&key) {
+            if existing.app_port == instance.port
+                && existing.topology == AppLinkTopology::LocalBotRemoteApp
+            {
+                return Ok(existing.handle.local_port());
+            }
+        }
+        map.insert(
+            key,
+            AppInstanceTunnel {
+                app_port: instance.port,
+                topology: AppLinkTopology::LocalBotRemoteApp,
+                handle,
+            },
+        );
+        Ok(local_port)
+    }
+
+    async fn ensure_remote_to_local_tunnel(
+        &self,
+        instance: &AppInstance,
+        bot: &BotConfig,
+    ) -> Result<u16, AppFrameworkError> {
+        if instance.port == 0 {
+            return Err(AppFrameworkError::Validation("应用实例端口无效".into()));
+        }
+        let key = instance.id.as_str().to_string();
+        {
+            let mut map = self.tunnels.lock().await;
+            if let Some(existing) = map.get(&key) {
+                if existing.app_port == instance.port
+                    && existing.topology == AppLinkTopology::RemoteBotLocalApp
+                    && existing.handle.remote_listen_port() != 0
+                {
+                    return Ok(existing.handle.remote_listen_port());
+                }
+            }
+            map.remove(&key);
+        }
+        let host = self
+            .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
+            .await?;
+        let handle = host
+            .open_tunnel(TunnelSpec::remote_to_local(0, instance.port))
+            .await
+            .map_err(host_err)?;
+        let bot_port = handle.remote_listen_port();
+        if bot_port == 0 {
+            return Err(AppFrameworkError::Host("SSH 隧道未分配远端端口".into()));
+        }
+        let mut map = self.tunnels.lock().await;
+        if let Some(existing) = map.get(&key) {
+            if existing.app_port == instance.port
+                && existing.topology == AppLinkTopology::RemoteBotLocalApp
+                && existing.handle.remote_listen_port() != 0
+            {
+                return Ok(existing.handle.remote_listen_port());
+            }
+        }
+        map.insert(
+            key,
+            AppInstanceTunnel {
+                app_port: instance.port,
+                topology: AppLinkTopology::RemoteBotLocalApp,
+                handle,
+            },
+        );
+        Ok(bot_port)
+    }
+
+    async fn drop_instance_tunnel(&self, id: &AppInstanceId) {
+        self.tunnels.lock().await.remove(id.as_str());
+    }
+
+    async fn ensure_resident_link(
+        &self,
+        instance: &AppInstance,
+        bot: &BotConfig,
+        bot_id: &BotId,
+    ) -> Result<u16, AppFrameworkError> {
+        let bot_host_id = host_id_of_runtime_target(&bot.bot.runtime_target);
+        let bot_host = self.resolve_host(&bot_host_id).await?;
+        let app_host = self.resolve_host(&instance.host_id).await?;
+        let taken = self.taken_resident_ports(&instance.id, &bot_host_id).await;
+        let reuse = instance
+            .link
+            .as_ref()
+            .filter(|l| &l.bot_id == bot_id)
+            .and_then(|l| l.resident_forward_port);
+        resident_link::ensure_resident_link(
+            app_host.as_ref(),
+            bot_host.as_ref(),
+            ResidentLinkSpec {
+                instance,
+                reuse_port: reuse,
+                taken_ports: &taken,
+            },
+        )
+        .await
+    }
+
+    async fn taken_resident_ports(&self, current: &AppInstanceId, bot_host_id: &str) -> Vec<u16> {
+        let mut taken = Vec::new();
+        for inst in self.store.list().await {
+            if inst.host_id == bot_host_id {
+                taken.push(inst.port);
+            }
+            let Some(link) = inst.link.as_ref() else {
+                continue;
+            };
+            let Some(port) = link.resident_forward_port else {
+                continue;
+            };
+            if inst.id == *current {
+                continue;
+            }
+            let Ok(Some(other)) = self.bot_manager.bot_config(&link.bot_id).await else {
+                continue;
+            };
+            if host_id_of_runtime_target(&other.bot.runtime_target) == bot_host_id {
+                taken.push(port);
+            }
+        }
+        taken
+    }
+
+    async fn teardown_resident_best_effort(&self, instance: &AppInstance, bot_id: &BotId) {
+        let app_host = match self.resolve_host(&instance.host_id).await {
+            Ok(h) => h,
+            Err(e) => {
+                tracing::warn!(
+                    instance = instance.id.as_str(),
+                    error = %e,
+                    "resident link teardown skipped (app host)"
+                );
+                return;
+            }
+        };
+        let bot_host = match self.bot_manager.bot_config(bot_id).await {
+            Ok(Some(bot)) => self
+                .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
+                .await
+                .ok(),
+            _ => None,
+        };
+        if let Err(e) = resident_link::teardown_resident_link(
+            app_host.as_ref(),
+            bot_host.as_ref().map(|h| h.as_ref()),
+            &instance.id,
+        )
+        .await
+        {
+            tracing::warn!(
+                instance = instance.id.as_str(),
+                error = %e,
+                "resident link teardown failed"
+            );
+        }
+    }
+
+    async fn reconcile_resident_link(&self, instance: &AppInstance) -> Result<(), AppFrameworkError> {
+        let Some(link) = instance.link.as_ref() else {
+            return Ok(());
+        };
+        let Some(fwd) = link.resident_forward_port else {
+            return Ok(());
+        };
+        let Some(bot) = self
+            .bot_manager
+            .bot_config(&link.bot_id)
+            .await
+            .map_err(AppFrameworkError::Integration)?
+        else {
+            return Ok(());
+        };
+        let app_host = self.resolve_host(&instance.host_id).await?;
+        let bot_host = self
+            .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
+            .await?;
+        resident_link::reconcile_resident_link(app_host.as_ref(), bot_host.as_ref(), instance, fwd)
+            .await
+    }
+
+    /// 已对接的跨机实例：重开 Desktop 隧道；分配口变了就再热推 Bot URL。
+    async fn reconcile_link_tunnel(
+        &self,
+        instance: &AppInstance,
+    ) -> Result<(), AppFrameworkError> {
+        let Some(link) = instance.link.as_ref() else {
+            return Ok(());
+        };
+        let Some(mut bot) = self
+            .bot_manager
+            .bot_config(&link.bot_id)
+            .await
+            .map_err(AppFrameworkError::Integration)?
+        else {
+            return Ok(());
+        };
+        let Some(topology) = classify_app_link(&bot.bot.runtime_target, &instance.host_id) else {
+            return Ok(());
+        };
+        if !needs_desktop_ssh_tunnel(topology) {
+            return Ok(());
+        }
+        let local_port = self.ensure_link_tunnel(instance, &bot).await?;
+        let Some(conn) = bot
+            .connect
+            .websocket_clients
+            .iter_mut()
+            .find(|c| c.base.name == link.connection_name)
+        else {
+            return Ok(());
+        };
+        let next = rewrite_ws_loopback_port(&conn.url, local_port)
+            .map_err(AppFrameworkError::Validation)?;
+        if next == conn.url {
+            return Ok(());
+        }
+        conn.url = next;
+        self.bot_manager
+            .upsert_bot_config(bot)
+            .await
+            .map_err(AppFrameworkError::Integration)?;
+        Ok(())
+    }
 
     async fn resolve_host(&self, host_id: &str) -> Result<Arc<dyn Host>, AppFrameworkError> {
         let target = if host_id == LOCAL_HOST_ID {
@@ -1248,6 +1848,7 @@ struct ConfigSyncOutcome {
 fn config_port(config: &AppInstanceConfig) -> u16 {
     match config {
         AppInstanceConfig::Karin(k) => k.env.http_port,
+        AppInstanceConfig::NoneBot2(n) => n.env_prod.port,
     }
 }
 
@@ -1257,6 +1858,91 @@ fn link_inputs_differ(before: &AppInstanceConfig, after: &AppInstanceConfig) -> 
         (AppInstanceConfig::Karin(b), AppInstanceConfig::Karin(a)) => {
             link_inputs_changed(&b.env, &a.env)
         }
+        (AppInstanceConfig::NoneBot2(b), AppInstanceConfig::NoneBot2(a)) => {
+            nonebot2_link_inputs_changed(&b.env_prod, &a.env_prod)
+        }
+        _ => false,
+    }
+}
+
+fn find_store_entry<'a>(
+    market: &'a [AppStoreMarketEntry],
+    name: &str,
+) -> Option<&'a AppStoreMarketEntry> {
+    // 不用 package：OneBot V11/V12 共用 nonebot-adapter-onebot，按包名会装错
+    market
+        .iter()
+        .find(|e| e.id == name || e.module_name == name)
+        .or_else(|| {
+            let hits: Vec<_> = market.iter().filter(|e| e.name == name).collect();
+            (hits.len() == 1).then_some(hits[0])
+        })
+}
+
+fn installed_to_market_entry(
+    item: &AppStoreInstalled,
+    resource: AppStoreResource,
+) -> Result<AppStoreMarketEntry, AppFrameworkError> {
+    if item.package.trim().is_empty() {
+        return Err(AppFrameworkError::Validation(
+            "官方目录不可用，且已装条目没有包名".into(),
+        ));
+    }
+    Ok(AppStoreMarketEntry {
+        resource,
+        id: item.id.clone(),
+        name: item.name.clone(),
+        description: String::new(),
+        version: item.version.clone().unwrap_or_default(),
+        author: String::new(),
+        homepage: String::new(),
+        time: String::new(),
+        package: item.package.clone(),
+        module_name: item.id.clone(),
+        flavor: item.flavor,
+        is_official: false,
+        valid: true,
+        tags: Vec::new(),
+        supported_adapters: Vec::new(),
+        authors: Vec::new(),
+        repos: Vec::new(),
+        files: Vec::new(),
+        allow_build: Vec::new(),
+    })
+}
+
+#[cfg(test)]
+mod installed_fallback_tests {
+    use super::*;
+
+    fn installed(package: &str, flavor: AppStoreFlavor) -> AppStoreInstalled {
+        AppStoreInstalled {
+            id: "nonebot_plugin_foo".into(),
+            name: "foo".into(),
+            resource: AppStoreResource::Plugin,
+            flavor,
+            version: Some("1.0.0".into()),
+            enabled: true,
+            package: package.into(),
+        }
+    }
+
+    #[test]
+    fn installed_fallback_needs_package() {
+        assert!(
+            installed_to_market_entry(&installed("", AppStoreFlavor::Pypi), AppStoreResource::Plugin)
+                .is_err()
+        );
+        let entry = installed_to_market_entry(
+            &installed("nonebot-plugin-foo", AppStoreFlavor::Pypi),
+            AppStoreResource::Plugin,
+        )
+        .unwrap();
+        assert_eq!(entry.package, "nonebot-plugin-foo");
+        assert_eq!(entry.module_name, "nonebot_plugin_foo");
+        assert_eq!(entry.id, "nonebot_plugin_foo");
+        assert_eq!(entry.flavor, AppStoreFlavor::Pypi);
+        assert_eq!(entry.resource, AppStoreResource::Plugin);
     }
 }
 
@@ -1322,15 +2008,19 @@ mod tests {
     };
 
     fn bot() -> BotConfig {
+        bot_with(10001, BackendType::NapCat, RuntimeTarget::Local)
+    }
+
+    fn bot_with(qq_id: u64, backend: BackendType, target: RuntimeTarget) -> BotConfig {
         BotConfig {
             bot: BotBasicConfig {
                 name: "b".into(),
-                qq_id: 10001,
+                qq_id,
                 music_sign_url: String::new(),
                 auto_restart_schedule: AutoRestartSchedule::default(),
                 offline_auto_restart: false,
-                runtime_target: RuntimeTarget::Local,
-                backend_type: BackendType::NapCat,
+                runtime_target: target,
+                backend_type: backend,
                 deployment_type: DeploymentType::default(),
                 snowluma_start_mode: None,
                 webui_password_takeover: false,
@@ -1432,6 +2122,14 @@ mod tests {
         }
 
         async fn fixture(linked: bool) -> Fixture {
+            fixture_on_host(linked, LOCAL_HOST_ID, AppPlacement::LocalNative).await
+        }
+
+        async fn fixture_on_host(
+            linked: bool,
+            host_id: &str,
+            placement: AppPlacement,
+        ) -> Fixture {
             let tmp = tempfile::tempdir().unwrap();
             let root = tmp.path().join("data");
             let inst_dir = tmp.path().join("karin");
@@ -1451,7 +2149,13 @@ mod tests {
             let store = Arc::new(AppInstanceStore::empty(&root));
             let local: Arc<dyn Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
             let bots = Arc::new(MemoryBots {
-                bots: AsyncMutex::new(vec![bot()]),
+                bots: AsyncMutex::new(vec![
+                    bot(),
+                    bot_with(20002, BackendType::SnowLuma, RuntimeTarget::Local),
+                    bot_with(30003, BackendType::NapCat, RuntimeTarget::server("vps")),
+                    bot_with(40004, BackendType::SnowLuma, RuntimeTarget::server("vps")),
+                    bot_with(50005, BackendType::NapCat, RuntimeTarget::server("other")),
+                ]),
                 upserts: Mutex::new(0),
             });
             let manager = Arc::new(AppManager::new(
@@ -1470,8 +2174,8 @@ mod tests {
                     id: id.clone(),
                     framework_id: AppFrameworkId::new("karin"),
                     display_name: "Karin".into(),
-                    placement: AppPlacement::LocalNative,
-                    host_id: LOCAL_HOST_ID.to_string(),
+                    placement,
+                    host_id: host_id.to_string(),
                     install_dir: install_dir.as_posix().to_string(),
                     port: 7777,
                     state: AppInstanceState::Stopped,
@@ -1480,6 +2184,7 @@ mod tests {
                         mode: OneBotLinkMode::ReverseWs,
                         connection_name: app_link_connection_name(&id),
                         linked_at_ms: 1,
+                        resident_forward_port: None,
                     }),
                     installed_version: Some("1.0.0".into()),
                     last_error: None,
@@ -1498,7 +2203,9 @@ mod tests {
         }
 
         fn karin(envelope: &AppInstanceConfigEnvelope) -> KarinInstanceConfig {
-            let AppInstanceConfig::Karin(k) = &envelope.config;
+            let AppInstanceConfig::Karin(k) = &envelope.config else {
+                panic!("expected Karin config");
+            };
             k.clone()
         }
 
@@ -1682,6 +2389,94 @@ mod tests {
             )
             .unwrap();
             assert_eq!(adapter["onebot"]["ws_server"]["enable"], true);
+        }
+
+        #[tokio::test]
+        async fn preview_link_allows_local_nc_and_sl_to_remote_app() {
+            let f = fixture_on_host(false, "remote:vps", AppPlacement::RemoteNative).await;
+            for bot_id in ["10001", "20002"] {
+                let plan = f
+                    .manager
+                    .preview_link(&f.id, &BotId::new(bot_id))
+                    .await
+                    .unwrap();
+                assert_eq!(plan.connection.url, "ws://127.0.0.1:7777/onebot/v11/ws");
+            }
+        }
+
+        #[tokio::test]
+        async fn apply_link_local_bot_remote_app_needs_ssh_tunnel() {
+            let f = fixture_on_host(false, "remote:vps", AppPlacement::RemoteNative).await;
+            for bot_id in ["10001", "20002"] {
+                let err = f
+                    .manager
+                    .apply_link(&f.id, &BotId::new(bot_id))
+                    .await
+                    .unwrap_err();
+                let msg = err.to_string();
+                assert!(
+                    msg.contains("open_tunnel"),
+                    "NC/SL 都应走同一条隧道：{msg}"
+                );
+            }
+        }
+
+        #[tokio::test]
+        async fn preview_link_allows_remote_nc_and_sl_to_local_app() {
+            let f = fixture(false).await;
+            for bot_id in ["30003", "40004"] {
+                let plan = f
+                    .manager
+                    .preview_link(&f.id, &BotId::new(bot_id))
+                    .await
+                    .unwrap();
+                assert_eq!(plan.connection.url, "ws://127.0.0.1:7777/onebot/v11/ws");
+            }
+        }
+
+        #[tokio::test]
+        async fn apply_link_remote_bot_local_app_needs_ssh_tunnel() {
+            let f = fixture(false).await;
+            for bot_id in ["30003", "40004"] {
+                let err = f
+                    .manager
+                    .apply_link(&f.id, &BotId::new(bot_id))
+                    .await
+                    .unwrap_err();
+                let msg = err.to_string();
+                assert!(
+                    msg.contains("open_tunnel"),
+                    "远端 NC/SL 都应走同一条 -R：{msg}"
+                );
+            }
+        }
+
+        #[tokio::test]
+        async fn preview_link_allows_two_remote_hosts() {
+            let f = fixture_on_host(false, "remote:vps", AppPlacement::RemoteNative).await;
+            let plan = f
+                .manager
+                .preview_link(&f.id, &BotId::new("50005"))
+                .await
+                .unwrap();
+            assert_eq!(plan.connection.url, "ws://127.0.0.1:7777/onebot/v11/ws");
+        }
+
+        #[tokio::test]
+        async fn apply_link_two_remotes_needs_bot_ssh_dial() {
+            let f = fixture_on_host(false, "remote:vps", AppPlacement::RemoteNative).await;
+            let err = f
+                .manager
+                .apply_link(&f.id, &BotId::new("50005"))
+                .await
+                .unwrap_err();
+            let msg = err.to_string();
+            assert!(
+                msg.contains("SSH") || msg.contains("Linux"),
+                "P2 应进入常驻隧道而不是桌面 open_tunnel: {msg}"
+            );
+            assert!(!msg.contains("尚未开放"), "{msg}");
+            assert!(!msg.contains("open_tunnel"), "{msg}");
         }
     }
 

@@ -5,10 +5,12 @@
 mod download;
 mod export;
 mod instances;
+mod listen_port;
 mod manager;
 mod native_runtime;
 mod plugin_market;
 mod plugin_task;
+mod resident_link;
 
 pub use export::{OneBotExportError, export_onebot_endpoint};
 pub use instances::{APP_INSTANCES_FILE, AppInstanceStore};

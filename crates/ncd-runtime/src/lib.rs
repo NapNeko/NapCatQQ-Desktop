@@ -164,7 +164,7 @@ pub use app_framework::{
 };
 pub use ncd_appframework::{
     AppConfigWriteResult, AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope,
-    KarinPluginInstalled, KarinPluginMarketEntry,
+    AppStoreInstalled, AppStoreMarketEntry, KarinPluginInstalled, KarinPluginMarketEntry,
 };
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
