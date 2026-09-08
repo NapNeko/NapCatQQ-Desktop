@@ -139,6 +139,7 @@ mod tests {
             installed_version: None,
             last_error: None,
             created_at_ms: 0,
+            install_renderer: true,
         }
     }
 

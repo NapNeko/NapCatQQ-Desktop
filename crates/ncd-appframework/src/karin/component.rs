@@ -46,6 +46,20 @@ pub struct KarinComponent {
     pub npm_registry: Option<String>,
     /// node-karin 版本规格（默认 latest）
     pub version_spec: String,
+    /// 创建时一并装 `@karinjs/plugin-puppeteer`（会下 Chromium）
+    pub install_renderer: bool,
+}
+
+pub fn renderer_pnpm_args(workspace: bool) -> Vec<String> {
+    let mut args = vec![
+        "add".into(),
+        "@karinjs/plugin-puppeteer".into(),
+        "--save".into(),
+    ];
+    if workspace {
+        args.push("-w".into());
+    }
+    args
 }
 
 impl KarinComponent {
@@ -56,7 +70,13 @@ impl KarinComponent {
             node_bin: None,
             npm_registry: None,
             version_spec: "latest".to_string(),
+            install_renderer: false,
         }
+    }
+
+    pub fn with_install_renderer(mut self, install_renderer: bool) -> Self {
+        self.install_renderer = install_renderer;
+        self
     }
 
     pub fn with_node_bin(mut self, node_bin: Option<HostPath>) -> Self {
@@ -206,8 +226,8 @@ impl KarinComponent {
 
     /// 首装/更新共用：装私有 pnpm → 装 node-karin → karin init → 二次 install → 写 .env
     async fn provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
-        const TOTAL: u32 = 6;
-        ctx.emit(ProgressKind::Started { total_steps: TOTAL }).await;
+        let total = if self.install_renderer { 7 } else { 6 };
+        ctx.emit(ProgressKind::Started { total_steps: total }).await;
 
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
@@ -282,6 +302,21 @@ impl KarinComponent {
         .await;
         self.write_env_port(host).await?;
         ctx.emit(ProgressKind::StepEnd { step: 6, ok: true }).await;
+
+        if self.install_renderer {
+            let has_workspace = host
+                .exists(&self.install_dir.join("pnpm-workspace.yaml"))
+                .await?;
+            let mut args = renderer_pnpm_args(has_workspace);
+            args.extend(self.registry_arg());
+            let cmd = pnpm_command(
+                &tc,
+                &self.install_dir,
+                host.os(),
+                &args.iter().map(String::as_str).collect::<Vec<_>>(),
+            );
+            self.run_step(host, ctx, 7, "安装插件版渲染器", cmd).await?;
+        }
 
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
@@ -445,6 +480,15 @@ impl Component for KarinComponent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renderer_pnpm_args_adds_workspace_flag() {
+        assert_eq!(
+            renderer_pnpm_args(false),
+            vec!["add".to_string(), "@karinjs/plugin-puppeteer".to_string(), "--save".to_string()]
+        );
+        assert_eq!(renderer_pnpm_args(true)[3], "-w");
+    }
 
     #[test]
     fn requirements_pin_node_floor_from_upstream() {

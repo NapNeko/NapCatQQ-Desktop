@@ -7,12 +7,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
-use ncd_domain::{AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, OneBotLinkPlan};
+use ncd_domain::{
+    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, OneBotLinkPlan,
+};
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, read_document, write_document_text,
+};
+use crate::karin::plugin::{
+    KarinPluginInstalled, KarinPluginKind, KarinPluginMarketEntry, PluginLogSink,
 };
 
 /// 为某个应用实例构造 Component 所需的输入（编排层填）
@@ -28,6 +33,8 @@ pub struct AppComponentSpec {
     pub uv_bin: Option<HostPath>,
     /// npm registry 镜像；None 用默认源
     pub npm_registry: Option<String>,
+    /// Karin：provision 时一并 `pnpm add @karinjs/plugin-puppeteer`。NoneBot2 忽略。
+    pub install_renderer: bool,
 }
 
 #[async_trait]
@@ -157,6 +164,64 @@ pub trait AppFrameworkAdapter: Send + Sync {
             .into_iter()
             .find(|d| d.id == doc_id)
             .ok_or_else(|| AppFrameworkError::Validation(format!("未知的配置文档: {doc_id}")))
+    }
+
+    async fn list_installed(
+        &self,
+        _host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<Vec<KarinPluginInstalled>, AppFrameworkError> {
+        Err(AppFrameworkError::PluginUnsupported(
+            instance.framework_id.as_str().to_string(),
+        ))
+    }
+
+    async fn install_plugin(
+        &self,
+        _host: &dyn Host,
+        instance: &AppInstance,
+        _entry: &KarinPluginMarketEntry,
+        _log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        Err(AppFrameworkError::PluginUnsupported(
+            instance.framework_id.as_str().to_string(),
+        ))
+    }
+
+    async fn update_plugin(
+        &self,
+        _host: &dyn Host,
+        instance: &AppInstance,
+        _entry: &KarinPluginMarketEntry,
+        _log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        Err(AppFrameworkError::PluginUnsupported(
+            instance.framework_id.as_str().to_string(),
+        ))
+    }
+
+    async fn uninstall_plugin(
+        &self,
+        _host: &dyn Host,
+        instance: &AppInstance,
+        _name: &str,
+        _kind: KarinPluginKind,
+        _log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        Err(AppFrameworkError::PluginUnsupported(
+            instance.framework_id.as_str().to_string(),
+        ))
+    }
+
+    async fn list_plugin_config_docs(
+        &self,
+        _host: &dyn Host,
+        instance: &AppInstance,
+        _plugin_name: &str,
+    ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
+        Err(AppFrameworkError::PluginUnsupported(
+            instance.framework_id.as_str().to_string(),
+        ))
     }
 }
 

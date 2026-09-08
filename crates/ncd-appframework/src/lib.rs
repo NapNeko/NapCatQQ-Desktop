@@ -24,6 +24,12 @@ pub use config_doc::{
 };
 pub use env_file::{EnvEntry, EnvFile, EnvWrite};
 pub use karin::config::{KarinEnv, KarinInstanceConfig};
+pub use karin::plugin::{
+    KarinPluginAppFile, KarinPluginAuthor, KarinPluginInstalled, KarinPluginKind,
+    KarinPluginMarketEntry, KarinPluginRepo, PluginLogSink, apply_plugin_enabled,
+    app_file_basename, confirm_plugin_on_disk, git_clone_url, parse_karin_plugins_list,
+    write_app_file_bytes,
+};
 pub use karin::{KARIN_FRAMEWORK_ID, KarinAdapter, KarinComponent, KarinIntegration, karin_manifest};
 pub use nonebot2::{
     NONEBOT2_FRAMEWORK_ID, NoneBot2Adapter, NoneBot2Component, NoneBot2Integration,

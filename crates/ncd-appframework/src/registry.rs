@@ -105,6 +105,7 @@ mod tests {
                 node_bin: None,
                 uv_bin: None,
                 npm_registry: None,
+                install_renderer: false,
             };
             let mut from_reqs: Vec<String> = adapter
                 .component(&spec)

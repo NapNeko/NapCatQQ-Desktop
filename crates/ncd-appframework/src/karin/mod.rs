@@ -4,12 +4,15 @@ mod component;
 pub mod config;
 mod integration;
 pub mod manifest;
+pub mod plugin;
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
-use ncd_domain::{AppConfigDocument, AppFrameworkManifest, AppInstance, OneBotLinkPlan};
+use ncd_domain::{
+    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, OneBotLinkPlan,
+};
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
@@ -17,12 +20,18 @@ pub use component::KarinComponent;
 pub use config::{KarinInstanceConfig, karin_config_documents};
 pub use integration::KarinIntegration;
 pub use manifest::{KARIN_FRAMEWORK_ID, karin_manifest};
+pub use plugin::{
+    KarinPluginAppFile, KarinPluginAuthor, KarinPluginInstalled, KarinPluginKind,
+    KarinPluginMarketEntry, KarinPluginRepo, apply_plugin_enabled, app_file_basename,
+    confirm_plugin_on_disk, git_clone_url, parse_karin_plugins_list, write_app_file_bytes,
+};
 
 use crate::adapter::{
     AppComponentSpec, AppFrameworkAdapter, apply_with_backup, restore_from_backup,
 };
 use crate::config_doc::{
-    AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
+    AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, MISSING_REVISION,
+    combined_revision_of, read_document,
 };
 use crate::env_file::EnvFile;
 use manifest::{ENV_WS_SERVER_AUTH_KEY, KARIN_ADAPTER_JSON, KARIN_ENV_FILE, KARIN_STDOUT_LOG};
@@ -139,7 +148,8 @@ impl AppFrameworkAdapter for KarinAdapter {
         Arc::new(
             KarinComponent::new(spec.install_dir.clone(), spec.port)
                 .with_node_bin(spec.node_bin.clone())
-                .with_npm_registry(spec.npm_registry.clone()),
+                .with_npm_registry(spec.npm_registry.clone())
+                .with_install_renderer(spec.install_renderer),
         )
     }
 
@@ -253,6 +263,101 @@ impl AppFrameworkAdapter for KarinAdapter {
         let (config, snaps) =
             config::write_karin_config(host, &install_dir, karin, &current).await?;
         Ok(envelope(config, &snaps))
+    }
+
+    async fn list_installed(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<Vec<plugin::KarinPluginInstalled>, AppFrameworkError> {
+        plugin::list_installed(host, instance).await
+    }
+
+    async fn install_plugin(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        entry: &plugin::KarinPluginMarketEntry,
+        log: Option<&plugin::PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        plugin::install_plugin(host, instance, entry, log).await
+    }
+
+    async fn update_plugin(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        entry: &plugin::KarinPluginMarketEntry,
+        log: Option<&plugin::PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        plugin::update_plugin(host, instance, entry, log).await
+    }
+
+    async fn uninstall_plugin(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        name: &str,
+        kind: plugin::KarinPluginKind,
+        log: Option<&plugin::PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        plugin::uninstall_plugin(host, instance, name, kind, log).await
+    }
+
+    async fn list_plugin_config_docs(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        plugin_name: &str,
+    ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
+        plugin::list_plugin_config_docs(host, instance, plugin_name).await
+    }
+
+    fn find_document(
+        &self,
+        instance: &AppInstance,
+        doc_id: &str,
+    ) -> Result<AppConfigDocument, AppFrameworkError> {
+        if let Some(doc) = plugin::resolve_plugin_config_doc(doc_id) {
+            return Ok(doc);
+        }
+        self.config_documents(instance)
+            .into_iter()
+            .find(|d| d.id == doc_id)
+            .ok_or_else(|| AppFrameworkError::Validation(format!("未知的配置文档: {doc_id}")))
+    }
+
+    async fn read_config_text(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        doc_id: &str,
+    ) -> Result<AppConfigText, AppFrameworkError> {
+        let doc = self.find_document(instance, doc_id)?;
+        let root = HostPath::from_posix(&instance.install_dir);
+        let snap = read_document(host, &root, &doc).await?;
+        if let Some(text) = snap.text {
+            return Ok(AppConfigText {
+                doc_id: doc.id,
+                text,
+                revision: snap.revision,
+            });
+        }
+        if let Some((name, rel)) = plugin::parse_plugin_doc_id(doc_id) {
+            if let Some(text) = plugin::read_plugin_package_default(host, instance, name, rel).await?
+            {
+                return Ok(AppConfigText {
+                    doc_id: doc.id,
+                    text,
+                    revision: MISSING_REVISION.to_string(),
+                });
+            }
+        }
+        Ok(AppConfigText {
+            doc_id: doc.id,
+            text: String::new(),
+            revision: MISSING_REVISION.to_string(),
+        })
     }
 }
 
