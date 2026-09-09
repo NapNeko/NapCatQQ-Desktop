@@ -1,4 +1,4 @@
-// 应用端实例详情：头部 + Tabs + 粘性保存。Karin 走类型化 Tab；NoneBot2 走适配器/插件店 + 窄连接。
+// 应用端实例详情：头部 + Tabs + 粘性保存。框架专有 Tab 走 registry，未知框架只有原文和日志。
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -42,68 +42,9 @@ import { cn } from '../../../shared/utils/cn';
 import { ConfigConflictDialog } from './ConfigConflictDialog';
 import { InstanceLogTab } from './InstanceLogTab';
 import { RawFilesTab } from './RawFilesTab';
-import { useKarinConfigForm } from './useKarinConfigForm';
-import { KarinBasicTab } from './karin/KarinBasicTab';
-import { KarinConnectionsTab } from './karin/KarinConnectionsTab';
-import { KarinPermissionsTab } from './karin/KarinPermissionsTab';
-import { KarinRenderStorageTab } from './karin/KarinRenderStorageTab';
-import { KarinPluginsTab } from './karin/KarinPluginsTab';
-import { KarinRulesTab } from './karin/KarinRulesTab';
-import { NoneBot2ConnectionsTab } from './nonebot2/NoneBot2ConnectionsTab';
-import { NoneBot2StoreTab } from './nonebot2/NoneBot2StoreTab';
-import { useNoneBot2ConfigForm } from './useNoneBot2ConfigForm';
+import { resolveFrameworkUi, type FrameworkSaveHandle } from './frameworkUi';
 import type { DetailTabHint } from '../list/AppInstanceListPage';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
-
-type KarinTab = 'basic' | 'permissions' | 'connections' | 'rules' | 'render' | 'plugins';
-type NoneBotTab = 'adapters' | 'plugins' | 'connections';
-type TabValue = KarinTab | NoneBotTab | 'raw' | 'log';
-
-const NONEBOT_TABS: ReadonlyArray<{ value: NoneBotTab; label: string }> = [
-    { value: 'adapters', label: '适配器' },
-    { value: 'plugins', label: '插件' },
-    { value: 'connections', label: '连接' },
-];
-
-const KARIN_TABS: ReadonlyArray<{ value: KarinTab; label: string }> = [
-    { value: 'basic', label: '基础' },
-    { value: 'permissions', label: '权限' },
-    { value: 'connections', label: '连接' },
-    { value: 'rules', label: '响应规则' },
-    { value: 'render', label: '渲染与存储' },
-    { value: 'plugins', label: '插件' },
-];
-
-const KARIN_TYPED_TABS = new Set<string>(['basic', 'permissions', 'connections', 'rules', 'render']);
-const NONEBOT_TYPED_TABS = new Set<string>(['connections']);
-
-/** 校验 issue 的 path 前缀 → 所在 Tab，保存被驳回时跳过去。 */
-function tabForIssuePath(path: string, nonebot: boolean): TabValue {
-    if (nonebot) return 'connections';
-    const root = path.split('/')[0];
-    switch (root) {
-        case 'config':
-            return 'permissions';
-        case 'adapter':
-            return 'connections';
-        case 'groups':
-        case 'privates':
-            return 'rules';
-        case 'render':
-        case 'redis':
-            return 'render';
-        case 'env':
-            if (
-                path.startsWith('env/http_') ||
-                path.startsWith('env/ws_server_auth_key')
-            ) {
-                return 'connections';
-            }
-            return 'basic';
-        default:
-            return 'basic';
-    }
-}
 
 export interface AppInstancePageNextProps {
     instanceId: string;
@@ -122,41 +63,36 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
         [frameworks.data, instance?.framework_id],
     );
 
-    const isKarin = instance?.framework_id === 'karin';
-    const isNoneBot2 = instance?.framework_id === 'nonebot2';
+    const ui = instance ? resolveFrameworkUi(instance.framework_id) : undefined;
     const installed = !!instance && isInstalled(instance);
     const running = instance?.state === 'running';
-    const karinTyped = isKarin && installed;
-    const nonebotTyped = isNoneBot2 && installed;
+    const FrameworkDetail = ui?.Detail;
 
-    const form = useKarinConfigForm(instanceId, karinTyped, instance?.display_name ?? '');
-    const nbForm = useNoneBot2ConfigForm(instanceId, nonebotTyped, instance?.display_name ?? '');
-
-    const defaultTab: TabValue =
-        initialTab === 'log' ? 'log' : karinTyped ? 'basic' : nonebotTyped ? 'adapters' : 'raw';
-    const [activeTab, setActiveTab] = useState<TabValue>(defaultTab);
-    // 详情页刚打开时实例列表可能还没到；到了之后按框架修正默认 Tab（仅在用户没手动切过时）
+    const defaultTab =
+        initialTab === 'log' ? 'log' : installed && ui ? ui.defaultTab : 'raw';
+    const [activeTab, setActiveTab] = useState(defaultTab);
     const [userSwitched, setUserSwitched] = useState(false);
+    const [saveHandle, setSaveHandle] = useState<FrameworkSaveHandle | null>(null);
+
     useEffect(() => {
         if (userSwitched || !instance) return;
-        setActiveTab(
-            initialTab === 'log' ? 'log' : karinTyped ? 'basic' : nonebotTyped ? 'adapters' : 'raw',
-        );
-    }, [instance, karinTyped, nonebotTyped, initialTab, userSwitched]);
+        setActiveTab(initialTab === 'log' ? 'log' : installed && ui ? ui.defaultTab : 'raw');
+    }, [instance, installed, ui, initialTab, userSwitched]);
 
     const [linkOpen, setLinkOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
     const jumpToFirstIssue = (issues: AppConfigIssue[]) => {
         const first = issues[0];
-        if (!first) return;
+        if (!first || !ui) return;
         setUserSwitched(true);
-        setActiveTab(tabForIssuePath(first.path, isNoneBot2));
+        setActiveTab(ui.tabForIssue(first.path));
     };
 
     const handleSave = async (overwrite = false) => {
-        const outcome = isNoneBot2 ? await nbForm.save(overwrite) : await form.save(overwrite);
-        if (outcome.kind === 'invalid') jumpToFirstIssue(outcome.issues);
+        if (!saveHandle) return;
+        const outcome = await saveHandle.save(overwrite);
+        if (outcome.kind === 'invalid' && outcome.issues) jumpToFirstIssue(outcome.issues);
     };
 
     if (apps.isLoading && !instance) {
@@ -181,15 +117,11 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
     }
 
     const busy = apps.pendingId === instance.id || instance.state === 'installing';
-    const activeForm = isNoneBot2 ? nbForm : form;
-    const showSaveBar =
-        (karinTyped && KARIN_TYPED_TABS.has(activeTab))
-        || (nonebotTyped && NONEBOT_TYPED_TABS.has(activeTab));
+    const showSaveBar = !!ui && ui.typedTabs.has(activeTab);
     const fillPane =
         activeTab === 'raw'
         || activeTab === 'log'
-        || activeTab === 'plugins'
-        || activeTab === 'adapters';
+        || !!ui?.fillPaneTabs.has(activeTab);
 
     return (
         <TooltipProvider delayDuration={200}>
@@ -278,24 +210,17 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                             value={activeTab}
                             onValueChange={(v) => {
                                 setUserSwitched(true);
-                                setActiveTab(v as TabValue);
+                                setActiveTab(v);
                             }}
                             className={cn('flex flex-1 flex-col', fillPane && 'min-h-0')}
                         >
                             <div className="sticky top-0 z-[5] flex items-center justify-between gap-2 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
                                 <TabsList className="scrollbar-hide min-w-0 shrink overflow-x-auto border-b-0">
-                                    {karinTyped &&
-                                        KARIN_TABS.map((t) => (
-                                            <TabsTrigger key={t.value} value={t.value}>
-                                                {t.label}
-                                            </TabsTrigger>
-                                        ))}
-                                    {nonebotTyped &&
-                                        NONEBOT_TABS.map((t) => (
-                                            <TabsTrigger key={t.value} value={t.value}>
-                                                {t.label}
-                                            </TabsTrigger>
-                                        ))}
+                                    {ui?.extraTabs.map((t) => (
+                                        <TabsTrigger key={t.value} value={t.value}>
+                                            {t.label}
+                                        </TabsTrigger>
+                                    ))}
                                     <TabsTrigger value="raw">原始文件</TabsTrigger>
                                     <TabsTrigger value="log">日志</TabsTrigger>
                                 </TabsList>
@@ -304,43 +229,20 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                                         id="app-store-toolbar-slot"
                                         className="flex min-w-0 items-center justify-end"
                                     />
-                                    {showSaveBar && (
+                                    {showSaveBar && saveHandle && (
                                         <SaveActions
-                                            dirty={activeForm.dirty}
-                                            saving={activeForm.saving}
-                                            issueCount={activeForm.clientIssues.length}
+                                            dirty={saveHandle.dirty}
+                                            saving={saveHandle.saving}
+                                            issueCount={saveHandle.issueCount}
                                             onSave={() => void handleSave()}
-                                            onCancel={activeForm.reset}
+                                            onCancel={saveHandle.reset}
                                         />
                                     )}
                                 </div>
                             </div>
 
-                            {karinTyped && <TypedTabs instance={instance} form={form} />}
-                            {karinTyped && (
-                                <TabsContent
-                                    value="plugins"
-                                    className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
-                                >
-                                    <KarinPluginsTab instance={instance} />
-                                </TabsContent>
-                            )}
-                            {nonebotTyped && (
-                                <>
-                                    <TabsContent
-                                        value="adapters"
-                                        className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
-                                    >
-                                        <NoneBot2StoreTab instance={instance} resource="adapter" />
-                                    </TabsContent>
-                                    <TabsContent
-                                        value="plugins"
-                                        className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2"
-                                    >
-                                        <NoneBot2StoreTab instance={instance} resource="plugin" />
-                                    </TabsContent>
-                                    <NoneBot2TypedTab instance={instance} form={nbForm} />
-                                </>
+                            {FrameworkDetail && (
+                                <FrameworkDetail instance={instance} onSaveHandle={setSaveHandle} />
                             )}
 
                             <TabsContent value="raw" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
@@ -373,10 +275,10 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                 />
 
                 <ConfigConflictDialog
-                    open={activeForm.conflict}
-                    busy={activeForm.saving}
-                    onCancel={activeForm.dismissConflict}
-                    onReload={() => void activeForm.reloadDiscard()}
+                    open={!!saveHandle?.conflict}
+                    busy={!!saveHandle?.saving}
+                    onCancel={() => saveHandle?.dismissConflict()}
+                    onReload={() => void saveHandle?.reloadDiscard()}
                     onOverwrite={() => void handleSave(true)}
                 />
             </div>
@@ -401,111 +303,6 @@ const NotInstalledBody: React.FC<{ instance: AppInstance; busy: boolean; onInsta
         )}
     </PagePlaceholder>
 );
-
-const NoneBot2TypedTab: React.FC<{
-    instance: AppInstance;
-    form: ReturnType<typeof useNoneBot2ConfigForm>;
-}> = ({ instance, form }) => {
-    if (form.isLoading && !form.form) {
-        return (
-            <TabsContent value="connections" className="pb-8 pt-2">
-                <div className="flex items-center gap-2 py-10 text-sm text-text-tertiary">
-                    <Spinner size="sm" /> 读取配置…
-                </div>
-            </TabsContent>
-        );
-    }
-    if (form.loadError && !form.form) {
-        return (
-            <TabsContent value="connections" className="pb-8 pt-2">
-                <div className="flex flex-col items-start gap-2 py-10">
-                    <p className="text-sm text-text-secondary">读取配置失败</p>
-                    <Button size="sm" variant="secondary" onClick={() => void form.reloadDiscard()}>
-                        <ActionMotionIcon icon={RefreshCw} size={13} />
-                        重试
-                    </Button>
-                </div>
-            </TabsContent>
-        );
-    }
-    if (!form.form) return null;
-    return (
-        <TabsContent value="connections" className="pb-8 pt-2">
-            <NoneBot2ConnectionsTab
-                config={form.form}
-                onChange={form.setForm}
-                errors={form.errors}
-                linked={!!instance.link}
-                disabled={form.saving}
-            />
-        </TabsContent>
-    );
-};
-
-const TypedTabs: React.FC<{
-    instance: AppInstance;
-    form: ReturnType<typeof useKarinConfigForm>;
-}> = ({ instance, form }) => {
-    if (form.isLoading && !form.form) {
-        return (
-            <>
-                {(['basic', 'permissions', 'connections', 'rules', 'render'] as const).map((value) => (
-                    <TabsContent key={value} value={value} className="pb-8 pt-2">
-                        <div className="flex items-center gap-2 py-10 text-sm text-text-tertiary">
-                            <Spinner size="sm" /> 读取配置…
-                        </div>
-                    </TabsContent>
-                ))}
-            </>
-        );
-    }
-    if (form.loadError && !form.form) {
-        return (
-            <>
-                {(['basic', 'permissions', 'connections', 'rules', 'render'] as const).map((value) => (
-                    <TabsContent key={value} value={value} className="pb-8 pt-2">
-                        <div className="flex flex-col items-start gap-2 py-10">
-                            <p className="text-sm text-text-secondary">读取配置失败</p>
-                            <Button size="sm" variant="secondary" onClick={() => void form.reloadDiscard()}>
-                                <ActionMotionIcon icon={RefreshCw} size={13} />
-                                重试
-                            </Button>
-                        </div>
-                    </TabsContent>
-                ))}
-            </>
-        );
-    }
-    if (!form.form) return null;
-
-    const tabProps = {
-        config: form.form,
-        onChange: form.setForm,
-        errors: form.errors,
-        linked: !!instance.link,
-        disabled: form.saving,
-    };
-
-    return (
-        <>
-            <TabsContent value="basic" className="pb-8 pt-2">
-                <KarinBasicTab {...tabProps} />
-            </TabsContent>
-            <TabsContent value="permissions" className="pb-8 pt-2">
-                <KarinPermissionsTab {...tabProps} />
-            </TabsContent>
-            <TabsContent value="connections" className="pb-8 pt-2">
-                <KarinConnectionsTab {...tabProps} />
-            </TabsContent>
-            <TabsContent value="rules" className="pb-8 pt-2">
-                <KarinRulesTab {...tabProps} />
-            </TabsContent>
-            <TabsContent value="render" className="pb-8 pt-2">
-                <KarinRenderStorageTab {...tabProps} />
-            </TabsContent>
-        </>
-    );
-};
 
 const InstanceMoreMenu: React.FC<{
     busy: boolean;

@@ -65,7 +65,7 @@ export const CreateInstanceDialog: React.FC<{
             port: null,
             installNow: true,
             installDirOverride: null,
-            installRenderer: request.manifest.id === 'karin',
+            installRenderer: request.manifest.has_install_renderer,
         });
     }, [request]);
 
@@ -90,7 +90,7 @@ export const CreateInstanceDialog: React.FC<{
     const supportsLocal = manifest?.supported_placements.includes('local_native') ?? false;
     const supportsRemote = manifest?.supported_placements.includes('remote_native') ?? false;
     const isRemote = draft?.hostId.startsWith('remote:') ?? false;
-    const isKarin = draft?.frameworkId === 'karin';
+    const showRenderer = manifest?.has_install_renderer ?? false;
 
     const hostItems: SelectItem[] = locked
         ? [{ value: locked, label: hostIdDisplayLabel(locked, servers) }]
@@ -225,7 +225,7 @@ export const CreateInstanceDialog: React.FC<{
                                     </p>
                                 </div>
                             )}
-                            {isKarin && (
+                            {showRenderer && (
                                 <Checkbox
                                     label="一并安装插件版渲染器"
                                     hint="会额外下载 Chromium，体积较大"

@@ -35,6 +35,8 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         link_modes: ['reverse_ws'],
         component_id: 'karin',
         runtime_component_ids: ['nodejs'],
+        store_resources: ['plugin'],
+        has_install_renderer: true,
     },
     {
         id: 'nonebot2',
@@ -48,6 +50,8 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         link_modes: ['reverse_ws'],
         component_id: 'nonebot2',
         runtime_component_ids: ['uv'],
+        store_resources: ['adapter', 'plugin'],
+        has_install_renderer: false,
     },
 ];
 
