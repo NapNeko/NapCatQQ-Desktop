@@ -83,7 +83,7 @@ export function OneBotEditorDialog({
                 <DialogHeader className="shrink-0">
                     <DialogTitle>配置 OneBot 通知</DialogTitle>
                     <DialogDescription>
-                        按主机勾选发送方：本机供 Desktop，远端供同机 ncd-watch。目标与模板全局共用。
+                        本机发送方供 Desktop，远端供同机 ncd-watch；目标与模板共用。
                     </DialogDescription>
                 </DialogHeader>
 

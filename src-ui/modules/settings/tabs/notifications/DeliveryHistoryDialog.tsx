@@ -74,7 +74,7 @@ export function DeliveryHistoryDialog({
                         </Badge>
                     </div>
                     <DialogDescription>
-                        本次运行的通知结果；重启应用后自动清空。
+                        本次运行的通知结果；重启后清空。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -83,9 +83,6 @@ export function DeliveryHistoryDialog({
                         <div className="flex min-h-48 flex-col justify-center px-5 py-8 text-center">
                             <p className="text-[13px] font-medium text-text-secondary">
                                 暂无投递记录
-                            </p>
-                            <p className="mx-auto mt-1.5 max-w-sm text-[12px] leading-relaxed text-text-tertiary">
-                                Bot 掉线、恢复或异常退出后，这里会记录桌面通知和各推送通道的结果。
                             </p>
                         </div>
                     ) : (

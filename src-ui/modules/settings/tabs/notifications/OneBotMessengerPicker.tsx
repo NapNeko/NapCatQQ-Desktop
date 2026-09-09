@@ -195,7 +195,7 @@ export function OneBotMessengerPicker({
                             </Badge>
                         </div>
                         <p className="mt-0.5 text-[11.5px] leading-relaxed text-text-tertiary">
-                            按主机分组；同机多 Bot 冗余，不会跨服务器发 OneBot
+                            同机多 Bot 冗余，不跨服务器发 OneBot
                             {localEligible > 0 ? ` · 本机可发 ${localEligible}` : ''}
                             {remoteWatchReady > 0
                                 ? ` · 远端同机 ${remoteWatchReady}`
@@ -269,11 +269,7 @@ export function OneBotMessengerPicker({
                             );
                         })}
                     </div>
-                ) : (
-                    <div className="rounded-sm border border-dashed border-border-subtle bg-inset/25 px-2.5 py-2 text-[11.5px] text-text-tertiary">
-                        从下方按主机勾选发送方；本机供 Desktop 投递，远端供该机 ncd-watch
-                    </div>
-                )}
+                ) : null}
 
                 <TextField
                     name="onebot-messenger-search"
@@ -297,8 +293,8 @@ export function OneBotMessengerPicker({
                         </p>
                         <p className="text-[11.5px] text-text-tertiary">
                             {candidates.length === 0
-                                ? '先在 Bot 列表添加本机或远端实例，再回来配置'
-                                : '试试换个关键词'}
+                                ? '先在 Bot 列表添加本机或远端实例'
+                                : '换个关键词'}
                         </p>
                     </div>
                 ) : (
@@ -314,7 +310,7 @@ export function OneBotMessengerPicker({
                                     </Badge>
                                     {!group.isLocal ? (
                                         <span className="truncate text-[10.5px] text-text-tertiary">
-                                            仅同机 watch · 不同服务器互不调用
+                                            仅同机 watch，不跨服务器调用
                                         </span>
                                     ) : null}
                                 </div>

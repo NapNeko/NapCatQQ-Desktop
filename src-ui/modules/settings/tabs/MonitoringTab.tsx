@@ -53,7 +53,7 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
 
                 <FieldRow
                     label="采样间隔"
-                    description={`曲线刷新间隔。拖动滑块，${PERFORMANCE_MONITOR_INTERVAL_MS_MIN}–${PERFORMANCE_MONITOR_INTERVAL_MS_MAX} 毫秒`}
+                    description={`曲线刷新间隔，${PERFORMANCE_MONITOR_INTERVAL_MS_MIN}–${PERFORMANCE_MONITOR_INTERVAL_MS_MAX} 毫秒`}
                     isLast
                 >
                     <PerformanceMonitorIntervalSlider
@@ -71,11 +71,11 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
 
             <SettingsSection
                 title="实例运行时指标"
-                description="内存与 OneBot 网络节点收发。不修改你的连接配置；探针需重新启动实例后生效。远端已装 ncd-watch 时，Desktop 退出后仍继续记录历史。"
+                description="内存与 OneBot 网络节点收发；远端已装 ncd-watch 时，Desktop 退出后仍继续记录历史"
             >
                 <FieldRow
                     label="启用实例指标"
-                    description="默认关闭。保存后重启需要观测的 Bot，轻量探针才会随进程载入"
+                    description="默认关闭；保存后重启被观测的 Bot 才生效"
                 >
                     <Switch
                         checked={draft.botRuntimeMetricsEnabled}
@@ -100,7 +100,7 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
                 </FieldRow>
                 <FieldRow
                     label="历史保留"
-                    description="默认 7 天，最长 90 天；图表粒度可能降为约 1 分钟"
+                    description="默认 7 天，最长 90 天；粒度可能降为约 1 分钟"
                     isLast
                 >
                     <div className="flex items-center gap-2">
@@ -127,13 +127,9 @@ export function MonitoringTab({ draft, patchDraft }: Props) {
 
             <SettingsSection
                 title="任务队列"
-                description="已完成、失败或已取消的条目在列表中的保留时间；关闭自动清理则一直保留，直至重启应用。"
+                description="已完成、失败或已取消的条目在列表中的保留时间；关闭则保留到重启应用"
             >
-                <FieldRow
-                    label="自动清理"
-                    description="开启后，终态任务在下方时长过后从任务队列移除"
-                    isLast
-                >
+                <FieldRow label="自动清理" isLast>
                     <InfoBarDismissSliderPresence
                         visible={draft.taskQueueCleanupEnabled}
                     >

@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import {
-    clampRemoteHostHealthProbeIntervalMs,
-    REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX,
-    REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN,
-} from '../../../core/domain/remote-host/healthProbeSettings';
+import { clampRemoteHostHealthProbeIntervalMs } from '../../../core/domain/remote-host/healthProbeSettings';
 import { Button, NumberField, Select, Switch } from '../../../shared/ui';
 import type { NodeEnvironmentCandidate } from '../../../core/ipc/types';
 import { componentService } from '../../../core/services/component.service';
@@ -96,11 +92,11 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
 
             <SettingsSection
                 title="SnowLuma 运行环境"
-                description="配置 SnowLuma 启动所使用的 Node.js 运行时（需 ^22.13.0 || >=23.4.0）。"
+                description="SnowLuma 启动所用 Node.js，需 ^22.13.0 || >=23.4.0"
             >
                 <FieldRow
                     label="Node.js 运行环境"
-                    description="默认按优先级自动选择（内置 > Node.js 组件 > 系统 PATH）。"
+                    description="默认按内置 > Node.js 组件 > 系统 PATH 选择"
                     isLast
                 >
                     <div className="flex items-center gap-2 max-w-md w-full">
@@ -130,11 +126,11 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
 
             <SettingsSection
                 title="远程主机"
-                description="后台定期对已连接的远端主机执行低频探测（is_healthy）。探测失败时自动标记并通知，不影响本机主机。默认开启低频（30 秒一次）。"
+                description="后台低频探测已连接的远端主机，失败时标记并通知；默认 30 秒一次"
             >
                 <FieldRow
                     label="启用后台探活"
-                    description="关闭后不再主动探测远端主机连通性；已有的失败状态仍保留，直至下次成功连接或手动测试。"
+                    description="关闭后不再主动探测；已有失败状态保留至下次成功连接或手动测试"
                 >
                     <Switch
                         checked={draft.remoteHostHealthProbeEnabled}
@@ -144,11 +140,7 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
                     />
                 </FieldRow>
 
-                <FieldRow
-                    label="探活间隔"
-                    description={`仅在启用时生效。${REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MIN / 1000}–${REMOTE_HOST_HEALTH_PROBE_INTERVAL_MS_MAX / 1000} 秒，拖动滑块调整。`}
-                    isLast
-                >
+                <FieldRow label="探活间隔" isLast>
                     <RemoteHostHealthProbeIntervalSlider
                         value={draft.remoteHostHealthProbeIntervalMs}
                         onChange={(v) =>

@@ -84,7 +84,7 @@ export function DataTab({
             >
                 <FieldRow
                     label="导出当前配置"
-                    description="保存为 ZIP 包（config.json、bot.json、servers.json 与元数据；不含密钥）"
+                    description="ZIP 内含 config.json、bot.json、servers.json"
                 >
                     <Button
                         variant="secondary"
@@ -96,11 +96,7 @@ export function DataTab({
                     </Button>
                 </FieldRow>
 
-                <FieldRow
-                    label="导入配置"
-                    description="从 ZIP 或文件夹恢复；向导内可预览将写入的项"
-                    isLast
-                >
+                <FieldRow label="导入配置" isLast>
                     <Button variant="secondary" size="sm" onClick={openImportWizard}>
                         打开导入向导
                     </Button>
@@ -121,7 +117,7 @@ export function DataTab({
 
             <SettingsSection
                 title="GitHub"
-                description="可选；组件页检查 NapCat / SnowLuma 更新时可走认证额度"
+                description="可选；填写后组件页检查更新走认证额度"
             >
                 {!draft ? (
                     <p className="text-[13px] text-text-tertiary">正在加载设置…</p>

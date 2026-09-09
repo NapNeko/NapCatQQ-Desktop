@@ -106,7 +106,7 @@ export function WebhookChannelEditorDialog({
                                     : '编辑推送通道'}
                             </DialogTitle>
                             <DialogDescription>
-                                选服务、填连接、编辑消息。完成后点添加/完成，再保存设置。
+                                确认后需保存设置才生效。
                             </DialogDescription>
                         </DialogHeader>
 

@@ -3,7 +3,7 @@
 /** Server酱风格默认 Webhook body */
 export const DEFAULT_WEBHOOK_BODY = `{
   "title": "账号状态通知：{event}",
-  "desp": "您的账号状态发生了改变。\\n\\n**昵称**：{nickname}\\n**QQ号**：{uin}\\n**当前状态**：{event}\\n**时间**：{time}"
+  "desp": "账号状态发生变化。\\n\\n**昵称**：{nickname}\\n**QQ号**：{uin}\\n**当前状态**：{event}\\n**时间**：{time}"
 }`;
 
 /** 钉钉机器人 markdown */

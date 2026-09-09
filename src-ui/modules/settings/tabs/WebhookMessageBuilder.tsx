@@ -213,11 +213,11 @@ export function WebhookMessageBuilder({
                         <p className="text-xs font-medium text-text-secondary">
                             消息内容
                         </p>
-                        <p className="text-[11.5px] leading-relaxed text-text-tertiary">
-                            {isCustom
-                                ? '结构未识别，请直接编辑 JSON'
-                                : '字段改动会同步到 JSON'}
-                        </p>
+                        {isCustom ? (
+                            <p className="text-[11.5px] leading-relaxed text-text-tertiary">
+                                结构未识别，直接编辑 JSON
+                            </p>
+                        ) : null}
                     </div>
                     <Badge
                         tone={isCustom ? 'warning' : 'brand'}
@@ -230,10 +230,10 @@ export function WebhookMessageBuilder({
                 {isCustom ? (
                     <div className="flex flex-1 flex-col justify-center gap-2 rounded-sm border border-dashed border-border-subtle bg-field/40 px-3 py-6 text-center">
                         <p className="text-[13px] text-text-secondary">
-                            当前是自定义 payload
+                            自定义 payload
                         </p>
                         <p className="text-[11.5px] leading-relaxed text-text-tertiary">
-                            可点选服务类型自动套壳，或继续编辑 JSON。
+                            可选服务类型套用模板，或直接编辑 JSON
                         </p>
                     </div>
                 ) : (
@@ -338,9 +338,6 @@ export function WebhookMessageBuilder({
                     <div className="min-w-0 space-y-0.5">
                         <p className="text-xs font-medium text-text-secondary">
                             原始 JSON
-                        </p>
-                        <p className="text-[11.5px] leading-relaxed text-text-tertiary">
-                            可直接编辑；合法时会同步字段
                         </p>
                     </div>
                     <Badge

@@ -324,7 +324,7 @@ export function NotificationsTab({
                         : '已自动创建环回 HTTP 服务';
             const scopeHint =
                 result.candidate.scope === 'remote'
-                    ? '远端配置已写入；保存后请同步 ncd-watch。运行中时会尽量热更新。'
+                    ? '远端配置已写入；保存后同步 ncd-watch。运行中会尽量热更新。'
                     : '若 Bot 正在运行，会热更新连接配置。';
             pushInfoBar({
                 key: 'onebot-enable-http',
@@ -352,7 +352,7 @@ export function NotificationsTab({
                 tone: 'success',
                 title: '测试已发送',
                 content:
-                    '请到目标服务确认是否收到。',
+                    '到目标服务确认是否收到。',
             });
         } catch (err) {
             pushErrorBar({
@@ -397,11 +397,11 @@ export function NotificationsTab({
         <SettingsTabSections>
             <SettingsSection
                 title="桌面通知"
-                description="主窗口隐藏或进入轻量模式时，仍可通过系统通知提醒你"
+                description="主窗口隐藏或进入轻量模式时仍会提醒"
             >
                 <FieldRow
                     label="Bot 掉线"
-                    description="还需在对应 Bot 高级设置里打开「掉线时发送通知」（NapCat / SnowLuma 均需；此开关同时门控 Webhook / 邮件 / OneBot）"
+                    description="还需在 Bot 高级设置里打开「掉线时发送通知」（NapCat / SnowLuma 均需）；此开关同时门控 Webhook / 邮件 / OneBot"
                 >
                     <Switch
                         checked={draft.notifyOnOffline}
@@ -412,7 +412,7 @@ export function NotificationsTab({
                 </FieldRow>
                 <FieldRow
                     label="Bot 异常退出"
-                    description="进程非正常结束时（全局）"
+                    description="所有 Bot 进程非正常结束时"
                 >
                     <Switch
                         checked={draft.notifyOnBotCrashed}
@@ -423,7 +423,7 @@ export function NotificationsTab({
                 </FieldRow>
                 <FieldRow
                     label="被踢下线"
-                    description="QQ 被踢或登录失效时（全局）"
+                    description="所有 Bot 被踢下线或登录失效时"
                     isLast
                 >
                     <Switch
@@ -439,11 +439,11 @@ export function NotificationsTab({
 
             <SettingsSection
                 title="投递行为"
-                description="恢复通知、重复掉线防抖与内存投递历史（不落盘，重启清空）"
+                description="恢复通知、掉线防抖与投递历史（仅内存，重启清空）"
             >
                 <FieldRow
                     label="上线恢复通知"
-                    description="掉线后又上线时再推一次（默认关；Webhook/邮件/OneBot 同样走总开关）"
+                    description="掉线后恢复上线时再推一次；默认关闭"
                 >
                     <Switch
                         checked={draft.notifyOnRecovered}
@@ -454,7 +454,7 @@ export function NotificationsTab({
                 </FieldRow>
                 <FieldRow
                     label="掉线防抖（秒）"
-                    description="同一 Bot 在窗口内重复 offline 边沿只投递一次；0 关闭"
+                    description="同一 Bot 在此秒数内只投递一次；0 关闭"
                 >
                     <NumberField
                         value={draft.offlineDebounceSeconds}
@@ -474,7 +474,7 @@ export function NotificationsTab({
                 </FieldRow>
                 <FieldRow
                     label="历史条数上限"
-                    description="内存保留最近 N 条投递记录；0 不记录"
+                    description="内存保留最近 N 条；0 不记录"
                 >
                     <NumberField
                         value={draft.offlineDeliveryHistoryLimit}
@@ -497,7 +497,7 @@ export function NotificationsTab({
                     description={
                         history.length > 0
                             ? `本次运行已有 ${history.length} 条记录；重启后自动清空`
-                            : '查看本次运行中各渠道的投递结果；重启后自动清空'
+                            : '查看各渠道投递结果；重启后自动清空'
                     }
                     isLast
                 >
@@ -513,10 +513,7 @@ export function NotificationsTab({
                 </FieldRow>
             </SettingsSection>
 
-            <SettingsSection
-                title="Webhook 推送"
-                description="掉线时向配置的地址发 JSON。启用后可管理通道；点通道在对话框里编辑。"
-            >
+            <SettingsSection title="Webhook 推送">
                 <FieldRow
                     label="启用 Webhook"
                     description={
@@ -540,7 +537,7 @@ export function NotificationsTab({
                     channels.length === 0 ? (
                         <FieldRow
                             label="推送通道"
-                            description="还没有通道；点右侧添加，在对话框里填地址与模板"
+                            description="还没有通道"
                             isLast
                         >
                             <Button
@@ -624,11 +621,7 @@ export function NotificationsTab({
                                     </FieldRow>
                                 );
                             })}
-                            <FieldRow
-                                label="添加通道"
-                                description={`已有 ${channels.length} 个；继续添加可配置多路推送`}
-                                isLast
-                            >
+                            <FieldRow label="添加通道" isLast>
                                 <Button
                                     type="button"
                                     variant="secondary"
@@ -653,7 +646,6 @@ export function NotificationsTab({
                         ) : null}
                     </span>
                 }
-                description="通过 SMTP 发 HTML 邮件。连接信息收敛到对话框，便于一次完成配置。"
             >
                 <FieldRow
                     label="启用邮件"
@@ -697,7 +689,7 @@ export function NotificationsTab({
                         ) : null}
                     </span>
                 }
-                description="本机掉线用本机发送方；远端掉线由该机 ncd-watch 用同机发送方。不会跨服务器调用 OneBot。"
+                description="本机掉线用本机发送方，远端掉线由该机 ncd-watch 发送；不跨服务器调用 OneBot"
             >
                 <FieldRow
                     label="启用 OneBot 通知"
@@ -734,9 +726,9 @@ export function NotificationsTab({
 
             <SettingsSection
                 title="应用内提示条"
-                description="错误类始终需手动关闭；下面控制说明 / 成功 / 警告是否自动消失"
+                description="错误提示需手动关闭；以下三类可自动消失"
             >
-                <FieldRow label="说明" description="蓝色提示">
+                <FieldRow label="说明">
                     <InfoBarDismissSliderPresence
                         visible={draft.infoBarDismissInfoEnabled}
                     >
@@ -757,7 +749,7 @@ export function NotificationsTab({
                         }
                     />
                 </FieldRow>
-                <FieldRow label="成功" description="绿色提示">
+                <FieldRow label="成功">
                     <InfoBarDismissSliderPresence
                         visible={draft.infoBarDismissSuccessEnabled}
                     >
@@ -778,7 +770,7 @@ export function NotificationsTab({
                         }
                     />
                 </FieldRow>
-                <FieldRow label="警告" description="橙色提示" isLast>
+                <FieldRow label="警告" isLast>
                     <InfoBarDismissSliderPresence
                         visible={draft.infoBarDismissWarningEnabled}
                     >

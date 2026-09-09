@@ -26,32 +26,22 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
 
     return (
         <SettingsTabSections>
-            <SettingsSection title="界面" description="保存后生效；编辑过程中不会预览主题切换">
-                <FieldRow
-                    label="主题"
-                    description="系统跟随 / 浅色 / 暗色 / Catppuccin 风味"
-                >
+            <SettingsSection title="界面" description="保存后生效，编辑时不预览主题切换">
+                <FieldRow label="主题">
                     <ThemePicker
                         value={draft.theme}
                         onChange={(v) => patchDraft({ theme: v })}
                     />
                 </FieldRow>
 
-                <FieldRow
-                    label="圆角风格"
-                    description="方正克制 · 标准平衡 · 圆润饱满，全局统一缩放"
-                >
+                <FieldRow label="圆角风格">
                     <RadiusStyleSegment
                         value={draft.radiusStyle}
                         onChange={(v) => patchDraft({ radiusStyle: v })}
                     />
                 </FieldRow>
 
-                <FieldRow
-                    label="主页吉祥物"
-                    description="概览页右上角猫娘"
-                    isLast
-                >
+                <FieldRow label="主页吉祥物" isLast>
                     <Switch
                         checked={draft.showMascot}
                         onCheckedChange={(v) => patchDraft({ showMascot: v })}
@@ -62,7 +52,7 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
             <SettingsSection title="动效">
                 <FieldRow
                     label="动画与体感"
-                    description="总开关。关闭后过渡退化为瞬时；系统「减少动画」仍会覆盖"
+                    description="关闭后过渡变为瞬时；系统「减少动画」仍会覆盖"
                 >
                     <Switch
                         checked={draft.motionEnabled}
@@ -70,10 +60,7 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
                     />
                 </FieldRow>
 
-                <FieldRow
-                    label="动画档位"
-                    description="优雅 仅淡入淡出 · 标准 含轻 spring · 丰富 按钮弹性与卡片浮起"
-                >
+                <FieldRow label="动画档位">
                     <MotionLevelSegment
                         value={draft.motionLevel}
                         onChange={(v) => patchDraft({ motionLevel: v })}
@@ -83,7 +70,7 @@ export function AppearanceTab({ draft, patchDraft }: Props) {
 
                 <FieldRow
                     label="动画速度"
-                    description="1.00× 为默认体感；更快可拉到 3.00×"
+                    description="默认 1.00×，最快 3.00×"
                     isLast
                 >
                     <MotionSpeedSlider

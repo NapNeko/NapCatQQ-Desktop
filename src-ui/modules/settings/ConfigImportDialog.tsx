@@ -164,7 +164,7 @@ export function ConfigImportDialog({
                         导入配置
                     </DialogTitle>
                     <DialogDescription>
-                        从 ZIP 包或文件夹恢复应用配置、Bot 与远端档案。密钥不会随包导入。
+                        从 ZIP 或文件夹恢复配置、Bot 与远端档案；不含密钥。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -197,9 +197,6 @@ export function ConfigImportDialog({
                                 <p className="text-[14px] font-medium text-text">
                                     拖入 ZIP 或文件夹到此处
                                 </p>
-                                <p className="text-[12px] leading-relaxed text-text-tertiary">
-                                    拖入 ZIP 或文件夹自动识别；点击选择 ZIP 包
-                                </p>
                             </div>
                             {dropHint && (
                                 <p className="pointer-events-none text-[11.5px] font-medium text-brand">
@@ -224,9 +221,6 @@ export function ConfigImportDialog({
                                 />
                             ))}
                         </div>
-                        <p className="text-[12px] text-text-tertiary">
-                            识别 config.json、bot.json、servers.json
-                        </p>
                     </div>
                 )}
 

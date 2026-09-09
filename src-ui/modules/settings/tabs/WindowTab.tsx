@@ -26,7 +26,7 @@ export function WindowTab({ draft, patchDraft }: Props) {
             <SettingsSection title="关闭与托盘">
                 <FieldRow
                     label="点击关闭按钮"
-                    description="最小化到托盘，或退出程序（有本机 Bot 运行时会拦截退出）"
+                    description="有本机 Bot 运行时会拦截退出"
                 >
                     <Select
                         value={draft.closeAction}
@@ -42,10 +42,7 @@ export function WindowTab({ draft, patchDraft }: Props) {
 
                 {draft.closeAction === 'tray' && (
                     <>
-                        <FieldRow
-                            label="关窗后界面"
-                            description="最小化到托盘后，是否在一段时间不用后自动释放界面内存"
-                        >
+                        <FieldRow label="关窗后界面">
                             <Select
                                 value={draft.afterCloseUiBehavior}
                                 onValueChange={(v) =>
@@ -61,7 +58,7 @@ export function WindowTab({ draft, patchDraft }: Props) {
                                     },
                                     {
                                         value: 'delayed_lightweight',
-                                        label: '一段时间不用后释放（推荐）',
+                                        label: '一段时间不用后释放（默认）',
                                     },
                                     {
                                         value: 'immediate_lightweight',
@@ -72,10 +69,7 @@ export function WindowTab({ draft, patchDraft }: Props) {
                         </FieldRow>
                         {draft.afterCloseUiBehavior ===
                             'delayed_lightweight' && (
-                                <FieldRow
-                                    label="释放前等待"
-                                    description="主窗口不可见累计多久后释放 WebView"
-                                >
+                                <FieldRow label="释放前等待">
                                     <Select
                                         value={String(
                                             draft.enterLightweightDelaySecs,
@@ -104,7 +98,7 @@ export function WindowTab({ draft, patchDraft }: Props) {
             <SettingsSection title="启动">
                 <FieldRow
                     label="开机自启"
-                    description="登录当前 Windows 用户后自动启动（写入当前用户启动项，无需管理员）"
+                    description="登录当前 Windows 用户后自动启动；写入用户启动项，无需管理员"
                 >
                     <Switch
                         checked={draft.launchOnStartup}
@@ -115,7 +109,7 @@ export function WindowTab({ draft, patchDraft }: Props) {
                 </FieldRow>
                 <FieldRow
                     label="启动时"
-                    description="仅托盘：无界面直接托管 Bot，需从托盘打开主界面"
+                    description="仅托盘：Bot 照常运行，从托盘打开界面"
                     isLast
                 >
                     <Select
