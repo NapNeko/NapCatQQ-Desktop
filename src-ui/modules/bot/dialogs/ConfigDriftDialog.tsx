@@ -112,7 +112,7 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
                         配置冲突解决
                     </DialogTitle>
                     <DialogDescription>
-                        检测到 Bot {drift.bot_id} 运行时磁盘文件与桌面端配置存在差异。请选择每项要保留的值。
+                        Bot {drift.bot_id} 运行时磁盘文件与桌面端配置不一致。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -228,7 +228,7 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
                     <div className="text-xs text-text-secondary">
                         {allDecided ? (
                             <span className="inline-flex items-center gap-1 text-success font-medium">
-                                <CheckCircle2 size={14} /> 所有冲突已就绪
+                                <CheckCircle2 size={14} /> 全部已选
                             </span>
                         ) : (
                             <span>
@@ -371,13 +371,9 @@ function FlatOptionButton({
                     </span>
                 </div>
 
-                {selected ? (
+                {selected && (
                     <span className="text-[11px] font-semibold text-brand inline-flex items-center gap-0.5">
                         ✓ 已选
-                    </span>
-                ) : (
-                    <span className="text-[11px] text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity">
-                        点击选用
                     </span>
                 )}
             </div>

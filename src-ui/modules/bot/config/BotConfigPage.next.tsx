@@ -508,7 +508,7 @@ export function BotConfigPageNext({
                                 ? '已预填演示数据，点保存不会写入配置'
                                 : isEditMode
                                     ? `QQ ${botId} · ${formData.bot.backend_type} · ${formData.bot.runtime_target}`
-                                    : '账号身份 → 连接通道 → 高级选项，至少添加一个连接才能与外部通信'}
+                                    : '至少添加一个连接才能与外部通信'}
                         </p>
                     </div>
                 </div>

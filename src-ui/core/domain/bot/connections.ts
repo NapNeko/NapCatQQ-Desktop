@@ -50,7 +50,7 @@ export const CONNECTION_KINDS: ReadonlyArray<ConnectionKindMeta> = [
     {
         kind: 'httpServer',
         title: 'HTTP 服务器',
-        description: '开本地端口接收外部 API 调用',
+        description: '本端开端口，供外部调用 API',
         supportedBackends: ['napcat', 'snowluma'],
         namePrefix: 'http-server',
     },
@@ -64,7 +64,7 @@ export const CONNECTION_KINDS: ReadonlyArray<ConnectionKindMeta> = [
     {
         kind: 'httpClient',
         title: 'HTTP Webhook',
-        description: '主动 POST 投递事件到远端',
+        description: '主动 POST 事件到远端 URL',
         supportedBackends: ['napcat', 'snowluma'],
         namePrefix: 'http-client',
     },
@@ -72,7 +72,7 @@ export const CONNECTION_KINDS: ReadonlyArray<ConnectionKindMeta> = [
         kind: 'websocketServer',
         // NapCat 文档：WebSocket 服务端 = 正向 WS（本端监听，外部连入）
         title: 'WS 正向服务器',
-        description: '正向 WS：本端作服务端监听，外部连入双向通信',
+        description: '正向 WS：本端监听，外部连入',
         supportedBackends: ['napcat', 'snowluma'],
         namePrefix: 'ws-server',
     },
@@ -80,7 +80,7 @@ export const CONNECTION_KINDS: ReadonlyArray<ConnectionKindMeta> = [
         kind: 'websocketClient',
         // NapCat 文档：WebSocket 客户端 = 反向 WS（本端主动连远端）
         title: 'WS 反向客户端',
-        description: '反向 WS：本端作客户端主动连远端，全双工低延迟',
+        description: '反向 WS：本端主动连远端',
         supportedBackends: ['napcat', 'snowluma'],
         namePrefix: 'ws-client',
     },

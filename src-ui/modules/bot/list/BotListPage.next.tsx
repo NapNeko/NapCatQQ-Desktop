@@ -563,7 +563,7 @@ export function BotListPageNext({
                 <DialogContent size="md">
                     <DialogTitle>确认批量删除选中实例？</DialogTitle>
                     <DialogDescription>
-                        即将删除选中的 {batch.selectedIds.size} 个 Bot 实例的配置文件与数据项。
+                        将删除选中的 {batch.selectedIds.size} 个 Bot 实例的配置文件与数据项。
                         若有正在运行的 Bot，会先自动停止再删除。此操作不可撤销。
                     </DialogDescription>
                     <DialogFooter>
@@ -653,9 +653,6 @@ function EmptyState({
             <div>
                 <p className="font-display text-md font-semibold text-text">
                     还没有 Bot 实例
-                </p>
-                <p className="mt-1 text-xs text-text-secondary">
-                    可以新建，也可以把远端已有的 NapCat / SnowLuma 账号导进来。
                 </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">

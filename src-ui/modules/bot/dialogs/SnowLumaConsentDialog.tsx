@@ -95,9 +95,8 @@ export function SnowLumaConsentDialog({
                 </div>
 
                 <div className="flex h-9 items-center justify-between rounded-sm border border-border-subtle bg-inset px-3 text-xs">
-                    <span className="text-text-secondary">阅读状态</span>
                     <span className={readComplete ? 'font-medium text-success' : 'text-text-tertiary'}>
-                        {readComplete ? '已读完协议内容' : '请阅读至文末'}
+                        {readComplete ? '已读完协议内容' : '还没读到文末'}
                     </span>
                 </div>
 

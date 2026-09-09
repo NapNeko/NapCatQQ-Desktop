@@ -53,8 +53,6 @@ export function SnowLumaGlobalWebuiSection({
                 onValueChange={(v) =>
                     onChange({ ...value, snowlumaWebuiPasswordOverride: v })
                 }
-                placeholder="留空 = 本机用 session；远端接管则每次生成"
-                hint="非空时本机与远端接管都用这个固定密码"
             />
         </FormSection>
     );

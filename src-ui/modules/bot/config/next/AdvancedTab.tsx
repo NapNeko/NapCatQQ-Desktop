@@ -32,23 +32,22 @@ const LOG_LEVEL_ITEMS = [
 ];
 
 const PACKET_BACKEND_ITEMS = [
-    { value: 'auto', label: 'auto（自动选择）' },
-    { value: 'disable', label: 'disable（关闭 PacketBackend）' },
+    { value: 'auto', label: 'auto' },
+    { value: 'disable', label: 'disable' },
 ];
 
 interface BypassFieldMeta {
     key: keyof BypassConfig;
     label: string;
-    description: string;
 }
 
 const BYPASS_FIELDS: ReadonlyArray<BypassFieldMeta> = [
-    { key: 'hook', label: 'Hook', description: 'hook 特征隐藏' },
-    { key: 'window', label: 'Window', description: '窗口伪造' },
-    { key: 'module', label: 'Module', description: '加载模块隐藏' },
-    { key: 'process', label: 'Process', description: '进程反检测' },
-    { key: 'container', label: 'Container', description: '容器反检测' },
-    { key: 'js', label: 'JS', description: 'JS 反检测' },
+    { key: 'hook', label: 'Hook' },
+    { key: 'window', label: 'Window' },
+    { key: 'module', label: 'Module' },
+    { key: 'process', label: 'Process' },
+    { key: 'container', label: 'Container' },
+    { key: 'js', label: 'JS' },
 ];
 
 const DEFAULT_STATUS_COMMAND: StatusCommandConfig = {
@@ -91,7 +90,7 @@ export function AdvancedTab({
             {isSnowLuma && (
                 <FormSection
                     title="WebUI 密码接管"
-                    description="仅远端 Native；勾选后每次启动覆盖密码"
+                    description="仅远端 Native"
                 >
                     <Switch
                         label="启动时覆盖 WebUI 密码"
@@ -105,7 +104,6 @@ export function AdvancedTab({
             <FormSection title="桌面端集成">
                 <Switch
                     label="桌面端启动时自动拉起此 Bot"
-                    hint="勾上后软件每次开机就尝试启动这个实例"
                     checked={data.autoStart}
                     onCheckedChange={(v) => onChange({ autoStart: v })}
                 />
@@ -113,8 +111,8 @@ export function AdvancedTab({
                     label="掉线时发送通知"
                     hint={
                         isSnowLuma
-                            ? '需同时打开设置里对应通道；改完后无需重启。'
-                            : '需同时打开设置里对应通道；改完后请重启该 Bot。'
+                            ? '需同时打开设置里的推送通道；改完后无需重启。'
+                            : '需同时打开设置里的推送通道；改完后重启该 Bot。'
                     }
                     checked={data.offlineNotice}
                     onCheckedChange={(v) => onChange({ offlineNotice: v })}
@@ -125,7 +123,6 @@ export function AdvancedTab({
                 <FormSection title="SnowLuma 协议与内置命令">
                     <Switch
                         label="启用 #sl 状态命令"
-                        hint="收到纯文本 #sl 时回复 SnowLuma 版本与运行信息"
                         checked={sc.enabled}
                         onCheckedChange={(v) => onStatusCommandChange({ enabled: v })}
                     />
@@ -156,13 +153,13 @@ export function AdvancedTab({
                     <FormSection title="OneBot 行为">
                         <Switch
                             label="启用本地文件到 URL"
-                            hint="OneBot 上报时把本地文件路径转成可访问的 URL"
+                            hint="上报时把本地文件路径转成 URL"
                             checked={data.enableLocalFile2Url}
                             onCheckedChange={(v) => onChange({ enableLocalFile2Url: v })}
                         />
                         <Switch
                             label="启用合并消息上报解析"
-                            hint="把合并转发消息展开成普通消息列表上报给客户端"
+                            hint="合并转发展开成普通消息列表上报"
                             checked={data.parseMultMsg}
                             onCheckedChange={(v) => onChange({ parseMultMsg: v })}
                         />
@@ -197,11 +194,10 @@ export function AdvancedTab({
 
                     <FormSection title="反检测开关" description="修改后需重启 Bot">
                         <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
-                            {BYPASS_FIELDS.map(({ key, label, description }) => (
+                            {BYPASS_FIELDS.map(({ key, label }) => (
                                 <Checkbox
                                     key={key}
                                     label={label}
-                                    hint={description}
                                     checked={data.bypass[key]}
                                     onCheckedChange={(v) => handleBypass(key, v)}
                                 />
@@ -210,7 +206,6 @@ export function AdvancedTab({
                         <div className="mt-1 border-t border-border-subtle pt-3">
                             <Switch
                                 label="o3HookMode"
-                                hint="O3 Hook 模式"
                                 checked={data.o3HookMode === 1}
                                 onCheckedChange={(v) => onChange({ o3HookMode: v ? 1 : 0 })}
                             />
