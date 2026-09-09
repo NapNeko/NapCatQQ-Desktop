@@ -349,6 +349,7 @@ pub fn run() {
         ))
     };
     let app_manager_reconcile = Arc::clone(&app_manager);
+    let app_manager_host_recovery = Arc::clone(&app_manager);
 
     let bot_manager_bootstrap = Arc::clone(&bot_manager);
     let data_root_for_bootstrap = data_root.clone();
@@ -472,6 +473,11 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 (*bot_manager_host_recovery_listener)
                     .clone()
+                    .run_host_connection_recovered_listener()
+                    .await;
+            });
+            tauri::async_runtime::spawn(async move {
+                app_manager_host_recovery
                     .run_host_connection_recovered_listener()
                     .await;
             });
@@ -681,9 +687,12 @@ pub fn run() {
             commands::app_framework::list_app_frameworks,
             commands::app_framework::list_app_instances,
             commands::app_framework::create_app_instance,
+            commands::app_framework::probe_app_project,
+            commands::app_framework::import_app_instance,
             commands::app_framework::preview_app_install_dir,
             commands::app_framework::install_app_instance,
             commands::app_framework::refresh_app_instance,
+            commands::app_framework::tail_app_instance_log,
             commands::app_framework::start_app_instance,
             commands::app_framework::stop_app_instance,
             commands::app_framework::delete_app_instance,

@@ -5,8 +5,9 @@ use ncd_component::ComponentId;
 use ncd_deploy::StepKind;
 use ncd_domain::{
     AppConfigDocument, AppConfigIssue, AppConfigText, AppFrameworkId, AppFrameworkManifest,
-    AppInstance, AppInstanceId, AppPluginAction, AppStoreResource, BotId, CreateAppInstanceRequest,
-    DeploymentTaskKind, DeploymentTaskResource, OneBotLinkPlan,
+    AppInstance, AppInstanceId, AppPluginAction, AppProjectProbe, AppStoreResource, BotId,
+    CreateAppInstanceRequest, DeploymentTaskKind, DeploymentTaskResource, ImportAppInstanceRequest,
+    OneBotLinkPlan,
 };
 use ncd_runtime::{
     AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreInstalled,
@@ -102,6 +103,32 @@ pub async fn create_app_instance(
 }
 
 #[tauri::command]
+pub async fn probe_app_project(
+    host_id: String,
+    framework_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<AppProjectProbe, String> {
+    state
+        .app_manager
+        .probe_project(&host_id, &AppFrameworkId::new(framework_id), &path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn import_app_instance(
+    request: ImportAppInstanceRequest,
+    state: State<'_, AppState>,
+) -> Result<AppInstance, String> {
+    state
+        .app_manager
+        .import_instance(request)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn preview_app_install_dir(
     host_id: String,
     framework_id: String,
@@ -167,6 +194,19 @@ pub async fn refresh_app_instance(
     state
         .app_manager
         .refresh_instance(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn tail_app_instance_log(
+    instance_id: String,
+    lines: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<ncd_traits::runtime_backend::LogSnapshot, String> {
+    state
+        .app_manager
+        .tail_log(&AppInstanceId::new(instance_id), lines.unwrap_or(1000))
         .await
         .map_err(|e| e.to_string())
 }
