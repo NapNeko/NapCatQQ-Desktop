@@ -55,13 +55,14 @@ pub use app_config::{
     default_snowluma_port,
 };
 pub use app_framework::{
-    APP_LINK_CONNECTION_PREFIX, AppConfigDocument, AppConfigFormat, AppConfigIssue, AppConfigText,
-    AppConfigWrite, AppFrameworkId, AppFrameworkManifest, AppInstance, AppInstanceId,
-    AppInstanceState, AppLinkRecord, AppPlacement, CreateAppInstanceRequest, LOCAL_HOST_ID,
-    OneBotEndpointExport, OneBotLinkMode, OneBotLinkPlan, REMOTE_HOST_ID_PREFIX,
-    AppLinkTopology, app_link_connection_name, classify_app_link, host_id_of_runtime_target,
-    is_app_link_connection_name, rewrite_ws_loopback_port, runtime_target_matches_host,
-    server_id_of_host,
+    APP_LINK_ADOPTED_FORWARD, APP_LINK_CONNECTION_PREFIX, AppConfigDocument, AppConfigFormat,
+    AppConfigIssue, AppConfigText, AppConfigWrite, AppFrameworkId, AppFrameworkManifest,
+    AppInstance, AppInstanceId, AppInstanceOrigin, AppInstanceState, AppLinkRecord, AppPlacement,
+    AppProjectProbe, CreateAppInstanceRequest, ImportAppInstanceRequest, LOCAL_HOST_ID,
+    OneBotEndpointExport, OneBotLinkMode, OneBotLinkPlan, REMOTE_HOST_ID_PREFIX, AppLinkTopology,
+    WsUrlParts, app_link_connection_name, classify_app_link, host_id_of_runtime_target,
+    is_app_link_connection_name, is_loopback_host, parse_ws_url, rewrite_ws_loopback_port,
+    runtime_target_matches_host, server_id_of_host,
 };
 pub use bootstrap::{
     BootstrapSnapshot, BootstrapStatus, DataLayoutConsolidateSnapshot, LocalVersionSnapshot,

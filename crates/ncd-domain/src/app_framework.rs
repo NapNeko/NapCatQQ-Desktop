@@ -227,8 +227,57 @@ pub fn rewrite_ws_loopback_port(url: &str, local_port: u16) -> Result<String, St
     Ok(format!("{scheme}://127.0.0.1:{local_port}{path}"))
 }
 
+/// `ws://host:port/path` 的主机 / 口 / 路径；导入认领已有对接时用来对 Bot 连接表
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WsUrlParts {
+    pub host: String,
+    pub port: u16,
+    pub path: String,
+}
+
+/// 必须带显式端口,避免 80/443 默认口误配
+pub fn parse_ws_url(url: &str) -> Option<WsUrlParts> {
+    let raw = url.trim();
+    let rest = raw
+        .strip_prefix("wss://")
+        .or_else(|| raw.strip_prefix("ws://"))?;
+    let (authority, path) = match rest.split_once('/') {
+        Some((a, p)) => (a, format!("/{p}")),
+        None => (rest, String::new()),
+    };
+    if authority.is_empty() {
+        return None;
+    }
+    let (host, port) = if let Some(inner) = authority.strip_prefix('[') {
+        let (host, after) = inner.split_once(']')?;
+        let port = after.strip_prefix(':')?.parse().ok()?;
+        (host.to_string(), port)
+    } else {
+        let (host, port) = authority.rsplit_once(':')?;
+        if host.is_empty() {
+            return None;
+        }
+        (host.to_string(), port.parse().ok()?)
+    };
+    if host.is_empty() || port == 0 {
+        return None;
+    }
+    Some(WsUrlParts { host, port, path })
+}
+
+pub fn is_loopback_host(host: &str) -> bool {
+    let h = host
+        .trim()
+        .trim_matches(|c| c == '[' || c == ']')
+        .to_ascii_lowercase();
+    matches!(h.as_str(), "127.0.0.1" | "localhost" | "::1" | "0.0.0.0" | "::")
+}
+
 /// 写入协议 Bot 的连接名前缀；全名 `ncd-app:<instance_id>`，重复对接按名替换，解绑按名删。
 pub const APP_LINK_CONNECTION_PREFIX: &str = "ncd-app:";
+
+/// 导入时认到正向 WS (应用连 Bot 的 wsServers),Bot 侧没有 ncd-app 连接可摘
+pub const APP_LINK_ADOPTED_FORWARD: &str = "ncd-adopt-forward";
 
 pub fn app_link_connection_name(instance_id: &AppInstanceId) -> String {
     format!("{APP_LINK_CONNECTION_PREFIX}{}", instance_id.as_str())
@@ -347,10 +396,36 @@ pub struct AppInstance {
     /// Karin：创建时是否一并装 `@karinjs/plugin-puppeteer`。旧快照缺字段视为 true。
     #[serde(default = "default_true")]
     pub install_renderer: bool,
+    /// 桌面端脚手架新建 vs 领养已有目录。旧快照缺字段视为 Created。
+    #[serde(default)]
+    pub origin: AppInstanceOrigin,
 }
 
 fn default_true() -> bool {
     true
+}
+
+/// 实例从哪来。导入的目录禁止脚手架重写，删除默认不拆项目。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AppInstanceOrigin {
+    #[default]
+    Created,
+    Imported,
+}
+
+impl AppInstanceOrigin {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::Imported => "imported",
+        }
+    }
+
+    pub const fn is_imported(self) -> bool {
+        matches!(self, Self::Imported)
+    }
 }
 
 impl AppInstance {
@@ -382,6 +457,48 @@ pub struct CreateAppInstanceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub install_renderer: Option<bool>,
+}
+
+/// 探测已有项目目录（导入前）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppProjectProbe {
+    pub framework_id: AppFrameworkId,
+    pub path: String,
+    pub display_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub port: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub version: Option<String>,
+    /// 类型化配置实际读写的相对路径（NoneBot：`.env` 或 `.env.{ENVIRONMENT}`）
+    pub env_rel_path: String,
+    pub environment: String,
+    /// 现在就能启动（依赖已同步）
+    pub ready: bool,
+    /// 目录里已有该框架进程
+    pub running: bool,
+    /// 将停用的 systemd 单元等；导入后由桌面端接管启停
+    #[serde(default)]
+    pub supervisors: Vec<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    /// 已有协议 Bot 的反向 / 正向 WS 能唯一对上时填 QQ 号
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "string")]
+    pub detected_bot_id: Option<BotId>,
+}
+
+/// 领养已有项目（UI → command → 编排）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct ImportAppInstanceRequest {
+    pub framework_id: AppFrameworkId,
+    pub host_id: String,
+    /// 项目根（HostPath POSIX 或本机 Windows 路径）
+    pub path: String,
+    pub display_name: String,
 }
 
 /// 配置文件格式（原始文件 Tab 决定预检与高亮）
@@ -551,6 +668,27 @@ mod tests {
     }
 
     #[test]
+    fn parse_ws_url_requires_explicit_port() {
+        let p = parse_ws_url("ws://127.0.0.1:3001/onebot/v11/ws").unwrap();
+        assert_eq!(p.host, "127.0.0.1");
+        assert_eq!(p.port, 3001);
+        assert_eq!(p.path, "/onebot/v11/ws");
+        assert_eq!(parse_ws_url("ws://127.0.0.1/onebot").map(|p| p.port), None);
+        assert_eq!(
+            parse_ws_url("ws://[::1]:8080/onebot/v11/ws").unwrap(),
+            WsUrlParts {
+                host: "::1".into(),
+                port: 8080,
+                path: "/onebot/v11/ws".into(),
+            }
+        );
+        assert!(is_loopback_host("127.0.0.1"));
+        assert!(is_loopback_host("LOCALHOST"));
+        assert!(is_loopback_host("[::1]"));
+        assert!(!is_loopback_host("160.30.231.138"));
+    }
+
+    #[test]
     fn rewrite_ws_keeps_framework_path() {
         assert_eq!(
             rewrite_ws_loopback_port("ws://127.0.0.1:32100/onebot/v11/ws", 47011).unwrap(),
@@ -578,6 +716,7 @@ mod tests {
             last_error: None,
             created_at_ms: 1,
             install_renderer: true,
+            origin: AppInstanceOrigin::Created,
         };
         let json = serde_json::to_string(&inst).unwrap();
         assert!(!json.contains("\"link\""));
@@ -639,6 +778,20 @@ mod tests {
         }"#;
         let inst: AppInstance = serde_json::from_str(json).unwrap();
         assert!(inst.install_renderer);
+        assert_eq!(inst.origin, AppInstanceOrigin::Created);
+    }
+
+    #[test]
+    fn import_request_round_trips() {
+        let req = ImportAppInstanceRequest {
+            framework_id: AppFrameworkId::new("nonebot2"),
+            host_id: "remote:s1".into(),
+            path: "/root/game-qqbot/bot-xiuxian".into(),
+            display_name: "荒境修仙".into(),
+        };
+        let v = serde_json::to_value(&req).unwrap();
+        let back: ImportAppInstanceRequest = serde_json::from_value(v).unwrap();
+        assert_eq!(back, req);
     }
 
     #[test]
