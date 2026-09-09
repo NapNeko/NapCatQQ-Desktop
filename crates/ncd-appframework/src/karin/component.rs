@@ -48,6 +48,7 @@ pub struct KarinComponent {
     pub version_spec: String,
     /// 创建时一并装 `@karinjs/plugin-puppeteer`（会下 Chromium）
     pub install_renderer: bool,
+    pub adopt_existing: bool,
 }
 
 pub fn renderer_pnpm_args(workspace: bool) -> Vec<String> {
@@ -71,7 +72,13 @@ impl KarinComponent {
             npm_registry: None,
             version_spec: "latest".to_string(),
             install_renderer: false,
+            adopt_existing: false,
         }
+    }
+
+    pub fn with_adopt_existing(mut self, adopt: bool) -> Self {
+        self.adopt_existing = adopt;
+        self
     }
 
     pub fn with_install_renderer(mut self, install_renderer: bool) -> Self {
@@ -226,6 +233,9 @@ impl KarinComponent {
 
     /// 首装/更新共用：装私有 pnpm → 装 node-karin → karin init → 二次 install → 写 .env
     async fn provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+        if self.adopt_existing {
+            return self.adopt_provision(host, ctx).await;
+        }
         let total = if self.install_renderer { 7 } else { 6 };
         ctx.emit(ProgressKind::Started { total_steps: total }).await;
 
@@ -318,6 +328,49 @@ impl KarinComponent {
             self.run_step(host, ctx, 7, "安装插件版渲染器", cmd).await?;
         }
 
+        ctx.emit(ProgressKind::Finished { ok: true }).await;
+        Ok(())
+    }
+
+    async fn adopt_provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+        ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
+        ctx.emit(ProgressKind::StepBegin {
+            step: 1,
+            message: "解析 Node.js".to_string(),
+        })
+        .await;
+        let preferred = self.preferred_nodes(host).await;
+        let tc = resolve_node_toolchain(host, &preferred).await?;
+        write_node_marker(host, &self.install_dir, &tc).await?;
+        ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
+
+        let tools = self.tools_dir();
+        host.create_dir_all(&tools).await?;
+        let mut npm_args: Vec<String> = vec![
+            "install".into(),
+            PNPM_SPEC.into(),
+            "--prefix".into(),
+            tools.render_for(host.os()),
+            "--no-audit".into(),
+            "--no-fund".into(),
+            "--loglevel=error".into(),
+        ];
+        npm_args.extend(self.registry_arg());
+        let npm_cmd = tc
+            .npm(host.os(), &npm_args.iter().map(String::as_str).collect::<Vec<_>>())
+            .working_dir(self.install_dir.clone());
+        self.run_step(host, ctx, 2, "安装项目私有 pnpm", npm_cmd)
+            .await?;
+
+        let mut again: Vec<String> = vec!["install".into()];
+        again.extend(self.registry_arg());
+        let cmd = pnpm_command(
+            &tc,
+            &self.install_dir,
+            host.os(),
+            &again.iter().map(String::as_str).collect::<Vec<_>>(),
+        );
+        self.run_step(host, ctx, 3, "同步 Node 依赖", cmd).await?;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }

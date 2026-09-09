@@ -37,6 +37,8 @@ pub struct AppComponentSpec {
     pub npm_registry: Option<String>,
     /// Karin：provision 时一并 `pnpm add @karinjs/plugin-puppeteer`。NoneBot2 忽略。
     pub install_renderer: bool,
+    /// 领养已有项目：同步依赖，不写脚手架、不改端口。
+    pub adopt_existing: bool,
 }
 
 #[async_trait]
@@ -48,6 +50,27 @@ pub trait AppFrameworkAdapter: Send + Sync {
 
     /// 安装 / 探测 / 启动命令（R12：走既有 Component × Host × Action）
     fn component(&self, spec: &AppComponentSpec) -> Arc<dyn Component>;
+
+    /// 探测已有目录能不能当这个框架的实例领养
+    async fn probe_project(
+        &self,
+        _host: &dyn Host,
+        _path: &HostPath,
+    ) -> Result<ncd_domain::AppProjectProbe, AppFrameworkError> {
+        Err(AppFrameworkError::Validation(format!(
+            "{} 暂不支持导入已有项目",
+            self.manifest().display_name
+        )))
+    }
+
+    /// 导入前要快照的相对路径（dotenv / 入口 / 清单）。缺文件也列入，释放时删掉我们后来写的。
+    async fn adopt_watch_rels(
+        &self,
+        host: &dyn Host,
+        root: &HostPath,
+    ) -> Result<Vec<String>, AppFrameworkError> {
+        crate::adopt::list_dotenv_rels(host, root).await
+    }
 
     /// 启动命令（可做 IO 解析工具链，比 `Component::launch_command` 的同步版准确）
     async fn launch_command(
@@ -63,6 +86,15 @@ pub trait AppFrameworkAdapter: Send + Sync {
         host: &dyn Host,
         instance: &AppInstance,
     ) -> Result<Option<String>, AppFrameworkError>;
+
+    /// 应用作为客户端连协议 Bot 的 WS 地址 (NoneBot ONEBOT_WS_URLS / Karin onebot.ws_client)
+    async fn read_outbound_ws_urls(
+        &self,
+        _host: &dyn Host,
+        _instance: &AppInstance,
+    ) -> Result<Vec<String>, AppFrameworkError> {
+        Ok(Vec::new())
+    }
 
     /// 把计划写进应用端：先备份 `<file>.ncd.bak`，任一步失败自动还原
     async fn apply_link(
@@ -98,6 +130,15 @@ pub trait AppFrameworkAdapter: Send + Sync {
         Vec::new()
     }
 
+    /// 能碰 Host 时按真实文件列出（NoneBot 的 `.env.{ENVIRONMENT}`）
+    async fn list_config_documents(
+        &self,
+        _host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
+        Ok(self.config_documents(instance))
+    }
+
     /// 类型化配置读取；没有类型化模型的框架保持默认（`ConfigUnsupported`）
     async fn read_config(
         &self,
@@ -128,7 +169,7 @@ pub trait AppFrameworkAdapter: Send + Sync {
         instance: &AppInstance,
         doc_id: &str,
     ) -> Result<AppConfigText, AppFrameworkError> {
-        let doc = self.find_document(instance, doc_id)?;
+        let doc = self.resolve_document(host, instance, doc_id).await?;
         let snap = read_document(host, &HostPath::from_posix(&instance.install_dir), &doc).await?;
         Ok(AppConfigText {
             doc_id: doc.id,
@@ -146,13 +187,14 @@ pub trait AppFrameworkAdapter: Send + Sync {
         text: &str,
         base_revision: Option<&str>,
     ) -> Result<AppConfigText, AppFrameworkError> {
-        let doc = self.find_document(instance, doc_id)?;
+        let doc = self.resolve_document(host, instance, doc_id).await?;
         write_document_text(
             host,
             &HostPath::from_posix(&instance.install_dir),
             &doc,
             text,
             base_revision,
+            crate::adopt::write_project_sidecar(instance),
         )
         .await
     }
@@ -166,6 +208,23 @@ pub trait AppFrameworkAdapter: Send + Sync {
             .into_iter()
             .find(|d| d.id == doc_id)
             .ok_or_else(|| AppFrameworkError::Validation(format!("未知的配置文档: {doc_id}")))
+    }
+
+    async fn resolve_document(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        doc_id: &str,
+    ) -> Result<AppConfigDocument, AppFrameworkError> {
+        if let Some(doc) = self
+            .list_config_documents(host, instance)
+            .await?
+            .into_iter()
+            .find(|d| d.id == doc_id)
+        {
+            return Ok(doc);
+        }
+        self.find_document(instance, doc_id)
     }
 
     async fn list_installed(
@@ -294,10 +353,23 @@ pub trait AppFrameworkAdapter: Send + Sync {
 }
 
 /// 「备份 → 写 → 失败还原」骨架：`write` 返回 Err 时把 `files` 全部还原到备份内容。
-/// 备份文件名 `<file>.ncd.bak`，成功后保留最近一份供人工比对。
+/// 脚手架实例还会落 `<file>.ncd.bak`；导入项目只做内存回滚，避免弄脏用户仓库。
 pub async fn apply_with_backup<F, Fut>(
     host: &dyn Host,
     files: &[HostPath],
+    write: F,
+) -> Result<(), AppFrameworkError>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<(), AppFrameworkError>>,
+{
+    apply_with_backup_ex(host, files, true, write).await
+}
+
+pub async fn apply_with_backup_ex<F, Fut>(
+    host: &dyn Host,
+    files: &[HostPath],
+    write_sidecar: bool,
     write: F,
 ) -> Result<(), AppFrameworkError>
 where
@@ -315,9 +387,11 @@ where
                 .read_file(file)
                 .await
                 .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
-            host.write_file(&backup_path(file), &bytes)
-                .await
-                .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+            if write_sidecar {
+                host.write_file(&backup_path(file), &bytes)
+                    .await
+                    .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+            }
             Some(bytes.to_vec())
         } else {
             None
@@ -469,6 +543,7 @@ mod tests {
             last_error: None,
             created_at_ms: 1,
             install_renderer: true,
+            origin: ncd_domain::AppInstanceOrigin::Created,
         };
         let dest = KarinAdapter::new()
             .store_app_file_dest(&instance, "index.js")

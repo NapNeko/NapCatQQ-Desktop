@@ -52,6 +52,24 @@ impl EnvFile {
         })
     }
 
+    /// NoneBot 把环境变量当大小写不敏感；读真实项目时 `port` / `PORT` 都要认
+    pub fn get_ci(&self, key: &str) -> Option<String> {
+        let want = key.to_ascii_lowercase();
+        self.lines.iter().rev().find_map(|line| {
+            let (k, v) = split_kv(line)?;
+            (k.eq_ignore_ascii_case(&want)).then(|| unquote(v))
+        })
+    }
+
+    /// 已有同名键（忽略大小写）则改那一处，避免 `PORT` / `port` 双写
+    pub fn set_ci(&mut self, key: &str, value: &str) {
+        let existing = self.lines.iter().rev().find_map(|line| {
+            let (k, _) = split_kv(line)?;
+            k.eq_ignore_ascii_case(key).then(|| k.to_string())
+        });
+        self.set(existing.as_deref().unwrap_or(key), value);
+    }
+
     /// 按文件顺序列出所有键（重复键取最后一处的位置与值），带上一行注释
     pub fn entries(&self) -> Vec<EnvEntry> {
         let mut out: Vec<EnvEntry> = Vec::new();
@@ -222,6 +240,15 @@ mod tests {
     use super::*;
 
     const KARIN_ENV: &str = "# 是否启用HTTP\nHTTP_ENABLE=true\n# HTTP监听端口\nHTTP_PORT=7777\n# HTTP监听地址\nHTTP_HOST=0.0.0.0\n# HTTP鉴权秘钥 仅用于karin自身Api\nHTTP_AUTH_KEY=abc123\n# ws_server鉴权秘钥\nWS_SERVER_AUTH_KEY=\n\n\nRUNTIME=node\nLOG_FNC_COLOR=\"#E1D919\"\n";
+
+    #[test]
+    fn get_ci_and_set_ci_keep_original_key_case() {
+        let mut env = EnvFile::parse("port=13120\nDriver=~httpx\n");
+        assert_eq!(env.get_ci("PORT").as_deref(), Some("13120"));
+        env.set_ci("PORT", "8080");
+        env.set_ci("DRIVER", "~fastapi+~httpx");
+        assert_eq!(env.render(), "port=8080\nDriver=~fastapi+~httpx\n");
+    }
 
     #[test]
     fn get_reads_quoted_and_empty_values() {

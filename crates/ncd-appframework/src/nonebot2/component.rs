@@ -24,7 +24,8 @@ use super::manifest::{
 use crate::env_file::EnvFile;
 use crate::uv_tooling::{read_uv_marker, resolve_uv, venv_python, write_uv_marker};
 
-pub fn is_legacy_bot_py(text: &str) -> bool {
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn is_legacy_bot_py(text: &str) -> bool {
     text.contains("from nonebot.adapters.onebot.v11 import")
         || (text.contains("OneBotV11Adapter") && !text.contains("importlib"))
 }
@@ -61,6 +62,8 @@ pub struct NoneBot2Component {
     pub uv_bin: Option<HostPath>,
     /// PyPI 索引镜像（`uv sync --default-index`）；None 用默认源
     pub pypi_index: Option<String>,
+    /// 领养已有项目：只同步依赖，不写脚手架 / 端口
+    pub adopt_existing: bool,
 }
 
 impl NoneBot2Component {
@@ -70,7 +73,13 @@ impl NoneBot2Component {
             port,
             uv_bin: None,
             pypi_index: None,
+            adopt_existing: false,
         }
+    }
+
+    pub fn with_adopt_existing(mut self, adopt: bool) -> Self {
+        self.adopt_existing = adopt;
+        self
     }
 
     pub fn with_uv_bin(mut self, uv_bin: Option<HostPath>) -> Self {
@@ -125,21 +134,35 @@ impl NoneBot2Component {
         args: &LaunchArgs,
     ) -> Result<HostCommand, ActionError> {
         let python = self.venv_python(host.os());
-        if !host.exists(&python).await? {
-            return Err(ActionError::other(format!(
-                "实例虚拟环境不存在（{}），请先安装 / 重新安装",
-                python.as_posix()
-            )));
+        if host.exists(&python).await? {
+            return Ok(self.launch_with(host.os(), args));
         }
-        Ok(self.launch_with(host.os(), args))
+        let preferred = self.preferred_uvs(host).await;
+        if let Ok(uv) = resolve_uv(host, &preferred).await {
+            let cmd = HostCommand::new(uv.uv_bin.as_posix())
+                .arg("run")
+                .arg("python")
+                .arg("-u")
+                .arg(NONEBOT2_BOT_PY)
+                .working_dir(self.install_dir.clone())
+                .env("PYTHONUNBUFFERED", "1")
+                .env("PYTHONUTF8", "1")
+                .env("PYTHONIOENCODING", "utf-8")
+                .long_running();
+            return Ok(args.apply_to(cmd));
+        }
+        Err(ActionError::other(format!(
+            "实例虚拟环境不存在（{}），请先安装 / 重新安装",
+            python.as_posix()
+        )))
     }
 
     fn launch_with(&self, os: Os, args: &LaunchArgs) -> HostCommand {
+        // 不注入 ENVIRONMENT：官方默认就是 prod；项目 .env 里写了 dev 也不能被桌面端盖掉
         let cmd = HostCommand::new(self.venv_python(os).as_posix())
             .arg("-u")
             .arg(NONEBOT2_BOT_PY)
             .working_dir(self.install_dir.clone())
-            .env("ENVIRONMENT", "prod")
             .env("PYTHONUNBUFFERED", "1")
             .env("PYTHONUTF8", "1")
             .env("PYTHONIOENCODING", "utf-8")
@@ -205,6 +228,9 @@ impl NoneBot2Component {
 
     /// 首装 / 更新共用：解析 uv → 脚手架 → uv sync → 写 .env.prod
     async fn provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+        if self.adopt_existing {
+            return self.adopt_provision(host, ctx).await;
+        }
         const TOTAL: u32 = 4;
         ctx.emit(ProgressKind::Started { total_steps: TOTAL }).await;
 
@@ -252,6 +278,34 @@ impl NoneBot2Component {
         Ok(())
     }
 
+    /// 已有项目：只补 uv 标记 + sync，不改 bot.py / dotenv
+    async fn adopt_provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+        ctx.emit(ProgressKind::Started { total_steps: 2 }).await;
+        ctx.emit(ProgressKind::StepBegin {
+            step: 1,
+            message: "解析 uv".to_string(),
+        })
+        .await;
+        let preferred = self.preferred_uvs(host).await;
+        let uv = resolve_uv(host, &preferred).await?;
+        ctx.info(format!("uv {}: {}", uv.version, uv.uv_bin.as_posix()))
+            .await;
+        write_uv_marker(host, &self.install_dir, &uv).await?;
+        ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
+
+        let mut sync = HostCommand::new(uv.uv_bin.as_posix())
+            .arg("sync")
+            .working_dir(self.install_dir.clone())
+            .env("UV_PROJECT_ENVIRONMENT", ".venv");
+        if let Some(index) = &self.pypi_index {
+            sync = sync.arg("--default-index").arg(index);
+        }
+        self.run_step(host, ctx, 2, "同步 Python 依赖（uv sync）", sync)
+            .await?;
+        ctx.emit(ProgressKind::Finished { ok: true }).await;
+        Ok(())
+    }
+
     fn project_name(&self) -> String {
         self.install_dir
             .file_name()
@@ -285,11 +339,9 @@ builtin_plugins = ["echo"]
     }
 
     /// 旧硬编码 V11、无版本戳的动态入口、或 `# ncd-managed-bot-py` 落后于当前模板，启动时重写
+    /// 只改桌面端自己写的入口。官方教程 / 真实项目的 `from nonebot.adapters.onebot.v11 import` 不能动。
     pub fn bot_py_needs_rewrite(text: &str) -> bool {
         const BOT_PY_REV: u32 = 2;
-        if is_legacy_bot_py(text) {
-            return true;
-        }
         match managed_bot_py_rev(text) {
             Some(rev) => rev < BOT_PY_REV,
             None => looks_like_ncd_dynamic_bot_py(text),
@@ -464,6 +516,14 @@ impl Component for NoneBot2Component {
         if !host.exists(&self.pyproject()).await? {
             return Ok(DetectOutcome::NotInstalled);
         }
+        let toml = host
+            .read_file(&self.pyproject())
+            .await
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .unwrap_or_default();
+        if !super::probe::pyproject_looks_like_nonebot2(&toml) {
+            return Ok(DetectOutcome::NotInstalled);
+        }
         let version = self.read_installed_version(host).await?;
         let python = self.venv_python(host.os());
         if !host.exists(&python).await? {
@@ -473,16 +533,14 @@ impl Component for NoneBot2Component {
                 reason: "项目已创建但依赖未同步（缺 .venv），重新安装可修复".to_string(),
             }));
         }
-        let Some(version) = version else {
-            return Ok(DetectOutcome::Unusable(UnusableInstall {
-                source: self.install_dir.as_posix().to_string(),
-                version: None,
-                reason: "uv.lock 里没有 nonebot2，重新安装可修复".to_string(),
-            }));
-        };
+        let version = version.unwrap_or_else(|| "installed".to_string());
         Ok(DetectOutcome::Installed(DetectedVersion {
             version,
-            source: self.uv_lock().as_posix().to_string(),
+            source: if host.exists(&self.uv_lock()).await.unwrap_or(false) {
+                self.uv_lock().as_posix().to_string()
+            } else {
+                self.pyproject().as_posix().to_string()
+            },
         }))
     }
 
@@ -517,7 +575,6 @@ impl Component for NoneBot2Component {
         for (name, path) in [
             (NONEBOT2_PYPROJECT, self.pyproject()),
             (NONEBOT2_BOT_PY, self.bot_py()),
-            (NONEBOT2_ENV_PROD_FILE, self.env_prod_file()),
             ("venv python", self.venv_python(host.os())),
         ] {
             let ok = host.exists(&path).await?;

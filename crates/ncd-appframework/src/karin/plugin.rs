@@ -1106,6 +1106,7 @@ mod tests {
             last_error: None,
             created_at_ms: 1,
             install_renderer: true,
+            origin: ncd_domain::AppInstanceOrigin::Created,
         }
     }
 

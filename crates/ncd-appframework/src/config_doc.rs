@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use ts_rs::TS;
 
-use crate::adapter::apply_with_backup;
+use crate::adapter::apply_with_backup_ex;
 use crate::karin::config::KarinInstanceConfig;
 use crate::nonebot2::config::NoneBot2InstanceConfig;
 
@@ -223,6 +223,7 @@ pub async fn write_document_text(
     doc: &AppConfigDocument,
     text: &str,
     base_revision: Option<&str>,
+    write_sidecar: bool,
 ) -> Result<AppConfigText, AppFrameworkError> {
     validate_text(doc.format, text)?;
     if let Some(base) = base_revision {
@@ -234,7 +235,7 @@ pub async fn write_document_text(
     let path = document_path(install_dir, doc);
     ensure_parent_dir(host, &path).await?;
     let bytes = text.as_bytes().to_vec();
-    apply_with_backup(host, std::slice::from_ref(&path), || async {
+    apply_with_backup_ex(host, std::slice::from_ref(&path), write_sidecar, || async {
         host.write_file(&path, &bytes)
             .await
             .map_err(|e| AppFrameworkError::Integration(e.to_string()))

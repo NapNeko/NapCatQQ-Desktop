@@ -4,6 +4,7 @@ mod component;
 pub mod config;
 mod integration;
 pub mod manifest;
+mod probe;
 pub mod plugin;
 
 use std::sync::Arc;
@@ -11,8 +12,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
-    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppStoreResource,
-    OneBotLinkPlan,
+    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppProjectProbe,
+    AppStoreResource, OneBotLinkPlan,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
@@ -28,8 +29,9 @@ pub use plugin::{
 };
 
 use crate::adapter::{
-    AppComponentSpec, AppFrameworkAdapter, apply_with_backup, restore_from_backup,
+    AppComponentSpec, AppFrameworkAdapter, apply_with_backup_ex, restore_from_backup,
 };
+use crate::adopt::{self, write_project_sidecar};
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, MISSING_REVISION,
@@ -151,8 +153,30 @@ impl AppFrameworkAdapter for KarinAdapter {
             KarinComponent::new(spec.install_dir.clone(), spec.port)
                 .with_node_bin(spec.node_bin.clone())
                 .with_npm_registry(spec.npm_registry.clone())
-                .with_install_renderer(spec.install_renderer),
+                .with_install_renderer(spec.install_renderer)
+                .with_adopt_existing(spec.adopt_existing),
         )
+    }
+
+    async fn probe_project(
+        &self,
+        host: &dyn Host,
+        path: &HostPath,
+    ) -> Result<AppProjectProbe, AppFrameworkError> {
+        probe::probe_karin(host, path).await
+    }
+
+    async fn adopt_watch_rels(
+        &self,
+        host: &dyn Host,
+        root: &HostPath,
+    ) -> Result<Vec<String>, AppFrameworkError> {
+        let dotenv = adopt::list_dotenv_rels(host, root).await?;
+        let mut extra: Vec<&str> = vec!["package.json", KARIN_ENV_FILE, KARIN_ADAPTER_JSON];
+        let docs = karin_config_documents();
+        let owned: Vec<String> = docs.iter().map(|d| d.rel_path.clone()).collect();
+        extra.extend(owned.iter().map(String::as_str));
+        Ok(adopt::merge_rels(dotenv, &extra))
     }
 
     async fn launch_command(
@@ -179,6 +203,17 @@ impl AppFrameworkAdapter for KarinAdapter {
         Ok(EnvFile::parse(&text)
             .get(ENV_WS_SERVER_AUTH_KEY)
             .filter(|v| !v.trim().is_empty()))
+    }
+
+    async fn read_outbound_ws_urls(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<Vec<String>, AppFrameworkError> {
+        let Some(text) = Self::read_text(host, &Self::adapter_json_path(instance)).await? else {
+            return Ok(Vec::new());
+        };
+        Ok(config::outbound_onebot_ws_urls(&text))
     }
 
     async fn apply_link(
@@ -209,7 +244,7 @@ impl AppFrameworkAdapter for KarinAdapter {
         if adapter_out.is_some() {
             touched.push(adapter_path.clone());
         }
-        apply_with_backup(host, &touched, || async {
+        apply_with_backup_ex(host, &touched, write_project_sidecar(instance), || async {
             host.write_file(&env_path, env_out.as_bytes())
                 .await
                 .map_err(|e| AppFrameworkError::Integration(e.to_string()))?;
@@ -266,8 +301,14 @@ impl AppFrameworkAdapter for KarinAdapter {
         };
         let install_dir = HostPath::from_posix(&instance.install_dir);
         let (_, current) = config::read_karin_config(host, &install_dir).await?;
-        let (config, snaps) =
-            config::write_karin_config(host, &install_dir, karin, &current).await?;
+        let (config, snaps) = config::write_karin_config(
+            host,
+            &install_dir,
+            karin,
+            &current,
+            write_project_sidecar(instance),
+        )
+        .await?;
         Ok(envelope(config, &snaps))
     }
 

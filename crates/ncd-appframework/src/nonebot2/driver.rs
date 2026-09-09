@@ -77,6 +77,22 @@ pub fn adapter_driver_mixins(module_name: &str) -> DriverMixins {
     }
 }
 
+/// 反向 WS 需要 ASGI 服务端驱动。已有 fastapi/aiohttp 不改顺序；否则把 `~fastapi` 放到最前。
+pub fn ensure_reverse_driver(current: &str) -> String {
+    let t = current.trim();
+    if t.contains("fastapi") || t.contains("aiohttp") || t.contains("quart") {
+        return if t.is_empty() {
+            DRIVER_FASTAPI.to_string()
+        } else {
+            t.to_string()
+        };
+    }
+    if t.is_empty() {
+        return DRIVER_FASTAPI.to_string();
+    }
+    format!("{DRIVER_FASTAPI}+{t}")
+}
+
 pub fn required_forward_mixins<'a>(modules: impl IntoIterator<Item = &'a str>) -> Vec<&'static str> {
     modules
         .into_iter()
@@ -142,6 +158,19 @@ mod tests {
                 "nonebot.adapters.qq"
             ]),
             vec![DRIVER_HTTPX, DRIVER_WEBSOCKETS]
+        );
+    }
+
+    #[test]
+    fn reverse_driver_prefixes_fastapi_for_forward_only_projects() {
+        assert_eq!(ensure_reverse_driver(""), "~fastapi");
+        assert_eq!(
+            ensure_reverse_driver("~httpx+~websockets"),
+            "~fastapi+~httpx+~websockets"
+        );
+        assert_eq!(
+            ensure_reverse_driver("~fastapi+~httpx"),
+            "~fastapi+~httpx"
         );
     }
 }

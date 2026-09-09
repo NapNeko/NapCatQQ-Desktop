@@ -6,14 +6,15 @@ use ncd_traits::AppFrameworkError;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::adapter::apply_with_backup;
+use crate::adapter::apply_with_backup_ex;
 use crate::config_doc::{
     DocumentSnapshot, IssueSink, read_documents, revision_of,
 };
 use crate::env_file::EnvFile;
 
+use super::env_layout::{self, NoneBotEnvLayout};
 use super::manifest::{
-    ENV_DRIVER, ENV_HOST, ENV_ONEBOT_ACCESS_TOKEN, ENV_PORT, NONEBOT2_ENV_FILE,
+    ENV_DRIVER, ENV_HOST, ENV_ONEBOT_ACCESS_TOKEN, ENV_ONEBOT_WS_URLS, ENV_PORT, NONEBOT2_ENV_FILE,
     NONEBOT2_ENV_PROD_FILE, NONEBOT2_PYPROJECT,
 };
 
@@ -90,39 +91,39 @@ impl Default for NoneBot2EnvProd {
 impl NoneBot2EnvProd {
     pub fn from_env_file(env: &EnvFile) -> Self {
         let mut out = Self::default();
-        if let Some(v) = env.get(ENV_HOST) {
+        if let Some(v) = env.get_ci(ENV_HOST) {
             out.host = v;
         }
-        if let Some(v) = env.get(ENV_PORT)
+        if let Some(v) = env.get_ci(ENV_PORT)
             && let Ok(p) = v.parse()
         {
             out.port = p;
         }
-        if let Some(v) = env.get(ENV_DRIVER) {
+        if let Some(v) = env.get_ci(ENV_DRIVER) {
             out.driver = v;
         }
-        if let Some(v) = env.get(ENV_LOG_LEVEL) {
+        if let Some(v) = env.get_ci(ENV_LOG_LEVEL) {
             out.log_level = v;
         }
-        if let Some(v) = env.get(ENV_ONEBOT_ACCESS_TOKEN) {
+        if let Some(v) = env.get_ci(ENV_ONEBOT_ACCESS_TOKEN) {
             out.onebot_access_token = v;
         }
-        if let Some(v) = env.get(ENV_SUPERUSERS) {
+        if let Some(v) = env.get_ci(ENV_SUPERUSERS) {
             out.superusers = parse_list(&v);
         }
-        if let Some(v) = env.get(ENV_NICKNAME) {
+        if let Some(v) = env.get_ci(ENV_NICKNAME) {
             out.nickname = parse_list(&v);
         }
-        if let Some(v) = env.get(ENV_COMMAND_START) {
+        if let Some(v) = env.get_ci(ENV_COMMAND_START) {
             out.command_start = parse_list(&v);
         }
-        if let Some(v) = env.get(ENV_COMMAND_SEP) {
+        if let Some(v) = env.get_ci(ENV_COMMAND_SEP) {
             out.command_sep = parse_list(&v);
         }
         out.custom = env
             .entries()
             .into_iter()
-            .filter(|e| !SYSTEM_KEYS.contains(&e.key.as_str()))
+            .filter(|e| !is_system_env_key(&e.key) && !e.key.eq_ignore_ascii_case("ENVIRONMENT"))
             .map(|e| NoneBot2EnvEntry {
                 key: e.key,
                 value: e.value,
@@ -133,15 +134,15 @@ impl NoneBot2EnvProd {
     }
 
     pub fn apply_to(&self, env: &mut EnvFile) {
-        env.set(ENV_HOST, &self.host);
-        env.set(ENV_PORT, &self.port.to_string());
-        env.set(ENV_DRIVER, &self.driver);
-        env.set(ENV_LOG_LEVEL, &self.log_level);
-        env.set(ENV_ONEBOT_ACCESS_TOKEN, &self.onebot_access_token);
-        env.set(ENV_SUPERUSERS, &render_list(&self.superusers));
-        env.set(ENV_NICKNAME, &render_list(&self.nickname));
-        env.set(ENV_COMMAND_START, &render_list(&self.command_start));
-        env.set(ENV_COMMAND_SEP, &render_list(&self.command_sep));
+        env.set_ci(ENV_HOST, &self.host);
+        env.set_ci(ENV_PORT, &self.port.to_string());
+        env.set_ci(ENV_DRIVER, &self.driver);
+        env.set_ci(ENV_LOG_LEVEL, &self.log_level);
+        env.set_ci(ENV_ONEBOT_ACCESS_TOKEN, &self.onebot_access_token);
+        env.set_ci(ENV_SUPERUSERS, &render_list(&self.superusers));
+        env.set_ci(ENV_NICKNAME, &render_list(&self.nickname));
+        env.set_ci(ENV_COMMAND_START, &render_list(&self.command_start));
+        env.set_ci(ENV_COMMAND_SEP, &render_list(&self.command_sep));
 
         let keep: std::collections::BTreeSet<&str> = self
             .custom
@@ -149,12 +150,18 @@ impl NoneBot2EnvProd {
             .map(|e| e.key.as_str())
             .collect();
         for entry in env.entries() {
-            if !SYSTEM_KEYS.contains(&entry.key.as_str()) && !keep.contains(entry.key.as_str()) {
+            if !is_system_env_key(&entry.key)
+                && !entry.key.eq_ignore_ascii_case("ENVIRONMENT")
+                && !keep.contains(entry.key.as_str())
+            {
                 env.remove(&entry.key);
             }
         }
         for c in &self.custom {
-            if c.key.trim().is_empty() || SYSTEM_KEYS.contains(&c.key.as_str()) {
+            if c.key.trim().is_empty()
+                || is_system_env_key(&c.key)
+                || c.key.eq_ignore_ascii_case("ENVIRONMENT")
+            {
                 continue;
             }
             env.set_with_comment(&c.key, &c.value, &c.comment);
@@ -195,19 +202,60 @@ impl NoneBot2InstanceConfig {
     }
 }
 
-pub fn nonebot2_config_documents() -> Vec<AppConfigDocument> {
-    let d = |id: &str, rel: &str, format: AppConfigFormat| AppConfigDocument {
+fn config_doc(id: &str, rel: &str, format: AppConfigFormat) -> AppConfigDocument {
+    AppConfigDocument {
         id: id.to_string(),
         label: rel.to_string(),
         rel_path: rel.to_string(),
         format,
         hot_reload: false,
-    };
+    }
+}
+
+pub fn nonebot2_config_documents() -> Vec<AppConfigDocument> {
     vec![
-        d(DOC_ENV, NONEBOT2_ENV_FILE, AppConfigFormat::DotEnv),
-        d(DOC_ENV_PROD, NONEBOT2_ENV_PROD_FILE, AppConfigFormat::DotEnv),
-        d(DOC_PYPROJECT, NONEBOT2_PYPROJECT, AppConfigFormat::Toml),
+        config_doc(DOC_ENV, NONEBOT2_ENV_FILE, AppConfigFormat::DotEnv),
+        config_doc(DOC_ENV_PROD, NONEBOT2_ENV_PROD_FILE, AppConfigFormat::DotEnv),
+        config_doc(DOC_PYPROJECT, NONEBOT2_PYPROJECT, AppConfigFormat::Toml),
     ]
+}
+
+/// 官方：`.env` 总会加载；存在 `.env.{ENVIRONMENT}` 时再叠一层。没有 overlay 就不列幽灵文件。
+pub fn nonebot2_config_documents_for(layout: &NoneBotEnvLayout) -> Vec<AppConfigDocument> {
+    let mut docs = vec![config_doc(
+        DOC_ENV,
+        NONEBOT2_ENV_FILE,
+        AppConfigFormat::DotEnv,
+    )];
+    if layout.is_overlay() {
+        docs.push(config_doc(
+            DOC_ENV_PROD,
+            &layout.write_rel,
+            AppConfigFormat::DotEnv,
+        ));
+    }
+    docs.push(config_doc(
+        DOC_PYPROJECT,
+        NONEBOT2_PYPROJECT,
+        AppConfigFormat::Toml,
+    ));
+    docs
+}
+
+/// 官方优先级：`.env` 先加载，`.env.{ENVIRONMENT}` 覆盖同名键。
+pub fn merge_env_texts(base: Option<&str>, overlay: Option<&str>) -> EnvFile {
+    let mut env = EnvFile::parse(base.unwrap_or(""));
+    if let Some(over) = overlay.filter(|s| !s.is_empty()) {
+        let extra = EnvFile::parse(over);
+        for entry in extra.entries() {
+            env.set_with_comment(&entry.key, &entry.value, &entry.comment);
+        }
+    }
+    env
+}
+
+fn is_system_env_key(key: &str) -> bool {
+    SYSTEM_KEYS.iter().any(|k| key.eq_ignore_ascii_case(k))
 }
 
 pub fn link_inputs_changed(before: &NoneBot2EnvProd, after: &NoneBot2EnvProd) -> bool {
@@ -215,52 +263,108 @@ pub fn link_inputs_changed(before: &NoneBot2EnvProd, after: &NoneBot2EnvProd) ->
 }
 
 pub fn parse_nonebot2_config(snaps: &[DocumentSnapshot]) -> Result<NoneBot2InstanceConfig, AppFrameworkError> {
-    let env_text = snaps
+    let base = snaps
+        .iter()
+        .find(|s| s.doc.id == DOC_ENV)
+        .and_then(|s| s.text.as_deref());
+    let overlay = snaps
         .iter()
         .find(|s| s.doc.id == DOC_ENV_PROD)
-        .and_then(|s| s.text.as_deref())
-        .ok_or_else(|| {
-            AppFrameworkError::Integration("NoneBot2 实例缺少 .env.prod，请先完成安装".to_string())
-        })?;
+        .and_then(|s| s.text.as_deref());
+    if base.is_none() && overlay.is_none() {
+        return Err(AppFrameworkError::Integration(
+            "NoneBot2 实例没有 .env / .env.{ENVIRONMENT}".to_string(),
+        ));
+    }
     Ok(NoneBot2InstanceConfig {
-        env_prod: NoneBot2EnvProd::from_env_file(&EnvFile::parse(env_text)),
+        env_prod: NoneBot2EnvProd::from_env_file(&merge_env_texts(base, overlay)),
     })
+}
+
+pub fn read_listen_port(base: Option<&str>, overlay: Option<&str>) -> Option<u16> {
+    merge_env_texts(base, overlay)
+        .get_ci(ENV_PORT)
+        .and_then(|v| v.parse().ok())
+        .filter(|p| *p > 0)
+}
+
+pub fn read_access_token_from_texts(base: Option<&str>, overlay: Option<&str>) -> Option<String> {
+    let merged = merge_env_texts(base, overlay);
+    merged
+        .get_ci(ENV_ONEBOT_ACCESS_TOKEN)
+        .or_else(|| merged.get_ci("ONEBOT_V11_ACCESS_TOKEN"))
+        .filter(|v| !v.trim().is_empty())
+}
+
+pub fn read_outbound_ws_urls_from_texts(base: Option<&str>, overlay: Option<&str>) -> Vec<String> {
+    merge_env_texts(base, overlay)
+        .get_ci(ENV_ONEBOT_WS_URLS)
+        .map(|raw| parse_ws_url_list(&raw))
+        .unwrap_or_default()
+}
+
+pub fn parse_ws_url_list(raw: &str) -> Vec<String> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return Vec::new();
+    }
+    if let Ok(arr) = serde_json::from_str::<Vec<String>>(t) {
+        return arr
+            .into_iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+    }
+    if t.starts_with("ws://") || t.starts_with("wss://") {
+        return vec![t.to_string()];
+    }
+    Vec::new()
+}
+
+pub async fn load_env_layout(
+    host: &dyn Host,
+    install_dir: &HostPath,
+) -> Result<NoneBotEnvLayout, AppFrameworkError> {
+    let base = read_optional_text(host, &install_dir.join(NONEBOT2_ENV_FILE)).await?;
+    let environment = env_layout::environment_from_dotenv(base.as_deref().unwrap_or(""));
+    let overlay_rel = env_layout::overlay_rel(&environment);
+    let overlay_exists = host
+        .exists(&install_dir.join(&overlay_rel))
+        .await
+        .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    Ok(env_layout::layout_from_base(base.as_deref(), |rel| {
+        overlay_exists && rel == overlay_rel
+    }))
 }
 
 pub async fn read_nonebot2_config(
     host: &dyn Host,
     install_dir: &HostPath,
 ) -> Result<(NoneBot2InstanceConfig, Vec<DocumentSnapshot>), AppFrameworkError> {
-    let snaps = read_documents(host, install_dir, &nonebot2_config_documents()).await?;
-    let config = parse_nonebot2_config(&snaps)?;
-    Ok((config, snaps))
+    let layout = load_env_layout(host, install_dir).await?;
+    let snaps = read_documents(host, install_dir, &nonebot2_config_documents_for(&layout)).await?;
+    parse_nonebot2_config(&snaps).map(|config| (config, snaps))
 }
 
 pub async fn write_nonebot2_config(
     host: &dyn Host,
     install_dir: &HostPath,
     config: &NoneBot2InstanceConfig,
-    current: &[DocumentSnapshot],
+    _current: &[DocumentSnapshot],
+    write_sidecar: bool,
 ) -> Result<(NoneBot2InstanceConfig, Vec<DocumentSnapshot>), AppFrameworkError> {
     let issues = config.validate();
     if !issues.is_empty() {
         return Err(AppFrameworkError::ConfigInvalid(issues));
     }
-    let path = install_dir.join(NONEBOT2_ENV_PROD_FILE);
-    let text = current
-        .iter()
-        .find(|s| s.doc.id == DOC_ENV_PROD)
-        .and_then(|s| s.text.clone())
-        .unwrap_or_default();
+    let layout = load_env_layout(host, install_dir).await?;
+    let path = install_dir.join(&layout.write_rel);
+    let text = read_optional_text(host, &path).await?.unwrap_or_default();
     let mut env = EnvFile::parse(&text);
     config.env_prod.apply_to(&mut env);
     let out = env.render();
-    let unchanged = current
-        .iter()
-        .find(|s| s.doc.id == DOC_ENV_PROD)
-        .is_some_and(|s| s.revision == revision_of(out.as_bytes()));
-    if !unchanged {
-        apply_with_backup(host, std::slice::from_ref(&path), || async {
+    if revision_of(out.as_bytes()) != revision_of(text.as_bytes()) {
+        apply_with_backup_ex(host, std::slice::from_ref(&path), write_sidecar, || async {
             host.write_file(&path, out.as_bytes())
                 .await
                 .map_err(|e| AppFrameworkError::Integration(e.to_string()))
@@ -268,6 +372,24 @@ pub async fn write_nonebot2_config(
         .await?;
     }
     read_nonebot2_config(host, install_dir).await
+}
+
+async fn read_optional_text(
+    host: &dyn Host,
+    path: &HostPath,
+) -> Result<Option<String>, AppFrameworkError> {
+    if !host
+        .exists(path)
+        .await
+        .map_err(|e| AppFrameworkError::Host(e.to_string()))?
+    {
+        return Ok(None);
+    }
+    let bytes = host
+        .read_file(path)
+        .await
+        .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 fn valid_env_key(key: &str) -> bool {
@@ -356,5 +478,68 @@ mod tests {
         b = a.clone();
         b.onebot_access_token = "x".into();
         assert!(link_inputs_changed(&a, &b));
+    }
+
+    #[test]
+    fn outbound_ws_urls_parse_json_array_and_single() {
+        assert_eq!(
+            parse_ws_url_list(r#"["ws://127.0.0.1:3001","wss://x:1/p"]"#),
+            vec!["ws://127.0.0.1:3001".to_string(), "wss://x:1/p".to_string()]
+        );
+        assert_eq!(
+            parse_ws_url_list("ws://127.0.0.1:3001"),
+            vec!["ws://127.0.0.1:3001".to_string()]
+        );
+        assert!(parse_ws_url_list("not-a-url").is_empty());
+        assert_eq!(
+            read_outbound_ws_urls_from_texts(
+                Some("ONEBOT_WS_URLS=[\"ws://127.0.0.1:3001\"]\n"),
+                None
+            ),
+            vec!["ws://127.0.0.1:3001".to_string()]
+        );
+    }
+
+    #[test]
+    fn listen_port_prefers_overlay_then_base() {
+        assert_eq!(
+            read_listen_port(Some("PORT=13120\n"), Some("PORT=8080\n")),
+            Some(8080)
+        );
+        assert_eq!(read_listen_port(Some("PORT=13120\n"), None), Some(13120));
+        assert_eq!(read_listen_port(Some("port=13120\n"), None), Some(13120));
+        assert_eq!(read_listen_port(Some("HOST=127.0.0.1\n"), None), None);
+    }
+
+    #[test]
+    fn merge_follows_official_overlay() {
+        let merged = merge_env_texts(
+            Some("ENVIRONMENT=dev\nPORT=13120\nONEBOT_WS_URLS=[\"ws://x\"]\n"),
+            Some("PORT=8080\nLOG_LEVEL=DEBUG\n"),
+        );
+        let parsed = NoneBot2EnvProd::from_env_file(&merged);
+        assert_eq!(parsed.port, 8080);
+        assert_eq!(parsed.log_level, "DEBUG");
+        assert!(parsed.custom.iter().any(|e| e.key == "ONEBOT_WS_URLS"));
+        assert!(!parsed.custom.iter().any(|e| e.key.eq_ignore_ascii_case("ENVIRONMENT")));
+    }
+
+    #[test]
+    fn documents_omit_missing_overlay() {
+        let only_env = NoneBotEnvLayout {
+            environment: "prod".into(),
+            write_rel: ".env".into(),
+        };
+        let docs = nonebot2_config_documents_for(&only_env);
+        assert_eq!(docs.len(), 2);
+        assert!(docs.iter().all(|d| d.rel_path != ".env.prod"));
+
+        let with_overlay = NoneBotEnvLayout {
+            environment: "dev".into(),
+            write_rel: ".env.dev".into(),
+        };
+        let docs = nonebot2_config_documents_for(&with_overlay);
+        assert_eq!(docs[1].rel_path, ".env.dev");
+        assert_eq!(docs[1].id, DOC_ENV_PROD);
     }
 }

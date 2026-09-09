@@ -44,6 +44,7 @@ pub const ENV_DRIVER: &str = "DRIVER";
 pub const ENV_HOST: &str = "HOST";
 pub const ENV_PORT: &str = "PORT";
 pub const ENV_ONEBOT_ACCESS_TOKEN: &str = "ONEBOT_ACCESS_TOKEN";
+pub const ENV_ONEBOT_WS_URLS: &str = "ONEBOT_WS_URLS";
 pub const DRIVER_FASTAPI: &str = "~fastapi";
 pub const DRIVER_HTTPX: &str = "~httpx";
 pub const DRIVER_WEBSOCKETS: &str = "~websockets";

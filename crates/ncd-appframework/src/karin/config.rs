@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use ts_rs::TS;
 
-use crate::adapter::apply_with_backup;
+use crate::adapter::apply_with_backup_ex;
 use crate::config_doc::{
     DocumentSnapshot, IssueSink, ensure_parent_dir, read_documents, render_json_pretty,
 };
@@ -509,6 +509,20 @@ pub struct KarinAdapterConfig {
     pub extra: Extra,
 }
 
+/// 只收 enable 的正向客户端,默认占位 `ws://127.0.0.1:7778` 是关着的
+pub fn outbound_onebot_ws_urls(text: &str) -> Vec<String> {
+    let Ok(cfg) = serde_json::from_str::<KarinAdapterConfig>(text) else {
+        return Vec::new();
+    };
+    cfg.onebot
+        .ws_client
+        .into_iter()
+        .filter(|c| c.enable)
+        .map(|c| c.url.trim().to_string())
+        .filter(|u| !u.is_empty())
+        .collect()
+}
+
 // ---------- groups.json / privates.json ----------
 
 /// 群 / 频道 / 私聊响应规则（groups.json 与 privates.json 共用；私聊没有 userCD / member_*）。
@@ -989,6 +1003,7 @@ pub async fn write_karin_config(
     install_dir: &HostPath,
     config: &KarinInstanceConfig,
     current: &[DocumentSnapshot],
+    write_sidecar: bool,
 ) -> Result<(KarinInstanceConfig, Vec<DocumentSnapshot>), AppFrameworkError> {
     let writes = plan_karin_writes(install_dir, config, current)?;
     if !writes.is_empty() {
@@ -996,7 +1011,7 @@ pub async fn write_karin_config(
             ensure_parent_dir(host, &w.path).await?;
         }
         let paths: Vec<HostPath> = writes.iter().map(|w| w.path.clone()).collect();
-        apply_with_backup(host, &paths, || async {
+        apply_with_backup_ex(host, &paths, write_sidecar, || async {
             for w in &writes {
                 host.write_file(&w.path, w.text.as_bytes())
                     .await
@@ -1253,5 +1268,16 @@ mod tests {
         b = a.clone();
         b.log_level = "debug".into();
         assert!(!link_inputs_changed(&a, &b));
+    }
+
+    #[test]
+    fn outbound_ws_urls_skip_disabled_placeholder() {
+        let disabled = r#"{"onebot":{"ws_client":[{"enable":false,"url":"ws://127.0.0.1:7778"}]}}"#;
+        assert!(outbound_onebot_ws_urls(disabled).is_empty());
+        let on = r#"{"onebot":{"ws_client":[{"enable":true,"url":"ws://127.0.0.1:3001"}]}}"#;
+        assert_eq!(
+            outbound_onebot_ws_urls(on),
+            vec!["ws://127.0.0.1:3001".to_string()]
+        );
     }
 }

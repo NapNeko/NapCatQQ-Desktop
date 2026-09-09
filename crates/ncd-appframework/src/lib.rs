@@ -9,6 +9,7 @@
 //! 衡量标准：接第二个框架只加一个子目录 + 注册一行。
 
 pub mod adapter;
+pub mod adopt;
 pub mod config_doc;
 pub mod env_file;
 pub mod karin;
@@ -19,7 +20,12 @@ pub mod store;
 pub mod uv_tooling;
 
 pub use adapter::{
-    AppComponentSpec, AppFrameworkAdapter, PluginLogSink, apply_with_backup, restore_from_backup,
+    AppComponentSpec, AppFrameworkAdapter, PluginLogSink, apply_with_backup, apply_with_backup_ex,
+    restore_from_backup,
+};
+pub use adopt::{
+    AdoptRestoreScope, AdoptedFile, capture_adopted_files, list_dotenv_rels, merge_rels,
+    remove_ncd_debris, restore_adopted_files, write_project_sidecar,
 };
 pub use config_doc::{
     AppConfigDocumentRevision, AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope,

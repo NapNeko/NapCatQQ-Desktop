@@ -16,10 +16,11 @@ use super::config::{DOC_ENV_PROD, nonebot2_config_documents};
 use super::driver::{merge_driver, required_forward_mixins};
 use super::manifest::{
     DRIVER_FASTAPI, DRIVER_HTTPX, DRIVER_WEBSOCKETS, ENV_DRIVER, NONEBOT2_BOT_PY,
-    NONEBOT2_ENV_PROD_FILE, NONEBOT2_PYPROJECT, NONEBOT2_UV_LOCK, PYPI_ADAPTER_ONEBOT,
+    NONEBOT2_PYPROJECT, NONEBOT2_UV_LOCK, PYPI_ADAPTER_ONEBOT,
     PYPI_NONEBOT2_FORWARD,
 };
-use crate::adapter::apply_with_backup;
+use crate::adapter::apply_with_backup_ex;
+use crate::adopt::write_project_sidecar;
 use crate::env_file::EnvFile;
 use crate::adapter::PluginLogSink;
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
@@ -882,6 +883,9 @@ pub async fn ensure_dynamic_bot_py(
     instance: &AppInstance,
     log: Option<&PluginLogSink>,
 ) -> Result<(), AppFrameworkError> {
+    if instance.origin.is_imported() {
+        return Ok(());
+    }
     ensure_dynamic_bot_py_at(
         host,
         &HostPath::from_posix(&instance.install_dir),
@@ -906,7 +910,7 @@ pub async fn ensure_dynamic_bot_py_at(
     }
     emit_log(log, "入口改为按 toml 注册适配器(非 V11 失败可跳过)".into());
     let body = NoneBot2Component::render_bot_py();
-    apply_with_backup(host, std::slice::from_ref(&path), || async {
+    apply_with_backup_ex(host, std::slice::from_ref(&path), true, || async {
         host.write_file(&path, body.as_bytes())
             .await
             .map_err(|e| AppFrameworkError::Integration(e.to_string()))
@@ -947,7 +951,8 @@ pub async fn ensure_forward_driver_at(
         return Ok(());
     }
 
-    let env_path = root.join(NONEBOT2_ENV_PROD_FILE);
+    let layout = crate::nonebot2::config::load_env_layout(host, root).await?;
+    let env_path = root.join(&layout.write_rel);
     let env_text = read_text(host, &env_path).await?.unwrap_or_default();
     let mut env = EnvFile::parse(&env_text);
     let current = env
@@ -1039,11 +1044,16 @@ where
     let Some(out) = commit_catalog_text(&text, &catalog, latest.as_deref(), overwrite)? else {
         return Ok(());
     };
-    apply_with_backup(host, std::slice::from_ref(&path), || async {
-        host.write_file(&path, out.as_bytes())
-            .await
-            .map_err(|e| AppFrameworkError::Integration(e.to_string()))
-    })
+    apply_with_backup_ex(
+        host,
+        std::slice::from_ref(&path),
+        write_project_sidecar(instance),
+        || async {
+            host.write_file(&path, out.as_bytes())
+                .await
+                .map_err(|e| AppFrameworkError::Integration(e.to_string()))
+        },
+    )
     .await
 }
 
@@ -1362,6 +1372,7 @@ plugins = []
             last_error: None,
             created_at_ms: 1,
             install_renderer: false,
+            origin: ncd_domain::AppInstanceOrigin::Created,
         }
     }
 
@@ -1445,7 +1456,7 @@ plugins = []
     fn managed_bot_py_rewrites_stale_dynamic_template() {
         let current = NoneBot2Component::render_bot_py();
         assert!(!NoneBot2Component::bot_py_needs_rewrite(current));
-        assert!(NoneBot2Component::bot_py_needs_rewrite(
+        assert!(!NoneBot2Component::bot_py_needs_rewrite(
             "from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter\n"
         ));
         let v1 = "def _register_adapters(driver):\n    module = importlib.import_module(name)\n    driver.register_adapter(module.Adapter)\nnonebot.load_from_toml(\"pyproject.toml\")\n";
