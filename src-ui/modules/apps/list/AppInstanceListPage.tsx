@@ -81,7 +81,6 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
                     <div>
                         <p className="text-2xs uppercase tracking-widest text-text-tertiary">apps</p>
                         <h1 className="font-display text-xl font-semibold text-text">应用端</h1>
-                        <p className="mt-1 text-sm text-text-secondary">管理应用实例的启停、对接与配置。</p>
                     </div>
                     <div className="flex items-baseline gap-1 text-xs text-text-tertiary tabular-nums">
                         <span>共</span>

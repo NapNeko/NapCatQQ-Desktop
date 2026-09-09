@@ -47,7 +47,7 @@ export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
             // 这里就地显示原因，对话框保持打开让用户改密码重试，而不是默默关掉。
             await onConfirm(password, remember);
         } catch (e) {
-            setError(errorText(e, '安装失败，请重试'));
+            setError(errorText(e, '安装失败'));
         }
     };
 
@@ -57,8 +57,7 @@ export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
                 <DialogHeader>
                     <DialogTitle>需要 sudo 密码</DialogTitle>
                     <DialogDescription>
-                        {hostName} 是以 SSH 密钥登录的远端机器，安装 Docker 需要管理员（sudo）权限。
-                        请输入该登录用户的 sudo 密码以继续。
+                        {hostName} 用 SSH 密钥登录，安装 Docker 需要 sudo 权限。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -82,10 +81,6 @@ export const SudoPasswordDialog: React.FC<SudoPasswordDialogProps> = ({
                         onCheckedChange={setRemember}
                         disabled={isSubmitting}
                     />
-
-                    <p className="text-2xs text-text-tertiary leading-snug">
-                        密码仅用于在 {hostName} 上执行 sudo，通过加密的 SSH 通道传输，不会以明文写入任何配置文件。
-                    </p>
 
                     {error && <p className="text-xs text-danger">{error}</p>}
                 </div>

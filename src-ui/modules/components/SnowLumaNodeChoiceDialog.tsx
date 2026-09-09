@@ -68,10 +68,7 @@ export const SnowLumaNodeChoiceDialog: React.FC<Props> = ({
                                 : 'border-border-subtle bg-inset hover:border-border',
                         )}
                     >
-                        <div className="text-sm font-medium text-text">自动安装 Node.js（推荐）</div>
-                        <p className="mt-0.5 text-2xs leading-snug text-text-secondary">
-                            由桌面端自动下载并安装，不影响系统现有开发环境。
-                        </p>
+                        <div className="text-sm font-medium text-text">自动安装 Node.js（默认）</div>
                     </button>
 
                     {/* 选项 2：复用本机已检测到的 Node.js 环境 */}
@@ -86,9 +83,6 @@ export const SnowLumaNodeChoiceDialog: React.FC<Props> = ({
                             )}
                         >
                             <div className="text-sm font-medium text-text">复用本机已有的 Node.js 环境</div>
-                            <p className="mt-0.5 text-2xs leading-snug text-text-secondary mb-2">
-                                直接使用本机已检测到且满足版本要求的 Node 运行环境。
-                            </p>
 
                             {mode === 'reuse' && (
                                 <div className="mt-2 flex flex-col gap-1.5 pt-1 border-t border-border-subtle">

@@ -43,7 +43,7 @@ export function componentLifecycleBlockedReason(
 ): string | null {
     const active = countActiveBotsOnComponentHost(snapshots, configs, hostId);
     if (active <= 0) return null;
-    return `该机器上仍有 ${active} 个 Bot 处于启动中/运行中/停止中，请先全部停止后再更新或卸载组件`;
+    return `该机器上仍有 ${active} 个 Bot 处于启动中/运行中/停止中，全部停止后才能更新或卸载组件`;
 }
 
 export function componentMutationBlockedReason(
@@ -56,5 +56,5 @@ export function componentMutationBlockedReason(
     const active = countActiveBotsOnComponentHost(snapshots, configs, hostId);
     if (active <= 0) return null;
     const action = kind === 'update' ? '更新' : '卸载';
-    return `该机器上仍有 ${active} 个 Bot 处于启动中/运行中/停止中，请先全部停止后再${action}组件`;
+    return `该机器上仍有 ${active} 个 Bot 处于启动中/运行中/停止中，全部停止后才能${action}组件`;
 }

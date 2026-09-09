@@ -51,12 +51,11 @@ export function serverStatusLine(
 ): { text: string; tone: ServerStatusTone } | null {
     if (isTesting) return { text: '正在测试连接…', tone: 'brand' };
     switch (state) {
-        case 'connected':
-            return { text: '服务器在线，可以部署组件', tone: 'success' };
         case 'connecting':
             return { text: '正在连接…', tone: 'brand' };
         case 'failed':
-            return { text: '远端主机不可达，请检查网络或凭据', tone: 'danger' };
+            return { text: '远端主机不可达，检查网络或凭据', tone: 'danger' };
+        case 'connected': // 徽标已显示「在线」
         case 'disconnected':
         default:
             return null; // 未测试时不显示状态行，避免视觉噪音

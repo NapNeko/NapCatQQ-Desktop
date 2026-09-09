@@ -589,9 +589,6 @@ export const ComponentsPageNext: React.FC = () => {
                         components
                     </p>
                     <h1 className="font-display text-xl font-semibold text-text">组件管理</h1>
-                    <p className="mt-1 text-sm text-text-secondary">
-                        选一台机器，管理它上面的协议端、应用端与运行时依赖：安装、更新、卸载、容器部署。
-                    </p>
                 </div>
                 <Button
                     size="sm"

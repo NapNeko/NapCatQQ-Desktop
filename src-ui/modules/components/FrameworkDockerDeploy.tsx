@@ -70,7 +70,7 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
             key: `docker-deploy-start:${id}`,
             tone: 'info',
             title: `${frameworkLabel} 镜像拉取已提交${hostCtx}`,
-            content: `源：${mirrorHint}。可在「任务队列」查看进度；拉取中可点「停止」。`,
+            content: `源：${mirrorHint}。进度见「任务队列」，可随时停止。`,
             autoDismissMs: 6000,
         });
         void onPullImage(hostId, flavor, id, mirrorArg)
@@ -114,7 +114,7 @@ export const FrameworkDockerDeployButton: React.FC<FrameworkDockerDeployButtonPr
                 variant="ghost"
                 className="rounded-r-none border-r border-border-subtle/60 pr-2"
                 onClick={() => startPull('auto')}
-                title="自动换源拉取（推荐）"
+                title="自动换源拉取"
             >
                 <Container size={13} />
                 拉镜像

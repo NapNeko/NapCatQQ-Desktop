@@ -127,7 +127,6 @@ export const KarinConnectionsTab: React.FC<KarinTabProps> = ({
         <>
             <div className="flex flex-col gap-8 pb-2">
                 <FormSection
-                    title="已配置的连接"
                     actions={<span className="text-2xs text-text-tertiary">{rows.length} 项</span>}
                 >
                     <div className="flex flex-col gap-2">
@@ -201,7 +200,7 @@ export const KarinConnectionsTab: React.FC<KarinTabProps> = ({
                     <DialogHeader>
                         <DialogTitle>删除连接？</DialogTitle>
                         <DialogDescription>
-                            即将删除连接 “{deleteTarget?.name}”，此操作不可撤销。
+                            删除连接 “{deleteTarget?.name}”，不可撤销。
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>

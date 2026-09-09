@@ -50,7 +50,7 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
     const [authMethod, setAuthMethod] = useState<AuthMethod>('password');
     const [keyPath, setKeyPath] = useState('');
     const [remember, setRemember] = useState(true);
-    // 密码模式下勾选：添加后用这次密码自动配置免密登录（推荐）。
+    // 密码模式下勾选：添加后用这次密码自动配置免密登录。
     const [autoKey, setAutoKey] = useState(true);
     const formId = React.useId();
     const nameId = `${formId}-name`;
@@ -140,9 +140,7 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                 <DialogHeader>
                     <DialogTitle>{isEdit ? '编辑远端服务器' : '添加远端服务器'}</DialogTitle>
                     <DialogDescription>
-                        {isEdit
-                            ? '修改 SSH 连接信息。密码留空表示不改动已保存的凭据。'
-                            : '配置 SSH 连接信息。凭据将通过系统 keyring 加密存储。'}
+                        {isEdit ? null : '凭据经系统 keyring 加密存储。'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -224,7 +222,7 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                                 checked={autoKey}
                                 onChange={(e) => setAutoKey(e.target.checked)}
                             />
-                            <span>自动配置免密登录（推荐）</span>
+                            <span>自动配置免密登录</span>
                         </label>
                     )}
 
@@ -232,7 +230,7 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
                         <Field
                             id={scannedKeys.length > 0 ? keyPathSelectId : keyPathCustomId}
                             label="私钥文件路径"
-                            description={scannedKeys.length > 0 ? `已在 ~/.ssh/ 中发现 ${scannedKeys.length} 个标准密钥。` : '~/.ssh/ 下未发现标准命名密钥，请手动填路径。'}
+                            description={scannedKeys.length > 0 ? `已在 ~/.ssh/ 中发现 ${scannedKeys.length} 个标准密钥。` : '~/.ssh/ 下未发现标准命名密钥，手动填路径。'}
                         >
                             {scannedKeys.length > 0 ? (
                                 <div className="flex flex-col gap-1.5">

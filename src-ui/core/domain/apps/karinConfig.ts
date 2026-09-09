@@ -49,14 +49,14 @@ export const KARIN_SYSTEM_ENV_KEYS = [
 ] as const;
 
 /** 群 / 私聊响应模式（Karin 固定语义） */
-export const KARIN_RULE_MODES: ReadonlyArray<{ value: number; label: string; hint: string }> = [
-    { value: 0, label: '所有消息', hint: '不限制' },
-    { value: 1, label: '仅 @ 机器人', hint: '必须 @Bot 才响应' },
-    { value: 2, label: '仅管理员', hint: '只响应 master / admin' },
-    { value: 3, label: '仅别名', hint: '消息须以别名开头' },
-    { value: 4, label: '别名或 @', hint: '别名开头或 @Bot 任一满足' },
-    { value: 5, label: '管理员无限制', hint: '管理员不受限，其他人需别名或 @' },
-    { value: 6, label: '仅主人', hint: '只响应 master' },
+export const KARIN_RULE_MODES: ReadonlyArray<{ value: number; label: string }> = [
+    { value: 0, label: '所有消息' },
+    { value: 1, label: '仅 @ 机器人' },
+    { value: 2, label: '仅管理员' },
+    { value: 3, label: '仅别名' },
+    { value: 4, label: '别名或 @' },
+    { value: 5, label: '管理员无限制' },
+    { value: 6, label: '仅主人' },
 ];
 
 export const KARIN_GROUP_RULE_KEYS = [

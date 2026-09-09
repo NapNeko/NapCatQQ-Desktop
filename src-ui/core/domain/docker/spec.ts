@@ -45,16 +45,16 @@ export function defaultDeploySpec(flavor: DockerFlavor): DockerDeploySpec {
 ///   SnowLuma.Docker.Framework：5900 VNC / 6081 noVNC / 5099 WebUI / 3000 HTTP / 3001 WS
 export interface PortPurpose {
     label: string;
-    description: string;
+    description?: string;
 }
 
 const PORT_PURPOSES: Record<number, PortPurpose> = {
-    3000: { label: 'OneBot HTTP', description: 'OneBot v11 HTTP 接口，机器人框架对接用' },
-    3001: { label: 'OneBot WS', description: 'OneBot v11 WebSocket 接口，机器人框架对接用' },
-    6099: { label: 'WebUI', description: 'NapCat 管理后台，浏览器访问扫码登录 / 改配置' },
-    5099: { label: 'WebUI', description: 'SnowLuma 管理后台，浏览器访问改配置' },
-    5900: { label: 'VNC', description: '远程桌面（VNC 客户端连），扫码登录 QQ 用' },
-    6081: { label: 'noVNC', description: '网页版远程桌面，浏览器直接打开扫码登录 QQ' },
+    3000: { label: 'OneBot HTTP' },
+    3001: { label: 'OneBot WS' },
+    6099: { label: 'WebUI', description: 'NapCat 管理后台，扫码登录 / 改配置' },
+    5099: { label: 'WebUI', description: 'SnowLuma 管理后台' },
+    5900: { label: 'VNC', description: '需 VNC 客户端，扫码登录 QQ' },
+    6081: { label: 'noVNC', description: '浏览器直接打开，扫码登录 QQ' },
 };
 
 export function portPurpose(containerPort: number): PortPurpose | null {
