@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { isAppConfigError } from '../../core/domain/apps/appConfigError';
 import { errorText } from '../../core/domain/errors';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushAppErrorBar } from './pushAppErrorBar';
 import { deploymentTaskStore } from '../task-queue/deploymentTaskStore';
+import {
+    APP_STORE_GC_MS,
+    APP_STORE_STALE_MS,
+    appStoreInstalledKey,
+    appStoreMarketKey,
+} from './appStoreQuery';
 import {
     filterNoneBot2Store,
     overlayInstalledFromTasks,
@@ -45,20 +52,81 @@ function actionVerb(action: AppPluginAction): string {
     return '卸载';
 }
 
+function reportCatalogError(key: string, e: unknown): never {
+    const raw = errorText(e);
+    const copy = pluginCatalogErrorCopy(raw);
+    pushAppErrorBar({
+        key,
+        title: copy.title,
+        raw,
+        content: copy.content,
+    });
+    throw e instanceof Error ? e : new Error(raw);
+}
+
 export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResource) {
+    const queryClient = useQueryClient();
     const taskState = useSyncExternalStore(
         deploymentTaskStore.subscribe,
         deploymentTaskStore.getSnapshot,
         deploymentTaskStore.getSnapshot,
     );
 
-    const [market, setMarket] = useState<AppStoreMarketEntry[]>([]);
-    const [installed, setInstalled] = useState<AppStoreInstalled[]>([]);
-    const [adapters, setAdapters] = useState<AppStoreInstalled[]>([]);
+    const marketKey = appStoreMarketKey(instance.framework_id, resource);
+    const installedKey = appStoreInstalledKey(instance.id, resource);
+    const adaptersKey = appStoreInstalledKey(instance.id, 'adapter');
+
+    const marketQ = useQuery({
+        queryKey: marketKey,
+        queryFn: async (): Promise<AppStoreMarketEntry[]> => {
+            try {
+                return await appFrameworkService.listStore(instance.framework_id, resource);
+            } catch (e) {
+                reportCatalogError(`nb-store-market:${instance.framework_id}:${resource}`, e);
+            }
+        },
+        staleTime: APP_STORE_STALE_MS,
+        gcTime: APP_STORE_GC_MS,
+    });
+
+    const installedQ = useQuery({
+        queryKey: installedKey,
+        queryFn: async (): Promise<AppStoreInstalled[]> => {
+            try {
+                return await appFrameworkService.listStoreInstalled(instance.id, resource);
+            } catch (e) {
+                reportCatalogError(`nb-store-installed:${instance.id}:${resource}`, e);
+            }
+        },
+        staleTime: APP_STORE_STALE_MS,
+        gcTime: APP_STORE_GC_MS,
+    });
+
+    const adaptersQ = useQuery({
+        queryKey: adaptersKey,
+        queryFn: async (): Promise<AppStoreInstalled[]> => {
+            try {
+                return await appFrameworkService.listStoreInstalled(instance.id, 'adapter');
+            } catch (e) {
+                reportCatalogError(`nb-store-installed:${instance.id}:adapter`, e);
+            }
+        },
+        enabled: resource === 'plugin',
+        staleTime: APP_STORE_STALE_MS,
+        gcTime: APP_STORE_GC_MS,
+    });
+
+    const market = marketQ.data ?? [];
+    const installed = installedQ.data ?? [];
+    const adapters = adaptersQ.data ?? [];
+    const catalogError = marketQ.error ?? installedQ.error ?? (resource === 'plugin' ? adaptersQ.error : null);
+    const loading =
+        marketQ.isFetching
+        || installedQ.isFetching
+        || (resource === 'plugin' && adaptersQ.isFetching);
+
     const [query, setQuery] = useState('');
     const [kindFilter, setKindFilter] = useState<StoreKindFilter>('all');
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [conflict, setConflict] = useState<{ name: string; enabled: boolean } | null>(null);
     const [conflictBusy, setConflictBusy] = useState(false);
     const [localBusy, setLocalBusy] = useState<Set<string>>(() => new Set());
@@ -66,37 +134,21 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
     const terminalPrimed = useRef(false);
 
     const reload = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const [nextMarket, nextInstalled, nextAdapters] = await Promise.all([
-                appFrameworkService.listStore(instance.framework_id, resource),
-                appFrameworkService.listStoreInstalled(instance.id, resource),
-                resource === 'plugin'
-                    ? appFrameworkService.listStoreInstalled(instance.id, 'adapter')
-                    : Promise.resolve([]),
-            ]);
-            setMarket(nextMarket);
-            setInstalled(nextInstalled);
-            setAdapters(nextAdapters);
-        } catch (e) {
-            const raw = errorText(e);
-            setError(raw);
-            const copy = pluginCatalogErrorCopy(raw);
-            pushAppErrorBar({
-                key: `nb-store-catalog:${instance.id}:${resource}`,
-                title: copy.title,
-                raw,
-                content: copy.content,
-            });
-        } finally {
-            setLoading(false);
-        }
-    }, [instance.framework_id, instance.id, resource]);
+        await Promise.all([
+            queryClient.refetchQueries({ queryKey: marketKey }),
+            queryClient.refetchQueries({ queryKey: installedKey }),
+            resource === 'plugin'
+                ? queryClient.refetchQueries({ queryKey: adaptersKey })
+                : Promise.resolve(),
+        ]);
+    }, [adaptersKey, installedKey, marketKey, queryClient, resource]);
 
-    useEffect(() => {
-        void reload();
-    }, [reload]);
+    const reloadInstalled = useCallback(async () => {
+        await queryClient.invalidateQueries({ queryKey: installedKey });
+        if (resource === 'plugin') {
+            await queryClient.invalidateQueries({ queryKey: adaptersKey });
+        }
+    }, [adaptersKey, installedKey, queryClient, resource]);
 
     const pluginTasks = useMemo(
         () =>
@@ -170,7 +222,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
             if (!TERMINAL.has(task.status)) continue;
             if (seenTerminal.current.has(task.taskId)) continue;
             seenTerminal.current.add(task.taskId);
-            void reload();
+            void reloadInstalled();
             const name = task.kind.plugin_name;
             const verb = actionVerb(task.kind.action);
             if (task.status === 'success') {
@@ -189,7 +241,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
                 });
             }
         }
-    }, [instance.id, instance.state, pluginTasks, reload, resource, taskState.loaded]);
+    }, [instance.id, instance.state, pluginTasks, reloadInstalled, resource, taskState.loaded]);
 
     const runOp = useCallback(
         async (id: string, action: AppPluginAction) => {
@@ -203,7 +255,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
                         && task.kind.plugin_name === id
                         && (task.kind.resource ?? 'plugin') === resource,
                 );
-                if (!hasTask) await reload();
+                if (!hasTask) await reloadInstalled();
             } catch (e) {
                 pushAppErrorBar({
                     key: `nb-store-op:${instance.id}:${id}`,
@@ -218,7 +270,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
                 });
             }
         },
-        [instance.id, reload, resource],
+        [instance.id, reloadInstalled, resource],
     );
 
     const applyEnabled = useCallback(
@@ -232,7 +284,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
                     resource,
                 );
                 setConflict(null);
-                await reload();
+                await reloadInstalled();
             } catch (e) {
                 if (isAppConfigError(e) && e.kind === 'conflict') {
                     setConflict({ name: id, enabled });
@@ -245,7 +297,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
                 });
             }
         },
-        [instance.id, reload, resource],
+        [instance.id, reloadInstalled, resource],
     );
 
     const resolveConflict = useCallback(
@@ -255,7 +307,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
             try {
                 if (!overwrite) {
                     setConflict(null);
-                    await reload();
+                    await reloadInstalled();
                     return;
                 }
                 await applyEnabled(conflict.name, conflict.enabled, true);
@@ -263,7 +315,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
                 setConflictBusy(false);
             }
         },
-        [applyEnabled, conflict, reload],
+        [applyEnabled, conflict, reloadInstalled],
     );
 
     return {
@@ -273,7 +325,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
         kindFilter,
         setKindFilter,
         loading,
-        error,
+        error: catalogError ? errorText(catalogError) : null,
         reload,
         busyNames,
         runOp,

@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { isAppConfigError } from '../../core/domain/apps/appConfigError';
 import { errorText } from '../../core/domain/errors';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushAppErrorBar } from './pushAppErrorBar';
 import { deploymentTaskStore } from '../task-queue/deploymentTaskStore';
+import {
+    APP_STORE_GC_MS,
+    APP_STORE_STALE_MS,
+    karinPluginMarketKey,
+    karinPluginsInstalledKey,
+} from './appStoreQuery';
 import {
     filterKarinPlugins,
     overlayInstalledFromTasks,
@@ -43,19 +50,61 @@ function actionVerb(action: AppPluginAction): string {
     return '卸载';
 }
 
+function reportCatalogError(key: string, e: unknown): never {
+    const raw = errorText(e);
+    const copy = pluginCatalogErrorCopy(raw);
+    pushAppErrorBar({
+        key,
+        title: copy.title,
+        raw,
+        content: copy.content,
+    });
+    throw e instanceof Error ? e : new Error(raw);
+}
+
 export function useKarinPlugins(instance: AppInstance) {
+    const queryClient = useQueryClient();
     const taskState = useSyncExternalStore(
         deploymentTaskStore.subscribe,
         deploymentTaskStore.getSnapshot,
         deploymentTaskStore.getSnapshot,
     );
 
-    const [market, setMarket] = useState<KarinPluginMarketEntry[]>([]);
-    const [installed, setInstalled] = useState<KarinPluginInstalled[]>([]);
+    const installedKey = karinPluginsInstalledKey(instance.id);
+
+    const marketQ = useQuery({
+        queryKey: karinPluginMarketKey,
+        queryFn: async (): Promise<KarinPluginMarketEntry[]> => {
+            try {
+                return await appFrameworkService.listPluginMarket();
+            } catch (e) {
+                reportCatalogError('karin-plugin-market', e);
+            }
+        },
+        staleTime: APP_STORE_STALE_MS,
+        gcTime: APP_STORE_GC_MS,
+    });
+
+    const installedQ = useQuery({
+        queryKey: installedKey,
+        queryFn: async (): Promise<KarinPluginInstalled[]> => {
+            try {
+                return await appFrameworkService.listPlugins(instance.id);
+            } catch (e) {
+                reportCatalogError(`karin-plugin-installed:${instance.id}`, e);
+            }
+        },
+        staleTime: APP_STORE_STALE_MS,
+        gcTime: APP_STORE_GC_MS,
+    });
+
+    const market = marketQ.data ?? [];
+    const installed = installedQ.data ?? [];
+    const catalogError = marketQ.error ?? installedQ.error;
+    const loading = marketQ.isFetching || installedQ.isFetching;
+
     const [query, setQuery] = useState('');
     const [kindFilter, setKindFilter] = useState<KarinPluginKindFilter>('all');
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [conflict, setConflict] = useState<{ name: string; enabled: boolean } | null>(null);
     const [conflictBusy, setConflictBusy] = useState(false);
     const [localBusy, setLocalBusy] = useState<Set<string>>(() => new Set());
@@ -63,33 +112,15 @@ export function useKarinPlugins(instance: AppInstance) {
     const terminalPrimed = useRef(false);
 
     const reload = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const [nextMarket, nextInstalled] = await Promise.all([
-                appFrameworkService.listPluginMarket(),
-                appFrameworkService.listPlugins(instance.id),
-            ]);
-            setMarket(nextMarket);
-            setInstalled(nextInstalled);
-        } catch (e) {
-            const raw = errorText(e);
-            setError(raw);
-            const copy = pluginCatalogErrorCopy(raw);
-            pushAppErrorBar({
-                key: `karin-plugin-catalog:${instance.id}`,
-                title: copy.title,
-                raw,
-                content: copy.content,
-            });
-        } finally {
-            setLoading(false);
-        }
-    }, [instance.id]);
+        await Promise.all([
+            queryClient.refetchQueries({ queryKey: karinPluginMarketKey }),
+            queryClient.refetchQueries({ queryKey: installedKey }),
+        ]);
+    }, [installedKey, queryClient]);
 
-    useEffect(() => {
-        void reload();
-    }, [reload]);
+    const reloadInstalled = useCallback(async () => {
+        await queryClient.invalidateQueries({ queryKey: installedKey });
+    }, [installedKey, queryClient]);
 
     const pluginTasks = useMemo(
         () =>
@@ -151,7 +182,7 @@ export function useKarinPlugins(instance: AppInstance) {
             if (!TERMINAL.has(task.status)) continue;
             if (seenTerminal.current.has(task.taskId)) continue;
             seenTerminal.current.add(task.taskId);
-            void reload();
+            void reloadInstalled();
             const name = task.kind.plugin_name;
             const verb = actionVerb(task.kind.action);
             if (task.status === 'success') {
@@ -170,7 +201,7 @@ export function useKarinPlugins(instance: AppInstance) {
                 });
             }
         }
-    }, [instance.id, instance.state, pluginTasks, reload, taskState.loaded]);
+    }, [instance.id, instance.state, pluginTasks, reloadInstalled, taskState.loaded]);
 
     const runOp = useCallback(
         async (pluginName: string, action: AppPluginAction) => {
@@ -184,7 +215,7 @@ export function useKarinPlugins(instance: AppInstance) {
                         task.kind.plugin_name === pluginName,
                 );
                 if (!hasTask) {
-                    await reload();
+                    await reloadInstalled();
                 }
             } catch (e) {
                 pushAppErrorBar({
@@ -200,7 +231,7 @@ export function useKarinPlugins(instance: AppInstance) {
                 });
             }
         },
-        [instance.id, reload],
+        [instance.id, reloadInstalled],
     );
 
     const applyEnabled = useCallback(
@@ -208,7 +239,7 @@ export function useKarinPlugins(instance: AppInstance) {
             try {
                 await appFrameworkService.setPluginEnabled(instance.id, pluginName, enabled, overwrite);
                 setConflict(null);
-                await reload();
+                await reloadInstalled();
             } catch (e) {
                 if (isAppConfigError(e) && e.kind === 'conflict') {
                     setConflict({ name: pluginName, enabled });
@@ -221,7 +252,7 @@ export function useKarinPlugins(instance: AppInstance) {
                 });
             }
         },
-        [instance.id, reload],
+        [instance.id, reloadInstalled],
     );
 
     const resolveConflict = useCallback(
@@ -231,7 +262,7 @@ export function useKarinPlugins(instance: AppInstance) {
             try {
                 if (!overwrite) {
                     setConflict(null);
-                    await reload();
+                    await reloadInstalled();
                     return;
                 }
                 await applyEnabled(conflict.name, conflict.enabled, true);
@@ -239,7 +270,7 @@ export function useKarinPlugins(instance: AppInstance) {
                 setConflictBusy(false);
             }
         },
-        [applyEnabled, conflict, reload],
+        [applyEnabled, conflict, reloadInstalled],
     );
 
     return {
@@ -249,7 +280,7 @@ export function useKarinPlugins(instance: AppInstance) {
         kindFilter,
         setKindFilter,
         loading,
-        error,
+        error: catalogError ? errorText(catalogError) : null,
         reload,
         busyNames,
         runOp,
