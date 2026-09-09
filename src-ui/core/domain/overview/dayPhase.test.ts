@@ -3,6 +3,7 @@ import {
     celestialPosition,
     getDayPhase,
     getGreeting,
+    greetingSeed,
     starCountFor,
     starField,
 } from './dayPhase';
@@ -19,6 +20,27 @@ describe('getDayPhase', () => {
         expect(getDayPhase(0)).toBe('night');
         expect(getDayPhase(4)).toBe('night');
         expect(getGreeting('night').title).toBe('夜深了');
+    });
+});
+
+describe('getGreeting', () => {
+    it('同一天同一时段固定一句，隔天换一句', () => {
+        const today = new Date(2026, 8, 9, 10, 0);
+        const later = new Date(2026, 8, 9, 10, 59);
+        const tomorrow = new Date(2026, 8, 10, 10, 0);
+        expect(greetingSeed(today)).toBe(greetingSeed(later));
+        expect(greetingSeed(tomorrow)).not.toBe(greetingSeed(today));
+        expect(getGreeting('morning', greetingSeed(today)).hint).toBe(
+            getGreeting('morning', greetingSeed(later)).hint,
+        );
+    });
+
+    it('任意种子都落在台词池里', () => {
+        for (const phase of ['morning', 'noon', 'afternoon', 'evening', 'night'] as const) {
+            for (let seed = 0; seed < 12; seed += 1) {
+                expect(getGreeting(phase, seed).hint.length).toBeGreaterThan(0);
+            }
+        }
     });
 });
 

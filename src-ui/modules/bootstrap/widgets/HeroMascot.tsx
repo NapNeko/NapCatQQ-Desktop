@@ -33,6 +33,7 @@ const BUBBLE_MS = 3200;
 const DIZZY_AT = 6;
 const DIZZY_WINDOW_MS = 1500;
 const DOZE_AFTER_MS = 45_000;
+const DIZZY_LINES = ['转晕了……让我歇会儿。', '晕了，站不稳。', '别转了，眼前发黑。'] as const;
 
 export const HeroMascot: React.FC<HeroMascotProps> = ({ stageRef, quips, reaction, className }) => {
     const m = useMotion();
@@ -197,7 +198,7 @@ export const HeroMascot: React.FC<HeroMascotProps> = ({ stageRef, quips, reactio
             }
             face.dizzy();
             showEmote('sweat');
-            say('转晕了……让我歇会儿。', 3600);
+            say(DIZZY_LINES[Math.floor(Math.random() * DIZZY_LINES.length)], 3600);
             return;
         }
 
