@@ -127,7 +127,7 @@ function nonCancellableHint(kind: TaskQueueItem['kind']): string {
         case 'docker_install':
             return 'Docker 安装正在修改系统服务与包源，不能安全强停。';
         case 'docker_deploy':
-            return '镜像拉取应可停止；若仍显示不可停止，请重启应用后再试。';
+            return '镜像拉取通常可以停止；这里仍不可停止的话，重启应用再试。';
         default:
             return '该任务暂不支持强制停止。';
     }
