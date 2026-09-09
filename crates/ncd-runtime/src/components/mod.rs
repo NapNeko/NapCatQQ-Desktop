@@ -22,7 +22,7 @@ pub use executor::{
 };
 pub use factory::{AppComponentHint, BuildComponentCtx, build_component_for_host};
 pub use graph::{
-    ClosureNode, GRAPH_COMPONENT_IDS, catalog_version_reqs_for, graph_component,
+    ClosureNode, catalog_version_reqs_for, graph_component, graph_component_ids,
     render_dependency_graph, requirement_closure,
 };
 pub use resolver::{

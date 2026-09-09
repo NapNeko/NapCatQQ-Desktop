@@ -190,7 +190,7 @@ pub use component_action_policy::{
 pub use component_factory::{BuildComponentCtx, build_component_for_host};
 pub use components::{
     ClosureNode, ComponentActionRequest, ComponentBuildInputs, ComponentBuilder,
-    ComponentExecutor, GRAPH_COMPONENT_IDS, ResolveCtx, catalog_version_reqs_for,
+    ComponentExecutor, ResolveCtx, catalog_version_reqs_for, graph_component_ids,
     graph_component, infer_local_snowluma_package, render_dependency_graph, requirement_closure,
     resolve_dependencies, resolve_runtime_readiness,
 };

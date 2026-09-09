@@ -7,18 +7,14 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use ncd_appframework::{
-    AppStoreMarketEntry, KarinPluginMarketEntry, parse_karin_plugins_list,
-    parse_nonebot_adapters_json, parse_nonebot_plugins_json,
-};
+use ncd_appframework::{AppFrameworkRegistry, AppStoreMarketEntry, KarinPluginMarketEntry};
+use ncd_domain::AppFrameworkId;
 use ncd_domain::AppStoreResource;
 use ncd_network::shared_client;
 use ncd_traits::AppFrameworkError;
 use tokio::task::JoinSet;
 
-pub const KARIN_PLUGINS_LIST_URL: &str = "https://registry.npmjs.com/@karinjs/plugins-list/latest";
-const NONEBOT_ADAPTERS_URL: &str = "https://registry.nonebot.dev/adapters.json";
-const NONEBOT_PLUGINS_URL: &str = "https://registry.nonebot.dev/plugins.json";
+pub use ncd_appframework::KARIN_PLUGINS_LIST_URL;
 
 const MARKET_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 
@@ -50,85 +46,48 @@ fn cache_put(key: &'static str, entries: Vec<AppStoreMarketEntry>) {
     }
 }
 
-/// nb-cli 同序：官网 → jsDelivr → 国内 jsDelivr → gh-proxy。
-pub fn nonebot_registry_urls(file: &str) -> Vec<String> {
-    let official = match file {
-        "adapters.json" => NONEBOT_ADAPTERS_URL.to_string(),
-        "plugins.json" => NONEBOT_PLUGINS_URL.to_string(),
-        other => format!("https://registry.nonebot.dev/{other}"),
-    };
-    vec![
-        official,
-        format!("https://cdn.jsdelivr.net/gh/nonebot/registry@results/{file}"),
-        format!("https://jsd.cdn.zzko.cn/gh/nonebot/registry@results/{file}"),
-        format!(
-            "https://gh-proxy.com/https://raw.githubusercontent.com/nonebot/registry/results/{file}"
-        ),
-    ]
-}
-
 pub async fn fetch_karin_plugin_market() -> Result<Vec<KarinPluginMarketEntry>, AppFrameworkError> {
-    fetch_karin_plugin_market_from(KARIN_PLUGINS_LIST_URL).await
-}
-
-pub async fn fetch_karin_plugin_market_from(
-    url: &str,
-) -> Result<Vec<KarinPluginMarketEntry>, AppFrameworkError> {
-    let text = fetch_text(url, "插件目录").await?;
-    parse_karin_plugins_list(&text)
+    Ok(fetch_store("karin", AppStoreResource::Plugin)
+        .await?
+        .into_iter()
+        .filter_map(|e| e.to_karin())
+        .collect())
 }
 
 pub async fn fetch_store(
     framework_id: &str,
     resource: AppStoreResource,
 ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-    match (framework_id, resource) {
-        ("karin", AppStoreResource::Plugin) => Ok(fetch_karin_plugin_market()
-            .await?
-            .into_iter()
-            .map(AppStoreMarketEntry::from_karin)
-            .collect()),
-        ("karin", AppStoreResource::Adapter) => Ok(Vec::new()),
-        ("nonebot2", AppStoreResource::Adapter) => fetch_nonebot_adapters().await,
-        ("nonebot2", AppStoreResource::Plugin) => fetch_nonebot_plugins().await,
-        (other, _) => Err(AppFrameworkError::PluginUnsupported(other.to_string())),
+    let adapter = match AppFrameworkRegistry::with_builtin().get(&AppFrameworkId::new(framework_id)) {
+        Ok(adapter) => adapter,
+        Err(AppFrameworkError::NotRegistered(id)) => {
+            return Err(AppFrameworkError::PluginUnsupported(id));
+        }
+        Err(err) => return Err(err),
+    };
+    if let Some(key) = adapter.store_market_cache_key(resource) {
+        if let Some(hit) = cache_get(key) {
+            return Ok(hit);
+        }
     }
-}
-
-pub async fn fetch_nonebot_adapters() -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-    if let Some(hit) = cache_get("adapters") {
-        return Ok(hit);
+    let urls = adapter.store_market_urls(resource);
+    if urls.is_empty() {
+        return Ok(Vec::new());
     }
-    let text = fetch_text_first_ok(&nonebot_registry_urls("adapters.json"), "适配器目录").await?;
-    let list = parse_nonebot_adapters_json(&text)?;
-    cache_put("adapters", list.clone());
+    let label = match resource {
+        AppStoreResource::Adapter => "适配器目录",
+        AppStoreResource::Plugin => "插件目录",
+    };
+    let text = if urls.len() == 1 {
+        fetch_text(&urls[0], label).await?
+    } else {
+        fetch_text_first_ok(&urls, label).await?
+    };
+    let list = adapter.parse_store_market(resource, &text)?;
+    if let Some(key) = adapter.store_market_cache_key(resource) {
+        cache_put(key, list.clone());
+    }
     Ok(list)
-}
-
-pub async fn fetch_nonebot_plugins() -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-    if let Some(hit) = cache_get("plugins") {
-        return Ok(hit);
-    }
-    let text = fetch_text_first_ok(&nonebot_registry_urls("plugins.json"), "插件目录").await?;
-    let list = parse_nonebot_plugins_json(&text)?;
-    cache_put("plugins", list.clone());
-    Ok(list)
-}
-
-#[cfg(test)]
-async fn fetch_nonebot_adapters_from(
-    url: &str,
-) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-    let text = fetch_text(url, "适配器目录").await?;
-    parse_nonebot_adapters_json(&text)
-}
-
-#[cfg(test)]
-async fn fetch_nonebot_plugins_from(
-    url: &str,
-) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-    let text = fetch_text(url, "插件目录").await?;
-    parse_nonebot_plugins_json(&text)
 }
 
 const MARKET_BODY_LIMIT: usize = 8 * 1024 * 1024;
@@ -191,6 +150,23 @@ async fn fetch_text(url: &str, label: &str) -> Result<String, AppFrameworkError>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ncd_appframework::{
+        KarinAdapter, NoneBot2Adapter, NONEBOT_ADAPTERS_URL, NONEBOT_PLUGINS_URL,
+        nonebot_registry_urls,
+    };
+
+    async fn parse_market_from(
+        adapter: &dyn ncd_appframework::AppFrameworkAdapter,
+        resource: AppStoreResource,
+        url: &str,
+    ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+        let label = match resource {
+            AppStoreResource::Adapter => "适配器目录",
+            AppStoreResource::Plugin => "插件目录",
+        };
+        let text = fetch_text(url, label).await?;
+        adapter.parse_store_market(resource, &text)
+    }
 
     #[tokio::test]
     async fn fetch_market_reads_plugins_array() {
@@ -203,10 +179,14 @@ mod tests {
             )
             .mount(&server)
             .await;
-        let list = fetch_karin_plugin_market_from(&format!("{}/latest", server.uri()))
-            .await
-            .unwrap();
-        assert_eq!(list[0].name, "x");
+        let list = parse_market_from(
+            &KarinAdapter::new(),
+            AppStoreResource::Plugin,
+            &format!("{}/latest", server.uri()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(list[0].id, "x");
     }
 
     #[tokio::test]
@@ -218,7 +198,13 @@ mod tests {
             ))
             .mount(&server)
             .await;
-        let list = fetch_nonebot_adapters_from(&server.uri()).await.unwrap();
+        let list = parse_market_from(
+            &NoneBot2Adapter::new(),
+            AppStoreResource::Adapter,
+            &server.uri(),
+        )
+        .await
+        .unwrap();
         assert_eq!(list[0].id, "nonebot.adapters.console");
         assert_eq!(list[0].resource, AppStoreResource::Adapter);
     }
@@ -242,7 +228,13 @@ mod tests {
             ))
             .mount(&server)
             .await;
-        let list = fetch_nonebot_plugins_from(&server.uri()).await.unwrap();
+        let list = parse_market_from(
+            &NoneBot2Adapter::new(),
+            AppStoreResource::Plugin,
+            &server.uri(),
+        )
+        .await
+        .unwrap();
         assert_eq!(list[0].id, "nonebot_plugin_foo");
         assert_eq!(list[0].resource, AppStoreResource::Plugin);
     }

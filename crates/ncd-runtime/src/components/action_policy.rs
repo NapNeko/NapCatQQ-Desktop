@@ -106,7 +106,7 @@ pub fn component_needs_download_slot(component_id: ComponentId, kind: StepKind) 
     matches!(
         kind,
         StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Update
-    ) && matches!(
+    ) && (matches!(
         component_id,
         ComponentId::NapCat
             | ComponentId::SnowLuma
@@ -114,9 +114,7 @@ pub fn component_needs_download_slot(component_id: ComponentId, kind: StepKind) 
             | ComponentId::Uv
             | ComponentId::Qq
             | ComponentId::NcdWatch
-            | ComponentId::Karin
-            | ComponentId::NoneBot2
-    )
+    ) || component_id.is_app_framework())
 }
 
 pub fn component_needs_package_manager(
@@ -456,6 +454,37 @@ mod tests {
         assert!(resources.contains(&DeploymentTaskResource::PackageManager {
             host_id: "remote:a".to_string(),
         }));
+    }
+
+    #[test]
+    fn app_frameworks_use_download_slot_without_name_list() {
+        for id in [
+            ComponentId::NapCat,
+            ComponentId::SnowLuma,
+            ComponentId::Qq,
+            ComponentId::NodeJs,
+            ComponentId::NoVnc,
+            ComponentId::DesktopSelf,
+            ComponentId::NcdWatch,
+            ComponentId::Karin,
+            ComponentId::Uv,
+            ComponentId::NoneBot2,
+        ] {
+            if id.is_app_framework() {
+                assert!(
+                    component_needs_download_slot(id, StepKind::EnsureInstalled),
+                    "{id:?} 是应用端，装包要占下载槽"
+                );
+            }
+        }
+        assert!(!component_needs_download_slot(
+            ComponentId::DesktopSelf,
+            StepKind::EnsureInstalled
+        ));
+        assert!(!component_needs_download_slot(
+            ComponentId::NoVnc,
+            StepKind::EnsureInstalled
+        ));
     }
 
     #[test]

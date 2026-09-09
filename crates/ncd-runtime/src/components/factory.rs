@@ -81,6 +81,10 @@ pub fn build_component_for_host(
             .ok_or_else(|| format!("无法派生默认 QQ 安装根（home={home}）"))
     };
 
+    if id.is_app_framework() {
+        return build_app_framework_component(id, ctx, &data_root_host, remote_home);
+    }
+
     let component: Arc<dyn Component> = match id {
         ComponentId::NapCat => {
             if ctx.host.os() == Os::Windows {
@@ -258,52 +262,61 @@ pub fn build_component_for_host(
             };
             Arc::new(UvComponent::new(UV_DEFAULT_VERSION, install_dir))
         }
-        ComponentId::Karin | ComponentId::NoneBot2 => {
-            let hint = ctx.app_component.ok_or_else(|| {
-                "应用端组件按实例安装，请从「应用端」页面操作".to_string()
-            })?;
-            let adapter = AppFrameworkRegistry::with_builtin()
-                .by_component_id(id.as_str())
-                .ok_or_else(|| format!("应用端框架未注册: {}", id.as_str()))?;
-            // 工具链取值口径与其他远端组件一致：用户 path_overrides 优先，其次桌面端管理的
-            // 组件落点（NodeJs / Uv 组件同一目录），都没有再由框架组件回退到实例标记 / PATH。
-            // 两条都算出来交给适配器，Node 系只用 node_bin，Python 系只用 uv_bin。
-            let node_bin = if ctx.host.os() == Os::Windows {
-                Some(NodeJsComponent::node_binary_path_for_os(
-                    &data_root_host.join("components").join("NodeJs"),
-                    Os::Windows,
-                ))
-            } else {
-                nodejs_extra_detect_bin(ctx.selected).or_else(|| {
-                    node_install_dir(ctx.selected, remote_home)
-                        .ok()
-                        .map(|dir| NodeJsComponent::node_binary_path_for_os(&dir, ctx.host.os()))
-                })
-            };
-            let uv_bin = if ctx.host.os() == Os::Windows {
-                Some(UvComponent::uv_binary_path_for_os(
-                    &data_root_host.join("components").join("Uv"),
-                    Os::Windows,
-                ))
-            } else {
-                remote_home.map(|home| {
-                    UvComponent::uv_binary_path_for_os(
-                        &UvComponent::default_remote_install_dir(home),
-                        ctx.host.os(),
-                    )
-                })
-            };
-            adapter.component(&AppComponentSpec {
-                install_dir: hint.install_dir.clone(),
-                port: hint.port,
-                node_bin,
-                uv_bin,
-                npm_registry: hint.npm_registry.clone(),
-                install_renderer: hint.install_renderer,
-            })
+        _ => {
+            return Err(format!("组件工厂未覆盖: {}", id.as_str()));
         }
     };
     Ok(component)
+}
+
+fn build_app_framework_component(
+    id: ComponentId,
+    ctx: &BuildComponentCtx<'_>,
+    data_root_host: &HostPath,
+    remote_home: Option<&str>,
+) -> Result<Arc<dyn Component>, String> {
+    let hint = ctx.app_component.ok_or_else(|| {
+        "应用端组件按实例安装，请从「应用端」页面操作".to_string()
+    })?;
+    let adapter = AppFrameworkRegistry::with_builtin()
+        .by_component_id(id.as_str())
+        .ok_or_else(|| format!("应用端框架未注册: {}", id.as_str()))?;
+    // 工具链取值口径与其他远端组件一致：用户 path_overrides 优先，其次桌面端管理的
+    // 组件落点（NodeJs / Uv 组件同一目录），都没有再由框架组件回退到实例标记 / PATH。
+    // 两条都算出来交给适配器，Node 系只用 node_bin，Python 系只用 uv_bin。
+    let node_bin = if ctx.host.os() == Os::Windows {
+        Some(NodeJsComponent::node_binary_path_for_os(
+            &data_root_host.join("components").join("NodeJs"),
+            Os::Windows,
+        ))
+    } else {
+        nodejs_extra_detect_bin(ctx.selected).or_else(|| {
+            node_install_dir(ctx.selected, remote_home)
+                .ok()
+                .map(|dir| NodeJsComponent::node_binary_path_for_os(&dir, ctx.host.os()))
+        })
+    };
+    let uv_bin = if ctx.host.os() == Os::Windows {
+        Some(UvComponent::uv_binary_path_for_os(
+            &data_root_host.join("components").join("Uv"),
+            Os::Windows,
+        ))
+    } else {
+        remote_home.map(|home| {
+            UvComponent::uv_binary_path_for_os(
+                &UvComponent::default_remote_install_dir(home),
+                ctx.host.os(),
+            )
+        })
+    };
+    Ok(adapter.component(&AppComponentSpec {
+        install_dir: hint.install_dir.clone(),
+        port: hint.port,
+        node_bin,
+        uv_bin,
+        npm_registry: hint.npm_registry.clone(),
+        install_renderer: hint.install_renderer,
+    }))
 }
 
 /// Linux 远端 detect 在默认 workspace 之外再看这些目录（不扫盘）。

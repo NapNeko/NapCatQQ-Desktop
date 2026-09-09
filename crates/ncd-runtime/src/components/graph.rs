@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use ncd_appframework::{KarinComponent, NoneBot2Component};
+use ncd_appframework::{AppComponentSpec, AppFrameworkRegistry};
 use ncd_component::{
     Component, ComponentId, DependencyTarget, DesktopSelfComponent, NapCatComponent,
     NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent, Requirement,
@@ -14,9 +14,19 @@ use ncd_component::{
 use ncd_domain::SnowLumaLinuxPackage;
 use ncd_host::{HostPath, Locality, Os};
 
-/// catalog 顺序(与 component_catalog 一致)+ 应用端组件（不进 catalog，但参与依赖图：
-/// Node / uv 的可接受版本要把 Karin / NoneBot2 的约束也算上）
-pub const GRAPH_COMPONENT_IDS: [ComponentId; 10] = [
+fn graph_placeholder_spec() -> AppComponentSpec {
+    AppComponentSpec {
+        install_dir: HostPath::from_posix("/x"),
+        port: 0,
+        node_bin: None,
+        uv_bin: None,
+        npm_registry: None,
+        install_renderer: false,
+    }
+}
+
+/// catalog 顺序（与 component_catalog 一致）。应用端不写在这里，由注册表追加。
+const HOST_GRAPH_COMPONENT_IDS: [ComponentId; 8] = [
     ComponentId::NapCat,
     ComponentId::SnowLuma,
     ComponentId::NodeJs,
@@ -25,12 +35,29 @@ pub const GRAPH_COMPONENT_IDS: [ComponentId; 10] = [
     ComponentId::NoVnc,
     ComponentId::NcdWatch,
     ComponentId::DesktopSelf,
-    ComponentId::Karin,
-    ComponentId::NoneBot2,
 ];
+
+/// 主机组件 + 已注册应用端。接新框架只改注册表，不用改这张名单。
+pub fn graph_component_ids() -> Vec<ComponentId> {
+    let mut ids = HOST_GRAPH_COMPONENT_IDS.to_vec();
+    for m in AppFrameworkRegistry::with_builtin().manifests() {
+        if let Some(id) = ComponentId::parse(&m.component_id) {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+    }
+    ids
+}
 
 /// 只为调 requirements() 的占位实例;路径都是假的,别拿去 detect / install
 pub fn graph_component(id: ComponentId, package: SnowLumaLinuxPackage) -> Arc<dyn Component> {
+    if id.is_app_framework() {
+        return AppFrameworkRegistry::with_builtin()
+            .by_component_id(id.as_str())
+            .expect("app framework ComponentId must be registered")
+            .component(&graph_placeholder_spec());
+    }
     let x = HostPath::from_posix("/x");
     match id {
         ComponentId::NapCat => Arc::new(NapCatComponent::new(x)),
@@ -43,8 +70,7 @@ pub fn graph_component(id: ComponentId, package: SnowLumaLinuxPackage) -> Arc<dy
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
         ComponentId::NcdWatch => Arc::new(NcdWatchComponent::new(None)),
         ComponentId::DesktopSelf => Arc::new(DesktopSelfComponent::new("0.0.0", x)),
-        ComponentId::Karin => Arc::new(KarinComponent::new(x, 0)),
-        ComponentId::NoneBot2 => Arc::new(NoneBot2Component::new(x, 0)),
+        _ => panic!("graph_component missing host arm for {}", id.as_str()),
     }
 }
 
@@ -127,7 +153,7 @@ fn walk(
 pub fn catalog_version_reqs_for(target: ComponentId, os: Os, locality: Locality) -> Vec<VersionReq> {
     let mut reqs = Vec::new();
     for package in [SnowLumaLinuxPackage::Full, SnowLumaLinuxPackage::Lite] {
-        for id in GRAPH_COMPONENT_IDS {
+        for id in graph_component_ids() {
             if id == target {
                 continue;
             }
@@ -155,7 +181,7 @@ pub fn render_dependency_graph() -> String {
     ];
     let mut out = String::new();
     for (os, locality) in targets {
-        for id in GRAPH_COMPONENT_IDS {
+        for id in graph_component_ids() {
             let variants: &[SnowLumaLinuxPackage] = if id == ComponentId::SnowLuma {
                 &[SnowLumaLinuxPackage::Full, SnowLumaLinuxPackage::Lite]
             } else {
@@ -333,6 +359,35 @@ Linux/Remote nonebot2
             ]
         );
         assert!(catalog_version_reqs_for(ComponentId::Qq, Os::Linux, Locality::Remote).is_empty());
+    }
+
+    #[test]
+    fn graph_ids_follow_host_catalog_then_registry() {
+        use ncd_appframework::AppFrameworkRegistry;
+        let ids = graph_component_ids();
+        for m in AppFrameworkRegistry::with_builtin().manifests() {
+            let id = ComponentId::parse(&m.component_id).expect("framework component_id");
+            assert!(ids.contains(&id), "{} 必须进依赖图，不能靠手写名单", m.component_id);
+            let _ = graph_component(id, SnowLumaLinuxPackage::Full);
+        }
+        let host: Vec<ComponentId> = ids
+            .iter()
+            .copied()
+            .filter(|id| !id.is_app_framework())
+            .collect();
+        assert_eq!(
+            host,
+            vec![
+                ComponentId::NapCat,
+                ComponentId::SnowLuma,
+                ComponentId::NodeJs,
+                ComponentId::Uv,
+                ComponentId::Qq,
+                ComponentId::NoVnc,
+                ComponentId::NcdWatch,
+                ComponentId::DesktopSelf,
+            ]
+        );
     }
 
     #[test]

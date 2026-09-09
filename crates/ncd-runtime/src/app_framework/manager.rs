@@ -13,14 +13,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use ncd_appframework::karin::config::link_inputs_changed;
-use ncd_appframework::nonebot2::config::link_inputs_changed as nonebot2_link_inputs_changed;
 use ncd_appframework::{
     AppComponentSpec, AppConfigWriteResult, AppFrameworkAdapter, AppFrameworkRegistry,
     AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor, AppStoreInstalled,
-    AppStoreMarketEntry, KARIN_FRAMEWORK_ID, KarinPluginInstalled, KarinPluginMarketEntry,
-    PluginLogSink, apply_plugin_enabled, app_file_basename,
-    confirm_plugin_on_disk,
+    AppStoreMarketEntry, KarinPluginInstalled, KarinPluginMarketEntry, PluginLogSink,
+    app_file_basename,
 };
 use ncd_component::{DetectOutcome, LaunchArgs};
 use ncd_domain::{
@@ -875,7 +872,7 @@ impl AppManager {
             return Err(AppFrameworkError::ConfigConflict("config".to_string()));
         }
 
-        let new_port = config_port(&config);
+        let new_port = config.listen_port();
         if new_port != instance.port {
             self.ensure_port_free(&instance, new_port).await?;
         }
@@ -949,7 +946,7 @@ impl AppManager {
                 .typed_snapshot(adapter.as_ref(), host.as_ref(), &instance)
                 .await
         {
-            let new_port = config_port(&after.config);
+            let new_port = after.config.listen_port();
             if new_port != instance.port
                 && let Err(e) = self.ensure_port_free(&instance, new_port).await
             {
@@ -1072,9 +1069,9 @@ impl AppManager {
                     log,
                 )
                 .await?;
-                if let Some(karin) = entry.to_karin() {
-                    confirm_plugin_on_disk(host.as_ref(), &instance, &karin).await?;
-                }
+                adapter
+                    .confirm_store_item(host.as_ref(), &instance, &entry)
+                    .await?;
                 Ok(())
             }
             AppPluginAction::Uninstall => {
@@ -1130,23 +1127,28 @@ impl AppManager {
         overwrite: bool,
     ) -> Result<AppConfigWriteResult, AppFrameworkError> {
         let instance = self.store.require(id).await?;
-        if instance.framework_id.as_str() == KARIN_FRAMEWORK_ID {
+        let adapter = self.registry.get(&instance.framework_id)?;
+        if adapter.store_enable_via_config() {
             let envelope = self.read_config(id).await?;
-            let AppInstanceConfig::Karin(mut cfg) = envelope.config else {
+            let Some(cfg) = adapter.apply_store_enabled(
+                &envelope.config,
+                name,
+                resource,
+                enabled,
+            )?
+            else {
                 return Err(AppFrameworkError::Validation(
-                    "写入的不是 Karin 配置".into(),
+                    "该应用端声称走配置启停，但没有返回新配置".into(),
                 ));
             };
-            apply_plugin_enabled(&mut cfg, name, enabled)?;
             let base = if overwrite {
                 None
             } else {
                 Some(envelope.revision)
             };
-            return self.write_config(id, AppInstanceConfig::Karin(cfg), base).await;
+            return self.write_config(id, cfg, base).await;
         }
 
-        let adapter = self.registry.get(&instance.framework_id)?;
         let host = self.resolve_host(&instance.host_id).await?;
         adapter
             .set_store_enabled(host.as_ref(), &instance, name, resource, enabled, overwrite)
@@ -1210,7 +1212,9 @@ impl AppManager {
         log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
         if entry.flavor == AppStoreFlavor::App {
-            return self.install_app_files(host, instance, entry, log).await;
+            return self
+                .install_app_files(host, adapter, instance, entry, log)
+                .await;
         }
         match action {
             AppPluginAction::Update => adapter.update_store_item(host, instance, entry, log).await,
@@ -1221,17 +1225,19 @@ impl AppManager {
     async fn install_app_files(
         &self,
         host: &dyn Host,
+        adapter: &dyn AppFrameworkAdapter,
         instance: &AppInstance,
         entry: &AppStoreMarketEntry,
         log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
-        let root = HostPath::from_posix(&instance.install_dir);
         for file in &entry.files {
             let basename = app_file_basename(&file.url)?;
+            let dest = adapter.store_app_file_dest(instance, &basename).ok_or_else(|| {
+                AppFrameworkError::PluginUnsupported(instance.framework_id.as_str().to_string())
+            })?;
             if let Some(sink) = log {
                 sink(format!("下载 {basename}"));
             }
-            let dest = root.join("plugins/karin-plugin-example").join(&basename);
             super::download::download_url_to_host(host, &file.url, &dest).await?;
             if let Some(sink) = log {
                 sink(format!("已写入 {basename}"));
@@ -1343,7 +1349,7 @@ impl AppManager {
         after: &AppInstanceConfigEnvelope,
     ) -> Result<ConfigSyncOutcome, AppFrameworkError> {
         let mut outcome = ConfigSyncOutcome::default();
-        let new_port = config_port(&after.config);
+        let new_port = after.config.listen_port();
         let running = instance.state == AppInstanceState::Running;
 
         if new_port != instance.port {
@@ -1358,7 +1364,7 @@ impl AppManager {
         }
 
         if let Some(link) = instance.link.as_ref()
-            && link_inputs_differ(&before.config, &after.config)
+            && before.config.link_inputs_changed(&after.config)
         {
             self.apply_link(&instance.id, &link.bot_id)
                 .await
@@ -1842,27 +1848,6 @@ struct ConfigSyncOutcome {
     port_changed: bool,
     relinked: bool,
     restart_required: bool,
-}
-
-/// 应用端监听口在类型化配置里的位置（每接一个框架加一臂）
-fn config_port(config: &AppInstanceConfig) -> u16 {
-    match config {
-        AppInstanceConfig::Karin(k) => k.env.http_port,
-        AppInstanceConfig::NoneBot2(n) => n.env_prod.port,
-    }
-}
-
-/// 对接依赖的输入（端口 / 反向 WS 秘钥）是否变了
-fn link_inputs_differ(before: &AppInstanceConfig, after: &AppInstanceConfig) -> bool {
-    match (before, after) {
-        (AppInstanceConfig::Karin(b), AppInstanceConfig::Karin(a)) => {
-            link_inputs_changed(&b.env, &a.env)
-        }
-        (AppInstanceConfig::NoneBot2(b), AppInstanceConfig::NoneBot2(a)) => {
-            nonebot2_link_inputs_changed(&b.env_prod, &a.env_prod)
-        }
-        _ => false,
-    }
 }
 
 fn find_store_entry<'a>(

@@ -61,7 +61,8 @@ impl ComponentId {
         }
     }
 
-    /// 应用端框架组件：每个应用实例一个安装目录，由应用端页面按实例装，不进组件页 catalog
+    /// 应用端框架：按实例目录装，不进组件页 catalog。
+    /// 新框架加变体时必须写进这里，factory / 依赖图靠它分流，不再点名。
     pub const fn is_app_framework(&self) -> bool {
         matches!(self, Self::Karin | Self::NoneBot2)
     }
