@@ -8,7 +8,7 @@
 //! 安装本身走既有 ComponentExecutor（R12），这里只给 hint、置 Installing、盯任务结束后
 //! 用 detect 对账；框架差异全部封在 `ncd_appframework::AppFrameworkAdapter` 后面。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -17,13 +17,15 @@ use ncd_appframework::{
     AppComponentSpec, AppConfigWriteResult, AppFrameworkAdapter, AppFrameworkRegistry,
     AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor, AppStoreInstalled,
     AppStoreMarketEntry, KarinPluginInstalled, KarinPluginMarketEntry, PluginLogSink,
-    app_file_basename,
+    app_file_basename, restore_adopted_files, remove_ncd_debris, AdoptRestoreScope,
 };
 use ncd_component::{DetectOutcome, LaunchArgs};
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkId, AppFrameworkManifest, AppInstance,
     AppInstanceId, AppInstanceState, AppLinkRecord, AppLinkTopology, AppPlacement, AppPluginAction,
-    AppStoreResource, BotConfig, BotId, CreateAppInstanceRequest, DomainEventKind, LOCAL_HOST_ID,
+    AppInstanceOrigin, AppProjectProbe, AppStoreResource, BotConfig, BotId,
+    CreateAppInstanceRequest, DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID,
+    REMOTE_HOST_ID_PREFIX,
     OneBotLinkMode, OneBotLinkPlan, RuntimeTarget, app_link_connection_name, classify_app_link,
     host_id_of_runtime_target, is_app_link_connection_name, rewrite_ws_loopback_port,
     server_id_of_host,
@@ -32,9 +34,11 @@ use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
 use ncd_server::HostResolver;
 use ncd_traits::{AppFrameworkError, EventBus, EventFilter};
+use ncd_traits::runtime_backend::LogSnapshot;
 use rand::Rng;
 use rand::distributions::Alphanumeric;
 
+use super::adopt::{self, AdoptStore};
 use super::instances::AppInstanceStore;
 use super::listen_port::{allocate_listen_port, local_port_free};
 use super::native_runtime::{AppLaunchSpec, NativeAppRuntime};
@@ -78,6 +82,9 @@ pub fn parse_user_install_dir(raw: &str, os: Os) -> Result<HostPath, AppFramewor
 pub trait BotConfigPort: Send + Sync {
     async fn bot_config(&self, bot_id: &BotId) -> Result<Option<BotConfig>, String>;
     async fn upsert_bot_config(&self, config: BotConfig) -> Result<(), String>;
+    async fn list_bot_configs_for_link(&self) -> Result<Vec<BotConfig>, String> {
+        Ok(Vec::new())
+    }
 }
 
 #[async_trait::async_trait]
@@ -97,6 +104,10 @@ where
             .await
             .map(|_| ())
             .map_err(|e| e.to_string())
+    }
+
+    async fn list_bot_configs_for_link(&self) -> Result<Vec<BotConfig>, String> {
+        self.list_bot_configs().await.map_err(|e| e.to_string())
     }
 }
 
@@ -129,6 +140,7 @@ pub struct AppManager {
     bot_manager: Arc<dyn BotConfigPort>,
     event_bus: Arc<BroadcastEventBus>,
     data_root: PathBuf,
+    adopt_store: AdoptStore,
     npm_registry: Option<String>,
     /// Desktop 握着的跨机隧道。key = instance id；解绑 / 删实例 / 改端口时释放。
     tunnels: tokio::sync::Mutex<HashMap<String, AppInstanceTunnel>>,
@@ -152,6 +164,7 @@ impl AppManager {
             bot_manager,
             event_bus,
             data_root: data_root.to_path_buf(),
+            adopt_store: AdoptStore::new(data_root),
             npm_registry: None,
             tunnels: tokio::sync::Mutex::new(HashMap::new()),
         }
@@ -188,6 +201,7 @@ impl AppManager {
             port: instance.port,
             npm_registry: self.npm_registry.clone(),
             install_renderer: instance.install_renderer,
+            adopt_existing: instance.origin.is_imported(),
         }
     }
 
@@ -269,10 +283,161 @@ impl AppManager {
             last_error: None,
             created_at_ms: now_ms(),
             install_renderer: req.install_renderer.unwrap_or(true),
+            origin: ncd_domain::AppInstanceOrigin::Created,
         };
         let saved = self.store.upsert(instance).await?;
         self.publish(&saved, "created");
         Ok(saved)
+    }
+
+    pub async fn probe_project(
+        &self,
+        host_id: &str,
+        framework_id: &AppFrameworkId,
+        raw_path: &str,
+    ) -> Result<AppProjectProbe, AppFrameworkError> {
+        let adapter = self.registry.get(framework_id)?;
+        let host = self.resolve_host(host_id).await?;
+        let path = parse_user_install_dir(raw_path, host.os())?;
+        if !host
+            .exists(&path)
+            .await
+            .map_err(|e| AppFrameworkError::Host(e.to_string()))?
+        {
+            return Err(AppFrameworkError::Validation("目录不存在".into()));
+        }
+        let mut probe = adapter.probe_project(host.as_ref(), &path).await?;
+        probe.path = path.as_posix().to_string();
+        probe.supervisors =
+            super::supervisor::list_supervisors(host.as_ref(), path.as_posix()).await?;
+        if !probe.supervisors.is_empty() {
+            probe.warnings.push(format!(
+                "现在由 systemd 在跑（{}）。导入后改由这边开关，不要了可以还回去。",
+                probe.supervisors.join("、")
+            ));
+        }
+        let kind = super::supervisor::AppProcessKind::from_framework(framework_id.as_str());
+        probe.running = match host.locality() {
+            Locality::Remote => {
+                let listing =
+                    super::supervisor::list_cwd_processes(host.as_ref(), path.as_posix()).await?;
+                super::supervisor::pick_app_pid(&listing, kind).is_some()
+            }
+            Locality::Local => {
+                super::native_runtime::discover_local_pid(path.as_posix(), kind).is_some()
+            }
+        };
+        let stub = probe_read_instance(
+            framework_id,
+            host_id,
+            path.as_posix(),
+            probe.port.unwrap_or(0),
+        );
+        if let Some(found) = self.discover_existing_link(&stub).await {
+            probe.detected_bot_id = Some(found.bot_id);
+        }
+        Ok(probe)
+    }
+
+    pub async fn import_instance(
+        &self,
+        req: ImportAppInstanceRequest,
+    ) -> Result<AppInstance, AppFrameworkError> {
+        let adapter = self.registry.get(&req.framework_id)?;
+        let manifest = adapter.manifest();
+        let placement = AppPlacement::native_for_host(&req.host_id);
+        if !manifest.supported_placements.contains(&placement) {
+            return Err(AppFrameworkError::PlacementUnsupported(format!(
+                "{} 不支持 {}",
+                manifest.display_name,
+                placement.as_str()
+            )));
+        }
+        let probe = self
+            .probe_project(&req.host_id, &req.framework_id, &req.path)
+            .await?;
+        let host = self.resolve_host(&req.host_id).await?;
+        let id = AppInstanceId::new(short_id());
+        let install_dir = self
+            .bind_existing_dir(
+                host.as_ref(),
+                &req.host_id,
+                &id,
+                Some(probe.path.as_str()),
+            )
+            .await?;
+        let siblings = self.store.list().await;
+        let taken: Vec<u16> = siblings
+            .iter()
+            .filter(|i| i.host_id == req.host_id)
+            .map(|i| i.port)
+            .collect();
+        // 接管后对接用 instance.port；必须跟项目实际监听口一致，不能悄悄换成随机高位
+        let port = allocate_listen_port(probe.port.or(Some(manifest.default_port)), &taken, false)
+            .map_err(AppFrameworkError::Validation)?;
+        let display_name = if req.display_name.trim().is_empty() {
+            probe.display_name.clone()
+        } else {
+            req.display_name.trim().to_string()
+        };
+
+        let instance = AppInstance {
+            id,
+            framework_id: req.framework_id.clone(),
+            display_name,
+            placement,
+            host_id: req.host_id.clone(),
+            install_dir: install_dir.as_posix().to_string(),
+            port,
+            state: AppInstanceState::NotInstalled,
+            link: None,
+            installed_version: probe.version.clone(),
+            last_error: None,
+            created_at_ms: now_ms(),
+            install_renderer: false,
+            origin: AppInstanceOrigin::Imported,
+        };
+        let rels = adapter
+            .adopt_watch_rels(host.as_ref(), &install_dir)
+            .await?;
+        let snapshot = adopt::capture_snapshot(
+            host.as_ref(),
+            &instance.id,
+            &instance.host_id,
+            &instance.install_dir,
+            &rels,
+            &probe.supervisors,
+            instance.created_at_ms,
+        )
+        .await?;
+        let saved = self.store.upsert(instance).await?;
+        if let Err(e) = self.adopt_store.save(&snapshot) {
+            let _ = self.store.remove(&saved.id).await;
+            return Err(e);
+        }
+        self.publish(&saved, "imported");
+
+        if !probe.supervisors.is_empty() {
+            if let Err(e) =
+                super::supervisor::disable_now(host.as_ref(), &probe.supervisors).await
+            {
+                let _ = self.adopt_store.remove(&saved.id);
+                let _ = self.store.remove(&saved.id).await;
+                return Err(e);
+            }
+        }
+
+        let refreshed = self.refresh_instance(&saved.id).await?;
+        // systemd 没停干净就再拉一份，会和 Restart=always 对打
+        let current = if probe.ready && refreshed.state != AppInstanceState::Running {
+            match self.start_instance(&refreshed.id).await {
+                Ok(started) => started,
+                Err(_) => self.store.require(&refreshed.id).await?,
+            }
+        } else {
+            refreshed
+        };
+        self.adopt_existing_link(&current.id).await
     }
 
     /// 安装任务已提交：置 Installing 并盯任务结束
@@ -455,11 +620,8 @@ impl AppManager {
             }
             _ => None,
         };
-        if running.is_some() && instance.state != AppInstanceState::Running {
-            let adapter = self.registry.get(&instance.framework_id)?;
-            let log = adapter
-                .log_file(&instance)
-                .unwrap_or_else(|| HostPath::from_posix(&instance.install_dir).join(".ncd-app.log"));
+        if running.is_some() && !self.runtime.is_following(&instance.id).await {
+            let log = self.resolve_log_file(host.as_ref(), &instance).await;
             self.runtime.attach(Arc::clone(&host), &instance, log).await?;
         }
         let updated = self
@@ -490,39 +652,129 @@ impl AppManager {
         if updated.state != instance.state || updated.installed_version != instance.installed_version {
             self.publish(&updated, "refreshed");
         }
+        if updated.origin.is_imported() && updated.link.is_none() {
+            return self.adopt_existing_link(&updated.id).await;
+        }
         Ok(updated)
+    }
+
+    /// 开页拉历史:broadcast 无 backlog,启动对账推过的行会丢
+    pub async fn tail_log(
+        &self,
+        id: &AppInstanceId,
+        lines: usize,
+    ) -> Result<LogSnapshot, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        let path = self.resolve_log_file(host.as_ref(), &instance).await;
+        let mut collected = super::log_tail::tail_file(host.as_ref(), &path, lines).await;
+        if collected.is_empty() {
+            let units = self
+                .adopt_store
+                .load(&instance.id)
+                .ok()
+                .flatten()
+                .map(|s| s.supervisors)
+                .unwrap_or_default();
+            let pid = self
+                .runtime
+                .reconcile_pid(host.as_ref(), &instance)
+                .await
+                .ok()
+                .flatten();
+            collected = super::log_tail::tail_journal(host.as_ref(), &units, pid, lines).await;
+        }
+        Ok(LogSnapshot {
+            total_lines: collected.len(),
+            lines: collected,
+        })
+    }
+
+    async fn resolve_log_file(&self, host: &dyn Host, instance: &AppInstance) -> HostPath {
+        let primary = self
+            .registry
+            .get(&instance.framework_id)
+            .ok()
+            .and_then(|a| a.log_file(instance))
+            .unwrap_or_else(|| HostPath::from_posix(&instance.install_dir).join(".ncd-app.log"));
+        if super::log_tail::file_size(host, &primary)
+            .await
+            .unwrap_or(0)
+            > 0
+        {
+            return primary;
+        }
+        if let Some(found) = super::log_tail::newest_project_log(host, &instance.install_dir).await {
+            if super::log_tail::file_size(host, &found).await.unwrap_or(0) > 0 {
+                return found;
+            }
+        }
+        primary
     }
 
     /// 冷启动：逐实例对账；连不上的远端主机跳过（脱管语义）
     pub async fn reconcile_all(&self) {
         for instance in self.store.list().await {
-            if let Err(e) = self.refresh_instance(&instance.id).await {
-                tracing::info!(instance = instance.id.as_str(), error = %e, "app reconcile skipped");
+            self.reconcile_one(&instance.id).await;
+        }
+    }
+
+    /// 主机连上后补跑启动时因 SSH 未就绪跳过的远端对账 / 日志挂接
+    pub async fn reconcile_for_server(&self, server_id: &str) {
+        let host_id = format!("{REMOTE_HOST_ID_PREFIX}{server_id}");
+        for instance in self.store.list().await {
+            if instance.host_id != host_id {
+                continue;
             }
-            let current = match self.store.require(&instance.id).await {
-                Ok(i) => i,
-                Err(_) => continue,
-            };
-            if current
-                .link
-                .as_ref()
-                .and_then(|l| l.resident_forward_port)
-                .is_some()
-            {
-                if let Err(e) = self.reconcile_resident_link(&current).await {
-                    tracing::info!(
-                        instance = instance.id.as_str(),
-                        error = %e,
-                        "app resident link reconcile skipped"
-                    );
-                }
-            } else if let Err(e) = self.reconcile_link_tunnel(&current).await {
+            self.reconcile_one(&instance.id).await;
+        }
+    }
+
+    async fn reconcile_one(&self, id: &AppInstanceId) {
+        if let Err(e) = self.refresh_instance(id).await {
+            tracing::info!(instance = id.as_str(), error = %e, "app reconcile skipped");
+        }
+        let current = match self.store.require(id).await {
+            Ok(i) => i,
+            Err(_) => return,
+        };
+        if current
+            .link
+            .as_ref()
+            .and_then(|l| l.resident_forward_port)
+            .is_some()
+        {
+            if let Err(e) = self.reconcile_resident_link(&current).await {
                 tracing::info!(
-                    instance = instance.id.as_str(),
+                    instance = id.as_str(),
                     error = %e,
-                    "app link tunnel reconcile skipped"
+                    "app resident link reconcile skipped"
                 );
             }
+        } else if let Err(e) = self.reconcile_link_tunnel(&current).await {
+            tracing::info!(
+                instance = id.as_str(),
+                error = %e,
+                "app link tunnel reconcile skipped"
+            );
+        }
+    }
+
+    pub async fn run_host_connection_recovered_listener(self: Arc<Self>) {
+        let mut subscription = self.event_bus.subscribe(EventFilter::all());
+        let mut last_reconciled: HashMap<String, Instant> = HashMap::new();
+        while let Some(event) = subscription.next().await {
+            let DomainEvent::HostConnectionRecovered { server_id, .. } = event else {
+                continue;
+            };
+            let now = Instant::now();
+            if let Some(prev) = last_reconciled.get(&server_id) {
+                if now.duration_since(*prev) < Duration::from_secs(30) {
+                    continue;
+                }
+            }
+            last_reconciled.insert(server_id.clone(), now);
+            self.reconcile_for_server(&server_id).await;
         }
     }
 
@@ -594,7 +846,7 @@ impl AppManager {
         Ok(updated)
     }
 
-    /// 删除实例：停进程 → 解绑 Bot 侧连接 → （可选）删目录 → 删记录
+    /// 删除实例：停进程 → 解绑 Bot 侧连接 → 导入项先还原快照 → （可选）删目录 → 删记录
     pub async fn delete_instance(
         &self,
         id: &AppInstanceId,
@@ -613,12 +865,18 @@ impl AppManager {
             }
         }
         self.drop_instance_tunnel(id).await;
-        if remove_files {
+        if instance.origin.is_imported() && !remove_files {
+            let host = host?;
+            self.release_imported(&instance, host.as_ref()).await?;
+        } else if remove_files {
             let host = host?;
             let dir = HostPath::from_posix(&instance.install_dir);
             if host.exists(&dir).await.map_err(host_err)? {
                 host.remove_dir_all(&dir).await.map_err(host_err)?;
             }
+            let _ = self.adopt_store.remove(id);
+        } else {
+            let _ = self.adopt_store.remove(id);
         }
         if let Some(removed) = self.store.remove(id).await? {
             self.publish(&removed, "deleted");
@@ -626,7 +884,104 @@ impl AppManager {
         Ok(())
     }
 
+    /// 还原导入快照 + 清桌面端落盘 + 把 systemd 还给系统。失败则保留实例记录以便重试。
+    async fn release_imported(
+        &self,
+        instance: &AppInstance,
+        host: &dyn Host,
+    ) -> Result<(), AppFrameworkError> {
+        let root = HostPath::from_posix(&instance.install_dir);
+        let snap = self.adopt_store.load(&instance.id)?;
+        if let Some(snap) = &snap {
+            restore_adopted_files(host, &root, &snap.files, AdoptRestoreScope::All).await?;
+            if let Err(e) = remove_ncd_debris(host, &root, &snap.files).await {
+                tracing::warn!(instance = instance.id.as_str(), error = %e, "clean ncd debris");
+            }
+            if !snap.supervisors.is_empty() {
+                super::supervisor::enable_now(host, &snap.supervisors).await?;
+            }
+        } else {
+            if let Err(e) = remove_ncd_debris(host, &root, &[]).await {
+                tracing::warn!(instance = instance.id.as_str(), error = %e, "clean ncd debris");
+            }
+            let units = super::supervisor::list_supervisors(host, root.as_posix()).await?;
+            if !units.is_empty() {
+                super::supervisor::enable_now(host, &units).await?;
+            }
+        }
+        self.adopt_store.remove(&instance.id)
+    }
+
     // ---- 对接 ----
+
+    async fn discover_existing_link(&self, instance: &AppInstance) -> Option<AppLinkRecord> {
+        let bots = self.bot_manager.list_bot_configs_for_link().await.ok()?;
+        if bots.is_empty() {
+            return None;
+        }
+        let host = self.resolve_host(&instance.host_id).await.ok()?;
+        let adapter = self.registry.get(&instance.framework_id).ok()?;
+        let token = adapter
+            .read_access_token(host.as_ref(), instance)
+            .await
+            .ok()
+            .flatten();
+        let outbound = adapter
+            .read_outbound_ws_urls(host.as_ref(), instance)
+            .await
+            .unwrap_or_default();
+        let claimed = self.claimed_link_names(&instance.id).await;
+        super::existing_link::discover_existing_link(
+            &instance.host_id,
+            instance.port,
+            token.as_deref(),
+            &outbound,
+            &claimed,
+            &bots,
+        )
+    }
+
+    async fn claimed_link_names(&self, except: &AppInstanceId) -> HashSet<(String, String)> {
+        self.store
+            .list()
+            .await
+            .into_iter()
+            .filter(|i| &i.id != except)
+            .filter_map(|i| {
+                let link = i.link?;
+                if link.connection_name.is_empty() {
+                    return None;
+                }
+                Some((link.bot_id.as_str().to_string(), link.connection_name))
+            })
+            .collect()
+    }
+
+    /// 导入实例:已有反向 / 正向 WS 能唯一对上协议 Bot 时补上 link,不改双方配置
+    async fn adopt_existing_link(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<AppInstance, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        if instance.link.is_some() || !instance.origin.is_imported() {
+            return Ok(instance);
+        }
+        let Some(found) = self.discover_existing_link(&instance).await else {
+            return Ok(instance);
+        };
+        let updated = self
+            .store
+            .update(id, |i| {
+                if i.link.is_none() {
+                    i.link = Some(found);
+                }
+            })
+            .await?;
+        if updated.link.is_some() {
+            self.publish(&updated, "linked");
+        }
+        Ok(updated)
+    }
 
     /// 预览：不写任何东西，只算计划
     pub async fn preview_link(
@@ -684,6 +1039,25 @@ impl AppManager {
 
         upsert_ws_client(&mut bot, plan.connection.clone());
         if let Err(e) = self.bot_manager.upsert_bot_config(bot).await {
+            if instance.origin.is_imported() {
+                if let Ok(Some(snap)) = self.adopt_store.load(&instance.id) {
+                    let root = HostPath::from_posix(&instance.install_dir);
+                    if let Err(rb) = restore_adopted_files(
+                        host.as_ref(),
+                        &root,
+                        &snap.files,
+                        AdoptRestoreScope::Link,
+                    )
+                    .await
+                    {
+                        tracing::error!(
+                            instance = instance_id.as_str(),
+                            error = %rb,
+                            "restore import snapshot after failed bot upsert"
+                        );
+                    }
+                }
+            }
             if let Err(rb) = adapter.rollback_link(host.as_ref(), &instance).await {
                 tracing::error!(instance = instance_id.as_str(), error = %rb, "rollback app-side link");
             }
@@ -698,10 +1072,16 @@ impl AppManager {
             )));
         }
 
-        // 同一实例换绑到别的 Bot：把旧 Bot 上的连接摘掉，避免两个 Bot 同时连
-        if let Some(old) = instance.link.as_ref().filter(|l| &l.bot_id != bot_id) {
-            if let Err(e) = self.remove_ws_client_from_bot(&old.bot_id, &old.connection_name).await {
-                tracing::warn!(instance = instance_id.as_str(), error = %e, "detach previous bot");
+        // 换 Bot,或导入认领的旧连接名和 ncd-app:<id> 不同:把旧条目摘掉,避免双连
+        if let Some(old) = instance.link.as_ref() {
+            let replacing = old.bot_id != *bot_id || old.connection_name != plan.connection.base.name;
+            if replacing && !old.connection_name.is_empty() {
+                if let Err(e) = self
+                    .remove_ws_client_from_bot(&old.bot_id, &old.connection_name)
+                    .await
+                {
+                    tracing::warn!(instance = instance_id.as_str(), error = %e, "detach previous bot");
+                }
             }
         }
 
@@ -906,7 +1286,10 @@ impl AppManager {
     ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
         let instance = self.store.require(id).await?;
         let adapter = self.registry.get(&instance.framework_id)?;
-        Ok(adapter.config_documents(&instance))
+        match self.resolve_host(&instance.host_id).await {
+            Ok(host) => adapter.list_config_documents(host.as_ref(), &instance).await,
+            Err(_) => Ok(adapter.config_documents(&instance)),
+        }
     }
 
     pub async fn read_config_text(
@@ -1702,6 +2085,7 @@ impl AppManager {
                 .map(|dir| ncd_component::UvComponent::uv_binary_path_for_os(&dir, host.os())),
             npm_registry: self.npm_registry.clone(),
             install_renderer: instance.install_renderer,
+            adopt_existing: instance.origin.is_imported(),
         }
     }
 
@@ -1779,6 +2163,39 @@ impl AppManager {
                     ));
                 }
             }
+        }
+        Ok(path)
+    }
+
+    async fn bind_existing_dir(
+        &self,
+        host: &dyn Host,
+        host_id: &str,
+        id: &AppInstanceId,
+        override_dir: Option<&str>,
+    ) -> Result<HostPath, AppFrameworkError> {
+        let raw = override_dir.map(str::trim).filter(|s| !s.is_empty()).ok_or_else(|| {
+            AppFrameworkError::Validation("导入必须指定已有项目目录".into())
+        })?;
+        let path = parse_user_install_dir(raw, host.os())?;
+        let posix = path.as_posix();
+        let taken = self.store.list().await.into_iter().any(|i| {
+            i.host_id == host_id && i.id != *id && i.install_dir == posix
+        });
+        if taken {
+            return Err(AppFrameworkError::Validation(
+                "该目录已被其它实例占用".to_string(),
+            ));
+        }
+        if !host
+            .exists(&path)
+            .await
+            .map_err(|e| AppFrameworkError::Host(e.to_string()))?
+        {
+            return Err(AppFrameworkError::Validation("目录不存在".into()));
+        }
+        if host.list_dir(&path).await.is_err() {
+            return Err(AppFrameworkError::Validation("导入路径必须是目录".into()));
         }
         Ok(path)
     }
@@ -1984,12 +2401,37 @@ fn host_err(e: ncd_host::HostError) -> AppFrameworkError {
     AppFrameworkError::Host(e.to_string())
 }
 
+fn probe_read_instance(
+    framework_id: &AppFrameworkId,
+    host_id: &str,
+    path: &str,
+    port: u16,
+) -> AppInstance {
+    AppInstance {
+        id: AppInstanceId::new("probe"),
+        framework_id: framework_id.clone(),
+        display_name: String::new(),
+        placement: AppPlacement::native_for_host(host_id),
+        host_id: host_id.to_string(),
+        install_dir: path.to_string(),
+        port,
+        state: AppInstanceState::Installed,
+        link: None,
+        installed_version: None,
+        last_error: None,
+        created_at_ms: 0,
+        install_renderer: false,
+        origin: AppInstanceOrigin::Imported,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ncd_domain::{
         AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, ConnectConfig,
-        DeploymentType, MessagePostFormat, NetworkBaseFields, WebsocketClientConfig, WsRole,
+        DeploymentType, MessagePostFormat, NetworkBaseFields, WebsocketClientConfig,
+        WebsocketServerConfig, WsRole,
     };
 
     fn bot() -> BotConfig {
@@ -2096,6 +2538,10 @@ mod tests {
                 *self.upserts.lock().unwrap() += 1;
                 Ok(())
             }
+
+            async fn list_bot_configs_for_link(&self) -> Result<Vec<BotConfig>, String> {
+                Ok(self.bots.lock().await.clone())
+            }
         }
 
         struct Fixture {
@@ -2175,6 +2621,7 @@ mod tests {
                     last_error: None,
                     created_at_ms: 1,
                     install_renderer: true,
+                    origin: ncd_domain::AppInstanceOrigin::Created,
                 })
                 .await
                 .unwrap();
@@ -2200,6 +2647,35 @@ mod tests {
                 .iter()
                 .map(|c: &WebsocketClientConfig| c.url.clone())
                 .collect()
+        }
+
+        #[tokio::test]
+        async fn tail_log_reads_ncd_stdout_file() {
+            let f = fixture(false).await;
+            std::fs::write(
+                f.inst_dir.join(".ncd-karin.log"),
+                "boot\n[INFO] karin listening\n",
+            )
+            .unwrap();
+            let snap = f.manager.tail_log(&f.id, 100).await.unwrap();
+            assert!(
+                snap.lines.iter().any(|l| l.contains("karin listening")),
+                "{:?}",
+                snap.lines
+            );
+        }
+
+        #[tokio::test]
+        async fn tail_log_falls_back_to_project_logs_dir() {
+            let f = fixture(false).await;
+            std::fs::create_dir_all(f.inst_dir.join("logs")).unwrap();
+            std::fs::write(f.inst_dir.join("logs").join("nonebot.log"), "from logs dir\n").unwrap();
+            let snap = f.manager.tail_log(&f.id, 100).await.unwrap();
+            assert!(
+                snap.lines.iter().any(|l| l.contains("from logs dir")),
+                "{:?}",
+                snap.lines
+            );
         }
 
         #[tokio::test]
@@ -2483,6 +2959,13 @@ mod tests {
         use ncd_host::local::LocalWindowsHost;
 
         async fn dir_manager(root: &std::path::Path) -> Arc<AppManager> {
+            dir_manager_with_bots(root, Arc::new(MemoryBotsStub)).await
+        }
+
+        async fn dir_manager_with_bots(
+            root: &std::path::Path,
+            bots: Arc<dyn BotConfigPort>,
+        ) -> Arc<AppManager> {
             let bus = Arc::new(BroadcastEventBus::default());
             let store = Arc::new(AppInstanceStore::empty(root));
             let local: Arc<dyn Host> = Arc::new(LocalWindowsHost::new());
@@ -2491,7 +2974,7 @@ mod tests {
                 Arc::clone(&store),
                 Arc::new(NativeAppRuntime::new(Arc::clone(&bus), Arc::clone(&store))),
                 Arc::new(ncd_server::LocalOnlyHostResolver::new(local)),
-                Arc::new(MemoryBotsStub),
+                bots,
                 bus,
                 root,
             ))
@@ -2566,6 +3049,172 @@ mod tests {
                 )
                 .await;
             assert!(matches!(err, Err(AppFrameworkError::Validation(m)) if m.contains("占用")));
+        }
+
+        #[tokio::test]
+        async fn import_nonebot_adopts_nonempty_dir() {
+            let tmp = tempfile::tempdir().unwrap();
+            let root = tmp.path().join("data");
+            std::fs::create_dir_all(&root).unwrap();
+            let project = tmp.path().join("bot-xiuxian");
+            std::fs::create_dir_all(&project).unwrap();
+            std::fs::write(
+                project.join("pyproject.toml"),
+                r#"
+[project]
+name = "bot-xiuxian"
+dependencies = ["nonebot2[httpx,websockets]>=2.5.0"]
+
+[tool.nonebot]
+plugin_dirs = ["src/plugins"]
+"#,
+            )
+            .unwrap();
+            std::fs::write(
+                project.join("bot.py"),
+                "import nonebot\nfrom nonebot.adapters.onebot.v11 import Adapter\nnonebot.init()\n",
+            )
+            .unwrap();
+            std::fs::write(
+                project.join(".env"),
+                "DRIVER=~httpx+~websockets\nPORT=13120\nONEBOT_WS_URLS=[\"ws://127.0.0.1:3001\"]\n",
+            )
+            .unwrap();
+            let manager = dir_manager(&root).await;
+            let imported = manager
+                .import_instance(ImportAppInstanceRequest {
+                    framework_id: AppFrameworkId::new("nonebot2"),
+                    host_id: "local".into(),
+                    path: project.to_string_lossy().into_owned(),
+                    display_name: String::new(),
+                })
+                .await
+                .unwrap();
+            assert_eq!(imported.origin, AppInstanceOrigin::Imported);
+            assert_eq!(imported.port, 13120);
+            assert_eq!(imported.display_name, "bot-xiuxian");
+            assert_eq!(imported.state, AppInstanceState::NotInstalled);
+
+            let create_err = manager
+                .create_instance(CreateAppInstanceRequest {
+                    framework_id: AppFrameworkId::new("nonebot2"),
+                    host_id: "local".into(),
+                    display_name: "x".into(),
+                    port: Some(20001),
+                    install_dir: Some(project.to_string_lossy().into_owned()),
+                    install_renderer: None,
+                })
+                .await;
+            assert!(
+                matches!(create_err, Err(AppFrameworkError::Validation(ref m)) if m.contains("占用") || m.contains("非空")),
+                "{create_err:?}"
+            );
+
+            std::fs::write(project.join(".env"), "PORT=1\nONEBOT_ACCESS_TOKEN=stolen\n").unwrap();
+            std::fs::write(project.join(".ncd-uv"), "marker\n").unwrap();
+            manager
+                .delete_instance(&imported.id, false)
+                .await
+                .unwrap();
+            assert_eq!(
+                std::fs::read_to_string(project.join(".env")).unwrap(),
+                "DRIVER=~httpx+~websockets\nPORT=13120\nONEBOT_WS_URLS=[\"ws://127.0.0.1:3001\"]\n"
+            );
+            assert_eq!(
+                std::fs::read_to_string(project.join("bot.py")).unwrap(),
+                "import nonebot\nfrom nonebot.adapters.onebot.v11 import Adapter\nnonebot.init()\n"
+            );
+            assert!(!project.join(".ncd-uv").exists());
+            assert!(!project.join(".env.ncd.bak").exists());
+            assert!(manager.get_instance(&imported.id).await.is_err());
+        }
+
+        struct ForwardWsBots;
+
+        #[async_trait::async_trait]
+        impl BotConfigPort for ForwardWsBots {
+            async fn bot_config(&self, bot_id: &BotId) -> Result<Option<BotConfig>, String> {
+                Ok(self
+                    .list_bot_configs_for_link()
+                    .await?
+                    .into_iter()
+                    .find(|b| b.bot.qq_id.to_string() == bot_id.as_str()))
+            }
+            async fn upsert_bot_config(&self, _: BotConfig) -> Result<(), String> {
+                Ok(())
+            }
+            async fn list_bot_configs_for_link(&self) -> Result<Vec<BotConfig>, String> {
+                let mut b = super::bot();
+                b.connect.websocket_servers.push(WebsocketServerConfig {
+                    base: NetworkBaseFields {
+                        enable: true,
+                        name: "ws".into(),
+                        message_post_format: MessagePostFormat::Array,
+                        token: String::new(),
+                        debug: false,
+                    },
+                    host: "0.0.0.0".into(),
+                    port: 3001,
+                    report_self_message: false,
+                    enable_force_push_event: false,
+                    heart_interval: 30000,
+                    path: "/".into(),
+                    role: WsRole::Universal,
+                });
+                Ok(vec![b])
+            }
+        }
+
+        #[tokio::test]
+        async fn import_nonebot_adopts_existing_forward_ws() {
+            let tmp = tempfile::tempdir().unwrap();
+            let root = tmp.path().join("data");
+            std::fs::create_dir_all(&root).unwrap();
+            let project = tmp.path().join("bot-xiuxian");
+            std::fs::create_dir_all(&project).unwrap();
+            std::fs::write(
+                project.join("pyproject.toml"),
+                r#"
+[project]
+name = "bot-xiuxian"
+dependencies = ["nonebot2[httpx,websockets]>=2.5.0"]
+
+[tool.nonebot]
+plugin_dirs = ["src/plugins"]
+"#,
+            )
+            .unwrap();
+            std::fs::write(
+                project.join("bot.py"),
+                "import nonebot\nfrom nonebot.adapters.onebot.v11 import Adapter\nnonebot.init()\n",
+            )
+            .unwrap();
+            std::fs::write(
+                project.join(".env"),
+                "DRIVER=~httpx+~websockets\nPORT=13120\nONEBOT_WS_URLS=[\"ws://127.0.0.1:3001\"]\n",
+            )
+            .unwrap();
+            let manager = dir_manager_with_bots(&root, Arc::new(ForwardWsBots)).await;
+            let probe = manager
+                .probe_project("local", &AppFrameworkId::new("nonebot2"), project.to_str().unwrap())
+                .await
+                .unwrap();
+            assert_eq!(
+                probe.detected_bot_id.as_ref().map(|id| id.as_str()),
+                Some("10001")
+            );
+            let imported = manager
+                .import_instance(ImportAppInstanceRequest {
+                    framework_id: AppFrameworkId::new("nonebot2"),
+                    host_id: "local".into(),
+                    path: project.to_string_lossy().into_owned(),
+                    display_name: String::new(),
+                })
+                .await
+                .unwrap();
+            let link = imported.link.expect("should adopt existing bot");
+            assert_eq!(link.bot_id.as_str(), "10001");
+            assert_eq!(link.connection_name, ncd_domain::APP_LINK_ADOPTED_FORWARD);
         }
     }
 }

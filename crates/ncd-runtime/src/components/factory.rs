@@ -54,6 +54,7 @@ pub struct AppComponentHint {
     pub port: u16,
     pub npm_registry: Option<String>,
     pub install_renderer: bool,
+    pub adopt_existing: bool,
 }
 
 /// 把 component_id 实例化成具体 Component
@@ -316,6 +317,7 @@ fn build_app_framework_component(
         uv_bin,
         npm_registry: hint.npm_registry.clone(),
         install_renderer: hint.install_renderer,
+        adopt_existing: hint.adopt_existing,
     }))
 }
 

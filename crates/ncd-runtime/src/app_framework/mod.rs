@@ -2,15 +2,19 @@
 //!
 //! 框架差异（Karin / NoneBot2 …）在 `ncd-appframework`；这里只认 `AppFrameworkAdapter`。
 
+mod adopt;
 mod download;
+mod existing_link;
 mod export;
 mod instances;
+mod log_tail;
 mod listen_port;
 mod manager;
 mod native_runtime;
 mod plugin_market;
 mod plugin_task;
 mod resident_link;
+mod supervisor;
 
 pub use export::{OneBotExportError, export_onebot_endpoint};
 pub use instances::{APP_INSTANCES_FILE, AppInstanceStore};

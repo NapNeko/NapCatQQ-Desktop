@@ -22,6 +22,7 @@ fn graph_placeholder_spec() -> AppComponentSpec {
         uv_bin: None,
         npm_registry: None,
         install_renderer: false,
+        adopt_existing: false,
     }
 }
 

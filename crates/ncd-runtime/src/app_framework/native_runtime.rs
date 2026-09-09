@@ -118,14 +118,58 @@ impl NativeAppRuntime {
         if let Some(m) = self.local.lock().await.get(&instance.id) {
             return Ok(Some(m.pid));
         }
-        let Some((pid, program)) = read_pid_file(host, &Self::pid_file(instance)).await? else {
+        if let Some((pid, program)) = read_pid_file(host, &Self::pid_file(instance)).await? {
+            let alive = match host.locality() {
+                Locality::Local => local_pid_matches(pid, &program),
+                Locality::Remote => remote_pid_matches(host, pid, &instance.install_dir).await,
+            };
+            if alive {
+                return Ok(Some(pid));
+            }
+        }
+        self.discover_and_claim(host, instance).await
+    }
+
+    pub async fn claim_pid(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        pid: u32,
+        program: &str,
+    ) -> Result<(), AppFrameworkError> {
+        let body = render_pid_file(pid, program);
+        host.write_file(&Self::pid_file(instance), body.as_bytes())
+            .await
+            .map_err(host_err)
+    }
+
+    pub async fn discover_and_claim(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<Option<u32>, AppFrameworkError> {
+        let kind = super::supervisor::AppProcessKind::from_framework(instance.framework_id.as_str());
+        let found = match host.locality() {
+            Locality::Remote => {
+                let listing =
+                    super::supervisor::list_cwd_processes(host, &instance.install_dir).await?;
+                super::supervisor::pick_app_pid(&listing, kind)
+            }
+            Locality::Local => discover_local_pid(&instance.install_dir, kind),
+        };
+        let Some((pid, program)) = found else {
             return Ok(None);
         };
-        let alive = match host.locality() {
-            Locality::Local => local_pid_matches(pid, &program),
-            Locality::Remote => remote_pid_matches(host, pid, &instance.install_dir).await,
-        };
-        Ok(alive.then_some(pid))
+        self.claim_pid(host, instance, pid, &program).await?;
+        Ok(Some(pid))
+    }
+
+    /// 本会话已经在跟这条实例的日志 / 存活了（本机 spawn 或 attach 的 follower）
+    pub async fn is_following(&self, id: &AppInstanceId) -> bool {
+        if self.local.lock().await.contains_key(id) {
+            return true;
+        }
+        self.followers.lock().await.contains_key(id)
     }
 
     /// 对已经在跑但不是本会话起的实例（冷启动 reconcile 命中）挂上日志 + 存活轮询
@@ -143,9 +187,9 @@ impl NativeAppRuntime {
                 else {
                     return Ok(());
                 };
-                self.spawn_local_tail(instance.id.clone(), log_file, pid, program)
+                self.spawn_local_tail(instance.id.clone(), log_file, pid, program, true)
             }
-            Locality::Remote => self.spawn_remote_follow(host, instance.clone(), log_file),
+            Locality::Remote => self.spawn_remote_follow(host, instance.clone(), log_file, true),
         };
         self.followers.lock().await.insert(instance.id.clone(), task);
         Ok(())
@@ -278,22 +322,28 @@ impl NativeAppRuntime {
         log_file: HostPath,
         pid: u32,
         program: String,
+        backfill: bool,
     ) -> JoinHandle<()> {
         let store = Arc::clone(&self.store);
         let bus = Arc::clone(&self.event_bus);
         let path = log_file.render(PathStyle::Windows);
         tokio::spawn(async move {
-            let mut offset = tokio::fs::metadata(&path).await.map(|m| m.len()).unwrap_or(0);
+            let mut offset = if backfill {
+                0
+            } else {
+                tokio::fs::metadata(&path).await.map(|m| m.len()).unwrap_or(0)
+            };
             let mut ticks: u32 = 0;
             loop {
-                tokio::time::sleep(LOCAL_TAIL_POLL).await;
+                if ticks > 0 || !backfill {
+                    tokio::time::sleep(LOCAL_TAIL_POLL).await;
+                }
                 if let Ok(meta) = tokio::fs::metadata(&path).await {
                     let size = meta.len();
                     if size < offset {
                         offset = 0;
                     }
-                    if size > offset {
-                        let read_from = size.saturating_sub(MAX_CHUNK).max(offset);
+                    if let Some(read_from) = log_follow_read_from(offset, size) {
                         if let Some(chunk) = local_read_from(&path, read_from, size).await {
                             for line in String::from_utf8_lossy(&chunk).lines() {
                                 publish_app_log(&bus, &id, line);
@@ -345,7 +395,7 @@ impl NativeAppRuntime {
                 detail.trim()
             )));
         };
-        let task = self.spawn_remote_follow(host, instance.clone(), spec.log_file);
+        let task = self.spawn_remote_follow(host, instance.clone(), spec.log_file, false);
         self.followers.lock().await.insert(instance.id.clone(), task);
         Ok(pid)
     }
@@ -355,6 +405,7 @@ impl NativeAppRuntime {
         host: Arc<dyn Host>,
         instance: AppInstance,
         log_file: HostPath,
+        backfill: bool,
     ) -> JoinHandle<()> {
         let store = Arc::clone(&self.store);
         let bus = Arc::clone(&self.event_bus);
@@ -363,18 +414,23 @@ impl NativeAppRuntime {
         let install_dir = instance.install_dir.clone();
         let id = instance.id.clone();
         tokio::spawn(async move {
-            let mut last_size = remote_file_size(host.as_ref(), &log_path)
-                .await
-                .unwrap_or(0);
+            let mut last_size = if backfill {
+                0
+            } else {
+                remote_file_size(host.as_ref(), &log_path)
+                    .await
+                    .unwrap_or(0)
+            };
             let mut ticks: u32 = 0;
             loop {
-                tokio::time::sleep(REMOTE_POLL).await;
+                if ticks > 0 || !backfill {
+                    tokio::time::sleep(REMOTE_POLL).await;
+                }
                 if let Some(size) = remote_file_size(host.as_ref(), &log_path).await {
                     if size < last_size {
                         last_size = 0;
                     }
-                    if size > last_size {
-                        let read_from = size.saturating_sub(MAX_CHUNK).max(last_size);
+                    if let Some(read_from) = log_follow_read_from(last_size, size) {
                         if let Some(chunk) =
                             remote_read_from(host.as_ref(), &log_path, read_from).await
                         {
@@ -478,6 +534,37 @@ fn local_pid_matches(pid: u32, program: &str) -> bool {
         return true;
     }
     p.name().to_string_lossy().to_ascii_lowercase() == program
+}
+
+pub(crate) fn discover_local_pid(
+    install_dir: &str,
+    kind: super::supervisor::AppProcessKind,
+) -> Option<(u32, String)> {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        ProcessRefreshKind::new().with_cwd(UpdateKind::Always).with_cmd(UpdateKind::Always),
+    );
+    let want = HostPath::from_posix(install_dir);
+    let mut lines = String::new();
+    for (pid, proc) in sys.processes() {
+        let Some(cwd) = proc.cwd() else {
+            continue;
+        };
+        let got = HostPath::from_windows(&cwd.to_string_lossy());
+        if got.as_posix() != want.as_posix() {
+            continue;
+        }
+        let cmd = proc
+            .cmd()
+            .iter()
+            .map(|s| s.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ");
+        lines.push_str(&format!("{} {cmd}\n", pid.as_u32()));
+    }
+    super::supervisor::pick_app_pid(&lines, kind)
 }
 
 fn kill_local_pid(pid: u32) {
@@ -597,6 +684,18 @@ async fn remote_read_from(host: &dyn Host, path: &str, offset: u64) -> Option<Ve
     Some(out.stdout.into_bytes())
 }
 
+/// attach 时 last_size=0,只吐尾巴,避免整文件灌事件总线
+fn log_follow_read_from(last_size: u64, size: u64) -> Option<u64> {
+    if size <= last_size {
+        return None;
+    }
+    if last_size == 0 {
+        Some(size.saturating_sub(MAX_CHUNK))
+    } else {
+        Some(last_size)
+    }
+}
+
 fn publish_app_log(bus: &BroadcastEventBus, id: &AppInstanceId, line: &str) {
     let cleaned = ncd_deploy::strip_ansi_escapes(line);
     if cleaned.trim().is_empty() {
@@ -650,5 +749,14 @@ mod tests {
     #[test]
     fn shell_quote_escapes_single_quotes() {
         assert_eq!(shell_quote("it's"), "'it'\"'\"'s'");
+    }
+
+    #[test]
+    fn attach_backfill_reads_tail_not_whole_file() {
+        assert_eq!(log_follow_read_from(0, 100), Some(0));
+        assert_eq!(log_follow_read_from(0, MAX_CHUNK + 80), Some(80));
+        assert_eq!(log_follow_read_from(40, 80), Some(40));
+        assert_eq!(log_follow_read_from(80, 80), None);
+        assert_eq!(log_follow_read_from(90, 80), None);
     }
 }
