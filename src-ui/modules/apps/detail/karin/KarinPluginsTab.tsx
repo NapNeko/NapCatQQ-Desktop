@@ -20,6 +20,7 @@ import {
 } from '../../../../shared/ui';
 import { ActionMotionIcon } from '../../../../shared/ui/motion';
 import { ConfigConflictDialog } from '../ConfigConflictDialog';
+import { PaneLoading } from '../PaneStatus';
 import { useKarinPlugins } from '../../../../hooks/apps/useKarinPlugins';
 import { cn } from '../../../../shared/utils/cn';
 import styles from './karinPluginsGrid.module.css';
@@ -106,10 +107,7 @@ export const KarinPluginsTab: React.FC<{ instance: AppInstance }> = ({ instance 
             </PluginsToolbarPortal>
 
             {p.loading && p.rows.length === 0 ? (
-                <PagePlaceholder className="gap-3 py-16">
-                    <Spinner size="lg" tone="brand" label="读取插件" />
-                    <p className="text-sm text-text-tertiary">正在读取插件…</p>
-                </PagePlaceholder>
+                <PaneLoading text="正在读取插件…" />
             ) : p.rows.length === 0 ? (
                 <PagePlaceholder className="gap-2 py-16">
                     <ActionMotionIcon icon={Blocks} size={28} className="text-text-tertiary" />

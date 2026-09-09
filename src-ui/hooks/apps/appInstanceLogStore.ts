@@ -1,10 +1,16 @@
 // 应用端实例日志：缓冲挂模块级 Map，离开详情 / 切走日志 Tab 不丢。
 // 订阅在首个调用方挂一次，之后不卸——否则切到列表或基础 Tab 期间的行会漏掉。
 
-import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { createStore } from '../utils/createStore';
 import { subscribeDomainEvents } from '../../core/services/domain-event-hub';
-import { appendLine, canonicalizeLogEntry, type LogEntry } from '../../core/domain/events/log-buffer';
+import { appFrameworkService } from '../../core/services/app-framework.service';
+import {
+    appendLine,
+    buildHistoryEntries,
+    canonicalizeLogEntry,
+    type LogEntry,
+} from '../../core/domain/events/log-buffer';
 import type { DomainEvent } from '../../core/ipc/types';
 
 interface State {
@@ -48,6 +54,28 @@ export function dropAppInstanceLogs(instanceId: string): void {
     store.setState({ byId: next });
 }
 
+const hydrating = new Set<string>();
+
+export function hydrateAppInstanceLogs(instanceId: string): void {
+    if (!instanceId || hydrating.has(instanceId)) return;
+    hydrating.add(instanceId);
+    void appFrameworkService
+        .tailLog(instanceId, 1000)
+        .then((snap) => {
+            const historical = buildHistoryEntries(snap.lines ?? []);
+            if (historical.length === 0) return;
+            store.setState({
+                byId: { ...store.getSnapshot().byId, [instanceId]: historical },
+            });
+        })
+        .catch((err) => {
+            console.warn('加载应用日志失败:', err);
+        })
+        .finally(() => {
+            hydrating.delete(instanceId);
+        });
+}
+
 export function clearAppInstanceLogs(instanceId: string): void {
     const { byId } = store.getSnapshot();
     if (!byId[instanceId]?.length) return;
@@ -73,11 +101,15 @@ export const appInstanceLogStore = {
             }
             unsubDomain = null;
         }
+        hydrating.clear();
         store._reset();
     },
 };
 
 export function useAppInstanceLog(instanceId: string | null) {
+    useEffect(() => {
+        if (instanceId) hydrateAppInstanceLogs(instanceId);
+    }, [instanceId]);
     const snapshot = useSyncExternalStore(subscribe, store.getSnapshot, store.getSnapshot);
     const logs = useMemo(() => {
         if (!instanceId) return EMPTY;

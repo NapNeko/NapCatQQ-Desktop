@@ -9,6 +9,7 @@ import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { pushAppErrorBar } from '../../../hooks/apps/pushAppErrorBar';
 import { cn } from '../../../shared/utils/cn';
 import { ConfigConflictDialog } from './ConfigConflictDialog';
+import { PaneLoading } from './PaneStatus';
 import type { AppConfigDocument, AppConfigError, AppInstance } from '../../../core/ipc/types';
 
 const FORMAT_LABEL: Record<AppConfigDocument['format'], string> = {
@@ -127,11 +128,7 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
     };
 
     if (docsQuery.isLoading) {
-        return (
-            <div className="flex items-center gap-2 py-8 text-sm text-text-tertiary">
-                <Spinner size="sm" /> 读取文档列表…
-            </div>
-        );
+        return <PaneLoading text="正在读取文档列表…" />;
     }
     if (docs.length === 0) {
         return <p className="py-8 text-sm text-text-tertiary">该应用端没有可编辑的配置文件。</p>;

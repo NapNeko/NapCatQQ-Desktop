@@ -1,10 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { RefreshCw } from 'lucide-react';
-import { Button, Spinner, TabsContent } from '../../../../shared/ui';
-import { ActionMotionIcon } from '../../../../shared/ui/motion';
+import { TabsContent } from '../../../../shared/ui';
 import { NoneBot2ConnectionsTab } from './NoneBot2ConnectionsTab';
 import { NoneBot2StoreTab } from './NoneBot2StoreTab';
 import { useNoneBot2ConfigForm } from '../useNoneBot2ConfigForm';
+import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import type { FrameworkDetailProps, FrameworkUiModule } from '../frameworkUi';
 
 const EXTRA_TABS = [
@@ -54,20 +53,15 @@ function NoneBot2FrameworkDetail({ instance, onSaveHandle }: FrameworkDetailProp
                 <NoneBot2StoreTab instance={instance} resource="plugin" />
             </TabsContent>
             {form.isLoading && !form.form ? (
-                <TabsContent value="connections" className="pb-8 pt-2">
-                    <div className="flex items-center gap-2 py-10 text-sm text-text-tertiary">
-                        <Spinner size="sm" /> 读取配置…
-                    </div>
+                <TabsContent value="connections" className="flex min-h-0 flex-1 flex-col pt-2">
+                    <PaneLoading text="正在读取配置…" />
                 </TabsContent>
             ) : form.loadError && !form.form ? (
-                <TabsContent value="connections" className="pb-8 pt-2">
-                    <div className="flex flex-col items-start gap-2 py-10">
-                        <p className="text-sm text-text-secondary">读取配置失败</p>
-                        <Button size="sm" variant="secondary" onClick={() => void form.reloadDiscard()}>
-                            <ActionMotionIcon icon={RefreshCw} size={13} />
-                            重试
-                        </Button>
-                    </div>
+                <TabsContent value="connections" className="flex min-h-0 flex-1 flex-col pt-2">
+                    <PaneLoadError
+                        message="读取配置失败"
+                        onRetry={() => void form.reloadDiscard()}
+                    />
                 </TabsContent>
             ) : form.form ? (
                 <TabsContent value="connections" className="pb-8 pt-2">

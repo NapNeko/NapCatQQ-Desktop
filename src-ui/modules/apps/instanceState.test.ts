@@ -13,6 +13,7 @@ const instance: AppInstance = {
     state: 'installing',
     created_at_ms: 1,
     install_renderer: true,
+    origin: 'created',
 };
 
 function task(target: string, action = 'ensure_installed'): DeploymentTaskSnapshot {

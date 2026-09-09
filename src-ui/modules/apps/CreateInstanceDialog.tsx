@@ -22,6 +22,8 @@ import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
 import type { useServerManager } from '../../hooks/remote/useServerManager';
 import { pickDirectory } from '../../core/ipc/transport';
 import { appFrameworkService } from '../../core/services/app-framework.service';
+import { remoteServerIdFromHostId } from '../../core/domain/remote-host/posixPath';
+import { RemoteDirectoryPicker } from '../../shared/components/RemoteDirectoryPicker';
 import { hostIdDisplayLabel } from './hostLabel';
 import type { AppFrameworkManifest } from '../../core/ipc/types';
 
@@ -54,6 +56,7 @@ export const CreateInstanceDialog: React.FC<{
     // 关闭动画期间保留内容，避免对话框在退场时先变空
     const [mounted, setMounted] = useState<CreateInstanceRequest | null>(null);
     const [previewParent, setPreviewParent] = useState('');
+    const [pickerOpen, setPickerOpen] = useState(false);
 
     useEffect(() => {
         if (!request) return;
@@ -67,6 +70,7 @@ export const CreateInstanceDialog: React.FC<{
             installDirOverride: null,
             installRenderer: request.manifest.has_install_renderer,
         });
+        setPickerOpen(false);
     }, [request]);
 
     useEffect(() => {
@@ -90,6 +94,8 @@ export const CreateInstanceDialog: React.FC<{
     const supportsLocal = manifest?.supported_placements.includes('local_native') ?? false;
     const supportsRemote = manifest?.supported_placements.includes('remote_native') ?? false;
     const isRemote = draft?.hostId.startsWith('remote:') ?? false;
+    const remoteId = draft ? remoteServerIdFromHostId(draft.hostId) : null;
+    const remoteHome = servers.find((s) => s.id === remoteId)?.inventory?.home;
     const showRenderer = manifest?.has_install_renderer ?? false;
 
     const hostItems: SelectItem[] = locked
@@ -114,8 +120,9 @@ export const CreateInstanceDialog: React.FC<{
     const defaultDisplay = previewParent ? `${previewParent}/<自动编号>` : '';
 
     return (
-        <Dialog open={request !== null} onOpenChange={(o) => !o && !isCreating && onClose()}>
-            <DialogContent size="md" dismissOnOutsideClick={!isCreating} onExited={() => setMounted(null)}>
+        <>
+        <Dialog open={request !== null} onOpenChange={(o) => !o && !isCreating && !pickerOpen && onClose()}>
+            <DialogContent size="md" dismissOnOutsideClick={!isCreating && !pickerOpen} onExited={() => setMounted(null)}>
                 {manifest && draft && (
                     <>
                         <DialogHeader>
@@ -156,19 +163,38 @@ export const CreateInstanceDialog: React.FC<{
                                 hint="留空则随机分配高位端口，并避开同机已有实例"
                             />
                             {isRemote ? (
-                                <TextField
-                                    label="安装目录"
-                                    placeholder={defaultDisplay}
-                                    value={draft.installDirOverride ?? ''}
-                                    onValueChange={(v) =>
-                                        setDraft({
-                                            ...draft,
-                                            installDirOverride: v.trim() === '' ? null : v,
-                                        })
-                                    }
-                                    error={remoteDirInvalid ? '远端路径必须是绝对路径' : undefined}
-                                    hint="目录必须为空或不存在；装完不能改路径"
-                                />
+                                <div className="flex flex-col gap-1.5">
+                                    <span className="text-xs font-medium text-text-secondary">安装目录</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <TextField
+                                            className="min-w-0 flex-1"
+                                            aria-label="安装目录"
+                                            placeholder={defaultDisplay}
+                                            value={draft.installDirOverride ?? ''}
+                                            onValueChange={(v) =>
+                                                setDraft({
+                                                    ...draft,
+                                                    installDirOverride: v.trim() === '' ? null : v,
+                                                })
+                                            }
+                                            error={remoteDirInvalid ? '远端路径必须是绝对路径' : undefined}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="md"
+                                            className="shrink-0"
+                                            disabled={isCreating || !remoteId}
+                                            onClick={() => setPickerOpen(true)}
+                                        >
+                                            <FolderOpen size={14} strokeWidth={2.2} />
+                                            选择
+                                        </Button>
+                                    </div>
+                                    <p className="text-2xs leading-snug text-text-tertiary">
+                                        目录必须为空或不存在；装完不能改路径
+                                    </p>
+                                </div>
                             ) : (
                                 <div className="flex flex-col gap-1.5">
                                     <span className="text-xs font-medium text-text-secondary">
@@ -270,6 +296,18 @@ export const CreateInstanceDialog: React.FC<{
                 )}
             </DialogContent>
         </Dialog>
+        <RemoteDirectoryPicker
+            open={pickerOpen && !!remoteId}
+            remoteId={remoteId}
+            initialPath={draft?.installDirOverride ?? ''}
+            initialRoot={remoteHome ?? '/'}
+            onClose={() => setPickerOpen(false)}
+            onSelect={(next) => {
+                if (draft) setDraft({ ...draft, installDirOverride: next });
+                setPickerOpen(false);
+            }}
+        />
+        </>
     );
 };
 

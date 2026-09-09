@@ -76,7 +76,6 @@ export function AppLinkDialog({
     const [instanceId, setInstanceId] = useState<string>(presetInstanceId ?? '');
     const [botId, setBotId] = useState<string>(presetBotId ?? '');
     const [plan, setPlan] = useState<OneBotLinkPlan | null>(null);
-    const [previewError, setPreviewError] = useState<string | null>(null);
     const [previewing, setPreviewing] = useState(false);
     const [applying, setApplying] = useState(false);
 
@@ -85,7 +84,6 @@ export function AppLinkDialog({
         setInstanceId(presetInstanceId ?? '');
         setBotId(presetBotId ?? '');
         setPlan(null);
-        setPreviewError(null);
     }, [open, presetInstanceId, presetBotId]);
 
     const instance = instances.find((i) => i.id === instanceId) ?? null;
@@ -133,7 +131,6 @@ export function AppLinkDialog({
         }
         let cancelled = false;
         setPreviewing(true);
-        setPreviewError(null);
         appFrameworkService
             .previewLink(instanceId, botId)
             .then((p) => {
@@ -142,12 +139,10 @@ export function AppLinkDialog({
             .catch((err) => {
                 if (!cancelled) {
                     setPlan(null);
-                    const raw = errorText(err);
-                    setPreviewError('无法生成对接计划，详情见日志');
                     pushAppErrorBar({
                         key: `app-link-preview:${instanceId}:${botId}`,
                         title: '无法生成对接计划',
-                        raw,
+                        raw: errorText(err),
                     });
                 }
             })
@@ -223,12 +218,6 @@ export function AppLinkDialog({
                             <Spinner size="sm" />
                             正在生成对接计划…
                         </div>
-                    )}
-
-                    {previewError && (
-                        <p className="rounded-sm border border-danger/40 bg-danger-soft px-3 py-2 text-sm text-danger">
-                            {previewError}
-                        </p>
                     )}
 
                     {plan && !previewing && (

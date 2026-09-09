@@ -24,6 +24,7 @@ import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { SnowLumaPackageDialog } from './SnowLumaPackageDialog';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import { CreateInstanceDialog, type CreateInstanceRequest } from '../apps/CreateInstanceDialog';
+import { ImportInstanceDialog, type ImportInstanceTarget } from '../apps/ImportInstanceDialog';
 import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
 import { componentMutationBlockedReason, componentLifecycleBlockedReason } from '../../core/domain/components/mutation-gate';
 import { buildDemoRemoteMachine } from '../../core/domain/onboarding/demoRemoteMachine';
@@ -74,11 +75,12 @@ export const ComponentsPageNext: React.FC = () => {
     const hostIds = useMemo(() => hosts.map((h) => h.host_id), [hosts]);
     const dockerHosts = useDockerHosts(hostIds);
 
-    // 应用端：框架清单 + 实例（按实例安装，只在这页提供「新建实例」入口）
+    // 应用端：框架清单 + 实例（按实例安装；应用端页也能导入已有项目）
     const appFrameworks = useAppFrameworks();
     const apps = useAppInstances();
     const { servers } = useServerManager();
     const [createAppRequest, setCreateAppRequest] = useState<CreateInstanceRequest | null>(null);
+    const [importAppTarget, setImportAppTarget] = useState<ImportInstanceTarget | null>(null);
 
     // 组件主导矩阵 → 主机主导，再剔掉这台机器一个组件都装不了的空机器。
     const allRows = useMemo<ComponentRow[]>(
@@ -264,6 +266,13 @@ export const ComponentsPageNext: React.FC = () => {
     const handleCreateAppInstance = useCallback(
         (manifest: AppFrameworkManifest, hostId: string) => {
             setCreateAppRequest({ manifest, lockedHostId: hostId });
+        },
+        [],
+    );
+
+    const handleImportAppInstance = useCallback(
+        (manifest: AppFrameworkManifest, hostId: string) => {
+            setImportAppTarget({ manifest, lockedHostId: hostId });
         },
         [],
     );
@@ -628,6 +637,7 @@ export const ComponentsPageNext: React.FC = () => {
                         appFrameworks={appFrameworks.data ?? []}
                         appInstances={apps.instances}
                         onCreateAppInstance={handleCreateAppInstance}
+                        onImportAppInstance={handleImportAppInstance}
                         latestVersionFor={latestVersionFor}
                         latestReleaseFor={latestReleaseFor}
                         getProgress={getProgressFor}
@@ -682,6 +692,35 @@ export const ComponentsPageNext: React.FC = () => {
                     if (!open) setSlPkgPrompt(null);
                 }}
                 onConfirm={confirmSnowLumaPackage}
+            />
+
+            <ImportInstanceDialog
+                target={importAppTarget}
+                frameworks={appFrameworks.data ?? []}
+                servers={servers}
+                isImporting={apps.isImporting}
+                onClose={() => setImportAppTarget(null)}
+                onSubmit={async (draft) => {
+                    const imported = await apps.importInstance({
+                        framework_id: draft.frameworkId,
+                        host_id: draft.hostId,
+                        path: draft.path,
+                        display_name: draft.displayName,
+                    });
+                    setImportAppTarget(null);
+                    globalInfoBarStore.push({
+                        key: `app-instance-imported:${imported.id}`,
+                        tone: 'success',
+                        title: `已接管 ${imported.display_name} · ${hostNameOf(draft.hostId)}`,
+                        content:
+                            imported.state === 'running'
+                                ? '已由桌面端启动'
+                                : imported.state === 'not_installed'
+                                  ? '依赖未同步，先到「应用端」页安装'
+                                  : '到「应用端」页启动并对接协议 Bot。',
+                        autoDismissMs: 8_000,
+                    });
+                }}
             />
 
             <CreateInstanceDialog

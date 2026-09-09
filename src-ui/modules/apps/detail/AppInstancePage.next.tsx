@@ -41,6 +41,7 @@ import { isInstalled } from '../instanceState';
 import { cn } from '../../../shared/utils/cn';
 import { ConfigConflictDialog } from './ConfigConflictDialog';
 import { InstanceLogTab } from './InstanceLogTab';
+import { PaneLoading } from './PaneStatus';
 import { RawFilesTab } from './RawFilesTab';
 import { resolveFrameworkUi, type FrameworkSaveHandle } from './frameworkUi';
 import type { DetailTabHint } from '../list/AppInstanceListPage';
@@ -96,12 +97,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
     };
 
     if (apps.isLoading && !instance) {
-        return (
-            <PagePlaceholder className="gap-2 py-16">
-                <Spinner size="sm" />
-                <span className="text-sm text-text-tertiary">加载实例…</span>
-            </PagePlaceholder>
-        );
+        return <PaneLoading text="正在读取实例…" />;
     }
 
     if (!instance) {
@@ -162,7 +158,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                             </Button>
                         )}
                         {installed && !running && (
-                            <Button size="sm" variant="primary" disabled={busy} onClick={() => apps.start(instance.id)}>
+                            <Button size="sm" variant="ghost" disabled={busy} onClick={() => apps.start(instance.id)}>
                                 <ActionMotionIcon icon={Play} size={13} motion={EMPHASIS_MOTION} />
                                 启动
                             </Button>
@@ -178,21 +174,13 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                             canLink={installed}
                             linked={!!instance.link}
                             canWebUi={!!manifest?.has_webui && running}
+                            deleteLabel={instance.origin === 'imported' ? '释放接管' : '删除实例'}
                             onLink={() => setLinkOpen(true)}
                             onUnlink={() => apps.unlink(instance.id)}
                             onWebUi={() => void apps.openWebUi(instance.id)}
                             onRefresh={() => apps.refresh(instance.id)}
+                            onDelete={() => setDeleteOpen(true)}
                         />
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-danger hover:text-danger"
-                            disabled={busy}
-                            onClick={() => setDeleteOpen(true)}
-                        >
-                            <ActionMotionIcon icon={Trash2} size={13} strokeWidth={2.2} />
-                            删除实例
-                        </Button>
                     </div>
                 </header>
 
@@ -309,11 +297,24 @@ const InstanceMoreMenu: React.FC<{
     canLink: boolean;
     linked: boolean;
     canWebUi: boolean;
+    deleteLabel: string;
     onLink: () => void;
     onUnlink: () => void;
     onWebUi: () => void;
     onRefresh: () => void;
-}> = ({ busy, canLink, linked, canWebUi, onLink, onUnlink, onWebUi, onRefresh }) => (
+    onDelete: () => void;
+}> = ({
+    busy,
+    canLink,
+    linked,
+    canWebUi,
+    deleteLabel,
+    onLink,
+    onUnlink,
+    onWebUi,
+    onRefresh,
+    onDelete,
+}) => (
     <Popover>
         <PopoverTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy} aria-label="更多">
@@ -327,6 +328,8 @@ const InstanceMoreMenu: React.FC<{
             {linked && <MoreItem icon={Unlink} label="解除对接" onClick={onUnlink} />}
             {canWebUi && <MoreItem icon={ExternalLink} label="打开 WebUI" onClick={onWebUi} />}
             <MoreItem icon={RefreshCw} label="重新探测" onClick={onRefresh} />
+            <div className="my-1 h-px bg-border-subtle" />
+            <MoreItem icon={Trash2} label={deleteLabel} tone="danger" onClick={onDelete} />
         </PopoverContent>
     </Popover>
 );
@@ -334,15 +337,24 @@ const InstanceMoreMenu: React.FC<{
 const MoreItem: React.FC<{
     icon: typeof Link2;
     label: string;
+    tone?: 'neutral' | 'danger';
     onClick: () => void;
-}> = ({ icon: Icon, label, onClick }) => (
+}> = ({ icon: Icon, label, tone = 'neutral', onClick }) => (
     <PopoverClose asChild>
         <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px] text-text hover:bg-inset"
+            className={cn(
+                'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[13px]',
+                tone === 'danger'
+                    ? 'text-danger hover:bg-danger-soft'
+                    : 'text-text hover:bg-inset',
+            )}
             onClick={onClick}
         >
-            <Icon size={14} className="shrink-0 text-text-secondary" />
+            <Icon
+                size={14}
+                className={cn('shrink-0', tone === 'danger' ? 'text-danger' : 'text-text-secondary')}
+            />
             {label}
         </button>
     </PopoverClose>

@@ -6,6 +6,7 @@ import {
     Boxes,
     Download,
     ExternalLink,
+    Import,
     Link2,
     Play,
     RefreshCw,
@@ -40,8 +41,11 @@ import { useAppFrameworks, useAppInstances } from '../../../hooks/apps/useAppIns
 import { cn } from '../../../shared/utils/cn';
 import { AppLinkDialog } from '../AppLinkDialog';
 import { DeleteInstanceDialog } from '../DeleteInstanceDialog';
+import { ImportInstanceDialog, type ImportInstanceTarget } from '../ImportInstanceDialog';
+import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { hostIdDisplayLabel } from '../hostLabel';
 import { STATE_META, isInstalled } from '../instanceState';
+import { FloatingActions } from './FloatingActions';
 import type { AppRoute } from '../../../shared/components/next/Sidebar';
 import type { AppFrameworkManifest, AppInstance } from '../../../core/ipc/types';
 import gridStyles from './appCardGrid.module.css';
@@ -60,6 +64,7 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
 
     const [linkInstanceId, setLinkInstanceId] = useState<string | null>(null);
     const [deleteInstance, setDeleteInstance] = useState<AppInstance | null>(null);
+    const [importTarget, setImportTarget] = useState<ImportInstanceTarget | null>(null);
 
     const manifests = frameworks.data ?? [];
     const manifestById = useMemo(
@@ -78,34 +83,14 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
                         <h1 className="font-display text-xl font-semibold text-text">应用端</h1>
                         <p className="mt-1 text-sm text-text-secondary">管理应用实例的启停、对接与配置。</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <div className="hidden items-baseline gap-1 text-xs text-text-tertiary tabular-nums sm:flex">
-                            <span>共</span>
-                            <Counter value={apps.instances.length} className="font-medium text-text-secondary" />
-                            <span>个实例</span>
-                        </div>
-                        {onNavigate && (
-                            <Button size="sm" variant="secondary" onClick={() => onNavigate('components')}>
-                                <ActionMotionIcon icon={Boxes} size={14} />
-                                去组件页安装
-                            </Button>
-                        )}
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => {
-                                void frameworks.refetch();
-                                void apps.refetch();
-                            }}
-                            disabled={refreshing}
-                        >
-                            <ActionMotionIcon icon={RefreshCw} size={14} motion={refreshMotion(refreshing)} />
-                            刷新
-                        </Button>
+                    <div className="flex items-baseline gap-1 text-xs text-text-tertiary tabular-nums">
+                        <span>共</span>
+                        <Counter value={apps.instances.length} className="font-medium text-text-secondary" />
+                        <span>个实例</span>
                     </div>
                 </header>
 
-                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-6 pt-1">
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-24 pt-1">
                     {apps.isLoading ? (
                         <Loading text="加载实例列表…" />
                     ) : apps.error ? (
@@ -125,18 +110,18 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
                                 className="text-text-tertiary"
                             />
                             <p className="text-sm text-text-secondary">还没有应用实例</p>
-                            <p className="text-xs text-text-tertiary">到「组件」页按主机新建</p>
-                            {onNavigate && (
-                                <Button
-                                    size="sm"
-                                    variant="primary"
-                                    className="mt-1"
-                                    onClick={() => onNavigate('components')}
-                                >
-                                    <ActionMotionIcon icon={Boxes} size={14} motion={EMPHASIS_MOTION} />
-                                    前往组件管理
+                            <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+                                <Button size="sm" variant="primary" onClick={() => setImportTarget({})}>
+                                    <ActionMotionIcon icon={Import} size={14} motion={EMPHASIS_MOTION} />
+                                    导入已有项目
                                 </Button>
-                            )}
+                                {onNavigate && (
+                                    <Button size="sm" variant="secondary" onClick={() => onNavigate('components')}>
+                                        <ActionMotionIcon icon={Boxes} size={14} />
+                                        前往组件管理
+                                    </Button>
+                                )}
+                            </div>
                         </PagePlaceholder>
                     ) : (
                         <InstanceList
@@ -173,6 +158,49 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
                         if (!deleteInstance) return;
                         await apps.remove({ id: deleteInstance.id, removeFiles });
                         setDeleteInstance(null);
+                    }}
+                />
+
+                {importTarget === null && deleteInstance === null && linkInstanceId === null && (
+                    <FloatingActions
+                        showInstall={!!onNavigate}
+                        importDisabled={manifests.length === 0}
+                        busy={refreshing}
+                        onInstall={() => onNavigate?.('components')}
+                        onImport={() => setImportTarget({})}
+                        onRefresh={() => {
+                            void frameworks.refetch();
+                            void apps.refetch();
+                        }}
+                    />
+                )}
+
+                <ImportInstanceDialog
+                    target={importTarget}
+                    frameworks={manifests}
+                    servers={servers}
+                    isImporting={apps.isImporting}
+                    onClose={() => setImportTarget(null)}
+                    onSubmit={async (draft) => {
+                        const imported = await apps.importInstance({
+                            framework_id: draft.frameworkId,
+                            host_id: draft.hostId,
+                            path: draft.path,
+                            display_name: draft.displayName,
+                        });
+                        setImportTarget(null);
+                        pushInfoBar({
+                            key: `app-instance-imported:${imported.id}`,
+                            tone: 'success',
+                            title: `已接管 ${imported.display_name}`,
+                            content:
+                                imported.state === 'running'
+                                    ? '已由桌面端启动'
+                                    : imported.state === 'not_installed'
+                                      ? '依赖未同步，先点安装'
+                                      : '可在列表里启动、对接',
+                            autoDismissMs: 6000,
+                        });
                     }}
                 />
             </div>
@@ -252,6 +280,7 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
         manifest?.display_name ?? i.framework_id,
         `${hostIdDisplayLabel(i.host_id, servers)} :${i.port}`,
         i.installed_version ? `v${i.installed_version}` : null,
+        i.origin === 'imported' ? '导入' : null,
     ]
         .filter(Boolean)
         .join(' · ');
@@ -352,7 +381,12 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                     <FooterIcon label="重新探测" disabled={busy} onClick={() => onRefresh(i.id)}>
                         <ActionMotionIcon icon={RefreshCw} size={15} strokeWidth={2.2} motion={refreshMotion(busy)} />
                     </FooterIcon>
-                    <FooterIcon label="删除实例" disabled={busy} tone="danger" onClick={() => onDelete(i)}>
+                    <FooterIcon
+                        label={i.origin === 'imported' ? '释放接管' : '删除实例'}
+                        disabled={busy}
+                        tone="danger"
+                        onClick={() => onDelete(i)}
+                    >
                         <ActionMotionIcon icon={Trash2} size={15} strokeWidth={2.2} />
                     </FooterIcon>
                 </div>

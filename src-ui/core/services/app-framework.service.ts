@@ -15,7 +15,9 @@ import type {
     AppStoreInstalled,
     AppStoreMarketEntry,
     AppStoreResource,
+    AppProjectProbe,
     CreateAppInstanceRequest,
+    ImportAppInstanceRequest,
     KarinPluginInstalled,
     KarinPluginMarketEntry,
     OneBotLinkPlan,
@@ -38,6 +40,20 @@ export const appFrameworkService = {
         return invoke<AppInstance>('create_app_instance', { request });
     },
 
+    probeProject: async (
+        hostId: string,
+        frameworkId: string,
+        path: string,
+    ): Promise<AppProjectProbe> => {
+        if (!isTauri) return mockAppFrameworkApi.probeProject(hostId, frameworkId, path);
+        return invoke<AppProjectProbe>('probe_app_project', { hostId, frameworkId, path });
+    },
+
+    importInstance: async (request: ImportAppInstanceRequest): Promise<AppInstance> => {
+        if (!isTauri) return mockAppFrameworkApi.importInstance(request);
+        return invoke<AppInstance>('import_app_instance', { request });
+    },
+
     previewInstallDir: async (hostId: string, frameworkId: string): Promise<string> => {
         if (!isTauri) return mockAppFrameworkApi.previewInstallDir(hostId, frameworkId);
         return invoke<string>('preview_app_install_dir', { hostId, frameworkId });
@@ -52,6 +68,14 @@ export const appFrameworkService = {
     refresh: async (instanceId: string): Promise<AppInstance> => {
         if (!isTauri) return mockAppFrameworkApi.refresh(instanceId);
         return invoke<AppInstance>('refresh_app_instance', { instanceId });
+    },
+
+    tailLog: async (
+        instanceId: string,
+        lines = 1000,
+    ): Promise<{ lines: string[]; total_lines: number }> => {
+        if (!isTauri) return mockAppFrameworkApi.tailLog(instanceId, lines);
+        return invoke('tail_app_instance_log', { instanceId, lines });
     },
 
     start: async (instanceId: string): Promise<AppInstance> => {

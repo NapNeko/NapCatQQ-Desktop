@@ -21,6 +21,7 @@ import {
 import { ActionMotionIcon, ListItem } from '../../../../shared/ui/motion';
 import { ConfigConflictDialog } from '../ConfigConflictDialog';
 import { KarinPluginConfigDialog } from '../karin/KarinPluginConfigDialog';
+import { PaneLoading } from '../PaneStatus';
 import { useNoneBot2Store } from '../../../../hooks/apps/useNoneBot2Store';
 import { openExternalUrl } from '../../../../core/ipc/transport';
 import { cn } from '../../../../shared/utils/cn';
@@ -145,10 +146,7 @@ export const NoneBot2StoreTab: React.FC<{
             </PluginsToolbarPortal>
 
             {p.loading && p.rows.length === 0 ? (
-                <PagePlaceholder className="gap-3 py-16">
-                    <Spinner size="lg" tone="brand" label={`读取${kindLabel}`} />
-                    <p className="text-sm text-text-tertiary">正在读取{kindLabel}…</p>
-                </PagePlaceholder>
+                <PaneLoading text={`正在读取${kindLabel}…`} />
             ) : p.rows.length === 0 ? (
                 <PagePlaceholder className="gap-2 py-16">
                     <ActionMotionIcon icon={Blocks} size={28} className="text-text-tertiary" />

@@ -12,11 +12,45 @@ const remoteFiles = new Map<string, RemoteFileEntry[]>([
     [
         '/',
         [
+            { name: 'root', is_dir: true, size: 0 },
+            { name: 'home', is_dir: true, size: 0 },
+            { name: 'etc', is_dir: true, size: 0 },
+            { name: 'tmp', is_dir: true, size: 0 },
             { name: 'app', is_dir: true, size: 0 },
             { name: 'config', is_dir: true, size: 0 },
             { name: 'napcat_starter.sh', is_dir: false, size: 2048 },
             { name: 'README.md', is_dir: false, size: 450 },
         ],
+    ],
+    [
+        '/root',
+        [
+            { name: 'game-qqbot', is_dir: true, size: 0 },
+            { name: 'my-bot', is_dir: true, size: 0 },
+        ],
+    ],
+    [
+        '/root/game-qqbot',
+        [{ name: 'bot-xiuxian', is_dir: true, size: 0 }],
+    ],
+    [
+        '/root/game-qqbot/bot-xiuxian',
+        [
+            { name: 'bot.py', is_dir: false, size: 4096 },
+            { name: 'pyproject.toml', is_dir: false, size: 1024 },
+            { name: '.env', is_dir: false, size: 128 },
+        ],
+    ],
+    [
+        '/root/my-bot',
+        [
+            { name: 'bot.py', is_dir: false, size: 2048 },
+            { name: 'pyproject.toml', is_dir: false, size: 512 },
+        ],
+    ],
+    [
+        '/home',
+        [{ name: 'ubuntu', is_dir: true, size: 0 }],
     ],
     [
         '/config',
@@ -47,10 +81,7 @@ export function mockListRemoteFiles(_remoteId: string, path: string): Promise<Re
     return new Promise((resolve) => {
         setTimeout(() => {
             const normalized = path === '' || path === '/' ? '/' : path;
-            const files = remoteFiles.get(normalized) || [
-                { name: 'mock_file_1.log', is_dir: false, size: 4096 },
-                { name: 'mock_file_2.conf', is_dir: false, size: 1024 },
-            ];
+            const files = remoteFiles.get(normalized) ?? [];
             resolve(files);
         }, 400);
     });

@@ -17,6 +17,7 @@ import type {
     AppFrameworkManifest,
     AppInstance,
     CreateAppInstanceRequest,
+    ImportAppInstanceRequest,
 } from '../../core/ipc/types';
 
 export { useAppInstanceLog } from './appInstanceLogStore';
@@ -102,6 +103,12 @@ export function useAppInstances() {
         onError: fail('新建应用实例失败', 'app-create'),
     });
 
+    const importMutation = useMutation({
+        mutationFn: (req: ImportAppInstanceRequest) => appFrameworkService.importInstance(req),
+        onSuccess: patch,
+        onError: fail('导入应用实例失败', 'app-import'),
+    });
+
     const installMutation = useMutation({
         mutationFn: (id: string) => appFrameworkService.install(id),
         onSuccess: (_taskId, id) => {
@@ -145,7 +152,7 @@ export function useAppInstances() {
                 (old ?? []).filter((i) => i.id !== args.id),
             );
         },
-        onError: (err, args) => fail('删除实例失败', `app-delete:${args.id}`)(err),
+        onError: (err, args) => fail('注销失败', `app-delete:${args.id}`)(err),
     });
 
     const unlinkMutation = useMutation({
@@ -210,6 +217,8 @@ export function useAppInstances() {
 
         create: createMutation.mutateAsync,
         isCreating: createMutation.isPending,
+        importInstance: importMutation.mutateAsync,
+        isImporting: importMutation.isPending,
         install: installMutation.mutate,
         start: startMutation.mutate,
         stop: stopMutation.mutate,

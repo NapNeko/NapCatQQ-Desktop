@@ -34,6 +34,7 @@ interface HostComponentsViewProps {
     appFrameworks: AppFrameworkManifest[];
     appInstances: AppInstance[];
     onCreateAppInstance: (manifest: AppFrameworkManifest, hostId: string) => void;
+    onImportAppInstance: (manifest: AppFrameworkManifest, hostId: string) => void;
     latestVersionFor: (id: ComponentId) => string | null;
     /** 远端 release 全文（含更新日志）；无则不显示「日志」按钮 */
     latestReleaseFor: (id: ComponentId) => ReleaseInfoView | null;
@@ -79,6 +80,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
     appFrameworks,
     appInstances,
     onCreateAppInstance,
+    onImportAppInstance,
     latestVersionFor,
     latestReleaseFor,
     getProgress,
@@ -232,6 +234,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 machine={machine}
                 disableActions={isDemo}
                 onCreate={(manifest) => onCreateAppInstance(manifest, host.host_id)}
+                onImport={(manifest) => onImportAppInstance(manifest, host.host_id)}
             />
 
             <div data-tour-id="comp-group-runtime">
@@ -284,7 +287,8 @@ const AppFrameworkGroup: React.FC<{
     machine: MachineView;
     disableActions: boolean;
     onCreate: (manifest: AppFrameworkManifest) => void;
-}> = ({ manifests, instances, machine, disableActions, onCreate }) => {
+    onImport: (manifest: AppFrameworkManifest) => void;
+}> = ({ manifests, instances, machine, disableActions, onCreate, onImport }) => {
     if (manifests.length === 0) return null;
     const { host } = machine;
     return (
@@ -308,6 +312,7 @@ const AppFrameworkGroup: React.FC<{
                                 )}
                                 disabled={disableActions}
                                 onCreate={() => onCreate(manifest)}
+                                onImport={() => onImport(manifest)}
                             />
                         </div>
                     ))}

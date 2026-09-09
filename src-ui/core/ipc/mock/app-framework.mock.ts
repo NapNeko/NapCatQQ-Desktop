@@ -11,7 +11,9 @@ import type {
     AppStoreInstalled,
     AppStoreMarketEntry,
     AppStoreResource,
+    AppProjectProbe,
     CreateAppInstanceRequest,
+    ImportAppInstanceRequest,
     KarinPluginInstalled,
     KarinPluginMarketEntry,
     OneBotLinkPlan,
@@ -74,6 +76,7 @@ let instances: AppInstance[] = [
         installed_version: '1.17.0',
         created_at_ms: Date.now() - 86_400_000,
         install_renderer: true,
+        origin: 'created',
     },
     {
         id: 'd5e6f7a8',
@@ -86,15 +89,16 @@ let instances: AppInstance[] = [
         state: 'not_installed',
         created_at_ms: Date.now() - 600_000,
         install_renderer: true,
+        origin: 'created',
     },
     {
         id: 'n9b8c7d6',
         framework_id: 'nonebot2',
-        display_name: 'NoneBot2 · 本机',
-        placement: 'local_native',
-        host_id: 'local',
-        install_dir: 'D:/NapCatQQ/apps/nonebot2/n9b8c7d6',
-        port: 8080,
+        display_name: '荒境修仙',
+        placement: 'remote_native',
+        host_id: 'remote:production',
+        install_dir: '/root/game-qqbot/bot-xiuxian',
+        port: 13120,
         state: 'running',
         link: {
             bot_id: '10001',
@@ -102,9 +106,10 @@ let instances: AppInstance[] = [
             connection_name: 'ncd-app:n9b8c7d6',
             linked_at_ms: Date.now() - 1_800_000,
         },
-        installed_version: '2.4.2',
+        installed_version: '2.5.1',
         created_at_ms: Date.now() - 7_200_000,
         install_renderer: false,
+        origin: 'imported',
     },
 ];
 
@@ -149,10 +154,75 @@ export const mockAppFrameworkApi = {
             state: 'not_installed',
             created_at_ms: Date.now(),
             install_renderer: req.install_renderer ?? true,
+            origin: 'created',
         };
         instances = [...instances, created];
         emitMockEvent({ kind: 'app_instance_changed', instance: created, reason: 'created' });
         return withMockDelay(created);
+    },
+
+    probeProject: async (
+        hostId: string,
+        frameworkId: string,
+        path: string,
+    ): Promise<AppProjectProbe> => {
+        const trimmed = path.trim();
+        if (!trimmed) throw new Error('请填写项目目录');
+        if (hostId.startsWith('remote:') && !trimmed.startsWith('/')) {
+            throw new Error('远端路径必须是绝对路径');
+        }
+        if (/nope|not-a-project/i.test(trimmed)) {
+            throw new Error('这里不是可导入的项目');
+        }
+        const name = trimmed.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? frameworkId;
+        const isNonebot = frameworkId === 'nonebot2';
+        return withMockDelay({
+            framework_id: frameworkId,
+            path: trimmed,
+            display_name: name,
+            port: isNonebot ? 13120 : 7777,
+            version: isNonebot ? '2.5.1' : '1.17.0',
+            env_rel_path: isNonebot ? '.env' : '.env',
+            environment: isNonebot ? 'prod' : '',
+            ready: true,
+            running: hostId.startsWith('remote:'),
+            supervisors: hostId.startsWith('remote:') && isNonebot ? ['bot-xiuxian'] : [],
+            warnings:
+                hostId.startsWith('remote:') && isNonebot
+                    ? ['现在由 systemd 在跑（bot-xiuxian）。导入后改由这边开关，不要了可以还回去。']
+                    : [],
+            detected_bot_id: hostId.startsWith('remote:') && isNonebot ? '10001' : undefined,
+        });
+    },
+
+    importInstance: async (req: ImportAppInstanceRequest): Promise<AppInstance> => {
+        const probe = await mockAppFrameworkApi.probeProject(req.host_id, req.framework_id, req.path);
+        const id = Math.random().toString(16).slice(2, 10);
+        const imported: AppInstance = {
+            id,
+            framework_id: req.framework_id,
+            display_name: req.display_name.trim() || probe.display_name,
+            placement: req.host_id === 'local' ? 'local_native' : 'remote_native',
+            host_id: req.host_id,
+            install_dir: probe.path,
+            port: probe.port ?? 8080,
+            state: probe.ready ? 'running' : 'not_installed',
+            installed_version: probe.version,
+            created_at_ms: Date.now(),
+            install_renderer: false,
+            origin: 'imported',
+            link: probe.detected_bot_id
+                ? {
+                      bot_id: probe.detected_bot_id,
+                      mode: 'reverse_ws',
+                      connection_name: 'ncd-adopt-forward',
+                      linked_at_ms: Date.now(),
+                  }
+                : undefined,
+        };
+        instances = [...instances, imported];
+        emitMockEvent({ kind: 'app_instance_changed', instance: imported, reason: 'imported' });
+        return withMockDelay(imported);
     },
 
     install: async (id: string): Promise<string> => {
@@ -168,6 +238,15 @@ export const mockAppFrameworkApi = {
     },
 
     refresh: async (id: string): Promise<AppInstance> => withMockDelay(require(id)),
+
+    tailLog: async (id: string, _lines = 1000): Promise<{ lines: string[]; total_lines: number }> => {
+        const inst = require(id);
+        const lines = [
+            `[INFO] ${inst.display_name} listening on :${inst.port}`,
+            '[INFO] OneBot V11 已连接',
+        ];
+        return withMockDelay({ lines, total_lines: lines.length });
+    },
 
     start: async (id: string): Promise<AppInstance> => {
         const next: AppInstance = { ...require(id), state: 'running', last_error: undefined };

@@ -5,7 +5,7 @@
 // 实例的启停 / 对接 / 日志在「应用端」页。
 
 import React from 'react';
-import { ExternalLink, Plus } from 'lucide-react';
+import { ExternalLink, Import, Plus } from 'lucide-react';
 import { Button } from '../../shared/ui';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
 import { useOpenExternal } from '../../hooks/useOpenExternal';
@@ -28,6 +28,7 @@ interface AppFrameworkRowProps {
     runtimeDeps: RuntimeDepReadiness[];
     disabled?: boolean;
     onCreate: () => void;
+    onImport: () => void;
 }
 
 export function hostSupportsAppFramework(host: HostInfo, manifest: AppFrameworkManifest): boolean {
@@ -72,6 +73,7 @@ export const AppFrameworkRow: React.FC<AppFrameworkRowProps> = ({
     runtimeDeps,
     disabled = false,
     onCreate,
+    onImport,
 }) => {
     const openExternal = useOpenExternal();
     const supported = hostSupportsAppFramework(host, manifest);
@@ -102,10 +104,16 @@ export const AppFrameworkRow: React.FC<AppFrameworkRowProps> = ({
     }
 
     const footer = supported ? (
-        <Button size="sm" variant="primary" onClick={onCreate} disabled={disabled}>
-            <ActionMotionIcon icon={Plus} size={13} strokeWidth={2.4} motion={EMPHASIS_MOTION} />
-            新建实例
-        </Button>
+        <div className="flex items-center gap-1.5">
+            <Button size="sm" variant="secondary" onClick={onImport} disabled={disabled}>
+                <ActionMotionIcon icon={Import} size={13} strokeWidth={2.4} />
+                导入
+            </Button>
+            <Button size="sm" variant="primary" onClick={onCreate} disabled={disabled}>
+                <ActionMotionIcon icon={Plus} size={13} strokeWidth={2.4} motion={EMPHASIS_MOTION} />
+                新建实例
+            </Button>
+        </div>
     ) : (
         <span className="text-2xs text-text-disabled">—</span>
     );
