@@ -8,6 +8,7 @@ use std::fmt;
 use ts_rs::TS;
 
 use crate::bot_config::WebsocketClientConfig;
+use crate::deployment_task::AppStoreResource;
 use crate::ids::BotId;
 use crate::kinds::RuntimeTarget;
 
@@ -266,6 +267,12 @@ pub struct AppFrameworkManifest {
     /// 真相仍是 Component::requirements()，注册表测试保证两者一致
     #[serde(default)]
     pub runtime_component_ids: Vec<String>,
+    /// 商店 Tab 对应的资源；空 = 无商店。UI 按此挂 Tab，不写框架名。
+    #[serde(default)]
+    pub store_resources: Vec<AppStoreResource>,
+    /// 新建实例是否展示「一并安装渲染器」
+    #[serde(default)]
+    pub has_install_renderer: bool,
 }
 
 /// 对接时将改动的应用端文件（预览用，只描述不带内容）
