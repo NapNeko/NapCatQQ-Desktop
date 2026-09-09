@@ -21,12 +21,31 @@ use super::manifest::{
 };
 use crate::adapter::apply_with_backup;
 use crate::env_file::EnvFile;
-use crate::karin::plugin::PluginLogSink;
+use crate::adapter::PluginLogSink;
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use crate::uv_tooling::{read_uv_marker, resolve_uv};
 
 pub const ONEBOT_V11_MODULE: &str = "nonebot.adapters.onebot.v11";
+pub const NONEBOT_ADAPTERS_URL: &str = "https://registry.nonebot.dev/adapters.json";
+pub const NONEBOT_PLUGINS_URL: &str = "https://registry.nonebot.dev/plugins.json";
 const CMD_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+
+/// nb-cli 同序：官网 → jsDelivr → 国内 jsDelivr → gh-proxy。
+pub fn nonebot_registry_urls(file: &str) -> Vec<String> {
+    let official = match file {
+        "adapters.json" => NONEBOT_ADAPTERS_URL.to_string(),
+        "plugins.json" => NONEBOT_PLUGINS_URL.to_string(),
+        other => format!("https://registry.nonebot.dev/{other}"),
+    };
+    vec![
+        official,
+        format!("https://cdn.jsdelivr.net/gh/nonebot/registry@results/{file}"),
+        format!("https://jsd.cdn.zzko.cn/gh/nonebot/registry@results/{file}"),
+        format!(
+            "https://gh-proxy.com/https://raw.githubusercontent.com/nonebot/registry/results/{file}"
+        ),
+    ]
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogItem {

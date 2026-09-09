@@ -34,6 +34,27 @@ impl AppInstanceConfig {
             Self::NoneBot2(_) => "",
         }
     }
+
+    /// 应用端监听口（编排层同步实例 `port` / 重新对接用）。
+    pub fn listen_port(&self) -> u16 {
+        match self {
+            Self::Karin(c) => c.env.http_port,
+            Self::NoneBot2(c) => c.env_prod.port,
+        }
+    }
+
+    /// 对接依赖的输入（端口 / 反向 WS 秘钥）是否变了。跨框架比较视为没变。
+    pub fn link_inputs_changed(&self, after: &Self) -> bool {
+        match (self, after) {
+            (Self::Karin(before), Self::Karin(after)) => {
+                crate::karin::config::link_inputs_changed(&before.env, &after.env)
+            }
+            (Self::NoneBot2(before), Self::NoneBot2(after)) => {
+                crate::nonebot2::config::link_inputs_changed(&before.env_prod, &after.env_prod)
+            }
+            _ => false,
+        }
+    }
 }
 
 /// 单个文档的版本信息（信封里逐文件列出，UI 据此判断哪些改动要重启）
@@ -268,6 +289,79 @@ mod tests {
         assert_eq!(AppInstanceConfig::Karin(cfg.clone()).webui_auth_key(), "");
         cfg.env.http_auth_key = "secret-1".into();
         assert_eq!(AppInstanceConfig::Karin(cfg).webui_auth_key(), "secret-1");
+    }
+
+    #[test]
+    fn listen_port_reads_karin_http_port() {
+        let mut cfg = KarinInstanceConfig::upstream_default();
+        assert_eq!(AppInstanceConfig::Karin(cfg.clone()).listen_port(), 7777);
+        cfg.env.http_port = 7801;
+        assert_eq!(AppInstanceConfig::Karin(cfg).listen_port(), 7801);
+    }
+
+    #[test]
+    fn listen_port_reads_nonebot2_env_prod_port() {
+        let mut env = crate::nonebot2::config::NoneBot2EnvProd::default();
+        assert_eq!(
+            AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig {
+                env_prod: env.clone()
+            })
+            .listen_port(),
+            8080
+        );
+        env.port = 9090;
+        assert_eq!(
+            AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig { env_prod: env })
+                .listen_port(),
+            9090
+        );
+    }
+
+    #[test]
+    fn link_inputs_changed_tracks_karin_port_and_ws_key() {
+        let a = AppInstanceConfig::Karin(KarinInstanceConfig::upstream_default());
+        let mut b_cfg = KarinInstanceConfig::upstream_default();
+        assert!(!a.link_inputs_changed(&AppInstanceConfig::Karin(b_cfg.clone())));
+        b_cfg.env.http_port = 8000;
+        assert!(a.link_inputs_changed(&AppInstanceConfig::Karin(b_cfg.clone())));
+        b_cfg = KarinInstanceConfig::upstream_default();
+        b_cfg.env.ws_server_auth_key = "x".into();
+        assert!(a.link_inputs_changed(&AppInstanceConfig::Karin(b_cfg.clone())));
+        b_cfg = KarinInstanceConfig::upstream_default();
+        b_cfg.env.log_level = "debug".into();
+        assert!(!a.link_inputs_changed(&AppInstanceConfig::Karin(b_cfg)));
+    }
+
+    #[test]
+    fn link_inputs_changed_tracks_nonebot2_port_and_token() {
+        let a = AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig {
+            env_prod: crate::nonebot2::config::NoneBot2EnvProd::default(),
+        });
+        let mut env = crate::nonebot2::config::NoneBot2EnvProd::default();
+        let same = AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig {
+            env_prod: env.clone(),
+        });
+        assert!(!a.link_inputs_changed(&same));
+        env.port = 9091;
+        let port = AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig {
+            env_prod: env.clone(),
+        });
+        assert!(a.link_inputs_changed(&port));
+        env = crate::nonebot2::config::NoneBot2EnvProd::default();
+        env.onebot_access_token = "tok".into();
+        let token = AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig {
+            env_prod: env,
+        });
+        assert!(a.link_inputs_changed(&token));
+    }
+
+    #[test]
+    fn link_inputs_changed_is_false_across_frameworks() {
+        let karin = AppInstanceConfig::Karin(KarinInstanceConfig::upstream_default());
+        let nb2 = AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig {
+            env_prod: crate::nonebot2::config::NoneBot2EnvProd::default(),
+        });
+        assert!(!karin.link_inputs_changed(&nb2));
     }
 
     #[test]

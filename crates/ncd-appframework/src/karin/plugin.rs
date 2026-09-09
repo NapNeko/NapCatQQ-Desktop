@@ -1,7 +1,6 @@
 //! Karin 官方插件目录条目、扫描与 Host 侧装更卸（HTTP 在 ncd-runtime）。
 
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::time::Duration;
 
 use ncd_domain::{AppConfigDocument, AppConfigFormat, AppInstance};
@@ -10,8 +9,10 @@ use ncd_traits::AppFrameworkError;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// 装更卸命令行输出；编排层转成任务 `ProgressKind::Log`，这里不碰 DeploymentTask。
-pub type PluginLogSink = Arc<dyn Fn(String) + Send + Sync>;
+pub use crate::adapter::PluginLogSink;
+
+/// Karin 官方插件目录（`@karinjs/plugins-list` latest）。
+pub const KARIN_PLUGINS_LIST_URL: &str = "https://registry.npmjs.com/@karinjs/plugins-list/latest";
 
 use super::config::{KARIN_CONFIG_DIR, KarinInstanceConfig, KarinScopeRule};
 use crate::node_tooling::{

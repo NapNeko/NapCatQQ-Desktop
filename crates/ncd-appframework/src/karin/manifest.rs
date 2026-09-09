@@ -54,6 +54,8 @@ pub fn karin_manifest() -> AppFrameworkManifest {
         link_modes: vec![OneBotLinkMode::ReverseWs],
         component_id: KARIN_COMPONENT_ID.to_string(),
         runtime_component_ids: vec!["nodejs".to_string()],
+        store_resources: vec![ncd_domain::AppStoreResource::Plugin],
+        has_install_renderer: true,
     }
 }
 
@@ -76,5 +78,7 @@ mod tests {
             vec![AppPlacement::LocalNative, AppPlacement::RemoteNative]
         );
         assert!(!back.supported_placements.contains(&AppPlacement::RemoteDocker));
+        assert!(back.has_install_renderer);
+        assert_eq!(back.store_resources, vec![ncd_domain::AppStoreResource::Plugin]);
     }
 }

@@ -18,7 +18,9 @@ pub mod registry;
 pub mod store;
 pub mod uv_tooling;
 
-pub use adapter::{AppComponentSpec, AppFrameworkAdapter, apply_with_backup, restore_from_backup};
+pub use adapter::{
+    AppComponentSpec, AppFrameworkAdapter, PluginLogSink, apply_with_backup, restore_from_backup,
+};
 pub use config_doc::{
     AppConfigDocumentRevision, AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope,
     DocumentSnapshot, MISSING_REVISION, combined_revision, revision_of,
@@ -26,15 +28,16 @@ pub use config_doc::{
 pub use env_file::{EnvEntry, EnvFile, EnvWrite};
 pub use karin::config::{KarinEnv, KarinInstanceConfig};
 pub use karin::plugin::{
-    KarinPluginAppFile, KarinPluginAuthor, KarinPluginInstalled, KarinPluginKind,
-    KarinPluginMarketEntry, KarinPluginRepo, PluginLogSink, apply_plugin_enabled,
+    KARIN_PLUGINS_LIST_URL, KarinPluginAppFile, KarinPluginAuthor, KarinPluginInstalled,
+    KarinPluginKind, KarinPluginMarketEntry, KarinPluginRepo, apply_plugin_enabled,
     app_file_basename, confirm_plugin_on_disk, git_clone_url, parse_karin_plugins_list,
     write_app_file_bytes,
 };
 pub use karin::{KARIN_FRAMEWORK_ID, KarinAdapter, KarinComponent, KarinIntegration, karin_manifest};
 pub use nonebot2::{
-    NONEBOT2_FRAMEWORK_ID, NoneBot2Adapter, NoneBot2Component, NoneBot2EnvEntry, NoneBot2EnvProd,
-    NoneBot2InstanceConfig, NoneBot2Integration, nonebot2_manifest, parse_nonebot_adapters_json,
+    NONEBOT2_FRAMEWORK_ID, NONEBOT_ADAPTERS_URL, NONEBOT_PLUGINS_URL, NoneBot2Adapter,
+    NoneBot2Component, NoneBot2EnvEntry, NoneBot2EnvProd, NoneBot2InstanceConfig,
+    NoneBot2Integration, nonebot2_manifest, nonebot_registry_urls, parse_nonebot_adapters_json,
     parse_nonebot_plugins_json,
 };
 pub use registry::AppFrameworkRegistry;

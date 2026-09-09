@@ -22,7 +22,8 @@ pub use config::{NoneBot2EnvEntry, NoneBot2EnvProd, NoneBot2InstanceConfig};
 pub use integration::NoneBot2Integration;
 pub use manifest::{NONEBOT2_FRAMEWORK_ID, nonebot2_manifest};
 pub use store::{
-    ONEBOT_V11_MODULE, parse_nonebot_adapters_json, parse_nonebot_plugins_json,
+    NONEBOT_ADAPTERS_URL, NONEBOT_PLUGINS_URL, ONEBOT_V11_MODULE, nonebot_registry_urls,
+    parse_nonebot_adapters_json, parse_nonebot_plugins_json,
 };
 
 use crate::adapter::{
@@ -32,7 +33,7 @@ use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
 };
 use crate::env_file::EnvFile;
-use crate::karin::plugin::PluginLogSink;
+use crate::adapter::PluginLogSink;
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use config::nonebot2_config_documents;
 use manifest::{ENV_ONEBOT_ACCESS_TOKEN, NONEBOT2_ENV_PROD_FILE, NONEBOT2_STDOUT_LOG};
@@ -266,5 +267,30 @@ impl AppFrameworkAdapter for NoneBot2Adapter {
         _plugin_name: &str,
     ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
         Ok(store::plugin_config_docs())
+    }
+
+    fn store_market_urls(&self, resource: AppStoreResource) -> Vec<String> {
+        match resource {
+            AppStoreResource::Adapter => store::nonebot_registry_urls("adapters.json"),
+            AppStoreResource::Plugin => store::nonebot_registry_urls("plugins.json"),
+        }
+    }
+
+    fn store_market_cache_key(&self, resource: AppStoreResource) -> Option<&'static str> {
+        match resource {
+            AppStoreResource::Adapter => Some("adapters"),
+            AppStoreResource::Plugin => Some("plugins"),
+        }
+    }
+
+    fn parse_store_market(
+        &self,
+        resource: AppStoreResource,
+        text: &str,
+    ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+        match resource {
+            AppStoreResource::Adapter => store::parse_nonebot_adapters_json(text),
+            AppStoreResource::Plugin => store::parse_nonebot_plugins_json(text),
+        }
     }
 }

@@ -383,6 +383,67 @@ impl AppFrameworkAdapter for KarinAdapter {
             revision: MISSING_REVISION.to_string(),
         })
     }
+
+    fn store_enable_via_config(&self) -> bool {
+        true
+    }
+
+    fn apply_store_enabled(
+        &self,
+        config: &AppInstanceConfig,
+        name: &str,
+        _resource: AppStoreResource,
+        enabled: bool,
+    ) -> Result<Option<AppInstanceConfig>, AppFrameworkError> {
+        let AppInstanceConfig::Karin(mut cfg) = config.clone() else {
+            return Err(AppFrameworkError::Validation(
+                "写入的不是 Karin 配置".into(),
+            ));
+        };
+        apply_plugin_enabled(&mut cfg, name, enabled)?;
+        Ok(Some(AppInstanceConfig::Karin(cfg)))
+    }
+
+    async fn confirm_store_item(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        entry: &crate::store::AppStoreMarketEntry,
+    ) -> Result<(), AppFrameworkError> {
+        let Some(karin) = entry.to_karin() else {
+            return Ok(());
+        };
+        confirm_plugin_on_disk(host, instance, &karin).await
+    }
+
+    fn store_market_urls(&self, resource: AppStoreResource) -> Vec<String> {
+        match resource {
+            AppStoreResource::Plugin => vec![plugin::KARIN_PLUGINS_LIST_URL.to_string()],
+            AppStoreResource::Adapter => Vec::new(),
+        }
+    }
+
+    fn parse_store_market(
+        &self,
+        resource: AppStoreResource,
+        text: &str,
+    ) -> Result<Vec<crate::store::AppStoreMarketEntry>, AppFrameworkError> {
+        match resource {
+            AppStoreResource::Plugin => Ok(parse_karin_plugins_list(text)?
+                .into_iter()
+                .map(crate::store::AppStoreMarketEntry::from_karin)
+                .collect()),
+            AppStoreResource::Adapter => Ok(Vec::new()),
+        }
+    }
+
+    fn store_app_file_dest(&self, instance: &AppInstance, basename: &str) -> Option<HostPath> {
+        Some(
+            HostPath::from_posix(&instance.install_dir)
+                .join("plugins/karin-plugin-example")
+                .join(basename),
+        )
+    }
 }
 
 #[cfg(test)]

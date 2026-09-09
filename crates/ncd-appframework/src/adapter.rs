@@ -17,8 +17,10 @@ use ncd_traits::{AppFrameworkError, AppIntegration};
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, read_document, write_document_text,
 };
-use crate::karin::plugin::PluginLogSink;
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
+
+/// 装更卸命令行输出；编排层转成任务 `ProgressKind::Log`。
+pub type PluginLogSink = Arc<dyn Fn(String) + Send + Sync>;
 
 /// 为某个应用实例构造 Component 所需的输入（编排层填）
 #[derive(Debug, Clone)]
@@ -239,6 +241,56 @@ pub trait AppFrameworkAdapter: Send + Sync {
             instance.framework_id.as_str().to_string(),
         ))
     }
+
+    /// 商店启停是否改类型化配置（再走 `write_config` 同步对接）。
+    /// false：自己写盘（`set_store_enabled`）。
+    fn store_enable_via_config(&self) -> bool {
+        false
+    }
+
+    /// 在类型化配置上改商店启停；`None` 表示走 `set_store_enabled`。
+    fn apply_store_enabled(
+        &self,
+        _config: &AppInstanceConfig,
+        _name: &str,
+        _resource: AppStoreResource,
+        _enabled: bool,
+    ) -> Result<Option<AppInstanceConfig>, AppFrameworkError> {
+        Ok(None)
+    }
+
+    /// 装/更之后核对落盘（Karin 插件目录）；默认不做事。
+    async fn confirm_store_item(
+        &self,
+        _host: &dyn Host,
+        _instance: &AppInstance,
+        _entry: &AppStoreMarketEntry,
+    ) -> Result<(), AppFrameworkError> {
+        Ok(())
+    }
+
+    fn store_market_urls(&self, _resource: AppStoreResource) -> Vec<String> {
+        Vec::new()
+    }
+
+    fn store_market_cache_key(&self, _resource: AppStoreResource) -> Option<&'static str> {
+        None
+    }
+
+    fn parse_store_market(
+        &self,
+        _resource: AppStoreResource,
+        _text: &str,
+    ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+        Err(AppFrameworkError::PluginUnsupported(
+            self.manifest().id.as_str().to_string(),
+        ))
+    }
+
+    /// App 口味文件落盘路径；None 表示此框架不收 app 文件。
+    fn store_app_file_dest(&self, _instance: &AppInstance, _basename: &str) -> Option<HostPath> {
+        None
+    }
 }
 
 /// 「备份 → 写 → 失败还原」骨架：`write` 返回 Err 时把 `files` 全部还原到备份内容。
@@ -324,4 +376,131 @@ pub async fn restore_from_backup(
             .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use ncd_domain::AppStoreResource;
+
+    use crate::config_doc::AppInstanceConfig;
+    use crate::karin::config::KarinInstanceConfig;
+    use crate::karin::KarinAdapter;
+    use crate::nonebot2::NoneBot2Adapter;
+    use crate::AppFrameworkAdapter;
+
+    #[test]
+    fn karin_store_enable_goes_through_typed_config() {
+        let adapter = KarinAdapter::new();
+        assert!(adapter.store_enable_via_config());
+        let cfg = AppInstanceConfig::Karin(KarinInstanceConfig::upstream_default());
+        let next = adapter
+            .apply_store_enabled(&cfg, "@karinjs/plugin-basic", AppStoreResource::Plugin, false)
+            .unwrap()
+            .expect("Karin 启停应返回改过的配置");
+        let AppInstanceConfig::Karin(k) = next else {
+            panic!("expected Karin config");
+        };
+        assert!(
+            k.groups
+                .iter()
+                .any(|r| r.key == "default" && r.disable.contains(&"@karinjs/plugin-basic".into()))
+        );
+    }
+
+    #[test]
+    fn nonebot2_store_enable_does_not_mutate_typed_config() {
+        let adapter = NoneBot2Adapter::new();
+        assert!(!adapter.store_enable_via_config());
+        let cfg = AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig {
+            env_prod: crate::nonebot2::config::NoneBot2EnvProd::default(),
+        });
+        assert!(adapter
+            .apply_store_enabled(&cfg, "nonebot_plugin_foo", AppStoreResource::Plugin, false)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn karin_store_market_urls_only_for_plugins() {
+        let adapter = KarinAdapter::new();
+        assert_eq!(
+            adapter.store_market_urls(AppStoreResource::Plugin),
+            vec![crate::karin::plugin::KARIN_PLUGINS_LIST_URL.to_string()]
+        );
+        assert!(adapter.store_market_urls(AppStoreResource::Adapter).is_empty());
+        assert!(adapter.store_market_cache_key(AppStoreResource::Plugin).is_none());
+    }
+
+    #[test]
+    fn nonebot2_store_market_urls_follow_nb_cli() {
+        let adapter = NoneBot2Adapter::new();
+        let plugins = adapter.store_market_urls(AppStoreResource::Plugin);
+        let adapters = adapter.store_market_urls(AppStoreResource::Adapter);
+        assert_eq!(plugins[0], "https://registry.nonebot.dev/plugins.json");
+        assert_eq!(adapters[0], "https://registry.nonebot.dev/adapters.json");
+        assert!(plugins.iter().any(|u| u.contains("jsdelivr.net/gh/nonebot/registry@results")));
+        assert_eq!(
+            adapter.store_market_cache_key(AppStoreResource::Plugin),
+            Some("plugins")
+        );
+        assert_eq!(
+            adapter.store_market_cache_key(AppStoreResource::Adapter),
+            Some("adapters")
+        );
+    }
+
+    #[test]
+    fn store_app_file_dest_is_per_adapter() {
+        use ncd_domain::{
+            AppFrameworkId, AppInstance, AppInstanceId, AppInstanceState, AppPlacement,
+        };
+
+        let instance = AppInstance {
+            id: AppInstanceId::new("k1"),
+            framework_id: AppFrameworkId::new("karin"),
+            display_name: "K".into(),
+            placement: AppPlacement::LocalNative,
+            host_id: "local".into(),
+            install_dir: "/apps/karin/k1".into(),
+            port: 7777,
+            state: AppInstanceState::Installed,
+            link: None,
+            installed_version: None,
+            last_error: None,
+            created_at_ms: 1,
+            install_renderer: true,
+        };
+        let dest = KarinAdapter::new()
+            .store_app_file_dest(&instance, "index.js")
+            .expect("Karin 收 app 文件");
+        assert_eq!(dest.as_posix(), "/apps/karin/k1/plugins/karin-plugin-example/index.js");
+        assert!(
+            NoneBot2Adapter::new()
+                .store_app_file_dest(&instance, "index.js")
+                .is_none(),
+            "NoneBot2 没有 Karin 式 app 文件落点"
+        );
+    }
+
+    #[test]
+    fn parse_store_market_dispatches_by_adapter() {
+        let karin = KarinAdapter::new();
+        let list = karin
+            .parse_store_market(
+                AppStoreResource::Plugin,
+                r#"{"plugins":[{"name":"x","type":"npm","description":"d","time":"2025-01-01 00:00:00","home":"h","author":[],"repo":[]}]}"#,
+            )
+            .unwrap();
+        assert_eq!(list[0].id, "x");
+
+        let nb = NoneBot2Adapter::new();
+        let adapters = nb
+            .parse_store_market(
+                AppStoreResource::Adapter,
+                r#"[{"module_name":"nonebot.adapters.console","project_link":"nonebot-adapter-console","name":"Console"}]"#,
+            )
+            .unwrap();
+        assert_eq!(adapters[0].id, "nonebot.adapters.console");
+        assert_eq!(adapters[0].resource, AppStoreResource::Adapter);
+    }
 }

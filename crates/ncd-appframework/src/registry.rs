@@ -20,7 +20,7 @@ impl AppFrameworkRegistry {
         Self::default()
     }
 
-    /// 内置：Karin（首发）+ NoneBot2（第二波）。接新框架只在这里加一行。
+    /// 内置框架。接新框架：本函数加一行 + `ComponentId` 变体 + `is_app_framework` +（可选）前端 UI 模块。
     pub fn with_builtin() -> Self {
         let mut reg = Self::new();
         reg.register(Arc::new(KarinAdapter::new()));
@@ -118,6 +118,22 @@ mod tests {
             let mut declared = m.runtime_component_ids.clone();
             declared.sort();
             assert_eq!(declared, from_reqs, "{} 的 runtime_component_ids 与 requirements 不一致", m.id.as_str());
+        }
+    }
+
+    #[test]
+    fn manifest_store_resources_have_market_urls() {
+        let reg = AppFrameworkRegistry::with_builtin();
+        for m in reg.manifests() {
+            let adapter = reg.get(&m.id).expect("registered");
+            for resource in &m.store_resources {
+                assert!(
+                    !adapter.store_market_urls(*resource).is_empty(),
+                    "{} 声明了 {:?} 商店但没有目录 URL",
+                    m.id.as_str(),
+                    resource
+                );
+            }
         }
     }
 }
