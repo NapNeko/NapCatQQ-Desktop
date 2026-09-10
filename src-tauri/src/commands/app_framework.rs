@@ -5,9 +5,9 @@ use ncd_component::ComponentId;
 use ncd_deploy::StepKind;
 use ncd_domain::{
     AppConfigDocument, AppConfigIssue, AppConfigText, AppFrameworkId, AppFrameworkManifest,
-    AppInstance, AppInstanceId, AppPluginAction, AppProjectProbe, AppStoreResource, BotId,
-    CreateAppInstanceRequest, DeploymentTaskKind, DeploymentTaskResource, ImportAppInstanceRequest,
-    OneBotLinkPlan,
+    AppInstance, AppInstanceId, AppPluginAction, AppPluginConfigSchema, AppProjectProbe,
+    AppStoreResource, AppWebUiAccount, BotId, CreateAppInstanceRequest, DeploymentTaskKind,
+    DeploymentTaskResource, ImportAppInstanceRequest, OneBotLinkPlan,
 };
 use ncd_runtime::{
     AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreInstalled,
@@ -30,6 +30,9 @@ pub struct AppInstanceWebUi {
     pub url: String,
     /// Karin `HTTP_AUTH_KEY`；空则前端不写剪贴板。
     pub auth_key: String,
+    /// 用户名密码类 WebUI（AstrBot）的账号；None = 该框架不是账号密码登录
+    #[ts(optional)]
+    pub account: Option<AppWebUiAccount>,
 }
 
 /// 配置读写命令的结构化错误：前端按 `kind` 分流（冲突 → 重载/覆盖对话框；校验 → 定位字段）。
@@ -389,7 +392,7 @@ pub async fn get_app_instance_webui(
         .map_err(|e| e.to_string())?;
     let port = state
         .app_manager
-        .desktop_loopback_port(&instance)
+        .desktop_webui_loopback_port(&instance)
         .await
         .map_err(|e| e.to_string())?;
     let mut view = instance.clone();
@@ -399,7 +402,41 @@ pub async fn get_app_instance_webui(
         .webui_url(&view, "127.0.0.1")
         .ok_or_else(|| "该应用端没有 WebUI".to_string())?;
     let auth_key = state.app_manager.webui_auth_key(&instance.id).await;
-    Ok(AppInstanceWebUi { url, auth_key })
+    let account = state.app_manager.webui_account(&instance).await;
+    Ok(AppInstanceWebUi {
+        url,
+        auth_key,
+        account,
+    })
+}
+
+/// 只看账号不开隧道：实例停着时从详情页查看 / 重置密码用。
+#[tauri::command]
+pub async fn get_app_instance_webui_account(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<AppWebUiAccount>, String> {
+    let instance = state
+        .app_manager
+        .get_instance(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(state.app_manager.webui_account(&instance).await)
+}
+
+/// 重置账号密码类 WebUI 的密码（`password` 空 = 随机生成）；实例须已停止。
+#[tauri::command]
+pub async fn reset_app_instance_webui_password(
+    instance_id: String,
+    password: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<AppWebUiAccount, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    let instance = state.app_manager.get_instance(&id).await?;
+    resolve_host_with_autoconnect(&instance.host_id, &state)
+        .await
+        .map_err(|e| AppConfigError::from(AppFrameworkError::Host(e)))?;
+    Ok(state.app_manager.reset_webui_password(&id, password).await?)
 }
 
 #[tauri::command]
@@ -467,6 +504,26 @@ pub async fn list_app_plugin_config_docs(
 }
 
 #[tauri::command]
+pub async fn get_app_plugin_config_schema(
+    instance_id: String,
+    plugin_name: String,
+    state: State<'_, AppState>,
+) -> Result<Option<AppPluginConfigSchema>, String> {
+    let id = AppInstanceId::new(instance_id);
+    let instance = state
+        .app_manager
+        .get_instance(&id)
+        .await
+        .map_err(|e| e.to_string())?;
+    let _ = resolve_host_with_autoconnect(&instance.host_id, &state).await?;
+    state
+        .app_manager
+        .plugin_config_schema(&id, &plugin_name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn list_app_instance_plugins(
     instance_id: String,
     state: State<'_, AppState>,
@@ -518,6 +575,7 @@ pub async fn submit_app_plugin_op(
     let fw = match instance.framework_id.as_str() {
         "karin" => "Karin",
         "nonebot2" => "NoneBot2",
+        "astrbot" => "AstrBot",
         other => other,
     };
     let app_manager = std::sync::Arc::clone(&state.app_manager);

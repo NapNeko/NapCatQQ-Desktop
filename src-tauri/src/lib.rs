@@ -338,15 +338,18 @@ pub fn run() {
             Arc::new(event_bus.clone()),
             Arc::clone(&store),
         ));
-        Arc::new(ncd_runtime::AppManager::new(
-            Arc::new(ncd_runtime::AppFrameworkRegistry::with_builtin()),
-            store,
-            app_runtime,
-            Arc::clone(&host_resolver_for_apps),
-            Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::BotConfigPort>,
-            Arc::new(event_bus.clone()),
-            &data_root,
-        ))
+        Arc::new(
+            ncd_runtime::AppManager::new(
+                Arc::new(ncd_runtime::AppFrameworkRegistry::with_builtin()),
+                store,
+                app_runtime,
+                Arc::clone(&host_resolver_for_apps),
+                Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::BotConfigPort>,
+                Arc::new(event_bus.clone()),
+                &data_root,
+            )
+            .with_secret_store(Arc::clone(&secrets)),
+        )
     };
     let app_manager_reconcile = Arc::clone(&app_manager);
     let app_manager_host_recovery = Arc::clone(&app_manager);
@@ -700,6 +703,8 @@ pub fn run() {
             commands::app_framework::apply_app_link,
             commands::app_framework::unlink_app_instance,
             commands::app_framework::get_app_instance_webui,
+            commands::app_framework::get_app_instance_webui_account,
+            commands::app_framework::reset_app_instance_webui_password,
             commands::app_framework::read_app_instance_config,
             commands::app_framework::write_app_instance_config,
             commands::app_framework::list_app_config_documents,
@@ -709,6 +714,7 @@ pub fn run() {
             commands::app_framework::list_app_store,
             commands::app_framework::list_app_store_installed,
             commands::app_framework::list_app_plugin_config_docs,
+            commands::app_framework::get_app_plugin_config_schema,
             commands::app_framework::list_app_instance_plugins,
             commands::app_framework::submit_app_plugin_op,
             commands::app_framework::set_app_plugin_enabled,
