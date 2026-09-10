@@ -94,7 +94,6 @@ export const RemoteHostPanelNext: React.FC = () => {
                 pushInfoBar({
                     tone: 'success',
                     title: '连接成功',
-                    content: '服务器在线，可以部署组件',
                     autoDismissMs: 3000,
                 });
             } else if (report.hostKeyMismatch) {
@@ -185,9 +184,6 @@ export const RemoteHostPanelNext: React.FC = () => {
                     <h1 className="font-display text-xl font-semibold text-text">
                         远端主机
                     </h1>
-                    <p className="mt-1 text-sm text-text-secondary">
-                        管理 SSH 服务器档案。在组件页选择主机后可在远端部署 NapCat 运行时。
-                    </p>
                 </div>
                 <div className="flex items-center gap-1.5">
                     <Tooltip>
@@ -414,12 +410,12 @@ function EmptyState({ onCreate, onImport }: { onCreate: () => void; onImport: ()
                     还没有远端服务器
                 </p>
                 <p className="mt-1 text-xs text-text-secondary">
-                    添加一台 SSH 服务器后，就能在组件页把 NapCat 部署到远端。也可从本机 ~/.ssh/config 导入。
+                    添加 SSH 服务器后，可在组件页把 NapCat 部署到远端。
                 </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
                 <Button size="sm" variant="primary" onClick={onCreate}>
-                    添加第一台服务器
+                    添加服务器
                 </Button>
                 <Button size="sm" variant="secondary" onClick={onImport}>
                     从 SSH 配置导入
@@ -544,7 +540,7 @@ function HostKeyConfirmDialog({
                         </span>
                     </DialogTitle>
                     <DialogDescription>
-                        首次连接 {prompt.host}:{prompt.port}。请核对下方指纹与服务器真实 host key
+                        首次连接 {prompt.host}:{prompt.port}。核对下方指纹与服务器真实 host key
                         一致后再信任，避免中间人攻击窃取登录凭据。
                     </DialogDescription>
                 </DialogHeader>

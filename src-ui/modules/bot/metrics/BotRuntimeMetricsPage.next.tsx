@@ -230,10 +230,10 @@ function ResourceMeter({
     );
 }
 
-const SERIES_OPTIONS: { id: HistorySeriesKey; label: string; hint: string }[] = [
-    { id: 'rss', label: '内存 RSS', hint: '进程常驻内存趋势' },
-    { id: 'eventsOut', label: '出站事件', hint: 'OneBot 事件发出累计' },
-    { id: 'actionsIn', label: '入站 action', hint: '收到的 action 累计' },
+const SERIES_OPTIONS: { id: HistorySeriesKey; label: string }[] = [
+    { id: 'rss', label: '内存 RSS' },
+    { id: 'eventsOut', label: '出站事件' },
+    { id: 'actionsIn', label: '入站 action' },
 ];
 
 function SegmentControl<T extends string>({
@@ -319,10 +319,6 @@ function TrendConfigMenu({
                             value: o.id,
                             label: o.label,
                         }))}
-                        hint={
-                            SERIES_OPTIONS.find((o) => o.id === series)?.hint ??
-                            undefined
-                        }
                     />
 
                     <div className="space-y-1.5">
@@ -335,12 +331,11 @@ function TrendConfigMenu({
                                 {
                                     value: 'zero',
                                     label: '从 0',
-                                    title: '从 0 起，便于读绝对量',
                                 },
                                 {
                                     value: 'fit',
                                     label: '贴合',
-                                    title: '贴合数据区间，便于看小波动',
+                                    title: '贴合数据区间看小波动',
                                 },
                             ]}
                         />
@@ -764,7 +759,7 @@ export function BotRuntimeMetricsPageNext({
         range: '1h',
     });
     const [series, setSeries] = useState<HistorySeriesKey>('rss');
-    /** false = 从 0 起（默认更直观）；true = 贴合数据区间看小波动 */
+    /** false = 从 0 起（默认）；true = 贴合数据区间看小波动 */
     const [fitData, setFitData] = useState(false);
     const [showDots, setShowDots] = useState(false);
     const history = useBotRuntimeMetricsHistory(
@@ -999,7 +994,6 @@ export function BotRuntimeMetricsPageNext({
                     <div className="grid min-h-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
                         <Panel
                             title="总览"
-                            description="当前健康度与关键计数"
                             className="min-h-0"
                             aside={overviewAside}
                         >
@@ -1024,7 +1018,7 @@ export function BotRuntimeMetricsPageNext({
                                                 (metrics?.nodes.length ?? 0) === 0
                                                     ? '暂无节点'
                                                     : activeNodes > 0
-                                                        ? '有近期活动'
+                                                        ? undefined
                                                         : '暂无活动'
                                             }
                                         />
@@ -1037,7 +1031,7 @@ export function BotRuntimeMetricsPageNext({
                                             label="累计错误"
                                             value={formatCompactCount(totals.errors)}
                                             tone={totals.errors > 0 ? 'danger' : 'neutral'}
-                                            hint={totals.errors > 0 ? '需关注节点表' : '正常'}
+                                            hint={totals.errors > 0 ? '需关注节点表' : undefined}
                                         />
                                     </div>
                                 </div>
@@ -1063,7 +1057,7 @@ export function BotRuntimeMetricsPageNext({
                                     detail={
                                         heap != null
                                             ? `堆 ${formatBytes(Number(heap))}`
-                                            : '进程常驻内存'
+                                            : undefined
                                     }
                                     ratio={
                                         rss != null &&
@@ -1133,7 +1127,6 @@ export function BotRuntimeMetricsPageNext({
 
                     <Panel
                         title="节点与出入流量"
-                        description="各 OneBot 网络节点累计收发"
                         className="min-h-0"
                         aside={
                             <span className="font-mono text-[10px] tabular-nums text-text-tertiary">
@@ -1148,7 +1141,7 @@ export function BotRuntimeMetricsPageNext({
 
                 <Panel
                     title="流量趋势"
-                    description="约每分钟一点 · 悬停查看采样"
+                    description="约每分钟一点"
                     className="min-h-[18rem] lg:col-span-5 lg:row-span-2"
                     aside={
                         <div className="flex items-center gap-1">

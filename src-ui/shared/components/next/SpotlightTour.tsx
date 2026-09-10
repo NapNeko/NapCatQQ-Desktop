@@ -509,7 +509,7 @@ export function SpotlightTour({
                     </p>
                     {missing ? (
                         <p className="mt-2 text-[11px] text-warning">
-                            没找到对应界面元素，可点下一步或跳过。
+                            没找到界面元素，可点下一步或跳过。
                         </p>
                     ) : null}
                 </DialogStepTransition>

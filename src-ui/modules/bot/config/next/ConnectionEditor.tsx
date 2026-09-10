@@ -1,12 +1,6 @@
-// 单个连接的就地编辑器。inline 展开（不弹 Dialog）—— 用户可以在主页面同时
-// 看到列表里其他连接，避免 Dialog 模态框阻断浏览的反直觉问题。
-//
-// 设计要点：
-//   - 公共字段（名称 / token / 消息格式 / debug）在前，差异字段在中段，
-//     "启用此连接" 开关放在 Header 右侧（与"取消/保存"分离，不混入提交流）
-//   - 校验全走 core/domain/bot/connections.ts，UI 只负责调度
-//   - 校验失败时把 reason 留在编辑器内（小红条）+ 同时 push 全局 InfoBar
-//     就近提示更直接，全局 InfoBar 仅作 fallback（用户切走时还能看到）
+// 单个连接的就地编辑器：inline 展开而不是弹 Dialog，改一条时仍能看到列表里其他连接。
+// 校验全走 core/domain/bot/connections.ts；失败 reason 就近显示在编辑器内，
+// 全局 InfoBar 只作 fallback（用户切走时还能看到）。
 
 import { useEffect, useState } from 'react';
 import {
@@ -33,7 +27,7 @@ import type { WsRole } from '../../../../core/ipc/generated/domain/WsRole';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 
 const MSG_FORMAT_ITEMS = [
-    { value: 'array' as MessagePostFormat, label: 'Array（结构化数组，推荐）' },
+    { value: 'array' as MessagePostFormat, label: 'Array（结构化数组）' },
     { value: 'string' as MessagePostFormat, label: 'String（纯文本）' },
 ];
 
@@ -226,7 +220,6 @@ function HttpServerFields({
                 value={data.path}
                 onValueChange={(v) => patch('path' as keyof ConnectionConfig, v as never)}
                 placeholder="/"
-                hint={isSnowLuma ? 'SnowLuma 服务端监听的具体 HTTP 路由' : undefined}
             />
             {!isSnowLuma && (
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
@@ -325,7 +318,6 @@ function HttpClientFields({
                         patch('timeoutMs' as keyof ConnectionConfig, (v ?? undefined) as never)
                     }
                     placeholder="留空使用引擎默认值"
-                    hint="SnowLuma 独有可选字段"
                 />
             )}
         </>

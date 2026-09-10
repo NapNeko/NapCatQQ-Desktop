@@ -152,7 +152,7 @@ export const ImportSshConfigDialog: React.FC<ImportSshConfigDialogProps> = ({
                 <DialogHeader>
                     <DialogTitle>从 SSH 配置导入</DialogTitle>
                     <DialogDescription>
-                        把本机已经能连上的机器加进远端列表，不用再手填地址。
+                        把本机已能连上的机器加进远端列表。
                     </DialogDescription>
                 </DialogHeader>
 

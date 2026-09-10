@@ -16,16 +16,61 @@ export interface Greeting {
     hint: string;
 }
 
-const GREETINGS: Record<DayPhase, Greeting> = {
-    morning: { title: '早上好', hint: '美好的一天，NapCat 正在守护你的机器人实例。' },
-    noon: { title: '中午好', hint: '午间时刻，NapCat 替你盯着机器人实例。' },
-    afternoon: { title: '下午好', hint: '下午时光，NapCat 继续守护你的实例与连接。' },
-    evening: { title: '晚上好', hint: '夜晚安宁，NapCatQQ 持续为你守护消息与连接。' },
-    night: { title: '夜深了', hint: '夜深人静，后台服务还在替你守着。' },
+const TITLES: Record<DayPhase, string> = {
+    morning: '早上好',
+    noon: '中午好',
+    afternoon: '下午好',
+    evening: '晚上好',
+    night: '夜深了',
 };
 
-export function getGreeting(phase: DayPhase): Greeting {
-    return GREETINGS[phase];
+// 副标题是吉祥物的口气，不是状态播报（实例为零 / 全停由 fleetHint 顶掉）。
+const HINTS: Record<DayPhase, readonly string[]> = {
+    morning: [
+        '天亮了，昨晚一切照旧。',
+        '刚睡醒，先看一眼实例。',
+        '早班接上了，你慢慢来。',
+        '窗户开了条缝，风挺凉。',
+        '早饭吃了吗，我吃了。',
+    ],
+    noon: [
+        '饭点了，机器归我看。',
+        '中午这会儿最安静。',
+        '日头正高，风扇有点响。',
+        '你去吃饭，我不饿。',
+        '午休一会儿也行，出事我叫你。',
+    ],
+    afternoon: [
+        '下午容易困，我先撑着。',
+        '太阳偏西了。',
+        '这会儿最容易走神，别问我怎么知道。',
+        '晒着挺舒服，别叫我。',
+        '再撑两小时。',
+    ],
+    evening: [
+        '天黑了，灯打开吧。',
+        '晚上人多，消息也多。',
+        '这个点最热闹，我精神。',
+        '窗外开始亮灯了。',
+        '你吃过了吗，我又饿了。',
+    ],
+    night: [
+        '这个点还没睡？',
+        '夜里很静，我醒着。',
+        '早点睡，明天再看。',
+        '就我们俩还醒着。',
+        '风扇声比白天清楚。',
+    ],
+};
+
+/// 同一天同一时段固定一句：Hello 卡每分钟重渲一次，副标题不能跟着跳。
+export function greetingSeed(now: Date): number {
+    return now.getFullYear() * 384 + now.getMonth() * 32 + now.getDate();
+}
+
+export function getGreeting(phase: DayPhase, seed = 0): Greeting {
+    const hints = HINTS[phase];
+    return { title: TITLES[phase], hint: hints[Math.abs(seed) % hints.length] };
 }
 
 export type CelestialKind = 'sun' | 'moon';

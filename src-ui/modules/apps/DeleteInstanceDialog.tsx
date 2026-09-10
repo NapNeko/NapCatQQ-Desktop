@@ -34,8 +34,8 @@ export const DeleteInstanceDialog: React.FC<{
                     <DialogTitle>{imported ? '释放接管？' : '删除实例？'}</DialogTitle>
                     <DialogDescription>
                         {imported
-                            ? `还原「${instance.display_name}」导入时的配置，恢复原来的 systemd（如有），然后注销控制台记录${instance.state === 'running' ? '，会先停止进程' : ''}${instance.link ? '，并移除协议 Bot 上对应的对接连接' : ''}。`
-                            : `即将删除应用实例「${instance?.display_name}」${instance?.state === 'running' ? '，会先停止进程' : ''}${instance?.link ? '，并移除协议 Bot 上对应的对接连接' : ''}。`}
+                            ? `还原「${instance.display_name}」导入时的配置与 systemd（如有），注销控制台记录${instance.state === 'running' ? '，会先停止进程' : ''}${instance.link ? '，并移除协议 Bot 上的对接连接' : ''}。`
+                            : `删除应用实例「${instance?.display_name}」${instance?.state === 'running' ? '，会先停止进程' : ''}${instance?.link ? '，并移除协议 Bot 上的对接连接' : ''}。`}
                     </DialogDescription>
                 </DialogHeader>
                 <Checkbox

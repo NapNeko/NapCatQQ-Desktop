@@ -253,7 +253,7 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                 <DialogHeader>
                     <DialogTitle>导入已有 Bot</DialogTitle>
                     <DialogDescription>
-                        从已发现的 NapCat / SnowLuma 安装和 Docker 容器里登记 QQ。
+                        登记远端已发现的 NapCat / SnowLuma 安装与 Docker 容器。
                         不会改写远端 WebUI 密码；若实例还在跑，导入后会接到控制台。
                     </DialogDescription>
                 </DialogHeader>
@@ -266,7 +266,7 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                     <p className="py-5 text-center text-sm text-text-secondary">读取失败，详情见日志</p>
                 ) : rows.length === 0 ? (
                     <p className="py-5 text-center text-sm text-text-secondary">
-                        还没有发现可导入的 Bot。请先在远端页添加主机并刷新库存，或点下面重新发现。
+                        还没有发现可导入的 Bot。先在远端页添加主机并刷新库存，或点下面重新发现。
                     </p>
                 ) : (
                     <BotPickList
@@ -289,7 +289,7 @@ export const ImportRemoteBotsDialog: React.FC<Props> = ({ open, onOpenChange }) 
                             disabled={busy || selectedCount === 0}
                             onCheckedChange={(v) => setTakeOverWebuiPwd(v === true)}
                             label="接管 WebUI 密码"
-                            hint="勾选后，所选远端 Native SnowLuma 下次启动会覆盖 WebUI 密码；不勾选则不改远端配置。"
+                            hint="所选远端 Native SnowLuma 下次启动覆盖 WebUI 密码；不勾选不改远端配置。"
                         />
                     </div>
                 )}

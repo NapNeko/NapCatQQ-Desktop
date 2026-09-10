@@ -151,8 +151,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
                 <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-md border border-border-subtle bg-surface/40 px-6 py-10 text-center">
                     <WifiOff size={28} className="text-text-tertiary" strokeWidth={1.5} />
                     <p className="text-sm text-text-secondary">{host.display_name} 主机不可达</p>
-                    <p className="max-w-[48ch] text-xs text-text-tertiary">连接失败，详情见日志</p>
-                    <p className="text-2xs text-text-tertiary">请在「远端」页手动测试连接，或检查网络/防火墙/SSH 配置。</p>
+                    <p className="text-2xs text-text-tertiary">到「远端」页测试连接，或检查网络 / 防火墙 / SSH 配置。</p>
                     <div className="mt-1">
                         <Button size="sm" variant="primary" onClick={() => onRetryDetect(host.host_id)}>
                             重试探测
@@ -208,7 +207,7 @@ export const HostComponentsView: React.FC<HostComponentsViewProps> = ({
             {isDemo ? (
                 <p className="rounded-md border border-brand/25 bg-brand/[0.06] px-3 py-2 text-[12.5px] leading-relaxed text-text-secondary">
                     当前是<strong className="font-medium text-text">演示远端</strong>
-                    ，不会连真机、也不写入远程档案。用来对照远端 NC / SL 要装啥。
+                    ，不会连真机、也不写入远程档案。仅用于预览远端 NC / SL 的组件清单。
                 </p>
             ) : null}
             <div className="flex w-full flex-col gap-3" data-tour-id="comp-group-framework">
@@ -295,7 +294,7 @@ const AppFrameworkGroup: React.FC<{
         <div data-tour-id="comp-group-app">
             <FormSection
                 title="应用端"
-                description="按实例安装；实例的启停、对接协议 Bot、日志在「应用端」页"
+                description="按实例安装；启停、对接与日志在「应用端」页"
                 layout="none"
             >
                 <div className={componentCardGridClass}>

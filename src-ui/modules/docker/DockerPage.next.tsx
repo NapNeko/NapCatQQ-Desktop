@@ -65,9 +65,6 @@ export const DockerPageNext: React.FC = () => {
                 <div>
                     <p className="text-2xs uppercase tracking-widest text-text-tertiary">docker</p>
                     <h1 className="font-display text-xl font-semibold text-text">Docker 管理</h1>
-                    <p className="mt-1 text-sm text-text-secondary">
-                        管理远端服务器上的容器与本地镜像；部署与拉取框架镜像请前往组件页。
-                    </p>
                 </div>
                 <Button size="sm" variant="secondary" onClick={docker.refetch} disabled={docker.isProbing}>
                     <ActionMotionIcon icon={RefreshCw} size={14} motion={refreshMotion(docker.isProbing)} />
@@ -195,7 +192,7 @@ const ImageList: React.FC<{
             <PagePlaceholder className="gap-2">
                 <ActionMotionIcon icon={Disc3} size={28} motion={RESOURCE_MOTION} className="text-text-tertiary" />
                 <p className="text-sm text-text-secondary">这台主机上还没有本地镜像</p>
-                <p className="text-xs text-text-tertiary">在组件页拉取 NapCat / SnowLuma 框架镜像后会出现在这里</p>
+                <p className="text-xs text-text-tertiary">在组件页拉取框架镜像后会出现在这里</p>
             </PagePlaceholder>
         );
     }

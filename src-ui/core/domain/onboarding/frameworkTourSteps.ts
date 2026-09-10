@@ -21,7 +21,7 @@ export const LOCAL_FRAMEWORK_STEPS: readonly FrameworkTourStep[] = [
         phase: 'local',
         target: TOUR_IDS.groupFramework,
         title: '两个协议端',
-        body: 'Bot 跑在 NapCat 或 SnowLuma 上。Windows 本机两边都只要 QQ。下面的「应用端」是接在协议端后面的插件框架，按实例安装。',
+        body: 'Bot 跑在 NapCat 或 SnowLuma 上，Windows 本机两边都只要 QQ。下面的「应用端」是接在协议端后面的插件框架，按实例装。',
         selectHostId: 'local',
     },
     {
@@ -103,14 +103,14 @@ export const BOT_CREATE_STEPS: readonly FrameworkTourStep[] = [
         phase: 'bots',
         target: TOUR_IDS.navBots,
         title: '侧栏 · 机器人',
-        body: '组件装好之后，日常在这里管实例。和「组件」页分工：那边装依赖，这边建 Bot、启停、扫码。',
+        body: '「组件」页装依赖，这里建 Bot、启停、扫码。',
     },
     {
         id: 'bots-list',
         phase: 'bots',
         target: TOUR_IDS.botListHeader,
         title: 'Bot 实例列表',
-        body: '每个实例一份配置。空列表时中间可创建；有实例后卡片上启动、配置、日志。下一步会打开演示新建页（不会真的保存）。',
+        body: '每个实例一份配置，卡片上启动、配置、日志。下一步打开演示新建页。',
     },
     {
         id: 'bots-create-open',
@@ -138,21 +138,21 @@ export const BOT_CREATE_STEPS: readonly FrameworkTourStep[] = [
         phase: 'bots',
         target: TOUR_IDS.botConnectionsBody,
         title: '② 连接 · 对外通道',
-        body: '至少一个 OneBot 通道（HTTP / WebSocket 等），外部才能连这个 Bot。底部可新增；演示不要求你真加。',
+        body: '至少一个 OneBot 通道（HTTP / WebSocket 等），外部才能连这个 Bot。底部可新增。',
     },
     {
         id: 'bots-save',
         phase: 'bots',
         target: TOUR_IDS.botSaveActions,
         title: '③ 保存（演示）',
-        body: '日常填完点保存会写入配置。演示模式下点保存只会提示「不会真正添加」，方便你认位置。',
+        body: '日常填完点保存会写入配置。演示模式下点保存只会提示「不会真正添加」。',
     },
     {
         id: 'bots-after',
         phase: 'bots',
         target: TOUR_IDS.botListHeader,
         title: '真建好之后',
-        body: '回到列表点启动，出码用手机 QQ 扫；超时再开一次登录。状态变绿即登录成功。引导到此结束。',
+        body: '回到列表点启动，出码用手机 QQ 扫；超时再开一次登录。状态变绿即登录成功。',
     },
 ];
 

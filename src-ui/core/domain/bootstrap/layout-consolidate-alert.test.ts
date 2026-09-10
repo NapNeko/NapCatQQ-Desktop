@@ -38,7 +38,7 @@ describe('resolveLayoutConsolidateAlert', () => {
         expect(alert.kind).toBe('success');
         if (alert.kind === 'none') throw new Error('expected alert');
         expect(alert.title).toBe('数据目录已整理');
-        expect(alert.content).toContain('含密钥，请自行保管');
+        expect(alert.content).toContain('含密钥');
         expect(alert.content).toContain('整理 3 项');
         expect(alert.autoDismissMs).toBe(10_000);
     });

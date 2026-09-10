@@ -16,7 +16,7 @@ export function buildLayoutConsolidateContent(
 ): string {
     const parts: string[] = [];
     if (snap.backup_path) {
-        parts.push(`备份：${snap.backup_path}（含密钥，请自行保管）`);
+        parts.push(`备份：${snap.backup_path}（含密钥）`);
     }
     if (snap.moved_count > 0) {
         parts.push(`整理 ${snap.moved_count} 项`);

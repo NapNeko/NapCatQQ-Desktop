@@ -195,7 +195,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                         disabled={isRunning}
                         hint={
                             isRunning
-                                ? '运行中请先停止再切换底座'
+                                ? '运行中需先停止再切换底座'
                                 : undefined
                         }
                     />
@@ -327,7 +327,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
 
             <FormSection
                 title="附加服务"
-                description="非必填，仅在需要发送音乐卡片时配置"
+                description="仅发送音乐卡片时需要"
             >
                 <TextField
                     label="音乐签名接口"
@@ -391,7 +391,7 @@ function SceneExplainerPopover({ children }: { children: ReactNode }) {
                     type="button"
                     className="inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-[11px] text-text-tertiary transition-colors hover:bg-inset hover:text-text"
                 >
-                    了解此模式
+                    机制说明
                 </button>
             </PopoverTrigger>
             <PopoverContent side="bottom" align="end" sideOffset={6}>
@@ -444,7 +444,7 @@ function SnowLumaStartModeBlock({
         <>
             <RadioGroup
                 items={[
-                    { value: 'cold_start', label: '冷启动（推荐）' },
+                    { value: 'cold_start', label: '冷启动（默认）' },
                     { value: 'hot_start', label: '热启动' },
                 ]}
                 value={mode}
@@ -453,7 +453,7 @@ function SnowLumaStartModeBlock({
             />
             {mode === 'hot_start' && (
                 <InlineNotice tone="neutral">
-                    启动前请在此 QQ 号（
+                    启动前需在此 QQ 号（
                     <span className="font-mono">{data.QQID || '未填'}</span>
                     ）下登录 QQ；找不到匹配进程时启动会失败
                 </InlineNotice>

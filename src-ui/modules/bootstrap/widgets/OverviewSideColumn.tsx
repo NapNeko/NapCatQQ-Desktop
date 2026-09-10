@@ -1,4 +1,4 @@
-// 概览副列：监控关闭时的态势摘要 + 实例运行台；开启时的双曲线区。
+// 概览副列：监控关闭时的状态摘要 + 实例运行台；开启时的双曲线区。
 
 import {
     Activity,
@@ -97,7 +97,7 @@ export function BotFleetOverviewCard({
                     </div>
                     <div>
                         <h3 className="font-display text-[14.5px] font-semibold text-text">
-                            实例运行态势
+                            实例状态
                         </h3>
                         <p className="text-[11.5px] text-text-tertiary">{subtitle}</p>
                     </div>
@@ -154,7 +154,7 @@ export function BotFleetOverviewCard({
             {stats.total === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 py-4 text-center rounded-md bg-inset/40 border border-dashed border-border-subtle/80">
                     <p className="text-xs text-text-secondary">
-                        尚未创建任何 Bot 实例
+                        尚未创建 Bot 实例
                     </p>
                     <Button variant="primary" size="sm" onClick={() => onNavigate('bots')} className="text-2xs h-7">
                         前往实例页创建

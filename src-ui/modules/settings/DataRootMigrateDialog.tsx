@@ -229,8 +229,7 @@ export function DataRootMigrateDialog({
                 <DialogHeader>
                     <DialogTitle>迁移数据目录</DialogTitle>
                     <DialogDescription>
-                        将当前数据根整树复制到新位置（配置、密钥、组件）。完成后可删除旧目录并重启。
-                        与「导出 ZIP」不同：ZIP 不含密钥与组件安装树。
+                        将数据根整树复制到新位置：配置、密钥、组件。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -245,14 +244,14 @@ export function DataRootMigrateDialog({
                             <p>步骤：</p>
                             <ol className="list-decimal space-y-1 pl-5">
                                 <li>
-                                    选择一个<strong>空文件夹</strong>
-                                    作为新的数据根（路径本身即 data root，不会再拼产品名）。
+                                    选一个<strong>空文件夹</strong>
+                                    作为新数据根（路径本身即 data root，不再拼产品名）。
                                 </li>
-                                <li>确认预览中的目标路径与将复制的文件结构。</li>
-                                <li>开始迁移；完成后可删除旧目录，再重启应用。</li>
+                                <li>确认预览的目标路径与文件结构。</li>
+                                <li>开始迁移。</li>
                             </ol>
                             <p className="text-[12px] text-text-tertiary">
-                                无需管理员权限。旧目录仅在你确认后才会删除。
+                                无需管理员权限；旧目录仅在你确认后删除。
                             </p>
                         </div>
                     ) : null}
@@ -340,7 +339,7 @@ export function DataRootMigrateDialog({
                                     </p>
                                 ) : (
                                     <p className="mt-1.5 text-[12px] text-text-tertiary">
-                                        确认新位置正常后可删除旧目录，释放磁盘空间。
+                                        确认新位置正常后可删除旧目录。
                                     </p>
                                 )}
                             </div>

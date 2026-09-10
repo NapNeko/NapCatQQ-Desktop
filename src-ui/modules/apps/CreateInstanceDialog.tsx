@@ -8,7 +8,6 @@ import {
     Checkbox,
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -136,9 +135,6 @@ export const CreateInstanceDialog: React.FC<{
                     <>
                         <DialogHeader>
                             <DialogTitle>新建 {manifest.display_name} 实例</DialogTitle>
-                            <DialogDescription>
-                                {locked ? '安装到当前选中的主机' : '选择安装位置'}
-                            </DialogDescription>
                         </DialogHeader>
                         <div className="flex flex-col gap-3">
                             <Select
@@ -153,7 +149,7 @@ export const CreateInstanceDialog: React.FC<{
                                     !locked && supportsRemote && servers.length === 0
                                         ? '尚未添加远端主机，可先到「远端」页添加'
                                         : draft.hostId.startsWith('remote:')
-                                          ? '远端经 SSH 安装、启停与写配置'
+                                          ? '安装、启停、写配置都走 SSH'
                                           : undefined
                                 }
                             />

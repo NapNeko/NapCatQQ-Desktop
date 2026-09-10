@@ -67,7 +67,7 @@ export function SettingsPageNext() {
                     设置
                 </h1>
                 <p className="mt-1.5 text-[13px] text-text-secondary">
-                    外观、窗口、运行与通知修改后请保存；数据页中目录与导入导出可即时操作
+                    多数设置需保存后生效；数据页操作即时执行
                 </p>
             </header>
 

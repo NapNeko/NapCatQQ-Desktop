@@ -77,7 +77,6 @@ export function AboutTab() {
                     key: 'about-desktop-update',
                     tone: 'success',
                     title: '已是最新版本',
-                    content: `当前 ${APP_VERSION_LABEL}，无需更新。`,
                 });
                 return;
             }
@@ -87,7 +86,7 @@ export function AboutTab() {
                 key: 'about-desktop-update',
                 tone: 'info',
                 title: `发现新版本 ${formatUpdateVersion(next.version)}`,
-                content: '可在本页安装，或到「组件」页管理 Desktop 更新。',
+                content: '可在本页或「组件」页安装。',
             });
         } catch (err) {
             setCheckState('error');
@@ -107,7 +106,7 @@ export function AboutTab() {
                 tone: 'info',
                 title: '正在安装更新',
                 content:
-                    '将下载安装包并显示安装进度；应用会短暂退出，安装完成后自动重新打开。进度也可在任务队列查看。',
+                    '应用会短暂退出，安装完成后自动重开；进度见任务队列。',
             });
             await startAction('desktop_self', 'local', 'update');
             // 成功路径后端会 exit；若仍返回则多为 mock / 异常未退出
@@ -115,7 +114,7 @@ export function AboutTab() {
                 key: 'about-desktop-update',
                 tone: 'info',
                 title: '安装程序已启动',
-                content: '若应用未自动退出，请手动关闭后等待安装完成。',
+                content: '应用未自动退出时手动关闭，等安装跑完。',
             });
         } catch (err) {
             pushErrorBar({
@@ -149,10 +148,7 @@ export function AboutTab() {
 
     return (
         <SettingsTabSections>
-            <SettingsSection
-                title="应用"
-                description="桌面端版本与更新；与组件页 Desktop 更新共用同一套安装链路"
-            >
+            <SettingsSection title="应用">
                 <div className="flex items-center justify-between gap-6 py-5 first:pt-1 last:pb-1">
                     <div className="flex min-w-0 items-center gap-3">
                         <img
@@ -213,7 +209,7 @@ export function AboutTab() {
                 </div>
             </SettingsSection>
 
-            <SettingsSection title="开源" description="源码、发行说明与许可证">
+            <SettingsSection title="开源">
                 <FieldRow label="源码仓库" description={APP_GITHUB_REPO}>
                     <Button
                         variant="secondary"
@@ -225,7 +221,7 @@ export function AboutTab() {
                         <ExternalLink size={12} strokeWidth={2} className="opacity-70" />
                     </Button>
                 </FieldRow>
-                <FieldRow label="发行说明" description="GitHub Releases">
+                <FieldRow label="发行说明">
                     <Button
                         variant="secondary"
                         size="sm"
@@ -247,10 +243,7 @@ export function AboutTab() {
                         <ExternalLink size={12} strokeWidth={2} className="opacity-70" />
                     </Button>
                 </FieldRow>
-                <FieldRow
-                    label="用户协议"
-                    description="EULA 与隐私说明（本机同意记录）"
-                >
+                <FieldRow label="用户协议" description="EULA 与隐私说明">
                     <Button
                         variant="secondary"
                         size="sm"
@@ -262,7 +255,7 @@ export function AboutTab() {
                 </FieldRow>
                 <FieldRow
                     label="入门引导"
-                    description="认路说明 + 组件页框架对比。不会重走协议门禁。"
+                    description="重看认路说明与框架对比；不会重走协议门禁"
                     isLast
                 >
                     <Button
@@ -282,9 +275,6 @@ export function AboutTab() {
                 <SettingsSection
                     key={group.title}
                     title={`鸣谢 · ${group.title}`}
-                    description={
-                        group.title === '前端' ? '感谢这些开源项目' : undefined
-                    }
                 >
                     {group.items.map((item, index) => (
                         <FieldRow

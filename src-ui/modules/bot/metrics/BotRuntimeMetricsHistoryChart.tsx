@@ -276,7 +276,7 @@ export function BotRuntimeMetricsHistoryChart({
     series,
     accentColor,
     title,
-    emptyHint = '尚无采样点；运行一段时间后出现（约 ≥1 分钟一点）',
+    emptyHint = '尚无采样点，运行一段时间后出现',
     className,
     scaleMode = 'zero',
     showDots = false,

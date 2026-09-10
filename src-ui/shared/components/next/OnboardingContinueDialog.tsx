@@ -58,10 +58,10 @@ export function OnboardingContinueDialog({
 
                         <div className="relative min-w-0 max-w-xl">
                             <DialogTitle className="font-display text-[1.5rem] font-bold leading-snug text-[var(--text-hero-title)] sm:text-[1.65rem]">
-                                组件这边告一段落
+                                组件部分结束
                             </DialogTitle>
                             <DialogDescription className="mt-2.5 text-[13px] leading-relaxed text-text-secondary">
-                                框架和依赖已经认过路。接下来可以走一遍「添加 Bot」演示：会打开真实新建页并预填示例，点保存不会写入。也可以先自己逛。
+                                「添加 Bot」演示会打开真实新建页并预填示例，点保存不会写入。
                             </DialogDescription>
                         </div>
                     </div>
@@ -69,7 +69,7 @@ export function OnboardingContinueDialog({
                     <div className="grid flex-1 grid-cols-1 gap-3 p-5 sm:grid-cols-2 sm:gap-3 sm:p-5">
                         <ChoiceCard
                             title="继续：演示创建 Bot"
-                            description="打开新建页，逐步看身份、运行位置、连接和保存（不会真正添加）。"
+                            description="逐步看身份、运行位置、连接和保存（不会真正添加）。"
                             icon={Bot}
                             disabled={submitting}
                             primary
@@ -77,7 +77,7 @@ export function OnboardingContinueDialog({
                         />
                         <ChoiceCard
                             title="先自己逛"
-                            description="结束引导。装好依赖后可自己点加号真实创建。设置 → 关于 可重新打开。"
+                            description="结束引导。设置 → 关于 可重新打开。"
                             icon={SkipForward}
                             disabled={submitting}
                             onClick={onFinish}

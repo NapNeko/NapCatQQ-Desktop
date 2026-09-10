@@ -38,8 +38,8 @@ export const TaskQueueEmptyState: React.FC<TaskQueueEmptyStateProps> = ({
                 </p>
                 <p className="text-[13px] leading-relaxed text-text-secondary">
                     {isGlobal
-                        ? '在组件页安装或更新 QQ、NapCat 等；在远端安装 Docker；或通过 Docker 部署框架后，进度会集中显示在这里。'
-                        : '试试切换上方的「全部」或「进行中」查看其它任务。'}
+                        ? '组件页安装更新、远端安装 Docker、Docker 部署框架的进度都在这里。'
+                        : '切换上方的「全部」或「进行中」看其它任务。'}
                 </p>
             </div>
             {isGlobal && onNavigate && (

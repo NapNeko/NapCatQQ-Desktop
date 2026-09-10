@@ -32,7 +32,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../../../shared/ui';
+import { Dialog, DialogContent, DialogTitle } from '../../../../shared/ui';
 import { useThemeTokens } from '../../../../hooks/theme/useThemeTokens';
 import type { NapCatLoginInvalidationReason } from '../../../../core/ipc/types';
 
@@ -84,9 +84,6 @@ export function QrCodeDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent size="sm">
                 <DialogTitle>扫码登录 · {botId}</DialogTitle>
-                <DialogDescription>
-                    用 QQ 客户端扫描下方二维码完成登录。
-                </DialogDescription>
 
                 <div className="mt-4 flex items-center justify-center rounded-md bg-elevated p-6 ring-1 ring-border-subtle">
                     {qrcodeUrl ? <QrCanvas content={qrcodeUrl} /> : <QrPending />}
@@ -276,7 +273,7 @@ function QrCanvas({ content }: { content: string }) {
 function QrPending() {
     return (
         <div className="flex h-[280px] w-[280px] items-center justify-center text-sm text-text-tertiary">
-            二维码已失效，请稍候…
+            等待二维码…
         </div>
     );
 }

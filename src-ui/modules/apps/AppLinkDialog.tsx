@@ -190,7 +190,7 @@ export function AppLinkDialog({
             <DialogContent size="lg" dismissOnOutsideClick={!applying}>
                 <DialogHeader>
                     <DialogTitle>对接应用端</DialogTitle>
-                    <DialogDescription>协议 Bot 以反向 WS 连到应用端，双方配置一并写入。</DialogDescription>
+                    <DialogDescription>协议 Bot 反向 WS 连到应用端，两端配置一并写入。</DialogDescription>
                 </DialogHeader>
 
                 <div className="flex flex-col gap-4">

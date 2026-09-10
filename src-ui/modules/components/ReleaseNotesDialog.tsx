@@ -68,9 +68,7 @@ export function ReleaseNotesDialog({
                                 )}
                             </DialogTitle>
                             <DialogDescription className="mt-1">
-                                {publishedLabel
-                                    ? `发布于 ${publishedLabel}`
-                                    : '来自远端 Release 快照（中转或 GitHub）'}
+                                {publishedLabel ? `发布于 ${publishedLabel}` : null}
                             </DialogDescription>
                         </div>
                     </div>
@@ -85,7 +83,7 @@ export function ReleaseNotesDialog({
                         />
                     ) : (
                         <p className="text-sm text-text-tertiary">
-                            暂无远端版本信息，请稍后刷新组件页再试。
+                            暂无远端版本信息，稍后到组件页刷新再试。
                         </p>
                     )}
                 </div>

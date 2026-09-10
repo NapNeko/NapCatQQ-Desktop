@@ -136,7 +136,7 @@ export function QqDependencyDialog({
                         <DialogDescription>
                             {report?.distroInfo
                                 ? `检测到 ${report.distroInfo.name} ${report.distroInfo.version}`
-                                : '检测 QQ 运行所需的系统库'}
+                                : null}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -200,7 +200,7 @@ function QqDependencyBody({
             <div className="flex flex-col items-center justify-center gap-4 py-12">
                 <Loader2 size={32} className="animate-spin text-accent" />
                 <p className="text-sm text-text-secondary">
-                    正在安装 {missing.length} 个依赖包，请稍候...
+                    正在安装 {missing.length} 个依赖包
                 </p>
             </div>
         );

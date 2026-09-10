@@ -179,11 +179,11 @@ function DemoBotCard({ variant }: { variant: 'running' | 'need-login' }) {
                     </div>
                 }
                 meta={
-                    <span className="text-text-secondary">
-                        {running
-                            ? '进程正常，账号在线'
-                            : '保存后点启动，手机 QQ 扫码'}
-                    </span>
+                    running ? null : (
+                        <span className="text-text-secondary">
+                            保存后点启动，手机 QQ 扫码
+                        </span>
+                    )
                 }
                 chips={
                     <div className="flex flex-wrap gap-1">
@@ -230,14 +230,8 @@ export function WelcomePreview() {
                         <span className="text-[12px] font-medium text-text">
                             机器人
                         </span>
-                        <span className="text-[10px] text-text-tertiary">
-                            列表里一张卡
-                        </span>
                     </div>
                     <DemoBotCard variant="running" />
-                    <p className="text-[11px] leading-snug text-text-tertiary">
-                        启停、扫码、日志都在这种卡上操作。
-                    </p>
                 </div>
             </div>
         </PreviewChrome>
@@ -255,7 +249,6 @@ export function MapPreview() {
                 <div className="flex min-w-0 flex-1 flex-col justify-center gap-2 py-1">
                     <MapHint active label="组件" text="装依赖" />
                     <MapHint label="机器人" text="建实例、扫码" />
-                    <MapHint label="其它" text="用到再点" muted />
                 </div>
             </div>
         </PreviewChrome>

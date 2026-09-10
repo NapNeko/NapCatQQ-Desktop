@@ -84,7 +84,6 @@ export const DockerRow: React.FC<DockerRowProps> = ({
                         accent={isInstalling ? 'brand' : 'none'}
                         statusBadge={dockerRowStatusBadge({ ready, probing, inFlight: isInstalling })}
                         title="Docker"
-                        description="用容器跑框架"
                         titleAside={
                             <button
                                 type="button"

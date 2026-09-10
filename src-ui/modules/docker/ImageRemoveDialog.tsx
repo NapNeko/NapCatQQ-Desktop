@@ -77,7 +77,7 @@ export const ImageRemoveDialog: React.FC<ImageRemoveDialogProps> = ({
                 <DialogHeader>
                     <DialogTitle>删除镜像</DialogTitle>
                     <DialogDescription>
-                        将从当前远端主机移除该镜像。若仍有容器在使用，普通删除会失败。
+                        从当前主机移除该镜像。仍被容器引用时普通删除会失败。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -93,7 +93,7 @@ export const ImageRemoveDialog: React.FC<ImageRemoveDialogProps> = ({
                         onCheckedChange={setForce}
                         disabled={isRemoving}
                         label="强制删除"
-                        hint="仍有容器引用时执行 docker rmi -f。若仍失败，请先到「容器」页删除或停止相关容器后再试。"
+                        hint="仍有容器引用时执行 docker rmi -f。若仍失败，先到「容器」页停掉这些容器。"
                     />
                 </div>
 

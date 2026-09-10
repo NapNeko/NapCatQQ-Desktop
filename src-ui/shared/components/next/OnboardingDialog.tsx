@@ -68,7 +68,6 @@ type GuideStep = {
     id: OnboardingGuideStepId;
     title: string;
     lead: string;
-    /** 左栏要点，填满空白；写具体事，不写空话 */
     facts: readonly GuideFact[];
     icon: ComponentType<LucideProps>;
     visual: GuideVisual;
@@ -85,7 +84,7 @@ const GUIDE_STEPS: readonly GuideStep[] = [
         facts: [
             {
                 label: 'Desktop',
-                text: '你现在打开的这个窗口。管组件、Bot、远端、通知。',
+                text: '当前窗口。管组件、Bot、远端、通知。',
             },
             {
                 label: 'NapCat / SnowLuma',
@@ -95,16 +94,12 @@ const GUIDE_STEPS: readonly GuideStep[] = [
                 label: 'QQ 客户端',
                 text: '原来的 QQ。扫码、登录都在它那边。',
             },
-            {
-                label: '右边预览',
-                text: '主界面一角：左导航，右机器人列表卡。',
-            },
         ],
     },
     {
         id: 'map',
         title: '侧栏里常用的两个',
-        lead: '日常主要在「组件」和「机器人」之间切换。',
+        lead: '其余几个用得少。',
         icon: Map,
         visual: 'map',
         facts: [
@@ -115,10 +110,6 @@ const GUIDE_STEPS: readonly GuideStep[] = [
             {
                 label: '机器人',
                 text: '建实例、启停、扫码、日志、WebUI。',
-            },
-            {
-                label: '概览',
-                text: '状态和通知的总览。',
             },
             {
                 label: '远端 / 任务 / 设置',
@@ -135,7 +126,7 @@ const GUIDE_STEPS: readonly GuideStep[] = [
         facts: [
             {
                 label: '① 组件',
-                text: 'Node、QQ、NapCat 装在这里，进度在「任务」里。',
+                text: 'Node、QQ、NapCat 都在这里装。',
             },
             {
                 label: '② 建 Bot',
@@ -150,7 +141,7 @@ const GUIDE_STEPS: readonly GuideStep[] = [
     {
         id: 'tips',
         title: '几个常见情况',
-        lead: '多数卡点都和依赖、扫码、远端、通知有关。',
+        lead: '多数卡点在依赖、扫码、远端、通知。',
         icon: TriangleAlert,
         visual: 'tips',
         facts: [
@@ -175,19 +166,11 @@ const GUIDE_STEPS: readonly GuideStep[] = [
     {
         id: 'go',
         title: '接下来是组件页',
-        lead: '继续会进组件页，用遮罩介绍 NapCat、SnowLuma 和远端依赖。装完依赖后会再弹一层，说明创建 Bot。',
+        lead: '继续进组件页，遮罩介绍 NapCat、SnowLuma 和远端依赖。',
         icon: Rocket,
         visual: 'go',
         showActions: true,
         facts: [
-            {
-                label: '继续引导',
-                text: '组件页：本机 NC / SL 对比，再看演示远端依赖。',
-            },
-            {
-                label: '之后建 Bot',
-                text: '组件遮罩结束后会再讲：新建入口、身份/连接、保存后启动扫码。',
-            },
             {
                 label: '以后想再看',
                 text: '设置 → 关于 → 重新查看入门。',
@@ -310,8 +293,7 @@ function ChoiceBody({
                         新手指引
                     </DialogTitle>
                     <DialogDescription className="mt-2.5 text-[13px] leading-relaxed text-text-secondary">
-                        简单介绍 Desktop 是什么、侧栏有什么、本机第一个 Bot
-                        大致怎么走。也可以直接进主界面，设置里还能再打开。
+                        介绍 Desktop、侧栏，以及本机第一个 Bot 怎么建。
                     </DialogDescription>
                 </div>
             </div>
@@ -319,7 +301,7 @@ function ChoiceBody({
             <div className="grid flex-1 grid-cols-1 gap-3 p-5 sm:grid-cols-2 sm:gap-3 sm:p-5">
                 <ChoiceCard
                     title="看一遍介绍"
-                    description="三层结构、侧栏、本机路径，以及组件页框架对比。"
+                    description="看完进组件页，对比两个协议端。"
                     icon={BookOpen}
                     disabled={submitting}
                     primary
@@ -327,7 +309,7 @@ function ChoiceBody({
                 />
                 <ChoiceCard
                     title="直接进主界面"
-                    description="跳过介绍。设置 → 关于 可重新打开。"
+                    description="设置 → 关于 可重新打开。"
                     icon={SkipForward}
                     disabled={submitting}
                     onClick={onSkip}
@@ -456,11 +438,12 @@ function GuideBody({
                             step.visual === 'path' ||
                             step.visual === 'go' ||
                             step.visual === 'tips';
+                        // 列数按要点条数定，不按 visual 定：只剩一条时通栏，别留空格子。
                         const factCols =
-                            step.visual === 'tips'
-                                ? 'sm:grid-cols-2'
-                                : step.visual === 'path' || step.visual === 'go'
-                                    ? 'sm:grid-cols-3'
+                            step.facts.length === 3
+                                ? 'sm:grid-cols-3'
+                                : step.facts.length >= 2
+                                    ? 'sm:grid-cols-2'
                                     : '';
                         return (
                             <div
@@ -514,7 +497,7 @@ function GuideBody({
                                             <ActionTile
                                                 icon={Package}
                                                 title="去组件页"
-                                                description="接着看 NC / SL 和远端依赖"
+                                                description="NC / SL 和远端依赖"
                                                 primary
                                                 disabled={submitting}
                                                 onClick={onGoComponents}
@@ -522,8 +505,8 @@ function GuideBody({
                                             />
                                             <ActionTile
                                                 icon={Bot}
-                                                title="同样去组件页"
-                                                description="同一条遮罩介绍，之后再去建 Bot"
+                                                title="建 Bot"
+                                                description="也要先装依赖，同样进组件页"
                                                 disabled={submitting}
                                                 onClick={onGoBots}
                                                 className="sm:max-w-[15.5rem] sm:flex-none"

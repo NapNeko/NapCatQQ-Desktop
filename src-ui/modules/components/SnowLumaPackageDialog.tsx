@@ -3,7 +3,6 @@ import {
     Button,
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -33,19 +32,18 @@ export const SnowLumaPackageDialog: React.FC<Props> = ({
             <DialogContent size="md" dismissOnOutsideClick={false}>
                 <DialogHeader>
                     <DialogTitle>选择 SnowLuma 安装包</DialogTitle>
-                    <DialogDescription>选一种包形态后开始安装。</DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col gap-2">
                     <PackageChoice
                         selected={pkg === 'full'}
-                        title="完整版（推荐）"
-                        detail="自带 SnowLuma 所需的运行时，开箱即用。升级时会沿用当前包类型。"
+                        title="完整版（默认）"
+                        detail="自带 SnowLuma 所需运行时。升级时沿用当前包类型。"
                         onSelect={() => setPkg('full')}
                     />
                     <PackageChoice
                         selected={pkg === 'lite'}
                         title="Lite 精简版"
-                        detail="体积小，不含 Node。安装任务会自动安装 Node.js 作为运行依赖。"
+                        detail="体积小，不含 Node。安装任务会自动装 Node.js。"
                         onSelect={() => setPkg('lite')}
                     />
                 </div>

@@ -80,7 +80,7 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
                     <p className="text-2xs uppercase tracking-widest text-text-tertiary">tasks</p>
                     <h1 className="font-display text-xl font-semibold text-text">任务队列</h1>
                     <p className="mt-1 text-sm text-text-secondary">
-                        组件与 Docker 相关操作的全局进度；切换页面后任务仍在后台执行。
+                        组件与 Docker 任务的全局进度；切换页面后仍在后台执行。
                     </p>
                 </div>
             </header>

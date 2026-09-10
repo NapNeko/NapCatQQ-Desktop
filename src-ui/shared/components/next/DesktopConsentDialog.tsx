@@ -142,10 +142,10 @@ export function DesktopConsentDialog({
                     </DialogTitle>
                     <DialogDescription className="text-xs text-text-secondary leading-relaxed">
                         {isGate
-                            ? '首次启动或条款更新时须阅读并确认。请完整阅读后继续。'
+                            ? '首次启动或条款更新时须阅读并确认。'
                             : payload?.accepted_at
-                                ? `当前已同意（${formatAcceptedAt(payload.accepted_at)}）。以下为现行正文。`
-                                : '以下为现行用户协议与隐私说明正文。'}
+                                ? `当前已同意（${formatAcceptedAt(payload.accepted_at)}）。`
+                                : '本机还没有同意记录。'}
                     </DialogDescription>
                 </DialogHeader>
 

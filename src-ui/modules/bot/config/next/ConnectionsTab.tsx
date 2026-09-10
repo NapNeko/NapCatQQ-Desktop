@@ -143,19 +143,16 @@ export function ConnectionsTab({ data, onChange, backendType, botId = null }: Co
                 <div className="flex min-h-[60vh] flex-1 items-center justify-center">
                     <div className="w-full max-w-xs rounded-md border border-dashed border-border-subtle bg-canvas/60 px-5 py-6 text-center">
                         <p className="text-sm font-medium text-text-secondary">
-                            暂无任何协议连接
+                            暂无协议连接
                         </p>
                         <p className="mt-1 text-2xs text-text-tertiary leading-relaxed">
-                            Bot 启动后将无法与外部 OneBot 客户端通信，
-                            <br />
-                            请通过下方“新增”添加一个
+                            Bot 启动后无法与外部 OneBot 客户端通信
                         </p>
                     </div>
                 </div>
             ) : (
                 <div className="flex flex-col gap-8 pb-2">
                     <FormSection
-                        title="已配置的连接"
                         actions={
                             <span className="text-2xs text-text-tertiary">{total} 项</span>
                         }
@@ -249,7 +246,7 @@ export function ConnectionsTab({ data, onChange, backendType, botId = null }: Co
                     <DialogHeader>
                         <DialogTitle>删除连接？</DialogTitle>
                         <DialogDescription>
-                            即将删除连接 "{deleteTarget?.name}"，此操作不可撤销。
+                            删除连接 "{deleteTarget?.name}"，此操作不可撤销。
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>

@@ -194,7 +194,7 @@ export function fieldsFromPresetBody(kind: WebhookPresetId): WebhookVisualFields
         case 'serverchan':
             return {
                 title: '账号状态通知：{event}',
-                body: '您的账号状态发生了改变。\n\n**昵称**：{nickname}\n**QQ号**：{uin}\n**当前状态**：{event}\n**时间**：{time}',
+                body: '账号状态发生变化。\n\n**昵称**：{nickname}\n**QQ号**：{uin}\n**当前状态**：{event}\n**时间**：{time}',
                 group: DEFAULT_BARK_GROUP,
             };
         case 'dingtalk':

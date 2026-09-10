@@ -104,7 +104,7 @@ export function NcdWatchRemoteSection({
                 key: `ncd-watch-install-${row.serverId}`,
                 tone: 'info',
                 title: '已提交 NCD Watch 安装',
-                content: `${row.name}：进度见任务队列；装完后保存设置会自动同步 notify，也可点「同步」。`,
+                content: `${row.name}：进度见任务队列；装完保存设置即自动同步，也可点「同步」。`,
             });
             window.setTimeout(() => refetchAll(), 2500);
         } catch (err) {
@@ -130,7 +130,7 @@ export function NcdWatchRemoteSection({
                 key: `ncd-watch-update-${row.serverId}`,
                 tone: 'info',
                 title: '已提交 NCD Watch 更新',
-                content: `${row.name}：将拉取最新二进制并重启服务；进度见任务队列。`,
+                content: `${row.name}：更新后会重启服务；进度见任务队列。`,
             });
             window.setTimeout(() => refetchAll(), 2500);
         } catch (err) {
@@ -149,8 +149,8 @@ export function NcdWatchRemoteSection({
             pushInfoBar({
                 key: 'ncd-watch-sync-dirty',
                 tone: 'warning',
-                title: '请先保存设置',
-                content: '同步使用已落盘的通知设置（Webhook / Email / 同机 OneBot）。点「保存设置」会自动推送到远端；也可在此手动再同步。',
+                title: '设置未保存',
+                content: '同步使用磁盘上的通知设置；点「保存设置」会自动推送到远端。',
             });
             return;
         }
@@ -161,7 +161,7 @@ export function NcdWatchRemoteSection({
                 key: `ncd-watch-sync-${row.serverId}`,
                 tone: 'success',
                 title: '已同步',
-                content: `${row.name}：Bot 列表、Webhook/Email/同机 OneBot 与登录探活凭据已写入远端。`,
+                content: `${row.name}：Bot 列表、通知配置与探活凭据已写入远端。`,
             });
             refetchAll();
         } catch (err) {
@@ -180,8 +180,8 @@ export function NcdWatchRemoteSection({
             pushInfoBar({
                 key: 'ncd-watch-sync-dirty',
                 tone: 'warning',
-                title: '请先保存设置',
-                content: '批量同步使用已保存的通知设置。通常保存设置后已自动推送；此处可再强制同步。',
+                title: '设置未保存',
+                content: '批量同步使用磁盘上的通知设置；保存设置后通常已自动推送。',
             });
             return;
         }
@@ -223,7 +223,7 @@ export function NcdWatchRemoteSection({
                 label="远端主机"
                 description={
                     settingsDirty
-                        ? '设置未保存：同步会用磁盘上的旧通知配置，请先保存'
+                        ? '设置未保存：同步会用磁盘上的旧通知配置，需先保存'
                         : loading && rows.length === 0
                             ? '正在加载远端主机…'
                             : rows.length === 0

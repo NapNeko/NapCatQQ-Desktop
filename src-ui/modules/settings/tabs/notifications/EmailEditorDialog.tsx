@@ -90,14 +90,11 @@ export function EmailEditorDialog({
                 <DialogHeader>
                     <DialogTitle>配置邮件通知</DialogTitle>
                     <DialogDescription>
-                        选择常用邮箱后补齐收发地址和授权码。完成后回到设置页保存。
+                        填完后回设置页保存。
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-5 py-1">
-                    <DialogField
-                        label="常用邮箱"
-                        hint="选择后会自动填入服务器、端口和加密方式。"
-                    >
+                    <DialogField label="常用邮箱">
                         <Select
                             value={preset}
                             placeholder="选择服务商，或手动填写"

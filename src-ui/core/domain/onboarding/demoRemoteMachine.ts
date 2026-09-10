@@ -64,7 +64,7 @@ export function buildDemoRemoteMachine(): MachineView {
                 info(
                     'nodejs',
                     'Node.js',
-                    '远端 SnowLuma 需要',
+                    '仅 SnowLuma 需要',
                     'runtime_dep',
                 ),
             ),
