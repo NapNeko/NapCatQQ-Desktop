@@ -23,6 +23,7 @@ import type { useServerManager } from '../../hooks/remote/useServerManager';
 import { pickDirectory } from '../../core/ipc/transport';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { remoteServerIdFromHostId } from '../../core/domain/remote-host/posixPath';
+import { validateWebUiPassword, validateWebUiUsername } from '../../core/domain/apps/webuiAccount';
 import { RemoteDirectoryPicker } from '../../shared/components/RemoteDirectoryPicker';
 import { hostIdDisplayLabel } from './hostLabel';
 import type { AppFrameworkManifest } from '../../core/ipc/types';
@@ -35,6 +36,9 @@ export interface CreateInstanceDraft {
     installNow: boolean;
     installDirOverride: string | null;
     installRenderer: boolean;
+    /** 仅 `webui_auth = user_password` 的框架；空 = 框架默认用户名 / 随机口令 */
+    webuiUsername: string;
+    webuiPassword: string;
 }
 
 export interface CreateInstanceRequest {
@@ -69,6 +73,8 @@ export const CreateInstanceDialog: React.FC<{
             installNow: true,
             installDirOverride: null,
             installRenderer: request.manifest.has_install_renderer,
+            webuiUsername: '',
+            webuiPassword: '',
         });
         setPickerOpen(false);
     }, [request]);
@@ -97,6 +103,9 @@ export const CreateInstanceDialog: React.FC<{
     const remoteId = draft ? remoteServerIdFromHostId(draft.hostId) : null;
     const remoteHome = servers.find((s) => s.id === remoteId)?.inventory?.home;
     const showRenderer = manifest?.has_install_renderer ?? false;
+    const showAccount = manifest?.webui_auth === 'user_password';
+    const usernameError = draft ? validateWebUiUsername(draft.webuiUsername) : null;
+    const passwordError = draft ? validateWebUiPassword(draft.webuiPassword) : null;
 
     const hostItems: SelectItem[] = locked
         ? [{ value: locked, label: hostIdDisplayLabel(locked, servers) }]
@@ -251,6 +260,28 @@ export const CreateInstanceDialog: React.FC<{
                                     </p>
                                 </div>
                             )}
+                            {showAccount && (
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <TextField
+                                        label="WebUI 用户名"
+                                        placeholder="astrbot"
+                                        autoComplete="off"
+                                        value={draft.webuiUsername}
+                                        onValueChange={(v) => setDraft({ ...draft, webuiUsername: v })}
+                                        error={usernameError ?? undefined}
+                                        hint="留空用默认"
+                                    />
+                                    <TextField
+                                        label="WebUI 密码"
+                                        type="password"
+                                        autoComplete="new-password"
+                                        value={draft.webuiPassword}
+                                        onValueChange={(v) => setDraft({ ...draft, webuiPassword: v })}
+                                        error={passwordError ?? undefined}
+                                        hint="留空随机生成；8 位以上，含大小写和数字"
+                                    />
+                                </div>
+                            )}
                             {showRenderer && (
                                 <Checkbox
                                     label="一并安装插件版渲染器"
@@ -280,7 +311,12 @@ export const CreateInstanceDialog: React.FC<{
                                 variant="primary"
                                 size="sm"
                                 disabled={
-                                    isCreating || !draft.hostId || portInvalid || remoteDirInvalid
+                                    isCreating
+                                    || !draft.hostId
+                                    || portInvalid
+                                    || remoteDirInvalid
+                                    || !!usernameError
+                                    || !!passwordError
                                 }
                                 onClick={() => void onSubmit(draft).catch(() => undefined)}
                             >

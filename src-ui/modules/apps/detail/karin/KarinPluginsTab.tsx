@@ -24,7 +24,7 @@ import { PaneLoading } from '../PaneStatus';
 import { useKarinPlugins } from '../../../../hooks/apps/useKarinPlugins';
 import { cn } from '../../../../shared/utils/cn';
 import styles from './karinPluginsGrid.module.css';
-import { KarinPluginConfigDialog } from './KarinPluginConfigDialog';
+import { PluginConfigDialog } from '../PluginConfigDialog';
 import { type VisiblePlugin } from './karinPluginsModel';
 import type { AppInstance } from '../../../../core/ipc/types';
 
@@ -158,7 +158,7 @@ export const KarinPluginsTab: React.FC<{ instance: AppInstance }> = ({ instance 
                 </DialogContent>
             </Dialog>
 
-            <KarinPluginConfigDialog
+            <PluginConfigDialog
                 instanceId={instance.id}
                 pluginName={configName}
                 onClose={() => setConfigName(null)}

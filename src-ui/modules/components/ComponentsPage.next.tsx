@@ -729,6 +729,7 @@ export const ComponentsPageNext: React.FC = () => {
                 isCreating={apps.isCreating}
                 onClose={() => setCreateAppRequest(null)}
                 onSubmit={async (draft) => {
+                    const userPassword = createAppRequest?.manifest.webui_auth === 'user_password';
                     const created = await apps.create({
                         framework_id: draft.frameworkId,
                         host_id: draft.hostId,
@@ -738,6 +739,8 @@ export const ComponentsPageNext: React.FC = () => {
                         install_renderer: createAppRequest?.manifest.has_install_renderer
                             ? draft.installRenderer
                             : undefined,
+                        webui_username: userPassword ? draft.webuiUsername.trim() || undefined : undefined,
+                        webui_password: userPassword ? draft.webuiPassword || undefined : undefined,
                     });
                     if (draft.installNow) apps.install(created.id);
                     setCreateAppRequest(null);
@@ -745,9 +748,14 @@ export const ComponentsPageNext: React.FC = () => {
                         key: `app-instance-created:${created.id}`,
                         tone: 'success',
                         title: `已创建 ${created.display_name} · ${hostNameOf(draft.hostId)}`,
-                        content: draft.installNow
-                            ? '安装进度见任务队列；装好后到「应用端」页启动并对接协议 Bot。'
-                            : '实例已登记但未安装；到「应用端」页可随时安装。',
+                        content: [
+                            draft.installNow
+                                ? '安装进度见任务队列；装好后到「应用端」页启动并对接协议 Bot。'
+                                : '实例已登记但未安装；到「应用端」页可随时安装。',
+                            userPassword && !draft.webuiPassword ? 'WebUI 密码已随机生成，见实例详情「连接」页。' : '',
+                        ]
+                            .filter(Boolean)
+                            .join(' '),
                         autoDismissMs: 8_000,
                     });
                 }}

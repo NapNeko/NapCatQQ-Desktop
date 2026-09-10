@@ -20,7 +20,7 @@ import {
 } from '../../../../shared/ui';
 import { ActionMotionIcon, ListItem } from '../../../../shared/ui/motion';
 import { ConfigConflictDialog } from '../ConfigConflictDialog';
-import { KarinPluginConfigDialog } from '../karin/KarinPluginConfigDialog';
+import { PluginConfigDialog } from '../PluginConfigDialog';
 import { PaneLoading } from '../PaneStatus';
 import { useNoneBot2Store } from '../../../../hooks/apps/useNoneBot2Store';
 import { openExternalUrl } from '../../../../core/ipc/transport';
@@ -250,7 +250,7 @@ export const NoneBot2StoreTab: React.FC<{
             </Dialog>
 
             {resource === 'plugin' && (
-                <KarinPluginConfigDialog
+                <PluginConfigDialog
                     instanceId={instance.id}
                     pluginName={configName}
                     onClose={() => setConfigName(null)}

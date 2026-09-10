@@ -1,6 +1,6 @@
-// 插件配置：一插件一页。Karin WebUI 走 web.config 表单，Desktop 改文件本身。
+// 插件配置：一插件一页。有 schema 的框架（AstrBot）默认出表单，随时可切到源码；其它框架改文件本身。
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileCode, RefreshCw, Save } from 'lucide-react';
 import {
     Button,
@@ -13,30 +13,43 @@ import {
     Spinner,
     SyntaxTextEditor,
     type SyntaxMode,
-} from '../../../../shared/ui';
-import { ActionMotionIcon } from '../../../../shared/ui/motion';
-import { useAppConfigText } from '../../../../hooks/apps/useAppInstanceConfig';
-import { appFrameworkService } from '../../../../core/services/app-framework.service';
-import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
-import { pushAppErrorBar } from '../../../../hooks/apps/pushAppErrorBar';
-import { errorText } from '../../../../core/domain/errors';
-import { cn } from '../../../../shared/utils/cn';
-import { ConfigConflictDialog } from '../ConfigConflictDialog';
-import type { AppConfigDocument, AppConfigError } from '../../../../core/ipc/types';
+} from '../../../shared/ui';
+import { ActionMotionIcon } from '../../../shared/ui/motion';
+import { useAppConfigText } from '../../../hooks/apps/useAppInstanceConfig';
+import { appFrameworkService } from '../../../core/services/app-framework.service';
+import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { pushAppErrorBar } from '../../../hooks/apps/pushAppErrorBar';
+import { errorText } from '../../../core/domain/errors';
+import { cn } from '../../../shared/utils/cn';
+import { ConfigConflictDialog } from './ConfigConflictDialog';
+import { PluginSchemaForm, type PluginConfigObject } from './PluginSchemaForm';
+import type { AppConfigDocument, AppConfigError, AppPluginConfigSchema } from '../../../core/ipc/types';
 
 const WORKSPACE = 'flex h-[min(64dvh,560px)] min-h-[22rem] min-w-0 flex-1 flex-col overflow-hidden';
+
+type ViewMode = 'form' | 'source';
 
 function editorMode(format: AppConfigDocument['format']): SyntaxMode {
     if (format === 'json' || format === 'dot_env' || format === 'toml') return format;
     return 'plain';
 }
 
-export const KarinPluginConfigDialog: React.FC<{
+function parseObject(text: string): PluginConfigObject | null {
+    try {
+        const v: unknown = JSON.parse(text);
+        return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as PluginConfigObject) : null;
+    } catch {
+        return null;
+    }
+}
+
+export const PluginConfigDialog: React.FC<{
     instanceId: string;
     pluginName: string | null;
     onClose: () => void;
 }> = ({ instanceId, pluginName, onClose }) => {
     const [docs, setDocs] = useState<AppConfigDocument[]>([]);
+    const [schema, setSchema] = useState<AppPluginConfigSchema | null>(null);
     const [docsError, setDocsError] = useState<string | null>(null);
     const [docsLoading, setDocsLoading] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -44,6 +57,7 @@ export const KarinPluginConfigDialog: React.FC<{
     useEffect(() => {
         if (!pluginName) {
             setDocs([]);
+            setSchema(null);
             setSelectedId(null);
             setDocsError(null);
             return;
@@ -51,12 +65,15 @@ export const KarinPluginConfigDialog: React.FC<{
         let cancelled = false;
         setDocsLoading(true);
         setDocsError(null);
-        void appFrameworkService
-            .listPluginConfigDocs(instanceId, pluginName)
-            .then((next) => {
+        void Promise.all([
+            appFrameworkService.listPluginConfigDocs(instanceId, pluginName),
+            appFrameworkService.pluginConfigSchema(instanceId, pluginName).catch(() => null),
+        ])
+            .then(([nextDocs, nextSchema]) => {
                 if (cancelled) return;
-                setDocs(next);
-                setSelectedId(next[0]?.id ?? null);
+                setDocs(nextDocs);
+                setSchema(nextSchema);
+                setSelectedId(nextSchema?.doc_id ?? nextDocs[0]?.id ?? null);
             })
             .catch((e) => {
                 if (cancelled) return;
@@ -110,6 +127,7 @@ export const KarinPluginConfigDialog: React.FC<{
                         instanceId={instanceId}
                         docs={docs}
                         active={active}
+                        schema={active && schema?.doc_id === active.id ? schema : null}
                         onSelect={setSelectedId}
                     />
                 )}
@@ -122,13 +140,15 @@ const PluginConfigWorkspace: React.FC<{
     instanceId: string;
     docs: AppConfigDocument[];
     active: AppConfigDocument | null;
+    schema: AppPluginConfigSchema | null;
     onSelect: (id: string) => void;
-}> = ({ instanceId, docs, active, onSelect }) => {
+}> = ({ instanceId, docs, active, schema, onSelect }) => {
     const text = useAppConfigText(instanceId, active?.id ?? null);
     const [draft, setDraft] = useState('');
     const [loaded, setLoaded] = useState<{ docId: string; revision: string } | null>(null);
     const [syntaxError, setSyntaxError] = useState<string | null>(null);
     const [conflict, setConflict] = useState(false);
+    const [mode, setMode] = useState<ViewMode>(schema ? 'form' : 'source');
 
     const sameDocLoaded = loaded !== null && loaded.docId === text.doc?.doc_id;
     const dirty = sameDocLoaded && text.doc != null && draft !== text.doc.text;
@@ -144,7 +164,8 @@ const PluginConfigWorkspace: React.FC<{
 
     useEffect(() => {
         setSyntaxError(null);
-    }, [active?.id]);
+        setMode(schema ? 'form' : 'source');
+    }, [active?.id, schema]);
 
     useEffect(() => {
         if (!text.error) return;
@@ -155,6 +176,9 @@ const PluginConfigWorkspace: React.FC<{
         });
     }, [active?.id, instanceId, text.error]);
 
+    const formValue = useMemo(() => (schema && mode === 'form' ? parseObject(draft) : null), [draft, mode, schema]);
+    const formBroken = schema !== null && mode === 'form' && formValue === null && draft.trim() !== '';
+
     const precheck = (): boolean => {
         if (!active) return false;
         if (active.format === 'json') {
@@ -162,6 +186,7 @@ const PluginConfigWorkspace: React.FC<{
                 JSON.parse(draft);
             } catch (e) {
                 setSyntaxError(`JSON 语法错误：${(e as Error).message}`);
+                setMode('source');
                 return false;
             }
         }
@@ -210,41 +235,76 @@ const PluginConfigWorkspace: React.FC<{
         await text.reload();
     };
 
+    const showTabs = docs.length > 1;
+    const showModeSwitch = schema !== null;
+
     return (
         <>
             <div className={cn(WORKSPACE, 'pt-3')}>
-                {docs.length > 1 && (
-                    <div className="mb-2 flex shrink-0 flex-wrap gap-1">
-                        {docs.map((d) => (
-                            <button
-                                key={d.id}
-                                type="button"
-                                onClick={() => onSelect(d.id)}
-                                className={cn(
-                                    'rounded-sm px-2 py-1 font-mono text-[12px] transition-colors',
-                                    d.id === active?.id
-                                        ? 'bg-brand-soft/70 text-text'
-                                        : 'text-text-secondary hover:bg-inset hover:text-text',
-                                )}
-                            >
-                                {d.label}
-                            </button>
-                        ))}
+                {(showTabs || showModeSwitch) && (
+                    <div className="mb-2 flex shrink-0 flex-wrap items-center gap-1">
+                        {showTabs &&
+                            docs.map((d) => (
+                                <button
+                                    key={d.id}
+                                    type="button"
+                                    onClick={() => onSelect(d.id)}
+                                    className={cn(
+                                        'rounded-sm px-2 py-1 font-mono text-[12px] transition-colors',
+                                        d.id === active?.id
+                                            ? 'bg-brand-soft/70 text-text'
+                                            : 'text-text-secondary hover:bg-inset hover:text-text',
+                                    )}
+                                >
+                                    {d.label}
+                                </button>
+                            ))}
+                        {showModeSwitch && (
+                            <div className="ml-auto flex items-center gap-0.5 rounded-sm bg-inset p-0.5">
+                                {(['form', 'source'] as const).map((m) => (
+                                    <button
+                                        key={m}
+                                        type="button"
+                                        onClick={() => setMode(m)}
+                                        className={cn(
+                                            'rounded-sm px-2 py-0.5 text-[12px] transition-colors',
+                                            mode === m
+                                                ? 'bg-canvas text-text shadow-card'
+                                                : 'text-text-secondary hover:text-text',
+                                        )}
+                                    >
+                                        {m === 'form' ? '表单' : '源码'}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
                 {syntaxError && <p className="mb-2 shrink-0 text-xs text-danger">{syntaxError}</p>}
-                <SyntaxTextEditor
-                    mode={active ? editorMode(active.format) : 'plain'}
-                    value={draft}
-                    wrap
-                    invalid={!!syntaxError}
-                    disabled={text.isLoading || !text.doc}
-                    aria-label={active?.label ?? '配置'}
-                    onChange={(next) => {
-                        setDraft(next);
-                        if (syntaxError) setSyntaxError(null);
-                    }}
-                />
+                {formBroken && (
+                    <p className="mb-2 shrink-0 text-xs text-danger">当前内容不是合法的 JSON 对象，请切到源码修正。</p>
+                )}
+                {schema && mode === 'form' && formValue !== null ? (
+                    <PluginSchemaForm
+                        fields={schema.fields}
+                        value={formValue}
+                        disabled={text.isLoading || !text.doc || text.isWriting}
+                        onChange={(next) => setDraft(`${JSON.stringify(next, null, 2)}\n`)}
+                    />
+                ) : (
+                    <SyntaxTextEditor
+                        mode={active ? editorMode(active.format) : 'plain'}
+                        value={draft}
+                        wrap
+                        invalid={!!syntaxError}
+                        disabled={text.isLoading || !text.doc}
+                        aria-label={active?.label ?? '配置'}
+                        onChange={(next) => {
+                            setDraft(next);
+                            if (syntaxError) setSyntaxError(null);
+                        }}
+                    />
+                )}
             </div>
 
             <DialogFooter className="mt-3 mb-0 shrink-0 border-t border-border-subtle pt-3">

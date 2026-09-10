@@ -3,7 +3,17 @@ import { resolveFrameworkUi } from './frameworkUi';
 
 describe('resolveFrameworkUi', () => {
     it('unknown framework has no extra tabs (raw + log only)', () => {
-        expect(resolveFrameworkUi('astrbot')).toBeUndefined();
+        expect(resolveFrameworkUi('koishi')).toBeUndefined();
+    });
+
+    it('astrbot extra tabs and issue routing', () => {
+        const ui = resolveFrameworkUi('astrbot');
+        expect(ui).toBeDefined();
+        expect(ui?.defaultTab).toBe('plugins');
+        expect(ui?.extraTabs.map((t) => t.value)).toEqual(['plugins', 'connections']);
+        expect(ui?.typedTabs.has('connections')).toBe(true);
+        expect(ui?.fillPaneTabs.has('plugins')).toBe(true);
+        expect(ui?.tabForIssue('onebot/ws_reverse_port')).toBe('connections');
     });
 
     it('karin extra tabs and issue routing', () => {

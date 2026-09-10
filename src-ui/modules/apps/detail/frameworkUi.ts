@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
+import { astrbotFrameworkUi } from './astrbot/astrbotFrameworkUi';
 import { karinFrameworkUi } from './karin/karinFrameworkUi';
 import { nonebot2FrameworkUi } from './nonebot2/nonebot2FrameworkUi';
 
@@ -33,6 +34,7 @@ export type FrameworkUiModule = {
 const MODULES: Record<string, FrameworkUiModule> = {
     karin: karinFrameworkUi,
     nonebot2: nonebot2FrameworkUi,
+    astrbot: astrbotFrameworkUi,
 };
 
 export function resolveFrameworkUi(frameworkId: string): FrameworkUiModule | undefined {
