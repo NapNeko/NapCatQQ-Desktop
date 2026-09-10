@@ -12,6 +12,7 @@ import { pushAppErrorBar } from './pushAppErrorBar';
 import { useAppInstanceAlerts } from './useAppInstanceAlerts';
 import { botConfigKey } from '../bot/useBotConfigsMap';
 import { dropAppInstanceLogs, ensureAppInstanceLogStore } from './appInstanceLogStore';
+import { showWebUiAccountDialog } from './webuiAccountDialogStore';
 import { matchesAppInstallTask } from '../../modules/apps/instanceState';
 import type {
     AppFrameworkManifest,
@@ -176,7 +177,13 @@ export function useAppInstances() {
 
     const openWebUi = useCallback(async (id: string) => {
         try {
-            const { url, authKey } = await appFrameworkService.webui(id);
+            const { url, authKey, account } = await appFrameworkService.webui(id);
+            if (account) {
+                const name = queryClient
+                    .getQueryData<AppInstance[]>(APP_INSTANCES_KEY)
+                    ?.find((i) => i.id === id)?.display_name;
+                showWebUiAccountDialog({ instanceId: id, instanceName: name ?? id, url, account });
+            }
             const key = authKey.trim();
             if (key) {
                 try {
@@ -206,7 +213,7 @@ export function useAppInstances() {
                 raw: errorText(err),
             });
         }
-    }, []);
+    }, [queryClient]);
 
     return {
         instances: query.data ?? [],

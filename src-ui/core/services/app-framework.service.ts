@@ -12,10 +12,12 @@ import type {
     AppInstanceConfigEnvelope,
     AppInstanceWebUi,
     AppPluginAction,
+    AppPluginConfigSchema,
     AppStoreInstalled,
     AppStoreMarketEntry,
     AppStoreResource,
     AppProjectProbe,
+    AppWebUiAccount,
     CreateAppInstanceRequest,
     ImportAppInstanceRequest,
     KarinPluginInstalled,
@@ -113,6 +115,24 @@ export const appFrameworkService = {
         return invoke<AppInstanceWebUi>('get_app_instance_webui', { instanceId });
     },
 
+    /** 只读账号，不建隧道；实例停着时查看 / 重置用。null = 该框架不是账号密码登录。 */
+    webuiAccount: async (instanceId: string): Promise<AppWebUiAccount | null> => {
+        if (!isTauri) return mockAppFrameworkApi.webuiAccount(instanceId);
+        return invoke<AppWebUiAccount | null>('get_app_instance_webui_account', { instanceId });
+    },
+
+    /** `password` 传 null 让后端随机生成；实例须已停止。失败 reject 的是 AppConfigError。 */
+    resetWebUiPassword: async (
+        instanceId: string,
+        password: string | null,
+    ): Promise<AppWebUiAccount> => {
+        if (!isTauri) return mockAppFrameworkApi.resetWebUiPassword(instanceId, password);
+        return invoke<AppWebUiAccount>('reset_app_instance_webui_password', {
+            instanceId,
+            password,
+        });
+    },
+
     // ---- 实例配置（类型化 + 原始文件）。失败 reject 的是 AppConfigError 结构体，见 isAppConfigError ----
 
     readConfig: async (instanceId: string): Promise<AppInstanceConfigEnvelope> => {
@@ -188,6 +208,18 @@ export const appFrameworkService = {
     ): Promise<AppConfigDocument[]> => {
         if (!isTauri) return mockAppFrameworkApi.listPluginConfigDocs(instanceId, pluginName);
         return invoke<AppConfigDocument[]>('list_app_plugin_config_docs', {
+            instanceId,
+            pluginName,
+        });
+    },
+
+    /** null = 该插件没有表单 schema，只能改原文。 */
+    pluginConfigSchema: async (
+        instanceId: string,
+        pluginName: string,
+    ): Promise<AppPluginConfigSchema | null> => {
+        if (!isTauri) return mockAppFrameworkApi.pluginConfigSchema(instanceId, pluginName);
+        return invoke<AppPluginConfigSchema | null>('get_app_plugin_config_schema', {
             instanceId,
             pluginName,
         });

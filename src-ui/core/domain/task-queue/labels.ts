@@ -13,6 +13,7 @@ const COMPONENT_DISPLAY_NAME: Record<ComponentId, string> = {
     karin: 'Karin',
     uv: 'uv',
     nonebot2: 'NoneBot2',
+    astrbot: 'AstrBot',
 };
 
 const STEP_KIND_LABEL: Record<string, string> = {

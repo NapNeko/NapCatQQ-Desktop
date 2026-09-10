@@ -8,10 +8,12 @@ import type {
     AppInstance,
     AppInstanceWebUi,
     AppPluginAction,
+    AppPluginConfigSchema,
     AppStoreInstalled,
     AppStoreMarketEntry,
     AppStoreResource,
     AppProjectProbe,
+    AppWebUiAccount,
     CreateAppInstanceRequest,
     ImportAppInstanceRequest,
     KarinPluginInstalled,
@@ -19,6 +21,7 @@ import type {
     OneBotLinkPlan,
 } from '../types';
 import { karinDefaultConfig } from '../../domain/apps/karinConfig';
+import { astrbotDefaultConfig } from '../../domain/apps/astrbotConfig';
 import { nonebot2DefaultConfig } from '../../domain/apps/nonebot2Config';
 import { emitMockEvent } from './events.mock';
 import { withMockDelay } from './bootstrap.mock';
@@ -39,6 +42,7 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         runtime_component_ids: ['nodejs'],
         store_resources: ['plugin'],
         has_install_renderer: true,
+        webui_auth: 'key',
     },
     {
         id: 'nonebot2',
@@ -54,8 +58,49 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         runtime_component_ids: ['uv'],
         store_resources: ['adapter', 'plugin'],
         has_install_renderer: false,
+        webui_auth: 'none',
+    },
+    {
+        id: 'astrbot',
+        display_name: 'AstrBot',
+        description: 'Python 应用端，自带 WebUI；Desktop 只对接 OneBot v11',
+        repo_url: 'https://github.com/AstrBotDevs/AstrBot',
+        docs_url: 'https://docs.astrbot.app',
+        supported_placements: ['local_native', 'remote_native'],
+        default_port: 6199,
+        has_webui: true,
+        link_modes: ['reverse_ws'],
+        component_id: 'astrbot',
+        runtime_component_ids: ['uv'],
+        store_resources: ['plugin'],
+        has_install_renderer: false,
+        webui_auth: 'user_password',
     },
 ];
+
+/// 账号密码类 WebUI 的假账号：新建时按请求种入，重置时换密码。
+const mockWebUiAccounts = new Map<string, { username: string; password: string | null }>([
+    ['ab12cd34', { username: 'astrbot', password: 'Mock2024astrbot' }],
+]);
+
+function mockAccountView(inst: AppInstance): AppWebUiAccount | null {
+    const manifest = mockAppFrameworks.find((m) => m.id === inst.framework_id);
+    if (manifest?.webui_auth !== 'user_password') return null;
+    const acct = mockWebUiAccounts.get(inst.id) ?? { username: 'astrbot', password: null };
+    return {
+        username: acct.username,
+        password: acct.password ?? undefined,
+        password_matches: acct.password ? true : undefined,
+        can_reset: inst.state !== 'running',
+    };
+}
+
+function mockGeneratePassword(): string {
+    const pool = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let out = 'Aa1';
+    for (let i = 0; i < 21; i += 1) out += pool[Math.floor(Math.random() * pool.length)];
+    return out;
+}
 
 let instances: AppInstance[] = [
     {
@@ -111,6 +156,19 @@ let instances: AppInstance[] = [
         install_renderer: false,
         origin: 'imported',
     },
+    {
+        id: 'ab12cd34',
+        framework_id: 'astrbot',
+        display_name: 'AstrBot · 本机',
+        placement: 'local_native',
+        host_id: 'local',
+        install_dir: 'D:/NapCatQQ/apps/astrbot/ab12cd34',
+        port: 6199,
+        state: 'installed',
+        created_at_ms: Date.now() - 3_600_000,
+        install_renderer: false,
+        origin: 'created',
+    },
 ];
 
 function publish(instance: AppInstance, reason: string) {
@@ -156,6 +214,12 @@ export const mockAppFrameworkApi = {
             install_renderer: req.install_renderer ?? true,
             origin: 'created',
         };
+        if (manifest?.webui_auth === 'user_password') {
+            mockWebUiAccounts.set(id, {
+                username: req.webui_username?.trim() || 'astrbot',
+                password: req.webui_password || mockGeneratePassword(),
+            });
+        }
         instances = [...instances, created];
         emitMockEvent({ kind: 'app_instance_changed', instance: created, reason: 'created' });
         return withMockDelay(created);
@@ -176,19 +240,31 @@ export const mockAppFrameworkApi = {
         }
         const name = trimmed.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? frameworkId;
         const isNonebot = frameworkId === 'nonebot2';
+        const isAstrbot = frameworkId === 'astrbot';
+        const emptyOnebot = /no-onebot|empty-platform/i.test(trimmed);
+        const ambiguousOnebot = /ambiguous-onebot/i.test(trimmed);
         return withMockDelay({
             framework_id: frameworkId,
             path: trimmed,
             display_name: name,
-            port: isNonebot ? 13120 : 7777,
-            version: isNonebot ? '2.5.1' : '1.17.0',
-            env_rel_path: isNonebot ? '.env' : '.env',
+            port: emptyOnebot || ambiguousOnebot
+                ? undefined
+                : isNonebot
+                  ? 13120
+                  : isAstrbot
+                    ? 6199
+                    : 7777,
+            version: isNonebot ? '2.5.1' : isAstrbot ? '4.0.0' : '1.17.0',
+            env_rel_path: isAstrbot ? 'data/cmd_config.json' : isNonebot ? '.env' : '.env',
             environment: isNonebot ? 'prod' : '',
             ready: true,
             running: hostId.startsWith('remote:'),
             supervisors: hostId.startsWith('remote:') && isNonebot ? ['bot-xiuxian'] : [],
-            warnings:
-                hostId.startsWith('remote:') && isNonebot
+            warnings: ambiguousOnebot
+                ? ['有多条 OneBot v11（aiocqhttp），无法唯一认领。请在 AstrBot WebUI 或原文里指定要对接的那条']
+                : emptyOnebot
+                  ? ['还没有 OneBot v11，对接时会加一条']
+                  : hostId.startsWith('remote:') && isNonebot
                     ? ['现在由 systemd 在跑（bot-xiuxian）。导入后改由这边开关，不要了可以还回去。']
                     : [],
             detected_bot_id: hostId.startsWith('remote:') && isNonebot ? '10001' : undefined,
@@ -205,7 +281,7 @@ export const mockAppFrameworkApi = {
             placement: req.host_id === 'local' ? 'local_native' : 'remote_native',
             host_id: req.host_id,
             install_dir: probe.path,
-            port: probe.port ?? 8080,
+            port: probe.port ?? 0,
             state: probe.ready ? 'running' : 'not_installed',
             installed_version: probe.version,
             created_at_ms: Date.now(),
@@ -285,7 +361,7 @@ export const mockAppFrameworkApi = {
             instance_id: instanceId,
             bot_id: botId,
             connection: {
-                url: `ws://127.0.0.1:${inst.port}/onebot/v11/ws`,
+                url: `ws://127.0.0.1:${inst.port}${inst.framework_id === 'astrbot' ? '/ws' : '/onebot/v11/ws'}`,
                 reportSelfMessage: false,
                 heartInterval: 30000,
                 reconnectInterval: 30000,
@@ -328,9 +404,32 @@ export const mockAppFrameworkApi = {
     webui: async (instanceId: string): Promise<AppInstanceWebUi> => {
         const inst = require(instanceId);
         return withMockDelay({
-            url: `http://127.0.0.1:${inst.port}/web`,
-            authKey: peekKarinHttpAuthKey(instanceId),
+            url:
+                inst.framework_id === 'astrbot'
+                    ? `http://127.0.0.1:6185`
+                    : `http://127.0.0.1:${inst.port}/web`,
+            authKey: inst.framework_id === 'karin' ? peekKarinHttpAuthKey(instanceId) : '',
+            account: mockAccountView(inst) ?? undefined,
         });
+    },
+
+    webuiAccount: async (instanceId: string): Promise<AppWebUiAccount | null> =>
+        withMockDelay(mockAccountView(require(instanceId))),
+
+    resetWebUiPassword: async (
+        instanceId: string,
+        password: string | null,
+    ): Promise<AppWebUiAccount> => {
+        const inst = require(instanceId);
+        if (inst.state === 'running') throw new Error('实例运行中，先停止再重置密码');
+        const current = mockWebUiAccounts.get(instanceId) ?? { username: 'astrbot', password: null };
+        mockWebUiAccounts.set(instanceId, {
+            username: current.username,
+            password: password?.trim() || mockGeneratePassword(),
+        });
+        const view = mockAccountView(inst);
+        if (!view) throw new Error('该应用端不是账号密码登录');
+        return withMockDelay(view);
     },
 
     ...createMockAppConfigApi({ require, publish }),
@@ -340,6 +439,18 @@ export const mockAppFrameworkApi = {
         pluginName: string,
     ): Promise<AppConfigDocument[]> => {
         const inst = require(instanceId);
+        if (inst.framework_id === 'astrbot') {
+            const dir = pluginName.split('/').pop() ?? pluginName;
+            return withMockDelay([
+                {
+                    id: `plugin:${dir}`,
+                    label: `${dir}_config.json`,
+                    rel_path: `data/config/${dir}_config.json`,
+                    format: 'json',
+                    hot_reload: false,
+                },
+            ]);
+        }
         if (inst.framework_id === 'nonebot2') {
             return withMockDelay([
                 {
@@ -363,6 +474,101 @@ export const mockAppFrameworkApi = {
         ]);
     },
 
+    pluginConfigSchema: async (
+        instanceId: string,
+        pluginName: string,
+    ): Promise<AppPluginConfigSchema | null> => {
+        const inst = require(instanceId);
+        if (inst.framework_id !== 'astrbot') return withMockDelay(null);
+        const dir = pluginName.split('/').pop() ?? pluginName;
+        return withMockDelay({
+            doc_id: `plugin:${dir}`,
+            fields: [
+                {
+                    key: 'token',
+                    kind: 'string',
+                    label: 'Bot Token',
+                    hint: '从上游平台复制',
+                    obvious_hint: true,
+                    secret: true,
+                    options: [],
+                    items: [],
+                },
+                {
+                    key: 'mode',
+                    kind: 'string',
+                    label: '模式',
+                    hint: '',
+                    obvious_hint: false,
+                    secret: false,
+                    options: ['chat', 'agent'],
+                    items: [],
+                },
+                {
+                    key: 'prompt',
+                    kind: 'text',
+                    label: '系统提示词',
+                    hint: '',
+                    obvious_hint: false,
+                    secret: false,
+                    options: [],
+                    items: [],
+                },
+                {
+                    key: 'enabled_groups',
+                    kind: 'list',
+                    label: '启用的群',
+                    hint: '留空表示全部',
+                    obvious_hint: false,
+                    secret: false,
+                    options: [],
+                    items: [],
+                },
+                {
+                    key: 'limits',
+                    kind: 'object',
+                    label: '限额',
+                    hint: '',
+                    obvious_hint: false,
+                    secret: false,
+                    options: [],
+                    items: [
+                        {
+                            key: 'per_user',
+                            kind: 'int',
+                            label: '每人每日',
+                            hint: '',
+                            obvious_hint: false,
+                            secret: false,
+                            options: [],
+                            items: [],
+                        },
+                        {
+                            key: 'strict',
+                            kind: 'bool',
+                            label: '超限直接拒绝',
+                            hint: '',
+                            obvious_hint: false,
+                            secret: false,
+                            options: [],
+                            items: [],
+                        },
+                    ],
+                },
+                {
+                    key: 'extra',
+                    kind: 'json',
+                    label: '附加参数',
+                    hint: '',
+                    obvious_hint: false,
+                    secret: false,
+                    options: [],
+                    items: [],
+                },
+            ],
+        });
+    },
+
     listPluginMarket: () => withMockDelay(mockPluginMarket.slice()),
 
     listStore: async (frameworkId: string, resource: AppStoreResource): Promise<AppStoreMarketEntry[]> => {
@@ -374,6 +580,9 @@ export const mockAppFrameworkApi = {
         }
         if (frameworkId === 'nonebot2' && resource === 'plugin') {
             return withMockDelay(mockNoneBotPlugins.slice());
+        }
+        if (frameworkId === 'astrbot' && resource === 'plugin') {
+            return withMockDelay(mockAstrBotPlugins.slice());
         }
         return withMockDelay([]);
     },
@@ -398,7 +607,7 @@ export const mockAppFrameworkApi = {
         resource?: AppStoreResource,
     ): Promise<string> => {
         require(instanceId);
-        if (require(instanceId).framework_id === 'nonebot2') {
+        if (require(instanceId).framework_id === 'nonebot2' || require(instanceId).framework_id === 'astrbot') {
             applyMockStoreOp(instanceId, pluginName, action, resource ?? 'plugin');
         } else {
             applyMockPluginOp(instanceId, pluginName, action);
@@ -414,13 +623,24 @@ export const mockAppFrameworkApi = {
         resource?: AppStoreResource,
     ): Promise<AppConfigWriteResult> => {
         const inst = require(instanceId);
-        if (inst.framework_id === 'nonebot2') {
+        if (inst.framework_id === 'nonebot2' || inst.framework_id === 'astrbot') {
             const key = storeKey(instanceId, resource ?? 'plugin');
             const list = mockStoreInstalledFor(instanceId, resource ?? 'plugin');
             mockStoreInstalled.set(
                 key,
                 list.map((p) => (p.id === pluginName || p.name === pluginName ? { ...p, enabled } : p)),
             );
+            if (inst.framework_id === 'astrbot') {
+                const config = astrbotDefaultConfig(inst.port);
+                return withMockDelay({
+                    config: { framework: 'astrbot', data: config },
+                    revision: 'mock-r-plugin',
+                    documents: [],
+                    restart_required: inst.state === 'running',
+                    relinked: false,
+                    port_changed: false,
+                });
+            }
             const config = nonebot2DefaultConfig(inst.port);
             return withMockDelay({
                 config: { framework: 'nonebot2', data: config },
@@ -651,6 +871,30 @@ const mockNoneBotPlugins: AppStoreMarketEntry[] = [
     },
 ];
 
+const mockAstrBotPlugins: AppStoreMarketEntry[] = [
+    {
+        resource: 'plugin',
+        id: 'soulter/helloworld',
+        name: 'helloworld',
+        description: '示例插件',
+        version: '1.2.0',
+        author: 'soulter',
+        homepage: 'https://github.com/Soulter/helloworld',
+        time: '',
+        package: 'https://github.com/Soulter/helloworld',
+        module_name: '',
+        flavor: 'git',
+        is_official: false,
+        valid: true,
+        tags: [],
+        supported_adapters: ['aiocqhttp'],
+        authors: [],
+        repos: [],
+        files: [],
+        allow_build: [],
+    },
+];
+
 const mockStoreInstalled = new Map<string, AppStoreInstalled[]>();
 
 function storeKey(instanceId: string, resource: AppStoreResource): string {
@@ -660,31 +904,46 @@ function storeKey(instanceId: string, resource: AppStoreResource): string {
 function mockStoreInstalledFor(instanceId: string, resource: AppStoreResource): AppStoreInstalled[] {
     const key = storeKey(instanceId, resource);
     if (!mockStoreInstalled.has(key)) {
+        const inst = instances.find((i) => i.id === instanceId);
         mockStoreInstalled.set(
             key,
             resource === 'adapter'
-                ? [
-                      {
-                          id: 'nonebot.adapters.onebot.v11',
-                          name: 'OneBot V11',
-                          resource: 'adapter',
-                          flavor: 'pypi',
-                          version: '2.4.6',
-                          enabled: true,
-                          package: 'nonebot-adapter-onebot',
-                      },
-                  ]
-                : [
-                      {
-                          id: 'nonebot_plugin_status',
-                          name: 'Status',
-                          resource: 'plugin',
-                          flavor: 'pypi',
-                          version: '0.9.0',
-                          enabled: true,
-                          package: 'nonebot-plugin-status',
-                      },
-                  ],
+                ? inst?.framework_id === 'astrbot'
+                    ? []
+                    : [
+                          {
+                              id: 'nonebot.adapters.onebot.v11',
+                              name: 'OneBot V11',
+                              resource: 'adapter',
+                              flavor: 'pypi',
+                              version: '2.4.6',
+                              enabled: true,
+                              package: 'nonebot-adapter-onebot',
+                          },
+                      ]
+                : inst?.framework_id === 'astrbot'
+                  ? [
+                        {
+                            id: 'soulter/helloworld',
+                            name: 'helloworld',
+                            resource: 'plugin',
+                            flavor: 'git',
+                            version: '1.2.0',
+                            enabled: true,
+                            package: 'https://github.com/Soulter/helloworld',
+                        },
+                    ]
+                  : [
+                        {
+                            id: 'nonebot_plugin_status',
+                            name: 'Status',
+                            resource: 'plugin',
+                            flavor: 'pypi',
+                            version: '0.9.0',
+                            enabled: true,
+                            package: 'nonebot-plugin-status',
+                        },
+                    ],
         );
     }
     return mockStoreInstalled.get(key) ?? [];
@@ -706,16 +965,17 @@ function applyMockStoreOp(
         return;
     }
     if (current.some((p) => p.id === pluginName || p.name === pluginName)) return;
-    const market = (resource === 'adapter' ? mockNoneBotAdapters : mockNoneBotPlugins).find(
-        (e) => e.id === pluginName || e.name === pluginName,
-    );
+    const market = [
+        ...(resource === 'adapter' ? mockNoneBotAdapters : mockNoneBotPlugins),
+        ...mockAstrBotPlugins,
+    ].find((e) => e.id === pluginName || e.name === pluginName);
     mockStoreInstalled.set(key, [
         ...current,
         {
             id: market?.id ?? pluginName,
             name: market?.name ?? pluginName,
             resource,
-            flavor: 'pypi',
+            flavor: market?.flavor ?? 'pypi',
             version: '1.0.0',
             enabled: true,
             package: market?.package ?? '',
