@@ -193,7 +193,7 @@ fn tokens_match(app: Option<&str>, other: &str) -> bool {
 
 fn looks_like_onebot_path(path: &str) -> bool {
     let p = path.trim_end_matches('/');
-    p.is_empty() || p.contains("onebot") || p == "/"
+    p.is_empty() || p.contains("onebot") || p == "/" || p == "/ws"
 }
 
 #[cfg(test)]
@@ -328,6 +328,17 @@ mod tests {
             .websocket_clients
             .push(ws_client("b", "ws://127.0.0.1:8080/onebot/v11/ws", ""));
         assert!(discover("local", 8080, None, &[], &[a, b]).is_none());
+    }
+
+    #[test]
+    fn reverse_ws_path_scores_as_onebot() {
+        let mut b = bot(10001, RuntimeTarget::Local);
+        b.connect
+            .websocket_clients
+            .push(ws_client("ncd-app:a1", "ws://127.0.0.1:6199/ws", "tok"));
+        let hit = discover("local", 6199, Some("tok"), &[], &[b]).unwrap();
+        assert_eq!(hit.bot_id.as_str(), "10001");
+        assert_eq!(hit.connection_name, "ncd-app:a1");
     }
 
     #[test]

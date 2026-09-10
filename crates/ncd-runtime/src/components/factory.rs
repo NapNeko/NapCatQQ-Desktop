@@ -55,6 +55,9 @@ pub struct AppComponentHint {
     pub npm_registry: Option<String>,
     pub install_renderer: bool,
     pub adopt_existing: bool,
+    /// 用户名密码类 WebUI 首启前种入的账号；编排层从 SecretStore 取，只在内存里过
+    pub webui_username: Option<String>,
+    pub webui_password: Option<String>,
 }
 
 /// 把 component_id 实例化成具体 Component
@@ -318,6 +321,9 @@ fn build_app_framework_component(
         npm_registry: hint.npm_registry.clone(),
         install_renderer: hint.install_renderer,
         adopt_existing: hint.adopt_existing,
+        instance_id: hint.instance_id.clone(),
+        webui_username: hint.webui_username.clone(),
+        webui_password: hint.webui_password.clone(),
     }))
 }
 

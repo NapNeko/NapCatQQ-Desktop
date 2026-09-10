@@ -469,6 +469,7 @@ mod tests {
             ComponentId::Karin,
             ComponentId::Uv,
             ComponentId::NoneBot2,
+            ComponentId::AstrBot,
         ] {
             if id.is_app_framework() {
                 assert!(

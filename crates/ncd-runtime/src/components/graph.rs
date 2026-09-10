@@ -23,6 +23,9 @@ fn graph_placeholder_spec() -> AppComponentSpec {
         npm_registry: None,
         install_renderer: false,
         adopt_existing: false,
+        instance_id: "x".into(),
+        webui_username: None,
+        webui_password: None,
     }
 }
 
@@ -246,6 +249,8 @@ Windows/Local nodejs
 Windows/Local uv
 Windows/Local qq
 Windows/Local desktop_self
+Windows/Local astrbot
+  component uv >=0.4 (Both)
 Windows/Local karin
   component nodejs >=18 (Both)
 Windows/Local nonebot2
@@ -268,6 +273,8 @@ Linux/Local qq
   host_packages qq_dependencies (Both)
 Linux/Local novnc
 Linux/Local desktop_self
+Linux/Local astrbot
+  component uv >=0.4 (Both)
 Linux/Local karin
   component nodejs >=18 (Both)
 Linux/Local nonebot2
@@ -292,6 +299,8 @@ Linux/Remote qq
   host_packages qq_dependencies (Both)
 Linux/Remote novnc
 Linux/Remote ncd_watch
+Linux/Remote astrbot
+  component uv >=0.4 (Both)
 Linux/Remote karin
   component nodejs >=18 (Both)
 Linux/Remote nonebot2

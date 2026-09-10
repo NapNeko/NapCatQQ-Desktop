@@ -23,7 +23,8 @@ use ncd_component::{DetectOutcome, LaunchArgs};
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkId, AppFrameworkManifest, AppInstance,
     AppInstanceId, AppInstanceState, AppLinkRecord, AppLinkTopology, AppPlacement, AppPluginAction,
-    AppInstanceOrigin, AppProjectProbe, AppStoreResource, BotConfig, BotId,
+    AppInstanceOrigin, AppPluginConfigSchema, AppProjectProbe, AppStoreResource, AppWebUiAccount,
+    AppWebUiAuthKind, BotConfig, BotId,
     CreateAppInstanceRequest, DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID,
     REMOTE_HOST_ID_PREFIX,
     OneBotLinkMode, OneBotLinkPlan, RuntimeTarget, app_link_connection_name, classify_app_link,
@@ -33,7 +34,7 @@ use ncd_domain::{
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
 use ncd_server::HostResolver;
-use ncd_traits::{AppFrameworkError, EventBus, EventFilter};
+use ncd_traits::{AppFrameworkError, EventBus, EventFilter, SecretStore};
 use ncd_traits::runtime_backend::LogSnapshot;
 use rand::Rng;
 use rand::distributions::Alphanumeric;
@@ -50,6 +51,29 @@ use crate::metrics::now_ms;
 
 /// 本机实例目录：`data_root/apps/<framework>/<instance>`
 const LOCAL_APPS_DIR: &str = "apps";
+/// SecretStore 里 WebUI 账号的键后缀（`app:<instance_id>:<suffix>`）；明文只存这里，实例记录不带
+const SECRET_WEBUI_USERNAME: &str = "webui_username";
+const SECRET_WEBUI_PASSWORD: &str = "webui_password";
+
+fn secret_key(instance_id: &str, suffix: &str) -> String {
+    format!("app:{instance_id}:{suffix}")
+}
+
+/// 用户给的密码过框架口令策略；没给（或空）就按框架策略生成
+fn resolve_webui_password(
+    adapter: &dyn AppFrameworkAdapter,
+    requested: Option<String>,
+) -> Result<String, AppFrameworkError> {
+    match requested.map(|p| p.trim().to_string()).filter(|p| !p.is_empty()) {
+        Some(p) => {
+            adapter
+                .validate_webui_password(&p)
+                .map_err(|m| AppFrameworkError::ConfigInvalid(vec![ncd_domain::AppConfigIssue::new("webui_password", m)]))?;
+            Ok(p)
+        }
+        None => Ok(adapter.generate_webui_password()),
+    }
+}
 /// 远端实例目录：`$HOME/ncd/apps/<framework>/<instance>`
 const REMOTE_APPS_REL: &str = "ncd/apps";
 
@@ -124,6 +148,10 @@ fn needs_desktop_ssh_tunnel(topology: AppLinkTopology) -> bool {
     )
 }
 
+fn webui_tunnel_key(instance: &AppInstance) -> String {
+    format!("{}:webui", instance.id.as_str())
+}
+
 fn unsupported_link_topology(bot_target: &RuntimeTarget, app_host_id: &str) -> AppFrameworkError {
     AppFrameworkError::Validation(format!(
         "不支持该对接拓扑：Bot 在 {}，应用实例在 {}",
@@ -142,6 +170,8 @@ pub struct AppManager {
     data_root: PathBuf,
     adopt_store: AdoptStore,
     npm_registry: Option<String>,
+    /// 用户名密码类 WebUI 的明文密码落点；None（测试）时创建实例不种密码，交给框架首启自生成
+    secrets: Option<Arc<dyn SecretStore + Send + Sync>>,
     /// Desktop 握着的跨机隧道。key = instance id；解绑 / 删实例 / 改端口时释放。
     tunnels: tokio::sync::Mutex<HashMap<String, AppInstanceTunnel>>,
 }
@@ -166,6 +196,7 @@ impl AppManager {
             data_root: data_root.to_path_buf(),
             adopt_store: AdoptStore::new(data_root),
             npm_registry: None,
+            secrets: None,
             tunnels: tokio::sync::Mutex::new(HashMap::new()),
         }
     }
@@ -173,6 +204,42 @@ impl AppManager {
     pub fn with_npm_registry(mut self, registry: Option<String>) -> Self {
         self.npm_registry = registry.filter(|s| !s.trim().is_empty());
         self
+    }
+
+    pub fn with_secret_store(mut self, secrets: Arc<dyn SecretStore + Send + Sync>) -> Self {
+        self.secrets = Some(secrets);
+        self
+    }
+
+    fn remembered_secret(&self, instance: &AppInstance, suffix: &str) -> Option<String> {
+        let store = self.secrets.as_ref()?;
+        match store.get(&secret_key(instance.id.as_str(), suffix)) {
+            Ok(v) => v.filter(|s| !s.is_empty()),
+            Err(e) => {
+                tracing::warn!(instance = instance.id.as_str(), suffix, error = %e, "read app secret");
+                None
+            }
+        }
+    }
+
+    fn remember_secret(&self, instance_id: &AppInstanceId, suffix: &str, value: &str) {
+        let Some(store) = self.secrets.as_ref() else {
+            return;
+        };
+        if let Err(e) = store.put(&secret_key(instance_id.as_str(), suffix), value) {
+            tracing::warn!(instance = instance_id.as_str(), suffix, error = %e, "store app secret");
+        }
+    }
+
+    fn forget_secrets(&self, instance_id: &AppInstanceId) {
+        let Some(store) = self.secrets.as_ref() else {
+            return;
+        };
+        for suffix in [SECRET_WEBUI_USERNAME, SECRET_WEBUI_PASSWORD] {
+            if let Err(e) = store.delete(&secret_key(instance_id.as_str(), suffix)) {
+                tracing::debug!(instance = instance_id.as_str(), suffix, error = %e, "drop app secret");
+            }
+        }
     }
 
     pub fn runtime(&self) -> &Arc<NativeAppRuntime> {
@@ -202,6 +269,8 @@ impl AppManager {
             npm_registry: self.npm_registry.clone(),
             install_renderer: instance.install_renderer,
             adopt_existing: instance.origin.is_imported(),
+            webui_username: self.remembered_secret(instance, SECRET_WEBUI_USERNAME),
+            webui_password: self.remembered_secret(instance, SECRET_WEBUI_PASSWORD),
         }
     }
 
@@ -218,12 +287,104 @@ impl AppManager {
         self.ensure_local_to_remote_tunnel(instance).await
     }
 
+    /// WebUI 在应用机上的 HTTP 口（AstrBot 是 dashboard.port，不是 OneBot 口）。
+    pub async fn webui_listen_port(&self, instance: &AppInstance) -> u16 {
+        match self.read_config(&instance.id).await {
+            Ok(env) => env.config.webui_port().unwrap_or(instance.port),
+            Err(_) => self
+                .registry
+                .get(&instance.framework_id)
+                .map(|adapter| adapter.webui_fallback_port(instance))
+                .unwrap_or(instance.port),
+        }
+    }
+
+    /// 打开 WebUI：远端隧道打到 WebUI 口，再交给 integration 拼 URL。
+    pub async fn desktop_webui_loopback_port(
+        &self,
+        instance: &AppInstance,
+    ) -> Result<u16, AppFrameworkError> {
+        let remote = self.webui_listen_port(instance).await;
+        self.ensure_local_to_remote_port_tunnel(instance, remote, webui_tunnel_key(instance))
+            .await
+    }
+
     /// 读盘拿到的 WebUI 登录密钥；配置读失败或没有密钥时返回空串。
     pub async fn webui_auth_key(&self, id: &AppInstanceId) -> String {
         match self.read_config(id).await {
             Ok(envelope) => envelope.config.webui_auth_key().to_string(),
             Err(_) => String::new(),
         }
+    }
+
+    /// 用户名密码类 WebUI 的账号：用户名以落盘为准，密码只有桌面端自己设过才有。
+    /// 落盘读不到时也给出默认用户名，让用户至少知道该填什么。
+    pub async fn webui_account(&self, instance: &AppInstance) -> Option<AppWebUiAccount> {
+        let adapter = self.registry.get(&instance.framework_id).ok()?;
+        if adapter.manifest().webui_auth != AppWebUiAuthKind::UserPassword {
+            return None;
+        }
+        let remembered = self.remembered_secret(instance, SECRET_WEBUI_PASSWORD);
+        let probe = match self.resolve_host(&instance.host_id).await {
+            Ok(host) => adapter
+                .read_webui_account(host.as_ref(), instance, remembered.as_deref())
+                .await
+                .ok()
+                .flatten(),
+            Err(_) => None,
+        };
+        let can_reset = !matches!(instance.state, AppInstanceState::Running);
+        Some(match probe {
+            Some(p) => AppWebUiAccount {
+                username: p.username,
+                password: remembered,
+                password_matches: p.password_matches,
+                can_reset,
+            },
+            None => AppWebUiAccount {
+                username: self
+                    .remembered_secret(instance, SECRET_WEBUI_USERNAME)
+                    .unwrap_or_default(),
+                password: remembered,
+                password_matches: None,
+                can_reset,
+            },
+        })
+    }
+
+    /// 重置 WebUI 密码（None = 随机生成）：实例必须已停止，写完下次启动生效。
+    pub async fn reset_webui_password(
+        &self,
+        id: &AppInstanceId,
+        password: Option<String>,
+    ) -> Result<AppWebUiAccount, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let adapter = self.registry.get(&instance.framework_id)?;
+        if adapter.manifest().webui_auth != AppWebUiAuthKind::UserPassword {
+            return Err(AppFrameworkError::ConfigUnsupported(
+                instance.framework_id.as_str().to_string(),
+            ));
+        }
+        if matches!(instance.state, AppInstanceState::Running) {
+            return Err(AppFrameworkError::Validation(
+                "实例运行中，先停止再重置密码".to_string(),
+            ));
+        }
+        let password = resolve_webui_password(adapter.as_ref(), password)?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        adapter
+            .write_webui_password(host.as_ref(), &instance, &password)
+            .await?;
+        self.remember_secret(id, SECRET_WEBUI_PASSWORD, &password);
+        Ok(self
+            .webui_account(&instance)
+            .await
+            .unwrap_or(AppWebUiAccount {
+                username: String::new(),
+                password: Some(password),
+                password_matches: Some(true),
+                can_reset: true,
+            }))
     }
 
     // ---- 实例生命周期 ----
@@ -251,9 +412,28 @@ impl AppManager {
         let probe_local = req.host_id == LOCAL_HOST_ID;
         let port = allocate_listen_port(req.port, &taken, probe_local)
             .map_err(AppFrameworkError::Validation)?;
+        // 账号密码类 WebUI：先把密码定下来，安装时种进配置，之后打开 WebUI 才有得显示
+        let webui_account = if manifest.webui_auth == AppWebUiAuthKind::UserPassword {
+            let password = resolve_webui_password(adapter.as_ref(), req.webui_password.clone())?;
+            let username = req
+                .webui_username
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(ToOwned::to_owned);
+            Some((username, password))
+        } else {
+            None
+        };
 
         let host = self.resolve_host(&req.host_id).await?;
         let id = AppInstanceId::new(short_id());
+        if let Some((username, password)) = &webui_account {
+            if let Some(name) = username {
+                self.remember_secret(&id, SECRET_WEBUI_USERNAME, name);
+            }
+            self.remember_secret(&id, SECRET_WEBUI_PASSWORD, password);
+        }
         let install_dir = self
             .resolve_install_dir(
                 host.as_ref(),
@@ -372,9 +552,13 @@ impl AppManager {
             .filter(|i| i.host_id == req.host_id)
             .map(|i| i.port)
             .collect();
-        // 接管后对接用 instance.port；必须跟项目实际监听口一致，不能悄悄换成随机高位
-        let port = allocate_listen_port(probe.port.or(Some(manifest.default_port)), &taken, false)
-            .map_err(AppFrameworkError::Validation)?;
+        // 接管后对接用 instance.port；必须跟项目实际监听口一致，不能悄悄换成随机高位。
+        // 探测不到口时不要填框架默认口：多监听口会把默认口误认成认领。
+        let port = match adapter.suggested_import_port(&probe).filter(|p| *p > 0) {
+            Some(p) => allocate_listen_port(Some(p), &taken, false)
+                .map_err(AppFrameworkError::Validation)?,
+            None => 0,
+        };
         let display_name = if req.display_name.trim().is_empty() {
             probe.display_name.clone()
         } else {
@@ -879,6 +1063,7 @@ impl AppManager {
             let _ = self.adopt_store.remove(id);
         }
         if let Some(removed) = self.store.remove(id).await? {
+            self.forget_secrets(id);
             self.publish(&removed, "deleted");
         }
         Ok(())
@@ -1400,6 +1585,24 @@ impl AppManager {
             .await
     }
 
+    pub async fn plugin_config_schema(
+        &self,
+        id: &AppInstanceId,
+        plugin_name: &str,
+    ) -> Result<Option<AppPluginConfigSchema>, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        if !instance.state.is_installed() {
+            return Err(AppFrameworkError::Validation(
+                "应用实例尚未安装".to_string(),
+            ));
+        }
+        let adapter = self.registry.get(&instance.framework_id)?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        adapter
+            .plugin_config_schema(host.as_ref(), &instance, plugin_name)
+            .await
+    }
+
     pub async fn run_plugin_op(
         &self,
         id: &AppInstanceId,
@@ -1802,17 +2005,30 @@ impl AppManager {
         &self,
         instance: &AppInstance,
     ) -> Result<u16, AppFrameworkError> {
+        self.ensure_local_to_remote_port_tunnel(
+            instance,
+            instance.port,
+            instance.id.as_str().to_string(),
+        )
+        .await
+    }
+
+    async fn ensure_local_to_remote_port_tunnel(
+        &self,
+        instance: &AppInstance,
+        remote_port: u16,
+        key: String,
+    ) -> Result<u16, AppFrameworkError> {
         if server_id_of_host(&instance.host_id).is_none() {
-            return Ok(instance.port);
+            return Ok(remote_port);
         }
-        if instance.port == 0 {
+        if remote_port == 0 {
             return Err(AppFrameworkError::Validation("应用实例端口无效".into()));
         }
-        let key = instance.id.as_str().to_string();
         {
             let mut map = self.tunnels.lock().await;
             if let Some(existing) = map.get(&key) {
-                if existing.app_port == instance.port
+                if existing.app_port == remote_port
                     && existing.topology == AppLinkTopology::LocalBotRemoteApp
                 {
                     return Ok(existing.handle.local_port());
@@ -1822,7 +2038,7 @@ impl AppManager {
         }
         let host = self.resolve_host(&instance.host_id).await?;
         let handle = host
-            .open_tunnel(TunnelSpec::local_to_remote(0, instance.port))
+            .open_tunnel(TunnelSpec::local_to_remote(0, remote_port))
             .await
             .map_err(host_err)?;
         let local_port = handle.local_port();
@@ -1831,7 +2047,7 @@ impl AppManager {
         }
         let mut map = self.tunnels.lock().await;
         if let Some(existing) = map.get(&key) {
-            if existing.app_port == instance.port
+            if existing.app_port == remote_port
                 && existing.topology == AppLinkTopology::LocalBotRemoteApp
             {
                 return Ok(existing.handle.local_port());
@@ -1840,7 +2056,7 @@ impl AppManager {
         map.insert(
             key,
             AppInstanceTunnel {
-                app_port: instance.port,
+                app_port: remote_port,
                 topology: AppLinkTopology::LocalBotRemoteApp,
                 handle,
             },
@@ -1901,7 +2117,11 @@ impl AppManager {
     }
 
     async fn drop_instance_tunnel(&self, id: &AppInstanceId) {
-        self.tunnels.lock().await.remove(id.as_str());
+        let id_str = id.as_str().to_string();
+        let webui = format!("{id_str}:webui");
+        let mut map = self.tunnels.lock().await;
+        map.remove(&id_str);
+        map.remove(&webui);
     }
 
     async fn ensure_resident_link(
@@ -2086,6 +2306,9 @@ impl AppManager {
             npm_registry: self.npm_registry.clone(),
             install_renderer: instance.install_renderer,
             adopt_existing: instance.origin.is_imported(),
+            instance_id: instance.id.as_str().to_string(),
+            webui_username: None,
+            webui_password: None,
         }
     }
 
@@ -3037,6 +3260,8 @@ mod tests {
                     port: Some(7777),
                     install_dir: None,
                     install_renderer: None,
+                    webui_username: None,
+                    webui_password: None,
                 })
                 .await
                 .unwrap();
@@ -3103,6 +3328,8 @@ plugin_dirs = ["src/plugins"]
                     port: Some(20001),
                     install_dir: Some(project.to_string_lossy().into_owned()),
                     install_renderer: None,
+                    webui_username: None,
+                    webui_password: None,
                 })
                 .await;
             assert!(

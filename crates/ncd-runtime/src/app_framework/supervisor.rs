@@ -12,7 +12,10 @@ fn shell_quote(s: &str) -> String {
 /// ExecStart 像在跑框架入口，而不是项目里的 sidecar 脚本。
 pub fn exec_looks_like_app(exec: &str, install_dir: &str) -> bool {
     let e = exec.to_ascii_lowercase();
-    if !e.contains(&install_dir.to_ascii_lowercase()) && !e.contains("bot.py") && !e.contains("app.mjs")
+    if !e.contains(&install_dir.to_ascii_lowercase())
+        && !e.contains("bot.py")
+        && !e.contains("app.mjs")
+        && !e.contains("astrbot")
     {
         return false;
     }
@@ -23,6 +26,7 @@ pub fn exec_looks_like_app(exec: &str, install_dir: &str) -> bool {
         || e.contains("app.mjs")
         || e.contains("node-karin")
         || e.contains("uv run")
+        || e.contains("astrbot")
 }
 
 pub async fn list_supervisors(
@@ -148,6 +152,7 @@ pub fn pick_app_pid(lines: &str, kind: AppProcessKind) -> Option<(u32, String)> 
             AppProcessKind::Karin => {
                 lower.contains("app.mjs") || lower.contains("node-karin") || lower.contains("karin")
             }
+            AppProcessKind::AstrBot => lower.contains("astrbot"),
         };
         if hit {
             let program = if lower.contains("python") {
@@ -167,14 +172,15 @@ pub fn pick_app_pid(lines: &str, kind: AppProcessKind) -> Option<(u32, String)> 
 pub enum AppProcessKind {
     NoneBot2,
     Karin,
+    AstrBot,
 }
 
 impl AppProcessKind {
     pub fn from_framework(id: &str) -> Self {
-        if id == "karin" {
-            Self::Karin
-        } else {
-            Self::NoneBot2
+        match id {
+            "karin" => Self::Karin,
+            "astrbot" => Self::AstrBot,
+            _ => Self::NoneBot2,
         }
     }
 }
@@ -248,6 +254,16 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
 659110 /root/game-qqbot/bot-xiuxian/.venv/bin/python3 scripts/run_admin.py\n";
         let (pid, prog) = pick_app_pid(lines, AppProcessKind::NoneBot2).unwrap();
         assert_eq!(pid, 659109);
+        assert_eq!(prog, "python");
+    }
+
+    #[test]
+    fn pick_astrbot_run() {
+        let lines = "\
+2201 /opt/astrbot/.venv/bin/python -m astrbot.cli\n\
+2202 /home/u/apps/a1/.venv/bin/astrbot run\n";
+        let (pid, prog) = pick_app_pid(lines, AppProcessKind::AstrBot).unwrap();
+        assert_eq!(pid, 2202);
         assert_eq!(prog, "python");
     }
 }
