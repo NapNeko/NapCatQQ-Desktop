@@ -56,6 +56,7 @@ pub fn karin_manifest() -> AppFrameworkManifest {
         runtime_component_ids: vec!["nodejs".to_string()],
         store_resources: vec![ncd_domain::AppStoreResource::Plugin],
         has_install_renderer: true,
+        webui_auth: ncd_domain::AppWebUiAuthKind::Key,
     }
 }
 

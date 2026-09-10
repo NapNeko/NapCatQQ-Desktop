@@ -15,8 +15,11 @@ ncd-traits = { path = "../ncd-traits" }
 ncd-component = { path = "../ncd-component" }
 ncd-host = { path = "../ncd-host" }
 async-trait = "0.1"
+md5 = "0.7"
+pbkdf2 = "0.12"
+rand = "0.8"
 serde = { workspace = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
 sha2 = "0.10"
 thiserror = { workspace = true }
 tokio = { version = "1", features = ["rt", "sync"] }

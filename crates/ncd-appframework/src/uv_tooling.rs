@@ -94,6 +94,14 @@ pub fn venv_python(install_dir: &HostPath, os: Os) -> HostPath {
     }
 }
 
+/// 实例 venv 里的脚本：Windows `.venv/Scripts/<name>.exe`，其它 `.venv/bin/<name>`
+pub fn venv_script(install_dir: &HostPath, os: Os, name: &str) -> HostPath {
+    match os {
+        Os::Windows => install_dir.join(format!(".venv/Scripts/{name}.exe")),
+        _ => install_dir.join(format!(".venv/bin/{name}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,6 +117,14 @@ mod tests {
         assert_eq!(
             venv_python(&win, Os::Windows).render(ncd_host::PathStyle::Windows),
             r"C:\apps\n1\.venv\Scripts\python.exe"
+        );
+        assert_eq!(
+            venv_script(&dir, Os::Linux, "astrbot").as_posix(),
+            "/home/u/ncd/apps/nonebot2/n1/.venv/bin/astrbot"
+        );
+        assert_eq!(
+            venv_script(&win, Os::Windows, "astrbot").render(ncd_host::PathStyle::Windows),
+            r"C:\apps\n1\.venv\Scripts\astrbot.exe"
         );
     }
 

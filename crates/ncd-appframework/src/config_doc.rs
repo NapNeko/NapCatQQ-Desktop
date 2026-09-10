@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use ts_rs::TS;
 
 use crate::adapter::apply_with_backup_ex;
+use crate::astrbot::config::AstrBotInstanceConfig;
 use crate::karin::config::KarinInstanceConfig;
 use crate::nonebot2::config::NoneBot2InstanceConfig;
 
@@ -24,6 +25,8 @@ pub enum AppInstanceConfig {
     Karin(KarinInstanceConfig),
     #[serde(rename = "nonebot2")]
     NoneBot2(NoneBot2InstanceConfig),
+    #[serde(rename = "astrbot")]
+    AstrBot(AstrBotInstanceConfig),
 }
 
 impl AppInstanceConfig {
@@ -31,7 +34,7 @@ impl AppInstanceConfig {
     pub fn webui_auth_key(&self) -> &str {
         match self {
             Self::Karin(c) => c.env.http_auth_key.as_str(),
-            Self::NoneBot2(_) => "",
+            Self::NoneBot2(_) | Self::AstrBot(_) => "",
         }
     }
 
@@ -40,6 +43,16 @@ impl AppInstanceConfig {
         match self {
             Self::Karin(c) => c.env.http_port,
             Self::NoneBot2(c) => c.env_prod.port,
+            Self::AstrBot(c) => c.onebot.ws_reverse_port,
+        }
+    }
+
+    /// WebUI HTTP 口；没有 WebUI 返回 None。AstrBot 与 OneBot 口不是同一个。
+    pub fn webui_port(&self) -> Option<u16> {
+        match self {
+            Self::Karin(c) => Some(c.env.http_port),
+            Self::NoneBot2(_) => None,
+            Self::AstrBot(c) => Some(c.dashboard_port).filter(|p| *p > 0),
         }
     }
 
@@ -51,6 +64,9 @@ impl AppInstanceConfig {
             }
             (Self::NoneBot2(before), Self::NoneBot2(after)) => {
                 crate::nonebot2::config::link_inputs_changed(&before.env_prod, &after.env_prod)
+            }
+            (Self::AstrBot(before), Self::AstrBot(after)) => {
+                crate::astrbot::config::link_inputs_changed(before, after)
             }
             _ => false,
         }
@@ -298,6 +314,26 @@ mod tests {
         assert_eq!(AppInstanceConfig::Karin(cfg.clone()).listen_port(), 7777);
         cfg.env.http_port = 7801;
         assert_eq!(AppInstanceConfig::Karin(cfg).listen_port(), 7801);
+    }
+
+    #[test]
+    fn listen_port_reads_astrbot_onebot_port() {
+        let mut cfg = crate::astrbot::AstrBotInstanceConfig::default();
+        assert_eq!(
+            AppInstanceConfig::AstrBot(cfg.clone()).listen_port(),
+            6199
+        );
+        cfg.onebot.ws_reverse_port = 6201;
+        assert_eq!(AppInstanceConfig::AstrBot(cfg.clone()).listen_port(), 6201);
+        assert_eq!(
+            AppInstanceConfig::AstrBot(cfg).webui_port(),
+            Some(6185)
+        );
+        assert_eq!(
+            AppInstanceConfig::AstrBot(crate::astrbot::AstrBotInstanceConfig::default())
+                .webui_auth_key(),
+            ""
+        );
     }
 
     #[test]

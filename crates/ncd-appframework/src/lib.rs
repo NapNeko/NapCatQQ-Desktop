@@ -10,6 +10,7 @@
 
 pub mod adapter;
 pub mod adopt;
+pub mod astrbot;
 pub mod config_doc;
 pub mod env_file;
 pub mod karin;
@@ -45,6 +46,11 @@ pub use nonebot2::{
     NoneBot2Component, NoneBot2EnvEntry, NoneBot2EnvProd, NoneBot2InstanceConfig,
     NoneBot2Integration, nonebot2_manifest, nonebot_registry_urls, parse_nonebot_adapters_json,
     parse_nonebot_plugins_json,
+};
+pub use astrbot::{
+    ASTRBOT_FRAMEWORK_ID, ASTRBOT_PLUGINS_URL, AstrBotAdapter, AstrBotComponent,
+    AstrBotInstanceConfig, AstrBotIntegration, AstrBotOneBotRow, astrbot_manifest,
+    astrbot_plugin_market_urls, parse_astrbot_plugins_json,
 };
 pub use registry::AppFrameworkRegistry;
 pub use store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};

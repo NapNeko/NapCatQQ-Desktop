@@ -16,6 +16,7 @@ use ts_rs::TS;
 /// - Karin → karin（应用端框架；按实例目录安装，不进组件页 catalog）
 /// - Uv → uv（Python 工具链，单二进制，可自带装 Python；NoneBot2 的运行时依赖）
 /// - NoneBot2 → nonebot2（应用端框架；同 Karin 按实例目录安装）
+/// - AstrBot → astrbot（应用端框架；按实例目录安装，不进组件页 catalog）
 ///
 /// 与项目内 napcat_* / snowluma_* 事件名风格保持一致;不直接走 serde
 /// 的 rename_all = "snake_case",因为它会把 NapCat 切成 nap_cat,
@@ -43,6 +44,8 @@ pub enum ComponentId {
     Uv,
     #[serde(rename = "nonebot2")]
     NoneBot2,
+    #[serde(rename = "astrbot")]
+    AstrBot,
 }
 
 impl ComponentId {
@@ -58,13 +61,14 @@ impl ComponentId {
             Self::Karin => "karin",
             Self::Uv => "uv",
             Self::NoneBot2 => "nonebot2",
+            Self::AstrBot => "astrbot",
         }
     }
 
     /// 应用端框架：按实例目录装，不进组件页 catalog。
     /// 新框架加变体时必须写进这里，factory / 依赖图靠它分流，不再点名。
     pub const fn is_app_framework(&self) -> bool {
-        matches!(self, Self::Karin | Self::NoneBot2)
+        matches!(self, Self::Karin | Self::NoneBot2 | Self::AstrBot)
     }
 
     /// 从跨边界字面量还原（与 serde rename 同源）；未知返回 None
@@ -195,7 +199,7 @@ impl LaunchArgs {
 /// - Framework:用户主动选择安装的协议框架(NapCat / SnowLuma)
 /// - RuntimeDep:Framework 依赖的运行时(QQ / NodeJs / NoVnc)
 /// - SelfApp:Desktop 产品侧(本机 Desktop 自更新;远端 ncd-watch 脱管监控)
-/// - AppFramework:应用端框架(Karin / NoneBot2),消费 OneBot,按实例安装
+/// - AppFramework:应用端框架(Karin / NoneBot2 / AstrBot),消费 OneBot,按实例安装
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -305,6 +309,7 @@ mod tests {
             ComponentId::Karin,
             ComponentId::Uv,
             ComponentId::NoneBot2,
+            ComponentId::AstrBot,
         ] {
             assert_eq!(ComponentId::parse(id.as_str()), Some(id));
         }
@@ -315,6 +320,7 @@ mod tests {
     fn app_framework_flag_marks_only_frameworks() {
         assert!(ComponentId::Karin.is_app_framework());
         assert!(ComponentId::NoneBot2.is_app_framework());
+        assert!(ComponentId::AstrBot.is_app_framework());
         assert!(!ComponentId::Uv.is_app_framework());
         assert!(!ComponentId::NodeJs.is_app_framework());
     }
@@ -332,6 +338,7 @@ mod tests {
             ComponentId::Karin,
             ComponentId::Uv,
             ComponentId::NoneBot2,
+            ComponentId::AstrBot,
         ] {
             let s = serde_json::to_string(&id).unwrap();
             let expected = format!("\"{}\"", id.as_str());

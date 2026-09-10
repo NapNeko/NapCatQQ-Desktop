@@ -8,8 +8,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
-    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppStoreResource,
-    OneBotLinkPlan,
+    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppPluginConfigSchema,
+    AppProjectProbe, AppStoreResource, OneBotLinkPlan,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
@@ -39,6 +39,19 @@ pub struct AppComponentSpec {
     pub install_renderer: bool,
     /// 领养已有项目：同步依赖，不写脚手架、不改端口。
     pub adopt_existing: bool,
+    /// 实例 id；AstrBot 预置 `ncd-app:<id>` 行时用。图占位可填 `"x"`。
+    pub instance_id: String,
+    /// 用户名密码类 WebUI 首启前要种进配置的账号（明文只在内存里过一次）；None = 不碰
+    pub webui_username: Option<String>,
+    pub webui_password: Option<String>,
+}
+
+/// 用户名密码类 WebUI 落盘账号 + 与桌面端记住的密码是否一致
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WebUiAccountProbe {
+    pub username: String,
+    /// None = 落盘还没有哈希（首启才生成）或没给要核对的密码
+    pub password_matches: Option<bool>,
 }
 
 #[async_trait]
@@ -56,11 +69,61 @@ pub trait AppFrameworkAdapter: Send + Sync {
         &self,
         _host: &dyn Host,
         _path: &HostPath,
-    ) -> Result<ncd_domain::AppProjectProbe, AppFrameworkError> {
+    ) -> Result<AppProjectProbe, AppFrameworkError> {
         Err(AppFrameworkError::Validation(format!(
             "{} 暂不支持导入已有项目",
             self.manifest().display_name
         )))
+    }
+
+    /// 导入时写入 `AppInstance.port` 的口。默认：探测口，否则框架默认口。
+    /// 探测不到真实口时不要猜默认口——多监听口会把默认口误认成认领。
+    fn suggested_import_port(&self, probe: &AppProjectProbe) -> Option<u16> {
+        probe
+            .port
+            .filter(|p| *p > 0)
+            .or(Some(self.manifest().default_port))
+    }
+
+    /// `read_config` 失败时打开 WebUI 用的回落口。默认等于 `instance.port`。
+    fn webui_fallback_port(&self, instance: &AppInstance) -> u16 {
+        instance.port
+    }
+
+    /// 用户名密码类 WebUI：读落盘账号，顺带核对桌面端记住的密码。None = 该框架不是账号密码登录。
+    async fn read_webui_account(
+        &self,
+        _host: &dyn Host,
+        _instance: &AppInstance,
+        _remembered_password: Option<&str>,
+    ) -> Result<Option<WebUiAccountProbe>, AppFrameworkError> {
+        Ok(None)
+    }
+
+    /// 把新密码按框架哈希格式写进实例配置。调用方保证实例已停止（运行中改会被进程覆盖）。
+    async fn write_webui_password(
+        &self,
+        _host: &dyn Host,
+        instance: &AppInstance,
+        _password: &str,
+    ) -> Result<(), AppFrameworkError> {
+        Err(AppFrameworkError::ConfigUnsupported(
+            instance.framework_id.as_str().to_string(),
+        ))
+    }
+
+    /// 框架自己的口令策略；新建 / 重置时用户给的密码先过这里
+    fn validate_webui_password(&self, _password: &str) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn generate_webui_password(&self) -> String {
+        use rand::Rng;
+        rand::thread_rng()
+            .sample_iter(rand::distributions::Alphanumeric)
+            .take(24)
+            .map(char::from)
+            .collect()
     }
 
     /// 导入前要快照的相对路径（dotenv / 入口 / 清单）。缺文件也列入，释放时删掉我们后来写的。
@@ -301,6 +364,16 @@ pub trait AppFrameworkAdapter: Send + Sync {
         ))
     }
 
+    /// 插件配置表单；None = 该插件只能改原文（`list_plugin_config_docs` 给的文档）
+    async fn plugin_config_schema(
+        &self,
+        _host: &dyn Host,
+        _instance: &AppInstance,
+        _plugin_name: &str,
+    ) -> Result<Option<AppPluginConfigSchema>, AppFrameworkError> {
+        Ok(None)
+    }
+
     /// 商店启停是否改类型化配置（再走 `write_config` 同步对接）。
     /// false：自己写盘（`set_store_enabled`）。
     fn store_enable_via_config(&self) -> bool {
@@ -521,6 +594,21 @@ mod tests {
             adapter.store_market_cache_key(AppStoreResource::Adapter),
             Some("adapters")
         );
+    }
+
+    #[test]
+    fn astrbot_store_is_plugins_only() {
+        let adapter = crate::astrbot::AstrBotAdapter::new();
+        assert!(!adapter.store_market_urls(AppStoreResource::Plugin).is_empty());
+        assert!(adapter.store_market_urls(AppStoreResource::Adapter).is_empty());
+        assert_eq!(
+            adapter.store_market_cache_key(AppStoreResource::Plugin),
+            Some("astrbot-plugins")
+        );
+        assert!(matches!(
+            adapter.parse_store_market(AppStoreResource::Adapter, "{}"),
+            Err(ncd_traits::AppFrameworkError::PluginUnsupported(_))
+        ));
     }
 
     #[test]

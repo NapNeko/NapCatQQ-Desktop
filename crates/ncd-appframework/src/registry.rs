@@ -7,6 +7,7 @@ use ncd_domain::{AppFrameworkId, AppFrameworkManifest};
 use ncd_traits::AppFrameworkError;
 
 use crate::adapter::AppFrameworkAdapter;
+use crate::astrbot::AstrBotAdapter;
 use crate::karin::KarinAdapter;
 use crate::nonebot2::NoneBot2Adapter;
 
@@ -25,6 +26,7 @@ impl AppFrameworkRegistry {
         let mut reg = Self::new();
         reg.register(Arc::new(KarinAdapter::new()));
         reg.register(Arc::new(NoneBot2Adapter::new()));
+        reg.register(Arc::new(AstrBotAdapter::new()));
         reg
     }
 
@@ -69,15 +71,24 @@ mod tests {
             .iter()
             .map(|m| m.id.as_str().to_string())
             .collect();
-        assert_eq!(ids, vec!["karin".to_string(), "nonebot2".to_string()]);
+        assert_eq!(
+            ids,
+            vec![
+                "astrbot".to_string(),
+                "karin".to_string(),
+                "nonebot2".to_string()
+            ]
+        );
         assert!(reg.get(&AppFrameworkId::new("karin")).is_ok());
         assert!(reg.get(&AppFrameworkId::new("nonebot2")).is_ok());
+        assert!(reg.get(&AppFrameworkId::new("astrbot")).is_ok());
         assert!(matches!(
             reg.get(&AppFrameworkId::new("koishi")),
             Err(AppFrameworkError::NotRegistered(_))
         ));
         assert!(reg.by_component_id("karin").is_some());
         assert!(reg.by_component_id("nonebot2").is_some());
+        assert!(reg.by_component_id("astrbot").is_some());
         assert!(reg.by_component_id("uv").is_none(), "运行时依赖不是应用端框架");
     }
 
@@ -107,6 +118,9 @@ mod tests {
                 npm_registry: None,
                 install_renderer: false,
                 adopt_existing: false,
+                instance_id: "x".into(),
+                webui_username: None,
+                webui_password: None,
             };
             let mut from_reqs: Vec<String> = adapter
                 .component(&spec)

@@ -70,6 +70,7 @@ pub fn nonebot2_manifest() -> AppFrameworkManifest {
             ncd_domain::AppStoreResource::Plugin,
         ],
         has_install_renderer: false,
+        webui_auth: ncd_domain::AppWebUiAuthKind::None,
     }
 }
 
