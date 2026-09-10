@@ -322,6 +322,37 @@ pub struct AppFrameworkManifest {
     /// 新建实例是否展示「一并安装渲染器」
     #[serde(default)]
     pub has_install_renderer: bool,
+    /// WebUI 登录方式；决定新建对话框是否收账号密码、打开时弹不弹账号框
+    #[serde(default)]
+    pub webui_auth: AppWebUiAuthKind,
+}
+
+/// WebUI 怎么登录。Karin 是单个 `HTTP_AUTH_KEY`；AstrBot 是用户名 + 密码（落盘只有哈希）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AppWebUiAuthKind {
+    #[default]
+    None,
+    Key,
+    UserPassword,
+}
+
+/// 用户名密码类 WebUI 的账号视图（打开 WebUI 时弹给用户）。
+/// 密码只有桌面端自己设过才知道；导入的实例或用户在 WebUI 改过后就只剩用户名。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppWebUiAccount {
+    pub username: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub password: Option<String>,
+    /// 记住的密码与落盘哈希是否仍一致；None = 没记密码或落盘没有哈希（首启才生成）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub password_matches: Option<bool>,
+    /// 实例已停止时才允许桌面端重置密码（运行中改文件会被进程覆盖）
+    pub can_reset: bool,
 }
 
 /// 对接时将改动的应用端文件（预览用，只描述不带内容）
@@ -457,6 +488,14 @@ pub struct CreateAppInstanceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub install_renderer: Option<bool>,
+    /// 仅 `webui_auth = user_password` 的框架有意义；None 用框架默认用户名
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub webui_username: Option<String>,
+    /// None / 空 = 桌面端按框架口令策略随机生成
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub webui_password: Option<String>,
 }
 
 /// 探测已有项目目录（导入前）
@@ -534,6 +573,49 @@ pub struct AppConfigText {
     pub text: String,
     /// 文件不存在时为 `"missing"`
     pub revision: String,
+}
+
+/// 插件配置表单里一个字段的类型。`Json` 是兜底：框架 schema 里桌面端不认的类型按 JSON 源码编辑。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AppPluginConfigFieldKind {
+    String,
+    Text,
+    Int,
+    Float,
+    Bool,
+    List,
+    Object,
+    Json,
+}
+
+/// 插件配置表单字段（由框架 schema 翻译；默认值不过 IPC，缺文件时由后端按 schema 物化到文档）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppPluginConfigField {
+    pub key: String,
+    pub kind: AppPluginConfigFieldKind,
+    pub label: String,
+    #[serde(default)]
+    pub hint: String,
+    #[serde(default)]
+    pub obvious_hint: bool,
+    #[serde(default)]
+    pub secret: bool,
+    #[serde(default)]
+    pub options: Vec<String>,
+    /// `Object` 的子字段
+    #[serde(default)]
+    pub items: Vec<AppPluginConfigField>,
+}
+
+/// 插件配置表单：绑定到哪份文档 + 字段树。None 表示该插件只能改原文。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppPluginConfigSchema {
+    pub doc_id: String,
+    pub fields: Vec<AppPluginConfigField>,
 }
 
 /// 校验问题（`path` 用 JSON pointer 风格定位到字段，如 "env/http_port" / "groups/2/mode"）
@@ -760,10 +842,13 @@ mod tests {
             port: None,
             install_dir: Some("/d/bots/karin-main".into()),
             install_renderer: Some(false),
+            webui_username: None,
+            webui_password: None,
         };
         let v = serde_json::to_value(&req).unwrap();
         assert_eq!(v["install_dir"], "/d/bots/karin-main");
         assert_eq!(v["install_renderer"], false);
+        assert!(v.get("webui_password").is_none());
         let back: CreateAppInstanceRequest = serde_json::from_value(v).unwrap();
         assert_eq!(back, req);
     }
