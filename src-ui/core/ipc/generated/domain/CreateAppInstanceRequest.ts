@@ -16,4 +16,12 @@ install_dir?: string,
 /**
  * 仅 Karin 有意义；None 视为 true。
  */
-install_renderer?: boolean, };
+install_renderer?: boolean, 
+/**
+ * 仅 `webui_auth = user_password` 的框架有意义；None 用框架默认用户名
+ */
+webui_username?: string, 
+/**
+ * None / 空 = 桌面端按框架口令策略随机生成
+ */
+webui_password?: string, };

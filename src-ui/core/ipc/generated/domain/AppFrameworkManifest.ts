@@ -2,6 +2,7 @@
 import type { AppFrameworkId } from "./AppFrameworkId";
 import type { AppPlacement } from "./AppPlacement";
 import type { AppStoreResource } from "./AppStoreResource";
+import type { AppWebUiAuthKind } from "./AppWebUiAuthKind";
 import type { OneBotLinkMode } from "./OneBotLinkMode";
 
 /**
@@ -48,4 +49,8 @@ store_resources: Array<AppStoreResource>,
 /**
  * 新建实例是否展示「一并安装渲染器」
  */
-has_install_renderer: boolean, };
+has_install_renderer: boolean, 
+/**
+ * WebUI 登录方式；决定新建对话框是否收账号密码、打开时弹不弹账号框
+ */
+webui_auth: AppWebUiAuthKind, };
