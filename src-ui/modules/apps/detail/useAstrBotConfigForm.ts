@@ -18,7 +18,13 @@ export type SaveOutcome =
     | { kind: 'error'; message: string }
     | { kind: 'noop' };
 
-export function useAstrBotConfigForm(instanceId: string, enabled: boolean, instanceName: string) {
+export function useAstrBotConfigForm(
+    instanceId: string,
+    enabled: boolean,
+    instanceName: string,
+    running = false,
+    confId = 'default',
+) {
     const remote = useAppInstanceConfig(instanceId, enabled);
     const [form, setFormState] = useState<AstrBotInstanceConfig | null>(null);
     const [pristine, setPristine] = useState<AstrBotInstanceConfig | null>(null);
@@ -77,16 +83,22 @@ export function useAstrBotConfigForm(instanceId: string, enabled: boolean, insta
         setServerIssues([]);
     }, [pristine]);
 
+    const reload = remote.reload;
+    const write = remote.write;
+    const envelope = remote.envelope;
+
     const reloadDiscard = useCallback(async () => {
         hydratedRevision.current = null;
         setPristine(null);
         setConflict(false);
-        await remote.reload();
-    }, [remote]);
+        await reload();
+    }, [reload]);
+
+    const dismissConflict = useCallback(() => setConflict(false), []);
 
     const save = useCallback(
         async (overwrite = false): Promise<SaveOutcome> => {
-            if (!form || !remote.envelope) return { kind: 'noop' };
+            if (!form || !envelope) return { kind: 'noop' };
             if (clientIssues.length) {
                 pushInfoBar({
                     key: `app-config-invalid:${instanceId}`,
@@ -101,9 +113,10 @@ export function useAstrBotConfigForm(instanceId: string, enabled: boolean, insta
                 return { kind: 'invalid', issues: clientIssues };
             }
             try {
-                const result = await remote.write({
+                const result = await write({
                     config: { framework: 'astrbot', data: form },
-                    baseRevision: overwrite ? null : (hydratedRevision.current ?? remote.envelope.revision),
+                    baseRevision: overwrite ? null : (hydratedRevision.current ?? envelope.revision),
+                    confId,
                 });
                 if (result.config.framework === 'astrbot') {
                     hydratedRevision.current = result.revision;
@@ -116,7 +129,7 @@ export function useAstrBotConfigForm(instanceId: string, enabled: boolean, insta
                     key: `app-config-saved:${instanceId}`,
                     tone: result.restart_required ? 'warning' : 'success',
                     title: `${instanceName} 配置已保存`,
-                    content: describeSave(result),
+                    content: describeSave(result, running),
                     autoDismissMs: result.restart_required ? 8000 : 4000,
                 });
                 return { kind: 'saved', result };
@@ -142,16 +155,18 @@ export function useAstrBotConfigForm(instanceId: string, enabled: boolean, insta
                     title: '保存失败',
                     raw: err.message,
                 });
-                void remote.reload();
+                void reload();
                 return { kind: 'error', message: err.message };
             }
         },
-        [form, remote, clientIssues, instanceId, instanceName],
+        [clientIssues, confId, envelope, form, instanceId, instanceName, reload, running, write],
     );
 
     return {
         form,
         setForm,
+        /** 最近一次读到 / 写成功的版本；「这个源服务端认不认」看它，不看草稿 */
+        saved: pristine,
         dirty,
         errors,
         clientIssues,
@@ -162,14 +177,16 @@ export function useAstrBotConfigForm(instanceId: string, enabled: boolean, insta
         reset,
         reloadDiscard,
         conflict,
-        dismissConflict: () => setConflict(false),
+        dismissConflict,
     };
 }
 
-function describeSave(r: AppConfigWriteResult): string {
+function describeSave(r: AppConfigWriteResult, running: boolean): string {
     const parts: string[] = [];
     if (r.port_changed) parts.push('实例端口已同步');
     if (r.relinked) parts.push('已同步更新协议 Bot 侧的对接连接');
     if (r.restart_required) parts.push('改完要重启');
-    return parts.join('；') || '已保存';
+    else if (running) parts.push('已热生效');
+    else parts.push('已写入');
+    return parts.join('；');
 }

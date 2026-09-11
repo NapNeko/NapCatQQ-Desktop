@@ -20,6 +20,8 @@ export type FrameworkSaveHandle = {
 export type FrameworkDetailProps = {
     instance: AppInstance;
     onSaveHandle: (handle: FrameworkSaveHandle | null) => void;
+    /** 切到本框架的某个 Tab；空态 / 就绪清单里「去 X 页」用它，不再让用户自己找 */
+    onGoTab: (tab: string) => void;
 };
 
 export type FrameworkUiModule = {

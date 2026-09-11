@@ -9,11 +9,27 @@ describe('resolveFrameworkUi', () => {
     it('astrbot extra tabs and issue routing', () => {
         const ui = resolveFrameworkUi('astrbot');
         expect(ui).toBeDefined();
-        expect(ui?.defaultTab).toBe('plugins');
-        expect(ui?.extraTabs.map((t) => t.value)).toEqual(['plugins', 'connections']);
-        expect(ui?.typedTabs.has('connections')).toBe(true);
+        expect(ui?.defaultTab).toBe('connections');
+        expect(ui?.extraTabs.map((t) => t.value)).toEqual([
+            'connections',
+            'models',
+            'talk',
+            'persona',
+            'kb',
+            'subagent',
+            'rules',
+            'plugins',
+        ]);
+        // 人格 / 知识库页也能改配置（设默认、挂载），保存条要一直在；只有插件页不是
+        for (const t of ['connections', 'models', 'talk', 'persona', 'kb', 'subagent', 'rules']) {
+            expect(ui?.typedTabs.has(t)).toBe(true);
+        }
+        expect(ui?.typedTabs.has('plugins')).toBe(false);
         expect(ui?.fillPaneTabs.has('plugins')).toBe(true);
         expect(ui?.tabForIssue('onebot/ws_reverse_port')).toBe('connections');
+        expect(ui?.tabForIssue('sources/0/id')).toBe('models');
+        expect(ui?.tabForIssue('gates/id_whitelist')).toBe('talk');
+        expect(ui?.tabForIssue('subagent/main_enable')).toBe('subagent');
     });
 
     it('karin extra tabs and issue routing', () => {

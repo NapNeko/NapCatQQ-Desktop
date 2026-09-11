@@ -77,16 +77,22 @@ export function useNoneBot2ConfigForm(instanceId: string, enabled: boolean, inst
         setServerIssues([]);
     }, [pristine]);
 
+    const reload = remote.reload;
+    const write = remote.write;
+    const envelope = remote.envelope;
+
     const reloadDiscard = useCallback(async () => {
         hydratedRevision.current = null;
         setPristine(null);
         setConflict(false);
-        await remote.reload();
-    }, [remote]);
+        await reload();
+    }, [reload]);
+
+    const dismissConflict = useCallback(() => setConflict(false), []);
 
     const save = useCallback(
         async (overwrite = false): Promise<SaveOutcome> => {
-            if (!form || !remote.envelope) return { kind: 'noop' };
+            if (!form || !envelope) return { kind: 'noop' };
             if (clientIssues.length) {
                 pushInfoBar({
                     key: `app-config-invalid:${instanceId}`,
@@ -101,9 +107,9 @@ export function useNoneBot2ConfigForm(instanceId: string, enabled: boolean, inst
                 return { kind: 'invalid', issues: clientIssues };
             }
             try {
-                const result = await remote.write({
+                const result = await write({
                     config: { framework: 'nonebot2', data: form },
-                    baseRevision: overwrite ? null : (hydratedRevision.current ?? remote.envelope.revision),
+                    baseRevision: overwrite ? null : (hydratedRevision.current ?? envelope.revision),
                 });
                 if (result.config.framework === 'nonebot2') {
                     hydratedRevision.current = result.revision;
@@ -142,11 +148,11 @@ export function useNoneBot2ConfigForm(instanceId: string, enabled: boolean, inst
                     title: '保存失败',
                     raw: err.message,
                 });
-                void remote.reload();
+                void reload();
                 return { kind: 'error', message: err.message };
             }
         },
-        [form, remote, clientIssues, instanceId, instanceName],
+        [clientIssues, envelope, form, instanceId, instanceName, reload, write],
     );
 
     return {
@@ -162,7 +168,7 @@ export function useNoneBot2ConfigForm(instanceId: string, enabled: boolean, inst
         reset,
         reloadDiscard,
         conflict,
-        dismissConflict: () => setConflict(false),
+        dismissConflict,
     };
 }
 

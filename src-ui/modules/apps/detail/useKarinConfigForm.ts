@@ -81,17 +81,23 @@ export function useKarinConfigForm(instanceId: string, enabled: boolean, instanc
         setServerIssues([]);
     }, [pristine]);
 
+    const reload = remote.reload;
+    const write = remote.write;
+    const envelope = remote.envelope;
+
     /** 丢弃本地改动，拉最新 */
     const reloadDiscard = useCallback(async () => {
         hydratedRevision.current = null;
         setPristine(null);
         setConflict(false);
-        await remote.reload();
-    }, [remote]);
+        await reload();
+    }, [reload]);
+
+    const dismissConflict = useCallback(() => setConflict(false), []);
 
     const save = useCallback(
         async (overwrite = false): Promise<SaveOutcome> => {
-            if (!form || !remote.envelope) return { kind: 'noop' };
+            if (!form || !envelope) return { kind: 'noop' };
             if (clientIssues.length) {
                 pushInfoBar({
                     key: `app-config-invalid:${instanceId}`,
@@ -106,11 +112,11 @@ export function useKarinConfigForm(instanceId: string, enabled: boolean, instanc
                 return { kind: 'invalid', issues: clientIssues };
             }
             try {
-                const result = await remote.write({
+                const result = await write({
                     config: { framework: 'karin', data: form },
                     // 必须用灌表时的版本号：对接会改 .env，query 刷新后
                     // envelope.revision 变了但表单还是旧内容，拿新版本号保存会把对接键盖掉。
-                    baseRevision: overwrite ? null : (hydratedRevision.current ?? remote.envelope.revision),
+                    baseRevision: overwrite ? null : (hydratedRevision.current ?? envelope.revision),
                 });
                 if (result.config.framework === 'karin') {
                     hydratedRevision.current = result.revision;
@@ -150,11 +156,11 @@ export function useKarinConfigForm(instanceId: string, enabled: boolean, instanc
                     raw: err.message,
                 });
                 // 写可能部分成功（例如重新对接失败），拉一次最新避免本地版本号过期
-                void remote.reload();
+                void reload();
                 return { kind: 'error', message: err.message };
             }
         },
-        [form, remote, clientIssues, instanceId, instanceName],
+        [clientIssues, envelope, form, instanceId, instanceName, reload, write],
     );
 
     return {
@@ -172,7 +178,7 @@ export function useKarinConfigForm(instanceId: string, enabled: boolean, instanc
         reset,
         reloadDiscard,
         conflict,
-        dismissConflict: () => setConflict(false),
+        dismissConflict,
     };
 }
 

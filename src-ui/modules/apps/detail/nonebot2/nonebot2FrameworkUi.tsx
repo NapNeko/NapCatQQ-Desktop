@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react';
 import { TabsContent } from '../../../../shared/ui';
 import { NoneBot2ConnectionsTab } from './NoneBot2ConnectionsTab';
 import { NoneBot2StoreTab } from './NoneBot2StoreTab';
 import { useNoneBot2ConfigForm } from '../useNoneBot2ConfigForm';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import type { FrameworkDetailProps, FrameworkUiModule } from '../frameworkUi';
+import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
 
 const EXTRA_TABS = [
     { value: 'adapters', label: '适配器' },
@@ -17,32 +17,7 @@ const FILL_PANE = new Set(['adapters', 'plugins']);
 
 function NoneBot2FrameworkDetail({ instance, onSaveHandle }: FrameworkDetailProps) {
     const form = useNoneBot2ConfigForm(instance.id, true, instance.display_name);
-    const onSaveHandleRef = useRef(onSaveHandle);
-    onSaveHandleRef.current = onSaveHandle;
-
-    useEffect(() => {
-        onSaveHandleRef.current({
-            dirty: form.dirty,
-            saving: form.saving,
-            issueCount: form.clientIssues.length,
-            save: form.save,
-            reset: form.reset,
-            conflict: form.conflict,
-            dismissConflict: form.dismissConflict,
-            reloadDiscard: form.reloadDiscard,
-        });
-    }, [
-        form.dirty,
-        form.saving,
-        form.clientIssues.length,
-        form.save,
-        form.reset,
-        form.conflict,
-        form.dismissConflict,
-        form.reloadDiscard,
-    ]);
-
-    useEffect(() => () => onSaveHandleRef.current(null), []);
+    useSyncFrameworkSaveHandle(onSaveHandle, form);
 
     return (
         <>

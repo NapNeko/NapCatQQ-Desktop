@@ -8,6 +8,7 @@ import {
     Download,
     ExternalLink,
     Link2,
+    MessageSquare,
     MoreHorizontal,
     Play,
     RefreshCw,
@@ -83,11 +84,15 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
     const [linkOpen, setLinkOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
+    const goTab = (tab: string) => {
+        setUserSwitched(true);
+        setActiveTab(tab);
+    };
+
     const jumpToFirstIssue = (issues: AppConfigIssue[]) => {
         const first = issues[0];
         if (!first || !ui) return;
-        setUserSwitched(true);
-        setActiveTab(ui.tabForIssue(first.path));
+        goTab(ui.tabForIssue(first.path));
     };
 
     const handleSave = async (overwrite = false) => {
@@ -169,6 +174,17 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                                 停止
                             </Button>
                         )}
+                        {running && instance.framework_id === 'astrbot' && (
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={busy}
+                                onClick={() => void apps.openWebUi(instance.id, '/chat')}
+                            >
+                                <ActionMotionIcon icon={MessageSquare} size={13} />
+                                试聊
+                            </Button>
+                        )}
                         <InstanceMoreMenu
                             busy={busy}
                             canLink={installed}
@@ -196,10 +212,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                     >
                         <Tabs
                             value={activeTab}
-                            onValueChange={(v) => {
-                                setUserSwitched(true);
-                                setActiveTab(v);
-                            }}
+                            onValueChange={goTab}
                             className={cn('flex flex-1 flex-col', fillPane && 'min-h-0')}
                         >
                             <div className="sticky top-0 z-[5] flex items-center justify-between gap-2 border-b border-border-subtle bg-canvas/95 backdrop-blur-sm">
@@ -230,7 +243,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                             </div>
 
                             {FrameworkDetail && (
-                                <FrameworkDetail instance={instance} onSaveHandle={setSaveHandle} />
+                                <FrameworkDetail instance={instance} onSaveHandle={setSaveHandle} onGoTab={goTab} />
                             )}
 
                             <TabsContent value="raw" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
