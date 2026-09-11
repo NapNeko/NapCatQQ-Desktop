@@ -23,6 +23,7 @@ scripts/hooks/
 
 ### 编辑器（可选共享：若需团队统一 VS Code 设置再单独 un-ignore）###
 .vscode/
+.cursor/
 
 ### 参考克隆与旧实现（体积大，仅本地对照；权威旧版路径: .references/NapCatQQ-Desktop-main）###
 .references/
