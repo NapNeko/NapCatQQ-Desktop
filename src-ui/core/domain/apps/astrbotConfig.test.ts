@@ -8,6 +8,39 @@ describe('astrbotConfig', () => {
         expect(cfg.onebot.ws_reverse_host).toBe('0.0.0.0');
         expect(cfg.dashboard_port).toBe(6185);
         expect(cfg.claimed).toBe(false);
+        expect(cfg.sources).toEqual([]);
+        expect(cfg.ai.enable).toBe(true);
+        expect(cfg.gates.enable_id_white_list).toBe(true);
+    });
+
+    it('rejects duplicate source id and orphan model', () => {
+        const dup = astrbotDefaultConfig(6199);
+        const src = {
+            id: 'a',
+            provider: 'openai',
+            type: 'openai_chat_completion',
+            provider_type: 'chat_completion',
+            enable: true,
+            key: [] as string[],
+            api_base: '',
+            timeout: 120,
+            proxy: '',
+        };
+        dup.sources = [src, { ...src }];
+        expect(validateAstrBotConfig(dup).some((i) => i.path === 'sources/1/id')).toBe(true);
+        const orphan = astrbotDefaultConfig(6199);
+        orphan.sources = [src];
+        orphan.models = [
+            {
+                id: 'a/m',
+                enable: true,
+                provider_source_id: 'missing',
+                model: 'm',
+                modalities: ['text'],
+                max_context_tokens: 0,
+            },
+        ];
+        expect(validateAstrBotConfig(orphan).some((i) => i.path === 'models/0/provider_source_id')).toBe(true);
     });
 
     it('rejects OneBot port colliding with WebUI', () => {

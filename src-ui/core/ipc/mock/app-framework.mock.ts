@@ -14,12 +14,19 @@ import type {
     AppStoreResource,
     AppProjectProbe,
     AppWebUiAccount,
+    AstrBotAbconfInfo,
+    AstrBotDashboardStatus,
+    AstrBotKbCreate,
+    AstrBotKnowledgeBase,
+    AstrBotPersona,
+    AstrBotSessionRule,
     CreateAppInstanceRequest,
     ImportAppInstanceRequest,
     KarinPluginInstalled,
     KarinPluginMarketEntry,
     OneBotLinkPlan,
 } from '../types';
+import { mockAstrBotDashboard } from './astrbot-dashboard.mock';
 import { karinDefaultConfig } from '../../domain/apps/karinConfig';
 import { astrbotDefaultConfig } from '../../domain/apps/astrbotConfig';
 import { nonebot2DefaultConfig } from '../../domain/apps/nonebot2Config';
@@ -164,7 +171,7 @@ let instances: AppInstance[] = [
         host_id: 'local',
         install_dir: 'D:/NapCatQQ/apps/astrbot/ab12cd34',
         port: 6199,
-        state: 'installed',
+        state: 'running',
         created_at_ms: Date.now() - 3_600_000,
         install_renderer: false,
         origin: 'created',
@@ -261,7 +268,7 @@ export const mockAppFrameworkApi = {
             running: hostId.startsWith('remote:'),
             supervisors: hostId.startsWith('remote:') && isNonebot ? ['bot-xiuxian'] : [],
             warnings: ambiguousOnebot
-                ? ['有多条 OneBot v11（aiocqhttp），无法唯一认领。请在 AstrBot WebUI 或原文里指定要对接的那条']
+                ? ['有多条 OneBot v11（aiocqhttp），无法唯一认领。到 AstrBot WebUI 或原文指定要对接的那条']
                 : emptyOnebot
                   ? ['还没有 OneBot v11，对接时会加一条']
                   : hostId.startsWith('remote:') && isNonebot
@@ -401,13 +408,19 @@ export const mockAppFrameworkApi = {
         return withMockDelay(next);
     },
 
-    webui: async (instanceId: string): Promise<AppInstanceWebUi> => {
+    webui: async (instanceId: string, path?: string): Promise<AppInstanceWebUi> => {
         const inst = require(instanceId);
+        const base =
+            inst.framework_id === 'astrbot'
+                ? `http://127.0.0.1:6185`
+                : `http://127.0.0.1:${inst.port}/web`;
+        const suffix = path?.trim()
+            ? path.startsWith('/')
+                ? path
+                : `/${path}`
+            : '';
         return withMockDelay({
-            url:
-                inst.framework_id === 'astrbot'
-                    ? `http://127.0.0.1:6185`
-                    : `http://127.0.0.1:${inst.port}/web`,
+            url: `${base.replace(/\/$/, '')}${suffix}`,
             authKey: inst.framework_id === 'karin' ? peekKarinHttpAuthKey(instanceId) : '',
             account: mockAccountView(inst) ?? undefined,
         });
@@ -663,6 +676,81 @@ export const mockAppFrameworkApi = {
             relinked: false,
             port_changed: false,
         });
+    },
+
+    astrbotDashboardStatus: (instanceId: string): Promise<AstrBotDashboardStatus> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.status(inst, mockAccountView(inst));
+    },
+    astrbotListPersonas: (instanceId: string): Promise<AstrBotPersona[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.listPersonas(inst, mockAccountView(inst));
+    },
+    astrbotUpsertPersona: (
+        instanceId: string,
+        persona: AstrBotPersona,
+        creating: boolean,
+    ): Promise<AstrBotPersona[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.upsertPersona(inst, mockAccountView(inst), persona, creating);
+    },
+    astrbotDeletePersona: (instanceId: string, personaId: string): Promise<AstrBotPersona[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.deletePersona(inst, mockAccountView(inst), personaId);
+    },
+    astrbotListKbs: (instanceId: string): Promise<AstrBotKnowledgeBase[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.listKbs(inst, mockAccountView(inst));
+    },
+    astrbotCreateKb: (
+        instanceId: string,
+        request: AstrBotKbCreate,
+    ): Promise<AstrBotKnowledgeBase[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.createKb(inst, mockAccountView(inst), request);
+    },
+    astrbotDeleteKb: (instanceId: string, kbId: string): Promise<AstrBotKnowledgeBase[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.deleteKb(inst, mockAccountView(inst), kbId);
+    },
+    astrbotListSessionRules: (instanceId: string): Promise<AstrBotSessionRule[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.listRules(inst, mockAccountView(inst));
+    },
+    astrbotUpdateSessionRule: (
+        instanceId: string,
+        rule: AstrBotSessionRule,
+    ): Promise<AstrBotSessionRule[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.updateRule(inst, mockAccountView(inst), rule);
+    },
+    astrbotDeleteSessionRule: (
+        instanceId: string,
+        umo: string,
+        ruleKey: string,
+    ): Promise<AstrBotSessionRule[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.deleteRule(inst, mockAccountView(inst), umo, ruleKey);
+    },
+    astrbotListAbconfs: (instanceId: string): Promise<AstrBotAbconfInfo[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.listAbconfs(inst, mockAccountView(inst));
+    },
+    astrbotCreateAbconf: (instanceId: string, name: string): Promise<AstrBotAbconfInfo[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.createAbconf(inst, mockAccountView(inst), name);
+    },
+    astrbotDeleteAbconf: (instanceId: string, abconfId: string): Promise<AstrBotAbconfInfo[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.deleteAbconf(inst, mockAccountView(inst), abconfId);
+    },
+    astrbotListSourceModels: (instanceId: string, sourceId: string): Promise<string[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.listSourceModels(inst, mockAccountView(inst), sourceId);
+    },
+    astrbotListSubagentTools: (instanceId: string): Promise<string[]> => {
+        const inst = require(instanceId);
+        return mockAstrBotDashboard.listSubagentTools(inst, mockAccountView(inst));
     },
 };
 

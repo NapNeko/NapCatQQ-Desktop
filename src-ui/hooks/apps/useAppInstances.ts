@@ -175,9 +175,9 @@ export function useAppInstances() {
         onError: (err, id) => fail('解除对接失败', `app-unlink:${id}`)(err),
     });
 
-    const openWebUi = useCallback(async (id: string) => {
+    const openWebUi = useCallback(async (id: string, path?: string) => {
         try {
-            const { url, authKey, account } = await appFrameworkService.webui(id);
+            const { url, authKey, account } = await appFrameworkService.webui(id, path);
             if (account) {
                 const name = queryClient
                     .getQueryData<AppInstance[]>(APP_INSTANCES_KEY)
@@ -192,7 +192,7 @@ export function useAppInstances() {
                         key: `app-webui-copied:${id}`,
                         tone: 'success',
                         title: '密钥已复制',
-                        content: '粘贴即可登录 WebUI',
+                        content: '粘贴到 WebUI 登录',
                         autoDismissMs: 3000,
                     });
                 } catch (e) {
@@ -201,7 +201,7 @@ export function useAppInstances() {
                         key: `app-webui-copy-fail:${id}`,
                         tone: 'warning',
                         title: '未能复制密钥',
-                        content: '请到连接页查看 HTTP 鉴权密钥',
+                        content: '到连接页查看 HTTP 鉴权密钥',
                     });
                 }
             }

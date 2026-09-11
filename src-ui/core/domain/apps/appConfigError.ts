@@ -9,6 +9,9 @@ const KINDS: ReadonlySet<string> = new Set<AppConfigErrorKind>([
     'conflict',
     'invalid',
     'unsupported',
+    'not_running',
+    'auth',
+    'unreachable',
     'other',
 ]);
 

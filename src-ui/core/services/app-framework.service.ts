@@ -18,6 +18,12 @@ import type {
     AppStoreResource,
     AppProjectProbe,
     AppWebUiAccount,
+    AstrBotAbconfInfo,
+    AstrBotDashboardStatus,
+    AstrBotKbCreate,
+    AstrBotKnowledgeBase,
+    AstrBotPersona,
+    AstrBotSessionRule,
     CreateAppInstanceRequest,
     ImportAppInstanceRequest,
     KarinPluginInstalled,
@@ -110,9 +116,12 @@ export const appFrameworkService = {
         return invoke<AppInstance>('unlink_app_instance', { instanceId });
     },
 
-    webui: async (instanceId: string): Promise<AppInstanceWebUi> => {
-        if (!isTauri) return mockAppFrameworkApi.webui(instanceId);
-        return invoke<AppInstanceWebUi>('get_app_instance_webui', { instanceId });
+    webui: async (instanceId: string, path?: string): Promise<AppInstanceWebUi> => {
+        if (!isTauri) return mockAppFrameworkApi.webui(instanceId, path);
+        return invoke<AppInstanceWebUi>('get_app_instance_webui', {
+            instanceId,
+            path: path ?? null,
+        });
     },
 
     /** 只读账号，不建隧道；实例停着时查看 / 重置用。null = 该框架不是账号密码登录。 */
@@ -145,12 +154,14 @@ export const appFrameworkService = {
         instanceId: string,
         config: AppInstanceConfig,
         baseRevision: string | null,
+        confId?: string | null,
     ): Promise<AppConfigWriteResult> => {
-        if (!isTauri) return mockAppFrameworkApi.writeConfig(instanceId, config, baseRevision);
+        if (!isTauri) return mockAppFrameworkApi.writeConfig(instanceId, config, baseRevision, confId);
         return invoke<AppConfigWriteResult>('write_app_instance_config', {
             instanceId,
             config,
             baseRevision,
+            confId: confId ?? null,
         });
     },
 
@@ -270,5 +281,98 @@ export const appFrameworkService = {
             overwrite: overwrite ?? null,
             resource: resource ?? null,
         });
+    },
+
+    astrbotDashboardStatus: async (instanceId: string): Promise<AstrBotDashboardStatus> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotDashboardStatus(instanceId);
+        return invoke<AstrBotDashboardStatus>('astrbot_dashboard_status', { instanceId });
+    },
+
+    astrbotListPersonas: async (instanceId: string): Promise<AstrBotPersona[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotListPersonas(instanceId);
+        return invoke<AstrBotPersona[]>('astrbot_list_personas', { instanceId });
+    },
+
+    astrbotUpsertPersona: async (
+        instanceId: string,
+        persona: AstrBotPersona,
+        creating: boolean,
+    ): Promise<AstrBotPersona[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotUpsertPersona(instanceId, persona, creating);
+        return invoke<AstrBotPersona[]>('astrbot_upsert_persona', { instanceId, persona, creating });
+    },
+
+    astrbotDeletePersona: async (instanceId: string, personaId: string): Promise<AstrBotPersona[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotDeletePersona(instanceId, personaId);
+        return invoke<AstrBotPersona[]>('astrbot_delete_persona', { instanceId, personaId });
+    },
+
+    astrbotListKbs: async (instanceId: string): Promise<AstrBotKnowledgeBase[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotListKbs(instanceId);
+        return invoke<AstrBotKnowledgeBase[]>('astrbot_list_kbs', { instanceId });
+    },
+
+    astrbotCreateKb: async (
+        instanceId: string,
+        request: AstrBotKbCreate,
+    ): Promise<AstrBotKnowledgeBase[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotCreateKb(instanceId, request);
+        return invoke<AstrBotKnowledgeBase[]>('astrbot_create_kb', { instanceId, request });
+    },
+
+    astrbotDeleteKb: async (instanceId: string, kbId: string): Promise<AstrBotKnowledgeBase[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotDeleteKb(instanceId, kbId);
+        return invoke<AstrBotKnowledgeBase[]>('astrbot_delete_kb', { instanceId, kbId });
+    },
+
+    astrbotListSessionRules: async (instanceId: string): Promise<AstrBotSessionRule[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotListSessionRules(instanceId);
+        return invoke<AstrBotSessionRule[]>('astrbot_list_session_rules', { instanceId });
+    },
+
+    astrbotUpdateSessionRule: async (
+        instanceId: string,
+        rule: AstrBotSessionRule,
+    ): Promise<AstrBotSessionRule[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotUpdateSessionRule(instanceId, rule);
+        return invoke<AstrBotSessionRule[]>('astrbot_update_session_rule', { instanceId, rule });
+    },
+
+    astrbotDeleteSessionRule: async (
+        instanceId: string,
+        umo: string,
+        ruleKey: string,
+    ): Promise<AstrBotSessionRule[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotDeleteSessionRule(instanceId, umo, ruleKey);
+        return invoke<AstrBotSessionRule[]>('astrbot_delete_session_rule', {
+            instanceId,
+            umo,
+            ruleKey,
+        });
+    },
+
+    astrbotListAbconfs: async (instanceId: string): Promise<AstrBotAbconfInfo[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotListAbconfs(instanceId);
+        return invoke<AstrBotAbconfInfo[]>('astrbot_list_abconfs', { instanceId });
+    },
+
+    astrbotCreateAbconf: async (instanceId: string, name: string): Promise<AstrBotAbconfInfo[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotCreateAbconf(instanceId, name);
+        return invoke<AstrBotAbconfInfo[]>('astrbot_create_abconf', { instanceId, name });
+    },
+
+    astrbotDeleteAbconf: async (instanceId: string, abconfId: string): Promise<AstrBotAbconfInfo[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotDeleteAbconf(instanceId, abconfId);
+        return invoke<AstrBotAbconfInfo[]>('astrbot_delete_abconf', { instanceId, abconfId });
+    },
+
+    astrbotListSourceModels: async (instanceId: string, sourceId: string): Promise<string[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotListSourceModels(instanceId, sourceId);
+        return invoke<string[]>('astrbot_list_source_models', { instanceId, sourceId });
+    },
+
+    astrbotListSubagentTools: async (instanceId: string): Promise<string[]> => {
+        if (!isTauri) return mockAppFrameworkApi.astrbotListSubagentTools(instanceId);
+        return invoke<string[]>('astrbot_list_subagent_tools', { instanceId });
     },
 };

@@ -2,7 +2,7 @@
 // 写成功后就地更新缓存并让实例列表失效（端口 / 对接可能变了）。错误不在这里弹 InfoBar：
 // 冲突 / 校验要由页面分流（对话框 / 字段级提示），所以 mutation 只把 AppConfigError 抛回去。
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
@@ -25,6 +25,7 @@ export interface WriteConfigArgs {
     config: AppInstanceConfig;
     /** null = 覆盖（用户在冲突对话框选了「覆盖」） */
     baseRevision: string | null;
+    confId?: string | null;
 }
 
 export function useAppInstanceConfig(instanceId: string | null, enabled = true) {
@@ -40,9 +41,9 @@ export function useAppInstanceConfig(instanceId: string | null, enabled = true) 
     });
 
     const writeMutation = useMutation<AppConfigWriteResult, AppConfigError, WriteConfigArgs>({
-        mutationFn: ({ config, baseRevision }) =>
+        mutationFn: ({ config, baseRevision, confId }) =>
             appFrameworkService
-                .writeConfig(instanceId!, config, baseRevision)
+                .writeConfig(instanceId!, config, baseRevision, confId)
                 .catch((e) => Promise.reject(toAppConfigError(e))),
         onSuccess: (result) => {
             queryClient.setQueryData<AppInstanceConfigEnvelope>(key, {
@@ -57,16 +58,21 @@ export function useAppInstanceConfig(instanceId: string | null, enabled = true) 
         },
     });
 
-    const reload = useCallback(() => query.refetch(), [query]);
+    const refetch = query.refetch;
+    const reload = useCallback(() => refetch(), [refetch]);
+    const write = writeMutation.mutateAsync;
 
-    return {
-        envelope: query.data ?? null,
-        isLoading: query.isLoading,
-        error: query.error ?? null,
-        reload,
-        write: writeMutation.mutateAsync,
-        isWriting: writeMutation.isPending,
-    };
+    return useMemo(
+        () => ({
+            envelope: query.data ?? null,
+            isLoading: query.isLoading,
+            error: query.error ?? null,
+            reload,
+            write,
+            isWriting: writeMutation.isPending,
+        }),
+        [query.data, query.error, query.isLoading, reload, write, writeMutation.isPending],
+    );
 }
 
 export function useAppConfigDocuments(instanceId: string | null) {

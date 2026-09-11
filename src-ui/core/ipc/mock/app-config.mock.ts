@@ -310,6 +310,7 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             instanceId: string,
             config: AppInstanceConfig,
             baseRevision: string | null,
+            _confId?: string | null,
         ): Promise<AppConfigWriteResult> => {
             const inst = requireInstalled(instanceId);
             if (inst.framework_id === 'nonebot2' && config.framework === 'nonebot2') {
@@ -383,7 +384,7 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     config: env.config,
                     revision: env.revision,
                     documents: env.documents,
-                    restart_required: inst.state === 'running',
+                    restart_required: false,
                     relinked,
                     port_changed: portChanged,
                 });
