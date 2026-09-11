@@ -4,4 +4,4 @@
  * 配置读写命令的结构化错误：前端按 `kind` 分流（冲突 → 重载/覆盖对话框；校验 → 定位字段）。
  * 其它命令仍返回 String，这里只在需要分流的地方升级。
  */
-export type AppConfigErrorKind = "conflict" | "invalid" | "unsupported" | "other";
+export type AppConfigErrorKind = "conflict" | "invalid" | "unsupported" | "not_running" | "auth" | "unreachable" | "other";
