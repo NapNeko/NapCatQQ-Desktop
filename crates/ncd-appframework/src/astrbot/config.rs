@@ -7,6 +7,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
+use super::ai::{
+    self, AstrBotAiSettings, AstrBotKbBind, AstrBotPlatformGates, AstrBotProviderModel,
+    AstrBotProviderSource, AstrBotSttSettings, AstrBotSubagentConfig, AstrBotTtsSettings,
+    AstrBotWebSearchSettings,
+};
 use super::config_json::{
     cmd_config_documents, load_cmd_config, read_cmd_config_snapshots, save_cmd_config,
 };
@@ -30,7 +35,7 @@ pub struct AstrBotOneBotRow {
     pub ws_reverse_token: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AstrBotInstanceConfig {
     pub onebot: AstrBotOneBotRow,
@@ -41,6 +46,24 @@ pub struct AstrBotInstanceConfig {
     /// 文件里已经有可认领的 aiocqhttp
     #[serde(default)]
     pub claimed: bool,
+    #[serde(default)]
+    pub sources: Vec<AstrBotProviderSource>,
+    #[serde(default)]
+    pub models: Vec<AstrBotProviderModel>,
+    #[serde(default)]
+    pub ai: AstrBotAiSettings,
+    #[serde(default)]
+    pub stt: AstrBotSttSettings,
+    #[serde(default)]
+    pub tts: AstrBotTtsSettings,
+    #[serde(default)]
+    pub websearch: AstrBotWebSearchSettings,
+    #[serde(default)]
+    pub kb: AstrBotKbBind,
+    #[serde(default)]
+    pub gates: AstrBotPlatformGates,
+    #[serde(default)]
+    pub subagent: AstrBotSubagentConfig,
 }
 
 impl Default for AstrBotOneBotRow {
@@ -62,6 +85,15 @@ impl Default for AstrBotInstanceConfig {
             dashboard_port: ASTRBOT_DEFAULT_DASHBOARD_PORT,
             other_platforms: Vec::new(),
             claimed: false,
+            sources: Vec::new(),
+            models: Vec::new(),
+            ai: AstrBotAiSettings::default(),
+            stt: AstrBotSttSettings::default(),
+            tts: AstrBotTtsSettings::default(),
+            websearch: AstrBotWebSearchSettings::default(),
+            kb: AstrBotKbBind::default(),
+            gates: AstrBotPlatformGates::default(),
+            subagent: AstrBotSubagentConfig::default(),
         }
     }
 }
@@ -105,6 +137,15 @@ impl AstrBotInstanceConfig {
             dashboard_port: dashboard_port(root),
             other_platforms: other_platform_types(rows, idx),
             claimed: idx.is_some(),
+            sources: ai::sources_from_root(root),
+            models: ai::models_from_root(root),
+            ai: ai::ai_from_root(root),
+            stt: ai::stt_from_root(root),
+            tts: ai::tts_from_root(root),
+            websearch: ai::websearch_from_root(root),
+            kb: ai::kb_from_root(root),
+            gates: ai::gates_from_root(root),
+            subagent: ai::subagent_from_root(root),
         }
     }
 
@@ -122,6 +163,7 @@ impl AstrBotInstanceConfig {
                 format!("OneBot 口不能与 WebUI 口相同（{}）", self.dashboard_port),
             );
         }
+        sink.extend(ai::validate_ai(&self.sources, &self.models));
         sink.into_vec()
     }
 }
@@ -178,52 +220,24 @@ pub async fn write_astrbot_config(
         return Err(AppFrameworkError::ConfigInvalid(extra));
     }
 
-    let claim = claim_for_upsert(
-        platforms(&root),
-        instance.id.as_str(),
-        cfg.onebot.ws_reverse_port,
-    )?;
-    if !cfg.claimed && matches!(claim, Claim::Index(_)) {
-        return Err(AppFrameworkError::Validation(
-            platform::AMBIGUOUS_AIOCQHTTP.into(),
-        ));
-    }
-    {
-        let rows = platform::platforms_mut(&mut root)?;
-        match claim {
-            Claim::Index(i) => {
-                let row = &mut rows[i];
-                apply_claimed_fields(
-                    row,
-                    instance.id.as_str(),
-                    cfg.onebot.ws_reverse_port,
-                    &cfg.onebot.ws_reverse_token,
-                );
-                if let Some(obj) = row.as_object_mut() {
-                    obj.insert("enable".into(), Value::Bool(cfg.onebot.enable));
-                    obj.insert(
-                        super::manifest::KEY_WS_REVERSE_HOST.into(),
-                        Value::String(cfg.onebot.ws_reverse_host.clone()),
-                    );
-                }
-            }
-            Claim::Append => {
-                let mut row = seed_row(
-                    instance.id.as_str(),
-                    cfg.onebot.ws_reverse_port,
-                    &cfg.onebot.ws_reverse_token,
-                );
-                if let Some(obj) = row.as_object_mut() {
-                    obj.insert("enable".into(), Value::Bool(cfg.onebot.enable));
-                    obj.insert(
-                        super::manifest::KEY_WS_REVERSE_HOST.into(),
-                        Value::String(cfg.onebot.ws_reverse_host.clone()),
-                    );
-                }
-                rows.push(row);
-            }
-        }
-    }
+    apply_onebot_to_root(&mut root, instance.id.as_str(), cfg)?;
+
+    let mut sources = cfg.sources.clone();
+    let mut models = cfg.models.clone();
+    ai::restore_extras(&root, &mut sources, &mut models);
+    ai::apply_ai_patch(
+        &mut root,
+        &sources,
+        &models,
+        &cfg.ai,
+        &cfg.stt,
+        &cfg.tts,
+        &cfg.websearch,
+        &cfg.kb,
+        &cfg.gates,
+        &cfg.subagent,
+    )
+    .map_err(AppFrameworkError::Integration)?;
 
     save_cmd_config(
         host,
@@ -233,6 +247,71 @@ pub async fn write_astrbot_config(
     )
     .await?;
     read_astrbot_config(host, &install_dir, instance.id.as_str(), instance.port).await
+}
+
+pub fn apply_onebot_to_root(
+    root: &mut Value,
+    instance_id: &str,
+    cfg: &AstrBotInstanceConfig,
+) -> Result<Claim, AppFrameworkError> {
+    let claim = claim_for_upsert(
+        platforms(root),
+        instance_id,
+        cfg.onebot.ws_reverse_port,
+    )?;
+    if !cfg.claimed && matches!(claim, Claim::Index(_)) {
+        return Err(AppFrameworkError::Validation(
+            platform::AMBIGUOUS_AIOCQHTTP.into(),
+        ));
+    }
+    let rows = platform::platforms_mut(root)?;
+    match claim {
+        Claim::Index(i) => {
+            let row = &mut rows[i];
+            apply_claimed_fields(
+                row,
+                instance_id,
+                cfg.onebot.ws_reverse_port,
+                &cfg.onebot.ws_reverse_token,
+            );
+            if let Some(obj) = row.as_object_mut() {
+                obj.insert("enable".into(), Value::Bool(cfg.onebot.enable));
+                obj.insert(
+                    super::manifest::KEY_WS_REVERSE_HOST.into(),
+                    Value::String(cfg.onebot.ws_reverse_host.clone()),
+                );
+            }
+        }
+        Claim::Append => {
+            let mut row = seed_row(
+                instance_id,
+                cfg.onebot.ws_reverse_port,
+                &cfg.onebot.ws_reverse_token,
+            );
+            if let Some(obj) = row.as_object_mut() {
+                obj.insert("enable".into(), Value::Bool(cfg.onebot.enable));
+                obj.insert(
+                    super::manifest::KEY_WS_REVERSE_HOST.into(),
+                    Value::String(cfg.onebot.ws_reverse_host.clone()),
+                );
+            }
+            rows.push(row);
+        }
+    }
+    Ok(claim)
+}
+
+pub fn claimed_platform_row<'a>(root: &'a Value, instance_id: &str, port: u16) -> Option<&'a Value> {
+    let rows = platforms(root);
+    let want_id = ncd_platform_id(instance_id);
+    let idx = rows
+        .iter()
+        .position(|row| platform::row_id(row) == Some(want_id.as_str()) && platform::is_aiocqhttp(row))
+        .or_else(|| match claim_for_upsert(rows, instance_id, port).ok()? {
+            Claim::Index(i) => Some(i),
+            Claim::Append => None,
+        })?;
+    Some(&rows[idx])
 }
 
 pub fn read_access_token_from_root(root: &Value, instance_id: &str, port: u16) -> Option<String> {

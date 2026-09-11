@@ -101,6 +101,19 @@ impl AppIntegration for AstrBotIntegration {
     }
 }
 
+/// 在 WebUI 根地址后拼 SPA path（`/chat`、`/providers`）。
+pub fn join_webui_url(base: &str, path: Option<&str>) -> String {
+    let Some(p) = path.map(str::trim).filter(|s| !s.is_empty()) else {
+        return base.to_string();
+    };
+    let path = if p.starts_with('/') {
+        p.to_string()
+    } else {
+        format!("/{p}")
+    };
+    format!("{}{path}", base.trim_end_matches('/'))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,6 +193,22 @@ mod tests {
                 .webui_url(&inst, "127.0.0.1")
                 .as_deref(),
             Some("http://127.0.0.1:6185")
+        );
+    }
+
+    #[test]
+    fn join_webui_url_appends_spa_path() {
+        assert_eq!(
+            join_webui_url("http://127.0.0.1:6185", Some("/chat")),
+            "http://127.0.0.1:6185/chat"
+        );
+        assert_eq!(
+            join_webui_url("http://127.0.0.1:6185/", Some("providers")),
+            "http://127.0.0.1:6185/providers"
+        );
+        assert_eq!(
+            join_webui_url("http://127.0.0.1:6185", None),
+            "http://127.0.0.1:6185"
         );
     }
 }

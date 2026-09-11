@@ -118,6 +118,10 @@ impl IssueSink {
         self.issues.push(AppConfigIssue::new(path, message));
     }
 
+    pub fn extend(&mut self, extra: Vec<AppConfigIssue>) {
+        self.issues.extend(extra);
+    }
+
     pub fn into_vec(self) -> Vec<AppConfigIssue> {
         self.issues
     }

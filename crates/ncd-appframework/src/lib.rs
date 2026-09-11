@@ -48,9 +48,15 @@ pub use nonebot2::{
     parse_nonebot_plugins_json,
 };
 pub use astrbot::{
-    ASTRBOT_FRAMEWORK_ID, ASTRBOT_PLUGINS_URL, AstrBotAdapter, AstrBotComponent,
-    AstrBotInstanceConfig, AstrBotIntegration, AstrBotOneBotRow, astrbot_manifest,
-    astrbot_plugin_market_urls, parse_astrbot_plugins_json,
+    ASTRBOT_FRAMEWORK_ID, ASTRBOT_PLUGINS_URL, AstrBotAbconfInfo, AstrBotAdapter,
+    AstrBotAiSettings, AstrBotComponent, AstrBotDashboardGate, AstrBotDashboardStatus,
+    AstrBotInstanceConfig, AstrBotIntegration, AstrBotKbBind, AstrBotKbCreate,
+    join_webui_url,
+    AstrBotKnowledgeBase, AstrBotOneBotRow, AstrBotPersona, AstrBotPlatformGates,
+    AstrBotProviderModel, AstrBotProviderSource, AstrBotRuntimeApi, AstrBotSession,
+    AstrBotSessionRule, AstrBotSttSettings,
+    AstrBotSubagentConfig, AstrBotSubagentRow, AstrBotTtsSettings, AstrBotWebSearchSettings,
+    astrbot_manifest, astrbot_plugin_market_urls, parse_astrbot_plugins_json,
 };
 pub use registry::AppFrameworkRegistry;
 pub use store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};

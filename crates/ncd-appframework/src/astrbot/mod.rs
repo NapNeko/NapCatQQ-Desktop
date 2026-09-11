@@ -1,14 +1,19 @@
 //! AstrBot 适配器：manifest + Component + Integration + 窄配置 + 官方插件店。
 
+pub mod ai;
+pub mod api;
 mod component;
 pub mod config;
 mod config_json;
 pub mod dashboard_auth;
+pub mod dashboard_client;
 mod integration;
+pub mod live;
 pub mod manifest;
 mod platform;
 pub mod plugin_config;
 mod probe;
+pub mod runtime;
 pub mod store;
 
 use std::sync::Arc;
@@ -22,10 +27,20 @@ use ncd_domain::{
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
+pub use ai::{
+    AstrBotAiSettings, AstrBotKbBind, AstrBotPlatformGates, AstrBotProviderModel,
+    AstrBotProviderSource, AstrBotSttSettings, AstrBotSubagentConfig, AstrBotSubagentRow,
+    AstrBotTtsSettings, AstrBotWebSearchSettings,
+};
+pub use api::{AstrBotRuntimeApi, AstrBotSession};
 pub use component::AstrBotComponent;
 pub use config::{AstrBotInstanceConfig, AstrBotOneBotRow};
-pub use integration::AstrBotIntegration;
+pub use integration::{join_webui_url, AstrBotIntegration};
 pub use manifest::{ASTRBOT_FRAMEWORK_ID, astrbot_manifest};
+pub use runtime::{
+    AstrBotAbconfInfo, AstrBotDashboardGate, AstrBotDashboardStatus, AstrBotKbCreate,
+    AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
+};
 pub use store::{
     ASTRBOT_PLUGINS_URL, astrbot_plugin_market_urls, parse_astrbot_plugins_json,
 };
@@ -56,6 +71,7 @@ fn envelope(config: AstrBotInstanceConfig, snaps: &[DocumentSnapshot]) -> AppIns
 
 pub struct AstrBotAdapter {
     integration: AstrBotIntegration,
+    runtime: api::DashboardRuntime,
 }
 
 impl Default for AstrBotAdapter {
@@ -68,6 +84,7 @@ impl AstrBotAdapter {
     pub fn new() -> Self {
         Self {
             integration: AstrBotIntegration::new(),
+            runtime: api::DashboardRuntime,
         }
     }
 
@@ -312,6 +329,52 @@ impl AppFrameworkAdapter for AstrBotAdapter {
         .await?;
         let (config, snaps) = config::write_astrbot_config(host, instance, ab, &current).await?;
         Ok(envelope(config, &snaps))
+    }
+
+    fn supports_live_config(&self) -> bool {
+        true
+    }
+
+    async fn write_live_config(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        loopback_port: u16,
+        username: &str,
+        password: &str,
+        config: &AppInstanceConfig,
+        conf_id: &str,
+    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
+        let AppInstanceConfig::AstrBot(ab) = config else {
+            return Err(AppFrameworkError::Validation(
+                "写入的不是 AstrBot 配置".to_string(),
+            ));
+        };
+        let install_dir = HostPath::from_posix(&instance.install_dir);
+        let (config, snaps) = live::write_live(
+            host,
+            &install_dir,
+            instance.id.as_str(),
+            instance.port,
+            ab,
+            &live::LiveTarget {
+                instance_id: instance.id.as_str().to_string(),
+                port: loopback_port,
+                username: username.to_string(),
+                password: password.to_string(),
+                conf_id: if conf_id.trim().is_empty() {
+                    "default".into()
+                } else {
+                    conf_id.trim().to_string()
+                },
+            },
+        )
+        .await?;
+        Ok(envelope(config, &snaps))
+    }
+
+    fn astrbot_runtime(&self) -> Option<&dyn api::AstrBotRuntimeApi> {
+        Some(&self.runtime)
     }
 
     async fn list_installed(

@@ -18,6 +18,7 @@ async-trait = "0.1"
 md5 = "0.7"
 pbkdf2 = "0.12"
 rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["preserve_order"] }
 sha2 = "0.10"
@@ -31,6 +32,7 @@ ts-rs = { version = "12", features = ["serde-compat"] }
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tempfile = "3"
+wiremock = "0.6"
 
 [lints]
 workspace = true

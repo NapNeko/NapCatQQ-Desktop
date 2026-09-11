@@ -12,7 +12,7 @@ use super::manifest::{
 use crate::config_doc::IssueSink;
 
 pub const AMBIGUOUS_AIOCQHTTP: &str =
-    "有多条 OneBot v11（aiocqhttp），无法唯一认领。请在 AstrBot WebUI 或原文里指定要对接的那条";
+    "有多条 OneBot v11（aiocqhttp），无法唯一认领。到 AstrBot WebUI 或原文指定要对接的那条";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Claim {

@@ -14,6 +14,7 @@ use ncd_domain::{
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
+use crate::astrbot::api::AstrBotRuntimeApi;
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, read_document, write_document_text,
 };
@@ -223,6 +224,31 @@ pub trait AppFrameworkAdapter: Send + Sync {
         Err(AppFrameworkError::ConfigUnsupported(
             instance.framework_id.as_str().to_string(),
         ))
+    }
+
+    fn supports_live_config(&self) -> bool {
+        false
+    }
+
+    async fn write_live_config(
+        &self,
+        _host: &dyn Host,
+        instance: &AppInstance,
+        _loopback_port: u16,
+        _username: &str,
+        _password: &str,
+        _config: &AppInstanceConfig,
+        _conf_id: &str,
+    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
+        Err(AppFrameworkError::ConfigUnsupported(
+            instance.framework_id.as_str().to_string(),
+        ))
+    }
+
+    /// AstrBot 的人格 / 知识库 / 会话规则等运行期资源。None = 该框架没有这套 API。
+    /// 这些类型是 AstrBot 专有的，不进通用 trait 的方法签名。
+    fn astrbot_runtime(&self) -> Option<&dyn AstrBotRuntimeApi> {
+        None
     }
 
     /// 读一份文档原文（缺文件返回空文本 + `"missing"` 版本号）
