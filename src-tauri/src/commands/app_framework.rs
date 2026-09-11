@@ -11,8 +11,10 @@ use ncd_domain::{
 };
 use ncd_runtime::{
     AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreInstalled,
-    AppStoreMarketEntry, ComponentActionRequest, DeploymentTaskRequest, KarinPluginInstalled,
-    KarinPluginMarketEntry, run_app_plugin_task,
+    AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
+    AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule, ComponentActionRequest,
+    DeploymentTaskRequest, KarinPluginInstalled, KarinPluginMarketEntry, join_webui_url,
+    run_app_plugin_task,
 };
 use ncd_traits::AppFrameworkError;
 use serde::Serialize;
@@ -44,6 +46,9 @@ pub enum AppConfigErrorKind {
     Conflict,
     Invalid,
     Unsupported,
+    NotRunning,
+    Auth,
+    Unreachable,
     Other,
 }
 
@@ -71,6 +76,21 @@ impl From<AppFrameworkError> for AppConfigError {
             },
             AppFrameworkError::ConfigUnsupported(_) => Self {
                 kind: AppConfigErrorKind::Unsupported,
+                message,
+                issues: Vec::new(),
+            },
+            AppFrameworkError::NotRunning(_) => Self {
+                kind: AppConfigErrorKind::NotRunning,
+                message,
+                issues: Vec::new(),
+            },
+            AppFrameworkError::DashboardAuth(_) => Self {
+                kind: AppConfigErrorKind::Auth,
+                message,
+                issues: Vec::new(),
+            },
+            AppFrameworkError::DashboardUnreachable(_) => Self {
+                kind: AppConfigErrorKind::Unreachable,
                 message,
                 issues: Vec::new(),
             },
@@ -306,11 +326,17 @@ pub async fn write_app_instance_config(
     instance_id: String,
     config: AppInstanceConfig,
     base_revision: Option<String>,
+    conf_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<AppConfigWriteResult, AppConfigError> {
     state
         .app_manager
-        .write_config(&AppInstanceId::new(instance_id), config, base_revision)
+        .write_config_profile(
+            &AppInstanceId::new(instance_id),
+            config,
+            base_revision,
+            conf_id,
+        )
         .await
         .map_err(AppConfigError::from)
 }
@@ -383,6 +409,7 @@ pub(crate) fn test_app_manager(
 #[tauri::command]
 pub async fn get_app_instance_webui(
     instance_id: String,
+    path: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<AppInstanceWebUi, String> {
     let instance = state
@@ -401,6 +428,7 @@ pub async fn get_app_instance_webui(
         .app_manager
         .webui_url(&view, "127.0.0.1")
         .ok_or_else(|| "该应用端没有 WebUI".to_string())?;
+    let url = join_webui_url(&url, path.as_deref());
     let auth_key = state.app_manager.webui_auth_key(&instance.id).await;
     let account = state.app_manager.webui_account(&instance).await;
     Ok(AppInstanceWebUi {
@@ -408,6 +436,197 @@ pub async fn get_app_instance_webui(
         auth_key,
         account,
     })
+}
+
+#[tauri::command]
+pub async fn astrbot_dashboard_status(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<AstrBotDashboardStatus, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_dashboard_status(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_list_personas(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotPersona>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_list_personas(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_upsert_persona(
+    instance_id: String,
+    persona: AstrBotPersona,
+    creating: bool,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotPersona>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_upsert_persona(&AppInstanceId::new(instance_id), persona, creating)
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_delete_persona(
+    instance_id: String,
+    persona_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotPersona>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_delete_persona(&AppInstanceId::new(instance_id), &persona_id)
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_list_kbs(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotKnowledgeBase>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_list_kbs(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_create_kb(
+    instance_id: String,
+    request: AstrBotKbCreate,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotKnowledgeBase>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_create_kb(&AppInstanceId::new(instance_id), request)
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_delete_kb(
+    instance_id: String,
+    kb_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotKnowledgeBase>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_delete_kb(&AppInstanceId::new(instance_id), &kb_id)
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_list_session_rules(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotSessionRule>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_list_session_rules(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_update_session_rule(
+    instance_id: String,
+    rule: AstrBotSessionRule,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotSessionRule>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_update_session_rule(&AppInstanceId::new(instance_id), rule)
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_delete_session_rule(
+    instance_id: String,
+    umo: String,
+    rule_key: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotSessionRule>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_delete_session_rule(&AppInstanceId::new(instance_id), &umo, &rule_key)
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_list_abconfs(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotAbconfInfo>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_list_abconfs(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_create_abconf(
+    instance_id: String,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotAbconfInfo>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_create_abconf(&AppInstanceId::new(instance_id), &name)
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_delete_abconf(
+    instance_id: String,
+    abconf_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AstrBotAbconfInfo>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_delete_abconf(&AppInstanceId::new(instance_id), &abconf_id)
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_list_source_models(
+    instance_id: String,
+    source_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_list_source_models(&AppInstanceId::new(instance_id), &source_id)
+        .await
+        .map_err(AppConfigError::from)
+}
+
+#[tauri::command]
+pub async fn astrbot_list_subagent_tools(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppConfigError> {
+    state
+        .app_manager
+        .astrbot_list_subagent_tools(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppConfigError::from)
 }
 
 /// 只看账号不开隧道：实例停着时从详情页查看 / 重置密码用。
