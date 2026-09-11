@@ -635,6 +635,42 @@ impl AppConfigIssue {
     }
 }
 
+/// 打开应用端 WebUI 时返回给前端的入口。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+pub struct AppInstanceWebUi {
+    pub url: String,
+    /// Karin `HTTP_AUTH_KEY`；空则前端不写剪贴板。
+    pub auth_key: String,
+    /// 用户名密码类 WebUI（AstrBot）的账号；None = 该框架不是账号密码登录
+    #[ts(optional)]
+    pub account: Option<AppWebUiAccount>,
+}
+
+/// 配置读写命令的结构化错误：前端按 `kind` 分流（冲突 → 重载/覆盖对话框；校验 → 定位字段）。
+/// 其它命令仍返回 String，这里只在需要分流的地方升级。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+pub enum AppConfigErrorKind {
+    Conflict,
+    Invalid,
+    Unsupported,
+    NotRunning,
+    Auth,
+    Unreachable,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+pub struct AppConfigError {
+    pub kind: AppConfigErrorKind,
+    pub message: String,
+    pub issues: Vec<AppConfigIssue>,
+}
+
 /// 从协议 Bot 导出的 OneBot HTTP 出口（正向 HTTP 对接的输入；反向 WS 走 OneBotLinkPlan）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]

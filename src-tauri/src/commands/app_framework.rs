@@ -4,10 +4,10 @@
 use ncd_component::ComponentId;
 use ncd_deploy::StepKind;
 use ncd_domain::{
-    AppConfigDocument, AppConfigIssue, AppConfigText, AppFrameworkId, AppFrameworkManifest,
-    AppInstance, AppInstanceId, AppPluginAction, AppPluginConfigSchema, AppProjectProbe,
-    AppStoreResource, AppWebUiAccount, BotId, CreateAppInstanceRequest, DeploymentTaskKind,
-    DeploymentTaskResource, ImportAppInstanceRequest, OneBotLinkPlan,
+    AppConfigDocument, AppConfigError, AppConfigText, AppFrameworkId, AppFrameworkManifest,
+    AppInstance, AppInstanceId, AppInstanceWebUi, AppPluginAction, AppPluginConfigSchema,
+    AppProjectProbe, AppStoreResource, AppWebUiAccount, BotId, CreateAppInstanceRequest,
+    DeploymentTaskKind, DeploymentTaskResource, ImportAppInstanceRequest, OneBotLinkPlan,
 };
 use ncd_runtime::{
     AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreInstalled,
@@ -17,91 +17,11 @@ use ncd_runtime::{
     run_app_plugin_task,
 };
 use ncd_traits::AppFrameworkError;
-use serde::Serialize;
 use tauri::State;
-use ts_rs::TS;
 
 use crate::AppState;
 use crate::commands::components::{build_inputs, cached_host_probe, executor};
 use crate::commands::host_resolve::resolve_host_with_autoconnect;
-
-#[derive(Debug, Clone, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
-pub struct AppInstanceWebUi {
-    pub url: String,
-    /// Karin `HTTP_AUTH_KEY`；空则前端不写剪贴板。
-    pub auth_key: String,
-    /// 用户名密码类 WebUI（AstrBot）的账号；None = 该框架不是账号密码登录
-    #[ts(optional)]
-    pub account: Option<AppWebUiAccount>,
-}
-
-/// 配置读写命令的结构化错误：前端按 `kind` 分流（冲突 → 重载/覆盖对话框；校验 → 定位字段）。
-/// 其它命令仍返回 String，这里只在需要分流的地方升级。
-#[derive(Debug, Clone, Serialize, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
-pub enum AppConfigErrorKind {
-    Conflict,
-    Invalid,
-    Unsupported,
-    NotRunning,
-    Auth,
-    Unreachable,
-    Other,
-}
-
-#[derive(Debug, Clone, Serialize, TS)]
-#[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
-pub struct AppConfigError {
-    pub kind: AppConfigErrorKind,
-    pub message: String,
-    pub issues: Vec<AppConfigIssue>,
-}
-
-impl From<AppFrameworkError> for AppConfigError {
-    fn from(e: AppFrameworkError) -> Self {
-        let message = e.to_string();
-        match e {
-            AppFrameworkError::ConfigConflict(_) => Self {
-                kind: AppConfigErrorKind::Conflict,
-                message,
-                issues: Vec::new(),
-            },
-            AppFrameworkError::ConfigInvalid(issues) => Self {
-                kind: AppConfigErrorKind::Invalid,
-                message,
-                issues,
-            },
-            AppFrameworkError::ConfigUnsupported(_) => Self {
-                kind: AppConfigErrorKind::Unsupported,
-                message,
-                issues: Vec::new(),
-            },
-            AppFrameworkError::NotRunning(_) => Self {
-                kind: AppConfigErrorKind::NotRunning,
-                message,
-                issues: Vec::new(),
-            },
-            AppFrameworkError::DashboardAuth(_) => Self {
-                kind: AppConfigErrorKind::Auth,
-                message,
-                issues: Vec::new(),
-            },
-            AppFrameworkError::DashboardUnreachable(_) => Self {
-                kind: AppConfigErrorKind::Unreachable,
-                message,
-                issues: Vec::new(),
-            },
-            _ => Self {
-                kind: AppConfigErrorKind::Other,
-                message,
-                issues: Vec::new(),
-            },
-        }
-    }
-}
 
 #[tauri::command]
 pub fn list_app_frameworks(state: State<'_, AppState>) -> Vec<AppFrameworkManifest> {
@@ -318,7 +238,7 @@ pub async fn read_app_instance_config(
         .app_manager
         .read_config(&AppInstanceId::new(instance_id))
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -338,7 +258,7 @@ pub async fn write_app_instance_config(
             conf_id,
         )
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -363,7 +283,7 @@ pub async fn read_app_config_text(
         .app_manager
         .read_config_text(&AppInstanceId::new(instance_id), &doc_id)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -378,7 +298,7 @@ pub async fn write_app_config_text(
         .app_manager
         .write_config_text(&AppInstanceId::new(instance_id), &doc_id, &text, base_revision)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 /// 测试用：本机-only 的 AppManager（空实例表 + LocalOnlyHostResolver）
@@ -447,7 +367,7 @@ pub async fn astrbot_dashboard_status(
         .app_manager
         .astrbot_dashboard_status(&AppInstanceId::new(instance_id))
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -459,7 +379,7 @@ pub async fn astrbot_list_personas(
         .app_manager
         .astrbot_list_personas(&AppInstanceId::new(instance_id))
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -473,7 +393,7 @@ pub async fn astrbot_upsert_persona(
         .app_manager
         .astrbot_upsert_persona(&AppInstanceId::new(instance_id), persona, creating)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -486,7 +406,7 @@ pub async fn astrbot_delete_persona(
         .app_manager
         .astrbot_delete_persona(&AppInstanceId::new(instance_id), &persona_id)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -498,7 +418,7 @@ pub async fn astrbot_list_kbs(
         .app_manager
         .astrbot_list_kbs(&AppInstanceId::new(instance_id))
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -511,7 +431,7 @@ pub async fn astrbot_create_kb(
         .app_manager
         .astrbot_create_kb(&AppInstanceId::new(instance_id), request)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -524,7 +444,7 @@ pub async fn astrbot_delete_kb(
         .app_manager
         .astrbot_delete_kb(&AppInstanceId::new(instance_id), &kb_id)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -536,7 +456,7 @@ pub async fn astrbot_list_session_rules(
         .app_manager
         .astrbot_list_session_rules(&AppInstanceId::new(instance_id))
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -549,7 +469,7 @@ pub async fn astrbot_update_session_rule(
         .app_manager
         .astrbot_update_session_rule(&AppInstanceId::new(instance_id), rule)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -563,7 +483,7 @@ pub async fn astrbot_delete_session_rule(
         .app_manager
         .astrbot_delete_session_rule(&AppInstanceId::new(instance_id), &umo, &rule_key)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -575,7 +495,7 @@ pub async fn astrbot_list_abconfs(
         .app_manager
         .astrbot_list_abconfs(&AppInstanceId::new(instance_id))
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -588,7 +508,7 @@ pub async fn astrbot_create_abconf(
         .app_manager
         .astrbot_create_abconf(&AppInstanceId::new(instance_id), &name)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -601,7 +521,7 @@ pub async fn astrbot_delete_abconf(
         .app_manager
         .astrbot_delete_abconf(&AppInstanceId::new(instance_id), &abconf_id)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -614,7 +534,7 @@ pub async fn astrbot_list_source_models(
         .app_manager
         .astrbot_list_source_models(&AppInstanceId::new(instance_id), &source_id)
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 #[tauri::command]
@@ -626,7 +546,7 @@ pub async fn astrbot_list_subagent_tools(
         .app_manager
         .astrbot_list_subagent_tools(&AppInstanceId::new(instance_id))
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }
 
 /// 只看账号不开隧道：实例停着时从详情页查看 / 重置密码用。
@@ -651,11 +571,19 @@ pub async fn reset_app_instance_webui_password(
     state: State<'_, AppState>,
 ) -> Result<AppWebUiAccount, AppConfigError> {
     let id = AppInstanceId::new(instance_id);
-    let instance = state.app_manager.get_instance(&id).await?;
+    let instance = state
+        .app_manager
+        .get_instance(&id)
+        .await
+        .map_err(AppFrameworkError::into_config_error)?;
     resolve_host_with_autoconnect(&instance.host_id, &state)
         .await
-        .map_err(|e| AppConfigError::from(AppFrameworkError::Host(e)))?;
-    Ok(state.app_manager.reset_webui_password(&id, password).await?)
+        .map_err(|e| AppFrameworkError::Host(e).into_config_error())?;
+    Ok(state
+        .app_manager
+        .reset_webui_password(&id, password)
+        .await
+        .map_err(AppFrameworkError::into_config_error)?)
 }
 
 #[tauri::command]
@@ -856,5 +784,5 @@ pub async fn set_app_plugin_enabled(
             overwrite.unwrap_or(false),
         )
         .await
-        .map_err(AppConfigError::from)
+        .map_err(AppFrameworkError::into_config_error)
 }

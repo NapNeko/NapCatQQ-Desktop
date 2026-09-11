@@ -6,8 +6,8 @@
 
 use async_trait::async_trait;
 use ncd_domain::{
-    AppConfigIssue, AppFrameworkId, AppFrameworkManifest, AppInstance, AppInstanceId, BotConfig,
-    OneBotLinkPlan, StopMode,
+    AppConfigError, AppConfigErrorKind, AppConfigIssue, AppFrameworkId, AppFrameworkManifest,
+    AppInstance, AppInstanceId, BotConfig, OneBotLinkPlan, StopMode,
 };
 
 /// 把协议 Bot 的 OneBot 出口翻译成该应用端的对接计划（差异最大的扩展点）。
@@ -110,6 +110,50 @@ pub enum AppFrameworkError {
     /// 写之前状态变了（启停竞态），禁止改走另一条写路径
     #[error("{0}")]
     StateChanged(String),
+}
+
+impl AppFrameworkError {
+    /// IPC 结构化错误：前端按 `kind` 分流。不能用 `From`——两边分属 domain / traits。
+    pub fn into_config_error(self) -> AppConfigError {
+        let message = self.to_string();
+        match self {
+            Self::ConfigConflict(_) => AppConfigError {
+                kind: AppConfigErrorKind::Conflict,
+                message,
+                issues: Vec::new(),
+            },
+            Self::ConfigInvalid(issues) => AppConfigError {
+                kind: AppConfigErrorKind::Invalid,
+                message,
+                issues,
+            },
+            Self::ConfigUnsupported(_) => AppConfigError {
+                kind: AppConfigErrorKind::Unsupported,
+                message,
+                issues: Vec::new(),
+            },
+            Self::NotRunning(_) => AppConfigError {
+                kind: AppConfigErrorKind::NotRunning,
+                message,
+                issues: Vec::new(),
+            },
+            Self::DashboardAuth(_) => AppConfigError {
+                kind: AppConfigErrorKind::Auth,
+                message,
+                issues: Vec::new(),
+            },
+            Self::DashboardUnreachable(_) => AppConfigError {
+                kind: AppConfigErrorKind::Unreachable,
+                message,
+                issues: Vec::new(),
+            },
+            _ => AppConfigError {
+                kind: AppConfigErrorKind::Other,
+                message,
+                issues: Vec::new(),
+            },
+        }
+    }
 }
 
 fn format_issues(issues: &[AppConfigIssue]) -> String {
