@@ -39,7 +39,7 @@ export const WebUiAccountDialogHost: React.FC = () => {
                                 onClick={() => void openExternalUrl(state.url)}
                             >
                                 <ActionMotionIcon icon={ExternalLink} size={13} />
-                                再打开一次
+                                重新打开
                             </Button>
                             <Button variant="primary" size="sm" onClick={closeWebUiAccountDialog}>
                                 关闭

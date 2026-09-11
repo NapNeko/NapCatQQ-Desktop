@@ -76,10 +76,10 @@ const ValueRow: React.FC<{
 
 export function webUiPasswordNote(account: AppWebUiAccount): string | null {
     if (!account.password) {
-        return '密码只有桌面端设过才知道；忘了就停止实例后重置。';
+        return '密码只有桌面端设过才知道；忘了就停实例后重置。';
     }
     if (account.password_matches === false) {
-        return '这个密码已经不是当前密码（可能在 WebUI 里改过）；停止实例后可重置。';
+        return '已不是当前密码（可能在 WebUI 里改过）；停实例后可重置。';
     }
     return null;
 }

@@ -82,7 +82,7 @@ export const WebUiAccountCard: React.FC<{ instance: AppInstance }> = ({ instance
                 <DialogContent size="sm">
                     <DialogHeader>
                         <DialogTitle>重置 WebUI 密码</DialogTitle>
-                        <DialogDescription>写进 {instance.display_name} 的配置，下次启动生效。</DialogDescription>
+                        <DialogDescription>写入配置，下次启动生效。</DialogDescription>
                     </DialogHeader>
                     <TextField
                         label="新密码"

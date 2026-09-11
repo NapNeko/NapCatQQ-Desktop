@@ -282,7 +282,7 @@ const PluginConfigWorkspace: React.FC<{
                 )}
                 {syntaxError && <p className="mb-2 shrink-0 text-xs text-danger">{syntaxError}</p>}
                 {formBroken && (
-                    <p className="mb-2 shrink-0 text-xs text-danger">当前内容不是合法的 JSON 对象，请切到源码修正。</p>
+                    <p className="mb-2 shrink-0 text-xs text-danger">当前内容不是合法的 JSON 对象，切到源码修正。</p>
                 )}
                 {schema && mode === 'form' && formValue !== null ? (
                     <PluginSchemaForm

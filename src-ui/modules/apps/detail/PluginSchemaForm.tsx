@@ -253,7 +253,7 @@ export const PluginSchemaForm: React.FC<{
     onChange: (next: PluginConfigObject) => void;
 }> = ({ fields, value, disabled, onChange }) => {
     if (fields.length === 0) {
-        return <p className="text-sm text-text-secondary">这个插件没有可配置项。</p>;
+        return <p className="text-sm text-text-secondary">没有可配置项</p>;
     }
     return (
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
