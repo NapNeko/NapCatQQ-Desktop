@@ -2,7 +2,7 @@
 // 布局:TitleBar(透明) ─ [Sidebar | main]
 // overview 首屏同步加载；其余业务路由 lazy，降低主包解析成本。
 // spotlight 等锚点仍靠 waitForTourTarget，lazy 挂载延迟可接受。
-// 侧栏 hover/focus 预取对应 chunk；导航 setRoute 走 startTransition，不改路由语义。
+// 侧栏 hover/focus 预取对应 chunk；点击导航直接 setRoute（不走 startTransition）。
 
 import React, {
     Suspense,
@@ -185,8 +185,8 @@ export const AppNext: React.FC = () => {
     const navigate = useCallback((nextRoute: AppRoute) => {
         const target =
             nextRoute === 'docker' && !showDocker ? 'overview' : nextRoute;
-        // 非紧急 UI 更新：与 lazy 解析叠在一起时少抢输入响应。
-        startTransition(() => setRoute(target));
+        // 侧栏点击必须是紧急更新：详情页一旦有持续 setState，startTransition 会一直交不出去。
+        setRoute(target);
     }, [showDocker]);
 
     const prefetchRoute = useCallback((nextRoute: AppRoute) => {
