@@ -164,7 +164,9 @@ pub use app_framework::{
 };
 pub use ncd_appframework::{
     AppConfigWriteResult, AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope,
-    AppStoreInstalled, AppStoreMarketEntry, KarinPluginInstalled, KarinPluginMarketEntry,
+    AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
+    AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
+    KarinPluginInstalled, KarinPluginMarketEntry, join_webui_url,
 };
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
