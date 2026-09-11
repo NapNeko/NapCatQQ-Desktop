@@ -94,6 +94,22 @@ pub enum AppFrameworkError {
 
     #[error("该应用端暂不支持插件代管: {0}")]
     PluginUnsupported(String),
+
+    /// 实例没在跑，运行期 API（人格 / 知识库 / 会话）不可用
+    #[error("{0}")]
+    NotRunning(String),
+
+    /// Dashboard 登录失败、没记住密码、或上游开了 2FA
+    #[error("{0}")]
+    DashboardAuth(String),
+
+    /// 本机 loopback / 隧道打不到 WebUI
+    #[error("{0}")]
+    DashboardUnreachable(String),
+
+    /// 写之前状态变了（启停竞态），禁止改走另一条写路径
+    #[error("{0}")]
+    StateChanged(String),
 }
 
 fn format_issues(issues: &[AppConfigIssue]) -> String {
