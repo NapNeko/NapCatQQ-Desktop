@@ -593,6 +593,7 @@ export function BotListPageNext({
                 <ConfigDriftDialog
                     open={!!pendingDrift}
                     drift={pendingDrift}
+                    intent="start"
                     onConfirm={handleDriftConfirm}
                     onCancel={handleDriftCancel}
                 />

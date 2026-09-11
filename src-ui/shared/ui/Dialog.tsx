@@ -352,19 +352,21 @@ function useDialogContentHeight(
             return;
         }
 
-        // sheet / sheetWide: 高度封顶后交给子级 flex 分区滚动，避免整页把 header/footer 一起卷走。
+        // sheet / sheetWide：不要按 inner.scrollHeight 写死 clip 高度。
+        // 内容高于外层 max-h（或调用方又叠了 max-h-[85vh]）时，像素高度会大于
+        // 内容盒，overflow-hidden 把 footer 裁掉；外层 portal 还 pointer-events-none，
+        // 整卡也滚不到按钮。高度交给 CSS max-h + flex 收缩，只让中间区滚。
         if (size === 'sheet' || size === 'sheetWide') {
             tweenRef.current?.kill();
-            const raw = Math.max(inner.scrollHeight, 1);
-            const target = Math.min(raw, cap);
-            clip.style.flex = '1 1 0%';
+            clip.style.flex = '1 1 auto';
             clip.style.minHeight = '0';
-            clip.style.height = `${target}px`;
+            clip.style.height = '';
+            clip.style.maxHeight = '';
             inner.style.overflowY = 'hidden';
-            inner.style.maxHeight = 'none';
-            inner.style.height = '100%';
+            inner.style.maxHeight = '';
+            inner.style.height = '';
             inner.style.minHeight = '0';
-            inner.style.flex = '1 1 0%';
+            inner.style.flex = '1 1 auto';
             primedRef.current = true;
             return;
         }
@@ -482,29 +484,30 @@ const ContentBody = forwardRef<
             className={cn(
                 'pointer-events-auto relative w-full',
                 'rounded-md bg-elevated p-6 shadow-popover',
-                size === 'sheet' && 'flex max-h-[calc(100dvh-3rem)] flex-col',
-                size === 'sheetWide' && 'flex max-h-[calc(100dvh-3rem)] flex-col',
+                'transition-[max-width] duration-300 ease-out',
+                className,
+                // 放在 className 之后，避免业务再叠 max-h-[85vh] 把 footer 裁掉。
+                size === 'sheet' && 'flex max-h-[calc(100dvh-3rem)] min-h-0 flex-col overflow-hidden',
+                size === 'sheetWide' && 'flex max-h-[calc(100dvh-3rem)] min-h-0 flex-col overflow-hidden',
                 size === 'onboarding' &&
                 'flex max-h-[calc(100dvh-2.5rem)] flex-col overflow-hidden p-0',
                 size === 'taskQueue' && 'flex h-[min(92dvh,900px)] min-h-[min(52dvh,480px)] max-h-[min(92dvh,900px)] flex-col p-0',
-                'transition-[max-width] duration-300 ease-out',
-                className,
             )}
         >
             <div
                 ref={setClipRef}
                 className={cn(
                     'overflow-x-clip overflow-y-hidden',
-                    size === 'sheet' && 'min-h-0 flex-1',
-                    size === 'sheetWide' && 'min-h-0 flex-1',
+                    size === 'sheet' && 'flex min-h-0 flex-1 flex-col',
+                    size === 'sheetWide' && 'flex min-h-0 flex-1 flex-col',
                     size === 'onboarding' && 'min-h-0 flex-1',
                     size === 'taskQueue' && 'min-h-0 flex-1',
                 )}
             >
                 <div ref={setInnerRef} className={cn(
                     size === 'onboarding' || size === 'taskQueue' ? 'px-0' : 'px-1',
-                    size === 'sheet' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
-                    size === 'sheetWide' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
+                    size === 'sheet' && 'flex min-h-0 flex-1 flex-col overflow-hidden',
+                    size === 'sheetWide' && 'flex min-h-0 flex-1 flex-col overflow-hidden',
                     size === 'onboarding' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
                     size === 'taskQueue' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
                 )}>
@@ -533,7 +536,7 @@ ContentBody.displayName = 'ContentBody';
 export const DialogHeader: React.FC<HTMLAttributes<HTMLDivElement>> = ({
     className,
     ...props
-}) => <div className={cn('mb-3 flex flex-col gap-1', className)} {...props} />;
+}) => <div className={cn('mb-3 flex shrink-0 flex-col gap-1', className)} {...props} />;
 
 export const DialogTitle = forwardRef<
     ElementRef<typeof RadixDialog.Title>,
@@ -564,7 +567,7 @@ export const DialogFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({
     ...props
 }) => (
     <div
-        className={cn('mt-5 flex items-center justify-end gap-2', className)}
+        className={cn('mt-5 flex shrink-0 items-center justify-end gap-2', className)}
         {...props}
     />
 );

@@ -51,7 +51,7 @@ export function FloatingActions({
         <BodyPortal>
             <div
                 ref={groupRef}
-                className="pointer-events-none fixed bottom-6 right-6 z-[60] flex flex-col items-center gap-3"
+                className="pointer-events-none fixed bottom-6 right-6 z-30 flex flex-col items-center gap-3"
                 aria-label="应用端列表快捷操作"
             >
                 <CircleButton tooltip="刷新列表" onClick={onRefresh} disabled={busy} variant="ghost">

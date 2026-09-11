@@ -625,6 +625,7 @@ export function BotConfigPageNext({
                 <ConfigDriftDialog
                     open={!!pendingSaveDrift}
                     drift={pendingSaveDrift}
+                    intent="save"
                     onConfirm={handleSaveDriftConfirm}
                     onCancel={handleSaveDriftCancel}
                 />

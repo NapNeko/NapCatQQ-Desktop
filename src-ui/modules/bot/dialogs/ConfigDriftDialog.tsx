@@ -43,11 +43,19 @@ import {
 interface ConfigDriftDialogProps {
     open: boolean;
     drift: ConfigDrift;
+    /** 启动前冲突 vs 保存前冲突，只影响按钮文案。 */
+    intent?: 'start' | 'save';
     onConfirm: (decisions: DriftDecision[]) => void;
     onCancel: () => void;
 }
 
-export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDriftDialogProps) {
+export function ConfigDriftDialog({
+    open,
+    drift,
+    intent = 'start',
+    onConfirm,
+    onCancel,
+}: ConfigDriftDialogProps) {
     const modifiedDisplay = useMemo(() => transformDriftEntries(drift.modified), [drift.modified]);
 
     const [addedKeep, setAddedKeep] = useState<Record<string, boolean>>(() => {
@@ -100,7 +108,7 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
 
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
-            <DialogContent size="sheet" className="max-w-3xl max-h-[85vh] flex min-h-0 flex-col overflow-hidden">
+            <DialogContent size="sheet" dismissOnOutsideClick={false}>
                 <DialogHeader className="shrink-0">
                     <DialogTitle className="flex items-center gap-2">
                         <ActionMotionIcon
@@ -238,7 +246,7 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
                     </div>
                     <div className="flex items-center gap-2">
                         <Button variant="secondary" size="sm" onClick={onCancel} className="rounded-sm">
-                            取消启动
+                            {intent === 'save' ? '取消' : '取消启动'}
                         </Button>
                         <Button
                             variant="primary"
@@ -247,7 +255,7 @@ export function ConfigDriftDialog({ open, drift, onConfirm, onCancel }: ConfigDr
                             onClick={handleConfirm}
                             className="rounded-sm"
                         >
-                            应用并启动 Bot
+                            {intent === 'save' ? '应用并保存' : '应用并启动 Bot'}
                         </Button>
                     </div>
                 </DialogFooter>

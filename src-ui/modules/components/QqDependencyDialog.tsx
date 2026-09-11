@@ -140,7 +140,7 @@ export function QqDependencyDialog({
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-y-auto space-y-4 py-3 scrollbar-hide">
+                    <div className="min-h-0 flex-1 overflow-y-auto space-y-4 py-3 scrollbar-hide">
                         <QqDependencyBody
                             phase={phase}
                             missing={missing}
