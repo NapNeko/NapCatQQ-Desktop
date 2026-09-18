@@ -430,6 +430,9 @@ pub struct AppInstance {
     /// 桌面端脚手架新建 vs 领养已有目录。旧快照缺字段视为 Created。
     #[serde(default)]
     pub origin: AppInstanceOrigin,
+    /// 开机/桌面端启动时自动启动该实例。旧快照缺字段视为 true（兼容语义：已安装即启用）。
+    #[serde(default = "default_true")]
+    pub auto_start: bool,
 }
 
 fn default_true() -> bool {
@@ -496,6 +499,9 @@ pub struct CreateAppInstanceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub webui_password: Option<String>,
+    /// 开机/桌面端启动时自动启动该实例。默认 true。
+    #[serde(default = "default_true")]
+    pub auto_start: bool,
 }
 
 /// 探测已有项目目录（导入前）
@@ -835,6 +841,7 @@ mod tests {
             created_at_ms: 1,
             install_renderer: true,
             origin: AppInstanceOrigin::Created,
+            auto_start: true,
         };
         let json = serde_json::to_string(&inst).unwrap();
         assert!(!json.contains("\"link\""));
@@ -880,6 +887,7 @@ mod tests {
             install_renderer: Some(false),
             webui_username: None,
             webui_password: None,
+            auto_start: true,
         };
         let v = serde_json::to_value(&req).unwrap();
         assert_eq!(v["install_dir"], "/d/bots/karin-main");
@@ -900,6 +908,7 @@ mod tests {
         let inst: AppInstance = serde_json::from_str(json).unwrap();
         assert!(inst.install_renderer);
         assert_eq!(inst.origin, AppInstanceOrigin::Created);
+        assert!(inst.auto_start); // 旧 JSON 缺字段回落到 default_true
     }
 
     #[test]

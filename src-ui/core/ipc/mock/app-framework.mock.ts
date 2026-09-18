@@ -129,6 +129,7 @@ let instances: AppInstance[] = [
         created_at_ms: Date.now() - 86_400_000,
         install_renderer: true,
         origin: 'created',
+        auto_start: true,
     },
     {
         id: 'd5e6f7a8',
@@ -142,6 +143,7 @@ let instances: AppInstance[] = [
         created_at_ms: Date.now() - 600_000,
         install_renderer: true,
         origin: 'created',
+        auto_start: true,
     },
     {
         id: 'n9b8c7d6',
@@ -162,6 +164,7 @@ let instances: AppInstance[] = [
         created_at_ms: Date.now() - 7_200_000,
         install_renderer: false,
         origin: 'imported',
+        auto_start: true,
     },
     {
         id: 'ab12cd34',
@@ -175,6 +178,7 @@ let instances: AppInstance[] = [
         created_at_ms: Date.now() - 3_600_000,
         install_renderer: false,
         origin: 'created',
+        auto_start: true,
     },
 ];
 
@@ -220,6 +224,7 @@ export const mockAppFrameworkApi = {
             created_at_ms: Date.now(),
             install_renderer: req.install_renderer ?? true,
             origin: 'created',
+            auto_start: true,
         };
         if (manifest?.webui_auth === 'user_password') {
             mockWebUiAccounts.set(id, {
@@ -294,6 +299,7 @@ export const mockAppFrameworkApi = {
             created_at_ms: Date.now(),
             install_renderer: false,
             origin: 'imported',
+            auto_start: true,
             link: probe.detected_bot_id
                 ? {
                       bot_id: probe.detected_bot_id,
@@ -443,6 +449,12 @@ export const mockAppFrameworkApi = {
         const view = mockAccountView(inst);
         if (!view) throw new Error('该应用端不是账号密码登录');
         return withMockDelay(view);
+    },
+
+    setInstanceAutoStart: async (instanceId: string, autoStart: boolean): Promise<AppInstance> => {
+        const next: AppInstance = { ...require(instanceId), auto_start: autoStart };
+        publish(next, 'auto_start_changed');
+        return withMockDelay(next);
     },
 
     ...createMockAppConfigApi({ require, publish }),

@@ -394,7 +394,7 @@ pub fn run() {
             health_probe_cancel: Arc::new(Mutex::new(None)),
             metrics_collector: metrics_collector.clone(),
             migrate_gate: Arc::new(commands::data_root_migrate::DataRootMigrateGate::default()),
-            app_manager,
+            app_manager: app_manager.clone(),
         })
         .setup(move |app| {
             if startup_tray_only {
@@ -580,8 +580,13 @@ pub fn run() {
                 );
             }
             // 应用端实例冷启动对账：按 pid 文件判 Running / Stopped；连不上的远端跳过
+            let app_manager_auto_start = Arc::clone(&app_manager);
+            let app_settings_for_auto = Arc::clone(&app_settings_shared);
             tauri::async_runtime::spawn(async move {
                 app_manager_reconcile.reconcile_all().await;
+                // 对账完成后自动启动实例
+                let global_enabled = app_settings_for_auto.read().await.app_instances_auto_start;
+                app_manager_auto_start.auto_start_instances(global_enabled).await;
             });
             // 远端 ncd-watch:周期写 desktop_present + 同步 notify.json
             commands::ncd_watch::spawn_ncd_watch_heartbeat(app.handle().clone());
@@ -705,6 +710,7 @@ pub fn run() {
             commands::app_framework::get_app_instance_webui,
             commands::app_framework::get_app_instance_webui_account,
             commands::app_framework::reset_app_instance_webui_password,
+            commands::app_framework::set_app_instance_auto_start,
             commands::app_framework::read_app_instance_config,
             commands::app_framework::write_app_instance_config,
             commands::app_framework::list_app_config_documents,

@@ -129,9 +129,13 @@ impl AppFrameworkAdapter for AstrBotAdapter {
         let password_matches = remembered_password
             .filter(|p| !p.is_empty())
             .and_then(|p| dashboard_auth::password_matches(&root, p));
+        // 检查落盘是否为哈希格式（无明文时用于判断是否能代登录）
+        let stored_hash = account.stored_hash.as_deref().unwrap_or("");
+        let is_hash = dashboard_auth::is_hash_format(stored_hash);
         Ok(Some(WebUiAccountProbe {
             username: account.username,
             password_matches,
+            stored_is_hash: is_hash,
         }))
     }
 

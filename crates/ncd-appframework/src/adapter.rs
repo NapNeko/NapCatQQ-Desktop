@@ -53,6 +53,8 @@ pub struct WebUiAccountProbe {
     pub username: String,
     /// None = 落盘还没有哈希（首启才生成）或没给要核对的密码
     pub password_matches: Option<bool>,
+    /// 落盘存储的密码是否为哈希格式（用于判断能否代登录）
+    pub stored_is_hash: bool,
 }
 
 #[async_trait]
@@ -658,6 +660,7 @@ mod tests {
             created_at_ms: 1,
             install_renderer: true,
             origin: ncd_domain::AppInstanceOrigin::Created,
+            auto_start: true,
         };
         let dest = KarinAdapter::new()
             .store_app_file_dest(&instance, "index.js")

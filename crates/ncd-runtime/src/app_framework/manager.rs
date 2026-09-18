@@ -341,6 +341,7 @@ impl AppManager {
 
     /// 用户名密码类 WebUI 的账号：用户名以落盘为准，密码只有桌面端自己设过才有。
     /// 落盘读不到时也给出默认用户名，让用户至少知道该填什么。
+    /// 关键：password 字段仅在桌面端有明文密码时返回；若落盘是哈希且无明文，返回 None 引导用户手动登录或重置。
     pub async fn webui_account(&self, instance: &AppInstance) -> Option<AppWebUiAccount> {
         let adapter = self.registry.get(&instance.framework_id).ok()?;
         if adapter.manifest().webui_auth != AppWebUiAuthKind::UserPassword {
@@ -356,18 +357,68 @@ impl AppManager {
             Err(_) => None,
         };
         let can_reset = !matches!(instance.state, AppInstanceState::Running);
+
+        // 如果有明文密码（桌面端设置过），直接用明文
+        if let Some(ref pwd) = remembered
+            && !pwd.is_empty()
+        {
+            return Some(match probe {
+                Some(p) => AppWebUiAccount {
+                    username: p.username,
+                    password: Some(pwd.clone()),
+                    password_matches: p.password_matches,
+                    can_reset,
+                },
+                None => AppWebUiAccount {
+                    username: self
+                        .remembered_secret(instance, SECRET_WEBUI_USERNAME)
+                        .unwrap_or_default(),
+                    password: Some(pwd.clone()),
+                    password_matches: None,
+                    can_reset,
+                },
+            });
+        }
+
+        // 无明文密码：检查落盘是否为哈希
+        let stored_hash_is_hash = match &probe {
+            Some(p) => p.stored_is_hash,
+            None => false,
+        };
+
+        // 无明文且落盘是哈希 -> 不返回 password，password_matches = None，引导用户去 WebUI 登录或重置
+        if stored_hash_is_hash {
+            return Some(match probe {
+                Some(p) => AppWebUiAccount {
+                    username: p.username,
+                    password: None,
+                    password_matches: None,
+                    can_reset,
+                },
+                None => AppWebUiAccount {
+                    username: self
+                        .remembered_secret(instance, SECRET_WEBUI_USERNAME)
+                        .unwrap_or_default(),
+                    password: None,
+                    password_matches: None,
+                    can_reset,
+                },
+            });
+        }
+
+        // 无明文且落盘无哈希（首启状态）
         Some(match probe {
             Some(p) => AppWebUiAccount {
                 username: p.username,
-                password: remembered,
-                password_matches: p.password_matches,
+                password: None,
+                password_matches: None,
                 can_reset,
             },
             None => AppWebUiAccount {
                 username: self
                     .remembered_secret(instance, SECRET_WEBUI_USERNAME)
                     .unwrap_or_default(),
-                password: remembered,
+                password: None,
                 password_matches: None,
                 can_reset,
             },
@@ -486,6 +537,7 @@ impl AppManager {
             created_at_ms: now_ms(),
             install_renderer: req.install_renderer.unwrap_or(true),
             origin: ncd_domain::AppInstanceOrigin::Created,
+            auto_start: req.auto_start,
         };
         let saved = self.store.upsert(instance).await?;
         self.publish(&saved, "created");
@@ -602,6 +654,7 @@ impl AppManager {
             created_at_ms: now_ms(),
             install_renderer: false,
             origin: AppInstanceOrigin::Imported,
+            auto_start: true,
         };
         let rels = adapter
             .adopt_watch_rels(host.as_ref(), &install_dir)
@@ -925,6 +978,36 @@ impl AppManager {
         }
     }
 
+    /// 对账完成后自动启动符合条件的实例（开机/桌面端启动时调用）
+    /// 条件：全局开关开启 && 实例 auto_start=true && 已安装 && 未运行
+    pub async fn auto_start_instances(&self, global_enabled: bool) {
+        if !global_enabled {
+            return;
+        }
+        let instances = self.store.list().await;
+        for instance in instances {
+            if instance.auto_start
+                && instance.state.is_installed()
+                && instance.state != AppInstanceState::Running
+            {
+                if let Err(e) = self.start_instance(&instance.id).await {
+                    tracing::warn!(
+                        instance = instance.id.as_str(),
+                        display_name = %instance.display_name,
+                        error = %e,
+                        "auto start instance failed"
+                    );
+                } else {
+                    tracing::info!(
+                        instance = instance.id.as_str(),
+                        display_name = %instance.display_name,
+                        "auto started instance"
+                    );
+                }
+            }
+        }
+    }
+
     /// 主机连上后补跑启动时因 SSH 未就绪跳过的远端对账 / 日志挂接
     pub async fn reconcile_for_server(&self, server_id: &str) {
         let host_id = format!("{REMOTE_HOST_ID_PREFIX}{server_id}");
@@ -1050,6 +1133,17 @@ impl AppManager {
             .await?;
         self.publish(&updated, "stopped");
         Ok(updated)
+    }
+
+    /// 修改实例的开机自启设置
+    pub async fn set_instance_auto_start(
+        &self,
+        id: &AppInstanceId,
+        auto_start: bool,
+    ) -> Result<AppInstance, AppFrameworkError> {
+        self.store
+            .update(id, |i| i.auto_start = auto_start)
+            .await
     }
 
     /// 删除实例：停进程 → 解绑 Bot 侧连接 → 导入项先还原快照 → （可选）删目录 → 删记录
@@ -2936,6 +3030,7 @@ fn probe_read_instance(
         created_at_ms: 0,
         install_renderer: false,
         origin: AppInstanceOrigin::Imported,
+        auto_start: true,
     }
 }
 
@@ -3136,6 +3231,7 @@ mod tests {
                     created_at_ms: 1,
                     install_renderer: true,
                     origin: ncd_domain::AppInstanceOrigin::Created,
+                    auto_start: true,
                 })
                 .await
                 .unwrap();
@@ -3553,6 +3649,7 @@ mod tests {
                     install_renderer: None,
                     webui_username: None,
                     webui_password: None,
+                    auto_start: true,
                 })
                 .await
                 .unwrap();
@@ -3621,6 +3718,7 @@ plugin_dirs = ["src/plugins"]
                     install_renderer: None,
                     webui_username: None,
                     webui_password: None,
+                    auto_start: true,
                 })
                 .await;
             assert!(

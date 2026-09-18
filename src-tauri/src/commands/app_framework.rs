@@ -586,6 +586,20 @@ pub async fn reset_app_instance_webui_password(
         .map_err(AppFrameworkError::into_config_error)?)
 }
 
+/// 修改实例的开机自启设置
+#[tauri::command]
+pub async fn set_app_instance_auto_start(
+    instance_id: String,
+    auto_start: bool,
+    state: State<'_, AppState>,
+) -> Result<AppInstance, String> {
+    state
+        .app_manager
+        .set_instance_auto_start(&AppInstanceId::new(instance_id), auto_start)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn list_karin_plugin_market(
     state: State<'_, AppState>,

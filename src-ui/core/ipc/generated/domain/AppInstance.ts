@@ -33,4 +33,8 @@ install_renderer: boolean,
 /**
  * 桌面端脚手架新建 vs 领养已有目录。旧快照缺字段视为 Created。
  */
-origin: AppInstanceOrigin, };
+origin: AppInstanceOrigin, 
+/**
+ * 开机/桌面端启动时自动启动该实例。旧快照缺字段视为 true（兼容语义：已安装即启用）。
+ */
+auto_start: boolean, };

@@ -354,6 +354,9 @@ pub struct AppSettings {
     /// 登录当前 Windows 用户后自动启动本程序(HKCU Run,无需管理员)
     #[serde(rename = "launchOnStartup", default)]
     pub launch_on_startup: bool,
+    /// 桌面端启动时自动启动已安装的应用端实例（按实例 auto_start 字段）。默认 true。
+    #[serde(rename = "appInstancesAutoStart", default = "default_true")]
+    pub app_instances_auto_start: bool,
     #[serde(rename = "minimizeToTrayCountsAsHidden", default = "default_true")]
     pub minimize_to_tray_counts_as_hidden: bool,
     /// 桌面 Toast:NapCat 登录态离线
@@ -428,6 +431,7 @@ impl Default for AppSettings {
             enter_lightweight_delay_secs: default_enter_lightweight_delay_secs(),
             ui_mode_on_startup: UiModeOnStartup::default(),
             launch_on_startup: false,
+            app_instances_auto_start: true,
             minimize_to_tray_counts_as_hidden: true,
             notify_on_offline: true,
             notify_on_bot_crashed: true,

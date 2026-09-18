@@ -64,7 +64,11 @@ afterCloseUiBehavior: AfterCloseUiBehavior, enterLightweightDelaySecs: number, u
 /**
  * 登录当前 Windows 用户后自动启动本程序(HKCU Run,无需管理员)
  */
-launchOnStartup: boolean, minimizeToTrayCountsAsHidden: boolean, 
+launchOnStartup: boolean, 
+/**
+ * 桌面端启动时自动启动已安装的应用端实例（按实例 auto_start 字段）。默认 true。
+ */
+appInstancesAutoStart: boolean, minimizeToTrayCountsAsHidden: boolean, 
 /**
  * 桌面 Toast:NapCat 登录态离线
  */

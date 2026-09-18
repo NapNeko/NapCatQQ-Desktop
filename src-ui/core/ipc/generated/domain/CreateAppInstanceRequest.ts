@@ -24,4 +24,8 @@ webui_username?: string,
 /**
  * None / 空 = 桌面端按框架口令策略随机生成
  */
-webui_password?: string, };
+webui_password?: string, 
+/**
+ * 开机/桌面端启动时自动启动该实例。默认 true。
+ */
+auto_start: boolean, };

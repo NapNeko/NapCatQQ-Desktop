@@ -147,6 +147,7 @@ mod tests {
             created_at_ms: 0,
             install_renderer: true,
             origin: ncd_domain::AppInstanceOrigin::Created,
+            auto_start: true,
         }
     }
 

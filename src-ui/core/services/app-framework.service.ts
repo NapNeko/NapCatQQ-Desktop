@@ -375,4 +375,9 @@ export const appFrameworkService = {
         if (!isTauri) return mockAppFrameworkApi.astrbotListSubagentTools(instanceId);
         return invoke<string[]>('astrbot_list_subagent_tools', { instanceId });
     },
+
+    setInstanceAutoStart: async (instanceId: string, autoStart: boolean): Promise<AppInstance> => {
+        if (!isTauri) return mockAppFrameworkApi.setInstanceAutoStart(instanceId, autoStart);
+        return invoke<AppInstance>('set_app_instance_auto_start', { instanceId, autoStart });
+    },
 };

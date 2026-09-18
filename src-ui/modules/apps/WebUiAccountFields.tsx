@@ -76,6 +76,10 @@ const ValueRow: React.FC<{
 
 export function webUiPasswordNote(account: AppWebUiAccount): string | null {
     if (!account.password) {
+        if (account.password_matches === null || account.password_matches === undefined) {
+            // 无明文密码：可能是落盘哈希（导入实例/在WebUI改过密码），也可能是首启
+            return '密码未知（落盘存储的是哈希，或桌面端未设置过）。请在浏览器打开 WebUI 手动登录，或停止实例后点击"重置密码"。';
+        }
         return '密码只有桌面端设过才知道；忘了就停实例后重置。';
     }
     if (account.password_matches === false) {

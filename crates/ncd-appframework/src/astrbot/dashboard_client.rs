@@ -11,7 +11,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::dashboard_auth::md5_hex;
+use super::dashboard_auth::{is_hash_format, md5_hex};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -110,6 +110,12 @@ impl DashboardClient {
     }
 
     async fn login_fresh(&self, username: &str, password: &str) -> Result<(), AppFrameworkError> {
+        // 禁止把哈希当明文提交：AstrBot 登录接口期望明文，服务端再哈希比对
+        if is_hash_format(password) {
+            return Err(AppFrameworkError::DashboardAuth(
+                "检测到配置中存储的是密码哈希（非明文），无法代为登录。请在浏览器打开 WebUI 手动登录，或在桌面端重置密码后再试。".into(),
+            ));
+        }
         let body = json!({
             "username": username,
             "password": md5_hex(password),

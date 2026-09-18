@@ -148,6 +148,27 @@ pub fn read_dashboard_account(root: &Value) -> DashboardAccount {
     }
 }
 
+/// 判断存储的密码字符串是否为哈希格式（MD5 32位 或 PBKDF2）。
+/// 若为哈希，不应作为明文提交登录接口。
+pub fn is_hash_format(stored: &str) -> bool {
+    let s = stored.trim();
+    if s.is_empty() {
+        return false;
+    }
+    // MD5: 32 位十六进制
+    if s.len() == 32 && s.chars().all(|c| c.is_ascii_hexdigit()) {
+        return true;
+    }
+    // PBKDF2: pbkdf2_sha256$iterations$salt$digest
+    if s.starts_with("pbkdf2_sha256$") {
+        let parts: Vec<&str> = s.split('$').collect();
+        if parts.len() == 4 {
+            return parts[1].parse::<u32>().is_ok() && parts[2].len() == 32 && parts[3].len() == 64;
+        }
+    }
+    false
+}
+
 /// 记住的密码是否仍是落盘那一个；落盘没哈希返回 None。
 pub fn password_matches(root: &Value, remembered: &str) -> Option<bool> {
     read_dashboard_account(root)
@@ -284,5 +305,25 @@ mod tests {
         assert_eq!(acc.username, "astrbot");
         assert_eq!(acc.stored_hash, None);
         assert_eq!(password_matches(&root, "x"), None);
+    }
+
+    #[test]
+    fn is_hash_format_detects_md5_and_pbkdf2() {
+        // MD5
+        assert!(is_hash_format("77b90590a8945a7d36c963981a307dc9"));
+        assert!(is_hash_format("  77b90590a8945a7d36c963981a307dc9  "));
+        assert!(!is_hash_format("not32chars"));
+        assert!(!is_hash_format(""));
+
+        // PBKDF2: pbkdf2_sha256$600000$<salt(16 bytes=32 hex)>$<digest(32 bytes=64 hex)>
+        let salt_32 = "1234567890abcdef1234567890abcdef"; // 32 chars = 16 bytes
+        let digest_64 = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"; // 64 chars = 32 bytes
+        let valid_pbkdf2 = format!("pbkdf2_sha256$600000${}${}", salt_32, digest_64);
+        assert!(is_hash_format(&valid_pbkdf2));
+        assert!(is_hash_format(&format!("  {}  ", valid_pbkdf2)));
+        assert!(!is_hash_format("pbkdf2_sha256$abc$1234567890abcdef$1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")); // bad iter
+        assert!(!is_hash_format(&format!("pbkdf2_sha256$600000$short${}", digest_64))); // bad salt
+        assert!(!is_hash_format(&format!("pbkdf2_sha256$600000${}$short", salt_32))); // bad digest
+        assert!(!is_hash_format(&format!("other_algo$600000${}${}", salt_32, digest_64)));
     }
 }
