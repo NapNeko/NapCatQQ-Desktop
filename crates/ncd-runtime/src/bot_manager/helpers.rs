@@ -1,6 +1,16 @@
 // BotManager 纯函数 helpers：drift 路径写入 + 远端传输错误判定
 
+use std::ffi::OsStr;
+use std::path::Path;
+
 use ncd_traits::runtime_backend::BotBackendError;
+
+/// NapCat 启动期 Bypass 与 WebUI「系统配置」读的是共享 `napcat.json`，
+/// 不随单个 Bot 切 backend / 删除清掉。
+pub(crate) fn is_shared_napcat_json(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|name| name == OsStr::new("napcat.json"))
+}
 
 // ConfigDriftDialog 的 AcceptExternal / DropAdded 走 dot-path（含数组下标）。
 // 中间 object 缺失时建空 object；数组越界 / 非数字段必须 Err，避免「点了没生效」。

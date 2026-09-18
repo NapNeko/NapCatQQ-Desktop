@@ -187,6 +187,7 @@ async fn read_existing_napcat_config(
     for file_name in [
         format!("onebot11_{}.json", bot_id.as_str()),
         format!("napcat_{}.json", bot_id.as_str()),
+        "napcat.json".to_string(),
     ] {
         let path = HostPath::from_posix(format!("{config_dir}/{file_name}"));
         match host.read_file(&path).await {

@@ -182,7 +182,8 @@ const NAPCAT_NAPCAT_KNOWN_KEYS: &[&str] = &[
 
 /// Renders BotConfig into NapCat-specific JSON files:
 /// - onebot11_<qq>.json — OneBot network + musicSignUrl + enableLocalFile2Url + parseMultMsg
-/// - napcat_<qq>.json   — log / packet / bypass settings
+/// - napcat_<qq>.json   — log / packet / bypass（登录后 per-uin）
+/// - napcat.json        — 同上；WebUI「系统配置-反检测」与启动期 Bypass 读这份
 pub struct NapCatConfigRenderer {
     config_dir: PathBuf,
 }
@@ -200,6 +201,10 @@ impl NapCatConfigRenderer {
 
     fn napcat_path(&self, bot_id: &BotId) -> PathBuf {
         self.config_dir.join(format!("napcat_{}.json", bot_id))
+    }
+
+    fn shared_napcat_path(&self) -> PathBuf {
+        self.config_dir.join("napcat.json")
     }
 
     fn build_onebot_payload(config: &BotConfig) -> Value {
@@ -223,7 +228,8 @@ impl BackendConfigRenderer for NapCatConfigRenderer {
 
         let txn = JsonTransaction::new()
             .write(self.onebot_path(bot_id), onebot)
-            .write(self.napcat_path(bot_id), napcat);
+            .write(self.napcat_path(bot_id), napcat.clone())
+            .write(self.shared_napcat_path(), napcat);
 
         Ok(txn)
     }
@@ -236,26 +242,36 @@ impl BackendConfigRenderer for NapCatConfigRenderer {
     ) -> Result<JsonTransaction, RenderError> {
         let onebot_path = self.onebot_path(bot_id);
         let napcat_path = self.napcat_path(bot_id);
+        let shared_path = self.shared_napcat_path();
 
         let onebot = merge_unknown_top_level(
             Self::build_onebot_payload(config),
             existing.get(&onebot_path),
             NAPCAT_ONEBOT_KNOWN_KEYS,
         );
+        // 共享文件与 per-uin 同源：扩展字段优先吃 per-uin，缺了再用 napcat.json
+        let napcat_existing = existing
+            .get(&napcat_path)
+            .or_else(|| existing.get(&shared_path));
         let napcat = merge_unknown_top_level(
             Self::build_napcat_payload(config),
-            existing.get(&napcat_path),
+            napcat_existing,
             NAPCAT_NAPCAT_KNOWN_KEYS,
         );
 
         let txn = JsonTransaction::new()
             .write(onebot_path, onebot)
-            .write(napcat_path, napcat);
+            .write(napcat_path, napcat.clone())
+            .write(shared_path, napcat);
         Ok(txn)
     }
 
     fn output_paths(&self, bot_id: &BotId) -> Vec<PathBuf> {
-        vec![self.onebot_path(bot_id), self.napcat_path(bot_id)]
+        vec![
+            self.onebot_path(bot_id),
+            self.napcat_path(bot_id),
+            self.shared_napcat_path(),
+        ]
     }
 }
 
@@ -278,14 +294,18 @@ pub fn render_napcat_docker_config_payloads(
 ) -> Vec<DockerConfigPayload> {
     let onebot_file = format!("onebot11_{}.json", bot_id.as_str());
     let napcat_file = format!("napcat_{}.json", bot_id.as_str());
+    let shared_file = "napcat.json".to_string();
     let onebot = merge_unknown_top_level(
         NapCatConfigRenderer::build_onebot_payload(config),
         existing.get(&onebot_file),
         NAPCAT_ONEBOT_KNOWN_KEYS,
     );
+    let napcat_existing = existing
+        .get(&napcat_file)
+        .or_else(|| existing.get(&shared_file));
     let napcat = merge_unknown_top_level(
         NapCatConfigRenderer::build_napcat_payload(config),
-        existing.get(&napcat_file),
+        napcat_existing,
         NAPCAT_NAPCAT_KNOWN_KEYS,
     );
     vec![
@@ -295,6 +315,10 @@ pub fn render_napcat_docker_config_payloads(
         },
         DockerConfigPayload {
             file_name: napcat_file,
+            payload: napcat.clone(),
+        },
+        DockerConfigPayload {
+            file_name: shared_file,
             payload: napcat,
         },
     ]

@@ -50,10 +50,11 @@ async fn probe_home(host: &dyn Host) -> Result<String, BotBackendError> {
     }
 }
 
-fn docker_config_file_names(bot_id: &BotId) -> [String; 2] {
+fn docker_config_file_names(bot_id: &BotId) -> [String; 3] {
     [
         format!("onebot11_{}.json", bot_id.as_str()),
         format!("napcat_{}.json", bot_id.as_str()),
+        "napcat.json".to_string(),
     ]
 }
 

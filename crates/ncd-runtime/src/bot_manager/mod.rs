@@ -42,7 +42,7 @@ pub mod auto_restart;
 mod helpers;
 mod listeners;
 pub mod runtime_gate;
-use helpers::{is_remote_transport_error, set_value_at_dot_path};
+use helpers::{is_remote_transport_error, is_shared_napcat_json, set_value_at_dot_path};
 pub use runtime_gate::{RuntimeReadinessGate, describe_not_ready, framework_component_for};
 
 // ─── 常量 ──────────────────────────────────────────────────────────────────────
@@ -1340,6 +1340,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         }
 
         // 清理不再需要的旧 backend 派生文件(例如 NapCat→SL 时删除 onebot11/napcat 文件)
+        // napcat.json 是本机安装目录共享文件，WebUI/启动 Bypass 也读它，不随单个 Bot 切 backend 删除
         let target_backend = config.bot.backend_type;
         let current_paths =
             output_paths_for_backend(target_backend, self.store.config_dir(), &bot_id);
@@ -1352,6 +1353,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         let delete_paths: Vec<_> = all_paths
             .into_iter()
             .filter(|path| !current_paths.contains(path))
+            .filter(|path| !is_shared_napcat_json(path))
             .collect();
         if !delete_paths.is_empty() {
             let mut txn = ncd_traits::JsonTransaction::new();
@@ -2390,7 +2392,10 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.repo.delete(qq_id).await?;
 
         let mut txn = JsonTransaction::new();
-        for path in output_paths_for_backend(BackendType::NapCat, self.store.config_dir(), bot_id) {
+        for path in output_paths_for_backend(BackendType::NapCat, self.store.config_dir(), bot_id)
+            .into_iter()
+            .filter(|path| !is_shared_napcat_json(path))
+        {
             txn = txn.delete(path);
         }
         for path in output_paths_for_backend(BackendType::SnowLuma, self.store.config_dir(), bot_id)

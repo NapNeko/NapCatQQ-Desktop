@@ -100,14 +100,14 @@ mod tests {
     // ==================== NapCat Renderer Tests ====================
 
     #[test]
-    fn napcat_render_produces_two_files() {
+    fn napcat_render_writes_shared_and_per_uin_files() {
         let renderer = NapCatConfigRenderer::new("/tmp/napcat/config");
         let bot_id = make_bot_id();
         let config = make_full_config();
 
         let txn = renderer.render(&bot_id, &config).unwrap();
 
-        assert_eq!(txn.writes.len(), 2);
+        assert_eq!(txn.writes.len(), 3);
         assert!(txn.deletes.is_empty());
 
         let paths: Vec<_> = txn
@@ -116,7 +116,8 @@ mod tests {
             .map(|w| w.path.to_string_lossy().to_string())
             .collect();
         assert!(paths.iter().any(|p| p.contains("onebot11_10001.json")));
-        assert!(paths.iter().any(|p| p.contains("napcat_10001.json")));
+        assert!(paths.iter().any(|p| p.ends_with("napcat_10001.json")));
+        assert!(paths.iter().any(|p| p.ends_with("napcat.json")));
     }
 
     #[test]
@@ -167,11 +168,61 @@ mod tests {
     }
 
     #[test]
-    fn napcat_output_paths_returns_two() {
+    fn napcat_shared_payload_matches_per_uin_including_bypass() {
+        let renderer = NapCatConfigRenderer::new("/tmp/napcat/config");
+        let bot_id = make_bot_id();
+        let mut config = make_full_config();
+        config.advanced.bypass.hook = true;
+        config.advanced.bypass.js = true;
+
+        let txn = renderer.render(&bot_id, &config).unwrap();
+        let per_uin = txn
+            .writes
+            .iter()
+            .find(|w| w.path.to_string_lossy().ends_with("napcat_10001.json"))
+            .unwrap();
+        let shared = txn
+            .writes
+            .iter()
+            .find(|w| w.path.to_string_lossy().ends_with("napcat.json"))
+            .unwrap();
+
+        assert_eq!(shared.payload, per_uin.payload);
+        assert_eq!(shared.payload["bypass"]["hook"], true);
+        assert_eq!(shared.payload["bypass"]["js"], true);
+        assert_eq!(shared.payload["bypass"]["window"], false);
+    }
+
+    #[test]
+    fn napcat_output_paths_includes_shared_file() {
         let renderer = NapCatConfigRenderer::new("/tmp/napcat/config");
         let bot_id = make_bot_id();
         let paths = renderer.output_paths(&bot_id);
-        assert_eq!(paths.len(), 2);
+        assert_eq!(paths.len(), 3);
+        let names: Vec<_> = paths
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert!(names.contains(&"onebot11_10001.json".to_string()));
+        assert!(names.contains(&"napcat_10001.json".to_string()));
+        assert!(names.contains(&"napcat.json".to_string()));
+    }
+
+    #[test]
+    fn napcat_docker_payloads_include_shared_napcat_json() {
+        let bot_id = make_bot_id();
+        let mut config = make_full_config();
+        config.advanced.bypass.hook = true;
+        let payloads = render_napcat_docker_config_payloads(&bot_id, &config, &Default::default());
+        let names: Vec<_> = payloads.iter().map(|p| p.file_name.as_str()).collect();
+        assert!(names.contains(&"onebot11_10001.json"));
+        assert!(names.contains(&"napcat_10001.json"));
+        assert!(names.contains(&"napcat.json"));
+        let shared = payloads
+            .iter()
+            .find(|p| p.file_name == "napcat.json")
+            .unwrap();
+        assert_eq!(shared.payload["bypass"]["hook"], true);
     }
 
     // ==================== SnowLuma Renderer Tests ====================
@@ -601,7 +652,7 @@ mod tests {
         let renderer = create_renderer(BackendType::NapCat, "/tmp/config");
         let bot_id = make_bot_id();
         let paths = renderer.output_paths(&bot_id);
-        assert_eq!(paths.len(), 2);
+        assert_eq!(paths.len(), 3);
         assert!(paths[0].to_string_lossy().contains("onebot11_"));
     }
 

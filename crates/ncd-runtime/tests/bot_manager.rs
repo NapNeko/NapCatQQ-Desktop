@@ -1069,6 +1069,32 @@ async fn delete_bot_removes_actor_and_config() {
 }
 
 #[tokio::test]
+async fn delete_napcat_bot_keeps_shared_napcat_json() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (store, _, _, manager) = make_manager(temp.path());
+    let config_dir = store.config_dir();
+
+    manager
+        .upsert_bot_config(bot_config(10001, "bot"))
+        .await
+        .unwrap();
+    assert!(config_dir.join("napcat.json").exists());
+    assert!(config_dir.join("napcat_10001.json").exists());
+
+    manager
+        .delete_bot_config(&BotId::new("10001"))
+        .await
+        .unwrap();
+
+    assert!(
+        config_dir.join("napcat.json").exists(),
+        "shared napcat.json must survive deleting a NapCat bot"
+    );
+    assert!(!config_dir.join("napcat_10001.json").exists());
+    assert!(!config_dir.join("onebot11_10001.json").exists());
+}
+
+#[tokio::test]
 async fn batch_delete_stops_and_removes_bots() {
     let temp = ncd_test_support::TempWorkspace::new().unwrap();
     let (_, repo, _, manager) = make_manager(temp.path());
@@ -1582,6 +1608,7 @@ async fn upsert_backend_switch_cleans_old_backend_files() {
         config_dir.display()
     );
     assert!(config_dir.join("napcat_10008.json").exists());
+    assert!(config_dir.join("napcat.json").exists());
     assert!(!config_dir.join("onebot_10008.json").exists());
 
     let mut snowluma_config = bot_config(10008, "bot");
@@ -1591,6 +1618,10 @@ async fn upsert_backend_switch_cleans_old_backend_files() {
     assert!(config_dir.join("onebot_10008.json").exists());
     assert!(!config_dir.join("onebot11_10008.json").exists());
     assert!(!config_dir.join("napcat_10008.json").exists());
+    assert!(
+        config_dir.join("napcat.json").exists(),
+        "shared napcat.json must survive a NapCat→SnowLuma backend switch"
+    );
 }
 
 #[tokio::test]
