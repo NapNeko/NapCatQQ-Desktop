@@ -3,7 +3,6 @@ import { FormSection, NumberField, Switch, TextField } from '../../../../shared/
 import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
 import { Pill } from './parts';
 import type { AstrBotInstanceConfig, AstrBotOneBotRow } from '../../../../core/ipc/types';
-import { AstrBotReadyBar } from './AstrBotReadyBar';
 
 export interface AstrBotConnectionsTabProps {
     config: AstrBotInstanceConfig;
@@ -11,7 +10,6 @@ export interface AstrBotConnectionsTabProps {
     errors: Record<string, string>;
     linked: boolean;
     disabled?: boolean;
-    onGoTab: (tab: string) => void;
     /** 表单之外的即时操作块（WebUI 账号卡） */
     footer?: ReactNode;
 }
@@ -22,7 +20,6 @@ export const AstrBotConnectionsTab: React.FC<AstrBotConnectionsTabProps> = ({
     errors,
     linked,
     disabled,
-    onGoTab,
     footer,
 }) => {
     const row = config.onebot;
@@ -32,7 +29,6 @@ export const AstrBotConnectionsTab: React.FC<AstrBotConnectionsTabProps> = ({
 
     return (
         <ConfigForm>
-            <AstrBotReadyBar config={config} onGoTab={onGoTab} />
             <FormSection
                 title="OneBot v11"
                 actions={

@@ -96,7 +96,6 @@ function AstrBotFrameworkDetail({ instance, onSaveHandle, onGoTab }: FrameworkDe
                     errors={form.errors}
                     linked={!!instance.link}
                     disabled={form.saving}
-                    onGoTab={onGoTab}
                     footer={<WebUiAccountCard instance={instance} />}
                 />
             ))}

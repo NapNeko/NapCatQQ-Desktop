@@ -343,21 +343,81 @@ export function parseJsonString(json: string): string {
     }
 }
 
-export type AstrBotReadiness = {
-    hasSource: boolean;
-    hasEnabledChat: boolean;
-    defaultOk: boolean;
-    llmOn: boolean;
-    whitelistMayBlock: boolean;
+/** 「接入大模型」卡在哪；按修的先后排，前一项没好后一项无从谈起 */
+export type AstrBotLlmIssue = 'no_source' | 'no_model' | 'no_default' | 'llm_off';
+
+export type AstrBotSetup = {
+    /** 对接了协议 Bot，或者在 WebUI 里配了别的平台 */
+    linkDone: boolean;
+    llmIssue: AstrBotLlmIssue | null;
+    /** 第一个对话类服务商在 sources 里的下标（优先启用的），没有为 -1；no_model 时「加模型」打开它 */
+    chatSourceIndex: number;
+    ready: boolean;
 };
 
-export function astrbotReadiness(cfg: AstrBotInstanceConfig): AstrBotReadiness {
+export function astrbotSetup(cfg: AstrBotInstanceConfig, linked: boolean): AstrBotSetup {
+    const linkDone = linked || cfg.other_platforms.length > 0;
+    const isChat = (s: AstrBotProviderSource) => isChatProviderType(s.provider_type);
+    const enabledIdx = cfg.sources.findIndex((s) => isChat(s) && s.enable);
+    const chatSourceIndex = enabledIdx >= 0 ? enabledIdx : cfg.sources.findIndex(isChat);
     const chat = enabledChatModels(cfg);
-    return {
-        hasSource: cfg.sources.length > 0,
-        hasEnabledChat: chat.length > 0,
-        defaultOk: !!cfg.ai.default_provider_id && chat.some((m) => m.id === cfg.ai.default_provider_id),
-        llmOn: cfg.ai.enable,
-        whitelistMayBlock: cfg.gates.enable_id_white_list && cfg.gates.id_whitelist.length === 0,
-    };
+    let llmIssue: AstrBotLlmIssue | null = null;
+    if (chatSourceIndex < 0) llmIssue = 'no_source';
+    else if (chat.length === 0) llmIssue = 'no_model';
+    else if (!chat.some((m) => m.id === cfg.ai.default_provider_id)) llmIssue = 'no_default';
+    else if (!cfg.ai.enable) llmIssue = 'llm_off';
+    return { linkDone, llmIssue, chatSourceIndex, ready: linkDone && llmIssue === null };
+}
+
+/**
+ * 「怎么叫它」的文案，照上游 waking_check：群里靠 @ / 引用 / 前缀唤醒，私聊默认不用前缀。
+ * 空字符串前缀会让 startswith 永远成立，也就是每条消息都唤醒。
+ */
+export function astrbotWakeHint(cfg: AstrBotInstanceConfig): { sentence: string; short: string } {
+    const raw = cfg.gates.wake_prefix;
+    const everyMessage = raw.includes('');
+    const prefixes = raw.filter((p) => p !== '');
+    let group: string;
+    let short: string;
+    if (everyMessage) {
+        group = '群里每条消息都会叫醒它';
+        short = '每条消息';
+    } else if (prefixes.length) {
+        group = `群里 @它 或用${prefixes.map((p) => `「${p}」`).join('或')}开头发消息`;
+        short = `@它 或 ${prefixes.join(' ')} 开头`;
+    } else {
+        group = '群里 @它 发消息';
+        short = '@它';
+    }
+    const friend =
+        !cfg.gates.friend_message_needs_wake_prefix || everyMessage
+            ? '私聊直接发'
+            : prefixes.length
+              ? '私聊也要带前缀'
+              : '私聊没法唤醒';
+    const llmPrefix = cfg.ai.wake_prefix.trim() ? `；走大模型还要再带「${cfg.ai.wake_prefix}」` : '';
+    return { sentence: `${group}，${friend}${llmPrefix}`, short };
+}
+
+/** 不挡对话、但开了等于没开的配置冲突。area 是出问题的那一页。 */
+export type AstrBotConfigWarning = { key: string; text: string; area: 'talk' | 'subagent' };
+
+export function astrbotConfigWarnings(cfg: AstrBotInstanceConfig): AstrBotConfigWarning[] {
+    const out: AstrBotConfigWarning[] = [];
+    if (cfg.stt.enable && !cfg.stt.provider_id) {
+        out.push({ key: 'stt', text: '语音转文字开着，但没选提供商', area: 'talk' });
+    }
+    if (cfg.tts.enable && !cfg.tts.provider_id) {
+        out.push({ key: 'tts', text: '文字转语音开着，但没选提供商', area: 'talk' });
+    }
+    const sub = cfg.subagent;
+    if (sub.main_enable) {
+        const half = sub.agents.filter((a) => !a.provider_id || !a.persona_id).length;
+        if (sub.agents.length === 0) {
+            out.push({ key: 'subagent-empty', text: '子代理开着，但一个都没加', area: 'subagent' });
+        } else if (half > 0) {
+            out.push({ key: 'subagent-incomplete', text: `${half} 个子代理没配全`, area: 'subagent' });
+        }
+    }
+    return out;
 }
