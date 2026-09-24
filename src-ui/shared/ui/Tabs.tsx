@@ -158,6 +158,101 @@ export const TabsTrigger = forwardRef<
 ));
 TabsTrigger.displayName = 'TabsTrigger';
 
+/// 竖排导航（详情页侧栏）。和主侧栏一套语言：选中行左侧一根品牌竖条，在行间 FLIP 滑动；
+/// 这里没有图标，所以选中行再垫一层淡品牌底。Tabs 根上记得配 orientation="vertical"，上下键才对。
+/// 列表里可以夹分组标题之类的非 trigger 元素，roving focus 只在 trigger 之间走。
+export const TabsSideList = forwardRef<
+    React.ElementRef<typeof RadixTabs.List>,
+    React.ComponentPropsWithoutRef<typeof RadixTabs.List>
+>(({ className, children, ...props }, ref) => {
+    const m = useMotion();
+    const ctx = useContext(TabsCtx);
+    const listRef = useRef<HTMLDivElement | null>(null);
+    const indicatorRef = useRef<HTMLSpanElement | null>(null);
+
+    const setListRef = (node: HTMLDivElement | null) => {
+        listRef.current = node;
+        ctx.listRef.current = node;
+        if (typeof ref === 'function') ref(node);
+        else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    };
+
+    useLayoutEffect(() => {
+        const list = listRef.current;
+        const indicator = indicatorRef.current;
+        if (!list || !indicator) return;
+        const active = list.querySelector<HTMLElement>('button[role="tab"][data-state="active"]');
+        if (!active) {
+            gsap.set(indicator, { autoAlpha: 0 });
+            return;
+        }
+        const listRect = list.getBoundingClientRect();
+        const activeRect = active.getBoundingClientRect();
+        const y = activeRect.top - listRect.top + 7;
+        const height = Math.max(activeRect.height - 14, 8);
+        if (!m.enabled) {
+            gsap.set(indicator, { autoAlpha: 1, y, height });
+            return;
+        }
+        gsap.to(indicator, {
+            autoAlpha: 1,
+            y,
+            height,
+            duration: m.duration('base'),
+            ease: m.ease.hover,
+        });
+    }, [ctx.activeValue, m.enabled, m.level, m.speed, m]);
+
+    return (
+        <RadixTabs.List ref={setListRef} className={cn('relative flex flex-col gap-0.5', className)} {...props}>
+            {children}
+            <span
+                ref={indicatorRef}
+                aria-hidden
+                style={{ visibility: 'hidden', opacity: 0 }}
+                className="pointer-events-none absolute left-0 top-0 w-[2px] rounded-r-pill bg-brand"
+            />
+        </RadixTabs.List>
+    );
+});
+TabsSideList.displayName = 'TabsSideList';
+
+export type TabsSideDot = 'brand' | 'warning';
+
+const SIDE_DOT_LABEL: Record<TabsSideDot, string> = { brand: '下一步在这里', warning: '有设置要留意' };
+
+/// dot：右侧小圆点。brand 表示下一步该来这页，warning 表示这页有配置冲突。
+export const TabsSideTrigger = forwardRef<
+    React.ElementRef<typeof RadixTabs.Trigger>,
+    React.ComponentPropsWithoutRef<typeof RadixTabs.Trigger> & { dot?: TabsSideDot }
+>(({ className, children, dot, ...props }, ref) => (
+    <RadixTabs.Trigger
+        ref={ref}
+        className={cn(
+            'flex h-8 w-full shrink-0 items-center justify-between gap-2 rounded-sm pl-3 pr-2 text-left text-[13px] text-text-secondary',
+            'transition-colors duration-150 ease-out',
+            'hover:bg-text/5 hover:text-text',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
+            'data-[state=active]:bg-brand-soft/60 data-[state=active]:font-medium data-[state=active]:text-text',
+            'disabled:pointer-events-none disabled:opacity-50',
+            className,
+        )}
+        {...props}
+    >
+        <span className="truncate">{children}</span>
+        {dot && (
+            <>
+                <span
+                    aria-hidden
+                    className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dot === 'brand' ? 'bg-brand' : 'bg-warning')}
+                />
+                <span className="sr-only">{SIDE_DOT_LABEL[dot]}</span>
+            </>
+        )}
+    </RadixTabs.Trigger>
+));
+TabsSideTrigger.displayName = 'TabsSideTrigger';
+
 interface TabsContentProps
     extends Omit<
         React.ComponentPropsWithoutRef<typeof RadixTabs.Content>,

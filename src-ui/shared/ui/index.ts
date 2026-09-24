@@ -11,7 +11,7 @@ export {
     type CardProps,
 } from './Card';
 export { Badge, BadgeDot, type BadgeProps } from './Badge';
-export { Tabs, TabsList, TabsTrigger, TabsContent } from './Tabs';
+export { Tabs, TabsList, TabsTrigger, TabsContent, TabsSideList, TabsSideTrigger, type TabsSideDot } from './Tabs';
 export {
     TooltipProvider,
     Tooltip,
