@@ -1,15 +1,33 @@
-// 概览：左边状态卡回答「它现在能不能在 QQ 上回话、还差什么」，右边是当前设置的摘要，点一行就去那一页。
-// 「还差什么」全页只在状态卡里说一次，别的页最多在侧栏亮个点。能在原地补的就在原地补，不让人先跳页。
+// 概览：顶部一张状态卡回答「它现在能不能在 QQ 上回话、还差什么」，全卡只给一个主按钮；
+// 下面是当前设置的卡片，点一张去对应页。和首页同一套语言：hero 大卡 + 带图标方块的卡片。
+// 「还差什么」全页只在状态卡里说一次，别的页最多在侧栏亮个点。
 
-import type { ReactNode } from 'react';
-import { AlertTriangle, Check, ChevronDown, ChevronRight, ExternalLink, Link2, MessageSquare, Play } from 'lucide-react';
+import type { ComponentType, ReactNode } from 'react';
+import type { LucideProps } from 'lucide-react';
+import {
+    AlertTriangle,
+    AtSign,
+    Bot,
+    Boxes,
+    CheckCircle2,
+    ChevronDown,
+    ChevronRight,
+    Circle,
+    ExternalLink,
+    Library,
+    Link2,
+    MessageSquare,
+    Play,
+    ShieldCheck,
+    UserRound,
+} from 'lucide-react';
 import { Button, Card, Select, Spinner } from '../../../../shared/ui';
 import {
     astrbotConfigWarnings,
     astrbotSetup,
     astrbotWakeHint,
     enabledChatModels,
-    presetLabel,
+    type AstrBotLlmIssue,
 } from '../../../../core/domain/apps/astrbotConfig';
 import { ProviderDialog } from './ProviderDialog';
 import { ProviderPresetMenu, useProviderEditor } from './providerEditor';
@@ -18,16 +36,27 @@ import { JumpLink } from './parts';
 import { cn } from '../../../../shared/utils/cn';
 import type { AppInstance, AstrBotAiSettings, AstrBotDashboardStatus, AstrBotInstanceConfig } from '../../../../core/ipc/types';
 
-type Step = {
-    key: string;
-    done: boolean;
-    title: string;
-    desc: ReactNode;
-    /** primary = 这是眼下该做的那一步 */
-    action?: (primary: boolean) => ReactNode;
-};
+/** 能回话的三个前提，按该补的先后排；状态卡底下那一行就是它们 */
+type CondKey = 'link' | 'llm' | 'run';
+type Cond = { key: CondKey; ok: boolean; label: string };
 
 type Notice = { key: string; text: string; tab: string; action: string };
+
+type Tone = 'ready' | 'todo' | 'idle';
+
+const TONE_DOT: Record<Tone, string> = {
+    ready: 'bg-success ring-success/15',
+    todo: 'bg-brand ring-brand/15',
+    idle: 'bg-text-disabled ring-text-disabled/15',
+};
+
+const LLM_LABEL: Record<AstrBotLlmIssue | 'ok', string> = {
+    no_source: '大模型还没接入',
+    no_model: '还没有可用的模型',
+    no_default: '还没选用哪个模型',
+    llm_off: '大模型回复关着',
+    ok: '大模型已接入',
+};
 
 export const AstrBotOverviewTab: React.FC<{
     instance: AppInstance;
@@ -52,89 +81,113 @@ export const AstrBotOverviewTab: React.FC<{
     const editor = useProviderEditor(config, onChange);
     const savedIds = new Set((saved?.sources ?? []).map((s) => s.id));
     const setAi = (patch: Partial<AstrBotAiSettings>) => onChange({ ...config, ai: { ...config.ai, ...patch } });
-
     const chat = enabledChatModels(config);
     const chatSource = setup.chatSourceIndex >= 0 ? config.sources[setup.chatSourceIndex] : undefined;
-    const current = chat.find((m) => m.id === config.ai.default_provider_id);
-    const currentSource = current && config.sources.find((s) => s.id === current.provider_source_id);
 
-    const linkStep: Step = {
-        key: 'link',
-        done: setup.linkDone,
-        title: '连上 QQ',
-        desc: instance.link
-            ? `已对接 ${instance.link.bot_id}`
-            : setup.linkDone
-              ? `没对接 QQ，走的是 ${config.other_platforms.join('、')}`
-              : '对接 NapCat / SnowLuma 后，QQ 消息才会转给它',
-        action: setup.linkDone
-            ? undefined
-            : (primary) => (
-                  <Button size="sm" variant={primary ? 'primary' : 'secondary'} onClick={onOpenLink}>
-                      <Link2 size={13} />
-                      对接
-                  </Button>
-              ),
-    };
+    const conds: Cond[] = [
+        {
+            key: 'link',
+            ok: setup.linkDone,
+            label: linked ? 'QQ 已对接' : setup.linkDone ? `走 ${config.other_platforms.join('、')}` : 'QQ 还没对接',
+        },
+        { key: 'llm', ok: setup.llmIssue === null, label: LLM_LABEL[setup.llmIssue ?? 'ok'] },
+        { key: 'run', ok: running, label: running ? '运行中' : '已停止' },
+    ];
+    const missing = conds.filter((c) => !c.ok);
+    const next = missing[0]?.key;
 
-    const llmStep: Step = { key: 'llm', done: setup.llmIssue === null, title: '接入大模型', desc: '' };
-    switch (setup.llmIssue) {
-        case 'no_source':
-            llmStep.desc = '选一家提供商，填上 API Key';
-            llmStep.action = (primary) => (
-                <ProviderPresetMenu onPick={editor.openCreate}>
-                    <Button size="sm" variant={primary ? 'primary' : 'secondary'} disabled={disabled}>
-                        添加提供商
-                        <ChevronDown size={12} className="-mr-0.5 opacity-80" />
+    let tone: Tone;
+    let title: string;
+    let sub: ReactNode;
+    let actions: ReactNode = null;
+    if (!next) {
+        tone = 'ready';
+        title = savedReady ? '可以对话了' : '保存后就能对话了';
+        sub = wake.sentence;
+        if (savedReady) {
+            actions = (
+                <>
+                    <Button size="sm" variant="secondary" onClick={() => onOpenWebUi()}>
+                        <ExternalLink size={13} />
+                        打开 WebUI
                     </Button>
-                </ProviderPresetMenu>
+                    <Button size="sm" variant="primary" onClick={() => onOpenWebUi('/chat')}>
+                        <MessageSquare size={13} />
+                        网页试聊
+                    </Button>
+                </>
             );
-            break;
-        case 'no_model':
-            llmStep.desc = chatSource?.enable
-                ? `「${chatSource.id}」下还没有启用的对话模型`
-                : `提供商「${chatSource?.id}」停用了`;
-            llmStep.action = (primary) => (
-                <Button
-                    size="sm"
-                    variant={primary ? 'primary' : 'secondary'}
-                    disabled={disabled}
-                    onClick={() => editor.openEdit(setup.chatSourceIndex)}
-                >
-                    {chatSource?.enable ? '加模型' : '去启用'}
+        }
+    } else if (next === 'run' && missing.length === 1) {
+        tone = 'idle';
+        title = '配好了，启动就能对话';
+        sub = '配置照常可以改，启动后生效';
+        actions = <StartButton starting={starting} onStart={onStart} />;
+    } else {
+        tone = 'todo';
+        title = `还差 ${missing.length} 步就能在 QQ 上对话`;
+        if (next === 'link') {
+            sub = '先对接一个 NapCat / SnowLuma 机器人，QQ 消息才会转给它';
+            actions = (
+                <Button size="sm" variant="primary" onClick={onOpenLink}>
+                    <Link2 size={13} />
+                    对接
                 </Button>
             );
-            break;
-        case 'no_default':
-            llmStep.desc = '选一个模型来回复';
-            llmStep.action = () => (
-                <Select
-                    value={undefined}
-                    items={chat.map((m) => ({ value: m.id, label: m.model || m.id }))}
-                    placeholder="选择模型"
-                    disabled={disabled}
-                    className="w-44"
-                    onValueChange={(default_provider_id) => setAi({ default_provider_id })}
-                />
-            );
-            break;
-        case 'llm_off':
-            llmStep.desc = '大模型回复关着，现在只回指令和插件';
-            llmStep.action = (primary) => (
-                <Button size="sm" variant={primary ? 'primary' : 'secondary'} disabled={disabled} onClick={() => setAi({ enable: true })}>
-                    打开
-                </Button>
-            );
-            break;
-        default:
-            llmStep.desc = [current?.model || current?.id, currentSource && (presetLabel(currentSource) ?? currentSource.id)]
-                .filter(Boolean)
-                .join(' · ');
+        } else if (next === 'run') {
+            sub = '配置照常可以改，启动后生效';
+            actions = <StartButton starting={starting} onStart={onStart} />;
+        } else {
+            switch (setup.llmIssue) {
+                case 'no_source':
+                    sub = '接入一个大模型：选一家提供商，填上 API Key';
+                    actions = (
+                        <ProviderPresetMenu onPick={editor.openCreate}>
+                            <Button size="sm" variant="primary" disabled={disabled}>
+                                添加提供商
+                                <ChevronDown size={12} className="-mr-0.5 opacity-80" />
+                            </Button>
+                        </ProviderPresetMenu>
+                    );
+                    break;
+                case 'no_model':
+                    sub = chatSource?.enable
+                        ? `「${chatSource.id}」下还没有启用的对话模型`
+                        : `提供商「${chatSource?.id}」停用了`;
+                    actions = (
+                        <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={disabled}
+                            onClick={() => editor.openEdit(setup.chatSourceIndex)}
+                        >
+                            {chatSource?.enable ? '加模型' : '去启用'}
+                        </Button>
+                    );
+                    break;
+                case 'no_default':
+                    sub = '有可用的模型了，选一个来回复';
+                    actions = (
+                        <Select
+                            value={undefined}
+                            items={chat.map((m) => ({ value: m.id, label: m.model || m.id }))}
+                            placeholder="选择模型"
+                            disabled={disabled}
+                            className="w-44"
+                            onValueChange={(default_provider_id) => setAi({ default_provider_id })}
+                        />
+                    );
+                    break;
+                default:
+                    sub = '大模型回复关着，现在只回指令和插件';
+                    actions = (
+                        <Button size="sm" variant="primary" disabled={disabled} onClick={() => setAi({ enable: true })}>
+                            打开
+                        </Button>
+                    );
+            }
+        }
     }
-
-    const steps = [linkStep, llmStep];
-    const firstOpen = steps.findIndex((s) => !s.done);
-    const left = steps.filter((s) => !s.done).length;
 
     const notices: Notice[] = astrbotConfigWarnings(config).map((w) => ({
         key: w.key,
@@ -148,62 +201,65 @@ export const AstrBotOverviewTab: React.FC<{
         notices.unshift({ key: 'dash-down', text: '连不上 AstrBot 控制台，人格、知识库、会话规则暂时管不了', tab: 'log', action: '看日志' });
     }
 
-    const checklist = (
-        <div>
-            <div className="mb-2 flex items-baseline justify-between gap-3">
-                <h2 className="text-[15px] font-semibold text-text">让它在 QQ 上开口</h2>
-                <span className="shrink-0 text-xs text-text-tertiary">还差 {left} 步</span>
-            </div>
-            <ol className="flex flex-col gap-1">
-                {steps.map((s, i) => (
-                    // 停着的时候「启动」才是主按钮，清单里的动作一律降成次要
-                    <StepRow key={s.key} index={i + 1} step={s} current={i === firstOpen} emphasize={running} />
-                ))}
-            </ol>
-            <p className="mx-2.5 mt-2 border-t border-dashed border-border pt-2.5 text-xs text-text-tertiary">
-                两步都完成后，{wake.sentence}
-            </p>
-        </div>
-    );
+    const model = chat.find((m) => m.id === config.ai.default_provider_id);
+    const g = config.gates;
+    const tiles: TileDef[] = [
+        { key: 'model', tab: 'models', icon: Boxes, label: '对话模型', value: model ? model.model || model.id : null, empty: '还没有' },
+        { key: 'persona', tab: 'persona', icon: UserRound, label: '人格', value: config.ai.default_personality || null, empty: '内置' },
+        { key: 'kb', tab: 'kb', icon: Library, label: '知识库', value: config.kb.names.length ? config.kb.names.join('、') : null, empty: '未挂载' },
+        { key: 'wake', tab: 'talk', icon: AtSign, label: '唤醒方式', value: wake.short, empty: '' },
+        {
+            key: 'scope',
+            tab: 'talk',
+            icon: ShieldCheck,
+            label: '回复范围',
+            // 名单为空时上游不做检查，开着开关也是所有会话
+            value: g.enable_id_white_list && g.id_whitelist.length ? `白名单 ${g.id_whitelist.length} 个会话` : '所有会话',
+            empty: '',
+        },
+        {
+            key: 'subagent',
+            tab: 'subagent',
+            icon: Bot,
+            label: '子代理',
+            value: config.subagent.main_enable ? `${config.subagent.agents.length} 个` : null,
+            empty: '没开',
+        },
+    ];
 
     return (
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-            <Card variant="outlined" padding="none" className="p-4">
-                {!running ? (
-                    <>
-                        <h2 className="text-[15px] font-semibold text-text-secondary">实例没在运行</h2>
-                        <p className="mt-1 text-[13px] leading-relaxed text-text-secondary">
-                            配置照常可以改，启动后生效。人格、知识库、会话规则要实例运行时才能管理。
-                        </p>
-                        <Button size="sm" variant="primary" className="mt-3" disabled={starting} onClick={onStart}>
-                            {starting ? <Spinner size="xs" className="text-white" /> : <Play size={13} />}
-                            启动
-                        </Button>
-                        {!setup.ready && <div className="mt-4 border-t border-border-subtle pt-4">{checklist}</div>}
-                    </>
-                ) : !setup.ready ? (
-                    checklist
-                ) : (
-                    <>
-                        <h2 className="flex items-center gap-2.5 text-[15px] font-semibold text-text">
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-success ring-4 ring-success/15" aria-hidden />
-                            {savedReady ? '可以对话了' : '保存后就能对话了'}
+        <div className="flex flex-col">
+            <Card variant="hero" padding="none" className="px-6 py-5">
+                <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+                    <div className="min-w-0 flex-1">
+                        <h2 className="flex items-center gap-3 font-display text-[19px] font-semibold leading-snug text-text">
+                            <span className={cn('h-2 w-2 shrink-0 rounded-full ring-4', TONE_DOT[tone])} aria-hidden />
+                            {title}
                         </h2>
-                        <p className="mt-1.5 text-[13px] leading-relaxed text-text-secondary">{wake.sentence}</p>
-                        {savedReady && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                <Button size="sm" variant="primary" onClick={() => onOpenWebUi('/chat')}>
-                                    <MessageSquare size={13} />
-                                    网页试聊
-                                </Button>
-                                <Button size="sm" variant="secondary" onClick={() => onOpenWebUi()}>
-                                    <ExternalLink size={13} />
-                                    打开 WebUI
-                                </Button>
-                            </div>
-                        )}
-                    </>
-                )}
+                        <p className="mt-1.5 pl-5 text-[13px] leading-relaxed text-text-secondary">{sub}</p>
+                    </div>
+                    {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+                </div>
+
+                <ul className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 pl-5">
+                    {conds.map((c) => (
+                        <li
+                            key={c.key}
+                            className={cn(
+                                'inline-flex items-center gap-1.5 text-xs',
+                                c.ok ? 'text-text-secondary' : c.key === next ? 'font-medium text-text' : 'text-text-tertiary',
+                            )}
+                        >
+                            {c.ok ? (
+                                <CheckCircle2 size={14} className="text-success" />
+                            ) : (
+                                <Circle size={14} className={c.key === next ? 'text-brand' : 'text-text-disabled'} />
+                            )}
+                            {c.label}
+                        </li>
+                    ))}
+                </ul>
+
                 {notices.length > 0 && (
                     <ul className="mt-4 flex flex-col gap-1.5">
                         {notices.map((n) => (
@@ -222,7 +278,15 @@ export const AstrBotOverviewTab: React.FC<{
                 )}
             </Card>
 
-            <SettingsSummary config={config} wakeShort={wake.short} onGoTab={onGoTab} />
+            <div className="mb-3 mt-8 flex items-center gap-2.5">
+                <span className="h-3.5 w-0.5 shrink-0 rounded-full bg-brand/45" aria-hidden />
+                <h3 className="text-[13.5px] font-semibold leading-none tracking-tight text-text">当前设置</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+                {tiles.map((t) => (
+                    <SettingTile key={t.key} tile={t} onOpen={() => onGoTab(t.tab)} />
+                ))}
+            </div>
 
             {editor.draft && (
                 <ProviderDialog
@@ -241,87 +305,54 @@ export const AstrBotOverviewTab: React.FC<{
     );
 };
 
-const StepRow: React.FC<{ index: number; step: Step; current: boolean; emphasize: boolean }> = ({
-    index,
-    step,
-    current,
-    emphasize,
-}) => (
-    <li className={cn('flex items-center gap-3 rounded-md px-2.5 py-2.5', current && 'bg-brand-tint')}>
-        <span
-            className={cn(
-                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-2xs font-semibold',
-                step.done && 'border-success bg-success text-white',
-                !step.done && current && 'border-brand text-brand',
-                !step.done && !current && 'border-border text-text-tertiary',
-            )}
-        >
-            {step.done ? <Check size={11} strokeWidth={3} /> : index}
-        </span>
-        <div className="min-w-0 flex-1">
-            <p className={cn('text-[13px]', step.done ? 'text-text-secondary' : 'font-medium text-text')}>{step.title}</p>
-            <p className="truncate text-xs text-text-tertiary">{step.desc}</p>
-        </div>
-        {step.action && <div className="shrink-0">{step.action(current && emphasize)}</div>}
-    </li>
+const StartButton: React.FC<{ starting: boolean; onStart: () => void }> = ({ starting, onStart }) => (
+    <Button size="sm" variant="primary" disabled={starting} onClick={onStart}>
+        {starting ? <Spinner size="xs" className="text-white" /> : <Play size={13} />}
+        启动
+    </Button>
 );
 
-type SummaryRow = { label: string; value: string | null; empty: string; tab: string };
+type TileDef = {
+    key: string;
+    tab: string;
+    icon: ComponentType<LucideProps>;
+    label: string;
+    value: string | null;
+    /** value 为空时显示的灰字 */
+    empty: string;
+};
 
-const SettingsSummary: React.FC<{
-    config: AstrBotInstanceConfig;
-    wakeShort: string;
-    onGoTab: (tab: string) => void;
-}> = ({ config, wakeShort, onGoTab }) => {
-    const model = enabledChatModels(config).find((m) => m.id === config.ai.default_provider_id);
-    const g = config.gates;
-    const sub = config.subagent;
-    const rows: SummaryRow[] = [
-        { label: '对话模型', value: model ? model.model || model.id : null, empty: '还没有', tab: 'models' },
-        { label: '人格', value: config.ai.default_personality || null, empty: '内置', tab: 'persona' },
-        { label: '唤醒方式', value: wakeShort, empty: '', tab: 'talk' },
-        {
-            label: '回复范围',
-            // 名单为空时上游不做检查，开着开关也是所有会话
-            value: g.enable_id_white_list && g.id_whitelist.length ? `白名单 ${g.id_whitelist.length} 个会话` : '所有会话',
-            empty: '',
-            tab: 'talk',
-        },
-        { label: '知识库', value: config.kb.names.length ? config.kb.names.join('、') : null, empty: '未挂载', tab: 'kb' },
-        { label: '子代理', value: sub.main_enable ? `${sub.agents.length} 个` : null, empty: '没开', tab: 'subagent' },
-    ];
+const SettingTile: React.FC<{ tile: TileDef; onOpen: () => void }> = ({ tile, onOpen }) => {
+    const Icon = tile.icon;
     return (
-        <section>
-            <h3 className="px-2 pb-1 text-xs font-medium text-text-tertiary">现在的设置</h3>
-            <div className="flex flex-col">
-                {rows.map((r) => (
-                    <button
-                        key={r.label}
-                        type="button"
-                        title={`去「${ASTRBOT_TAB_LABEL[r.tab]}」`}
-                        onClick={() => onGoTab(r.tab)}
-                        className={cn(
-                            'group flex w-full items-center gap-3 rounded-sm border-b border-border-subtle px-2 py-2.5 text-left last:border-b-0',
-                            'transition-colors hover:bg-inset/60',
-                            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand',
-                        )}
-                    >
-                        <span className="w-16 shrink-0 text-[12.5px] text-text-tertiary">{r.label}</span>
-                        <span
-                            className={cn(
-                                'min-w-0 flex-1 truncate text-right text-[13px]',
-                                r.value ? 'text-text' : 'text-text-disabled',
-                            )}
-                        >
-                            {r.value ?? r.empty}
-                        </span>
-                        <ChevronRight
-                            size={13}
-                            className="shrink-0 text-text-disabled transition-colors group-hover:text-text-secondary"
-                        />
-                    </button>
-                ))}
-            </div>
-        </section>
+        <button
+            type="button"
+            title={`去「${ASTRBOT_TAB_LABEL[tile.tab]}」`}
+            onClick={onOpen}
+            className={cn(
+                'group flex min-w-0 items-center gap-3 rounded-md bg-surface px-3.5 py-3 text-left shadow-card',
+                'transition-[box-shadow,transform] duration-200 hover:-translate-y-px hover:shadow-popover',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40',
+            )}
+        >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-inset text-text-tertiary transition-colors group-hover:text-brand">
+                <Icon size={16} />
+            </span>
+            <span className="min-w-0 flex-1">
+                <span className="block text-xs text-text-tertiary">{tile.label}</span>
+                <span
+                    className={cn(
+                        'mt-0.5 block truncate text-[13.5px]',
+                        tile.value ? 'font-medium text-text' : 'text-text-disabled',
+                    )}
+                >
+                    {tile.value ?? tile.empty}
+                </span>
+            </span>
+            <ChevronRight
+                size={14}
+                className="shrink-0 text-text-disabled transition-colors group-hover:text-text-secondary"
+            />
+        </button>
     );
 };
