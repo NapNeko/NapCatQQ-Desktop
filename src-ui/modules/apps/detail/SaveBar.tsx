@@ -10,7 +10,9 @@ export const SaveBar: React.FC<{
     issueCount: number;
     onSave: () => void;
     onCancel: () => void;
-}> = ({ dirty, saving, issueCount, onSave, onCancel }) => (
+    /** 错在别的页时给；保存按钮被错挡住，不给跳转就只能一页页去找 */
+    onLocate?: () => void;
+}> = ({ dirty, saving, issueCount, onSave, onCancel, onLocate }) => (
     <ExpandPresence visible={dirty || saving || issueCount > 0}>
         <div className="px-3 pb-3 pt-1">
             <div
@@ -28,6 +30,15 @@ export const SaveBar: React.FC<{
                                 className="shrink-0 text-danger"
                             />
                             <span className="truncate text-danger">{issueCount} 处填写有误，改好才能保存</span>
+                            {onLocate && (
+                                <button
+                                    type="button"
+                                    onClick={onLocate}
+                                    className="ml-1 shrink-0 rounded-xs text-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                                >
+                                    去看看
+                                </button>
+                            )}
                         </>
                     ) : saving ? (
                         <span className="text-text-secondary">正在保存…</span>

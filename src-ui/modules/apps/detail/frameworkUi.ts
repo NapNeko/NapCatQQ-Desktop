@@ -9,14 +9,16 @@ export type FrameworkTabDef = { value: string; label: string };
 /** 侧栏一组。label 为空就不画组标题（概览这种单独一项）。 */
 export type FrameworkNavGroup = { id: string; label?: string; items: readonly FrameworkTabDef[] };
 
-/** 侧栏小圆点：next = 下一步在这页，warn = 这页有不挡运行的配置冲突 */
-export type NavBadgeTone = 'next' | 'warn';
+/** 侧栏小圆点：next = 下一步在这页，warn = 这页有不挡运行的配置冲突，error = 这页有填错、挡着保存的字段 */
+export type NavBadgeTone = 'next' | 'warn' | 'error';
 export type NavBadges = Readonly<Partial<Record<string, NavBadgeTone>>>;
 
 export type FrameworkSaveHandle = {
     dirty: boolean;
     saving: boolean;
     issueCount: number;
+    /** 前端校验不过的字段路径；外壳用 tabForIssue 换成页，亮红点、给保存条「去看看」 */
+    issuePaths: readonly string[];
     save: (overwrite?: boolean) => Promise<{ kind: string; issues?: AppConfigIssue[] }>;
     reset: () => void;
     conflict: boolean;

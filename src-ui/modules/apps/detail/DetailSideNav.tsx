@@ -6,7 +6,7 @@ import { TabsSideList, TabsSideTrigger, type TabsSideDot } from '../../../shared
 import { cn } from '../../../shared/utils/cn';
 import type { FrameworkNavGroup, NavBadgeTone, NavBadges } from './frameworkUi';
 
-const DOT: Record<NavBadgeTone, TabsSideDot> = { next: 'brand', warn: 'warning' };
+const DOT: Record<NavBadgeTone, TabsSideDot> = { next: 'brand', warn: 'warning', error: 'danger' };
 
 export const DetailSideNav: React.FC<{
     groups: readonly FrameworkNavGroup[];

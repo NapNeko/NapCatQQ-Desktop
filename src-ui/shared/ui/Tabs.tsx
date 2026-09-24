@@ -217,11 +217,22 @@ export const TabsSideList = forwardRef<
 });
 TabsSideList.displayName = 'TabsSideList';
 
-export type TabsSideDot = 'brand' | 'warning';
+export type TabsSideDot = 'brand' | 'warning' | 'danger';
 
-const SIDE_DOT_LABEL: Record<TabsSideDot, string> = { brand: '下一步在这里', warning: '有设置要留意' };
+const SIDE_DOT_LABEL: Record<TabsSideDot, string> = {
+    brand: '下一步在这里',
+    warning: '有设置要留意',
+    danger: '这页有填错的地方',
+};
 
-/// dot：右侧小圆点。brand 表示下一步该来这页，warning 表示这页有配置冲突。
+// 品牌橙和危险红在 6px 上几乎分不出来，所以「下一步」画空心环，「有问题」画实心点，靠形状区分
+const SIDE_DOT_CLASS: Record<TabsSideDot, string> = {
+    brand: 'h-[7px] w-[7px] border-[1.5px] border-brand',
+    warning: 'h-1.5 w-1.5 bg-warning',
+    danger: 'h-1.5 w-1.5 bg-danger',
+};
+
+/// dot：右侧小圆点。brand 表示下一步该来这页，warning 表示这页有配置冲突，danger 表示这页有填错的字段。
 export const TabsSideTrigger = forwardRef<
     React.ElementRef<typeof RadixTabs.Trigger>,
     React.ComponentPropsWithoutRef<typeof RadixTabs.Trigger> & { dot?: TabsSideDot }
@@ -242,10 +253,7 @@ export const TabsSideTrigger = forwardRef<
         <span className="truncate">{children}</span>
         {dot && (
             <>
-                <span
-                    aria-hidden
-                    className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dot === 'brand' ? 'bg-brand' : 'bg-warning')}
-                />
+                <span aria-hidden className={cn('shrink-0 rounded-full', SIDE_DOT_CLASS[dot])} />
                 <span className="sr-only">{SIDE_DOT_LABEL[dot]}</span>
             </>
         )}

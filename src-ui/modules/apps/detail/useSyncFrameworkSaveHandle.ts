@@ -4,7 +4,7 @@ import type { FrameworkSaveHandle } from './frameworkUi';
 type SaveHandleSource = {
     dirty: boolean;
     saving: boolean;
-    clientIssues: { length: number };
+    clientIssues: readonly { path: string }[];
     save: FrameworkSaveHandle['save'];
     reset: FrameworkSaveHandle['reset'];
     conflict: boolean;
@@ -32,18 +32,22 @@ export function useSyncFrameworkSaveHandle(
         reloadDiscard: form.reloadDiscard,
     };
 
+    // 条数不变但换了一处错也要重新上报，所以按路径拼 key
+    const issueKey = form.clientIssues.map((i) => i.path).join('\n');
+
     useEffect(() => {
         onSaveHandleRef.current({
             dirty: form.dirty,
             saving: form.saving,
             issueCount: form.clientIssues.length,
+            issuePaths: issueKey ? issueKey.split('\n') : [],
             save: (overwrite) => fnsRef.current.save(overwrite),
             reset: () => fnsRef.current.reset(),
             conflict: form.conflict,
             dismissConflict: () => fnsRef.current.dismissConflict(),
             reloadDiscard: () => fnsRef.current.reloadDiscard(),
         });
-    }, [form.conflict, form.dirty, form.saving, form.clientIssues.length]);
+    }, [form.conflict, form.dirty, form.saving, form.clientIssues.length, issueKey]);
 
     useEffect(() => () => onSaveHandleRef.current(null), []);
 }

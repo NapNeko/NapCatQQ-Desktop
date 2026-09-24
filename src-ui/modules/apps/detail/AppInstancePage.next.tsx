@@ -100,6 +100,11 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
     const showSaveBar = !!ui && ui.typedTabs.has(activeTab);
     const fillPane = activeTab === 'raw' || activeTab === 'log' || !!ui?.fillPaneTabs.has(activeTab);
 
+    // 填错的页亮红点，盖过框架给的下一步 / 冲突点：挡着保存的事最急
+    const issueTabs = ui && saveHandle ? saveHandle.issuePaths.map(ui.tabForIssue) : [];
+    const badges: NavBadges = { ...navBadges, ...Object.fromEntries(issueTabs.map((t) => [t, 'error' as const])) };
+    const firstIssueTab = issueTabs[0];
+
     return (
         <TooltipProvider delayDuration={200}>
             <div className="flex h-full w-full flex-col">
@@ -130,7 +135,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                     <NotInstalledBody instance={instance} busy={busy} onInstall={() => apps.install(instance.id)} />
                 ) : (
                     <Tabs value={activeTab} onValueChange={goTab} orientation="vertical" className="flex min-h-0 flex-1">
-                        <DetailSideNav groups={nav} badges={navBadges} />
+                        <DetailSideNav groups={nav} badges={badges} />
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                             {/* 插件商店把搜索 / 筛选挂进来；别的页没往里放东西时整行不占位 */}
                             <div
@@ -167,6 +172,11 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                                     issueCount={saveHandle.issueCount}
                                     onSave={() => void handleSave()}
                                     onCancel={saveHandle.reset}
+                                    onLocate={
+                                        firstIssueTab && firstIssueTab !== activeTab
+                                            ? () => goTab(firstIssueTab)
+                                            : undefined
+                                    }
                                 />
                             )}
                         </div>
