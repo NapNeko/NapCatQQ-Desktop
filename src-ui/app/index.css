@@ -307,8 +307,6 @@ samp,
    文字区在左，上面压一层 --surface-hero 的雾（__haze），天色浓淡不影响可读性。
    具体色值只在这里出现。 */
 .ndf-hero-sky {
-    /* 云的横飘距离用 cqw 按卡宽算，卡多宽就飘多远。 */
-    container-type: inline-size;
     --sky-strength: 1;
     --sky-top: var(--brand-100);
     --sky-mid: var(--brand-50);
@@ -364,14 +362,23 @@ samp,
 }
 
 /* 云：两个叠着的胶囊，边缘微糊、底下一点暖影，在浅色天上也立得住。
-   位置由 top 定，横向全靠动画从左外飘到右外。 */
+   每朵云套一条和天幕同宽的轨道，横飘动的是轨道：translateX 的百分比按轨道自身宽度算，
+   也就是卡宽，所以不用 cqw。keyframes 里一旦出现 cqw 这类容器单位，动画就上不了合成线程，
+   每帧都要主线程重算样式（实测首页空闲样式重算一半来自这里）。 */
+.ndf-hero-cloud-track {
+    left: 0;
+    width: 100%;
+    height: 0;
+    transform: translateX(-30%);
+}
+
 .ndf-hero-cloud {
-    left: -30%;
+    left: 0;
+    top: 0;
     border-radius: 999px;
     background: var(--sky-cloud);
     filter: blur(2.5px);
     box-shadow: 0 4px 12px -3px rgba(236, 150, 96, 0.28);
-    transform: translateX(0);
 }
 
 .ndf-hero-cloud::before {
@@ -396,33 +403,35 @@ samp,
     background: inherit;
 }
 
+/* 从左外 30% 卡宽处飘到右边缘外，和原来 left:-30% 起步、飘出右边的行程一致 */
 @keyframes hero-cloud-drift {
     from {
-        transform: translateX(0);
+        transform: translateX(-30%);
     }
 
     to {
-        transform: translateX(calc(100cqw + 160%));
+        transform: translateX(100%);
     }
 }
 
-.ndf-hero-sky.is-live .ndf-hero-cloud {
+.ndf-hero-sky.is-live .ndf-hero-cloud-track {
     animation-name: hero-cloud-drift;
     animation-timing-function: linear;
     animation-iteration-count: infinite;
+    will-change: transform;
 }
 
 /* 不动效时云停在各自的位置上，不堆在左外。 */
-.ndf-hero-sky:not(.is-live) .ndf-hero-cloud:nth-child(1 of .ndf-hero-cloud) {
-    left: 58%;
+.ndf-hero-sky:not(.is-live) .ndf-hero-cloud-track:nth-child(1 of .ndf-hero-cloud-track) {
+    transform: translateX(58%);
 }
 
-.ndf-hero-sky:not(.is-live) .ndf-hero-cloud:nth-child(2 of .ndf-hero-cloud) {
-    left: 78%;
+.ndf-hero-sky:not(.is-live) .ndf-hero-cloud-track:nth-child(2 of .ndf-hero-cloud-track) {
+    transform: translateX(78%);
 }
 
-.ndf-hero-sky:not(.is-live) .ndf-hero-cloud:nth-child(3 of .ndf-hero-cloud) {
-    left: 40%;
+.ndf-hero-sky:not(.is-live) .ndf-hero-cloud-track:nth-child(3 of .ndf-hero-cloud-track) {
+    transform: translateX(40%);
 }
 
 /* 流星：每 23 s 从右上划向左下一次，只亮 0.8 s。 */

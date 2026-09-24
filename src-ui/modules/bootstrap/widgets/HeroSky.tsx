@@ -62,18 +62,25 @@ export const HeroSky: React.FC<HeroSkyProps> = ({ phase, hour, minute, motionEna
             )}
 
             {clouds.map((c, i) => (
+                // 轨道负责横飘（纯 transform，走合成线程），云本身静止挂在轨道左端
                 <span
                     key={i}
-                    className="ndf-hero-cloud absolute"
+                    className="ndf-hero-cloud-track absolute"
                     style={{
                         top: `${c.y}%`,
-                        width: c.width,
-                        height: c.width * 0.3,
-                        opacity: 0.96 - 0.38 * c.depth,
                         animationDuration: `${c.duration}s`,
                         animationDelay: `${c.delay}s`,
                     }}
-                />
+                >
+                    <span
+                        className="ndf-hero-cloud absolute"
+                        style={{
+                            width: c.width,
+                            height: c.width * 0.3,
+                            opacity: 0.96 - 0.38 * c.depth,
+                        }}
+                    />
+                </span>
             ))}
 
             <div className="ndf-hero-sky__haze absolute inset-0" />
