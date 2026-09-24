@@ -5,7 +5,7 @@
 //
 // hover/active 配色保持原样;折叠态展开按钮的 hover swap 也保留 CSS transition。
 
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { memo, useLayoutEffect, useRef } from 'react';
 import {
     Blocks,
     Bot,
@@ -79,7 +79,8 @@ const TASKS_NAV: NavItem = {
 const LOGO_IMG_CLASS =
     'select-none object-contain [image-rendering:-webkit-optimize-contrast]';
 
-export const Sidebar: React.FC<SidebarProps> = ({
+// memo：根组件因提示条等重渲时侧栏不跟着重渲，props 都是稳定值
+export const Sidebar = memo(function Sidebar({
     active,
     onChange,
     onPrefetch,
@@ -87,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onToggleCollapse,
     showDocker = true,
     taskQueueActiveCount = 0,
-}) => {
+}: SidebarProps) {
     const mainNavItems = showDocker
         ? MAIN_NAV
         : MAIN_NAV.filter((item) => item.id !== 'docker');
@@ -250,7 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </nav>
         </aside>
     );
-};
+});
 
 interface NavRowProps {
     item: NavItem;

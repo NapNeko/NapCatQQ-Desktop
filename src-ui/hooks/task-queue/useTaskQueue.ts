@@ -193,6 +193,22 @@ function taskToItem(
     }
 }
 
+function countActiveTasks(): number {
+    let n = 0;
+    for (const task of Object.values(deploymentTaskStore.getSnapshot().tasks)) {
+        if (isActiveStatus(taskToItem(task).status)) n += 1;
+    }
+    return n;
+}
+
+/**
+ * 只要进行中的任务数。下载进度一秒几十条事件，数字不变时订阅方不重渲；
+ * 根组件和侧栏徽标只关心这个，别让它们订阅整份队列。
+ */
+export function useTaskQueueActiveCount(): number {
+    return useSyncExternalStore(deploymentTaskStore.subscribe, countActiveTasks, countActiveTasks);
+}
+
 export function useTaskQueue(options?: UseTaskQueueOptions): TaskQueueSnapshot {
     const taskState = useSyncExternalStore(
         deploymentTaskStore.subscribe,

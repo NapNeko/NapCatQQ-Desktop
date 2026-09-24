@@ -7,6 +7,7 @@
 import React, {
     Suspense,
     lazy,
+    memo,
     startTransition,
     useCallback,
     useEffect,
@@ -35,8 +36,7 @@ import { useGlobalInfoBars } from '../hooks/ui/useGlobalInfoBars';
 import { pushInfoBar } from '../hooks/ui/globalInfoBarStore';
 import { useAppUiPreferencesBootstrap } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
-import { useTaskQueue } from '../hooks/task-queue/useTaskQueue';
-import type { TaskQueueSnapshot } from '../core/domain/task-queue/types';
+import { useTaskQueue, useTaskQueueActiveCount } from '../hooks/task-queue/useTaskQueue';
 import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
@@ -163,7 +163,8 @@ export const AppNext: React.FC = () => {
         return map;
     }, [servers]);
 
-    const taskQueue = useTaskQueue({ hostLabels });
+    // 根组件只订阅任务数：整份队列每条进度事件都换新快照，订阅它会让整页跟着重渲
+    const taskQueueActiveCount = useTaskQueueActiveCount();
 
     useAppUiPreferencesBootstrap();
 
@@ -193,6 +194,8 @@ export const AppNext: React.FC = () => {
         if (nextRoute === 'docker' && !showDocker) return;
         preloadRoute(nextRoute);
     }, [showDocker]);
+
+    const toggleCollapsed = useCallback(() => setCollapsed((v) => !v), []);
 
     useEffect(() => {
         void (async () => {
@@ -340,9 +343,9 @@ export const AppNext: React.FC = () => {
                             onChange={navigate}
                             onPrefetch={prefetchRoute}
                             collapsed={collapsed}
-                            onToggleCollapse={() => setCollapsed((v) => !v)}
+                            onToggleCollapse={toggleCollapsed}
                             showDocker={showDocker}
-                            taskQueueActiveCount={taskQueue.activeCount}
+                            taskQueueActiveCount={taskQueueActiveCount}
                         />
                     </div>
 
@@ -379,7 +382,7 @@ export const AppNext: React.FC = () => {
                                         <RouteContent
                                             route={displayedRoute}
                                             onNavigate={navigate}
-                                            taskQueue={taskQueue}
+                                            hostLabels={hostLabels}
                                             showDocker={showDocker}
                                         />
                                     </PageTransition>
@@ -443,12 +446,21 @@ export const AppNext: React.FC = () => {
     );
 };
 
-const RouteContent: React.FC<{
+/**
+ * 页面本体。memo 住，props 只放稳定值：根组件因提示条、主机状态、引导等重渲时，
+ * 当前页不跟着从头渲一遍。
+ */
+const RouteContent = memo(function RouteContent({
+    route,
+    onNavigate,
+    hostLabels,
+    showDocker,
+}: {
     route: AppRoute;
     onNavigate: (route: AppRoute) => void;
-    taskQueue: TaskQueueSnapshot;
+    hostLabels: Record<string, string>;
     showDocker: boolean;
-}> = ({ route, onNavigate, taskQueue, showDocker }) => {
+}) {
     let body: React.ReactNode;
     switch (route) {
         case 'overview':
@@ -470,14 +482,7 @@ const RouteContent: React.FC<{
             body = <RemoteHostPanelNext />;
             break;
         case 'tasks':
-            body = (
-                <TaskQueuePageNext
-                    items={taskQueue.items}
-                    activeCount={taskQueue.activeCount}
-                    onNavigate={onNavigate}
-                    showDocker={showDocker}
-                />
-            );
+            body = <TasksRoute hostLabels={hostLabels} onNavigate={onNavigate} showDocker={showDocker} />;
             break;
         case 'settings':
             body = <SettingsPageNext />;
@@ -494,6 +499,27 @@ const RouteContent: React.FC<{
         return body;
     }
     return <Suspense fallback={<RouteFallback />}>{body}</Suspense>;
-};
+});
+
+/** 只有任务页要整份队列：订阅放在这里，进度事件只让任务页重渲。 */
+function TasksRoute({
+    hostLabels,
+    onNavigate,
+    showDocker,
+}: {
+    hostLabels: Record<string, string>;
+    onNavigate: (route: AppRoute) => void;
+    showDocker: boolean;
+}) {
+    const taskQueue = useTaskQueue({ hostLabels });
+    return (
+        <TaskQueuePageNext
+            items={taskQueue.items}
+            activeCount={taskQueue.activeCount}
+            onNavigate={onNavigate}
+            showDocker={showDocker}
+        />
+    );
+}
 
 export default AppNext;
