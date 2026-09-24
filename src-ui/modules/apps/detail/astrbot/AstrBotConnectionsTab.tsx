@@ -40,9 +40,12 @@ export const AstrBotConnectionsTab: React.FC<AstrBotConnectionsTabProps> = ({
                     />
                 }
             >
+                {/* 这两项桌面端不让改，画成输入框会让人以为能填 */}
+                <dl className="flex flex-wrap gap-x-8 gap-y-1.5">
+                    <ReadOnlyItem label="标识" value={row.id || '—'} />
+                    <ReadOnlyItem label="WebUI 端口" value={String(config.dashboard_port)} />
+                </dl>
                 <div className={CONFIG_PAIR}>
-                    <TextField label="标识" value={row.id} disabled className="font-mono" />
-                    <NumberField label="WebUI 端口" value={config.dashboard_port} disabled />
                     <TextField
                         label="监听地址"
                         value={row.ws_reverse_host}
@@ -88,3 +91,10 @@ export const AstrBotConnectionsTab: React.FC<AstrBotConnectionsTabProps> = ({
         </ConfigForm>
     );
 };
+
+const ReadOnlyItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+    <div className="flex items-baseline gap-2">
+        <dt className="text-xs text-text-tertiary">{label}</dt>
+        <dd className="font-mono text-[12.5px] text-text">{value}</dd>
+    </div>
+);

@@ -1,9 +1,10 @@
-// 知识库建 / 删走 Dashboard 即时落库；「挂到对话里」是配置项，改了要走顶部保存。
+// 知识库建 / 删走 Dashboard 即时落库；挂到对话里、检索参数是配置项，改了要保存。
+// 挂哪些知识库只在这一页改，对话设置里不再放第二份。
 
 import { useState } from 'react';
-import { ExternalLink, Library, Plus, Trash2 } from 'lucide-react';
-import { Badge, Button, FormSection, Select, Switch, TextField } from '../../../../shared/ui';
-import { ConfigForm } from '../karin/configLayout';
+import { ExternalLink, Library, Plus, Trash2, X } from 'lucide-react';
+import { Badge, Button, FormSection, NumberField, Select, Switch, TextField } from '../../../../shared/ui';
+import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
 import { embeddingSources } from '../../../../core/domain/apps/astrbotConfig';
 import { AstrBotRuntimeGate, dashboardReady } from './AstrBotRuntimeGate';
 import { ConfirmDelete, EmptyHint, EntityRow, FormDialog, JumpLink } from './parts';
@@ -36,15 +37,13 @@ export const AstrBotKbTab: React.FC<{
     const canCreate = ready && embeddings.length > 0;
     const nameTaken = !!draft && list.some((k) => k.kb_name === draft.kb_name.trim());
 
-    const mounted = new Set(config.kb.names);
+    const k = config.kb;
+    const mounted = new Set(k.names);
+    const setKb = (patch: Partial<AstrBotInstanceConfig['kb']>) => onChange({ ...config, kb: { ...k, ...patch } });
     const setMounted = (name: string, on: boolean) =>
-        onChange({
-            ...config,
-            kb: {
-                ...config.kb,
-                names: on ? [...config.kb.names.filter((n) => n !== name), name] : config.kb.names.filter((n) => n !== name),
-            },
-        });
+        setKb({ names: on ? [...k.names.filter((n) => n !== name), name] : k.names.filter((n) => n !== name) });
+    // 在 WebUI 里删掉的库名还留在配置里，只能在这里摘掉
+    const orphans = ready ? k.names.filter((n) => !list.some((kb) => kb.kb_name === n)) : [];
 
     const newButton = (
         <Button
@@ -96,7 +95,11 @@ export const AstrBotKbTab: React.FC<{
                         icon={Library}
                         title={
                             !ready ? (
-                                '连上控制台后可以管理知识库'
+                                k.names.length ? (
+                                    `连上控制台后可以管理知识库。现在挂着：${k.names.join('、')}`
+                                ) : (
+                                    '连上控制台后可以管理知识库'
+                                )
                             ) : embeddings.length === 0 ? (
                                 <>
                                     建知识库要先有一个向量嵌入提供商。
@@ -147,6 +150,49 @@ export const AstrBotKbTab: React.FC<{
                         ))}
                     </div>
                 )}
+                {orphans.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs text-text-tertiary">
+                        <span>挂着但已经找不到：</span>
+                        {orphans.map((name) => (
+                            <button
+                                key={name}
+                                type="button"
+                                disabled={formDisabled}
+                                title="点一下从对话里摘掉"
+                                onClick={() => setMounted(name, false)}
+                                className="inline-flex items-center gap-1 rounded-pill border border-dashed border-warning/50 bg-warning-soft/40 px-2 py-0.5 font-mono text-2xs text-text-secondary line-through disabled:opacity-50"
+                            >
+                                {name}
+                                <X size={10} />
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </FormSection>
+
+            <FormSection title="检索">
+                <div className={CONFIG_PAIR}>
+                    <NumberField
+                        label="召回条数"
+                        value={k.fusion_top_k}
+                        min={1}
+                        disabled={formDisabled}
+                        onValueChange={(fusion_top_k) => setKb({ fusion_top_k: fusion_top_k ?? k.fusion_top_k })}
+                    />
+                    <NumberField
+                        label="最终保留"
+                        value={k.final_top_k}
+                        min={1}
+                        disabled={formDisabled}
+                        onValueChange={(final_top_k) => setKb({ final_top_k: final_top_k ?? k.final_top_k })}
+                    />
+                </div>
+                <Switch
+                    label="让模型自己决定何时检索"
+                    checked={k.agentic_mode}
+                    disabled={formDisabled}
+                    onCheckedChange={(agentic_mode) => setKb({ agentic_mode })}
+                />
             </FormSection>
 
             {draft && (

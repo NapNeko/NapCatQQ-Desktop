@@ -17,11 +17,7 @@ import { WebUiAccountCard } from '../WebUiAccountCard';
 import type { FrameworkDetailProps, FrameworkUiModule } from '../frameworkUi';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
 import { useAppInstances } from '../../../../hooks/apps/useAppInstances';
-import {
-    useAstrBotDashboardStatus,
-    useAstrBotKbs,
-    useAstrBotPersonas,
-} from '../../../../hooks/apps/useAstrBotDashboard';
+import { useAstrBotDashboardStatus, useAstrBotPersonas } from '../../../../hooks/apps/useAstrBotDashboard';
 import { dashboardReady } from './AstrBotRuntimeGate';
 
 const EXTRA_TABS = [
@@ -63,7 +59,6 @@ function AstrBotFrameworkDetail({ instance, onSaveHandle, onGoTab }: FrameworkDe
     const dash = useAstrBotDashboardStatus(instance.id, true);
     const live = dashboardReady(dash.data);
     const personas = useAstrBotPersonas(instance.id, live);
-    const kbs = useAstrBotKbs(instance.id, live);
 
     const openPath = (path: string) => void apps.openWebUi(instance.id, path);
     const start = () => apps.start(instance.id);
@@ -111,15 +106,7 @@ function AstrBotFrameworkDetail({ instance, onSaveHandle, onGoTab }: FrameworkDe
                 />
             ))}
             {pane('talk', (cfg) => (
-                <AstrBotTalkTab
-                    config={cfg}
-                    onChange={form.setForm}
-                    disabled={form.saving}
-                    personas={personas.data ?? []}
-                    kbs={kbs.data ?? []}
-                    live={live}
-                    onGoTab={onGoTab}
-                />
+                <AstrBotTalkTab config={cfg} onChange={form.setForm} disabled={form.saving} onGoTab={onGoTab} />
             ))}
             {pane('persona', (cfg) => (
                 <AstrBotPersonaTab
