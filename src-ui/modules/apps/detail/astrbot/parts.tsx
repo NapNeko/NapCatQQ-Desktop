@@ -16,16 +16,7 @@ import {
     type DialogSize,
 } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
-
-export const TAB_LABEL: Record<string, string> = {
-    connections: '连接',
-    models: '模型',
-    talk: '对话',
-    persona: '人格',
-    kb: '知识库',
-    subagent: '子代理',
-    rules: '规则',
-};
+import { ASTRBOT_TAB_LABEL } from './astrbotNav';
 
 /** 「去『模型』页」这类内联跳转。空态 / 占位文字里的死胡同都换成它。 */
 export const JumpLink: React.FC<{
@@ -43,7 +34,7 @@ export const JumpLink: React.FC<{
             className,
         )}
     >
-        {children ?? `去「${TAB_LABEL[tab] ?? tab}」页`}
+        {children ?? `去「${ASTRBOT_TAB_LABEL[tab] ?? tab}」页`}
         <ArrowRight size={11} strokeWidth={2.2} />
     </button>
 );

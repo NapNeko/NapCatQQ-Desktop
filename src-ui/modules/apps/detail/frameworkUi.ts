@@ -6,6 +6,13 @@ import { nonebot2FrameworkUi } from './nonebot2/nonebot2FrameworkUi';
 
 export type FrameworkTabDef = { value: string; label: string };
 
+/** 侧栏一组。label 为空就不画组标题（概览这种单独一项）。 */
+export type FrameworkNavGroup = { id: string; label?: string; items: readonly FrameworkTabDef[] };
+
+/** 侧栏小圆点：next = 下一步在这页，warn = 这页有不挡运行的配置冲突 */
+export type NavBadgeTone = 'next' | 'warn';
+export type NavBadges = Readonly<Partial<Record<string, NavBadgeTone>>>;
+
 export type FrameworkSaveHandle = {
     dirty: boolean;
     saving: boolean;
@@ -20,18 +27,37 @@ export type FrameworkSaveHandle = {
 export type FrameworkDetailProps = {
     instance: AppInstance;
     onSaveHandle: (handle: FrameworkSaveHandle | null) => void;
-    /** 切到本框架的某个 Tab；空态 / 就绪清单里「去 X 页」用它，不再让用户自己找 */
+    /** 切到本框架的某一页；空态 / 清单里「去 X 页」用它，不再让用户自己找 */
     onGoTab: (tab: string) => void;
+    /** 打开外壳的对接对话框（概览清单「连上 QQ」用） */
+    onOpenLink: () => void;
+    /** 上报侧栏小圆点；不关心的框架不调 */
+    onNavBadges: (badges: NavBadges) => void;
 };
 
 export type FrameworkUiModule = {
-    extraTabs: readonly FrameworkTabDef[];
+    nav: readonly FrameworkNavGroup[];
     defaultTab: string;
     typedTabs: ReadonlySet<string>;
     fillPaneTabs: ReadonlySet<string>;
     tabForIssue: (path: string) => string;
     Detail: ComponentType<FrameworkDetailProps>;
 };
+
+/** 原始文件、日志由外壳自己渲染，所有框架都挂在这一组末尾 */
+export const INSTANCE_GROUP_ID = 'instance';
+export const SHELL_TABS: readonly FrameworkTabDef[] = [
+    { value: 'raw', label: '原始文件' },
+    { value: 'log', label: '日志' },
+];
+
+export function buildDetailNav(ui: FrameworkUiModule | undefined): FrameworkNavGroup[] {
+    const groups = (ui?.nav ?? []).map((g) => ({ ...g, items: [...g.items] }));
+    const instance = groups.find((g) => g.id === INSTANCE_GROUP_ID);
+    if (instance) instance.items.push(...SHELL_TABS);
+    else groups.push({ id: INSTANCE_GROUP_ID, label: '实例', items: [...SHELL_TABS] });
+    return groups;
+}
 
 const MODULES: Record<string, FrameworkUiModule> = {
     karin: karinFrameworkUi,

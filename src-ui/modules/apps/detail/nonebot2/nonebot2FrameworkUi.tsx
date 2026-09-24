@@ -3,14 +3,20 @@ import { NoneBot2ConnectionsTab } from './NoneBot2ConnectionsTab';
 import { NoneBot2StoreTab } from './NoneBot2StoreTab';
 import { useNoneBot2ConfigForm } from '../useNoneBot2ConfigForm';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
-import type { FrameworkDetailProps, FrameworkUiModule } from '../frameworkUi';
+import type { FrameworkDetailProps, FrameworkNavGroup, FrameworkUiModule } from '../frameworkUi';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
 
-const EXTRA_TABS = [
-    { value: 'adapters', label: '适配器' },
-    { value: 'plugins', label: '插件' },
-    { value: 'connections', label: '连接' },
-] as const;
+const NAV: readonly FrameworkNavGroup[] = [
+    {
+        id: 'extend',
+        label: '扩展',
+        items: [
+            { value: 'adapters', label: '适配器' },
+            { value: 'plugins', label: '插件' },
+        ],
+    },
+    { id: 'instance', label: '实例', items: [{ value: 'connections', label: '连接' }] },
+];
 
 const TYPED_TABS = new Set(['connections']);
 const FILL_PANE = new Set(['adapters', 'plugins']);
@@ -54,7 +60,7 @@ function NoneBot2FrameworkDetail({ instance, onSaveHandle }: FrameworkDetailProp
 }
 
 export const nonebot2FrameworkUi: FrameworkUiModule = {
-    extraTabs: EXTRA_TABS,
+    nav: NAV,
     defaultTab: 'adapters',
     typedTabs: TYPED_TABS,
     fillPaneTabs: FILL_PANE,

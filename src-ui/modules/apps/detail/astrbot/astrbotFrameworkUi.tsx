@@ -19,17 +19,7 @@ import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
 import { useAppInstances } from '../../../../hooks/apps/useAppInstances';
 import { useAstrBotDashboardStatus, useAstrBotPersonas } from '../../../../hooks/apps/useAstrBotDashboard';
 import { dashboardReady } from './AstrBotRuntimeGate';
-
-const EXTRA_TABS = [
-    { value: 'connections', label: '连接' },
-    { value: 'models', label: '模型' },
-    { value: 'talk', label: '对话' },
-    { value: 'persona', label: '人格' },
-    { value: 'kb', label: '知识库' },
-    { value: 'subagent', label: '子代理' },
-    { value: 'rules', label: '规则' },
-    { value: 'plugins', label: '插件' },
-] as const;
+import { ASTRBOT_NAV } from './astrbotNav';
 
 // 人格 / 知识库页也能改配置（设默认、挂载），保存条得在；只有插件页是纯外部资源
 const TYPED_TABS = new Set(['connections', 'models', 'talk', 'persona', 'kb', 'subagent', 'rules']);
@@ -163,7 +153,7 @@ function AstrBotFrameworkDetail({ instance, onSaveHandle, onGoTab }: FrameworkDe
 }
 
 export const astrbotFrameworkUi: FrameworkUiModule = {
-    extraTabs: EXTRA_TABS,
+    nav: ASTRBOT_NAV,
     defaultTab: 'connections',
     typedTabs: TYPED_TABS,
     fillPaneTabs: FILL_PANE,

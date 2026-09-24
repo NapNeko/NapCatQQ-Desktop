@@ -7,19 +7,25 @@ import { KarinRenderStorageTab } from './KarinRenderStorageTab';
 import { KarinRulesTab } from './KarinRulesTab';
 import { useKarinConfigForm } from '../useKarinConfigForm';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
-import type { FrameworkDetailProps, FrameworkUiModule } from '../frameworkUi';
+import type { FrameworkDetailProps, FrameworkNavGroup, FrameworkUiModule } from '../frameworkUi';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
 
 const TYPED_TAB_VALUES = ['basic', 'permissions', 'connections', 'rules', 'render'] as const;
 
-const EXTRA_TABS = [
-    { value: 'basic', label: '基础' },
-    { value: 'permissions', label: '权限' },
-    { value: 'connections', label: '连接' },
-    { value: 'rules', label: '响应规则' },
-    { value: 'render', label: '渲染与存储' },
-    { value: 'plugins', label: '插件' },
-] as const;
+const NAV: readonly FrameworkNavGroup[] = [
+    {
+        id: 'config',
+        label: '配置',
+        items: [
+            { value: 'basic', label: '基础' },
+            { value: 'permissions', label: '权限' },
+            { value: 'rules', label: '响应规则' },
+            { value: 'render', label: '渲染与存储' },
+        ],
+    },
+    { id: 'extend', label: '扩展', items: [{ value: 'plugins', label: '插件' }] },
+    { id: 'instance', label: '实例', items: [{ value: 'connections', label: '连接' }] },
+];
 
 const TYPED_TABS = new Set(['basic', 'permissions', 'connections', 'rules', 'render']);
 const FILL_PANE = new Set(['plugins']);
@@ -119,7 +125,7 @@ function PluginsPane({ instance }: { instance: FrameworkDetailProps['instance'] 
 }
 
 export const karinFrameworkUi: FrameworkUiModule = {
-    extraTabs: EXTRA_TABS,
+    nav: NAV,
     defaultTab: 'basic',
     typedTabs: TYPED_TABS,
     fillPaneTabs: FILL_PANE,
