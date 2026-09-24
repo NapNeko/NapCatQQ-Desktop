@@ -5,7 +5,6 @@
 import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import gsap from 'gsap';
 import type { MotionEnv } from '../../../hooks/preferences/useMotion';
-import { bindVisibilityPause } from '../../../shared/ui/motion/visibilityPause';
 import { MASCOT_PIVOTS, type MascotLayer } from './mascotRig';
 
 export type MascotMove = 'hop' | 'tilt' | 'nod' | 'liftCat';
@@ -46,9 +45,21 @@ function queryParts(root: ParentNode): Parts {
     };
 }
 
+const BREATH_CLASS = 'ndf-mascot-breathe';
+
+/** 呼吸是 CSS 动画，开关就是加减类名；去掉再加回等于从头播，和原来 restart() 一样。 */
+function setBreathing(el: HTMLElement | null, on: boolean): void {
+    if (!el) return;
+    el.classList.remove(BREATH_CLASS);
+    if (on) {
+        void el.getBoundingClientRect();
+        el.classList.add(BREATH_CLASS);
+    }
+}
+
 export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): MascotBody {
     const partsRef = useRef<Parts | null>(null);
-    const breathRef = useRef<gsap.core.Timeline | null>(null);
+    const breathingRef = useRef<HTMLElement | null>(null);
     const moveRef = useRef<gsap.core.Timeline | null>(null);
     const lastMoveRef = useRef<MascotMove | null>(null);
     const slumpedRef = useRef(false);
@@ -64,33 +75,18 @@ export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
         partsRef.current = parts;
         const all = Object.values(parts).filter((el): el is SVGGElement => el !== null);
 
-        const unbinds: (() => void)[] = [];
-        let catBreath: gsap.core.Tween | null = null;
+        // 呼吸挂在包着 SVG 的这层 div 上（见 index.css .ndf-mascot-breathe）。
+        // 原点是这个 div 自带的 50% 100%，正好是脚底，和原来的 svgOrigin: feet 一致。
         if (lively) {
             const speed = Math.max(0.5, m.speed);
-            const tl = gsap.timeline({ repeat: -1, yoyo: true });
-            tl.to(parts.figure, { scaleY: 1.008, duration: 2.6 / speed, ease: 'sine.inOut', svgOrigin: MASCOT_PIVOTS.feet });
-            breathRef.current = tl;
-            unbinds.push(bindVisibilityPause(tl));
-            // 地上的猫单独喘：不跟动作一起停，蹦完再接上也不会跳一下
-            if (parts.floorCat) {
-                catBreath = gsap.to(parts.floorCat, {
-                    scaleY: 1.02,
-                    duration: 3.1 / speed,
-                    ease: 'sine.inOut',
-                    repeat: -1,
-                    yoyo: true,
-                    svgOrigin: MASCOT_PIVOTS.floorCat,
-                });
-                unbinds.push(bindVisibilityPause(catBreath));
-            }
+            root.style.setProperty('--ndf-breath-dur', `${(2.6 / speed).toFixed(2)}s`);
+            breathingRef.current = root;
+            setBreathing(root, true);
         }
 
         return () => {
-            unbinds.forEach((fn) => fn());
-            catBreath?.kill();
-            breathRef.current?.kill();
-            breathRef.current = null;
+            setBreathing(root, false);
+            breathingRef.current = null;
             moveRef.current?.kill();
             moveRef.current = null;
             gsap.killTweensOf(all);
@@ -105,17 +101,16 @@ export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
 
         const speed = Math.max(0.5, m.speed);
         const s = (sec: number) => sec / speed;
-        // 动作都以 scaleY 1 收尾，呼吸从头重放才接得上；接着播会从暂停处跳一下。
         const resumeBreath = () => {
-            if (!slumpedRef.current) breathRef.current?.restart();
+            if (!slumpedRef.current) setBreathing(breathingRef.current, true);
         };
-        // 一次只跑一个动作；新动作来了先杀旧的，onInterrupt 会把呼吸放开，所以杀完再暂停。
+        // 一次只跑一个动作，新动作来了先杀旧的。呼吸在外层 div 上，和这里改的 SVG 层
+        // 互不干涉，跑动作时不用停它。
         const play = (build: (p: Parts, tl: gsap.core.Timeline) => void) => {
             const p = partsRef.current;
             if (!p || !p.figure || !p.head || slumpedRef.current) return;
             moveRef.current?.kill();
-            breathRef.current?.pause();
-            const tl = gsap.timeline({ onComplete: resumeBreath, onInterrupt: resumeBreath });
+            const tl = gsap.timeline();
             moveRef.current = tl;
             build(p, tl);
         };
@@ -223,7 +218,7 @@ export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
                 slumpedRef.current = on;
                 moveRef.current?.kill();
                 moveRef.current = null;
-                breathRef.current?.pause();
+                setBreathing(breathingRef.current, false);
                 if (on) {
                     // 顺时针转：左边（头发贴着猫耳那侧）往上抬，不会被窗口切到；垂头感靠 y 给
                     gsap.to(p.head, { rotation: 4, y: 9, duration: s(0.9), ease: 'power2.inOut', svgOrigin: MASCOT_PIVOTS.neck });
@@ -236,7 +231,7 @@ export function useMascotBody(bodyRef: RefObject<HTMLElement>, m: MotionEnv): Ma
                         duration: s(0.3),
                         ease: m.ease.release,
                         svgOrigin: MASCOT_PIVOTS.feet,
-                        onComplete: () => breathRef.current?.play(),
+                        onComplete: resumeBreath,
                     });
                     if (p.heldCat) gsap.to(p.heldCat, { y: 0, duration: s(0.3), ease: m.ease.release });
                 }

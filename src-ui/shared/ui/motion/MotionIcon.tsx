@@ -1,11 +1,14 @@
 // 动态图标：Lucide SVG + 描边绘制 / 弹入 / 循环动效（零额外依赖）。
+//
+// 进场（描边 + 弹入）是一次性的，交给 GSAP；常驻循环走 CSS keyframes（见 index.css
+// 的 .ndf-icon-loop）。循环图标同屏十几个，用 JS 就是每帧在主线程改十几处内联 style，
+// 换成 CSS 之后这些 transform / opacity 直接跑在合成线程上。
 
-import { useEffect, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useRef, useState, type ComponentType, type CSSProperties } from 'react';
 import gsap from 'gsap';
 import type { LucideProps } from 'lucide-react';
-import { useMotion } from '../../../hooks/preferences/useMotion';
+import { useMotion, type MotionEnv } from '../../../hooks/preferences/useMotion';
 import { cn } from '../../utils/cn';
-import { bindVisibilityPause } from './visibilityPause';
 
 export type MotionIconPreset =
     | 'none'
@@ -27,6 +30,50 @@ export interface MotionIconProps extends LucideProps {
     /// 悬停时短暂 pop，适合工具栏图标按钮。
     hoverAccent?: boolean;
     className?: string;
+}
+
+/**
+ * 每种循环对应的 CSS 类和一轮时长（秒）。往复型（pulse / breathe / swell / bob）用
+ * animation-direction: alternate，时长是单程；nudge / wiggle 的停顿写在关键帧里，时长是整轮。
+ * 数值沿用原来的 GSAP 参数，观感不变。
+ */
+function loopStyle(preset: MotionIconPreset, m: MotionEnv): { cls: string; style: CSSProperties } | null {
+    const speed = Math.max(0.5, m.speed);
+    const f = m.preset.feel;
+    const sec = (v: number) => `${(v / speed).toFixed(3)}s`;
+    switch (preset) {
+        case 'pulse':
+            return {
+                cls: 'ndf-icon-loop--pulse',
+                style: {
+                    '--ndf-icon-dur': sec(f.breathDuration * 0.55),
+                    '--ndf-icon-peak': f.overshoot ? 1.1 : 1.05,
+                } as CSSProperties,
+            };
+        case 'breathe':
+            return {
+                cls: 'ndf-icon-loop--breathe',
+                style: {
+                    '--ndf-icon-dur': sec(f.breathDuration * 1.05),
+                    '--ndf-icon-dim': f.overshoot ? 0.72 : 0.82,
+                } as CSSProperties,
+            };
+        // elegant 档不做旋转，退化成轻微缩放
+        case 'wiggle':
+            return m.level === 'elegant'
+                ? { cls: 'ndf-icon-loop--swell', style: { '--ndf-icon-dur': sec(f.breathDuration) } as CSSProperties }
+                : { cls: 'ndf-icon-loop--wiggle', style: { '--ndf-icon-dur': sec(1.76) } as CSSProperties };
+        case 'spin':
+            return { cls: 'ndf-icon-loop--spin', style: { '--ndf-icon-dur': sec(2.4) } as CSSProperties };
+        case 'spin-slow':
+            return { cls: 'ndf-icon-loop--spin', style: { '--ndf-icon-dur': sec(4.5) } as CSSProperties };
+        case 'nudge':
+            return { cls: 'ndf-icon-loop--nudge', style: { '--ndf-icon-dur': sec(2.64) } as CSSProperties };
+        case 'bob':
+            return { cls: 'ndf-icon-loop--bob', style: { '--ndf-icon-dur': sec(0.65) } as CSSProperties };
+        default:
+            return null;
+    }
 }
 
 function collectStrokedNodes(svg: SVGSVGElement): SVGGeometryElement[] {
@@ -134,113 +181,16 @@ export function MotionIcon({
         };
     }, [preset, playEnter, enterKey, m.enabled, m.speed, m.preset.timing.ease.pop]);
 
-    // 选中态持续动效（进场结束后再开，避免和弹入打架）
+    // 循环动效等进场跑完再挂，避免和弹入抢同一个 transform
+    const waitEnter = playEnter && enterKey != null && enterKey !== '';
+    const loop = active && (!waitEnter || enterSettled) ? loopStyle(preset, m) : null;
+
+    // 进场结束后 GSAP 会在内联 style 上留下 transform，CSS 动画虽然优先级更高，
+    // 但停掉循环时那份残留会露出来，所以挂循环前先清掉。
     useEffect(() => {
         const el = wrapRef.current;
-        const waitEnter = playEnter && enterKey != null && enterKey !== '';
-        if (!el || !active || (waitEnter && !enterSettled)) {
-            if (el && !active) {
-                gsap.killTweensOf(el);
-                gsap.set(el, { rotation: 0, scale: 1, y: 0, opacity: 1 });
-            }
-            return;
-        }
-
-        const speed = Math.max(0.5, m.speed);
-        const f = m.preset.feel;
-        const easeHover = m.preset.timing.ease.hover;
-        let tl: gsap.core.Timeline | gsap.core.Tween | null = null;
-
-        switch (preset) {
-            case 'pulse':
-                tl = gsap.timeline({ repeat: -1, yoyo: true }).to(el, {
-                    scale: f.overshoot ? 1.1 : 1.05,
-                    duration: (f.breathDuration * 0.55) / speed,
-                    ease: 'sine.inOut',
-                });
-                break;
-            case 'breathe':
-                tl = gsap.timeline({ repeat: -1, yoyo: true }).to(el, {
-                    opacity: f.overshoot ? 0.72 : 0.82,
-                    duration: (f.breathDuration * 1.05) / speed,
-                    ease: 'sine.inOut',
-                });
-                break;
-            case 'wiggle':
-                if (m.level === 'elegant') {
-                    tl = gsap.timeline({ repeat: -1, yoyo: true }).to(el, {
-                        scale: 1.04,
-                        duration: f.breathDuration / speed,
-                        ease: 'sine.inOut',
-                    });
-                } else {
-                    tl = gsap.timeline({ repeat: -1, repeatDelay: 1.4 / speed }).to(el, {
-                        rotation: 6,
-                        duration: 0.09 / speed,
-                        yoyo: true,
-                        repeat: 3,
-                        ease: 'power1.inOut',
-                    });
-                }
-                break;
-            case 'spin':
-                tl = gsap.to(el, {
-                    rotation: 360,
-                    duration: 2.4 / speed,
-                    ease: 'none',
-                    repeat: -1,
-                });
-                break;
-            case 'spin-slow':
-                tl = gsap.to(el, {
-                    rotation: 360,
-                    duration: 4.5 / speed,
-                    ease: 'none',
-                    repeat: -1,
-                });
-                break;
-            case 'nudge':
-                tl = gsap.timeline({ repeat: -1, repeatDelay: 2.2 / speed }).to(el, {
-                    y: -2,
-                    duration: 0.22 / speed,
-                    yoyo: true,
-                    repeat: 1,
-                    ease: easeHover,
-                });
-                break;
-            case 'bob':
-                tl = gsap.timeline({ repeat: -1, yoyo: true }).to(el, {
-                    y: -2,
-                    duration: 0.65 / speed,
-                    ease: 'sine.inOut',
-                });
-                break;
-            default:
-                break;
-        }
-
-        const unbindVis = bindVisibilityPause(tl);
-        return () => {
-            unbindVis();
-            tl?.kill();
-            // 同一 DOM 在 spin → 静止图标间复用时，必须清零 rotation，否则会「歪着」停住
-            if (el) {
-                gsap.set(el, { rotation: 0 });
-            }
-        };
-    }, [
-        active,
-        enterSettled,
-        playEnter,
-        enterKey,
-        preset,
-        m.enabled,
-        m.speed,
-        m.level,
-        m.preset.feel.overshoot,
-        m.preset.feel.breathDuration,
-        m.preset.timing.ease.hover,
-    ]);
+        if (el && loop) gsap.set(el, { clearProps: 'transform,opacity' });
+    }, [loop?.cls]);
 
     useEffect(() => {
         const wrap = wrapRef.current;
@@ -256,11 +206,14 @@ export function MotionIcon({
         <span
             ref={wrapRef}
             className={cn(
-                'inline-flex shrink-0 items-center justify-center transition-[opacity] duration-200',
+                'inline-flex shrink-0 items-center justify-center',
+                // breathe 循环本身在改 opacity，再挂过渡等于每轮都重建一次过渡
+                !loop && 'transition-[opacity] duration-200',
                 !active && m.enabled && preset === 'none' && 'opacity-80',
+                loop && `ndf-icon-loop ${loop.cls}`,
                 className,
             )}
-            style={{ transformOrigin: '50% 50%' }}
+            style={{ transformOrigin: '50% 50%', ...loop?.style }}
         >
             <Icon size={size} strokeWidth={strokeWidth} aria-hidden {...rest} />
         </span>

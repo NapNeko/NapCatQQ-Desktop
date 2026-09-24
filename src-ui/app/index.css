@@ -161,6 +161,179 @@
     }
 }
 
+/* 图标常驻循环（MotionIcon 的 pulse / breathe / wiggle / spin / nudge / bob）。
+   这些图标同屏能有十几个，交给 GSAP 就是每帧在主线程改十几处内联 style；
+   纯 transform / opacity 的循环用 CSS 写，浏览器直接扔给合成线程。
+   时长和幅度由 MotionIcon 按动效档位算好，通过 --ndf-icon-* 传进来。 */
+@keyframes ndf-icon-pulse {
+
+    from,
+    to {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(var(--ndf-icon-peak, 1.05));
+    }
+}
+
+@keyframes ndf-icon-breathe {
+
+    from,
+    to {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: var(--ndf-icon-dim, 0.82);
+    }
+}
+
+@keyframes ndf-icon-swell {
+
+    from,
+    to {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.04);
+    }
+}
+
+@keyframes ndf-icon-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes ndf-icon-bob {
+
+    from,
+    to {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-2px);
+    }
+}
+
+/* nudge / wiggle 原本是「动一下 + 停一会儿」，停顿直接写进关键帧里，
+   前 17% / 20% 在动，剩下的时间停着。 */
+@keyframes ndf-icon-nudge {
+    0% {
+        transform: translateY(0);
+    }
+
+    8% {
+        transform: translateY(-2px);
+    }
+
+    17%,
+    100% {
+        transform: translateY(0);
+    }
+}
+
+@keyframes ndf-icon-wiggle {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    5% {
+        transform: rotate(6deg);
+    }
+
+    10% {
+        transform: rotate(0deg);
+    }
+
+    15% {
+        transform: rotate(6deg);
+    }
+
+    20%,
+    100% {
+        transform: rotate(0deg);
+    }
+}
+
+.ndf-icon-loop {
+    animation-duration: var(--ndf-icon-dur, 1.6s);
+    animation-iteration-count: infinite;
+    animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
+}
+
+/* 往复型：一来一回算一轮，用 alternate 而不是在关键帧里写回程 */
+.ndf-icon-loop--pulse,
+.ndf-icon-loop--breathe,
+.ndf-icon-loop--swell,
+.ndf-icon-loop--bob {
+    animation-direction: alternate;
+}
+
+.ndf-icon-loop--pulse {
+    animation-name: ndf-icon-pulse;
+}
+
+.ndf-icon-loop--breathe {
+    animation-name: ndf-icon-breathe;
+}
+
+.ndf-icon-loop--swell {
+    animation-name: ndf-icon-swell;
+}
+
+.ndf-icon-loop--bob {
+    animation-name: ndf-icon-bob;
+}
+
+.ndf-icon-loop--nudge {
+    animation-name: ndf-icon-nudge;
+}
+
+.ndf-icon-loop--wiggle {
+    animation-name: ndf-icon-wiggle;
+}
+
+.ndf-icon-loop--spin {
+    animation-name: ndf-icon-spin;
+    animation-timing-function: linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ndf-icon-loop {
+        animation: none;
+    }
+}
+
+/* 吉祥物待机呼吸：页面上唯一一直在动的东西，脚底为轴缓慢起伏 0.8%。
+   动的是包着 SVG 的那层 div，不是 SVG 里的 <g>——SVG 元素的 transform 每帧都要重新
+   布局并把整张矢量图重新栅格化（实测首页所有强制布局都出自这里，加 will-change 也救不了）。
+   动 HTML 容器则是整张图栅格化一次交给合成层，主线程一帧都不用跑。
+   戳一下的动作仍由 GSAP 改 SVG 内部的层，和外层这个缩放各管各的，不会打架。 */
+@keyframes ndf-mascot-breathe {
+    from {
+        transform: scaleY(1);
+    }
+
+    to {
+        transform: scaleY(1.008);
+    }
+}
+
+.ndf-mascot-breathe {
+    will-change: transform;
+    animation: ndf-mascot-breathe var(--ndf-breath-dur, 2.6s) cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ndf-mascot-breathe {
+        animation: none;
+    }
+}
+
 /* 角落柔光呼吸:rich 档启用,通过 .ndf-canvas-glow.is-breathing 类启用。
    只在 BootstrapPanel mount 时附加这个类,避免全 App 常驻渲染。 */
 @keyframes glow-breath {
