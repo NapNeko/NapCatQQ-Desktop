@@ -4,6 +4,7 @@
 import type { FrameworkNavGroup } from '../frameworkUi';
 
 export const ASTRBOT_NAV: readonly FrameworkNavGroup[] = [
+    { id: 'home', items: [{ value: 'overview', label: '概览' }] },
     {
         id: 'ai',
         label: 'AI',

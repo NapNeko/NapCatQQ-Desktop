@@ -11,17 +11,32 @@ describe('resolveFrameworkUi', () => {
     it('astrbot nav groups and issue routing', () => {
         const ui = resolveFrameworkUi('astrbot');
         expect(ui).toBeDefined();
-        expect(ui?.defaultTab).toBe('connections');
-        expect(ui?.nav.map((g) => g.id)).toEqual(['ai', 'message', 'extend', 'instance']);
-        expect(navValues(ui)).toEqual(['models', 'persona', 'kb', 'subagent', 'talk', 'rules', 'plugins', 'connections']);
-        // 人格 / 知识库页也能改配置（设默认、挂载），保存条要一直在；只有插件页不是
-        for (const t of ['connections', 'models', 'talk', 'persona', 'kb', 'subagent', 'rules']) {
+        expect(ui?.defaultTab).toBe('overview');
+        expect(ui?.nav.map((g) => g.id)).toEqual(['home', 'ai', 'message', 'extend', 'instance']);
+        expect(navValues(ui)).toEqual([
+            'overview',
+            'models',
+            'persona',
+            'kb',
+            'subagent',
+            'talk',
+            'rules',
+            'plugins',
+            'connections',
+        ]);
+        // 概览、人格、知识库也能就地改配置，保存条要在；只有插件页不是
+        for (const t of ['overview', 'connections', 'models', 'talk', 'persona', 'kb', 'subagent', 'rules']) {
             expect(ui?.typedTabs.has(t)).toBe(true);
         }
         expect(ui?.typedTabs.has('plugins')).toBe(false);
         expect(ui?.fillPaneTabs.has('plugins')).toBe(true);
         expect(ui?.tabForIssue('onebot/ws_reverse_port')).toBe('connections');
         expect(ui?.tabForIssue('sources/0/id')).toBe('models');
+        expect(ui?.tabForIssue('ai/default_provider_id')).toBe('models');
+        expect(ui?.tabForIssue('ai/fallback_chat_models/0')).toBe('models');
+        expect(ui?.tabForIssue('ai/default_personality')).toBe('persona');
+        expect(ui?.tabForIssue('kb/fusion_top_k')).toBe('kb');
+        expect(ui?.tabForIssue('ai/max_agent_step')).toBe('talk');
         expect(ui?.tabForIssue('gates/id_whitelist')).toBe('talk');
         expect(ui?.tabForIssue('subagent/main_enable')).toBe('subagent');
     });
