@@ -374,6 +374,7 @@ export const mockAppFrameworkApi = {
             instance_id: instanceId,
             bot_id: botId,
             connection: {
+                kind: 'ws_client',
                 url: `ws://127.0.0.1:${inst.port}${inst.framework_id === 'astrbot' ? '/ws' : '/onebot/v11/ws'}`,
                 reportSelfMessage: false,
                 heartInterval: 30000,

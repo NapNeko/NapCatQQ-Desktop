@@ -46,6 +46,26 @@ fn allocate_listen_port_in<R: Rng + ?Sized>(
     Err("无法分配空闲监听端口，请手动指定".into())
 }
 
+/// 同一份输入给同一个口：正向对接的预览和真正写入要看到同一个 Bot 听口，随机分配做不到。
+/// 从 seed 的 FNV-1a 散列出起点往上找第一个没登记、（本机）也能 bind 的口
+pub fn allocate_stable_port(seed: &str, taken: &[u16], probe_local: bool) -> Result<u16, String> {
+    let span = u32::from(APP_LISTEN_PORT_MAX - APP_LISTEN_PORT_MIN) + 1;
+    let start = fnv1a(seed) % span;
+    for i in 0..span.min(STABLE_TRIES) {
+        let port = APP_LISTEN_PORT_MIN + ((start + i) % span) as u16;
+        if accept_port(port, taken, probe_local).is_ok() {
+            return Ok(port);
+        }
+    }
+    Err("无法分配空闲监听端口".into())
+}
+
+const STABLE_TRIES: u32 = 512;
+
+fn fnv1a(s: &str) -> u32 {
+    s.bytes().fold(0x811c_9dc5_u32, |h, b| (h ^ u32::from(b)).wrapping_mul(0x0100_0193))
+}
+
 fn accept_port(port: u16, taken: &[u16], probe_local: bool) -> Result<u16, String> {
     if port == 0 {
         return Err("端口不能为 0".into());
@@ -91,6 +111,20 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(1);
         let port = allocate_listen_port_in(None, &[20_000], false, 20_000, 20_001, &mut rng).unwrap();
         assert_eq!(port, 20_001);
+    }
+
+    #[test]
+    fn stable_port_is_repeatable_and_skips_taken() {
+        let a = allocate_stable_port("m1:10001", &[], false).unwrap();
+        assert_eq!(allocate_stable_port("m1:10001", &[], false).unwrap(), a);
+        assert!((APP_LISTEN_PORT_MIN..=APP_LISTEN_PORT_MAX).contains(&a));
+        let b = allocate_stable_port("m1:10001", &[a], false).unwrap();
+        assert_ne!(b, a);
+        assert_ne!(
+            allocate_stable_port("m2:10001", &[], false).unwrap(),
+            a,
+            "不同实例起点不同"
+        );
     }
 
     #[test]

@@ -5,8 +5,8 @@
 
 use ncd_domain::{
     AppConfigWrite, AppFrameworkId, AppFrameworkManifest, AppInstance, BotConfig, BotId,
-    MessagePostFormat, NetworkBaseFields, OneBotLinkMode, OneBotLinkPlan, WebsocketClientConfig,
-    WsRole, app_link_connection_name,
+    MessagePostFormat, NetworkBaseFields, OneBotLinkEndpoint, OneBotLinkMode, OneBotLinkPlan,
+    WebsocketClientConfig, WsRole, app_link_connection_name,
 };
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
@@ -84,7 +84,7 @@ impl AppIntegration for AstrBotIntegration {
             mode: OneBotLinkMode::ReverseWs,
             instance_id: instance.id.clone(),
             bot_id: BotId::new(bot.bot.qq_id.to_string()),
-            connection,
+            connection: OneBotLinkEndpoint::WsClient(connection),
             app_side_writes: vec![AppConfigWrite {
                 path: ASTRBOT_CMD_CONFIG.to_string(),
                 summary: format!(
@@ -168,13 +168,14 @@ mod tests {
             .plan_link(&instance(), &bot(), "tok-abc")
             .unwrap();
         assert_eq!(plan.mode, OneBotLinkMode::ReverseWs);
-        assert_eq!(plan.connection.url, "ws://127.0.0.1:6199/ws");
-        assert_eq!(plan.connection.base.name, "ncd-app:a1");
-        assert_eq!(plan.connection.base.token, "tok-abc");
+        let c = plan.connection.as_ws_client().expect("AstrBot 是反向对接");
+        assert_eq!(c.url, "ws://127.0.0.1:6199/ws");
+        assert_eq!(c.base.name, "ncd-app:a1");
+        assert_eq!(c.base.token, "tok-abc");
         assert_eq!(plan.app_side_writes[0].path, "data/cmd_config.json");
         assert!(!plan.app_side_writes[0].summary.contains("tok-abc"));
-        assert!(!plan.connection.url.contains("onebot/v11"));
-        assert!(!plan.connection.url.contains(":6185"));
+        assert!(!c.url.contains("onebot/v11"));
+        assert!(!c.url.contains(":6185"));
     }
 
     #[test]

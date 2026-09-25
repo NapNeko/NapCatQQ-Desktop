@@ -35,8 +35,16 @@ import {
 } from '../../../../core/domain/bot/connections';
 import type { ConnectConfig } from '../../../../core/ipc/generated/domain/ConnectConfig';
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
-import type { WebsocketClientConfig } from '../../../../core/ipc/generated/domain/WebsocketClientConfig';
+import type { OneBotLinkEndpoint } from '../../../../core/ipc/generated/domain/OneBotLinkEndpoint';
 import { ConnectionEditor } from './ConnectionEditor';
+
+function upsertByName<T extends { name: string }>(list: readonly T[], item: T): T[] {
+    const next = list.slice();
+    const idx = next.findIndex((c) => c.name === item.name);
+    if (idx < 0) next.push(item);
+    else next[idx] = item;
+    return next;
+}
 
 // 对接对话框与应用端页共用；按需加载，不让 Bot 配置页首屏背上应用端 chunk。
 const AppLinkDialog = lazy(() =>
@@ -83,13 +91,15 @@ export function ConnectionsTab({ data, onChange, backendType, botId = null }: Co
     }, [linkOpen]);
 
     /// 对接由后端直接落盘 + 热推；这里把同一条连接同步进未保存的表单草稿，
-    /// 否则用户随后点「保存」会用旧草稿把它覆盖掉。
-    const syncLinkedConnection = (connection: WebsocketClientConfig) => {
-        const list = data.websocketClients.slice();
-        const idx = list.findIndex((c) => c.name === connection.name);
-        if (idx < 0) list.push(connection);
-        else list[idx] = connection;
-        onChange({ websocketClients: list });
+    /// 否则用户随后点「保存」会用旧草稿把它覆盖掉。反向进 WS 客户端表，正向进 WS 服务端表。
+    const syncLinkedConnection = (connection: OneBotLinkEndpoint) => {
+        if (connection.kind === 'ws_client') {
+            const { kind: _kind, ...client } = connection;
+            onChange({ websocketClients: upsertByName(data.websocketClients, client) });
+        } else {
+            const { kind: _kind, ...server } = connection;
+            onChange({ websocketServers: upsertByName(data.websocketServers, server) });
+        }
     };
 
     useEffect(() => {

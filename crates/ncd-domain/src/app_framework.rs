@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use ts_rs::TS;
 
-use crate::bot_config::WebsocketClientConfig;
+use crate::bot_config::{WebsocketClientConfig, WebsocketServerConfig};
 use crate::deployment_task::AppStoreResource;
 use crate::ids::BotId;
 use crate::kinds::RuntimeTarget;
@@ -139,18 +139,23 @@ impl AppInstanceState {
     }
 }
 
-/// 协议 Bot 与应用端的对接拓扑。首发只开反向 WS（协议 Bot 作 WS 客户端连应用端 WS 服务）。
+/// 协议 Bot 与应用端怎么连。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum OneBotLinkMode {
+    /// 协议 Bot 作 WS 客户端，连应用端的 WS 服务
     ReverseWs,
+    /// 协议 Bot 开 WS 服务端，应用端作客户端连过来（MaiBot 的 NapCat 适配器插件只会这样）。
+    /// 听口在 Bot 侧，桌面隧道方向和反向相反，目前只开同机
+    ForwardWs,
 }
 
 impl OneBotLinkMode {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::ReverseWs => "reverse_ws",
+            Self::ForwardWs => "forward_ws",
         }
     }
 }
@@ -365,7 +370,55 @@ pub struct AppConfigWrite {
     pub summary: String,
 }
 
+/// 对接时往协议 Bot 里写的那一条连接，name 固定 `ncd-app:<instance_id>`。
+/// 反向进 `connect.websocketClients`，正向进 `connect.websocketServers`
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum OneBotLinkEndpoint {
+    WsClient(WebsocketClientConfig),
+    WsServer(WebsocketServerConfig),
+}
+
+impl OneBotLinkEndpoint {
+    pub fn mode(&self) -> OneBotLinkMode {
+        match self {
+            Self::WsClient(_) => OneBotLinkMode::ReverseWs,
+            Self::WsServer(_) => OneBotLinkMode::ForwardWs,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::WsClient(c) => &c.base.name,
+            Self::WsServer(s) => &s.base.name,
+        }
+    }
+
+    pub fn token(&self) -> &str {
+        match self {
+            Self::WsClient(c) => &c.base.token,
+            Self::WsServer(s) => &s.base.token,
+        }
+    }
+
+    pub fn as_ws_client(&self) -> Option<&WebsocketClientConfig> {
+        match self {
+            Self::WsClient(c) => Some(c),
+            Self::WsServer(_) => None,
+        }
+    }
+
+    pub fn as_ws_server(&self) -> Option<&WebsocketServerConfig> {
+        match self {
+            Self::WsServer(s) => Some(s),
+            Self::WsClient(_) => None,
+        }
+    }
+}
+
 /// 对接计划：预览与应用共用同一份，UI 展示「将写入 Bot 的连接」与「将改动的应用端文件」。
+/// `mode` 与 `connection` 的种类一致（反向 = WsClient，正向 = WsServer），由各框架 `plan_link` 保证
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct OneBotLinkPlan {
@@ -373,8 +426,7 @@ pub struct OneBotLinkPlan {
     pub instance_id: AppInstanceId,
     #[ts(type = "string")]
     pub bot_id: BotId,
-    /// 将 upsert 进协议 Bot `connect.websocketClients` 的条目（name 固定 `ncd-app:<instance_id>`）
-    pub connection: WebsocketClientConfig,
+    pub connection: OneBotLinkEndpoint,
     pub app_side_writes: Vec<AppConfigWrite>,
     pub access_token: String,
 }
@@ -874,6 +926,67 @@ mod tests {
         };
         let v = serde_json::to_value(&with_port).unwrap();
         assert_eq!(v["resident_forward_port"], 21001);
+    }
+
+    #[test]
+    fn forward_link_record_round_trips_next_to_legacy_reverse() {
+        assert_eq!(OneBotLinkMode::ForwardWs.as_str(), "forward_ws");
+        let rec: AppLinkRecord = serde_json::from_str(
+            r#"{"bot_id":"10001","mode":"forward_ws","connection_name":"ncd-app:m1","linked_at_ms":1}"#,
+        )
+        .unwrap();
+        assert_eq!(rec.mode, OneBotLinkMode::ForwardWs);
+        assert_eq!(serde_json::to_value(rec.mode).unwrap(), "forward_ws");
+    }
+
+    fn base(name: &str, token: &str) -> crate::bot_config::NetworkBaseFields {
+        crate::bot_config::NetworkBaseFields {
+            enable: true,
+            name: name.into(),
+            message_post_format: crate::bot_config::MessagePostFormat::Array,
+            token: token.into(),
+            debug: false,
+        }
+    }
+
+    #[test]
+    fn link_endpoint_is_tagged_by_kind_and_keeps_wire_fields_flat() {
+        let server = OneBotLinkEndpoint::WsServer(WebsocketServerConfig {
+            base: base("ncd-app:m1", "tok"),
+            host: "127.0.0.1".into(),
+            port: 23001,
+            report_self_message: false,
+            enable_force_push_event: true,
+            heart_interval: 30000,
+            path: "/".into(),
+            role: Default::default(),
+        });
+        let v = serde_json::to_value(&server).unwrap();
+        assert_eq!(v["kind"], "ws_server");
+        assert_eq!(v["name"], "ncd-app:m1");
+        assert_eq!(v["port"], 23001);
+        assert_eq!(v["heartInterval"], 30000);
+        let back: OneBotLinkEndpoint = serde_json::from_value(v).unwrap();
+        assert_eq!(back, server);
+        assert_eq!(back.mode(), OneBotLinkMode::ForwardWs);
+        assert_eq!(back.name(), "ncd-app:m1");
+        assert_eq!(back.token(), "tok");
+        assert!(back.as_ws_client().is_none());
+
+        let client = OneBotLinkEndpoint::WsClient(WebsocketClientConfig {
+            base: base("ncd-app:k1", "t2"),
+            url: "ws://127.0.0.1:7777/onebot/v11/ws".into(),
+            report_self_message: false,
+            heart_interval: 30000,
+            reconnect_interval: 30000,
+            role: Default::default(),
+        });
+        let v = serde_json::to_value(&client).unwrap();
+        assert_eq!(v["kind"], "ws_client");
+        assert_eq!(v["url"], "ws://127.0.0.1:7777/onebot/v11/ws");
+        let back: OneBotLinkEndpoint = serde_json::from_value(v).unwrap();
+        assert_eq!(back.mode(), OneBotLinkMode::ReverseWs);
+        assert_eq!(back.as_ws_client().map(|c| c.url.as_str()), Some("ws://127.0.0.1:7777/onebot/v11/ws"));
     }
 
     #[test]

@@ -85,6 +85,7 @@ export type { KarinPluginRepo } from './generated/domain/KarinPluginRepo';
 export type { KarinPluginAppFile } from './generated/domain/KarinPluginAppFile';
 export type { KarinPluginMarketEntry } from './generated/domain/KarinPluginMarketEntry';
 export type { KarinPluginInstalled } from './generated/domain/KarinPluginInstalled';
+export type { OneBotLinkEndpoint } from './generated/domain/OneBotLinkEndpoint';
 export type { OneBotLinkMode } from './generated/domain/OneBotLinkMode';
 export type { OneBotLinkPlan } from './generated/domain/OneBotLinkPlan';
 export type { AppInstanceWebUi } from './generated/AppInstanceWebUi';

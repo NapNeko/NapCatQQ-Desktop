@@ -3,8 +3,8 @@
 
 use ncd_domain::{
     AppConfigWrite, AppFrameworkId, AppFrameworkManifest, AppInstance, BotConfig, BotId,
-    MessagePostFormat, NetworkBaseFields, OneBotLinkMode, OneBotLinkPlan, WebsocketClientConfig,
-    WsRole, app_link_connection_name,
+    MessagePostFormat, NetworkBaseFields, OneBotLinkEndpoint, OneBotLinkMode, OneBotLinkPlan,
+    WebsocketClientConfig, WsRole, app_link_connection_name,
 };
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
@@ -103,7 +103,7 @@ impl AppIntegration for NoneBot2Integration {
             mode: OneBotLinkMode::ReverseWs,
             instance_id: instance.id.clone(),
             bot_id: BotId::new(bot.bot.qq_id.to_string()),
-            connection,
+            connection: OneBotLinkEndpoint::WsClient(connection),
             app_side_writes: vec![AppConfigWrite {
                 path: NONEBOT2_ENV_PROD_FILE.to_string(),
                 summary,
@@ -171,9 +171,10 @@ mod tests {
             .plan_link(&instance(), &bot(), "tok-abc")
             .unwrap();
         assert_eq!(plan.mode, OneBotLinkMode::ReverseWs);
-        assert_eq!(plan.connection.url, "ws://127.0.0.1:8081/onebot/v11/ws");
-        assert_eq!(plan.connection.base.name, "ncd-app:n1");
-        assert_eq!(plan.connection.base.token, "tok-abc");
+        let c = plan.connection.as_ws_client().expect("NoneBot2 是反向对接");
+        assert_eq!(c.url, "ws://127.0.0.1:8081/onebot/v11/ws");
+        assert_eq!(c.base.name, "ncd-app:n1");
+        assert_eq!(c.base.token, "tok-abc");
         assert_eq!(plan.app_side_writes.len(), 1);
         assert_eq!(plan.app_side_writes[0].path, ".env.prod");
         assert!(plan.app_side_writes[0].summary.contains("PORT=8081"));

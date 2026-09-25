@@ -1,9 +1,10 @@
 //! AppManager：应用实例表 + 生命周期 + 「协议 Bot 一键对接应用端」编排
 //!
-//! 对接 = 往 Bot 的 `connect.websocket_clients` 按名 upsert 一条反向 WS 连接，再调
-//! `BotManager::upsert_bot_config`（持久化 + 渲染 + 热推）。不新写推送链路。
-//! 拓扑按主机分、不看 BackendType：同机走实例口；本机 Bot→远端应用 SSH `-L`；远端 Bot→本机应用 SSH `-R`；
-//! 两台远端走应用机常驻 `ssh -R`（Desktop 只编排）。
+//! 对接 = 往 Bot 里按名 upsert 一条连接，再调 `BotManager::upsert_bot_config`（持久化 + 渲染 +
+//! 热推）。不新写推送链路。反向进 `connect.websocket_clients`（Bot 连应用端）；正向进
+//! `connect.websocket_servers`（Bot 开服务端，应用端来连，听口由这里在 Bot 主机上分配）。
+//! 反向拓扑按主机分、不看 BackendType：同机走实例口；本机 Bot→远端应用 SSH `-L`；远端 Bot→本机应用 SSH `-R`；
+//! 两台远端走应用机常驻 `ssh -R`（Desktop 只编排）。正向的听口在 Bot 侧，隧道方向全反，目前只开同机。
 //!
 //! 安装本身走既有 ComponentExecutor（R12），这里只给 hint、置 Installing、盯任务结束后
 //! 用 detect 对账；框架差异全部封在 `ncd_appframework::AppFrameworkAdapter` 后面。
@@ -30,9 +31,9 @@ use ncd_domain::{
     AppWebUiAuthKind, BotConfig, BotId,
     CreateAppInstanceRequest, DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID,
     REMOTE_HOST_ID_PREFIX,
-    OneBotLinkMode, OneBotLinkPlan, RuntimeTarget, app_link_connection_name, classify_app_link,
-    host_id_of_runtime_target, is_app_link_connection_name, rewrite_ws_loopback_port,
-    server_id_of_host,
+    OneBotLinkEndpoint, OneBotLinkMode, OneBotLinkPlan, RuntimeTarget, app_link_connection_name,
+    classify_app_link, host_id_of_runtime_target, is_app_link_connection_name,
+    rewrite_ws_loopback_port, runtime_target_matches_host, server_id_of_host,
 };
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
@@ -44,7 +45,7 @@ use rand::distributions::Alphanumeric;
 
 use super::adopt::{self, AdoptStore};
 use super::instances::AppInstanceStore;
-use super::listen_port::{allocate_listen_port, local_port_free};
+use super::listen_port::{allocate_listen_port, allocate_stable_port, local_port_free};
 use super::native_runtime::{AppLaunchSpec, NativeAppRuntime};
 use super::resident_link::{self, ResidentLinkSpec};
 use crate::bot_manager::BotManager;
@@ -1291,8 +1292,11 @@ impl AppManager {
         bot_id: &BotId,
     ) -> Result<OneBotLinkPlan, AppFrameworkError> {
         let (instance, bot, adapter, host) = self.link_context(instance_id, bot_id).await?;
-        let token = self.pick_access_token(host.as_ref(), &instance, &bot, adapter.as_ref()).await?;
-        adapter.integration().plan_link(&instance, &bot, &token)
+        let topology = classify_app_link(&bot.bot.runtime_target, &instance.host_id).ok_or_else(
+            || unsupported_link_topology(&bot.bot.runtime_target, &instance.host_id),
+        )?;
+        self.plan_link_for(&instance, &bot, adapter.as_ref(), host.as_ref(), topology)
+            .await
     }
 
     /// 应用：写应用端 → Bot 侧 upsert 连接 + 热推 → 记 link；Bot 侧失败回滚应用端
@@ -1305,6 +1309,11 @@ impl AppManager {
         let topology = classify_app_link(&bot.bot.runtime_target, &instance.host_id).ok_or_else(
             || unsupported_link_topology(&bot.bot.runtime_target, &instance.host_id),
         )?;
+        // 先把计划算完（正向不同机在这里就拒），再动旧隧道，免得拒了还拆掉现有对接
+        let mut plan = self
+            .plan_link_for(&instance, &bot, adapter.as_ref(), host.as_ref(), topology)
+            .await?;
+        let mode = plan.connection.mode();
         if let Some(old) = instance.link.as_ref() {
             if old.resident_forward_port.is_some() {
                 self.teardown_resident_best_effort(&instance, &old.bot_id).await;
@@ -1313,19 +1322,19 @@ impl AppManager {
         if !needs_desktop_ssh_tunnel(topology) {
             self.drop_instance_tunnel(instance_id).await;
         }
-        let token = self.pick_access_token(host.as_ref(), &instance, &bot, adapter.as_ref()).await?;
-        let mut plan = adapter.integration().plan_link(&instance, &bot, &token)?;
 
         let mut resident_forward_port = None;
-        if topology == AppLinkTopology::RemoteBotRemoteApp {
-            let fwd = self.ensure_resident_link(&instance, &bot, bot_id).await?;
-            plan.connection.url = rewrite_ws_loopback_port(&plan.connection.url, fwd)
-                .map_err(AppFrameworkError::Validation)?;
-            resident_forward_port = Some(fwd);
-        } else if needs_desktop_ssh_tunnel(topology) {
-            let loopback = self.ensure_link_tunnel(&instance, &bot).await?;
-            plan.connection.url = rewrite_ws_loopback_port(&plan.connection.url, loopback)
-                .map_err(AppFrameworkError::Validation)?;
+        if let OneBotLinkEndpoint::WsClient(client) = &mut plan.connection {
+            if topology == AppLinkTopology::RemoteBotRemoteApp {
+                let fwd = self.ensure_resident_link(&instance, &bot, bot_id).await?;
+                client.url = rewrite_ws_loopback_port(&client.url, fwd)
+                    .map_err(AppFrameworkError::Validation)?;
+                resident_forward_port = Some(fwd);
+            } else if needs_desktop_ssh_tunnel(topology) {
+                let loopback = self.ensure_link_tunnel(&instance, &bot).await?;
+                client.url = rewrite_ws_loopback_port(&client.url, loopback)
+                    .map_err(AppFrameworkError::Validation)?;
+            }
         }
 
         if let Err(e) = adapter.apply_link(host.as_ref(), &instance, &plan).await {
@@ -1338,7 +1347,7 @@ impl AppManager {
             return Err(e);
         }
 
-        upsert_ws_client(&mut bot, plan.connection.clone());
+        upsert_link_endpoint(&mut bot, plan.connection.clone());
         if let Err(e) = self.bot_manager.upsert_bot_config(bot).await {
             if instance.origin.is_imported() {
                 if let Ok(Some(snap)) = self.adopt_store.load(&instance.id) {
@@ -1373,12 +1382,14 @@ impl AppManager {
             )));
         }
 
-        // 换 Bot,或导入认领的旧连接名和 ncd-app:<id> 不同:把旧条目摘掉,避免双连
+        // 换 Bot、导入认领的旧连接名和 ncd-app:<id> 不同、或换了对接方向：把旧条目摘掉，避免双连
         if let Some(old) = instance.link.as_ref() {
-            let replacing = old.bot_id != *bot_id || old.connection_name != plan.connection.base.name;
+            let replacing = old.bot_id != *bot_id
+                || old.connection_name != plan.connection.name()
+                || old.mode != mode;
             if replacing && !old.connection_name.is_empty() {
                 if let Err(e) = self
-                    .remove_ws_client_from_bot(&old.bot_id, &old.connection_name)
+                    .remove_link_connection_from_bot(&old.bot_id, &old.connection_name, old.mode)
                     .await
                 {
                     tracing::warn!(instance = instance_id.as_str(), error = %e, "detach previous bot");
@@ -1391,8 +1402,8 @@ impl AppManager {
             .update(instance_id, |i| {
                 i.link = Some(AppLinkRecord {
                     bot_id: bot_id.clone(),
-                    mode: OneBotLinkMode::ReverseWs,
-                    connection_name: plan.connection.base.name.clone(),
+                    mode,
+                    connection_name: plan.connection.name().to_string(),
                     linked_at_ms: now_ms(),
                     resident_forward_port,
                 });
@@ -1403,13 +1414,13 @@ impl AppManager {
         Ok(updated)
     }
 
-    /// 解绑：按名从 Bot 的 websocket_clients 删并热推；应用端监听口不动
+    /// 解绑：按名从 Bot 对应那张连接表删并热推；应用端怎么收尾交给适配器（多数不动监听口）
     pub async fn unlink(&self, instance_id: &AppInstanceId) -> Result<AppInstance, AppFrameworkError> {
         let instance = self.store.require(instance_id).await?;
         let Some(link) = instance.link.clone() else {
             return Ok(instance);
         };
-        self.remove_ws_client_from_bot(&link.bot_id, &link.connection_name)
+        self.remove_link_connection_from_bot(&link.bot_id, &link.connection_name, link.mode)
             .await?;
         if let Ok(adapter) = self.registry.get(&instance.framework_id)
             && let Ok(host) = self.resolve_host(&instance.host_id).await
@@ -1451,9 +1462,9 @@ impl AppManager {
             ));
         }
         let adapter = self.registry.get(&instance.framework_id)?;
-        if !adapter.manifest().link_modes.contains(&OneBotLinkMode::ReverseWs) {
+        if adapter.manifest().link_modes.is_empty() {
             return Err(AppFrameworkError::LinkModeUnsupported(
-                "该框架不支持反向 WS 对接".to_string(),
+                "该框架不支持对接协议 Bot".to_string(),
             ));
         }
         let bot = self
@@ -1485,24 +1496,110 @@ impl AppManager {
         if let Some(t) = adapter.read_access_token(host, instance).await? {
             return Ok(t);
         }
+        // ncd-app:<id> 只可能是我们写的，两张表一起看，换过对接方向也能沿用旧 token
         let name = app_link_connection_name(&instance.id);
-        if let Some(existing) = bot
+        let clients = bot
             .connect
             .websocket_clients
             .iter()
-            .find(|c| c.base.name == name)
-            .map(|c| c.base.token.trim().to_string())
-            .filter(|t| !t.is_empty())
+            .filter(|c| c.base.name == name)
+            .map(|c| &c.base);
+        let servers = bot
+            .connect
+            .websocket_servers
+            .iter()
+            .filter(|s| s.base.name == name)
+            .map(|s| &s.base);
+        if let Some(existing) = clients
+            .chain(servers)
+            .map(|b| b.token.trim().to_string())
+            .find(|t| !t.is_empty())
         {
             return Ok(existing);
         }
         Ok(generate_token())
     }
 
-    async fn remove_ws_client_from_bot(
+    /// 算计划并补上只有编排层知道的部分：正向的 Bot 听口在 Bot 主机上分配（`plan_link` 填 0）
+    async fn plan_link_for(
+        &self,
+        instance: &AppInstance,
+        bot: &BotConfig,
+        adapter: &dyn AppFrameworkAdapter,
+        host: &dyn Host,
+        topology: AppLinkTopology,
+    ) -> Result<OneBotLinkPlan, AppFrameworkError> {
+        let token = self.pick_access_token(host, instance, bot, adapter).await?;
+        let mut plan = adapter.integration().plan_link(instance, bot, &token)?;
+        if plan.mode != plan.connection.mode() {
+            return Err(AppFrameworkError::Integration(format!(
+                "对接计划自相矛盾：mode={} 但连接是 {}",
+                plan.mode.as_str(),
+                plan.connection.mode().as_str()
+            )));
+        }
+        if let OneBotLinkEndpoint::WsServer(server) = &mut plan.connection {
+            if topology != AppLinkTopology::SameHost {
+                return Err(AppFrameworkError::LinkModeUnsupported(format!(
+                    "{} 由应用端主动连协议 Bot，目前只能对接同一台机器上的 Bot（Bot 在{}，实例在{}）",
+                    adapter.manifest().display_name,
+                    describe_target(&bot.bot.runtime_target),
+                    describe_host(&instance.host_id)
+                )));
+            }
+            server.port = self.pick_forward_port(instance, bot).await?;
+        }
+        Ok(plan)
+    }
+
+    /// 正向对接的 Bot 听口：重新对接沿用已有 `ncd-app:<id>` 的口；否则避开同主机上所有 Bot 的
+    /// 服务口和应用实例口，按实例 + Bot 算出稳定的口（预览与写入一致），本机再探一次能否 bind
+    async fn pick_forward_port(
+        &self,
+        instance: &AppInstance,
+        bot: &BotConfig,
+    ) -> Result<u16, AppFrameworkError> {
+        let name = app_link_connection_name(&instance.id);
+        if let Some(existing) = bot
+            .connect
+            .websocket_servers
+            .iter()
+            .find(|s| s.base.name == name && s.port > 0)
+        {
+            return Ok(existing.port);
+        }
+        let mut taken: Vec<u16> = self
+            .store
+            .list()
+            .await
+            .into_iter()
+            .filter(|i| i.host_id == instance.host_id)
+            .map(|i| i.port)
+            .collect();
+        let bots = self
+            .bot_manager
+            .list_bot_configs_for_link()
+            .await
+            .map_err(AppFrameworkError::Integration)?;
+        for b in bots
+            .iter()
+            .chain(std::iter::once(bot))
+            .filter(|b| runtime_target_matches_host(&b.bot.runtime_target, &instance.host_id))
+        {
+            taken.extend(bot_listen_ports(b));
+        }
+        let seed = format!("{}:{}", instance.id.as_str(), bot.bot.qq_id);
+        allocate_stable_port(&seed, &taken, instance.host_id == LOCAL_HOST_ID)
+            .map_err(AppFrameworkError::Validation)
+    }
+
+    /// 只摘对接方向对应的那张表：导入认领的连接名是用户自己起的，
+    /// 另一张表里可能正好有同名的用户连接
+    async fn remove_link_connection_from_bot(
         &self,
         bot_id: &BotId,
         connection_name: &str,
+        mode: OneBotLinkMode,
     ) -> Result<(), AppFrameworkError> {
         let Some(mut bot) = self
             .bot_manager
@@ -1513,11 +1610,7 @@ impl AppManager {
             // Bot 已删：没有连接可摘
             return Ok(());
         };
-        let before = bot.connect.websocket_clients.len();
-        bot.connect
-            .websocket_clients
-            .retain(|c| c.base.name != connection_name);
-        if bot.connect.websocket_clients.len() == before {
+        if !remove_link_connection(&mut bot, connection_name, mode) {
             return Ok(());
         }
         self.bot_manager
@@ -2969,13 +3062,61 @@ pub fn upsert_ws_client(bot: &mut BotConfig, connection: ncd_domain::WebsocketCl
     }
 }
 
+pub fn upsert_ws_server(bot: &mut BotConfig, server: ncd_domain::WebsocketServerConfig) {
+    match bot
+        .connect
+        .websocket_servers
+        .iter_mut()
+        .find(|s| s.base.name == server.base.name)
+    {
+        Some(slot) => *slot = server,
+        None => bot.connect.websocket_servers.push(server),
+    }
+}
+
+/// 反向进 websocket_clients，正向进 websocket_servers
+pub fn upsert_link_endpoint(bot: &mut BotConfig, endpoint: OneBotLinkEndpoint) {
+    match endpoint {
+        OneBotLinkEndpoint::WsClient(c) => upsert_ws_client(bot, c),
+        OneBotLinkEndpoint::WsServer(s) => upsert_ws_server(bot, s),
+    }
+}
+
+/// 按对接方向从对应的表摘掉同名连接；返回有没有摘到
+fn remove_link_connection(bot: &mut BotConfig, name: &str, mode: OneBotLinkMode) -> bool {
+    match mode {
+        OneBotLinkMode::ReverseWs => {
+            let before = bot.connect.websocket_clients.len();
+            bot.connect.websocket_clients.retain(|c| c.base.name != name);
+            bot.connect.websocket_clients.len() != before
+        }
+        OneBotLinkMode::ForwardWs => {
+            let before = bot.connect.websocket_servers.len();
+            bot.connect.websocket_servers.retain(|s| s.base.name != name);
+            bot.connect.websocket_servers.len() != before
+        }
+    }
+}
+
+/// 这个 Bot 自己会监听的口（分配正向听口时避开）
+fn bot_listen_ports(bot: &BotConfig) -> impl Iterator<Item = u16> + '_ {
+    let c = &bot.connect;
+    c.http_servers
+        .iter()
+        .map(|s| s.port)
+        .chain(c.http_sse_servers.iter().map(|s| s.port))
+        .chain(c.websocket_servers.iter().map(|s| s.port))
+        .filter(|p| *p > 0)
+}
+
 /// Bot 上有没有应用端对接连接（UI 徽章 / 迁移提示用）
 pub fn app_link_connections(bot: &BotConfig) -> Vec<String> {
-    bot.connect
-        .websocket_clients
-        .iter()
-        .filter(|c| is_app_link_connection_name(&c.base.name))
-        .map(|c| c.base.name.clone())
+    let clients = bot.connect.websocket_clients.iter().map(|c| &c.base.name);
+    let servers = bot.connect.websocket_servers.iter().map(|s| &s.base.name);
+    clients
+        .chain(servers)
+        .filter(|name| is_app_link_connection_name(name))
+        .cloned()
         .collect()
 }
 
@@ -3096,6 +3237,67 @@ mod tests {
             "ws://127.0.0.1:7801/onebot/v11/ws"
         );
         assert_eq!(app_link_connections(&b), vec!["ncd-app:k1".to_string()]);
+    }
+
+    fn ws_server(name: &str, port: u16) -> WebsocketServerConfig {
+        WebsocketServerConfig {
+            base: NetworkBaseFields {
+                enable: true,
+                name: name.into(),
+                message_post_format: MessagePostFormat::Array,
+                token: "t".into(),
+                debug: false,
+            },
+            host: "127.0.0.1".into(),
+            port,
+            report_self_message: false,
+            enable_force_push_event: true,
+            heart_interval: 30000,
+            path: "/".into(),
+            role: WsRole::Universal,
+        }
+    }
+
+    #[test]
+    fn link_endpoint_goes_to_the_table_of_its_direction() {
+        let mut b = bot();
+        b.connect.websocket_servers.push(ws_server("user", 3001));
+        upsert_link_endpoint(&mut b, OneBotLinkEndpoint::WsServer(ws_server("ncd-app:m1", 23001)));
+        upsert_link_endpoint(&mut b, OneBotLinkEndpoint::WsServer(ws_server("ncd-app:m1", 23002)));
+        assert!(b.connect.websocket_clients.is_empty());
+        assert_eq!(b.connect.websocket_servers.len(), 2);
+        assert_eq!(b.connect.websocket_servers[1].port, 23002, "同名替换不追加");
+        assert_eq!(app_link_connections(&b), vec!["ncd-app:m1".to_string()]);
+
+        upsert_link_endpoint(&mut b, OneBotLinkEndpoint::WsClient(ws("ncd-app:k1", "ws://x")));
+        assert_eq!(b.connect.websocket_clients.len(), 1);
+        assert_eq!(
+            app_link_connections(&b),
+            vec!["ncd-app:k1".to_string(), "ncd-app:m1".to_string()]
+        );
+    }
+
+    #[test]
+    fn remove_link_connection_only_touches_its_direction() {
+        let mut b = bot();
+        // 导入认领的是用户自己起名的反向连接；同名的正向服务端是另一回事，不能跟着删
+        b.connect.websocket_clients.push(ws("onebot", "ws://127.0.0.1:8080/onebot/v11/ws"));
+        b.connect.websocket_servers.push(ws_server("onebot", 3001));
+        assert!(remove_link_connection(&mut b, "onebot", OneBotLinkMode::ReverseWs));
+        assert!(b.connect.websocket_clients.is_empty());
+        assert_eq!(b.connect.websocket_servers.len(), 1);
+        assert!(!remove_link_connection(&mut b, "ncd-app:m1", OneBotLinkMode::ForwardWs));
+        assert!(remove_link_connection(&mut b, "onebot", OneBotLinkMode::ForwardWs));
+        assert!(b.connect.websocket_servers.is_empty());
+    }
+
+    #[test]
+    fn bot_listen_ports_cover_every_server_kind() {
+        let mut b = bot();
+        b.connect.websocket_servers.push(ws_server("a", 3001));
+        b.connect.websocket_servers.push(ws_server("zero", 0));
+        let ports: Vec<u16> = bot_listen_ports(&b).collect();
+        assert_eq!(ports, vec![3001]);
     }
 
     #[test]
@@ -3249,6 +3451,10 @@ mod tests {
                 panic!("expected Karin config");
             };
             k.clone()
+        }
+
+        fn client_url(plan: &OneBotLinkPlan) -> &str {
+            &plan.connection.as_ws_client().expect("Karin 是反向对接").url
         }
 
         fn ws_client_urls(bot: &BotConfig) -> Vec<String> {
@@ -3471,7 +3677,7 @@ mod tests {
                     .preview_link(&f.id, &BotId::new(bot_id))
                     .await
                     .unwrap();
-                assert_eq!(plan.connection.url, "ws://127.0.0.1:7777/onebot/v11/ws");
+                assert_eq!(client_url(&plan), "ws://127.0.0.1:7777/onebot/v11/ws");
             }
         }
 
@@ -3501,7 +3707,7 @@ mod tests {
                     .preview_link(&f.id, &BotId::new(bot_id))
                     .await
                     .unwrap();
-                assert_eq!(plan.connection.url, "ws://127.0.0.1:7777/onebot/v11/ws");
+                assert_eq!(client_url(&plan), "ws://127.0.0.1:7777/onebot/v11/ws");
             }
         }
 
@@ -3530,7 +3736,7 @@ mod tests {
                 .preview_link(&f.id, &BotId::new("50005"))
                 .await
                 .unwrap();
-            assert_eq!(plan.connection.url, "ws://127.0.0.1:7777/onebot/v11/ws");
+            assert_eq!(client_url(&plan), "ws://127.0.0.1:7777/onebot/v11/ws");
         }
 
         #[tokio::test]

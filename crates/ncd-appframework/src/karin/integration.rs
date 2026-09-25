@@ -3,8 +3,8 @@
 
 use ncd_domain::{
     AppConfigWrite, AppFrameworkId, AppFrameworkManifest, AppInstance, BotConfig, BotId,
-    MessagePostFormat, NetworkBaseFields, OneBotLinkMode, OneBotLinkPlan, WebsocketClientConfig,
-    WsRole, app_link_connection_name,
+    MessagePostFormat, NetworkBaseFields, OneBotLinkEndpoint, OneBotLinkMode, OneBotLinkPlan,
+    WebsocketClientConfig, WsRole, app_link_connection_name,
 };
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
@@ -106,7 +106,7 @@ impl AppIntegration for KarinIntegration {
             mode: OneBotLinkMode::ReverseWs,
             instance_id: instance.id.clone(),
             bot_id: BotId::new(bot.bot.qq_id.to_string()),
-            connection,
+            connection: OneBotLinkEndpoint::WsClient(connection),
             app_side_writes: vec![AppConfigWrite {
                 path: KARIN_ENV_FILE.to_string(),
                 summary,
@@ -177,10 +177,11 @@ mod tests {
             .plan_link(&instance(), &bot(), "tok-abc")
             .unwrap();
         assert_eq!(plan.mode, OneBotLinkMode::ReverseWs);
-        assert_eq!(plan.connection.url, "ws://127.0.0.1:7801/onebot/v11/ws");
-        assert_eq!(plan.connection.base.name, "ncd-app:k1");
-        assert_eq!(plan.connection.base.token, "tok-abc");
-        assert!(plan.connection.base.enable);
+        let c = plan.connection.as_ws_client().expect("Karin 是反向对接");
+        assert_eq!(c.url, "ws://127.0.0.1:7801/onebot/v11/ws");
+        assert_eq!(c.base.name, "ncd-app:k1");
+        assert_eq!(c.base.token, "tok-abc");
+        assert!(c.base.enable);
         assert_eq!(plan.bot_id.as_str(), "10001");
         assert_eq!(plan.app_side_writes.len(), 1);
         assert_eq!(plan.app_side_writes[0].path, ".env");
