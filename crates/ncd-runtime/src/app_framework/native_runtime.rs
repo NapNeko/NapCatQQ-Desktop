@@ -83,7 +83,7 @@ impl NativeAppRuntime {
         }
     }
 
-    /// 停止：本会话接管的直接 kill；否则按 pid 文件停。总是清 pid 文件
+    /// 停止：连子进程一起结束（本会话接管的、按 pid 文件认到的都一样）。总是清 pid 文件
     pub async fn stop(
         &self,
         host: Arc<dyn Host>,
@@ -95,14 +95,16 @@ impl NativeAppRuntime {
             for t in &managed.tasks {
                 t.abort();
             }
+            kill_local_tree(managed.pid);
+            // 树已经收掉了，这里只是让 tokio 回收子进程句柄
             let mut proc = managed.process.lock().await;
             if let Err(e) = proc.kill().await {
-                tracing::warn!(pid = managed.pid, error = %e, "kill app process failed");
+                tracing::debug!(pid = managed.pid, error = %e, "reap app process");
             }
         } else if let Some(pid) = self.reconcile_pid(host.as_ref(), instance).await? {
             match host.locality() {
-                Locality::Local => kill_local_pid(pid),
-                Locality::Remote => remote_stop(host.as_ref(), instance, pid).await?,
+                Locality::Local => kill_local_tree(pid),
+                Locality::Remote => remote_stop(host.as_ref(), pid).await?,
             }
         }
         let _ = host.remove_file(&Self::pid_file(instance)).await;
@@ -202,6 +204,7 @@ impl NativeAppRuntime {
             for t in &managed.tasks {
                 t.abort();
             }
+            kill_local_tree(managed.pid);
             let mut proc = managed.process.lock().await;
             let _ = proc.kill().await;
         }
@@ -567,14 +570,54 @@ pub(crate) fn discover_local_pid(
     super::supervisor::pick_app_pid(&lines, kind)
 }
 
-fn kill_local_pid(pid: u32) {
+/// 连子孙进程一起结束。只杀直接子进程会留孤儿：MaiBot 是 bot.py → Worker → 插件 Runner
+/// 三层，Worker 活着就继续占 WebUI 口和协议连接
+fn kill_local_tree(pid: u32) {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
     let mut sys = System::new();
-    let spid = Pid::from_u32(pid);
-    sys.refresh_processes_specifics(ProcessesToUpdate::Some(&[spid]), ProcessRefreshKind::new());
-    if let Some(p) = sys.process(spid) {
-        p.kill();
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, ProcessRefreshKind::new());
+    let table: Vec<ProcRow> = sys
+        .processes()
+        .iter()
+        .map(|(p, proc)| ProcRow {
+            pid: p.as_u32(),
+            parent: proc.parent().map(|pp| pp.as_u32()),
+            start_time: proc.start_time(),
+        })
+        .collect();
+    for victim in process_tree(pid, &table) {
+        if let Some(p) = sys.process(Pid::from_u32(victim)) {
+            p.kill();
+        }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ProcRow {
+    pid: u32,
+    parent: Option<u32>,
+    /// 秒级；Windows 父进程退出后 ppid 不清零，pid 被复用时靠它排除早于父进程的「假子进程」
+    start_time: u64,
+}
+
+/// 根在前、子孙在后。根不在表里时只返回根（让调用方照常尝试一次）
+fn process_tree(root: u32, table: &[ProcRow]) -> Vec<u32> {
+    let mut out = vec![root];
+    let mut frontier = vec![root];
+    while let Some(parent) = frontier.pop() {
+        let parent_start = table.iter().find(|r| r.pid == parent).map(|r| r.start_time);
+        for row in table {
+            if row.parent != Some(parent) || out.contains(&row.pid) {
+                continue;
+            }
+            if parent_start.is_some_and(|t| row.start_time < t) {
+                continue;
+            }
+            out.push(row.pid);
+            frontier.push(row.pid);
+        }
+    }
+    out
 }
 
 async fn local_read_from(path: &str, from: u64, to: u64) -> Option<Vec<u8>> {
@@ -643,26 +686,33 @@ async fn remote_pid_matches(host: &dyn Host, pid: u32, install_dir: &str) -> boo
     }
 }
 
-async fn remote_stop(
-    host: &dyn Host,
-    instance: &AppInstance,
-    pid: u32,
-) -> Result<(), AppFrameworkError> {
-    let script = format!(
-        "kill {pid} 2>/dev/null; \
-         for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 {pid} 2>/dev/null || exit 0; sleep 0.5; done; \
-         kill -9 {pid} 2>/dev/null; exit 0"
-    );
+async fn remote_stop(host: &dyn Host, pid: u32) -> Result<(), AppFrameworkError> {
     host.run_to_string(
         HostCommand::new("sh")
             .arg("-c")
-            .arg(script)
+            .arg(remote_stop_script(pid))
             .timeout(Duration::from_secs(20)),
     )
     .await
     .map_err(host_err)?;
-    let _ = instance;
     Ok(())
+}
+
+/// `nohup setsid` 起的进程自己是进程组长，按组发信号把 Worker / 插件子进程一起带走。
+/// 只有 pid 确实是组长才按组杀：冷启动认领到的外来进程可能和用户的 shell 同组。
+/// pgid 从 /proc/<pid>/stat 取（comm 里可能有空格和括号，所以从最后一个 ") " 往后数）。
+/// 负 pid 紧跟在信号后面写，不加 `--`：dash 的内建 kill 不认 `--`
+fn remote_stop_script(pid: u32) -> String {
+    format!(
+        "target={pid}\n\
+         stat=$(cat /proc/{pid}/stat 2>/dev/null)\n\
+         if [ -n \"$stat\" ]; then set -- ${{stat##*) }}; [ \"$3\" = \"{pid}\" ] && target=-{pid}; fi\n\
+         kill -TERM $target 2>/dev/null\n\
+         i=0\n\
+         while [ $i -lt 10 ]; do kill -0 $target 2>/dev/null || exit 0; sleep 0.5; i=$((i+1)); done\n\
+         kill -KILL $target 2>/dev/null\n\
+         exit 0\n"
+    )
 }
 
 async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
@@ -744,6 +794,100 @@ mod tests {
         assert!(script.contains("> '/home/u/ncd/apps/karin/k1/.ncd-app.pid'"));
         assert!(script.contains("'node'"));
         assert!(script.contains("RUNNING $pid"));
+    }
+
+    fn row(pid: u32, parent: Option<u32>, start_time: u64) -> ProcRow {
+        ProcRow {
+            pid,
+            parent,
+            start_time,
+        }
+    }
+
+    #[test]
+    fn process_tree_collects_runner_worker_and_plugin_runners() {
+        let table = [
+            row(1, None, 0),
+            row(100, Some(1), 50),
+            row(200, Some(100), 51),
+            row(300, Some(200), 52),
+            row(301, Some(200), 52),
+            row(400, Some(1), 60),
+        ];
+        let mut tree = process_tree(100, &table);
+        assert_eq!(tree[0], 100, "根在前");
+        tree.sort_unstable();
+        assert_eq!(tree, vec![100, 200, 300, 301]);
+    }
+
+    #[test]
+    fn process_tree_skips_stale_ppid_from_pid_reuse() {
+        // 500 的原父进程早退了，pid 100 后来被复用；500 比新的 100 还早启动，不算它的子进程
+        let table = [row(100, None, 90), row(500, Some(100), 10), row(600, Some(100), 95)];
+        let mut tree = process_tree(100, &table);
+        tree.sort_unstable();
+        assert_eq!(tree, vec![100, 600]);
+    }
+
+    #[test]
+    fn process_tree_of_missing_root_is_root_only() {
+        assert_eq!(process_tree(42, &[row(1, None, 0)]), vec![42]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn kill_local_tree_takes_grandchildren_with_it() {
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+        use std::time::Instant;
+
+        let mut parent = std::process::Command::new("cmd")
+            .args(["/c", "ping -n 60 127.0.0.1 >nul"])
+            .spawn()
+            .expect("spawn cmd");
+        let root = parent.id();
+        let child_of_root = || {
+            let mut sys = System::new();
+            sys.refresh_processes_specifics(ProcessesToUpdate::All, ProcessRefreshKind::new());
+            sys.processes()
+                .iter()
+                .find(|(_, p)| p.parent() == Some(Pid::from_u32(root)))
+                .map(|(pid, _)| pid.as_u32())
+        };
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let child = loop {
+            if let Some(c) = child_of_root() {
+                break c;
+            }
+            assert!(Instant::now() < deadline, "cmd 没拉起 ping");
+            std::thread::sleep(Duration::from_millis(50));
+        };
+
+        kill_local_tree(root);
+        let _ = parent.wait();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let mut sys = System::new();
+            let pid = Pid::from_u32(child);
+            sys.refresh_processes_specifics(ProcessesToUpdate::Some(&[pid]), ProcessRefreshKind::new());
+            if sys.process(pid).is_none() {
+                break;
+            }
+            assert!(Instant::now() < deadline, "孙进程 {child} 还活着");
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    #[test]
+    fn remote_stop_signals_the_group_only_when_pid_leads_it() {
+        let script = remote_stop_script(4242);
+        assert!(script.contains("stat=$(cat /proc/4242/stat 2>/dev/null)"));
+        assert!(script.contains("set -- ${stat##*) }; [ \"$3\" = \"4242\" ] && target=-4242"));
+        assert!(script.contains("kill -TERM $target"));
+        assert!(script.contains("kill -KILL $target"));
+        assert!(
+            !script.contains("kill -TERM --") && !script.contains("kill -KILL --") && !script.contains("kill -0 --"),
+            "dash 内建 kill 不认 --"
+        );
     }
 
     #[test]
