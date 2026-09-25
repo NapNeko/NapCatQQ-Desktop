@@ -13,6 +13,7 @@ import { useAppInstanceAlerts } from './useAppInstanceAlerts';
 import { botConfigKey } from '../bot/useBotConfigsMap';
 import { dropAppInstanceLogs, ensureAppInstanceLogStore } from './appInstanceLogStore';
 import { showWebUiAccountDialog } from './webuiAccountDialogStore';
+import { requestTermsConsent } from './termsDialogStore';
 import { matchesAppInstallTask } from '../../modules/apps/instanceState';
 import type {
     AppFrameworkManifest,
@@ -125,9 +126,20 @@ export function useAppInstances() {
     });
 
     const startMutation = useMutation({
-        mutationFn: (id: string) => appFrameworkService.start(id),
+        mutationFn: async (id: string): Promise<AppInstance | null> => {
+            // 有上游条款的框架（MaiBot）：没同意过或更新后改过，先弹框；不同意就不启动
+            const pending = await appFrameworkService.pendingTerms(id);
+            if (pending.length) {
+                const name =
+                    queryClient.getQueryData<AppInstance[]>(APP_INSTANCES_KEY)?.find((i) => i.id === id)
+                        ?.display_name ?? id;
+                if (!(await requestTermsConsent(name, pending))) return null;
+                await appFrameworkService.acceptTerms(id);
+            }
+            return appFrameworkService.start(id);
+        },
         onSuccess: (inst) => {
-            patch(inst);
+            if (inst) patch(inst);
         },
         onError: (err, id) => fail('启动失败', `app-start:${id}`)(err),
     });

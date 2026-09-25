@@ -41,6 +41,20 @@ describe('resolveFrameworkUi', () => {
         expect(ui?.tabForIssue('subagent/main_enable')).toBe('subagent');
     });
 
+    it('maibot nav groups and issue routing', () => {
+        const ui = resolveFrameworkUi('maibot');
+        expect(ui).toBeDefined();
+        expect(ui?.defaultTab).toBe('overview');
+        expect(ui?.nav.map((g) => g.id)).toEqual(['home', 'message', 'instance']);
+        expect(navValues(ui)).toEqual(['overview', 'chat', 'connection']);
+        for (const t of ['overview', 'chat', 'connection']) expect(ui?.typedTabs.has(t)).toBe(true);
+        expect(ui?.tabForIssue('adapter/chat/group_list')).toBe('chat');
+        expect(ui?.tabForIssue('webui_port')).toBe('connection');
+        expect(ui?.tabForIssue('legacy_ws_port')).toBe('connection');
+        // 原始文件、日志由外壳挂到「实例」组末尾
+        expect(buildDetailNav(ui).at(-1)?.items.map((t) => t.value)).toEqual(['connection', 'raw', 'log']);
+    });
+
     it('karin nav groups and issue routing', () => {
         const ui = resolveFrameworkUi('karin');
         expect(ui).toBeDefined();

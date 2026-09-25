@@ -11,6 +11,7 @@ import type {
     AppInstanceConfig,
     AppInstanceConfigEnvelope,
     AppInstanceWebUi,
+    AppPendingTerms,
     AppPluginAction,
     AppPluginConfigSchema,
     AppStoreInstalled,
@@ -94,6 +95,17 @@ export const appFrameworkService = {
     stop: async (instanceId: string): Promise<AppInstance> => {
         if (!isTauri) return mockAppFrameworkApi.stop(instanceId);
         return invoke<AppInstance>('stop_app_instance', { instanceId });
+    },
+
+    /** 启动前要用户（重新）同意的上游条款；没有条款的框架恒为空 */
+    pendingTerms: async (instanceId: string): Promise<AppPendingTerms[]> => {
+        if (!isTauri) return mockAppFrameworkApi.pendingTerms(instanceId);
+        return invoke<AppPendingTerms[]>('app_pending_terms', { instanceId });
+    },
+
+    acceptTerms: async (instanceId: string): Promise<void> => {
+        if (!isTauri) return mockAppFrameworkApi.acceptTerms(instanceId);
+        return invoke<void>('accept_app_terms', { instanceId });
     },
 
     delete: async (instanceId: string, removeFiles: boolean): Promise<void> => {

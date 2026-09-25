@@ -6,6 +6,7 @@ import { RouteErrorBoundary } from '../../shared/ui/RouteErrorBoundary';
 import { AppInstanceListPage, type DetailTabHint } from './list/AppInstanceListPage';
 import { AppInstancePageNext } from './detail/AppInstancePage.next';
 import { WebUiAccountDialogHost } from './WebUiAccountDialog';
+import { TermsConsentDialogHost } from './TermsConsentDialog';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
 
 type View = 'list' | 'detail';
@@ -71,6 +72,7 @@ export const AppsPageNext: React.FC<{ onNavigate?: (route: AppRoute) => void }> 
                 )}
             </PageTransition>
             <WebUiAccountDialogHost />
+            <TermsConsentDialogHost />
         </div>
     );
 };

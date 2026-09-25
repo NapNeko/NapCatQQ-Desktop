@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
 import { astrbotFrameworkUi } from './astrbot/astrbotFrameworkUi';
 import { karinFrameworkUi } from './karin/karinFrameworkUi';
+import { maibotFrameworkUi } from './maibot/maibotFrameworkUi';
 import { nonebot2FrameworkUi } from './nonebot2/nonebot2FrameworkUi';
 
 export type FrameworkTabDef = { value: string; label: string };
@@ -65,6 +66,7 @@ const MODULES: Record<string, FrameworkUiModule> = {
     karin: karinFrameworkUi,
     nonebot2: nonebot2FrameworkUi,
     astrbot: astrbotFrameworkUi,
+    maibot: maibotFrameworkUi,
 };
 
 export function resolveFrameworkUi(frameworkId: string): FrameworkUiModule | undefined {

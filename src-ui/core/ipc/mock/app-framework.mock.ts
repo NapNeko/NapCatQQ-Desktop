@@ -7,6 +7,7 @@ import type {
     AppFrameworkManifest,
     AppInstance,
     AppInstanceWebUi,
+    AppPendingTerms,
     AppPluginAction,
     AppPluginConfigSchema,
     AppStoreInstalled,
@@ -32,7 +33,12 @@ import { astrbotDefaultConfig } from '../../domain/apps/astrbotConfig';
 import { nonebot2DefaultConfig } from '../../domain/apps/nonebot2Config';
 import { emitMockEvent } from './events.mock';
 import { withMockDelay } from './bootstrap.mock';
-import { createMockAppConfigApi, peekKarinHttpAuthKey, syncKarinLinkToken } from './app-config.mock';
+import {
+    createMockAppConfigApi,
+    peekKarinHttpAuthKey,
+    syncKarinLinkToken,
+    syncMaiBotLink,
+} from './app-config.mock';
 
 export const mockAppFrameworks: AppFrameworkManifest[] = [
     {
@@ -86,7 +92,42 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         webui_auth: 'user_password',
         terms: [],
     },
+    {
+        id: 'maibot',
+        display_name: 'MaiBot',
+        description: '麦麦，大模型驱动的拟人聊天应用端，自带 WebUI',
+        repo_url: 'https://github.com/Mai-with-u/MaiBot',
+        docs_url: 'https://docs.mai-mai.org',
+        supported_placements: ['local_native', 'remote_native'],
+        default_port: 8001,
+        has_webui: true,
+        link_modes: ['forward_ws'],
+        component_id: 'maibot',
+        runtime_component_ids: ['uv'],
+        store_resources: [],
+        has_install_renderer: false,
+        webui_auth: 'key',
+        terms: [
+            {
+                id: 'eula',
+                title: 'MaiBot 最终用户许可协议',
+                url: 'https://github.com/Mai-with-u/MaiBot/blob/main/EULA.md',
+            },
+            {
+                id: 'privacy',
+                title: 'MaiBot 用户隐私条款',
+                url: 'https://github.com/Mai-with-u/MaiBot/blob/main/PRIVACY.md',
+            },
+        ],
+    },
 ];
+
+/// 假装实例目录里的条款：MaiBot 实例启动前要同意一次，同意过的记在这里
+const mockAcceptedTerms = new Set<string>();
+const MOCK_TERMS_TEXT: Record<string, string> = {
+    eula: '# MaiBot最终用户许可协议\n\n**版本：V1.3**\n\n1. 本项目免费开源，禁止倒卖。\n2. 使用本项目产生的内容由使用者自行负责。\n',
+    privacy: '### MaiBot用户隐私条款\n\n**版本：V1.2**\n\n- 聊天记录只存在你自己的机器上。\n- 默认上报匿名统计，可在配置里关掉。\n',
+};
 
 /// 账号密码类 WebUI 的假账号：新建时按请求种入，重置时换密码。
 const mockWebUiAccounts = new Map<string, { username: string; password: string | null }>([
@@ -182,6 +223,21 @@ let instances: AppInstance[] = [
         install_renderer: false,
         origin: 'created',
         auto_start: true,
+    },
+    {
+        id: 'mb56ef78',
+        framework_id: 'maibot',
+        display_name: '麦麦 · 本机',
+        placement: 'local_native',
+        host_id: 'local',
+        install_dir: 'D:/NapCatQQ/apps/maibot/mb56ef78',
+        port: 23001,
+        state: 'stopped',
+        installed_version: '1.2.5',
+        created_at_ms: Date.now() - 1_200_000,
+        install_renderer: false,
+        origin: 'created',
+        auto_start: false,
     },
 ];
 
@@ -370,8 +426,51 @@ export const mockAppFrameworkApi = {
         return withMockDelay(undefined);
     },
 
+    pendingTerms: async (instanceId: string): Promise<AppPendingTerms[]> => {
+        const inst = require(instanceId);
+        const manifest = mockAppFrameworks.find((m) => m.id === inst.framework_id);
+        if (!manifest?.terms.length || mockAcceptedTerms.has(instanceId)) return withMockDelay([]);
+        return withMockDelay(
+            manifest.terms.map((t) => ({ ...t, text: MOCK_TERMS_TEXT[t.id] ?? '' })),
+        );
+    },
+
+    acceptTerms: async (instanceId: string): Promise<void> => {
+        mockAcceptedTerms.add(instanceId);
+        return withMockDelay(undefined);
+    },
+
     previewLink: async (instanceId: string, botId: string): Promise<OneBotLinkPlan> => {
         const inst = require(instanceId);
+        if (inst.framework_id === 'maibot') {
+            return withMockDelay({
+                mode: 'forward_ws',
+                instance_id: instanceId,
+                bot_id: botId,
+                connection: {
+                    kind: 'ws_server',
+                    host: '127.0.0.1',
+                    port: 23456,
+                    reportSelfMessage: false,
+                    enableForcePushEvent: true,
+                    heartInterval: 30000,
+                    path: '/',
+                    role: 'Universal',
+                    enable: true,
+                    name: `ncd-app:${instanceId}`,
+                    messagePostFormat: 'array',
+                    token: 'mockmockmockmockmockmock',
+                    debug: false,
+                },
+                app_side_writes: [
+                    {
+                        path: 'plugins/MaiBot-Napcat-Adapter/config.toml',
+                        summary: '启用适配器 / napcat_server 指向这条连接（host、port、token=<token>）',
+                    },
+                ],
+                access_token: 'mockmockmockmockmockmock',
+            });
+        }
         return withMockDelay({
             mode: 'reverse_ws',
             instance_id: instanceId,
@@ -398,22 +497,27 @@ export const mockAppFrameworkApi = {
     },
 
     applyLink: async (instanceId: string, botId: string): Promise<AppInstance> => {
+        const inst = require(instanceId);
+        const forward = inst.framework_id === 'maibot';
         const next: AppInstance = {
-            ...require(instanceId),
+            ...inst,
             link: {
                 bot_id: botId,
-                mode: 'reverse_ws',
+                mode: forward ? 'forward_ws' : 'reverse_ws',
                 connection_name: `ncd-app:${instanceId}`,
                 linked_at_ms: Date.now(),
             },
         };
-        syncKarinLinkToken(instanceId);
+        if (forward) syncMaiBotLink(inst, true);
+        else syncKarinLinkToken(instanceId);
         publish(next, 'linked');
         return withMockDelay(next);
     },
 
     unlink: async (instanceId: string): Promise<AppInstance> => {
-        const next: AppInstance = { ...require(instanceId), link: undefined };
+        const inst = require(instanceId);
+        if (inst.framework_id === 'maibot') syncMaiBotLink(inst, false);
+        const next: AppInstance = { ...inst, link: undefined };
         publish(next, 'unlinked');
         return withMockDelay(next);
     },
@@ -423,7 +527,9 @@ export const mockAppFrameworkApi = {
         const base =
             inst.framework_id === 'astrbot'
                 ? `http://127.0.0.1:6185`
-                : `http://127.0.0.1:${inst.port}/web`;
+                : inst.framework_id === 'maibot'
+                  ? `http://127.0.0.1:${inst.port}/`
+                  : `http://127.0.0.1:${inst.port}/web`;
         const suffix = path?.trim()
             ? path.startsWith('/')
                 ? path
@@ -431,7 +537,12 @@ export const mockAppFrameworkApi = {
             : '';
         return withMockDelay({
             url: `${base.replace(/\/$/, '')}${suffix}`,
-            authKey: inst.framework_id === 'karin' ? peekKarinHttpAuthKey(instanceId) : '',
+            authKey:
+                inst.framework_id === 'karin'
+                    ? peekKarinHttpAuthKey(instanceId)
+                    : inst.framework_id === 'maibot'
+                      ? 'Ncd_mockMockMockMockMock'
+                      : '',
             account: mockAccountView(inst) ?? undefined,
         });
     },

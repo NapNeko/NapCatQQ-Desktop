@@ -12,8 +12,10 @@ import type {
     AppInstanceConfigEnvelope,
     AstrBotInstanceConfig,
     KarinInstanceConfig,
+    MaiBotInstanceConfig,
     NoneBot2InstanceConfig,
 } from '../types';
+import { maibotDefaultConfig, validateMaiBotConfig } from '../../domain/apps/maibotConfig';
 import {
     karinDefaultConfig,
     karinEnvToDotenv,
@@ -53,6 +55,37 @@ const ASTRBOT_DOCS: AppConfigDocument[] = [
     { id: 'cmd_config', label: 'cmd_config.json', rel_path: 'data/cmd_config.json', format: 'json', hot_reload: false },
 ];
 
+const MAIBOT_DOCS: AppConfigDocument[] = [
+    { id: 'bot_config', label: '主配置 bot_config.toml', rel_path: 'config/bot_config.toml', format: 'toml', hot_reload: false },
+    { id: 'model_config', label: '模型配置 model_config.toml', rel_path: 'config/model_config.toml', format: 'toml', hot_reload: true },
+    {
+        id: 'adapter_config',
+        label: 'NapCat 适配器 config.toml',
+        rel_path: 'plugins/MaiBot-Napcat-Adapter/config.toml',
+        format: 'toml',
+        hot_reload: true,
+    },
+];
+
+const MAIBOT_TEXT: Record<string, string> = {
+    bot_config: '[inner]\nversion = "8.14.40"\n\n[webui]\nport = 23001\n\n[maim_message]\nws_server_port = 23002\n',
+    model_config: '[inner]\nversion = "1.17.9"\n',
+    adapter_config: '[plugin]\nconfig_version = "0.1.0"\nenabled = false\n',
+};
+
+function docsOf(frameworkId: string): AppConfigDocument[] {
+    switch (frameworkId) {
+        case 'karin':
+            return KARIN_DOCS;
+        case 'astrbot':
+            return ASTRBOT_DOCS;
+        case 'maibot':
+            return MAIBOT_DOCS;
+        default:
+            return NONEBOT2_DOCS;
+    }
+}
+
 const ASTRBOT_TEXT: Record<string, string> = {
     cmd_config: `${JSON.stringify(
         {
@@ -91,8 +124,49 @@ interface KarinState {
 const karinStates = new Map<string, KarinState>();
 const nbStates = new Map<string, { config: NoneBot2InstanceConfig; docRev: Record<string, number> }>();
 const abStates = new Map<string, { config: AstrBotInstanceConfig; docRev: Record<string, number> }>();
+const mbStates = new Map<string, { config: MaiBotInstanceConfig; docRev: Record<string, number> }>();
 const rawStates = new Map<string, { text: Record<string, string>; rev: Record<string, number> }>();
 let conflictOnce = false;
+
+function mbState(instance: AppInstance) {
+    let s = mbStates.get(instance.id);
+    if (!s) {
+        const docRev: Record<string, number> = {};
+        for (const d of MAIBOT_DOCS) docRev[d.id] = 1;
+        s = { config: maibotDefaultConfig(instance.port), docRev };
+        s.config.webui_token = 'Ncd_mockMockMockMockMock';
+        if (instance.link && s.config.adapter) {
+            s.config.adapter = { ...s.config.adapter, enabled: true, napcat_port: 23456, has_token: true };
+        }
+        mbStates.set(instance.id, s);
+    }
+    return s;
+}
+
+function mbEnvelope(s: { config: MaiBotInstanceConfig; docRev: Record<string, number> }): AppInstanceConfigEnvelope {
+    return {
+        config: { framework: 'maibot', data: structuredClone(s.config) },
+        revision: combined(s.docRev, MAIBOT_DOCS),
+        documents: MAIBOT_DOCS.map((d) => ({
+            doc_id: d.id,
+            revision: rev(s.docRev[d.id] ?? 0),
+            hot_reload: d.hot_reload,
+        })),
+    };
+}
+
+/** 对接后假装适配器配置被写了（真机由后端 apply_link 写 config.toml） */
+export function syncMaiBotLink(instance: AppInstance, linked: boolean): void {
+    const s = mbState(instance);
+    if (!s.config.adapter) return;
+    s.config.adapter = {
+        ...s.config.adapter,
+        enabled: linked,
+        napcat_port: linked ? 23456 : s.config.adapter.napcat_port,
+        has_token: linked || s.config.adapter.has_token,
+    };
+    s.docRev.adapter_config = (s.docRev.adapter_config ?? 0) + 1;
+}
 
 const rev = (n: number) => `mock-r${n}`;
 
@@ -300,6 +374,9 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             if (inst.framework_id === 'astrbot') {
                 return withMockDelay(abEnvelope(abState(inst)));
             }
+            if (inst.framework_id === 'maibot') {
+                return withMockDelay(mbEnvelope(mbState(inst)));
+            }
             if (inst.framework_id !== 'karin') {
                 throw makeAppConfigError('unsupported', `该应用端暂不支持类型化配置: ${inst.framework_id}`);
             }
@@ -389,6 +466,46 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     port_changed: portChanged,
                 });
             }
+            if (inst.framework_id === 'maibot' && config.framework === 'maibot') {
+                const s = mbState(inst);
+                if (baseRevision != null && baseRevision !== combined(s.docRev, MAIBOT_DOCS)) {
+                    throw makeAppConfigError('conflict', '配置已被修改（bot_config），请重新加载后再保存');
+                }
+                const next = structuredClone(config.data);
+                const issues = validateMaiBotConfig(next);
+                if (issues.length) {
+                    throw makeAppConfigError(
+                        'invalid',
+                        `配置校验未通过：${issues.map((i) => `${i.path}: ${i.message}`).join('; ')}`,
+                        issues,
+                    );
+                }
+                const before = s.config;
+                const portsChanged =
+                    before.webui_port !== next.webui_port || before.legacy_ws_port !== next.legacy_ws_port;
+                if (portsChanged) s.docRev.bot_config = (s.docRev.bot_config ?? 0) + 1;
+                if (JSON.stringify(before.adapter?.chat) !== JSON.stringify(next.adapter?.chat)) {
+                    s.docRev.adapter_config = (s.docRev.adapter_config ?? 0) + 1;
+                }
+                // 只读字段以落盘为准
+                s.config = { ...next, webui_token: before.webui_token, adapter: next.adapter && before.adapter
+                    ? { ...before.adapter, chat: next.adapter.chat }
+                    : before.adapter };
+                let portChanged = false;
+                if (next.webui_port !== inst.port) {
+                    deps.publish({ ...inst, port: next.webui_port }, 'port_changed');
+                    portChanged = true;
+                }
+                const env = mbEnvelope(s);
+                return withMockDelay({
+                    config: env.config,
+                    revision: env.revision,
+                    documents: env.documents,
+                    restart_required: portsChanged && inst.state === 'running',
+                    relinked: false,
+                    port_changed: portChanged,
+                });
+            }
             if (inst.framework_id !== 'karin' || config.framework !== 'karin') {
                 throw makeAppConfigError('unsupported', `该应用端暂不支持类型化配置: ${inst.framework_id}`);
             }
@@ -445,13 +562,7 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
 
         listConfigDocuments: async (instanceId: string): Promise<AppConfigDocument[]> => {
             const inst = deps.require(instanceId);
-            return withMockDelay(
-                inst.framework_id === 'karin'
-                    ? KARIN_DOCS
-                    : inst.framework_id === 'astrbot'
-                      ? ASTRBOT_DOCS
-                      : NONEBOT2_DOCS,
-            );
+            return withMockDelay(docsOf(inst.framework_id));
         },
 
         readConfigText: async (instanceId: string, docId: string): Promise<AppConfigText> => {
@@ -486,7 +597,10 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             }
             let raw = rawStates.get(inst.id);
             if (!raw) {
-                raw = { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
+                raw =
+                    inst.framework_id === 'maibot'
+                        ? { text: { ...MAIBOT_TEXT }, rev: { bot_config: 1, model_config: 1, adapter_config: 1 } }
+                        : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
                 rawStates.set(inst.id, raw);
             }
             return withMockDelay({ doc_id: docId, text: raw.text[docId] ?? '', revision: rev(raw.rev[docId] ?? 0) });
@@ -526,13 +640,7 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 s.rawOverride[docId] = text;
                 return withMockDelay({ doc_id: docId, text, revision: rev(s.docRev[docId]) });
             }
-            const docs =
-                inst.framework_id === 'karin'
-                    ? KARIN_DOCS
-                    : inst.framework_id === 'astrbot'
-                      ? ASTRBOT_DOCS
-                      : NONEBOT2_DOCS;
-            const doc = docs.find((d) => d.id === docId);
+            const doc = docsOf(inst.framework_id).find((d) => d.id === docId);
             if (!doc) throw makeAppConfigError('other', `未知的配置文档: ${docId}`);
             if (doc.format === 'json') {
                 try {
@@ -564,7 +672,9 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 raw =
                     inst.framework_id === 'astrbot'
                         ? { text: { ...ASTRBOT_TEXT }, rev: { cmd_config: 1 } }
-                        : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
+                        : inst.framework_id === 'maibot'
+                          ? { text: { ...MAIBOT_TEXT }, rev: { bot_config: 1, model_config: 1, adapter_config: 1 } }
+                          : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
                 rawStates.set(inst.id, raw);
             }
             const current = rev(raw.rev[docId] ?? 0);
@@ -587,6 +697,7 @@ export const mockAppConfigControls = {
         karinStates.clear();
         nbStates.clear();
         abStates.clear();
+        mbStates.clear();
         rawStates.clear();
         conflictOnce = false;
     },

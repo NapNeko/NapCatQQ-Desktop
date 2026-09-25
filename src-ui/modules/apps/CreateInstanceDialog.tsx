@@ -2,7 +2,7 @@
 // 传 lockedHostId 时安装位置固定为该主机（组件页是主机主导视图）。
 
 import React, { useEffect, useState } from 'react';
-import { FolderOpen, Plus } from 'lucide-react';
+import { ExternalLink, FolderOpen, Plus } from 'lucide-react';
 import {
     Button,
     Checkbox,
@@ -19,7 +19,7 @@ import {
 } from '../../shared/ui';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
 import type { useServerManager } from '../../hooks/remote/useServerManager';
-import { pickDirectory } from '../../core/ipc/transport';
+import { openExternalUrl, pickDirectory } from '../../core/ipc/transport';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { remoteServerIdFromHostId } from '../../core/domain/remote-host/posixPath';
 import { validateWebUiPassword, validateWebUiUsername } from '../../core/domain/apps/webuiAccount';
@@ -38,6 +38,8 @@ export interface CreateInstanceDraft {
     /** 仅 `webui_auth = user_password` 的框架；空 = 框架默认用户名 / 随机口令 */
     webuiUsername: string;
     webuiPassword: string;
+    /** manifest 声明了上游条款时必须勾选（MaiBot 的 EULA / 隐私条款） */
+    acceptTerms: boolean;
 }
 
 export interface CreateInstanceRequest {
@@ -74,6 +76,7 @@ export const CreateInstanceDialog: React.FC<{
             installRenderer: request.manifest.has_install_renderer,
             webuiUsername: '',
             webuiPassword: '',
+            acceptTerms: false,
         });
         setPickerOpen(false);
     }, [request]);
@@ -103,6 +106,7 @@ export const CreateInstanceDialog: React.FC<{
     const remoteHome = servers.find((s) => s.id === remoteId)?.inventory?.home;
     const showRenderer = manifest?.has_install_renderer ?? false;
     const showAccount = manifest?.webui_auth === 'user_password';
+    const terms = manifest?.terms ?? [];
     const usernameError = draft ? validateWebUiUsername(draft.webuiUsername) : null;
     const passwordError = draft ? validateWebUiPassword(draft.webuiPassword) : null;
 
@@ -288,6 +292,28 @@ export const CreateInstanceDialog: React.FC<{
                                     }
                                 />
                             )}
+                            {terms.length > 0 && (
+                                <div className="flex flex-col gap-1">
+                                    <Checkbox
+                                        label="我已阅读并同意下面的上游条款"
+                                        checked={draft.acceptTerms}
+                                        onCheckedChange={(c) => setDraft({ ...draft, acceptTerms: c })}
+                                    />
+                                    <div className="flex flex-wrap gap-1 pl-6">
+                                        {terms.map((t) => (
+                                            <Button
+                                                key={t.id}
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => void openExternalUrl(t.url)}
+                                            >
+                                                <ActionMotionIcon icon={ExternalLink} size={13} />
+                                                {t.title}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             <Checkbox
                                 label="创建后立即安装"
                                 hint={
@@ -313,6 +339,7 @@ export const CreateInstanceDialog: React.FC<{
                                     || remoteDirInvalid
                                     || !!usernameError
                                     || !!passwordError
+                                    || (terms.length > 0 && !draft.acceptTerms)
                                 }
                                 onClick={() => void onSubmit(draft).catch(() => undefined)}
                             >

@@ -739,6 +739,9 @@ export const ComponentsPageNext: React.FC = () => {
                         webui_username: userPassword ? draft.webuiUsername.trim() || undefined : undefined,
                         webui_password: userPassword ? draft.webuiPassword || undefined : undefined,
                         auto_start: true,
+                        accept_terms: createAppRequest?.manifest.terms.length
+                            ? draft.acceptTerms
+                            : undefined,
                     });
                     if (draft.installNow) apps.install(created.id);
                     setCreateAppRequest(null);
