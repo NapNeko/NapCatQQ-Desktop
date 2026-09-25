@@ -32,9 +32,7 @@ function exitTo(dir: number, m: MotionEnv): Keyframe {
     const rich = m.level === 'rich';
     const x = dir === 0 ? 0 : dir > 0 ? (rich ? -16 : -10) : rich ? 16 : 10;
     const y = rich ? -10 : -6;
-    // visibility 在 WAAPI 里是「有一端 visible 就一直 visible」，所以到终点才藏起来，
-    // 和原来 GSAP 的 autoAlpha 一样：淡完之后不再挡点击
-    return { opacity: 0, transform: `translate(${x}px, ${y}px) scale(${rich ? 0.992 : 1})`, visibility: 'hidden' };
+    return { opacity: 0, transform: `translate(${x}px, ${y}px) scale(${rich ? 0.992 : 1})` };
 }
 
 export function PageTransition({ visible, children, className, onExited, direction = 0 }: PageTransitionProps) {
@@ -61,6 +59,7 @@ export function PageTransition({ visible, children, className, onExited, directi
         const canAnimate = env.enabled && typeof el.animate === 'function';
 
         if (visible) {
+            el.style.visibility = '';
             if (!canAnimate) return;
             // layout effect 在首帧绘制前执行，起点直接生效，新内容不会先亮一下
             animRef.current = el.animate([enterFrom(dir, env), SHOWN], {
@@ -83,7 +82,11 @@ export function PageTransition({ visible, children, className, onExited, directi
         });
         animRef.current = anim;
         anim.onfinish = () => {
-            if (animRef.current === anim) latest.current.onExited?.();
+            if (animRef.current !== anim) return;
+            // 淡完再藏起来，和原来 GSAP 的 autoAlpha 一样不再挡点击。visibility 不放进关键帧：
+            // 一段动画里只要有一个属性上不了合成线程，整段都会退回主线程跑
+            el.style.visibility = 'hidden';
+            latest.current.onExited?.();
         };
     }, [visible]);
 
