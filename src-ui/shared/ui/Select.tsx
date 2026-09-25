@@ -11,6 +11,12 @@ import { cn } from '../utils/cn';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { MotionIcon } from './motion/MotionIcon';
 
+// 进场动画挂在 Content 的 ref 回调上，但 ref 回调不是「挂载一次」：Radix 内部把我们的 ref
+// 和一个内联箭头函数组合在一起，SelectContentImpl 每重渲一次（打开过程中要连着好几次）就换一个
+// 组合 ref，同一个节点被反复传进来，父级重渲也一样。以前每传一次就从透明重播一遍，打开时面板
+// 一闪一闪。每次打开 Radix 都新建内容节点，按节点记住已进场的就够了。
+const enteredContent = new WeakSet<Element>();
+
 export interface SelectItem<V extends string = string> {
     value: V;
     label: ReactNode;
@@ -106,7 +112,8 @@ function SelectInner<V extends string>(
                 <RadixSelect.Portal>
                     <RadixSelect.Content
                         ref={(node) => {
-                            if (!node) return;
+                            if (!node || enteredContent.has(node)) return;
+                            enteredContent.add(node);
                             // Content 可能以 hidden 起手；无论动效开/关，最终都必须可见。
                             // 旧 bug：!m.enabled 时直接 return，下拉挂在 DOM 里但永远看不见。
                             gsap.killTweensOf(node);
