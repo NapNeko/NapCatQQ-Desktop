@@ -138,6 +138,14 @@ pub trait Host: Send + Sync {
     /// 递归删除目录
     async fn remove_dir_all(&self, path: &HostPath) -> Result<(), HostError>;
 
+    /// 同一文件系统内改名 / 挪位置（文件或目录）。目标已存在时不保证覆盖，调用方先删。
+    /// 解压带顶层目录的源码包后把内容挪到实例目录用：几十次改名比逐文件拷贝快得多
+    async fn rename(&self, _from: &HostPath, _to: &HostPath) -> Result<(), HostError> {
+        Err(HostError::Unsupported {
+            operation: "rename",
+        })
+    }
+
     /// 检查路径是否存在
     async fn exists(&self, path: &HostPath) -> Result<bool, HostError>;
 

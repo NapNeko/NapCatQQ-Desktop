@@ -950,6 +950,23 @@ impl Host for RemoteLinuxHost {
         }
     }
 
+    async fn rename(&self, from: &HostPath, to: &HostPath) -> Result<(), HostError> {
+        // 同 create_dir_all,exec 比 SFTP rename 稳:SFTP v3 的 rename 目标已存在时直接失败,各服务端还不一致
+        let cmd = HostCommand::new("mv")
+            .arg("-f")
+            .arg(self.to_remote(from))
+            .arg(self.to_remote(to));
+        let out = self.run_to_string(cmd).await?;
+        if !out.success() {
+            return Err(HostError::CommandFailed {
+                program: "mv".into(),
+                exit_code: out.exit_code,
+                stderr: out.stderr,
+            });
+        }
+        Ok(())
+    }
+
     async fn remove_dir_all(&self, path: &HostPath) -> Result<(), HostError> {
         // 同 create_dir_all,走 rm -rf 更稳(SFTP 没有 -r remove)
         // 安全约束:测试时调用方应保证传入 path 在白名单内

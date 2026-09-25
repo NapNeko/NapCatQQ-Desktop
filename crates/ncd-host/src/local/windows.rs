@@ -195,6 +195,16 @@ impl Host for LocalWindowsHost {
         }
     }
 
+    async fn rename(&self, from: &HostPath, to: &HostPath) -> Result<(), HostError> {
+        match tokio::fs::rename(self.to_local(from), self.to_local(to)).await {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                Err(HostError::PathNotFound { path: from.clone() })
+            }
+            Err(e) => Err(HostError::Io(e)),
+        }
+    }
+
     async fn remove_dir_all(&self, path: &HostPath) -> Result<(), HostError> {
         let local = self.to_local(path);
         match tokio::fs::remove_dir_all(&local).await {
