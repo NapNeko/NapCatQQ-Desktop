@@ -1,115 +1,105 @@
-// PageTransition: 路由级页面过渡。GSAP 版,精细化第二轮+方向感。
+// 页面切换（根路由、Bot 列表 ↔ 配置、应用端列表 ↔ 详情）。
 //
-// direction prop 决定 enter 起点:
-//   1  forward(向后翻页) → 新页从右滑入(x=20),旧页向左滑出(x=-12)
-//  -1  backward          → 新页从左滑入(x=-20),旧页向右滑出(x=12)
-//  0  unknown / 首次     → 不带方向,沿用单纯纵向 fade
+// 约定和原来一样：visible 变 false 播退场，播完调 onExited，父级换内容再把 visible 放回 true，
+// 这时播进场。
 //
-// 性能:整页只动 opacity + transform(x/y);scale 仅 rich 极轻使用。
-// 不用 filter blur/brightness。will-change 只在 tween 期间挂上。
+// 动画走 WAAPI（el.animate）而不是 GSAP：transform / opacity 的 WAAPI 动画由合成线程跑，
+// 新页面挂载完、数据回来触发重渲时主线程被占满，动画照样顺；GSAP 每帧都要主线程来推，
+// 恰好在最忙的那几百毫秒里卡住。位移、缩放、时长、缓动都沿用原来的数值。
 
-import { forwardRef, type ReactNode } from 'react';
-import gsap from 'gsap';
-import { useMotion } from '../../../hooks/preferences/useMotion';
-import { GsapPresence, type EnterFn, type ExitFn } from './GsapPresence';
-import { armTransformLayer, disarmTransformLayer } from './layerHints';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useMotion, type MotionEnv } from '../../../hooks/preferences/useMotion';
+import { cssEase } from '../../../core/design/cssEase';
 
 interface PageTransitionProps {
     visible: boolean;
     children: ReactNode;
     className?: string;
     onExited?: () => void;
-    /// 进退场方向:1=向后翻页(右滑入), -1=向前回页(左滑入), 0/undefined=不分方向。
     direction?: -1 | 0 | 1;
 }
 
-function makeEnter(dir: number): EnterFn {
-    return (el, env) => {
-        const rich = env.level === 'rich';
-        const fromX = dir === 0 ? 0 : dir > 0 ? (rich ? 28 : 18) : rich ? -28 : -18;
-        const fromY = rich ? 14 : 10;
-        armTransformLayer(el);
-        return gsap.fromTo(
-            el,
-            {
-                autoAlpha: 0,
-                y: fromY,
-                x: fromX,
-                // 整页 scale 抬巨大合成层;仅 rich 极轻缩放保留弹入感。
-                scale: rich ? 0.988 : 1,
-                force3D: true,
-            },
-            {
-                autoAlpha: 1,
-                y: 0,
-                x: 0,
-                scale: 1,
-                duration: env.duration('slow'),
-                ease: env.ease.enter,
-                force3D: true,
-                onComplete: () => disarmTransformLayer(el),
-                onInterrupt: () => disarmTransformLayer(el),
-            },
-        );
-    };
+const SHOWN: Keyframe = { opacity: 1, transform: 'none' };
+
+function enterFrom(dir: number, m: MotionEnv): Keyframe {
+    const rich = m.level === 'rich';
+    const x = dir === 0 ? 0 : dir > 0 ? (rich ? 28 : 18) : rich ? -28 : -18;
+    const y = rich ? 14 : 10;
+    return { opacity: 0, transform: `translate(${x}px, ${y}px) scale(${rich ? 0.988 : 1})` };
 }
 
-function makeExit(dir: number): ExitFn {
-    return (el, env) => {
-        const rich = env.level === 'rich';
-        const toX = dir === 0 ? 0 : dir > 0 ? (rich ? -16 : -10) : rich ? 16 : 10;
-        armTransformLayer(el);
-        return gsap.to(el, {
-            autoAlpha: 0,
-            y: rich ? -10 : -6,
-            x: toX,
-            scale: rich ? 0.992 : 1,
-            duration: env.duration('fast'),
-            ease: env.ease.exit,
-            force3D: true,
-            onComplete: () => disarmTransformLayer(el),
-            onInterrupt: () => disarmTransformLayer(el),
+function exitTo(dir: number, m: MotionEnv): Keyframe {
+    const rich = m.level === 'rich';
+    const x = dir === 0 ? 0 : dir > 0 ? (rich ? -16 : -10) : rich ? 16 : 10;
+    const y = rich ? -10 : -6;
+    // visibility 在 WAAPI 里是「有一端 visible 就一直 visible」，所以到终点才藏起来，
+    // 和原来 GSAP 的 autoAlpha 一样：淡完之后不再挡点击
+    return { opacity: 0, transform: `translate(${x}px, ${y}px) scale(${rich ? 0.992 : 1})`, visibility: 'hidden' };
+}
+
+export function PageTransition({ visible, children, className, onExited, direction = 0 }: PageTransitionProps) {
+    const m = useMotion();
+    const ref = useRef<HTMLDivElement>(null);
+    const animRef = useRef<Animation | null>(null);
+    // 下面的 effect 只跟 visible 走；方向、档位、回调读最新值即可，变了不该重播
+    const latest = useRef({ m, direction, onExited });
+    latest.current = { m, direction, onExited };
+
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const { m: env, direction: dir, onExited: done } = latest.current;
+
+        // 上一段没播完就换方向（退场途中又点回原页），直接撤掉它，从当前内容重新进场
+        const prev = animRef.current;
+        animRef.current = null;
+        if (prev) {
+            prev.onfinish = null;
+            prev.cancel();
+        }
+
+        const canAnimate = env.enabled && typeof el.animate === 'function';
+
+        if (visible) {
+            if (!canAnimate) return;
+            // layout effect 在首帧绘制前执行，起点直接生效，新内容不会先亮一下
+            animRef.current = el.animate([enterFrom(dir, env), SHOWN], {
+                duration: env.duration('slow') * 1000,
+                easing: cssEase(env.ease.enter),
+                fill: 'backwards',
+            });
+            return;
+        }
+
+        if (!canAnimate) {
+            done?.();
+            return;
+        }
+        // fill: forwards 让页面停在淡出后的样子，等父级换好内容、这里再起进场时一起撤掉
+        const anim = el.animate([SHOWN, exitTo(dir, env)], {
+            duration: env.duration('fast') * 1000,
+            easing: cssEase(env.ease.exit),
+            fill: 'forwards',
         });
-    };
-}
+        animRef.current = anim;
+        anim.onfinish = () => {
+            if (animRef.current === anim) latest.current.onExited?.();
+        };
+    }, [visible]);
 
-export function PageTransition({
-    visible,
-    children,
-    className,
-    onExited,
-    direction = 0,
-}: PageTransitionProps) {
-    const { enabled } = useMotion();
+    useLayoutEffect(
+        () => () => {
+            animRef.current?.cancel();
+            animRef.current = null;
+        },
+        [],
+    );
+
     return (
-        <GsapPresence
-            visible={visible}
-            onEnter={enabled ? makeEnter(direction) : undefined}
-            onExit={enabled ? makeExit(direction) : undefined}
-            onExited={onExited}
-        >
-            <PageBody className={className} hideUntilEnter={enabled}>
-                {children}
-            </PageBody>
-        </GsapPresence>
+        <div ref={ref} className={className}>
+            {children}
+        </div>
     );
 }
 
-const PageBody = forwardRef<
-    HTMLDivElement,
-    { children: ReactNode; className?: string; hideUntilEnter?: boolean }
->(({ children, className, hideUntilEnter }, ref) => (
-    <div
-        ref={ref}
-        className={className}
-        // will-change 由 makeEnter/makeExit 临时挂上,避免常驻合成层。
-        style={
-            hideUntilEnter
-                ? { visibility: 'hidden' as const, opacity: 0 }
-                : undefined
-        }
-    >
-        {children}
-    </div>
-));
-PageBody.displayName = 'PageBody';
+export default PageTransition;
