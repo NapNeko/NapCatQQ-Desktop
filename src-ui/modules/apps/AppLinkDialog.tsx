@@ -1,7 +1,8 @@
 // 「对接应用端」对话框：选协议 Bot / 应用实例 → 预览 OneBotLinkPlan → 应用。
 //
 // 应用端页面预填实例、Bot 配置页预填 Bot；两处共用同一份对话框。
-// 同机可对接；本机 Bot↔远端应用、远端 Bot↔本机应用经桌面 SSH；两台远端走主机常驻隧道。
+// 反向（Bot 连应用端）：同机可对接；本机 Bot↔远端应用、远端 Bot↔本机应用经桌面 SSH；两台远端走主机常驻隧道。
+// 正向（应用端连 Bot，框架 manifest 的首个 link_mode 是 forward_ws）：只开同机。
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -24,7 +25,11 @@ import { appFrameworkService } from '../../core/services/app-framework.service';
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
 import { useServerManager } from '../../hooks/remote/useServerManager';
-import { useAppInstances, invalidateBotConfigAfterLink } from '../../hooks/apps/useAppInstances';
+import {
+    useAppFrameworks,
+    useAppInstances,
+    invalidateBotConfigAfterLink,
+} from '../../hooks/apps/useAppInstances';
 import { appConfigKey } from '../../hooks/apps/useAppInstanceConfig';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
@@ -42,7 +47,12 @@ import {
     isDesktopSshLink,
     isResidentLink,
 } from './appLinkTopology';
-import type { AppInstance, OneBotLinkPlan } from '../../core/ipc/types';
+import type {
+    AppFrameworkManifest,
+    AppInstance,
+    OneBotLinkMode,
+    OneBotLinkPlan,
+} from '../../core/ipc/types';
 
 interface AppLinkDialogProps {
     open: boolean;
@@ -60,6 +70,14 @@ function botHostId(runtimeTarget: string): string | null {
     return remoteHostIdFromRuntimeTarget(runtimeTarget);
 }
 
+/** 框架推荐的对接方向；清单还没拉到时按反向（旧三个框架都是反向） */
+function linkModeOf(
+    frameworks: readonly AppFrameworkManifest[],
+    frameworkId: string | undefined,
+): OneBotLinkMode {
+    return frameworks.find((f) => f.id === frameworkId)?.link_modes[0] ?? 'reverse_ws';
+}
+
 export function AppLinkDialog({
     open,
     onOpenChange,
@@ -69,6 +87,7 @@ export function AppLinkDialog({
 }: AppLinkDialogProps) {
     const queryClient = useQueryClient();
     const { instances, patch } = useAppInstances();
+    const { data: frameworks = [] } = useAppFrameworks();
     const { data: snapshots = [] } = useBotSnapshots({ disablePolling: true });
     const configs = useBotConfigsMap(snapshots);
     const { servers } = useServerManager();
@@ -94,16 +113,18 @@ export function AppLinkDialog({
         () =>
             instances.map((i) => {
                 const installed = i.state !== 'not_installed' && i.state !== 'installing';
-                const allowed = appLinkPairEnabled(botHost, i.host_id);
-                const note = !installed ? '（未安装）' : appLinkPairNote(botHost, i.host_id);
+                const mode = linkModeOf(frameworks, i.framework_id);
+                const allowed = appLinkPairEnabled(botHost, i.host_id, mode);
+                const note = !installed ? '（未安装）' : appLinkPairNote(botHost, i.host_id, mode);
                 return {
                     value: i.id,
                     label: `${i.display_name} · ${hostIdDisplayLabel(i.host_id, servers)}${note}`,
                     disabled: !installed || !allowed,
                 };
             }),
-        [instances, botHost, servers],
+        [instances, frameworks, botHost, servers],
     );
+    const instanceMode = linkModeOf(frameworks, instance?.framework_id);
 
     const botItems: SelectItem[] = useMemo(
         () =>
@@ -112,8 +133,11 @@ export function AppLinkDialog({
                 const name = cfg?.bot.name?.trim();
                 const host = cfg ? botHostId(cfg.bot.runtime_target) : null;
                 const allowed =
-                    !instance || !host ? true : appLinkPairEnabled(host, instance.host_id);
-                const note = instance && host ? appLinkPairNote(host, instance.host_id) : '';
+                    !instance || !host
+                        ? true
+                        : appLinkPairEnabled(host, instance.host_id, instanceMode);
+                const note =
+                    instance && host ? appLinkPairNote(host, instance.host_id, instanceMode) : '';
                 const where = cfg ? runtimeTargetDisplayLabel(cfg.bot.runtime_target, servers) : '';
                 return {
                     value: s.bot_id,
@@ -121,7 +145,7 @@ export function AppLinkDialog({
                     disabled: !allowed,
                 };
             }),
-        [snapshots, configs, instance, servers],
+        [snapshots, configs, instance, instanceMode, servers],
     );
 
     useEffect(() => {
@@ -190,7 +214,11 @@ export function AppLinkDialog({
             <DialogContent size="lg" dismissOnOutsideClick={!applying}>
                 <DialogHeader>
                     <DialogTitle>对接应用端</DialogTitle>
-                    <DialogDescription>协议 Bot 反向 WS 连到应用端，两端配置一并写入。</DialogDescription>
+                    <DialogDescription>
+                        {instanceMode === 'forward_ws'
+                            ? '协议 Bot 开一个 WS 服务，应用端连过来，两端配置一并写入。'
+                            : '协议 Bot 反向 WS 连到应用端，两端配置一并写入。'}
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex flex-col gap-4">
@@ -275,14 +303,16 @@ function PlanPreview({
                 </p>
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                     <Badge tone="info" appearance="soft" className="font-mono text-[11px]">
-                        WS-Client
+                        {c.kind === 'ws_server' ? 'WS-Server' : 'WS-Client'}
                     </Badge>
                     <span className="font-medium text-text">{c.name}</span>
                     <Badge tone="brand" appearance="soft">
                         应用端
                     </Badge>
                 </div>
-                <p className="mt-1 break-all font-mono text-2xs text-text-secondary">{c.url}</p>
+                <p className="mt-1 break-all font-mono text-2xs text-text-secondary">
+                    {c.kind === 'ws_server' ? `监听 ${c.host}:${c.port}，应用端连过来` : c.url}
+                </p>
                 <p className="mt-0.5 text-2xs text-text-tertiary">
                     token 已生成；同名连接会被替换。
                     {tunnelNote}

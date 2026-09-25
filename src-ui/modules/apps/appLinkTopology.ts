@@ -1,4 +1,7 @@
 // 对接拓扑：按 Bot runtime_target 与实例 host_id，不看 NapCat / SnowLuma。
+// 正向（应用端连 Bot，如 MaiBot）听口在 Bot 侧，隧道方向和反向相反，后端目前只开同机。
+
+import type { OneBotLinkMode } from '../../core/ipc/types';
 
 export type AppLinkTopology =
     | 'same_host'
@@ -27,9 +30,12 @@ export function classifyAppLink(
 export function appLinkPairNote(
     botHostId: string | null,
     appHostId: string,
+    mode: OneBotLinkMode = 'reverse_ws',
 ): string {
     if (!botHostId) return '';
-    switch (classifyAppLink(botHostId, appHostId)) {
+    const topology = classifyAppLink(botHostId, appHostId);
+    if (mode === 'forward_ws') return topology === 'same_host' ? '' : '（需同一台机器）';
+    switch (topology) {
         case 'same_host':
             return '';
         case 'local_bot_remote_app':
@@ -45,9 +51,12 @@ export function appLinkPairNote(
 export function appLinkPairEnabled(
     botHostId: string | null,
     appHostId: string,
+    mode: OneBotLinkMode = 'reverse_ws',
 ): boolean {
     if (!botHostId) return true;
-    return classifyAppLink(botHostId, appHostId) !== null;
+    const topology = classifyAppLink(botHostId, appHostId);
+    if (mode === 'forward_ws') return topology === 'same_host';
+    return topology !== null;
 }
 
 export function isDesktopSshLink(topology: AppLinkTopology | null): boolean {
