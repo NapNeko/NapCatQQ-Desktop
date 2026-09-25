@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
+import gsap from 'gsap';
 import { cssEase } from './cssEase';
 import { motionPresets } from './motion';
+
+// motion.ts 在模块顶层注册 GSAP 插件，import 进来 ticker 就醒了。不让它睡下，
+// 它挂着的下一帧定时器会在测试环境拆掉之后触发，报 window is not defined
+afterAll(() => gsap.ticker.sleep());
 
 describe('cssEase', () => {
     it('maps GSAP power eases by their polynomial degree', () => {
