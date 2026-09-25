@@ -34,7 +34,11 @@ export const MaiBotOverviewTab: React.FC<{
 
     const conds: { key: CondKey; ok: boolean; label: string }[] = [
         { key: 'link', ok: linked, label: linked ? 'QQ 已对接' : 'QQ 还没对接' },
-        { key: 'chat', ok: chatOk, label: chat ? `回复：${maibotChatScope(chat)}` : '适配器缺失' },
+        {
+            key: 'chat',
+            ok: chatOk,
+            label: !chat ? '适配器缺失' : chatOk ? `回复：${maibotChatScope(chat)}` : '还没放行群聊',
+        },
         { key: 'run', ok: running, label: running ? '运行中' : '已停止' },
     ];
     const missing = conds.filter((c) => !c.ok);

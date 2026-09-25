@@ -31,12 +31,17 @@ export const MaiBotConnectionTab: React.FC<{
                         <dt className="text-text-tertiary">适配器</dt>
                         <dd className="text-text">{adapter.enabled ? '已启用' : '未启用'}</dd>
                         <dt className="text-text-tertiary">连接地址</dt>
-                        <dd className="font-mono text-text">
-                            ws://{adapter.napcat_host}:{adapter.napcat_port}
-                            <span className="ml-2 font-sans text-2xs text-text-tertiary">
-                                {adapter.has_token ? '带 token' : '没设 token'}
-                            </span>
-                        </dd>
+                        {/* 没对接时适配器里是上游默认的 3001，Bot 并没在那儿听，显示出来只会误导 */}
+                        {adapter.enabled || linked ? (
+                            <dd className="font-mono text-text">
+                                ws://{adapter.napcat_host}:{adapter.napcat_port}
+                                <span className="ml-2 font-sans text-2xs text-text-tertiary">
+                                    {adapter.has_token ? '带 token' : '没设 token'}
+                                </span>
+                            </dd>
+                        ) : (
+                            <dd className="text-text-secondary">对接时自动填好</dd>
+                        )}
                     </dl>
                 )}
             </FormSection>
