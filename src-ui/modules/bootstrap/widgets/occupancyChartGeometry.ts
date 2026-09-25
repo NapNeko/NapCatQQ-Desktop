@@ -45,6 +45,11 @@ export function buildSmoothPath(points: ChartPoint[]): string {
     return d;
 }
 
+// buildSmoothPath 每段的两个控制点都在两端点的横向中点，纵向分别贴着起点和终点，
+// 归一化后这一段就是 cubic-bezier(0.5, 0, 0.5, 1)。拿它当 CSS 缓动：横向匀速扫过这一段时，
+// 纵坐标正好落在曲线上。滚入时绘图区右边缘的端点圆点靠它贴着线走，改控制点要一起改。
+export const EDGE_EASE = 'cubic-bezier(0.5, 0, 0.5, 1)';
+
 export function buildAreaPath(linePath: string, points: ChartPoint[], bottom: number, left: number): string {
     if (points.length === 0) return '';
     const last = points[points.length - 1];

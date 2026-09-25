@@ -23,7 +23,6 @@ import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
 import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
-import { useResourceMonitor } from '../../hooks/diagnostics/useResourceMonitor';
 import {
     clampPerformanceMonitorIntervalMs,
     PERFORMANCE_MONITOR_INTERVAL_MS_DEFAULT,
@@ -78,10 +77,6 @@ export const BootstrapPanelNext: React.FC<BootstrapPanelNextProps> = ({ onNaviga
     const monitorInterval = clampPerformanceMonitorIntervalMs(
         settings?.performanceMonitorIntervalMs ?? PERFORMANCE_MONITOR_INTERVAL_MS_DEFAULT,
     );
-    const resource = useResourceMonitor({
-        enabled: monitorEnabled,
-        intervalMs: monitorInterval,
-    });
     const motionEnabled = usePreferences().motionEnabled;
 
     const navigate = onNavigate ?? (() => { });
@@ -139,7 +134,6 @@ export const BootstrapPanelNext: React.FC<BootstrapPanelNextProps> = ({ onNaviga
                 />
                 {monitorEnabled ? (
                     <PerformanceChartsSection
-                        resource={resource}
                         sampleIntervalMs={monitorInterval}
                         motionEnabled={motionEnabled}
                     />

@@ -21,7 +21,7 @@ import {
     listActionableBots,
 } from '../../../core/domain/overview/glance';
 import { OccupancyChart } from './OccupancyChart';
-import type { ResourceUsage } from '../../../hooks/diagnostics/useResourceMonitor';
+import { useResourceMonitor } from '../../../hooks/diagnostics/useResourceMonitor';
 
 export interface OverviewNavigate {
     (route: AppRoute): void;
@@ -281,14 +281,15 @@ function displayBotName(botId: string, configs: Record<string, BotConfig | null>
 // ─── 监控 ON ─────────────────────────────────────────────────────────────
 
 export function PerformanceChartsSection({
-    resource,
     sampleIntervalMs,
     motionEnabled,
 }: {
-    resource: ResourceUsage;
     sampleIntervalMs: number;
     motionEnabled: boolean;
 }) {
+    // 采样在这里订阅，不放到概览页根上：每次新读数只重渲这两张图，不带着吉祥物和通知列表一起
+    const resource = useResourceMonitor({ enabled: true, intervalMs: sampleIntervalMs });
+
     if (resource.status === 'error') {
         return (
             <Card padding="md" className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
