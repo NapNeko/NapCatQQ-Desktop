@@ -350,9 +350,9 @@ pub fn validate(config: &MaiBotInstanceConfig) -> Vec<AppConfigIssue> {
     if let Some(adapter) = &config.adapter {
         let chat = &adapter.chat;
         for (path, list, what) in [
-            ("adapter.chat.group_list", &chat.group_list, "群号"),
-            ("adapter.chat.private_list", &chat.private_list, "QQ 号"),
-            ("adapter.chat.ban_user_id", &chat.ban_user_id, "QQ 号"),
+            ("adapter/chat/group_list", &chat.group_list, "群号"),
+            ("adapter/chat/private_list", &chat.private_list, "QQ 号"),
+            ("adapter/chat/ban_user_id", &chat.ban_user_id, "QQ 号"),
         ] {
             if let Some(bad) = list
                 .iter()
@@ -467,7 +467,7 @@ mod tests {
             .into_iter()
             .map(|i| i.path)
             .collect();
-        assert_eq!(paths, vec!["legacy_ws_port", "adapter.chat.group_list"]);
+        assert_eq!(paths, vec!["legacy_ws_port", "adapter/chat/group_list"]);
         assert_eq!(validate(&cfg(0, 8000, &[]))[0].path, "webui_port");
     }
 }
