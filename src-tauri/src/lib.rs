@@ -702,6 +702,8 @@ pub fn run() {
             commands::app_framework::refresh_app_instance,
             commands::app_framework::tail_app_instance_log,
             commands::app_framework::start_app_instance,
+            commands::app_framework::app_pending_terms,
+            commands::app_framework::accept_app_terms,
             commands::app_framework::stop_app_instance,
             commands::app_framework::delete_app_instance,
             commands::app_framework::preview_app_link,

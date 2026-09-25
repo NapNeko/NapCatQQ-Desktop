@@ -3142,6 +3142,7 @@ dependencies = [
  "ncd-component",
  "ncd-domain",
  "ncd-host",
+ "ncd-network",
  "ncd-traits",
  "pbkdf2 0.12.2",
  "rand 0.8.6",

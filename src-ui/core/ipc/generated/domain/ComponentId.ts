@@ -15,9 +15,10 @@
  * - Uv → uv（Python 工具链，单二进制，可自带装 Python；NoneBot2 的运行时依赖）
  * - NoneBot2 → nonebot2（应用端框架；同 Karin 按实例目录安装）
  * - AstrBot → astrbot（应用端框架；按实例目录安装，不进组件页 catalog）
+ * - MaiBot → maibot（应用端框架；按实例目录安装，不进组件页 catalog）
  *
  * 与项目内 napcat_* / snowluma_* 事件名风格保持一致;不直接走 serde
  * 的 rename_all = "snake_case",因为它会把 NapCat 切成 nap_cat,
  * Qq 切成 qq 也算巧合,但 NapCat 不行,所以统一都用显式 rename
  */
-export type ComponentId = "napcat" | "snowluma" | "qq" | "nodejs" | "novnc" | "desktop_self" | "ncd_watch" | "karin" | "uv" | "nonebot2" | "astrbot";
+export type ComponentId = "napcat" | "snowluma" | "qq" | "nodejs" | "novnc" | "desktop_self" | "ncd_watch" | "karin" | "uv" | "nonebot2" | "astrbot" | "maibot";

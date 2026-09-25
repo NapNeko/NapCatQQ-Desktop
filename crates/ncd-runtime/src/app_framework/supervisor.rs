@@ -131,6 +131,8 @@ async fn systemctl(host: &dyn Host, args: &[&str]) -> Result<(), AppFrameworkErr
 }
 
 /// 在项目目录里找框架主进程（跳过 admin / cg 脚本）。
+/// MaiBot 的 Runner 和 Worker 命令行一样（都是 `python bot.py`），取 pid 最小的那个当 Runner：
+/// 它先起，而且停的时候要从它开始收整棵树。本机的进程表来自 HashMap，顺序本来就不固定
 pub fn pick_app_pid(lines: &str, kind: AppProcessKind) -> Option<(u32, String)> {
     let mut best: Option<(u32, String)> = None;
     for raw in lines.lines() {
@@ -153,17 +155,22 @@ pub fn pick_app_pid(lines: &str, kind: AppProcessKind) -> Option<(u32, String)> 
                 lower.contains("app.mjs") || lower.contains("node-karin") || lower.contains("karin")
             }
             AppProcessKind::AstrBot => lower.contains("astrbot"),
+            AppProcessKind::MaiBot => lower.contains("bot.py"),
         };
-        if hit {
-            let program = if lower.contains("python") {
-                "python"
-            } else if lower.contains("node") {
-                "node"
-            } else {
-                "python"
-            };
-            best = Some((pid, program.to_string()));
+        if !hit {
+            continue;
         }
+        if matches!(kind, AppProcessKind::MaiBot) && best.as_ref().is_some_and(|(p, _)| *p < pid) {
+            continue;
+        }
+        let program = if lower.contains("python") {
+            "python"
+        } else if lower.contains("node") {
+            "node"
+        } else {
+            "python"
+        };
+        best = Some((pid, program.to_string()));
     }
     best
 }
@@ -173,6 +180,7 @@ pub enum AppProcessKind {
     NoneBot2,
     Karin,
     AstrBot,
+    MaiBot,
 }
 
 impl AppProcessKind {
@@ -180,6 +188,7 @@ impl AppProcessKind {
         match id {
             "karin" => Self::Karin,
             "astrbot" => Self::AstrBot,
+            "maibot" => Self::MaiBot,
             _ => Self::NoneBot2,
         }
     }
@@ -265,5 +274,17 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
         let (pid, prog) = pick_app_pid(lines, AppProcessKind::AstrBot).unwrap();
         assert_eq!(pid, 2202);
         assert_eq!(prog, "python");
+    }
+
+    #[test]
+    fn pick_maibot_runner_over_worker_in_any_order() {
+        let lines = "\
+3302 /home/u/apps/m1/.venv/bin/python bot.py\n\
+3310 /home/u/apps/m1/.venv/bin/python -m src.plugin_runtime.runner.runner_main\n\
+3301 /home/u/apps/m1/.venv/bin/python bot.py\n";
+        let (pid, prog) = pick_app_pid(lines, AppProcessKind::MaiBot).unwrap();
+        assert_eq!(pid, 3301, "Runner 先起，pid 更小");
+        assert_eq!(prog, "python");
+        assert!(matches!(AppProcessKind::from_framework("maibot"), AppProcessKind::MaiBot));
     }
 }

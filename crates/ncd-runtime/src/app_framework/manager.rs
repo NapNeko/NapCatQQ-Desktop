@@ -27,7 +27,8 @@ use ncd_component::{DetectOutcome, LaunchArgs};
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkId, AppFrameworkManifest, AppInstance,
     AppInstanceId, AppInstanceState, AppLinkRecord, AppLinkTopology, AppPlacement, AppPluginAction,
-    AppInstanceOrigin, AppPluginConfigSchema, AppProjectProbe, AppStoreResource, AppWebUiAccount,
+    AppInstanceOrigin, AppPendingTerms, AppPluginConfigSchema, AppProjectProbe, AppStoreResource,
+    AppWebUiAccount,
     AppWebUiAuthKind, BotConfig, BotId,
     CreateAppInstanceRequest, DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID,
     REMOTE_HOST_ID_PREFIX,
@@ -469,6 +470,13 @@ impl AppManager {
     ) -> Result<AppInstance, AppFrameworkError> {
         let adapter = self.registry.get(&req.framework_id)?;
         let manifest = adapter.manifest();
+        if !manifest.terms.is_empty() && req.accept_terms != Some(true) {
+            let titles: Vec<&str> = manifest.terms.iter().map(|t| t.title.as_str()).collect();
+            return Err(AppFrameworkError::Validation(format!(
+                "需要先阅读并同意{}",
+                titles.join("、")
+            )));
+        }
         let placement = AppPlacement::native_for_host(&req.host_id);
         if !manifest.supported_placements.contains(&placement) {
             return Err(AppFrameworkError::PlacementUnsupported(format!(
@@ -1082,15 +1090,22 @@ impl AppManager {
         let adapter = self.registry.get(&instance.framework_id)?;
         let host = self.resolve_host(&instance.host_id).await?;
         let spec = self.component_spec(host.as_ref(), &instance);
-        let command = adapter
-            .launch_command(host.as_ref(), &spec, &LaunchArgs::default())
-            .await?;
         let log_file = adapter
             .log_file(&instance)
             .unwrap_or_else(|| HostPath::from_posix(&instance.install_dir).join(".ncd-app.log"));
-        let launch = AppLaunchSpec { command, log_file };
+        // 起不来的原因（缺 venv、条款没同意）也要落到 last_error：开机自启没人盯着看报错条
+        let started = match adapter
+            .launch_command(host.as_ref(), &spec, &LaunchArgs::default())
+            .await
+        {
+            Ok(command) => {
+                let launch = AppLaunchSpec { command, log_file };
+                self.runtime.start(Arc::clone(&host), &instance, launch).await
+            }
+            Err(e) => Err(e),
+        };
 
-        match self.runtime.start(Arc::clone(&host), &instance, launch).await {
+        match started {
             Ok(_pid) => {
                 let updated = self
                     .store
@@ -1114,6 +1129,28 @@ impl AppManager {
                 Err(e)
             }
         }
+    }
+
+    /// 还没同意、或更新后改过的上游条款；框架没有条款、实例还没装好时都为空
+    pub async fn pending_terms(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Vec<AppPendingTerms>, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let adapter = self.registry.get(&instance.framework_id)?;
+        if adapter.manifest().terms.is_empty() || !instance.state.is_installed() {
+            return Ok(Vec::new());
+        }
+        let host = self.resolve_host(&instance.host_id).await?;
+        adapter.pending_terms(host.as_ref(), &instance).await
+    }
+
+    /// 用户在同意框里点了同意
+    pub async fn accept_terms(&self, id: &AppInstanceId) -> Result<(), AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let adapter = self.registry.get(&instance.framework_id)?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        adapter.accept_terms(host.as_ref(), &instance).await
     }
 
     pub async fn stop_instance(
@@ -3446,6 +3483,279 @@ mod tests {
             }
         }
 
+        /// MaiBot 实例目录：已装好的样子（源码只放对接 / 配置 / 条款用得上的几个文件）
+        async fn maibot_fixture() -> Fixture {
+            let tmp = tempfile::tempdir().unwrap();
+            let root = tmp.path().join("data");
+            let inst_dir = tmp.path().join("maibot");
+            for dir in ["config", "data", "src/config", "plugins/MaiBot-Napcat-Adapter"] {
+                std::fs::create_dir_all(inst_dir.join(dir)).unwrap();
+            }
+            std::fs::write(
+                inst_dir.join("config/bot_config.toml"),
+                "[inner]\nversion = \"8.14.40\"\n\n[webui]\nport = 23001\n\n[maim_message]\nws_server_port = 23002\n",
+            )
+            .unwrap();
+            std::fs::write(
+                inst_dir.join("data/webui.json"),
+                "{\"access_token\":\"Ncd_tok\",\"token_source\":\"configured\"}\n",
+            )
+            .unwrap();
+            std::fs::write(
+                inst_dir.join("src/config/config.py"),
+                "CONFIG_VERSION: str = \"8.14.40\"\n",
+            )
+            .unwrap();
+            std::fs::write(
+                inst_dir.join("plugins/MaiBot-Napcat-Adapter/_manifest.json"),
+                "{\"host_application\":{\"min_version\":\"1.2.0\",\"max_version\":\"1.2.99\"}}",
+            )
+            .unwrap();
+            std::fs::write(inst_dir.join("EULA.md"), "# EULA\r\n条款一\r\n").unwrap();
+            std::fs::write(inst_dir.join("PRIVACY.md"), "# PRIVACY\n条款二\n").unwrap();
+
+            let bus = Arc::new(BroadcastEventBus::default());
+            let store = Arc::new(AppInstanceStore::empty(&root));
+            let local: Arc<dyn Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
+            let bots = Arc::new(MemoryBots {
+                bots: AsyncMutex::new(vec![
+                    bot(),
+                    bot_with(20002, BackendType::SnowLuma, RuntimeTarget::Local),
+                    bot_with(30003, BackendType::NapCat, RuntimeTarget::server("vps")),
+                ]),
+                upserts: Mutex::new(0),
+            });
+            let manager = Arc::new(AppManager::new(
+                Arc::new(AppFrameworkRegistry::with_builtin()),
+                Arc::clone(&store),
+                Arc::new(NativeAppRuntime::new(Arc::clone(&bus), Arc::clone(&store))),
+                Arc::new(ncd_server::LocalOnlyHostResolver::new(local)),
+                bots.clone(),
+                bus,
+                &root,
+            ));
+            let id = AppInstanceId::new("m1");
+            let install_dir = HostPath::from_windows(inst_dir.to_string_lossy().as_ref());
+            store
+                .upsert(AppInstance {
+                    id: id.clone(),
+                    framework_id: AppFrameworkId::new("maibot"),
+                    display_name: "麦麦".into(),
+                    placement: AppPlacement::LocalNative,
+                    host_id: LOCAL_HOST_ID.to_string(),
+                    install_dir: install_dir.as_posix().to_string(),
+                    port: 23001,
+                    state: AppInstanceState::Stopped,
+                    link: None,
+                    installed_version: Some("1.2.5".into()),
+                    last_error: None,
+                    created_at_ms: 1,
+                    install_renderer: false,
+                    origin: ncd_domain::AppInstanceOrigin::Created,
+                    auto_start: false,
+                })
+                .await
+                .unwrap();
+            Fixture {
+                _tmp: tmp,
+                inst_dir,
+                manager,
+                bots,
+                id,
+            }
+        }
+
+        fn adapter_text(f: &Fixture) -> String {
+            std::fs::read_to_string(f.inst_dir.join("plugins/MaiBot-Napcat-Adapter/config.toml"))
+                .unwrap()
+        }
+
+        fn adapter_cfg(f: &Fixture) -> ncd_appframework::MaiBotAdapterConfig {
+            ncd_appframework::maibot::config::read_adapter_config(Some(&adapter_text(f)))
+        }
+
+        #[tokio::test]
+        async fn maibot_forward_link_opens_bot_server_and_points_adapter_at_it() {
+            let f = maibot_fixture().await;
+            let bot_id = BotId::new("10001");
+            let plan = f.manager.preview_link(&f.id, &bot_id).await.unwrap();
+            let server = plan.connection.as_ws_server().expect("MaiBot 是正向对接").clone();
+            assert!(server.port >= 20_000, "听口由编排层分配：{}", server.port);
+            let again = f.manager.preview_link(&f.id, &bot_id).await.unwrap();
+            assert_eq!(again.connection.as_ws_server().unwrap().port, server.port, "预览和写入要同一个口");
+
+            let linked = f.manager.apply_link(&f.id, &bot_id).await.unwrap();
+            let link = linked.link.expect("已对接");
+            assert_eq!(link.mode, OneBotLinkMode::ForwardWs);
+            assert_eq!(link.connection_name, "ncd-app:m1");
+
+            let bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+            assert!(bot.connect.websocket_clients.is_empty(), "正向不写客户端表");
+            let s = &bot.connect.websocket_servers[0];
+            assert_eq!((s.base.name.as_str(), s.host.as_str(), s.port), ("ncd-app:m1", "127.0.0.1", server.port));
+
+            let a = adapter_cfg(&f);
+            assert!(a.enabled);
+            assert_eq!(a.napcat_port, server.port);
+            assert!(adapter_text(&f).contains("config_version = \"0.1.0\""));
+            assert_eq!(
+                ncd_appframework::maibot::config::read_adapter_token(Some(&adapter_text(&f))).as_deref(),
+                Some(s.base.token.as_str())
+            );
+
+            // 重新对接沿用原口和 token
+            f.manager.apply_link(&f.id, &bot_id).await.unwrap();
+            let bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+            assert_eq!(bot.connect.websocket_servers.len(), 1);
+            assert_eq!(bot.connect.websocket_servers[0].port, server.port);
+            assert_eq!(bot.connect.websocket_servers[0].base.token, s.base.token);
+
+            let unlinked = f.manager.unlink(&f.id).await.unwrap();
+            assert!(unlinked.link.is_none());
+            let bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+            assert!(bot.connect.websocket_servers.is_empty());
+            assert!(!adapter_cfg(&f).enabled, "解绑关掉适配器，免得对着删掉的服务端重连刷日志");
+        }
+
+        #[tokio::test]
+        async fn maibot_forward_port_avoids_other_bot_servers_on_the_same_host() {
+            let f = maibot_fixture().await;
+            let first = f
+                .manager
+                .preview_link(&f.id, &BotId::new("10001"))
+                .await
+                .unwrap()
+                .connection
+                .as_ws_server()
+                .unwrap()
+                .port;
+            // 同机另一台 Bot 已经在这个口上开了服务端
+            let mut other = f.bots.bot_config(&BotId::new("20002")).await.unwrap().unwrap();
+            other.connect.websocket_servers.push(WebsocketServerConfig {
+                base: ncd_domain::NetworkBaseFields {
+                    enable: true,
+                    name: "user".into(),
+                    message_post_format: ncd_domain::MessagePostFormat::Array,
+                    token: String::new(),
+                    debug: false,
+                },
+                host: "0.0.0.0".into(),
+                port: first,
+                report_self_message: false,
+                enable_force_push_event: true,
+                heart_interval: 30000,
+                path: "/".into(),
+                role: ncd_domain::WsRole::Universal,
+            });
+            f.bots.upsert_bot_config(other).await.unwrap();
+            let second = f
+                .manager
+                .preview_link(&f.id, &BotId::new("10001"))
+                .await
+                .unwrap()
+                .connection
+                .as_ws_server()
+                .unwrap()
+                .port;
+            assert_ne!(second, first);
+        }
+
+        #[tokio::test]
+        async fn maibot_forward_link_refuses_cross_host_before_touching_anything() {
+            let f = maibot_fixture().await;
+            let err = f
+                .manager
+                .apply_link(&f.id, &BotId::new("30003"))
+                .await
+                .unwrap_err();
+            assert!(matches!(err, AppFrameworkError::LinkModeUnsupported(_)), "{err}");
+            assert!(err.to_string().contains("同一台机器"), "{err}");
+            assert!(!f.inst_dir.join("plugins/MaiBot-Napcat-Adapter/config.toml").exists());
+            assert_eq!(*f.bots.upserts.lock().unwrap(), 0);
+        }
+
+        #[tokio::test]
+        async fn maibot_terms_pending_until_accepted_and_again_after_change() {
+            let f = maibot_fixture().await;
+            let pending = f.manager.pending_terms(&f.id).await.unwrap();
+            let ids: Vec<&str> = pending.iter().map(|t| t.id.as_str()).collect();
+            assert_eq!(ids, vec!["eula", "privacy"]);
+            assert!(pending[0].text.contains("条款一"));
+            let err = f.manager.start_instance(&f.id).await.unwrap_err();
+            assert!(err.to_string().contains("同意"), "{err}");
+            let inst = f.manager.get_instance(&f.id).await.unwrap();
+            assert!(inst.last_error.as_deref().is_some_and(|e| e.contains("同意")), "起不来的原因要落盘");
+
+            f.manager.accept_terms(&f.id).await.unwrap();
+            assert!(f.manager.pending_terms(&f.id).await.unwrap().is_empty());
+            let confirmed = std::fs::read_to_string(f.inst_dir.join("eula.confirmed")).unwrap();
+            assert_eq!(confirmed.len(), 32, "上游原样比对，不能带换行：{confirmed:?}");
+
+            std::fs::write(f.inst_dir.join("PRIVACY.md"), "# PRIVACY\n条款二（修订）\n").unwrap();
+            let pending = f.manager.pending_terms(&f.id).await.unwrap();
+            assert_eq!(pending.len(), 1);
+            assert_eq!(pending[0].id, "privacy");
+        }
+
+        #[tokio::test]
+        async fn maibot_config_writes_ports_and_chat_filter() {
+            let f = maibot_fixture().await;
+            let env = f.manager.read_config(&f.id).await.unwrap();
+            let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
+                panic!("expected MaiBot config");
+            };
+            assert_eq!((cfg.webui_port, cfg.legacy_ws_port), (23001, 23002));
+            assert_eq!(cfg.webui_token, "Ncd_tok");
+            let adapter = cfg.adapter.as_mut().expect("适配器目录在");
+            assert!(adapter.chat.drops_everything());
+            adapter.chat.group_list.push("123456".into());
+            cfg.webui_port = 23011;
+
+            let res = f
+                .manager
+                .write_config(&f.id, AppInstanceConfig::MaiBot(cfg), Some(env.revision))
+                .await
+                .unwrap();
+            assert!(res.port_changed);
+            assert!(!res.relinked);
+            assert_eq!(f.manager.get_instance(&f.id).await.unwrap().port, 23011);
+            let AppInstanceConfig::MaiBot(after) = res.config else {
+                panic!("expected MaiBot config");
+            };
+            assert_eq!(after.adapter.unwrap().chat.group_list, vec!["123456"]);
+            let bot_cfg = std::fs::read_to_string(f.inst_dir.join("config/bot_config.toml")).unwrap();
+            assert!(bot_cfg.contains("port = 23011"), "{bot_cfg}");
+            assert!(bot_cfg.contains("version = \"8.14.40\""));
+        }
+
+        #[tokio::test]
+        async fn creating_maibot_requires_accepting_terms() {
+            let f = maibot_fixture().await;
+            let req = CreateAppInstanceRequest {
+                framework_id: AppFrameworkId::new("maibot"),
+                host_id: "local".into(),
+                display_name: "新麦麦".into(),
+                port: None,
+                install_dir: None,
+                install_renderer: None,
+                webui_username: None,
+                webui_password: None,
+                auto_start: false,
+                accept_terms: None,
+            };
+            let err = f.manager.create_instance(req.clone()).await.unwrap_err();
+            assert!(err.to_string().contains("同意"), "{err}");
+            let created = f
+                .manager
+                .create_instance(CreateAppInstanceRequest {
+                    accept_terms: Some(true),
+                    ..req
+                })
+                .await
+                .unwrap();
+            assert_eq!(created.framework_id.as_str(), "maibot");
+        }
+
         fn karin(envelope: &AppInstanceConfigEnvelope) -> KarinInstanceConfig {
             let AppInstanceConfig::Karin(k) = &envelope.config else {
                 panic!("expected Karin config");
@@ -3856,6 +4166,7 @@ mod tests {
                     webui_username: None,
                     webui_password: None,
                     auto_start: true,
+                    accept_terms: None,
                 })
                 .await
                 .unwrap();
@@ -3925,6 +4236,7 @@ plugin_dirs = ["src/plugins"]
                     webui_username: None,
                     webui_password: None,
                     auto_start: true,
+                    accept_terms: None,
                 })
                 .await;
             assert!(

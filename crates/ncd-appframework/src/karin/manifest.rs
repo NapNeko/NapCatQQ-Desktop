@@ -57,6 +57,7 @@ pub fn karin_manifest() -> AppFrameworkManifest {
         store_resources: vec![ncd_domain::AppStoreResource::Plugin],
         has_install_renderer: true,
         webui_auth: ncd_domain::AppWebUiAuthKind::Key,
+        terms: Vec::new(),
     }
 }
 

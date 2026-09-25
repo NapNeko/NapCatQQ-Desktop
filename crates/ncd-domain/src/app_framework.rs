@@ -330,6 +330,30 @@ pub struct AppFrameworkManifest {
     /// WebUI 登录方式；决定新建对话框是否收账号密码、打开时弹不弹账号框
     #[serde(default)]
     pub webui_auth: AppWebUiAuthKind,
+    /// 上游要求用户同意的条款；非空时新建对话框必须勾选同意，启动前也会核对是否改过
+    #[serde(default)]
+    pub terms: Vec<AppTermsDoc>,
+}
+
+/// 一份上游条款（MaiBot 的 EULA / 隐私条款）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppTermsDoc {
+    /// 稳定 id（"eula" / "privacy"）
+    pub id: String,
+    pub title: String,
+    /// 上游原文；新建时本地还没有文件，只能给链接
+    pub url: String,
+}
+
+/// 已装实例里还没同意（或更新后改过）的一份条款，带实例目录里的原文
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppPendingTerms {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub text: String,
 }
 
 /// WebUI 怎么登录。Karin 是单个 `HTTP_AUTH_KEY`；AstrBot 是用户名 + 密码（落盘只有哈希）。
@@ -554,6 +578,10 @@ pub struct CreateAppInstanceRequest {
     /// 开机/桌面端启动时自动启动该实例。默认 true。
     #[serde(default = "default_true")]
     pub auto_start: bool,
+    /// 用户已勾选同意 manifest 里的上游条款；框架没有条款时忽略
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub accept_terms: Option<bool>,
 }
 
 /// 探测已有项目目录（导入前）
@@ -1001,11 +1029,13 @@ mod tests {
             webui_username: None,
             webui_password: None,
             auto_start: true,
+            accept_terms: None,
         };
         let v = serde_json::to_value(&req).unwrap();
         assert_eq!(v["install_dir"], "/d/bots/karin-main");
         assert_eq!(v["install_renderer"], false);
         assert!(v.get("webui_password").is_none());
+        assert!(v.get("accept_terms").is_none(), "旧前端不发这个字段也能解");
         let back: CreateAppInstanceRequest = serde_json::from_value(v).unwrap();
         assert_eq!(back, req);
     }

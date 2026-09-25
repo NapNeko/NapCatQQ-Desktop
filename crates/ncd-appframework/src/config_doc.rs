@@ -13,6 +13,7 @@ use ts_rs::TS;
 use crate::adapter::apply_with_backup_ex;
 use crate::astrbot::config::AstrBotInstanceConfig;
 use crate::karin::config::KarinInstanceConfig;
+use crate::maibot::config::MaiBotInstanceConfig;
 use crate::nonebot2::config::NoneBot2InstanceConfig;
 
 pub const MISSING_REVISION: &str = "missing";
@@ -27,6 +28,8 @@ pub enum AppInstanceConfig {
     NoneBot2(NoneBot2InstanceConfig),
     #[serde(rename = "astrbot")]
     AstrBot(AstrBotInstanceConfig),
+    #[serde(rename = "maibot")]
+    MaiBot(MaiBotInstanceConfig),
 }
 
 impl AppInstanceConfig {
@@ -34,16 +37,19 @@ impl AppInstanceConfig {
     pub fn webui_auth_key(&self) -> &str {
         match self {
             Self::Karin(c) => c.env.http_auth_key.as_str(),
+            Self::MaiBot(c) => c.webui_token.as_str(),
             Self::NoneBot2(_) | Self::AstrBot(_) => "",
         }
     }
 
-    /// 应用端监听口（编排层同步实例 `port` / 重新对接用）。
+    /// 实例 `port` 对应的口（编排层同步实例 `port` / 重新对接用）。
+    /// 反向对接的框架是 OneBot 监听口；MaiBot 不听 OneBot（它去连 Bot），是 WebUI 口
     pub fn listen_port(&self) -> u16 {
         match self {
             Self::Karin(c) => c.env.http_port,
             Self::NoneBot2(c) => c.env_prod.port,
             Self::AstrBot(c) => c.onebot.ws_reverse_port,
+            Self::MaiBot(c) => c.webui_port,
         }
     }
 
@@ -53,6 +59,7 @@ impl AppInstanceConfig {
             Self::Karin(c) => Some(c.env.http_port),
             Self::NoneBot2(_) => None,
             Self::AstrBot(c) => Some(c.dashboard_port).filter(|p| *p > 0),
+            Self::MaiBot(c) => Some(c.webui_port).filter(|p| *p > 0),
         }
     }
 
@@ -67,6 +74,9 @@ impl AppInstanceConfig {
             }
             (Self::AstrBot(before), Self::AstrBot(after)) => {
                 crate::astrbot::config::link_inputs_changed(before, after)
+            }
+            (Self::MaiBot(before), Self::MaiBot(after)) => {
+                crate::maibot::config::link_inputs_changed(before, after)
             }
             _ => false,
         }

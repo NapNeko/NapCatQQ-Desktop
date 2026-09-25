@@ -50,6 +50,7 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         store_resources: ['plugin'],
         has_install_renderer: true,
         webui_auth: 'key',
+        terms: [],
     },
     {
         id: 'nonebot2',
@@ -66,6 +67,7 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         store_resources: ['adapter', 'plugin'],
         has_install_renderer: false,
         webui_auth: 'none',
+        terms: [],
     },
     {
         id: 'astrbot',
@@ -82,6 +84,7 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         store_resources: ['plugin'],
         has_install_renderer: false,
         webui_auth: 'user_password',
+        terms: [],
     },
 ];
 

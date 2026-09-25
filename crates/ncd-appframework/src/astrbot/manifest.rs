@@ -48,6 +48,7 @@ pub fn astrbot_manifest() -> AppFrameworkManifest {
         store_resources: vec![AppStoreResource::Plugin],
         has_install_renderer: false,
         webui_auth: AppWebUiAuthKind::UserPassword,
+        terms: Vec::new(),
     }
 }
 

@@ -14,6 +14,8 @@ ncd-domain = { path = "../ncd-domain" }
 ncd-traits = { path = "../ncd-traits" }
 ncd-component = { path = "../ncd-component" }
 ncd-host = { path = "../ncd-host" }
+# MaiBot 不发 PyPI：查 GitHub Release、下源码包（镜像竞速）要用共享客户端和镜像表
+ncd-network = { path = "../ncd-network" }
 async-trait = "0.1"
 md5 = "0.7"
 pbkdf2 = "0.12"

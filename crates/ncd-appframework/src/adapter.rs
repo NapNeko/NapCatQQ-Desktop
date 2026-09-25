@@ -8,8 +8,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
-    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppPluginConfigSchema,
-    AppProjectProbe, AppStoreResource, OneBotLinkPlan,
+    AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppPendingTerms,
+    AppPluginConfigSchema, AppProjectProbe, AppStoreResource, OneBotLinkPlan,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
@@ -127,6 +127,25 @@ pub trait AppFrameworkAdapter: Send + Sync {
             .take(24)
             .map(char::from)
             .collect()
+    }
+
+    /// manifest 声明了上游条款的框架：实例目录里还没同意、或更新后改过的条款（带原文）。
+    /// 非空时编排层拒绝启动，前端先弹同意框
+    async fn pending_terms(
+        &self,
+        _host: &dyn Host,
+        _instance: &AppInstance,
+    ) -> Result<Vec<AppPendingTerms>, AppFrameworkError> {
+        Ok(Vec::new())
+    }
+
+    /// 用户在同意框里点了同意：把实例目录里现在这版条款记成已同意
+    async fn accept_terms(
+        &self,
+        _host: &dyn Host,
+        _instance: &AppInstance,
+    ) -> Result<(), AppFrameworkError> {
+        Ok(())
     }
 
     /// 导入前要快照的相对路径（dotenv / 入口 / 清单）。缺文件也列入，释放时删掉我们后来写的。

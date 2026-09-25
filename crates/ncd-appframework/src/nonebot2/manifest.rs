@@ -71,6 +71,7 @@ pub fn nonebot2_manifest() -> AppFrameworkManifest {
         ],
         has_install_renderer: false,
         webui_auth: ncd_domain::AppWebUiAuthKind::None,
+        terms: Vec::new(),
     }
 }
 

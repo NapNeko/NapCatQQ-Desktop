@@ -2,6 +2,7 @@
 import type { AppFrameworkId } from "./AppFrameworkId";
 import type { AppPlacement } from "./AppPlacement";
 import type { AppStoreResource } from "./AppStoreResource";
+import type { AppTermsDoc } from "./AppTermsDoc";
 import type { AppWebUiAuthKind } from "./AppWebUiAuthKind";
 import type { OneBotLinkMode } from "./OneBotLinkMode";
 
@@ -53,4 +54,8 @@ has_install_renderer: boolean,
 /**
  * WebUI 登录方式；决定新建对话框是否收账号密码、打开时弹不弹账号框
  */
-webui_auth: AppWebUiAuthKind, };
+webui_auth: AppWebUiAuthKind, 
+/**
+ * 上游要求用户同意的条款；非空时新建对话框必须勾选同意，启动前也会核对是否改过
+ */
+terms: Array<AppTermsDoc>, };

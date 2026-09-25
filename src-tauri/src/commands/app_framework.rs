@@ -5,7 +5,8 @@ use ncd_component::ComponentId;
 use ncd_deploy::StepKind;
 use ncd_domain::{
     AppConfigDocument, AppConfigError, AppConfigText, AppFrameworkId, AppFrameworkManifest,
-    AppInstance, AppInstanceId, AppInstanceWebUi, AppPluginAction, AppPluginConfigSchema,
+    AppInstance, AppInstanceId, AppInstanceWebUi, AppPendingTerms, AppPluginAction,
+    AppPluginConfigSchema,
     AppProjectProbe, AppStoreResource, AppWebUiAccount, BotId, CreateAppInstanceRequest,
     DeploymentTaskKind, DeploymentTaskResource, ImportAppInstanceRequest, OneBotLinkPlan,
 };
@@ -162,6 +163,30 @@ pub async fn start_app_instance(
     state
         .app_manager
         .start_instance(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn app_pending_terms(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AppPendingTerms>, String> {
+    state
+        .app_manager
+        .pending_terms(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn accept_app_terms(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .app_manager
+        .accept_terms(&AppInstanceId::new(instance_id))
         .await
         .map_err(|e| e.to_string())
 }

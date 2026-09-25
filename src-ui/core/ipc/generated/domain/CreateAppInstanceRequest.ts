@@ -28,4 +28,8 @@ webui_password?: string,
 /**
  * 开机/桌面端启动时自动启动该实例。默认 true。
  */
-auto_start: boolean, };
+auto_start: boolean, 
+/**
+ * 用户已勾选同意 manifest 里的上游条款；框架没有条款时忽略
+ */
+accept_terms?: boolean, };

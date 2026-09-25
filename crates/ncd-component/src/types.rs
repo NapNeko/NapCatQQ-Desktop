@@ -17,6 +17,7 @@ use ts_rs::TS;
 /// - Uv → uv（Python 工具链，单二进制，可自带装 Python；NoneBot2 的运行时依赖）
 /// - NoneBot2 → nonebot2（应用端框架；同 Karin 按实例目录安装）
 /// - AstrBot → astrbot（应用端框架；按实例目录安装，不进组件页 catalog）
+/// - MaiBot → maibot（应用端框架；按实例目录安装，不进组件页 catalog）
 ///
 /// 与项目内 napcat_* / snowluma_* 事件名风格保持一致;不直接走 serde
 /// 的 rename_all = "snake_case",因为它会把 NapCat 切成 nap_cat,
@@ -46,6 +47,8 @@ pub enum ComponentId {
     NoneBot2,
     #[serde(rename = "astrbot")]
     AstrBot,
+    #[serde(rename = "maibot")]
+    MaiBot,
 }
 
 impl ComponentId {
@@ -62,13 +65,14 @@ impl ComponentId {
             Self::Uv => "uv",
             Self::NoneBot2 => "nonebot2",
             Self::AstrBot => "astrbot",
+            Self::MaiBot => "maibot",
         }
     }
 
     /// 应用端框架：按实例目录装，不进组件页 catalog。
     /// 新框架加变体时必须写进这里，factory / 依赖图靠它分流，不再点名。
     pub const fn is_app_framework(&self) -> bool {
-        matches!(self, Self::Karin | Self::NoneBot2 | Self::AstrBot)
+        matches!(self, Self::Karin | Self::NoneBot2 | Self::AstrBot | Self::MaiBot)
     }
 
     /// 从跨边界字面量还原（与 serde rename 同源）；未知返回 None
@@ -310,6 +314,7 @@ mod tests {
             ComponentId::Uv,
             ComponentId::NoneBot2,
             ComponentId::AstrBot,
+            ComponentId::MaiBot,
         ] {
             assert_eq!(ComponentId::parse(id.as_str()), Some(id));
         }
@@ -321,6 +326,7 @@ mod tests {
         assert!(ComponentId::Karin.is_app_framework());
         assert!(ComponentId::NoneBot2.is_app_framework());
         assert!(ComponentId::AstrBot.is_app_framework());
+        assert!(ComponentId::MaiBot.is_app_framework());
         assert!(!ComponentId::Uv.is_app_framework());
         assert!(!ComponentId::NodeJs.is_app_framework());
     }
@@ -339,6 +345,7 @@ mod tests {
             ComponentId::Uv,
             ComponentId::NoneBot2,
             ComponentId::AstrBot,
+            ComponentId::MaiBot,
         ] {
             let s = serde_json::to_string(&id).unwrap();
             let expected = format!("\"{}\"", id.as_str());

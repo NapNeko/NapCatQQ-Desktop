@@ -57,7 +57,7 @@ pub use app_config::{
 pub use app_framework::{
     APP_LINK_ADOPTED_FORWARD, APP_LINK_CONNECTION_PREFIX, AppConfigDocument, AppConfigError,
     AppConfigErrorKind, AppConfigFormat, AppConfigIssue, AppConfigText, AppConfigWrite,
-    AppFrameworkId, AppFrameworkManifest, AppInstanceWebUi,
+    AppFrameworkId, AppFrameworkManifest, AppInstanceWebUi, AppPendingTerms, AppTermsDoc,
     AppInstance, AppInstanceId, AppInstanceOrigin, AppInstanceState, AppLinkRecord, AppPlacement,
     AppPluginConfigField, AppPluginConfigFieldKind, AppPluginConfigSchema, AppProjectProbe,
     AppWebUiAccount, AppWebUiAuthKind, CreateAppInstanceRequest, ImportAppInstanceRequest,

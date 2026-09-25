@@ -14,6 +14,7 @@ const COMPONENT_DISPLAY_NAME: Record<ComponentId, string> = {
     uv: 'uv',
     nonebot2: 'NoneBot2',
     astrbot: 'AstrBot',
+    maibot: 'MaiBot',
 };
 
 const STEP_KIND_LABEL: Record<string, string> = {
