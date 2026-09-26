@@ -7,6 +7,7 @@ pub mod manifest;
 pub mod release;
 pub mod schema;
 pub mod terms;
+pub mod webui_client;
 
 use std::sync::Arc;
 
@@ -28,6 +29,7 @@ pub use config::{
     maibot_config_documents,
 };
 pub use integration::MaiBotIntegration;
+use webui_client::MaiBotWebUi;
 pub use manifest::{MAIBOT_FRAMEWORK_ID, maibot_manifest};
 
 use crate::adapter::{AppComponentSpec, AppFrameworkAdapter, apply_with_backup_ex, restore_from_backup};
@@ -58,6 +60,26 @@ fn envelope(config: MaiBotInstanceConfig, snaps: &[DocumentSnapshot]) -> AppInst
         revision: combined_revision_of(snaps),
         documents: snaps.iter().map(DocumentSnapshot::revision_entry).collect(),
     }
+}
+
+fn invalid(doc: &str, e: String) -> AppFrameworkError {
+    AppFrameworkError::ConfigInvalid(vec![ncd_domain::AppConfigIssue::new(doc, e)])
+}
+
+fn maibot_config_of(config: &AppInstanceConfig) -> Result<&MaiBotInstanceConfig, AppFrameworkError> {
+    match config {
+        AppInstanceConfig::MaiBot(cfg) => Ok(cfg),
+        _ => Err(AppFrameworkError::Validation("写入的不是 MaiBot 配置".to_string())),
+    }
+}
+
+/// bot_config.toml 不在时新文件要带的 `[inner].version`；文件在就用不上
+fn seed_version(config_py: &str, bot_text: Option<&str>) -> Result<String, AppFrameworkError> {
+    if bot_text.is_some() {
+        return Ok(String::new());
+    }
+    read_config_version(config_py)
+        .ok_or_else(|| AppFrameworkError::Integration(format!("{CONFIG_PY} 里找不到 CONFIG_VERSION")))
 }
 
 fn snapshot_text<'a>(snaps: &'a [DocumentSnapshot], id: &str) -> Option<&'a str> {
@@ -104,6 +126,68 @@ impl MaiBotAdapter {
         Err(AppFrameworkError::Integration(
             "实例里没有 NapCat 适配器插件，重新安装实例可修复".to_string(),
         ))
+    }
+
+    /// 校验要写的配置，再读盘上现状当改前（编排层已经按版本号确认过没被别处改过）
+    async fn before_write(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        cfg: &MaiBotInstanceConfig,
+    ) -> Result<MaiBotInstanceConfig, AppFrameworkError> {
+        let issues = config::validate(cfg);
+        if !issues.is_empty() {
+            return Err(AppFrameworkError::ConfigInvalid(issues));
+        }
+        let current = self.read_config(host, instance).await?;
+        match current.config {
+            AppInstanceConfig::MaiBot(before) => Ok(before),
+            _ => Err(AppFrameworkError::Validation("读回来的不是 MaiBot 配置".to_string())),
+        }
+    }
+
+    /// 名单变了才出一份新文本；适配器目录不在就不写
+    async fn adapter_chat_write(
+        host: &dyn Host,
+        root: &HostPath,
+        before: &MaiBotInstanceConfig,
+        after: &MaiBotInstanceConfig,
+    ) -> Result<Option<(HostPath, String)>, AppFrameworkError> {
+        let Some(adapter) = &after.adapter else {
+            return Ok(None);
+        };
+        if before.adapter.as_ref().map(|a| &a.chat) == Some(&adapter.chat)
+            || !host.exists(&root.join(ADAPTER_DIR)).await.map_err(host_err)?
+        {
+            return Ok(None);
+        }
+        let path = root.join(ADAPTER_CONFIG);
+        let current = read_text(host, &path).await?;
+        let next = config::write_adapter_chat(current.as_deref(), &adapter.chat)
+            .map_err(|e| invalid(config::DOC_ADAPTER_CONFIG, e))?;
+        Ok((current.as_deref() != Some(next.as_str())).then_some((path, next)))
+    }
+
+    /// 一次保存的几个文件一起备份，任一个写失败整批还原
+    async fn write_files(
+        host: &dyn Host,
+        instance: &AppInstance,
+        writes: Vec<(HostPath, String)>,
+    ) -> Result<(), AppFrameworkError> {
+        if writes.is_empty() {
+            return Ok(());
+        }
+        let paths: Vec<HostPath> = writes.iter().map(|(p, _)| p.clone()).collect();
+        apply_with_backup_ex(host, &paths, write_project_sidecar(instance), || async {
+            for (path, text) in &writes {
+                crate::config_doc::ensure_parent_dir(host, path).await?;
+                host.write_file(path, text.as_bytes())
+                    .await
+                    .map_err(|e| AppFrameworkError::Integration(e.to_string()))?;
+            }
+            Ok(())
+        })
+        .await
     }
 
     async fn write_adapter_config(
@@ -272,41 +356,23 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         ))
     }
 
+    /// 停止时：两份主配置和适配器名单各自在盘上差量写，只写变了的文件
     async fn write_config(
         &self,
         host: &dyn Host,
         instance: &AppInstance,
         config: &AppInstanceConfig,
     ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
-        let AppInstanceConfig::MaiBot(cfg) = config else {
-            return Err(AppFrameworkError::Validation("写入的不是 MaiBot 配置".to_string()));
-        };
-        let issues = config::validate(cfg);
-        if !issues.is_empty() {
-            return Err(AppFrameworkError::ConfigInvalid(issues));
-        }
-        // 改前以盘上现状为准（编排层已经按版本号确认过没被别处改过）
-        let current = self.read_config(host, instance).await?;
-        let AppInstanceConfig::MaiBot(before) = &current.config else {
-            return Err(AppFrameworkError::Validation("读回来的不是 MaiBot 配置".to_string()));
-        };
+        let cfg = maibot_config_of(config)?;
+        let before = self.before_write(host, instance, cfg).await?;
         let root = HostPath::from_posix(&instance.install_dir);
         let config_py = read_text(host, &root.join(CONFIG_PY)).await?.unwrap_or_default();
-        let invalid = |doc: &str, e: String| {
-            AppFrameworkError::ConfigInvalid(vec![ncd_domain::AppConfigIssue::new(doc, e)])
-        };
         // 没变的文件不写，免得版本号跳了、白白提示重启
         let mut writes: Vec<(HostPath, String)> = Vec::new();
 
         let bot_path = root.join(BOT_CONFIG);
         let bot_text = read_text(host, &bot_path).await?;
-        let bot_version = if bot_text.is_none() {
-            read_config_version(&config_py).ok_or_else(|| {
-                AppFrameworkError::Integration(format!("{CONFIG_PY} 里找不到 CONFIG_VERSION"))
-            })?
-        } else {
-            String::new()
-        };
+        let bot_version = seed_version(&config_py, bot_text.as_deref())?;
         if let Some(next) =
             config::files::patch_bot_config(bot_text.as_deref(), &bot_version, &before.bot, &cfg.bot)
                 .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?
@@ -328,31 +394,61 @@ impl AppFrameworkAdapter for MaiBotAdapter {
             writes.push((model_path, next));
         }
 
-        if let Some(adapter) = &cfg.adapter
-            && before.adapter.as_ref().map(|a| &a.chat) != Some(&adapter.chat)
-            && host.exists(&root.join(ADAPTER_DIR)).await.map_err(host_err)?
-        {
-            let path = root.join(ADAPTER_CONFIG);
-            let current = read_text(host, &path).await?;
-            let next = config::write_adapter_chat(current.as_deref(), &adapter.chat)
-                .map_err(|e| invalid(config::DOC_ADAPTER_CONFIG, e))?;
-            if current.as_deref() != Some(next.as_str()) {
-                writes.push((path, next));
+        writes.extend(Self::adapter_chat_write(host, &root, &before, cfg).await?);
+        Self::write_files(host, instance, writes).await?;
+        self.read_config(host, instance).await
+    }
+
+    fn supports_live_config(&self) -> bool {
+        true
+    }
+
+    /// 运行中：两份主配置交给麦麦自己的 WebUI 写（它校验、合并进当前文件、写盘、热加载，
+    /// 和它自己的写入不打架）；适配器名单是插件自己的文件，照旧在盘上改，插件监听着
+    async fn write_live_config(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        loopback_port: u16,
+        _username: &str,
+        _password: &str,
+        config: &AppInstanceConfig,
+        _conf_id: &str,
+    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
+        let cfg = maibot_config_of(config)?;
+        let before = self.before_write(host, instance, cfg).await?;
+        let root = HostPath::from_posix(&instance.install_dir);
+        let token_json = read_text(host, &root.join(WEBUI_JSON)).await?;
+        let webui = MaiBotWebUi::connect(loopback_port, &config::read_webui_token(token_json.as_deref()))?;
+
+        let before_bot = schema::bot_config_to_toml(&before.bot).map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?;
+        let after_bot = schema::bot_config_to_toml(&cfg.bot).map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?;
+        if before_bot != after_bot {
+            if crate::toml_patch::removed_keys(&before_bot, &after_bot).is_empty() {
+                let partial = serde_json::to_value(crate::toml_patch::changes(&before_bot, &after_bot))
+                    .map_err(|e| invalid(config::DOC_BOT_CONFIG, e.to_string()))?;
+                webui.merge_bot_config(&partial).await?;
+            } else {
+                // 部分合并删不掉键（清空的可选项、删掉的映射项），只能整份：在盘上原文上差量改好再交给它
+                let bot_text = read_text(host, &root.join(BOT_CONFIG)).await?;
+                let config_py = read_text(host, &root.join(CONFIG_PY)).await?.unwrap_or_default();
+                let version = seed_version(&config_py, bot_text.as_deref())?;
+                if let Some(next) =
+                    config::files::patch_bot_config(bot_text.as_deref(), &version, &before.bot, &cfg.bot)
+                        .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?
+                {
+                    webui.write_bot_config_raw(&next).await?;
+                }
             }
         }
-        if !writes.is_empty() {
-            let paths: Vec<HostPath> = writes.iter().map(|(p, _)| p.clone()).collect();
-            apply_with_backup_ex(host, &paths, write_project_sidecar(instance), || async {
-                for (path, text) in &writes {
-                    crate::config_doc::ensure_parent_dir(host, path).await?;
-                    host.write_file(path, text.as_bytes())
-                        .await
-                        .map_err(|e| AppFrameworkError::Integration(e.to_string()))?;
-                }
-                Ok(())
-            })
-            .await?;
+        if before.models != cfg.models {
+            let full = schema::model_config_to_toml(&cfg.models).map_err(|e| invalid(config::DOC_MODEL_CONFIG, e))?;
+            let body = serde_json::to_value(full).map_err(|e| invalid(config::DOC_MODEL_CONFIG, e.to_string()))?;
+            webui.write_model_config(&body).await?;
         }
+
+        let writes = Self::adapter_chat_write(host, &root, &before, cfg).await?;
+        Self::write_files(host, instance, writes.into_iter().collect()).await?;
         self.read_config(host, instance).await
     }
 

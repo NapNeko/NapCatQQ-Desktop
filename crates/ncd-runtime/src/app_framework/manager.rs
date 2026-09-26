@@ -1800,14 +1800,20 @@ impl AppManager {
                     "实例状态已变，请重试".into(),
                 ));
             }
-            let username = self.webui_login_username(&instance).await;
-            let password = self
-                .remembered_secret(&instance, SECRET_WEBUI_PASSWORD)
-                .ok_or_else(|| {
-                    AppFrameworkError::DashboardAuth(
-                        "没有可用的 WebUI 密码。到连接页写下密码后再保存".into(),
-                    )
-                })?;
+            // 用户名密码类（AstrBot）要桌面端记着的密码；密钥类（MaiBot）的 token 在实例目录里，适配器自己读
+            let (username, password) =
+                if adapter.manifest().webui_auth == AppWebUiAuthKind::UserPassword {
+                    let password = self
+                        .remembered_secret(&instance, SECRET_WEBUI_PASSWORD)
+                        .ok_or_else(|| {
+                            AppFrameworkError::DashboardAuth(
+                                "没有可用的 WebUI 密码。到连接页写下密码后再保存".into(),
+                            )
+                        })?;
+                    (self.webui_login_username(&instance).await, password)
+                } else {
+                    (String::new(), String::new())
+                };
             let profile = conf_id
                 .as_deref()
                 .map(str::trim)
@@ -1841,8 +1847,9 @@ impl AppManager {
         if live {
             sync.restart_required = false;
         }
-        // 同一份文档里只在启动时读的字段（MaiBot 的端口 / 日志），走文件还是走接口写都得重启
-        if decided_running && before.config.restart_inputs_changed(&after.config) {
+        // 同一份文档里只在启动时读的字段（MaiBot 的端口 / 日志），走文件还是走接口写都得重启。
+        // 按这次要写的配置判：走接口时回读的文件什么时候落盘由应用决定，不拿它当准
+        if decided_running && before.config.restart_inputs_changed(&config) {
             sync.restart_required = true;
         }
 
@@ -3945,18 +3952,13 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn maibot_typed_write_touches_only_changed_keys_and_flags_restart_by_field() {
+        async fn maibot_stopped_write_touches_only_changed_keys() {
             let f = maibot_fixture("m-typed").await;
             std::fs::write(
                 f.inst_dir.join("src/config/config.py"),
                 "CONFIG_VERSION: str = \"8.14.40\"\nMODEL_CONFIG_VERSION: str = \"1.17.9\"\n",
             )
             .unwrap();
-            f.manager
-                .store
-                .update(&f.id, |i| i.state = AppInstanceState::Running)
-                .await
-                .unwrap();
 
             let env = f.manager.read_config(&f.id).await.unwrap();
             let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
@@ -3969,17 +3971,77 @@ mod tests {
                 .write_config(&f.id, AppInstanceConfig::MaiBot(cfg), Some(env.revision))
                 .await
                 .unwrap();
-            assert!(!res.restart_required, "人格、模型上游热加载，不用重启");
+            assert!(!res.restart_required);
             let bot_cfg = std::fs::read_to_string(f.inst_dir.join("config/bot_config.toml")).unwrap();
             assert!(bot_cfg.starts_with("[inner]\nversion = \"8.14.40\"\n\n[webui]\nport = 23001\n"), "{bot_cfg}");
             assert!(bot_cfg.contains("[personality]\npersonality = \"新人格\""), "{bot_cfg}");
             assert!(!bot_cfg.contains("[chat"), "没改的默认值不写出来：{bot_cfg}");
             let model_cfg = std::fs::read_to_string(f.inst_dir.join("config/model_config.toml")).unwrap();
-            assert!(model_cfg.starts_with("[inner]
-version = \"1.17.9\""), "版本号取实例源码里的常量");
+            assert!(model_cfg.starts_with("[inner]\nversion = \"1.17.9\""), "版本号取实例源码里的常量");
             let models = ncd_appframework::maibot::schema::read_model_config_file(Some(&model_cfg)).unwrap();
             assert_eq!(models.api_providers[0].api_key, "sk-test");
             assert!(model_cfg.contains("# 模型标识符"), "从上游默认文件起的稿，注释带着");
+        }
+
+        /// 运行中不碰文件：bot 只把改动交给麦麦 WebUI 合并，model 整份交；按字段提示重启；两次写留间隔
+        #[tokio::test]
+        async fn maibot_running_write_goes_through_webui() {
+            use wiremock::matchers::{header, method, path};
+            use wiremock::{Mock, MockServer, ResponseTemplate};
+
+            let f = maibot_fixture("m-live").await;
+            let server = MockServer::start().await;
+            let port = server.address().port();
+            let bot_path = f.inst_dir.join("config/bot_config.toml");
+            let seed = format!(
+                "[inner]\nversion = \"8.14.40\"\n\n[webui]\nport = {port}\n\n[maim_message]\nws_server_port = 23002\n"
+            );
+            std::fs::write(&bot_path, &seed).unwrap();
+            f.manager
+                .store
+                .update(&f.id, |i| {
+                    i.port = port;
+                    i.state = AppInstanceState::Running;
+                })
+                .await
+                .unwrap();
+            for route in ["/api/webui/config/bot", "/api/webui/config/model"] {
+                Mock::given(method("POST"))
+                    .and(path(route))
+                    .and(header("cookie", "maibot_session=Ncd_tok"))
+                    .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"success": true})))
+                    .mount(&server)
+                    .await;
+            }
+
+            let env = f.manager.read_config(&f.id).await.unwrap();
+            let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
+                panic!("expected MaiBot config");
+            };
+            cfg.bot.personality.personality = "新人格".into();
+            cfg.models.api_providers[0].api_key = "sk-live".into();
+            let res = f
+                .manager
+                .write_config(&f.id, AppInstanceConfig::MaiBot(cfg), Some(env.revision))
+                .await
+                .unwrap();
+            assert!(!res.restart_required, "人格、模型上游热加载，不用重启");
+            assert_eq!(std::fs::read_to_string(&bot_path).unwrap(), seed, "运行中写交给 WebUI，桌面端不直接改文件");
+
+            let body_of = |p: &str, reqs: &[wiremock::Request]| -> serde_json::Value {
+                let req = reqs.iter().rev().find(|r| r.url.path() == p).expect("该路由收到过请求");
+                serde_json::from_slice(&req.body).unwrap()
+            };
+            let reqs = server.received_requests().await.unwrap();
+            assert_eq!(
+                body_of("/api/webui/config/bot", &reqs),
+                serde_json::json!({"personality": {"personality": "新人格"}}),
+                "bot 只带改了的键"
+            );
+            let model = body_of("/api/webui/config/model", &reqs);
+            assert_eq!(model["api_providers"][0]["api_key"], "sk-live");
+            assert!(model["models"].as_array().is_some_and(|m| !m.is_empty()), "model 整份给");
+            assert!(model["models"][0]["extra_params"].is_object(), "extra_params 交出去要是表");
 
             let env = f.manager.read_config(&f.id).await.unwrap();
             let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
@@ -3992,11 +4054,16 @@ version = \"1.17.9\""), "版本号取实例源码里的常量");
                 .write_config(&f.id, AppInstanceConfig::MaiBot(cfg), Some(env.revision))
                 .await
                 .unwrap();
-            assert!(res.restart_required, "旧版消息口启动时才绑");
+            assert!(res.restart_required, "旧版消息口启动时才绑，走接口写也得重启");
             assert!(
                 t0.elapsed() >= Duration::from_millis(1300),
-                "运行中两次写之间要留出上游热加载的间隔，实际 {:?}",
+                "两次写之间要留出上游热加载的间隔，实际 {:?}",
                 t0.elapsed()
+            );
+            let reqs = server.received_requests().await.unwrap();
+            assert_eq!(
+                body_of("/api/webui/config/bot", &reqs),
+                serde_json::json!({"maim_message": {"ws_server_port": 23012}})
             );
         }
 
