@@ -26,6 +26,15 @@ export const MAIBOT_NAV: readonly FrameworkNavGroup[] = [
         ],
     },
     {
+        // 麦麦自己攒下的数据：改了就落库，要它在跑
+        id: 'resource',
+        label: '资源',
+        items: [
+            { value: 'expressions', label: '表达方式' },
+            { value: 'jargon', label: '黑话' },
+        ],
+    },
+    {
         id: 'extend',
         label: '扩展',
         items: [
@@ -121,8 +130,8 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
             { path: ['jargon'], title: '黑话' },
         ],
         links: [
-            { label: '学到的表达方式', path: '/resource/expression' },
-            { label: '学到的黑话', path: '/resource/jargon' },
+            { label: '学到的表达方式', tab: 'expressions' },
+            { label: '学到的黑话', tab: 'jargon' },
         ],
     },
     memory: {

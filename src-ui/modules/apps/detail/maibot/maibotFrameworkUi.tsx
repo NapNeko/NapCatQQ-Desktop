@@ -13,6 +13,8 @@ import {
 import { McpStatusPanel } from './maibotProbes';
 import { useAdvancedSections } from './advancedToggle';
 import { MaiBotPromptsTab } from './MaiBotPromptsTab';
+import { MaiBotExpressionsTab } from './MaiBotExpressionsTab';
+import { MaiBotJargonTab } from './MaiBotJargonTab';
 import { usePromptDrafts } from './maibotPromptDrafts';
 import { NoneBot2StoreTab } from '../nonebot2/NoneBot2StoreTab';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
@@ -28,8 +30,8 @@ import { MaiBotSchemaTab } from './MaiBotSchemaTab';
 import { MAIBOT_NAV, MAIBOT_SCHEMA_PAGES, maibotTabForIssue } from './maibotPages';
 
 const TYPED_TABS = new Set(['overview', 'models', 'chat', 'connection', ...Object.keys(MAIBOT_SCHEMA_PAGES)]);
-// 插件商店、提示词这些页自己落盘，不是表单：铺满内容区、不挂保存条
-const FILL_PANE = new Set(['plugins', 'prompts']);
+// 插件商店、提示词、资源页这些自己落盘，不是表单：铺满内容区、不挂保存条
+const FILL_PANE = new Set(['plugins', 'prompts', 'expressions', 'jargon']);
 
 function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
     const form = useMaiBotConfigForm(instance.id, true, instance.display_name);
@@ -73,6 +75,8 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
         ) : null;
 
     const common = { onChange: form.setForm, errors: form.errors, disabled: form.saving };
+    // 资源页没连上时给的「启动麦麦」
+    const startProps = { onStart: () => apps.start(instance.id), starting: apps.pendingId === instance.id };
 
     return (
         <>
@@ -80,13 +84,19 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                 <NoneBot2StoreTab instance={instance} resource="plugin" />
             </TabsContent>
             <TabsContent value="prompts" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
-                <MaiBotPromptsTab
+                <MaiBotPromptsTab instance={instance} status={status} drafts={promptDrafts} {...startProps} />
+            </TabsContent>
+            <TabsContent value="expressions" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+                <MaiBotExpressionsTab
                     instance={instance}
                     status={status}
-                    drafts={promptDrafts}
-                    onStart={() => apps.start(instance.id)}
-                    starting={apps.pendingId === instance.id}
+                    // 读不到配置时按上游默认（开着）说
+                    curatedOnly={form.form?.bot.expression.expression_checked_only ?? true}
+                    {...startProps}
                 />
+            </TabsContent>
+            <TabsContent value="jargon" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+                <MaiBotJargonTab instance={instance} status={status} {...startProps} />
             </TabsContent>
             {pane('overview', (cfg) => (
                 <MaiBotOverviewTab
