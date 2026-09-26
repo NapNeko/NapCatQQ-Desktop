@@ -100,6 +100,8 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                         showAdvanced={showAdvanced}
                         onShowAdvanced={setShowAdvanced}
                         chatTargets={live ? sessions.data : undefined}
+                        live={live}
+                        onOpenWebUi={(path) => void apps.openWebUi(instance.id, path)}
                         intro={
                             tab === 'mcp' && live ? (
                                 <McpStatusPanel instanceId={instance.id} servers={cfg.bot.mcp.servers} status={mcp.data} />

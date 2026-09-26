@@ -53,6 +53,11 @@ export type SchemaPageDef = {
     /** 这页不出的字段（形状键，见 SchemaForm 的 shapeKey） */
     skip?: readonly string[];
     advanced?: readonly string[];
+    /**
+     * 麦麦 WebUI 里和这页相关的数据页（学到的表达、记忆图谱、提示词模板…）。那些是带审核、
+     * 批量操作的完整管理界面，桌面端不重做，运行中给个直达
+     */
+    links?: readonly { label: string; path: string }[];
 };
 
 // 分时段频率和按聊天的提示词是「按会话」的规则，归会话规则页；回复设置页只放全局的
@@ -70,6 +75,10 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
         ],
         // 适配器连上后会上报真实账号，这三项只在没上报时兜底，平时不用碰
         advanced: ['bot.platform', 'bot.qq_account', 'bot.platforms'],
+        links: [
+            { label: '提示词模板', path: '/config/prompts' },
+            { label: '人物画像', path: '/resource/person' },
+        ],
     },
     talk: {
         sections: [
@@ -82,6 +91,7 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
             { path: ['voice'], title: '语音' },
         ],
         skip: RULE_FIELDS,
+        links: [{ label: '表情包库', path: '/resource/emoji' }],
     },
     rules: {
         sections: [
@@ -100,8 +110,18 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
             { path: ['expression'], title: '表达方式' },
             { path: ['jargon'], title: '黑话' },
         ],
+        links: [
+            { label: '学到的表达方式', path: '/resource/expression' },
+            { label: '学到的黑话', path: '/resource/jargon' },
+        ],
     },
-    memory: { sections: [{ path: ['a_memorix'], title: '长期记忆' }] },
+    memory: {
+        sections: [{ path: ['a_memorix'], title: '长期记忆' }],
+        links: [
+            { label: '记忆图谱', path: '/resource/knowledge-graph' },
+            { label: '导入知识', path: '/resource/knowledge-base' },
+        ],
+    },
     mcp: { sections: [{ path: ['mcp'], title: 'MCP' }] },
     advanced: {
         sections: [
@@ -124,6 +144,7 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
             // 麦麦由桌面端在后台拉起，没有可输入的终端
             'debug.enable_console_input',
         ],
+        links: [{ label: '学到的行为', path: '/resource/behavior' }],
     },
 };
 
