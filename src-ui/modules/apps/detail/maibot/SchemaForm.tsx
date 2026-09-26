@@ -21,7 +21,9 @@ import {
     type UiField,
     type UiNode,
 } from '../../../../core/domain/apps/maibotSchema';
+import type { MaiBotChatSession } from '../../../../core/ipc/types';
 import { LineListField, StringMapEditor } from './listEditors';
+import { ChatTargetPicker } from './maibotProbes';
 
 // 一行一条编辑的字符串列表：内容里本身有空格逗号（正则、句子、命令行参数），按分隔符拆会拆坏。
 // 其余的（账号、库名、token、监听地址）是一个个短 id，用标签输入
@@ -75,6 +77,15 @@ export interface SchemaCtx {
     advanced?: ReadonlySet<string>;
     /** 按字段换控件（如模型的服务商从已有的里选） */
     widgets?: Readonly<Record<string, (p: WidgetProps) => React.ReactNode>>;
+    /** 麦麦见过的聊天；给了的话，按聊天配的列表多一个「从聊过的里选」 */
+    chatTargets?: readonly MaiBotChatSession[];
+}
+
+/** 条目是「平台 + 聊天 ID + 群 / 私聊」的列表（按聊天的规则、学习名单、共享组成员），返回类型字段名 */
+function chatTargetTypeField(item: UiNode): string | null {
+    const names = new Set(item.fields.map((f) => f.name));
+    if (!names.has('platform') || !names.has('item_id')) return null;
+    return names.has('rule_type') ? 'rule_type' : names.has('type') ? 'type' : null;
 }
 
 /** 在两栏网格里占满一整行；自定义控件要宽就套它 */
@@ -285,6 +296,7 @@ const ObjectListField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field
     const raw = getIn(ctx.value, p);
     const items = Array.isArray(raw) ? raw : [];
     const set = (next: unknown[]) => ctx.onChange(setIn(ctx.value, p, next));
+    const typeField = chatTargetTypeField(item);
     return (
         <div className={cn('flex flex-col gap-2', WIDE)}>
             <div className="flex items-start justify-between gap-3">
@@ -292,15 +304,34 @@ const ObjectListField: React.FC<{ ctx: SchemaCtx; path: readonly string[]; field
                     <span className="text-xs font-medium text-text-secondary">{field.label ?? field.name}</span>
                     {field.description && <p className="text-2xs text-text-tertiary">{field.description}</p>}
                 </div>
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={ctx.disabled}
-                    onClick={() => set([...items, newItemFor(item)])}
-                >
-                    <ActionMotionIcon icon={Plus} size={13} />
-                    加一条
-                </Button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                    {typeField && ctx.chatTargets && (
+                        <ChatTargetPicker
+                            sessions={ctx.chatTargets}
+                            disabled={ctx.disabled}
+                            onPick={(s) =>
+                                set([
+                                    ...items,
+                                    {
+                                        ...newItemFor(item),
+                                        platform: s.platform,
+                                        item_id: s.target_id,
+                                        [typeField]: s.chat_type === 'private' ? 'private' : 'group',
+                                    },
+                                ])
+                            }
+                        />
+                    )}
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={ctx.disabled}
+                        onClick={() => set([...items, newItemFor(item)])}
+                    >
+                        <ActionMotionIcon icon={Plus} size={13} />
+                        加一条
+                    </Button>
+                </div>
             </div>
             {items.length === 0 ? (
                 <p className="text-2xs text-text-tertiary">还没有</p>

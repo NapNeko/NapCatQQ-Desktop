@@ -11,6 +11,7 @@ import {
 } from '../../../../core/domain/apps/maibotConfig';
 import { cn } from '../../../../shared/utils/cn';
 import type { AppInstance, MaiBotInstanceConfig } from '../../../../core/ipc/types';
+import { MaiBotRuntimeCard } from './MaiBotRuntimeCard';
 
 type CondKey = 'link' | 'model' | 'chat' | 'run';
 
@@ -34,7 +35,8 @@ export const MaiBotOverviewTab: React.FC<{
     onOpenLink: () => void;
     onStart: () => void;
     starting: boolean;
-    onOpenWebUi: () => void;
+    /** path 是 WebUI 里的页，如 /chat；不给就开首页 */
+    onOpenWebUi: (path?: string) => void;
 }> = ({ instance, config, onGoTab, onOpenLink, onStart, starting, onOpenWebUi }) => {
     const running = instance.state === 'running';
     const linked = !!instance.link;
@@ -64,7 +66,7 @@ export const MaiBotOverviewTab: React.FC<{
         title = '可以在 QQ 上找麦麦聊天了';
         sub = '人格、回复方式这些左边各页都能改，运行中保存马上生效';
         actions = (
-            <Button size="sm" variant="primary" onClick={onOpenWebUi}>
+            <Button size="sm" variant="primary" onClick={() => onOpenWebUi()}>
                 <ExternalLink size={13} />
                 打开 WebUI
             </Button>
@@ -142,11 +144,13 @@ export const MaiBotOverviewTab: React.FC<{
                 </ul>
             </Card>
 
+            <MaiBotRuntimeCard instance={instance} onOpenChat={() => onOpenWebUi('/chat')} />
+
             <Card padding="none" className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                 <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-text-secondary">
                     记忆图谱、学到的表达方式、表情包库在 MaiBot 自己的 WebUI 里看。登录 token 在「连接」页，打开时会自动复制。
                 </p>
-                <Button size="sm" variant="secondary" disabled={!running} onClick={onOpenWebUi}>
+                <Button size="sm" variant="secondary" disabled={!running} onClick={() => onOpenWebUi()}>
                     <ExternalLink size={13} />
                     {running ? '打开 WebUI' : '启动后可打开 WebUI'}
                 </Button>

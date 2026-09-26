@@ -25,6 +25,15 @@ import type {
     AstrBotKnowledgeBase,
     AstrBotPersona,
     AstrBotSessionRule,
+    MaiBotAPIProvider,
+    MaiBotChatSession,
+    MaiBotMCPServerItemConfig,
+    MaiBotMcpStatus,
+    MaiBotMcpTest,
+    MaiBotProviderCheck,
+    MaiBotProviderModel,
+    MaiBotRuntimeStatus,
+    MaiBotStatsSummary,
     CreateAppInstanceRequest,
     ImportAppInstanceRequest,
     KarinPluginInstalled,
@@ -386,6 +395,46 @@ export const appFrameworkService = {
     astrbotListSubagentTools: async (instanceId: string): Promise<string[]> => {
         if (!isTauri) return mockAppFrameworkApi.astrbotListSubagentTools(instanceId);
         return invoke<string[]>('astrbot_list_subagent_tools', { instanceId });
+    },
+
+    maibotStatus: async (instanceId: string): Promise<MaiBotRuntimeStatus> => {
+        if (!isTauri) return mockAppFrameworkApi.maibotStatus(instanceId);
+        return invoke<MaiBotRuntimeStatus>('maibot_status', { instanceId });
+    },
+
+    maibotRestart: async (instanceId: string): Promise<void> => {
+        if (!isTauri) return mockAppFrameworkApi.maibotRestart(instanceId);
+        return invoke<void>('maibot_restart', { instanceId });
+    },
+
+    maibotStats: async (instanceId: string, hours: number): Promise<MaiBotStatsSummary> => {
+        if (!isTauri) return mockAppFrameworkApi.maibotStats(instanceId, hours);
+        return invoke<MaiBotStatsSummary>('maibot_stats', { instanceId, hours });
+    },
+
+    maibotChatSessions: async (instanceId: string): Promise<MaiBotChatSession[]> => {
+        if (!isTauri) return mockAppFrameworkApi.maibotChatSessions(instanceId);
+        return invoke<MaiBotChatSession[]>('maibot_chat_sessions', { instanceId });
+    },
+
+    maibotProviderModels: async (instanceId: string, provider: MaiBotAPIProvider): Promise<MaiBotProviderModel[]> => {
+        if (!isTauri) return mockAppFrameworkApi.maibotProviderModels(instanceId, provider);
+        return invoke<MaiBotProviderModel[]>('maibot_provider_models', { instanceId, provider });
+    },
+
+    maibotTestProvider: async (instanceId: string, provider: MaiBotAPIProvider): Promise<MaiBotProviderCheck> => {
+        if (!isTauri) return mockAppFrameworkApi.maibotTestProvider(instanceId, provider);
+        return invoke<MaiBotProviderCheck>('maibot_test_provider', { instanceId, provider });
+    },
+
+    maibotMcpStatus: async (instanceId: string): Promise<MaiBotMcpStatus> => {
+        if (!isTauri) return mockAppFrameworkApi.maibotMcpStatus(instanceId);
+        return invoke<MaiBotMcpStatus>('maibot_mcp_status', { instanceId });
+    },
+
+    maibotTestMcp: async (instanceId: string, server: MaiBotMCPServerItemConfig): Promise<MaiBotMcpTest> => {
+        if (!isTauri) return mockAppFrameworkApi.maibotTestMcp(instanceId, server);
+        return invoke<MaiBotMcpTest>('maibot_test_mcp', { instanceId, server });
     },
 
     setInstanceAutoStart: async (instanceId: string, autoStart: boolean): Promise<AppInstance> => {

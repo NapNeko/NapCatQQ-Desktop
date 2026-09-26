@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import { FormSection, Switch } from '../../../../shared/ui';
 import { ConfigForm } from '../karin/configLayout';
-import type { MaiBotInstanceConfig } from '../../../../core/ipc/types';
+import type { MaiBotChatSession, MaiBotInstanceConfig } from '../../../../core/ipc/types';
 import { anyVisible, FieldGrid, hasAdvanced, type SchemaCtx } from './SchemaForm';
 import { BOT_SCHEMA, nodeAt, type UiNode } from '../../../../core/domain/apps/maibotSchema';
 import type { SchemaPageDef, SchemaSectionDef } from './maibotPages';
@@ -23,9 +23,11 @@ export const MaiBotSchemaTab: React.FC<{
     disabled?: boolean;
     showAdvanced: boolean;
     onShowAdvanced: (next: boolean) => void;
-    /** 页顶的说明或提示条 */
+    /** 页顶的说明或运行状态 */
     intro?: ReactNode;
-}> = ({ page, config, onChange, errors, disabled, showAdvanced, onShowAdvanced, intro }) => {
+    /** 麦麦在跑时它见过的聊天，按聊天配的列表能直接挑 */
+    chatTargets?: readonly MaiBotChatSession[];
+}> = ({ page, config, onChange, errors, disabled, showAdvanced, onShowAdvanced, intro, chatTargets }) => {
     const skip = new Set(page.skip);
     const advanced = new Set(page.advanced);
     const ctx: SchemaCtx = {
@@ -37,6 +39,7 @@ export const MaiBotSchemaTab: React.FC<{
         showAdvanced,
         skip,
         advanced,
+        chatTargets,
     };
     const sections = page.sections.map((s) => ({ def: s, node: sectionNode(s) }));
     const anyAdvanced = sections.some(({ def, node }) => hasAdvanced(node, def.path, advanced));

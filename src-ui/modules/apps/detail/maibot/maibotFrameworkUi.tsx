@@ -5,6 +5,12 @@ import { useState, type ReactNode } from 'react';
 import { TabsContent } from '../../../../shared/ui';
 import { maibotChatDropsEverything, maibotModelSetupIssue } from '../../../../core/domain/apps/maibotConfig';
 import { useAppInstances } from '../../../../hooks/apps/useAppInstances';
+import {
+    useMaiBotChatSessions,
+    useMaiBotMcpStatus,
+    useMaiBotStatus,
+} from '../../../../hooks/apps/useMaiBotRuntime';
+import { McpStatusPanel } from './maibotProbes';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import { useMaiBotConfigForm } from '../useMaiBotConfigForm';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
@@ -26,6 +32,13 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
     const apps = useAppInstances();
     // 高级选项开关整个详情页共用：在模型页打开了，切到别的页还开着
     const [showAdvanced, setShowAdvanced] = useState(false);
+
+    // 运行期：WebUI 应答了才去拉会话、MCP 状态
+    const running = instance.state === 'running';
+    const live = useMaiBotStatus(instance.id, running).data?.gate === 'ok';
+    const sessions = useMaiBotChatSessions(instance.id, live);
+    const mcpServers = form.form?.bot.mcp.servers ?? [];
+    const mcp = useMaiBotMcpStatus(instance.id, live && mcpServers.length > 0);
 
     // 和概览状态卡同一套判定：模型没配好亮在「模型」，名单把消息全丢了亮在「聊天名单」
     const badges: Record<string, NavBadgeTone> = {};
@@ -63,7 +76,7 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     onOpenLink={onOpenLink}
                     onStart={() => apps.start(instance.id)}
                     starting={apps.pendingId === instance.id}
-                    onOpenWebUi={() => void apps.openWebUi(instance.id)}
+                    onOpenWebUi={(path) => void apps.openWebUi(instance.id, path)}
                 />
             ))}
             {pane('models', (cfg) => (
@@ -72,6 +85,8 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     {...common}
                     showAdvanced={showAdvanced}
                     onShowAdvanced={setShowAdvanced}
+                    instanceId={instance.id}
+                    live={live}
                 />
             ))}
             {pane('chat', (cfg) => <MaiBotChatTab config={cfg} {...common} />)}
@@ -84,6 +99,12 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                         {...common}
                         showAdvanced={showAdvanced}
                         onShowAdvanced={setShowAdvanced}
+                        chatTargets={live ? sessions.data : undefined}
+                        intro={
+                            tab === 'mcp' && live ? (
+                                <McpStatusPanel instanceId={instance.id} servers={cfg.bot.mcp.servers} status={mcp.data} />
+                            ) : undefined
+                        }
                     />
                 )),
             )}

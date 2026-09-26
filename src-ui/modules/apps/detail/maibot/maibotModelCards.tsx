@@ -124,7 +124,9 @@ export const ProviderCard: React.FC<{
     onChange: (next: MaiBotAPIProvider) => void;
     onRename: (from: string, to: string) => void;
     onRemove: () => void;
-}> = ({ provider: p, path, errors, disabled, showAdvanced, onChange, onRename, onRemove }) => {
+    /** 运行中才有的测连接 / 拉模型 */
+    footer?: ReactNode;
+}> = ({ provider: p, path, errors, disabled, showAdvanced, onChange, onRename, onRemove, footer }) => {
     const set = (patch: Partial<MaiBotAPIProvider>) => onChange({ ...p, ...patch });
     const err = (k: string) => errors[`${path}/${k}`];
     const typeLabel = CLIENT_TYPES.find((t) => t.value === p.client_type)?.label ?? p.client_type;
@@ -292,6 +294,7 @@ export const ProviderCard: React.FC<{
                     />
                 </div>
             )}
+            {footer}
         </Card>
     );
 };
@@ -306,7 +309,9 @@ export const ModelCard: React.FC<{
     onChange: (next: MaiBotModelInfo) => void;
     onRename: (from: string, to: string) => void;
     onRemove: () => void;
-}> = ({ model: m, path, errors, providers, disabled, showAdvanced, onChange, onRename, onRemove }) => {
+    /** 运行中才有：模型标识下面的「从服务商列表里挑」 */
+    identifierExtra?: ReactNode;
+}> = ({ model: m, path, errors, providers, disabled, showAdvanced, onChange, onRename, onRemove, identifierExtra }) => {
     const set = (patch: Partial<MaiBotModelInfo>) => onChange({ ...m, ...patch });
     const err = (k: string) => errors[`${path}/${k}`];
     const providerItems = withCurrent(
@@ -334,15 +339,18 @@ export const ModelCard: React.FC<{
                     onChange={(name) => set({ name })}
                     onCommit={onRename}
                 />
-                <TextField
-                    label="模型标识"
-                    hint="服务商那边的模型 ID"
-                    value={m.model_identifier}
-                    placeholder="deepseek-chat"
-                    error={err('model_identifier')}
-                    disabled={disabled}
-                    onValueChange={(model_identifier) => set({ model_identifier })}
-                />
+                <div className="flex flex-col gap-1">
+                    <TextField
+                        label="模型标识"
+                        hint="服务商那边的模型 ID"
+                        value={m.model_identifier}
+                        placeholder="deepseek-chat"
+                        error={err('model_identifier')}
+                        disabled={disabled}
+                        onValueChange={(model_identifier) => set({ model_identifier })}
+                    />
+                    {identifierExtra}
+                </div>
                 <Select
                     label="提供商"
                     placeholder="选一个提供商"

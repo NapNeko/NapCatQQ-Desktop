@@ -155,6 +155,11 @@ function mbEnvelope(s: { config: MaiBotInstanceConfig; docRev: Record<string, nu
     };
 }
 
+/** 运行期 mock 读当前落盘的配置（MCP 服务列表、提供商） */
+export function peekMaiBotConfig(instance: AppInstance): MaiBotInstanceConfig {
+    return structuredClone(mbState(instance).config);
+}
+
 /** 对接后假装适配器配置被写了（真机由后端 apply_link 写 config.toml） */
 export function syncMaiBotLink(instance: AppInstance, linked: boolean): void {
     const s = mbState(instance);

@@ -21,6 +21,15 @@ import type {
     AstrBotKnowledgeBase,
     AstrBotPersona,
     AstrBotSessionRule,
+    MaiBotAPIProvider,
+    MaiBotChatSession,
+    MaiBotMCPServerItemConfig,
+    MaiBotMcpStatus,
+    MaiBotMcpTest,
+    MaiBotProviderCheck,
+    MaiBotProviderModel,
+    MaiBotRuntimeStatus,
+    MaiBotStatsSummary,
     CreateAppInstanceRequest,
     DeploymentTaskSnapshot,
     DomainEvent,
@@ -32,6 +41,7 @@ import type {
     ProgressKind,
 } from '../types';
 import { mockAstrBotDashboard } from './astrbot-dashboard.mock';
+import { mockMaiBotRuntime } from './maibot-runtime.mock';
 import { karinDefaultConfig } from '../../domain/apps/karinConfig';
 import { astrbotDefaultConfig } from '../../domain/apps/astrbotConfig';
 import { nonebot2DefaultConfig } from '../../domain/apps/nonebot2Config';
@@ -922,6 +932,20 @@ export const mockAppFrameworkApi = {
         const inst = require(instanceId);
         return mockAstrBotDashboard.listSubagentTools(inst, mockAccountView(inst));
     },
+
+    maibotStatus: (instanceId: string): Promise<MaiBotRuntimeStatus> => mockMaiBotRuntime.status(require(instanceId)),
+    maibotRestart: (instanceId: string): Promise<void> => mockMaiBotRuntime.restart(require(instanceId)),
+    maibotStats: (instanceId: string, hours: number): Promise<MaiBotStatsSummary> =>
+        mockMaiBotRuntime.stats(require(instanceId), hours),
+    maibotChatSessions: (instanceId: string): Promise<MaiBotChatSession[]> =>
+        mockMaiBotRuntime.chatSessions(require(instanceId)),
+    maibotProviderModels: (instanceId: string, provider: MaiBotAPIProvider): Promise<MaiBotProviderModel[]> =>
+        mockMaiBotRuntime.providerModels(require(instanceId), provider),
+    maibotTestProvider: (instanceId: string, provider: MaiBotAPIProvider): Promise<MaiBotProviderCheck> =>
+        mockMaiBotRuntime.testProvider(require(instanceId), provider),
+    maibotMcpStatus: (instanceId: string): Promise<MaiBotMcpStatus> => mockMaiBotRuntime.mcpStatus(require(instanceId)),
+    maibotTestMcp: (instanceId: string, server: MaiBotMCPServerItemConfig): Promise<MaiBotMcpTest> =>
+        mockMaiBotRuntime.testMcp(require(instanceId), server),
 };
 
 const mockPluginMarket: KarinPluginMarketEntry[] = [

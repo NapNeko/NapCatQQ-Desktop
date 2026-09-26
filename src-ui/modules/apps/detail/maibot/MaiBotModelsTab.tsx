@@ -32,6 +32,7 @@ import type {
     MaiBotModelInfo,
 } from '../../../../core/ipc/types';
 import { ModelCard, ProviderCard, TaskCard } from './maibotModelCards';
+import { ModelIdPicker, ProviderProbe } from './maibotProbes';
 
 type TaskKey = (typeof MAIBOT_TASK_KEYS)[number];
 
@@ -119,7 +120,10 @@ export const MaiBotModelsTab: React.FC<{
     disabled?: boolean;
     showAdvanced: boolean;
     onShowAdvanced: (next: boolean) => void;
-}> = ({ config, onChange, errors, disabled, showAdvanced, onShowAdvanced }) => {
+    instanceId: string;
+    /** 麦麦在跑且 WebUI 应答了：测连接、拉模型列表要走它 */
+    live: boolean;
+}> = ({ config, onChange, errors, disabled, showAdvanced, onShowAdvanced, instanceId, live }) => {
     const models = config.models;
     const setModels = (next: MaiBotModelConfigFile) => onChange({ ...config, models: next });
     const issue = maibotModelSetupIssue(models);
@@ -129,6 +133,25 @@ export const MaiBotModelsTab: React.FC<{
         setModels({ ...models, api_providers: models.api_providers.map((x, j) => (j === i ? p : x)) });
     const setModel = (i: number, m: MaiBotModelInfo) =>
         setModels({ ...models, models: models.models.map((x, j) => (j === i ? m : x)) });
+
+    // 从服务商列表加一条：名字默认就是标识，撞了往后编号
+    const addModelFrom = (provider: string, identifier: string) => {
+        const taken = new Set(models.models.map((m) => m.name));
+        let name = identifier;
+        for (let n = 2; taken.has(name); n += 1) name = `${identifier}-${n}`;
+        const next = { ...freshModel(models), api_provider: provider, model_identifier: identifier, name };
+        setModels({ ...models, models: [...models.models, next] });
+    };
+
+    // 换标识时，名字原本就跟着标识走的（或空着）一起换，任务里的引用跟过去
+    const pickIdentifier = (i: number, identifier: string) => {
+        const m = models.models[i];
+        if (!m) return;
+        const follow = !m.name || m.name === m.model_identifier;
+        const next = { ...m, model_identifier: identifier, name: follow ? identifier : m.name };
+        const updated = { ...models, models: models.models.map((x, j) => (j === i ? next : x)) };
+        setModels(follow && m.name ? renameMaiBotModel(updated, m.name, identifier) : updated);
+    };
 
     const tasks = TASK_ORDER.filter(
         (k) => showAdvanced || !fieldOf(TASK_NODE, k)?.advanced || models.model_task_config[k].model_list.length > 0,
@@ -177,6 +200,23 @@ export const MaiBotModelsTab: React.FC<{
                         onRemove={() =>
                             setModels({ ...models, api_providers: models.api_providers.filter((_, j) => j !== i) })
                         }
+                        footer={
+                            live && (
+                                <ProviderProbe
+                                    instanceId={instanceId}
+                                    provider={p}
+                                    added={
+                                        new Set(
+                                            models.models
+                                                .filter((m) => m.api_provider === p.name)
+                                                .map((m) => m.model_identifier),
+                                        )
+                                    }
+                                    onAddModel={(id) => addModelFrom(p.name, id)}
+                                    disabled={disabled}
+                                />
+                            )
+                        }
                     />
                 ))}
             </FormSection>
@@ -209,6 +249,17 @@ export const MaiBotModelsTab: React.FC<{
                         onChange={(next) => setModel(i, next)}
                         onRename={(from, to) => setModels(renameMaiBotModel(models, from, to))}
                         onRemove={() => setModels({ ...models, models: models.models.filter((_, j) => j !== i) })}
+                        identifierExtra={
+                            live && (
+                                <ModelIdPicker
+                                    instanceId={instanceId}
+                                    provider={models.api_providers.find((p) => p.name === m.api_provider)}
+                                    current={m.model_identifier}
+                                    onPick={(id) => pickIdentifier(i, id)}
+                                    disabled={disabled}
+                                />
+                            )
+                        }
                     />
                 ))}
             </FormSection>
