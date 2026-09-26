@@ -89,6 +89,7 @@ export {
 export { GlobalTitleTooltip } from './GlobalTitleTooltip';
 export {
     SyntaxTextEditor,
+    type SyntaxTextEditorHandle,
     type SyntaxTextEditorProps,
     type SyntaxMode,
 } from './SyntaxTextEditor';

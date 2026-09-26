@@ -1,6 +1,6 @@
 // 配置原文编辑。着色和光标都由 CodeMirror 画，避免 pre+textarea 叠层在 WebView2 里错位。
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 import {
     Decoration,
     EditorView,
@@ -21,9 +21,11 @@ const EMPTY: Record<SyntaxMode, string> = {
     dot_env: '# KEY=value',
     toml: '# table',
     plain: '',
+    prompt: '',
 };
 
 const MARK: Partial<Record<TokKind, Decoration>> = {
+    param: Decoration.mark({ class: 'ncd-syn-param' }),
     key: Decoration.mark({ class: 'ncd-syn-key' }),
     string: Decoration.mark({ class: 'ncd-syn-string' }),
     number: Decoration.mark({ class: 'ncd-syn-number' }),
@@ -94,7 +96,27 @@ const editorTheme = EditorView.theme({
     '.ncd-syn-null': { color: 'var(--color-warning)' },
     '.ncd-syn-punct': { color: 'var(--color-text-tertiary)' },
     '.ncd-syn-comment': { color: 'var(--color-text-tertiary)' },
+    // 提示词参数画成一枚小标签：一眼分得出哪些是麦麦要填进去的
+    '.ncd-syn-param': {
+        color: 'var(--color-brand)',
+        backgroundColor: 'color-mix(in srgb, var(--color-brand) 11%, transparent)',
+        borderRadius: '4px',
+        padding: '1px 2px',
+    },
 });
+
+// 大段中文用正文字体，读起来不像代码
+const proseTheme = EditorView.theme({
+    '&': { fontSize: '13px' },
+    '.cm-scroller': { fontFamily: 'var(--font-sans)', lineHeight: '1.8' },
+    '.cm-content': { padding: '14px 16px' },
+});
+
+export interface SyntaxTextEditorHandle {
+    /** 在光标处插入（有选区就替换），插完光标停在后面 */
+    insert: (text: string) => void;
+    focus: () => void;
+}
 
 export interface SyntaxTextEditorProps {
     value: string;
@@ -104,6 +126,9 @@ export interface SyntaxTextEditorProps {
     disabled?: boolean;
     /** 软折行（Webhook 模板）；配置原文默认关。 */
     wrap?: boolean;
+    /** 正文字体、行距放宽，给大段文字（提示词）用 */
+    prose?: boolean;
+    handleRef?: Ref<SyntaxTextEditorHandle>;
     'aria-label'?: string;
     className?: string;
 }
@@ -115,6 +140,8 @@ export function SyntaxTextEditor({
     invalid = false,
     disabled = false,
     wrap = false,
+    prose = false,
+    handleRef,
     'aria-label': ariaLabel,
     className,
 }: SyntaxTextEditorProps) {
@@ -143,6 +170,7 @@ export function SyntaxTextEditor({
                     tokenField(mode),
                     cmPlaceholder(EMPTY[mode]),
                     wrap ? EditorView.lineWrapping : [],
+                    prose ? proseTheme : [],
                     EditorView.contentAttributes.of({
                         'aria-label': ariaLabel ?? '配置文件',
                         spellcheck: 'false',
@@ -171,7 +199,22 @@ export function SyntaxTextEditor({
         };
         // value 只作初始文档；之后由下面的 effect 对齐。
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, wrap, ariaLabel]);
+    }, [mode, wrap, prose, ariaLabel]);
+
+    useImperativeHandle(
+        handleRef,
+        () => ({
+            insert: (text: string) => {
+                const view = viewRef.current;
+                if (!view || view.state.readOnly) return;
+                const { from, to } = view.state.selection.main;
+                view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length } });
+                view.focus();
+            },
+            focus: () => viewRef.current?.focus(),
+        }),
+        [],
+    );
 
     useEffect(() => {
         viewRef.current?.dispatch({

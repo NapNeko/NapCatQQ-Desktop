@@ -1,8 +1,18 @@
 // 配置原文分词：给 CodeMirror 着色用。拼回去必须等于原文。
 
-export type SyntaxMode = 'json' | 'dot_env' | 'toml' | 'plain';
+export type SyntaxMode = 'json' | 'dot_env' | 'toml' | 'plain' | 'prompt';
 
-export type TokKind = 'key' | 'string' | 'number' | 'bool' | 'null' | 'punct' | 'comment' | 'space' | 'plain';
+export type TokKind =
+    | 'key'
+    | 'string'
+    | 'number'
+    | 'bool'
+    | 'null'
+    | 'punct'
+    | 'comment'
+    | 'space'
+    | 'plain'
+    | 'param';
 
 export interface Tok {
     kind: TokKind;
@@ -231,6 +241,43 @@ function tokenizeToml(source: string): Tok[] {
     return out;
 }
 
+// 提示词模板（Python str.format）：{name} 是参数，{{ }} 是字面括号。没配对的括号照普通字符画，
+// 错在哪由调用方的校验去说，这里不跟着报
+function tokenizePrompt(source: string): Tok[] {
+    const out: Tok[] = [];
+    const push = (kind: TokKind, text: string) => {
+        if (!text) return;
+        const last = out[out.length - 1];
+        if (last && last.kind === kind && kind !== 'param') last.text += text;
+        else out.push({ kind, text });
+    };
+    let i = 0;
+    while (i < source.length) {
+        const c = source[i];
+        const n = source[i + 1];
+        if ((c === '{' && n === '{') || (c === '}' && n === '}')) {
+            push('punct', c + n);
+            i += 2;
+            continue;
+        }
+        if (c === '{') {
+            const close = source.indexOf('}', i + 1);
+            const reopen = source.indexOf('{', i + 1);
+            const body = close > i ? source.slice(i + 1, close) : '';
+            if (close > i && (reopen === -1 || reopen > close) && !body.includes('\n')) {
+                push('param', source.slice(i, close + 1));
+                i = close + 1;
+                continue;
+            }
+        }
+        let j = i + 1;
+        while (j < source.length && source[j] !== '{' && source[j] !== '}') j += 1;
+        push('plain', source.slice(i, j));
+        i = j;
+    }
+    return out;
+}
+
 export function tokenize(source: string, mode: SyntaxMode): Tok[] {
     switch (mode) {
         case 'json':
@@ -239,6 +286,8 @@ export function tokenize(source: string, mode: SyntaxMode): Tok[] {
             return tokenizeDotenv(source);
         case 'toml':
             return tokenizeToml(source);
+        case 'prompt':
+            return tokenizePrompt(source);
         default:
             return source ? [{ kind: 'plain', text: source }] : [];
     }
