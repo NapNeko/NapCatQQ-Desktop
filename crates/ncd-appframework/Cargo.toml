@@ -17,6 +17,8 @@ ncd-host = { path = "../ncd-host" }
 # MaiBot 不发 PyPI：查 GitHub Release、下源码包（镜像竞速）要用共享客户端和镜像表
 ncd-network = { path = "../ncd-network" }
 async-trait = "0.1"
+# 麦麦表情包缩略图、上传前的本地预览以 data URL 交给页面
+base64 = "0.22"
 # MaiBot 标首次配置完成时按上游 datetime.now().isoformat() 的样子写时间
 chrono = "0.4"
 md5 = "0.7"

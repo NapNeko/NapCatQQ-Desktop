@@ -20,8 +20,11 @@ use ncd_appframework::{
     AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession, AstrBotSessionRule,
     KarinPluginInstalled, MaiBotAPIProvider, MaiBotChatSession, MaiBotMCPServerItemConfig,
+    MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
+    MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotLocalImage,
     MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
     MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotResourceDone,
+    MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
     MaiBotMcpStatus, MaiBotMcpTest, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
     MaiBotPromptTarget, MaiBotProviderCheck, MaiBotProviderModel, MaiBotProviderSource,
     MaiBotRuntimeApi, MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotSession, MaiBotStatsSummary,
@@ -2354,6 +2357,82 @@ impl AppManager {
     ) -> Result<MaiBotResourceDone, AppFrameworkError> {
         let (adapter, s) = self.maibot_session(id).await?;
         maibot_api(adapter.as_ref())?.jargon_action(&s, &action).await
+    }
+
+    pub async fn maibot_persons(
+        &self,
+        id: &AppInstanceId,
+        query: MaiBotPersonQuery,
+    ) -> Result<MaiBotPersonPage, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.persons(&s, &query).await
+    }
+
+    pub async fn maibot_person_overview(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotPersonOverview, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.person_overview(&s).await
+    }
+
+    pub async fn maibot_person_action(
+        &self,
+        id: &AppInstanceId,
+        action: MaiBotPersonAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.person_action(&s, &action).await
+    }
+
+    pub async fn maibot_emojis(
+        &self,
+        id: &AppInstanceId,
+        query: MaiBotEmojiQuery,
+    ) -> Result<MaiBotEmojiPage, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.emojis(&s, &query).await
+    }
+
+    pub async fn maibot_emoji_overview(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotEmojiOverview, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.emoji_overview(&s).await
+    }
+
+    pub async fn maibot_emoji_action(
+        &self,
+        id: &AppInstanceId,
+        action: MaiBotEmojiAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.emoji_action(&s, &action).await
+    }
+
+    pub async fn maibot_emoji_image(
+        &self,
+        id: &AppInstanceId,
+        emoji_id: i64,
+        original: bool,
+    ) -> Result<MaiBotEmojiImage, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.emoji_image(&s, emoji_id, original).await
+    }
+
+    pub async fn maibot_emoji_upload(
+        &self,
+        id: &AppInstanceId,
+        upload: MaiBotEmojiUpload,
+    ) -> Result<MaiBotEmojiUploadDone, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.emoji_upload(&s, &upload).await
+    }
+
+    /// 上传前在本机看一眼要传的图，不碰实例：拖进来时麦麦停着也能先挑
+    pub async fn maibot_local_images(&self, paths: Vec<String>) -> Vec<MaiBotLocalImage> {
+        ncd_appframework::inspect_local_images(paths).await
     }
 
     pub async fn list_config_documents(

@@ -4,6 +4,11 @@ use async_trait::async_trait;
 use ncd_traits::AppFrameworkError;
 
 use super::resources::MaiBotResourceDone;
+use super::resources::emoji::{
+    self, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
+    MaiBotEmojiUpload, MaiBotEmojiUploadDone,
+};
+use super::resources::person::{self, MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery};
 use super::resources::expression::{
     self, MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
 };
@@ -118,6 +123,41 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         session: &MaiBotSession,
         action: &MaiBotJargonAction,
     ) -> Result<MaiBotResourceDone, AppFrameworkError>;
+
+    async fn persons(&self, session: &MaiBotSession, query: &MaiBotPersonQuery) -> Result<MaiBotPersonPage, AppFrameworkError>;
+
+    async fn person_overview(&self, session: &MaiBotSession) -> Result<MaiBotPersonOverview, AppFrameworkError>;
+
+    async fn person_action(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotPersonAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError>;
+
+    async fn emojis(&self, session: &MaiBotSession, query: &MaiBotEmojiQuery) -> Result<MaiBotEmojiPage, AppFrameworkError>;
+
+    async fn emoji_overview(&self, session: &MaiBotSession) -> Result<MaiBotEmojiOverview, AppFrameworkError>;
+
+    async fn emoji_action(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotEmojiAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError>;
+
+    /// 缩略图，`original` 时是原图（动图保留）
+    async fn emoji_image(
+        &self,
+        session: &MaiBotSession,
+        id: i64,
+        original: bool,
+    ) -> Result<MaiBotEmojiImage, AppFrameworkError>;
+
+    /// 读本机的图传上去；读不了、上游不收的逐张记在结果里，不整批失败
+    async fn emoji_upload(
+        &self,
+        session: &MaiBotSession,
+        upload: &MaiBotEmojiUpload,
+    ) -> Result<MaiBotEmojiUploadDone, AppFrameworkError>;
 }
 
 /// 直连本机回环 WebUI 的实现；`MaiBotAdapter` 用它
@@ -275,5 +315,54 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         action: &MaiBotJargonAction,
     ) -> Result<MaiBotResourceDone, AppFrameworkError> {
         jargon::act(&client(session)?, action).await
+    }
+
+    async fn persons(&self, session: &MaiBotSession, query: &MaiBotPersonQuery) -> Result<MaiBotPersonPage, AppFrameworkError> {
+        person::list(&client(session)?, query).await
+    }
+
+    async fn person_overview(&self, session: &MaiBotSession) -> Result<MaiBotPersonOverview, AppFrameworkError> {
+        person::overview(&client(session)?).await
+    }
+
+    async fn person_action(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotPersonAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError> {
+        person::act(&client(session)?, action).await
+    }
+
+    async fn emojis(&self, session: &MaiBotSession, query: &MaiBotEmojiQuery) -> Result<MaiBotEmojiPage, AppFrameworkError> {
+        emoji::list(&client(session)?, query).await
+    }
+
+    async fn emoji_overview(&self, session: &MaiBotSession) -> Result<MaiBotEmojiOverview, AppFrameworkError> {
+        emoji::overview(&client(session)?).await
+    }
+
+    async fn emoji_action(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotEmojiAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError> {
+        emoji::act(&client(session)?, action).await
+    }
+
+    async fn emoji_image(
+        &self,
+        session: &MaiBotSession,
+        id: i64,
+        original: bool,
+    ) -> Result<MaiBotEmojiImage, AppFrameworkError> {
+        emoji::image(&client(session)?, id, original).await
+    }
+
+    async fn emoji_upload(
+        &self,
+        session: &MaiBotSession,
+        upload: &MaiBotEmojiUpload,
+    ) -> Result<MaiBotEmojiUploadDone, AppFrameworkError> {
+        emoji::upload(&client(session)?, upload).await
     }
 }

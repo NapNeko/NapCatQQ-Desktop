@@ -3,8 +3,10 @@
 //! 每块一个子模块：对外的强类型（ts-rs）、宽松收上游 JSON 的 `Upstream*`、这一块的 WebUI 调用。
 //! 上游跨版本会加字段、在字符串位置给 null，所以先宽松收再换成对外类型，对外的不带 null。
 
+pub mod emoji;
 pub mod expression;
 pub mod jargon;
+pub mod person;
 pub mod prompts;
 
 use serde::{Deserialize, Serialize};

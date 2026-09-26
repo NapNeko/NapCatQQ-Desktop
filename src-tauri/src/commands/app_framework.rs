@@ -15,9 +15,12 @@ use ncd_runtime::{
     AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule, ComponentActionRequest,
     DeploymentTaskRequest, KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider,
-    MaiBotChatSession, MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage,
-    MaiBotExpressionQuery, MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage,
-    MaiBotJargonQuery, MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest,
+    MaiBotChatSession, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
+    MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotExpressionAction,
+    MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery, MaiBotJargonAction,
+    MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotLocalImage,
+    MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest, MaiBotPersonAction,
+    MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
     MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotProviderCheck,
     MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus, MaiBotStatsSummary,
     join_webui_url, run_app_plugin_task,
@@ -807,6 +810,117 @@ pub async fn maibot_jargon_action(
         .maibot_jargon_action(&AppInstanceId::new(instance_id), action)
         .await
         .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_persons(
+    instance_id: String,
+    query: MaiBotPersonQuery,
+    state: State<'_, AppState>,
+) -> Result<MaiBotPersonPage, AppConfigError> {
+    state
+        .app_manager
+        .maibot_persons(&AppInstanceId::new(instance_id), query)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_person_overview(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotPersonOverview, AppConfigError> {
+    state
+        .app_manager
+        .maibot_person_overview(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_person_action(
+    instance_id: String,
+    action: MaiBotPersonAction,
+    state: State<'_, AppState>,
+) -> Result<MaiBotResourceDone, AppConfigError> {
+    state
+        .app_manager
+        .maibot_person_action(&AppInstanceId::new(instance_id), action)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_emojis(
+    instance_id: String,
+    query: MaiBotEmojiQuery,
+    state: State<'_, AppState>,
+) -> Result<MaiBotEmojiPage, AppConfigError> {
+    state
+        .app_manager
+        .maibot_emojis(&AppInstanceId::new(instance_id), query)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_emoji_overview(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotEmojiOverview, AppConfigError> {
+    state
+        .app_manager
+        .maibot_emoji_overview(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_emoji_action(
+    instance_id: String,
+    action: MaiBotEmojiAction,
+    state: State<'_, AppState>,
+) -> Result<MaiBotResourceDone, AppConfigError> {
+    state
+        .app_manager
+        .maibot_emoji_action(&AppInstanceId::new(instance_id), action)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_emoji_image(
+    instance_id: String,
+    emoji_id: i64,
+    original: bool,
+    state: State<'_, AppState>,
+) -> Result<MaiBotEmojiImage, AppConfigError> {
+    state
+        .app_manager
+        .maibot_emoji_image(&AppInstanceId::new(instance_id), emoji_id, original)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_emoji_upload(
+    instance_id: String,
+    upload: MaiBotEmojiUpload,
+    state: State<'_, AppState>,
+) -> Result<MaiBotEmojiUploadDone, AppConfigError> {
+    state
+        .app_manager
+        .maibot_emoji_upload(&AppInstanceId::new(instance_id), upload)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_local_images(
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<MaiBotLocalImage>, AppConfigError> {
+    Ok(state.app_manager.maibot_local_images(paths).await)
 }
 
 /// 只看账号不开隧道：实例停着时从详情页查看 / 重置密码用。

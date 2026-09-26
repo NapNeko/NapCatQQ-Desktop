@@ -68,36 +68,67 @@ impl MaiBotWebUi {
         if let Some(timeout) = req.timeout {
             builder = builder.timeout(timeout);
         }
-        let resp = builder
-            .send()
-            .await
-            .map_err(|e| AppFrameworkError::DashboardUnreachable(e.without_url().to_string()))?;
+        let resp = builder.send().await.map_err(transport_err)?;
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
         let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
         if status.is_success() {
             return Ok(value);
         }
-        let detail = value
-            .get("detail")
-            .map(|d| d.as_str().map_or_else(|| d.to_string(), str::to_string))
-            .unwrap_or_else(|| text.chars().take(300).collect());
-        Err(match (status, req.doc) {
-            (StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN, _) => AppFrameworkError::DashboardAuth(
-                "麦麦 WebUI 不认这个 token，data/webui.json 里的 token 可能被改过".into(),
-            ),
-            (StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY, Some(doc)) => {
-                AppFrameworkError::ConfigInvalid(vec![AppConfigIssue::new(
-                    doc,
-                    format!("麦麦没收下：{detail}"),
-                )])
-            }
-            // 上游把服务商那边的 401 / 403 换成 502 回来（免得前端当成 WebUI 登录失效），原话就够清楚
-            (StatusCode::BAD_REQUEST | StatusCode::BAD_GATEWAY | StatusCode::GATEWAY_TIMEOUT, None) => {
-                AppFrameworkError::Integration(detail)
-            }
-            _ => AppFrameworkError::Integration(format!("麦麦 WebUI 返回 {status}：{detail}")),
-        })
+        Err(failure(status, &value, &text, req.doc))
+    }
+
+    /// 图片这类二进制（表情包缩略图、原图）。上游缩略图还在生成时回 202，文件被清理过回 404，
+    /// 这两种都不算错，交给调用方决定等一会儿再要还是显示「图没了」
+    pub(crate) async fn fetch_bytes(&self, path: &str, query: &[(&str, &str)]) -> Result<Fetched, AppFrameworkError> {
+        let resp = self
+            .http
+            .get(format!("{}{path}", self.base))
+            .header(reqwest::header::COOKIE, &self.cookie)
+            .query(query)
+            .send()
+            .await
+            .map_err(transport_err)?;
+        let status = resp.status();
+        if status == StatusCode::ACCEPTED {
+            return Ok(Fetched::Pending);
+        }
+        if status == StatusCode::NOT_FOUND {
+            return Ok(Fetched::Missing);
+        }
+        if !status.is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+            return Err(failure(status, &value, &text, None));
+        }
+        let mime = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.split(';').next().unwrap_or(v).trim().to_string())
+            .unwrap_or_default();
+        let bytes = resp.bytes().await.map_err(transport_err)?;
+        Ok(Fetched::Ready { mime, bytes: bytes.to_vec() })
+    }
+
+    /// multipart 表单（上传表情包）。上游处理图片要一会儿，按慢请求等
+    pub(crate) async fn send_form(&self, path: &str, form: reqwest::multipart::Form) -> Result<Value, AppFrameworkError> {
+        let resp = self
+            .http
+            .post(format!("{}{path}", self.base))
+            .header(reqwest::header::COOKIE, &self.cookie)
+            .timeout(SLOW_TIMEOUT)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(transport_err)?;
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+        if status.is_success() {
+            return Ok(value);
+        }
+        Err(failure(status, &value, &text, None))
     }
 
     pub(crate) async fn get<T: DeserializeOwned>(
@@ -248,6 +279,39 @@ impl<'a> Request<'a> {
     pub(crate) fn slow(mut self) -> Self {
         self.timeout = Some(SLOW_TIMEOUT);
         self
+    }
+}
+
+/// 二进制请求的结果：缩略图生成中（202）、文件没了（404）和拿到了分开
+#[derive(Debug)]
+pub(crate) enum Fetched {
+    Ready { mime: String, bytes: Vec<u8> },
+    Pending,
+    Missing,
+}
+
+fn transport_err(e: reqwest::Error) -> AppFrameworkError {
+    AppFrameworkError::DashboardUnreachable(e.without_url().to_string())
+}
+
+/// 上游出错时回 `{"detail": "..."}`；`doc` 是这次改的是哪份配置，400 时报成它的配置错误
+fn failure(status: StatusCode, value: &Value, text: &str, doc: Option<&str>) -> AppFrameworkError {
+    let detail = value
+        .get("detail")
+        .map(|d| d.as_str().map_or_else(|| d.to_string(), str::to_string))
+        .unwrap_or_else(|| text.chars().take(300).collect());
+    match (status, doc) {
+        (StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN, _) => AppFrameworkError::DashboardAuth(
+            "麦麦 WebUI 不认这个 token，data/webui.json 里的 token 可能被改过".into(),
+        ),
+        (StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY, Some(doc)) => {
+            AppFrameworkError::ConfigInvalid(vec![AppConfigIssue::new(doc, format!("麦麦没收下：{detail}"))])
+        }
+        // 上游把服务商那边的 401 / 403 换成 502 回来（免得前端当成 WebUI 登录失效），原话就够清楚
+        (StatusCode::BAD_REQUEST | StatusCode::BAD_GATEWAY | StatusCode::GATEWAY_TIMEOUT, None) => {
+            AppFrameworkError::Integration(detail)
+        }
+        _ => AppFrameworkError::Integration(format!("麦麦 WebUI 返回 {status}：{detail}")),
     }
 }
 

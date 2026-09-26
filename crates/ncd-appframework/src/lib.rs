@@ -56,6 +56,15 @@ pub use maibot::resources::jargon::{
     MaiBotJargon, MaiBotJargonAction, MaiBotJargonFilter, MaiBotJargonOverview, MaiBotJargonPage,
     MaiBotJargonQuery,
 };
+pub use maibot::resources::emoji::{
+    MaiBotEmoji, MaiBotEmojiAction, MaiBotEmojiFilter, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
+    MaiBotEmojiQuery, MaiBotEmojiSort, MaiBotEmojiStatus, MaiBotEmojiUpload, MaiBotEmojiUploadDone,
+    MaiBotLocalImage, MaiBotUploadFailure, inspect_local_images,
+};
+pub use maibot::resources::person::{
+    MaiBotGroupCard, MaiBotPerson, MaiBotPersonAction, MaiBotPersonFilter, MaiBotPersonOverview, MaiBotPersonPage,
+    MaiBotPersonQuery,
+};
 pub use maibot::resources::{MaiBotLearningChat, MaiBotResourceDone};
 pub use maibot::resources::prompts::{
     MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotPromptInfo, MaiBotPromptLanguage,
