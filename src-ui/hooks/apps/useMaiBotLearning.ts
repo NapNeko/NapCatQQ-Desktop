@@ -1,10 +1,8 @@
 // 麦麦学到的表达方式和黑话：列表、概况、操作。都要麦麦在跑、WebUI 应答了；操作成功后列表和概况一起刷。
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { maibotResourcesService as svc } from '../../core/services/maibot-resources.service';
-import { toAppConfigError } from '../../core/domain/apps/appConfigError';
-import { pushInfoBar } from '../ui/globalInfoBarStore';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { useResourceAction } from './maibotResourceAction';
 import type {
     MaiBotExpressionAction,
     MaiBotExpressionOverview,
@@ -14,7 +12,6 @@ import type {
     MaiBotJargonOverview,
     MaiBotJargonPage,
     MaiBotJargonQuery,
-    MaiBotResourceDone,
 } from '../../core/ipc/types';
 
 const exprKey = (id: string) => ['maibotExpressions', id] as const;
@@ -60,32 +57,6 @@ export function useMaiBotJargonOverview(instanceId: string, enabled: boolean) {
         enabled,
         retry: false,
         staleTime: 30_000,
-    });
-}
-
-type ActionOpts = {
-    /** 成功时弹一条提示；精选这种一点一下的就不弹，列表变了就是结果 */
-    toast?: boolean;
-};
-
-function useResourceAction<A>(
-    instanceId: string,
-    key: readonly unknown[],
-    run: (instanceId: string, action: A) => Promise<MaiBotResourceDone>,
-    failTitle: string,
-) {
-    const qc = useQueryClient();
-    return useMutation<MaiBotResourceDone, unknown, A & ActionOpts>({
-        mutationFn: ({ toast: _toast, ...action }) => run(instanceId, action as A),
-        onSuccess: (res, vars) => {
-            void qc.invalidateQueries({ queryKey: key });
-            if (vars.toast && res.message) {
-                pushInfoBar({ key: `${String(key[0])}:${instanceId}`, tone: 'success', title: res.message, autoDismissMs: 2500 });
-            }
-        },
-        onError: (err) => {
-            pushAppErrorBar({ key: `${String(key[0])}-fail:${instanceId}`, title: failTitle, raw: toAppConfigError(err).message });
-        },
     });
 }
 
