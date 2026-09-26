@@ -124,7 +124,7 @@ pub async fn install_app_instance(
         .await?;
     state
         .app_manager
-        .track_install(&id, submitted.clone())
+        .track_install(&id, submitted.clone(), state.deployment_tasks.clone())
         .await
         .map_err(|e| e.to_string())?;
     Ok(submitted)

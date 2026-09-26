@@ -175,6 +175,16 @@ impl DeploymentTaskManager {
         state.active_task_by_dedupe_key(key)
     }
 
+    /// 只取状态和错误：盯任务的人轮询用，不必每次克隆整份进度事件。
+    /// None = 队列里已经没有这个任务（终态后被清理，或从来没提交过）
+    pub async fn status_of(&self, task_id: &str) -> Option<(DeploymentTaskStatus, Option<String>)> {
+        let state = self.inner.lock().await;
+        state
+            .tasks
+            .get(task_id)
+            .map(|r| (r.snapshot.status, r.snapshot.error.clone()))
+    }
+
     pub async fn list(&self) -> DeploymentTaskList {
         let state = self.inner.lock().await;
         let tasks = state
@@ -802,6 +812,29 @@ mod tests {
         manager.delete_terminal("done").await.unwrap();
 
         assert!(manager.list().await.tasks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn status_of_reports_status_error_and_forgets_removed_tasks() {
+        let manager = DeploymentTaskManager::new(BroadcastEventBus::default());
+        {
+            let mut state = manager.inner.lock().await;
+            insert_request(&mut state, request("run", vec![]), DeploymentTaskStatus::Running);
+            insert_request(&mut state, request("bad", vec![]), DeploymentTaskStatus::Failed);
+            state.tasks.get_mut("bad").unwrap().snapshot.error = Some("boom".into());
+        }
+
+        assert_eq!(
+            manager.status_of("run").await,
+            Some((DeploymentTaskStatus::Running, None))
+        );
+        assert_eq!(
+            manager.status_of("bad").await,
+            Some((DeploymentTaskStatus::Failed, Some("boom".into())))
+        );
+        manager.delete_terminal("bad").await.unwrap();
+        assert_eq!(manager.status_of("bad").await, None);
+        assert_eq!(manager.status_of("never").await, None);
     }
 
     #[tokio::test]

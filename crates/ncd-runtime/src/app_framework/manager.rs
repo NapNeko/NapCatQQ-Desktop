@@ -51,6 +51,7 @@ use super::native_runtime::{AppLaunchSpec, NativeAppRuntime};
 use super::resident_link::{self, ResidentLinkSpec};
 use crate::bot_manager::BotManager;
 use crate::components::{AppComponentHint, data_root_to_host_path};
+use crate::deploy::DeploymentTaskManager;
 use crate::events::{BroadcastEventBus, DomainEvent};
 use crate::metrics::now_ms;
 
@@ -62,6 +63,18 @@ const SECRET_WEBUI_PASSWORD: &str = "webui_password";
 
 fn secret_key(instance_id: &str, suffix: &str) -> String {
     format!("app:{instance_id}:{suffix}")
+}
+
+/// 盯安装时事件之外的兜底：隔这么久查一次任务队列
+const INSTALL_POLL_INTERVAL: Duration = Duration::from_secs(2);
+
+enum InstallEnd {
+    Finished {
+        status: ncd_domain::DeploymentTaskStatus,
+        error: Option<String>,
+    },
+    /// 队列里已经查不到这个任务（终态后被清掉了），结果只能看目录
+    Vanished,
 }
 
 /// 用户给的密码过框架口令策略；没给（或空）就按框架策略生成
@@ -187,6 +200,8 @@ pub struct AppManager {
     secrets: Option<Arc<dyn SecretStore + Send + Sync>>,
     /// Desktop 握着的跨机隧道。key = instance id；解绑 / 删实例 / 改端口时释放。
     tunnels: tokio::sync::Mutex<HashMap<String, AppInstanceTunnel>>,
+    /// 正在盯的安装：instance id → task id。不在表里的「安装中」是上次装到一半桌面端退了
+    install_watches: std::sync::Mutex<HashMap<AppInstanceId, String>>,
 }
 
 impl AppManager {
@@ -211,6 +226,7 @@ impl AppManager {
             npm_registry: None,
             secrets: None,
             tunnels: tokio::sync::Mutex::new(HashMap::new()),
+            install_watches: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -708,11 +724,16 @@ impl AppManager {
         self.adopt_existing_link(&current.id).await
     }
 
-    /// 安装任务已提交：置 Installing 并盯任务结束
+    /// 安装任务已提交：置 Installing 并盯任务结束。
+    ///
+    /// 什么时候算装完只听任务的：事件为主，事件漏了按 task id 查队列兜底。不拿 detect 当信号，
+    /// uv 先建 `.venv` 再装包，目录早早就「像装好了」，冷缓存时后面还要装好几分钟。
+    /// 也不设截止时间：各安装步骤自己有超时，任务总会走到终态或被清出队列。
     pub async fn track_install(
         self: &Arc<Self>,
         id: &AppInstanceId,
         task_id: String,
+        tasks: DeploymentTaskManager,
     ) -> Result<AppInstance, AppFrameworkError> {
         let updated = self
             .store
@@ -723,56 +744,105 @@ impl AppManager {
             .await?;
         self.publish(&updated, "installing");
 
+        // 重复点安装会命中同一个任务（去重），已经有人盯着就不再起一个
+        {
+            let mut watches = self.install_watches.lock().unwrap_or_else(|e| e.into_inner());
+            if watches.get(id) == Some(&task_id) {
+                return Ok(updated);
+            }
+            watches.insert(id.clone(), task_id.clone());
+        }
+
         let this = Arc::clone(self);
         let id = id.clone();
         let mut sub = self
             .event_bus
             .subscribe(EventFilter::kind(DomainEventKind::DeploymentTaskChanged));
         tokio::spawn(async move {
-            let deadline = Instant::now() + Duration::from_mins(30);
-            loop {
+            let end = loop {
                 tokio::select! {
                     event = sub.next() => {
                         let Some(event) = event else {
-                            return;
+                            break None;
                         };
-                        let DomainEvent::DeploymentTaskChanged { task } = event else {
-                            continue;
-                        };
-                        if task.task_id != task_id || !task.status.is_terminal() {
-                            continue;
+                        if let DomainEvent::DeploymentTaskChanged { task } = event
+                            && task.task_id == task_id
+                            && task.status.is_terminal()
+                        {
+                            break Some(InstallEnd::Finished { status: task.status, error: task.error });
                         }
-                        let failure = (!matches!(
-                            task.status,
-                            ncd_domain::DeploymentTaskStatus::Success
-                        ))
-                        .then(|| {
-                            task.error
-                                .clone()
-                                .unwrap_or_else(|| "安装任务未成功结束".to_string())
-                        });
-                        if let Err(e) = this.refresh_after_install(&id, failure).await {
-                            tracing::warn!(instance = id.as_str(), error = %e, "refresh after install");
-                        }
-                        return;
                     }
-                    _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                        if Instant::now() > deadline {
-                            return;
-                        }
-                        match this.refresh_instance(&id).await {
-                            Ok(inst) if inst.state != AppInstanceState::Installing => return,
-                            Err(e) => tracing::warn!(
-                                instance = id.as_str(),
-                                error = %e,
-                                "poll after install"
-                            ),
-                            _ => {}
+                    _ = tokio::time::sleep(INSTALL_POLL_INTERVAL) => {
+                        match tasks.status_of(&task_id).await {
+                            Some((status, error)) if status.is_terminal() => {
+                                break Some(InstallEnd::Finished { status, error });
+                            }
+                            Some(_) => {}
+                            None => break Some(InstallEnd::Vanished),
                         }
                     }
                 }
+            };
+            let settled = match end {
+                Some(InstallEnd::Finished { status, error }) => {
+                    let failure = (status != ncd_domain::DeploymentTaskStatus::Success)
+                        .then(|| error.unwrap_or_else(|| "安装任务未成功结束".to_string()));
+                    this.refresh_after_install(&id, failure).await.map(|_| ())
+                }
+                Some(InstallEnd::Vanished) => this.settle_unwatched_install(&id).await.map(|_| ()),
+                // 事件总线关了 = 桌面端在退出，下次启动由对账收尾
+                None => Ok(()),
+            };
+            if let Err(e) = settled {
+                tracing::warn!(instance = id.as_str(), error = %e, "settle install");
+            }
+            // 收完尾再撤表：撤早了，并发的刷新会看到「安装中且没人盯」去按目录收尾
+            let mut watches = this.install_watches.lock().unwrap_or_else(|e| e.into_inner());
+            if watches.get(&id) == Some(&task_id) {
+                watches.remove(&id);
             }
         });
+        Ok(updated)
+    }
+
+    fn install_watched(&self, id: &AppInstanceId) -> bool {
+        self.install_watches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(id)
+    }
+
+    /// 「安装中」却没人盯（上次装到一半桌面端退了，或任务结束后被清出队列）：只能按目录现状收尾
+    async fn settle_unwatched_install(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<AppInstance, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        let detected = self.detect(host.as_ref(), &instance).await?;
+        let updated = self
+            .store
+            .update(id, |i| {
+                if i.state != AppInstanceState::Installing {
+                    return;
+                }
+                if let DetectOutcome::Installed(v) = &detected {
+                    i.state = AppInstanceState::Installed;
+                    i.installed_version = Some(v.version.clone());
+                } else {
+                    i.state = AppInstanceState::NotInstalled;
+                    i.last_error = Some("上次安装没有完成，重新安装即可".to_string());
+                }
+            })
+            .await?;
+        if updated.state != instance.state {
+            let reason = if updated.state == AppInstanceState::Installed {
+                "installed"
+            } else {
+                "install_failed"
+            };
+            self.publish(&updated, reason);
+        }
         Ok(updated)
     }
 
@@ -861,24 +931,11 @@ impl AppManager {
     ) -> Result<AppInstance, AppFrameworkError> {
         let instance = self.store.require(id).await?;
         if instance.state == AppInstanceState::Installing {
-            let host = self.resolve_host(&instance.host_id).await?;
-            let detected = self.detect(host.as_ref(), &instance).await?;
-            if let DetectOutcome::Installed(v) = detected {
-                let updated = self
-                    .store
-                    .update(id, |i| {
-                        if i.state == AppInstanceState::Installing {
-                            i.state = AppInstanceState::Installed;
-                            i.installed_version = Some(v.version.clone());
-                        }
-                    })
-                    .await?;
-                if updated.state != instance.state {
-                    self.publish(&updated, "installed");
-                }
-                return Ok(updated);
+            // 任务还在跑就以任务为准，目录里的半成品不算数
+            if self.install_watched(id) {
+                return Ok(instance);
             }
-            return Ok(instance);
+            return self.settle_unwatched_install(id).await;
         }
         let host = self.resolve_host(&instance.host_id).await?;
         let detected = self.detect(host.as_ref(), &instance).await?;
@@ -3697,6 +3754,125 @@ mod tests {
             let pending = f.manager.pending_terms(&f.id).await.unwrap();
             assert_eq!(pending.len(), 1);
             assert_eq!(pending[0].id, "privacy");
+        }
+
+        /// uv 先建 venv 再装包：目录到这一步 detect 就认「装好了」，其实包还没装完
+        fn make_dir_look_installed(f: &Fixture) {
+            std::fs::write(f.inst_dir.join("bot.py"), "").unwrap();
+            std::fs::write(
+                f.inst_dir.join("pyproject.toml"),
+                "[project]\nname = \"MaiBot\"\nversion = \"1.2.5\"\n",
+            )
+            .unwrap();
+            std::fs::create_dir_all(f.inst_dir.join(".venv/Scripts")).unwrap();
+            std::fs::write(f.inst_dir.join(".venv/Scripts/python.exe"), "").unwrap();
+        }
+
+        /// 假的安装任务：跑到收到信号为止，true 成功、false 失败
+        async fn gated_install_task(
+            tasks: &DeploymentTaskManager,
+            task_id: &str,
+        ) -> tokio::sync::oneshot::Sender<bool> {
+            let (release, gate) = tokio::sync::oneshot::channel::<bool>();
+            tasks
+                .submit(crate::deploy::DeploymentTaskRequest {
+                    task_id: task_id.into(),
+                    kind: ncd_domain::DeploymentTaskKind::ComponentAction {
+                        component_id: "maibot".into(),
+                        action: "ensure_installed".into(),
+                    },
+                    host_id: LOCAL_HOST_ID.into(),
+                    title: "maibot ensure_installed".into(),
+                    resources: vec![],
+                    depends_on: vec![],
+                    dedupe_key: None,
+                    cancellable: false,
+                    runner: Box::new(move |_| {
+                        Box::pin(async move {
+                            if gate.await.unwrap_or(false) {
+                                crate::deploy::DeploymentTaskRunResult::ok("ok")
+                            } else {
+                                crate::deploy::DeploymentTaskRunResult::failed("uv sync 失败")
+                            }
+                        })
+                    }),
+                })
+                .await;
+            release
+        }
+
+        async fn wait_state(f: &Fixture, want: AppInstanceState) -> AppInstance {
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            loop {
+                let inst = f.manager.get_instance(&f.id).await.unwrap();
+                if inst.state == want && !f.manager.install_watched(&f.id) {
+                    return inst;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "等不到 {want:?}，现在 {:?}，还在盯：{}",
+                    inst.state,
+                    f.manager.install_watched(&f.id)
+                );
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn install_state_follows_the_task_not_the_half_built_dir() {
+            let f = maibot_fixture("m-inst-ok").await;
+            make_dir_look_installed(&f);
+            let tasks = DeploymentTaskManager::new((*f.manager.event_bus).clone());
+            let release = gated_install_task(&tasks, "t-ok").await;
+
+            let inst = f.manager.track_install(&f.id, "t-ok".into(), tasks.clone()).await.unwrap();
+            assert_eq!(inst.state, AppInstanceState::Installing);
+            // 过一轮兜底轮询，再手动刷新一次：任务没完就一直是安装中
+            tokio::time::sleep(INSTALL_POLL_INTERVAL + Duration::from_millis(500)).await;
+            let inst = f.manager.refresh_instance(&f.id).await.unwrap();
+            assert_eq!(inst.state, AppInstanceState::Installing);
+
+            release.send(true).unwrap();
+            let inst = wait_state(&f, AppInstanceState::Installed).await;
+            assert_eq!(inst.installed_version.as_deref(), Some("1.2.5"));
+            assert_eq!(inst.last_error, None);
+        }
+
+        #[tokio::test]
+        async fn install_failure_lands_as_not_installed_with_the_task_error() {
+            let f = maibot_fixture("m-inst-fail").await;
+            let tasks = DeploymentTaskManager::new((*f.manager.event_bus).clone());
+            let release = gated_install_task(&tasks, "t-fail").await;
+            f.manager.track_install(&f.id, "t-fail".into(), tasks.clone()).await.unwrap();
+
+            release.send(false).unwrap();
+            let inst = wait_state(&f, AppInstanceState::NotInstalled).await;
+            assert!(
+                inst.last_error.as_deref().is_some_and(|e| e.contains("uv sync 失败")),
+                "{:?}",
+                inst.last_error
+            );
+        }
+
+        #[tokio::test]
+        async fn unwatched_installing_settles_from_the_dir() {
+            // 上次装到一半桌面端退了：没人盯的「安装中」在刷新 / 冷启动对账时按目录收尾
+            let f = maibot_fixture("m-inst-orphan").await;
+            f.manager
+                .store
+                .update(&f.id, |i| i.state = AppInstanceState::Installing)
+                .await
+                .unwrap();
+            let inst = f.manager.refresh_instance(&f.id).await.unwrap();
+            assert_eq!(inst.state, AppInstanceState::NotInstalled);
+            assert!(inst.last_error.as_deref().is_some_and(|e| e.contains("没有完成")));
+
+            // 任务在队列里查不到（结束后被清掉了）：同样按目录收尾，目录是好的就算装好
+            make_dir_look_installed(&f);
+            let tasks = DeploymentTaskManager::new((*f.manager.event_bus).clone());
+            f.manager.track_install(&f.id, "t-gone".into(), tasks).await.unwrap();
+            let inst = wait_state(&f, AppInstanceState::Installed).await;
+            assert_eq!(inst.installed_version.as_deref(), Some("1.2.5"));
         }
 
         #[tokio::test]
