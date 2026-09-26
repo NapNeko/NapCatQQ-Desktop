@@ -3,6 +3,7 @@
 
 import type {
     AppConfigIssue,
+    MaiBotAPIProvider,
     MaiBotBotConfigFile,
     MaiBotChatFilter,
     MaiBotInstanceConfig,
@@ -11,7 +12,7 @@ import type {
 } from '../../ipc/types';
 // 由 Rust 的 export_bindings_maibot_defaults 导出：和 IPC 上的序列化逐字一致
 import maibotDefaults from './maibotDefaults.json';
-import { BOT_SCHEMA, MODEL_SCHEMA, schemaIssues } from './maibotSchema';
+import { BOT_SCHEMA, MODEL_SCHEMA, newItemFor, nodeAt, schemaIssues } from './maibotSchema';
 
 type MaiBotFiles = Pick<MaiBotInstanceConfig, 'bot' | 'models'>;
 
@@ -111,6 +112,59 @@ export function maibotModelSetupIssue(models: MaiBotModelConfigFile): MaiBotMode
     if (placeholder) return 'placeholder_key';
     if (MAIBOT_REQUIRED_TASKS.some((k) => !t[k].model_list.length)) return 'no_task_model';
     return null;
+}
+
+export type MaiBotProviderPreset = {
+    id: string;
+    label: string;
+    /** 写进配置的提供商名，模型按它引用 */
+    name: string;
+    base_url: string;
+    client_type: 'openai' | 'openai_responses' | 'gemini';
+    /** 本机跑的服务，不鉴权 */
+    local?: boolean;
+};
+
+// 照上游 WebUI 的 providerTemplates，去掉接口不兼容的几家，补上两个本机服务
+export const MAIBOT_PROVIDER_PRESETS: readonly MaiBotProviderPreset[] = [
+    { id: 'deepseek', label: 'DeepSeek', name: 'DeepSeek', base_url: 'https://api.deepseek.com', client_type: 'openai' },
+    { id: 'siliconflow', label: '硅基流动', name: 'SiliconFlow', base_url: 'https://api.siliconflow.cn/v1', client_type: 'openai' },
+    { id: 'alibaba', label: '阿里云百炼', name: 'Alibaba', base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', client_type: 'openai' },
+    { id: 'zhipu', label: '智谱 GLM', name: 'ZhipuAI', base_url: 'https://open.bigmodel.cn/api/paas/v4', client_type: 'openai' },
+    { id: 'moonshot', label: 'Moonshot / Kimi', name: 'Moonshot', base_url: 'https://api.moonshot.cn/v1', client_type: 'openai' },
+    { id: 'doubao', label: '火山方舟（豆包）', name: 'Doubao', base_url: 'https://ark.cn-beijing.volces.com/api/v3', client_type: 'openai' },
+    { id: 'minimax', label: 'MiniMax', name: 'MiniMax', base_url: 'https://api.minimax.chat/v1', client_type: 'openai' },
+    { id: 'stepfun', label: '阶跃星辰', name: 'StepFun', base_url: 'https://api.stepfun.com/v1', client_type: 'openai' },
+    { id: 'openai', label: 'OpenAI', name: 'OpenAI', base_url: 'https://api.openai.com/v1', client_type: 'openai' },
+    { id: 'gemini', label: 'Google Gemini', name: 'Gemini', base_url: 'https://generativelanguage.googleapis.com/v1beta', client_type: 'gemini' },
+    { id: 'openrouter', label: 'OpenRouter', name: 'OpenRouter', base_url: 'https://openrouter.ai/api/v1', client_type: 'openai' },
+    { id: 'xai', label: 'xAI（Grok）', name: 'xAI', base_url: 'https://api.x.ai/v1', client_type: 'openai' },
+    { id: 'groq', label: 'Groq', name: 'Groq', base_url: 'https://api.groq.com/openai/v1', client_type: 'openai' },
+    { id: 'mistral', label: 'Mistral', name: 'Mistral', base_url: 'https://api.mistral.ai/v1', client_type: 'openai' },
+    { id: 'ollama', label: 'Ollama（本机）', name: 'Ollama', base_url: 'http://127.0.0.1:11434/v1', client_type: 'openai', local: true },
+    { id: 'lm_studio', label: 'LM Studio（本机）', name: 'LMStudio', base_url: 'http://127.0.0.1:1234/v1', client_type: 'openai', local: true },
+    { id: 'custom', label: '自定义 OpenAI 兼容接口', name: '', base_url: '', client_type: 'openai' },
+];
+
+/** 照预设起一个新提供商：其余字段取上游默认；名字撞了往后编号，自定义的给个占位名 */
+export function newMaiBotProvider(
+    existing: readonly MaiBotAPIProvider[],
+    preset: MaiBotProviderPreset,
+): MaiBotAPIProvider {
+    const node = nodeAt(MODEL_SCHEMA, ['api_providers']);
+    const base = (node ? newItemFor(node) : {}) as MaiBotAPIProvider;
+    const stem = preset.name || '提供商';
+    const taken = new Set(existing.map((p) => p.name));
+    let name = stem;
+    for (let n = 2; taken.has(name); n += 1) name = `${stem} ${n}`;
+    return {
+        ...base,
+        name,
+        base_url: preset.base_url,
+        client_type: preset.client_type,
+        api_key: '',
+        auth_type: preset.local ? 'none' : base.auth_type,
+    };
 }
 
 /**

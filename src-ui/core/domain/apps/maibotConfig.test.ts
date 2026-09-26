@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
     MAIBOT_PLACEHOLDER_API_KEY,
+    MAIBOT_PROVIDER_PRESETS,
     maibotChatDropsEverything,
     maibotChatScope,
     maibotDefaultChat,
     maibotDefaultConfig,
     maibotModelSetupIssue,
+    newMaiBotProvider,
     renameMaiBotModel,
     renameMaiBotProvider,
     validateMaiBotConfig,
@@ -94,6 +96,31 @@ describe('maibotModelSetupIssue', () => {
         models.api_providers[0]!.api_key = 'sk-real';
         models.api_providers.push({ ...models.api_providers[0]!, name: 'Spare', api_key: MAIBOT_PLACEHOLDER_API_KEY });
         expect(maibotModelSetupIssue(models)).toBeNull();
+    });
+});
+
+describe('newMaiBotProvider', () => {
+    const preset = (id: string) => MAIBOT_PROVIDER_PRESETS.find((p) => p.id === id)!;
+
+    it('fills the preset over upstream defaults and numbers a taken name', () => {
+        const existing = maibotDefaultConfig(23001).models.api_providers;
+        const p = newMaiBotProvider(existing, preset('deepseek'));
+        expect(p).toMatchObject({
+            name: 'DeepSeek 2',
+            base_url: 'https://api.deepseek.com',
+            client_type: 'openai',
+            auth_type: 'bearer',
+            api_key: '',
+            max_retry: 3,
+            default_headers: {},
+        });
+        // 可选字段不写，免得带个 null 进配置
+        expect('organization' in p).toBe(false);
+    });
+
+    it('skips auth for local services and names custom ones generically', () => {
+        expect(newMaiBotProvider([], preset('ollama')).auth_type).toBe('none');
+        expect(newMaiBotProvider([], preset('custom')).name).toBe('提供商');
     });
 });
 

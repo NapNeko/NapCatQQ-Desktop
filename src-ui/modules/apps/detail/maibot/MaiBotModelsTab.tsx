@@ -2,16 +2,27 @@
 // 删掉被引用的会在引用处标红，不替用户悄悄删引用。
 
 import { AlertTriangle, Plus } from 'lucide-react';
-import { Button, FormSection, Switch } from '../../../../shared/ui';
+import {
+    Button,
+    FormSection,
+    Popover,
+    PopoverClose,
+    PopoverContent,
+    PopoverTrigger,
+    Switch,
+} from '../../../../shared/ui';
 import { ActionMotionIcon } from '../../../../shared/ui/motion';
 import { ConfigForm } from '../karin/configLayout';
 import {
+    MAIBOT_PROVIDER_PRESETS,
     MAIBOT_REQUIRED_TASKS,
     MAIBOT_TASK_KEYS,
     maibotModelSetupIssue,
+    newMaiBotProvider,
     renameMaiBotModel,
     renameMaiBotProvider,
     type MaiBotModelSetupIssue,
+    type MaiBotProviderPreset,
 } from '../../../../core/domain/apps/maibotConfig';
 import { fieldOf, MODEL_SCHEMA, newItemFor, nodeAt } from '../../../../core/domain/apps/maibotSchema';
 import type {
@@ -45,7 +56,6 @@ const TASK_ORDER: readonly TaskKey[] = [
 ];
 
 const TASK_NODE = nodeAt(MODEL_SCHEMA, ['model_task_config']);
-const PROVIDER_NODE = nodeAt(MODEL_SCHEMA, ['api_providers']);
 const MODEL_NODE = nodeAt(MODEL_SCHEMA, ['models']);
 
 const SETUP_TEXT: Record<Exclude<MaiBotModelSetupIssue, null>, string> = {
@@ -54,12 +64,47 @@ const SETUP_TEXT: Record<Exclude<MaiBotModelSetupIssue, null>, string> = {
     no_task_model: '回复、规划、杂务三个任务都要挑模型，不然麦麦说不了话。',
 };
 
-function freshProvider(existing: readonly MaiBotAPIProvider[]): MaiBotAPIProvider {
-    const base = (PROVIDER_NODE ? newItemFor(PROVIDER_NODE) : {}) as MaiBotAPIProvider;
-    let n = existing.length + 1;
-    while (existing.some((p) => p.name === `提供商 ${n}`)) n += 1;
-    return { ...base, name: `提供商 ${n}` };
-}
+const hostOf = (url: string) => url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+
+/** 预设十几条，不限高会顶出窗口；和 AstrBot 模型页的预设菜单同一个样子 */
+const PresetMenu: React.FC<{ onPick: (p: MaiBotProviderPreset) => void; disabled?: boolean }> = ({
+    onPick,
+    disabled,
+}) => (
+    <Popover>
+        <PopoverTrigger asChild>
+            <Button size="sm" variant="secondary" disabled={disabled}>
+                <ActionMotionIcon icon={Plus} size={13} />
+                加提供商
+            </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" sideOffset={6} className="w-72 p-1">
+            <div
+                className="overflow-y-auto overscroll-contain"
+                style={{
+                    maxHeight: 'min(24rem, calc(var(--radix-popover-content-available-height, 24rem) - 8px))',
+                }}
+            >
+                {MAIBOT_PROVIDER_PRESETS.map((p) => (
+                    <PopoverClose key={p.id} asChild>
+                        <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-left text-[13px] text-text hover:bg-inset"
+                            onClick={() => onPick(p)}
+                        >
+                            <span className="shrink-0 whitespace-nowrap">{p.label}</span>
+                            {p.base_url && (
+                                <span className="min-w-0 truncate font-mono text-2xs text-text-tertiary">
+                                    {hostOf(p.base_url)}
+                                </span>
+                            )}
+                        </button>
+                    </PopoverClose>
+                ))}
+            </div>
+        </PopoverContent>
+    </Popover>
+);
 
 function freshModel(models: MaiBotModelConfigFile): MaiBotModelInfo {
     const base = (MODEL_NODE ? newItemFor(MODEL_NODE) : {}) as MaiBotModelInfo;
@@ -107,17 +152,15 @@ export const MaiBotModelsTab: React.FC<{
                 title="提供商"
                 description="模型服务的接口地址和 Key"
                 actions={
-                    <Button
-                        size="sm"
-                        variant="secondary"
+                    <PresetMenu
                         disabled={disabled}
-                        onClick={() =>
-                            setModels({ ...models, api_providers: [...models.api_providers, freshProvider(models.api_providers)] })
+                        onPick={(preset) =>
+                            setModels({
+                                ...models,
+                                api_providers: [...models.api_providers, newMaiBotProvider(models.api_providers, preset)],
+                            })
                         }
-                    >
-                        <ActionMotionIcon icon={Plus} size={13} />
-                        加提供商
-                    </Button>
+                    />
                 }
             >
                 {errors['models/api_providers'] && <p className="text-2xs text-danger">{errors['models/api_providers']}</p>}
