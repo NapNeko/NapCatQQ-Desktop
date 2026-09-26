@@ -147,6 +147,40 @@ pub fn read_webui_token(json: Option<&str>) -> String {
         .unwrap_or_default()
 }
 
+/// 在桌面端把模型配好了，WebUI 的首次配置向导就不必再走：同上游 `mark_setup_completed`
+/// 记下完成时间，其余键原样。已经标过、或者文件读不懂就不动（返回 None），免得把 token 写丢
+pub fn mark_setup_completed(json: &str, now: &str) -> Option<String> {
+    let mut v: serde_json::Value = serde_json::from_str(json).ok()?;
+    let obj = v.as_object_mut()?;
+    if obj.get("first_setup_completed").and_then(serde_json::Value::as_bool) == Some(true) {
+        return None;
+    }
+    obj.insert("first_setup_completed".into(), true.into());
+    obj.insert("setup_completed_at".into(), now.into());
+    serde_json::to_string_pretty(&v).ok().map(|s| format!("{s}\n"))
+}
+
+/// 模型能不能用，和前端 `maibotModelSetupIssue` 同一套判定：有提供商，回复 / 规划 / 杂务都挑了模型，
+/// 这几个任务用到的提供商 Key 不是开箱那份占位
+pub fn models_ready(models: &MaiBotModelConfigFile) -> bool {
+    const PLACEHOLDER_KEY: &str = "your-api-key";
+    let t = &models.model_task_config;
+    let required = [&t.replyer, &t.planner, &t.utils];
+    if models.api_providers.is_empty() || required.iter().any(|task| task.model_list.is_empty()) {
+        return false;
+    }
+    let used: std::collections::HashSet<&str> = models
+        .models
+        .iter()
+        .filter(|m| required.iter().any(|task| task.model_list.contains(&m.name)))
+        .map(|m| m.api_provider.as_str())
+        .collect();
+    !models
+        .api_providers
+        .iter()
+        .any(|p| used.contains(p.name.as_str()) && p.auth_type != "none" && p.api_key.trim() == PLACEHOLDER_KEY)
+}
+
 /// 首装种子：文件不存在时只写 `[inner].version` 和两个口，其余首启由上游按默认补齐
 pub fn write_bot_config_ports(
     text: Option<&str>,
@@ -192,6 +226,29 @@ pub fn restart_inputs_changed(before: &MaiBotInstanceConfig, after: &MaiBotInsta
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn setup_is_marked_once_and_keeps_the_token() {
+        let seed = super::super::render_webui_json("Ncd_tok");
+        let marked = mark_setup_completed(&seed, "2026-09-26T15:00:00.000000").unwrap();
+        let v: serde_json::Value = serde_json::from_str(&marked).unwrap();
+        assert_eq!(v["first_setup_completed"], true);
+        assert_eq!(v["setup_completed_at"], "2026-09-26T15:00:00.000000");
+        assert_eq!(v["access_token"], "Ncd_tok");
+        assert_eq!(v["token_source"], "configured");
+        assert_eq!(mark_setup_completed(&marked, "later"), None, "标过就不再改时间");
+        assert_eq!(mark_setup_completed("not json", "x"), None, "读不懂不动，免得把 token 写丢");
+    }
+
+    #[test]
+    fn models_are_ready_once_the_placeholder_key_is_replaced() {
+        let mut models = super::super::schema::read_model_config_file(None).unwrap();
+        assert!(!models_ready(&models), "开箱那份是占位 Key");
+        models.api_providers[0].api_key = "sk-real".into();
+        assert!(models_ready(&models));
+        models.model_task_config.utils.model_list.clear();
+        assert!(!models_ready(&models), "杂务也是必需任务");
+    }
 
     #[test]
     fn missing_files_read_as_upstream_defaults() {

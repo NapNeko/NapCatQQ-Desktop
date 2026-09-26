@@ -4167,6 +4167,10 @@ mod tests {
                 .unwrap();
             assert!(!res.restart_required, "人格、模型上游热加载，不用重启");
             assert_eq!(std::fs::read_to_string(&bot_path).unwrap(), seed, "运行中写交给 WebUI，桌面端不直接改文件");
+            let webui: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(f.inst_dir.join("data/webui.json")).unwrap()).unwrap();
+            assert_eq!(webui["first_setup_completed"], true, "模型配好了，WebUI 不必再走首次向导");
+            assert_eq!(webui["access_token"], "Ncd_tok");
 
             let body_of = |p: &str, reqs: &[wiremock::Request]| -> serde_json::Value {
                 let req = reqs.iter().rev().find(|r| r.url.path() == p).expect("该路由收到过请求");

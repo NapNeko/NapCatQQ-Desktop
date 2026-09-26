@@ -196,6 +196,24 @@ impl MaiBotAdapter {
         .await
     }
 
+    /// 模型能用了就把 WebUI 的首次配置向导标成完成（D0-4）。尽力而为：配置已经存好了，
+    /// 这一步失败只是用户第一次开 WebUI 时多看一次向导，不该让保存报错
+    async fn mark_setup_if_ready(host: &dyn Host, instance: &AppInstance, cfg: &MaiBotInstanceConfig) {
+        if !config::models_ready(&cfg.models) {
+            return;
+        }
+        let path = HostPath::from_posix(&instance.install_dir).join(WEBUI_JSON);
+        let Ok(Some(current)) = read_text(host, &path).await else {
+            return;
+        };
+        let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.6f").to_string();
+        if let Some(next) = config::mark_setup_completed(&current, &now)
+            && let Err(e) = host.write_file(&path, next.as_bytes()).await
+        {
+            tracing::warn!(instance = %instance.id.as_str(), error = %e, "标记 MaiBot 首次配置完成失败");
+        }
+    }
+
     async fn write_adapter_config(
         host: &dyn Host,
         instance: &AppInstance,
@@ -510,6 +528,7 @@ impl AppFrameworkAdapter for MaiBotAdapter {
 
         writes.extend(Self::adapter_chat_write(host, &root, &before, cfg).await?);
         Self::write_files(host, instance, writes).await?;
+        Self::mark_setup_if_ready(host, instance, cfg).await;
         self.read_config(host, instance).await
     }
 
@@ -567,6 +586,7 @@ impl AppFrameworkAdapter for MaiBotAdapter {
 
         let writes = Self::adapter_chat_write(host, &root, &before, cfg).await?;
         Self::write_files(host, instance, writes.into_iter().collect()).await?;
+        Self::mark_setup_if_ready(host, instance, cfg).await;
         self.read_config(host, instance).await
     }
 
