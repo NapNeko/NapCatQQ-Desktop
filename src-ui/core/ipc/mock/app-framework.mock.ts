@@ -22,10 +22,14 @@ import type {
     AstrBotPersona,
     AstrBotSessionRule,
     CreateAppInstanceRequest,
+    DeploymentTaskSnapshot,
+    DomainEvent,
     ImportAppInstanceRequest,
     KarinPluginInstalled,
     KarinPluginMarketEntry,
     OneBotLinkPlan,
+    ProgressEvent,
+    ProgressKind,
 } from '../types';
 import { mockAstrBotDashboard } from './astrbot-dashboard.mock';
 import { karinDefaultConfig } from '../../domain/apps/karinConfig';
@@ -252,6 +256,51 @@ function require(id: string): AppInstance {
     return found;
 }
 
+const MOCK_INSTALL_STEPS = ['解析 uv', '下载源码', '放置源码', '同步 Python 依赖', '预置端口与协议确认'];
+
+/**
+ * 按真机的事件顺序假装跑一次安装：任务快照、步骤进度、最后实例变成已安装。
+ * 走查卡片 / 详情页的「安装中」进度用。
+ */
+function simulateInstallTask(inst: AppInstance): string {
+    const taskId = `mock-install-${inst.id}-${Date.now()}`;
+    const target = `${inst.framework_id}@${inst.id}`;
+    const submittedAtMs = BigInt(Date.now());
+    let events: ProgressEvent[] = [];
+    const snapshot = (status: DeploymentTaskSnapshot['status']): DeploymentTaskSnapshot => ({
+        taskId,
+        kind: { kind: 'component_action', component_id: inst.framework_id, action: 'ensure_installed' },
+        status,
+        hostId: inst.host_id,
+        title: `${target} ensure_installed`,
+        resources: [{ kind: 'install_target', host_id: inst.host_id, target }],
+        progressEvents: events,
+        submittedAtMs,
+        cancellable: true,
+    });
+    const push = (kind: ProgressKind) => {
+        const event = { v: 1, timestamp_ms: BigInt(Date.now()), ...kind } as ProgressEvent;
+        events = [...events, event];
+        emitMockEvent({ kind: 'component_action_progress', task_id: taskId, event } as DomainEvent);
+        emitMockEvent({ kind: 'deployment_task_changed', task: snapshot('running') } as DomainEvent);
+    };
+
+    emitMockEvent({ kind: 'deployment_task_changed', task: snapshot('queued') } as DomainEvent);
+    const plan: Array<() => void> = [() => push({ kind: 'started', total_steps: MOCK_INSTALL_STEPS.length })];
+    MOCK_INSTALL_STEPS.forEach((message, idx) => {
+        const step = idx + 1;
+        plan.push(() => push({ kind: 'step_begin', step, message }));
+        plan.push(() => push({ kind: 'step_end', step, ok: true }));
+    });
+    plan.push(() => push({ kind: 'finished', ok: true }));
+    plan.push(() => {
+        emitMockEvent({ kind: 'deployment_task_changed', task: snapshot('success') } as DomainEvent);
+        publish({ ...require(inst.id), state: 'installed', installed_version: '1.2.5' }, 'installed');
+    });
+    plan.forEach((run, i) => setTimeout(run, 400 + i * 600));
+    return taskId;
+}
+
 export const mockAppFrameworkApi = {
     listFrameworks: () => withMockDelay(mockAppFrameworks),
     listInstances: () => withMockDelay(instances.slice()),
@@ -376,13 +425,7 @@ export const mockAppFrameworkApi = {
     install: async (id: string): Promise<string> => {
         const inst = require(id);
         publish({ ...inst, state: 'installing' }, 'installing');
-        setTimeout(() => {
-            publish(
-                { ...require(id), state: 'installed', installed_version: '1.17.0' },
-                'installed',
-            );
-        }, 2500);
-        return withMockDelay(`mock-install-${id}`);
+        return withMockDelay(simulateInstallTask(inst));
     },
 
     refresh: async (id: string): Promise<AppInstance> => withMockDelay(require(id)),

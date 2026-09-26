@@ -2,12 +2,13 @@
 // 框架专有页走 registry，未知框架只有原始文件和日志。
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, ListChecks } from 'lucide-react';
 import { Button, PagePlaceholder, Tabs, TabsContent, TooltipProvider } from '../../../shared/ui';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../../shared/ui/motion';
 import { useServerManager } from '../../../hooks/remote/useServerManager';
 import { useAppFrameworks, useAppInstances } from '../../../hooks/apps/useAppInstances';
 import { AppLinkDialog } from '../AppLinkDialog';
+import { DetailInstallProgress } from '../InstallProgress';
 import { DeleteInstanceDialog } from '../DeleteInstanceDialog';
 import { hostIdDisplayLabel } from '../hostLabel';
 import { isInstalled } from '../instanceState';
@@ -27,9 +28,16 @@ export interface AppInstancePageNextProps {
     instanceId: string;
     initialTab?: DetailTabHint;
     onBack: () => void;
+    /** 安装中「在任务队列查看」要跳走；没给就不显示这个按钮 */
+    onViewTasks?: () => void;
 }
 
-export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instanceId, initialTab, onBack }) => {
+export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
+    instanceId,
+    initialTab,
+    onBack,
+    onViewTasks,
+}) => {
     const apps = useAppInstances();
     const frameworks = useAppFrameworks();
     const { servers } = useServerManager();
@@ -132,7 +140,12 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
                 />
 
                 {!installed ? (
-                    <NotInstalledBody instance={instance} busy={busy} onInstall={() => apps.install(instance.id)} />
+                    <NotInstalledBody
+                        instance={instance}
+                        busy={busy}
+                        onInstall={() => apps.install(instance.id)}
+                        onViewTasks={onViewTasks}
+                    />
                 ) : (
                     <Tabs value={activeTab} onValueChange={goTab} orientation="vertical" className="flex min-h-0 flex-1">
                         <DetailSideNav groups={nav} badges={badges} />
@@ -212,22 +225,31 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({ instan
     );
 };
 
-const NotInstalledBody: React.FC<{ instance: AppInstance; busy: boolean; onInstall: () => void }> = ({
-    instance,
-    busy,
-    onInstall,
-}) => (
-    <PagePlaceholder className="gap-3 py-16">
-        <p className="text-sm text-text-secondary">
-            {instance.state === 'installing' ? '正在安装，完成后即可配置' : '实例尚未安装，安装后才能配置与查看日志'}
-        </p>
-        {instance.state !== 'installing' && (
+const NotInstalledBody: React.FC<{
+    instance: AppInstance;
+    busy: boolean;
+    onInstall: () => void;
+    onViewTasks?: () => void;
+}> = ({ instance, busy, onInstall, onViewTasks }) =>
+    instance.state === 'installing' ? (
+        <PagePlaceholder className="gap-3 py-16">
+            <p className="text-sm text-text-secondary">正在安装，完成后即可配置</p>
+            <DetailInstallProgress instance={instance} />
+            {onViewTasks && (
+                <Button size="sm" variant="secondary" onClick={onViewTasks}>
+                    <ActionMotionIcon icon={ListChecks} size={13} />
+                    在任务队列查看
+                </Button>
+            )}
+        </PagePlaceholder>
+    ) : (
+        <PagePlaceholder className="gap-3 py-16">
+            <p className="text-sm text-text-secondary">实例尚未安装，安装后才能配置与查看日志</p>
             <Button size="sm" variant="primary" disabled={busy} onClick={onInstall}>
                 <ActionMotionIcon icon={Download} size={13} motion={EMPHASIS_MOTION} />
                 立即安装
             </Button>
-        )}
-    </PagePlaceholder>
-);
+        </PagePlaceholder>
+    );
 
 export default AppInstancePageNext;

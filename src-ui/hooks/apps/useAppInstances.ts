@@ -1,11 +1,11 @@
 // 应用端实例列表 + 操作的 React 适配层。
-// useQuery 拉全量，app_instance_changed 事件就地替换单条；操作失败统一走 InfoBar。
+// useQuery 拉全量；app_instance_changed 由根上的 useAppInstanceEventsBridge 就地替换单条；
+// 操作失败统一走 InfoBar。
 
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { openExternalUrl } from '../../core/ipc/transport';
-import { useDomainEvents } from '../events/useDomainEvents';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
 import { pushAppErrorBar } from './pushAppErrorBar';
@@ -14,7 +14,7 @@ import { botConfigKey } from '../bot/useBotConfigsMap';
 import { dropAppInstanceLogs, ensureAppInstanceLogStore } from './appInstanceLogStore';
 import { showWebUiAccountDialog } from './webuiAccountDialogStore';
 import { requestTermsConsent } from './termsDialogStore';
-import { matchesAppInstallTask } from '../../modules/apps/instanceState';
+import { APP_INSTANCES_KEY, upsertInstance } from './appInstancesCache';
 import type {
     AppFrameworkManifest,
     AppInstance,
@@ -27,7 +27,7 @@ export { useAppInstanceLog } from './appInstanceLogStore';
 ensureAppInstanceLogStore();
 
 export const APP_FRAMEWORKS_KEY = ['appFrameworks'] as const;
-export const APP_INSTANCES_KEY = ['appInstances'] as const;
+export { APP_INSTANCES_KEY };
 
 export function useAppFrameworks() {
     return useQuery<AppFrameworkManifest[], Error>({
@@ -37,51 +37,12 @@ export function useAppFrameworks() {
     });
 }
 
-function upsertInstance(list: AppInstance[] | undefined, next: AppInstance): AppInstance[] {
-    if (!list?.length) return [next];
-    const idx = list.findIndex((i) => i.id === next.id);
-    if (idx < 0) return [...list, next];
-    return list.map((i) => (i.id === next.id ? next : i));
-}
-
 export function useAppInstances() {
     const queryClient = useQueryClient();
 
     const query = useQuery<AppInstance[], Error>({
         queryKey: APP_INSTANCES_KEY,
         queryFn: appFrameworkService.listInstances,
-    });
-
-    useDomainEvents((event) => {
-        if (event.kind === 'app_instance_changed') {
-            queryClient.setQueryData<AppInstance[]>(APP_INSTANCES_KEY, (old) =>
-                upsertInstance(old, event.instance),
-            );
-            const reason = event.reason ?? '';
-            if (reason === 'linked' || reason === 'unlinked' || reason === 'port_changed') {
-                queryClient.invalidateQueries({ queryKey: ['appInstanceConfig', event.instance.id] });
-                queryClient.invalidateQueries({ queryKey: ['appConfigText', event.instance.id] });
-            }
-            return;
-        }
-        if (event.kind !== 'deployment_task_changed') return;
-        const { task } = event;
-        if (task.status !== 'success' && task.status !== 'failed' && task.status !== 'cancelled') {
-            return;
-        }
-        queryClient.setQueryData<AppInstance[]>(APP_INSTANCES_KEY, (old) => {
-            if (!old?.length) return old;
-            const hit = old.find((instance) => matchesAppInstallTask(task, instance));
-            if (!hit || hit.state !== 'installing') return old;
-            if (task.status === 'success') {
-                return upsertInstance(old, { ...hit, state: 'installed', last_error: undefined });
-            }
-            return upsertInstance(old, {
-                ...hit,
-                state: 'not_installed',
-                last_error: task.error ?? hit.last_error,
-            });
-        });
     });
 
     const patch = useCallback(
@@ -247,6 +208,8 @@ export function useAppInstances() {
         unlink: unlinkMutation.mutate,
         openWebUi,
 
+        /** 只有「重新探测」在跑的实例：刷新图标自己转，不再另挂一个转圈 */
+        refreshingId: refreshMutation.isPending ? refreshMutation.variables : null,
         pendingId:
             startMutation.isPending
                 ? startMutation.variables

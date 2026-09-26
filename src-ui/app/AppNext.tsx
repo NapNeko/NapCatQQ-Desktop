@@ -29,6 +29,7 @@ import { useDockerDeployProgressBridge } from '../hooks/docker/useDockerDeployPr
 import { useDockerInstallProgressBridge } from '../hooks/docker/useDockerInstallProgressBridge';
 import { useDockerStatusByHost } from '../hooks/docker/useDockerStatusByHost';
 import { useDeploymentTaskBridge } from '../hooks/task-queue/useDeploymentTaskBridge';
+import { useAppInstanceEventsBridge } from '../hooks/apps/useAppInstanceEventsBridge';
 import { useComponentsWarmup } from '../hooks/components/useComponents';
 import { useHostConnectionEvents } from '../hooks/remote/useHostConnectionEvents';
 import { useHostHealthAlerts } from '../hooks/remote/useHostHealthAlerts';
@@ -137,6 +138,7 @@ export const AppNext: React.FC = () => {
     useDockerDeployProgressBridge();
     useDockerInstallProgressBridge();
     useDeploymentTaskBridge();
+    useAppInstanceEventsBridge();
     useComponentsWarmup();
     useHostConnectionEvents();
     useHostHealthAlerts();

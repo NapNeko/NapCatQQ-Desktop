@@ -63,6 +63,7 @@ export const DetailHeader: React.FC<{
     onDelete,
 }) => {
     const running = instance.state === 'running';
+    const installing = instance.state === 'installing';
     const look = STATE_LOOK[instance.state];
     // 默认名就是「AstrBot · 本机」这种，身份行再写一遍框架名是重复
     const showFramework = !!frameworkName && !instance.display_name.includes(frameworkName);
@@ -94,8 +95,9 @@ export const DetailHeader: React.FC<{
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5">
-                {busy && <Spinner size="sm" />}
-                {!installed && (
+                {/* 安装中的进度在正文里，头部不再另转一个 */}
+                {busy && !installing && <Spinner size="sm" />}
+                {!installed && !installing && (
                     <Button size="sm" variant="primary" disabled={busy} onClick={onInstall}>
                         <ActionMotionIcon icon={Download} size={13} motion={EMPHASIS_MOTION} />
                         安装

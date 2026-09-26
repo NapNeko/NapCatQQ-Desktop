@@ -8,6 +8,7 @@ import {
     ExternalLink,
     Import,
     Link2,
+    ListChecks,
     Play,
     RefreshCw,
     ScrollText,
@@ -45,6 +46,7 @@ import { ImportInstanceDialog, type ImportInstanceTarget } from '../ImportInstan
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { hostIdDisplayLabel } from '../hostLabel';
 import { STATE_META, isInstalled } from '../instanceState';
+import { CardInstallProgress } from '../InstallProgress';
 import { FloatingActions } from './FloatingActions';
 import type { AppRoute } from '../../../shared/components/next/Sidebar';
 import type { AppFrameworkManifest, AppInstance } from '../../../core/ipc/types';
@@ -128,6 +130,8 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
                             manifestById={manifestById}
                             servers={servers}
                             pendingId={apps.pendingId}
+                            refreshingId={apps.refreshingId}
+                            onViewTasks={onNavigate ? () => onNavigate('tasks') : undefined}
                             onInstall={apps.install}
                             onStart={apps.start}
                             onStop={apps.stop}
@@ -219,6 +223,8 @@ interface InstanceListProps {
     manifestById: Map<string, AppFrameworkManifest>;
     servers: ReturnType<typeof useServerManager>['servers'];
     pendingId: string | null | undefined;
+    refreshingId: string | null | undefined;
+    onViewTasks?: () => void;
     onInstall: (id: string) => void;
     onStart: (id: string) => void;
     onStop: (id: string) => void;
@@ -258,6 +264,8 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
     manifestById,
     servers,
     pendingId,
+    refreshingId,
+    onViewTasks,
     onInstall,
     onStart,
     onStop,
@@ -270,10 +278,12 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
 }) => {
     const manifest = manifestById.get(i.framework_id);
     const state = STATE_META[i.state];
-    const busy = pendingId === i.id || i.state === 'installing';
+    const installing = i.state === 'installing';
+    const refreshing = refreshingId === i.id;
+    const busy = pendingId === i.id || installing;
     const installed = isInstalled(i);
     const running = i.state === 'running';
-    const accent = i.last_error ? 'danger' : running || i.state === 'installing' ? 'brand' : 'none';
+    const accent = i.last_error ? 'danger' : running || installing ? 'brand' : 'none';
 
     const meta = [
         manifest?.display_name ?? i.framework_id,
@@ -324,7 +334,9 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                     </p>
                 </div>
                 <div className="min-h-[1.25rem] min-w-0 text-xs leading-snug text-text-secondary">
-                    {i.link ? (
+                    {installing ? (
+                        <CardInstallProgress instance={i} />
+                    ) : i.link ? (
                         <p className="truncate">对接 Bot {i.link.bot_id}</p>
                     ) : !installed ? (
                         <p className="truncate text-text-tertiary">安装后才能启动与配置</p>
@@ -340,8 +352,14 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                     {state.label}
                 </Badge>
                 <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
-                    {busy && <Spinner size="sm" className="mr-0.5" />}
-                    {!installed && (
+                    {/* 安装中的进度在卡片正文里，刷新有自己的转圈；这里只给启停 / 解绑这类操作 */}
+                    {busy && !installing && !refreshing && <Spinner size="sm" className="mr-0.5" />}
+                    {installing && onViewTasks && (
+                        <FooterIcon label="查看安装进度" onClick={onViewTasks}>
+                            <ActionMotionIcon icon={ListChecks} size={15} strokeWidth={2.2} />
+                        </FooterIcon>
+                    )}
+                    {!installed && !installing && (
                         <Button size="sm" variant="primary" disabled={busy} onClick={() => onInstall(i.id)}>
                             <ActionMotionIcon icon={Download} size={13} motion={EMPHASIS_MOTION} />
                             安装
@@ -377,17 +395,27 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                             <ActionMotionIcon icon={ScrollText} size={15} strokeWidth={2.2} />
                         </FooterIcon>
                     )}
-                    <FooterIcon label="重新探测" disabled={busy} onClick={() => onRefresh(i.id)}>
-                        <ActionMotionIcon icon={RefreshCw} size={15} strokeWidth={2.2} motion={refreshMotion(busy)} />
-                    </FooterIcon>
-                    <FooterIcon
-                        label={i.origin === 'imported' ? '释放接管' : '删除实例'}
-                        disabled={busy}
-                        tone="danger"
-                        onClick={() => onDelete(i)}
-                    >
-                        <ActionMotionIcon icon={Trash2} size={15} strokeWidth={2.2} />
-                    </FooterIcon>
+                    {/* 装的过程中探测和删除都没意义，装完或失败后再出现 */}
+                    {!installing && (
+                        <>
+                            <FooterIcon label="重新探测" disabled={busy} onClick={() => onRefresh(i.id)}>
+                                <ActionMotionIcon
+                                    icon={RefreshCw}
+                                    size={15}
+                                    strokeWidth={2.2}
+                                    motion={refreshMotion(refreshing)}
+                                />
+                            </FooterIcon>
+                            <FooterIcon
+                                label={i.origin === 'imported' ? '释放接管' : '删除实例'}
+                                disabled={busy}
+                                tone="danger"
+                                onClick={() => onDelete(i)}
+                            >
+                                <ActionMotionIcon icon={Trash2} size={15} strokeWidth={2.2} />
+                            </FooterIcon>
+                        </>
+                    )}
                 </div>
             </footer>
         </article>

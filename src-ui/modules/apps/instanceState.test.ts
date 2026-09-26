@@ -40,3 +40,14 @@ describe('matchesAppInstallTask', () => {
         expect(matchesAppInstallTask(task('uv'), instance)).toBe(false);
     });
 });
+
+describe('latestAppInstallTask', () => {
+    it('同一实例有多次安装时取最近提交的那次，别的实例的任务不算', async () => {
+        const { latestAppInstallTask } = await import('../../hooks/apps/useAppInstallProgress');
+        const old = { ...task('nonebot2@6d4853b2'), taskId: 'old', submittedAtMs: 1n };
+        const recent = { ...task('nonebot2@6d4853b2'), taskId: 'recent', submittedAtMs: 5n };
+        const other = { ...task('nonebot2@ffff0000'), taskId: 'other', submittedAtMs: 9n };
+        expect(latestAppInstallTask({ old, recent, other }, instance)?.taskId).toBe('recent');
+        expect(latestAppInstallTask({ other }, instance)).toBeUndefined();
+    });
+});
