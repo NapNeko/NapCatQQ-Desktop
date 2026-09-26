@@ -3484,7 +3484,9 @@ mod tests {
         }
 
         /// MaiBot 实例目录：已装好的样子（源码只放对接 / 配置 / 条款用得上的几个文件）
-        async fn maibot_fixture() -> Fixture {
+        /// 每个测试给不同的实例 id：正向听口按「实例:QQ」散列起点再探 bind，
+        /// 并行的测试若共用一个 id 会同时探同一个口，互相把对方挤到下一个口
+        async fn maibot_fixture(instance_id: &str) -> Fixture {
             let tmp = tempfile::tempdir().unwrap();
             let root = tmp.path().join("data");
             let inst_dir = tmp.path().join("maibot");
@@ -3534,7 +3536,7 @@ mod tests {
                 bus,
                 &root,
             ));
-            let id = AppInstanceId::new("m1");
+            let id = AppInstanceId::new(instance_id);
             let install_dir = HostPath::from_windows(inst_dir.to_string_lossy().as_ref());
             store
                 .upsert(AppInstance {
@@ -3576,7 +3578,7 @@ mod tests {
 
         #[tokio::test]
         async fn maibot_forward_link_opens_bot_server_and_points_adapter_at_it() {
-            let f = maibot_fixture().await;
+            let f = maibot_fixture("m1").await;
             let bot_id = BotId::new("10001");
             let plan = f.manager.preview_link(&f.id, &bot_id).await.unwrap();
             let server = plan.connection.as_ws_server().expect("MaiBot 是正向对接").clone();
@@ -3619,7 +3621,7 @@ mod tests {
 
         #[tokio::test]
         async fn maibot_forward_port_avoids_other_bot_servers_on_the_same_host() {
-            let f = maibot_fixture().await;
+            let f = maibot_fixture("m2").await;
             let first = f
                 .manager
                 .preview_link(&f.id, &BotId::new("10001"))
@@ -3662,7 +3664,7 @@ mod tests {
 
         #[tokio::test]
         async fn maibot_forward_link_refuses_cross_host_before_touching_anything() {
-            let f = maibot_fixture().await;
+            let f = maibot_fixture("m3").await;
             let err = f
                 .manager
                 .apply_link(&f.id, &BotId::new("30003"))
@@ -3676,7 +3678,7 @@ mod tests {
 
         #[tokio::test]
         async fn maibot_terms_pending_until_accepted_and_again_after_change() {
-            let f = maibot_fixture().await;
+            let f = maibot_fixture("m4").await;
             let pending = f.manager.pending_terms(&f.id).await.unwrap();
             let ids: Vec<&str> = pending.iter().map(|t| t.id.as_str()).collect();
             assert_eq!(ids, vec!["eula", "privacy"]);
@@ -3699,7 +3701,7 @@ mod tests {
 
         #[tokio::test]
         async fn maibot_config_writes_ports_and_chat_filter() {
-            let f = maibot_fixture().await;
+            let f = maibot_fixture("m5").await;
             let env = f.manager.read_config(&f.id).await.unwrap();
             let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
                 panic!("expected MaiBot config");
@@ -3730,7 +3732,7 @@ mod tests {
 
         #[tokio::test]
         async fn creating_maibot_requires_accepting_terms() {
-            let f = maibot_fixture().await;
+            let f = maibot_fixture("m6").await;
             let req = CreateAppInstanceRequest {
                 framework_id: AppFrameworkId::new("maibot"),
                 host_id: "local".into(),
