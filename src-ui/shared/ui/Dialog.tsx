@@ -134,11 +134,14 @@ function makeContentEnter(anchor: DialogAnchor | null): EnterFn {
             dy = Math.max(-32, Math.min(32, (anchor.y - cy) * 0.18));
         }
         gsap.set(el, { transformOrigin: `${originX} ${originY}` });
+        // 起点只透明、不 visibility:hidden：Radix 挂载后马上把焦点移进弹窗，隐藏的元素
+        // 拿不到焦点，焦点就会留在背后的触发按钮上（回车会再点一次它、方向键落在页面上）。
+        // 终点也不能用 autoAlpha，它在 0 那一帧会把 visibility 重新设成 hidden
         return gsap.fromTo(
             el,
-            { autoAlpha: 0, scale: 0.92, x: dx, y: dy - 2 },
+            { opacity: 0, visibility: 'visible', scale: 0.92, x: dx, y: dy - 2 },
             {
-                autoAlpha: 1,
+                opacity: 1,
                 scale: 1,
                 x: 0,
                 y: 0,
