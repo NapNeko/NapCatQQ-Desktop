@@ -477,6 +477,11 @@ impl MaiBotComponent {
             .env("PYTHONUTF8", "1")
             .env("PYTHONIOENCODING", "utf-8")
             .long_running();
+        // 上游启动时把这几个环境变量迁进配置、WEBUI_HOST 还会并进监听地址；用户机器上常有别的程序留下的
+        // PORT=3000 之类，会顶掉桌面端分好的口。HostCommand 只能加不能删，置空即可：上游把空串当没设
+        for key in ["HOST", "PORT", "WEBUI_HOST", "WEBUI_PORT"] {
+            cmd = cmd.env(key, "");
+        }
         // 上游装插件依赖时只认 PATH 上的 uv，找不到就退回 `python -m pip`，而 uv 建的 venv 里没有 pip
         if let Some(dir) = uv_dir {
             cmd = cmd.env("PATH", path_with_uv(dir, os, locality));
@@ -742,6 +747,9 @@ mod tests {
             !cmd.environment.iter().any(|(k, _)| k == "MAIBOT_WORKER_PROCESS"),
             "要让 bot.py 以 Runner 身份起"
         );
+        for key in ["HOST", "PORT", "WEBUI_HOST", "WEBUI_PORT"] {
+            assert_eq!(cmd.environment.get(key).map(String::as_str), Some(""), "{key} 置空，不让外面的值顶掉桌面端分的口");
+        }
 
         let bare = comp.launch_with(Os::Linux, Locality::Remote, &LaunchArgs::default(), None);
         assert!(!bare.environment.iter().any(|(k, _)| k == "PATH"));
