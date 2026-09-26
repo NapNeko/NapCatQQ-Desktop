@@ -170,7 +170,7 @@ export function useMaiBotConfigForm(instanceId: string, enabled: boolean, instan
 function describeSave(r: AppConfigWriteResult): string {
     const parts: string[] = [];
     if (r.port_changed) parts.push('实例端口已同步');
-    // 名单改动适配器会热加载；端口是启动时绑的
-    if (r.restart_required) parts.push('端口改了要重启才生效');
-    return parts.join('；') || '已保存，名单改动马上生效';
+    // 麦麦和适配器都热加载配置；只有端口、日志、插件运行时这些启动时读的要重启
+    if (r.restart_required) parts.push('端口、日志这类启动时读的设置要重启麦麦才生效');
+    return parts.join('；') || '已保存';
 }

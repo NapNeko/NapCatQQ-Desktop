@@ -45,14 +45,41 @@ describe('resolveFrameworkUi', () => {
         const ui = resolveFrameworkUi('maibot');
         expect(ui).toBeDefined();
         expect(ui?.defaultTab).toBe('overview');
-        expect(ui?.nav.map((g) => g.id)).toEqual(['home', 'message', 'instance']);
-        expect(navValues(ui)).toEqual(['overview', 'chat', 'connection']);
-        for (const t of ['overview', 'chat', 'connection']) expect(ui?.typedTabs.has(t)).toBe(true);
+        expect(ui?.nav.map((g) => g.id)).toEqual(['home', 'ai', 'message', 'extend', 'instance']);
+        const tabs = navValues(ui);
+        expect(tabs).toEqual([
+            'overview',
+            'models',
+            'persona',
+            'memory',
+            'learning',
+            'chat',
+            'talk',
+            'rules',
+            'mcp',
+            'connection',
+            'advanced',
+        ]);
+        // 都是配置页，保存条每页都在
+        for (const t of tabs) expect(ui?.typedTabs.has(t)).toBe(true);
         expect(ui?.tabForIssue('adapter/chat/group_list')).toBe('chat');
         expect(ui?.tabForIssue('bot/webui/port')).toBe('connection');
         expect(ui?.tabForIssue('bot/maim_message/ws_server_port')).toBe('connection');
+        expect(ui?.tabForIssue('bot/maim_message/api_server_port')).toBe('advanced');
+        expect(ui?.tabForIssue('models/api_providers/0/api_key')).toBe('models');
+        expect(ui?.tabForIssue('bot/personality/multiple_probability')).toBe('persona');
+        // chat 整节在回复设置，其中按会话的规则字段在会话规则：最长前缀赢
+        expect(ui?.tabForIssue('bot/chat/max_context_size')).toBe('talk');
+        expect(ui?.tabForIssue('bot/chat/reply_timing/talk_value')).toBe('talk');
+        expect(ui?.tabForIssue('bot/chat/reply_timing/talk_value_rules/1/value')).toBe('rules');
+        expect(ui?.tabForIssue('bot/chat/reply_style/chat_prompts/0/prompt')).toBe('rules');
+        expect(ui?.tabForIssue('bot/keyword_reaction/regex_rules/0/regex/2')).toBe('rules');
+        expect(ui?.tabForIssue('bot/a_memorix/threshold/min_threshold')).toBe('memory');
+        expect(ui?.tabForIssue('bot/jargon/learning_list/0/type')).toBe('learning');
+        expect(ui?.tabForIssue('bot/mcp/servers/0/command')).toBe('mcp');
+        expect(ui?.tabForIssue('bot/log/log_level')).toBe('advanced');
         // 原始文件、日志由外壳挂到「实例」组末尾
-        expect(buildDetailNav(ui).at(-1)?.items.map((t) => t.value)).toEqual(['connection', 'raw', 'log']);
+        expect(buildDetailNav(ui).at(-1)?.items.map((t) => t.value)).toEqual(['connection', 'advanced', 'raw', 'log']);
     });
 
     it('karin nav groups and issue routing', () => {

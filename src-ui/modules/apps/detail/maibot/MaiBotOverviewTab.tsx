@@ -1,15 +1,24 @@
 // 概览：状态卡回答「麦麦现在能不能在 QQ 上回话、还差什么」，全卡只给一个主按钮。
-// 能回话的前提只看 Desktop 管得着的三件事：对接、名单放行、在跑。
-// 模型 Key 在 MaiBot 自己的 WebUI 里配，Desktop 不读 model_config，所以只指路、不判定。
+// 能回话的前提看四件事：对接、模型、名单放行、在跑，都是 Desktop 自己读得到、改得了的。
 
 import type { ReactNode } from 'react';
-import { CheckCircle2, Circle, ExternalLink, Link2, ListChecks, Play } from 'lucide-react';
+import { Bot, CheckCircle2, Circle, ExternalLink, Link2, ListChecks, Play } from 'lucide-react';
 import { Button, Card, Spinner } from '../../../../shared/ui';
-import { maibotChatDropsEverything, maibotChatScope } from '../../../../core/domain/apps/maibotConfig';
+import {
+    maibotChatDropsEverything,
+    maibotChatScope,
+    maibotModelSetupIssue,
+} from '../../../../core/domain/apps/maibotConfig';
 import { cn } from '../../../../shared/utils/cn';
 import type { AppInstance, MaiBotInstanceConfig } from '../../../../core/ipc/types';
 
-type CondKey = 'link' | 'chat' | 'run';
+type CondKey = 'link' | 'model' | 'chat' | 'run';
+
+const MODEL_SUB: Record<Exclude<ReturnType<typeof maibotModelSetupIssue>, null>, string> = {
+    no_provider: '还没有模型提供商，加一个并填上 API Key',
+    placeholder_key: '默认带的 DeepSeek 还是占位的 API Key，换成你自己的 Key，或者换一家提供商',
+    no_task_model: '回复、规划、杂务三个任务都要挑一个模型',
+};
 type Tone = 'ready' | 'todo' | 'idle';
 
 const TONE_DOT: Record<Tone, string> = {
@@ -31,9 +40,11 @@ export const MaiBotOverviewTab: React.FC<{
     const linked = !!instance.link;
     const chat = config.adapter?.chat;
     const chatOk = !!chat && !maibotChatDropsEverything(chat);
+    const modelIssue = maibotModelSetupIssue(config.models);
 
     const conds: { key: CondKey; ok: boolean; label: string }[] = [
         { key: 'link', ok: linked, label: linked ? 'QQ 已对接' : 'QQ 还没对接' },
+        { key: 'model', ok: !modelIssue, label: modelIssue ? '模型还没配好' : '模型已配好' },
         {
             key: 'chat',
             ok: chatOk,
@@ -51,7 +62,7 @@ export const MaiBotOverviewTab: React.FC<{
     if (!next) {
         tone = 'ready';
         title = '可以在 QQ 上找麦麦聊天了';
-        sub = '还没配大模型的话，在 WebUI 里配：第一次登录会带你走一遍';
+        sub = '人格、回复方式这些左边各页都能改，运行中保存马上生效';
         actions = (
             <Button size="sm" variant="primary" onClick={onOpenWebUi}>
                 <ExternalLink size={13} />
@@ -61,7 +72,7 @@ export const MaiBotOverviewTab: React.FC<{
     } else if (next === 'run' && missing.length === 1) {
         tone = 'idle';
         title = '都接好了，启动就能聊';
-        sub = '启动后在 WebUI 里配大模型，第一次登录有向导';
+        sub = '启动后在 QQ 里找麦麦说句话试试';
         actions = <StartButton starting={starting} onStart={onStart} />;
     } else {
         tone = 'todo';
@@ -72,6 +83,14 @@ export const MaiBotOverviewTab: React.FC<{
                 <Button size="sm" variant="primary" onClick={onOpenLink}>
                     <Link2 size={13} />
                     对接
+                </Button>
+            );
+        } else if (next === 'model' && modelIssue) {
+            sub = MODEL_SUB[modelIssue];
+            actions = (
+                <Button size="sm" variant="primary" onClick={() => onGoTab('models')}>
+                    <Bot size={13} />
+                    去配模型
                 </Button>
             );
         } else if (next === 'chat') {
@@ -85,7 +104,7 @@ export const MaiBotOverviewTab: React.FC<{
                 </Button>
             ) : null;
         } else {
-            sub = '启动后在 WebUI 里配大模型，第一次登录有向导';
+            sub = '启动后在 QQ 里找麦麦说句话试试';
             actions = <StartButton starting={starting} onStart={onStart} />;
         }
     }
@@ -125,7 +144,7 @@ export const MaiBotOverviewTab: React.FC<{
 
             <Card padding="none" className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                 <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-text-secondary">
-                    大模型、人格、表情包和插件都在 MaiBot 自己的 WebUI 里配。登录 token 在「连接」页，打开时会自动复制。
+                    记忆图谱、学到的表达方式、表情包库在 MaiBot 自己的 WebUI 里看。登录 token 在「连接」页，打开时会自动复制。
                 </p>
                 <Button size="sm" variant="secondary" disabled={!running} onClick={onOpenWebUi}>
                     <ExternalLink size={13} />
