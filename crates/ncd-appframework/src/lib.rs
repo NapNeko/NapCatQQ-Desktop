@@ -61,6 +61,16 @@ pub use maibot::resources::emoji::{
     MaiBotEmojiQuery, MaiBotEmojiSort, MaiBotEmojiStatus, MaiBotEmojiUpload, MaiBotEmojiUploadDone,
     MaiBotLocalImage, MaiBotUploadFailure, inspect_local_images,
 };
+pub use maibot::resources::memory::{
+    MaiBotLocalTextFile, MaiBotMemoryCounts, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteKind, MaiBotMemoryDeleteOp,
+    MaiBotMemoryDeleteResult, MaiBotMemoryDeleteSample, MaiBotMemoryDeleteTarget, MaiBotMemoryGraph,
+    MaiBotMemoryGraphEdge, MaiBotMemoryGraphHit, MaiBotMemoryGraphNode, MaiBotMemoryGraphParagraph,
+    MaiBotMemoryGraphRelation, MaiBotMemoryImport, MaiBotMemoryImportKind, MaiBotMemoryImportLimits,
+    MaiBotMemoryImportOptions, MaiBotMemoryImportSetup, MaiBotMemoryKindCounts, MaiBotMemoryNodeDetail,
+    MaiBotMemoryQuery, MaiBotMemoryRecord, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage,
+    MaiBotMemorySource, MaiBotMemoryState, MaiBotMemoryStatus, MaiBotMemoryTask, MaiBotMemoryTaskAction,
+    MaiBotMemoryTaskDetail, MaiBotMemoryTaskFile, MaiBotMemoryTaskStatus, inspect_local_texts,
+};
 pub use maibot::resources::person::{
     MaiBotGroupCard, MaiBotPerson, MaiBotPersonAction, MaiBotPersonFilter, MaiBotPersonOverview, MaiBotPersonPage,
     MaiBotPersonQuery,

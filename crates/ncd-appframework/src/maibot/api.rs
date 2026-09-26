@@ -8,6 +8,12 @@ use super::resources::emoji::{
     self, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
     MaiBotEmojiUpload, MaiBotEmojiUploadDone,
 };
+use super::resources::memory::{
+    self, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult, MaiBotMemoryGraph,
+    MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup, MaiBotMemoryNodeDetail, MaiBotMemoryQuery,
+    MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage, MaiBotMemorySource, MaiBotMemoryStatus,
+    MaiBotMemoryTask, MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail,
+};
 use super::resources::person::{self, MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery};
 use super::resources::expression::{
     self, MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
@@ -158,6 +164,64 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         session: &MaiBotSession,
         upload: &MaiBotEmojiUpload,
     ) -> Result<MaiBotEmojiUploadDone, AppFrameworkError>;
+
+    /// 长期记忆开没开、在不在初始化；关着时其余 memory_* 都会报错
+    async fn memory_status(&self, session: &MaiBotSession) -> Result<MaiBotMemoryStatus, AppFrameworkError>;
+
+    async fn memory_import_setup(&self, session: &MaiBotSession) -> Result<MaiBotMemoryImportSetup, AppFrameworkError>;
+
+    async fn memory_import(
+        &self,
+        session: &MaiBotSession,
+        req: &MaiBotMemoryImport,
+    ) -> Result<MaiBotMemoryTask, AppFrameworkError>;
+
+    async fn memory_tasks(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError>;
+
+    async fn memory_task(&self, session: &MaiBotSession, id: &str) -> Result<MaiBotMemoryTaskDetail, AppFrameworkError>;
+
+    async fn memory_task_action(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotMemoryTaskAction,
+    ) -> Result<MaiBotMemoryTask, AppFrameworkError>;
+
+    async fn memory_records(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotMemoryQuery,
+    ) -> Result<MaiBotMemoryRecordPage, AppFrameworkError>;
+
+    async fn memory_record(
+        &self,
+        session: &MaiBotSession,
+        kind: MaiBotMemoryRecordKind,
+        id: &str,
+    ) -> Result<MaiBotMemoryRecordDetail, AppFrameworkError>;
+
+    async fn memory_sources(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError>;
+
+    async fn memory_delete(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotMemoryDeleteAction,
+    ) -> Result<MaiBotMemoryDeleteResult, AppFrameworkError>;
+
+    async fn memory_delete_ops(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemoryDeleteOp>, AppFrameworkError>;
+
+    async fn memory_graph(&self, session: &MaiBotSession, max_nodes: u32) -> Result<MaiBotMemoryGraph, AppFrameworkError>;
+
+    async fn memory_graph_node(
+        &self,
+        session: &MaiBotSession,
+        node_id: &str,
+    ) -> Result<MaiBotMemoryNodeDetail, AppFrameworkError>;
+
+    async fn memory_graph_search(
+        &self,
+        session: &MaiBotSession,
+        query: &str,
+    ) -> Result<Vec<MaiBotMemoryGraphHit>, AppFrameworkError>;
 }
 
 /// 直连本机回环 WebUI 的实现；`MaiBotAdapter` 用它
@@ -364,5 +428,90 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         upload: &MaiBotEmojiUpload,
     ) -> Result<MaiBotEmojiUploadDone, AppFrameworkError> {
         emoji::upload(&client(session)?, upload).await
+    }
+
+    async fn memory_status(&self, session: &MaiBotSession) -> Result<MaiBotMemoryStatus, AppFrameworkError> {
+        memory::status(&client(session)?).await
+    }
+
+    async fn memory_import_setup(&self, session: &MaiBotSession) -> Result<MaiBotMemoryImportSetup, AppFrameworkError> {
+        memory::import_setup(&client(session)?).await
+    }
+
+    async fn memory_import(
+        &self,
+        session: &MaiBotSession,
+        req: &MaiBotMemoryImport,
+    ) -> Result<MaiBotMemoryTask, AppFrameworkError> {
+        memory::import(&client(session)?, req).await
+    }
+
+    async fn memory_tasks(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError> {
+        memory::tasks(&client(session)?).await
+    }
+
+    async fn memory_task(&self, session: &MaiBotSession, id: &str) -> Result<MaiBotMemoryTaskDetail, AppFrameworkError> {
+        memory::task(&client(session)?, id).await
+    }
+
+    async fn memory_task_action(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotMemoryTaskAction,
+    ) -> Result<MaiBotMemoryTask, AppFrameworkError> {
+        memory::task_action(&client(session)?, action).await
+    }
+
+    async fn memory_records(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotMemoryQuery,
+    ) -> Result<MaiBotMemoryRecordPage, AppFrameworkError> {
+        memory::records(&client(session)?, query).await
+    }
+
+    async fn memory_record(
+        &self,
+        session: &MaiBotSession,
+        kind: MaiBotMemoryRecordKind,
+        id: &str,
+    ) -> Result<MaiBotMemoryRecordDetail, AppFrameworkError> {
+        memory::record(&client(session)?, kind, id).await
+    }
+
+    async fn memory_sources(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError> {
+        memory::sources(&client(session)?).await
+    }
+
+    async fn memory_delete(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotMemoryDeleteAction,
+    ) -> Result<MaiBotMemoryDeleteResult, AppFrameworkError> {
+        memory::delete(&client(session)?, action).await
+    }
+
+    async fn memory_delete_ops(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemoryDeleteOp>, AppFrameworkError> {
+        memory::delete_ops(&client(session)?).await
+    }
+
+    async fn memory_graph(&self, session: &MaiBotSession, max_nodes: u32) -> Result<MaiBotMemoryGraph, AppFrameworkError> {
+        memory::graph(&client(session)?, max_nodes).await
+    }
+
+    async fn memory_graph_node(
+        &self,
+        session: &MaiBotSession,
+        node_id: &str,
+    ) -> Result<MaiBotMemoryNodeDetail, AppFrameworkError> {
+        memory::graph_node(&client(session)?, node_id).await
+    }
+
+    async fn memory_graph_search(
+        &self,
+        session: &MaiBotSession,
+        query: &str,
+    ) -> Result<Vec<MaiBotMemoryGraphHit>, AppFrameworkError> {
+        memory::graph_search(&client(session)?, query).await
     }
 }

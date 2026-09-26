@@ -20,7 +20,12 @@ use ncd_runtime::{
     MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery, MaiBotJargonAction,
     MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotLocalImage,
     MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest, MaiBotPersonAction,
-    MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
+    MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery, MaiBotLocalTextFile,
+    MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult, MaiBotMemoryGraph,
+    MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup, MaiBotMemoryNodeDetail,
+    MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage,
+    MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask, MaiBotMemoryTaskAction,
+    MaiBotMemoryTaskDetail,
     MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotProviderCheck,
     MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus, MaiBotStatsSummary,
     join_webui_url, run_app_plugin_task,
@@ -921,6 +926,154 @@ pub async fn maibot_local_images(
     state: State<'_, AppState>,
 ) -> Result<Vec<MaiBotLocalImage>, AppConfigError> {
     Ok(state.app_manager.maibot_local_images(paths).await)
+}
+
+#[tauri::command]
+pub async fn maibot_local_texts(
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<MaiBotLocalTextFile>, AppConfigError> {
+    Ok(state.app_manager.maibot_local_texts(paths).await)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_status(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMemoryStatus, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_status(&id).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_import_setup(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMemoryImportSetup, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_import_setup(&id).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_import(
+    instance_id: String,
+    req: MaiBotMemoryImport,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMemoryTask, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_import(&id, req).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_tasks(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<MaiBotMemoryTask>, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_tasks(&id).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_task(
+    instance_id: String,
+    task_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMemoryTaskDetail, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_task(&id, &task_id).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_task_action(
+    instance_id: String,
+    action: MaiBotMemoryTaskAction,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMemoryTask, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_task_action(&id, action).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_records(
+    instance_id: String,
+    query: MaiBotMemoryQuery,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMemoryRecordPage, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_records(&id, query).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_record(
+    instance_id: String,
+    kind: MaiBotMemoryRecordKind,
+    record_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMemoryRecordDetail, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state
+        .app_manager
+        .maibot_memory_record(&id, kind, &record_id)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_sources(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<MaiBotMemorySource>, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_sources(&id).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_delete(
+    instance_id: String,
+    action: MaiBotMemoryDeleteAction,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMemoryDeleteResult, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_delete(&id, action).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_delete_ops(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<MaiBotMemoryDeleteOp>, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_delete_ops(&id).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_graph(
+    instance_id: String,
+    max_nodes: u32,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMemoryGraph, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_graph(&id, max_nodes).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_graph_node(
+    instance_id: String,
+    node_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMemoryNodeDetail, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_graph_node(&id, &node_id).await.map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_memory_graph_search(
+    instance_id: String,
+    query: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<MaiBotMemoryGraphHit>, AppConfigError> {
+    let id = AppInstanceId::new(instance_id);
+    state.app_manager.maibot_memory_graph_search(&id, &query).await.map_err(AppFrameworkError::into_config_error)
 }
 
 /// 只看账号不开隧道：实例停着时从详情页查看 / 重置密码用。

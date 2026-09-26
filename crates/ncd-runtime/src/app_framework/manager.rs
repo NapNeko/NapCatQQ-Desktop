@@ -25,6 +25,11 @@ use ncd_appframework::{
     MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
     MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotResourceDone,
     MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
+    MaiBotLocalTextFile, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult,
+    MaiBotMemoryGraph, MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup,
+    MaiBotMemoryNodeDetail, MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind,
+    MaiBotMemoryRecordPage, MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask,
+    MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail,
     MaiBotMcpStatus, MaiBotMcpTest, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
     MaiBotPromptTarget, MaiBotProviderCheck, MaiBotProviderModel, MaiBotProviderSource,
     MaiBotRuntimeApi, MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotSession, MaiBotStatsSummary,
@@ -2433,6 +2438,124 @@ impl AppManager {
     /// 上传前在本机看一眼要传的图，不碰实例：拖进来时麦麦停着也能先挑
     pub async fn maibot_local_images(&self, paths: Vec<String>) -> Vec<MaiBotLocalImage> {
         ncd_appframework::inspect_local_images(paths).await
+    }
+
+    /// 导入长期记忆前在本机看一眼要导的文件，不碰实例
+    pub async fn maibot_local_texts(&self, paths: Vec<String>) -> Vec<MaiBotLocalTextFile> {
+        ncd_appframework::inspect_local_texts(paths).await
+    }
+
+    pub async fn maibot_memory_status(&self, id: &AppInstanceId) -> Result<MaiBotMemoryStatus, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_status(&s).await
+    }
+
+    pub async fn maibot_memory_import_setup(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotMemoryImportSetup, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_import_setup(&s).await
+    }
+
+    pub async fn maibot_memory_import(
+        &self,
+        id: &AppInstanceId,
+        req: MaiBotMemoryImport,
+    ) -> Result<MaiBotMemoryTask, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_import(&s, &req).await
+    }
+
+    pub async fn maibot_memory_tasks(&self, id: &AppInstanceId) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_tasks(&s).await
+    }
+
+    pub async fn maibot_memory_task(
+        &self,
+        id: &AppInstanceId,
+        task_id: &str,
+    ) -> Result<MaiBotMemoryTaskDetail, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_task(&s, task_id).await
+    }
+
+    pub async fn maibot_memory_task_action(
+        &self,
+        id: &AppInstanceId,
+        action: MaiBotMemoryTaskAction,
+    ) -> Result<MaiBotMemoryTask, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_task_action(&s, &action).await
+    }
+
+    pub async fn maibot_memory_records(
+        &self,
+        id: &AppInstanceId,
+        query: MaiBotMemoryQuery,
+    ) -> Result<MaiBotMemoryRecordPage, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_records(&s, &query).await
+    }
+
+    pub async fn maibot_memory_record(
+        &self,
+        id: &AppInstanceId,
+        kind: MaiBotMemoryRecordKind,
+        record_id: &str,
+    ) -> Result<MaiBotMemoryRecordDetail, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_record(&s, kind, record_id).await
+    }
+
+    pub async fn maibot_memory_sources(&self, id: &AppInstanceId) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_sources(&s).await
+    }
+
+    pub async fn maibot_memory_delete(
+        &self,
+        id: &AppInstanceId,
+        action: MaiBotMemoryDeleteAction,
+    ) -> Result<MaiBotMemoryDeleteResult, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_delete(&s, &action).await
+    }
+
+    pub async fn maibot_memory_delete_ops(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Vec<MaiBotMemoryDeleteOp>, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_delete_ops(&s).await
+    }
+
+    pub async fn maibot_memory_graph(
+        &self,
+        id: &AppInstanceId,
+        max_nodes: u32,
+    ) -> Result<MaiBotMemoryGraph, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_graph(&s, max_nodes).await
+    }
+
+    pub async fn maibot_memory_graph_node(
+        &self,
+        id: &AppInstanceId,
+        node_id: &str,
+    ) -> Result<MaiBotMemoryNodeDetail, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_graph_node(&s, node_id).await
+    }
+
+    pub async fn maibot_memory_graph_search(
+        &self,
+        id: &AppInstanceId,
+        query: &str,
+    ) -> Result<Vec<MaiBotMemoryGraphHit>, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.memory_graph_search(&s, query).await
     }
 
     pub async fn list_config_documents(

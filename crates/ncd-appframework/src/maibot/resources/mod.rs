@@ -6,6 +6,7 @@
 pub mod emoji;
 pub mod expression;
 pub mod jargon;
+pub mod memory;
 pub mod person;
 pub mod prompts;
 

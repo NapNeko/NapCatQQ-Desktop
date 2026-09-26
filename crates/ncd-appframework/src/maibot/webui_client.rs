@@ -280,6 +280,10 @@ impl<'a> Request<'a> {
         self.timeout = Some(SLOW_TIMEOUT);
         self
     }
+
+    pub(crate) fn path(&self) -> &'a str {
+        self.path
+    }
 }
 
 /// 二进制请求的结果：缩略图生成中（202）、文件没了（404）和拿到了分开
