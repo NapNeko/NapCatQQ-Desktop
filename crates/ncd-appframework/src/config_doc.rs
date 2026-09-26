@@ -135,6 +135,29 @@ impl IssueSink {
     pub fn into_vec(self) -> Vec<AppConfigIssue> {
         self.issues
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.issues.is_empty()
+    }
+
+    /// 闭区间；两头都可以不限
+    pub fn range(&mut self, path: &str, value: f64, min: Option<f64>, max: Option<f64>) {
+        let fmt = |v: f64| if v.fract() == 0.0 { format!("{v:.0}") } else { v.to_string() };
+        match (min, max) {
+            (Some(lo), Some(hi)) if !(lo..=hi).contains(&value) => {
+                self.push(path, format!("要在 {} 到 {} 之间", fmt(lo), fmt(hi)));
+            }
+            (Some(lo), None) if value < lo => self.push(path, format!("不能小于 {}", fmt(lo))),
+            (None, Some(hi)) if value > hi => self.push(path, format!("不能大于 {}", fmt(hi))),
+            _ => {}
+        }
+    }
+
+    pub fn one_of(&mut self, path: &str, value: &str, options: &[&str]) {
+        if !options.contains(&value) {
+            self.push(path, format!("只能是 {} 之一，现在是 {value:?}", options.join(" / ")));
+        }
+    }
 }
 
 pub fn revision_of(bytes: &[u8]) -> String {

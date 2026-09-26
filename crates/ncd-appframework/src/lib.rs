@@ -19,6 +19,7 @@ pub mod node_tooling;
 pub mod nonebot2;
 pub mod registry;
 pub mod store;
+pub mod toml_patch;
 pub mod uv_tooling;
 
 pub use adapter::{
