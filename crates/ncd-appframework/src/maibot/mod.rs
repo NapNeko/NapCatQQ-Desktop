@@ -5,6 +5,7 @@ pub mod config;
 mod integration;
 pub mod manifest;
 pub mod release;
+pub mod schema;
 pub mod terms;
 
 use std::sync::Arc;

@@ -1,0 +1,4087 @@
+{
+ "className": "Config",
+ "uiAdvanced": false,
+ "fields": [
+  {
+   "name": "bot",
+   "type": "object",
+   "label": "bot",
+   "description": "机器人配置类"
+  },
+  {
+   "name": "personality",
+   "type": "object",
+   "label": "personality",
+   "description": "人格配置类"
+  },
+  {
+   "name": "chat",
+   "type": "object",
+   "label": "chat",
+   "description": "聊天配置类"
+  },
+  {
+   "name": "experimental",
+   "type": "object",
+   "label": "experimental",
+   "description": "实验性功能配置类"
+  },
+  {
+   "name": "visual",
+   "type": "object",
+   "label": "visual",
+   "description": "视觉配置类"
+  },
+  {
+   "name": "expression",
+   "type": "object",
+   "label": "expression",
+   "description": "表达配置类"
+  },
+  {
+   "name": "jargon",
+   "type": "object",
+   "label": "jargon",
+   "description": "黑话配置类"
+  },
+  {
+   "name": "a_memorix",
+   "type": "object",
+   "label": "a_memorix",
+   "description": "A_Memorix 长期记忆子系统配置"
+  },
+  {
+   "name": "message_receive",
+   "type": "object",
+   "label": "message_receive",
+   "description": "消息接收配置类"
+  },
+  {
+   "name": "voice",
+   "type": "object",
+   "label": "voice",
+   "description": "语音配置类"
+  },
+  {
+   "name": "emoji",
+   "type": "object",
+   "label": "emoji",
+   "description": "表情包配置类"
+  },
+  {
+   "name": "keyword_reaction",
+   "type": "object",
+   "label": "keyword_reaction",
+   "description": "关键词反应配置类"
+  },
+  {
+   "name": "response_post_process",
+   "type": "object",
+   "label": "response_post_process",
+   "description": "回复后处理配置类"
+  },
+  {
+   "name": "chinese_typo",
+   "type": "object",
+   "label": "chinese_typo",
+   "description": "中文错别字生成器配置类"
+  },
+  {
+   "name": "response_splitter",
+   "type": "object",
+   "label": "response_splitter",
+   "description": "回复分割器配置类"
+  },
+  {
+   "name": "telemetry",
+   "type": "object",
+   "label": "telemetry",
+   "description": "遥测配置类"
+  },
+  {
+   "name": "log",
+   "type": "object",
+   "label": "log",
+   "description": "日志配置类"
+  },
+  {
+   "name": "debug",
+   "type": "object",
+   "label": "debug",
+   "description": "调试配置类"
+  },
+  {
+   "name": "maim_message",
+   "type": "object",
+   "label": "maim_message",
+   "description": "maim_message配置类"
+  },
+  {
+   "name": "webui",
+   "type": "object",
+   "label": "webui",
+   "description": "WebUI配置类"
+  },
+  {
+   "name": "database",
+   "type": "object",
+   "label": "database",
+   "description": "数据库配置类"
+  },
+  {
+   "name": "mcp",
+   "type": "object",
+   "label": "mcp",
+   "description": "MCP 配置类"
+  },
+  {
+   "name": "plugin",
+   "type": "object",
+   "label": "plugin",
+   "description": "插件管理配置类"
+  },
+  {
+   "name": "plugin_runtime",
+   "type": "object",
+   "label": "plugin_runtime",
+   "description": "插件运行时配置类"
+  }
+ ],
+ "nested": {
+  "bot": {
+   "className": "BotConfig",
+   "uiLabel": "基础",
+   "uiAdvanced": false,
+   "uiOrder": 10,
+   "fields": [
+    {
+     "name": "platform",
+     "type": "string",
+     "label": "备用主平台",
+     "description": "适配器没有上报身份时使用的备用主平台，例如 qq。",
+     "x-widget": "input",
+     "x-row": "bot-platform-account"
+    },
+    {
+     "name": "qq_account",
+     "type": "string",
+     "label": "备用 QQ 账号",
+     "description": "适配器没有上报 QQ 身份时使用的备用账号 ID。",
+     "x-widget": "input",
+     "x-row": "bot-platform-account"
+    },
+    {
+     "name": "platforms",
+     "type": "array",
+     "label": "其他备用平台",
+     "description": "其他平台的备用账号，格式为 platform:账号；适配器身份存在时不参与判断。",
+     "x-widget": "custom",
+     "items": {
+      "type": "string"
+     }
+    },
+    {
+     "name": "nickname",
+     "type": "string",
+     "label": "机器人昵称",
+     "description": "麦麦显示和自称时使用的名字。",
+     "x-widget": "input"
+    },
+    {
+     "name": "alias_names",
+     "type": "array",
+     "label": "别名",
+     "description": "别人可能用来称呼麦麦的名字，用于辅助识别提及。",
+     "x-widget": "custom",
+     "advanced": true,
+     "items": {
+      "type": "string"
+     }
+    }
+   ]
+  },
+  "personality": {
+   "className": "PersonalityConfig",
+   "uiLabel": "人格",
+   "uiAdvanced": false,
+   "uiParent": "bot",
+   "fields": [
+    {
+     "name": "personality",
+     "type": "string",
+     "label": "人格设定",
+     "description": "麦麦的人格和身份设定，建议简短描述她是谁、是什么性格。",
+     "x-widget": "textarea",
+     "x-textarea-rows": 1,
+     "x-description-display": "icon"
+    },
+    {
+     "name": "behavior_style",
+     "type": "string",
+     "label": "行为风格",
+     "description": "Planner 使用的行动准则，例如何时参与聊天、如何观察局面以及何时保持安静。",
+     "x-widget": "textarea",
+     "x-textarea-rows": 1,
+     "x-description-display": "icon"
+    },
+    {
+     "name": "reply_style",
+     "type": "string",
+     "label": "表达风格",
+     "description": "麦麦平时说话的风格，例如简短、温和、吐槽或正式。",
+     "x-widget": "textarea",
+     "x-textarea-rows": 1,
+     "x-description-display": "icon"
+    },
+    {
+     "name": "multiple_reply_style",
+     "type": "array",
+     "label": "备用表达风格",
+     "description": "备用说话风格；触发后只影响本次回复。",
+     "x-widget": "custom",
+     "advanced": true,
+     "items": {
+      "type": "string"
+     }
+    },
+    {
+     "name": "multiple_probability",
+     "type": "number",
+     "label": "临时风格注入概率",
+     "description": "随机启用备用风格的概率；0 表示不随机切换。",
+     "minValue": 0,
+     "maxValue": 1,
+     "step": 0.1,
+     "x-widget": "slider",
+     "advanced": true
+    }
+   ]
+  },
+  "chat": {
+   "className": "ChatConfig",
+   "uiLabel": "聊天",
+   "uiAdvanced": false,
+   "uiOrder": 20,
+   "fields": [
+    {
+     "name": "max_context_size",
+     "type": "integer",
+     "label": "群聊上下文",
+     "description": "群聊回复时参考的最近消息数量；越大越懂上下文，也更耗模型。",
+     "x-widget": "input",
+     "x-row": "chat-context-controls"
+    },
+    {
+     "name": "max_private_context_size",
+     "type": "integer",
+     "label": "私聊上下文",
+     "description": "私聊回复时参考的最近消息数量。",
+     "x-widget": "input",
+     "x-row": "chat-context-controls"
+    },
+    {
+     "name": "enable_context_optimization",
+     "type": "boolean",
+     "label": "优化上下文",
+     "description": "压缩部分上下文，减少模型消耗；一般建议开启。",
+     "x-widget": "switch",
+     "x-row": "chat-context-controls"
+    },
+    {
+     "name": "mid_term_memory",
+     "type": "boolean",
+     "label": "聊天回想",
+     "description": "打开后会主动召回最近聊天发生的事情。",
+     "x-widget": "switch",
+     "x-row": "chat-recall-controls"
+    },
+    {
+     "name": "mid_term_memory_lenth",
+     "type": "integer",
+     "label": "聊天回想保留数",
+     "description": "最多保留多少条聊天回想；设为 0 表示不保留。",
+     "minValue": 0,
+     "x-widget": "input",
+     "x-row": "chat-recall-controls"
+    },
+    {
+     "name": "reply_timing",
+     "type": "object",
+     "label": "reply_timing",
+     "description": "什么时候回复、回复频率与等待退避配置。"
+    },
+    {
+     "name": "reply_style",
+     "type": "object",
+     "label": "reply_style",
+     "description": "如何回复、引用回复与聊天 Prompt 配置。"
+    }
+   ],
+   "nested": {
+    "reply_timing": {
+     "className": "ChatReplyTimingConfig",
+     "uiLabel": "什么时候发言",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "talk_value",
+       "type": "number",
+       "label": "群聊频率",
+       "description": "群聊里麦麦主动说话的频率；越小越安静。",
+       "minValue": 0,
+       "maxValue": 1,
+       "step": 0.001,
+       "x-widget": "slider",
+       "x-row": "talk-values"
+      },
+      {
+       "name": "private_talk_value",
+       "type": "number",
+       "label": "私聊频率",
+       "description": "私聊里麦麦主动说话的频率；越小越安静。",
+       "minValue": 0,
+       "maxValue": 1,
+       "step": 0.001,
+       "x-widget": "slider",
+       "x-row": "talk-values"
+      },
+      {
+       "name": "mentioned_bot_reply",
+       "type": "boolean",
+       "label": "提及必回复",
+       "description": "开启后，只要消息提到麦麦名字就更容易回复。",
+       "x-widget": "switch",
+       "x-row": "reply-switches"
+      },
+      {
+       "name": "inevitable_at_reply",
+       "type": "boolean",
+       "label": "At 必回复",
+       "description": "开启后，被 @ 时会尽量回复。",
+       "x-widget": "switch",
+       "x-row": "reply-switches"
+      },
+      {
+       "name": "reply_trigger_mode",
+       "type": "select",
+       "label": "回复触发模式",
+       "description": "控制新消息何时进入 Planner。",
+       "options": [
+        "frequency",
+        "reply_necessity"
+       ],
+       "x-widget": "select",
+       "x-option-labels": {
+        "frequency": "频率触发",
+        "reply_necessity": "必要性触发"
+       },
+       "x-option-descriptions": {
+        "frequency": "按照新消息数量决定思考",
+        "reply_necessity": "综合新消息数量、内容、过往发言决定思考"
+       }
+      },
+      {
+       "name": "planner_interrupt_max_consecutive_count",
+       "type": "integer",
+       "label": "规划器连续打断上限",
+       "description": "思考时来了新消息，最多重新思考多少次。",
+       "minValue": 0,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "max_consecutive_wait_count",
+       "type": "integer",
+       "label": "连续 wait 上限",
+       "description": "Planner 最多连续调用 wait 多少次；达到上限后 wait 工具会拒绝继续进入等待。",
+       "minValue": 1,
+       "x-widget": "input"
+      },
+      {
+       "name": "no_action_backoff_base_seconds",
+       "type": "number",
+       "label": "空闲退避基准",
+       "description": "连续决定不回复后，下一次检查前先等多久。",
+       "minValue": 0,
+       "x-widget": "input",
+       "advanced": false,
+       "x-description-display": "icon"
+      },
+      {
+       "name": "no_action_backoff_cap_seconds",
+       "type": "number",
+       "label": "空闲退避上限",
+       "description": "不回复退避等待的最长时间。",
+       "minValue": 0,
+       "x-widget": "input",
+       "advanced": true,
+       "x-description-display": "icon"
+      },
+      {
+       "name": "no_action_backoff_start_count",
+       "type": "integer",
+       "label": "空闲退避起点",
+       "description": "连续几次不回复后开始放慢检查。",
+       "minValue": 1,
+       "x-widget": "input",
+       "advanced": true,
+       "x-description-display": "icon"
+      },
+      {
+       "name": "no_action_backoff_bypass_pending_count",
+       "type": "integer",
+       "label": "空闲退避绕过消息数",
+       "description": "等待期间新消息达到多少条就立刻重新处理；0 表示不按条数打断等待。",
+       "minValue": 0,
+       "x-widget": "input",
+       "advanced": true,
+       "x-description-display": "icon"
+      },
+      {
+       "name": "enable_talk_value_rules",
+       "type": "boolean",
+       "label": "启用动态发言频率规则",
+       "description": "开启后，可以按聊天或时间段单独调整发言频率。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "talk_value_rules",
+       "type": "array",
+       "label": "动态发言频率规则",
+       "description": "动态发言频率规则；可让麦麦在某些群、私聊或时段更活跃或更安静。",
+       "x-widget": "custom",
+       "items": {
+        "type": "object"
+       }
+      }
+     ],
+     "nested": {
+      "talk_value_rules": {
+       "className": "TalkRulesItem",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "platform",
+         "type": "string",
+         "label": "平台",
+         "description": "规则作用的平台；留空表示不限定平台，* 表示任意平台。"
+        },
+        {
+         "name": "item_id",
+         "type": "string",
+         "label": "聊天流 ID",
+         "description": "规则作用的群号或用户 ID；留空表示不限定聊天，* 表示任意聊天。"
+        },
+        {
+         "name": "rule_type",
+         "type": "select",
+         "label": "聊天类型",
+         "description": "规则作用于群聊还是私聊。",
+         "options": [
+          "group",
+          "private"
+         ],
+         "x-widget": "select",
+         "x-option-descriptions": {
+          "group": "群聊聊天流，item_id 填群号或群聊 ID",
+          "private": "私聊聊天流，item_id 填用户 ID"
+         }
+        },
+        {
+         "name": "time",
+         "type": "string",
+         "label": "时间段",
+         "description": "规则生效时间；留空为兜底，* 为全天，也可填 23:00-02:00。",
+         "x-widget": "talk-time"
+        },
+        {
+         "name": "value",
+         "type": "number",
+         "label": "发言频率",
+         "description": "该规则下的发言频率；0 更安静，1 按正常频率。"
+        }
+       ]
+      }
+     }
+    },
+    "reply_style": {
+     "className": "ChatReplyStyleConfig",
+     "uiLabel": "如何发言",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enable_reply_quote",
+       "type": "boolean",
+       "label": "启用引用回复",
+       "description": "回复时是否可以引用上一条或相关消息。",
+       "x-widget": "switch",
+       "advanced": true
+      },
+      {
+       "name": "group_chat_prompt",
+       "type": "string",
+       "label": "群聊提示词",
+       "description": "群聊通用提示词，告诉麦麦群聊中该怎么说话。",
+       "x-widget": "textarea"
+      },
+      {
+       "name": "private_chat_prompts",
+       "type": "string",
+       "label": "私聊提示词",
+       "description": "私聊通用提示词，告诉麦麦私聊中该怎么说话。",
+       "x-widget": "textarea"
+      },
+      {
+       "name": "chat_prompts",
+       "type": "array",
+       "label": "额外 Prompt",
+       "description": "给指定群聊或私聊额外补充聊天要求；有特殊群规或语气要求时再加。",
+       "x-widget": "custom",
+       "items": {
+        "type": "object"
+       }
+      }
+     ],
+     "nested": {
+      "chat_prompts": {
+       "className": "ExtraPromptItem",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "platform",
+         "type": "string",
+         "label": "platform",
+         "description": "额外提示作用的平台，和聊天流 ID、提示内容需要一起填写。",
+         "x-widget": "input"
+        },
+        {
+         "name": "item_id",
+         "type": "string",
+         "label": "item_id",
+         "description": "额外提示作用的群号或用户 ID。",
+         "x-widget": "input"
+        },
+        {
+         "name": "rule_type",
+         "type": "select",
+         "label": "rule_type",
+         "description": "额外提示作用于群聊还是私聊。",
+         "options": [
+          "group",
+          "private"
+         ],
+         "x-widget": "select",
+         "x-option-descriptions": {
+          "group": "群聊聊天流，item_id 填群号或群聊 ID",
+          "private": "私聊聊天流，item_id 填用户 ID"
+         }
+        },
+        {
+         "name": "prompt",
+         "type": "string",
+         "label": "prompt",
+         "description": "给这个聊天额外补充的要求。",
+         "x-widget": "textarea"
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "experimental": {
+   "className": "ExperimentalConfig",
+   "uiLabel": "实验性功能",
+   "uiAdvanced": true,
+   "uiOrder": 140,
+   "fields": [
+    {
+     "name": "enable_behavior_learning",
+     "type": "boolean",
+     "label": "启用行为学习",
+     "description": "让麦麦从聊天中学习什么时候该怎么回应的经验。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "enable_rich_reply",
+     "type": "boolean",
+     "label": "丰富回复能力",
+     "description": "开启后，reply 动作可通过 attach_pic、attach_emoji、attach_at 参数附加图片、表情包或 at。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "emotion_trait",
+     "type": "select",
+     "label": "情绪特点",
+     "description": "实验性人格情绪特点；理性冷静和多愁善感会追加人格后缀，中性不追加内容。",
+     "options": [
+      "rational_calm",
+      "neutral",
+      "sentimental"
+     ],
+     "x-widget": "select",
+     "x-option-labels": {
+      "rational_calm": "理性冷静",
+      "neutral": "中性",
+      "sentimental": "多愁善感"
+     },
+     "x-option-descriptions": {
+      "rational_calm": "情绪表达更克制，优先保持客观、清晰和稳定。",
+      "neutral": "不追加额外情绪特点描述，完全使用原人格设定。",
+      "sentimental": "情绪表达更细腻敏感，更容易被聊天氛围触动。"
+     }
+    },
+    {
+     "name": "attention_drift",
+     "type": "object",
+     "label": "attention_drift",
+     "description": "注意力漂移实验模式；让麦麦在群聊/私聊中表现出更活跃的联想和轻微话题漂移。"
+    },
+    {
+     "name": "behavior_learning_list",
+     "type": "array",
+     "label": "行为学习配置",
+     "description": "配置哪些聊天会学习和使用行为经验；默认规则不够时再单独添加。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    },
+    {
+     "name": "behavior_groups",
+     "type": "array",
+     "label": "行为共享组",
+     "description": "让多个群聊或私聊共享学到的行为经验。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    },
+    {
+     "name": "focus_mode",
+     "type": "boolean",
+     "label": "Focus 模式",
+     "description": "让麦麦同一时间只专注一个聊天流，适合直播或高强度聊天场景。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "focus_on_private",
+     "type": "boolean",
+     "label": "私聊启用 Focus",
+     "description": "Focus 模式是否也作用于私聊。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "focus_chat_whitelist",
+     "type": "array",
+     "label": "Focus 白名单",
+     "description": "Focus 白名单。配置后只有命中的群聊或私聊会进入 Focus；留空表示所有符合聊天类型开关的聊天都可进入 Focus。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    },
+    {
+     "name": "focus_groups",
+     "type": "array",
+     "label": "Focus 共享组",
+     "description": "把聊天流分组后，同组共享 Focus，不同组互不抢占。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    },
+    {
+     "name": "focus_cool_time",
+     "type": "integer",
+     "label": "Focus 冷却时间",
+     "description": "当前关注的聊天多久没继续处理后，允许被其他聊天唤醒。",
+     "minValue": 1,
+     "x-widget": "input",
+     "x-row": "focus-cool-time"
+    }
+   ],
+   "nested": {
+    "attention_drift": {
+     "className": "AttentionDriftConfig",
+     "uiLabel": "注意力漂移",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "注意力漂移模式",
+       "description": "开启后，麦麦会更容易被有趣的新话题、梗或反差点吸引，但仍需保持上下文可理解。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "drift_level",
+       "type": "select",
+       "label": "漂移档位",
+       "description": "控制注意力漂移的整体表现档位，而不是用数值概率描述。",
+       "options": [
+        "subtle",
+        "active",
+        "scattered",
+        "wild"
+       ],
+       "x-widget": "select",
+       "x-option-labels": {
+        "subtle": "轻微漂移",
+        "active": "活跃联想",
+        "scattered": "明显发散",
+        "wild": "强烈跳跃"
+       },
+       "x-option-descriptions": {
+        "subtle": "只在很自然的触发点上轻轻联想一句，整体仍跟随当前话题。",
+        "active": "允许更主动地抓有趣支线，但回复仍应保持清楚、短促、可追溯。",
+        "scattered": "会更明显地抓支线和突然联想，回复里可以出现可理解的拐弯。",
+        "wild": "强实验档位；可以有更强的跳跃、插话和突然联想，但必须能从最近消息找到触发点。"
+       },
+       "x-row": "attention-drift-style"
+      },
+      {
+       "name": "anchor_policy",
+       "type": "select",
+       "label": "回钩策略",
+       "description": "控制话题漂移后需要多强地回到当前聊天上下文。",
+       "options": [
+        "strict",
+        "balanced",
+        "loose"
+       ],
+       "x-widget": "select",
+       "x-option-labels": {
+        "strict": "严格回钩",
+        "balanced": "自然回钩",
+        "loose": "宽松关联"
+       },
+       "x-option-descriptions": {
+        "strict": "每次联想后都要快速拉回当前话题，适合技术群或严肃场景。",
+        "balanced": "可以短暂支线联想，但通常要让回复和最近消息保持明显关系。",
+        "loose": "允许更自由的相关联想，但仍必须能从最近消息找到触发点。"
+       },
+       "x-row": "attention-drift-style"
+      },
+      {
+       "name": "reaction_style",
+       "type": "select",
+       "label": "短反应风格",
+       "description": "控制短句、吐槽、语气词等短反应在漂移风格中的使用方式。",
+       "options": [
+        "reserved",
+        "natural",
+        "lively"
+       ],
+       "x-widget": "select",
+       "x-option-labels": {
+        "reserved": "少量短反应",
+        "natural": "自然短反应",
+        "lively": "活泼短反应"
+       },
+       "x-option-descriptions": {
+        "reserved": "短反应很少出现，只在特别好接的话题上使用。",
+        "natural": "偶尔先用短句、吐槽或语气词接住话题，再继续回复。",
+        "lively": "更容易先用短促反应开头，但不能把回复拆得太碎。"
+       },
+       "x-row": "attention-drift-reaction"
+      }
+     ]
+    },
+    "behavior_learning_list": {
+     "className": "LearningItem",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "platform",
+       "type": "string",
+       "label": "平台",
+       "description": "平台，与ID一起留空表示全局",
+       "x-widget": "input"
+      },
+      {
+       "name": "item_id",
+       "type": "string",
+       "label": "聊天流 ID",
+       "description": "要单独配置的群号或用户 ID；留空表示默认规则。",
+       "x-widget": "input"
+      },
+      {
+       "name": "type",
+       "type": "select",
+       "label": "聊天类型",
+       "description": "这条规则作用于群聊还是私聊。",
+       "options": [
+        "group",
+        "private"
+       ],
+       "x-widget": "select",
+       "x-option-descriptions": {
+        "group": "群聊聊天流，item_id 填群号或群聊 ID",
+        "private": "私聊聊天流，item_id 填用户 ID"
+       }
+      },
+      {
+       "name": "use",
+       "type": "boolean",
+       "label": "使用",
+       "description": "是否在这个聊天里使用已学到的内容。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "learn",
+       "type": "boolean",
+       "label": "学习",
+       "description": "是否从这个聊天里继续学习新内容。",
+       "x-widget": "switch"
+      }
+     ]
+    },
+    "behavior_groups": {
+     "className": "ChatStreamGroup",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "targets",
+       "type": "array",
+       "label": "共享聊天流",
+       "description": "这个组里的聊天流会共享对应的学习内容。",
+       "x-widget": "custom",
+       "items": {
+        "type": "object"
+       }
+      }
+     ],
+     "nested": {
+      "targets": {
+       "className": "TargetItem",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "platform",
+         "type": "string",
+         "label": "平台",
+         "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+         "x-widget": "input"
+        },
+        {
+         "name": "item_id",
+         "type": "string",
+         "label": "聊天流 ID",
+         "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+         "x-widget": "input"
+        },
+        {
+         "name": "rule_type",
+         "type": "select",
+         "label": "聊天类型",
+         "description": "聊天流类型，group（群聊）或private（私聊）",
+         "options": [
+          "group",
+          "private"
+         ],
+         "x-widget": "select",
+         "x-option-descriptions": {
+          "group": "群聊聊天流，item_id 填群号或群聊 ID",
+          "private": "私聊聊天流，item_id 填用户 ID"
+         }
+        }
+       ]
+      }
+     }
+    },
+    "focus_chat_whitelist": {
+     "className": "TargetItem",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "platform",
+       "type": "string",
+       "label": "平台",
+       "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+       "x-widget": "input"
+      },
+      {
+       "name": "item_id",
+       "type": "string",
+       "label": "聊天流 ID",
+       "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+       "x-widget": "input"
+      },
+      {
+       "name": "rule_type",
+       "type": "select",
+       "label": "聊天类型",
+       "description": "聊天流类型，group（群聊）或private（私聊）",
+       "options": [
+        "group",
+        "private"
+       ],
+       "x-widget": "select",
+       "x-option-descriptions": {
+        "group": "群聊聊天流，item_id 填群号或群聊 ID",
+        "private": "私聊聊天流，item_id 填用户 ID"
+       }
+      }
+     ]
+    },
+    "focus_groups": {
+     "className": "ChatStreamGroup",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "targets",
+       "type": "array",
+       "label": "共享聊天流",
+       "description": "这个组里的聊天流会共享对应的学习内容。",
+       "x-widget": "custom",
+       "items": {
+        "type": "object"
+       }
+      }
+     ],
+     "nested": {
+      "targets": {
+       "className": "TargetItem",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "platform",
+         "type": "string",
+         "label": "平台",
+         "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+         "x-widget": "input"
+        },
+        {
+         "name": "item_id",
+         "type": "string",
+         "label": "聊天流 ID",
+         "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+         "x-widget": "input"
+        },
+        {
+         "name": "rule_type",
+         "type": "select",
+         "label": "聊天类型",
+         "description": "聊天流类型，group（群聊）或private（私聊）",
+         "options": [
+          "group",
+          "private"
+         ],
+         "x-widget": "select",
+         "x-option-descriptions": {
+          "group": "群聊聊天流，item_id 填群号或群聊 ID",
+          "private": "私聊聊天流，item_id 填用户 ID"
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "visual": {
+   "className": "VisualConfig",
+   "uiLabel": "视觉",
+   "uiAdvanced": false,
+   "uiOrder": 60,
+   "fields": [
+    {
+     "name": "planner_mode",
+     "type": "select",
+     "label": "规划阶段视觉模式",
+     "description": "控制规划阶段是否把图片内容直接发送给 planner 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。",
+     "options": [
+      "text",
+      "multimodal",
+      "auto"
+     ],
+     "x-widget": "select",
+     "x-option-descriptions": {
+      "auto": "根据模型信息自动选择文本或多模态模式",
+      "text": "纯文本模式，不向模型发送视觉输入",
+      "multimodal": "多模态模式，会向模型发送视觉输入"
+     },
+     "x-row": "visual-modes"
+    },
+    {
+     "name": "replyer_mode",
+     "type": "select",
+     "label": "回复生成视觉模式",
+     "description": "控制回复生成阶段是否把图片内容直接发送给 replyer 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。",
+     "options": [
+      "text",
+      "multimodal",
+      "auto"
+     ],
+     "x-widget": "select",
+     "x-option-descriptions": {
+      "auto": "根据模型信息自动选择文本或多模态模式",
+      "text": "纯文本模式，不向模型发送视觉输入",
+      "multimodal": "多模态模式，会向模型发送视觉输入"
+     },
+     "x-row": "visual-modes"
+    },
+    {
+     "name": "max_image_num",
+     "type": "integer",
+     "label": "多模态最大图片数",
+     "description": "一次多模态请求最多带多少张图，太大可能更慢更贵。",
+     "minValue": 0,
+     "x-widget": "input",
+     "advanced": true
+    },
+    {
+     "name": "wait_image_recognize_max_time",
+     "type": "number",
+     "label": "识图最长等待时间",
+     "description": "等图片识别完成的最长秒数；0 表示不等待。",
+     "minValue": 0,
+     "x-widget": "input"
+    },
+    {
+     "name": "handle_oversized_images",
+     "type": "boolean",
+     "label": "是否处理过大图片",
+     "description": "收到太大的图片时，是否自动压缩或丢弃。",
+     "x-widget": "switch",
+     "x-row": "visual-image-compression"
+    },
+    {
+     "name": "max_image_size_mb",
+     "type": "number",
+     "label": "最大图片大小(MB)",
+     "description": "超过这个大小的图片会按过大图片处理方法处理；0 表示不限。",
+     "minValue": 0,
+     "x-widget": "input",
+     "x-row": "visual-image-compression"
+    },
+    {
+     "name": "oversized_image_handle_method",
+     "type": "select",
+     "label": "过大图片处理方法",
+     "description": "大图的处理方式：压缩后继续用，或直接丢弃。",
+     "options": [
+      "compress",
+      "discard"
+     ],
+     "x-widget": "select",
+     "x-option-descriptions": {
+      "compress": "压缩图片并继续处理",
+      "discard": "丢弃超过最大大小的图片组件"
+     },
+     "x-row": "visual-image-compression"
+    },
+    {
+     "name": "image_cache_cleanup",
+     "type": "object",
+     "label": "image_cache_cleanup",
+     "description": "定期清理旧图片缓存，减少磁盘占用。"
+    }
+   ],
+   "nested": {
+    "image_cache_cleanup": {
+     "className": "ImageCacheCleanupConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "启用图片缓存自动清理",
+       "description": "开启后会自动删除长期不用的图片缓存。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "check_interval_hours",
+       "type": "number",
+       "label": "清理检查间隔（小时）",
+       "description": "每隔多少小时检查一次旧图片。",
+       "minValue": 0.016666666666666666,
+       "x-widget": "input"
+      },
+      {
+       "name": "image_file_retention_days",
+       "type": "integer",
+       "label": "图片文件保留天数",
+       "description": "图片文件多久没被使用后可以删除。",
+       "minValue": 1,
+       "x-widget": "input"
+      },
+      {
+       "name": "no_file_result_retention_days",
+       "type": "integer",
+       "label": "图片理解保留天数",
+       "description": "图片文件删掉后，识别文字还能保留多久。",
+       "minValue": 1,
+       "x-widget": "input"
+      }
+     ]
+    }
+   }
+  },
+  "expression": {
+   "className": "ExpressionConfig",
+   "uiLabel": "学习",
+   "uiAdvanced": false,
+   "uiOrder": 40,
+   "fields": [
+    {
+     "name": "expression_checked_only",
+     "type": "boolean",
+     "label": "使用精选表达",
+     "description": "仅使用人工精选的表达。",
+     "x-widget": "switch",
+     "x-row": "expression-learning-switches"
+    },
+    {
+     "name": "expression_self_reflect",
+     "type": "boolean",
+     "label": "优化表达方式学习",
+     "description": "写入表达方式前先让 AI 检查，减少学到奇怪内容。",
+     "x-widget": "switch",
+     "x-row": "expression-learning-switches"
+    },
+    {
+     "name": "expression_selection_mode",
+     "type": "select",
+     "label": "表达使用方式",
+     "description": "表达方式的使用策略：legacy 随手抽取候选，vector_intent 使用表达意图与嵌入召回。",
+     "options": [
+      "legacy",
+      "vector_intent"
+     ],
+     "x-widget": "select",
+     "x-option-labels": {
+      "legacy": "随手",
+      "vector_intent": "超级精细"
+     },
+     "x-option-descriptions": {
+      "legacy": "使用 LLM 进行选择，效果一般",
+      "vector_intent": "使用特殊构建的回复方式加上嵌入模型进行选择，效果非常好（需要配置嵌入模型）"
+     },
+     "advanced": false
+    },
+    {
+     "name": "expression_vector_index_path",
+     "type": "string",
+     "label": "表达向量索引路径",
+     "description": "向量召回使用的表达索引 JSON；相对路径按项目根目录解析。",
+     "x-widget": "input",
+     "advanced": true
+    },
+    {
+     "name": "expression_vector_candidate_pool_size",
+     "type": "integer",
+     "label": "向量候选上限",
+     "description": "向量召回后最多交给表达方式 LLM 选择的候选数；硬上限为 50。",
+     "minValue": 1,
+     "maxValue": 50,
+     "x-widget": "input",
+     "advanced": true
+    },
+    {
+     "name": "max_expression_learner",
+     "type": "integer",
+     "label": "表达学习最大并发",
+     "description": "同时运行的表达学习任务数量；太高可能占用更多资源。",
+     "x-widget": "input",
+     "advanced": true
+    },
+    {
+     "name": "learning_list",
+     "type": "array",
+     "label": "学习配置",
+     "description": "配置哪些聊天会学习和使用表达方式；默认规则不够时再单独添加。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    },
+    {
+     "name": "expression_groups",
+     "type": "array",
+     "label": "共享共享组",
+     "description": "让多个群聊或私聊共享学到的表达方式。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    }
+   ],
+   "nested": {
+    "learning_list": {
+     "className": "LearningItem",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "platform",
+       "type": "string",
+       "label": "平台",
+       "description": "平台，与ID一起留空表示全局",
+       "x-widget": "input"
+      },
+      {
+       "name": "item_id",
+       "type": "string",
+       "label": "聊天流 ID",
+       "description": "要单独配置的群号或用户 ID；留空表示默认规则。",
+       "x-widget": "input"
+      },
+      {
+       "name": "type",
+       "type": "select",
+       "label": "聊天类型",
+       "description": "这条规则作用于群聊还是私聊。",
+       "options": [
+        "group",
+        "private"
+       ],
+       "x-widget": "select",
+       "x-option-descriptions": {
+        "group": "群聊聊天流，item_id 填群号或群聊 ID",
+        "private": "私聊聊天流，item_id 填用户 ID"
+       }
+      },
+      {
+       "name": "use",
+       "type": "boolean",
+       "label": "使用",
+       "description": "是否在这个聊天里使用已学到的内容。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "learn",
+       "type": "boolean",
+       "label": "学习",
+       "description": "是否从这个聊天里继续学习新内容。",
+       "x-widget": "switch"
+      }
+     ]
+    },
+    "expression_groups": {
+     "className": "ChatStreamGroup",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "targets",
+       "type": "array",
+       "label": "共享聊天流",
+       "description": "这个组里的聊天流会共享对应的学习内容。",
+       "x-widget": "custom",
+       "items": {
+        "type": "object"
+       }
+      }
+     ],
+     "nested": {
+      "targets": {
+       "className": "TargetItem",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "platform",
+         "type": "string",
+         "label": "平台",
+         "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+         "x-widget": "input"
+        },
+        {
+         "name": "item_id",
+         "type": "string",
+         "label": "聊天流 ID",
+         "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+         "x-widget": "input"
+        },
+        {
+         "name": "rule_type",
+         "type": "select",
+         "label": "聊天类型",
+         "description": "聊天流类型，group（群聊）或private（私聊）",
+         "options": [
+          "group",
+          "private"
+         ],
+         "x-widget": "select",
+         "x-option-descriptions": {
+          "group": "群聊聊天流，item_id 填群号或群聊 ID",
+          "private": "私聊聊天流，item_id 填用户 ID"
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "jargon": {
+   "className": "JargonConfig",
+   "uiLabel": "黑话",
+   "uiAdvanced": false,
+   "uiParent": "expression",
+   "fields": [
+    {
+     "name": "learning_list",
+     "type": "array",
+     "label": "学习配置",
+     "description": "配置哪些聊天会学习和使用黑话；默认规则不够时再单独添加。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    },
+    {
+     "name": "jargon_groups",
+     "type": "array",
+     "label": "黑话共享组",
+     "description": "让多个群聊或私聊共享学到的黑话。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    }
+   ],
+   "nested": {
+    "learning_list": {
+     "className": "LearningItem",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "platform",
+       "type": "string",
+       "label": "平台",
+       "description": "平台，与ID一起留空表示全局",
+       "x-widget": "input"
+      },
+      {
+       "name": "item_id",
+       "type": "string",
+       "label": "聊天流 ID",
+       "description": "要单独配置的群号或用户 ID；留空表示默认规则。",
+       "x-widget": "input"
+      },
+      {
+       "name": "type",
+       "type": "select",
+       "label": "聊天类型",
+       "description": "这条规则作用于群聊还是私聊。",
+       "options": [
+        "group",
+        "private"
+       ],
+       "x-widget": "select",
+       "x-option-descriptions": {
+        "group": "群聊聊天流，item_id 填群号或群聊 ID",
+        "private": "私聊聊天流，item_id 填用户 ID"
+       }
+      },
+      {
+       "name": "use",
+       "type": "boolean",
+       "label": "使用",
+       "description": "是否在这个聊天里使用已学到的内容。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "learn",
+       "type": "boolean",
+       "label": "学习",
+       "description": "是否从这个聊天里继续学习新内容。",
+       "x-widget": "switch"
+      }
+     ]
+    },
+    "jargon_groups": {
+     "className": "ChatStreamGroup",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "targets",
+       "type": "array",
+       "label": "共享聊天流",
+       "description": "这个组里的聊天流会共享对应的学习内容。",
+       "x-widget": "custom",
+       "items": {
+        "type": "object"
+       }
+      }
+     ],
+     "nested": {
+      "targets": {
+       "className": "TargetItem",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "platform",
+         "type": "string",
+         "label": "平台",
+         "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+         "x-widget": "input"
+        },
+        {
+         "name": "item_id",
+         "type": "string",
+         "label": "聊天流 ID",
+         "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+         "x-widget": "input"
+        },
+        {
+         "name": "rule_type",
+         "type": "select",
+         "label": "聊天类型",
+         "description": "聊天流类型，group（群聊）或private（私聊）",
+         "options": [
+          "group",
+          "private"
+         ],
+         "x-widget": "select",
+         "x-option-descriptions": {
+          "group": "群聊聊天流，item_id 填群号或群聊 ID",
+          "private": "私聊聊天流，item_id 填用户 ID"
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "a_memorix": {
+   "className": "AMemorixConfig",
+   "uiLabel": "记忆",
+   "uiAdvanced": false,
+   "uiOrder": 50,
+   "fields": [
+    {
+     "name": "plugin",
+     "type": "object",
+     "label": "记忆系统",
+     "description": "长期记忆系统的总开关"
+    },
+    {
+     "name": "integration",
+     "type": "object",
+     "label": "聊天中使用记忆",
+     "description": "控制麦麦在聊天中如何使用长期记忆"
+    },
+    {
+     "name": "embedding",
+     "type": "object",
+     "label": "记忆向量化",
+     "description": "把记忆内容转换为向量时使用的基础设置",
+     "advanced": true
+    },
+    {
+     "name": "retrieval",
+     "type": "object",
+     "label": "检索",
+     "description": "检索配置",
+     "advanced": true
+    },
+    {
+     "name": "threshold",
+     "type": "object",
+     "label": "阈值",
+     "description": "阈值过滤配置",
+     "advanced": true
+    },
+    {
+     "name": "filter",
+     "type": "object",
+     "label": "过滤",
+     "description": "聊天过滤配置"
+    },
+    {
+     "name": "global_memory_sharing_enabled",
+     "type": "boolean",
+     "label": "全局共享记忆",
+     "description": "是否让普通记忆查询在所有聊天流范围内检索",
+     "x-widget": "switch"
+    },
+    {
+     "name": "shared_memory_groups",
+     "type": "array",
+     "label": "共享记忆组",
+     "description": "把需要互相参考长期记忆的群聊或私聊放到同一组",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    },
+    {
+     "name": "episode",
+     "type": "object",
+     "label": "Episode",
+     "description": "Episode 配置",
+     "advanced": true
+    },
+    {
+     "name": "person_profile",
+     "type": "object",
+     "label": "人物画像",
+     "description": "人物画像配置"
+    },
+    {
+     "name": "memory",
+     "type": "object",
+     "label": "记忆演化",
+     "description": "记忆演化配置",
+     "advanced": true
+    },
+    {
+     "name": "advanced",
+     "type": "object",
+     "label": "高级",
+     "description": "高级运行时配置",
+     "advanced": true
+    },
+    {
+     "name": "web",
+     "type": "object",
+     "label": "Web 运维",
+     "description": "Web 运维配置",
+     "advanced": true
+    }
+   ],
+   "nested": {
+    "plugin": {
+     "className": "AMemorixPluginConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "启用记忆",
+       "description": "是否启用长期记忆系统"
+      }
+     ]
+    },
+    "integration": {
+     "className": "AMemorixIntegrationConfig",
+     "uiAdvanced": false,
+     "uiParent": "a_memorix",
+     "fields": [
+      {
+       "name": "enable_memory_query_tool",
+       "type": "boolean",
+       "label": "启用记忆检索",
+       "description": "是否允许麦麦在聊天时查询长期记忆",
+       "x-widget": "switch"
+      },
+      {
+       "name": "memory_query_default_limit",
+       "type": "integer",
+       "label": "回忆记忆条数",
+       "description": "每次默认从长期记忆中取回多少条结果",
+       "minValue": 1,
+       "maxValue": 20,
+       "x-widget": "input"
+      },
+      {
+       "name": "enable_person_profile_query_tool",
+       "type": "boolean",
+       "label": "启用人物画像查询",
+       "description": "是否允许麦麦查询人物画像记忆",
+       "x-widget": "switch"
+      },
+      {
+       "name": "enable_person_profile_injection",
+       "type": "boolean",
+       "label": "自动注入人物画像",
+       "description": "是否在 Maisaka Planner 调用前自动注入当前对象相关的人物画像",
+       "x-widget": "switch",
+       "advanced": true
+      },
+      {
+       "name": "person_profile_injection_max_profiles",
+       "type": "integer",
+       "label": "注入画像上限",
+       "description": "每轮自动注入的人物画像数量上限",
+       "minValue": 1,
+       "maxValue": 5,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "heuristic_memory_recall_enabled",
+       "type": "boolean",
+       "label": "启发式拉起记忆",
+       "description": "是否根据当前聊天印象自然拉起长期记忆",
+       "x-widget": "switch"
+      },
+      {
+       "name": "heuristic_memory_recall_window_size",
+       "type": "integer",
+       "label": "印象窗口消息数",
+       "description": "生成当前聊天印象时使用的最近消息数量",
+       "minValue": 1,
+       "maxValue": 200,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "heuristic_memory_recall_limit",
+       "type": "integer",
+       "label": "自然拉起记忆条数",
+       "description": "每轮自然拉起的长期记忆数量上限",
+       "minValue": 1,
+       "maxValue": 10,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "heuristic_memory_recall_max_chars",
+       "type": "integer",
+       "label": "自然拉起文本上限",
+       "description": "自然拉起记忆注入文本的最大字符数",
+       "minValue": 100,
+       "maxValue": 4000,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "heuristic_memory_recall_min_interval_seconds",
+       "type": "integer",
+       "label": "自然拉起冷却秒数",
+       "description": "同一聊天流两次自然拉起的最小间隔秒数",
+       "minValue": 0,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "heuristic_memory_recall_min_new_messages",
+       "type": "integer",
+       "label": "自然拉起新增消息阈值",
+       "description": "两次自然拉起之间至少需要新增的当前聊天流消息数",
+       "minValue": 1,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "heuristic_memory_recall_cache_ttl_seconds",
+       "type": "integer",
+       "label": "自然拉起缓存秒数",
+       "description": "同一聊天流自然拉起结果的运行时缓存时间",
+       "minValue": 0,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "person_fact_writeback_enabled",
+       "type": "boolean",
+       "label": "写回人物事实",
+       "description": "是否在发送回复后自动提取并写回人物事实到长期记忆",
+       "x-widget": "switch",
+       "advanced": true
+      },
+      {
+       "name": "chat_summary_writeback_enabled",
+       "type": "boolean",
+       "label": "写回聊天摘要",
+       "description": "是否在 Maisaka 聊天过程中按消息窗口自动写回聊天摘要到长期记忆",
+       "x-widget": "switch"
+      },
+      {
+       "name": "chat_summary_writeback_message_threshold",
+       "type": "integer",
+       "label": "chat_summary_writeback_message_threshold",
+       "description": "自动写回聊天摘要的消息窗口阈值",
+       "minValue": 1,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "chat_summary_writeback_context_length",
+       "type": "integer",
+       "label": "chat_summary_writeback_context_length",
+       "description": "自动写回聊天摘要时，从聊天流中回看的消息条数",
+       "minValue": 1,
+       "maxValue": 500,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "fuzzy_modify_enabled",
+       "type": "boolean",
+       "label": "fuzzy_modify_enabled",
+       "description": "是否启用自然语言记忆修正的后台接口",
+       "x-widget": "switch",
+       "advanced": true
+      },
+      {
+       "name": "fuzzy_modify_candidate_limit",
+       "type": "integer",
+       "label": "fuzzy_modify_candidate_limit",
+       "description": "每次记忆修正交给 LLM 的候选记忆上限",
+       "minValue": 1,
+       "maxValue": 100,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "feedback_correction_window_hours",
+       "type": "number",
+       "label": "feedback_correction_window_hours",
+       "description": "反馈窗口时长（小时），以 query_memory 执行时间为起点",
+       "minValue": 0.1,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "feedback_correction_max_feedback_messages",
+       "type": "integer",
+       "label": "feedback_correction_max_feedback_messages",
+       "description": "每个纠错任务最多使用的窗口内用户反馈消息数",
+       "minValue": 1,
+       "maxValue": 200,
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "feedback_correction_profile_refresh_enabled",
+       "type": "boolean",
+       "label": "feedback_correction_profile_refresh_enabled",
+       "description": "是否在反馈纠错后将受影响人物画像加入刷新队列",
+       "x-widget": "switch",
+       "advanced": true
+      },
+      {
+       "name": "feedback_correction_episode_rebuild_enabled",
+       "type": "boolean",
+       "label": "feedback_correction_episode_rebuild_enabled",
+       "description": "是否在反馈纠错后将受影响 source 加入 episode 重建队列",
+       "x-widget": "switch",
+       "advanced": true
+      }
+     ]
+    },
+    "embedding": {
+     "className": "AMemorixEmbeddingConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "model_name",
+       "type": "string",
+       "label": "向量化模型",
+       "description": "用于把记忆内容转换成向量的模型，auto 表示自动选择",
+       "advanced": true
+      },
+      {
+       "name": "dimension_request_mode",
+       "type": "select",
+       "label": "维度请求模式",
+       "description": "是否在 embedding 请求中携带维度参数：explicit 仅显式指定时携带，always 总是携带，never 不携带",
+       "options": [
+        "explicit",
+        "always",
+        "never"
+       ],
+       "advanced": true
+      },
+      {
+       "name": "batch_size",
+       "type": "integer",
+       "label": "单批数量",
+       "description": "每次向量化请求处理的记忆条数",
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "max_concurrent",
+       "type": "integer",
+       "label": "最大并发数",
+       "description": "同时进行的向量化请求数量",
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "enable_cache",
+       "type": "boolean",
+       "label": "启用向量缓存",
+       "description": "是否缓存向量化结果",
+       "advanced": true
+      },
+      {
+       "name": "fallback",
+       "type": "object",
+       "label": "Embedding 回退",
+       "description": "Embedding 回退配置",
+       "advanced": true
+      },
+      {
+       "name": "paragraph_vector_backfill",
+       "type": "object",
+       "label": "段落向量回填",
+       "description": "段落向量回填配置",
+       "advanced": true
+      }
+     ],
+     "nested": {
+      "fallback": {
+       "className": "AMemorixEmbeddingFallbackConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "enabled",
+         "type": "boolean",
+         "label": "启用回退",
+         "description": "是否启用回退机制",
+         "advanced": true
+        },
+        {
+         "name": "probe_interval_seconds",
+         "type": "integer",
+         "label": "探测间隔",
+         "description": "探测间隔秒数",
+         "minValue": 10,
+         "advanced": true
+        }
+       ]
+      },
+      "paragraph_vector_backfill": {
+       "className": "AMemorixParagraphVectorBackfillConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "enabled",
+         "type": "boolean",
+         "label": "启用回填",
+         "description": "是否启用回填任务",
+         "advanced": true
+        },
+        {
+         "name": "batch_size",
+         "type": "integer",
+         "label": "批量大小",
+         "description": "单批回填数量",
+         "minValue": 1,
+         "advanced": true
+        },
+        {
+         "name": "max_retry",
+         "type": "integer",
+         "label": "最大重试",
+         "description": "最大重试次数",
+         "minValue": 0,
+         "advanced": true
+        }
+       ]
+      }
+     }
+    },
+    "retrieval": {
+     "className": "AMemorixRetrievalConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "top_k_paragraphs",
+       "type": "integer",
+       "label": "段落 Top-K",
+       "description": "段落候选数",
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "top_k_relations",
+       "type": "integer",
+       "label": "关系 Top-K",
+       "description": "关系候选数",
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "top_k_final",
+       "type": "integer",
+       "label": "最终 Top-K",
+       "description": "最终返回条数",
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "enable_ppr",
+       "type": "boolean",
+       "label": "启用 PPR",
+       "description": "是否启用 PPR",
+       "advanced": true
+      },
+      {
+       "name": "ppr_timeout_seconds",
+       "type": "number",
+       "label": "PPR 超时",
+       "description": "PPR 超时秒数",
+       "minValue": 0.1,
+       "advanced": true
+      },
+      {
+       "name": "enable_parallel",
+       "type": "boolean",
+       "label": "并行检索",
+       "description": "是否启用并行检索",
+       "advanced": true
+      },
+      {
+       "name": "search",
+       "type": "object",
+       "label": "搜索后处理",
+       "description": "搜索后处理配置",
+       "advanced": true
+      },
+      {
+       "name": "relation_vectorization",
+       "type": "object",
+       "label": "关系向量化",
+       "description": "关系向量化配置",
+       "advanced": true
+      },
+      {
+       "name": "vector_pools",
+       "type": "object",
+       "label": "向量池检索",
+       "description": "双向量池检索配置",
+       "advanced": true
+      },
+      {
+       "name": "sparse",
+       "type": "object",
+       "label": "稀疏检索",
+       "description": "稀疏检索配置",
+       "advanced": true
+      }
+     ],
+     "nested": {
+      "search": {
+       "className": "AMemorixRetrievalSearchConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "smart_fallback",
+         "type": "object",
+         "label": "智能兜底",
+         "description": "智能兜底检索配置",
+         "advanced": true
+        }
+       ],
+       "nested": {
+        "smart_fallback": {
+         "className": "AMemorixSmartFallbackConfig",
+         "uiAdvanced": false,
+         "fields": [
+          {
+           "name": "enabled",
+           "type": "boolean",
+           "label": "启用智能兜底",
+           "description": "是否启用智能兜底检索",
+           "advanced": true
+          }
+         ]
+        }
+       }
+      },
+      "relation_vectorization": {
+       "className": "AMemorixRelationVectorizationConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "write_on_import",
+         "type": "boolean",
+         "label": "导入时写入关系向量",
+         "description": "导入时是否写入关系向量",
+         "advanced": true
+        }
+       ]
+      },
+      "vector_pools": {
+       "className": "AMemorixVectorPoolsConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "paragraph_top_k",
+         "type": "integer",
+         "label": "段落池候选数",
+         "description": "段落向量池候选数",
+         "minValue": 1,
+         "advanced": true
+        },
+        {
+         "name": "graph_top_k",
+         "type": "integer",
+         "label": "图谱池候选数",
+         "description": "图谱向量池候选数",
+         "minValue": 1,
+         "advanced": true
+        },
+        {
+         "name": "graph_expand_paragraph_k",
+         "type": "integer",
+         "label": "图谱展开段落上限",
+         "description": "图谱证据展开段落上限",
+         "minValue": 1,
+         "advanced": true
+        },
+        {
+         "name": "relation_intent",
+         "type": "object",
+         "label": "关系意图权重",
+         "description": "关系意图命中时的双向量池配置",
+         "advanced": true
+        }
+       ],
+       "nested": {
+        "relation_intent": {
+         "className": "AMemorixRelationIntentVectorPoolConfig",
+         "uiAdvanced": false,
+         "fields": [
+          {
+           "name": "graph_top_k",
+           "type": "integer",
+           "label": "关系意图图谱候选数",
+           "description": "关系意图命中时的图谱池候选数",
+           "minValue": 1,
+           "advanced": true
+          }
+         ]
+        }
+       }
+      },
+      "sparse": {
+       "className": "AMemorixSparseRetrievalConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "enabled",
+         "type": "boolean",
+         "label": "启用稀疏检索",
+         "description": "是否启用稀疏检索",
+         "advanced": true
+        },
+        {
+         "name": "mode",
+         "type": "select",
+         "label": "检索模式",
+         "description": "稀疏检索模式",
+         "options": [
+          "auto",
+          "fallback_only",
+          "hybrid"
+         ],
+         "advanced": true
+        },
+        {
+         "name": "tokenizer_mode",
+         "type": "select",
+         "label": "分词模式",
+         "description": "分词模式",
+         "options": [
+          "jieba",
+          "mixed",
+          "char_2gram"
+         ],
+         "advanced": true
+        },
+        {
+         "name": "candidate_k",
+         "type": "integer",
+         "label": "段落候选数",
+         "description": "段落候选数",
+         "minValue": 1,
+         "advanced": true
+        },
+        {
+         "name": "relation_candidate_k",
+         "type": "integer",
+         "label": "关系候选数",
+         "description": "关系候选数",
+         "minValue": 1,
+         "advanced": true
+        }
+       ]
+      }
+     }
+    },
+    "threshold": {
+     "className": "AMemorixThresholdConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "min_results",
+       "type": "integer",
+       "label": "最小保留数",
+       "description": "最小保留条数",
+       "minValue": 1,
+       "advanced": true
+      }
+     ]
+    },
+    "filter": {
+     "className": "AMemorixFilterConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "启用聊天过滤",
+       "description": "是否启用聊天过滤"
+      },
+      {
+       "name": "mode",
+       "type": "select",
+       "label": "过滤模式",
+       "description": "过滤模式",
+       "options": [
+        "blacklist",
+        "whitelist"
+       ]
+      },
+      {
+       "name": "chats",
+       "type": "array",
+       "label": "聊天流列表",
+       "description": "聊天流列表",
+       "items": {
+        "type": "string"
+       }
+      },
+      {
+       "name": "retrieval",
+       "type": "object",
+       "label": "跨聊天流检索结果过滤",
+       "description": "仅对跨聊天流检索结果生效的分类型过滤，不影响本聊天流读取自身记忆、写入和后台生成",
+       "advanced": true
+      }
+     ],
+     "nested": {
+      "retrieval": {
+       "className": "AMemorixRetrievalFilterConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "chat_stream",
+         "type": "object",
+         "label": "普通聊天流记忆",
+         "description": "普通 paragraph/relation 命中的跨聊天流检索后置过滤",
+         "advanced": true
+        },
+        {
+         "name": "chat_summary",
+         "type": "object",
+         "label": "聊天总结记忆",
+         "description": "聊天总结命中的跨聊天流检索后置过滤",
+         "advanced": true
+        },
+        {
+         "name": "episode",
+         "type": "object",
+         "label": "Episode 记忆",
+         "description": "Episode 命中的跨聊天流检索后置过滤",
+         "advanced": true
+        }
+       ],
+       "nested": {
+        "chat_stream": {
+         "className": "AMemorixRetrievalSubtypeFilterConfig",
+         "uiAdvanced": false,
+         "fields": [
+          {
+           "name": "enabled",
+           "type": "boolean",
+           "label": "启用跨聊天流过滤",
+           "description": "是否启用当前检索结果类型的跨聊天流过滤",
+           "advanced": true
+          },
+          {
+           "name": "mode",
+           "type": "select",
+           "label": "过滤模式",
+           "description": "过滤模式",
+           "options": [
+            "blacklist",
+            "whitelist"
+           ],
+           "advanced": true
+          },
+          {
+           "name": "chats",
+           "type": "array",
+           "label": "聊天流列表",
+           "description": "聊天流列表",
+           "advanced": true,
+           "items": {
+            "type": "string"
+           }
+          }
+         ]
+        },
+        "chat_summary": {
+         "className": "AMemorixRetrievalSubtypeFilterConfig",
+         "uiAdvanced": false,
+         "fields": [
+          {
+           "name": "enabled",
+           "type": "boolean",
+           "label": "启用跨聊天流过滤",
+           "description": "是否启用当前检索结果类型的跨聊天流过滤",
+           "advanced": true
+          },
+          {
+           "name": "mode",
+           "type": "select",
+           "label": "过滤模式",
+           "description": "过滤模式",
+           "options": [
+            "blacklist",
+            "whitelist"
+           ],
+           "advanced": true
+          },
+          {
+           "name": "chats",
+           "type": "array",
+           "label": "聊天流列表",
+           "description": "聊天流列表",
+           "advanced": true,
+           "items": {
+            "type": "string"
+           }
+          }
+         ]
+        },
+        "episode": {
+         "className": "AMemorixRetrievalSubtypeFilterConfig",
+         "uiAdvanced": false,
+         "fields": [
+          {
+           "name": "enabled",
+           "type": "boolean",
+           "label": "启用跨聊天流过滤",
+           "description": "是否启用当前检索结果类型的跨聊天流过滤",
+           "advanced": true
+          },
+          {
+           "name": "mode",
+           "type": "select",
+           "label": "过滤模式",
+           "description": "过滤模式",
+           "options": [
+            "blacklist",
+            "whitelist"
+           ],
+           "advanced": true
+          },
+          {
+           "name": "chats",
+           "type": "array",
+           "label": "聊天流列表",
+           "description": "聊天流列表",
+           "advanced": true,
+           "items": {
+            "type": "string"
+           }
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    "shared_memory_groups": {
+     "className": "ChatStreamGroup",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "targets",
+       "type": "array",
+       "label": "共享聊天流",
+       "description": "这个组里的聊天流会共享对应的学习内容。",
+       "x-widget": "custom",
+       "items": {
+        "type": "object"
+       }
+      }
+     ],
+     "nested": {
+      "targets": {
+       "className": "TargetItem",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "platform",
+         "type": "string",
+         "label": "平台",
+         "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+         "x-widget": "input"
+        },
+        {
+         "name": "item_id",
+         "type": "string",
+         "label": "聊天流 ID",
+         "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+         "x-widget": "input"
+        },
+        {
+         "name": "rule_type",
+         "type": "select",
+         "label": "聊天类型",
+         "description": "聊天流类型，group（群聊）或private（私聊）",
+         "options": [
+          "group",
+          "private"
+         ],
+         "x-widget": "select",
+         "x-option-descriptions": {
+          "group": "群聊聊天流，item_id 填群号或群聊 ID",
+          "private": "私聊聊天流，item_id 填用户 ID"
+         }
+        }
+       ]
+      }
+     }
+    },
+    "episode": {
+     "className": "AMemorixEpisodeConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "启用 Episode",
+       "description": "是否启用 Episode",
+       "advanced": true
+      },
+      {
+       "name": "generation_enabled",
+       "type": "boolean",
+       "label": "自动生成 Episode",
+       "description": "是否启用自动生成",
+       "advanced": true
+      },
+      {
+       "name": "source_poll_interval_seconds",
+       "type": "number",
+       "label": "来源任务轮询间隔",
+       "description": "来源级 Episode 任务轮询间隔秒数",
+       "minValue": 0.1,
+       "advanced": true
+      },
+      {
+       "name": "source_batch_size",
+       "type": "integer",
+       "label": "来源任务批量",
+       "description": "单轮领取的来源任务数",
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "source_max_retry",
+       "type": "integer",
+       "label": "来源任务最大尝试次数",
+       "description": "每个来源版本的最大尝试次数，包含首次尝试",
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "source_lease_seconds",
+       "type": "number",
+       "label": "来源任务租约时长",
+       "description": "来源任务租约时长秒数",
+       "minValue": 1.0,
+       "advanced": true
+      },
+      {
+       "name": "source_max_wait_seconds",
+       "type": "number",
+       "label": "来源任务最大防抖等待",
+       "description": "来源持续写入时允许的最大防抖等待秒数",
+       "minValue": 0.0,
+       "advanced": true
+      },
+      {
+       "name": "max_paragraphs_per_call",
+       "type": "integer",
+       "label": "单次段落上限",
+       "description": "单次最大段落数",
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "max_chars_per_call",
+       "type": "integer",
+       "label": "单次字符上限",
+       "description": "单次最大字符数",
+       "minValue": 100,
+       "advanced": true
+      },
+      {
+       "name": "source_time_window_hours",
+       "type": "number",
+       "label": "来源时间窗口",
+       "description": "时间窗口小时数",
+       "minValue": 0.0,
+       "advanced": true
+      },
+      {
+       "name": "segmentation_model",
+       "type": "string",
+       "label": "分段模型",
+       "description": "分段模型选择",
+       "advanced": true
+      },
+      {
+       "name": "disabled_source_types",
+       "type": "array",
+       "label": "跳过来源类型",
+       "description": "自动生成 Episode 时跳过的来源类型",
+       "advanced": true,
+       "items": {
+        "type": "string"
+       }
+      }
+     ]
+    },
+    "person_profile": {
+     "className": "AMemorixPersonProfileConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "启用人物画像",
+       "description": "是否启用画像"
+      },
+      {
+       "name": "refresh_interval_minutes",
+       "type": "integer",
+       "label": "刷新间隔",
+       "description": "刷新间隔分钟数",
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "active_window_hours",
+       "type": "number",
+       "label": "活跃窗口",
+       "description": "活跃窗口小时数",
+       "minValue": 1.0,
+       "advanced": true
+      },
+      {
+       "name": "max_refresh_per_cycle",
+       "type": "integer",
+       "label": "单轮刷新上限",
+       "description": "单轮最大刷新数",
+       "minValue": 1,
+       "advanced": true
+      },
+      {
+       "name": "top_k_evidence",
+       "type": "integer",
+       "label": "证据条数",
+       "description": "证据条数",
+       "minValue": 1,
+       "advanced": true
+      }
+     ]
+    },
+    "memory": {
+     "className": "AMemorixMemoryEvolutionConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "启用记忆演化",
+       "description": "是否启用记忆演化",
+       "advanced": true
+      },
+      {
+       "name": "half_life_hours",
+       "type": "number",
+       "label": "半衰期",
+       "description": "半衰期小时数",
+       "minValue": 0.1,
+       "advanced": true
+      },
+      {
+       "name": "prune_threshold",
+       "type": "number",
+       "label": "裁剪阈值",
+       "description": "裁剪阈值",
+       "advanced": true
+      },
+      {
+       "name": "freeze_duration_hours",
+       "type": "number",
+       "label": "冻结时长",
+       "description": "冻结时长小时数",
+       "minValue": 0.0,
+       "advanced": true
+      },
+      {
+       "name": "revive_threshold",
+       "type": "number",
+       "label": "恢复阈值",
+       "description": "冻结关系恢复为活跃状态的保留强度阈值",
+       "maxValue": 1.0,
+       "advanced": true
+      },
+      {
+       "name": "access_reinforcement_alpha",
+       "type": "number",
+       "label": "访问加强系数",
+       "description": "记忆被最终采用时的饱和加强系数",
+       "minValue": 0.0,
+       "maxValue": 1.0,
+       "advanced": true
+      },
+      {
+       "name": "access_reinforcement_cooldown_minutes",
+       "type": "number",
+       "label": "访问加强冷却时间",
+       "description": "同一关系两次访问加强之间的最短分钟数，0表示不限制",
+       "minValue": 0.0,
+       "advanced": true
+      },
+      {
+       "name": "explicit_reinforcement_alpha",
+       "type": "number",
+       "label": "显式加强系数",
+       "description": "用户显式加强或独立新证据的饱和加强系数",
+       "minValue": 0.0,
+       "maxValue": 1.0,
+       "advanced": true
+      },
+      {
+       "name": "weaken_alpha",
+       "type": "number",
+       "label": "弱化系数",
+       "description": "显式弱化事件的比例系数",
+       "minValue": 0.0,
+       "maxValue": 1.0,
+       "advanced": true
+      },
+      {
+       "name": "lifecycle_batch_size",
+       "type": "integer",
+       "label": "生命周期批量",
+       "description": "单轮处理的到期关系数量",
+       "minValue": 1,
+       "advanced": true
+      }
+     ]
+    },
+    "advanced": {
+     "className": "AMemorixAdvancedConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "debug",
+       "type": "boolean",
+       "label": "调试模式",
+       "description": "是否启用调试",
+       "advanced": true
+      }
+     ]
+    },
+    "web": {
+     "className": "AMemorixWebConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "import_config",
+       "type": "object",
+       "label": "导入中心",
+       "description": "导入中心配置",
+       "advanced": true
+      },
+      {
+       "name": "tuning",
+       "type": "object",
+       "label": "调优中心",
+       "description": "调优中心配置",
+       "advanced": true
+      }
+     ],
+     "nested": {
+      "import_config": {
+       "className": "AMemorixWebImportConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "enabled",
+         "type": "boolean",
+         "label": "启用导入中心",
+         "description": "是否启用导入中心",
+         "advanced": true
+        },
+        {
+         "name": "max_files_per_task",
+         "type": "integer",
+         "label": "单任务文件上限",
+         "description": "单任务最大文件数",
+         "minValue": 1,
+         "advanced": true
+        },
+        {
+         "name": "max_file_size_mb",
+         "type": "integer",
+         "label": "单文件大小上限",
+         "description": "单文件大小上限 MB",
+         "minValue": 1,
+         "advanced": true
+        },
+        {
+         "name": "max_paste_chars",
+         "type": "integer",
+         "label": "粘贴字符上限",
+         "description": "粘贴字符数上限",
+         "minValue": 100,
+         "advanced": true
+        },
+        {
+         "name": "default_narrative_window_size",
+         "type": "integer",
+         "label": "默认叙事抽取窗口",
+         "description": "默认叙事抽取窗口字符数",
+         "minValue": 200,
+         "advanced": true
+        },
+        {
+         "name": "default_narrative_overlap",
+         "type": "integer",
+         "label": "默认叙事重叠字符",
+         "description": "默认叙事窗口重叠字符数",
+         "minValue": 0,
+         "advanced": true
+        },
+        {
+         "name": "default_factual_target_size",
+         "type": "integer",
+         "label": "默认事实分块目标",
+         "description": "默认事实分块目标字符数",
+         "minValue": 200,
+         "advanced": true
+        },
+        {
+         "name": "timeout",
+         "type": "object",
+         "label": "导入超时",
+         "description": "导入中心超时配置",
+         "advanced": true
+        }
+       ],
+       "nested": {
+        "timeout": {
+         "className": "AMemorixWebImportTimeoutConfig",
+         "uiAdvanced": false,
+         "fields": [
+          {
+           "name": "llm_call_seconds",
+           "type": "number",
+           "label": "LLM 单次调用超时",
+           "description": "Web 导入中单次 LLM 抽取调用的超时时间，0 表示不额外限制",
+           "minValue": 0.0,
+           "advanced": true
+          },
+          {
+           "name": "convert_preflight_seconds",
+           "type": "number",
+           "label": "转换预检超时",
+           "description": "LPMM 转换依赖预检的超时时间",
+           "minValue": 0.1,
+           "advanced": true
+          }
+         ]
+        }
+       }
+      },
+      "tuning": {
+       "className": "AMemorixWebTuningConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "enabled",
+         "type": "boolean",
+         "label": "启用调优中心",
+         "description": "是否启用调优中心",
+         "advanced": true
+        },
+        {
+         "name": "poll_interval_ms",
+         "type": "integer",
+         "label": "轮询间隔",
+         "description": "轮询间隔毫秒数",
+         "minValue": 200,
+         "advanced": true
+        },
+        {
+         "name": "default_intensity",
+         "type": "select",
+         "label": "默认强度",
+         "description": "默认调优强度",
+         "options": [
+          "quick",
+          "standard",
+          "deep"
+         ],
+         "advanced": true
+        },
+        {
+         "name": "default_objective",
+         "type": "select",
+         "label": "默认目标",
+         "description": "默认调优目标",
+         "options": [
+          "precision_priority",
+          "balanced",
+          "recall_priority"
+         ],
+         "advanced": true
+        },
+        {
+         "name": "default_top_k_eval",
+         "type": "integer",
+         "label": "默认评估 Top-K",
+         "description": "默认评估 Top-K",
+         "minValue": 1,
+         "advanced": true
+        },
+        {
+         "name": "default_sample_size",
+         "type": "integer",
+         "label": "默认样本数",
+         "description": "默认样本数",
+         "minValue": 1,
+         "advanced": true
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "message_receive": {
+   "className": "MessageReceiveConfig",
+   "uiLabel": "消息接收",
+   "uiAdvanced": true,
+   "uiOrder": 70,
+   "fields": [
+    {
+     "name": "image_parse_threshold",
+     "type": "integer",
+     "label": "image_parse_threshold",
+     "description": "单条消息图片数不超过这个值时才识图，避免图片太多拖慢处理。",
+     "x-widget": "input",
+     "advanced": true
+    },
+    {
+     "name": "ban_words",
+     "type": "array",
+     "label": "ban_words",
+     "description": "包含这些词的消息会被过滤，不进入麦麦处理。",
+     "x-widget": "custom",
+     "items": {
+      "type": "string"
+     }
+    },
+    {
+     "name": "ban_msgs_regex",
+     "type": "array",
+     "label": "ban_msgs_regex",
+     "description": "用正则过滤消息；适合更复杂的过滤规则。",
+     "x-widget": "custom",
+     "items": {
+      "type": "string"
+     }
+    }
+   ]
+  },
+  "voice": {
+   "className": "VoiceConfig",
+   "uiLabel": "语音",
+   "uiAdvanced": true,
+   "uiParent": "message_receive",
+   "fields": [
+    {
+     "name": "enable_asr",
+     "type": "boolean",
+     "label": "enable_asr",
+     "description": "开启后麦麦可以把语音消息识别成文字再处理。",
+     "x-widget": "switch"
+    }
+   ]
+  },
+  "emoji": {
+   "className": "EmojiConfig",
+   "uiLabel": "表情",
+   "uiAdvanced": true,
+   "uiOrder": 80,
+   "fields": [
+    {
+     "name": "emoji_send_num",
+     "type": "integer",
+     "label": "单次发送候选数",
+     "description": "每次从多少个候选表情里挑一个发送；不是一次发送这么多。",
+     "minValue": 1,
+     "maxValue": 64,
+     "x-widget": "input",
+     "advanced": true
+    },
+    {
+     "name": "max_reg_num",
+     "type": "integer",
+     "label": "最大注册数量",
+     "description": "最多保存多少个可用表情。",
+     "x-widget": "input"
+    },
+    {
+     "name": "do_replace",
+     "type": "boolean",
+     "label": "满额后替换旧表情",
+     "description": "表情满了以后是否用新表情替换旧表情。",
+     "x-widget": "switch",
+     "advanced": true
+    },
+    {
+     "name": "check_interval",
+     "type": "integer",
+     "label": "检查间隔",
+     "description": "每隔多少分钟检查一次表情库状态。",
+     "x-widget": "input"
+    },
+    {
+     "name": "steal_emoji",
+     "type": "boolean",
+     "label": "收集聊天表情",
+     "description": "是否从聊天中自动收集别人发的表情。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "max_emoji_size_mb",
+     "type": "number",
+     "label": "收集表情大小上限（MB）",
+     "description": "收集表情时允许的最大文件大小；0 表示不限。",
+     "minValue": 0.0,
+     "x-widget": "input",
+     "advanced": true
+    },
+    {
+     "name": "content_filtration",
+     "type": "boolean",
+     "label": "启用内容过滤",
+     "description": "开启后只保存内容合适的表情。",
+     "x-widget": "switch",
+     "advanced": true
+    },
+    {
+     "name": "cache_cleanup",
+     "type": "object",
+     "label": "cache_cleanup",
+     "description": "定期清理未注册表情包缓存，减少磁盘占用；已注册表情包不会被清理。"
+    }
+   ],
+   "nested": {
+    "cache_cleanup": {
+     "className": "EmojiCacheCleanupConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "启用表情包缓存自动清理",
+       "description": "开启后会自动删除长期未注册、未使用的表情包缓存。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "check_interval_hours",
+       "type": "number",
+       "label": "表情包清理检查间隔（小时）",
+       "description": "每隔多少小时检查一次旧表情包缓存。",
+       "minValue": 0.016666666666666666,
+       "x-widget": "input"
+      },
+      {
+       "name": "emoji_file_retention_days",
+       "type": "integer",
+       "label": "未注册表情包文件保留天数",
+       "description": "未注册表情包文件多久没被使用后可以删除；已注册表情包永远不会由该任务删除。",
+       "minValue": 1,
+       "x-widget": "input"
+      },
+      {
+       "name": "no_file_record_retention_days",
+       "type": "integer",
+       "label": "未注册表情包无文件记录保留天数",
+       "description": "未注册表情包文件删掉后，描述缓存记录还能保留多久。",
+       "minValue": 1,
+       "x-widget": "input"
+      }
+     ]
+    }
+   }
+  },
+  "keyword_reaction": {
+   "className": "KeywordReactionConfig",
+   "uiAdvanced": false,
+   "uiParent": "message_receive",
+   "fields": [
+    {
+     "name": "keyword_rules",
+     "type": "array",
+     "label": "关键词规则",
+     "description": "命中关键词后，给麦麦追加一段固定反应提示。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    },
+    {
+     "name": "regex_rules",
+     "type": "array",
+     "label": "正则规则",
+     "description": "命中正则规则后，给麦麦追加一段固定反应提示。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    }
+   ],
+   "nested": {
+    "keyword_rules": {
+     "className": "KeywordRuleConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "keywords",
+       "type": "array",
+       "label": "关键词",
+       "description": "要匹配的关键词；命中任意一个即可触发。",
+       "x-widget": "custom",
+       "items": {
+        "type": "string"
+       }
+      },
+      {
+       "name": "regex",
+       "type": "array",
+       "label": "正则表达式",
+       "description": "要匹配的正则表达式；适合复杂文本规则。",
+       "x-widget": "custom",
+       "items": {
+        "type": "string"
+       }
+      },
+      {
+       "name": "reaction",
+       "type": "string",
+       "label": "反应提示",
+       "description": "命中后给麦麦看的提示内容，不会直接当作消息发送。",
+       "x-widget": "textarea"
+      }
+     ]
+    },
+    "regex_rules": {
+     "className": "KeywordRuleConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "keywords",
+       "type": "array",
+       "label": "关键词",
+       "description": "要匹配的关键词；命中任意一个即可触发。",
+       "x-widget": "custom",
+       "items": {
+        "type": "string"
+       }
+      },
+      {
+       "name": "regex",
+       "type": "array",
+       "label": "正则表达式",
+       "description": "要匹配的正则表达式；适合复杂文本规则。",
+       "x-widget": "custom",
+       "items": {
+        "type": "string"
+       }
+      },
+      {
+       "name": "reaction",
+       "type": "string",
+       "label": "反应提示",
+       "description": "命中后给麦麦看的提示内容，不会直接当作消息发送。",
+       "x-widget": "textarea"
+      }
+     ]
+    }
+   }
+  },
+  "response_post_process": {
+   "className": "ResponsePostProcessConfig",
+   "uiLabel": "后处理",
+   "uiAdvanced": true,
+   "uiOrder": 100,
+   "uiParent": "chat",
+   "fields": [
+    {
+     "name": "enable_response_post_process",
+     "type": "boolean",
+     "label": "启用回复后处理",
+     "description": "开启后会对回复做错别字、分段等后处理。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "typing_speed",
+     "type": "number",
+     "label": "打字速度",
+     "description": "模拟打字等待时间；0 最快，1 默认，2 更慢。",
+     "minValue": 0,
+     "maxValue": 2,
+     "step": 0.1,
+     "x-widget": "slider",
+     "advanced": true,
+     "x-row": "reply-speed"
+    }
+   ]
+  },
+  "chinese_typo": {
+   "className": "ChineseTypoConfig",
+   "uiAdvanced": false,
+   "uiParent": "response_post_process",
+   "fields": [
+    {
+     "name": "enable",
+     "type": "boolean",
+     "label": "启用错别字",
+     "description": "让麦麦偶尔打错字，更像真人聊天。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "enable_correction_quote",
+     "type": "boolean",
+     "label": "错别字纠正时引用原消息",
+     "description": "纠正错别字时，是否引用上一条包含错别字的消息。",
+     "x-widget": "switch",
+     "x-row": "typo-correction-quote"
+    },
+    {
+     "name": "correction_quote_probability",
+     "type": "number",
+     "label": "错别字纠正引用概率",
+     "description": "生成纠正消息时，引用上一条错别字消息的概率。",
+     "minValue": 0,
+     "maxValue": 1,
+     "step": 0.01,
+     "x-widget": "slider",
+     "advanced": true,
+     "x-row": "typo-correction-quote"
+    },
+    {
+     "name": "error_rate",
+     "type": "number",
+     "label": "单字错字概率",
+     "description": "单个字被替换成错字的概率。",
+     "minValue": 0,
+     "maxValue": 1,
+     "step": 0.01,
+     "x-widget": "slider",
+     "advanced": true
+    },
+    {
+     "name": "min_freq",
+     "type": "integer",
+     "label": "最小字频",
+     "description": "只对常见程度达到该值的字尝试制造错字。",
+     "x-widget": "input",
+     "advanced": true
+    },
+    {
+     "name": "tone_error_rate",
+     "type": "number",
+     "label": "声调错字概率",
+     "description": "按相近声调制造错字的概率。",
+     "minValue": 0,
+     "maxValue": 1,
+     "step": 0.1,
+     "x-widget": "slider",
+     "advanced": true
+    },
+    {
+     "name": "word_replace_rate",
+     "type": "number",
+     "label": "整词替换概率",
+     "description": "整词被替换成错词的概率。",
+     "minValue": 0,
+     "maxValue": 1,
+     "step": 0.001,
+     "x-widget": "slider",
+     "advanced": true
+    }
+   ]
+  },
+  "response_splitter": {
+   "className": "ResponseSplitterConfig",
+   "uiAdvanced": false,
+   "uiParent": "response_post_process",
+   "fields": [
+    {
+     "name": "enable",
+     "type": "boolean",
+     "label": "启用回复分割",
+     "description": "把过长回复拆成多条发送。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "max_length",
+     "type": "integer",
+     "label": "单条最大长度",
+     "description": "单条回复允许的最大长度。",
+     "x-widget": "input"
+    },
+    {
+     "name": "max_sentence_num",
+     "type": "integer",
+     "label": "单条最大句数",
+     "description": "单条回复最多包含多少个句子。",
+     "x-widget": "input"
+    },
+    {
+     "name": "max_split_num",
+     "type": "integer",
+     "label": "最多分割条数",
+     "description": "一次回复最多拆成几条消息。",
+     "minValue": 1,
+     "x-widget": "input"
+    },
+    {
+     "name": "enable_kaomoji_protection",
+     "type": "boolean",
+     "label": "保护颜文字",
+     "description": "尽量避免把颜文字从中间拆开。",
+     "x-widget": "switch",
+     "advanced": true
+    },
+    {
+     "name": "enable_overflow_return_all",
+     "type": "boolean",
+     "label": "超限保留全文",
+     "description": "句子太多时是否直接保留完整回复，不再强行截断。",
+     "x-widget": "switch",
+     "advanced": true
+    }
+   ]
+  },
+  "telemetry": {
+   "className": "TelemetryConfig",
+   "uiAdvanced": false,
+   "uiParent": "debug",
+   "fields": [
+    {
+     "name": "enable",
+     "type": "boolean",
+     "label": "启用遥测",
+     "description": "是否发送匿名运行统计；关闭不影响正常使用。",
+     "x-widget": "switch"
+    }
+   ]
+  },
+  "log": {
+   "className": "LogConfig",
+   "uiLabel": "调试",
+   "uiAdvanced": true,
+   "uiOrder": 130,
+   "fields": [
+    {
+     "name": "date_style",
+     "type": "string",
+     "label": "日期格式",
+     "description": "日志时间的显示格式。",
+     "x-widget": "input"
+    },
+    {
+     "name": "log_level_style",
+     "type": "select",
+     "label": "日志等级样式",
+     "description": "日志等级的显示样式，只影响日志外观。",
+     "options": [
+      "lite",
+      "compact",
+      "full"
+     ],
+     "x-widget": "select"
+    },
+    {
+     "name": "color_text",
+     "type": "select",
+     "label": "控制台颜色",
+     "description": "控制台日志颜色范围。",
+     "options": [
+      "none",
+      "title",
+      "full"
+     ],
+     "x-widget": "select"
+    },
+    {
+     "name": "log_level",
+     "type": "select",
+     "label": "全局日志级别",
+     "description": "全局最低日志等级；DEBUG 最详细，ERROR 最安静。",
+     "options": [
+      "DEBUG",
+      "INFO",
+      "WARNING",
+      "ERROR",
+      "CRITICAL"
+     ],
+     "x-widget": "select"
+    },
+    {
+     "name": "console_log_level",
+     "type": "select",
+     "label": "控制台日志级别",
+     "description": "控制台输出的最低日志等级。",
+     "options": [
+      "DEBUG",
+      "INFO",
+      "WARNING",
+      "ERROR",
+      "CRITICAL"
+     ],
+     "x-widget": "select"
+    },
+    {
+     "name": "file_log_level",
+     "type": "select",
+     "label": "文件日志级别",
+     "description": "写入日志文件的最低日志等级。",
+     "options": [
+      "DEBUG",
+      "INFO",
+      "WARNING",
+      "ERROR",
+      "CRITICAL"
+     ],
+     "x-widget": "select"
+    },
+    {
+     "name": "log_file_max_bytes",
+     "type": "integer",
+     "label": "单个日志大小",
+     "description": "单个日志文件超过这个大小后会轮转。",
+     "x-widget": "input"
+    },
+    {
+     "name": "max_log_files",
+     "type": "integer",
+     "label": "日志文件保留数",
+     "description": "最多保留多少个主日志文件。",
+     "x-widget": "input"
+    },
+    {
+     "name": "log_cleanup_days",
+     "type": "integer",
+     "label": "日志保留天数",
+     "description": "主日志文件超过多少天后清理。",
+     "x-widget": "input"
+    },
+    {
+     "name": "llm_request_snapshot_limit",
+     "type": "integer",
+     "label": "请求快照保留数",
+     "description": "失败模型请求快照最多保留多少份。",
+     "x-widget": "input"
+    },
+    {
+     "name": "maisaka_prompt_preview_limit",
+     "type": "integer",
+     "label": "Prompt 预览保留数",
+     "description": "每个聊天最多保留多少组 Prompt 预览。",
+     "x-widget": "input"
+    },
+    {
+     "name": "maisaka_reply_effect_limit",
+     "type": "integer",
+     "label": "回复效果记录数",
+     "description": "每个聊天最多保留多少条回复效果记录。",
+     "x-widget": "input"
+    },
+    {
+     "name": "suppress_libraries",
+     "type": "array",
+     "label": "屏蔽库日志",
+     "description": "完全不显示日志的第三方库名称列表。",
+     "x-widget": "custom",
+     "advanced": true,
+     "items": {
+      "type": "string"
+     }
+    },
+    {
+     "name": "library_log_levels",
+     "type": "object",
+     "label": "库日志级别",
+     "description": "单独设置某些第三方库的日志等级。",
+     "x-widget": "custom",
+     "advanced": true
+    }
+   ]
+  },
+  "debug": {
+   "className": "DebugConfig",
+   "uiLabel": "其他",
+   "uiAdvanced": false,
+   "uiParent": "log",
+   "fields": [
+    {
+     "name": "enable_console_input",
+     "type": "boolean",
+     "label": "启用终端输入",
+     "description": "在交互式终端中启用本地消息和指令输入。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "show_maisaka_thinking",
+     "type": "boolean",
+     "label": "显示思考过程",
+     "description": "在日志或界面中显示麦麦的思考过程。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "enable_clear_context_command",
+     "type": "boolean",
+     "label": "启用 /clear 指令",
+     "description": "允许使用 /clear 清空当前聊天流的 Maisaka 短期历史上下文。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "enable_reply_effect_tracking",
+     "type": "boolean",
+     "label": "记录回复效果",
+     "description": "记录回复效果评分，方便观察回复质量。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "keep_prompt_preview_json_base64",
+     "type": "boolean",
+     "label": "保留预览图片数据",
+     "description": "Prompt 预览里保留图片 base64，便于复现但会占空间。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "record_tool_structured_content",
+     "type": "boolean",
+     "label": "记录工具结构化内容",
+     "description": "保存工具返回的结构化内容，便于调试但会增加数据库体积。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "enable_llm_cache_stats",
+     "type": "boolean",
+     "label": "记录模型缓存统计",
+     "description": "记录模型 prompt cache 统计，用于性能调试。",
+     "x-widget": "switch"
+    }
+   ]
+  },
+  "maim_message": {
+   "className": "MaimMessageConfig",
+   "uiAdvanced": false,
+   "uiParent": "debug",
+   "fields": [
+    {
+     "name": "ws_server_host",
+     "type": "string",
+     "label": "旧版 WS 主机",
+     "description": "旧版 WebSocket 服务监听地址；不清楚就保持默认。",
+     "x-widget": "input"
+    },
+    {
+     "name": "ws_server_port",
+     "type": "integer",
+     "label": "旧版 WS 端口",
+     "description": "旧版 WebSocket 服务端口。",
+     "x-widget": "input"
+    },
+    {
+     "name": "auth_token",
+     "type": "array",
+     "label": "旧版认证令牌",
+     "description": "旧版 API 的认证令牌；为空表示不验证。",
+     "x-widget": "custom",
+     "items": {
+      "type": "string"
+     }
+    },
+    {
+     "name": "enable_api_server",
+     "type": "boolean",
+     "label": "启用新版 API",
+     "description": "是否开启新版 API Server，供外部程序调用麦麦。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "api_server_host",
+     "type": "string",
+     "label": "新版 API 主机",
+     "description": "新版 API Server 监听地址；0.0.0.0 表示允许外部访问。",
+     "x-widget": "input"
+    },
+    {
+     "name": "api_server_port",
+     "type": "integer",
+     "label": "新版 API 端口",
+     "description": "新版 API Server 监听端口。",
+     "x-widget": "input"
+    },
+    {
+     "name": "api_server_use_wss",
+     "type": "boolean",
+     "label": "新版 API 使用 WSS",
+     "description": "新版 API Server 是否使用加密 WebSocket。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "api_server_cert_file",
+     "type": "string",
+     "label": "WSS 证书文件",
+     "description": "WSS 使用的证书文件路径。",
+     "x-widget": "input"
+    },
+    {
+     "name": "api_server_key_file",
+     "type": "string",
+     "label": "WSS 私钥文件",
+     "description": "WSS 使用的私钥文件路径。",
+     "x-widget": "input"
+    },
+    {
+     "name": "api_server_allowed_api_keys",
+     "type": "array",
+     "label": "新版 API Key 白名单",
+     "description": "允许访问新版 API 的 Key 列表；为空表示不限制。",
+     "x-widget": "custom",
+     "items": {
+      "type": "string"
+     }
+    }
+   ]
+  },
+  "webui": {
+   "className": "WebUIConfig",
+   "uiLabel": "WebUI",
+   "uiAdvanced": true,
+   "uiOrder": 110,
+   "fields": [
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "label": "启用 WebUI",
+     "description": "是否启动 WebUI 管理界面。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "host",
+     "type": "array",
+     "label": "WebUI 主机",
+     "description": "WebUI 监听地址列表；可同时绑定 IPv4 和 IPv6，例如 [\"0.0.0.0\", \"::\"]。",
+     "x-widget": "tags",
+     "items": {
+      "type": "string"
+     }
+    },
+    {
+     "name": "port",
+     "type": "integer",
+     "label": "WebUI 端口",
+     "description": "WebUI 访问端口。",
+     "x-widget": "input"
+    },
+    {
+     "name": "mode",
+     "type": "select",
+     "label": "运行模式",
+     "description": "WebUI 运行模式；普通使用保持 production。",
+     "options": [
+      "development",
+      "production"
+     ],
+     "x-widget": "select"
+    },
+    {
+     "name": "webui_style",
+     "type": "integer",
+     "label": "界面风格",
+     "description": "界面风格编号；0 为旧风格，1 为未来复古风格。",
+     "minValue": 0,
+     "maxValue": 1,
+     "x-widget": "number"
+    },
+    {
+     "name": "anti_crawler_mode",
+     "type": "select",
+     "label": "防爬虫模式",
+     "description": "防爬虫策略；basic 只记录，strict/loose 会拦截更多请求。",
+     "options": [
+      "false",
+      "strict",
+      "loose",
+      "basic"
+     ],
+     "x-widget": "select"
+    },
+    {
+     "name": "allowed_ips",
+     "type": "string",
+     "label": "允许访问 IP",
+     "description": "允许访问 WebUI 的 IP，多个用逗号分隔。",
+     "x-widget": "comma-list"
+    },
+    {
+     "name": "trusted_proxies",
+     "type": "string",
+     "label": "可信代理 IP",
+     "description": "可信反向代理 IP；只有这些代理传来的真实 IP 会被信任。",
+     "x-widget": "comma-list"
+    },
+    {
+     "name": "trust_xff",
+     "type": "boolean",
+     "label": "信任 XFF",
+     "description": "是否信任 X-Forwarded-For 里的真实访客 IP。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "secure_cookie",
+     "type": "boolean",
+     "label": "安全 Cookie",
+     "description": "只在 HTTPS 下发送登录 Cookie；没有 HTTPS 时不要开启。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "enforce_public_outbound_url",
+     "type": "boolean",
+     "label": "强制公网出站 URL 校验",
+     "description": "限制 WebUI 访问外部 URL，降低访问内网地址的风险。",
+     "x-widget": "switch",
+     "advanced": false
+    },
+    {
+     "name": "enable_paragraph_content",
+     "type": "boolean",
+     "label": "加载段落全文",
+     "description": "知识图谱里是否加载段落全文；更完整但更占内存。",
+     "x-widget": "switch"
+    }
+   ]
+  },
+  "database": {
+   "className": "DatabaseConfig",
+   "uiAdvanced": false,
+   "uiParent": "debug",
+   "fields": [
+    {
+     "name": "save_binary_data",
+     "type": "boolean",
+     "label": "保存二进制原文件",
+     "description": "是否保存语音等二进制原文件；更占空间，但方便以后重新识别。",
+     "x-widget": "switch",
+     "advanced": true
+    }
+   ]
+  },
+  "mcp": {
+   "className": "MCPConfig",
+   "uiAdvanced": false,
+   "uiParent": "maisaka",
+   "fields": [
+    {
+     "name": "enable",
+     "type": "boolean",
+     "label": "启用 MCP",
+     "description": "是否启用 MCP 工具接入能力。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "client",
+     "type": "object",
+     "label": "客户端高级能力",
+     "description": "麦麦作为 MCP 客户端时声明的能力。",
+     "advanced": true
+    },
+    {
+     "name": "servers",
+     "type": "array",
+     "label": "MCP 服务",
+     "description": "要连接的 MCP 服务器列表。",
+     "x-widget": "custom",
+     "items": {
+      "type": "object"
+     }
+    }
+   ],
+   "nested": {
+    "client": {
+     "className": "MCPClientConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "client_name",
+       "type": "string",
+       "label": "客户端名称",
+       "description": "对 MCP 服务器展示的客户端名称。",
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "client_version",
+       "type": "string",
+       "label": "客户端版本",
+       "description": "对 MCP 服务器展示的客户端版本。",
+       "x-widget": "input",
+       "advanced": true
+      },
+      {
+       "name": "roots",
+       "type": "object",
+       "label": "Roots 能力",
+       "description": "是否向 MCP 服务器提供可访问的文件根目录。",
+       "advanced": true
+      },
+      {
+       "name": "sampling",
+       "type": "object",
+       "label": "Sampling 能力",
+       "description": "是否允许 MCP 服务器请求麦麦调用模型。",
+       "advanced": true
+      },
+      {
+       "name": "elicitation",
+       "type": "object",
+       "label": "Elicitation 能力",
+       "description": "是否允许 MCP 服务器向麦麦请求补充信息。",
+       "advanced": true
+      }
+     ],
+     "nested": {
+      "roots": {
+       "className": "MCPRootsConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "enable",
+         "type": "boolean",
+         "label": "启用 Roots",
+         "description": "是否向 MCP 服务器暴露 Roots 能力。",
+         "x-widget": "switch"
+        },
+        {
+         "name": "items",
+         "type": "array",
+         "label": "Root 列表",
+         "description": "允许 MCP 服务器看到的目录或资源列表。",
+         "x-widget": "custom",
+         "items": {
+          "type": "object"
+         }
+        }
+       ],
+       "nested": {
+        "items": {
+         "className": "MCPRootItemConfig",
+         "uiAdvanced": false,
+         "fields": [
+          {
+           "name": "enabled",
+           "type": "boolean",
+           "label": "启用 Root",
+           "description": "是否启用这个 Root。",
+           "x-widget": "switch"
+          },
+          {
+           "name": "uri",
+           "type": "string",
+           "label": "Root URI",
+           "description": "Root 的 URI，文件夹一般写 file:/// 开头的路径。",
+           "x-widget": "input"
+          },
+          {
+           "name": "name",
+           "type": "string",
+           "label": "显示名称",
+           "description": "这个 Root 在 MCP 里的显示名称。",
+           "x-widget": "input"
+          }
+         ]
+        }
+       }
+      },
+      "sampling": {
+       "className": "MCPSamplingConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "enable",
+         "type": "boolean",
+         "label": "启用 Sampling",
+         "description": "是否声明支持 MCP Sampling。",
+         "x-widget": "switch"
+        },
+        {
+         "name": "task_name",
+         "type": "string",
+         "label": "模型任务",
+         "description": "MCP Sampling 调用模型时使用的任务名。",
+         "x-widget": "input"
+        },
+        {
+         "name": "include_context_support",
+         "type": "boolean",
+         "label": "携带上下文（暂未支持）",
+         "description": "是否允许 Sampling 请求带上下文。",
+         "x-widget": "switch",
+         "advanced": true
+        },
+        {
+         "name": "tool_support",
+         "type": "boolean",
+         "label": "允许 Sampling 使用工具",
+         "description": "Sampling 过程中是否允许继续使用工具。",
+         "x-widget": "switch"
+        }
+       ]
+      },
+      "elicitation": {
+       "className": "MCPElicitationConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "enable",
+         "type": "boolean",
+         "label": "启用 Elicitation（暂未支持）",
+         "description": "是否声明支持 MCP Elicitation。",
+         "x-widget": "switch",
+         "advanced": true
+        },
+        {
+         "name": "allow_form",
+         "type": "boolean",
+         "label": "允许表单请求",
+         "description": "是否允许 MCP 服务器请求填写表单。",
+         "x-widget": "switch",
+         "advanced": true
+        },
+        {
+         "name": "allow_url",
+         "type": "boolean",
+         "label": "允许 URL 请求",
+         "description": "是否允许 MCP 服务器请求打开 URL。",
+         "x-widget": "switch",
+         "advanced": true
+        }
+       ]
+      }
+     }
+    },
+    "servers": {
+     "className": "MCPServerItemConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "name",
+       "type": "string",
+       "label": "服务名称",
+       "description": "MCP 服务器名称，必须唯一。",
+       "x-widget": "input"
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "启用服务",
+       "description": "是否启用这个 MCP 服务器。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "transport",
+       "type": "select",
+       "label": "传输方式",
+       "description": "连接方式；本地命令通常用 stdio，远程服务用 HTTP/SSE。",
+       "options": [
+        "stdio",
+        "streamable_http",
+        "sse"
+       ],
+       "x-widget": "select",
+       "x-option-labels": {
+        "stdio": "本地命令（stdio）",
+        "streamable_http": "远程 HTTP",
+        "sse": "旧版 SSE"
+       }
+      },
+      {
+       "name": "command",
+       "type": "string",
+       "label": "启动命令",
+       "description": "stdio 模式下启动服务器的命令。",
+       "x-widget": "input"
+      },
+      {
+       "name": "args",
+       "type": "array",
+       "label": "命令参数",
+       "description": "stdio 模式下传给命令的参数。",
+       "x-widget": "custom",
+       "items": {
+        "type": "string"
+       }
+      },
+      {
+       "name": "env",
+       "type": "object",
+       "label": "环境变量",
+       "description": "stdio 模式下额外传入的环境变量。",
+       "x-widget": "custom"
+      },
+      {
+       "name": "url",
+       "type": "string",
+       "label": "服务 URL",
+       "description": "HTTP 或 SSE 模式下的服务器地址。",
+       "x-widget": "input"
+      },
+      {
+       "name": "headers",
+       "type": "object",
+       "label": "请求 Headers",
+       "description": "HTTP/SSE 请求时附加的请求头。",
+       "x-widget": "custom"
+      },
+      {
+       "name": "http_timeout_seconds",
+       "type": "number",
+       "label": "HTTP 请求超时",
+       "description": "HTTP 请求多久没响应就算超时。",
+       "x-widget": "number"
+      },
+      {
+       "name": "read_timeout_seconds",
+       "type": "number",
+       "label": "会话读取超时",
+       "description": "连接建立后，等服务器消息的最长时间。",
+       "x-widget": "number"
+      },
+      {
+       "name": "authorization",
+       "type": "object",
+       "label": "远程认证",
+       "description": "HTTP/SSE 连接的认证设置。"
+      }
+     ],
+     "nested": {
+      "authorization": {
+       "className": "MCPAuthorizationConfig",
+       "uiAdvanced": false,
+       "fields": [
+        {
+         "name": "mode",
+         "type": "select",
+         "label": "认证方式",
+         "description": "MCP HTTP 认证方式；none 表示不认证。",
+         "options": [
+          "none",
+          "bearer"
+         ],
+         "x-widget": "select",
+         "x-option-labels": {
+          "none": "无认证",
+          "bearer": "Bearer Token"
+         }
+        },
+        {
+         "name": "bearer_token",
+         "type": "string",
+         "label": "Bearer Token",
+         "description": "Bearer 认证令牌，只在 mode 为 bearer 时使用。",
+         "x-widget": "password"
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "plugin": {
+   "className": "PluginConfig",
+   "uiLabel": "插件",
+   "uiAdvanced": true,
+   "uiOrder": 120,
+   "fields": [
+    {
+     "name": "permission",
+     "type": "array",
+     "label": "插件管理权限",
+     "description": "允许用聊天命令管理插件的用户，格式如 qq:123456789。",
+     "x-widget": "tags",
+     "items": {
+      "type": "string"
+     }
+    },
+    {
+     "name": "command_permissions",
+     "type": "object",
+     "label": "command_permissions",
+     "description": "受保护命令按用户和真实聊天流配置的额外放行规则。"
+    }
+   ]
+  },
+  "plugin_runtime": {
+   "className": "PluginRuntimeConfig",
+   "uiLabel": "运行时",
+   "uiAdvanced": false,
+   "uiParent": "plugin",
+   "fields": [
+    {
+     "name": "enabled",
+     "type": "boolean",
+     "label": "启用插件运行时",
+     "description": "是否启用新版插件运行时。",
+     "x-widget": "switch"
+    },
+    {
+     "name": "health_check_interval_sec",
+     "type": "number",
+     "label": "健康检查间隔秒数",
+     "description": "每隔多少秒检查一次插件运行状态。",
+     "x-widget": "number"
+    },
+    {
+     "name": "max_restart_attempts",
+     "type": "integer",
+     "label": "最大重启次数",
+     "description": "插件 Runner 崩溃后最多自动重启几次。",
+     "x-widget": "number"
+    },
+    {
+     "name": "runner_spawn_timeout_sec",
+     "type": "number",
+     "label": "Runner 启动超时秒数",
+     "description": "等待插件 Runner 启动完成的最长时间。",
+     "x-widget": "number"
+    },
+    {
+     "name": "hook_blocking_timeout_sec",
+     "type": "number",
+     "label": "阻塞 Hook 超时秒数",
+     "description": "单个阻塞 Hook 最多允许运行多久。",
+     "x-widget": "number"
+    },
+    {
+     "name": "ipc_socket_path",
+     "type": "string",
+     "label": "通信 Socket 路径",
+     "description": "自定义插件通信 Socket 路径；留空自动生成。",
+     "x-widget": "input"
+    },
+    {
+     "name": "render",
+     "type": "object",
+     "label": "浏览器渲染",
+     "description": "插件需要网页截图或渲染时使用的浏览器配置。"
+    }
+   ],
+   "nested": {
+    "render": {
+     "className": "PluginRuntimeRenderConfig",
+     "uiAdvanced": false,
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "label": "启用浏览器渲染",
+       "description": "是否允许插件使用浏览器渲染能力。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "browser_ws_endpoint",
+       "type": "string",
+       "label": "浏览器调试地址",
+       "description": "已有 Chrome/Chromium 的调试地址；留空则自动启动。",
+       "x-widget": "input"
+      },
+      {
+       "name": "executable_path",
+       "type": "string",
+       "label": "浏览器程序路径",
+       "description": "浏览器程序路径；留空自动查找。",
+       "x-widget": "input"
+      },
+      {
+       "name": "browser_install_root",
+       "type": "string",
+       "label": "浏览器安装目录",
+       "description": "自动下载浏览器时保存的位置。",
+       "x-widget": "input"
+      },
+      {
+       "name": "headless",
+       "type": "boolean",
+       "label": "无界面运行",
+       "description": "是否隐藏浏览器窗口运行。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "launch_args",
+       "type": "array",
+       "label": "启动参数",
+       "description": "启动浏览器时附加的命令参数。",
+       "x-widget": "custom",
+       "items": {
+        "type": "string"
+       }
+      },
+      {
+       "name": "concurrency_limit",
+       "type": "integer",
+       "label": "并发渲染数",
+       "description": "同时最多运行多少个渲染任务。",
+       "minValue": 1,
+       "x-widget": "number"
+      },
+      {
+       "name": "startup_timeout_sec",
+       "type": "number",
+       "label": "启动超时秒数",
+       "description": "浏览器启动或连接的最长等待时间。",
+       "x-widget": "number"
+      },
+      {
+       "name": "render_timeout_sec",
+       "type": "number",
+       "label": "渲染超时秒数",
+       "description": "单次渲染任务的最长等待时间。",
+       "x-widget": "number"
+      },
+      {
+       "name": "auto_download_chromium",
+       "type": "boolean",
+       "label": "自动下载 Chromium",
+       "description": "找不到浏览器时是否自动下载 Chromium。",
+       "x-widget": "switch"
+      },
+      {
+       "name": "download_connection_timeout_sec",
+       "type": "number",
+       "label": "下载连接超时秒数",
+       "description": "下载 Chromium 时的连接超时时间。",
+       "x-widget": "number"
+      },
+      {
+       "name": "restart_after_render_count",
+       "type": "integer",
+       "label": "渲染后重启次数",
+       "description": "渲染多少次后重启浏览器；0 表示不自动重启。",
+       "minValue": 0,
+       "x-widget": "number"
+      }
+     ]
+    }
+   }
+  }
+ }
+}
