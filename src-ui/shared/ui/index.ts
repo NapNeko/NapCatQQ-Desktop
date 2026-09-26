@@ -36,6 +36,7 @@ export { Progress, type ProgressProps } from './Progress';
 export { InfoBar, type InfoBarProps } from './InfoBar';
 export { InfoBarStack, type InfoBarStackItem } from './InfoBarStack';
 export { TextField, type TextFieldProps } from './TextField';
+export { TextAreaField, type TextAreaFieldProps } from './TextAreaField';
 export { NumberField, type NumberFieldProps } from './NumberField';
 export { Checkbox, type CheckboxProps } from './Checkbox';
 export { Switch, type SwitchProps } from './Switch';
