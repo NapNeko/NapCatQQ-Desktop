@@ -4067,6 +4067,330 @@ mod tests {
             assert!(!msg.contains("尚未开放"), "{msg}");
             assert!(!msg.contains("open_tunnel"), "{msg}");
         }
+
+        /// 真机冒烟，默认不跑：真下 MaiBot 源码、uv sync、对接、起、停一遍，要联网、几百 MB。
+        ///   NCD_MAIBOT_SMOKE_DIR=D:/somewhere cargo test -p ncd-runtime --lib maibot_real_smoke -- --ignored --nocapture
+        /// Bot 侧用一个只收握手头的 TCP 监听顶替 NapCat，看适配器是不是带着对的 token 连过来。
+        #[tokio::test]
+        #[ignore = "要联网下载 MaiBot 并起真进程，设 NCD_MAIBOT_SMOKE_DIR 后手动跑"]
+        #[allow(clippy::print_stderr)] // 这个测试就是给人看的报告，靠 --nocapture 打出来
+        async fn maibot_real_smoke() {
+            use ncd_appframework::maibot::MaiBotComponent;
+            use ncd_component::{ActionCtx, Component, DetectOutcome, ProgressKind};
+            use std::time::{Duration, Instant};
+            use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+            fn stamp(t0: Instant) -> String {
+                format!("[{:>7.1}s]", t0.elapsed().as_secs_f32())
+            }
+
+            // cwd 或命令行落在实例目录里的 python，加上它们的子孙（子进程不能早于父进程，防 ppid 复用）。
+            // 起点只认 python：在实例目录里开过的 shell 也是这个 cwd，连带把 cargo 和测试自己扫进来
+            fn related(dir: &str) -> Vec<(u32, u64, String)> {
+                let mut sys = System::new();
+                sys.refresh_processes_specifics(
+                    ProcessesToUpdate::All,
+                    ProcessRefreshKind::new().with_cwd(UpdateKind::Always).with_cmd(UpdateKind::Always),
+                );
+                let norm = |s: &str| s.replace('\\', "/").trim_end_matches('/').to_lowercase();
+                let want = norm(dir);
+                let cmd_of = |p: &sysinfo::Process| {
+                    p.cmd().iter().map(|s| s.to_string_lossy()).collect::<Vec<_>>().join(" ")
+                };
+                let mut hit: Vec<u32> = sys
+                    .processes()
+                    .iter()
+                    .filter(|(_, p)| {
+                        let is_python = p.name().to_string_lossy().to_lowercase().starts_with("python");
+                        let cwd = p.cwd().map(|c| norm(&c.to_string_lossy())).unwrap_or_default();
+                        is_python && (cwd == want || norm(&cmd_of(p)).contains(&want))
+                    })
+                    .map(|(pid, _)| pid.as_u32())
+                    .collect();
+                loop {
+                    let before = hit.len();
+                    for (pid, p) in sys.processes() {
+                        let pid = pid.as_u32();
+                        let Some(parent) = p.parent().and_then(|pp| sys.process(pp)) else {
+                            continue;
+                        };
+                        if !hit.contains(&pid)
+                            && hit.contains(&parent.pid().as_u32())
+                            && p.start_time() >= parent.start_time()
+                        {
+                            hit.push(pid);
+                        }
+                    }
+                    if hit.len() == before {
+                        break;
+                    }
+                }
+                hit.into_iter()
+                    .filter_map(|pid| {
+                        sys.process(Pid::from_u32(pid)).map(|p| (pid, p.start_time(), cmd_of(p)))
+                    })
+                    .collect()
+            }
+
+            let base = std::path::PathBuf::from(
+                std::env::var("NCD_MAIBOT_SMOKE_DIR").expect("设 NCD_MAIBOT_SMOKE_DIR"),
+            );
+            // 只清自己建过的目录（带标记文件才删），环境变量指错了也不会误删别的东西
+            let work = base.join("ncd-maibot-smoke");
+            let marker = work.join(".ncd-smoke");
+            if work.exists() {
+                assert!(marker.is_file(), "{} 不是冒烟测试建的目录，不动它", work.display());
+                std::fs::remove_dir_all(&work).unwrap();
+            }
+            std::fs::create_dir_all(&work).unwrap();
+            std::fs::write(&marker, b"").unwrap();
+            let inst_dir = work.join("inst");
+            let root = work.join("data");
+            std::fs::create_dir_all(&root).unwrap();
+            const WEBUI: u16 = 23901;
+            let t0 = Instant::now();
+            let local: Arc<dyn Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
+            let install_dir = HostPath::from_windows(inst_dir.to_string_lossy().as_ref());
+            let dir_str = inst_dir.to_string_lossy().to_string();
+
+            let component = MaiBotComponent::new(install_dir.clone(), WEBUI);
+            let (mut ctx, mut rx) = ActionCtx::new();
+            let printer = tokio::spawn(async move {
+                let mut last: Option<(u32, u8)> = None;
+                while let Some(ev) = rx.recv().await {
+                    if let ProgressKind::StepProgress { step, percent, .. } = &ev.kind {
+                        let bucket = percent / 20;
+                        if last == Some((*step, bucket)) {
+                            continue;
+                        }
+                        last = Some((*step, bucket));
+                    }
+                    eprintln!("{} {}", stamp(t0), serde_json::to_string(&ev.kind).unwrap());
+                }
+            });
+            let installed = component.install(local.as_ref(), &mut ctx).await;
+            drop(ctx);
+            let _ = printer.await;
+            installed.expect("安装失败");
+            let outcome = component.detect_outcome(local.as_ref()).await.unwrap();
+            eprintln!("{} 探测: {outcome:?}", stamp(t0));
+            let DetectOutcome::Installed(version) = outcome else {
+                panic!("装完探测不到");
+            };
+
+            let bus = Arc::new(BroadcastEventBus::default());
+            let store = Arc::new(AppInstanceStore::empty(&root));
+            let bots = Arc::new(MemoryBots {
+                bots: AsyncMutex::new(vec![bot()]),
+                upserts: Mutex::new(0),
+            });
+            let manager = Arc::new(AppManager::new(
+                Arc::new(AppFrameworkRegistry::with_builtin()),
+                Arc::clone(&store),
+                Arc::new(NativeAppRuntime::new(Arc::clone(&bus), Arc::clone(&store))),
+                Arc::new(ncd_server::LocalOnlyHostResolver::new(Arc::clone(&local))),
+                bots.clone(),
+                bus,
+                &root,
+            ));
+            let id = AppInstanceId::new("smoke1");
+            store
+                .upsert(AppInstance {
+                    id: id.clone(),
+                    framework_id: AppFrameworkId::new("maibot"),
+                    display_name: "麦麦冒烟".into(),
+                    placement: AppPlacement::LocalNative,
+                    host_id: LOCAL_HOST_ID.to_string(),
+                    install_dir: install_dir.as_posix().to_string(),
+                    port: WEBUI,
+                    state: AppInstanceState::Stopped,
+                    link: None,
+                    installed_version: Some(version.version.clone()),
+                    last_error: None,
+                    created_at_ms: 1,
+                    install_renderer: false,
+                    origin: ncd_domain::AppInstanceOrigin::Created,
+                    auto_start: false,
+                })
+                .await
+                .unwrap();
+
+            let pending = manager.pending_terms(&id).await.unwrap();
+            assert!(
+                pending.is_empty(),
+                "首装应已写好协议确认，还剩: {:?}",
+                pending.iter().map(|p| p.id.clone()).collect::<Vec<_>>()
+            );
+            let AppInstanceConfig::MaiBot(cfg) = manager.read_config(&id).await.unwrap().config else {
+                panic!("不是 MaiBot 配置");
+            };
+            eprintln!(
+                "{} 配置: webui={} legacy={} token 长度={} adapter={:?}",
+                stamp(t0),
+                cfg.webui_port,
+                cfg.legacy_ws_port,
+                cfg.webui_token.len(),
+                cfg.adapter.as_ref().map(|a| (a.enabled, a.napcat_port))
+            );
+
+            let linked = manager.apply_link(&id, &BotId::new("10001")).await.expect("对接失败");
+            let server = bots.bots.lock().await[0]
+                .connect
+                .websocket_servers
+                .iter()
+                .find(|s| s.base.name == app_link_connection_name(&id))
+                .cloned()
+                .expect("Bot 侧应多一条 WS 服务");
+            eprintln!(
+                "{} 对接: {:?}，Bot 侧听 {}:{}",
+                stamp(t0),
+                linked.link.as_ref().map(|l| &l.mode),
+                server.host,
+                server.port
+            );
+
+            let listener = tokio::net::TcpListener::bind(("127.0.0.1", server.port)).await.unwrap();
+            let seen: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+            let seen_in = Arc::clone(&seen);
+            let fake_bot = tokio::spawn(async move {
+                while let Ok((mut sock, _)) = listener.accept().await {
+                    let mut buf = vec![0u8; 8192];
+                    let mut len = 0;
+                    while len < buf.len() {
+                        match tokio::time::timeout(Duration::from_secs(5), sock.read(&mut buf[len..])).await {
+                            Ok(Ok(n)) if n > 0 => {
+                                len += n;
+                                if buf[..len].windows(4).any(|w| w == b"\r\n\r\n") {
+                                    break;
+                                }
+                            }
+                            _ => break,
+                        }
+                    }
+                    let head = String::from_utf8_lossy(&buf[..len]).to_string();
+                    let _ = sock
+                        .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n")
+                        .await;
+                    seen_in.lock().unwrap().get_or_insert(head);
+                }
+            });
+
+            let started = manager.start_instance(&id).await;
+            eprintln!(
+                "{} 启动: {:?}",
+                stamp(t0),
+                started.as_ref().map(|i| (&i.state, &i.last_error)).map_err(|e| e.to_string())
+            );
+            started.expect("启动失败");
+
+            let mut webui_up = false;
+            let deadline = Instant::now() + Duration::from_secs(420);
+            let mut polls = 0u32;
+            while Instant::now() < deadline {
+                if tokio::net::TcpStream::connect(("127.0.0.1", WEBUI)).await.is_ok() {
+                    webui_up = true;
+                    break;
+                }
+                polls += 1;
+                if polls % 5 == 0 && related(&dir_str).is_empty() {
+                    eprintln!("{} 进程没了", stamp(t0));
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            eprintln!("{} WebUI 口通: {webui_up}", stamp(t0));
+
+            let mut index_ok = false;
+            if webui_up {
+                let client = reqwest::Client::new();
+                // 前端静态资源来自 maibot-dashboard 包，缺了首页是空的，用户点「打开 WebUI」只看到 404
+                match client.get(format!("http://127.0.0.1:{WEBUI}/")).send().await {
+                    Ok(r) => {
+                        let status = r.status();
+                        let body = r.text().await.unwrap_or_default();
+                        index_ok = status.is_success() && body.to_ascii_lowercase().contains("<html");
+                        let head: String = body.chars().take(120).collect();
+                        eprintln!("{} 首页: {status} {head:?}", stamp(t0));
+                    }
+                    Err(e) => eprintln!("{} 首页: 请求失败 {e}", stamp(t0)),
+                }
+                let url = format!("http://127.0.0.1:{WEBUI}/api/webui/auth/verify");
+                for (label, token) in [("对的 token", cfg.webui_token.as_str()), ("错的 token", "wrong-token")] {
+                    match client.post(&url).json(&serde_json::json!({ "token": token })).send().await {
+                        Ok(r) => {
+                            let status = r.status();
+                            eprintln!("{} {label}: {status} {}", stamp(t0), r.text().await.unwrap_or_default());
+                        }
+                        Err(e) => eprintln!("{} {label}: 请求失败 {e}", stamp(t0)),
+                    }
+                }
+            }
+
+            let deadline = Instant::now() + Duration::from_secs(120);
+            while Instant::now() < deadline && seen.lock().unwrap().is_none() {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+            let head = seen.lock().unwrap().clone();
+            match &head {
+                Some(h) => eprintln!("{} 适配器握手:\n{h}", stamp(t0)),
+                None => eprintln!("{} 适配器 120s 内没连过来", stamp(t0)),
+            }
+            let auth_ok = head.as_deref().is_some_and(|h| {
+                h.lines().any(|l| {
+                    l.to_ascii_lowercase().starts_with("authorization:") && l.contains(&server.base.token)
+                })
+            });
+            let legacy_up = tokio::net::TcpStream::connect(("127.0.0.1", cfg.legacy_ws_port)).await.is_ok();
+            eprintln!("{} 握手带对的 token: {auth_ok}，旧版消息口在听: {legacy_up}", stamp(t0));
+
+            let procs = related(&dir_str);
+            eprintln!("{} 停之前的相关进程:", stamp(t0));
+            for (pid, _, cmd) in &procs {
+                eprintln!("  {pid} {cmd}");
+            }
+            let stopped = manager.stop_instance(&id).await;
+            eprintln!(
+                "{} 停止: {:?}",
+                stamp(t0),
+                stopped.as_ref().map(|i| &i.state).map_err(|e| e.to_string())
+            );
+            tokio::time::sleep(Duration::from_secs(3)).await;
+
+            let mut sys = System::new();
+            sys.refresh_processes_specifics(ProcessesToUpdate::All, ProcessRefreshKind::new());
+            let leftovers: Vec<_> = procs
+                .iter()
+                .filter(|(pid, start, _)| {
+                    sys.process(Pid::from_u32(*pid)).is_some_and(|p| p.start_time() == *start)
+                })
+                .collect();
+            let after = related(&dir_str);
+            let webui_after = tokio::net::TcpStream::connect(("127.0.0.1", WEBUI)).await.is_ok();
+            let legacy_after =
+                tokio::net::TcpStream::connect(("127.0.0.1", cfg.legacy_ws_port)).await.is_ok();
+            eprintln!(
+                "{} 停后残留: {leftovers:?}，重扫: {after:?}，WebUI 口仍通: {webui_after}，旧版口仍通: {legacy_after}",
+                stamp(t0)
+            );
+
+            let log = inst_dir.join(".ncd-maibot.log");
+            let text = std::fs::read(&log)
+                .map(|b| String::from_utf8_lossy(&b).to_string())
+                .unwrap_or_default();
+            let tail: Vec<&str> = text.lines().rev().take(80).collect();
+            eprintln!("---- {} 末 80 行 ----", log.display());
+            for line in tail.into_iter().rev() {
+                eprintln!("{line}");
+            }
+
+            fake_bot.abort();
+            assert!(webui_up, "WebUI 没起来");
+            assert!(index_ok, "WebUI 首页打不开");
+            assert!(auth_ok, "适配器没带对的 token 连过来");
+            assert!(leftovers.is_empty() && after.is_empty(), "停后有残留进程");
+            assert!(!webui_after && !legacy_after, "停后端口没释放");
+        }
     }
 
     #[test]
