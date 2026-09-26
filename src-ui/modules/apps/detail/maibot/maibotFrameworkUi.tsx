@@ -15,6 +15,8 @@ import { useAdvancedSections } from './advancedToggle';
 import { MaiBotPromptsTab } from './MaiBotPromptsTab';
 import { MaiBotExpressionsTab } from './MaiBotExpressionsTab';
 import { MaiBotJargonTab } from './MaiBotJargonTab';
+import { MaiBotEmojisTab } from './MaiBotEmojisTab';
+import { MaiBotPersonsTab } from './MaiBotPersonsTab';
 import { usePromptDrafts } from './maibotPromptDrafts';
 import { NoneBot2StoreTab } from '../nonebot2/NoneBot2StoreTab';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
@@ -31,7 +33,7 @@ import { MAIBOT_NAV, MAIBOT_SCHEMA_PAGES, maibotTabForIssue } from './maibotPage
 
 const TYPED_TABS = new Set(['overview', 'models', 'chat', 'connection', ...Object.keys(MAIBOT_SCHEMA_PAGES)]);
 // 插件商店、提示词、资源页这些自己落盘，不是表单：铺满内容区、不挂保存条
-const FILL_PANE = new Set(['plugins', 'prompts', 'expressions', 'jargon']);
+const FILL_PANE = new Set(['plugins', 'prompts', 'emoji', 'expressions', 'jargon', 'persons']);
 
 function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
     const form = useMaiBotConfigForm(instance.id, true, instance.display_name);
@@ -97,6 +99,18 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
             </TabsContent>
             <TabsContent value="jargon" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
                 <MaiBotJargonTab instance={instance} status={status} {...startProps} />
+            </TabsContent>
+            <TabsContent value="emoji" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+                <MaiBotEmojisTab
+                    instance={instance}
+                    status={status}
+                    config={form.form?.bot.emoji}
+                    onGoTab={onGoTab}
+                    {...startProps}
+                />
+            </TabsContent>
+            <TabsContent value="persons" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+                <MaiBotPersonsTab instance={instance} status={status} {...startProps} />
             </TabsContent>
             {pane('overview', (cfg) => (
                 <MaiBotOverviewTab

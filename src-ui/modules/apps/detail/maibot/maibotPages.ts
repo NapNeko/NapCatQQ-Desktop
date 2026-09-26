@@ -30,8 +30,10 @@ export const MAIBOT_NAV: readonly FrameworkNavGroup[] = [
         id: 'resource',
         label: '资源',
         items: [
+            { value: 'emoji', label: '表情包' },
             { value: 'expressions', label: '表达方式' },
             { value: 'jargon', label: '黑话' },
+            { value: 'persons', label: '人物' },
         ],
     },
     {
@@ -96,7 +98,7 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
         advanced: ['bot.platform', 'bot.qq_account', 'bot.platforms'],
         links: [
             { label: '提示词模板', tab: 'prompts' },
-            { label: '人物画像', path: '/resource/person' },
+            { label: '麦麦认识的人', tab: 'persons' },
         ],
     },
     talk: {
@@ -110,7 +112,7 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
             { path: ['voice'], title: '语音' },
         ],
         skip: RULE_FIELDS,
-        links: [{ label: '表情包库', path: '/resource/emoji' }],
+        links: [{ label: '表情包库', tab: 'emoji' }],
     },
     rules: {
         sections: [

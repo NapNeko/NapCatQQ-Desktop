@@ -84,6 +84,20 @@ export async function pickZipFile(title: string): Promise<string | null> {
     return selected;
 }
 
+/// 选几张图片（表情包上传），返回绝对路径；取消返回空数组。
+export async function pickImageFiles(title: string): Promise<string[]> {
+    const selected = await tauriInvoke<string | string[] | null>('plugin:dialog|open', {
+        options: {
+            directory: false,
+            multiple: true,
+            title,
+            filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+        },
+    });
+    if (!selected) return [];
+    return Array.isArray(selected) ? selected : [selected];
+}
+
 /// 另存为 ZIP，返回用户选的完整路径；取消返回 null。
 export async function saveZipFile(
     title: string,
