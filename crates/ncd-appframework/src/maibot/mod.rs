@@ -8,6 +8,7 @@ pub mod manifest;
 pub mod release;
 pub mod runtime;
 pub mod schema;
+pub mod resources;
 pub mod store;
 pub mod terms;
 pub mod webui_client;

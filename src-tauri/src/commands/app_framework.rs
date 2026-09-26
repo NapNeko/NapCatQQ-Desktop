@@ -16,8 +16,9 @@ use ncd_runtime::{
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule, ComponentActionRequest,
     DeploymentTaskRequest, KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider,
     MaiBotChatSession, MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest,
-    MaiBotProviderCheck, MaiBotProviderModel, MaiBotRuntimeStatus, MaiBotStatsSummary,
-    join_webui_url, run_app_plugin_task,
+    MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotProviderCheck,
+    MaiBotProviderModel, MaiBotRuntimeStatus, MaiBotStatsSummary, join_webui_url,
+    run_app_plugin_task,
 };
 use ncd_traits::AppFrameworkError;
 use tauri::State;
@@ -672,6 +673,60 @@ pub async fn maibot_test_mcp(
     state
         .app_manager
         .maibot_test_mcp(&AppInstanceId::new(instance_id), server)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_prompt_catalog(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotPromptCatalog, AppConfigError> {
+    state
+        .app_manager
+        .maibot_prompt_catalog(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_prompt_file(
+    instance_id: String,
+    language: String,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotPromptFile, AppConfigError> {
+    state
+        .app_manager
+        .maibot_prompt_file(&AppInstanceId::new(instance_id), &language, &name)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_prompt_version(
+    instance_id: String,
+    language: String,
+    name: String,
+    version_id: String,
+    state: State<'_, AppState>,
+) -> Result<String, AppConfigError> {
+    state
+        .app_manager
+        .maibot_prompt_version(&AppInstanceId::new(instance_id), &language, &name, &version_id)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_prompt_action(
+    instance_id: String,
+    action: MaiBotPromptAction,
+    state: State<'_, AppState>,
+) -> Result<MaiBotPromptFile, AppConfigError> {
+    state
+        .app_manager
+        .maibot_prompt_action(&AppInstanceId::new(instance_id), action)
         .await
         .map_err(AppFrameworkError::into_config_error)
 }

@@ -48,6 +48,10 @@ pub use maibot::{
     MaiBotInstanceConfig, MaiBotIntegration, MaiBotListMode, maibot_manifest,
 };
 pub use maibot::api::{MaiBotProviderSource, MaiBotRuntimeApi, MaiBotSession};
+pub use maibot::resources::prompts::{
+    MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotPromptInfo, MaiBotPromptLanguage,
+    MaiBotPromptTarget, MaiBotPromptVersion,
+};
 pub use maibot::runtime::{
     MaiBotChatSession, MaiBotMcpServerStatus, MaiBotMcpStatus, MaiBotMcpTest, MaiBotMcpTool,
     MaiBotProviderCheck, MaiBotProviderModel, MaiBotRuntimeGate, MaiBotRuntimeStatus,

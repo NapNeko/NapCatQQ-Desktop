@@ -56,7 +56,7 @@ impl MaiBotWebUi {
     }
 
     /// `doc` 是这次请求改的是哪份文档，上游 400 时报成它的配置错误；运行期查询不带 doc，400 照原话报
-    async fn send(&self, req: Request<'_>) -> Result<Value, AppFrameworkError> {
+    pub(crate) async fn send(&self, req: Request<'_>) -> Result<Value, AppFrameworkError> {
         let mut builder = self
             .http
             .request(req.method, format!("{}{}", self.base, req.path))
@@ -100,9 +100,19 @@ impl MaiBotWebUi {
         })
     }
 
-    async fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, &str)]) -> Result<T, AppFrameworkError> {
+    pub(crate) async fn get<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<T, AppFrameworkError> {
         let value = self.send(Request::new(Method::GET, path).query(query)).await?;
         parse(value, path)
+    }
+
+    /// 发出去并按 `T` 收；认不出时报的是这条路径
+    pub(crate) async fn call<T: DeserializeOwned>(&self, req: Request<'_>) -> Result<T, AppFrameworkError> {
+        let path = req.path;
+        parse(self.send(req).await?, path)
     }
 
     /// 只带改了的键：上游在它自己的进程里合并进当前文件（保注释），和它别处的写入不打架。
@@ -206,7 +216,7 @@ impl MaiBotWebUi {
 }
 
 /// 一次请求。默认 20 秒超时；探测服务商、试连 MCP 这类上游自己就要等三十秒的用 `slow`
-struct Request<'a> {
+pub(crate) struct Request<'a> {
     method: Method,
     path: &'a str,
     query: &'a [(&'a str, &'a str)],
@@ -216,32 +226,32 @@ struct Request<'a> {
 }
 
 impl<'a> Request<'a> {
-    fn new(method: Method, path: &'a str) -> Self {
+    pub(crate) fn new(method: Method, path: &'a str) -> Self {
         Self { method, path, query: &[], body: None, doc: None, timeout: None }
     }
 
-    fn query(mut self, query: &'a [(&'a str, &'a str)]) -> Self {
+    pub(crate) fn query(mut self, query: &'a [(&'a str, &'a str)]) -> Self {
         self.query = query;
         self
     }
 
-    fn body(mut self, body: &'a Value) -> Self {
+    pub(crate) fn body(mut self, body: &'a Value) -> Self {
         self.body = Some(body);
         self
     }
 
-    fn doc(mut self, doc: &'a str) -> Self {
+    pub(crate) fn doc(mut self, doc: &'a str) -> Self {
         self.doc = Some(doc);
         self
     }
 
-    fn slow(mut self) -> Self {
+    pub(crate) fn slow(mut self) -> Self {
         self.timeout = Some(SLOW_TIMEOUT);
         self
     }
 }
 
-fn parse<T: DeserializeOwned>(value: Value, path: &str) -> Result<T, AppFrameworkError> {
+pub(crate) fn parse<T: DeserializeOwned>(value: Value, path: &str) -> Result<T, AppFrameworkError> {
     serde_json::from_value(value)
         .map_err(|e| AppFrameworkError::Integration(format!("麦麦 WebUI {path} 回的内容认不出：{e}")))
 }

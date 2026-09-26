@@ -3,6 +3,9 @@
 use async_trait::async_trait;
 use ncd_traits::AppFrameworkError;
 
+use super::resources::prompts::{
+    self, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotPromptTarget,
+};
 use super::runtime::{
     MaiBotChatSession, MaiBotMcpStatus, MaiBotMcpTest, MaiBotProviderCheck, MaiBotProviderModel,
     MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotStatsSummary,
@@ -62,6 +65,30 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         session: &MaiBotSession,
         server: &MaiBotMCPServerItemConfig,
     ) -> Result<MaiBotMcpTest, AppFrameworkError>;
+
+    /// 提示词停着也能改：target 由编排层按实例状态给
+    async fn prompt_catalog(&self, target: MaiBotPromptTarget<'_>) -> Result<MaiBotPromptCatalog, AppFrameworkError>;
+
+    async fn prompt_file(
+        &self,
+        target: MaiBotPromptTarget<'_>,
+        language: &str,
+        name: &str,
+    ) -> Result<MaiBotPromptFile, AppFrameworkError>;
+
+    async fn prompt_version(
+        &self,
+        target: MaiBotPromptTarget<'_>,
+        language: &str,
+        name: &str,
+        version_id: &str,
+    ) -> Result<String, AppFrameworkError>;
+
+    async fn prompt_action(
+        &self,
+        target: MaiBotPromptTarget<'_>,
+        action: &MaiBotPromptAction,
+    ) -> Result<MaiBotPromptFile, AppFrameworkError>;
 }
 
 /// 直连本机回环 WebUI 的实现；`MaiBotAdapter` 用它
@@ -152,5 +179,36 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         let body = serde_json::to_value(server)
             .map_err(|e| AppFrameworkError::Integration(format!("MCP 服务配置转不成 JSON：{e}")))?;
         Ok(client(session)?.mcp_test(&body).await?.into())
+    }
+
+    async fn prompt_catalog(&self, target: MaiBotPromptTarget<'_>) -> Result<MaiBotPromptCatalog, AppFrameworkError> {
+        prompts::catalog(target).await
+    }
+
+    async fn prompt_file(
+        &self,
+        target: MaiBotPromptTarget<'_>,
+        language: &str,
+        name: &str,
+    ) -> Result<MaiBotPromptFile, AppFrameworkError> {
+        prompts::file(target, language, name).await
+    }
+
+    async fn prompt_version(
+        &self,
+        target: MaiBotPromptTarget<'_>,
+        language: &str,
+        name: &str,
+        version_id: &str,
+    ) -> Result<String, AppFrameworkError> {
+        prompts::version(target, language, name, version_id).await
+    }
+
+    async fn prompt_action(
+        &self,
+        target: MaiBotPromptTarget<'_>,
+        action: &MaiBotPromptAction,
+    ) -> Result<MaiBotPromptFile, AppFrameworkError> {
+        prompts::act(target, action).await
     }
 }

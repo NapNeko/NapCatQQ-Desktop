@@ -20,7 +20,8 @@ use ncd_appframework::{
     AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession, AstrBotSessionRule,
     KarinPluginInstalled, MaiBotAPIProvider, MaiBotChatSession, MaiBotMCPServerItemConfig,
-    MaiBotMcpStatus, MaiBotMcpTest, MaiBotProviderCheck, MaiBotProviderModel, MaiBotProviderSource,
+    MaiBotMcpStatus, MaiBotMcpTest, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
+    MaiBotPromptTarget, MaiBotProviderCheck, MaiBotProviderModel, MaiBotProviderSource,
     MaiBotRuntimeApi, MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotSession, MaiBotStatsSummary,
     KarinPluginMarketEntry, PluginLogSink, app_file_basename, restore_adopted_files,
     remove_ncd_debris, AdoptRestoreScope,
@@ -173,6 +174,21 @@ fn maibot_api(adapter: &dyn AppFrameworkAdapter) -> Result<&dyn MaiBotRuntimeApi
     adapter.maibot_runtime().ok_or_else(|| {
         AppFrameworkError::ConfigUnsupported(adapter.manifest().id.as_str().to_string())
     })
+}
+
+/// 提示词改在哪：跑着走 WebUI（上游改完会清它的缓存），停着改盘上文件
+enum PromptPlace {
+    Live(MaiBotSession),
+    Disk(Arc<dyn Host>, AppInstance),
+}
+
+impl PromptPlace {
+    fn target(&self) -> MaiBotPromptTarget<'_> {
+        match self {
+            Self::Live(s) => MaiBotPromptTarget::Live(s),
+            Self::Disk(host, instance) => MaiBotPromptTarget::Disk { host: host.as_ref(), instance },
+        }
+    }
 }
 
 fn needs_desktop_ssh_tunnel(topology: AppLinkTopology) -> bool {
@@ -2218,6 +2234,72 @@ impl AppManager {
     ) -> Result<MaiBotMcpTest, AppFrameworkError> {
         let (adapter, s) = self.maibot_session(id).await?;
         maibot_api(adapter.as_ref())?.test_mcp(&s, &server).await
+    }
+
+    async fn maibot_prompt_place(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<(Arc<dyn AppFrameworkAdapter>, PromptPlace), AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let adapter = self.registry.get(&instance.framework_id)?;
+        maibot_api(adapter.as_ref())?;
+        match instance.state {
+            AppInstanceState::Running => {
+                let (adapter, s) = self.maibot_session(id).await?;
+                Ok((adapter, PromptPlace::Live(s)))
+            }
+            AppInstanceState::Installed | AppInstanceState::Stopped => {
+                let host = self.resolve_host(&instance.host_id).await?;
+                Ok((adapter, PromptPlace::Disk(host, instance)))
+            }
+            AppInstanceState::NotInstalled | AppInstanceState::Installing => {
+                Err(AppFrameworkError::NotRunning("麦麦装好后才能改提示词".into()))
+            }
+        }
+    }
+
+    pub async fn maibot_prompt_catalog(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotPromptCatalog, AppFrameworkError> {
+        let (adapter, place) = self.maibot_prompt_place(id).await?;
+        maibot_api(adapter.as_ref())?.prompt_catalog(place.target()).await
+    }
+
+    pub async fn maibot_prompt_file(
+        &self,
+        id: &AppInstanceId,
+        language: &str,
+        name: &str,
+    ) -> Result<MaiBotPromptFile, AppFrameworkError> {
+        let (adapter, place) = self.maibot_prompt_place(id).await?;
+        maibot_api(adapter.as_ref())?
+            .prompt_file(place.target(), language, name)
+            .await
+    }
+
+    pub async fn maibot_prompt_version(
+        &self,
+        id: &AppInstanceId,
+        language: &str,
+        name: &str,
+        version_id: &str,
+    ) -> Result<String, AppFrameworkError> {
+        let (adapter, place) = self.maibot_prompt_place(id).await?;
+        maibot_api(adapter.as_ref())?
+            .prompt_version(place.target(), language, name, version_id)
+            .await
+    }
+
+    pub async fn maibot_prompt_action(
+        &self,
+        id: &AppInstanceId,
+        action: MaiBotPromptAction,
+    ) -> Result<MaiBotPromptFile, AppFrameworkError> {
+        let (adapter, place) = self.maibot_prompt_place(id).await?;
+        maibot_api(adapter.as_ref())?
+            .prompt_action(place.target(), &action)
+            .await
     }
 
     pub async fn list_config_documents(
