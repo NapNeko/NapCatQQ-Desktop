@@ -2,7 +2,7 @@
 // 在小节标题右边各自展开。
 
 import type { ReactNode } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { ArrowRight, ExternalLink } from 'lucide-react';
 import { Button, FormSection } from '../../../../shared/ui';
 import { ConfigForm } from '../karin/configLayout';
 import type { MaiBotChatSession, MaiBotInstanceConfig } from '../../../../core/ipc/types';
@@ -30,9 +30,10 @@ export const MaiBotSchemaTab: React.FC<{
     intro?: ReactNode;
     /** 麦麦在跑时它见过的聊天，按聊天配的列表能直接挑 */
     chatTargets?: readonly MaiBotChatSession[];
-    /** WebUI 应答了才能开 links 里的页 */
+    /** WebUI 应答了才能开 links 里的 WebUI 页 */
     live: boolean;
     onOpenWebUi: (path: string) => void;
+    onGoTab: (tab: string) => void;
 }> = ({
     tab,
     page,
@@ -45,6 +46,7 @@ export const MaiBotSchemaTab: React.FC<{
     chatTargets,
     live,
     onOpenWebUi,
+    onGoTab,
 }) => {
     const base: SchemaCtx = {
         value: config.bot,
@@ -77,19 +79,26 @@ export const MaiBotSchemaTab: React.FC<{
         <ConfigForm>
             {links.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1">
-                    {links.map((l) => (
-                        <Button
-                            key={l.path}
-                            size="sm"
-                            variant="ghost"
-                            disabled={!live}
-                            title={live ? `在麦麦的 WebUI 里看${l.label}` : '启动麦麦后能看'}
-                            onClick={() => onOpenWebUi(l.path)}
-                        >
-                            <ExternalLink size={13} />
-                            {l.label}
-                        </Button>
-                    ))}
+                    {links.map((l) =>
+                        'tab' in l ? (
+                            <Button key={l.tab} size="sm" variant="ghost" onClick={() => onGoTab(l.tab)}>
+                                <ArrowRight size={13} />
+                                {l.label}
+                            </Button>
+                        ) : (
+                            <Button
+                                key={l.path}
+                                size="sm"
+                                variant="ghost"
+                                disabled={!live}
+                                title={live ? `在麦麦的 WebUI 里看${l.label}` : '启动麦麦后能看'}
+                                onClick={() => onOpenWebUi(l.path)}
+                            >
+                                <ExternalLink size={13} />
+                                {l.label}
+                            </Button>
+                        ),
+                    )}
                 </div>
             )}
             {intro}

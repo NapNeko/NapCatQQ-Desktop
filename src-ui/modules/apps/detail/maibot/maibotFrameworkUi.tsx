@@ -12,6 +12,8 @@ import {
 } from '../../../../hooks/apps/useMaiBotRuntime';
 import { McpStatusPanel } from './maibotProbes';
 import { useAdvancedSections } from './advancedToggle';
+import { MaiBotPromptsTab } from './MaiBotPromptsTab';
+import { usePromptDrafts } from './maibotPromptDrafts';
 import { NoneBot2StoreTab } from '../nonebot2/NoneBot2StoreTab';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import { useMaiBotConfigForm } from '../useMaiBotConfigForm';
@@ -26,18 +28,20 @@ import { MaiBotSchemaTab } from './MaiBotSchemaTab';
 import { MAIBOT_NAV, MAIBOT_SCHEMA_PAGES, maibotTabForIssue } from './maibotPages';
 
 const TYPED_TABS = new Set(['overview', 'models', 'chat', 'connection', ...Object.keys(MAIBOT_SCHEMA_PAGES)]);
-// 插件页是商店，不是表单：铺满内容区、不挂保存条
-const FILL_PANE = new Set(['plugins']);
+// 插件商店、提示词这些页自己落盘，不是表单：铺满内容区、不挂保存条
+const FILL_PANE = new Set(['plugins', 'prompts']);
 
 function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
     const form = useMaiBotConfigForm(instance.id, true, instance.display_name);
     useSyncFrameworkSaveHandle(onSaveHandle, form);
     const apps = useAppInstances();
     const advancedSections = useAdvancedSections();
+    const promptDrafts = usePromptDrafts();
 
     // 运行期：WebUI 应答了才去拉会话、MCP 状态
     const running = instance.state === 'running';
-    const live = useMaiBotStatus(instance.id, running).data?.gate === 'ok';
+    const status = useMaiBotStatus(instance.id, running).data;
+    const live = status?.gate === 'ok';
     const sessions = useMaiBotChatSessions(instance.id, live);
     const mcpServers = form.form?.bot.mcp.servers ?? [];
     const mcp = useMaiBotMcpStatus(instance.id, live && mcpServers.length > 0);
@@ -49,6 +53,8 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
         const chat = form.form.adapter?.chat;
         if (chat && maibotChatDropsEverything(chat)) badges.chat = 'next';
     }
+    // 提示词有没保存的草稿：切走了也提醒一下
+    if (promptDrafts.keys.length > 0) badges.prompts = 'warn';
     useSyncNavBadges(onNavBadges, badges);
 
     const pane = (tab: string, body: (cfg: NonNullable<typeof form.form>) => ReactNode) =>
@@ -72,6 +78,15 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
         <>
             <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
                 <NoneBot2StoreTab instance={instance} resource="plugin" />
+            </TabsContent>
+            <TabsContent value="prompts" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+                <MaiBotPromptsTab
+                    instance={instance}
+                    status={status}
+                    drafts={promptDrafts}
+                    onStart={() => apps.start(instance.id)}
+                    starting={apps.pendingId === instance.id}
+                />
             </TabsContent>
             {pane('overview', (cfg) => (
                 <MaiBotOverviewTab
@@ -106,6 +121,7 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                         chatTargets={live ? sessions.data : undefined}
                         live={live}
                         onOpenWebUi={(path) => void apps.openWebUi(instance.id, path)}
+                        onGoTab={onGoTab}
                         intro={
                             tab === 'mcp' && live ? (
                                 <McpStatusPanel instanceId={instance.id} servers={cfg.bot.mcp.servers} status={mcp.data} />

@@ -266,6 +266,11 @@ function require(id: string): AppInstance {
     return found;
 }
 
+/** 别的 mock（麦麦资源页）按 id 取实例看它在不在跑 */
+export function peekMockAppInstance(id: string): AppInstance {
+    return require(id);
+}
+
 const MOCK_INSTALL_STEPS = ['解析 uv', '下载源码', '放置源码', '同步 Python 依赖', '预置端口与协议确认'];
 
 /**

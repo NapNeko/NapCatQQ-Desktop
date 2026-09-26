@@ -11,6 +11,7 @@ export const MAIBOT_NAV: readonly FrameworkNavGroup[] = [
         items: [
             { value: 'models', label: '模型' },
             { value: 'persona', label: '人格' },
+            { value: 'prompts', label: '提示词' },
             { value: 'memory', label: '记忆' },
             { value: 'learning', label: '表达学习' },
         ],
@@ -61,11 +62,13 @@ export type SchemaPageDef = {
     skip?: readonly string[];
     advanced?: readonly string[];
     /**
-     * 麦麦 WebUI 里和这页相关的数据页（学到的表达、记忆图谱、提示词模板…）。那些是带审核、
-     * 批量操作的完整管理界面，桌面端不重做，运行中给个直达
+     * 和这页相关的数据页（学到的表达、记忆图谱、提示词模板…）。给 tab 的跳桌面端那一页；
+     * 还没搬进桌面端的给 path，运行中开麦麦 WebUI 的那一页
      */
-    links?: readonly { label: string; path: string }[];
+    links?: readonly MaiBotPageLink[];
 };
+
+export type MaiBotPageLink = { label: string; tab: string } | { label: string; path: string };
 
 // 分时段频率和按聊天的提示词是「按会话」的规则，归会话规则页；回复设置页只放全局的
 const RULE_FIELDS = [
@@ -83,7 +86,7 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
         // 适配器连上后会上报真实账号，这三项只在没上报时兜底，平时不用碰
         advanced: ['bot.platform', 'bot.qq_account', 'bot.platforms'],
         links: [
-            { label: '提示词模板', path: '/config/prompts' },
+            { label: '提示词模板', tab: 'prompts' },
             { label: '人物画像', path: '/resource/person' },
         ],
     },

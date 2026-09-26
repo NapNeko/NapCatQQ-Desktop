@@ -51,6 +51,7 @@ describe('resolveFrameworkUi', () => {
             'overview',
             'models',
             'persona',
+            'prompts',
             'memory',
             'learning',
             'chat',
@@ -61,10 +62,13 @@ describe('resolveFrameworkUi', () => {
             'connection',
             'advanced',
         ]);
-        // 插件页是商店，铺满内容区、不挂保存条；其余都是配置页
-        expect(ui?.fillPaneTabs.has('plugins')).toBe(true);
-        for (const t of tabs.filter((x) => x !== 'plugins')) expect(ui?.typedTabs.has(t)).toBe(true);
-        expect(ui?.typedTabs.has('plugins')).toBe(false);
+        // 插件商店、提示词这些页自己落盘，铺满内容区、不挂保存条；其余都是配置页
+        const ownSave = ['plugins', 'prompts'];
+        for (const t of ownSave) {
+            expect(ui?.fillPaneTabs.has(t)).toBe(true);
+            expect(ui?.typedTabs.has(t)).toBe(false);
+        }
+        for (const t of tabs.filter((x) => !ownSave.includes(x))) expect(ui?.typedTabs.has(t)).toBe(true);
         expect(ui?.tabForIssue('adapter/chat/group_list')).toBe('chat');
         expect(ui?.tabForIssue('bot/webui/port')).toBe('connection');
         expect(ui?.tabForIssue('bot/maim_message/ws_server_port')).toBe('connection');
