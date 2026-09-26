@@ -3,6 +3,11 @@
 use async_trait::async_trait;
 use ncd_traits::AppFrameworkError;
 
+use super::resources::MaiBotResourceDone;
+use super::resources::expression::{
+    self, MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
+};
+use super::resources::jargon::{self, MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery};
 use super::resources::prompts::{
     self, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotPromptTarget,
 };
@@ -89,6 +94,30 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         target: MaiBotPromptTarget<'_>,
         action: &MaiBotPromptAction,
     ) -> Result<MaiBotPromptFile, AppFrameworkError>;
+
+    async fn expressions(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotExpressionQuery,
+    ) -> Result<MaiBotExpressionPage, AppFrameworkError>;
+
+    async fn expression_overview(&self, session: &MaiBotSession) -> Result<MaiBotExpressionOverview, AppFrameworkError>;
+
+    async fn expression_action(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotExpressionAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError>;
+
+    async fn jargons(&self, session: &MaiBotSession, query: &MaiBotJargonQuery) -> Result<MaiBotJargonPage, AppFrameworkError>;
+
+    async fn jargon_overview(&self, session: &MaiBotSession) -> Result<MaiBotJargonOverview, AppFrameworkError>;
+
+    async fn jargon_action(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotJargonAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError>;
 }
 
 /// 直连本机回环 WebUI 的实现；`MaiBotAdapter` 用它
@@ -210,5 +239,41 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         action: &MaiBotPromptAction,
     ) -> Result<MaiBotPromptFile, AppFrameworkError> {
         prompts::act(target, action).await
+    }
+
+    async fn expressions(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotExpressionQuery,
+    ) -> Result<MaiBotExpressionPage, AppFrameworkError> {
+        expression::list(&client(session)?, query).await
+    }
+
+    async fn expression_overview(&self, session: &MaiBotSession) -> Result<MaiBotExpressionOverview, AppFrameworkError> {
+        expression::overview(&client(session)?).await
+    }
+
+    async fn expression_action(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotExpressionAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError> {
+        expression::act(&client(session)?, action).await
+    }
+
+    async fn jargons(&self, session: &MaiBotSession, query: &MaiBotJargonQuery) -> Result<MaiBotJargonPage, AppFrameworkError> {
+        jargon::list(&client(session)?, query).await
+    }
+
+    async fn jargon_overview(&self, session: &MaiBotSession) -> Result<MaiBotJargonOverview, AppFrameworkError> {
+        jargon::overview(&client(session)?).await
+    }
+
+    async fn jargon_action(
+        &self,
+        session: &MaiBotSession,
+        action: &MaiBotJargonAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError> {
+        jargon::act(&client(session)?, action).await
     }
 }

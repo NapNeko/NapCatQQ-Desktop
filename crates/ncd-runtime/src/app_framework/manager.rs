@@ -20,6 +20,8 @@ use ncd_appframework::{
     AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession, AstrBotSessionRule,
     KarinPluginInstalled, MaiBotAPIProvider, MaiBotChatSession, MaiBotMCPServerItemConfig,
+    MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
+    MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotResourceDone,
     MaiBotMcpStatus, MaiBotMcpTest, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
     MaiBotPromptTarget, MaiBotProviderCheck, MaiBotProviderModel, MaiBotProviderSource,
     MaiBotRuntimeApi, MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotSession, MaiBotStatsSummary,
@@ -2300,6 +2302,58 @@ impl AppManager {
         maibot_api(adapter.as_ref())?
             .prompt_action(place.target(), &action)
             .await
+    }
+
+    pub async fn maibot_expressions(
+        &self,
+        id: &AppInstanceId,
+        query: MaiBotExpressionQuery,
+    ) -> Result<MaiBotExpressionPage, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.expressions(&s, &query).await
+    }
+
+    pub async fn maibot_expression_overview(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotExpressionOverview, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.expression_overview(&s).await
+    }
+
+    pub async fn maibot_expression_action(
+        &self,
+        id: &AppInstanceId,
+        action: MaiBotExpressionAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.expression_action(&s, &action).await
+    }
+
+    pub async fn maibot_jargons(
+        &self,
+        id: &AppInstanceId,
+        query: MaiBotJargonQuery,
+    ) -> Result<MaiBotJargonPage, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.jargons(&s, &query).await
+    }
+
+    pub async fn maibot_jargon_overview(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotJargonOverview, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.jargon_overview(&s).await
+    }
+
+    pub async fn maibot_jargon_action(
+        &self,
+        id: &AppInstanceId,
+        action: MaiBotJargonAction,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.jargon_action(&s, &action).await
     }
 
     pub async fn list_config_documents(

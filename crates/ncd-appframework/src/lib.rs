@@ -48,6 +48,15 @@ pub use maibot::{
     MaiBotInstanceConfig, MaiBotIntegration, MaiBotListMode, maibot_manifest,
 };
 pub use maibot::api::{MaiBotProviderSource, MaiBotRuntimeApi, MaiBotSession};
+pub use maibot::resources::expression::{
+    MaiBotExpression, MaiBotExpressionAction, MaiBotExpressionFilter, MaiBotExpressionOverview,
+    MaiBotExpressionPage, MaiBotExpressionQuery,
+};
+pub use maibot::resources::jargon::{
+    MaiBotJargon, MaiBotJargonAction, MaiBotJargonFilter, MaiBotJargonOverview, MaiBotJargonPage,
+    MaiBotJargonQuery,
+};
+pub use maibot::resources::{MaiBotLearningChat, MaiBotResourceDone};
 pub use maibot::resources::prompts::{
     MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotPromptInfo, MaiBotPromptLanguage,
     MaiBotPromptTarget, MaiBotPromptVersion,

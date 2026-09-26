@@ -15,10 +15,12 @@ use ncd_runtime::{
     AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule, ComponentActionRequest,
     DeploymentTaskRequest, KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider,
-    MaiBotChatSession, MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest,
+    MaiBotChatSession, MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage,
+    MaiBotExpressionQuery, MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage,
+    MaiBotJargonQuery, MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest,
     MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotProviderCheck,
-    MaiBotProviderModel, MaiBotRuntimeStatus, MaiBotStatsSummary, join_webui_url,
-    run_app_plugin_task,
+    MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus, MaiBotStatsSummary,
+    join_webui_url, run_app_plugin_task,
 };
 use ncd_traits::AppFrameworkError;
 use tauri::State;
@@ -727,6 +729,82 @@ pub async fn maibot_prompt_action(
     state
         .app_manager
         .maibot_prompt_action(&AppInstanceId::new(instance_id), action)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_expressions(
+    instance_id: String,
+    query: MaiBotExpressionQuery,
+    state: State<'_, AppState>,
+) -> Result<MaiBotExpressionPage, AppConfigError> {
+    state
+        .app_manager
+        .maibot_expressions(&AppInstanceId::new(instance_id), query)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_expression_overview(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotExpressionOverview, AppConfigError> {
+    state
+        .app_manager
+        .maibot_expression_overview(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_expression_action(
+    instance_id: String,
+    action: MaiBotExpressionAction,
+    state: State<'_, AppState>,
+) -> Result<MaiBotResourceDone, AppConfigError> {
+    state
+        .app_manager
+        .maibot_expression_action(&AppInstanceId::new(instance_id), action)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_jargons(
+    instance_id: String,
+    query: MaiBotJargonQuery,
+    state: State<'_, AppState>,
+) -> Result<MaiBotJargonPage, AppConfigError> {
+    state
+        .app_manager
+        .maibot_jargons(&AppInstanceId::new(instance_id), query)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_jargon_overview(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotJargonOverview, AppConfigError> {
+    state
+        .app_manager
+        .maibot_jargon_overview(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_jargon_action(
+    instance_id: String,
+    action: MaiBotJargonAction,
+    state: State<'_, AppState>,
+) -> Result<MaiBotResourceDone, AppConfigError> {
+    state
+        .app_manager
+        .maibot_jargon_action(&AppInstanceId::new(instance_id), action)
         .await
         .map_err(AppFrameworkError::into_config_error)
 }
