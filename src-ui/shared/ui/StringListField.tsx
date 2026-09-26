@@ -56,6 +56,8 @@ export const StringListField: React.FC<StringListFieldProps> = ({
     };
 
     const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+        // 输入法还在选字：这下回车是上屏，不是添加
+        if (e.nativeEvent.isComposing) return;
         if (e.key === 'Enter' || e.key === ',' || e.key === '，') {
             if (draft.trim()) {
                 e.preventDefault();
