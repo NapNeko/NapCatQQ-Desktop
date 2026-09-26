@@ -3,7 +3,7 @@
 // 内部仍用 vertical / grid-2 排字段；连接列表等复杂块也包在这一层里。
 // 父级 Tab 决定整体 padding，本组件不画外框卡片。
 
-import { forwardRef, type HTMLAttributes, type ReactNode } from 'react';
+import { Children, forwardRef, type HTMLAttributes, type ReactNode } from 'react';
 import { cn } from '../utils/cn';
 
 export interface FormSectionProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
@@ -47,18 +47,21 @@ export const FormSection = forwardRef<HTMLElement, FormSectionProps>(
                     )}
                 </div>
             )}
-            <div className="box-border min-w-0 w-full max-w-full border-l border-border-subtle/80 pl-4 sm:pl-5">
-                <div
-                    className={cn(
-                        layout === 'vertical' && 'flex min-w-0 w-full flex-col gap-3',
-                        layout === 'grid-2' &&
-                            'grid min-w-0 w-full grid-cols-1 gap-3 sm:grid-cols-2',
-                        layout === 'none' && 'min-w-0 w-full max-w-full',
-                    )}
-                >
-                    {children}
+            {/* 只有标题的小节（内容全收起了）不画空的引导线 */}
+            {Children.toArray(children).length > 0 && (
+                <div className="box-border min-w-0 w-full max-w-full border-l border-border-subtle/80 pl-4 sm:pl-5">
+                    <div
+                        className={cn(
+                            layout === 'vertical' && 'flex min-w-0 w-full flex-col gap-3',
+                            layout === 'grid-2' &&
+                                'grid min-w-0 w-full grid-cols-1 gap-3 sm:grid-cols-2',
+                            layout === 'none' && 'min-w-0 w-full max-w-full',
+                        )}
+                    >
+                        {children}
+                    </div>
                 </div>
-            </div>
+            )}
         </section>
     ),
 );

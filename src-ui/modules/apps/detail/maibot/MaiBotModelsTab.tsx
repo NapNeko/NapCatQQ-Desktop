@@ -9,7 +9,6 @@ import {
     PopoverClose,
     PopoverContent,
     PopoverTrigger,
-    Switch,
 } from '../../../../shared/ui';
 import { ActionMotionIcon } from '../../../../shared/ui/motion';
 import { ConfigForm } from '../karin/configLayout';
@@ -31,10 +30,20 @@ import type {
     MaiBotModelConfigFile,
     MaiBotModelInfo,
 } from '../../../../core/ipc/types';
-import { ModelCard, ProviderCard, TaskCard } from './maibotModelCards';
+import {
+    MODEL_ADVANCED_FIELDS,
+    ModelCard,
+    PROVIDER_ADVANCED_FIELDS,
+    ProviderCard,
+    TASK_ADVANCED_FIELDS,
+    TaskCard,
+} from './maibotModelCards';
 import { ModelIdPicker, ProviderProbe } from './maibotProbes';
+import { AdvancedToggle, useRevealOnError, type AdvancedSections } from './advancedToggle';
 
 type TaskKey = (typeof MAIBOT_TASK_KEYS)[number];
+
+const isTaskKey = (k: string | undefined): k is TaskKey => (MAIBOT_TASK_KEYS as readonly string[]).includes(k ?? '');
 
 const TASKS: Readonly<Record<TaskKey, { title: string; hint: string }>> = {
     replyer: { title: '回复', hint: '影响麦麦说话的表现' },
@@ -58,6 +67,9 @@ const TASK_ORDER: readonly TaskKey[] = [
 
 const TASK_NODE = nodeAt(MODEL_SCHEMA, ['model_task_config']);
 const MODEL_NODE = nodeAt(MODEL_SCHEMA, ['models']);
+
+// 三个小节各自的「高级选项」展开状态
+const SECTION = { providers: 'models/providers', models: 'models/models', tasks: 'models/tasks' } as const;
 
 const SETUP_TEXT: Record<Exclude<MaiBotModelSetupIssue, null>, string> = {
     no_provider: '还没有提供商。先加一个，填上接口地址和 API Key。',
@@ -118,16 +130,35 @@ export const MaiBotModelsTab: React.FC<{
     onChange: (next: MaiBotInstanceConfig) => void;
     errors: Record<string, string>;
     disabled?: boolean;
-    showAdvanced: boolean;
-    onShowAdvanced: (next: boolean) => void;
+    advancedSections: AdvancedSections;
     instanceId: string;
     /** 麦麦在跑且 WebUI 应答了：测连接、拉模型列表要走它 */
     live: boolean;
-}> = ({ config, onChange, errors, disabled, showAdvanced, onShowAdvanced, instanceId, live }) => {
+}> = ({ config, onChange, errors, disabled, advancedSections, instanceId, live }) => {
     const models = config.models;
     const setModels = (next: MaiBotModelConfigFile) => onChange({ ...config, models: next });
     const issue = maibotModelSetupIssue(models);
     const providerNames = models.api_providers.map((p) => p.name).filter(Boolean);
+
+    const open = {
+        providers: advancedSections.isOpen(SECTION.providers),
+        models: advancedSections.isOpen(SECTION.models),
+        tasks: advancedSections.isOpen(SECTION.tasks),
+    };
+    // 收起时不出的任务：标了高级、又还没挑模型的
+    const taskHidden = (k: TaskKey) =>
+        !!fieldOf(TASK_NODE, k)?.advanced && models.model_task_config[k].model_list.length === 0;
+
+    // 错误路径形如 models/api_providers/0/timeout、models/model_task_config/vlm/hard_timeout
+    const errPaths = Object.keys(errors).map((k) => k.split('/'));
+    const errOn = (list: string, fields: readonly string[]) =>
+        errPaths.some((p) => p[1] === list && fields.includes(p[3] ?? ''));
+    const hiddenTaskErr = errPaths.some((p) => p[1] === 'model_task_config' && isTaskKey(p[2]) && taskHidden(p[2]));
+    const revealed: string[] = [];
+    if (errOn('api_providers', PROVIDER_ADVANCED_FIELDS)) revealed.push(SECTION.providers);
+    if (errOn('models', MODEL_ADVANCED_FIELDS)) revealed.push(SECTION.models);
+    if (errOn('model_task_config', TASK_ADVANCED_FIELDS) || hiddenTaskErr) revealed.push(SECTION.tasks);
+    useRevealOnError(advancedSections, revealed);
 
     const setProvider = (i: number, p: MaiBotAPIProvider) =>
         setModels({ ...models, api_providers: models.api_providers.map((x, j) => (j === i ? p : x)) });
@@ -153,37 +184,38 @@ export const MaiBotModelsTab: React.FC<{
         setModels(follow && m.name ? renameMaiBotModel(updated, m.name, identifier) : updated);
     };
 
-    const tasks = TASK_ORDER.filter(
-        (k) => showAdvanced || !fieldOf(TASK_NODE, k)?.advanced || models.model_task_config[k].model_list.length > 0,
-    );
+    const tasks = TASK_ORDER.filter((k) => open.tasks || !taskHidden(k));
 
     return (
         <ConfigForm>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                    {issue && (
-                        <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2.5 text-[13px] leading-relaxed text-text">
-                            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
-                            <span>{SETUP_TEXT[issue]}</span>
-                        </div>
-                    )}
+            {issue && (
+                <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2.5 text-[13px] leading-relaxed text-text">
+                    <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
+                    <span>{SETUP_TEXT[issue]}</span>
                 </div>
-                <Switch label="显示高级选项" checked={showAdvanced} onCheckedChange={onShowAdvanced} />
-            </div>
+            )}
 
             <FormSection
                 title="提供商"
                 description="模型服务的接口地址和 Key"
                 actions={
-                    <PresetMenu
-                        disabled={disabled}
-                        onPick={(preset) =>
-                            setModels({
-                                ...models,
-                                api_providers: [...models.api_providers, newMaiBotProvider(models.api_providers, preset)],
-                            })
-                        }
-                    />
+                    <>
+                        {models.api_providers.length > 0 && (
+                            <AdvancedToggle
+                                open={open.providers}
+                                onToggle={() => advancedSections.toggle(SECTION.providers)}
+                            />
+                        )}
+                        <PresetMenu
+                            disabled={disabled}
+                            onPick={(preset) =>
+                                setModels({
+                                    ...models,
+                                    api_providers: [...models.api_providers, newMaiBotProvider(models.api_providers, preset)],
+                                })
+                            }
+                        />
+                    </>
                 }
             >
                 {errors['models/api_providers'] && <p className="text-2xs text-danger">{errors['models/api_providers']}</p>}
@@ -194,7 +226,7 @@ export const MaiBotModelsTab: React.FC<{
                         path={`models/api_providers/${i}`}
                         errors={errors}
                         disabled={disabled}
-                        showAdvanced={showAdvanced}
+                        showAdvanced={open.providers}
                         onChange={(next) => setProvider(i, next)}
                         onRename={(from, to) => setModels(renameMaiBotProvider(models, from, to))}
                         onRemove={() =>
@@ -225,15 +257,20 @@ export const MaiBotModelsTab: React.FC<{
                 title="模型"
                 description="每个模型挂在一个提供商下，名字给下面的任务挑"
                 actions={
-                    <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={disabled}
-                        onClick={() => setModels({ ...models, models: [...models.models, freshModel(models)] })}
-                    >
-                        <ActionMotionIcon icon={Plus} size={13} />
-                        加模型
-                    </Button>
+                    <>
+                        {models.models.length > 0 && (
+                            <AdvancedToggle open={open.models} onToggle={() => advancedSections.toggle(SECTION.models)} />
+                        )}
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={disabled}
+                            onClick={() => setModels({ ...models, models: [...models.models, freshModel(models)] })}
+                        >
+                            <ActionMotionIcon icon={Plus} size={13} />
+                            加模型
+                        </Button>
+                    </>
                 }
             >
                 {errors['models/models'] && <p className="text-2xs text-danger">{errors['models/models']}</p>}
@@ -245,7 +282,7 @@ export const MaiBotModelsTab: React.FC<{
                         errors={errors}
                         providers={providerNames}
                         disabled={disabled}
-                        showAdvanced={showAdvanced}
+                        showAdvanced={open.models}
                         onChange={(next) => setModel(i, next)}
                         onRename={(from, to) => setModels(renameMaiBotModel(models, from, to))}
                         onRemove={() => setModels({ ...models, models: models.models.filter((_, j) => j !== i) })}
@@ -264,7 +301,11 @@ export const MaiBotModelsTab: React.FC<{
                 ))}
             </FormSection>
 
-            <FormSection title="任务分配" description="每个任务从上面的模型里挑，可以挑多个轮换">
+            <FormSection
+                title="任务分配"
+                description="每个任务从上面的模型里挑，可以挑多个轮换"
+                actions={<AdvancedToggle open={open.tasks} onToggle={() => advancedSections.toggle(SECTION.tasks)} />}
+            >
                 {tasks.map((k) => (
                     <TaskCard
                         key={k}
@@ -276,7 +317,7 @@ export const MaiBotModelsTab: React.FC<{
                         errors={errors}
                         models={models.models}
                         disabled={disabled}
-                        showAdvanced={showAdvanced}
+                        showAdvanced={open.tasks}
                         onChange={(next) =>
                             setModels({ ...models, model_task_config: { ...models.model_task_config, [k]: next } })
                         }

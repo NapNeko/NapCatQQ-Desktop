@@ -15,6 +15,7 @@ import {
 import { ActionMotionIcon } from '../../../../shared/ui/motion';
 import { cn } from '../../../../shared/utils/cn';
 import {
+    fieldOf,
     getIn,
     newItemFor,
     setIn,
@@ -120,19 +121,44 @@ export function anyVisible(ctx: SchemaCtx, path: readonly string[], node: UiNode
     });
 }
 
-/** 一节里有没有收起来的高级字段（决定页头要不要给「显示高级选项」开关） */
-export function hasAdvanced(
-    node: UiNode | undefined,
-    path: readonly string[] = [],
-    extra?: ReadonlySet<string>,
-): boolean {
+/**
+ * 这一节的校验错误里有没有落在高级字段上的（字段本身、它所在的列表或子分组标了高级都算）。
+ * 错误路径和后端一致：前缀 / 小节路径 / 字段，列表条目带下标
+ */
+export function advancedHasError(ctx: SchemaCtx, path: readonly string[], node: UiNode): boolean {
+    const base = `${ctx.prefix}/${path.join('/')}/`;
+    return Object.keys(ctx.errors).some((key) => {
+        if (!key.startsWith(base)) return false;
+        let cur: UiNode | undefined = node;
+        const at = [...path];
+        for (const seg of key.slice(base.length).split('/')) {
+            if (!/^\d+$/.test(seg)) {
+                const f = fieldOf(cur, seg);
+                const key = shapeKey(at, seg);
+                if (!f || f.hidden || ctx.skip?.has(key)) return false;
+                if (f.advanced || ctx.advanced?.has(key)) return true;
+                cur = cur?.nested?.[seg];
+                if (cur?.uiAdvanced) return true;
+            }
+            at.push(seg);
+        }
+        return false;
+    });
+}
+
+/**
+ * 一节里有没有收起来的高级字段（决定小节标题要不要给「高级选项」）。
+ * 这页不出的字段不算，不然点开什么也不多
+ */
+export function hasAdvanced(ctx: SchemaCtx, path: readonly string[], node: UiNode | undefined): boolean {
     if (!node) return false;
     return node.fields.some((f) => {
-        if (f.hidden) return false;
         const key = shapeKey(path, f.name);
-        if (f.advanced || extra?.has(key)) return true;
+        if (f.hidden || ctx.skip?.has(key)) return false;
+        if (f.advanced || ctx.advanced?.has(key)) return true;
         const sub = node.nested?.[f.name];
-        return !!sub && (!!sub.uiAdvanced || hasAdvanced(sub, [...path, f.name], extra));
+        if (!sub || ctx.widgets?.[key]) return false;
+        return !!sub.uiAdvanced || hasAdvanced(ctx, [...path, f.name], sub);
     });
 }
 

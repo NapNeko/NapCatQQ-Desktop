@@ -13,6 +13,35 @@ import { WIDE } from './SchemaForm';
 
 type Errors = Record<string, string>;
 
+// 三种卡片各自收在「高级选项」下的字段。模型页靠它们判断错误落在收起的字段上、要展开小节，
+// 往卡片的高级块里加字段时这里跟着加
+export const PROVIDER_ADVANCED_FIELDS: readonly string[] = [
+    'auth_type',
+    'model_list_endpoint',
+    'auth_header_name',
+    'auth_header_prefix',
+    'auth_query_name',
+    'reasoning_parse_mode',
+    'tool_argument_parse_mode',
+    'max_retry',
+    'timeout',
+    'retry_interval',
+    'organization',
+    'project',
+    'default_headers',
+    'default_query',
+];
+export const MODEL_ADVANCED_FIELDS: readonly string[] = [
+    'price_in',
+    'price_out',
+    'cache',
+    'cache_price_in',
+    'send_temperature',
+    'force_stream_mode',
+    'extra_params',
+];
+export const TASK_ADVANCED_FIELDS: readonly string[] = ['slow_threshold', 'hard_timeout'];
+
 /** 文件里写了列表外的值（插件扩展的接口类型之类）也得选得中，不然一渲染就像被清掉了 */
 function withCurrent(items: readonly SelectItem[], value: string): SelectItem[] {
     return !value || items.some((i) => i.value === value) ? [...items] : [...items, { value, label: value }];

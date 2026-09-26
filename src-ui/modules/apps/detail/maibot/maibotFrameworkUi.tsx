@@ -1,7 +1,7 @@
 // MaiBot 详情页装配：所有页吃同一份类型化配置（两份主配置 + 适配器名单），改动走底部保存条。
 // 模型页和聊天名单、连接是手写的；其余配置页照 maibotPages 的定义由 schema 铺出来。
 
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { TabsContent } from '../../../../shared/ui';
 import { maibotChatDropsEverything, maibotModelSetupIssue } from '../../../../core/domain/apps/maibotConfig';
 import { useAppInstances } from '../../../../hooks/apps/useAppInstances';
@@ -11,6 +11,7 @@ import {
     useMaiBotStatus,
 } from '../../../../hooks/apps/useMaiBotRuntime';
 import { McpStatusPanel } from './maibotProbes';
+import { useAdvancedSections } from './advancedToggle';
 import { NoneBot2StoreTab } from '../nonebot2/NoneBot2StoreTab';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import { useMaiBotConfigForm } from '../useMaiBotConfigForm';
@@ -32,8 +33,7 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
     const form = useMaiBotConfigForm(instance.id, true, instance.display_name);
     useSyncFrameworkSaveHandle(onSaveHandle, form);
     const apps = useAppInstances();
-    // 高级选项开关整个详情页共用：在模型页打开了，切到别的页还开着
-    const [showAdvanced, setShowAdvanced] = useState(false);
+    const advancedSections = useAdvancedSections();
 
     // 运行期：WebUI 应答了才去拉会话、MCP 状态
     const running = instance.state === 'running';
@@ -88,8 +88,7 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                 <MaiBotModelsTab
                     config={cfg}
                     {...common}
-                    showAdvanced={showAdvanced}
-                    onShowAdvanced={setShowAdvanced}
+                    advancedSections={advancedSections}
                     instanceId={instance.id}
                     live={live}
                 />
@@ -99,11 +98,11 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
             {Object.entries(MAIBOT_SCHEMA_PAGES).map(([tab, page]) =>
                 pane(tab, (cfg) => (
                     <MaiBotSchemaTab
+                        tab={tab}
                         page={page}
                         config={cfg}
                         {...common}
-                        showAdvanced={showAdvanced}
-                        onShowAdvanced={setShowAdvanced}
+                        advancedSections={advancedSections}
                         chatTargets={live ? sessions.data : undefined}
                         live={live}
                         onOpenWebUi={(path) => void apps.openWebUi(instance.id, path)}
