@@ -19,6 +19,10 @@ export type VisibleStoreItem = {
     installed: boolean;
     enabled: boolean;
     locked: boolean;
+    /** 为什么不能动：对接着的 OneBot 适配器、桌面端管着的 MaiBot NapCat 适配器 */
+    lockReason?: string;
+    /** 桌面端自己装、自己写配置的：连更新也不给，版本跟着应用端本体走 */
+    managed?: boolean;
     official: boolean;
     version?: string;
     timeLabel: string | null;
@@ -27,6 +31,17 @@ export type VisibleStoreItem = {
 };
 
 const ONEBOT_V11 = 'nonebot.adapters.onebot.v11';
+
+/** 后端标了 locked 的是桌面端自己管的；NoneBot 的 OneBot 适配器是对接着才不让关 */
+function lockOf(
+    id: string,
+    installed: AppStoreInstalled | undefined,
+    linked: boolean,
+): Pick<VisibleStoreItem, 'locked' | 'lockReason' | 'managed'> {
+    if (installed?.locked) return { locked: true, lockReason: '桌面端管理', managed: true };
+    if (linked && id === ONEBOT_V11) return { locked: true, lockReason: '已对接不能关' };
+    return { locked: false };
+}
 
 export function storeOpErrorCopy(raw: string): string {
     const stripped = raw
@@ -132,6 +147,7 @@ export function overlayInstalledFromTasks(
                 flavor: 'pypi',
                 enabled: true,
                 package: '',
+                locked: false,
             });
         }
     }
@@ -178,7 +194,7 @@ export function filterNoneBot2Store(args: {
                 authorName: entry.author,
                 installed: !!hit,
                 enabled: hit?.enabled ?? false,
-                locked: linked && entry.id === ONEBOT_V11,
+                ...lockOf(entry.id, hit, linked),
                 official: entry.is_official,
                 version: hit?.version,
                 timeLabel: timeLabelFor(entry, !!hit, hit?.version),
@@ -202,7 +218,7 @@ export function filterNoneBot2Store(args: {
             authorName: '',
             installed: true,
             enabled: item.enabled,
-            locked: linked && item.id === ONEBOT_V11,
+            ...lockOf(item.id, item, linked),
             official: false,
             version: item.version,
             timeLabel: item.version ? `v${item.version}` : '已装',

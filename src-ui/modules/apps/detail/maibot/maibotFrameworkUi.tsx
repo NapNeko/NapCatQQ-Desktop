@@ -11,6 +11,7 @@ import {
     useMaiBotStatus,
 } from '../../../../hooks/apps/useMaiBotRuntime';
 import { McpStatusPanel } from './maibotProbes';
+import { NoneBot2StoreTab } from '../nonebot2/NoneBot2StoreTab';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import { useMaiBotConfigForm } from '../useMaiBotConfigForm';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
@@ -24,7 +25,8 @@ import { MaiBotSchemaTab } from './MaiBotSchemaTab';
 import { MAIBOT_NAV, MAIBOT_SCHEMA_PAGES, maibotTabForIssue } from './maibotPages';
 
 const TYPED_TABS = new Set(['overview', 'models', 'chat', 'connection', ...Object.keys(MAIBOT_SCHEMA_PAGES)]);
-const FILL_PANE = new Set<string>();
+// 插件页是商店，不是表单：铺满内容区、不挂保存条
+const FILL_PANE = new Set(['plugins']);
 
 function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
     const form = useMaiBotConfigForm(instance.id, true, instance.display_name);
@@ -68,6 +70,9 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
 
     return (
         <>
+            <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+                <NoneBot2StoreTab instance={instance} resource="plugin" />
+            </TabsContent>
             {pane('overview', (cfg) => (
                 <MaiBotOverviewTab
                     instance={instance}

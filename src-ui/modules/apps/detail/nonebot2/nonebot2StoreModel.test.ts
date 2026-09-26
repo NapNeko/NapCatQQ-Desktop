@@ -113,6 +113,7 @@ describe('filterNoneBot2Store', () => {
                     flavor: 'pypi',
                     enabled: true,
                     package: 'nonebot-adapter-onebot',
+                    locked: false,
                 },
             ],
             query: '',
@@ -121,8 +122,34 @@ describe('filterNoneBot2Store', () => {
             linked: true,
         });
         expect(rows).toHaveLength(2);
-        expect(rows.find((r) => r.id.endsWith('v11'))?.locked).toBe(true);
-        expect(rows.find((r) => r.id.endsWith('v11'))?.installed).toBe(true);
+        const v11 = rows.find((r) => r.id.endsWith('v11'));
+        expect(v11?.locked).toBe(true);
+        expect(v11?.lockReason).toBe('已对接不能关');
+        expect(v11?.managed).toBeFalsy();
+        expect(v11?.installed).toBe(true);
+    });
+
+    it('rows the backend marks locked are desktop-managed: no toggle, uninstall or update', () => {
+        const rows = filterNoneBot2Store({
+            resource: 'plugin',
+            entries: [],
+            installed: [
+                {
+                    id: 'maibot-team.napcat-adapter',
+                    name: 'Napcat 适配器',
+                    resource: 'plugin',
+                    flavor: 'git',
+                    enabled: true,
+                    package: '',
+                    locked: true,
+                },
+            ],
+            query: '',
+            kindFilter: 'all',
+            enabledAdapterModules: [],
+            linked: false,
+        });
+        expect(rows[0]).toMatchObject({ locked: true, managed: true, lockReason: '桌面端管理' });
     });
 
     it('shows plugin catalog without search', () => {
@@ -137,6 +164,7 @@ describe('filterNoneBot2Store', () => {
                     flavor: 'pypi',
                     enabled: true,
                     package: 'nonebot-plugin-foo',
+                    locked: false,
                 },
             ],
             query: '',

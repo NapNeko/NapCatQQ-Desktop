@@ -118,7 +118,7 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         link_modes: ['forward_ws'],
         component_id: 'maibot',
         runtime_component_ids: ['uv'],
-        store_resources: [],
+        store_resources: ['plugin'],
         has_install_renderer: false,
         webui_auth: 'key',
         terms: [
@@ -655,6 +655,18 @@ export const mockAppFrameworkApi = {
                 },
             ]);
         }
+        if (inst.framework_id === 'maibot') {
+            const dir = pluginName.replaceAll('.', '_');
+            return withMockDelay([
+                {
+                    id: `plugin:${dir}`,
+                    label: `${dir}/config.toml`,
+                    rel_path: `plugins/${dir}/config.toml`,
+                    format: 'toml',
+                    hot_reload: true,
+                },
+            ]);
+        }
         const dir = pluginName.replaceAll('/', '-');
         return withMockDelay([
             {
@@ -776,6 +788,9 @@ export const mockAppFrameworkApi = {
         }
         if (frameworkId === 'astrbot' && resource === 'plugin') {
             return withMockDelay(mockAstrBotPlugins.slice());
+        }
+        if (frameworkId === 'maibot' && resource === 'plugin') {
+            return withMockDelay(mockMaiBotPlugins.slice());
         }
         return withMockDelay([]);
     },
@@ -1177,56 +1192,121 @@ const mockAstrBotPlugins: AppStoreMarketEntry[] = [
     },
 ];
 
+const maibotMarketEntry = (
+    id: string,
+    name: string,
+    description: string,
+    author: string,
+    repo: string,
+): AppStoreMarketEntry => ({
+    resource: 'plugin',
+    id,
+    name,
+    description,
+    version: '1.0.0',
+    author,
+    homepage: `https://github.com/${repo}`,
+    time: '',
+    package: `https://github.com/${repo}`,
+    module_name: '',
+    flavor: 'git',
+    is_official: id.startsWith('maibot-team.'),
+    valid: true,
+    tags: [],
+    supported_adapters: [],
+    authors: [],
+    repos: [],
+    files: [],
+    allow_build: [],
+});
+
+const mockMaiBotPlugins: AppStoreMarketEntry[] = [
+    maibotMarketEntry('maibot-team.napcat-adapter', 'Napcat_Adapter 适配器', '插件版 Napcat 适配器，提供与 Napcat 的连接功能。', 'MaiBot Team', 'Mai-with-u/MaiBot-Napcat-Adapter'),
+    maibotMarketEntry('sengokucola.mute-plugin', '群聊禁言管理插件', '智能禁言和手动禁言命令', 'SengokuCola', 'SengokuCola/MutePlugin'),
+    maibotMarketEntry('a0000xz.maibot-tarots-plugin', '塔罗牌插件', '抽一张塔罗牌，麦麦来解读', 'A0000Xz', 'A0000Xz/MaiBot-Tarots-Plugin'),
+];
+
 const mockStoreInstalled = new Map<string, AppStoreInstalled[]>();
 
 function storeKey(instanceId: string, resource: AppStoreResource): string {
     return `${instanceId}:${resource}`;
 }
 
+function seedStoreInstalled(framework: string | undefined, resource: AppStoreResource): AppStoreInstalled[] {
+    if (framework === 'maibot') {
+        return resource === 'plugin'
+            ? [
+                  {
+                      id: 'maibot-team.napcat-adapter',
+                      name: 'Napcat_Adapter 适配器',
+                      resource: 'plugin',
+                      flavor: 'git',
+                      version: '1.4.0',
+                      enabled: true,
+                      package: 'https://github.com/Mai-with-u/MaiBot-Napcat-Adapter',
+                      locked: true,
+                  },
+                  {
+                      id: 'maibot-team.hello-world-plugin',
+                      name: 'Hello World 示例插件',
+                      resource: 'plugin',
+                      flavor: 'git',
+                      version: '2.0.0',
+                      enabled: false,
+                      package: '',
+                      locked: false,
+                  },
+              ]
+            : [];
+    }
+    if (resource === 'adapter') {
+        return framework === 'astrbot'
+            ? []
+            : [
+                  {
+                      id: 'nonebot.adapters.onebot.v11',
+                      name: 'OneBot V11',
+                      resource: 'adapter',
+                      flavor: 'pypi',
+                      version: '2.4.6',
+                      enabled: true,
+                      package: 'nonebot-adapter-onebot',
+                      locked: false,
+                  },
+              ];
+    }
+    return framework === 'astrbot'
+        ? [
+              {
+                  id: 'soulter/helloworld',
+                  name: 'helloworld',
+                  resource: 'plugin',
+                  flavor: 'git',
+                  version: '1.2.0',
+                  enabled: true,
+                  package: 'https://github.com/Soulter/helloworld',
+                  locked: false,
+              },
+          ]
+        : [
+              {
+                  id: 'nonebot_plugin_status',
+                  name: 'Status',
+                  resource: 'plugin',
+                  flavor: 'pypi',
+                  version: '0.9.0',
+                  enabled: true,
+                  package: 'nonebot-plugin-status',
+                  locked: false,
+              },
+          ];
+}
+
 function mockStoreInstalledFor(instanceId: string, resource: AppStoreResource): AppStoreInstalled[] {
     const key = storeKey(instanceId, resource);
     if (!mockStoreInstalled.has(key)) {
         const inst = instances.find((i) => i.id === instanceId);
-        mockStoreInstalled.set(
-            key,
-            resource === 'adapter'
-                ? inst?.framework_id === 'astrbot'
-                    ? []
-                    : [
-                          {
-                              id: 'nonebot.adapters.onebot.v11',
-                              name: 'OneBot V11',
-                              resource: 'adapter',
-                              flavor: 'pypi',
-                              version: '2.4.6',
-                              enabled: true,
-                              package: 'nonebot-adapter-onebot',
-                          },
-                      ]
-                : inst?.framework_id === 'astrbot'
-                  ? [
-                        {
-                            id: 'soulter/helloworld',
-                            name: 'helloworld',
-                            resource: 'plugin',
-                            flavor: 'git',
-                            version: '1.2.0',
-                            enabled: true,
-                            package: 'https://github.com/Soulter/helloworld',
-                        },
-                    ]
-                  : [
-                        {
-                            id: 'nonebot_plugin_status',
-                            name: 'Status',
-                            resource: 'plugin',
-                            flavor: 'pypi',
-                            version: '0.9.0',
-                            enabled: true,
-                            package: 'nonebot-plugin-status',
-                        },
-                    ],
-        );
+        mockStoreInstalled.set(key, seedStoreInstalled(inst?.framework_id, resource));
     }
     return mockStoreInstalled.get(key) ?? [];
 }
@@ -1250,6 +1330,7 @@ function applyMockStoreOp(
     const market = [
         ...(resource === 'adapter' ? mockNoneBotAdapters : mockNoneBotPlugins),
         ...mockAstrBotPlugins,
+        ...mockMaiBotPlugins,
     ].find((e) => e.id === pluginName || e.name === pluginName);
     mockStoreInstalled.set(key, [
         ...current,
@@ -1261,6 +1342,7 @@ function applyMockStoreOp(
             version: '1.0.0',
             enabled: true,
             package: market?.package ?? '',
+            locked: false,
         },
     ]);
 }

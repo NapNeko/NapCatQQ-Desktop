@@ -24,7 +24,14 @@ export const MAIBOT_NAV: readonly FrameworkNavGroup[] = [
             { value: 'rules', label: '会话规则' },
         ],
     },
-    { id: 'extend', label: '扩展', items: [{ value: 'mcp', label: 'MCP' }] },
+    {
+        id: 'extend',
+        label: '扩展',
+        items: [
+            { value: 'plugins', label: '插件' },
+            { value: 'mcp', label: 'MCP' },
+        ],
+    },
     {
         id: 'instance',
         label: '实例',

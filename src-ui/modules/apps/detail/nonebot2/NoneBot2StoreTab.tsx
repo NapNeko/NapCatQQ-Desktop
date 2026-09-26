@@ -335,7 +335,12 @@ const StoreCard: React.FC<{
                                     </button>
                                 </PopoverClose>
                                 <PopoverClose asChild>
-                                    <button type="button" className={menuItem} disabled={busy} onClick={onUpdate}>
+                                    <button
+                                        type="button"
+                                        className={menuItem}
+                                        disabled={busy || row.managed}
+                                        onClick={onUpdate}
+                                    >
                                         更新
                                     </button>
                                 </PopoverClose>
@@ -381,7 +386,9 @@ const StoreCard: React.FC<{
                         {row.enabled ? '已启用' : '已禁用'}
                     </Badge>
                 ) : null}
-                {row.locked ? <span className="text-2xs text-text-tertiary">已对接不能关</span> : null}
+                {row.locked ? (
+                    <span className="text-2xs text-text-tertiary">{row.lockReason ?? '已对接不能关'}</span>
+                ) : null}
             </div>
         </article>
     );
