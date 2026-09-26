@@ -159,6 +159,7 @@
      "type": "string",
      "label": "备用主平台",
      "description": "适配器没有上报身份时使用的备用主平台，例如 qq。",
+     "default": "",
      "x-widget": "input",
      "x-row": "bot-platform-account"
     },
@@ -167,6 +168,7 @@
      "type": "string",
      "label": "备用 QQ 账号",
      "description": "适配器没有上报 QQ 身份时使用的备用账号 ID。",
+     "default": "",
      "x-widget": "input",
      "x-row": "bot-platform-account"
     },
@@ -185,6 +187,7 @@
      "type": "string",
      "label": "机器人昵称",
      "description": "麦麦显示和自称时使用的名字。",
+     "default": "麦麦",
      "x-widget": "input"
     },
     {
@@ -211,6 +214,7 @@
      "type": "string",
      "label": "人格设定",
      "description": "麦麦的人格和身份设定，建议简短描述她是谁、是什么性格。",
+     "default": "是一个大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。",
      "x-widget": "textarea",
      "x-textarea-rows": 1,
      "x-description-display": "icon"
@@ -220,6 +224,7 @@
      "type": "string",
      "label": "行为风格",
      "description": "Planner 使用的行动准则，例如何时参与聊天、如何观察局面以及何时保持安静。",
+     "default": "是大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。不会没话题硬找话题，",
      "x-widget": "textarea",
      "x-textarea-rows": 1,
      "x-description-display": "icon"
@@ -229,6 +234,7 @@
      "type": "string",
      "label": "表达风格",
      "description": "麦麦平时说话的风格，例如简短、温和、吐槽或正式。",
+     "default": "你的风格平淡简短，可以参考贴吧的回复风格。不滥用比喻或者生硬句子。视情况省略主语或者进行倒装，风格较为随意。",
      "x-widget": "textarea",
      "x-textarea-rows": 1,
      "x-description-display": "icon"
@@ -249,6 +255,7 @@
      "type": "number",
      "label": "临时风格注入概率",
      "description": "随机启用备用风格的概率；0 表示不随机切换。",
+     "default": 0,
      "minValue": 0,
      "maxValue": 1,
      "step": 0.1,
@@ -268,6 +275,7 @@
      "type": "integer",
      "label": "群聊上下文",
      "description": "群聊回复时参考的最近消息数量；越大越懂上下文，也更耗模型。",
+     "default": 40,
      "x-widget": "input",
      "x-row": "chat-context-controls"
     },
@@ -276,6 +284,7 @@
      "type": "integer",
      "label": "私聊上下文",
      "description": "私聊回复时参考的最近消息数量。",
+     "default": 60,
      "x-widget": "input",
      "x-row": "chat-context-controls"
     },
@@ -284,6 +293,7 @@
      "type": "boolean",
      "label": "优化上下文",
      "description": "压缩部分上下文，减少模型消耗；一般建议开启。",
+     "default": true,
      "x-widget": "switch",
      "x-row": "chat-context-controls"
     },
@@ -292,6 +302,7 @@
      "type": "boolean",
      "label": "聊天回想",
      "description": "打开后会主动召回最近聊天发生的事情。",
+     "default": true,
      "x-widget": "switch",
      "x-row": "chat-recall-controls"
     },
@@ -300,6 +311,7 @@
      "type": "integer",
      "label": "聊天回想保留数",
      "description": "最多保留多少条聊天回想；设为 0 表示不保留。",
+     "default": 10,
      "minValue": 0,
      "x-widget": "input",
      "x-row": "chat-recall-controls"
@@ -328,6 +340,7 @@
        "type": "number",
        "label": "群聊频率",
        "description": "群聊里麦麦主动说话的频率；越小越安静。",
+       "default": 1,
        "minValue": 0,
        "maxValue": 1,
        "step": 0.001,
@@ -339,6 +352,7 @@
        "type": "number",
        "label": "私聊频率",
        "description": "私聊里麦麦主动说话的频率；越小越安静。",
+       "default": 1,
        "minValue": 0,
        "maxValue": 1,
        "step": 0.001,
@@ -350,6 +364,7 @@
        "type": "boolean",
        "label": "提及必回复",
        "description": "开启后，只要消息提到麦麦名字就更容易回复。",
+       "default": false,
        "x-widget": "switch",
        "x-row": "reply-switches"
       },
@@ -358,6 +373,7 @@
        "type": "boolean",
        "label": "At 必回复",
        "description": "开启后，被 @ 时会尽量回复。",
+       "default": true,
        "x-widget": "switch",
        "x-row": "reply-switches"
       },
@@ -366,6 +382,7 @@
        "type": "select",
        "label": "回复触发模式",
        "description": "控制新消息何时进入 Planner。",
+       "default": "frequency",
        "options": [
         "frequency",
         "reply_necessity"
@@ -385,6 +402,7 @@
        "type": "integer",
        "label": "规划器连续打断上限",
        "description": "思考时来了新消息，最多重新思考多少次。",
+       "default": 0,
        "minValue": 0,
        "x-widget": "input",
        "advanced": true
@@ -394,6 +412,7 @@
        "type": "integer",
        "label": "连续 wait 上限",
        "description": "Planner 最多连续调用 wait 多少次；达到上限后 wait 工具会拒绝继续进入等待。",
+       "default": 3,
        "minValue": 1,
        "x-widget": "input"
       },
@@ -402,6 +421,7 @@
        "type": "number",
        "label": "空闲退避基准",
        "description": "连续决定不回复后，下一次检查前先等多久。",
+       "default": 15,
        "minValue": 0,
        "x-widget": "input",
        "advanced": false,
@@ -412,6 +432,7 @@
        "type": "number",
        "label": "空闲退避上限",
        "description": "不回复退避等待的最长时间。",
+       "default": 300,
        "minValue": 0,
        "x-widget": "input",
        "advanced": true,
@@ -422,6 +443,7 @@
        "type": "integer",
        "label": "空闲退避起点",
        "description": "连续几次不回复后开始放慢检查。",
+       "default": 2,
        "minValue": 1,
        "x-widget": "input",
        "advanced": true,
@@ -432,6 +454,7 @@
        "type": "integer",
        "label": "空闲退避绕过消息数",
        "description": "等待期间新消息达到多少条就立刻重新处理；0 表示不按条数打断等待。",
+       "default": 6,
        "minValue": 0,
        "x-widget": "input",
        "advanced": true,
@@ -442,6 +465,7 @@
        "type": "boolean",
        "label": "启用动态发言频率规则",
        "description": "开启后，可以按聊天或时间段单独调整发言频率。",
+       "default": false,
        "x-widget": "switch"
       },
       {
@@ -464,19 +488,22 @@
          "name": "platform",
          "type": "string",
          "label": "平台",
-         "description": "规则作用的平台；留空表示不限定平台，* 表示任意平台。"
+         "description": "规则作用的平台；留空表示不限定平台，* 表示任意平台。",
+         "default": ""
         },
         {
          "name": "item_id",
          "type": "string",
          "label": "聊天流 ID",
-         "description": "规则作用的群号或用户 ID；留空表示不限定聊天，* 表示任意聊天。"
+         "description": "规则作用的群号或用户 ID；留空表示不限定聊天，* 表示任意聊天。",
+         "default": ""
         },
         {
          "name": "rule_type",
          "type": "select",
          "label": "聊天类型",
          "description": "规则作用于群聊还是私聊。",
+         "default": "group",
          "options": [
           "group",
           "private"
@@ -492,13 +519,15 @@
          "type": "string",
          "label": "时间段",
          "description": "规则生效时间；留空为兜底，* 为全天，也可填 23:00-02:00。",
+         "default": "",
          "x-widget": "talk-time"
         },
         {
          "name": "value",
          "type": "number",
          "label": "发言频率",
-         "description": "该规则下的发言频率；0 更安静，1 按正常频率。"
+         "description": "该规则下的发言频率；0 更安静，1 按正常频率。",
+         "default": 0.5
         }
        ]
       }
@@ -514,6 +543,7 @@
        "type": "boolean",
        "label": "启用引用回复",
        "description": "回复时是否可以引用上一条或相关消息。",
+       "default": true,
        "x-widget": "switch",
        "advanced": true
       },
@@ -522,6 +552,7 @@
        "type": "string",
        "label": "群聊提示词",
        "description": "群聊通用提示词，告诉麦麦群聊中该怎么说话。",
+       "default": "你正在qq群里聊天，下面是群里正在聊的内容，聊天中包含文字，图片和表情包等消息。\n回复尽量简短一些。最好一次对一个话题进行回复，但必须考虑不同群友发言之间的交互，免得啰嗦或者回复内容太乱。请注意把握聊天内容。\n不要总是提及自己的身份背景，根据聊天内容自由发挥，但是要日常不浮夸，不要刻意找话题。\n不用刻意回复其他人发送的表情包，只要关注表情包表达的含义。你可以适当发送表情包表达情绪。控制回复的频率，不要每个人的消息都回复，优先回复你感兴趣的或者主动提及你的，适当回复其他话题。\n",
        "x-widget": "textarea"
       },
       {
@@ -529,6 +560,7 @@
        "type": "string",
        "label": "私聊提示词",
        "description": "私聊通用提示词，告诉麦麦私聊中该怎么说话。",
+       "default": "你正在聊天，下面是正在聊的内容，其中包含聊天记录和聊天中的图片。\n回复尽量简短一些。请注意把握聊天内容。\n请考虑对方的发言频率，想法，思考自己何时回复以及回复内容。\n",
        "x-widget": "textarea"
       },
       {
@@ -552,6 +584,7 @@
          "type": "string",
          "label": "platform",
          "description": "额外提示作用的平台，和聊天流 ID、提示内容需要一起填写。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -559,6 +592,7 @@
          "type": "string",
          "label": "item_id",
          "description": "额外提示作用的群号或用户 ID。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -566,6 +600,7 @@
          "type": "select",
          "label": "rule_type",
          "description": "额外提示作用于群聊还是私聊。",
+         "default": "group",
          "options": [
           "group",
           "private"
@@ -581,6 +616,7 @@
          "type": "string",
          "label": "prompt",
          "description": "给这个聊天额外补充的要求。",
+         "default": "",
          "x-widget": "textarea"
         }
        ]
@@ -600,6 +636,7 @@
      "type": "boolean",
      "label": "启用行为学习",
      "description": "让麦麦从聊天中学习什么时候该怎么回应的经验。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -607,6 +644,7 @@
      "type": "boolean",
      "label": "丰富回复能力",
      "description": "开启后，reply 动作可通过 attach_pic、attach_emoji、attach_at 参数附加图片、表情包或 at。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -614,6 +652,7 @@
      "type": "select",
      "label": "情绪特点",
      "description": "实验性人格情绪特点；理性冷静和多愁善感会追加人格后缀，中性不追加内容。",
+     "default": "neutral",
      "options": [
       "rational_calm",
       "neutral",
@@ -662,6 +701,7 @@
      "type": "boolean",
      "label": "Focus 模式",
      "description": "让麦麦同一时间只专注一个聊天流，适合直播或高强度聊天场景。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -669,6 +709,7 @@
      "type": "boolean",
      "label": "私聊启用 Focus",
      "description": "Focus 模式是否也作用于私聊。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -696,6 +737,7 @@
      "type": "integer",
      "label": "Focus 冷却时间",
      "description": "当前关注的聊天多久没继续处理后，允许被其他聊天唤醒。",
+     "default": 120,
      "minValue": 1,
      "x-widget": "input",
      "x-row": "focus-cool-time"
@@ -712,6 +754,7 @@
        "type": "boolean",
        "label": "注意力漂移模式",
        "description": "开启后，麦麦会更容易被有趣的新话题、梗或反差点吸引，但仍需保持上下文可理解。",
+       "default": false,
        "x-widget": "switch"
       },
       {
@@ -719,6 +762,7 @@
        "type": "select",
        "label": "漂移档位",
        "description": "控制注意力漂移的整体表现档位，而不是用数值概率描述。",
+       "default": "scattered",
        "options": [
         "subtle",
         "active",
@@ -745,6 +789,7 @@
        "type": "select",
        "label": "回钩策略",
        "description": "控制话题漂移后需要多强地回到当前聊天上下文。",
+       "default": "balanced",
        "options": [
         "strict",
         "balanced",
@@ -768,6 +813,7 @@
        "type": "select",
        "label": "短反应风格",
        "description": "控制短句、吐槽、语气词等短反应在漂移风格中的使用方式。",
+       "default": "lively",
        "options": [
         "reserved",
         "natural",
@@ -797,6 +843,7 @@
        "type": "string",
        "label": "平台",
        "description": "平台，与ID一起留空表示全局",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -804,6 +851,7 @@
        "type": "string",
        "label": "聊天流 ID",
        "description": "要单独配置的群号或用户 ID；留空表示默认规则。",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -811,6 +859,7 @@
        "type": "select",
        "label": "聊天类型",
        "description": "这条规则作用于群聊还是私聊。",
+       "default": "group",
        "options": [
         "group",
         "private"
@@ -826,6 +875,7 @@
        "type": "boolean",
        "label": "使用",
        "description": "是否在这个聊天里使用已学到的内容。",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -833,6 +883,7 @@
        "type": "boolean",
        "label": "学习",
        "description": "是否从这个聊天里继续学习新内容。",
+       "default": true,
        "x-widget": "switch"
       }
      ]
@@ -862,6 +913,7 @@
          "type": "string",
          "label": "平台",
          "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -869,6 +921,7 @@
          "type": "string",
          "label": "聊天流 ID",
          "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -876,6 +929,7 @@
          "type": "select",
          "label": "聊天类型",
          "description": "聊天流类型，group（群聊）或private（私聊）",
+         "default": "group",
          "options": [
           "group",
           "private"
@@ -899,6 +953,7 @@
        "type": "string",
        "label": "平台",
        "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -906,6 +961,7 @@
        "type": "string",
        "label": "聊天流 ID",
        "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -913,6 +969,7 @@
        "type": "select",
        "label": "聊天类型",
        "description": "聊天流类型，group（群聊）或private（私聊）",
+       "default": "group",
        "options": [
         "group",
         "private"
@@ -950,6 +1007,7 @@
          "type": "string",
          "label": "平台",
          "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -957,6 +1015,7 @@
          "type": "string",
          "label": "聊天流 ID",
          "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -964,6 +1023,7 @@
          "type": "select",
          "label": "聊天类型",
          "description": "聊天流类型，group（群聊）或private（私聊）",
+         "default": "group",
          "options": [
           "group",
           "private"
@@ -991,6 +1051,7 @@
      "type": "select",
      "label": "规划阶段视觉模式",
      "description": "控制规划阶段是否把图片内容直接发送给 planner 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。",
+     "default": "auto",
      "options": [
       "text",
       "multimodal",
@@ -1009,6 +1070,7 @@
      "type": "select",
      "label": "回复生成视觉模式",
      "description": "控制回复生成阶段是否把图片内容直接发送给 replyer 模型。auto 会根据模型是否支持视觉自动选择；text 始终只使用文字和图片识别结果；multimodal 会强制使用多模态输入。",
+     "default": "auto",
      "options": [
       "text",
       "multimodal",
@@ -1027,6 +1089,7 @@
      "type": "integer",
      "label": "多模态最大图片数",
      "description": "一次多模态请求最多带多少张图，太大可能更慢更贵。",
+     "default": 128,
      "minValue": 0,
      "x-widget": "input",
      "advanced": true
@@ -1036,6 +1099,7 @@
      "type": "number",
      "label": "识图最长等待时间",
      "description": "等图片识别完成的最长秒数；0 表示不等待。",
+     "default": 10,
      "minValue": 0,
      "x-widget": "input"
     },
@@ -1044,6 +1108,7 @@
      "type": "boolean",
      "label": "是否处理过大图片",
      "description": "收到太大的图片时，是否自动压缩或丢弃。",
+     "default": true,
      "x-widget": "switch",
      "x-row": "visual-image-compression"
     },
@@ -1052,6 +1117,7 @@
      "type": "number",
      "label": "最大图片大小(MB)",
      "description": "超过这个大小的图片会按过大图片处理方法处理；0 表示不限。",
+     "default": 30.0,
      "minValue": 0,
      "x-widget": "input",
      "x-row": "visual-image-compression"
@@ -1061,6 +1127,7 @@
      "type": "select",
      "label": "过大图片处理方法",
      "description": "大图的处理方式：压缩后继续用，或直接丢弃。",
+     "default": "compress",
      "options": [
       "compress",
       "discard"
@@ -1089,6 +1156,7 @@
        "type": "boolean",
        "label": "启用图片缓存自动清理",
        "description": "开启后会自动删除长期不用的图片缓存。",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -1096,6 +1164,7 @@
        "type": "number",
        "label": "清理检查间隔（小时）",
        "description": "每隔多少小时检查一次旧图片。",
+       "default": 6.0,
        "minValue": 0.016666666666666666,
        "x-widget": "input"
       },
@@ -1104,6 +1173,7 @@
        "type": "integer",
        "label": "图片文件保留天数",
        "description": "图片文件多久没被使用后可以删除。",
+       "default": 14,
        "minValue": 1,
        "x-widget": "input"
       },
@@ -1112,6 +1182,7 @@
        "type": "integer",
        "label": "图片理解保留天数",
        "description": "图片文件删掉后，识别文字还能保留多久。",
+       "default": 30,
        "minValue": 1,
        "x-widget": "input"
       }
@@ -1130,6 +1201,7 @@
      "type": "boolean",
      "label": "使用精选表达",
      "description": "仅使用人工精选的表达。",
+     "default": true,
      "x-widget": "switch",
      "x-row": "expression-learning-switches"
     },
@@ -1138,6 +1210,7 @@
      "type": "boolean",
      "label": "优化表达方式学习",
      "description": "写入表达方式前先让 AI 检查，减少学到奇怪内容。",
+     "default": true,
      "x-widget": "switch",
      "x-row": "expression-learning-switches"
     },
@@ -1146,6 +1219,7 @@
      "type": "select",
      "label": "表达使用方式",
      "description": "表达方式的使用策略：legacy 随手抽取候选，vector_intent 使用表达意图与嵌入召回。",
+     "default": "legacy",
      "options": [
       "legacy",
       "vector_intent"
@@ -1166,6 +1240,7 @@
      "type": "string",
      "label": "表达向量索引路径",
      "description": "向量召回使用的表达索引 JSON；相对路径按项目根目录解析。",
+     "default": "data/expression_selection/expression_vector_index.json",
      "x-widget": "input",
      "advanced": true
     },
@@ -1174,6 +1249,7 @@
      "type": "integer",
      "label": "向量候选上限",
      "description": "向量召回后最多交给表达方式 LLM 选择的候选数；硬上限为 50。",
+     "default": 50,
      "minValue": 1,
      "maxValue": 50,
      "x-widget": "input",
@@ -1184,6 +1260,7 @@
      "type": "integer",
      "label": "表达学习最大并发",
      "description": "同时运行的表达学习任务数量；太高可能占用更多资源。",
+     "default": 3,
      "x-widget": "input",
      "advanced": true
     },
@@ -1218,6 +1295,7 @@
        "type": "string",
        "label": "平台",
        "description": "平台，与ID一起留空表示全局",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -1225,6 +1303,7 @@
        "type": "string",
        "label": "聊天流 ID",
        "description": "要单独配置的群号或用户 ID；留空表示默认规则。",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -1232,6 +1311,7 @@
        "type": "select",
        "label": "聊天类型",
        "description": "这条规则作用于群聊还是私聊。",
+       "default": "group",
        "options": [
         "group",
         "private"
@@ -1247,6 +1327,7 @@
        "type": "boolean",
        "label": "使用",
        "description": "是否在这个聊天里使用已学到的内容。",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -1254,6 +1335,7 @@
        "type": "boolean",
        "label": "学习",
        "description": "是否从这个聊天里继续学习新内容。",
+       "default": true,
        "x-widget": "switch"
       }
      ]
@@ -1283,6 +1365,7 @@
          "type": "string",
          "label": "平台",
          "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -1290,6 +1373,7 @@
          "type": "string",
          "label": "聊天流 ID",
          "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -1297,6 +1381,7 @@
          "type": "select",
          "label": "聊天类型",
          "description": "聊天流类型，group（群聊）或private（私聊）",
+         "default": "group",
          "options": [
           "group",
           "private"
@@ -1350,6 +1435,7 @@
        "type": "string",
        "label": "平台",
        "description": "平台，与ID一起留空表示全局",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -1357,6 +1443,7 @@
        "type": "string",
        "label": "聊天流 ID",
        "description": "要单独配置的群号或用户 ID；留空表示默认规则。",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -1364,6 +1451,7 @@
        "type": "select",
        "label": "聊天类型",
        "description": "这条规则作用于群聊还是私聊。",
+       "default": "group",
        "options": [
         "group",
         "private"
@@ -1379,6 +1467,7 @@
        "type": "boolean",
        "label": "使用",
        "description": "是否在这个聊天里使用已学到的内容。",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -1386,6 +1475,7 @@
        "type": "boolean",
        "label": "学习",
        "description": "是否从这个聊天里继续学习新内容。",
+       "default": true,
        "x-widget": "switch"
       }
      ]
@@ -1415,6 +1505,7 @@
          "type": "string",
          "label": "平台",
          "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -1422,6 +1513,7 @@
          "type": "string",
          "label": "聊天流 ID",
          "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -1429,6 +1521,7 @@
          "type": "select",
          "label": "聊天类型",
          "description": "聊天流类型，group（群聊）或private（私聊）",
+         "default": "group",
          "options": [
           "group",
           "private"
@@ -1495,6 +1588,7 @@
      "type": "boolean",
      "label": "全局共享记忆",
      "description": "是否让普通记忆查询在所有聊天流范围内检索",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -1551,7 +1645,8 @@
        "name": "enabled",
        "type": "boolean",
        "label": "启用记忆",
-       "description": "是否启用长期记忆系统"
+       "description": "是否启用长期记忆系统",
+       "default": false
       }
      ]
     },
@@ -1565,6 +1660,7 @@
        "type": "boolean",
        "label": "启用记忆检索",
        "description": "是否允许麦麦在聊天时查询长期记忆",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -1572,6 +1668,7 @@
        "type": "integer",
        "label": "回忆记忆条数",
        "description": "每次默认从长期记忆中取回多少条结果",
+       "default": 5,
        "minValue": 1,
        "maxValue": 20,
        "x-widget": "input"
@@ -1581,6 +1678,7 @@
        "type": "boolean",
        "label": "启用人物画像查询",
        "description": "是否允许麦麦查询人物画像记忆",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -1588,6 +1686,7 @@
        "type": "boolean",
        "label": "自动注入人物画像",
        "description": "是否在 Maisaka Planner 调用前自动注入当前对象相关的人物画像",
+       "default": true,
        "x-widget": "switch",
        "advanced": true
       },
@@ -1596,6 +1695,7 @@
        "type": "integer",
        "label": "注入画像上限",
        "description": "每轮自动注入的人物画像数量上限",
+       "default": 3,
        "minValue": 1,
        "maxValue": 5,
        "x-widget": "input",
@@ -1606,6 +1706,7 @@
        "type": "boolean",
        "label": "启发式拉起记忆",
        "description": "是否根据当前聊天印象自然拉起长期记忆",
+       "default": false,
        "x-widget": "switch"
       },
       {
@@ -1613,6 +1714,7 @@
        "type": "integer",
        "label": "印象窗口消息数",
        "description": "生成当前聊天印象时使用的最近消息数量",
+       "default": 20,
        "minValue": 1,
        "maxValue": 200,
        "x-widget": "input",
@@ -1623,6 +1725,7 @@
        "type": "integer",
        "label": "自然拉起记忆条数",
        "description": "每轮自然拉起的长期记忆数量上限",
+       "default": 3,
        "minValue": 1,
        "maxValue": 10,
        "x-widget": "input",
@@ -1633,6 +1736,7 @@
        "type": "integer",
        "label": "自然拉起文本上限",
        "description": "自然拉起记忆注入文本的最大字符数",
+       "default": 900,
        "minValue": 100,
        "maxValue": 4000,
        "x-widget": "input",
@@ -1643,6 +1747,7 @@
        "type": "integer",
        "label": "自然拉起冷却秒数",
        "description": "同一聊天流两次自然拉起的最小间隔秒数",
+       "default": 180,
        "minValue": 0,
        "x-widget": "input",
        "advanced": true
@@ -1652,6 +1757,7 @@
        "type": "integer",
        "label": "自然拉起新增消息阈值",
        "description": "两次自然拉起之间至少需要新增的当前聊天流消息数",
+       "default": 60,
        "minValue": 1,
        "x-widget": "input",
        "advanced": true
@@ -1661,6 +1767,7 @@
        "type": "integer",
        "label": "自然拉起缓存秒数",
        "description": "同一聊天流自然拉起结果的运行时缓存时间",
+       "default": 300,
        "minValue": 0,
        "x-widget": "input",
        "advanced": true
@@ -1670,6 +1777,7 @@
        "type": "boolean",
        "label": "写回人物事实",
        "description": "是否在发送回复后自动提取并写回人物事实到长期记忆",
+       "default": true,
        "x-widget": "switch",
        "advanced": true
       },
@@ -1678,6 +1786,7 @@
        "type": "boolean",
        "label": "写回聊天摘要",
        "description": "是否在 Maisaka 聊天过程中按消息窗口自动写回聊天摘要到长期记忆",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -1685,6 +1794,7 @@
        "type": "integer",
        "label": "chat_summary_writeback_message_threshold",
        "description": "自动写回聊天摘要的消息窗口阈值",
+       "default": 36,
        "minValue": 1,
        "x-widget": "input",
        "advanced": true
@@ -1694,6 +1804,7 @@
        "type": "integer",
        "label": "chat_summary_writeback_context_length",
        "description": "自动写回聊天摘要时，从聊天流中回看的消息条数",
+       "default": 36,
        "minValue": 1,
        "maxValue": 500,
        "x-widget": "input",
@@ -1704,6 +1815,7 @@
        "type": "boolean",
        "label": "fuzzy_modify_enabled",
        "description": "是否启用自然语言记忆修正的后台接口",
+       "default": true,
        "x-widget": "switch",
        "advanced": true
       },
@@ -1712,6 +1824,7 @@
        "type": "integer",
        "label": "fuzzy_modify_candidate_limit",
        "description": "每次记忆修正交给 LLM 的候选记忆上限",
+       "default": 20,
        "minValue": 1,
        "maxValue": 100,
        "x-widget": "input",
@@ -1722,6 +1835,7 @@
        "type": "number",
        "label": "feedback_correction_window_hours",
        "description": "反馈窗口时长（小时），以 query_memory 执行时间为起点",
+       "default": 12.0,
        "minValue": 0.1,
        "x-widget": "input",
        "advanced": true
@@ -1731,6 +1845,7 @@
        "type": "integer",
        "label": "feedback_correction_max_feedback_messages",
        "description": "每个纠错任务最多使用的窗口内用户反馈消息数",
+       "default": 30,
        "minValue": 1,
        "maxValue": 200,
        "x-widget": "input",
@@ -1741,6 +1856,7 @@
        "type": "boolean",
        "label": "feedback_correction_profile_refresh_enabled",
        "description": "是否在反馈纠错后将受影响人物画像加入刷新队列",
+       "default": true,
        "x-widget": "switch",
        "advanced": true
       },
@@ -1749,6 +1865,7 @@
        "type": "boolean",
        "label": "feedback_correction_episode_rebuild_enabled",
        "description": "是否在反馈纠错后将受影响 source 加入 episode 重建队列",
+       "default": true,
        "x-widget": "switch",
        "advanced": true
       }
@@ -1763,6 +1880,7 @@
        "type": "string",
        "label": "向量化模型",
        "description": "用于把记忆内容转换成向量的模型，auto 表示自动选择",
+       "default": "auto",
        "advanced": true
       },
       {
@@ -1770,6 +1888,7 @@
        "type": "select",
        "label": "维度请求模式",
        "description": "是否在 embedding 请求中携带维度参数：explicit 仅显式指定时携带，always 总是携带，never 不携带",
+       "default": "explicit",
        "options": [
         "explicit",
         "always",
@@ -1782,6 +1901,7 @@
        "type": "integer",
        "label": "单批数量",
        "description": "每次向量化请求处理的记忆条数",
+       "default": 32,
        "minValue": 1,
        "advanced": true
       },
@@ -1790,6 +1910,7 @@
        "type": "integer",
        "label": "最大并发数",
        "description": "同时进行的向量化请求数量",
+       "default": 5,
        "minValue": 1,
        "advanced": true
       },
@@ -1798,6 +1919,7 @@
        "type": "boolean",
        "label": "启用向量缓存",
        "description": "是否缓存向量化结果",
+       "default": false,
        "advanced": true
       },
       {
@@ -1825,6 +1947,7 @@
          "type": "boolean",
          "label": "启用回退",
          "description": "是否启用回退机制",
+         "default": true,
          "advanced": true
         },
         {
@@ -1832,6 +1955,7 @@
          "type": "integer",
          "label": "探测间隔",
          "description": "探测间隔秒数",
+         "default": 180,
          "minValue": 10,
          "advanced": true
         }
@@ -1846,6 +1970,7 @@
          "type": "boolean",
          "label": "启用回填",
          "description": "是否启用回填任务",
+         "default": true,
          "advanced": true
         },
         {
@@ -1853,6 +1978,7 @@
          "type": "integer",
          "label": "批量大小",
          "description": "单批回填数量",
+         "default": 64,
          "minValue": 1,
          "advanced": true
         },
@@ -1861,6 +1987,7 @@
          "type": "integer",
          "label": "最大重试",
          "description": "最大重试次数",
+         "default": 5,
          "minValue": 0,
          "advanced": true
         }
@@ -1877,6 +2004,7 @@
        "type": "integer",
        "label": "段落 Top-K",
        "description": "段落候选数",
+       "default": 20,
        "minValue": 1,
        "advanced": true
       },
@@ -1885,6 +2013,7 @@
        "type": "integer",
        "label": "关系 Top-K",
        "description": "关系候选数",
+       "default": 10,
        "minValue": 1,
        "advanced": true
       },
@@ -1893,6 +2022,7 @@
        "type": "integer",
        "label": "最终 Top-K",
        "description": "最终返回条数",
+       "default": 10,
        "minValue": 1,
        "advanced": true
       },
@@ -1901,6 +2031,7 @@
        "type": "boolean",
        "label": "启用 PPR",
        "description": "是否启用 PPR",
+       "default": true,
        "advanced": true
       },
       {
@@ -1908,6 +2039,7 @@
        "type": "number",
        "label": "PPR 超时",
        "description": "PPR 超时秒数",
+       "default": 1.5,
        "minValue": 0.1,
        "advanced": true
       },
@@ -1916,6 +2048,7 @@
        "type": "boolean",
        "label": "并行检索",
        "description": "是否启用并行检索",
+       "default": true,
        "advanced": true
       },
       {
@@ -1970,6 +2103,7 @@
            "type": "boolean",
            "label": "启用智能兜底",
            "description": "是否启用智能兜底检索",
+           "default": true,
            "advanced": true
           }
          ]
@@ -1985,6 +2119,7 @@
          "type": "boolean",
          "label": "导入时写入关系向量",
          "description": "导入时是否写入关系向量",
+         "default": true,
          "advanced": true
         }
        ]
@@ -1998,6 +2133,7 @@
          "type": "integer",
          "label": "段落池候选数",
          "description": "段落向量池候选数",
+         "default": 20,
          "minValue": 1,
          "advanced": true
         },
@@ -2006,6 +2142,7 @@
          "type": "integer",
          "label": "图谱池候选数",
          "description": "图谱向量池候选数",
+         "default": 40,
          "minValue": 1,
          "advanced": true
         },
@@ -2014,6 +2151,7 @@
          "type": "integer",
          "label": "图谱展开段落上限",
          "description": "图谱证据展开段落上限",
+         "default": 80,
          "minValue": 1,
          "advanced": true
         },
@@ -2035,6 +2173,7 @@
            "type": "integer",
            "label": "关系意图图谱候选数",
            "description": "关系意图命中时的图谱池候选数",
+           "default": 80,
            "minValue": 1,
            "advanced": true
           }
@@ -2051,6 +2190,7 @@
          "type": "boolean",
          "label": "启用稀疏检索",
          "description": "是否启用稀疏检索",
+         "default": true,
          "advanced": true
         },
         {
@@ -2058,6 +2198,7 @@
          "type": "select",
          "label": "检索模式",
          "description": "稀疏检索模式",
+         "default": "auto",
          "options": [
           "auto",
           "fallback_only",
@@ -2070,6 +2211,7 @@
          "type": "select",
          "label": "分词模式",
          "description": "分词模式",
+         "default": "jieba",
          "options": [
           "jieba",
           "mixed",
@@ -2082,6 +2224,7 @@
          "type": "integer",
          "label": "段落候选数",
          "description": "段落候选数",
+         "default": 80,
          "minValue": 1,
          "advanced": true
         },
@@ -2090,6 +2233,7 @@
          "type": "integer",
          "label": "关系候选数",
          "description": "关系候选数",
+         "default": 60,
          "minValue": 1,
          "advanced": true
         }
@@ -2106,6 +2250,7 @@
        "type": "integer",
        "label": "最小保留数",
        "description": "最小保留条数",
+       "default": 4,
        "minValue": 1,
        "advanced": true
       }
@@ -2119,13 +2264,15 @@
        "name": "enabled",
        "type": "boolean",
        "label": "启用聊天过滤",
-       "description": "是否启用聊天过滤"
+       "description": "是否启用聊天过滤",
+       "default": true
       },
       {
        "name": "mode",
        "type": "select",
        "label": "过滤模式",
        "description": "过滤模式",
+       "default": "blacklist",
        "options": [
         "blacklist",
         "whitelist"
@@ -2185,6 +2332,7 @@
            "type": "boolean",
            "label": "启用跨聊天流过滤",
            "description": "是否启用当前检索结果类型的跨聊天流过滤",
+           "default": false,
            "advanced": true
           },
           {
@@ -2192,6 +2340,7 @@
            "type": "select",
            "label": "过滤模式",
            "description": "过滤模式",
+           "default": "blacklist",
            "options": [
             "blacklist",
             "whitelist"
@@ -2219,6 +2368,7 @@
            "type": "boolean",
            "label": "启用跨聊天流过滤",
            "description": "是否启用当前检索结果类型的跨聊天流过滤",
+           "default": false,
            "advanced": true
           },
           {
@@ -2226,6 +2376,7 @@
            "type": "select",
            "label": "过滤模式",
            "description": "过滤模式",
+           "default": "blacklist",
            "options": [
             "blacklist",
             "whitelist"
@@ -2253,6 +2404,7 @@
            "type": "boolean",
            "label": "启用跨聊天流过滤",
            "description": "是否启用当前检索结果类型的跨聊天流过滤",
+           "default": false,
            "advanced": true
           },
           {
@@ -2260,6 +2412,7 @@
            "type": "select",
            "label": "过滤模式",
            "description": "过滤模式",
+           "default": "blacklist",
            "options": [
             "blacklist",
             "whitelist"
@@ -2307,6 +2460,7 @@
          "type": "string",
          "label": "平台",
          "description": "要单独配置的平台；和聊天流 ID 都留空表示全局默认，仅平台有值且聊天流 ID 留空表示平台兜底。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -2314,6 +2468,7 @@
          "type": "string",
          "label": "聊天流 ID",
          "description": "用户/群 ID；留空时和平台字段共同决定全局默认或平台兜底，* 表示任意聊天流。",
+         "default": "",
          "x-widget": "input"
         },
         {
@@ -2321,6 +2476,7 @@
          "type": "select",
          "label": "聊天类型",
          "description": "聊天流类型，group（群聊）或private（私聊）",
+         "default": "group",
          "options": [
           "group",
           "private"
@@ -2344,6 +2500,7 @@
        "type": "boolean",
        "label": "启用 Episode",
        "description": "是否启用 Episode",
+       "default": true,
        "advanced": true
       },
       {
@@ -2351,6 +2508,7 @@
        "type": "boolean",
        "label": "自动生成 Episode",
        "description": "是否启用自动生成",
+       "default": true,
        "advanced": true
       },
       {
@@ -2358,6 +2516,7 @@
        "type": "number",
        "label": "来源任务轮询间隔",
        "description": "来源级 Episode 任务轮询间隔秒数",
+       "default": 1.0,
        "minValue": 0.1,
        "advanced": true
       },
@@ -2366,6 +2525,7 @@
        "type": "integer",
        "label": "来源任务批量",
        "description": "单轮领取的来源任务数",
+       "default": 20,
        "minValue": 1,
        "advanced": true
       },
@@ -2374,6 +2534,7 @@
        "type": "integer",
        "label": "来源任务最大尝试次数",
        "description": "每个来源版本的最大尝试次数，包含首次尝试",
+       "default": 3,
        "minValue": 1,
        "advanced": true
       },
@@ -2382,6 +2543,7 @@
        "type": "number",
        "label": "来源任务租约时长",
        "description": "来源任务租约时长秒数",
+       "default": 1800.0,
        "minValue": 1.0,
        "advanced": true
       },
@@ -2390,6 +2552,7 @@
        "type": "number",
        "label": "来源任务最大防抖等待",
        "description": "来源持续写入时允许的最大防抖等待秒数",
+       "default": 60.0,
        "minValue": 0.0,
        "advanced": true
       },
@@ -2398,6 +2561,7 @@
        "type": "integer",
        "label": "单次段落上限",
        "description": "单次最大段落数",
+       "default": 20,
        "minValue": 1,
        "advanced": true
       },
@@ -2406,6 +2570,7 @@
        "type": "integer",
        "label": "单次字符上限",
        "description": "单次最大字符数",
+       "default": 6000,
        "minValue": 100,
        "advanced": true
       },
@@ -2414,6 +2579,7 @@
        "type": "number",
        "label": "来源时间窗口",
        "description": "时间窗口小时数",
+       "default": 24.0,
        "minValue": 0.0,
        "advanced": true
       },
@@ -2422,6 +2588,7 @@
        "type": "string",
        "label": "分段模型",
        "description": "分段模型选择",
+       "default": "auto",
        "advanced": true
       },
       {
@@ -2444,13 +2611,15 @@
        "name": "enabled",
        "type": "boolean",
        "label": "启用人物画像",
-       "description": "是否启用画像"
+       "description": "是否启用画像",
+       "default": true
       },
       {
        "name": "refresh_interval_minutes",
        "type": "integer",
        "label": "刷新间隔",
        "description": "刷新间隔分钟数",
+       "default": 30,
        "minValue": 1,
        "advanced": true
       },
@@ -2459,6 +2628,7 @@
        "type": "number",
        "label": "活跃窗口",
        "description": "活跃窗口小时数",
+       "default": 72.0,
        "minValue": 1.0,
        "advanced": true
       },
@@ -2467,6 +2637,7 @@
        "type": "integer",
        "label": "单轮刷新上限",
        "description": "单轮最大刷新数",
+       "default": 50,
        "minValue": 1,
        "advanced": true
       },
@@ -2475,6 +2646,7 @@
        "type": "integer",
        "label": "证据条数",
        "description": "证据条数",
+       "default": 12,
        "minValue": 1,
        "advanced": true
       }
@@ -2489,6 +2661,7 @@
        "type": "boolean",
        "label": "启用记忆演化",
        "description": "是否启用记忆演化",
+       "default": true,
        "advanced": true
       },
       {
@@ -2496,6 +2669,7 @@
        "type": "number",
        "label": "半衰期",
        "description": "半衰期小时数",
+       "default": 24.0,
        "minValue": 0.1,
        "advanced": true
       },
@@ -2504,6 +2678,7 @@
        "type": "number",
        "label": "裁剪阈值",
        "description": "裁剪阈值",
+       "default": 0.1,
        "advanced": true
       },
       {
@@ -2511,6 +2686,7 @@
        "type": "number",
        "label": "冻结时长",
        "description": "冻结时长小时数",
+       "default": 24.0,
        "minValue": 0.0,
        "advanced": true
       },
@@ -2519,6 +2695,7 @@
        "type": "number",
        "label": "恢复阈值",
        "description": "冻结关系恢复为活跃状态的保留强度阈值",
+       "default": 0.15,
        "maxValue": 1.0,
        "advanced": true
       },
@@ -2527,6 +2704,7 @@
        "type": "number",
        "label": "访问加强系数",
        "description": "记忆被最终采用时的饱和加强系数",
+       "default": 0.05,
        "minValue": 0.0,
        "maxValue": 1.0,
        "advanced": true
@@ -2536,6 +2714,7 @@
        "type": "number",
        "label": "访问加强冷却时间",
        "description": "同一关系两次访问加强之间的最短分钟数，0表示不限制",
+       "default": 60.0,
        "minValue": 0.0,
        "advanced": true
       },
@@ -2544,6 +2723,7 @@
        "type": "number",
        "label": "显式加强系数",
        "description": "用户显式加强或独立新证据的饱和加强系数",
+       "default": 0.5,
        "minValue": 0.0,
        "maxValue": 1.0,
        "advanced": true
@@ -2553,6 +2733,7 @@
        "type": "number",
        "label": "弱化系数",
        "description": "显式弱化事件的比例系数",
+       "default": 0.5,
        "minValue": 0.0,
        "maxValue": 1.0,
        "advanced": true
@@ -2562,6 +2743,7 @@
        "type": "integer",
        "label": "生命周期批量",
        "description": "单轮处理的到期关系数量",
+       "default": 1000,
        "minValue": 1,
        "advanced": true
       }
@@ -2576,6 +2758,7 @@
        "type": "boolean",
        "label": "调试模式",
        "description": "是否启用调试",
+       "default": false,
        "advanced": true
       }
      ]
@@ -2609,6 +2792,7 @@
          "type": "boolean",
          "label": "启用导入中心",
          "description": "是否启用导入中心",
+         "default": true,
          "advanced": true
         },
         {
@@ -2616,6 +2800,7 @@
          "type": "integer",
          "label": "单任务文件上限",
          "description": "单任务最大文件数",
+         "default": 200,
          "minValue": 1,
          "advanced": true
         },
@@ -2624,6 +2809,7 @@
          "type": "integer",
          "label": "单文件大小上限",
          "description": "单文件大小上限 MB",
+         "default": 20,
          "minValue": 1,
          "advanced": true
         },
@@ -2632,6 +2818,7 @@
          "type": "integer",
          "label": "粘贴字符上限",
          "description": "粘贴字符数上限",
+         "default": 200000,
          "minValue": 100,
          "advanced": true
         },
@@ -2640,6 +2827,7 @@
          "type": "integer",
          "label": "默认叙事抽取窗口",
          "description": "默认叙事抽取窗口字符数",
+         "default": 1600,
          "minValue": 200,
          "advanced": true
         },
@@ -2648,6 +2836,7 @@
          "type": "integer",
          "label": "默认叙事重叠字符",
          "description": "默认叙事窗口重叠字符数",
+         "default": 400,
          "minValue": 0,
          "advanced": true
         },
@@ -2656,6 +2845,7 @@
          "type": "integer",
          "label": "默认事实分块目标",
          "description": "默认事实分块目标字符数",
+         "default": 1200,
          "minValue": 200,
          "advanced": true
         },
@@ -2677,6 +2867,7 @@
            "type": "number",
            "label": "LLM 单次调用超时",
            "description": "Web 导入中单次 LLM 抽取调用的超时时间，0 表示不额外限制",
+           "default": 240.0,
            "minValue": 0.0,
            "advanced": true
           },
@@ -2685,6 +2876,7 @@
            "type": "number",
            "label": "转换预检超时",
            "description": "LPMM 转换依赖预检的超时时间",
+           "default": 20.0,
            "minValue": 0.1,
            "advanced": true
           }
@@ -2701,6 +2893,7 @@
          "type": "boolean",
          "label": "启用调优中心",
          "description": "是否启用调优中心",
+         "default": true,
          "advanced": true
         },
         {
@@ -2708,6 +2901,7 @@
          "type": "integer",
          "label": "轮询间隔",
          "description": "轮询间隔毫秒数",
+         "default": 1200,
          "minValue": 200,
          "advanced": true
         },
@@ -2716,6 +2910,7 @@
          "type": "select",
          "label": "默认强度",
          "description": "默认调优强度",
+         "default": "standard",
          "options": [
           "quick",
           "standard",
@@ -2728,6 +2923,7 @@
          "type": "select",
          "label": "默认目标",
          "description": "默认调优目标",
+         "default": "precision_priority",
          "options": [
           "precision_priority",
           "balanced",
@@ -2740,6 +2936,7 @@
          "type": "integer",
          "label": "默认评估 Top-K",
          "description": "默认评估 Top-K",
+         "default": 20,
          "minValue": 1,
          "advanced": true
         },
@@ -2748,6 +2945,7 @@
          "type": "integer",
          "label": "默认样本数",
          "description": "默认样本数",
+         "default": 24,
          "minValue": 1,
          "advanced": true
         }
@@ -2768,6 +2966,7 @@
      "type": "integer",
      "label": "image_parse_threshold",
      "description": "单条消息图片数不超过这个值时才识图，避免图片太多拖慢处理。",
+     "default": 5,
      "x-widget": "input",
      "advanced": true
     },
@@ -2804,6 +3003,7 @@
      "type": "boolean",
      "label": "enable_asr",
      "description": "开启后麦麦可以把语音消息识别成文字再处理。",
+     "default": false,
      "x-widget": "switch"
     }
    ]
@@ -2819,6 +3019,7 @@
      "type": "integer",
      "label": "单次发送候选数",
      "description": "每次从多少个候选表情里挑一个发送；不是一次发送这么多。",
+     "default": 25,
      "minValue": 1,
      "maxValue": 64,
      "x-widget": "input",
@@ -2829,6 +3030,7 @@
      "type": "integer",
      "label": "最大注册数量",
      "description": "最多保存多少个可用表情。",
+     "default": 64,
      "x-widget": "input"
     },
     {
@@ -2836,6 +3038,7 @@
      "type": "boolean",
      "label": "满额后替换旧表情",
      "description": "表情满了以后是否用新表情替换旧表情。",
+     "default": true,
      "x-widget": "switch",
      "advanced": true
     },
@@ -2844,6 +3047,7 @@
      "type": "integer",
      "label": "检查间隔",
      "description": "每隔多少分钟检查一次表情库状态。",
+     "default": 10,
      "x-widget": "input"
     },
     {
@@ -2851,6 +3055,7 @@
      "type": "boolean",
      "label": "收集聊天表情",
      "description": "是否从聊天中自动收集别人发的表情。",
+     "default": true,
      "x-widget": "switch"
     },
     {
@@ -2858,6 +3063,7 @@
      "type": "number",
      "label": "收集表情大小上限（MB）",
      "description": "收集表情时允许的最大文件大小；0 表示不限。",
+     "default": 5.0,
      "minValue": 0.0,
      "x-widget": "input",
      "advanced": true
@@ -2867,6 +3073,7 @@
      "type": "boolean",
      "label": "启用内容过滤",
      "description": "开启后只保存内容合适的表情。",
+     "default": false,
      "x-widget": "switch",
      "advanced": true
     },
@@ -2887,6 +3094,7 @@
        "type": "boolean",
        "label": "启用表情包缓存自动清理",
        "description": "开启后会自动删除长期未注册、未使用的表情包缓存。",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -2894,6 +3102,7 @@
        "type": "number",
        "label": "表情包清理检查间隔（小时）",
        "description": "每隔多少小时检查一次旧表情包缓存。",
+       "default": 6.0,
        "minValue": 0.016666666666666666,
        "x-widget": "input"
       },
@@ -2902,6 +3111,7 @@
        "type": "integer",
        "label": "未注册表情包文件保留天数",
        "description": "未注册表情包文件多久没被使用后可以删除；已注册表情包永远不会由该任务删除。",
+       "default": 30,
        "minValue": 1,
        "x-widget": "input"
       },
@@ -2910,6 +3120,7 @@
        "type": "integer",
        "label": "未注册表情包无文件记录保留天数",
        "description": "未注册表情包文件删掉后，描述缓存记录还能保留多久。",
+       "default": 30,
        "minValue": 1,
        "x-widget": "input"
       }
@@ -2973,6 +3184,7 @@
        "type": "string",
        "label": "反应提示",
        "description": "命中后给麦麦看的提示内容，不会直接当作消息发送。",
+       "default": "",
        "x-widget": "textarea"
       }
      ]
@@ -3006,6 +3218,7 @@
        "type": "string",
        "label": "反应提示",
        "description": "命中后给麦麦看的提示内容，不会直接当作消息发送。",
+       "default": "",
        "x-widget": "textarea"
       }
      ]
@@ -3024,6 +3237,7 @@
      "type": "boolean",
      "label": "启用回复后处理",
      "description": "开启后会对回复做错别字、分段等后处理。",
+     "default": true,
      "x-widget": "switch"
     },
     {
@@ -3031,6 +3245,7 @@
      "type": "number",
      "label": "打字速度",
      "description": "模拟打字等待时间；0 最快，1 默认，2 更慢。",
+     "default": 1.0,
      "minValue": 0,
      "maxValue": 2,
      "step": 0.1,
@@ -3050,6 +3265,7 @@
      "type": "boolean",
      "label": "启用错别字",
      "description": "让麦麦偶尔打错字，更像真人聊天。",
+     "default": true,
      "x-widget": "switch"
     },
     {
@@ -3057,6 +3273,7 @@
      "type": "boolean",
      "label": "错别字纠正时引用原消息",
      "description": "纠正错别字时，是否引用上一条包含错别字的消息。",
+     "default": true,
      "x-widget": "switch",
      "x-row": "typo-correction-quote"
     },
@@ -3065,6 +3282,7 @@
      "type": "number",
      "label": "错别字纠正引用概率",
      "description": "生成纠正消息时，引用上一条错别字消息的概率。",
+     "default": 1.0,
      "minValue": 0,
      "maxValue": 1,
      "step": 0.01,
@@ -3077,6 +3295,7 @@
      "type": "number",
      "label": "单字错字概率",
      "description": "单个字被替换成错字的概率。",
+     "default": 0.01,
      "minValue": 0,
      "maxValue": 1,
      "step": 0.01,
@@ -3088,6 +3307,7 @@
      "type": "integer",
      "label": "最小字频",
      "description": "只对常见程度达到该值的字尝试制造错字。",
+     "default": 9,
      "x-widget": "input",
      "advanced": true
     },
@@ -3096,6 +3316,7 @@
      "type": "number",
      "label": "声调错字概率",
      "description": "按相近声调制造错字的概率。",
+     "default": 0.1,
      "minValue": 0,
      "maxValue": 1,
      "step": 0.1,
@@ -3107,6 +3328,7 @@
      "type": "number",
      "label": "整词替换概率",
      "description": "整词被替换成错词的概率。",
+     "default": 0.006,
      "minValue": 0,
      "maxValue": 1,
      "step": 0.001,
@@ -3125,6 +3347,7 @@
      "type": "boolean",
      "label": "启用回复分割",
      "description": "把过长回复拆成多条发送。",
+     "default": true,
      "x-widget": "switch"
     },
     {
@@ -3132,6 +3355,7 @@
      "type": "integer",
      "label": "单条最大长度",
      "description": "单条回复允许的最大长度。",
+     "default": 512,
      "x-widget": "input"
     },
     {
@@ -3139,6 +3363,7 @@
      "type": "integer",
      "label": "单条最大句数",
      "description": "单条回复最多包含多少个句子。",
+     "default": 8,
      "x-widget": "input"
     },
     {
@@ -3146,6 +3371,7 @@
      "type": "integer",
      "label": "最多分割条数",
      "description": "一次回复最多拆成几条消息。",
+     "default": 3,
      "minValue": 1,
      "x-widget": "input"
     },
@@ -3154,6 +3380,7 @@
      "type": "boolean",
      "label": "保护颜文字",
      "description": "尽量避免把颜文字从中间拆开。",
+     "default": false,
      "x-widget": "switch",
      "advanced": true
     },
@@ -3162,6 +3389,7 @@
      "type": "boolean",
      "label": "超限保留全文",
      "description": "句子太多时是否直接保留完整回复，不再强行截断。",
+     "default": false,
      "x-widget": "switch",
      "advanced": true
     }
@@ -3177,6 +3405,7 @@
      "type": "boolean",
      "label": "启用遥测",
      "description": "是否发送匿名运行统计；关闭不影响正常使用。",
+     "default": true,
      "x-widget": "switch"
     }
    ]
@@ -3192,6 +3421,7 @@
      "type": "string",
      "label": "日期格式",
      "description": "日志时间的显示格式。",
+     "default": "m-d H:i:s",
      "x-widget": "input"
     },
     {
@@ -3199,6 +3429,7 @@
      "type": "select",
      "label": "日志等级样式",
      "description": "日志等级的显示样式，只影响日志外观。",
+     "default": "lite",
      "options": [
       "lite",
       "compact",
@@ -3211,6 +3442,7 @@
      "type": "select",
      "label": "控制台颜色",
      "description": "控制台日志颜色范围。",
+     "default": "full",
      "options": [
       "none",
       "title",
@@ -3223,6 +3455,7 @@
      "type": "select",
      "label": "全局日志级别",
      "description": "全局最低日志等级；DEBUG 最详细，ERROR 最安静。",
+     "default": "INFO",
      "options": [
       "DEBUG",
       "INFO",
@@ -3237,6 +3470,7 @@
      "type": "select",
      "label": "控制台日志级别",
      "description": "控制台输出的最低日志等级。",
+     "default": "INFO",
      "options": [
       "DEBUG",
       "INFO",
@@ -3251,6 +3485,7 @@
      "type": "select",
      "label": "文件日志级别",
      "description": "写入日志文件的最低日志等级。",
+     "default": "DEBUG",
      "options": [
       "DEBUG",
       "INFO",
@@ -3265,6 +3500,7 @@
      "type": "integer",
      "label": "单个日志大小",
      "description": "单个日志文件超过这个大小后会轮转。",
+     "default": 5242880,
      "x-widget": "input"
     },
     {
@@ -3272,6 +3508,7 @@
      "type": "integer",
      "label": "日志文件保留数",
      "description": "最多保留多少个主日志文件。",
+     "default": 30,
      "x-widget": "input"
     },
     {
@@ -3279,6 +3516,7 @@
      "type": "integer",
      "label": "日志保留天数",
      "description": "主日志文件超过多少天后清理。",
+     "default": 30,
      "x-widget": "input"
     },
     {
@@ -3286,6 +3524,7 @@
      "type": "integer",
      "label": "请求快照保留数",
      "description": "失败模型请求快照最多保留多少份。",
+     "default": 128,
      "x-widget": "input"
     },
     {
@@ -3293,6 +3532,7 @@
      "type": "integer",
      "label": "Prompt 预览保留数",
      "description": "每个聊天最多保留多少组 Prompt 预览。",
+     "default": 256,
      "x-widget": "input"
     },
     {
@@ -3300,6 +3540,7 @@
      "type": "integer",
      "label": "回复效果记录数",
      "description": "每个聊天最多保留多少条回复效果记录。",
+     "default": 256,
      "x-widget": "input"
     },
     {
@@ -3334,6 +3575,7 @@
      "type": "boolean",
      "label": "启用终端输入",
      "description": "在交互式终端中启用本地消息和指令输入。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -3341,6 +3583,7 @@
      "type": "boolean",
      "label": "显示思考过程",
      "description": "在日志或界面中显示麦麦的思考过程。",
+     "default": true,
      "x-widget": "switch"
     },
     {
@@ -3348,6 +3591,7 @@
      "type": "boolean",
      "label": "启用 /clear 指令",
      "description": "允许使用 /clear 清空当前聊天流的 Maisaka 短期历史上下文。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -3355,6 +3599,7 @@
      "type": "boolean",
      "label": "记录回复效果",
      "description": "记录回复效果评分，方便观察回复质量。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -3362,6 +3607,7 @@
      "type": "boolean",
      "label": "保留预览图片数据",
      "description": "Prompt 预览里保留图片 base64，便于复现但会占空间。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -3369,6 +3615,7 @@
      "type": "boolean",
      "label": "记录工具结构化内容",
      "description": "保存工具返回的结构化内容，便于调试但会增加数据库体积。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -3376,6 +3623,7 @@
      "type": "boolean",
      "label": "记录模型缓存统计",
      "description": "记录模型 prompt cache 统计，用于性能调试。",
+     "default": false,
      "x-widget": "switch"
     }
    ]
@@ -3390,6 +3638,7 @@
      "type": "string",
      "label": "旧版 WS 主机",
      "description": "旧版 WebSocket 服务监听地址；不清楚就保持默认。",
+     "default": "127.0.0.1",
      "x-widget": "input"
     },
     {
@@ -3397,6 +3646,7 @@
      "type": "integer",
      "label": "旧版 WS 端口",
      "description": "旧版 WebSocket 服务端口。",
+     "default": 8000,
      "x-widget": "input"
     },
     {
@@ -3414,6 +3664,7 @@
      "type": "boolean",
      "label": "启用新版 API",
      "description": "是否开启新版 API Server，供外部程序调用麦麦。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -3421,6 +3672,7 @@
      "type": "string",
      "label": "新版 API 主机",
      "description": "新版 API Server 监听地址；0.0.0.0 表示允许外部访问。",
+     "default": "0.0.0.0",
      "x-widget": "input"
     },
     {
@@ -3428,6 +3680,7 @@
      "type": "integer",
      "label": "新版 API 端口",
      "description": "新版 API Server 监听端口。",
+     "default": 8090,
      "x-widget": "input"
     },
     {
@@ -3435,6 +3688,7 @@
      "type": "boolean",
      "label": "新版 API 使用 WSS",
      "description": "新版 API Server 是否使用加密 WebSocket。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -3442,6 +3696,7 @@
      "type": "string",
      "label": "WSS 证书文件",
      "description": "WSS 使用的证书文件路径。",
+     "default": "",
      "x-widget": "input"
     },
     {
@@ -3449,6 +3704,7 @@
      "type": "string",
      "label": "WSS 私钥文件",
      "description": "WSS 使用的私钥文件路径。",
+     "default": "",
      "x-widget": "input"
     },
     {
@@ -3474,6 +3730,7 @@
      "type": "boolean",
      "label": "启用 WebUI",
      "description": "是否启动 WebUI 管理界面。",
+     "default": true,
      "x-widget": "switch"
     },
     {
@@ -3481,6 +3738,10 @@
      "type": "array",
      "label": "WebUI 主机",
      "description": "WebUI 监听地址列表；可同时绑定 IPv4 和 IPv6，例如 [\"0.0.0.0\", \"::\"]。",
+     "default": [
+      "127.0.0.1",
+      "::1"
+     ],
      "x-widget": "tags",
      "items": {
       "type": "string"
@@ -3491,6 +3752,7 @@
      "type": "integer",
      "label": "WebUI 端口",
      "description": "WebUI 访问端口。",
+     "default": 8001,
      "x-widget": "input"
     },
     {
@@ -3498,6 +3760,7 @@
      "type": "select",
      "label": "运行模式",
      "description": "WebUI 运行模式；普通使用保持 production。",
+     "default": "production",
      "options": [
       "development",
       "production"
@@ -3509,6 +3772,7 @@
      "type": "integer",
      "label": "界面风格",
      "description": "界面风格编号；0 为旧风格，1 为未来复古风格。",
+     "default": 1,
      "minValue": 0,
      "maxValue": 1,
      "x-widget": "number"
@@ -3518,6 +3782,7 @@
      "type": "select",
      "label": "防爬虫模式",
      "description": "防爬虫策略；basic 只记录，strict/loose 会拦截更多请求。",
+     "default": "basic",
      "options": [
       "false",
       "strict",
@@ -3531,6 +3796,7 @@
      "type": "string",
      "label": "允许访问 IP",
      "description": "允许访问 WebUI 的 IP，多个用逗号分隔。",
+     "default": "127.0.0.1",
      "x-widget": "comma-list"
     },
     {
@@ -3538,6 +3804,7 @@
      "type": "string",
      "label": "可信代理 IP",
      "description": "可信反向代理 IP；只有这些代理传来的真实 IP 会被信任。",
+     "default": "",
      "x-widget": "comma-list"
     },
     {
@@ -3545,6 +3812,7 @@
      "type": "boolean",
      "label": "信任 XFF",
      "description": "是否信任 X-Forwarded-For 里的真实访客 IP。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -3552,6 +3820,7 @@
      "type": "boolean",
      "label": "安全 Cookie",
      "description": "只在 HTTPS 下发送登录 Cookie；没有 HTTPS 时不要开启。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -3559,6 +3828,7 @@
      "type": "boolean",
      "label": "强制公网出站 URL 校验",
      "description": "限制 WebUI 访问外部 URL，降低访问内网地址的风险。",
+     "default": true,
      "x-widget": "switch",
      "advanced": false
     },
@@ -3567,6 +3837,7 @@
      "type": "boolean",
      "label": "加载段落全文",
      "description": "知识图谱里是否加载段落全文；更完整但更占内存。",
+     "default": false,
      "x-widget": "switch"
     }
    ]
@@ -3581,6 +3852,7 @@
      "type": "boolean",
      "label": "保存二进制原文件",
      "description": "是否保存语音等二进制原文件；更占空间，但方便以后重新识别。",
+     "default": false,
      "x-widget": "switch",
      "advanced": true
     }
@@ -3596,6 +3868,7 @@
      "type": "boolean",
      "label": "启用 MCP",
      "description": "是否启用 MCP 工具接入能力。",
+     "default": true,
      "x-widget": "switch"
     },
     {
@@ -3626,6 +3899,7 @@
        "type": "string",
        "label": "客户端名称",
        "description": "对 MCP 服务器展示的客户端名称。",
+       "default": "MaiBot",
        "x-widget": "input",
        "advanced": true
       },
@@ -3634,6 +3908,7 @@
        "type": "string",
        "label": "客户端版本",
        "description": "对 MCP 服务器展示的客户端版本。",
+       "default": "1.0.0",
        "x-widget": "input",
        "advanced": true
       },
@@ -3669,6 +3944,7 @@
          "type": "boolean",
          "label": "启用 Roots",
          "description": "是否向 MCP 服务器暴露 Roots 能力。",
+         "default": false,
          "x-widget": "switch"
         },
         {
@@ -3692,6 +3968,7 @@
            "type": "boolean",
            "label": "启用 Root",
            "description": "是否启用这个 Root。",
+           "default": true,
            "x-widget": "switch"
           },
           {
@@ -3699,6 +3976,7 @@
            "type": "string",
            "label": "Root URI",
            "description": "Root 的 URI，文件夹一般写 file:/// 开头的路径。",
+           "default": "",
            "x-widget": "input"
           },
           {
@@ -3706,6 +3984,7 @@
            "type": "string",
            "label": "显示名称",
            "description": "这个 Root 在 MCP 里的显示名称。",
+           "default": "",
            "x-widget": "input"
           }
          ]
@@ -3721,6 +4000,7 @@
          "type": "boolean",
          "label": "启用 Sampling",
          "description": "是否声明支持 MCP Sampling。",
+         "default": false,
          "x-widget": "switch"
         },
         {
@@ -3728,6 +4008,7 @@
          "type": "string",
          "label": "模型任务",
          "description": "MCP Sampling 调用模型时使用的任务名。",
+         "default": "planner",
          "x-widget": "input"
         },
         {
@@ -3735,6 +4016,7 @@
          "type": "boolean",
          "label": "携带上下文（暂未支持）",
          "description": "是否允许 Sampling 请求带上下文。",
+         "default": false,
          "x-widget": "switch",
          "advanced": true
         },
@@ -3743,6 +4025,7 @@
          "type": "boolean",
          "label": "允许 Sampling 使用工具",
          "description": "Sampling 过程中是否允许继续使用工具。",
+         "default": false,
          "x-widget": "switch"
         }
        ]
@@ -3756,6 +4039,7 @@
          "type": "boolean",
          "label": "启用 Elicitation（暂未支持）",
          "description": "是否声明支持 MCP Elicitation。",
+         "default": false,
          "x-widget": "switch",
          "advanced": true
         },
@@ -3764,6 +4048,7 @@
          "type": "boolean",
          "label": "允许表单请求",
          "description": "是否允许 MCP 服务器请求填写表单。",
+         "default": true,
          "x-widget": "switch",
          "advanced": true
         },
@@ -3772,6 +4057,7 @@
          "type": "boolean",
          "label": "允许 URL 请求",
          "description": "是否允许 MCP 服务器请求打开 URL。",
+         "default": false,
          "x-widget": "switch",
          "advanced": true
         }
@@ -3788,6 +4074,7 @@
        "type": "string",
        "label": "服务名称",
        "description": "MCP 服务器名称，必须唯一。",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -3795,6 +4082,7 @@
        "type": "boolean",
        "label": "启用服务",
        "description": "是否启用这个 MCP 服务器。",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -3802,6 +4090,7 @@
        "type": "select",
        "label": "传输方式",
        "description": "连接方式；本地命令通常用 stdio，远程服务用 HTTP/SSE。",
+       "default": "stdio",
        "options": [
         "stdio",
         "streamable_http",
@@ -3819,6 +4108,7 @@
        "type": "string",
        "label": "启动命令",
        "description": "stdio 模式下启动服务器的命令。",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -3843,6 +4133,7 @@
        "type": "string",
        "label": "服务 URL",
        "description": "HTTP 或 SSE 模式下的服务器地址。",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -3857,6 +4148,7 @@
        "type": "number",
        "label": "HTTP 请求超时",
        "description": "HTTP 请求多久没响应就算超时。",
+       "default": 30.0,
        "x-widget": "number"
       },
       {
@@ -3864,6 +4156,7 @@
        "type": "number",
        "label": "会话读取超时",
        "description": "连接建立后，等服务器消息的最长时间。",
+       "default": 300.0,
        "x-widget": "number"
       },
       {
@@ -3883,6 +4176,7 @@
          "type": "select",
          "label": "认证方式",
          "description": "MCP HTTP 认证方式；none 表示不认证。",
+         "default": "none",
          "options": [
           "none",
           "bearer"
@@ -3898,6 +4192,7 @@
          "type": "string",
          "label": "Bearer Token",
          "description": "Bearer 认证令牌，只在 mode 为 bearer 时使用。",
+         "default": "",
          "x-widget": "password"
         }
        ]
@@ -3926,7 +4221,8 @@
      "name": "command_permissions",
      "type": "object",
      "label": "command_permissions",
-     "description": "受保护命令按用户和真实聊天流配置的额外放行规则。"
+     "description": "受保护命令按用户和真实聊天流配置的额外放行规则。",
+     "hidden": true
     }
    ]
   },
@@ -3941,6 +4237,7 @@
      "type": "boolean",
      "label": "启用插件运行时",
      "description": "是否启用新版插件运行时。",
+     "default": true,
      "x-widget": "switch"
     },
     {
@@ -3948,6 +4245,7 @@
      "type": "number",
      "label": "健康检查间隔秒数",
      "description": "每隔多少秒检查一次插件运行状态。",
+     "default": 30.0,
      "x-widget": "number"
     },
     {
@@ -3955,6 +4253,7 @@
      "type": "integer",
      "label": "最大重启次数",
      "description": "插件 Runner 崩溃后最多自动重启几次。",
+     "default": 3,
      "x-widget": "number"
     },
     {
@@ -3962,6 +4261,7 @@
      "type": "number",
      "label": "Runner 启动超时秒数",
      "description": "等待插件 Runner 启动完成的最长时间。",
+     "default": 30.0,
      "x-widget": "number"
     },
     {
@@ -3969,6 +4269,7 @@
      "type": "number",
      "label": "阻塞 Hook 超时秒数",
      "description": "单个阻塞 Hook 最多允许运行多久。",
+     "default": 60,
      "x-widget": "number"
     },
     {
@@ -3976,6 +4277,7 @@
      "type": "string",
      "label": "通信 Socket 路径",
      "description": "自定义插件通信 Socket 路径；留空自动生成。",
+     "default": "",
      "x-widget": "input"
     },
     {
@@ -3995,6 +4297,7 @@
        "type": "boolean",
        "label": "启用浏览器渲染",
        "description": "是否允许插件使用浏览器渲染能力。",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -4002,6 +4305,7 @@
        "type": "string",
        "label": "浏览器调试地址",
        "description": "已有 Chrome/Chromium 的调试地址；留空则自动启动。",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -4009,6 +4313,7 @@
        "type": "string",
        "label": "浏览器程序路径",
        "description": "浏览器程序路径；留空自动查找。",
+       "default": "",
        "x-widget": "input"
       },
       {
@@ -4016,6 +4321,7 @@
        "type": "string",
        "label": "浏览器安装目录",
        "description": "自动下载浏览器时保存的位置。",
+       "default": "data/playwright-browsers",
        "x-widget": "input"
       },
       {
@@ -4023,6 +4329,7 @@
        "type": "boolean",
        "label": "无界面运行",
        "description": "是否隐藏浏览器窗口运行。",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -4040,6 +4347,7 @@
        "type": "integer",
        "label": "并发渲染数",
        "description": "同时最多运行多少个渲染任务。",
+       "default": 2,
        "minValue": 1,
        "x-widget": "number"
       },
@@ -4048,6 +4356,7 @@
        "type": "number",
        "label": "启动超时秒数",
        "description": "浏览器启动或连接的最长等待时间。",
+       "default": 20.0,
        "x-widget": "number"
       },
       {
@@ -4055,6 +4364,7 @@
        "type": "number",
        "label": "渲染超时秒数",
        "description": "单次渲染任务的最长等待时间。",
+       "default": 15.0,
        "x-widget": "number"
       },
       {
@@ -4062,6 +4372,7 @@
        "type": "boolean",
        "label": "自动下载 Chromium",
        "description": "找不到浏览器时是否自动下载 Chromium。",
+       "default": true,
        "x-widget": "switch"
       },
       {
@@ -4069,6 +4380,7 @@
        "type": "number",
        "label": "下载连接超时秒数",
        "description": "下载 Chromium 时的连接超时时间。",
+       "default": 120.0,
        "x-widget": "number"
       },
       {
@@ -4076,6 +4388,7 @@
        "type": "integer",
        "label": "渲染后重启次数",
        "description": "渲染多少次后重启浏览器；0 表示不自动重启。",
+       "default": 200,
        "minValue": 0,
        "x-widget": "number"
       }

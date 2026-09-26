@@ -5,7 +5,7 @@ MaiBot 的 bot_config / model_config 由 pydantic 类定义、没有模板文件
 
 - crates/ncd-appframework/src/maibot/schema/generated.rs   强类型结构体 + 范围 / 选项校验
 - crates/ncd-appframework/src/maibot/schema/defaults/*.toml 上游自己生成的完整默认配置（读取时垫底）
-- src-ui/modules/apps/detail/maibot/schema/*.json           界面用的中文标签、说明、控件、分组
+- src-ui/core/domain/apps/maibotSchema/*.json              界面用的中文标签、说明、控件、分组、范围
 
 用法（要一个装好依赖的 MaiBot venv；Desktop 装的实例目录里就有）：
 
@@ -30,16 +30,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 RUST_OUT = REPO / "crates/ncd-appframework/src/maibot/schema/generated.rs"
 DEFAULTS_OUT = REPO / "crates/ncd-appframework/src/maibot/schema/defaults"
-UI_OUT = REPO / "src-ui/modules/apps/detail/maibot/schema"
+UI_OUT = REPO / "src-ui/core/domain/apps/maibotSchema"
 TS_EXPORT = "../../../src-ui/core/ipc/generated/maibot/"
 SKIP_FIELDS = {"field_docs", "_validate_any", "suppress_any_warning"}
 # 上游 dict[str, Any] 字段：界面上当行内 TOML 文本编辑，读写时由 schema/mod.rs 按路径转换
 ANY_TABLE_FIELDS = {"ModelInfo.extra_params"}
-# 界面用得上的 schema 键；其余（多语言标签、布局宽度、默认值之类）丢掉。默认值以 Rust 一侧为准
+# 界面用得上的 schema 键；其余（多语言标签、布局宽度之类）丢掉。默认值留着：列表里「加一条」要按它起新条目
 UI_KEYS = (
-    "name", "type", "label", "description", "options", "minValue", "maxValue",
+    "name", "type", "label", "description", "default", "options", "minValue", "maxValue",
     "step", "x-widget", "x-option-labels", "x-option-descriptions", "advanced", "x-row",
-    "placeholder", "items", "x-textarea-rows", "x-description-display",
+    "placeholder", "items", "x-textarea-rows", "x-description-display", "hidden",
 )
 UI_NODE_KEYS = ("className", "uiLabel", "uiAdvanced", "uiOrder", "uiParent")
 

@@ -100,6 +100,12 @@ export type { MaiBotInstanceConfig } from './generated/domain/MaiBotInstanceConf
 export type { MaiBotAdapterConfig } from './generated/domain/MaiBotAdapterConfig';
 export type { MaiBotChatFilter } from './generated/domain/MaiBotChatFilter';
 export type { MaiBotListMode } from './generated/domain/MaiBotListMode';
+export type { MaiBotBotConfigFile } from './generated/maibot/MaiBotBotConfigFile';
+export type { MaiBotModelConfigFile } from './generated/maibot/MaiBotModelConfigFile';
+export type { MaiBotAPIProvider } from './generated/maibot/MaiBotAPIProvider';
+export type { MaiBotModelInfo } from './generated/maibot/MaiBotModelInfo';
+export type { MaiBotTaskConfig } from './generated/maibot/MaiBotTaskConfig';
+export type { MaiBotKeywordRuleConfig } from './generated/maibot/MaiBotKeywordRuleConfig';
 export type { AppConfigDocument } from './generated/domain/AppConfigDocument';
 export type { AppConfigFormat } from './generated/domain/AppConfigFormat';
 export type { AppConfigText } from './generated/domain/AppConfigText';

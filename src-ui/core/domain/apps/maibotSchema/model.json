@@ -37,6 +37,7 @@
      "type": "string",
      "label": "model_identifier",
      "description": "模型标识符 (API服务商提供的模型标识符)",
+     "default": "",
      "x-widget": "input"
     },
     {
@@ -44,6 +45,7 @@
      "type": "string",
      "label": "name",
      "description": "模型名称 (可随意命名, 在models中需使用这个命名)",
+     "default": "",
      "x-widget": "input"
     },
     {
@@ -51,6 +53,7 @@
      "type": "string",
      "label": "api_provider",
      "description": "API服务商名称 (对应在api_providers中配置的服务商名称)",
+     "default": "",
      "x-widget": "select"
     },
     {
@@ -58,6 +61,7 @@
      "type": "number",
      "label": "price_in",
      "description": "输入价格 (用于API调用统计, 单位：元/ M token) (可选, 若无该字段, 默认值为0)",
+     "default": 0.0,
      "minValue": 0,
      "step": 0.001,
      "x-widget": "input"
@@ -67,6 +71,7 @@
      "type": "boolean",
      "label": "cache",
      "description": "是否启用模型输入缓存计费。开启后命中缓存的输入 token 使用 cache_price_in 计费。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -74,6 +79,7 @@
      "type": "number",
      "label": "cache_price_in",
      "description": "缓存命中输入价格 (用于API调用统计, 单位：元/ M token)。仅当 cache=true 时使用。",
+     "default": 0.0,
      "minValue": 0,
      "step": 0.001,
      "x-widget": "input"
@@ -83,6 +89,7 @@
      "type": "number",
      "label": "price_out",
      "description": "输出价格 (用于API调用统计, 单位：元/ M token) (可选, 若无该字段, 默认值为0)",
+     "default": 0.0,
      "minValue": 0,
      "step": 0.001,
      "x-widget": "input"
@@ -92,6 +99,7 @@
      "type": "string",
      "label": "temperature",
      "description": "模型级别温度（可选），会覆盖任务配置中的温度",
+     "default": null,
      "x-widget": "input"
     },
     {
@@ -99,6 +107,7 @@
      "type": "boolean",
      "label": "send_temperature",
      "description": "是否向模型服务发送由 MaiBot 管理的 temperature 参数。",
+     "default": true,
      "x-widget": "switch",
      "advanced": true
     },
@@ -107,6 +116,7 @@
      "type": "string",
      "label": "max_tokens",
      "description": "模型级别最大token数（可选），会覆盖任务配置中的max_tokens",
+     "default": null,
      "x-widget": "input"
     },
     {
@@ -114,6 +124,7 @@
      "type": "boolean",
      "label": "force_stream_mode",
      "description": "强制流式输出模式 (若模型不支持非流式输出, 请设置为true启用强制流式输出, 默认值为false)",
+     "default": false,
      "x-widget": "switch",
      "advanced": true
     },
@@ -122,6 +133,7 @@
      "type": "boolean",
      "label": "visual",
      "description": "是否为多模态模型。开启后表示该模型支持视觉输入。",
+     "default": false,
      "x-widget": "switch"
     },
     {
@@ -241,6 +253,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -250,6 +263,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -260,6 +274,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -270,6 +285,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -282,6 +298,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -308,6 +325,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -317,6 +335,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -327,6 +346,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -337,6 +357,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -349,6 +370,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -375,6 +397,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -384,6 +407,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -394,6 +418,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -404,6 +429,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -416,6 +442,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -442,6 +469,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -451,6 +479,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -461,6 +490,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -471,6 +501,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -483,6 +514,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -509,6 +541,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -518,6 +551,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -528,6 +562,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -538,6 +573,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -550,6 +586,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -576,6 +613,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -585,6 +623,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -595,6 +634,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -605,6 +645,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -617,6 +658,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -643,6 +685,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -652,6 +695,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -662,6 +706,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -672,6 +717,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -684,6 +730,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -710,6 +757,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -719,6 +767,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -729,6 +778,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -739,6 +789,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -751,6 +802,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -777,6 +829,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -786,6 +839,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -796,6 +850,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -806,6 +861,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -818,6 +874,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -844,6 +901,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -853,6 +911,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -863,6 +922,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -873,6 +933,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -885,6 +946,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -911,6 +973,7 @@
        "type": "integer",
        "label": "max_tokens",
        "description": "任务最大输出token数",
+       "default": 4096,
        "minValue": 1,
        "step": 1,
        "x-widget": "input"
@@ -920,6 +983,7 @@
        "type": "number",
        "label": "temperature",
        "description": "模型温度",
+       "default": 0.3,
        "minValue": 0,
        "maxValue": 2,
        "step": 0.1,
@@ -930,6 +994,7 @@
        "type": "number",
        "label": "slow_threshold",
        "description": "超时警告时间（秒），超过此时间会输出警告日志",
+       "default": 15.0,
        "minValue": 0,
        "step": 0.1,
        "x-widget": "input",
@@ -940,6 +1005,7 @@
        "type": "string",
        "label": "selection_strategy",
        "description": "模型选择策略：balance（负载均衡）、random（随机选择）或 sequential（按配置顺序优先选择）",
+       "default": "balance",
        "options": [
         "balance",
         "random",
@@ -952,6 +1018,7 @@
        "type": "number",
        "label": "hard_timeout",
        "description": "任务硬超时（秒），到点未返回则取消请求并尝试切换下一个模型；防止上游代理静默排队导致主循环饥饿",
+       "default": 240.0,
        "minValue": 1.0,
        "step": 1.0,
        "x-widget": "input",
@@ -970,6 +1037,7 @@
      "type": "string",
      "label": "name",
      "description": "API服务商名称 (可随意命名, 在models的api-provider中需使用这个命名)",
+     "default": "",
      "x-widget": "input"
     },
     {
@@ -977,6 +1045,7 @@
      "type": "string",
      "label": "base_url",
      "description": "API服务商的BaseURL",
+     "default": "",
      "x-widget": "input"
     },
     {
@@ -991,6 +1060,7 @@
      "type": "string",
      "label": "client_type",
      "description": "客户端类型。内置支持 openai、openai_responses 和 gemini，也可由插件扩展。",
+     "default": "openai",
      "x-widget": "select"
     },
     {
@@ -998,6 +1068,7 @@
      "type": "string",
      "label": "auth_type",
      "description": "OpenAI 兼容接口的鉴权方式。可选值：`bearer`、`header`、`query`、`none`。",
+     "default": "bearer",
      "x-widget": "select"
     },
     {
@@ -1005,6 +1076,7 @@
      "type": "string",
      "label": "auth_header_name",
      "description": "当 `auth_type` 为 `header` 时使用的请求头名称。",
+     "default": "Authorization",
      "x-widget": "input"
     },
     {
@@ -1012,6 +1084,7 @@
      "type": "string",
      "label": "auth_header_prefix",
      "description": "当 `auth_type` 为 `header` 时使用的请求头前缀。留空表示直接发送原始密钥。",
+     "default": "Bearer",
      "x-widget": "input"
     },
     {
@@ -1019,6 +1092,7 @@
      "type": "string",
      "label": "auth_query_name",
      "description": "当 `auth_type` 为 `query` 时使用的查询参数名称。",
+     "default": "api_key",
      "x-widget": "input"
     },
     {
@@ -1040,6 +1114,7 @@
      "type": "string",
      "label": "organization",
      "description": "OpenAI 官方接口可选的 `organization`。",
+     "default": null,
      "x-widget": "input"
     },
     {
@@ -1047,6 +1122,7 @@
      "type": "string",
      "label": "project",
      "description": "OpenAI 官方接口可选的 `project`。",
+     "default": null,
      "x-widget": "input"
     },
     {
@@ -1054,6 +1130,7 @@
      "type": "string",
      "label": "model_list_endpoint",
      "description": "模型列表端点路径。适用于 OpenAI 兼容接口的探测与管理。",
+     "default": "/models",
      "x-widget": "input"
     },
     {
@@ -1061,6 +1138,7 @@
      "type": "string",
      "label": "reasoning_parse_mode",
      "description": "推理内容解析模式。可选值：`auto`、`native`、`think_tag`、`none`。",
+     "default": "auto",
      "x-widget": "select"
     },
     {
@@ -1068,6 +1146,7 @@
      "type": "string",
      "label": "tool_argument_parse_mode",
      "description": "工具参数解析模式。可选值：`auto`、`strict`、`repair`、`double_decode`。",
+     "default": "auto",
      "x-widget": "select"
     },
     {
@@ -1075,6 +1154,7 @@
      "type": "integer",
      "label": "max_retry",
      "description": "最大重试次数 (单个模型API调用失败, 最多重试的次数)",
+     "default": 3,
      "minValue": 0,
      "x-widget": "input"
     },
@@ -1083,6 +1163,7 @@
      "type": "integer",
      "label": "timeout",
      "description": "API调用的超时时长 (超过这个时长, 本次请求将被视为\"请求超时\", 单位: 秒)",
+     "default": 60,
      "minValue": 1,
      "step": 1,
      "x-widget": "input"
@@ -1092,6 +1173,7 @@
      "type": "integer",
      "label": "retry_interval",
      "description": "重试间隔 (如果API调用失败, 重试的间隔时间, 单位: 秒)",
+     "default": 5,
      "minValue": 1,
      "step": 1,
      "x-widget": "input"
