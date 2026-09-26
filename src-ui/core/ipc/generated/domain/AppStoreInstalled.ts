@@ -2,4 +2,8 @@
 import type { AppStoreFlavor } from "./AppStoreFlavor";
 import type { AppStoreResource } from "./AppStoreResource";
 
-export type AppStoreInstalled = { id: string, name: string, resource: AppStoreResource, flavor: AppStoreFlavor, version?: string, enabled: boolean, package: string, };
+export type AppStoreInstalled = { id: string, name: string, resource: AppStoreResource, flavor: AppStoreFlavor, version?: string, enabled: boolean, package: string, 
+/**
+ * 桌面端自己装、自己写配置的（MaiBot 的 NapCat 适配器）：商店里不能卸、不能停、不能更
+ */
+locked: boolean, };

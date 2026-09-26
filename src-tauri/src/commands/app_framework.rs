@@ -864,6 +864,7 @@ pub async fn submit_app_plugin_op(
         "karin" => "Karin",
         "nonebot2" => "NoneBot2",
         "astrbot" => "AstrBot",
+        "maibot" => "MaiBot",
         other => other,
     };
     let app_manager = std::sync::Arc::clone(&state.app_manager);

@@ -25,7 +25,7 @@ serde = { workspace = true }
 serde_json = { workspace = true, features = ["preserve_order"] }
 sha2 = "0.10"
 thiserror = { workspace = true }
-tokio = { version = "1", features = ["rt", "sync"] }
+tokio = { version = "1", features = ["rt", "sync", "time"] }
 toml = "0.8"
 toml_edit = "0.22"
 tracing = "0.1"
@@ -36,6 +36,8 @@ fancy-regex = "0.14"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tempfile = "3"
 wiremock = "0.6"
+# MaiBot 插件商店的测试要现做一个 GitHub 源码包那样的 zip（ncd-host 解压用的同一个库）
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [lints]
 workspace = true

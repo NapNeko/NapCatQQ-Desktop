@@ -8,6 +8,7 @@ pub mod manifest;
 pub mod release;
 pub mod runtime;
 pub mod schema;
+pub mod store;
 pub mod terms;
 pub mod webui_client;
 
@@ -17,7 +18,7 @@ use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
     AppConfigDocument, AppFrameworkManifest, AppInstance, AppPendingTerms, AppProjectProbe,
-    OneBotLinkPlan,
+    AppStoreResource, OneBotLinkPlan,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
@@ -34,7 +35,10 @@ pub use integration::MaiBotIntegration;
 use webui_client::MaiBotWebUi;
 pub use manifest::{MAIBOT_FRAMEWORK_ID, maibot_manifest};
 
-use crate::adapter::{AppComponentSpec, AppFrameworkAdapter, apply_with_backup_ex, restore_from_backup};
+use crate::adapter::{
+    AppComponentSpec, AppFrameworkAdapter, PluginLogSink, apply_with_backup_ex, restore_from_backup,
+};
+use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use crate::adopt::write_project_sidecar;
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
@@ -320,6 +324,114 @@ impl AppFrameworkAdapter for MaiBotAdapter {
 
     fn config_documents(&self, _instance: &AppInstance) -> Vec<AppConfigDocument> {
         maibot_config_documents()
+    }
+
+    /// 插件的 `config.toml` 按目录名现拼，不进固定文档列表
+    fn find_document(
+        &self,
+        instance: &AppInstance,
+        doc_id: &str,
+    ) -> Result<AppConfigDocument, AppFrameworkError> {
+        if let Some(dir) = store::parse_plugin_doc_id(doc_id) {
+            return Ok(store::plugin_config_document(dir));
+        }
+        self.config_documents(instance)
+            .into_iter()
+            .find(|d| d.id == doc_id)
+            .ok_or_else(|| AppFrameworkError::Validation(format!("未知的配置文档: {doc_id}")))
+    }
+
+    async fn list_installed(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        resource: AppStoreResource,
+    ) -> Result<Vec<AppStoreInstalled>, AppFrameworkError> {
+        store::list_installed(host, instance, resource).await
+    }
+
+    async fn install_store_item(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        entry: &AppStoreMarketEntry,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        store::install_item(host, instance, entry, log).await
+    }
+
+    async fn update_store_item(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        entry: &AppStoreMarketEntry,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        store::update_item(host, instance, entry, log).await
+    }
+
+    async fn uninstall_store_item(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        id: &str,
+        _flavor: AppStoreFlavor,
+        resource: AppStoreResource,
+        log: Option<&PluginLogSink>,
+    ) -> Result<(), AppFrameworkError> {
+        if resource != AppStoreResource::Plugin {
+            return Err(AppFrameworkError::PluginUnsupported("MaiBot 只有插件商店".into()));
+        }
+        store::uninstall_item(host, instance, id, log).await
+    }
+
+    async fn set_store_enabled(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        id: &str,
+        resource: AppStoreResource,
+        enabled: bool,
+        _overwrite: bool,
+    ) -> Result<(), AppFrameworkError> {
+        if resource != AppStoreResource::Plugin {
+            return Err(AppFrameworkError::PluginUnsupported("MaiBot 只有插件商店".into()));
+        }
+        store::set_enabled(host, instance, id, enabled).await
+    }
+
+    async fn list_plugin_config_docs(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        plugin_name: &str,
+    ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
+        store::list_plugin_config_docs(host, instance, plugin_name).await
+    }
+
+    fn store_market_urls(&self, resource: AppStoreResource) -> Vec<String> {
+        match resource {
+            AppStoreResource::Plugin => store::maibot_plugin_market_urls(),
+            AppStoreResource::Adapter => Vec::new(),
+        }
+    }
+
+    fn store_market_cache_key(&self, resource: AppStoreResource) -> Option<&'static str> {
+        match resource {
+            AppStoreResource::Plugin => Some("maibot-plugins"),
+            AppStoreResource::Adapter => None,
+        }
+    }
+
+    fn parse_store_market(
+        &self,
+        resource: AppStoreResource,
+        text: &str,
+    ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+        match resource {
+            AppStoreResource::Plugin => store::parse_maibot_plugins_json(text),
+            AppStoreResource::Adapter => Err(AppFrameworkError::PluginUnsupported("MaiBot 只有插件商店".into())),
+        }
     }
 
     /// 上游距上次热加载不足 1s 的变更直接跳过（`_hot_reload_min_interval_s`），加上 600ms 防抖留足余量

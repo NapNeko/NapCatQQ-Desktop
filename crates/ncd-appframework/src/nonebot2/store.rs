@@ -717,6 +717,7 @@ pub async fn list_installed(
             }),
             enabled: item.enabled,
             package: item.project_link.clone(),
+            locked: false,
         })
         .collect())
 }

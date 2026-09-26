@@ -75,6 +75,9 @@ pub struct AppStoreInstalled {
     pub enabled: bool,
     #[serde(default)]
     pub package: String,
+    /// 桌面端自己装、自己写配置的（MaiBot 的 NapCat 适配器）：商店里不能卸、不能停、不能更
+    #[serde(default)]
+    pub locked: bool,
 }
 
 impl AppStoreFlavor {
@@ -152,6 +155,7 @@ impl AppStoreInstalled {
             version: entry.version,
             enabled: entry.enabled,
             package: entry.name,
+            locked: false,
         }
     }
 

@@ -340,6 +340,7 @@ pub async fn list_installed(
             },
             enabled: !inactivated.iter().any(|p| p == &module),
             package: meta.repo,
+            locked: false,
         });
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -401,7 +402,8 @@ fn github_download_candidates(url: &str) -> Vec<String> {
     out
 }
 
-async fn download_file_with_mirrors(
+/// GitHub 的地址依次试原站和两个代理；MaiBot 的插件商店也用
+pub(crate) async fn download_file_with_mirrors(
     host: &dyn Host,
     url: &str,
     dest: &HostPath,

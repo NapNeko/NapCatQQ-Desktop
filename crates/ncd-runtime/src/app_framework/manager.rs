@@ -3305,6 +3305,7 @@ mod installed_fallback_tests {
             version: Some("1.0.0".into()),
             enabled: true,
             package: package.into(),
+            locked: false,
         }
     }
 

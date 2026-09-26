@@ -3170,6 +3170,7 @@ dependencies = [
  "tracing",
  "ts-rs",
  "wiremock",
+ "zip",
 ]
 
 [[package]]
