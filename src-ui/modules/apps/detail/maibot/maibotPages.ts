@@ -34,6 +34,7 @@ export const MAIBOT_NAV: readonly FrameworkNavGroup[] = [
             { value: 'expressions', label: '表达方式' },
             { value: 'jargon', label: '黑话' },
             { value: 'persons', label: '人物' },
+            { value: 'knowledge', label: '知识库' },
         ],
     },
     {
@@ -79,7 +80,8 @@ export type SchemaPageDef = {
     links?: readonly MaiBotPageLink[];
 };
 
-export type MaiBotPageLink = { label: string; tab: string } | { label: string; path: string };
+/** tab 跳桌面端那一页，view 是那页里的哪一块（知识库的导入 / 图谱）；path 开麦麦 WebUI */
+export type MaiBotPageLink = { label: string; tab: string; view?: string } | { label: string; path: string };
 
 // 分时段频率和按聊天的提示词是「按会话」的规则，归会话规则页；回复设置页只放全局的
 const RULE_FIELDS = [
@@ -139,8 +141,8 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
     memory: {
         sections: [{ path: ['a_memorix'], title: '长期记忆' }],
         links: [
-            { label: '记忆图谱', path: '/resource/knowledge-graph' },
-            { label: '导入知识', path: '/resource/knowledge-base' },
+            { label: '记忆图谱', tab: 'knowledge', view: 'graph' },
+            { label: '导入知识', tab: 'knowledge', view: 'import' },
         ],
     },
     mcp: { sections: [{ path: ['mcp'], title: 'MCP' }] },

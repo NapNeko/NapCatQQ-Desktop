@@ -1,7 +1,7 @@
 // MaiBot 详情页装配：所有页吃同一份类型化配置（两份主配置 + 适配器名单），改动走底部保存条。
 // 模型页和聊天名单、连接是手写的；其余配置页照 maibotPages 的定义由 schema 铺出来。
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { TabsContent } from '../../../../shared/ui';
 import { maibotChatDropsEverything, maibotModelSetupIssue } from '../../../../core/domain/apps/maibotConfig';
 import { useAppInstances } from '../../../../hooks/apps/useAppInstances';
@@ -17,6 +17,8 @@ import { MaiBotExpressionsTab } from './MaiBotExpressionsTab';
 import { MaiBotJargonTab } from './MaiBotJargonTab';
 import { MaiBotEmojisTab } from './MaiBotEmojisTab';
 import { MaiBotPersonsTab } from './MaiBotPersonsTab';
+import { MaiBotKnowledgeTab } from './MaiBotKnowledgeTab';
+import type { KnowledgeView } from './maibotKnowledgeParts';
 import { usePromptDrafts } from './maibotPromptDrafts';
 import { NoneBot2StoreTab } from '../nonebot2/NoneBot2StoreTab';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
@@ -33,7 +35,7 @@ import { MAIBOT_NAV, MAIBOT_SCHEMA_PAGES, maibotTabForIssue } from './maibotPage
 
 const TYPED_TABS = new Set(['overview', 'models', 'chat', 'connection', ...Object.keys(MAIBOT_SCHEMA_PAGES)]);
 // 插件商店、提示词、资源页这些自己落盘，不是表单：铺满内容区、不挂保存条
-const FILL_PANE = new Set(['plugins', 'prompts', 'emoji', 'expressions', 'jargon', 'persons']);
+const FILL_PANE = new Set(['plugins', 'prompts', 'emoji', 'expressions', 'jargon', 'persons', 'knowledge']);
 
 function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
     const form = useMaiBotConfigForm(instance.id, true, instance.display_name);
@@ -41,6 +43,12 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
     const apps = useAppInstances();
     const advancedSections = useAdvancedSections();
     const promptDrafts = usePromptDrafts();
+    // 知识库在哪一块；「记忆」页的「记忆图谱」「导入知识」直接跳到对应那块
+    const [knowledgeView, setKnowledgeView] = useState<KnowledgeView>('browse');
+    const goTab = (tab: string, view?: string) => {
+        if (tab === 'knowledge' && (view === 'import' || view === 'browse' || view === 'graph')) setKnowledgeView(view);
+        onGoTab(tab);
+    };
 
     // 运行期：WebUI 应答了才去拉会话、MCP 状态
     const running = instance.state === 'running';
@@ -112,6 +120,16 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
             <TabsContent value="persons" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
                 <MaiBotPersonsTab instance={instance} status={status} {...startProps} />
             </TabsContent>
+            <TabsContent value="knowledge" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+                <MaiBotKnowledgeTab
+                    instance={instance}
+                    status={status}
+                    view={knowledgeView}
+                    onView={setKnowledgeView}
+                    onGoTab={onGoTab}
+                    {...startProps}
+                />
+            </TabsContent>
             {pane('overview', (cfg) => (
                 <MaiBotOverviewTab
                     instance={instance}
@@ -145,7 +163,7 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                         chatTargets={live ? sessions.data : undefined}
                         live={live}
                         onOpenWebUi={(path) => void apps.openWebUi(instance.id, path)}
-                        onGoTab={onGoTab}
+                        onGoTab={goTab}
                         intro={
                             tab === 'mcp' && live ? (
                                 <McpStatusPanel instanceId={instance.id} servers={cfg.bot.mcp.servers} status={mcp.data} />

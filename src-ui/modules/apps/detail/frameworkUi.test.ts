@@ -61,13 +61,14 @@ describe('resolveFrameworkUi', () => {
             'expressions',
             'jargon',
             'persons',
+            'knowledge',
             'plugins',
             'mcp',
             'connection',
             'advanced',
         ]);
         // 插件商店、提示词、资源页这些自己落盘，铺满内容区、不挂保存条；其余都是配置页
-        const ownSave = ['plugins', 'prompts', 'emoji', 'expressions', 'jargon', 'persons'];
+        const ownSave = ['plugins', 'prompts', 'emoji', 'expressions', 'jargon', 'persons', 'knowledge'];
         for (const t of ownSave) {
             expect(ui?.fillPaneTabs.has(t)).toBe(true);
             expect(ui?.typedTabs.has(t)).toBe(false);

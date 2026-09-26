@@ -25,12 +25,14 @@ export const ResourcePane: React.FC<{
     footer?: ReactNode;
     /** 底部浮条（多选后出现），浮在列表上 */
     overlay?: ReactNode;
+    /** 内容区自己铺满、自己滚（图谱画布这种）：不留给浮条的底边距 */
+    fill?: boolean;
     children: ReactNode;
-}> = ({ toolbar, notice, footer, overlay, children }) => (
+}> = ({ toolbar, notice, footer, overlay, fill, children }) => (
     <div className="relative flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-2 pb-3">{toolbar}</div>
         {notice && <div className="pb-3">{notice}</div>}
-        <div className="min-h-0 flex-1 overflow-y-auto pb-16">{children}</div>
+        <div className={cn('min-h-0 flex-1', fill ? 'overflow-hidden' : 'overflow-y-auto pb-16')}>{children}</div>
         {footer && <div className="border-t border-border-subtle pt-2.5">{footer}</div>}
         {overlay}
     </div>

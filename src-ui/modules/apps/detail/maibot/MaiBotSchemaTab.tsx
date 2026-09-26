@@ -33,7 +33,8 @@ export const MaiBotSchemaTab: React.FC<{
     /** WebUI 应答了才能开 links 里的 WebUI 页 */
     live: boolean;
     onOpenWebUi: (path: string) => void;
-    onGoTab: (tab: string) => void;
+    /** view 是目标页里的哪一块（知识库的导入 / 图谱） */
+    onGoTab: (tab: string, view?: string) => void;
 }> = ({
     tab,
     page,
@@ -81,7 +82,7 @@ export const MaiBotSchemaTab: React.FC<{
                 <div className="flex flex-wrap items-center gap-1">
                     {links.map((l) =>
                         'tab' in l ? (
-                            <Button key={l.tab} size="sm" variant="ghost" onClick={() => onGoTab(l.tab)}>
+                            <Button key={l.label} size="sm" variant="ghost" onClick={() => onGoTab(l.tab, l.view)}>
                                 <ArrowRight size={13} />
                                 {l.label}
                             </Button>
