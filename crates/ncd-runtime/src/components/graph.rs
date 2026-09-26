@@ -253,6 +253,8 @@ Windows/Local astrbot
   component uv >=0.4 (Both)
 Windows/Local karin
   component nodejs >=18 (Both)
+Windows/Local maibot
+  component uv >=0.4 (Both)
 Windows/Local nonebot2
   component uv >=0.4 (Both)
 Linux/Local napcat
@@ -277,6 +279,8 @@ Linux/Local astrbot
   component uv >=0.4 (Both)
 Linux/Local karin
   component nodejs >=18 (Both)
+Linux/Local maibot
+  component uv >=0.4 (Both)
 Linux/Local nonebot2
   component uv >=0.4 (Both)
 Linux/Remote napcat
@@ -303,6 +307,8 @@ Linux/Remote astrbot
   component uv >=0.4 (Both)
 Linux/Remote karin
   component nodejs >=18 (Both)
+Linux/Remote maibot
+  component uv >=0.4 (Both)
 Linux/Remote nonebot2
   component uv >=0.4 (Both)
 ";
