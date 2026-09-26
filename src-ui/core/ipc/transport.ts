@@ -98,6 +98,20 @@ export async function pickImageFiles(title: string): Promise<string[]> {
     return Array.isArray(selected) ? selected : [selected];
 }
 
+/// 选几个文本文件（导入长期记忆），返回绝对路径；取消返回空数组。
+export async function pickTextFiles(title: string): Promise<string[]> {
+    const selected = await tauriInvoke<string | string[] | null>('plugin:dialog|open', {
+        options: {
+            directory: false,
+            multiple: true,
+            title,
+            filters: [{ name: '文本', extensions: ['txt', 'md', 'json'] }],
+        },
+    });
+    if (!selected) return [];
+    return Array.isArray(selected) ? selected : [selected];
+}
+
 /// 另存为 ZIP，返回用户选的完整路径；取消返回 null。
 export async function saveZipFile(
     title: string,
