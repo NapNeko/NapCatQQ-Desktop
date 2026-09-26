@@ -202,6 +202,8 @@ pub struct AppManager {
     tunnels: tokio::sync::Mutex<HashMap<String, AppInstanceTunnel>>,
     /// 正在盯的安装：instance id → task id。不在表里的「安装中」是上次装到一半桌面端退了
     install_watches: std::sync::Mutex<HashMap<AppInstanceId, String>>,
+    /// 运行中写配置的下一个可用时刻（应用要求两次写之间留间隔时才记）
+    config_write_slots: std::sync::Mutex<HashMap<AppInstanceId, Instant>>,
 }
 
 impl AppManager {
@@ -227,6 +229,7 @@ impl AppManager {
             secrets: None,
             tunnels: tokio::sync::Mutex::new(HashMap::new()),
             install_watches: std::sync::Mutex::new(HashMap::new()),
+            config_write_slots: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -803,6 +806,35 @@ impl AppManager {
             }
         });
         Ok(updated)
+    }
+
+    /// 运行中的实例两次写配置之间留够应用要的间隔：先占好自己的时刻再睡，并发保存自然排队
+    async fn wait_config_write_slot(
+        &self,
+        adapter: &dyn AppFrameworkAdapter,
+        instance: &AppInstance,
+    ) {
+        let Some(gap) = adapter.config_write_min_interval() else {
+            return;
+        };
+        if instance.state != AppInstanceState::Running {
+            return;
+        }
+        let wait = {
+            let mut slots = self
+                .config_write_slots
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let now = Instant::now();
+            let at = slots
+                .get(&instance.id)
+                .map_or(now, |next| (*next).max(now));
+            slots.insert(instance.id.clone(), at + gap);
+            at - now
+        };
+        if !wait.is_zero() {
+            tokio::time::sleep(wait).await;
+        }
     }
 
     fn install_watched(&self, id: &AppInstanceId) -> bool {
@@ -1759,6 +1791,7 @@ impl AppManager {
 
         let decided_running = matches!(instance.state, AppInstanceState::Running);
         let live = decided_running && adapter.supports_live_config();
+        self.wait_config_write_slot(adapter.as_ref(), &instance).await;
         let after = if live {
             let port = self.desktop_webui_loopback_port(&instance).await?;
             let again = self.store.require(id).await?;
@@ -1807,6 +1840,10 @@ impl AppManager {
             .await?;
         if live {
             sync.restart_required = false;
+        }
+        // 同一份文档里只在启动时读的字段（MaiBot 的端口 / 日志），走文件还是走接口写都得重启
+        if decided_running && before.config.restart_inputs_changed(&after.config) {
+            sync.restart_required = true;
         }
 
         // 重新对接会再改 .env（HTTP_PORT / WS_SERVER_AUTH_KEY 对齐），回读一次让前端拿到最终版本号
@@ -2072,6 +2109,7 @@ impl AppManager {
         let before = self
             .typed_snapshot(adapter.as_ref(), host.as_ref(), &instance)
             .await;
+        self.wait_config_write_slot(adapter.as_ref(), &instance).await;
         let written = adapter
             .write_config_text(
                 host.as_ref(),
@@ -3882,12 +3920,12 @@ mod tests {
             let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
                 panic!("expected MaiBot config");
             };
-            assert_eq!((cfg.webui_port, cfg.legacy_ws_port), (23001, 23002));
+            assert_eq!((cfg.webui_port(), cfg.legacy_ws_port()), (23001, 23002));
             assert_eq!(cfg.webui_token, "Ncd_tok");
             let adapter = cfg.adapter.as_mut().expect("适配器目录在");
             assert!(adapter.chat.drops_everything());
             adapter.chat.group_list.push("123456".into());
-            cfg.webui_port = 23011;
+            cfg.bot.webui.port = 23011;
 
             let res = f
                 .manager
@@ -3904,6 +3942,62 @@ mod tests {
             let bot_cfg = std::fs::read_to_string(f.inst_dir.join("config/bot_config.toml")).unwrap();
             assert!(bot_cfg.contains("port = 23011"), "{bot_cfg}");
             assert!(bot_cfg.contains("version = \"8.14.40\""));
+        }
+
+        #[tokio::test]
+        async fn maibot_typed_write_touches_only_changed_keys_and_flags_restart_by_field() {
+            let f = maibot_fixture("m-typed").await;
+            std::fs::write(
+                f.inst_dir.join("src/config/config.py"),
+                "CONFIG_VERSION: str = \"8.14.40\"\nMODEL_CONFIG_VERSION: str = \"1.17.9\"\n",
+            )
+            .unwrap();
+            f.manager
+                .store
+                .update(&f.id, |i| i.state = AppInstanceState::Running)
+                .await
+                .unwrap();
+
+            let env = f.manager.read_config(&f.id).await.unwrap();
+            let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
+                panic!("expected MaiBot config");
+            };
+            cfg.bot.personality.personality = "新人格".into();
+            cfg.models.api_providers[0].api_key = "sk-test".into();
+            let res = f
+                .manager
+                .write_config(&f.id, AppInstanceConfig::MaiBot(cfg), Some(env.revision))
+                .await
+                .unwrap();
+            assert!(!res.restart_required, "人格、模型上游热加载，不用重启");
+            let bot_cfg = std::fs::read_to_string(f.inst_dir.join("config/bot_config.toml")).unwrap();
+            assert!(bot_cfg.starts_with("[inner]\nversion = \"8.14.40\"\n\n[webui]\nport = 23001\n"), "{bot_cfg}");
+            assert!(bot_cfg.contains("[personality]\npersonality = \"新人格\""), "{bot_cfg}");
+            assert!(!bot_cfg.contains("[chat"), "没改的默认值不写出来：{bot_cfg}");
+            let model_cfg = std::fs::read_to_string(f.inst_dir.join("config/model_config.toml")).unwrap();
+            assert!(model_cfg.starts_with("[inner]
+version = \"1.17.9\""), "版本号取实例源码里的常量");
+            let models = ncd_appframework::maibot::schema::read_model_config_file(Some(&model_cfg)).unwrap();
+            assert_eq!(models.api_providers[0].api_key, "sk-test");
+            assert!(model_cfg.contains("# 模型标识符"), "从上游默认文件起的稿，注释带着");
+
+            let env = f.manager.read_config(&f.id).await.unwrap();
+            let AppInstanceConfig::MaiBot(mut cfg) = env.config.clone() else {
+                panic!("expected MaiBot config");
+            };
+            cfg.bot.maim_message.ws_server_port = 23012;
+            let t0 = std::time::Instant::now();
+            let res = f
+                .manager
+                .write_config(&f.id, AppInstanceConfig::MaiBot(cfg), Some(env.revision))
+                .await
+                .unwrap();
+            assert!(res.restart_required, "旧版消息口启动时才绑");
+            assert!(
+                t0.elapsed() >= Duration::from_millis(1300),
+                "运行中两次写之间要留出上游热加载的间隔，实际 {:?}",
+                t0.elapsed()
+            );
         }
 
         #[tokio::test]
@@ -4404,8 +4498,8 @@ mod tests {
             eprintln!(
                 "{} 配置: webui={} legacy={} token 长度={} adapter={:?}",
                 stamp(t0),
-                cfg.webui_port,
-                cfg.legacy_ws_port,
+                cfg.webui_port(),
+                cfg.legacy_ws_port(),
                 cfg.webui_token.len(),
                 cfg.adapter.as_ref().map(|a| (a.enabled, a.napcat_port))
             );
@@ -4517,7 +4611,7 @@ mod tests {
                     l.to_ascii_lowercase().starts_with("authorization:") && l.contains(&server.base.token)
                 })
             });
-            let legacy_up = tokio::net::TcpStream::connect(("127.0.0.1", cfg.legacy_ws_port)).await.is_ok();
+            let legacy_up = tokio::net::TcpStream::connect(("127.0.0.1", cfg.legacy_ws_port())).await.is_ok();
             eprintln!("{} 握手带对的 token: {auth_ok}，旧版消息口在听: {legacy_up}", stamp(t0));
 
             let procs = related(&dir_str);
@@ -4544,7 +4638,7 @@ mod tests {
             let after = related(&dir_str);
             let webui_after = tokio::net::TcpStream::connect(("127.0.0.1", WEBUI)).await.is_ok();
             let legacy_after =
-                tokio::net::TcpStream::connect(("127.0.0.1", cfg.legacy_ws_port)).await.is_ok();
+                tokio::net::TcpStream::connect(("127.0.0.1", cfg.legacy_ws_port())).await.is_ok();
             eprintln!(
                 "{} 停后残留: {leftovers:?}，重扫: {after:?}，WebUI 口仍通: {webui_after}，旧版口仍通: {legacy_after}",
                 stamp(t0)

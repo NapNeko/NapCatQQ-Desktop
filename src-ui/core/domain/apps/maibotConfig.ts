@@ -1,7 +1,11 @@
-// MaiBot 窄配置的前端校验 / 上手判定。规则与后端 `maibot::config::validate` 对齐。
-// Desktop 只管端口和聊天名单；模型、人格、插件都在 MaiBot 自己的 WebUI 里配。
+// MaiBot 类型化配置的前端校验 / 上手判定。规则与后端 `maibot::config::validate` 对齐，
+// 路径前缀同后端：`bot/…` 是 bot_config，`models/…` 是 model_config，`adapter/…` 是适配器名单。
 
 import type { AppConfigIssue, MaiBotChatFilter, MaiBotInstanceConfig } from '../../ipc/types';
+// 由 Rust 的 export_bindings_maibot_defaults 导出：和 IPC 上的序列化逐字一致
+import maibotDefaults from './maibotDefaults.json';
+
+type MaiBotFiles = Pick<MaiBotInstanceConfig, 'bot' | 'models'>;
 
 export function maibotDefaultChat(): MaiBotChatFilter {
     return {
@@ -14,10 +18,18 @@ export function maibotDefaultChat(): MaiBotChatFilter {
     };
 }
 
+/** 上游默认的两份主配置（model_config 是首启写出来的那份，带一组 DeepSeek） */
+export function maibotDefaultFiles(): MaiBotFiles {
+    // JSON 推不出字面量联合类型，这里按生成的 TS 类型认
+    return structuredClone(maibotDefaults) as unknown as MaiBotFiles;
+}
+
 export function maibotDefaultConfig(webuiPort: number): MaiBotInstanceConfig {
+    const files = maibotDefaultFiles();
+    files.bot.webui.port = webuiPort;
+    files.bot.maim_message.ws_server_port = webuiPort + 1;
     return {
-        webui_port: webuiPort,
-        legacy_ws_port: webuiPort + 1,
+        ...files,
         webui_token: '',
         adapter: {
             enabled: false,
@@ -52,16 +64,17 @@ export function maibotChatScope(chat: MaiBotChatFilter): string {
 
 const DIGITS = /^\d+$/;
 
+const validPort = (p: number) => Number.isInteger(p) && p >= 1 && p <= 65535;
+
 export function validateMaiBotConfig(cfg: MaiBotInstanceConfig): AppConfigIssue[] {
     const out: AppConfigIssue[] = [];
-    if (!Number.isInteger(cfg.webui_port) || cfg.webui_port < 1) {
-        out.push({ path: 'webui_port', message: '端口不能为 0' });
-    }
-    if (!Number.isInteger(cfg.legacy_ws_port) || cfg.legacy_ws_port < 1) {
-        out.push({ path: 'legacy_ws_port', message: '端口不能为 0' });
-    }
-    if (cfg.webui_port > 0 && cfg.webui_port === cfg.legacy_ws_port) {
-        out.push({ path: 'legacy_ws_port', message: '不能和 WebUI 用同一个端口' });
+    const webui = cfg.bot.webui.port;
+    const legacy = cfg.bot.maim_message.ws_server_port;
+    if (!validPort(webui)) out.push({ path: 'bot/webui/port', message: '要在 1 到 65535 之间' });
+    if (!validPort(legacy)) {
+        out.push({ path: 'bot/maim_message/ws_server_port', message: '要在 1 到 65535 之间' });
+    } else if (webui === legacy) {
+        out.push({ path: 'bot/maim_message/ws_server_port', message: '不能和 WebUI 用同一个端口' });
     }
     const chat = cfg.adapter?.chat;
     if (chat) {

@@ -56,7 +56,7 @@ const ASTRBOT_DOCS: AppConfigDocument[] = [
 ];
 
 const MAIBOT_DOCS: AppConfigDocument[] = [
-    { id: 'bot_config', label: '主配置 bot_config.toml', rel_path: 'config/bot_config.toml', format: 'toml', hot_reload: false },
+    { id: 'bot_config', label: '主配置 bot_config.toml', rel_path: 'config/bot_config.toml', format: 'toml', hot_reload: true },
     { id: 'model_config', label: '模型配置 model_config.toml', rel_path: 'config/model_config.toml', format: 'toml', hot_reload: true },
     {
         id: 'adapter_config',
@@ -481,19 +481,27 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     );
                 }
                 const before = s.config;
-                const portsChanged =
-                    before.webui_port !== next.webui_port || before.legacy_ws_port !== next.legacy_ws_port;
-                if (portsChanged) s.docRev.bot_config = (s.docRev.bot_config ?? 0) + 1;
-                if (JSON.stringify(before.adapter?.chat) !== JSON.stringify(next.adapter?.chat)) {
+                const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
+                if (changed(before.bot, next.bot)) s.docRev.bot_config = (s.docRev.bot_config ?? 0) + 1;
+                if (changed(before.models, next.models)) {
+                    s.docRev.model_config = (s.docRev.model_config ?? 0) + 1;
+                }
+                if (changed(before.adapter?.chat, next.adapter?.chat)) {
                     s.docRev.adapter_config = (s.docRev.adapter_config ?? 0) + 1;
                 }
+                // 和后端一样：只在启动时读的字段（端口、日志、插件运行时…）改了才提示重启
+                const restartFields =
+                    before.bot.webui.port !== next.bot.webui.port
+                    || changed(before.bot.maim_message, next.bot.maim_message)
+                    || changed(before.bot.log, next.bot.log)
+                    || before.bot.plugin_runtime.enabled !== next.bot.plugin_runtime.enabled;
                 // 只读字段以落盘为准
                 s.config = { ...next, webui_token: before.webui_token, adapter: next.adapter && before.adapter
                     ? { ...before.adapter, chat: next.adapter.chat }
                     : before.adapter };
                 let portChanged = false;
-                if (next.webui_port !== inst.port) {
-                    deps.publish({ ...inst, port: next.webui_port }, 'port_changed');
+                if (next.bot.webui.port !== inst.port) {
+                    deps.publish({ ...inst, port: next.bot.webui.port }, 'port_changed');
                     portChanged = true;
                 }
                 const env = mbEnvelope(s);
@@ -501,7 +509,7 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     config: env.config,
                     revision: env.revision,
                     documents: env.documents,
-                    restart_required: portsChanged && inst.state === 'running',
+                    restart_required: restartFields && inst.state === 'running',
                     relinked: false,
                     port_changed: portChanged,
                 });

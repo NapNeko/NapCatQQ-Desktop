@@ -512,8 +512,13 @@ async fn end(ctx: &ActionCtx, step: u32) {
 
 /// 照上游 `_read_config_constant` 认：行首 `CONFIG_VERSION: str = "x.y.z"`
 pub fn read_config_version(config_py: &str) -> Option<String> {
+    read_version_constant(config_py, "CONFIG_VERSION")
+}
+
+/// 同上，按常量名取（`MODEL_CONFIG_VERSION` 也在同一个文件里）
+pub fn read_version_constant(config_py: &str, name: &str) -> Option<String> {
     config_py.lines().find_map(|line| {
-        let rest = line.strip_prefix("CONFIG_VERSION")?.trim_start();
+        let rest = line.strip_prefix(name)?.trim_start();
         let rest = rest.strip_prefix(':')?.trim_start();
         let rest = rest.strip_prefix("str")?.trim_start();
         let rest = rest.strip_prefix('=')?.trim_start();
@@ -688,6 +693,7 @@ mod tests {
         assert_eq!(read_config_version(src).as_deref(), Some("8.14.40"));
         assert_eq!(read_config_version("    CONFIG_VERSION: str = \"1\"\n"), None, "上游只认行首");
         assert_eq!(read_config_version("CONFIG_VERSION = \"1\"\n"), None);
+        assert_eq!(read_version_constant(src, "MODEL_CONFIG_VERSION").as_deref(), Some("1.17.9"));
     }
 
     #[test]

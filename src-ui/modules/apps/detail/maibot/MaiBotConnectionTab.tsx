@@ -50,23 +50,37 @@ export const MaiBotConnectionTab: React.FC<{
                 <div className={CONFIG_PAIR}>
                     <NumberField
                         label="WebUI 端口"
-                        value={config.webui_port}
+                        value={config.bot.webui.port}
                         min={1}
                         max={65535}
-                        error={errors.webui_port}
+                        error={errors['bot/webui/port']}
                         disabled={disabled}
-                        onValueChange={(v) => onChange({ ...config, webui_port: v ?? config.webui_port })}
+                        onValueChange={(v) =>
+                            onChange({
+                                ...config,
+                                bot: { ...config.bot, webui: { ...config.bot.webui, port: v ?? config.bot.webui.port } },
+                            })
+                        }
                     />
                     <NumberField
                         label="旧版消息服务端口"
-                        value={config.legacy_ws_port}
+                        value={config.bot.maim_message.ws_server_port}
                         min={1}
                         max={65535}
-                        error={errors.legacy_ws_port}
+                        error={errors['bot/maim_message/ws_server_port']}
                         hint="适配器插件用不上，但麦麦启动时总会监听，被占用就起不来"
                         disabled={disabled}
                         onValueChange={(v) =>
-                            onChange({ ...config, legacy_ws_port: v ?? config.legacy_ws_port })
+                            onChange({
+                                ...config,
+                                bot: {
+                                    ...config.bot,
+                                    maim_message: {
+                                        ...config.bot.maim_message,
+                                        ws_server_port: v ?? config.bot.maim_message.ws_server_port,
+                                    },
+                                },
+                            })
                         }
                     />
                 </div>

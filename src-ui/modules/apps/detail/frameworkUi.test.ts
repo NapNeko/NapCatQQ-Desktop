@@ -49,8 +49,8 @@ describe('resolveFrameworkUi', () => {
         expect(navValues(ui)).toEqual(['overview', 'chat', 'connection']);
         for (const t of ['overview', 'chat', 'connection']) expect(ui?.typedTabs.has(t)).toBe(true);
         expect(ui?.tabForIssue('adapter/chat/group_list')).toBe('chat');
-        expect(ui?.tabForIssue('webui_port')).toBe('connection');
-        expect(ui?.tabForIssue('legacy_ws_port')).toBe('connection');
+        expect(ui?.tabForIssue('bot/webui/port')).toBe('connection');
+        expect(ui?.tabForIssue('bot/maim_message/ws_server_port')).toBe('connection');
         // 原始文件、日志由外壳挂到「实例」组末尾
         expect(buildDetailNav(ui).at(-1)?.items.map((t) => t.value)).toEqual(['connection', 'raw', 'log']);
     });

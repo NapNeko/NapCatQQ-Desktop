@@ -36,11 +36,24 @@ describe('validateMaiBotConfig', () => {
 
     it('rejects equal ports and non-numeric ids with backend paths', () => {
         const cfg = maibotDefaultConfig(23001);
-        cfg.legacy_ws_port = 23001;
+        cfg.bot.maim_message.ws_server_port = 23001;
         cfg.adapter!.chat.group_list = ['12a'];
         expect(validateMaiBotConfig(cfg).map((i) => i.path)).toEqual([
-            'legacy_ws_port',
+            'bot/maim_message/ws_server_port',
             'adapter/chat/group_list',
         ]);
+    });
+});
+
+describe('maibotDefaultConfig', () => {
+    it('carries the full upstream defaults with the instance ports', () => {
+        const cfg = maibotDefaultConfig(23001);
+        expect(cfg.bot.webui.port).toBe(23001);
+        expect(cfg.bot.maim_message.ws_server_port).toBe(23002);
+        expect(cfg.bot.chat.reply_timing.talk_value_rules).toHaveLength(2);
+        expect(cfg.models.api_providers[0]?.api_key).toBe('your-api-key');
+        // 每次都是新副本，改了不会串到下一次
+        cfg.bot.personality.personality = 'x';
+        expect(maibotDefaultConfig(23001).bot.personality.personality).not.toBe('x');
     });
 });

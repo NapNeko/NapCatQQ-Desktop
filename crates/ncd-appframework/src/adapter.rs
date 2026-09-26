@@ -251,6 +251,12 @@ pub trait AppFrameworkAdapter: Send + Sync {
         false
     }
 
+    /// 运行中两次写配置至少隔多久。应用靠文件监听热加载、又会丢掉太密的变更时给（MaiBot 距上次
+    /// 热加载不足 1s 的改动直接跳过、也不补）；None = 不限
+    fn config_write_min_interval(&self) -> Option<std::time::Duration> {
+        None
+    }
+
     async fn write_live_config(
         &self,
         _host: &dyn Host,

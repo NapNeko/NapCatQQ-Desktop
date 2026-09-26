@@ -20,7 +20,9 @@ pub fn read_bot_config_file(text: Option<&str>) -> Result<MaiBotBotConfigFile, S
     typed(table, "bot_config.toml")
 }
 
-/// 读 `config/model_config.toml`；没有文件按上游首启会生成的那份读
+/// 读 `config/model_config.toml`；没有文件按上游首启会生成的那份读。
+/// 注意 `MaiBotModelConfigFile::default()` 是类的默认值（提供商、模型都是空列表），不是首启那份：
+/// 上游首启另走 `create_default_model_config` 塞了一组 DeepSeek 默认，这里用 `defaults/` 里的文件对上
 pub fn read_model_config_file(text: Option<&str>) -> Result<MaiBotModelConfigFile, String> {
     let mut table = parse(text.unwrap_or(DEFAULT_MODEL_CONFIG), "model_config.toml")?;
     for model in models_mut(&mut table) {
@@ -182,6 +184,21 @@ mod tests {
         assert!(diff[0].1.starts_with("talk_value = 0.35 # "), "行尾注释要留着：{:?}", diff[0].1);
         assert!(diff[1].1.contains("learn = false"), "{:?}", diff[1].1);
         assert_eq!(read_bot_config_file(Some(&out)).unwrap(), after);
+    }
+
+    /// 前端 mock 和读到配置前的占位要一份完整默认值；从这里导出，和 IPC 上的序列化逐字一致。
+    /// 名字带 export_bindings_ 前缀，`pnpm run ts-bindings` 会顺带重写
+    #[test]
+    fn export_bindings_maibot_defaults() {
+        let out = serde_json::json!({
+            "bot": MaiBotBotConfigFile::default(),
+            "models": read_model_config_file(None).unwrap(),
+        });
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../src-ui/core/domain/apps/maibotDefaults.json"
+        );
+        std::fs::write(path, serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
     }
 
     #[test]

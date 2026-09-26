@@ -49,7 +49,7 @@ impl AppInstanceConfig {
             Self::Karin(c) => c.env.http_port,
             Self::NoneBot2(c) => c.env_prod.port,
             Self::AstrBot(c) => c.onebot.ws_reverse_port,
-            Self::MaiBot(c) => c.webui_port,
+            Self::MaiBot(c) => c.webui_port(),
         }
     }
 
@@ -59,7 +59,7 @@ impl AppInstanceConfig {
             Self::Karin(c) => Some(c.env.http_port),
             Self::NoneBot2(_) => None,
             Self::AstrBot(c) => Some(c.dashboard_port).filter(|p| *p > 0),
-            Self::MaiBot(c) => Some(c.webui_port).filter(|p| *p > 0),
+            Self::MaiBot(c) => Some(c.webui_port()).filter(|p| *p > 0),
         }
     }
 
@@ -77,6 +77,17 @@ impl AppInstanceConfig {
             }
             (Self::MaiBot(before), Self::MaiBot(after)) => {
                 crate::maibot::config::link_inputs_changed(before, after)
+            }
+            _ => false,
+        }
+    }
+
+    /// 同一份文档里有的字段热加载、有的只在启动时读（MaiBot 的端口 / 日志），文档粒度的
+    /// `hot_reload` 分不出来，由框架按字段判。跨框架比较视为没变
+    pub fn restart_inputs_changed(&self, after: &Self) -> bool {
+        match (self, after) {
+            (Self::MaiBot(before), Self::MaiBot(after)) => {
+                crate::maibot::config::restart_inputs_changed(before, after)
             }
             _ => false,
         }

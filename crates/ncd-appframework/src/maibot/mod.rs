@@ -1,4 +1,4 @@
-//! MaiBot 适配器：manifest + Component + 正向对接 + 窄配置 + 上游条款核对。
+//! MaiBot 适配器：manifest + Component + 正向对接 + 两份主配置全字段 + 上游条款核对。
 
 mod component;
 pub mod config;
@@ -21,7 +21,7 @@ use ncd_traits::{AppFrameworkError, AppIntegration};
 
 pub use component::{
     MaiBotComponent, generate_webui_token, legacy_port_candidates, read_config_version,
-    render_webui_json,
+    read_version_constant, render_webui_json,
 };
 pub use config::{
     MaiBotAdapterConfig, MaiBotChatFilter, MaiBotInstanceConfig, MaiBotListMode,
@@ -36,7 +36,9 @@ use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
     read_documents,
 };
-use manifest::{ADAPTER_CONFIG, ADAPTER_DIR, BOT_CONFIG, CONFIG_PY, MAIBOT_STDOUT_LOG, WEBUI_JSON};
+use manifest::{
+    ADAPTER_CONFIG, ADAPTER_DIR, BOT_CONFIG, CONFIG_PY, MAIBOT_STDOUT_LOG, MODEL_CONFIG, WEBUI_JSON,
+};
 
 fn host_err(e: ncd_host::HostError) -> AppFrameworkError {
     AppFrameworkError::Host(e.to_string())
@@ -234,6 +236,11 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         maibot_config_documents()
     }
 
+    /// 上游距上次热加载不足 1s 的变更直接跳过（`_hot_reload_min_interval_s`），加上 600ms 防抖留足余量
+    fn config_write_min_interval(&self) -> Option<std::time::Duration> {
+        Some(std::time::Duration::from_millis(1500))
+    }
+
     async fn read_config(
         &self,
         host: &dyn Host,
@@ -241,8 +248,10 @@ impl AppFrameworkAdapter for MaiBotAdapter {
     ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
         let root = HostPath::from_posix(&instance.install_dir);
         let snaps = read_documents(host, &root, &maibot_config_documents()).await?;
-        let (webui_port, legacy_ws_port) =
-            config::read_bot_config_ports(snapshot_text(&snaps, config::DOC_BOT_CONFIG));
+        let bot = schema::read_bot_config_file(snapshot_text(&snaps, config::DOC_BOT_CONFIG))
+            .map_err(AppFrameworkError::Integration)?;
+        let models = schema::read_model_config_file(snapshot_text(&snaps, config::DOC_MODEL_CONFIG))
+            .map_err(AppFrameworkError::Integration)?;
         let token_json = read_text(host, &root.join(WEBUI_JSON)).await?;
         let adapter = if host.exists(&root.join(ADAPTER_DIR)).await.map_err(host_err)? {
             Some(config::read_adapter_config(snapshot_text(
@@ -254,8 +263,8 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         };
         Ok(envelope(
             MaiBotInstanceConfig {
-                webui_port,
-                legacy_ws_port,
+                bot: Box::new(bot),
+                models: Box::new(models),
                 webui_token: config::read_webui_token(token_json.as_deref()),
                 adapter,
             },
@@ -276,33 +285,51 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         if !issues.is_empty() {
             return Err(AppFrameworkError::ConfigInvalid(issues));
         }
+        // 改前以盘上现状为准（编排层已经按版本号确认过没被别处改过）
+        let current = self.read_config(host, instance).await?;
+        let AppInstanceConfig::MaiBot(before) = &current.config else {
+            return Err(AppFrameworkError::Validation("读回来的不是 MaiBot 配置".to_string()));
+        };
         let root = HostPath::from_posix(&instance.install_dir);
+        let config_py = read_text(host, &root.join(CONFIG_PY)).await?.unwrap_or_default();
+        let invalid = |doc: &str, e: String| {
+            AppFrameworkError::ConfigInvalid(vec![ncd_domain::AppConfigIssue::new(doc, e)])
+        };
+        // 没变的文件不写，免得版本号跳了、白白提示重启
+        let mut writes: Vec<(HostPath, String)> = Vec::new();
+
         let bot_path = root.join(BOT_CONFIG);
         let bot_text = read_text(host, &bot_path).await?;
-        let version = if bot_text.is_none() {
-            let py = read_text(host, &root.join(CONFIG_PY)).await?.unwrap_or_default();
-            read_config_version(&py).ok_or_else(|| {
+        let bot_version = if bot_text.is_none() {
+            read_config_version(&config_py).ok_or_else(|| {
                 AppFrameworkError::Integration(format!("{CONFIG_PY} 里找不到 CONFIG_VERSION"))
             })?
         } else {
             String::new()
         };
-        let invalid = |doc: &str, e: String| {
-            AppFrameworkError::ConfigInvalid(vec![ncd_domain::AppConfigIssue::new(doc, e)])
-        };
-        let next_bot = config::write_bot_config_ports(
-            bot_text.as_deref(),
-            &version,
-            cfg.webui_port,
-            cfg.legacy_ws_port,
-        )
-        .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?;
-        // 没变的文件不写，免得版本号跳了、白白提示重启
-        let mut writes: Vec<(HostPath, String)> = Vec::new();
-        if bot_text.as_deref() != Some(next_bot.as_str()) {
-            writes.push((bot_path, next_bot));
+        if let Some(next) =
+            config::files::patch_bot_config(bot_text.as_deref(), &bot_version, &before.bot, &cfg.bot)
+                .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?
+        {
+            writes.push((bot_path, next));
         }
+
+        let model_path = root.join(MODEL_CONFIG);
+        let model_text = read_text(host, &model_path).await?;
+        let model_version = read_version_constant(&config_py, "MODEL_CONFIG_VERSION");
+        if let Some(next) = config::files::patch_model_config(
+            model_text.as_deref(),
+            model_version.as_deref(),
+            &before.models,
+            &cfg.models,
+        )
+        .map_err(|e| invalid(config::DOC_MODEL_CONFIG, e))?
+        {
+            writes.push((model_path, next));
+        }
+
         if let Some(adapter) = &cfg.adapter
+            && before.adapter.as_ref().map(|a| &a.chat) != Some(&adapter.chat)
             && host.exists(&root.join(ADAPTER_DIR)).await.map_err(host_err)?
         {
             let path = root.join(ADAPTER_CONFIG);
