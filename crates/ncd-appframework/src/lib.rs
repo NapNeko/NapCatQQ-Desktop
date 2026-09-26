@@ -47,6 +47,13 @@ pub use maibot::{
     MAIBOT_FRAMEWORK_ID, MaiBotAdapter, MaiBotAdapterConfig, MaiBotChatFilter, MaiBotComponent,
     MaiBotInstanceConfig, MaiBotIntegration, MaiBotListMode, maibot_manifest,
 };
+pub use maibot::api::{MaiBotProviderSource, MaiBotRuntimeApi, MaiBotSession};
+pub use maibot::runtime::{
+    MaiBotChatSession, MaiBotMcpServerStatus, MaiBotMcpStatus, MaiBotMcpTest, MaiBotMcpTool,
+    MaiBotProviderCheck, MaiBotProviderModel, MaiBotRuntimeGate, MaiBotRuntimeStatus,
+    MaiBotStatsSummary,
+};
+pub use maibot::schema::{MaiBotAPIProvider, MaiBotMCPServerItemConfig};
 pub use nonebot2::{
     NONEBOT2_FRAMEWORK_ID, NONEBOT_ADAPTERS_URL, NONEBOT_PLUGINS_URL, NoneBot2Adapter,
     NoneBot2Component, NoneBot2EnvEntry, NoneBot2EnvProd, NoneBot2InstanceConfig,

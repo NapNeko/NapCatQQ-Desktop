@@ -14,8 +14,10 @@ use ncd_runtime::{
     AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreInstalled,
     AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule, ComponentActionRequest,
-    DeploymentTaskRequest, KarinPluginInstalled, KarinPluginMarketEntry, join_webui_url,
-    run_app_plugin_task,
+    DeploymentTaskRequest, KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider,
+    MaiBotChatSession, MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest,
+    MaiBotProviderCheck, MaiBotProviderModel, MaiBotRuntimeStatus, MaiBotStatsSummary,
+    join_webui_url, run_app_plugin_task,
 };
 use ncd_traits::AppFrameworkError;
 use tauri::State;
@@ -570,6 +572,106 @@ pub async fn astrbot_list_subagent_tools(
     state
         .app_manager
         .astrbot_list_subagent_tools(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_status(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotRuntimeStatus, AppConfigError> {
+    state
+        .app_manager
+        .maibot_status(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_restart(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppConfigError> {
+    state
+        .app_manager
+        .maibot_restart(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_stats(
+    instance_id: String,
+    hours: u32,
+    state: State<'_, AppState>,
+) -> Result<MaiBotStatsSummary, AppConfigError> {
+    state
+        .app_manager
+        .maibot_stats(&AppInstanceId::new(instance_id), hours)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_chat_sessions(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<MaiBotChatSession>, AppConfigError> {
+    state
+        .app_manager
+        .maibot_chat_sessions(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_provider_models(
+    instance_id: String,
+    provider: MaiBotAPIProvider,
+    state: State<'_, AppState>,
+) -> Result<Vec<MaiBotProviderModel>, AppConfigError> {
+    state
+        .app_manager
+        .maibot_provider_models(&AppInstanceId::new(instance_id), provider)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_test_provider(
+    instance_id: String,
+    provider: MaiBotAPIProvider,
+    state: State<'_, AppState>,
+) -> Result<MaiBotProviderCheck, AppConfigError> {
+    state
+        .app_manager
+        .maibot_test_provider(&AppInstanceId::new(instance_id), provider)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_mcp_status(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMcpStatus, AppConfigError> {
+    state
+        .app_manager
+        .maibot_mcp_status(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_test_mcp(
+    instance_id: String,
+    server: MaiBotMCPServerItemConfig,
+    state: State<'_, AppState>,
+) -> Result<MaiBotMcpTest, AppConfigError> {
+    state
+        .app_manager
+        .maibot_test_mcp(&AppInstanceId::new(instance_id), server)
         .await
         .map_err(AppFrameworkError::into_config_error)
 }

@@ -1,10 +1,12 @@
 //! MaiBot 适配器：manifest + Component + 正向对接 + 两份主配置全字段 + 上游条款核对。
 
+pub mod api;
 mod component;
 pub mod config;
 mod integration;
 pub mod manifest;
 pub mod release;
+pub mod runtime;
 pub mod schema;
 pub mod terms;
 pub mod webui_client;
@@ -401,6 +403,10 @@ impl AppFrameworkAdapter for MaiBotAdapter {
 
     fn supports_live_config(&self) -> bool {
         true
+    }
+
+    fn maibot_runtime(&self) -> Option<&dyn api::MaiBotRuntimeApi> {
+        Some(&api::WebUiRuntime)
     }
 
     /// 运行中：两份主配置交给麦麦自己的 WebUI 写（它校验、合并进当前文件、写盘、热加载，

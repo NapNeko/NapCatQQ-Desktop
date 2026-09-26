@@ -166,7 +166,9 @@ pub use ncd_appframework::{
     AppConfigWriteResult, AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope,
     AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
     AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
-    KarinPluginInstalled, KarinPluginMarketEntry, join_webui_url,
+    KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider, MaiBotChatSession,
+    MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest, MaiBotProviderCheck,
+    MaiBotProviderModel, MaiBotRuntimeStatus, MaiBotStatsSummary, join_webui_url,
 };
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,

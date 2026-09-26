@@ -15,6 +15,7 @@ use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 use crate::astrbot::api::AstrBotRuntimeApi;
+use crate::maibot::api::MaiBotRuntimeApi;
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, read_document, write_document_text,
 };
@@ -275,6 +276,11 @@ pub trait AppFrameworkAdapter: Send + Sync {
     /// AstrBot 的人格 / 知识库 / 会话规则等运行期资源。None = 该框架没有这套 API。
     /// 这些类型是 AstrBot 专有的，不进通用 trait 的方法签名。
     fn astrbot_runtime(&self) -> Option<&dyn AstrBotRuntimeApi> {
+        None
+    }
+
+    /// MaiBot 的运行状态 / 用量 / 会话 / 提供商与 MCP 探测。同上，类型是 MaiBot 专有的
+    fn maibot_runtime(&self) -> Option<&dyn MaiBotRuntimeApi> {
         None
     }
 

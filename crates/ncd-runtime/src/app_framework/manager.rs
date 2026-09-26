@@ -19,7 +19,9 @@ use ncd_appframework::{
     AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor, AppStoreInstalled,
     AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession, AstrBotSessionRule,
-    KarinPluginInstalled,
+    KarinPluginInstalled, MaiBotAPIProvider, MaiBotChatSession, MaiBotMCPServerItemConfig,
+    MaiBotMcpStatus, MaiBotMcpTest, MaiBotProviderCheck, MaiBotProviderModel, MaiBotProviderSource,
+    MaiBotRuntimeApi, MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotSession, MaiBotStatsSummary,
     KarinPluginMarketEntry, PluginLogSink, app_file_basename, restore_adopted_files,
     remove_ncd_debris, AdoptRestoreScope,
 };
@@ -163,6 +165,12 @@ fn astrbot_api(
     adapter: &dyn AppFrameworkAdapter,
 ) -> Result<&dyn AstrBotRuntimeApi, AppFrameworkError> {
     adapter.astrbot_runtime().ok_or_else(|| {
+        AppFrameworkError::ConfigUnsupported(adapter.manifest().id.as_str().to_string())
+    })
+}
+
+fn maibot_api(adapter: &dyn AppFrameworkAdapter) -> Result<&dyn MaiBotRuntimeApi, AppFrameworkError> {
+    adapter.maibot_runtime().ok_or_else(|| {
         AppFrameworkError::ConfigUnsupported(adapter.manifest().id.as_str().to_string())
     })
 }
@@ -2079,6 +2087,137 @@ impl AppManager {
         astrbot_api(adapter.as_ref())?
             .list_subagent_tools(&s)
             .await
+    }
+
+    /// 不报错：没在跑、隧道没通、token 不对都折成 gate，前端照着出提示
+    pub async fn maibot_status(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotRuntimeStatus, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let adapter = self.registry.get(&instance.framework_id)?;
+        let runtime = maibot_api(adapter.as_ref())?;
+        if !matches!(instance.state, AppInstanceState::Running) {
+            return Ok(MaiBotRuntimeStatus::not_running());
+        }
+        let port = match self.desktop_webui_loopback_port(&instance).await {
+            Ok(p) => p,
+            Err(e) => {
+                return Ok(MaiBotRuntimeStatus::gate(MaiBotRuntimeGate::Unreachable, e.to_string()));
+            }
+        };
+        let session = MaiBotSession {
+            instance_id: instance.id.as_str().to_string(),
+            port,
+            token: self.webui_auth_key(id).await,
+        };
+        Ok(runtime.status(&session).await)
+    }
+
+    /// 运行期调用都要实例在跑；口和 token 由这里备齐。token 每次从盘上读：
+    /// 用户在 WebUI 里重置过 token 也能跟上，不会拿旧的去撞上游的限流
+    async fn maibot_session(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<(Arc<dyn AppFrameworkAdapter>, MaiBotSession), AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let adapter = self.registry.get(&instance.framework_id)?;
+        maibot_api(adapter.as_ref())?;
+        if !matches!(instance.state, AppInstanceState::Running) {
+            return Err(AppFrameworkError::NotRunning("启动麦麦后才能用".into()));
+        }
+        let port = self.desktop_webui_loopback_port(&instance).await?;
+        let again = self.store.require(id).await?;
+        if !matches!(again.state, AppInstanceState::Running) {
+            return Err(AppFrameworkError::StateChanged("实例状态已变，请重试".into()));
+        }
+        let session = MaiBotSession {
+            instance_id: instance.id.as_str().to_string(),
+            port,
+            token: self.webui_auth_key(id).await,
+        };
+        Ok((adapter, session))
+    }
+
+    /// 走上游自己的重启：工作进程退出码 42，bot.py 外层重新拉起，桌面端记着的进程不变
+    pub async fn maibot_restart(&self, id: &AppInstanceId) -> Result<(), AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.restart(&s).await
+    }
+
+    pub async fn maibot_stats(
+        &self,
+        id: &AppInstanceId,
+        hours: u32,
+    ) -> Result<MaiBotStatsSummary, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?
+            .stats_summary(&s, hours.clamp(1, 24 * 90))
+            .await
+    }
+
+    pub async fn maibot_chat_sessions(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Vec<MaiBotChatSession>, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.chat_sessions(&s).await
+    }
+
+    pub async fn maibot_provider_models(
+        &self,
+        id: &AppInstanceId,
+        provider: MaiBotAPIProvider,
+    ) -> Result<Vec<MaiBotProviderModel>, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        let source = self.maibot_provider_source(id, &provider).await;
+        maibot_api(adapter.as_ref())?
+            .provider_models(&s, &provider, source)
+            .await
+    }
+
+    pub async fn maibot_test_provider(
+        &self,
+        id: &AppInstanceId,
+        provider: MaiBotAPIProvider,
+    ) -> Result<MaiBotProviderCheck, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        let source = self.maibot_provider_source(id, &provider).await;
+        maibot_api(adapter.as_ref())?
+            .test_provider(&s, &provider, source)
+            .await
+    }
+
+    /// 盘上有一模一样的提供商就按名字查：上游用它自己读到的配置，放行回环 / 内网地址。
+    /// 表单里改过没保存的只能按地址查，上游那条只放行公网
+    async fn maibot_provider_source(
+        &self,
+        id: &AppInstanceId,
+        provider: &MaiBotAPIProvider,
+    ) -> MaiBotProviderSource {
+        match self.read_config(id).await.map(|env| env.config) {
+            Ok(AppInstanceConfig::MaiBot(saved)) if saved.models.api_providers.contains(provider) => {
+                MaiBotProviderSource::Saved
+            }
+            _ => MaiBotProviderSource::Draft,
+        }
+    }
+
+    pub async fn maibot_mcp_status(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotMcpStatus, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.mcp_status(&s).await
+    }
+
+    pub async fn maibot_test_mcp(
+        &self,
+        id: &AppInstanceId,
+        server: MaiBotMCPServerItemConfig,
+    ) -> Result<MaiBotMcpTest, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.test_mcp(&s, &server).await
     }
 
     pub async fn list_config_documents(
@@ -4064,6 +4203,79 @@ mod tests {
             assert_eq!(
                 body_of("/api/webui/config/bot", &reqs),
                 serde_json::json!({"maim_message": {"ws_server_port": 23012}})
+            );
+        }
+
+        #[tokio::test]
+        async fn maibot_runtime_calls_route_by_saved_or_draft_provider() {
+            use wiremock::matchers::{header, method, path, query_param};
+            use wiremock::{Mock, MockServer, ResponseTemplate};
+
+            let f = maibot_fixture("m-rt").await;
+            assert_eq!(
+                f.manager.maibot_status(&f.id).await.unwrap().gate,
+                MaiBotRuntimeGate::NotRunning,
+                "没在跑不发请求，直接折成 gate"
+            );
+            assert!(matches!(
+                f.manager.maibot_stats(&f.id, 24).await.unwrap_err(),
+                AppFrameworkError::NotRunning(_)
+            ));
+
+            let server = MockServer::start().await;
+            let port = server.address().port();
+            std::fs::write(
+                f.inst_dir.join("config/bot_config.toml"),
+                format!("[inner]\nversion = \"8.14.40\"\n\n[webui]\nport = {port}\n\n[maim_message]\nws_server_port = 23002\n"),
+            )
+            .unwrap();
+            f.manager
+                .store
+                .update(&f.id, |i| {
+                    i.port = port;
+                    i.state = AppInstanceState::Running;
+                })
+                .await
+                .unwrap();
+            let ok = |body: serde_json::Value| ResponseTemplate::new(200).set_body_json(body);
+            Mock::given(method("GET"))
+                .and(path("/api/webui/system/status"))
+                .and(header("cookie", "maibot_session=Ncd_tok"))
+                .respond_with(ok(serde_json::json!({"running": true, "uptime": 90.5, "version": "1.2.5", "start_time": "x"})))
+                .mount(&server)
+                .await;
+            Mock::given(method("GET"))
+                .and(path("/api/webui/models/list"))
+                .and(query_param("provider_name", "DeepSeek"))
+                .respond_with(ok(serde_json::json!({"success": true, "models": [{"id": "deepseek-chat"}]})))
+                .mount(&server)
+                .await;
+            Mock::given(method("GET"))
+                .and(path("/api/webui/models/list-by-url"))
+                .and(query_param("base_url", "https://draft.example/v1"))
+                .respond_with(ResponseTemplate::new(502).set_body_json(serde_json::json!({"detail": "API Key 无效或已过期"})))
+                .mount(&server)
+                .await;
+
+            let status = f.manager.maibot_status(&f.id).await.unwrap();
+            assert_eq!(status.gate, MaiBotRuntimeGate::Ok);
+            assert_eq!(status.version.as_deref(), Some("1.2.5"));
+            assert_eq!(status.uptime_secs, Some(90.5));
+
+            let env = f.manager.read_config(&f.id).await.unwrap();
+            let AppInstanceConfig::MaiBot(cfg) = env.config else {
+                panic!("expected MaiBot config");
+            };
+            let saved = cfg.models.api_providers[0].clone();
+            let models = f.manager.maibot_provider_models(&f.id, saved.clone()).await.unwrap();
+            assert_eq!(models[0].id, "deepseek-chat", "盘上一模一样的按名字查，上游放行它自己配的内网地址");
+
+            let mut draft = saved;
+            draft.base_url = "https://draft.example/v1".into();
+            let err = f.manager.maibot_provider_models(&f.id, draft).await.unwrap_err();
+            assert!(
+                matches!(&err, AppFrameworkError::Integration(m) if m == "API Key 无效或已过期"),
+                "改过没保存的按地址查；上游 502 的原话直接给用户：{err:?}"
             );
         }
 
