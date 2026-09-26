@@ -747,6 +747,26 @@ mod tests {
             assert!(unpack_stage(&host, &stage, id, None).await.is_err());
         }
 
+        /// 真下载：`archive/HEAD.zip` 要跟 GitHub 跳到 codeload，镜像也得能用。手动跑：
+        /// cargo test -p ncd-appframework --lib real_market_install_smoke -- --ignored
+        #[tokio::test]
+        #[ignore = "要联网从 GitHub 下插件包"]
+        async fn real_market_install_smoke() {
+            let tmp = tempfile::tempdir().unwrap();
+            let host = LocalWindowsHost::new();
+            let inst = instance(tmp.path(), AppInstanceState::Installed);
+            let text = reqwest::get(MARKET_RAW).await.unwrap().text().await.unwrap();
+            let market = parse_maibot_plugins_json(&text).unwrap();
+            let entry = market.iter().find(|e| e.id == "sengokucola.mute-plugin").expect("市场里有禁言插件");
+            install_item(&host, &inst, entry, None).await.unwrap();
+            let listed = list_installed(&host, &inst, AppStoreResource::Plugin).await.unwrap();
+            assert_eq!(listed.len(), 1, "{listed:?}");
+            assert_eq!(listed[0].id, entry.id);
+            update_item(&host, &inst, entry, None).await.unwrap();
+            uninstall_item(&host, &inst, &entry.id, None).await.unwrap();
+            assert!(list_installed(&host, &inst, AppStoreResource::Plugin).await.unwrap().is_empty());
+        }
+
         #[tokio::test]
         async fn the_managed_adapter_cannot_be_touched_and_residue_is_cleared() {
             let tmp = tempfile::tempdir().unwrap();
