@@ -198,6 +198,23 @@ pub struct DirEntry {
     pub mode: Option<u32>,
 }
 
+/// 主机上的一个盘(Windows 的 `C:\` 这种),Host::list_drives 给
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DriveEntry {
+    /// 盘根,带尾部 `\`
+    pub root: String,
+    pub kind: DriveKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DriveKind {
+    Fixed,
+    Removable,
+    Network,
+    Optical,
+    Other,
+}
+
 /// 归档类型(Host::extract_archive 参数)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArchiveKind {

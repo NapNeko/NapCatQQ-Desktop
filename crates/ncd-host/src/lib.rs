@@ -50,7 +50,7 @@ pub use error::HostError;
 pub use host::{Arch, Host, Locality, Os, SshDialTarget, StreamSource};
 pub use linux_pkg::LinuxPackageManager;
 pub use package_manager::{PackageInfo, PackageManager, PackageManagerKind};
-pub use path::{ArchiveKind, DirEntry, HostPath, PathStyle};
+pub use path::{ArchiveKind, DirEntry, DriveEntry, DriveKind, HostPath, PathStyle};
 pub use pkg_output::{
     PkgLineParse, PkgMgrFamily, PkgPhase, fallback_percent_from_line_no, parse_pkg_mgr_line,
     truncate_pkg_line,

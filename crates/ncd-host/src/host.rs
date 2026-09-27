@@ -258,6 +258,14 @@ pub trait Host: Send + Sync {
         })
     }
 
+    /// 列出主机上的盘(文件栏在盘根再往上一级时用)。只有本机 Windows 有盘符,
+    /// 其它主机返回 Unsupported
+    async fn list_drives(&self) -> Result<Vec<crate::path::DriveEntry>, HostError> {
+        Err(HostError::Unsupported {
+            operation: "list_drives",
+        })
+    }
+
     /// 开一个交互终端(伪终端)。本机走 ConPTY,远端走 SSH 的 pty 通道;
     /// 其它主机返回 Unsupported
     async fn open_pty(

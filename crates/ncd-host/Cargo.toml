@@ -41,6 +41,8 @@ windows = { version = "0.61", features = [
     "Win32_System_Console",
     "Win32_System_LibraryLoader",
     "Win32_System_Pipes",
+    # 文件栏列盘符(GetLogicalDrives / GetDriveTypeW)
+    "Win32_Storage_FileSystem",
     # SHELLEXECUTEINFOW 引用 HKEY,ShellExecuteExW 挂在 Registry feature 下
     "Win32_System_Registry",
     "Win32_System_Threading",

@@ -340,6 +340,10 @@ impl Host for LocalWindowsHost {
         }
     }
 
+    async fn list_drives(&self) -> Result<Vec<crate::path::DriveEntry>, HostError> {
+        Ok(logical_drives())
+    }
+
     // ===== 进程操作 =====
 
     async fn open_pty(
@@ -756,6 +760,33 @@ impl HostProcess for ChildHostProcess {
 
 // 同步解压辅助(在 spawn_blocking 内调用)
 
+/// 本机的盘。GetLogicalDrives 只读位掩码、GetDriveTypeW 只看类型，都不碰盘本身，
+/// 断开的网络盘、空光驱也不会卡住
+fn logical_drives() -> Vec<crate::path::DriveEntry> {
+    use crate::path::{DriveEntry, DriveKind};
+    use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
+    use windows::core::PCWSTR;
+
+    // SAFETY: 无参数，只返回位掩码
+    let mask = unsafe { GetLogicalDrives() };
+    (0..26u8)
+        .filter(|i| mask & (1 << i) != 0)
+        .map(|i| {
+            let root = format!("{}:\\", char::from(b'A' + i));
+            let wide: Vec<u16> = root.encode_utf16().chain(std::iter::once(0)).collect();
+            // SAFETY: wide 以 0 结尾，调用期间一直活着
+            let kind = match unsafe { GetDriveTypeW(PCWSTR(wide.as_ptr())) } {
+                2 => DriveKind::Removable,
+                3 => DriveKind::Fixed,
+                4 => DriveKind::Network,
+                5 => DriveKind::Optical,
+                _ => DriveKind::Other,
+            };
+            DriveEntry { root, kind }
+        })
+        .collect()
+}
+
 fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
     let file = std::fs::File::open(archive).map_err(|e| format!("open zip: {e}"))?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("zip open: {e}"))?;
@@ -834,6 +865,16 @@ mod tests {
         let path = temp_host_path(&ws, "missing.txt");
         let err = host.read_file(&path).await.unwrap_err();
         assert!(matches!(err, HostError::PathNotFound { .. }));
+    }
+
+    #[test]
+    fn logical_drives_include_the_system_drive() {
+        let drives = logical_drives();
+        let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+        let root = format!("{system}\\");
+        let found = drives.iter().find(|d| d.root.eq_ignore_ascii_case(&root));
+        assert!(found.is_some(), "{drives:?}");
+        assert_eq!(found.map(|d| d.kind), Some(crate::path::DriveKind::Fixed));
     }
 
     #[tokio::test]

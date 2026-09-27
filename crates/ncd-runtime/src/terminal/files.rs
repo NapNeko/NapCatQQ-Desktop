@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use ncd_domain::{TerminalDirListing, TerminalFileEntry, TerminalHostOs, TerminalTextFile};
-use ncd_host::{DirEntry, Host, HostError, HostPath, PathStyle};
+use ncd_host::{DirEntry, DriveKind, Host, HostError, HostPath, PathStyle};
 
 use super::TerminalError;
 use super::manager::TerminalManager;
@@ -88,6 +88,22 @@ pub(crate) fn join_child(os: TerminalHostOs, dir: &str, name: &str) -> String {
     }
 }
 
+/// `C:\` 这种盘根
+pub(crate) fn is_drive_root(os: TerminalHostOs, path: &str) -> bool {
+    let b = path.as_bytes();
+    os == TerminalHostOs::Windows && b.len() == 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'\\'
+}
+
+fn drive_label(kind: DriveKind) -> &'static str {
+    match kind {
+        DriveKind::Fixed => "本地磁盘",
+        DriveKind::Removable => "可移动磁盘",
+        DriveKind::Network => "网络驱动器",
+        DriveKind::Optical => "光驱",
+        DriveKind::Other => "磁盘",
+    }
+}
+
 /// 权限位写成 `rwxr-xr-x`
 pub(crate) fn mode_string(mode: u32) -> String {
     let mut out = String::with_capacity(9);
@@ -131,8 +147,38 @@ impl TerminalManager {
         Ok((host, os))
     }
 
+    /// Windows 上空路径表示「此电脑」：列出各个盘。盘根的上一级就是它，文件栏靠这个换盘
+    async fn list_drives(&self, host: &dyn Host) -> Result<TerminalDirListing, TerminalError> {
+        let entries = host
+            .list_drives()
+            .await
+            .map_err(file_error)?
+            .into_iter()
+            .map(|d| {
+                let letter = d.root.trim_end_matches('\\').to_string();
+                TerminalFileEntry {
+                    name: format!("{} ({letter})", drive_label(d.kind)),
+                    path: d.root,
+                    is_dir: true,
+                    is_symlink: false,
+                    size: 0,
+                    modified: None,
+                    mode: None,
+                }
+            })
+            .collect();
+        Ok(TerminalDirListing {
+            path: String::new(),
+            parent: None,
+            entries,
+        })
+    }
+
     pub async fn list_dir(&self, id: &str, path: &str) -> Result<TerminalDirListing, TerminalError> {
         let (host, os) = self.files_host(id)?;
+        if os == TerminalHostOs::Windows && path.trim().is_empty() {
+            return self.list_drives(host.as_ref()).await;
+        }
         let dir = to_host_path(os, path)?;
         let shown = normalize(os, &dir);
         let mut entries: Vec<TerminalFileEntry> = host
@@ -147,8 +193,9 @@ impl TerminalManager {
                 .cmp(&a.is_dir)
                 .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
         });
+        let parent = parent_of(os, &shown).or_else(|| is_drive_root(os, &shown).then(String::new));
         Ok(TerminalDirListing {
-            parent: parent_of(os, &shown),
+            parent,
             path: shown,
             entries,
         })
@@ -288,6 +335,14 @@ mod tests {
         assert_eq!(parent_of(TerminalHostOs::Windows, r"C:\Users\x"), Some(r"C:\Users".into()));
         assert_eq!(parent_of(TerminalHostOs::Windows, r"C:\Users"), Some(r"C:\".into()));
         assert_eq!(parent_of(TerminalHostOs::Windows, r"C:\"), None);
+    }
+
+    #[test]
+    fn drive_roots_are_recognised() {
+        assert!(is_drive_root(TerminalHostOs::Windows, r"D:\"));
+        assert!(!is_drive_root(TerminalHostOs::Windows, r"D:\x"));
+        assert!(!is_drive_root(TerminalHostOs::Windows, r"\\"));
+        assert!(!is_drive_root(TerminalHostOs::Linux, r"C:\"));
     }
 
     #[test]
