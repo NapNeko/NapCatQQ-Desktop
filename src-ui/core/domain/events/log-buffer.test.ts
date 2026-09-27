@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { appendLine, canonicalizeLogEntry, stripAnsiEscapes } from './log-buffer';
+import { appendLine, buildHistoryEntries, canonicalizeLogEntry, stripAnsiEscapes } from './log-buffer';
 import type { LogEntry } from './log-buffer';
+
+function one(raw: string): LogEntry {
+    const [entry] = appendLine([], raw, 'stdout', '00:00:00');
+    return entry;
+}
+
+function spanTexts(entry: LogEntry): string[] {
+    return (entry.spans ?? []).map((s) => entry.text.slice(s.start, s.end));
+}
 
 describe('stripAnsiEscapes', () => {
     it('剥掉 Karin chalk 的 CSI 颜色码', () => {
@@ -35,6 +44,101 @@ describe('appendLine · NapCat', () => {
         expect(entry.level).toBe('info');
         expect(entry.timestamp).toBe('17:06:19');
         expect(entry.text).toBe('nick | hello');
+    });
+});
+
+describe('appendLine · 麦麦', () => {
+    const mai = (color: string, body: string) =>
+        `\x1b[${color}m09-26 16:29:02\x1b[0m \x1b[38;2;162;255;0m[配置]\x1b[0m \x1b[38;2;162;255;0m${body}\x1b[0m`;
+
+    it('默认 lite 样式不写等级，按时间戳的颜色认', () => {
+        expect(one(mai('38;5;117', '配置文件已加载')).level).toBe('info');
+        expect(one(mai('33', '配置文件缺失')).level).toBe('warn');
+        expect(one(mai('31', '编码失败')).level).toBe('error');
+        expect(one(mai('38;5;208', '调试')).level).toBe('debug');
+        expect(one(mai('35', '崩了')).level).toBe('fatal');
+    });
+
+    it('时间进时间列，正文保留模块色；正文里的单词不抢时间戳颜色', () => {
+        const entry = one(mai('33', '控制台=INFO，文件=DEBUG'));
+        expect(entry.level).toBe('warn');
+        expect(entry.timestamp).toBe('16:29:02');
+        expect(entry.text).toBe('[配置] 控制台=INFO，文件=DEBUG');
+        expect(spanTexts(entry)).toEqual(['[配置]', '控制台=INFO，文件=DEBUG']);
+    });
+
+    it('full 样式补了空格的等级标签也认，并从正文拿掉', () => {
+        const entry = one('09-26 16:29:00 [    INFO] [主程序] 启动');
+        expect(entry.level).toBe('info');
+        expect(entry.text).toBe('[主程序] 启动');
+        expect(one('09-26 16:29:00 [CRITICAL] [主程序] 崩了').level).toBe('fatal');
+    });
+});
+
+describe('appendLine · AstrBot', () => {
+    it('方括号时间进时间列，[Core] 后面的等级标签从正文拿掉，粗体留着', () => {
+        const entry = one(
+            '\x1b[32m[18:55:54.222]\x1b[0m [Core] \x1b[1m[INFO]\x1b[0m [config.astrbot_config:199]: ' +
+                '\x1b[1mConfig key missing; added default.\x1b[0m',
+        );
+        expect(entry.timestamp).toBe('18:55:54');
+        expect(entry.level).toBe('info');
+        expect(entry.text).toBe('[Core] [config.astrbot_config:199]: Config key missing; added default.');
+        expect(spanTexts(entry)).toEqual(['Config key missing; added default.']);
+    });
+
+    it('插件行、它自带的 hypercorn 行', () => {
+        const plugin = one(
+            '[10:42:49.906] [astrbot_plugin_vikunja] [WARN] [v4.28.0] [astrbot-plugin-vikunja.main:228]: 未配置',
+        );
+        expect(plugin.level).toBe('warn');
+        expect(plugin.text).toBe('[astrbot_plugin_vikunja] [v4.28.0] [astrbot-plugin-vikunja.main:228]: 未配置');
+        const hypercorn = one('[2026-09-27 10:42:49 +0800] [20504] [INFO] Running on http://0.0.0.0:6185');
+        expect(hypercorn.timestamp).toBe('10:42:49');
+        expect(hypercorn.level).toBe('info');
+        expect(hypercorn.text).toBe('[20504] Running on http://0.0.0.0:6185');
+    });
+});
+
+describe('appendLine · NoneBot2', () => {
+    it('带颜色的 loguru 行：等级进列，模块名留着颜色', () => {
+        const entry = one(
+            '\x1b[32m09-26 11:15:42\x1b[0m [\x1b[32m\x1b[1mSUCCESS\x1b[0m] ' +
+                '\x1b[36m\x1b[4mnonebot\x1b[0m\x1b[36m\x1b[0m | NoneBot is initializing...',
+        );
+        expect(entry.level).toBe('success');
+        expect(entry.timestamp).toBe('11:15:42');
+        expect(entry.text).toBe('nonebot | NoneBot is initializing...');
+        expect(spanTexts(entry)).toEqual(['nonebot']);
+    });
+});
+
+describe('续行', () => {
+    it('没时间没等级的行接着上一条：等级跟着走，缩进留着', () => {
+        const logs = buildHistoryEntries(
+            [
+                '\x1b[31m09-27 11:14:47\x1b[0m [记忆嵌入] 编码失败',
+                'Traceback (most recent call last):',
+                '  File "bot.py", line 25, in <module>',
+                '09-27 11:14:48 [INFO] nonebot | 恢复',
+            ],
+            '00:00:00',
+        );
+        expect(logs.map((l) => [l.level, !!l.continuation])).toEqual([
+            ['error', false],
+            ['error', true],
+            ['error', true],
+            ['info', false],
+        ]);
+        expect(logs[2].text).toBe('  File "bot.py", line 25, in <module>');
+    });
+
+    it('第一行前面没东西可接；自己写了等级的不算续行', () => {
+        expect(one('Welcome to AstrBot CLI!').continuation).toBeUndefined();
+        const [, second] = buildHistoryEntries(['09-27 11:14:47 [INFO] a | b', '[Karin][INFO] heartbeat #1'], '00:00:00');
+        expect(second.continuation).toBeUndefined();
+        expect(second.level).toBe('info');
+        expect(second.text).toBe('[Karin] heartbeat #1');
     });
 });
 

@@ -1,5 +1,6 @@
 // 应用端实例日志：缓冲挂模块级 Map，离开详情 / 切走日志 Tab 不丢。
 // 订阅在首个调用方挂一次，之后不卸——否则切到列表或基础 Tab 期间的行会漏掉。
+// 实例另起一轮（启动、麦麦运行卡重启）后端先发 reset 再推新行：收到就清空，上一轮的不再往后接。
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { createStore } from '../utils/createStore';
@@ -36,7 +37,23 @@ function appendRaw(instanceId: string, line: string): void {
     });
 }
 
+// 这一轮是从开头看着收进来的（本会话收到过它的 reset）：缓冲就是这一轮的全部，
+// 开页不用再拿盘上的尾巴整块盖掉——盖了反而丢掉拉取途中到的行，用户清空过的也会被翻回来。
+// 桌面端刚打开时已经在跑的实例没收到过 reset，才需要拉
+const watchedFromStart = new Set<string>();
+
+function startNewRun(instanceId: string): void {
+    watchedFromStart.add(instanceId);
+    const { byId } = store.getSnapshot();
+    if (byId[instanceId] === EMPTY) return;
+    store.setState({ byId: { ...byId, [instanceId]: EMPTY } });
+}
+
 function onDomainEvent(event: DomainEvent): void {
+    if (event.kind === 'app_instance_log_reset') {
+        startNewRun(event.instance_id);
+        return;
+    }
     if (event.kind !== 'app_instance_log_appended') return;
     appendRaw(event.instance_id, event.line);
 }
@@ -47,6 +64,7 @@ export function ensureAppInstanceLogStore(): void {
 }
 
 export function dropAppInstanceLogs(instanceId: string): void {
+    watchedFromStart.delete(instanceId);
     const { byId } = store.getSnapshot();
     if (!(instanceId in byId)) return;
     const next = { ...byId };
@@ -57,11 +75,13 @@ export function dropAppInstanceLogs(instanceId: string): void {
 const hydrating = new Set<string>();
 
 export function hydrateAppInstanceLogs(instanceId: string): void {
-    if (!instanceId || hydrating.has(instanceId)) return;
+    if (!instanceId || hydrating.has(instanceId) || watchedFromStart.has(instanceId)) return;
     hydrating.add(instanceId);
     void appFrameworkService
         .tailLog(instanceId, 1000)
         .then((snap) => {
+            // 拉的途中另起了一轮：这份是上一轮的
+            if (watchedFromStart.has(instanceId)) return;
             const historical = buildHistoryEntries(snap.lines ?? []);
             if (historical.length === 0) return;
             store.setState({
@@ -102,6 +122,7 @@ export const appInstanceLogStore = {
             unsubDomain = null;
         }
         hydrating.clear();
+        watchedFromStart.clear();
         store._reset();
     },
 };

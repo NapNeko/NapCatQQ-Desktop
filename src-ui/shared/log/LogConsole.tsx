@@ -23,7 +23,9 @@ import {
     type LevelFilter,
     type LogEntry,
 } from '../../core/domain/events/log-buffer';
+import type { AnsiSpan } from '../../core/domain/events/ansi';
 import { LOG_LEVEL_SHORT, levelBarColor, levelLabelColor, lineTextColor } from './log-level-display';
+import { ansiCss } from './ansi-style';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { cn } from '../utils/cn';
 
@@ -389,10 +391,12 @@ function VirtualLogList({
     onRowContextMenu: (index: number, entry: LogEntry, e: React.MouseEvent) => void;
 }) {
     const parentRef = useRef<HTMLDivElement | null>(null);
+    // 长行换行，行高按实际量；量出来的高度跟着行的 id 走，缓冲满了从头丢行、下标整体前移时不会错位
     const virtualizer = useVirtualizer({
         count: entries.length,
         getScrollElement: () => parentRef.current,
         estimateSize: () => LOG_ROW_HEIGHT_PX,
+        getItemKey: (index) => entries[index]?.id ?? index,
         overscan: 12,
     });
 
@@ -423,11 +427,10 @@ function VirtualLogList({
                     return (
                         <div
                             key={entry.id}
+                            data-index={virtualRow.index}
+                            ref={virtualizer.measureElement}
                             className="absolute left-0 top-0 w-full"
-                            style={{
-                                height: virtualRow.size,
-                                transform: `translateY(${virtualRow.start}px)`,
-                            }}
+                            style={{ transform: `translateY(${virtualRow.start}px)` }}
                         >
                             <LogLine
                                 entry={entry}
@@ -463,32 +466,45 @@ function LogLine({
             onClick={onClick}
             onContextMenu={onContextMenu}
             className={cn(
-                'group flex h-[20px] cursor-pointer items-center gap-2 px-2 transition-colors select-none',
+                // \u957F\u884C\u6574\u884C\u6362\u4E0B\u53BB\uFF1B\u65F6\u95F4\u3001\u7B49\u7EA7\u3001\u8272\u6761\u5BF9\u9F50\u7B2C\u4E00\u884C
+                'group flex min-h-[20px] cursor-pointer items-start gap-2 px-2 py-px transition-colors select-none',
                 isSelected
                     ? 'border-l-2 border-brand bg-brand/15 pl-[6px] font-medium text-text'
                     : 'hover:bg-elevated/70',
             )}
             style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
         >
-            <span className="h-[12px] w-[3px] shrink-0" style={{ background: levelBarColor(entry.level) }} />
+            <span
+                className="mt-[3px] h-[12px] w-[3px] shrink-0"
+                style={{
+                    background: levelBarColor(entry.level),
+                    opacity: entry.continuation ? 0.4 : undefined,
+                }}
+            />
+            {/* \u7EED\u884C\uFF08\u5806\u6808\u3001\u591A\u884C\u8F93\u51FA\uFF09\u4E0D\u518D\u91CD\u590D\u65F6\u95F4\u548C\u6807\u7B7E\uFF0C\u770B\u7740\u5C31\u662F\u4E0A\u4E00\u6761\u7684\u4E00\u90E8\u5206 */}
             <span className="w-[58px] shrink-0 select-none whitespace-nowrap text-[11px] tabular-nums text-text-tertiary">
-                {entry.timestamp}
+                {entry.continuation ? '' : entry.timestamp}
             </span>
             <span
                 className="w-[28px] shrink-0 select-none text-[10px] font-semibold uppercase tracking-wider"
                 style={{ color: levelLabelColor(entry.level) }}
             >
-                {LEVEL_LABEL[entry.level]}
+                {entry.continuation ? '' : LEVEL_LABEL[entry.level]}
             </span>
-            <span className="min-w-0 flex-1 overflow-hidden truncate" style={{ color: lineTextColor(entry.level) }}>
-                <HighlightedLogBody text={entry.text} level={entry.level} />
+            <span
+                className="min-w-0 flex-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                style={{ color: lineTextColor(entry.level) }}
+            >
+                <HighlightedLogBody entry={entry} />
             </span>
         </div>
     );
 }
 
-function HighlightedLogBody({ text, level }: { text: string; level: LogEntry['level'] }) {
+function HighlightedLogBody({ entry }: { entry: LogEntry }) {
+    const { text, spans, level } = entry;
     if (!text) return '\u00A0';
+    if (spans?.length) return <>{ansiSegments(text, spans)}</>;
     const pipeIdx = text.indexOf(' | ');
     if (pipeIdx >= 0) {
         const nick = text.slice(0, pipeIdx);
@@ -502,6 +518,23 @@ function HighlightedLogBody({ text, level }: { text: string; level: LogEntry['le
         );
     }
     return <>{text}</>;
+}
+
+/** 上游带了颜色的行照它的颜色画，没标到的字用这一行的等级色 */
+function ansiSegments(text: string, spans: AnsiSpan[]): React.ReactNode[] {
+    const out: React.ReactNode[] = [];
+    let at = 0;
+    spans.forEach((span, i) => {
+        if (span.start > at) out.push(<span key={`t${i}`}>{text.slice(at, span.start)}</span>);
+        out.push(
+            <span key={`s${i}`} style={ansiCss(span.style)}>
+                {text.slice(span.start, span.end)}
+            </span>,
+        );
+        at = span.end;
+    });
+    if (at < text.length) out.push(<span key="tail">{text.slice(at)}</span>);
+    return out;
 }
 
 function EmptyState({

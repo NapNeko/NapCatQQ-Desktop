@@ -47,6 +47,7 @@ import { astrbotDefaultConfig } from '../../domain/apps/astrbotConfig';
 import { nonebot2DefaultConfig } from '../../domain/apps/nonebot2Config';
 import { emitMockEvent } from './events.mock';
 import { withMockDelay } from './bootstrap.mock';
+import { mockAppLogTail, playMockAppRun } from './app-log.mock';
 import {
     createMockAppConfigApi,
     peekKarinHttpAuthKey,
@@ -446,30 +447,14 @@ export const mockAppFrameworkApi = {
     refresh: async (id: string): Promise<AppInstance> => withMockDelay(require(id)),
 
     tailLog: async (id: string, _lines = 1000): Promise<{ lines: string[]; total_lines: number }> => {
-        const inst = require(id);
-        const lines = [
-            `[INFO] ${inst.display_name} listening on :${inst.port}`,
-            '[INFO] OneBot V11 已连接',
-        ];
+        const lines = mockAppLogTail(require(id));
         return withMockDelay({ lines, total_lines: lines.length });
     },
 
     start: async (id: string): Promise<AppInstance> => {
         const next: AppInstance = { ...require(id), state: 'running', last_error: undefined };
         publish(next, 'started');
-        let n = 0;
-        const timer = setInterval(() => {
-            const cur = instances.find((i) => i.id === id);
-            if (!cur || cur.state !== 'running' || n++ > 20) {
-                clearInterval(timer);
-                return;
-            }
-            emitMockEvent({
-                kind: 'app_instance_log_appended',
-                instance_id: id,
-                line: `[Karin][INFO] heartbeat #${n} · ws server listening on :${cur.port}`,
-            });
-        }, 2000);
+        playMockAppRun(next, () => instances.find((i) => i.id === id)?.state === 'running');
         return withMockDelay(next);
     },
 
@@ -954,7 +939,10 @@ export const mockAppFrameworkApi = {
     },
 
     maibotStatus: (instanceId: string): Promise<MaiBotRuntimeStatus> => mockMaiBotRuntime.status(require(instanceId)),
-    maibotRestart: (instanceId: string): Promise<void> => mockMaiBotRuntime.restart(require(instanceId)),
+    maibotRestart: async (instanceId: string): Promise<void> => {
+        await mockMaiBotRuntime.restart(require(instanceId));
+        playMockAppRun(require(instanceId), () => require(instanceId).state === 'running');
+    },
     maibotStats: (instanceId: string, hours: number): Promise<MaiBotStatsSummary> =>
         mockMaiBotRuntime.stats(require(instanceId), hours),
     maibotChatSessions: (instanceId: string): Promise<MaiBotChatSession[]> =>

@@ -79,6 +79,9 @@
    --text-disabled: var(--neutral-400);
    --text-on-brand: var(--neutral-0);
    --text-on-accent: var(--neutral-0);
+   /* 日志里上游终端颜色的 OKLCH 亮度区间：上游照黑底配色，浅底要压暗才读得清 */
+   --log-ansi-l-min: 0.36;
+   --log-ansi-l-max: 0.52;
 
    /* semantic: 边框 */
    --border-subtle: color-mix(in srgb, var(--neutral-900) 6%, transparent);
@@ -221,6 +224,8 @@
       --text-secondary: #c4bdb5;
       --text-tertiary: #968e86;
       --text-disabled: #5e5852;
+      --log-ansi-l-min: 0.72;
+      --log-ansi-l-max: 0.9;
 
       /* border: 暗色下更明显，帮助区分层级 */
       --border-subtle: rgba(255, 245, 235, 0.08);
@@ -286,6 +291,8 @@
    --text-secondary: #c4bdb5;
    --text-tertiary: #968e86;
    --text-disabled: #5e5852;
+   --log-ansi-l-min: 0.72;
+   --log-ansi-l-max: 0.9;
 
    /* border: 暗色下更明显，帮助区分层级 */
    --border-subtle: rgba(255, 245, 235, 0.08);
@@ -367,6 +374,9 @@
    --text-tertiary: #6c6f85;
    /* subtext0 */
    --text-disabled: #9ca0b0;
+   /* Latte 是浅色：系统偏深色时深色块也会命中这里，得自己写回浅色的区间 */
+   --log-ansi-l-min: 0.36;
+   --log-ansi-l-max: 0.52;
    /* overlay0 */
    --text-on-brand: #ffffff;
    --text-on-accent: #ffffff;
@@ -467,6 +477,8 @@
    --text-tertiary: #a5adce;
    /* subtext0 */
    --text-disabled: #737994;
+   --log-ansi-l-min: 0.72;
+   --log-ansi-l-max: 0.9;
    /* overlay0 */
    --text-on-brand: #ffffff;
    /* on brand */
@@ -568,6 +580,8 @@
    --text-tertiary: #a5adcb;
    /* subtext0 */
    --text-disabled: #6e738d;
+   --log-ansi-l-min: 0.72;
+   --log-ansi-l-max: 0.9;
    /* overlay0 */
    --text-on-brand: #ffffff;
    /* on brand */
@@ -669,6 +683,8 @@
    --text-tertiary: #a6adc8;
    /* subtext0 */
    --text-disabled: #6c7086;
+   --log-ansi-l-min: 0.72;
+   --log-ansi-l-max: 0.9;
    /* overlay0 */
    --text-on-brand: #ffffff;
    /* on brand */
