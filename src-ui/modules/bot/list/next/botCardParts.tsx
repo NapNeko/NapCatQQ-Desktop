@@ -313,23 +313,3 @@ export function formatRestartHint(config: BotConfig): string | null {
     if (parts.length === 0) return null;
     return parts.join(' · ');
 }
-
-export function formatRelativeTime(iso: string): string | null {
-    const ts = Date.parse(iso);
-    if (Number.isNaN(ts)) return null;
-    const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-    if (diffSec < 5) return '刚刚';
-    if (diffSec < 60) return `${diffSec} 秒前`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} 分钟前`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24) return `${hr} 小时前`;
-    const day = Math.floor(hr / 24);
-    if (day < 7) return `${day} 天前`;
-    const week = Math.floor(day / 7);
-    if (week < 4) return `${week} 周前`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} 个月前`;
-    const year = Math.floor(day / 365);
-    return `${year} 年前`;
-}

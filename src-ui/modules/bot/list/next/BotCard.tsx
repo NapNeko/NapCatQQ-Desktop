@@ -66,9 +66,9 @@ import {
     ToolbarMotionIcon,
     channelDetailLabel,
     countEnabledChannels,
-    formatRelativeTime,
     formatRestartHint,
 } from './botCardParts';
+import { formatRelativeTime } from '../../../../core/domain/ui/relativeTime';
 import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
 import { useBotRuntimeMetrics } from '../../../../hooks/bot/useBotRuntimeMetrics';
 import { serverService } from '../../../../core/services/server.service';

@@ -1,6 +1,7 @@
 // 市场 ∪ 已装 ∪ 任务 overlay。目录默认展示，分页在 Tab 里切。
 
 import { SEE_LOGS_HINT } from '../ui/errorBarCopy';
+import { relativeTimeFromMs } from '../ui/relativeTime';
 import type {
     AppPluginAction,
     AppStoreInstalled,
@@ -86,21 +87,6 @@ export function parseStoreTime(time: string): number | null {
     return Number.isNaN(ts) ? null : ts;
 }
 
-function formatRelativeTime(iso: string): string | null {
-    const ts = Date.parse(iso);
-    if (Number.isNaN(ts)) return null;
-    const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-    if (diffSec < 5) return '刚刚';
-    if (diffSec < 60) return `${diffSec} 秒前`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} 分钟前`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24) return `${hr} 小时前`;
-    const day = Math.floor(hr / 24);
-    if (day < 7) return `${day} 天前`;
-    return null;
-}
-
 function matchesQuery(
     row: Pick<VisibleStoreItem, 'id' | 'name' | 'description' | 'authorName'>,
     query: string,
@@ -158,7 +144,8 @@ function timeLabelFor(entry: AppStoreMarketEntry, installed: boolean, version?: 
     if (installed) return version ? `v${version}` : '已装';
     const ts = parseStoreTime(entry.time);
     if (ts == null) return null;
-    return formatRelativeTime(new Date(ts).toISOString());
+    // 商店里大多是上架很久的，一周以前的不写，免得满屏「几年前」
+    return relativeTimeFromMs(ts, 7);
 }
 
 export function filterNoneBot2Store(args: {

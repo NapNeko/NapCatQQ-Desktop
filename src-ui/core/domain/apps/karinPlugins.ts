@@ -1,6 +1,7 @@
 // 市场条目 + 已装扫描 → 卡片列表。字段名跟 ts-rs 生成走（type / author / allowBuild）。
 
 import { SEE_LOGS_HINT } from '../ui/errorBarCopy';
+import { relativeTimeFromMs } from '../ui/relativeTime';
 import type {
     AppPluginAction,
     DeploymentTaskStatus,
@@ -28,27 +29,6 @@ export function parseKarinPluginTime(time: string): number | null {
     const iso = t.includes('T') ? t : t.replace(' ', 'T');
     const ts = Date.parse(iso);
     return Number.isNaN(ts) ? null : ts;
-}
-
-/** 与 Bot 卡同一套阈值，避免 modules/bot → apps 依赖。 */
-function formatRelativeTime(iso: string): string | null {
-    const ts = Date.parse(iso);
-    if (Number.isNaN(ts)) return null;
-    const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-    if (diffSec < 5) return '刚刚';
-    if (diffSec < 60) return `${diffSec} 秒前`;
-    const min = Math.floor(diffSec / 60);
-    if (min < 60) return `${min} 分钟前`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24) return `${hr} 小时前`;
-    const day = Math.floor(hr / 24);
-    if (day < 7) return `${day} 天前`;
-    const week = Math.floor(day / 7);
-    if (week < 4) return `${week} 周前`;
-    const month = Math.floor(day / 30);
-    if (month < 12) return `${month} 个月前`;
-    const year = Math.floor(day / 365);
-    return `${year} 年前`;
 }
 
 export function pluginCatalogErrorCopy(raw: string): { title: string; content: string } {
@@ -118,7 +98,7 @@ function timeLabelFor(entry: KarinPluginMarketEntry, installed: boolean, version
     if (installed) return version ? `v${version}` : '已装';
     const ts = parseKarinPluginTime(entry.time);
     if (ts == null) return null;
-    return formatRelativeTime(new Date(ts).toISOString());
+    return relativeTimeFromMs(ts);
 }
 
 export type PluginTaskHint = {
