@@ -1,13 +1,13 @@
 // 市场 ∪ 已装 ∪ 任务 overlay。目录默认展示，分页在 Tab 里切。
 
-import { SEE_LOGS_HINT } from '../../../../core/domain/ui/errorBarCopy';
+import { SEE_LOGS_HINT } from '../ui/errorBarCopy';
 import type {
     AppPluginAction,
     AppStoreInstalled,
     AppStoreMarketEntry,
     AppStoreResource,
     DeploymentTaskStatus,
-} from '../../../../core/ipc/types';
+} from '../../ipc/types';
 
 export type StoreKindFilter = 'all' | 'official' | 'installed';
 

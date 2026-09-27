@@ -1,10 +1,10 @@
-// 应用实例状态的展示元数据（列表行与详情页头部共用）。
+// 应用实例状态的展示元数据（列表行与详情页头部共用），以及从任务表认出某个实例的安装任务。
 
 import type {
     AppInstance,
     AppInstanceState,
     DeploymentTaskSnapshot,
-} from '../../core/ipc/types';
+} from '../../ipc/types';
 
 export const STATE_META: Record<
     AppInstanceState,
@@ -36,4 +36,16 @@ export function matchesAppInstallTask(task: DeploymentTaskSnapshot, instance: Ap
             resource.kind === 'install_target'
             && (resource.target === expect || resource.target === instance.install_dir),
     );
+}
+
+export function latestAppInstallTask(
+    tasks: Record<string, DeploymentTaskSnapshot>,
+    instance: AppInstance,
+): DeploymentTaskSnapshot | undefined {
+    let latest: DeploymentTaskSnapshot | undefined;
+    for (const task of Object.values(tasks)) {
+        if (!matchesAppInstallTask(task, instance)) continue;
+        if (!latest || Number(task.submittedAtMs) > Number(latest.submittedAtMs)) latest = task;
+    }
+    return latest;
 }

@@ -25,7 +25,7 @@ import { useKarinPlugins } from '../../../../hooks/apps/useKarinPlugins';
 import { cn } from '../../../../shared/utils/cn';
 import styles from './karinPluginsGrid.module.css';
 import { PluginConfigDialog } from '../PluginConfigDialog';
-import { type VisiblePlugin } from './karinPluginsModel';
+import { type VisiblePlugin } from '../../../../core/domain/apps/karinPlugins';
 import type { AppInstance } from '../../../../core/ipc/types';
 
 const TOOLBAR_SLOT_ID = 'app-store-toolbar-slot';

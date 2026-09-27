@@ -7,8 +7,8 @@ import {
     storeGridFit,
     storeOpErrorCopy,
     storePageItems,
-} from './nonebot2StoreModel';
-import type { AppStoreMarketEntry } from '../../../../core/ipc/types';
+} from './nonebot2Store';
+import type { AppStoreMarketEntry } from '../../ipc/types';
 
 const adapters: AppStoreMarketEntry[] = [
     {

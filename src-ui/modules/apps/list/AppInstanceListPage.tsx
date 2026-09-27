@@ -47,7 +47,7 @@ import { ImportInstanceDialog, type ImportInstanceTarget } from '../ImportInstan
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { openTerminal } from '../../../hooks/terminal/terminalStore';
 import { hostIdDisplayLabel } from '../hostLabel';
-import { STATE_META, isInstalled } from '../instanceState';
+import { STATE_META, isInstalled } from '../../../core/domain/apps/instanceState';
 import { CardInstallProgress } from '../InstallProgress';
 import { FloatingActions } from './FloatingActions';
 import type { AppRoute } from '../../../shared/components/next/Sidebar';

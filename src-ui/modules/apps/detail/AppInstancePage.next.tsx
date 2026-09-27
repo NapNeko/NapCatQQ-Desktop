@@ -11,7 +11,7 @@ import { AppLinkDialog } from '../AppLinkDialog';
 import { DetailInstallProgress } from '../InstallProgress';
 import { DeleteInstanceDialog } from '../DeleteInstanceDialog';
 import { hostIdDisplayLabel } from '../hostLabel';
-import { isInstalled } from '../instanceState';
+import { isInstalled } from '../../../core/domain/apps/instanceState';
 import { cn } from '../../../shared/utils/cn';
 import { ConfigConflictDialog } from './ConfigConflictDialog';
 import { DetailHeader } from './DetailHeader';

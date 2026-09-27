@@ -4,8 +4,8 @@ import {
     overlayInstalledFromTasks,
     parseKarinPluginTime,
     pluginCatalogErrorCopy,
-} from './karinPluginsModel';
-import type { KarinPluginMarketEntry } from '../../../../core/ipc/types';
+} from './karinPlugins';
+import type { KarinPluginMarketEntry } from '../../ipc/types';
 
 const market: KarinPluginMarketEntry[] = [
     {

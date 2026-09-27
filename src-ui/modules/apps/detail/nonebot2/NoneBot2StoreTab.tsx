@@ -32,7 +32,7 @@ import {
     storePageItems,
     type StoreGridFit,
     type VisibleStoreItem,
-} from './nonebot2StoreModel';
+} from '../../../../core/domain/apps/nonebot2Store';
 import type { AppInstance, AppStoreResource } from '../../../../core/ipc/types';
 
 const TOOLBAR_SLOT_ID = 'app-store-toolbar-slot';

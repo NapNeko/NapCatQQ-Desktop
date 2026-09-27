@@ -4,7 +4,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useDomainEvents } from '../events/useDomainEvents';
-import { matchesAppInstallTask } from '../../modules/apps/instanceState';
+import { matchesAppInstallTask } from '../../core/domain/apps/instanceState';
 import { APP_INSTANCES_KEY, upsertInstance } from './appInstancesCache';
 import type { AppInstance } from '../../core/ipc/types';
 

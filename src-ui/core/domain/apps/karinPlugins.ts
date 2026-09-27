@@ -1,13 +1,13 @@
 // 市场条目 + 已装扫描 → 卡片列表。字段名跟 ts-rs 生成走（type / author / allowBuild）。
 
-import { SEE_LOGS_HINT } from '../../../../core/domain/ui/errorBarCopy';
+import { SEE_LOGS_HINT } from '../ui/errorBarCopy';
 import type {
     AppPluginAction,
     DeploymentTaskStatus,
     KarinPluginInstalled,
     KarinPluginKind,
     KarinPluginMarketEntry,
-} from '../../../../core/ipc/types';
+} from '../../ipc/types';
 
 export type KarinPluginKindFilter = 'all' | KarinPluginKind;
 

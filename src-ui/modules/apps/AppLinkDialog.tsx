@@ -49,7 +49,7 @@ import {
     isDesktopSshLink,
     isDockerBot,
     isResidentLink,
-} from './appLinkTopology';
+} from '../../core/domain/apps/appLinkTopology';
 import type {
     AppFrameworkManifest,
     AppInstance,

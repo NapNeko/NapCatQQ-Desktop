@@ -10,20 +10,8 @@ import {
     reduceActionProgress,
     type ActionProgressView,
 } from '../../core/domain/components/progress';
-import { matchesAppInstallTask } from '../../modules/apps/instanceState';
-import type { AppInstance, DeploymentTaskSnapshot } from '../../core/ipc/types';
-
-export function latestAppInstallTask(
-    tasks: Record<string, DeploymentTaskSnapshot>,
-    instance: AppInstance,
-): DeploymentTaskSnapshot | undefined {
-    let latest: DeploymentTaskSnapshot | undefined;
-    for (const task of Object.values(tasks)) {
-        if (!matchesAppInstallTask(task, instance)) continue;
-        if (!latest || Number(task.submittedAtMs) > Number(latest.submittedAtMs)) latest = task;
-    }
-    return latest;
-}
+import { latestAppInstallTask } from '../../core/domain/apps/instanceState';
+import type { AppInstance } from '../../core/ipc/types';
 
 export function useAppInstallProgress(instance: AppInstance): ActionProgressView | null {
     // 表里别的任务在走进度时，这里拿到的还是同一个对象，不会跟着重渲

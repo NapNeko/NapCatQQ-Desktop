@@ -18,7 +18,7 @@ import {
     pluginCatalogErrorCopy,
     type KarinPluginKindFilter,
     type PluginTaskHint,
-} from '../../modules/apps/detail/karin/karinPluginsModel';
+} from '../../core/domain/apps/karinPlugins';
 import type {
     AppPluginAction,
     AppInstance,

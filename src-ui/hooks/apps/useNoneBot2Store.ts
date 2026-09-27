@@ -19,7 +19,7 @@ import {
     storeOpErrorCopy,
     type StoreKindFilter,
     type StoreTaskHint,
-} from '../../modules/apps/detail/nonebot2/nonebot2StoreModel';
+} from '../../core/domain/apps/nonebot2Store';
 import type {
     AppInstance,
     AppPluginAction,
