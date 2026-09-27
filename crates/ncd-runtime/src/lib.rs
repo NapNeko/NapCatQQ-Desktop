@@ -167,7 +167,7 @@ pub use ncd_appframework::{
     AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
     AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
     KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider, MaiBotBehaviorDetail,
-    MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession,
+    MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession, MaiBotChatTicket,
     MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
     MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotLocalImage,
     MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,

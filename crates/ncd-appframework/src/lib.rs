@@ -54,6 +54,7 @@ pub use maibot::resources::behavior::{
     MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotBehaviorSort, MaiBotBehaviorTag,
     MaiBotBehaviorTagKind,
 };
+pub use maibot::resources::chat::MaiBotChatTicket;
 pub use maibot::resources::expression::{
     MaiBotExpression, MaiBotExpressionAction, MaiBotExpressionFilter, MaiBotExpressionOverview,
     MaiBotExpressionPage, MaiBotExpressionQuery,

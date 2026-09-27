@@ -16,7 +16,7 @@ use ncd_runtime::{
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule, ComponentActionRequest,
     DeploymentTaskRequest, KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider,
     MaiBotBehaviorDetail, MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery,
-    MaiBotChatSession, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
+    MaiBotChatSession, MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
     MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotExpressionAction,
     MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery, MaiBotJargonAction,
     MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotLocalImage,
@@ -852,6 +852,30 @@ pub async fn maibot_behavior_detail(
     state
         .app_manager
         .maibot_behavior(&AppInstanceId::new(instance_id), id)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_chat_ticket(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotChatTicket, AppConfigError> {
+    state
+        .app_manager
+        .maibot_chat_ticket(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_chat_clear(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotResourceDone, AppConfigError> {
+    state
+        .app_manager
+        .maibot_chat_clear(&AppInstanceId::new(instance_id))
         .await
         .map_err(AppFrameworkError::into_config_error)
 }

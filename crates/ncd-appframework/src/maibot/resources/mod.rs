@@ -4,6 +4,7 @@
 //! 上游跨版本会加字段、在字符串位置给 null，所以先宽松收再换成对外类型，对外的不带 null。
 
 pub mod behavior;
+pub mod chat;
 pub mod emoji;
 pub mod expression;
 pub mod jargon;

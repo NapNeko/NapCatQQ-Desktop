@@ -7,6 +7,7 @@ use super::resources::MaiBotResourceDone;
 use super::resources::behavior::{
     self, MaiBotBehaviorDetail, MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery,
 };
+use super::resources::chat::{self, MaiBotChatTicket};
 use super::resources::emoji::{
     self, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
     MaiBotEmojiUpload, MaiBotEmojiUploadDone,
@@ -143,6 +144,11 @@ pub trait MaiBotRuntimeApi: Send + Sync {
 
     /// 一条经验连同它的观察和反馈记录；上游行为数据只读，没有对应的操作
     async fn behavior(&self, session: &MaiBotSession, id: i64) -> Result<MaiBotBehaviorDetail, AppFrameworkError>;
+
+    /// 试聊的一次性连接票；页面拿到就连
+    async fn chat_ticket(&self, session: &MaiBotSession) -> Result<MaiBotChatTicket, AppFrameworkError>;
+
+    async fn chat_clear(&self, session: &MaiBotSession) -> Result<MaiBotResourceDone, AppFrameworkError>;
 
     async fn persons(&self, session: &MaiBotSession, query: &MaiBotPersonQuery) -> Result<MaiBotPersonPage, AppFrameworkError>;
 
@@ -409,6 +415,14 @@ impl MaiBotRuntimeApi for WebUiRuntime {
 
     async fn behavior(&self, session: &MaiBotSession, id: i64) -> Result<MaiBotBehaviorDetail, AppFrameworkError> {
         behavior::detail(&client(session)?, id).await
+    }
+
+    async fn chat_ticket(&self, session: &MaiBotSession) -> Result<MaiBotChatTicket, AppFrameworkError> {
+        chat::ticket(&client(session)?, session.port).await
+    }
+
+    async fn chat_clear(&self, session: &MaiBotSession) -> Result<MaiBotResourceDone, AppFrameworkError> {
+        chat::clear_history(&client(session)?).await
     }
 
     async fn persons(&self, session: &MaiBotSession, query: &MaiBotPersonQuery) -> Result<MaiBotPersonPage, AppFrameworkError> {

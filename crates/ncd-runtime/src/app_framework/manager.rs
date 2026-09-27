@@ -20,7 +20,7 @@ use ncd_appframework::{
     AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession, AstrBotSessionRule,
     KarinPluginInstalled, MaiBotAPIProvider, MaiBotBehaviorDetail, MaiBotBehaviorOverview,
-    MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession, MaiBotMCPServerItemConfig,
+    MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession, MaiBotChatTicket, MaiBotMCPServerItemConfig,
     MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
     MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotLocalImage,
     MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
@@ -2389,6 +2389,16 @@ impl AppManager {
     ) -> Result<MaiBotBehaviorDetail, AppFrameworkError> {
         let (adapter, s) = self.maibot_session(id).await?;
         maibot_api(adapter.as_ref())?.behavior(&s, behavior_id).await
+    }
+
+    pub async fn maibot_chat_ticket(&self, id: &AppInstanceId) -> Result<MaiBotChatTicket, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.chat_ticket(&s).await
+    }
+
+    pub async fn maibot_chat_clear(&self, id: &AppInstanceId) -> Result<MaiBotResourceDone, AppFrameworkError> {
+        let (adapter, s) = self.maibot_session(id).await?;
+        maibot_api(adapter.as_ref())?.chat_clear(&s).await
     }
 
     pub async fn maibot_persons(

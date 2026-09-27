@@ -762,6 +762,8 @@ pub fn run() {
             commands::app_framework::maibot_behaviors,
             commands::app_framework::maibot_behavior_overview,
             commands::app_framework::maibot_behavior_detail,
+            commands::app_framework::maibot_chat_ticket,
+            commands::app_framework::maibot_chat_clear,
             commands::app_framework::maibot_persons,
             commands::app_framework::maibot_person_overview,
             commands::app_framework::maibot_person_action,
