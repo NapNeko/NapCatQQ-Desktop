@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkManifest, AppInstance, AppPluginConfigSchema,
-    AppProjectProbe, AppStoreResource, OneBotLinkPlan,
+    AppProjectProbe, AppStoreResource, OneBotLinkPlan, TerminalSnippet,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
@@ -193,6 +193,23 @@ impl AppFrameworkAdapter for AstrBotAdapter {
             .resolve_launch_command(host, args)
             .await
             .map_err(|e| AppFrameworkError::Runtime(e.to_string()))
+    }
+
+    async fn terminal_profile(
+        &self,
+        host: &dyn Host,
+        spec: &AppComponentSpec,
+    ) -> crate::terminal::AppTerminalProfile {
+        crate::terminal::uv_venv_profile(
+            host,
+            spec,
+            vec![
+                TerminalSnippet::new("装了哪些包", "uv pip list"),
+                TerminalSnippet::new("AstrBot 版本", "astrbot --version"),
+                TerminalSnippet::new("命令帮助", "astrbot help"),
+            ],
+        )
+        .await
     }
 
     async fn read_access_token(

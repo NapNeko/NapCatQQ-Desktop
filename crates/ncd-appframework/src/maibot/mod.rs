@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs};
 use ncd_domain::{
     AppConfigDocument, AppFrameworkManifest, AppInstance, AppPendingTerms, AppProjectProbe,
-    AppStoreResource, OneBotLinkPlan,
+    AppStoreResource, OneBotLinkPlan, TerminalSnippet,
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
@@ -276,6 +276,24 @@ impl AppFrameworkAdapter for MaiBotAdapter {
             .resolve_launch_command(host, args)
             .await
             .map_err(|e| AppFrameworkError::Runtime(e.to_string()))
+    }
+
+    async fn terminal_profile(
+        &self,
+        host: &dyn Host,
+        spec: &AppComponentSpec,
+    ) -> crate::terminal::AppTerminalProfile {
+        // 麦麦的 pyproject 是上游的，uv add 会改动它的锁文件，更新时冲突；临时装包走 uv pip
+        crate::terminal::uv_venv_profile(
+            host,
+            spec,
+            vec![
+                TerminalSnippet::new("装了哪些包", "uv pip list"),
+                TerminalSnippet::new("装一个包", "uv pip install "),
+                TerminalSnippet::new("Python 版本", "python -V"),
+            ],
+        )
+        .await
     }
 
     async fn read_access_token(

@@ -166,6 +166,15 @@ pub trait AppFrameworkAdapter: Send + Sync {
         args: &LaunchArgs,
     ) -> Result<HostCommand, AppFrameworkError>;
 
+    /// 终端开在实例目录时接上的环境（PATH 前缀、变量、提示、常用命令）。默认只进目录
+    async fn terminal_profile(
+        &self,
+        _host: &dyn Host,
+        _spec: &AppComponentSpec,
+    ) -> crate::terminal::AppTerminalProfile {
+        crate::terminal::AppTerminalProfile::default()
+    }
+
     /// 应用端已配置的 OneBot 反向 WS token；没有或为空返回 None
     async fn read_access_token(
         &self,

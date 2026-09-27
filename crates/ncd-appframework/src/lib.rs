@@ -19,6 +19,7 @@ pub mod node_tooling;
 pub mod nonebot2;
 pub mod registry;
 pub mod store;
+pub mod terminal;
 pub mod toml_patch;
 pub mod uv_tooling;
 
@@ -112,3 +113,4 @@ pub use astrbot::{
 };
 pub use registry::AppFrameworkRegistry;
 pub use store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
+pub use terminal::AppTerminalProfile;
