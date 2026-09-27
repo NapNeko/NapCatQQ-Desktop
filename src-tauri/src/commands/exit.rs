@@ -16,11 +16,7 @@ pub struct PrepareExitDesktopResponse {
 pub async fn prepare_exit_desktop(
     state: tauri::State<'_, AppState>,
 ) -> Result<PrepareExitDesktopResponse, String> {
-    let local_active = state
-        .bot_manager
-        .count_local_active_bots()
-        .await
-        .map_err(|e| e.to_string())?;
+    let local_active = local_active_bots(&state).await?;
     let remote_active = state
         .bot_manager
         .count_remote_active_bots()
@@ -39,30 +35,42 @@ pub async fn request_exit_app(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let local_active = state
+    let local_active = local_active_bots(&state).await?;
+    if local_active > 0 {
+        return Err(exit_blocked_message(local_active));
+    }
+    shutdown_and_exit(&app, &state, "request_exit_app").await;
+    Ok(())
+}
+
+pub(crate) async fn local_active_bots(state: &AppState) -> Result<usize, String> {
+    state
         .bot_manager
         .count_local_active_bots()
         .await
-        .map_err(|e| e.to_string())?;
-    if local_active > 0 {
-        return Err(format!(
-            "有 {local_active} 个本机 Bot 正在运行，请先停止后再退出"
-        ));
-    }
+        .map_err(|e| e.to_string())
+}
 
+pub(crate) fn exit_blocked_message(local_active: usize) -> String {
+    format!("有 {local_active} 个本机 Bot 正在运行，请先停止后再退出")
+}
+
+/// 闸门放行之后的收尾。主菜单退出和托盘退出都走这一份：之前两边各抄一遍，托盘那份
+/// 漏了停应用端实例，退出后 Karin / AstrBot / MaiBot 进程就成了没人管的孤儿
+pub(crate) async fn shutdown_and_exit(app: &AppHandle, state: &AppState, origin: &str) {
     let result = state.bot_manager.exit_desktop().await;
     if !result.failed.is_empty() {
-        eprintln!(
-            "[bot_manager] request_exit_app: {} local bot(s) failed to stop cleanly",
-            result.failed.len()
+        tracing::warn!(
+            origin,
+            failed = result.failed.len(),
+            "local bot(s) failed to stop cleanly on exit"
         );
     }
     // 本机应用端实例随 Desktop 退出停止；远端实例脱管（与协议 Bot 同语义）
     state.app_manager.runtime().shutdown_local().await;
     state.terminals.close_all();
     // 删远端 desktop_present,ncd-watch 立刻可告警(不必干等 90s TTL)
-    crate::commands::ncd_watch::clear_present_on_all_remote_servers(state.inner()).await;
+    crate::commands::ncd_watch::clear_present_on_all_remote_servers(state).await;
     state.runtime.shutdown().await;
     app.exit(0);
-    Ok(())
 }

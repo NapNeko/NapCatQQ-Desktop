@@ -6,6 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
+use crate::commands::exit;
+use crate::window_events::{DesktopExitBlocked, DESKTOP_EXIT_BLOCKED};
 use crate::AppState;
 
 static TRAY_ATTACHED: AtomicBool = AtomicBool::new(false);
@@ -106,28 +108,12 @@ pub async fn tray_panel_enter_lightweight(app: AppHandle) -> Result<(), String> 
 
 async fn quit_from_tray(app: AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
-    let local_active = state
-        .bot_manager
-        .count_local_active_bots()
-        .await
-        .map_err(|e| e.to_string())?;
+    let local_active = exit::local_active_bots(&state).await?;
     if local_active > 0 {
         let _ = window_show(app.clone()).await;
-        let _ = app.emit("desktop-exit-blocked", local_active);
-        return Err(format!(
-            "有 {local_active} 个本机 Bot 正在运行，请先停止后再退出"
-        ));
+        let _ = app.emit(DESKTOP_EXIT_BLOCKED, DesktopExitBlocked::new(local_active));
+        return Err(exit::exit_blocked_message(local_active));
     }
-    let result = state.bot_manager.exit_desktop().await;
-    if !result.failed.is_empty() {
-        eprintln!(
-            "[bot_manager] tray quit: {} bot(s) failed to stop",
-            result.failed.len()
-        );
-    }
-    crate::commands::ncd_watch::clear_present_on_all_remote_servers(state.inner()).await;
-    state.terminals.close_all();
-    state.runtime.shutdown().await;
-    app.exit(0);
+    exit::shutdown_and_exit(&app, &state, "tray_panel_quit").await;
     Ok(())
 }

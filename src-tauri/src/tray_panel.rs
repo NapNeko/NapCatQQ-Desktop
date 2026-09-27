@@ -127,7 +127,10 @@ pub fn show_tray_panel_at(app: &AppHandle, position: PhysicalPosition<f64>) -> R
     let height = last_content_height();
     let _ = window.set_size(LogicalSize::new(PANEL_WIDTH, height));
     position_tray_panel(&window, position, height)?;
-    let _ = window.emit("tray_panel_show", ());
+    let _ = window.emit(
+        crate::window_events::TRAY_PANEL_SHOW,
+        crate::window_events::WindowSignal::V1,
+    );
     window.show().map_err(|e| e.to_string())?;
     let _ = window.set_focus();
     Ok(())

@@ -36,6 +36,7 @@ pub mod snowluma_offline_listener;
 pub mod tray_icon;
 pub mod tray_panel;
 pub mod tray_summary;
+pub mod window_events;
 pub mod window_icon;
 pub mod windows_toast;
 
@@ -653,7 +654,10 @@ pub fn run() {
                         }
                         return;
                     }
-                    let _ = app.emit("desktop-request-close", ());
+                    let _ = app.emit(
+                        window_events::DESKTOP_REQUEST_CLOSE,
+                        window_events::WindowSignal::V1,
+                    );
                 });
             }
         })
