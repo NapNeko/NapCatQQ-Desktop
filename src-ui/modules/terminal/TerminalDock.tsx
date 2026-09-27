@@ -1,0 +1,282 @@
+// 底部终端面板（VS Code 那种）：多标签、标签里可以分两块；切页面、收起都不断，拖顶边改高度，能最大化。
+// 应用根上常驻一个：收起时只是不画，会话和 xterm 实例都还在。
+
+import '@xterm/xterm/css/xterm.css';
+import './terminal.css';
+
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Columns2, Maximize2, Minimize2, Rows2, SquareTerminal } from 'lucide-react';
+import { Button } from '../../shared/ui';
+import { cn } from '../../shared/utils/cn';
+import { useThemeTokens } from '../../hooks/theme/useThemeTokens';
+import {
+    DOCK_HEIGHT_MIN,
+    terminalLayout,
+    useTerminalLayout,
+    useTerminalPrefs,
+} from '../../hooks/terminal/terminalPrefs';
+import { terminalStore, useTerminalState, type TerminalGroup } from '../../hooks/terminal/terminalStore';
+import { uploadToSession } from '../../hooks/terminal/useTerminalFiles';
+import { useTerminalFileDrop, type TerminalDropTarget } from '../../hooks/terminal/useTerminalFileDrop';
+import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
+import { buildPalette } from '../../core/domain/terminal/palette';
+import { quotePath, shellSyntaxOf } from '../../core/domain/terminal/paths';
+import { getRuntime, setTerminalTheme, startTerminalRuntimes } from './registry';
+import { TerminalPane } from './TerminalPane';
+import { TerminalNewMenu, TerminalTabs } from './TerminalTabs';
+
+function useDrag(onMove: (e: PointerEvent) => void, onEnd?: () => void) {
+    const [dragging, setDragging] = useState(false);
+    const start = useCallback(
+        (e: React.PointerEvent) => {
+            e.preventDefault();
+            setDragging(true);
+            const move = (ev: PointerEvent) => onMove(ev);
+            const up = () => {
+                setDragging(false);
+                window.removeEventListener('pointermove', move);
+                window.removeEventListener('pointerup', up);
+                onEnd?.();
+            };
+            window.addEventListener('pointermove', move);
+            window.addEventListener('pointerup', up);
+        },
+        [onMove, onEnd],
+    );
+    return { dragging, start };
+}
+
+function GroupView({ group, visible, drop }: { group: TerminalGroup; visible: boolean; drop: TerminalDropTarget | null }) {
+    const boxRef = useRef<HTMLDivElement>(null);
+    const divider = useDrag((e) => {
+        const rect = boxRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const ratio =
+            group.split === 'row' ? (e.clientX - rect.left) / rect.width : (e.clientY - rect.top) / rect.height;
+        terminalStore.setRatio(group.id, ratio);
+    });
+    const [first, second] = group.panes;
+    const zoneOf = (id: string | undefined) =>
+        id && drop?.sessionId === id ? (drop.dir ? 'files' : 'terminal') : null;
+    return (
+        <div ref={boxRef} className={cn('flex min-h-0 min-w-0 flex-1', group.split === 'column' ? 'flex-col' : 'flex-row')}>
+            {first && (
+                <div
+                    className="flex min-h-0 min-w-0"
+                    style={second ? { flexBasis: `${group.ratio * 100}%`, flexGrow: 0, flexShrink: 0 } : { flex: 1 }}
+                >
+                    <TerminalPane
+                        sessionId={first}
+                        focused={group.focused === first}
+                        visible={visible}
+                        dropZone={zoneOf(first)}
+                        showHeader
+                    />
+                </div>
+            )}
+            {second && (
+                <>
+                    <div
+                        className="ncd-term-divider"
+                        data-split={group.split}
+                        data-dragging={divider.dragging}
+                        onPointerDown={divider.start}
+                    />
+                    <div className="flex min-h-0 min-w-0 flex-1">
+                        <TerminalPane
+                            sessionId={second}
+                            focused={group.focused === second}
+                            visible={visible}
+                            dropZone={zoneOf(second)}
+                            showHeader
+                        />
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+/** 没分屏时点了把当前这个目标在右边再开一块；分了以后换成左右 / 上下切换，按钮不挪位置 */
+function SplitButton({ group, focusedId }: { group: TerminalGroup; focusedId: string | undefined }) {
+    const split = group.panes.length > 1;
+    const label = !split ? '左右分屏' : group.split === 'row' ? '改成上下分屏' : '改成左右分屏';
+    const Icon = split && group.split === 'row' ? Rows2 : Columns2;
+    const onClick = () => {
+        if (split) {
+            terminalStore.setSplit(group.id, group.split === 'row' ? 'column' : 'row');
+            return;
+        }
+        const view = focusedId ? terminalStore.getSnapshot().sessions[focusedId] : undefined;
+        if (view) void terminalStore.open(view.info.target, { shell: view.info.shell, splitFrom: focusedId, split: 'row' });
+    };
+    return (
+        <button
+            type="button"
+            title={label}
+            aria-label={label}
+            onClick={onClick}
+            className="flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary hover:bg-inset hover:text-text"
+        >
+            <Icon size={14} />
+        </button>
+    );
+}
+
+export function TerminalDock() {
+    const state = useTerminalState();
+    const layout = useTerminalLayout();
+    const prefs = useTerminalPrefs();
+    const dockRef = useRef<HTMLElement>(null);
+    const [liveHeight, setLiveHeight] = useState<number | null>(null);
+    const liveHeightRef = useRef<number | null>(null);
+
+    useEffect(() => startTerminalRuntimes(), []);
+
+    // 页面上贴底悬浮的按钮（index.css 的 .float-above-terminal）靠这两样避开面板
+    useLayoutEffect(() => {
+        const root = document.documentElement;
+        const dock = dockRef.current;
+        if (!dock) return;
+        const publish = () =>
+            root.style.setProperty('--terminal-dock-inset', `${Math.round(dock.getBoundingClientRect().height)}px`);
+        publish();
+        const observer = new ResizeObserver(publish);
+        observer.observe(dock);
+        return () => {
+            observer.disconnect();
+            root.style.removeProperty('--terminal-dock-inset');
+        };
+    }, [state.open]);
+    const covers = state.open && state.maximized;
+    useLayoutEffect(() => {
+        document.documentElement.toggleAttribute('data-terminal-covers', covers);
+        return () => document.documentElement.removeAttribute('data-terminal-covers');
+    }, [covers]);
+
+    const tokens = useThemeTokens({
+        background: { name: '--surface-inset', fallback: '#f4efe7' },
+        foreground: { name: '--text-primary', fallback: '#2c1f18' },
+        accent: { name: '--accent-500', fallback: '#f58fb6' },
+    });
+    const palette = useMemo(
+        () => buildPalette(tokens, prefs.colorScheme),
+        [tokens.background, tokens.foreground, tokens.accent, prefs.colorScheme],
+    );
+    useEffect(() => setTerminalTheme(palette), [palette]);
+
+    // Ctrl+` 开关面板、Ctrl+Shift+` 新开本机终端；焦点在终端里时由终端自己处理
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (!(e.ctrlKey || e.metaKey) || e.code !== 'Backquote') return;
+            if (e.target instanceof Element && e.target.closest('.xterm')) return;
+            e.preventDefault();
+            if (e.shiftKey) void terminalStore.open({ kind: 'local' }, { forceNew: true });
+            else terminalStore.toggle();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
+
+    const resize = useDrag(
+        (e) => {
+            const dock = dockRef.current;
+            const parent = dock?.parentElement;
+            if (!dock || !parent) return;
+            const bottom = dock.getBoundingClientRect().bottom;
+            const max = parent.getBoundingClientRect().height - 120;
+            const next = Math.round(Math.min(Math.max(bottom - e.clientY, DOCK_HEIGHT_MIN), Math.max(DOCK_HEIGHT_MIN, max)));
+            liveHeightRef.current = next;
+            setLiveHeight(next);
+        },
+        () => {
+            // 拖的时候只改本地高度，松手才落盘
+            if (liveHeightRef.current !== null) terminalLayout.patch({ height: liveHeightRef.current });
+            liveHeightRef.current = null;
+            setLiveHeight(null);
+        },
+    );
+
+    const onDrop = useCallback((target: TerminalDropTarget, paths: string[]) => {
+        const view = terminalStore.getSnapshot().sessions[target.sessionId];
+        if (!view) return;
+        const { info } = view;
+        if (target.dir) {
+            void uploadToSession(target.sessionId, paths, target.dir);
+        } else if (info.host_id === 'local') {
+            const syntax = shellSyntaxOf(info.host_os, info.shell);
+            getRuntime(target.sessionId)?.fillInput(`${paths.map((p) => quotePath(p, syntax)).join(' ')} `);
+        } else if (info.features.files) {
+            void uploadToSession(target.sessionId, paths, view.cwd ?? '~');
+        } else {
+            pushInfoBar({ tone: 'warning', title: '容器里的终端没法直接传文件', content: '改用「宿主机部署目录」那个终端传' });
+        }
+    }, []);
+    const drop = useTerminalFileDrop(state.open && state.groups.length > 0, onDrop);
+
+    if (!state.open) return null;
+    const activeGroup = state.groups.find((g) => g.id === state.activeGroup) ?? null;
+    const height = liveHeight ?? layout.height;
+    const focusedId = activeGroup?.focused;
+    const focusedView = focusedId ? state.sessions[focusedId] : undefined;
+
+    return (
+        <section
+            ref={dockRef}
+            aria-label="终端"
+            className={cn(
+                'relative z-20 flex min-h-0 flex-col border-t border-border-subtle bg-surface',
+                state.maximized ? 'flex-1' : 'shrink-0',
+            )}
+            style={{
+                height: state.maximized ? undefined : height,
+                ['--ncd-term-bg' as string]: palette.background,
+            }}
+        >
+            {!state.maximized && (
+                <div
+                    className="ncd-term-resize"
+                    data-dragging={resize.dragging}
+                    onPointerDown={resize.start}
+                    onDoubleClick={() => terminalStore.setMaximized(true)}
+                    title="拖动改高度，双击最大化"
+                />
+            )}
+            <header className="flex h-9 shrink-0 items-center gap-1 border-b border-border-subtle px-2">
+                <SquareTerminal size={14} className="mx-1 shrink-0 text-text-tertiary" />
+                <TerminalTabs state={state} />
+                <TerminalNewMenu busy={state.busy} />
+                {focusedView && activeGroup && <SplitButton group={activeGroup} focusedId={focusedId} />}
+                <button
+                    type="button"
+                    title={state.maximized ? '还原终端面板' : '最大化终端面板'}
+                    aria-label={state.maximized ? '还原终端面板' : '最大化终端面板'}
+                    onClick={() => terminalStore.setMaximized(!state.maximized)}
+                    className="flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary hover:bg-inset hover:text-text"
+                >
+                    {state.maximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                </button>
+                <button
+                    type="button"
+                    title="收起（Ctrl+`）；终端都还开着"
+                    aria-label="收起终端面板"
+                    onClick={() => terminalStore.setOpen(false)}
+                    className="flex h-7 w-7 items-center justify-center rounded-sm text-text-tertiary hover:bg-inset hover:text-text"
+                >
+                    <ChevronDown size={15} />
+                </button>
+            </header>
+            {activeGroup ? (
+                <GroupView key={activeGroup.id} group={activeGroup} visible={state.open} drop={drop} />
+            ) : (
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[13px] text-text-secondary">
+                    <p>没有开着的终端</p>
+                    <Button size="sm" disabled={state.busy} onClick={() => void terminalStore.open({ kind: 'local' })}>
+                        <SquareTerminal size={14} />
+                        开一个本机终端
+                    </Button>
+                </div>
+            )}
+        </section>
+    );
+}

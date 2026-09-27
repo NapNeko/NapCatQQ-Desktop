@@ -1,0 +1,137 @@
+/* 终端面板。xterm 自己的样式在 @xterm/xterm/css/xterm.css，这里只补外壳和命令标记。 */
+
+.ncd-term-host {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+/* 内边距挂在 .xterm 上：FitAddon 算行列时减的是它的内边距；左边留宽一点放命令标记 */
+.ncd-term-host > .xterm {
+    height: 100%;
+    padding: 6px 0 2px 16px;
+}
+
+/* viewport 铺满整个 .xterm（连内边距一起），xterm 自带样式给它刷的是黑底，
+   主题色只刷到内容区，不改的话左边和底下各露一条黑边 */
+.ncd-term-host .xterm .xterm-viewport {
+    background-color: var(--ncd-term-bg);
+}
+
+.ncd-term-host .xterm:focus,
+.ncd-term-host .xterm-helper-textarea:focus {
+    outline: none;
+}
+
+/* 命令标记：挂在提示符那一行，挪进左边的内边距里，成功绿、失败红 */
+.xterm-screen .xterm-decoration-container .xterm-decoration.ncd-term-mark {
+    width: 3px !important;
+    margin-left: -10px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--state-success) 75%, transparent);
+    pointer-events: auto;
+    cursor: default;
+}
+
+.xterm-screen .xterm-decoration-container .xterm-decoration.ncd-term-mark.is-fail {
+    background: var(--state-danger);
+}
+
+/* 拖文件进来时的提示层 */
+.ncd-term-drop {
+    position: absolute;
+    inset: 6px;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed color-mix(in srgb, var(--accent-500) 70%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--accent-500) 10%, transparent);
+    color: var(--text-primary);
+    font-size: 13px;
+    pointer-events: none;
+}
+
+/* 面板顶边的拖动条：看不见，鼠标放上去才出现一条线 */
+.ncd-term-resize {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -3px;
+    height: 6px;
+    z-index: 30;
+    cursor: row-resize;
+}
+
+.ncd-term-resize::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 2px;
+    height: 2px;
+    background: transparent;
+    transition: background-color 120ms ease-out;
+}
+
+.ncd-term-resize:hover::after,
+.ncd-term-resize[data-dragging='true']::after {
+    background: color-mix(in srgb, var(--accent-500) 60%, transparent);
+}
+
+/* 文件栏左边缘的拖动条，和面板顶边那条一样平时看不见 */
+.ncd-term-files-resize {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    width: 6px;
+    z-index: 15;
+    cursor: col-resize;
+}
+
+.ncd-term-files-resize::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 2px;
+    width: 2px;
+    background: transparent;
+    transition: background-color 120ms ease-out;
+}
+
+.ncd-term-files-resize:hover::after,
+.ncd-term-files-resize[data-dragging='true']::after {
+    background: color-mix(in srgb, var(--accent-500) 60%, transparent);
+}
+
+/* 分屏中间的分隔条 */
+.ncd-term-divider {
+    flex: none;
+    position: relative;
+    z-index: 10;
+    background: var(--border-subtle);
+}
+
+.ncd-term-divider[data-split='row'] {
+    width: 1px;
+    cursor: col-resize;
+}
+
+.ncd-term-divider[data-split='column'] {
+    height: 1px;
+    cursor: row-resize;
+}
+
+.ncd-term-divider::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+}
+
+.ncd-term-divider:hover,
+.ncd-term-divider[data-dragging='true'] {
+    background: color-mix(in srgb, var(--accent-500) 60%, transparent);
+}
