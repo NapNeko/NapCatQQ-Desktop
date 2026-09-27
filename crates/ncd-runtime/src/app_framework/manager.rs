@@ -60,7 +60,9 @@ use rand::distributions::Alphanumeric;
 
 use super::adopt::{self, AdoptStore};
 use super::instances::AppInstanceStore;
-use super::listen_port::{allocate_listen_port, allocate_stable_port, local_port_free};
+use super::listen_port::{
+    allocate_listen_port, allocate_stable_port, local_port_free, remote_listening_ports,
+};
 use super::native_runtime::{AppLaunchSpec, NativeAppRuntime};
 use super::resident_link::{self, ResidentLinkSpec};
 use crate::bot_manager::BotManager;
@@ -596,15 +598,10 @@ impl AppManager {
                 placement.as_str()
             )));
         }
-        let siblings = self.store.list().await;
-        let taken: Vec<u16> = siblings
-            .iter()
-            .filter(|i| i.host_id == req.host_id)
-            .map(|i| i.port)
-            .collect();
-        let probe_local = req.host_id == LOCAL_HOST_ID;
-        let port = allocate_listen_port(req.port, &taken, probe_local)
-            .map_err(AppFrameworkError::Validation)?;
+        let host = self.resolve_host(&req.host_id).await?;
+        let port = self
+            .allocate_instance_port(host.as_ref(), &req.host_id, req.port)
+            .await?;
         // 账号密码类 WebUI：先把密码定下来，安装时种进配置，之后打开 WebUI 才有得显示
         let webui_account = if manifest.webui_auth == AppWebUiAuthKind::UserPassword {
             let password = resolve_webui_password(adapter.as_ref(), req.webui_password.clone())?;
@@ -619,7 +616,6 @@ impl AppManager {
             None
         };
 
-        let host = self.resolve_host(&req.host_id).await?;
         let id = AppInstanceId::new(short_id());
         if let Some((username, password)) = &webui_account {
             if let Some(name) = username {
@@ -1776,8 +1772,9 @@ impl AppManager {
         Ok(plan)
     }
 
-    /// 正向对接的 Bot 听口：重新对接沿用已有 `ncd-app:<id>` 的口；否则避开同主机上所有 Bot 的
-    /// 服务口和应用实例口，按实例 + Bot 算出稳定的口（预览与写入一致），本机再探一次能否 bind
+    /// 正向对接的 Bot 听口（开在 Bot 那台机上）：重新对接沿用已有 `ncd-app:<id>` 的口；否则避开
+    /// Bot 主机上所有 Bot 的服务口和应用实例口，按实例 + Bot 算出稳定的口（预览与写入一致）；
+    /// 本机再探一次能否 bind，远端避开服务器上正在监听的口
     async fn pick_forward_port(
         &self,
         instance: &AppInstance,
@@ -1792,12 +1789,13 @@ impl AppManager {
         {
             return Ok(existing.port);
         }
+        let bot_host_id = host_id_of_runtime_target(&bot.bot.runtime_target);
         let mut taken: Vec<u16> = self
             .store
             .list()
             .await
             .into_iter()
-            .filter(|i| i.host_id == instance.host_id)
+            .filter(|i| i.host_id == bot_host_id)
             .map(|i| i.port)
             .collect();
         let bots = self
@@ -1808,13 +1806,17 @@ impl AppManager {
         for b in bots
             .iter()
             .chain(std::iter::once(bot))
-            .filter(|b| runtime_target_matches_host(&b.bot.runtime_target, &instance.host_id))
+            .filter(|b| runtime_target_matches_host(&b.bot.runtime_target, &bot_host_id))
         {
             taken.extend(bot_listen_ports(b));
         }
+        let local = bot_host_id == LOCAL_HOST_ID;
+        if !local {
+            let host = self.resolve_host(&bot_host_id).await?;
+            taken.extend(remote_listening_ports(host.as_ref()).await);
+        }
         let seed = format!("{}:{}", instance.id.as_str(), bot.bot.qq_id);
-        allocate_stable_port(&seed, &taken, instance.host_id == LOCAL_HOST_ID)
-            .map_err(AppFrameworkError::Validation)
+        allocate_stable_port(&seed, &taken, local).map_err(AppFrameworkError::Validation)
     }
 
     /// 只摘对接方向对应的那张表：导入认领的连接名是用户自己起的，
@@ -3152,7 +3154,43 @@ impl AppManager {
                 "本机端口 {port} 已被其它程序占用"
             )));
         }
+        if instance.host_id != LOCAL_HOST_ID {
+            let host = self.resolve_host(&instance.host_id).await?;
+            if remote_listening_ports(host.as_ref()).await.contains(&port) {
+                return Err(AppFrameworkError::Validation(format!(
+                    "远端主机上端口 {port} 已被其它程序占用"
+                )));
+            }
+        }
         Ok(())
+    }
+
+    /// 新实例的口：避开同主机登记过的实例口；本机探一次 bind，远端避开服务器上正在监听的口
+    async fn allocate_instance_port(
+        &self,
+        host: &dyn Host,
+        host_id: &str,
+        requested: Option<u16>,
+    ) -> Result<u16, AppFrameworkError> {
+        let mut taken: Vec<u16> = self
+            .store
+            .list()
+            .await
+            .iter()
+            .filter(|i| i.host_id == host_id)
+            .map(|i| i.port)
+            .collect();
+        let local = host.locality() == Locality::Local;
+        if !local {
+            let busy = remote_listening_ports(host).await;
+            if let Some(port) = requested.filter(|p| busy.contains(p)) {
+                return Err(AppFrameworkError::Validation(format!(
+                    "远端主机上端口 {port} 已被其它程序占用"
+                )));
+            }
+            taken.extend(busy);
+        }
+        allocate_listen_port(requested, &taken, local).map_err(AppFrameworkError::Validation)
     }
 
     /// 写盘之后的联动：端口同步 → 已对接且对接输入变了就重新 apply_link → 非热加载文件变了提示重启

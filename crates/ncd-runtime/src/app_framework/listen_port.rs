@@ -1,5 +1,9 @@
-//! 应用实例监听口：未指定则随机高位，避开同机已登记端口；本机再探一次能否 bind。
+//! 应用实例监听口：未指定则随机高位，避开同机已登记端口；本机再探一次能否 bind，
+//! 远端读一次正在监听的口一并避开。
 
+use std::time::Duration;
+
+use ncd_host::{Host, HostCommand};
 use rand::Rng;
 
 /// 避开特权口与常见框架默认（7777 / 8080），也避开系统临时端口段。
@@ -83,6 +87,43 @@ pub fn local_port_free(port: u16) -> bool {
     std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).is_ok()
 }
 
+/// 远端 Linux 上正在监听的 TCP 口。桌面端登记表只认得自己装的东西，服务器上用户另跑的程序
+/// 占着的口要靠这个避开。读 `/proc/net/tcp{,6}`（不依赖 ss / netstat 装没装）；读不到给空，照旧只按登记表
+pub async fn remote_listening_ports(host: &dyn Host) -> Vec<u16> {
+    let cmd = HostCommand::new("sh")
+        .arg("-c")
+        .arg("cat /proc/net/tcp /proc/net/tcp6 2>/dev/null")
+        .timeout(Duration::from_secs(15));
+    match host.run_to_string(cmd).await {
+        Ok(out) => parse_proc_net_listen(&out.stdout),
+        Err(e) => {
+            tracing::debug!(error = %e, "read remote listening ports");
+            Vec::new()
+        }
+    }
+}
+
+/// 每行 `sl local_address rem_address st …`，本地地址是 `十六进制 IP:十六进制口`，状态 `0A` 是 LISTEN
+pub fn parse_proc_net_listen(text: &str) -> Vec<u16> {
+    let mut ports: Vec<u16> = text
+        .lines()
+        .filter_map(|line| {
+            let mut cols = line.split_whitespace();
+            let _slot = cols.next()?;
+            let local = cols.next()?;
+            let _remote = cols.next()?;
+            if cols.next()? != "0A" {
+                return None;
+            }
+            u16::from_str_radix(local.rsplit_once(':')?.1, 16).ok()
+        })
+        .filter(|p| *p != 0)
+        .collect();
+    ports.sort_unstable();
+    ports.dedup();
+    ports
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,6 +166,19 @@ mod tests {
             a,
             "不同实例起点不同"
         );
+    }
+
+    #[test]
+    fn proc_net_listen_keeps_only_listening_ports() {
+        let text = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n\
+   0: 0100007F:1F41 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 1 1 0\n\
+   1: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 2 1 0\n\
+   2: 0100007F:1F41 0100007F:D431 01 00000000:00000000 00:00000000 00000000  1000        0 3 1 0\n\
+  sl  local_address                         remote_address                        st\n\
+   0: 00000000000000000000000001000000:1F41 00000000000000000000000000000000:0000 0A 0 0 0\n\
+   1: 00000000000000000000000000000000:1B59 00000000000000000000000000000000:0000 0A 0 0 0\n";
+        assert_eq!(parse_proc_net_listen(text), vec![22, 7001, 8001], "去重、只留 LISTEN（0A）");
+        assert!(parse_proc_net_listen("").is_empty());
     }
 
     #[test]
