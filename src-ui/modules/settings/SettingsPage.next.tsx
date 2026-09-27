@@ -9,6 +9,7 @@ import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
 import { AppearanceTab } from './tabs/AppearanceTab';
 import { WindowTab } from './tabs/WindowTab';
+import { TerminalTab } from './tabs/TerminalTab';
 import { RuntimeTab } from './tabs/RuntimeTab';
 import { MonitoringTab } from './tabs/MonitoringTab';
 import { NotificationsTab } from './tabs/NotificationsTab';
@@ -87,6 +88,7 @@ export function SettingsPageNext() {
                         <TabsList className="scrollbar-hide min-w-0 shrink overflow-x-auto border-b-0">
                             <TabsTrigger value="appearance">外观</TabsTrigger>
                             <TabsTrigger value="window">窗口</TabsTrigger>
+                            <TabsTrigger value="terminal">终端</TabsTrigger>
                             <TabsTrigger value="runtime">运行</TabsTrigger>
                             <TabsTrigger value="monitoring">监控</TabsTrigger>
                             <TabsTrigger value="notifications">通知</TabsTrigger>
@@ -119,6 +121,10 @@ export function SettingsPageNext() {
 
                     <TabsContent value="window" className="pb-10 pt-7 focus-visible:outline-none">
                         <WindowTab draft={draft} patchDraft={patchDraft} />
+                    </TabsContent>
+
+                    <TabsContent value="terminal" className="pb-10 pt-7 focus-visible:outline-none">
+                        <TerminalTab />
                     </TabsContent>
 
                     <TabsContent value="runtime" className="pb-10 pt-7 focus-visible:outline-none">
