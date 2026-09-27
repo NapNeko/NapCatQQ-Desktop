@@ -24,6 +24,11 @@ pub const MAIBOT_DOCS_URL: &str = "https://docs.mai-mai.org";
 pub const ADAPTER_REPO: &str = "Mai-with-u/MaiBot-Napcat-Adapter";
 /// 3.12 / 3.13 的 wheel 都齐；和 AstrBot 用同一个，uv 托管的解释器能共用
 pub const MAIBOT_PYTHON_REQUIRES: &str = "3.12";
+/// 锁里 pyarrow 24 的 Linux 轮子只有 manylinux_2_28（numpy / scipy / faiss 是 2_27），
+/// 低于这个 uv 会退回源码编译，服务器上编不过：CentOS 7、Ubuntu 18.04、Amazon Linux 2 都不行
+pub const MAIBOT_MIN_GLIBC: (u32, u32) = (2, 28);
+/// 依赖（faiss / scipy / pandas / pyarrow）加 uv 缓存两三 GB，少于这个先提醒
+pub const MAIBOT_MIN_FREE_KB: u64 = 3 * 1024 * 1024;
 pub const MAIBOT_UV_VERSION_RANGE: &str = ">=0.4";
 /// GitHub API 不通、或挑不出兼容组合时装的已验证组合
 pub const PINNED_MAIBOT_TAG: &str = "1.2.5";
@@ -52,6 +57,8 @@ pub const ADAPTER_CONFIG_VERSION: &str = "0.1.0";
 pub const MAIBOT_STDOUT_LOG: &str = ".ncd-maibot.log";
 /// 解压暂存目录，放在实例目录里才能和目标同盘改名
 pub const STAGE_DIR: &str = ".ncd-stage";
+/// 桌面端替远端下好的解释器包临时放这，当 uv 的本地镜像用，装完就删
+pub const PYTHON_SCRATCH_DIR: &str = ".ncd-python";
 
 /// 更新换代码时原样留下的顶层条目：用户数据、配置、插件、日志、venv、协议确认、桌面端标记
 pub const PRESERVED_ON_UPDATE: &[&str] = &[

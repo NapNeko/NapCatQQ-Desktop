@@ -14,23 +14,28 @@ use async_trait::async_trait;
 use ncd_component::{
     ActionCtx, ActionError, Component, ComponentId, DetectOutcome, DetectedVersion,
     DownloadHelper, LaunchArgs, ProgressKind, Requirement, UnusableInstall, VerifyReport,
+    probe_remote_arch,
 };
-use ncd_host::{ArchiveKind, Host, HostCommand, HostPath, Locality, Os};
+use ncd_host::{Arch, ArchiveKind, Host, HostCommand, HostPath, Locality, Os};
 use ncd_network::build_mirror_urls;
 use rand::Rng;
 
 use super::config::write_bot_config_ports;
 use super::manifest::{
     ADAPTER_DIR, ADAPTER_MANIFEST_FILE, ADAPTER_REPO, BOT_CONFIG, BOT_PY, CONFIG_PY,
-    MAIBOT_PYTHON_REQUIRES, MAIBOT_REPO, MAIBOT_UV_VERSION_RANGE, PINNED_ADAPTER_TAG,
-    PINNED_MAIBOT_TAG, PRESERVED_ON_UPDATE, PYPROJECT, PYPROJECT_NAME, STAGE_DIR, WEBUI_JSON,
+    MAIBOT_MIN_FREE_KB, MAIBOT_MIN_GLIBC, MAIBOT_PYTHON_REQUIRES, MAIBOT_REPO,
+    MAIBOT_UV_VERSION_RANGE, PINNED_ADAPTER_TAG, PINNED_MAIBOT_TAG, PRESERVED_ON_UPDATE,
+    PYPROJECT, PYPROJECT_NAME, PYTHON_SCRATCH_DIR, STAGE_DIR, WEBUI_JSON,
 };
 use super::release::{
     ArchiveExt, adapter_host_range, archive_url, fetch_stable_release_tags, host_compatible,
     pick_maibot_tag,
 };
 use super::terms::write_confirmations;
-use crate::uv_tooling::{read_uv_marker, resolve_uv, venv_python, write_uv_marker};
+use crate::uv_tooling::{
+    LinuxLibc, ensure_python, probe_free_kb, probe_linux_libc, read_uv_marker, resolve_uv,
+    venv_python, write_uv_marker,
+};
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
@@ -329,11 +334,64 @@ impl MaiBotComponent {
         Ok(())
     }
 
+    /// 装之前看一眼 Linux 主机：glibc 旧了 uv 会退回源码编译，几十分钟后才报一串编译错误；
+    /// 依赖只有 x86_64 / aarch64 的轮子。探测不出来的不拦，真装不上 uv 自己会报
+    async fn preflight(&self, host: &dyn Host, ctx: &ActionCtx) -> Result<(), ActionError> {
+        if host.os() != Os::Linux {
+            return Ok(());
+        }
+        let arch = match host.locality() {
+            Locality::Remote => probe_remote_arch(host).await.ok(),
+            Locality::Local => Some(host.arch()),
+        };
+        let unsupported = match arch {
+            Some(Arch::X86) => Some("32 位 x86"),
+            Some(Arch::Armv7) => Some("32 位 ARM"),
+            _ => None,
+        };
+        if let Some(what) = unsupported {
+            return Err(ActionError::install_step(
+                "preflight",
+                format!("MaiBot 的依赖只有 x86_64 / aarch64 的 Linux 包，这台主机是 {what}"),
+            ));
+        }
+        let (major, minor) = MAIBOT_MIN_GLIBC;
+        match probe_linux_libc(host).await {
+            LinuxLibc::Musl => {
+                return Err(ActionError::install_step(
+                    "preflight",
+                    "这台主机用的是 musl（Alpine 一类），MaiBot 的依赖装不上，换 Debian / Ubuntu 系的系统",
+                ));
+            }
+            LinuxLibc::Glibc { major: a, minor: b } if (a, b) < (major, minor) => {
+                return Err(ActionError::install_step(
+                    "preflight",
+                    format!(
+                        "这台主机的 glibc 是 {a}.{b}，MaiBot 的依赖（pyarrow 等）要 {major}.{minor} 以上：\
+                         Ubuntu 20.04、Debian 10、CentOS 8 及更新的系统可以装"
+                    ),
+                ));
+            }
+            _ => {}
+        }
+        if let Some(kb) = probe_free_kb(host, &self.install_dir).await
+            && kb < MAIBOT_MIN_FREE_KB
+        {
+            ctx.warn(format!(
+                "安装目录所在分区只剩 {:.1} GB，依赖加 uv 缓存要两三 GB，可能装不完",
+                kb as f64 / 1024.0 / 1024.0
+            ))
+            .await;
+        }
+        Ok(())
+    }
+
     async fn provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         let updating = host.exists(&self.install_dir.join(BOT_PY)).await?;
-        ctx.emit(ProgressKind::Started { total_steps: 6 }).await;
+        ctx.emit(ProgressKind::Started { total_steps: 7 }).await;
 
-        begin(ctx, 1, "解析 uv").await;
+        begin(ctx, 1, "检查主机、解析 uv").await;
+        self.preflight(host, ctx).await?;
         let preferred = self.preferred_uvs(host).await;
         let uv = resolve_uv(host, &preferred).await?;
         ctx.info(format!("uv {}: {}", uv.version, uv.uv_bin.as_posix()))
@@ -352,6 +410,18 @@ impl MaiBotComponent {
         let _ = host.remove_dir_all(&self.stage_dir()).await;
         end(ctx, 4).await;
 
+        begin(ctx, 5, format!("准备 Python {MAIBOT_PYTHON_REQUIRES}")).await;
+        ensure_python(
+            host,
+            &uv.uv_bin,
+            MAIBOT_PYTHON_REQUIRES,
+            &self.install_dir.join(PYTHON_SCRATCH_DIR),
+            ctx,
+            5,
+        )
+        .await?;
+        end(ctx, 5).await;
+
         let sync = HostCommand::new(uv.uv_bin.as_posix())
             .arg("sync")
             .arg("--locked")
@@ -361,12 +431,12 @@ impl MaiBotComponent {
             .arg(MAIBOT_PYTHON_REQUIRES)
             .working_dir(self.install_dir.clone())
             .env("UV_PROJECT_ENVIRONMENT", ".venv");
-        self.run_step(host, ctx, 5, "同步 Python 依赖（uv sync，首次要下几百 MB）", sync)
+        self.run_step(host, ctx, 6, "同步 Python 依赖（uv sync，首次要下几百 MB）", sync)
             .await?;
 
-        begin(ctx, 6, "预置端口、WebUI token 与协议确认").await;
+        begin(ctx, 7, "预置端口、WebUI token 与协议确认").await;
         self.seed(host, ctx, updating).await?;
-        end(ctx, 6).await;
+        end(ctx, 7).await;
         ctx.emit(ProgressKind::Finished { ok: true }).await;
         Ok(())
     }
