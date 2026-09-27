@@ -493,6 +493,19 @@ impl TerminalManager {
         session.acked.notify_one();
     }
 
+    /// 网页要被销毁了（进轻量模式）：摘掉所有前端，输出照常收进回放，网页重建后重新接上
+    pub fn detach_all(&self) {
+        let sessions: Vec<Arc<Session>> = self.table().values().cloned().collect();
+        for session in sessions {
+            {
+                let mut st = session.lock();
+                st.sink = None;
+                st.unacked = 0;
+            }
+            session.acked.notify_one();
+        }
+    }
+
     /// 桌面端退出前调用
     pub fn close_all(&self) {
         let ids: Vec<String> = self.table().keys().cloned().collect();
