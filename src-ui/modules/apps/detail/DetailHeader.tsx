@@ -8,12 +8,13 @@ import {
     MessageSquare,
     MoreHorizontal,
     Play,
+    Power,
     RefreshCw,
     Square,
     Trash2,
     Unlink,
 } from 'lucide-react';
-import { Badge, Button, Popover, PopoverClose, PopoverContent, PopoverTrigger, Spinner } from '../../../shared/ui';
+import { Badge, Button, Popover, PopoverClose, PopoverContent, PopoverTrigger, Spinner, Switch } from '../../../shared/ui';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../../shared/ui/motion';
 import { cn } from '../../../shared/utils/cn';
 import type { AppInstance, AppInstanceState } from '../../../core/ipc/types';
@@ -44,6 +45,7 @@ export const DetailHeader: React.FC<{
     onWebUi: () => void;
     onRefresh: () => void;
     onDelete: () => void;
+    onAutoStartChange: (autoStart: boolean) => void;
 }> = ({
     instance,
     frameworkName,
@@ -61,6 +63,7 @@ export const DetailHeader: React.FC<{
     onWebUi,
     onRefresh,
     onDelete,
+    onAutoStartChange,
 }) => {
     const running = instance.state === 'running';
     const installing = instance.state === 'installing';
@@ -128,6 +131,17 @@ export const DetailHeader: React.FC<{
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent align="end" sideOffset={6} className="w-44 p-1">
+                        {installed && (
+                            <>
+                                <ToggleItem
+                                    icon={Power}
+                                    label="随桌面端启动"
+                                    checked={instance.auto_start}
+                                    onChange={onAutoStartChange}
+                                />
+                                <div className="my-1 h-px bg-border-subtle" />
+                            </>
+                        )}
                         {installed && <MoreItem icon={Link2} label={instance.link ? '改绑' : '对接'} onClick={onLink} />}
                         {instance.link && <MoreItem icon={Unlink} label="解除对接" onClick={onUnlink} />}
                         {canWebUi && <MoreItem icon={ExternalLink} label="打开 WebUI" onClick={onWebUi} />}
@@ -145,6 +159,20 @@ export const DetailHeader: React.FC<{
         </header>
     );
 };
+
+/** 菜单里的开关：点了不收起菜单，翻过去就看得见 */
+const ToggleItem: React.FC<{
+    icon: typeof Link2;
+    label: string;
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+}> = ({ icon: Icon, label, checked, onChange }) => (
+    <label className="flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] text-text hover:bg-inset">
+        <Icon size={14} className="shrink-0 text-text-secondary" />
+        <span className="flex-1">{label}</span>
+        <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
+    </label>
+);
 
 const MoreItem: React.FC<{
     icon: typeof Link2;

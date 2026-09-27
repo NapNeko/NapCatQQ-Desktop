@@ -137,6 +137,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                     onWebUi={() => void apps.openWebUi(instance.id)}
                     onRefresh={() => apps.refresh(instance.id)}
                     onDelete={() => setDeleteOpen(true)}
+                    onAutoStartChange={(autoStart) => apps.setAutoStart({ id: instance.id, autoStart })}
                 />
 
                 {!installed ? (

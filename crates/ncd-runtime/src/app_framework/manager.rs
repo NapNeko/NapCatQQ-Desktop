@@ -1304,9 +1304,12 @@ impl AppManager {
         id: &AppInstanceId,
         auto_start: bool,
     ) -> Result<AppInstance, AppFrameworkError> {
-        self.store
+        let updated = self
+            .store
             .update(id, |i| i.auto_start = auto_start)
-            .await
+            .await?;
+        self.publish(&updated, "auto_start_changed");
+        Ok(updated)
     }
 
     /// 删除实例：停进程 → 解绑 Bot 侧连接 → 导入项先还原快照 → （可选）删目录 → 删记录

@@ -111,6 +111,24 @@ export function useAppInstances() {
         onError: (err, id) => fail('停止失败', `app-stop:${id}`)(err),
     });
 
+    // 开关先跟手翻过去，写失败再翻回来
+    const autoStartMutation = useMutation({
+        mutationFn: (args: { id: string; autoStart: boolean }) =>
+            appFrameworkService.setInstanceAutoStart(args.id, args.autoStart),
+        onMutate: ({ id, autoStart }) => {
+            const prev = queryClient
+                .getQueryData<AppInstance[]>(APP_INSTANCES_KEY)
+                ?.find((i) => i.id === id);
+            if (prev) patch({ ...prev, auto_start: autoStart });
+            return prev;
+        },
+        onSuccess: patch,
+        onError: (err, args, prev) => {
+            if (prev) patch(prev);
+            fail('自动启动没改成', `app-auto-start:${args.id}`)(err);
+        },
+    });
+
     const refreshMutation = useMutation({
         mutationFn: (id: string) => appFrameworkService.refresh(id),
         onSuccess: patch,
@@ -203,6 +221,7 @@ export function useAppInstances() {
         start: startMutation.mutate,
         stop: stopMutation.mutate,
         refresh: refreshMutation.mutate,
+        setAutoStart: autoStartMutation.mutate,
         remove: deleteMutation.mutateAsync,
         isRemoving: deleteMutation.isPending,
         unlink: unlinkMutation.mutate,
