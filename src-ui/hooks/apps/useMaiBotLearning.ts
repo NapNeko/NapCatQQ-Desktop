@@ -1,9 +1,14 @@
-// 麦麦学到的表达方式和黑话：列表、概况、操作。都要麦麦在跑、WebUI 应答了；操作成功后列表和概况一起刷。
+// 麦麦学到的表达方式、黑话和行为：列表、概况、操作。都要麦麦在跑、WebUI 应答了；操作成功后列表和概况一起刷。
+// 行为上游只给看，没有操作。
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { maibotResourcesService as svc } from '../../core/services/maibot-resources.service';
 import { useResourceAction } from './maibotResourceAction';
 import type {
+    MaiBotBehaviorDetail,
+    MaiBotBehaviorOverview,
+    MaiBotBehaviorPage,
+    MaiBotBehaviorQuery,
     MaiBotExpressionAction,
     MaiBotExpressionOverview,
     MaiBotExpressionPage,
@@ -66,4 +71,38 @@ export function useMaiBotExpressionAction(instanceId: string) {
 
 export function useMaiBotJargonAction(instanceId: string) {
     return useResourceAction<MaiBotJargonAction>(instanceId, jargonKey(instanceId), svc.jargonAction, '黑话没改成');
+}
+
+const behaviorKey = (id: string) => ['maibotBehaviors', id] as const;
+
+export function useMaiBotBehaviors(instanceId: string, query: MaiBotBehaviorQuery, enabled: boolean) {
+    return useQuery<MaiBotBehaviorPage, Error>({
+        queryKey: [...behaviorKey(instanceId), 'list', query],
+        queryFn: () => svc.behaviors(instanceId, query),
+        enabled,
+        retry: false,
+        placeholderData: keepPreviousData,
+        staleTime: 15_000,
+    });
+}
+
+export function useMaiBotBehaviorOverview(instanceId: string, enabled: boolean) {
+    return useQuery<MaiBotBehaviorOverview, Error>({
+        queryKey: [...behaviorKey(instanceId), 'overview'],
+        queryFn: () => svc.behaviorOverview(instanceId),
+        enabled,
+        retry: false,
+        staleTime: 30_000,
+    });
+}
+
+/** id 给 null 时不查（详情框关着） */
+export function useMaiBotBehavior(instanceId: string, id: number | null) {
+    return useQuery<MaiBotBehaviorDetail, Error>({
+        queryKey: [...behaviorKey(instanceId), 'detail', id],
+        queryFn: () => svc.behavior(instanceId, id as number),
+        enabled: id !== null,
+        retry: false,
+        staleTime: 15_000,
+    });
 }

@@ -35,6 +35,7 @@ export const MAIBOT_NAV: readonly FrameworkNavGroup[] = [
             { value: 'jargon', label: '黑话' },
             { value: 'persons', label: '人物' },
             { value: 'knowledge', label: '知识库' },
+            { value: 'behavior', label: '行为' },
         ],
     },
     {
@@ -167,7 +168,7 @@ export const MAIBOT_SCHEMA_PAGES: Readonly<Record<string, SchemaPageDef>> = {
             // 麦麦由桌面端在后台拉起，没有可输入的终端
             'debug.enable_console_input',
         ],
-        links: [{ label: '学到的行为', path: '/resource/behavior' }],
+        links: [{ label: '学到的行为', tab: 'behavior' }],
     },
 };
 

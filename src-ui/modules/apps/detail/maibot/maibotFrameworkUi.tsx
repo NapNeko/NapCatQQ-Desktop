@@ -18,6 +18,7 @@ import { MaiBotJargonTab } from './MaiBotJargonTab';
 import { MaiBotEmojisTab } from './MaiBotEmojisTab';
 import { MaiBotPersonsTab } from './MaiBotPersonsTab';
 import { MaiBotKnowledgeTab } from './MaiBotKnowledgeTab';
+import { MaiBotBehaviorTab } from './MaiBotBehaviorTab';
 import type { KnowledgeView } from './maibotKnowledgeParts';
 import { usePromptDrafts } from './maibotPromptDrafts';
 import { NoneBot2StoreTab } from '../nonebot2/NoneBot2StoreTab';
@@ -35,7 +36,7 @@ import { MAIBOT_NAV, MAIBOT_SCHEMA_PAGES, maibotTabForIssue } from './maibotPage
 
 const TYPED_TABS = new Set(['overview', 'models', 'chat', 'connection', ...Object.keys(MAIBOT_SCHEMA_PAGES)]);
 // 插件商店、提示词、资源页这些自己落盘，不是表单：铺满内容区、不挂保存条
-const FILL_PANE = new Set(['plugins', 'prompts', 'emoji', 'expressions', 'jargon', 'persons', 'knowledge']);
+const FILL_PANE = new Set(['plugins', 'prompts', 'emoji', 'expressions', 'jargon', 'persons', 'knowledge', 'behavior']);
 
 function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
     const form = useMaiBotConfigForm(instance.id, true, instance.display_name);
@@ -127,6 +128,17 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     view={knowledgeView}
                     onView={setKnowledgeView}
                     onGoTab={onGoTab}
+                    {...startProps}
+                />
+            </TabsContent>
+            <TabsContent value="behavior" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+                <MaiBotBehaviorTab
+                    instance={instance}
+                    status={status}
+                    // 读不到配置时按上游默认（关着）说
+                    learningOn={form.form?.bot.experimental.enable_behavior_learning ?? false}
+                    onGoTab={onGoTab}
+                    onOpenWebUi={(path) => void apps.openWebUi(instance.id, path)}
                     {...startProps}
                 />
             </TabsContent>
