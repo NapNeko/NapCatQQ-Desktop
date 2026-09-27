@@ -922,6 +922,9 @@ impl Host for RemoteLinuxHost {
                 name,
                 is_dir: metadata.is_dir(),
                 size: metadata.size.unwrap_or(0),
+                modified: metadata.mtime.map(i64::from),
+                is_symlink: metadata.is_symlink(),
+                mode: metadata.permissions,
             });
         }
         result.sort_by(|a, b| a.name.cmp(&b.name));

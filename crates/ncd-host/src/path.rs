@@ -187,6 +187,15 @@ pub struct DirEntry {
     pub name: String,
     pub is_dir: bool,
     pub size: u64,
+    /// 修改时间(Unix 秒);拿不到为 None
+    #[serde(default)]
+    pub modified: Option<i64>,
+    /// 符号链接本身(不跟随);远端 SFTP 的 readdir 按 lstat 给
+    #[serde(default)]
+    pub is_symlink: bool,
+    /// POSIX 权限位(含类型位);本机 Windows 为 None
+    #[serde(default)]
+    pub mode: Option<u32>,
 }
 
 /// 归档类型(Host::extract_archive 参数)

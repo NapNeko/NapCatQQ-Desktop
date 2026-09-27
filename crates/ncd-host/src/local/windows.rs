@@ -167,10 +167,18 @@ impl Host for LocalWindowsHost {
         let mut entries = Vec::new();
         while let Some(entry) = rd.next_entry().await? {
             let meta = entry.metadata().await?;
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .and_then(|d| i64::try_from(d.as_secs()).ok());
             entries.push(DirEntry {
                 name: entry.file_name().to_string_lossy().into_owned(),
                 is_dir: meta.is_dir(),
                 size: meta.len(),
+                modified,
+                is_symlink: meta.file_type().is_symlink(),
+                mode: None,
             });
         }
         // 排序保证测试稳定
