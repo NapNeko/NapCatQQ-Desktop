@@ -22,5 +22,5 @@ pub use manager::{
     AppManager, AppTerminalContext, BotConfigPort, app_link_connections, upsert_ws_client,
 };
 pub use native_runtime::{APP_PID_FILE, AppLaunchSpec, NativeAppRuntime};
-pub use plugin_market::{KARIN_PLUGINS_LIST_URL, fetch_karin_plugin_market};
+pub use plugin_market::KARIN_PLUGINS_LIST_URL;
 pub use plugin_task::run_app_plugin_task;

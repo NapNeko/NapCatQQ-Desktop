@@ -242,6 +242,7 @@ pub struct AppManager {
     /// 运行中写配置的下一个可用时刻（应用要求两次写之间留间隔时才记）
     config_write_slots: std::sync::Mutex<HashMap<AppInstanceId, Instant>>,
     webui_endpoints: std::sync::Mutex<HashMap<AppInstanceId, WebUiEndpoint>>,
+    market_cache: plugin_market::MarketCache,
 }
 
 impl AppManager {
@@ -269,6 +270,7 @@ impl AppManager {
             install_watches: std::sync::Mutex::new(HashMap::new()),
             config_write_slots: std::sync::Mutex::new(HashMap::new()),
             webui_endpoints: std::sync::Mutex::new(HashMap::new()),
+            market_cache: plugin_market::MarketCache::default(),
         }
     }
 

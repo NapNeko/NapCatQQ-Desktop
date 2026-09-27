@@ -1,10 +1,10 @@
 //! 只从官方目录拉商店；UI 禁止自己 fetch。
 //!
-//! NoneBot 对齐 nb-cli `download_module_data`：多源竞速 + 进程内缓存。
+//! NoneBot 对齐 nb-cli `download_module_data`：多源竞速 + 内存缓存。
 //! 主源 `registry.nonebot.dev/{adapters,plugins}.json`，镜像走 registry `results` 分支。
 
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use ncd_appframework::{AppFrameworkRegistry, AppStoreMarketEntry, KarinPluginMarketEntry};
@@ -23,42 +23,50 @@ struct CachedMarket {
     entries: Vec<AppStoreMarketEntry>,
 }
 
-fn market_cache() -> &'static Mutex<HashMap<&'static str, CachedMarket>> {
-    static CACHE: OnceLock<Mutex<HashMap<&'static str, CachedMarket>>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+/// 官方目录半小时内不重拉。归 AppManager 持有，跟着它的注册表一起活
+#[derive(Default)]
+pub(super) struct MarketCache {
+    entries: Mutex<HashMap<&'static str, CachedMarket>>,
 }
 
-fn cache_get(key: &'static str) -> Option<Vec<AppStoreMarketEntry>> {
-    let guard = market_cache().lock().ok()?;
-    let hit = guard.get(key)?;
-    (hit.at.elapsed() < MARKET_CACHE_TTL).then(|| hit.entries.clone())
-}
+impl MarketCache {
+    fn get(&self, key: &'static str) -> Option<Vec<AppStoreMarketEntry>> {
+        let guard = self.entries.lock().ok()?;
+        let hit = guard.get(key)?;
+        (hit.at.elapsed() < MARKET_CACHE_TTL).then(|| hit.entries.clone())
+    }
 
-fn cache_put(key: &'static str, entries: Vec<AppStoreMarketEntry>) {
-    if let Ok(mut guard) = market_cache().lock() {
-        guard.insert(
-            key,
-            CachedMarket {
-                at: Instant::now(),
-                entries,
-            },
-        );
+    fn put(&self, key: &'static str, entries: Vec<AppStoreMarketEntry>) {
+        if let Ok(mut guard) = self.entries.lock() {
+            guard.insert(
+                key,
+                CachedMarket {
+                    at: Instant::now(),
+                    entries,
+                },
+            );
+        }
     }
 }
 
-pub async fn fetch_karin_plugin_market() -> Result<Vec<KarinPluginMarketEntry>, AppFrameworkError> {
-    Ok(fetch_store("karin", AppStoreResource::Plugin)
+pub(super) async fn fetch_karin_plugin_market(
+    registry: &AppFrameworkRegistry,
+    cache: &MarketCache,
+) -> Result<Vec<KarinPluginMarketEntry>, AppFrameworkError> {
+    Ok(fetch_store(registry, cache, "karin", AppStoreResource::Plugin)
         .await?
         .into_iter()
         .filter_map(|e| e.to_karin())
         .collect())
 }
 
-pub async fn fetch_store(
+pub(super) async fn fetch_store(
+    registry: &AppFrameworkRegistry,
+    cache: &MarketCache,
     framework_id: &str,
     resource: AppStoreResource,
 ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-    let adapter = match AppFrameworkRegistry::with_builtin().get(&AppFrameworkId::new(framework_id)) {
+    let adapter = match registry.get(&AppFrameworkId::new(framework_id)) {
         Ok(adapter) => adapter,
         Err(AppFrameworkError::NotRegistered(id)) => {
             return Err(AppFrameworkError::PluginUnsupported(id));
@@ -66,7 +74,7 @@ pub async fn fetch_store(
         Err(err) => return Err(err),
     };
     if let Some(key) = adapter.store_market_cache_key(resource) {
-        if let Some(hit) = cache_get(key) {
+        if let Some(hit) = cache.get(key) {
             return Ok(hit);
         }
     }
@@ -85,7 +93,7 @@ pub async fn fetch_store(
     };
     let list = adapter.parse_store_market(resource, &text)?;
     if let Some(key) = adapter.store_market_cache_key(resource) {
-        cache_put(key, list.clone());
+        cache.put(key, list.clone());
     }
     Ok(list)
 }

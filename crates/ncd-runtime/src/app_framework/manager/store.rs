@@ -6,7 +6,7 @@ impl AppManager {
     pub async fn list_karin_plugin_market(
         &self,
     ) -> Result<Vec<KarinPluginMarketEntry>, AppFrameworkError> {
-        super::plugin_market::fetch_karin_plugin_market().await
+        super::plugin_market::fetch_karin_plugin_market(&self.registry, &self.market_cache).await
     }
 
     pub async fn list_store(
@@ -14,7 +14,16 @@ impl AppManager {
         framework_id: &AppFrameworkId,
         resource: AppStoreResource,
     ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-        super::plugin_market::fetch_store(framework_id.as_str(), resource).await
+        self.fetch_market(framework_id.as_str(), resource).await
+    }
+
+    async fn fetch_market(
+        &self,
+        framework_id: &str,
+        resource: AppStoreResource,
+    ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+        super::plugin_market::fetch_store(&self.registry, &self.market_cache, framework_id, resource)
+            .await
     }
 
     pub async fn list_plugins(
@@ -154,11 +163,9 @@ impl AppManager {
                         )
                         .await;
                 }
-                let market = super::plugin_market::fetch_store(
-                    instance.framework_id.as_str(),
-                    resource,
-                )
-                .await?;
+                let market = self
+                    .fetch_market(instance.framework_id.as_str(), resource)
+                    .await?;
                 let entry = find_store_entry(&market, name).ok_or_else(|| {
                     AppFrameworkError::Validation(format!("未安装且目录中没有 {name}"))
                 })?;
@@ -235,7 +242,7 @@ impl AppManager {
         resource: AppStoreResource,
         log: Option<&PluginLogSink>,
     ) -> Result<AppStoreMarketEntry, AppFrameworkError> {
-        let market = super::plugin_market::fetch_store(instance.framework_id.as_str(), resource).await;
+        let market = self.fetch_market(instance.framework_id.as_str(), resource).await;
         let market_failed = market.is_err();
         let fallback_err = match market {
             Ok(list) => {
