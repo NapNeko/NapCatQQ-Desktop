@@ -1,14 +1,14 @@
 // 市场条目 + 已装扫描 → 卡片列表。字段名跟 ts-rs 生成走（type / author / allowBuild）。
+// 时间、搜索、任务补显示和应用端商店一套，在 pluginCatalog。
 
-import { SEE_LOGS_HINT } from '../ui/errorBarCopy';
-import { relativeTimeFromMs } from '../ui/relativeTime';
-import type {
-    AppPluginAction,
-    DeploymentTaskStatus,
-    KarinPluginInstalled,
-    KarinPluginKind,
-    KarinPluginMarketEntry,
-} from '../../ipc/types';
+import {
+    catalogTimeLabel,
+    installedLabel,
+    matchesCatalogQuery,
+    overlayInstalledFromTasks,
+    type PluginTaskHint,
+} from './pluginCatalog';
+import type { KarinPluginInstalled, KarinPluginKind, KarinPluginMarketEntry } from '../../ipc/types';
 
 export type KarinPluginKindFilter = 'all' | KarinPluginKind;
 
@@ -23,37 +23,16 @@ export type VisiblePlugin = {
     timeLabel: string | null;
 };
 
-export function parseKarinPluginTime(time: string): number | null {
-    const t = time.trim();
-    if (!t) return null;
-    const iso = t.includes('T') ? t : t.replace(' ', 'T');
-    const ts = Date.parse(iso);
-    return Number.isNaN(ts) ? null : ts;
-}
-
-export function pluginCatalogErrorCopy(raw: string): { title: string; content: string } {
-    if (/error sending request|timed out|connection refused|dns|network|proxy/i.test(raw)) {
-        return { title: '无法连接官方插件目录', content: `检查网络或代理后重试。${SEE_LOGS_HINT}` };
-    }
-    if (/HTTP\s+[45]\d\d/.test(raw)) {
-        return { title: '官方插件目录暂时不可用', content: `稍后重试。${SEE_LOGS_HINT}` };
-    }
-    return { title: '插件目录加载失败', content: SEE_LOGS_HINT };
-}
+/** 拉目录失败时标题里的叫法 */
+export const KARIN_CATALOG = '插件目录';
 
 export function appFileBasename(url: string): string {
     const path = (url.split('?')[0] ?? '').split('#')[0] ?? '';
     return path.split('/').pop() ?? '';
 }
 
-function matchesQuery(row: Pick<VisiblePlugin, 'name' | 'description' | 'authorName'>, query: string): boolean {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-        row.name.toLowerCase().includes(q) ||
-        row.description.toLowerCase().includes(q) ||
-        row.authorName.toLowerCase().includes(q)
-    );
+function matchesQuery(row: VisiblePlugin, query: string): boolean {
+    return matchesCatalogQuery(query, [row.name, row.description, row.authorName]);
 }
 
 function marketCoveredNames(entries: readonly KarinPluginMarketEntry[]): Set<string> {
@@ -88,46 +67,17 @@ function marketInstallState(
     return { installed: false, enabled: true };
 }
 
-function timeLabelFor(entry: KarinPluginMarketEntry, installed: boolean, version?: string): string | null {
-    if (installed) return version ? `v${version}` : '已装';
-    const ts = parseKarinPluginTime(entry.time);
-    if (ts == null) return null;
-    return relativeTimeFromMs(ts);
-}
-
-export type PluginTaskHint = {
-    pluginName: string;
-    action: AppPluginAction;
-    status: DeploymentTaskStatus;
-    atMs: number;
-};
-
 /** 扫描还没跟上时，用最近一条终态任务补「已装 / 已卸」。 */
-export function overlayInstalledFromTasks(
+export function overlayKarinInstalled(
     installed: readonly KarinPluginInstalled[],
     hints: readonly PluginTaskHint[],
 ): KarinPluginInstalled[] {
-    const latest = new Map<string, PluginTaskHint>();
-    for (const hint of hints) {
-        const prev = latest.get(hint.pluginName);
-        if (!prev || hint.atMs >= prev.atMs) latest.set(hint.pluginName, hint);
-    }
-    let next = [...installed];
-    for (const hint of latest.values()) {
-        if (hint.status !== 'success') continue;
-        if (hint.action === 'uninstall') {
-            next = next.filter((item) => item.name !== hint.pluginName);
-            continue;
-        }
-        if (!next.some((item) => item.name === hint.pluginName)) {
-            next.push({
-                name: hint.pluginName,
-                kind: 'npm',
-                enabled: true,
-            });
-        }
-    }
-    return next;
+    return overlayInstalledFromTasks(
+        installed,
+        hints,
+        (item, name) => item.name === name,
+        (name) => ({ name, kind: 'npm', enabled: true }),
+    );
 }
 
 export function filterKarinPlugins(
@@ -148,7 +98,7 @@ export function filterKarinPlugins(
             installed: state.installed,
             enabled: state.enabled,
             version: state.version,
-            timeLabel: timeLabelFor(entry, state.installed, state.version),
+            timeLabel: catalogTimeLabel(entry.time, state.installed, state.version),
         };
         if (matchesQuery(row, query)) rows.push(row);
     }
@@ -165,7 +115,7 @@ export function filterKarinPlugins(
             installed: true,
             enabled: item.enabled,
             version: item.version,
-            timeLabel: item.version ? `v${item.version}` : '已装',
+            timeLabel: installedLabel(item.version),
         };
         if (matchesQuery(row, query)) rows.push(row);
     }

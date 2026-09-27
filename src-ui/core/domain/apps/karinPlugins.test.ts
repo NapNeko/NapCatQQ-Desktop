@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-    filterKarinPlugins,
-    overlayInstalledFromTasks,
-    parseKarinPluginTime,
-    pluginCatalogErrorCopy,
-} from './karinPlugins';
+import { filterKarinPlugins, overlayKarinInstalled } from './karinPlugins';
 import type { KarinPluginMarketEntry } from '../../ipc/types';
 
 const market: KarinPluginMarketEntry[] = [
@@ -52,11 +47,11 @@ describe('filterKarinPlugins', () => {
     });
 });
 
-describe('overlayInstalledFromTasks', () => {
+describe('overlayKarinInstalled', () => {
     it('treats a successful install as installed until scan catches up', () => {
         const rows = filterKarinPlugins(
             market,
-            overlayInstalledFromTasks([], [
+            overlayKarinInstalled([], [
                 { pluginName: '@karinjs/plugin-basic', action: 'install', status: 'success', atMs: 2 },
             ]),
             '',
@@ -69,28 +64,10 @@ describe('overlayInstalledFromTasks', () => {
         const scanned = [
             { name: '@karinjs/plugin-basic', kind: 'npm' as const, version: '1.0.0', enabled: true },
         ];
-        const next = overlayInstalledFromTasks(scanned, [
+        const next = overlayKarinInstalled(scanned, [
             { pluginName: '@karinjs/plugin-basic', action: 'install', status: 'success', atMs: 1 },
             { pluginName: '@karinjs/plugin-basic', action: 'uninstall', status: 'success', atMs: 2 },
         ]);
         expect(next).toHaveLength(0);
-    });
-});
-
-describe('parseKarinPluginTime', () => {
-    it('parses official space-separated time', () => {
-        expect(parseKarinPluginTime('2025-01-19 10:00:00')).not.toBeNull();
-        expect(parseKarinPluginTime('')).toBeNull();
-    });
-});
-
-describe('pluginCatalogErrorCopy', () => {
-    it('drops config-write prefix and reqwest noise', () => {
-        const copy = pluginCatalogErrorCopy(
-            '写入应用端配置失败: 拉取插件目录失败: error sending request for url (https://registry.npmjs.com/@karinjs/plugins-list/latest)',
-        );
-        expect(copy.title).toBe('无法连接官方插件目录');
-        expect(copy.content).toContain('检查网络或代理后重试');
-        expect(copy.content).toContain('详情见日志');
     });
 });

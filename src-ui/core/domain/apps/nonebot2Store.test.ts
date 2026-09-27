@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
     filterNoneBot2Store,
-    overlayInstalledFromTasks,
+    overlayStoreInstalled,
     paginateStore,
-    pluginCatalogErrorCopy,
     storeGridFit,
     storeOpErrorCopy,
     storePageItems,
@@ -190,15 +189,34 @@ describe('filterNoneBot2Store', () => {
     });
 });
 
-describe('overlayInstalledFromTasks', () => {
+describe('overlayStoreInstalled', () => {
     it('marks install success immediately', () => {
-        const next = overlayInstalledFromTasks(
+        const next = overlayStoreInstalled(
             [],
             [{ pluginName: 'nonebot_plugin_foo', action: 'install', status: 'success', atMs: 1 }],
             'plugin',
         );
         expect(next[0]?.id).toBe('nonebot_plugin_foo');
         expect(next[0]?.enabled).toBe(true);
+    });
+
+    it('drops an uninstalled row matched by display name', () => {
+        const next = overlayStoreInstalled(
+            [
+                {
+                    id: 'nonebot_plugin_foo',
+                    name: 'Foo',
+                    resource: 'plugin',
+                    flavor: 'pypi',
+                    enabled: true,
+                    package: 'nonebot-plugin-foo',
+                    locked: false,
+                },
+            ],
+            [{ pluginName: 'Foo', action: 'uninstall', status: 'success', atMs: 1 }],
+            'plugin',
+        );
+        expect(next).toHaveLength(0);
     });
 });
 
@@ -239,14 +257,6 @@ describe('storePageItems', () => {
         expect(storePageItems(0, 51)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 'gap', 50]);
         expect(storePageItems(5, 51)).toEqual([0, 'gap', 2, 3, 4, 5, 6, 7, 8, 'gap', 50]);
         expect(storePageItems(50, 51)).toEqual([0, 'gap', 43, 44, 45, 46, 47, 48, 49, 50]);
-    });
-});
-
-describe('pluginCatalogErrorCopy', () => {
-    it('humanizes network errors', () => {
-        const copy = pluginCatalogErrorCopy('拉取插件目录失败: error sending request');
-        expect(copy.title).toBe('无法连接官方目录');
-        expect(copy.content).toContain('详情见日志');
     });
 });
 

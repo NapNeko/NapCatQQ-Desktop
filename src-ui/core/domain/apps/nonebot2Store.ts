@@ -1,14 +1,14 @@
 // 市场 ∪ 已装 ∪ 任务 overlay。目录默认展示，分页在 Tab 里切。
+// 时间、搜索、任务补显示和 Karin 插件市场一套，在 pluginCatalog。
 
-import { SEE_LOGS_HINT } from '../ui/errorBarCopy';
-import { relativeTimeFromMs } from '../ui/relativeTime';
-import type {
-    AppPluginAction,
-    AppStoreInstalled,
-    AppStoreMarketEntry,
-    AppStoreResource,
-    DeploymentTaskStatus,
-} from '../../ipc/types';
+import {
+    catalogTimeLabel,
+    installedLabel,
+    matchesCatalogQuery,
+    overlayInstalledFromTasks,
+    type PluginTaskHint,
+} from './pluginCatalog';
+import type { AppStoreInstalled, AppStoreMarketEntry, AppStoreResource } from '../../ipc/types';
 
 export type StoreKindFilter = 'all' | 'official' | 'installed';
 
@@ -63,84 +63,34 @@ export function storeOpErrorCopy(raw: string): string {
     return stripped.length > 160 ? `${stripped.slice(0, 160)}…` : stripped;
 }
 
-export function pluginCatalogErrorCopy(raw: string): { title: string; content: string } {
-    if (/error sending request|timed out|connection refused|dns|network|proxy/i.test(raw)) {
-        return { title: '无法连接官方目录', content: `检查网络或代理后重试。${SEE_LOGS_HINT}` };
-    }
-    if (/HTTP\s+[45]\d\d/.test(raw)) {
-        return { title: '官方目录暂时不可用', content: `稍后重试。${SEE_LOGS_HINT}` };
-    }
-    return { title: '目录加载失败', content: SEE_LOGS_HINT };
+function matchesQuery(row: VisibleStoreItem, query: string): boolean {
+    return matchesCatalogQuery(query, [row.id, row.name, row.description, row.authorName]);
 }
 
-export function parseStoreTime(time: string): number | null {
-    const t = time.trim();
-    if (!t) return null;
-    const iso = t.includes('T') ? t : t.replace(' ', 'T');
-    const ts = Date.parse(iso);
-    return Number.isNaN(ts) ? null : ts;
-}
-
-function matchesQuery(
-    row: Pick<VisibleStoreItem, 'id' | 'name' | 'description' | 'authorName'>,
-    query: string,
-): boolean {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return (
-        row.id.toLowerCase().includes(q) ||
-        row.name.toLowerCase().includes(q) ||
-        row.description.toLowerCase().includes(q) ||
-        row.authorName.toLowerCase().includes(q)
+/** 任务里的名字是 id，也可能是显示名，两个都认 */
+export function overlayStoreInstalled(
+    installed: readonly AppStoreInstalled[],
+    hints: readonly PluginTaskHint[],
+    resource: AppStoreResource,
+): AppStoreInstalled[] {
+    return overlayInstalledFromTasks(
+        installed,
+        hints,
+        (item, name) => item.id === name || item.name === name,
+        (name) => ({
+            id: name,
+            name,
+            resource,
+            flavor: 'pypi',
+            enabled: true,
+            package: '',
+            locked: false,
+        }),
     );
 }
 
-export type StoreTaskHint = {
-    pluginName: string;
-    action: AppPluginAction;
-    status: DeploymentTaskStatus;
-    atMs: number;
-};
-
-export function overlayInstalledFromTasks(
-    installed: readonly AppStoreInstalled[],
-    hints: readonly StoreTaskHint[],
-    resource: AppStoreResource,
-): AppStoreInstalled[] {
-    const latest = new Map<string, StoreTaskHint>();
-    for (const hint of hints) {
-        const prev = latest.get(hint.pluginName);
-        if (!prev || hint.atMs >= prev.atMs) latest.set(hint.pluginName, hint);
-    }
-    let next = [...installed];
-    for (const hint of latest.values()) {
-        if (hint.status !== 'success') continue;
-        if (hint.action === 'uninstall') {
-            next = next.filter((item) => item.id !== hint.pluginName && item.name !== hint.pluginName);
-            continue;
-        }
-        if (!next.some((item) => item.id === hint.pluginName || item.name === hint.pluginName)) {
-            next.push({
-                id: hint.pluginName,
-                name: hint.pluginName,
-                resource,
-                flavor: 'pypi',
-                enabled: true,
-                package: '',
-                locked: false,
-            });
-        }
-    }
-    return next;
-}
-
-function timeLabelFor(entry: AppStoreMarketEntry, installed: boolean, version?: string): string | null {
-    if (installed) return version ? `v${version}` : '已装';
-    const ts = parseStoreTime(entry.time);
-    if (ts == null) return null;
-    // 商店里大多是上架很久的，一周以前的不写，免得满屏「几年前」
-    return relativeTimeFromMs(ts, 7);
-}
+// 商店里大多是上架很久的，一周以前的不写，免得满屏「几年前」
+const TIME_LABEL_MAX_DAYS = 7;
 
 export function filterNoneBot2Store(args: {
     resource: AppStoreResource;
@@ -178,7 +128,7 @@ export function filterNoneBot2Store(args: {
                 ...lockOf(entry.id, hit, linked),
                 official: entry.is_official,
                 version: hit?.version,
-                timeLabel: timeLabelFor(entry, !!hit, hit?.version),
+                timeLabel: catalogTimeLabel(entry.time, !!hit, hit?.version, TIME_LABEL_MAX_DAYS),
                 package: entry.package,
                 homepage: entry.homepage,
             };
@@ -202,7 +152,7 @@ export function filterNoneBot2Store(args: {
             ...lockOf(item.id, item, linked),
             official: false,
             version: item.version,
-            timeLabel: item.version ? `v${item.version}` : '已装',
+            timeLabel: installedLabel(item.version),
             package: item.package,
             homepage: '',
         };
