@@ -15,6 +15,7 @@ use ncd_runtime::{
     AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule, ComponentActionRequest,
     DeploymentTaskRequest, KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider,
+    MaiBotBehaviorDetail, MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery,
     MaiBotChatSession, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
     MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotExpressionAction,
     MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery, MaiBotJargonAction,
@@ -813,6 +814,44 @@ pub async fn maibot_jargon_action(
     state
         .app_manager
         .maibot_jargon_action(&AppInstanceId::new(instance_id), action)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_behaviors(
+    instance_id: String,
+    query: MaiBotBehaviorQuery,
+    state: State<'_, AppState>,
+) -> Result<MaiBotBehaviorPage, AppConfigError> {
+    state
+        .app_manager
+        .maibot_behaviors(&AppInstanceId::new(instance_id), query)
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_behavior_overview(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<MaiBotBehaviorOverview, AppConfigError> {
+    state
+        .app_manager
+        .maibot_behavior_overview(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(AppFrameworkError::into_config_error)
+}
+
+#[tauri::command]
+pub async fn maibot_behavior_detail(
+    instance_id: String,
+    id: i64,
+    state: State<'_, AppState>,
+) -> Result<MaiBotBehaviorDetail, AppConfigError> {
+    state
+        .app_manager
+        .maibot_behavior(&AppInstanceId::new(instance_id), id)
         .await
         .map_err(AppFrameworkError::into_config_error)
 }

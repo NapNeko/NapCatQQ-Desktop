@@ -48,6 +48,12 @@ pub use maibot::{
     MaiBotInstanceConfig, MaiBotIntegration, MaiBotListMode, maibot_manifest,
 };
 pub use maibot::api::{MaiBotProviderSource, MaiBotRuntimeApi, MaiBotSession};
+pub use maibot::resources::behavior::{
+    MaiBotBehavior, MaiBotBehaviorActor, MaiBotBehaviorChat, MaiBotBehaviorDetail, MaiBotBehaviorEvidence,
+    MaiBotBehaviorFeedback, MaiBotBehaviorFeedbackKind, MaiBotBehaviorFilter, MaiBotBehaviorOrigin,
+    MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotBehaviorSort, MaiBotBehaviorTag,
+    MaiBotBehaviorTagKind,
+};
 pub use maibot::resources::expression::{
     MaiBotExpression, MaiBotExpressionAction, MaiBotExpressionFilter, MaiBotExpressionOverview,
     MaiBotExpressionPage, MaiBotExpressionQuery,

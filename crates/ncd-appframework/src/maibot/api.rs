@@ -4,6 +4,9 @@ use async_trait::async_trait;
 use ncd_traits::AppFrameworkError;
 
 use super::resources::MaiBotResourceDone;
+use super::resources::behavior::{
+    self, MaiBotBehaviorDetail, MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery,
+};
 use super::resources::emoji::{
     self, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
     MaiBotEmojiUpload, MaiBotEmojiUploadDone,
@@ -129,6 +132,17 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         session: &MaiBotSession,
         action: &MaiBotJargonAction,
     ) -> Result<MaiBotResourceDone, AppFrameworkError>;
+
+    async fn behaviors(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotBehaviorQuery,
+    ) -> Result<MaiBotBehaviorPage, AppFrameworkError>;
+
+    async fn behavior_overview(&self, session: &MaiBotSession) -> Result<MaiBotBehaviorOverview, AppFrameworkError>;
+
+    /// 一条经验连同它的观察和反馈记录；上游行为数据只读，没有对应的操作
+    async fn behavior(&self, session: &MaiBotSession, id: i64) -> Result<MaiBotBehaviorDetail, AppFrameworkError>;
 
     async fn persons(&self, session: &MaiBotSession, query: &MaiBotPersonQuery) -> Result<MaiBotPersonPage, AppFrameworkError>;
 
@@ -379,6 +393,22 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         action: &MaiBotJargonAction,
     ) -> Result<MaiBotResourceDone, AppFrameworkError> {
         jargon::act(&client(session)?, action).await
+    }
+
+    async fn behaviors(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotBehaviorQuery,
+    ) -> Result<MaiBotBehaviorPage, AppFrameworkError> {
+        behavior::list(&client(session)?, query).await
+    }
+
+    async fn behavior_overview(&self, session: &MaiBotSession) -> Result<MaiBotBehaviorOverview, AppFrameworkError> {
+        behavior::overview(&client(session)?).await
+    }
+
+    async fn behavior(&self, session: &MaiBotSession, id: i64) -> Result<MaiBotBehaviorDetail, AppFrameworkError> {
+        behavior::detail(&client(session)?, id).await
     }
 
     async fn persons(&self, session: &MaiBotSession, query: &MaiBotPersonQuery) -> Result<MaiBotPersonPage, AppFrameworkError> {
