@@ -2,18 +2,24 @@
 // containers.length 等依赖变化时让整张列表重播一遍（轮询/事件更新 state 时
 // 子节点数量常不变，旧写法会反复 gsap.from(all children) 造成卡顿）。
 //
-// 使用 fromTo + onComplete/onInterrupt 强制落终态：路由 PageTransition 与列表
-// stagger 同帧时，gsap.from 被 kill 后首张卡可能卡在 autoAlpha:0 呈「发灰」。
+// 子节点往往同时挂着悬停上浮（ListItem），它只接管位移和缩放，不能动这里的透明度；
+// 收尾时仍按 onComplete / onInterrupt 兜底可见性，万一别处整段掐掉进场，卡片也不会一直发灰。
 
 import gsap from 'gsap';
 import type { MotionEnv } from '../../../hooks/preferences/useMotion';
 
 const DATA_ENTERED = 'data-motion-entered';
 
-function markEntered(els: readonly HTMLElement[]): void {
+const SHOWN = { autoAlpha: 1, opacity: 1, visibility: 'visible' };
+
+/**
+ * 可见性每次都兜底。位移和缩放只在整段被掐掉时归位：正常播完时它们已经落到终值，
+ * 没落到的是被悬停上浮接管了（进场途中指针移上卡片），这时拉回 0 卡片会在指针下掉下来
+ */
+function markEntered(els: readonly HTMLElement[], interrupted: boolean): void {
     for (const el of els) {
         el.setAttribute(DATA_ENTERED, '1');
-        gsap.set(el, { autoAlpha: 1, opacity: 1, visibility: 'visible', y: 0, scale: 1 });
+        gsap.set(el, interrupted ? { ...SHOWN, y: 0, scale: 1 } : SHOWN);
     }
 }
 
@@ -47,8 +53,8 @@ export function animateListChildrenEnter(
             ease: m.ease.enter,
             stagger: useStagger ? m.stagger() : 0,
             force3D: true,
-            onComplete: () => markEntered(pending),
-            onInterrupt: () => markEntered(pending),
+            onComplete: () => markEntered(pending, false),
+            onInterrupt: () => markEntered(pending, true),
         },
     );
 }

@@ -225,13 +225,16 @@ export function useMotion(): MotionEnv {
             const onEnter = () => {
                 const env = envRef.current;
                 if (!env.enabled) return;
-                gsap.killTweensOf(el);
                 const f = env.preset.feel;
                 const t = env.preset.timing;
                 const dur = scaleDuration(t.durationFast, env.speed);
+                // 只接管这里要动的属性。同一个元素上常挂着列表进场（透明度 + 位移），
+                // 整个 killTweensOf 会把进场一起掐掉：指针一扫过，卡片就停在半透明甚至
+                // 看不见，要等整组进场播完才被拉回来
                 const vars: gsap.TweenVars = {
                     duration: dur,
                     ease: t.ease.hover,
+                    overwrite: 'auto',
                 };
                 const targetScale = opts?.scale ?? f.hoverScale;
                 if (targetScale !== 1) vars.scale = targetScale;
@@ -254,7 +257,6 @@ export function useMotion(): MotionEnv {
             const onLeave = () => {
                 const env = envRef.current;
                 if (!env.enabled) return;
-                gsap.killTweensOf(el);
                 const t = env.preset.timing;
                 const dur = scaleDuration(t.durationFast, env.speed);
                 // 只清 onEnter 真正可能设过的属性。boxShadow/filter 没开就不动,
@@ -264,6 +266,7 @@ export function useMotion(): MotionEnv {
                     y: 0,
                     duration: dur,
                     ease: t.ease.damped,
+                    overwrite: 'auto',
                 };
                 if (opts?.shadow === true) vars.boxShadow = '';
                 if ((opts?.brightness ?? true)) vars.filter = '';
