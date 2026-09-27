@@ -1,6 +1,7 @@
 // 桌面壳：窗口控制 + 托盘行为（IPC 字符串集中在此 service）。
 
 import type { SnowLumaWebuiEndpoint } from '../ipc/generated/SnowLumaWebuiEndpoint';
+import type { WindowSignal } from '../ipc/generated/WindowSignal';
 import { preferencesStore } from '../../hooks/preferences/preferencesStore';
 import { invoke, isTauri } from '../ipc/transport';
 
@@ -60,7 +61,9 @@ export const windowControlService = {
                 return;
             }
             const { emit } = await import('@tauri-apps/api/event');
-            await emit('desktop-request-close');
+            // 后端关窗时发的是同一个事件，信封也对齐
+            const signal: WindowSignal = { v: 1 };
+            await emit('desktop-request-close', signal);
         } catch (err) {
             console.error('关闭窗口失败:', err);
         }

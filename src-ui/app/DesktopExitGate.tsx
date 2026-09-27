@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import type { DesktopExitBlocked } from '../core/ipc/generated/DesktopExitBlocked';
 import { isTauri } from '../core/ipc/transport';
 import {
     prepareExitDesktop,
@@ -53,7 +54,7 @@ export const DesktopExitGate: React.FC = () => {
                 }),
             );
             unsubs.push(
-                await listen<number>('desktop-exit-blocked', () => {
+                await listen<DesktopExitBlocked>('desktop-exit-blocked', () => {
                     void runExitFlow();
                 }),
             );
