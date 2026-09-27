@@ -20,6 +20,7 @@ import { InstanceLogTab } from './InstanceLogTab';
 import { PaneLoading } from './PaneStatus';
 import { RawFilesTab } from './RawFilesTab';
 import { SaveBar } from './SaveBar';
+import { STORE_TOOLBAR_SLOT_ID } from './storeToolbar';
 import { buildDetailNav, resolveFrameworkUi, type FrameworkSaveHandle, type NavBadges } from './frameworkUi';
 import type { DetailTabHint } from '../list/AppInstanceListPage';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
@@ -153,7 +154,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                             {/* 插件商店把搜索 / 筛选挂进来；别的页没往里放东西时整行不占位 */}
                             <div
-                                id="app-store-toolbar-slot"
+                                id={STORE_TOOLBAR_SLOT_ID}
                                 className="flex min-w-0 shrink-0 items-center justify-end gap-2 pl-5 pr-3 pt-3 empty:hidden"
                             />
                             <div

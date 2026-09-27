@@ -1,34 +1,25 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { Blocks, RefreshCw, Search, Settings } from 'lucide-react';
+import { useState } from 'react';
+import { Blocks, Settings } from 'lucide-react';
 import {
     Badge,
     Button,
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
     PagePlaceholder,
     Popover,
     PopoverClose,
     PopoverContent,
     PopoverTrigger,
-    Select,
     Spinner,
 } from '../../../../shared/ui';
 import { ActionMotionIcon } from '../../../../shared/ui/motion';
 import { ConfigConflictDialog } from '../ConfigConflictDialog';
 import { PaneLoading } from '../PaneStatus';
+import { StoreToolbar, UninstallDialog } from '../storeToolbar';
 import { useKarinPlugins } from '../../../../hooks/apps/useKarinPlugins';
 import { cn } from '../../../../shared/utils/cn';
 import styles from './karinPluginsGrid.module.css';
 import { PluginConfigDialog } from '../PluginConfigDialog';
 import { type VisiblePlugin } from '../../../../core/domain/apps/karinPlugins';
 import type { AppInstance } from '../../../../core/ipc/types';
-
-const TOOLBAR_SLOT_ID = 'app-store-toolbar-slot';
 
 const KIND_ITEMS = [
     { value: 'all', label: '全部类型' },
@@ -43,17 +34,6 @@ const KIND_LABEL: Record<VisiblePlugin['kind'], string> = {
     app: 'app',
 };
 
-function PluginsToolbarPortal({ children }: { children: ReactNode }) {
-    const [dock, setDock] = useState<HTMLElement | null>(() =>
-        document.getElementById(TOOLBAR_SLOT_ID),
-    );
-    useEffect(() => {
-        setDock(document.getElementById(TOOLBAR_SLOT_ID));
-    }, []);
-    if (!dock) return null;
-    return createPortal(children, dock);
-}
-
 export const KarinPluginsTab: React.FC<{ instance: AppInstance }> = ({ instance }) => {
     const p = useKarinPlugins(instance);
     const [uninstall, setUninstall] = useState<string | null>(null);
@@ -62,49 +42,17 @@ export const KarinPluginsTab: React.FC<{ instance: AppInstance }> = ({ instance 
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            <PluginsToolbarPortal>
-                <div className="flex min-w-0 items-center gap-1.5 pr-1">
-                    <div className="relative min-w-0">
-                        <Search
-                            size={13}
-                            className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-tertiary"
-                        />
-                        <input
-                            type="search"
-                            aria-label="搜索插件"
-                            placeholder="搜索"
-                            value={p.query}
-                            onChange={(e) => p.setQuery(e.target.value)}
-                            className={cn(
-                                'h-7 w-36 rounded-sm border border-transparent bg-inset/70 pl-7 pr-2',
-                                'text-[12px] text-text outline-none transition-colors',
-                                'placeholder:text-text-tertiary',
-                                'hover:border-border-subtle hover:bg-inset',
-                                'focus:border-brand focus:bg-field focus:ring-2 focus:ring-brand focus:ring-inset',
-                                'sm:w-48',
-                            )}
-                        />
-                    </div>
-                    <Select
-                        items={[...KIND_ITEMS]}
-                        value={p.kindFilter}
-                        onValueChange={p.setKindFilter}
-                        className="w-[6.75rem] shrink-0 [&_button]:h-7 [&_button]:min-h-7 [&_button]:px-2 [&_button]:py-0 [&_button]:text-[12px]"
-                    />
-                    <span className="hidden min-w-[1.25rem] text-right text-2xs tabular-nums text-text-tertiary sm:inline">
-                        {count}
-                    </span>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        aria-label="刷新"
-                        onClick={() => void p.reload()}
-                    >
-                        <ActionMotionIcon icon={RefreshCw} size={13} motion={p.loading ? 'spin' : 'none'} />
-                    </Button>
-                </div>
-            </PluginsToolbarPortal>
+            <StoreToolbar
+                noun="插件"
+                query={p.query}
+                onQueryChange={p.setQuery}
+                filters={KIND_ITEMS}
+                filter={p.kindFilter}
+                onFilterChange={p.setKindFilter}
+                count={count}
+                loading={p.loading}
+                onReload={() => void p.reload()}
+            />
 
             {p.loading && p.rows.length === 0 ? (
                 <PaneLoading text="正在读取插件…" />
@@ -134,29 +82,12 @@ export const KarinPluginsTab: React.FC<{ instance: AppInstance }> = ({ instance 
                 </div>
             )}
 
-            <Dialog open={uninstall !== null} onOpenChange={(o) => !o && setUninstall(null)}>
-                <DialogContent size="sm">
-                    <DialogHeader>
-                        <DialogTitle>卸载插件？</DialogTitle>
-                        <DialogDescription>此操作不可撤销。</DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="ghost" size="sm" onClick={() => setUninstall(null)}>
-                            取消
-                        </Button>
-                        <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => {
-                                if (uninstall) void p.runOp(uninstall, 'uninstall');
-                                setUninstall(null);
-                            }}
-                        >
-                            卸载
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <UninstallDialog
+                noun="插件"
+                target={uninstall}
+                onClose={() => setUninstall(null)}
+                onConfirm={(name) => void p.runOp(name, 'uninstall')}
+            />
 
             <PluginConfigDialog
                 instanceId={instance.id}

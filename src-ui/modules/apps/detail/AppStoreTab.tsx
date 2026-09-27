@@ -1,27 +1,19 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { Blocks, ChevronLeft, ChevronRight, ExternalLink, RefreshCw, Search, Settings } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Blocks, ChevronLeft, ChevronRight, ExternalLink, Settings } from 'lucide-react';
 import {
     Badge,
-    Button,
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
     PagePlaceholder,
     Popover,
     PopoverClose,
     PopoverContent,
     PopoverTrigger,
-    Select,
     Spinner,
 } from '../../../shared/ui';
 import { ActionMotionIcon, ListItem } from '../../../shared/ui/motion';
 import { ConfigConflictDialog } from './ConfigConflictDialog';
 import { PluginConfigDialog } from './PluginConfigDialog';
 import { PaneLoading } from './PaneStatus';
+import { StoreToolbar, UninstallDialog } from './storeToolbar';
 import { useAppStore } from '../../../hooks/apps/useAppStore';
 import { openExternalUrl } from '../../../core/ipc/transport';
 import { cn } from '../../../shared/utils/cn';
@@ -35,22 +27,11 @@ import {
 } from '../../../core/domain/apps/appStore';
 import type { AppInstance, AppStoreResource } from '../../../core/ipc/types';
 
-const TOOLBAR_SLOT_ID = 'app-store-toolbar-slot';
-
 const FILTER_ITEMS = [
     { value: 'all', label: '全部' },
     { value: 'official', label: '官方' },
     { value: 'installed', label: '已装' },
 ] as const;
-
-function PluginsToolbarPortal({ children }: { children: ReactNode }) {
-    const [dock, setDock] = useState<HTMLElement | null>(() => document.getElementById(TOOLBAR_SLOT_ID));
-    useEffect(() => {
-        setDock(document.getElementById(TOOLBAR_SLOT_ID));
-    }, []);
-    if (!dock) return null;
-    return createPortal(children, dock);
-}
 
 /** 应用端商店页：NoneBot2 的适配器、插件两页，AstrBot、MaiBot 的插件页 */
 export const AppStoreTab: React.FC<{
@@ -102,49 +83,17 @@ export const AppStoreTab: React.FC<{
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            <PluginsToolbarPortal>
-                <div className="flex min-w-0 items-center gap-1.5 pr-1">
-                    <div className="relative min-w-0">
-                        <Search
-                            size={13}
-                            className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-tertiary"
-                        />
-                        <input
-                            type="search"
-                            aria-label={`搜索${kindLabel}`}
-                            placeholder="搜索"
-                            value={p.query}
-                            onChange={(e) => p.setQuery(e.target.value)}
-                            className={cn(
-                                'h-7 w-36 rounded-sm border border-transparent bg-inset/70 pl-7 pr-2',
-                                'text-[12px] text-text outline-none transition-colors',
-                                'placeholder:text-text-tertiary',
-                                'hover:border-border-subtle hover:bg-inset',
-                                'focus:border-brand focus:bg-field focus:ring-2 focus:ring-brand focus:ring-inset',
-                                'sm:w-48',
-                            )}
-                        />
-                    </div>
-                    <Select
-                        items={[...FILTER_ITEMS]}
-                        value={p.kindFilter}
-                        onValueChange={p.setKindFilter}
-                        className="w-[6.75rem] shrink-0 [&_button]:h-7 [&_button]:min-h-7 [&_button]:px-2 [&_button]:py-0 [&_button]:text-[12px]"
-                    />
-                    <span className="hidden min-w-[1.25rem] text-right text-2xs tabular-nums text-text-tertiary sm:inline">
-                        {count}
-                    </span>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        aria-label="刷新"
-                        onClick={() => void p.reload()}
-                    >
-                        <ActionMotionIcon icon={RefreshCw} size={13} motion={p.loading ? 'spin' : 'none'} />
-                    </Button>
-                </div>
-            </PluginsToolbarPortal>
+            <StoreToolbar
+                noun={kindLabel}
+                query={p.query}
+                onQueryChange={p.setQuery}
+                filters={FILTER_ITEMS}
+                filter={p.kindFilter}
+                onFilterChange={p.setKindFilter}
+                count={count}
+                loading={p.loading}
+                onReload={() => void p.reload()}
+            />
 
             {p.loading && p.rows.length === 0 ? (
                 <PaneLoading text={`正在读取${kindLabel}…`} />
@@ -226,29 +175,12 @@ export const AppStoreTab: React.FC<{
                 </div>
             )}
 
-            <Dialog open={uninstall !== null} onOpenChange={(o) => !o && setUninstall(null)}>
-                <DialogContent size="sm">
-                    <DialogHeader>
-                        <DialogTitle>卸载{kindLabel}？</DialogTitle>
-                        <DialogDescription>此操作不可撤销。</DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="ghost" size="sm" onClick={() => setUninstall(null)}>
-                            取消
-                        </Button>
-                        <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => {
-                                if (uninstall) void p.runOp(uninstall, 'uninstall');
-                                setUninstall(null);
-                            }}
-                        >
-                            卸载
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <UninstallDialog
+                noun={kindLabel}
+                target={uninstall}
+                onClose={() => setUninstall(null)}
+                onConfirm={(id) => void p.runOp(id, 'uninstall')}
+            />
 
             {resource === 'plugin' && (
                 <PluginConfigDialog
