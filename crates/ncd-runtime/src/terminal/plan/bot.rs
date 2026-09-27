@@ -4,7 +4,7 @@ use ncd_domain::{BackendType, BotId, DeploymentType, RuntimeTarget, TerminalOpen
 
 use super::{
     DesktopTerminalPlanner, RemoteStart, TerminalLaunchPlan, dir_line, linux_snippets,
-    local_dir_prefix, posix_parent, remote_host_id,
+    local_dir_prefix, posix_parent, remote_host_id, with_host_label,
 };
 use crate::terminal::TerminalError;
 
@@ -54,7 +54,7 @@ impl DesktopTerminalPlanner {
                 self.local_plan(
                     host,
                     request,
-                    Some(format!("{name} · 本机")),
+                    Some(with_host_label(&name, "本机")),
                     Some(dir),
                     path_prefix,
                     Vec::new(),

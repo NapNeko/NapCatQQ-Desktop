@@ -114,6 +114,16 @@ fn dir_line(label: &str, dir: &str) -> String {
     format!("{label} · {dir}")
 }
 
+/// 标签名后面接主机名。实例名常常已经带了主机（新建时默认给的就是「麦麦 · 本机」这种），
+/// 带了就不再接一遍
+pub(super) fn with_host_label(name: &str, host_label: &str) -> String {
+    if name.contains(host_label) {
+        name.to_string()
+    } else {
+        format!("{name} · {host_label}")
+    }
+}
+
 /// 远端的起始位置
 enum RemoteStart {
     Home,
@@ -277,7 +287,7 @@ impl DesktopTerminalPlanner {
         let profile = self.profile(server_id).await;
         let host_label = Self::server_label(profile.as_ref(), server_id);
         let title = match title_prefix {
-            Some(prefix) => format!("{prefix} · {host_label}"),
+            Some(prefix) => with_host_label(&prefix, &host_label),
             None => host_label.clone(),
         };
         let sudo_fill = self.servers.sudo_password(server_id).is_some();
@@ -417,7 +427,7 @@ impl DesktopTerminalPlanner {
                 self.local_plan(
                     Arc::clone(&ctx.host),
                     request,
-                    Some(format!("{} · 本机", instance.display_name)),
+                    Some(with_host_label(&instance.display_name, "本机")),
                     Some(PathBuf::from(local_dir)),
                     prefix,
                     profile.env.clone(),
@@ -506,6 +516,14 @@ mod tests {
         assert!(script.contains("--format '{{.State.Running}}'"));
         assert!(script.contains("（ncbot-1 / slbot-1）"));
         assert!(script.contains("exec $D exec -it \"$C\" sh -c"));
+    }
+
+    #[test]
+    fn title_skips_host_already_in_name() {
+        assert_eq!(with_host_label("麦麦 · 本机", "本机"), "麦麦 · 本机");
+        assert_eq!(with_host_label("Karin · production", "production"), "Karin · production");
+        assert_eq!(with_host_label("AstrBot a1b2", "vps1"), "AstrBot a1b2 · vps1");
+        assert_eq!(with_host_label("10001", "本机"), "10001 · 本机");
     }
 
     #[test]
