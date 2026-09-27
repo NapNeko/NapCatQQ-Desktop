@@ -208,7 +208,8 @@ pub fn run() {
         ReqwestNapCatWebUiClient::new()
             .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
     );
-    let app_settings = commands::app_settings::read_app_settings(&data_root);
+    let mut app_settings = commands::app_settings::read_app_settings(&data_root);
+    ncd_runtime::desktop::backfill_snowluma_package(&data_root, &mut app_settings);
     // 以 app-settings 为准收敛 HKCU Run(开=刷新路径,关=删本产品值)
     autostart::reconcile_launch_on_startup(app_settings.launch_on_startup);
     let app_settings_shared = Arc::new(RwLock::new(app_settings.clone()));

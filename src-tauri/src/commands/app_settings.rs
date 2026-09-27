@@ -37,19 +37,7 @@ fn secret_store(state: &AppState) -> SecretStoreImpl {
 pub async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettingsDto, String> {
     let store = config_store(&state);
     let path = store.config_dir().join(APP_SETTINGS_FILE);
-
-    let mut settings = load_app_settings_from(&store, &path);
-    if settings.snowluma_package.is_none() {
-        let install_dir = state.data_root.join("components").join("SnowLuma");
-        if install_dir.is_dir() {
-            settings.snowluma_package = Some(
-                ncd_runtime::infer_local_snowluma_package(&state.data_root),
-            );
-            if let Ok(payload) = serde_json::to_value(&settings) {
-                let _ = store.write_json_atomic(&path, &payload);
-            }
-        }
-    }
+    let settings = load_app_settings_from(&store, &path);
 
     let github_pat = secret_store(&state)
         .get(GITHUB_PAT_SECRET_KEY)
@@ -76,12 +64,8 @@ pub async fn set_app_settings(
     dto: AppSettingsDto,
 ) -> Result<(), String> {
     state.migrate_gate.ensure_idle()?;
-    let store = config_store(&state);
-    let path = store.config_dir().join(APP_SETTINGS_FILE);
 
     let mut settings = dto.settings;
-    // 包类型由组件安装/卸载流程维护，不允许设置页的旧草稿覆盖当前安装状态。
-    settings.snowluma_package = state.app_settings.read().await.snowluma_package;
     settings.normalize_performance_monitor();
     settings.normalize_bot_runtime_metrics();
     settings.normalize_task_queue_cleanup();
@@ -90,11 +74,17 @@ pub async fn set_app_settings(
     settings.offline_webhook.normalize();
     settings.offline_onebot.normalize();
     settings.poller.offline_notify_behavior.normalize();
-    let payload =
-        serde_json::to_value(&settings).map_err(|e| format!("序列化 app 设置失败: {e}"))?;
-    store
-        .write_json_atomic(&path, &payload)
-        .map_err(|e| format!("写入 app-settings.json 失败: {e}"))?;
+    // 包类型由组件安装 / 卸载流程维护，设置页的旧草稿不能覆盖当前安装状态
+    let (settings, ()) = ncd_runtime::desktop::update_app_settings(
+        &state.data_root,
+        &state.app_settings,
+        move |current| {
+            let package = current.snowluma_package;
+            *current = settings;
+            current.snowluma_package = package;
+        },
+    )
+    .await?;
 
     // 开机自启:JSON 为权威源,落盘成功后再收敛 HKCU Run(用户级,无需 UAC)。
     // 若此处失败,启动时 reconcile_launch_on_startup 会再按 JSON 对齐。
@@ -122,7 +112,6 @@ pub async fn set_app_settings(
         .update_desktop_notify_settings(settings.desktop_notify_flags())
         .await;
     *state.desktop_notify.write().await = settings.desktop_notify_flags();
-    *state.app_settings.write().await = settings.clone();
 
     // 热更新 SnowLumaDaemon 的 node 路径覆盖
     if let Some(path) = settings.snowluma_node_path.as_deref().filter(|s| !s.trim().is_empty()) {

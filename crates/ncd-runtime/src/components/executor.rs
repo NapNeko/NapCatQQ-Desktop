@@ -22,7 +22,6 @@ use ncd_domain::{
 };
 use ncd_host::{Host, Locality};
 use ncd_server::ServerManager;
-use ncd_traits::ConfigStore;
 use tokio::sync::{Mutex, RwLock, oneshot};
 use tokio_util::sync::CancellationToken;
 
@@ -37,7 +36,6 @@ use crate::components::system_package::{
     qq_install_failure_message, run_qq_dependency_install_for_command, run_system_package_task,
     system_package_group, system_package_title,
 };
-use crate::config_store_impl::LocalConfigStore;
 use crate::deploy::tasks::{
     DeploymentTaskContext, DeploymentTaskManager, DeploymentTaskRequest, DeploymentTaskRunResult,
 };
@@ -678,16 +676,11 @@ async fn persist_local_snowluma_package(
     app_settings: &Arc<RwLock<AppSettings>>,
     package: Option<SnowLumaLinuxPackage>,
 ) -> Result<(), String> {
-    let mut settings = app_settings.read().await.clone();
-    settings.snowluma_package = package;
-    let store = LocalConfigStore::new(data_root);
-    let path = store.config_dir().join("app-settings.json");
-    let payload = serde_json::to_value(&settings).map_err(|e| e.to_string())?;
-    store
-        .write_json_atomic(&path, &payload)
-        .map_err(|e| e.to_string())?;
-    *app_settings.write().await = settings;
-    Ok(())
+    crate::desktop::update_app_settings(data_root, app_settings, |s| {
+        s.snowluma_package = package;
+    })
+    .await
+    .map(|_| ())
 }
 
 /// 本机 SnowLuma 目录里有 node.exe 就是完整包;没装按完整包(不会平白拉 Node)

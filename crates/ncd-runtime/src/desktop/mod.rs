@@ -1,6 +1,8 @@
-//! 桌面日志与崩溃包。
+//! 桌面日志、崩溃包与 App 设置落盘。
 
 pub mod crash_bundle;
 pub mod log;
+pub mod settings;
 
 pub use crash_bundle::{CrashBundleInput, desktop_output_dir, write_crash_bundle};
+pub use settings::{backfill_snowluma_package, update_app_settings};
