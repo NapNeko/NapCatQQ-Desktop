@@ -260,8 +260,9 @@ fn actor(raw: Option<&str>) -> MaiBotBehaviorActor {
     }
 }
 
-/// 上游存的是麦麦那台机器的本地时间、不带时区，按本机时区折算；远端时区不同会差几个小时
-fn iso_secs(raw: Option<&str>) -> Option<f64> {
+/// 上游存的是麦麦那台机器的本地时间、不带时区：`offset` 是那台机器相对 UTC 的秒数，
+/// 没有就按桌面端本机时区（麦麦就在本机）
+fn iso_secs(raw: Option<&str>, offset: Option<i32>) -> Option<f64> {
     let s = raw?.trim();
     if s.is_empty() {
         return None;
@@ -272,8 +273,11 @@ fn iso_secs(raw: Option<&str>) -> Option<f64> {
     let naive = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f")
         .or_else(|_| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f"))
         .ok()?;
-    let local = naive.and_local_timezone(chrono::Local).earliest()?;
-    Some(local.timestamp_millis() as f64 / 1000.0)
+    let millis = match offset.and_then(chrono::FixedOffset::east_opt) {
+        Some(tz) => naive.and_local_timezone(tz).single()?.timestamp_millis(),
+        None => naive.and_local_timezone(chrono::Local).earliest()?.timestamp_millis(),
+    };
+    Some(millis as f64 / 1000.0)
 }
 
 fn chat_id(session_id: Option<String>) -> String {
@@ -302,7 +306,7 @@ struct UpstreamPath {
 }
 
 impl UpstreamPath {
-    fn into_item(self) -> Option<MaiBotBehavior> {
+    fn into_item(self, offset: Option<i32>) -> Option<MaiBotBehavior> {
         let mut scene: Vec<MaiBotBehaviorTag> =
             self.scene_cluster_tags.unwrap_or_default().into_iter().filter_map(UpstreamTag::into_tag).collect();
         scene.sort_by(|a, b| b.weight.total_cmp(&a.weight));
@@ -321,8 +325,8 @@ impl UpstreamPath {
             failed: self.failure_count.unwrap_or(0),
             score: self.score.unwrap_or(0.0),
             enabled: self.enabled.unwrap_or(true),
-            active_at: iso_secs(self.last_active_time.as_deref()),
-            last_feedback_at: iso_secs(self.last_feedback_time.as_deref()),
+            active_at: iso_secs(self.last_active_time.as_deref(), offset),
+            last_feedback_at: iso_secs(self.last_feedback_time.as_deref(), offset),
         })
     }
 }
@@ -376,7 +380,11 @@ fn feedback_kind(status: &str) -> MaiBotBehaviorFeedbackKind {
     }
 }
 
-pub(crate) async fn list(c: &MaiBotWebUi, q: &MaiBotBehaviorQuery) -> Result<MaiBotBehaviorPage, AppFrameworkError> {
+pub(crate) async fn list(
+    c: &MaiBotWebUi,
+    q: &MaiBotBehaviorQuery,
+    offset: Option<i32>,
+) -> Result<MaiBotBehaviorPage, AppFrameworkError> {
     let page = q.page.max(1).to_string();
     let size = q.page_size.clamp(1, 100).to_string();
     let search = q.search.trim();
@@ -411,7 +419,7 @@ pub(crate) async fn list(c: &MaiBotWebUi, q: &MaiBotBehaviorQuery) -> Result<Mai
     let up: UpstreamPage<UpstreamPath> = c.get(&format!("{BASE}/paths"), &query).await?;
     Ok(MaiBotBehaviorPage {
         total: up.total.unwrap_or(0),
-        items: up.data.unwrap_or_default().into_iter().filter_map(UpstreamPath::into_item).collect(),
+        items: up.data.unwrap_or_default().into_iter().filter_map(|p| p.into_item(offset)).collect(),
     })
 }
 
@@ -447,12 +455,16 @@ pub(crate) async fn overview(c: &MaiBotWebUi) -> Result<MaiBotBehaviorOverview, 
     })
 }
 
-pub(crate) async fn detail(c: &MaiBotWebUi, id: i64) -> Result<MaiBotBehaviorDetail, AppFrameworkError> {
+pub(crate) async fn detail(
+    c: &MaiBotWebUi,
+    id: i64,
+    offset: Option<i32>,
+) -> Result<MaiBotBehaviorDetail, AppFrameworkError> {
     let up: UpstreamData<UpstreamDetail> = c.get(&format!("{BASE}/paths/{id}"), &[]).await?;
     let d = up.data.unwrap_or_default();
     let item = d
         .path
-        .and_then(UpstreamPath::into_item)
+        .and_then(|p| p.into_item(offset))
         .ok_or_else(|| AppFrameworkError::Integration(format!("麦麦没回第 {id} 条经验")))?;
     let evidence = d
         .evidence
@@ -465,7 +477,7 @@ pub(crate) async fn detail(c: &MaiBotWebUi, id: i64) -> Result<MaiBotBehaviorDet
             outcome: text(e.outcome),
             actor: actor(e.actor_type.as_deref()),
             messages: e.source_ids.map_or(0, |ids| ids.len() as u32),
-            at: iso_secs(e.created_at.as_deref()),
+            at: iso_secs(e.created_at.as_deref(), offset),
         })
         .collect();
     let feedback = d
@@ -479,7 +491,7 @@ pub(crate) async fn detail(c: &MaiBotWebUi, id: i64) -> Result<MaiBotBehaviorDet
             delta: f.score_delta.unwrap_or(0.0),
             reason: text(f.reason),
             outcome: text(f.outcome),
-            at: iso_secs(f.created_at.as_deref()),
+            at: iso_secs(f.created_at.as_deref(), offset),
         })
         .collect();
     Ok(MaiBotBehaviorDetail { item, evidence, feedback })
@@ -505,7 +517,7 @@ mod tests {
     #[test]
     fn upstream_rows_map_to_items() {
         let up: UpstreamPath = serde_json::from_str(PATH_ROW).unwrap();
-        let item = up.into_item().unwrap();
+        let item = up.into_item(None).unwrap();
         assert_eq!(item.chat_id, GLOBAL_CHAT, "不挂聊天的按上游的筛选值给");
         let labels: Vec<_> = item.scene.iter().map(|t| (t.kind, t.label.as_str())).collect();
         // 按分量排；随机 key 又没解析出名字的不要，没解析出名字但 key 可读的用 key
@@ -525,13 +537,21 @@ mod tests {
 
     #[test]
     fn naive_and_offset_times_both_parse() {
-        let a = iso_secs(Some("2026-09-20T10:00:00")).unwrap();
-        let b = iso_secs(Some("2026-09-20T10:00:00.500000")).unwrap();
+        let a = iso_secs(Some("2026-09-20T10:00:00"), None).unwrap();
+        let b = iso_secs(Some("2026-09-20T10:00:00.500000"), None).unwrap();
         assert!((b - a - 0.5).abs() < 1e-6);
-        assert_eq!(iso_secs(Some("2026-09-20 10:00:00")), Some(a));
-        assert_eq!(iso_secs(Some("1970-01-01T00:00:10+00:00")), Some(10.0));
-        assert_eq!(iso_secs(Some("昨天")), None);
-        assert_eq!(iso_secs(Some("")), None);
+        assert_eq!(iso_secs(Some("2026-09-20 10:00:00"), None), Some(a));
+        assert_eq!(iso_secs(Some("1970-01-01T00:00:10+00:00"), None), Some(10.0));
+        assert_eq!(iso_secs(Some("昨天"), None), None);
+        assert_eq!(iso_secs(Some(""), None), None);
+    }
+
+    /// 云服务器多是 UTC：同一个不带时区的时间，按麦麦那台机器的时区折，和桌面端在哪无关
+    #[test]
+    fn naive_times_follow_the_host_clock() {
+        assert_eq!(iso_secs(Some("1970-01-01T08:00:00"), Some(8 * 3600)), Some(0.0));
+        assert_eq!(iso_secs(Some("1970-01-01T00:00:00"), Some(0)), Some(0.0));
+        assert_eq!(iso_secs(Some("1970-01-01T00:00:10+00:00"), Some(8 * 3600)), Some(10.0), "自带时区的不折");
     }
 
     fn client(server: &MockServer) -> MaiBotWebUi {
@@ -564,7 +584,7 @@ mod tests {
             origin: MaiBotBehaviorOrigin::SelfReflection,
             sort: MaiBotBehaviorSort::Used,
         };
-        let page = list(&client(&server), &q).await.unwrap();
+        let page = list(&client(&server), &q, None).await.unwrap();
         assert_eq!((page.total, page.items.len()), (1, 1));
     }
 
@@ -619,7 +639,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_string(body))
             .mount(&server)
             .await;
-        let d = detail(&client(&server), 12).await.unwrap();
+        let d = detail(&client(&server), 12, None).await.unwrap();
         assert_eq!(d.item.id, 12);
         let ev: Vec<_> = d.evidence.iter().map(|e| (e.action.as_str(), e.messages, e.actor)).collect();
         assert_eq!(ev, [("a2", 1, MaiBotBehaviorActor::Maibot), ("a1", 2, MaiBotBehaviorActor::Others)]);
@@ -643,7 +663,7 @@ mod tests {
             .respond_with(ResponseTemplate::new(404).set_body_string(r#"{"detail":"行为经验路径不存在"}"#))
             .mount(&server)
             .await;
-        let err = detail(&client(&server), 99).await.unwrap_err();
+        let err = detail(&client(&server), 99, None).await.unwrap_err();
         assert!(err.to_string().contains("行为经验路径不存在"), "{err}");
     }
 }

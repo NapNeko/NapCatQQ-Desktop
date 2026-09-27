@@ -39,6 +39,9 @@ pub struct MaiBotSession {
     pub instance_id: String,
     pub port: u16,
     pub token: String,
+    /// 麦麦那台机器相对 UTC 的秒数。上游有些时间存成不带时区的本地时间，远端时区和桌面端不同
+    /// （云服务器多是 UTC）就得按它折算；`None` 表示按桌面端本机时区（麦麦就在本机，或没问出来）
+    pub utc_offset_secs: Option<i32>,
 }
 
 /// 提供商在哪：盘上已有且和表单里一样的按名字查（上游放行它自己配的内网地址，本机 Ollama 也能查），
@@ -406,7 +409,7 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         session: &MaiBotSession,
         query: &MaiBotBehaviorQuery,
     ) -> Result<MaiBotBehaviorPage, AppFrameworkError> {
-        behavior::list(&client(session)?, query).await
+        behavior::list(&client(session)?, query, session.utc_offset_secs).await
     }
 
     async fn behavior_overview(&self, session: &MaiBotSession) -> Result<MaiBotBehaviorOverview, AppFrameworkError> {
@@ -414,7 +417,7 @@ impl MaiBotRuntimeApi for WebUiRuntime {
     }
 
     async fn behavior(&self, session: &MaiBotSession, id: i64) -> Result<MaiBotBehaviorDetail, AppFrameworkError> {
-        behavior::detail(&client(session)?, id).await
+        behavior::detail(&client(session)?, id, session.utc_offset_secs).await
     }
 
     async fn chat_ticket(&self, session: &MaiBotSession) -> Result<MaiBotChatTicket, AppFrameworkError> {

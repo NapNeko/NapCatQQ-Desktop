@@ -181,7 +181,31 @@ struct AppInstanceTunnel {
 struct WebUiEndpoint {
     listen_port: u16,
     auth_key: String,
+    /// 远端主机相对 UTC 的秒数，本机为 None（按桌面端时区）
+    utc_offset_secs: Option<i32>,
     read_at: Instant,
+}
+
+/// `date +%z` 的输出（`+0800` / `-0530`）→ 秒
+fn parse_utc_offset(raw: &str) -> Option<i32> {
+    let s = raw.trim();
+    let (sign, digits) = match s.as_bytes().first()? {
+        b'+' => (1, &s[1..]),
+        b'-' => (-1, &s[1..]),
+        _ => return None,
+    };
+    if digits.len() != 4 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let hours: i32 = digits[..2].parse().ok()?;
+    let minutes: i32 = digits[2..].parse().ok()?;
+    Some(sign * (hours * 3600 + minutes * 60))
+}
+
+async fn remote_utc_offset(host: &dyn Host) -> Option<i32> {
+    let cmd = HostCommand::new("date").arg("+%z").timeout(Duration::from_secs(10));
+    let out = host.run_to_string(cmd).await.ok()?;
+    parse_utc_offset(&out.stdout)
 }
 
 /// 桌面端经手的改动当场作废；这个时限兜的是用户在应用自己的 WebUI 或盘上改了口令
@@ -406,9 +430,17 @@ impl AppManager {
         }
         match self.read_config(&instance.id).await {
             Ok(env) => {
+                let utc_offset_secs = match server_id_of_host(&instance.host_id) {
+                    Some(_) => match self.resolve_host(&instance.host_id).await {
+                        Ok(host) => remote_utc_offset(host.as_ref()).await,
+                        Err(_) => None,
+                    },
+                    None => None,
+                };
                 let endpoint = WebUiEndpoint {
                     listen_port: env.config.webui_port().unwrap_or(instance.port),
                     auth_key: env.config.webui_auth_key().to_string(),
+                    utc_offset_secs,
                     read_at: Instant::now(),
                 };
                 if let Ok(mut map) = self.webui_endpoints.lock() {
@@ -423,6 +455,7 @@ impl AppManager {
                     .map(|adapter| adapter.webui_fallback_port(instance))
                     .unwrap_or(instance.port),
                 auth_key: String::new(),
+                utc_offset_secs: None,
                 read_at: Instant::now(),
             },
         }
@@ -2220,10 +2253,12 @@ impl AppManager {
                 return Ok(MaiBotRuntimeStatus::gate(MaiBotRuntimeGate::Unreachable, e.to_string()));
             }
         };
+        let endpoint = self.webui_endpoint(&instance).await;
         let session = MaiBotSession {
             instance_id: instance.id.as_str().to_string(),
             port,
-            token: self.webui_auth_key(id).await,
+            token: endpoint.auth_key,
+            utc_offset_secs: endpoint.utc_offset_secs,
         };
         let status = runtime.status(&session).await;
         // 详情页一直在轮询这个：token 在麦麦自己的 WebUI 里换过、或者口变了，
@@ -2250,10 +2285,12 @@ impl AppManager {
         if !matches!(again.state, AppInstanceState::Running) {
             return Err(AppFrameworkError::StateChanged("实例状态已变，请重试".into()));
         }
+        let endpoint = self.webui_endpoint(&instance).await;
         let session = MaiBotSession {
             instance_id: instance.id.as_str().to_string(),
             port,
-            token: self.webui_auth_key(id).await,
+            token: endpoint.auth_key,
+            utc_offset_secs: endpoint.utc_offset_secs,
         };
         Ok((adapter, session))
     }
@@ -5536,6 +5573,16 @@ mod tests {
             assert!(leftovers.is_empty() && after.is_empty(), "停后有残留进程");
             assert!(!webui_after && !legacy_after, "停后端口没释放");
         }
+    }
+
+    #[test]
+    fn utc_offset_from_date_z() {
+        assert_eq!(parse_utc_offset("+0800\n"), Some(8 * 3600));
+        assert_eq!(parse_utc_offset("+0000"), Some(0));
+        assert_eq!(parse_utc_offset("-0530"), Some(-(5 * 3600 + 30 * 60)));
+        assert_eq!(parse_utc_offset("CST"), None);
+        assert_eq!(parse_utc_offset("+08:00"), None);
+        assert_eq!(parse_utc_offset(""), None);
     }
 
     #[test]
