@@ -4,7 +4,9 @@
 //! 热推）。不新写推送链路。反向进 `connect.websocket_clients`（Bot 连应用端）；正向进
 //! `connect.websocket_servers`（Bot 开服务端，应用端来连，听口由这里在 Bot 主机上分配）。
 //! 反向拓扑按主机分、不看 BackendType：同机走实例口；本机 Bot→远端应用 SSH `-L`；远端 Bot→本机应用 SSH `-R`；
-//! 两台远端走应用机常驻 `ssh -R`（Desktop 只编排）。正向的听口在 Bot 侧，隧道方向全反，目前只开同机。
+//! 两台远端走应用机常驻 `ssh -R`（Desktop 只编排）。正向的听口 P 在 Bot 侧，隧道方向全反：远端 Bot→本机应用
+//! 桌面端 `-L`，本机 Bot→远端应用桌面端对应用机 `-R`，两台远端应用机常驻 `ssh -L`；Bot 写 P，应用端连隧道口 Q。
+//! Docker 部署的 Bot 不给对接：容器里的 127.0.0.1 不是宿主机。
 //!
 //! 安装本身走既有 ComponentExecutor（R12），这里只给 hint、置 Installing、盯任务结束后
 //! 用 detect 对账；框架差异全部封在 `ncd_appframework::AppFrameworkAdapter` 后面。
@@ -47,7 +49,7 @@ use ncd_domain::{
     CreateAppInstanceRequest, DeploymentType, DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID,
     REMOTE_HOST_ID_PREFIX,
     OneBotLinkEndpoint, OneBotLinkMode, OneBotLinkPlan, RuntimeTarget, app_link_connection_name,
-    classify_app_link, host_id_of_runtime_target, is_app_link_connection_name,
+    classify_app_link, host_id_of_runtime_target, is_app_link_connection_name, parse_ws_url,
     rewrite_ws_loopback_port, runtime_target_matches_host, server_id_of_host,
 };
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
@@ -64,7 +66,7 @@ use super::listen_port::{
     allocate_listen_port, allocate_stable_port, local_port_free, remote_listening_ports,
 };
 use super::native_runtime::{AppLaunchSpec, NativeAppRuntime};
-use super::resident_link::{self, ResidentLinkSpec};
+use super::resident_link::{self, ResidentForward, ResidentLinkSpec};
 use crate::bot_manager::BotManager;
 use crate::components::{AppComponentHint, data_root_to_host_path};
 use crate::deploy::DeploymentTaskManager;
@@ -232,6 +234,26 @@ fn launch_log_file(adapter: &dyn AppFrameworkAdapter, instance: &AppInstance) ->
         .unwrap_or_else(|| HostPath::from_posix(&instance.install_dir).join(".ncd-app.log"))
 }
 
+/// 正向对接时 Bot 在自己机上开的那个服务口
+fn forward_listen_port(bot: &BotConfig, connection_name: &str) -> Option<u16> {
+    bot.connect
+        .websocket_servers
+        .iter()
+        .find(|s| s.base.name == connection_name && s.port > 0)
+        .map(|s| s.port)
+}
+
+/// 应用端现在去连的口（它自己配置里写的）；没对接、适配器关着就是 None
+async fn adapter_link_port(
+    adapter: &dyn AppFrameworkAdapter,
+    host: &dyn Host,
+    instance: &AppInstance,
+) -> Option<u16> {
+    let urls = adapter.read_outbound_ws_urls(host, instance).await.ok()?;
+    let parts = parse_ws_url(urls.first()?)?;
+    (parts.port != 0).then_some(parts.port)
+}
+
 /// 提示词改在哪：跑着走 WebUI（上游改完会清它的缓存），停着改盘上文件
 enum PromptPlace {
     Live(MaiBotSession),
@@ -256,6 +278,11 @@ fn needs_desktop_ssh_tunnel(topology: AppLinkTopology) -> bool {
 
 fn webui_tunnel_key(instance: &AppInstance) -> String {
     format!("{}:webui", instance.id.as_str())
+}
+
+/// 正向对接的桌面端隧道单独一个键：反向那条（键是实例 id）的端口语义不同，别互相认错
+fn forward_tunnel_key(id: &AppInstanceId) -> String {
+    format!("{}:fwd", id.as_str())
 }
 
 fn unsupported_link_topology(bot_target: &RuntimeTarget, app_host_id: &str) -> AppFrameworkError {
@@ -1542,10 +1569,7 @@ impl AppManager {
         bot_id: &BotId,
     ) -> Result<OneBotLinkPlan, AppFrameworkError> {
         let (instance, bot, adapter, host) = self.link_context(instance_id, bot_id).await?;
-        let topology = classify_app_link(&bot.bot.runtime_target, &instance.host_id).ok_or_else(
-            || unsupported_link_topology(&bot.bot.runtime_target, &instance.host_id),
-        )?;
-        self.plan_link_for(&instance, &bot, adapter.as_ref(), host.as_ref(), topology)
+        self.plan_link_for(&instance, &bot, adapter.as_ref(), host.as_ref())
             .await
     }
 
@@ -1559,9 +1583,9 @@ impl AppManager {
         let topology = classify_app_link(&bot.bot.runtime_target, &instance.host_id).ok_or_else(
             || unsupported_link_topology(&bot.bot.runtime_target, &instance.host_id),
         )?;
-        // 先把计划算完（正向不同机在这里就拒），再动旧隧道，免得拒了还拆掉现有对接
+        // 先把计划算完再动旧隧道，免得算不出来还拆掉现有对接
         let mut plan = self
-            .plan_link_for(&instance, &bot, adapter.as_ref(), host.as_ref(), topology)
+            .plan_link_for(&instance, &bot, adapter.as_ref(), host.as_ref())
             .await?;
         let mode = plan.connection.mode();
         if let Some(old) = instance.link.as_ref() {
@@ -1586,8 +1610,29 @@ impl AppManager {
                     .map_err(AppFrameworkError::Validation)?;
             }
         }
+        // 正向：Bot 照旧在自己机上听 P，应用端要连的是自己机回环上的隧道口 Q
+        let mut app_plan = plan.clone();
+        if let OneBotLinkEndpoint::WsServer(server) = &plan.connection
+            && topology != AppLinkTopology::SameHost
+        {
+            let q = if topology == AppLinkTopology::RemoteBotRemoteApp {
+                let q = self
+                    .ensure_resident_forward_link(&instance, &bot, bot_id, server.port)
+                    .await?;
+                resident_forward_port = Some(q);
+                q
+            } else {
+                let preferred = adapter_link_port(adapter.as_ref(), host.as_ref(), &instance).await;
+                self.ensure_forward_tunnel(&instance, &bot, topology, server.port, preferred)
+                    .await?
+            };
+            if let OneBotLinkEndpoint::WsServer(app_side) = &mut app_plan.connection {
+                app_side.host = "127.0.0.1".to_string();
+                app_side.port = q;
+            }
+        }
 
-        if let Err(e) = adapter.apply_link(host.as_ref(), &instance, &plan).await {
+        if let Err(e) = adapter.apply_link(host.as_ref(), &instance, &app_plan).await {
             if resident_forward_port.is_some() {
                 self.teardown_resident_best_effort(&instance, bot_id).await;
             }
@@ -1780,14 +1825,14 @@ impl AppManager {
         Ok(generate_token())
     }
 
-    /// 算计划并补上只有编排层知道的部分：正向的 Bot 听口在 Bot 主机上分配（`plan_link` 填 0）
+    /// 算计划并补上只有编排层知道的部分：正向的 Bot 听口在 Bot 主机上分配（`plan_link` 填 0）。
+    /// 跨机时这里给的还是 Bot 侧的口，应用端连的隧道口到 `apply_link` 开隧道时才知道（预览不开隧道）
     async fn plan_link_for(
         &self,
         instance: &AppInstance,
         bot: &BotConfig,
         adapter: &dyn AppFrameworkAdapter,
         host: &dyn Host,
-        topology: AppLinkTopology,
     ) -> Result<OneBotLinkPlan, AppFrameworkError> {
         let token = self.pick_access_token(host, instance, bot, adapter).await?;
         let mut plan = adapter.integration().plan_link(instance, bot, &token)?;
@@ -1799,14 +1844,6 @@ impl AppManager {
             )));
         }
         if let OneBotLinkEndpoint::WsServer(server) = &mut plan.connection {
-            if topology != AppLinkTopology::SameHost {
-                return Err(AppFrameworkError::LinkModeUnsupported(format!(
-                    "{} 由应用端主动连协议 Bot，目前只能对接同一台机器上的 Bot（Bot 在{}，实例在{}）",
-                    adapter.manifest().display_name,
-                    describe_target(&bot.bot.runtime_target),
-                    describe_host(&instance.host_id)
-                )));
-            }
             server.port = self.pick_forward_port(instance, bot).await?;
         }
         Ok(plan)
@@ -3432,6 +3469,80 @@ impl AppManager {
         let mut map = self.tunnels.lock().await;
         map.remove(&id_str);
         map.remove(&webui);
+        map.remove(&forward_tunnel_key(id));
+    }
+
+    /// 正向跨机、桌面端握着的隧道：应用端在自己机的回环上连 Q，隧道把 Q 接到 Bot 机回环上的 `bot_port`。
+    /// 远端 Bot + 本机应用：桌面端 `-L`，Q 在本机；本机 Bot + 远端应用：桌面端对应用机开 `-R`，Q 在应用机。
+    /// Q 先试 `preferred`（适配器配置里现有的口，重开隧道时不用改它的配置），占了再让系统分配
+    async fn ensure_forward_tunnel(
+        &self,
+        instance: &AppInstance,
+        bot: &BotConfig,
+        topology: AppLinkTopology,
+        bot_port: u16,
+        preferred: Option<u16>,
+    ) -> Result<u16, AppFrameworkError> {
+        if bot_port == 0 {
+            return Err(AppFrameworkError::Validation("协议 Bot 的 WS 服务还没分配端口".into()));
+        }
+        let key = forward_tunnel_key(&instance.id);
+        let reach = |h: &TunnelHandle| match topology {
+            AppLinkTopology::RemoteBotLocalApp => h.local_port(),
+            _ => h.remote_listen_port(),
+        };
+        {
+            let mut map = self.tunnels.lock().await;
+            if let Some(existing) = map.get(&key)
+                && existing.app_port == bot_port
+                && existing.topology == topology
+                && reach(&existing.handle) != 0
+            {
+                return Ok(reach(&existing.handle));
+            }
+            map.remove(&key);
+        }
+        let tunnel_host = match topology {
+            AppLinkTopology::RemoteBotLocalApp => {
+                self.resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
+                    .await?
+            }
+            AppLinkTopology::LocalBotRemoteApp => self.resolve_host(&instance.host_id).await?,
+            _ => {
+                return Err(AppFrameworkError::Validation(
+                    "这种拓扑不走桌面端隧道".into(),
+                ));
+            }
+        };
+        // Q 都是隧道的听口：`-L` 听在本机，`-R` 听在应用机
+        let spec_for = |q: u16| match topology {
+            AppLinkTopology::RemoteBotLocalApp => TunnelSpec::local_to_remote(q, bot_port),
+            _ => TunnelSpec::remote_to_local(q, bot_port),
+        };
+        let first = match preferred.filter(|p| *p != 0) {
+            Some(q) => tunnel_host.open_tunnel(spec_for(q)).await.ok(),
+            None => None,
+        };
+        let handle = match first {
+            Some(h) => h,
+            None => tunnel_host
+                .open_tunnel(spec_for(0))
+                .await
+                .map_err(host_err)?,
+        };
+        let q = reach(&handle);
+        if q == 0 {
+            return Err(AppFrameworkError::Host("SSH 隧道没分到端口".into()));
+        }
+        self.tunnels.lock().await.insert(
+            key,
+            AppInstanceTunnel {
+                app_port: bot_port,
+                topology,
+                handle,
+            },
+        );
+        Ok(q)
     }
 
     async fn ensure_resident_link(
@@ -3456,9 +3567,68 @@ impl AppManager {
                 instance,
                 reuse_port: reuse,
                 taken_ports: &taken,
+                forward: ResidentForward::ExposeApp {
+                    app_port: instance.port,
+                },
             },
         )
         .await
+    }
+
+    /// 正向的两台远端：应用机常驻 `ssh -L`，把 Bot 机回环上的 `bot_port` 挂到应用机回环上，返回应用机上的口
+    async fn ensure_resident_forward_link(
+        &self,
+        instance: &AppInstance,
+        bot: &BotConfig,
+        bot_id: &BotId,
+        bot_port: u16,
+    ) -> Result<u16, AppFrameworkError> {
+        let bot_host = self
+            .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
+            .await?;
+        let app_host = self.resolve_host(&instance.host_id).await?;
+        let taken = self
+            .taken_forward_listen_ports(&instance.id, &instance.host_id)
+            .await;
+        let reuse = instance
+            .link
+            .as_ref()
+            .filter(|l| &l.bot_id == bot_id && l.mode == OneBotLinkMode::ForwardWs)
+            .and_then(|l| l.resident_forward_port);
+        resident_link::ensure_resident_link(
+            app_host.as_ref(),
+            bot_host.as_ref(),
+            ResidentLinkSpec {
+                instance,
+                reuse_port: reuse,
+                taken_ports: &taken,
+                forward: ResidentForward::ReachBot { bot_port },
+            },
+        )
+        .await
+    }
+
+    /// 应用机上已经用掉的口：那台机上的实例口，加别的正向常驻隧道在那台机上的听口
+    async fn taken_forward_listen_ports(&self, current: &AppInstanceId, app_host_id: &str) -> Vec<u16> {
+        let mut taken = Vec::new();
+        for inst in self.store.list().await {
+            if inst.host_id != app_host_id {
+                continue;
+            }
+            taken.push(inst.port);
+            if inst.id == *current {
+                continue;
+            }
+            if let Some(port) = inst
+                .link
+                .as_ref()
+                .filter(|l| l.mode == OneBotLinkMode::ForwardWs)
+                .and_then(|l| l.resident_forward_port)
+            {
+                taken.push(port);
+            }
+        }
+        taken
     }
 
     async fn taken_resident_ports(&self, current: &AppInstanceId, bot_host_id: &str) -> Vec<u16> {
@@ -3467,7 +3637,8 @@ impl AppManager {
             if inst.host_id == bot_host_id {
                 taken.push(inst.port);
             }
-            let Some(link) = inst.link.as_ref() else {
+            // 正向的常驻口开在应用机上，不占 Bot 机的口
+            let Some(link) = inst.link.as_ref().filter(|l| l.mode == OneBotLinkMode::ReverseWs) else {
                 continue;
             };
             let Some(port) = link.resident_forward_port else {
@@ -3535,12 +3706,28 @@ impl AppManager {
         else {
             return Ok(());
         };
+        let forward = match link.mode {
+            OneBotLinkMode::ReverseWs => ResidentForward::ExposeApp {
+                app_port: instance.port,
+            },
+            OneBotLinkMode::ForwardWs => match forward_listen_port(&bot, &link.connection_name) {
+                Some(bot_port) => ResidentForward::ReachBot { bot_port },
+                // Bot 侧那条服务被手动删了：隧道重拉了也没东西可连
+                None => return Ok(()),
+            },
+        };
         let app_host = self.resolve_host(&instance.host_id).await?;
         let bot_host = self
             .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
             .await?;
-        resident_link::reconcile_resident_link(app_host.as_ref(), bot_host.as_ref(), instance, fwd)
-            .await
+        resident_link::reconcile_resident_link(
+            app_host.as_ref(),
+            bot_host.as_ref(),
+            instance,
+            forward,
+            fwd,
+        )
+        .await
     }
 
     /// 已对接的跨机实例：重开 Desktop 隧道；分配口变了就再热推 Bot URL。
@@ -3565,6 +3752,9 @@ impl AppManager {
         if !needs_desktop_ssh_tunnel(topology) {
             return Ok(());
         }
+        if link.mode == OneBotLinkMode::ForwardWs {
+            return self.reconcile_forward_tunnel(instance, &bot, topology).await;
+        }
         let local_port = self.ensure_link_tunnel(instance, &bot).await?;
         let Some(conn) = bot
             .connect
@@ -3585,6 +3775,39 @@ impl AppManager {
             .await
             .map_err(AppFrameworkError::Integration)?;
         Ok(())
+    }
+
+    /// 正向跨机的桌面端隧道跟着桌面端退出就没了：重开时先用应用端配置里的口，
+    /// 分到的口变了才把应用端改过去（麦麦的适配器插件盯着自己的配置热加载），Bot 侧的口不动
+    async fn reconcile_forward_tunnel(
+        &self,
+        instance: &AppInstance,
+        bot: &BotConfig,
+        topology: AppLinkTopology,
+    ) -> Result<(), AppFrameworkError> {
+        let Some(link) = instance.link.as_ref() else {
+            return Ok(());
+        };
+        let Some(bot_port) = forward_listen_port(bot, &link.connection_name) else {
+            return Ok(());
+        };
+        let adapter = self.registry.get(&instance.framework_id)?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        let current = adapter_link_port(adapter.as_ref(), host.as_ref(), instance).await;
+        let q = self
+            .ensure_forward_tunnel(instance, bot, topology, bot_port, current)
+            .await?;
+        if current == Some(q) {
+            return Ok(());
+        }
+        let mut plan = self
+            .plan_link_for(instance, bot, adapter.as_ref(), host.as_ref())
+            .await?;
+        if let OneBotLinkEndpoint::WsServer(server) = &mut plan.connection {
+            server.host = "127.0.0.1".to_string();
+            server.port = q;
+        }
+        adapter.apply_link(host.as_ref(), instance, &plan).await
     }
 
     async fn resolve_host(&self, host_id: &str) -> Result<Arc<dyn Host>, AppFrameworkError> {
@@ -4283,6 +4506,21 @@ mod tests {
         /// 每个测试给不同的实例 id：正向听口按「实例:QQ」散列起点再探 bind，
         /// 并行的测试若共用一个 id 会同时探同一个口，互相把对方挤到下一个口
         async fn maibot_fixture(instance_id: &str) -> Fixture {
+            let local: Arc<dyn Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
+            maibot_fixture_with(
+                instance_id,
+                LOCAL_HOST_ID,
+                Arc::new(ncd_server::LocalOnlyHostResolver::new(local)),
+            )
+            .await
+        }
+
+        /// `host_id` 是麦麦装在哪；文件总落在本机临时目录，远端由 `resolver` 给的替身主机转手
+        async fn maibot_fixture_with(
+            instance_id: &str,
+            host_id: &str,
+            resolver: Arc<dyn HostResolver>,
+        ) -> Fixture {
             let tmp = tempfile::tempdir().unwrap();
             let root = tmp.path().join("data");
             let inst_dir = tmp.path().join("maibot");
@@ -4314,12 +4552,12 @@ mod tests {
 
             let bus = Arc::new(BroadcastEventBus::default());
             let store = Arc::new(AppInstanceStore::empty(&root));
-            let local: Arc<dyn Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
             let bots = Arc::new(MemoryBots {
                 bots: AsyncMutex::new(vec![
                     bot(),
                     bot_with(20002, BackendType::SnowLuma, RuntimeTarget::Local),
                     bot_with(30003, BackendType::NapCat, RuntimeTarget::server("vps")),
+                    bot_with(50005, BackendType::NapCat, RuntimeTarget::server("vps2")),
                 ]),
                 upserts: Mutex::new(0),
             });
@@ -4327,7 +4565,7 @@ mod tests {
                 Arc::new(AppFrameworkRegistry::with_builtin()),
                 Arc::clone(&store),
                 Arc::new(NativeAppRuntime::new(Arc::clone(&bus), Arc::clone(&store))),
-                Arc::new(ncd_server::LocalOnlyHostResolver::new(local)),
+                resolver,
                 bots.clone(),
                 bus,
                 &root,
@@ -4339,8 +4577,8 @@ mod tests {
                     id: id.clone(),
                     framework_id: AppFrameworkId::new("maibot"),
                     display_name: "麦麦".into(),
-                    placement: AppPlacement::LocalNative,
-                    host_id: LOCAL_HOST_ID.to_string(),
+                    placement: AppPlacement::native_for_host(host_id),
+                    host_id: host_id.to_string(),
                     install_dir: install_dir.as_posix().to_string(),
                     port: 23001,
                     state: AppInstanceState::Stopped,
@@ -4458,16 +4696,205 @@ mod tests {
             assert_ne!(second, first);
         }
 
+        /// 远端替身：文件照样落在本机临时目录（实例目录在那），但自称远端；开隧道只记下请求、
+        /// 按请求的口（没指定就给固定口）回句柄；跑命令一律回空，占口探测、时区都当没有
+        struct TunnelHost {
+            fs: ncd_host::local::LocalWindowsHost,
+            specs: Mutex<Vec<TunnelSpec>>,
+        }
+
+        const AUTO_LOCAL: u16 = 41001;
+        const AUTO_REMOTE: u16 = 42002;
+
+        impl TunnelHost {
+            fn new() -> Arc<Self> {
+                Arc::new(Self {
+                    fs: ncd_host::local::LocalWindowsHost::new(),
+                    specs: Mutex::new(Vec::new()),
+                })
+            }
+
+            fn specs(&self) -> Vec<TunnelSpec> {
+                self.specs.lock().unwrap().clone()
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl Host for TunnelHost {
+            fn os(&self) -> Os {
+                self.fs.os()
+            }
+            fn arch(&self) -> ncd_host::Arch {
+                self.fs.arch()
+            }
+            fn locality(&self) -> Locality {
+                Locality::Remote
+            }
+            fn id(&self) -> &str {
+                "remote:test"
+            }
+            fn shell(&self) -> &dyn ncd_host::HostShell {
+                self.fs.shell()
+            }
+            fn pkg_manager(&self) -> Option<&dyn ncd_host::PackageManager> {
+                None
+            }
+            async fn read_file(&self, p: &HostPath) -> Result<bytes::Bytes, ncd_host::HostError> {
+                self.fs.read_file(p).await
+            }
+            async fn write_file(&self, p: &HostPath, b: &[u8]) -> Result<(), ncd_host::HostError> {
+                self.fs.write_file(p, b).await
+            }
+            async fn list_dir(&self, p: &HostPath) -> Result<Vec<ncd_host::DirEntry>, ncd_host::HostError> {
+                self.fs.list_dir(p).await
+            }
+            async fn create_dir_all(&self, p: &HostPath) -> Result<(), ncd_host::HostError> {
+                self.fs.create_dir_all(p).await
+            }
+            async fn remove_file(&self, p: &HostPath) -> Result<(), ncd_host::HostError> {
+                self.fs.remove_file(p).await
+            }
+            async fn remove_dir_all(&self, p: &HostPath) -> Result<(), ncd_host::HostError> {
+                self.fs.remove_dir_all(p).await
+            }
+            async fn rename(&self, a: &HostPath, b: &HostPath) -> Result<(), ncd_host::HostError> {
+                self.fs.rename(a, b).await
+            }
+            async fn exists(&self, p: &HostPath) -> Result<bool, ncd_host::HostError> {
+                self.fs.exists(p).await
+            }
+            async fn upload(&self, l: &std::path::Path, r: &HostPath) -> Result<(), ncd_host::HostError> {
+                self.fs.upload(l, r).await
+            }
+            async fn download(&self, r: &HostPath, l: &std::path::Path) -> Result<(), ncd_host::HostError> {
+                self.fs.download(r, l).await
+            }
+            async fn extract_archive(
+                &self,
+                a: &HostPath,
+                d: &HostPath,
+                k: ncd_host::ArchiveKind,
+            ) -> Result<(), ncd_host::HostError> {
+                self.fs.extract_archive(a, d, k).await
+            }
+            async fn spawn(&self, _: HostCommand) -> Result<Box<dyn ncd_host::HostProcess>, ncd_host::HostError> {
+                Err(ncd_host::HostError::Unsupported { operation: "spawn" })
+            }
+            async fn run_to_string(&self, _: HostCommand) -> Result<ncd_host::CommandOutput, ncd_host::HostError> {
+                Ok(ncd_host::CommandOutput {
+                    exit_code: Some(0),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                })
+            }
+            async fn open_tunnel(&self, spec: TunnelSpec) -> Result<TunnelHandle, ncd_host::HostError> {
+                self.specs.lock().unwrap().push(spec.clone());
+                Ok(match spec.direction {
+                    ncd_host::remote::TunnelDirection::LocalToRemote => {
+                        let local = if spec.local_port == 0 { AUTO_LOCAL } else { spec.local_port };
+                        TunnelHandle::detached(local, 0)
+                    }
+                    ncd_host::remote::TunnelDirection::RemoteToLocal => {
+                        let remote = if spec.remote_port == 0 { AUTO_REMOTE } else { spec.remote_port };
+                        TunnelHandle::detached(spec.local_port, remote)
+                    }
+                })
+            }
+        }
+
+        struct VpsResolver {
+            local: Arc<dyn Host>,
+            vps: Arc<TunnelHost>,
+            vps2: Arc<TunnelHost>,
+        }
+
+        #[async_trait::async_trait]
+        impl HostResolver for VpsResolver {
+            async fn resolve(
+                &self,
+                target: &RuntimeTarget,
+            ) -> Result<Arc<dyn Host>, ncd_server::HostResolveError> {
+                match target.server_id() {
+                    None => Ok(Arc::clone(&self.local)),
+                    Some("vps") => Ok(self.vps.clone() as Arc<dyn Host>),
+                    Some("vps2") => Ok(self.vps2.clone() as Arc<dyn Host>),
+                    Some(other) => Err(ncd_server::HostResolveError::message(format!("没有 {other}"))),
+                }
+            }
+        }
+
+        async fn tunnel_fixture(instance_id: &str, host_id: &str) -> (Fixture, Arc<TunnelHost>, Arc<TunnelHost>) {
+            let vps = TunnelHost::new();
+            let vps2 = TunnelHost::new();
+            let resolver = Arc::new(VpsResolver {
+                local: Arc::new(ncd_host::local::LocalWindowsHost::new()),
+                vps: vps.clone(),
+                vps2: vps2.clone(),
+            });
+            (maibot_fixture_with(instance_id, host_id, resolver).await, vps, vps2)
+        }
+
+        /// 远端 Bot + 本机麦麦：Bot 在自己机上听 P，桌面端 `-L` 把 P 接到本机 Q，适配器连 Q；
+        /// 桌面端重开时隧道先要适配器里那个口，要到了就不改适配器
         #[tokio::test]
-        async fn maibot_forward_link_refuses_cross_host_before_touching_anything() {
-            let f = maibot_fixture("m3").await;
-            let err = f
-                .manager
-                .apply_link(&f.id, &BotId::new("30003"))
-                .await
-                .unwrap_err();
-            assert!(matches!(err, AppFrameworkError::LinkModeUnsupported(_)), "{err}");
-            assert!(err.to_string().contains("同一台机器"), "{err}");
+        async fn maibot_reaches_a_remote_bot_through_a_desktop_l_tunnel() {
+            let (f, vps, _) = tunnel_fixture("m3", LOCAL_HOST_ID).await;
+            let bot_id = BotId::new("30003");
+            let linked = f.manager.apply_link(&f.id, &bot_id).await.unwrap();
+            let link = linked.link.clone().expect("已对接");
+            assert_eq!(link.mode, OneBotLinkMode::ForwardWs);
+            assert_eq!(link.resident_forward_port, None, "桌面端握着的隧道不算常驻");
+
+            let bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+            let s = bot.connect.websocket_servers[0].clone();
+            assert_eq!((s.base.name.as_str(), s.host.as_str()), ("ncd-app:m3", "127.0.0.1"));
+            let a = adapter_cfg(&f);
+            assert!(a.enabled);
+            assert_eq!((a.napcat_host.as_str(), a.napcat_port), ("127.0.0.1", AUTO_LOCAL), "适配器连的是隧道口，不是 Bot 的口");
+            let specs = vps.specs();
+            assert_eq!(specs.len(), 1);
+            assert_eq!(specs[0].direction, ncd_host::remote::TunnelDirection::LocalToRemote);
+            assert_eq!((specs[0].local_port, specs[0].remote_port), (0, s.port));
+
+            f.manager.apply_link(&f.id, &bot_id).await.unwrap();
+            assert_eq!(vps.specs().len(), 1, "隧道还在就不重开");
+
+            f.manager.drop_instance_tunnel(&f.id).await;
+            f.manager.reconcile_link_tunnel(&linked).await.unwrap();
+            let specs = vps.specs();
+            assert_eq!(specs.len(), 2);
+            assert_eq!(specs[1].local_port, AUTO_LOCAL, "重开时先要适配器里写着的口");
+            assert_eq!(adapter_cfg(&f).napcat_port, AUTO_LOCAL);
+
+            let unlinked = f.manager.unlink(&f.id).await.unwrap();
+            assert!(unlinked.link.is_none());
+            assert!(f.bots.bot_config(&bot_id).await.unwrap().unwrap().connect.websocket_servers.is_empty());
+            assert!(!adapter_cfg(&f).enabled);
+            assert!(!f.manager.tunnels.lock().await.contains_key(&forward_tunnel_key(&f.id)));
+        }
+
+        /// 本机 Bot + 远端麦麦：桌面端对麦麦那台机开 `-R`，在那台机的回环上听 Q、接回本机的 P
+        #[tokio::test]
+        async fn maibot_on_a_remote_host_reaches_a_local_bot_through_a_desktop_r_tunnel() {
+            let (f, vps, _) = tunnel_fixture("m3r", "remote:vps").await;
+            let bot_id = BotId::new("10001");
+            f.manager.apply_link(&f.id, &bot_id).await.unwrap();
+            let bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+            let p = bot.connect.websocket_servers[0].port;
+            let specs = vps.specs();
+            assert_eq!(specs.len(), 1);
+            assert_eq!(specs[0].direction, ncd_host::remote::TunnelDirection::RemoteToLocal);
+            assert_eq!((specs[0].remote_port, specs[0].local_port), (0, p));
+            assert_eq!(adapter_cfg(&f).napcat_port, AUTO_REMOTE);
+        }
+
+        /// 两台远端：要应用机能 SSH 上 Bot 机；替身拿不到拨号地址（也不是 Linux），一步都不该落
+        #[tokio::test]
+        async fn maibot_between_two_remotes_needs_the_resident_tunnel_before_touching_anything() {
+            let (f, vps, vps2) = tunnel_fixture("m3rr", "remote:vps").await;
+            let err = f.manager.apply_link(&f.id, &BotId::new("50005")).await.unwrap_err();
+            assert!(matches!(err, AppFrameworkError::Validation(_)), "{err}");
+            assert!(vps.specs().is_empty() && vps2.specs().is_empty(), "不走桌面端隧道");
             assert!(!f.inst_dir.join("plugins/MaiBot-Napcat-Adapter/config.toml").exists());
             assert_eq!(*f.bots.upserts.lock().unwrap(), 0);
         }

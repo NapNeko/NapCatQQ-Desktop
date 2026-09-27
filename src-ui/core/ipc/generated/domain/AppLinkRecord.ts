@@ -6,6 +6,7 @@ import type { OneBotLinkMode } from "./OneBotLinkMode";
  */
 export type AppLinkRecord = { bot_id: string, mode: OneBotLinkMode, connection_name: string, linked_at_ms: number, 
 /**
- * 两台远端常驻隧道在 Bot 机上的 loopback 听口；P0/P1 / 同机为 None
+ * 两台远端常驻隧道的 loopback 听口：反向开在 Bot 机上（Bot 连它），正向开在应用机上（应用端连它）；
+ * 桌面端握着的隧道 / 同机为 None
  */
 resident_forward_port?: number, };

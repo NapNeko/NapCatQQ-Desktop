@@ -147,7 +147,7 @@ pub enum OneBotLinkMode {
     /// 协议 Bot 作 WS 客户端，连应用端的 WS 服务
     ReverseWs,
     /// 协议 Bot 开 WS 服务端，应用端作客户端连过来（MaiBot 的 NapCat 适配器插件只会这样）。
-    /// 听口在 Bot 侧，桌面隧道方向和反向相反，目前只开同机
+    /// 听口在 Bot 侧，跨机时隧道方向和反向相反：把 Bot 的口挂到应用端那台机的回环上
     ForwardWs,
 }
 
@@ -465,7 +465,8 @@ pub struct AppLinkRecord {
     pub connection_name: String,
     #[ts(type = "number")]
     pub linked_at_ms: u64,
-    /// 两台远端常驻隧道在 Bot 机上的 loopback 听口；P0/P1 / 同机为 None
+    /// 两台远端常驻隧道的 loopback 听口：反向开在 Bot 机上（Bot 连它），正向开在应用机上（应用端连它）；
+    /// 桌面端握着的隧道 / 同机为 None
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional, type = "number")]
     pub resident_forward_port: Option<u16>,

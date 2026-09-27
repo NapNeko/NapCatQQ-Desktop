@@ -65,6 +65,17 @@ pub struct TunnelHandle {
 }
 
 impl TunnelHandle {
+    /// 不带后台转发任务的句柄：给自己不泵数据的主机实现用（上层编排的测试替身只需要记下口）。
+    /// 要在 tokio 运行时里调用
+    pub fn detached(local_port: u16, remote_listen_port: u16) -> Self {
+        Self {
+            local_port,
+            remote_listen_port,
+            shutdown: Arc::new(Notify::new()),
+            _task: tokio::spawn(async {}),
+        }
+    }
+
     pub fn local_port(&self) -> u16 {
         self.local_port
     }
