@@ -107,8 +107,8 @@ impl UvComponent {
         Ok(format!("uv-{triple}.{ext}"))
     }
 
-    fn build_download_url(&self, host: &dyn Host) -> Result<String, ActionError> {
-        let asset = Self::asset_name(host.os(), host.arch())?;
+    fn build_download_url(&self, os: Os, arch: Arch) -> Result<String, ActionError> {
+        let asset = Self::asset_name(os, arch)?;
         let template = self.download_url_template.clone().unwrap_or_else(|| {
             "https://github.com/astral-sh/uv/releases/download/{version}/{asset}".to_string()
         });
@@ -196,13 +196,26 @@ impl Component for UvComponent {
         self.check_target(host)?;
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
 
+        // 远端 Host::arch() 写死 x86_64，ARM 服务器上会传一个跑不起来的 uv 上去
+        let arch = if host.locality() == Locality::Remote {
+            match crate::ncd_watch::probe_remote_arch(host).await {
+                Ok(arch) => arch,
+                Err(e) => {
+                    ctx.warn(format!("{e}；按 x86_64 装")).await;
+                    host.arch()
+                }
+            }
+        } else {
+            host.arch()
+        };
+
         // 1. 下载
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
             message: "下载 uv 发行包".into(),
         })
         .await;
-        let url = self.build_download_url(host)?;
+        let url = self.build_download_url(host.os(), arch)?;
         let ext = if host.os() == Os::Windows { "zip" } else { "tar.gz" };
         let file_name = format!("ncd-uv-{}-{}.{ext}", self.version, std::process::id());
         let local_tmp = std::env::temp_dir().join(&file_name);
@@ -263,7 +276,7 @@ impl Component for UvComponent {
                 }
             }
         } else {
-            let triple = Self::target_triple(host.os(), host.arch())?;
+            let triple = Self::target_triple(host.os(), arch)?;
             let root = shell_quote(stage_dir.join(format!("uv-{triple}")).as_posix());
             let dest = shell_quote(self.install_dir.as_posix());
             let mv = HostCommand::new("sh").arg("-c").arg(format!(
