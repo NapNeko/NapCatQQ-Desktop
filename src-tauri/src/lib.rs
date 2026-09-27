@@ -332,12 +332,17 @@ pub fn run() {
         let store = match ncd_runtime::AppInstanceStore::load(&data_root) {
             Ok(s) => Arc::new(s),
             Err(err) => {
+                let (store, kept) =
+                    ncd_runtime::AppInstanceStore::quarantine_and_start_empty(&data_root);
+                let kept = kept
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "(move failed, left in place)".into());
                 desktop_log::write_session_line(
                     "EROR",
                     "ncd::app_framework",
-                    &format!("app-instances.json unreadable, starting empty: {err}"),
+                    &format!("app-instances.json unreadable, starting empty, original kept at {kept}: {err}"),
                 );
-                Arc::new(ncd_runtime::AppInstanceStore::empty(&data_root))
+                Arc::new(store)
             }
         };
         let app_runtime = Arc::new(ncd_runtime::NativeAppRuntime::new(

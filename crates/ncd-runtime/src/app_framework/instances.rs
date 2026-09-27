@@ -51,7 +51,22 @@ impl AppInstanceStore {
         })
     }
 
-    /// 文件损坏时的兜底：空表起步（write_json_atomic 会把旧文件轮转成 .bak，不丢原件）
+    /// 文件读不出来时的兜底：原件改名成 `app-instances.json.corrupt.<秒>` 挪开，再空表起步。
+    /// 不能指望 .bak 轮转保住原件：.bak 只留最近几份，多保存几次它就被挤掉了。
+    /// 返回挪到哪了，挪不动（比如被别的进程占着）时是 None，原件留在原地
+    pub fn quarantine_and_start_empty(data_root: &Path) -> (Self, Option<PathBuf>) {
+        let store = Self::empty(data_root);
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let target = store
+            .path
+            .with_file_name(format!("{APP_INSTANCES_FILE}.corrupt.{stamp}"));
+        let kept = std::fs::rename(&store.path, &target).ok().map(|()| target);
+        (store, kept)
+    }
+
     pub fn empty(data_root: &Path) -> Self {
         let store = LocalConfigStore::new(data_root);
         let path = store.config_dir().join(APP_INSTANCES_FILE);
@@ -182,5 +197,23 @@ mod tests {
         let store = AppInstanceStore::load(temp.path()).unwrap();
         let err = store.update(&AppInstanceId::new("nope"), |_| {}).await.unwrap_err();
         assert!(matches!(err, AppFrameworkError::InstanceNotFound(_)));
+    }
+
+    // 损坏的原件要一直留着给人手动救，不能在之后几次保存的 .bak 轮转里被删掉
+    #[tokio::test]
+    async fn unreadable_file_survives_later_saves() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let config_dir = temp.path().join("config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::write(config_dir.join(APP_INSTANCES_FILE), b"{ not json").unwrap();
+        assert!(AppInstanceStore::load(temp.path()).is_err());
+
+        let (store, kept) = AppInstanceStore::quarantine_and_start_empty(temp.path());
+        let kept = kept.expect("unreadable file should be moved aside");
+        for n in 0..6 {
+            store.upsert(sample(&format!("i{n}"))).await.unwrap();
+        }
+        assert_eq!(std::fs::read(&kept).unwrap(), b"{ not json");
+        assert_eq!(AppInstanceStore::load(temp.path()).unwrap().list().await.len(), 6);
     }
 }
