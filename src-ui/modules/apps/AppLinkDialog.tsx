@@ -41,10 +41,12 @@ import {
 } from '../../core/domain/bot/runtime-target';
 import { hostIdDisplayLabel } from './hostLabel';
 import {
+    DOCKER_BOT_NOTE,
     appLinkPairEnabled,
     appLinkPairNote,
     classifyAppLink,
     isDesktopSshLink,
+    isDockerBot,
     isResidentLink,
 } from './appLinkTopology';
 import type {
@@ -108,6 +110,8 @@ export function AppLinkDialog({
     const instance = instances.find((i) => i.id === instanceId) ?? null;
     const botConfig = botId ? configs[botId] ?? null : null;
     const botHost = botConfig ? botHostId(botConfig.bot.runtime_target) : null;
+    // Bot 配置页进来时 Bot 是预填的，选不了别的，只能在这里说清楚为什么对接不了
+    const botIsDocker = isDockerBot(botConfig?.bot.deploymentType);
 
     const instanceItems: SelectItem[] = useMemo(
         () =>
@@ -132,24 +136,28 @@ export function AppLinkDialog({
                 const cfg = configs[s.bot_id];
                 const name = cfg?.bot.name?.trim();
                 const host = cfg ? botHostId(cfg.bot.runtime_target) : null;
+                const docker = isDockerBot(cfg?.bot.deploymentType);
                 const allowed =
                     !instance || !host
                         ? true
                         : appLinkPairEnabled(host, instance.host_id, instanceMode);
-                const note =
-                    instance && host ? appLinkPairNote(host, instance.host_id, instanceMode) : '';
+                const note = docker
+                    ? DOCKER_BOT_NOTE
+                    : instance && host
+                      ? appLinkPairNote(host, instance.host_id, instanceMode)
+                      : '';
                 const where = cfg ? runtimeTargetDisplayLabel(cfg.bot.runtime_target, servers) : '';
                 return {
                     value: s.bot_id,
                     label: `${name ? `${name} (${s.bot_id})` : s.bot_id}${where ? ` · ${where}` : ''}${note}`,
-                    disabled: !allowed,
+                    disabled: docker || !allowed,
                 };
             }),
         [snapshots, configs, instance, instanceMode, servers],
     );
 
     useEffect(() => {
-        if (!open || !instanceId || !botId) {
+        if (!open || !instanceId || !botId || botIsDocker) {
             setPlan(null);
             return;
         }
@@ -176,7 +184,7 @@ export function AppLinkDialog({
         return () => {
             cancelled = true;
         };
-    }, [open, instanceId, botId]);
+    }, [open, instanceId, botId, botIsDocker]);
 
     const apply = async () => {
         if (!plan || !instanceId || !botId) return;
@@ -240,6 +248,12 @@ export function AppLinkDialog({
                             disabled={!!presetInstanceId}
                         />
                     </div>
+
+                    {botIsDocker && (
+                        <p className="text-2xs text-warning">
+                            这个 Bot 是 Docker 部署的，它在容器里，容器里的 127.0.0.1 不是宿主机，应用端连不上，暂不支持对接。
+                        </p>
+                    )}
 
                     {previewing && (
                         <div className="flex items-center gap-2 text-sm text-text-secondary">

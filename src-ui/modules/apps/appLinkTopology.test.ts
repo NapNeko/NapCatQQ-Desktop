@@ -3,6 +3,7 @@ import {
     appLinkPairEnabled,
     appLinkPairNote,
     classifyAppLink,
+    isDockerBot,
 } from './appLinkTopology';
 
 describe('classifyAppLink', () => {
@@ -47,5 +48,13 @@ describe('appLinkPairEnabled', () => {
         expect(appLinkPairEnabled(null, 'remote:vps', 'forward_ws')).toBe(true);
         expect(appLinkPairNote('local', 'remote:vps', 'forward_ws')).toBe('（需同一台机器）');
         expect(appLinkPairNote('local', 'local', 'forward_ws')).toBe('');
+    });
+});
+
+describe('isDockerBot', () => {
+    it('only docker deployments are blocked', () => {
+        expect(isDockerBot('docker')).toBe(true);
+        expect(isDockerBot('native')).toBe(false);
+        expect(isDockerBot(undefined)).toBe(false);
     });
 });

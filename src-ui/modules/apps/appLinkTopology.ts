@@ -59,6 +59,13 @@ export function appLinkPairEnabled(
     return topology !== null;
 }
 
+// Docker 部署的 Bot 在容器里：它开的服务、连的 127.0.0.1 都是容器自己的，宿主机上的应用端和隧道口碰不到
+export function isDockerBot(deploymentType: string | null | undefined): boolean {
+    return deploymentType === 'docker';
+}
+
+export const DOCKER_BOT_NOTE = '（Docker 部署暂不支持）';
+
 export function isDesktopSshLink(topology: AppLinkTopology | null): boolean {
     return topology === 'local_bot_remote_app' || topology === 'remote_bot_local_app';
 }

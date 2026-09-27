@@ -44,7 +44,7 @@ use ncd_domain::{
     AppInstanceOrigin, AppPendingTerms, AppPluginConfigSchema, AppProjectProbe, AppStoreResource,
     AppWebUiAccount,
     AppWebUiAuthKind, BotConfig, BotId,
-    CreateAppInstanceRequest, DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID,
+    CreateAppInstanceRequest, DeploymentType, DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID,
     REMOTE_HOST_ID_PREFIX,
     OneBotLinkEndpoint, OneBotLinkMode, OneBotLinkPlan, RuntimeTarget, app_link_connection_name,
     classify_app_link, host_id_of_runtime_target, is_app_link_connection_name,
@@ -1695,6 +1695,13 @@ impl AppManager {
             .ok_or_else(|| {
                 AppFrameworkError::Validation(format!("协议 Bot {} 不存在", bot_id.as_str()))
             })?;
+        // 容器走 bridge 网络加固定端口映射：Bot 在容器里开的服务、连的 127.0.0.1 都是容器自己的，
+        // 宿主机上的应用端和隧道口它碰不到，哪个方向都连不上
+        if bot.bot.deployment_type == DeploymentType::Docker {
+            return Err(AppFrameworkError::LinkModeUnsupported(
+                "Docker 部署的协议 Bot 还不能对接应用端：Bot 在容器里，容器里的 127.0.0.1 不是宿主机，两边连不上".into(),
+            ));
+        }
         if classify_app_link(&bot.bot.runtime_target, &instance.host_id).is_none() {
             return Err(unsupported_link_topology(
                 &bot.bot.runtime_target,
@@ -4426,6 +4433,27 @@ mod tests {
             assert!(err.to_string().contains("同一台机器"), "{err}");
             assert!(!f.inst_dir.join("plugins/MaiBot-Napcat-Adapter/config.toml").exists());
             assert_eq!(*f.bots.upserts.lock().unwrap(), 0);
+        }
+
+        /// Docker 部署的 Bot 在容器里：它开的服务、连的 127.0.0.1 都是容器自己的，同机也连不上
+        #[tokio::test]
+        async fn docker_bot_is_refused_before_touching_anything() {
+            let f = maibot_fixture("m-docker").await;
+            let bot_id = BotId::new("10001");
+            let mut bot = f.bots.bot_config(&bot_id).await.unwrap().unwrap();
+            bot.bot.deployment_type = DeploymentType::Docker;
+            f.bots.upsert_bot_config(bot).await.unwrap();
+            let upserts = *f.bots.upserts.lock().unwrap();
+
+            for err in [
+                f.manager.preview_link(&f.id, &bot_id).await.unwrap_err(),
+                f.manager.apply_link(&f.id, &bot_id).await.unwrap_err(),
+            ] {
+                assert!(matches!(err, AppFrameworkError::LinkModeUnsupported(_)), "{err}");
+                assert!(err.to_string().contains("Docker"), "{err}");
+            }
+            assert!(!f.inst_dir.join("plugins/MaiBot-Napcat-Adapter/config.toml").exists());
+            assert_eq!(*f.bots.upserts.lock().unwrap(), upserts, "Bot 侧一条没写");
         }
 
         #[tokio::test]
