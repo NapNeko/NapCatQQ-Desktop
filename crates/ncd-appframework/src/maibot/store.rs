@@ -4,11 +4,12 @@
 //! 麦麦的插件运行时监听 `plugins/`、跳过点开头的目录：先在 `plugins/.ncd-stage/` 里下载、解压、
 //! 校验好，再一次改名挪进去，运行中装、更、卸都能热生效，不会读到半截文件。
 //! 插件的 Python 依赖由麦麦载入时自己装，这里只管文件。
+//! 远端实例的插件包由桌面端下好写上去（服务器常常连不上 GitHub），用 tar.gz（服务器上 tar 必有、unzip 常缺）。
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ncd_domain::{AppConfigDocument, AppConfigFormat, AppInstance, AppInstanceState, AppStoreResource};
-use ncd_host::{ArchiveKind, Host, HostError, HostPath};
+use ncd_host::{ArchiveKind, Host, HostError, HostPath, Locality};
 use ncd_traits::AppFrameworkError;
 use serde_json::{Map, Value};
 
@@ -265,8 +266,8 @@ fn refuse_locked(id: &str, dir: &str) -> Result<(), AppFrameworkError> {
     Ok(())
 }
 
-/// 只接受 GitHub 仓库：下载走 `archive/HEAD.zip`（跟默认分支），不依赖主机上有 git
-fn archive_url(repository: &str) -> Result<String, AppFrameworkError> {
+/// 只接受 GitHub 仓库：下载走 `archive/HEAD.<ext>`（跟默认分支），不依赖主机上有 git
+fn archive_url(repository: &str, ext: &str) -> Result<String, AppFrameworkError> {
     let repo = repository.trim().trim_end_matches('/').trim_end_matches(".git");
     let rest = repo
         .strip_prefix("https://github.com/")
@@ -274,10 +275,43 @@ fn archive_url(repository: &str) -> Result<String, AppFrameworkError> {
     let mut parts = rest.split('/');
     match (parts.next(), parts.next(), parts.next()) {
         (Some(owner), Some(name), None) if !owner.is_empty() && !name.is_empty() => {
-            Ok(format!("https://github.com/{owner}/{name}/archive/HEAD.zip"))
+            Ok(format!("https://github.com/{owner}/{name}/archive/HEAD.{ext}"))
         }
         _ => Err(AppFrameworkError::Validation(format!("认不出仓库地址：{repository}"))),
     }
+}
+
+/// 本机下 zip（进程内解压）；远端下 tar.gz：服务器上 tar 必有、unzip 常缺，缺了还得 sudo 装
+fn archive_format(locality: Locality) -> (&'static str, ArchiveKind) {
+    match locality {
+        Locality::Local => ("zip", ArchiveKind::Zip),
+        Locality::Remote => ("tar.gz", ArchiveKind::TarGz),
+    }
+}
+
+/// 插件包就几 MB，整包读进内存再写上去
+const DESKTOP_FETCH_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// 远端实例的插件包由桌面端按 GitHub 镜像表挨个试着下
+async fn fetch_on_desktop(url: &str, log: Option<&PluginLogSink>) -> Result<Vec<u8>, AppFrameworkError> {
+    let mut last = String::from("没有可用下载地址");
+    for candidate in ncd_network::build_mirror_urls(url, None) {
+        emit(log, format!("桌面端下载 {candidate}"));
+        let sent = ncd_network::shared_client()
+            .get(&candidate)
+            .timeout(DESKTOP_FETCH_TIMEOUT)
+            .send()
+            .await;
+        match sent {
+            Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                Ok(bytes) => return Ok(bytes.to_vec()),
+                Err(e) => last = e.without_url().to_string(),
+            },
+            Ok(resp) => last = format!("返回 {}", resp.status()),
+            Err(e) => last = e.without_url().to_string(),
+        }
+    }
+    Err(AppFrameworkError::Host(format!("插件包下载失败：{last}")))
 }
 
 fn stamp() -> u128 {
@@ -290,18 +324,20 @@ async fn new_stage(host: &dyn Host, root: &HostPath, id: &str) -> Result<HostPat
     Ok(stage)
 }
 
-/// 把暂存目录里的 `src.zip` 解开、找到插件根、核对清单。
+/// 把暂存目录里下好的包解开、找到插件根、核对清单。
 /// GitHub 的包带一层 `<仓库>-<分支>/` 顶层目录，清单在它里面
 async fn unpack_stage(
     host: &dyn Host,
     stage: &HostPath,
+    archive: &HostPath,
+    kind: ArchiveKind,
     id: &str,
     log: Option<&PluginLogSink>,
 ) -> Result<HostPath, AppFrameworkError> {
     let unpacked = stage.join("src");
     host.create_dir_all(&unpacked).await.map_err(host_err)?;
     emit(log, "解压");
-    host.extract_archive(&stage.join("src.zip"), &unpacked, ArchiveKind::Zip)
+    host.extract_archive(archive, &unpacked, kind)
         .await
         .map_err(host_err)?;
     let plugin_root = if host.exists(&unpacked.join(MANIFEST)).await.map_err(host_err)? {
@@ -344,11 +380,19 @@ async fn stage_plugin(
     id: &str,
     log: Option<&PluginLogSink>,
 ) -> Result<(HostPath, HostPath), AppFrameworkError> {
-    let url = archive_url(&entry.package)?;
+    let (ext, kind) = archive_format(host.locality());
+    let url = archive_url(&entry.package, ext)?;
     let stage = new_stage(host, root, id).await?;
+    let archive = stage.join(format!("src.{ext}"));
     let result = async {
-        download_file_with_mirrors(host, &url, &stage.join("src.zip"), log).await?;
-        unpack_stage(host, &stage, id, log).await
+        match host.locality() {
+            Locality::Local => download_file_with_mirrors(host, &url, &archive, log).await?,
+            Locality::Remote => {
+                let bytes = fetch_on_desktop(&url, log).await?;
+                host.write_file(&archive, &bytes).await.map_err(host_err)?;
+            }
+        }
+        unpack_stage(host, &stage, &archive, kind, id, log).await
     }
     .await;
     match result {
@@ -613,12 +657,22 @@ mod tests {
     #[test]
     fn archives_come_from_github_default_branch_only() {
         assert_eq!(
-            archive_url("https://github.com/SengokuCola/MutePlugin.git/").unwrap(),
+            archive_url("https://github.com/SengokuCola/MutePlugin.git/", "zip").unwrap(),
             "https://github.com/SengokuCola/MutePlugin/archive/HEAD.zip"
         );
-        assert!(archive_url("https://gitee.com/a/b").is_err());
-        assert!(archive_url("https://github.com/a").is_err());
-        assert!(archive_url("https://github.com/a/b/tree/dev").is_err());
+        assert!(archive_url("https://gitee.com/a/b", "zip").is_err());
+        assert!(archive_url("https://github.com/a", "zip").is_err());
+        assert!(archive_url("https://github.com/a/b/tree/dev", "zip").is_err());
+    }
+
+    #[test]
+    fn remote_hosts_get_tarballs() {
+        assert_eq!(archive_format(Locality::Local), ("zip", ArchiveKind::Zip));
+        assert_eq!(archive_format(Locality::Remote), ("tar.gz", ArchiveKind::TarGz), "服务器上 unzip 常缺");
+        assert_eq!(
+            archive_url("https://github.com/a/b", "tar.gz").unwrap(),
+            "https://github.com/a/b/archive/HEAD.tar.gz"
+        );
     }
 
     #[test]
@@ -686,9 +740,19 @@ mod tests {
 
         async fn staged(host: &LocalWindowsHost, root: &HostPath, id: &str, files: &[(&str, &str)]) -> (HostPath, HostPath) {
             let stage = new_stage(host, root, id).await.unwrap();
-            write_zip(std::path::Path::new(&stage.join("src.zip").as_posix()), files);
-            let plugin_root = unpack_stage(host, &stage, id, None).await.unwrap();
+            let plugin_root = unpack_zip(host, &stage, id, files).await.unwrap();
             (plugin_root, stage)
+        }
+
+        async fn unpack_zip(
+            host: &LocalWindowsHost,
+            stage: &HostPath,
+            id: &str,
+            files: &[(&str, &str)],
+        ) -> Result<HostPath, AppFrameworkError> {
+            let archive = stage.join("src.zip");
+            write_zip(std::path::Path::new(&archive.as_posix()), files);
+            unpack_stage(host, stage, &archive, ArchiveKind::Zip, id, None).await
         }
 
         #[tokio::test]
@@ -732,19 +796,18 @@ mod tests {
             let id = "sengokucola.mute-plugin";
 
             let stage = new_stage(&host, &root, id).await.unwrap();
-            write_zip(std::path::Path::new(&stage.join("src.zip").as_posix()), &[("_manifest.json", &manifest("someone.else", "1.0.0"))]);
-            let err = unpack_stage(&host, &stage, id, None).await.unwrap_err();
+            let err = unpack_zip(&host, &stage, id, &[("_manifest.json", &manifest("someone.else", "1.0.0"))])
+                .await
+                .unwrap_err();
             assert!(err.to_string().contains("身份不符"), "{err}");
 
             let stage = new_stage(&host, &root, id).await.unwrap();
             let v1 = format!(r#"{{"manifest_version": 1, "id": "{id}", "name": "x", "version": "1"}}"#);
-            write_zip(std::path::Path::new(&stage.join("src.zip").as_posix()), &[("_manifest.json", &v1)]);
-            let err = unpack_stage(&host, &stage, id, None).await.unwrap_err();
+            let err = unpack_zip(&host, &stage, id, &[("_manifest.json", &v1)]).await.unwrap_err();
             assert!(err.to_string().contains("老版清单"), "{err}");
 
             let stage = new_stage(&host, &root, id).await.unwrap();
-            write_zip(std::path::Path::new(&stage.join("src.zip").as_posix()), &[("README.md", "no manifest")]);
-            assert!(unpack_stage(&host, &stage, id, None).await.is_err());
+            assert!(unpack_zip(&host, &stage, id, &[("README.md", "no manifest")]).await.is_err());
         }
 
         /// 真下载：`archive/HEAD.zip` 要跟 GitHub 跳到 codeload，镜像也得能用。手动跑：
