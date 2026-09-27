@@ -64,18 +64,12 @@ export function storeOpErrorCopy(raw: string): string {
 }
 
 export function pluginCatalogErrorCopy(raw: string): { title: string; content: string } {
-    const stripped = raw
-        .replace(/^写入应用端配置失败:\s*/g, '')
-        .replace(/^拉取(?:适配器|插件)?目录失败:\s*/g, '')
-        .replace(/^读取(?:适配器|插件)?目录失败:\s*/g, '')
-        .trim();
     if (/error sending request|timed out|connection refused|dns|network|proxy/i.test(raw)) {
         return { title: '无法连接官方目录', content: `检查网络或代理后重试。${SEE_LOGS_HINT}` };
     }
     if (/HTTP\s+[45]\d\d/.test(raw)) {
         return { title: '官方目录暂时不可用', content: `稍后重试。${SEE_LOGS_HINT}` };
     }
-    if (!stripped) return { title: '目录加载失败', content: SEE_LOGS_HINT };
     return { title: '目录加载失败', content: SEE_LOGS_HINT };
 }
 
