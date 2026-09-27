@@ -22,7 +22,7 @@ import { MaiBotBehaviorTab } from './MaiBotBehaviorTab';
 import { MaiBotTryChatTab } from './MaiBotTryChatTab';
 import type { KnowledgeView } from './maibotKnowledgeParts';
 import { usePromptDrafts } from './maibotPromptDrafts';
-import { NoneBot2StoreTab } from '../nonebot2/NoneBot2StoreTab';
+import { AppStoreTab } from '../AppStoreTab';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import { useMaiBotConfigForm } from '../useMaiBotConfigForm';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
@@ -106,7 +106,7 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                 <MaiBotTryChatTab instance={instance} status={status} {...startProps} />
             </TabsContent>
             <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
-                <NoneBot2StoreTab instance={instance} resource="plugin" />
+                <AppStoreTab instance={instance} resource="plugin" />
             </TabsContent>
             <TabsContent value="prompts" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
                 <MaiBotPromptsTab instance={instance} status={status} drafts={promptDrafts} {...startProps} />

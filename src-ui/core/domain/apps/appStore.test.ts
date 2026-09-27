@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-    filterNoneBot2Store,
+    filterAppStore,
     overlayStoreInstalled,
     paginateStore,
     storeGridFit,
     storeOpErrorCopy,
     storePageItems,
-} from './nonebot2Store';
+} from './appStore';
 import type { AppStoreMarketEntry } from '../../ipc/types';
 
 const adapters: AppStoreMarketEntry[] = [
@@ -99,9 +99,9 @@ const plugins: AppStoreMarketEntry[] = [
     },
 ];
 
-describe('filterNoneBot2Store', () => {
+describe('filterAppStore', () => {
     it('shows all adapters even with empty search', () => {
-        const rows = filterNoneBot2Store({
+        const rows = filterAppStore({
             resource: 'adapter',
             entries: adapters,
             installed: [
@@ -129,7 +129,7 @@ describe('filterNoneBot2Store', () => {
     });
 
     it('rows the backend marks locked are desktop-managed: no toggle, uninstall or update', () => {
-        const rows = filterNoneBot2Store({
+        const rows = filterAppStore({
             resource: 'plugin',
             entries: [],
             installed: [
@@ -152,7 +152,7 @@ describe('filterNoneBot2Store', () => {
     });
 
     it('shows plugin catalog without search', () => {
-        const rows = filterNoneBot2Store({
+        const rows = filterAppStore({
             resource: 'plugin',
             entries: plugins,
             installed: [
@@ -176,7 +176,7 @@ describe('filterNoneBot2Store', () => {
     });
 
     it('plugin search filters by supported adapters', () => {
-        const rows = filterNoneBot2Store({
+        const rows = filterAppStore({
             resource: 'plugin',
             entries: plugins,
             installed: [],

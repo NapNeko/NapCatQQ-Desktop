@@ -17,23 +17,23 @@ import {
     PopoverTrigger,
     Select,
     Spinner,
-} from '../../../../shared/ui';
-import { ActionMotionIcon, ListItem } from '../../../../shared/ui/motion';
-import { ConfigConflictDialog } from '../ConfigConflictDialog';
-import { PluginConfigDialog } from '../PluginConfigDialog';
-import { PaneLoading } from '../PaneStatus';
-import { useNoneBot2Store } from '../../../../hooks/apps/useNoneBot2Store';
-import { openExternalUrl } from '../../../../core/ipc/transport';
-import { cn } from '../../../../shared/utils/cn';
-import styles from './nonebot2StoreGrid.module.css';
+} from '../../../shared/ui';
+import { ActionMotionIcon, ListItem } from '../../../shared/ui/motion';
+import { ConfigConflictDialog } from './ConfigConflictDialog';
+import { PluginConfigDialog } from './PluginConfigDialog';
+import { PaneLoading } from './PaneStatus';
+import { useAppStore } from '../../../hooks/apps/useAppStore';
+import { openExternalUrl } from '../../../core/ipc/transport';
+import { cn } from '../../../shared/utils/cn';
+import styles from './appStoreGrid.module.css';
 import {
     paginateStore,
     storeGridFit,
     storePageItems,
     type StoreGridFit,
     type VisibleStoreItem,
-} from '../../../../core/domain/apps/nonebot2Store';
-import type { AppInstance, AppStoreResource } from '../../../../core/ipc/types';
+} from '../../../core/domain/apps/appStore';
+import type { AppInstance, AppStoreResource } from '../../../core/ipc/types';
 
 const TOOLBAR_SLOT_ID = 'app-store-toolbar-slot';
 
@@ -52,11 +52,12 @@ function PluginsToolbarPortal({ children }: { children: ReactNode }) {
     return createPortal(children, dock);
 }
 
-export const NoneBot2StoreTab: React.FC<{
+/** 应用端商店页：NoneBot2 的适配器、插件两页，AstrBot、MaiBot 的插件页 */
+export const AppStoreTab: React.FC<{
     instance: AppInstance;
     resource: AppStoreResource;
 }> = ({ instance, resource }) => {
-    const p = useNoneBot2Store(instance, resource);
+    const p = useAppStore(instance, resource);
     const [uninstall, setUninstall] = useState<string | null>(null);
     const [configName, setConfigName] = useState<string | null>(null);
     const [page, setPage] = useState(0);

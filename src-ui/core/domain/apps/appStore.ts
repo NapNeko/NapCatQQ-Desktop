@@ -1,5 +1,5 @@
-// 市场 ∪ 已装 ∪ 任务 overlay。目录默认展示，分页在 Tab 里切。
-// 时间、搜索、任务补显示和 Karin 插件市场一套，在 pluginCatalog。
+// 应用端商店（NoneBot2 的适配器 / 插件，AstrBot、MaiBot 的插件）：市场 ∪ 已装 ∪ 任务 overlay。
+// 目录默认展示，分页在 Tab 里切。时间、搜索、任务补显示和 Karin 插件市场一套，在 pluginCatalog。
 
 import {
     catalogTimeLabel,
@@ -92,7 +92,8 @@ export function overlayStoreInstalled(
 // 商店里大多是上架很久的，一周以前的不写，免得满屏「几年前」
 const TIME_LABEL_MAX_DAYS = 7;
 
-export function filterNoneBot2Store(args: {
+/** enabledAdapterModules 只有 NoneBot2 有：插件声明了支持哪些适配器的，跟启用着的对不上就不列 */
+export function filterAppStore(args: {
     resource: AppStoreResource;
     entries: readonly AppStoreMarketEntry[];
     installed: readonly AppStoreInstalled[];

@@ -10,11 +10,11 @@ import {
 } from './appStoreQuery';
 import { reportCatalogError, usePluginOps } from './usePluginOps';
 import {
-    filterNoneBot2Store,
+    filterAppStore,
     overlayStoreInstalled,
     storeOpErrorCopy,
     type StoreKindFilter,
-} from '../../core/domain/apps/nonebot2Store';
+} from '../../core/domain/apps/appStore';
 import type {
     AppInstance,
     AppStoreInstalled,
@@ -22,7 +22,8 @@ import type {
     AppStoreResource,
 } from '../../core/ipc/types';
 
-export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResource) {
+/** 应用端商店页（NoneBot2 的适配器 / 插件，AstrBot、MaiBot 的插件）；插件页顺带读已装适配器，按它筛插件 */
+export function useAppStore(instance: AppInstance, resource: AppStoreResource) {
     const queryClient = useQueryClient();
 
     const marketKey = appStoreMarketKey(instance.framework_id, resource);
@@ -35,7 +36,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
             try {
                 return await appFrameworkService.listStore(instance.framework_id, resource);
             } catch (e) {
-                reportCatalogError(`nb-store-market:${instance.framework_id}:${resource}`, e);
+                reportCatalogError(`app-store-market:${instance.framework_id}:${resource}`, e);
             }
         },
         staleTime: APP_STORE_STALE_MS,
@@ -48,7 +49,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
             try {
                 return await appFrameworkService.listStoreInstalled(instance.id, resource);
             } catch (e) {
-                reportCatalogError(`nb-store-installed:${instance.id}:${resource}`, e);
+                reportCatalogError(`app-store-installed:${instance.id}:${resource}`, e);
             }
         },
         staleTime: APP_STORE_STALE_MS,
@@ -61,7 +62,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
             try {
                 return await appFrameworkService.listStoreInstalled(instance.id, 'adapter');
             } catch (e) {
-                reportCatalogError(`nb-store-installed:${instance.id}:adapter`, e);
+                reportCatalogError(`app-store-installed:${instance.id}:adapter`, e);
             }
         },
         enabled: resource === 'plugin',
@@ -100,7 +101,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
 
     const { taskHints, ...ops } = usePluginOps(instance, {
         resource,
-        barKey: 'nb-store',
+        barKey: 'app-store',
         runningHint: '需重启后生效',
         failNoun: resource === 'adapter' ? '适配器' : '插件',
         submitFailTitle: '操作失败',
@@ -118,7 +119,7 @@ export function useNoneBot2Store(instance: AppInstance, resource: AppStoreResour
 
     const rows = useMemo(
         () =>
-            filterNoneBot2Store({
+            filterAppStore({
                 resource,
                 entries: market,
                 installed: overlayStoreInstalled(installed, taskHints, resource),

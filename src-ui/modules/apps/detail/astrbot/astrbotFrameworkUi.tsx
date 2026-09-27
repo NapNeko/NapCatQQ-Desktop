@@ -3,7 +3,7 @@
 
 import type { ReactNode } from 'react';
 import { TabsContent } from '../../../../shared/ui';
-import { NoneBot2StoreTab } from '../nonebot2/NoneBot2StoreTab';
+import { AppStoreTab } from '../AppStoreTab';
 import { astrbotConfigWarnings, astrbotSetup } from '../../../../core/domain/apps/astrbotConfig';
 import { AstrBotOverviewTab } from './AstrBotOverviewTab';
 import { AstrBotConnectionsTab } from './AstrBotConnectionsTab';
@@ -90,7 +90,7 @@ function AstrBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, o
     return (
         <>
             <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
-                <NoneBot2StoreTab instance={instance} resource="plugin" />
+                <AppStoreTab instance={instance} resource="plugin" />
             </TabsContent>
             {pane('overview', (cfg) => (
                 <AstrBotOverviewTab

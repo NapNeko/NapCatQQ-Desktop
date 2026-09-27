@@ -1,6 +1,6 @@
 import { TabsContent } from '../../../../shared/ui';
 import { NoneBot2ConnectionsTab } from './NoneBot2ConnectionsTab';
-import { NoneBot2StoreTab } from './NoneBot2StoreTab';
+import { AppStoreTab } from '../AppStoreTab';
 import { useNoneBot2ConfigForm } from '../useNoneBot2ConfigForm';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import type { FrameworkDetailProps, FrameworkNavGroup, FrameworkUiModule } from '../frameworkUi';
@@ -28,10 +28,10 @@ function NoneBot2FrameworkDetail({ instance, onSaveHandle }: FrameworkDetailProp
     return (
         <>
             <TabsContent value="adapters" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
-                <NoneBot2StoreTab instance={instance} resource="adapter" />
+                <AppStoreTab instance={instance} resource="adapter" />
             </TabsContent>
             <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
-                <NoneBot2StoreTab instance={instance} resource="plugin" />
+                <AppStoreTab instance={instance} resource="plugin" />
             </TabsContent>
             {form.isLoading && !form.form ? (
                 <TabsContent value="connections" className="flex min-h-0 flex-1 flex-col pt-2">
