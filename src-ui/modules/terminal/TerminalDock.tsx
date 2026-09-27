@@ -10,6 +10,7 @@ import { Button } from '../../shared/ui';
 import { cn } from '../../shared/utils/cn';
 import { useThemeTokens } from '../../hooks/theme/useThemeTokens';
 import { useMotion } from '../../hooks/preferences/useMotion';
+import gsap from 'gsap';
 import {
     DOCK_HEIGHT_MIN,
     terminalLayout,
@@ -63,7 +64,10 @@ function GroupView({ group, visible, drop }: { group: TerminalGroup; visible: bo
     const zoneOf = (id: string | undefined) =>
         id && drop?.sessionId === id ? (drop.dir ? 'files' : 'terminal') : null;
     return (
-        <div ref={boxRef} className={cn('flex min-h-0 min-w-0 flex-1', group.split === 'column' ? 'flex-col' : 'flex-row')}>
+        <div
+            ref={boxRef}
+            className={cn('ncd-term-group flex min-h-0 min-w-0 flex-1', group.split === 'column' ? 'flex-col' : 'flex-row')}
+        >
             {first && (
                 <div
                     className="flex min-h-0 min-w-0"
@@ -86,7 +90,7 @@ function GroupView({ group, visible, drop }: { group: TerminalGroup; visible: bo
                         data-dragging={divider.dragging}
                         onPointerDown={divider.start}
                     />
-                    <div className="flex min-h-0 min-w-0 flex-1">
+                    <div className="ncd-term-pane-in flex min-h-0 min-w-0 flex-1" data-split={group.split}>
                         <TerminalPane
                             sessionId={second}
                             focused={group.focused === second}
@@ -135,15 +139,102 @@ export function TerminalDock() {
     const [liveHeight, setLiveHeight] = useState<number | null>(null);
     const liveHeightRef = useRef<number | null>(null);
     const motion = useMotion();
+    // 收起时先放完退场动画再摘掉；还原时先把铺满的面板收回去再换布局，
+    // 所以「画不画」「按不按最大化排」各有一份，比 store 晚一拍
+    const [mounted, setMounted] = useState(state.open);
+    const [shownMax, setShownMax] = useState(state.maximized);
+    if (!mounted && shownMax !== state.maximized) setShownMax(state.maximized);
+    if (state.open && !mounted) setMounted(true);
+    if (state.maximized && !shownMax) setShownMax(true);
+    const openAnim = useRef<gsap.core.Animation | null>(null);
+    const maxAnim = useRef<gsap.core.Animation | null>(null);
 
     useEffect(() => startTerminalRuntimes(), []);
 
-    // 页面上贴底悬浮的按钮（index.css 的 .float-above-terminal）靠这两样避开面板。
+    // 开 / 收：只动 opacity 和 transform，结束后清掉，免得面板里 fixed 定位的东西以它为参照
+    useLayoutEffect(() => {
+        const el = dockRef.current;
+        if (!el) return;
+        openAnim.current?.kill();
+        if (state.open) {
+            if (!motion.enabled) {
+                gsap.set(el, { clearProps: 'opacity,transform' });
+                return;
+            }
+            openAnim.current = gsap.fromTo(
+                el,
+                { opacity: 0, y: 18, scale: 0.992 },
+                {
+                    opacity: 1,
+                    y: 0,
+                    scale: 1,
+                    duration: motion.duration('base'),
+                    ease: motion.ease.enter,
+                    clearProps: 'opacity,transform',
+                },
+            );
+        } else if (!motion.enabled) {
+            setMounted(false);
+        } else {
+            openAnim.current = gsap.to(el, {
+                opacity: 0,
+                y: 18,
+                scale: 0.992,
+                duration: motion.duration('fast'),
+                ease: motion.ease.exit,
+                onComplete: () => setMounted(false),
+            });
+        }
+    }, [state.open, mounted, motion.enabled]);
+    useEffect(() => () => void openAnim.current?.kill(), []);
+
+    // 最大化：布局先铺满，整块从原来的顶边往上推到位；还原：整块往下推回原来的顶边，再换回小布局。
+    // 标题行跟着顶边走，推到窗口外的那截被外层裁掉；动画期间终端尺寸不变，只在落定时重排一次行列
+    const prevMax = useRef(state.maximized);
+    useLayoutEffect(() => {
+        const el = dockRef.current;
+        const was = prevMax.current;
+        prevMax.current = state.maximized;
+        // 最大化着直接收起：保持铺满的样子一起淡出，摘掉以后再按 store 重置
+        if (was === state.maximized || !state.open) return;
+        maxAnim.current?.kill();
+        if (!el || !motion.enabled) {
+            if (el) gsap.set(el, { clearProps: 'transform' });
+            if (!state.maximized) setShownMax(false);
+            return;
+        }
+        const edge = Math.max(0, el.offsetHeight - terminalLayout.get().height);
+        if (state.maximized) {
+            maxAnim.current = gsap.fromTo(
+                el,
+                { y: edge },
+                { y: 0, duration: motion.duration('base'), ease: motion.ease.enter, clearProps: 'transform' },
+            );
+        } else {
+            maxAnim.current = gsap.fromTo(
+                el,
+                { y: 0 },
+                {
+                    y: edge,
+                    duration: motion.duration('base'),
+                    ease: motion.ease.enter,
+                    // 位移留到换完布局那一刻再清（下面的 effect），不然会先闪一帧铺满的样子
+                    onComplete: () => setShownMax(false),
+                },
+            );
+        }
+    }, [state.maximized, state.open, motion.enabled]);
+    useLayoutEffect(() => {
+        const el = dockRef.current;
+        if (el && !shownMax && !maxAnim.current?.isActive()) gsap.set(el, { clearProps: 'transform' });
+    }, [shownMax]);
+
+    // 页面上贴底悬浮的按钮（index.css 的 .float-above-terminal）靠这几样避开面板。
     // 面板贴着窗口底边、离底有一截空隙，抬的高度按「面板顶边到窗口底」算
     useLayoutEffect(() => {
         const root = document.documentElement;
         const dock = dockRef.current;
-        if (!dock) return;
+        if (!dock || !state.open) return;
         const publish = () => {
             // offsetTop 不算 transform：打开时的上浮动画还没走完也能量到落定的位置
             const top = (dock.offsetParent?.getBoundingClientRect().top ?? 0) + dock.offsetTop;
@@ -159,8 +250,8 @@ export function TerminalDock() {
             window.removeEventListener('resize', publish);
             root.style.removeProperty('--terminal-dock-inset');
         };
-    }, [state.open]);
-    const covers = state.open && state.maximized;
+    }, [state.open, mounted, shownMax]);
+    const covers = state.open && shownMax;
     useLayoutEffect(() => {
         document.documentElement.toggleAttribute('data-terminal-covers', covers);
         return () => document.documentElement.removeAttribute('data-terminal-covers');
@@ -226,7 +317,14 @@ export function TerminalDock() {
     }, []);
     const drop = useTerminalFileDrop(state.open && state.groups.length > 0, onDrop);
 
-    if (!state.open) return null;
+    // 悬浮按钮跟着面板滑上滑下；拖高度时逐帧跟手，不带过渡
+    const glide = motion.enabled && !resize.dragging;
+    useLayoutEffect(() => {
+        document.documentElement.toggleAttribute('data-terminal-glide', glide);
+        return () => document.documentElement.removeAttribute('data-terminal-glide');
+    }, [glide]);
+
+    if (!mounted) return null;
     const activeGroup = state.groups.find((g) => g.id === state.activeGroup) ?? null;
     const height = liveHeight ?? layout.height;
     const focusedId = activeGroup?.focused;
@@ -236,19 +334,19 @@ export function TerminalDock() {
         <section
             ref={dockRef}
             aria-label="终端"
+            data-motion={motion.enabled ? 'on' : 'off'}
             className={cn(
-                'absolute inset-x-2 bottom-2 z-20 flex min-h-0 flex-col overflow-hidden rounded-md',
+                'ncd-term absolute inset-x-2 bottom-2 z-20 flex min-h-0 flex-col overflow-hidden rounded-md',
                 'border border-border-subtle bg-surface shadow-popover',
                 // 最大化时顶到标题栏下面（标题栏 h-11）
-                state.maximized && 'top-11',
-                motion.enabled && 'ncd-term-dock-enter',
+                shownMax && 'top-11',
             )}
             style={{
-                height: state.maximized ? undefined : height,
+                height: shownMax ? undefined : height,
                 ['--ncd-term-bg' as string]: palette.background,
             }}
         >
-            {!state.maximized && (
+            {!shownMax && (
                 <div
                     className="ncd-term-resize"
                     data-dragging={resize.dragging}

@@ -69,7 +69,7 @@ export function TerminalSearchBar({ runtime, onClose }: Props) {
         : '';
 
     return (
-        <div className="absolute right-4 top-2 z-20 flex items-center gap-1 rounded-sm border border-border bg-elevated px-1.5 py-1 shadow-popover">
+        <div className="ncd-term-drop-down absolute right-4 top-2 z-20 flex items-center gap-1 rounded-sm border border-border bg-elevated px-1.5 py-1 shadow-popover">
             <input
                 ref={inputRef}
                 value={query}

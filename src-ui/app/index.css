@@ -1339,6 +1339,12 @@ samp,
     margin-bottom: var(--terminal-dock-inset, 0px);
 }
 
+/* 面板开合时跟着滑；data-terminal-glide 由面板按动效开关挂，拖高度时摘掉（逐帧跟手）。
+   自带 transition-all 的元素已经会过渡 margin，不覆盖它的 hover 过渡 */
+:root[data-terminal-glide] .float-above-terminal:not(.transition-all) {
+    transition: margin-bottom 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 :root[data-terminal-covers] .float-above-terminal {
     display: none !important;
 }

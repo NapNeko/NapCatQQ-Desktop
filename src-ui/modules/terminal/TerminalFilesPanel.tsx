@@ -60,11 +60,13 @@ interface Props {
     onInsertPath(path: string): void;
     /** 拖完左边缘松手时给新宽度 */
     onWidthChange(width: number): void;
+    /** 刚被点开，滑进来 */
+    slideIn?: boolean;
 }
 
 type NameDialog = { kind: 'mkdir' } | { kind: 'rename'; entry: TerminalFileEntry };
 
-export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, onCd, onInsertPath, onWidthChange }: Props) {
+export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, onCd, onInsertPath, onWidthChange, slideIn }: Props) {
     const files = useTerminalFiles(sessionId, hostOs, cwd);
     const asideRef = useRef<HTMLElement>(null);
     const [liveWidth, setLiveWidth] = useState<number | null>(null);
@@ -128,7 +130,10 @@ export function TerminalFilesPanel({ sessionId, hostOs, cwd, width, dropping, on
     return (
         <aside
             ref={asideRef}
-            className="relative flex min-h-0 shrink-0 flex-col border-l border-border-subtle bg-surface"
+            className={cn(
+                'relative flex min-h-0 shrink-0 flex-col border-l border-border-subtle bg-surface',
+                slideIn && 'ncd-term-slide-in',
+            )}
             style={{ width: liveWidth ?? width }}
             data-terminal-drop={sessionId}
             data-terminal-drop-dir={listingDir}

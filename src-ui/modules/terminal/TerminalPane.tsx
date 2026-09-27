@@ -14,6 +14,7 @@ import {
     SquareArrowOutUpRight,
     X,
 } from 'lucide-react';
+import { useRef } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../shared/ui';
 import { cn } from '../../shared/utils/cn';
 import { terminalLayout, useTerminalLayout } from '../../hooks/terminal/terminalPrefs';
@@ -97,11 +98,14 @@ export function TerminalPane({ sessionId, focused, visible, dropZone, showHeader
     const view = useTerminalSession(sessionId);
     const layout = useTerminalLayout();
     const openExternal = useTerminalExternal();
+    // 文件栏只在这块终端里被点开时滑进来；切标签重新挂上时本来就开着的不再滑一遍
+    const filesSlide = useRef(false);
     if (!view) return null;
     const { info } = view;
     const live = isLive(info.status);
     const syntax = shellSyntaxOf(info.host_os, info.shell);
     const filesOpen = view.filesOpen && info.features.files;
+    if (!filesOpen) filesSlide.current = true;
     const status = statusText(info.status);
     const runtime = getRuntime(sessionId);
 
@@ -138,7 +142,7 @@ export function TerminalPane({ sessionId, focused, visible, dropZone, showHeader
                         <button
                             type="button"
                             onClick={() => void terminalStore.restart(sessionId)}
-                            className="flex shrink-0 items-center gap-1 rounded-pill bg-warning-soft px-2 py-0.5 text-[11px] text-text hover:brightness-95"
+                            className="ncd-term-pop flex shrink-0 items-center gap-1 rounded-pill bg-warning-soft px-2 py-0.5 text-[11px] text-text hover:brightness-95"
                             title="重新打开（也可以在终端里按回车）"
                         >
                             <RotateCcw size={11} />
@@ -229,6 +233,7 @@ export function TerminalPane({ sessionId, focused, visible, dropZone, showHeader
                         cwd={view.cwd}
                         width={layout.filesWidth}
                         dropping={dropZone === 'files'}
+                        slideIn={filesSlide.current}
                         onCd={(path) => runtime?.fillInput(cdCommand(path, syntax))}
                         onInsertPath={(path) => runtime?.fillInput(`${quotePath(path, syntax)} `)}
                         onWidthChange={(filesWidth) => terminalLayout.patch({ filesWidth })}

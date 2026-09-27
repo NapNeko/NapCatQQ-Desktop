@@ -1,7 +1,8 @@
-// 标题栏上的终端开关：开着几个终端就显示几；后台有终端跑完命令失败时亮红点。
+// 标题栏上的终端开关：开着几个终端就显示几（数字滚着换）；后台有终端跑完命令失败时亮一个呼吸的红点。
 
 import { SquareTerminal } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { Counter, StatusDot } from '../../ui/motion';
 import { terminalStore, useTerminalState } from '../../../hooks/terminal/terminalStore';
 
 export function TerminalToggleButton() {
@@ -23,8 +24,12 @@ export function TerminalToggleButton() {
             )}
         >
             <SquareTerminal size={14} strokeWidth={2} />
-            {count > 0 && <span className="text-[11px] tabular-nums">{count}</span>}
-            {failed && !state.open && <span className="absolute right-0.5 top-1 h-1.5 w-1.5 rounded-full bg-danger" />}
+            {count > 0 && <Counter value={count} className="text-[11px] tabular-nums" />}
+            {failed && !state.open && (
+                <span className="absolute right-0.5 top-1 flex">
+                    <StatusDot tone="danger" size={6} />
+                </span>
+            )}
         </button>
     );
 }

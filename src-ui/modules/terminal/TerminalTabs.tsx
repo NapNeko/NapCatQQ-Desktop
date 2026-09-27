@@ -1,7 +1,7 @@
 // 面板顶上的标签条和「+」菜单。
 // 标签上的小点：后台来了输出是灰点，后台跑完命令成功绿点、失败红点；程序退出 / 断线时标签名变淡。
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, Columns2, Copy, FileDown, Pencil, Plus, Rows2, SquareArrowOutUpRight, X } from 'lucide-react';
 import {
     ContextMenu,
@@ -74,8 +74,9 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
                         setRenaming(true);
                     }}
                     className={cn(
-                        'group relative flex h-7 max-w-[220px] shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-sm pl-2.5 pr-1 text-[12px] transition-colors',
-                        active ? 'bg-inset text-text' : 'text-text-secondary hover:bg-inset/60 hover:text-text',
+                        'ncd-term-tab group relative z-[1] flex h-7 max-w-[220px] shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-sm pl-2.5 pr-1 text-[12px] transition-colors',
+                        // 当前标签的底色是标签条里那块会滑的指示块
+                        active ? 'text-text' : 'text-text-secondary hover:bg-inset/60 hover:text-text',
                         !live && 'italic opacity-70',
                     )}
                     title={`${title}${view.cwd ? `\n${view.cwd}` : ''}`}
@@ -100,8 +101,9 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
                     {group.panes.length > 1 && <span className="shrink-0 text-[10px] text-text-tertiary">+1</span>}
                     {activity !== 'none' && !active && (
                         <span
+                            key={activity}
                             className={cn(
-                                'h-1.5 w-1.5 shrink-0 rounded-full',
+                                'ncd-term-dot h-1.5 w-1.5 shrink-0 rounded-full',
                                 activity === 'fail' ? 'bg-danger' : activity === 'ok' ? 'bg-success' : 'bg-text-tertiary',
                             )}
                         />
@@ -192,9 +194,51 @@ function Tab({ state, group, active }: { state: TerminalState; group: TerminalGr
     );
 }
 
+/// 当前标签底下那块底色：切标签时滑过去、跟着标签宽度伸缩（只动 transform 和宽度，元素很小）。
+/// 第一次落位不带过渡，免得面板一打开它从最左边滑进来
+function useActiveIndicator(activeGroup: string | null, groupCount: number) {
+    const listRef = useRef<HTMLDivElement>(null);
+    const barRef = useRef<HTMLDivElement>(null);
+    const placed = useRef(false);
+
+    useLayoutEffect(() => {
+        const list = listRef.current;
+        const bar = barRef.current;
+        if (!list || !bar) return;
+        const place = () => {
+            const tab = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+            if (!tab) {
+                bar.style.opacity = '0';
+                placed.current = false;
+                return;
+            }
+            bar.dataset.instant = placed.current ? 'false' : 'true';
+            bar.style.opacity = '1';
+            bar.style.width = `${tab.offsetWidth}px`;
+            bar.style.transform = `translateX(${tab.offsetLeft}px)`;
+            placed.current = true;
+        };
+        place();
+        const tab = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+        // 改名、标题变了标签会变宽，跟着量
+        const observer = new ResizeObserver(place);
+        if (tab) observer.observe(tab);
+        observer.observe(list);
+        return () => observer.disconnect();
+    }, [activeGroup, groupCount]);
+
+    return { listRef, barRef };
+}
+
 export function TerminalTabs({ state }: { state: TerminalState }) {
+    const { listRef, barRef } = useActiveIndicator(state.activeGroup, state.groups.length);
     return (
-        <div role="tablist" className="scrollbar-hide flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+        <div
+            ref={listRef}
+            role="tablist"
+            className="scrollbar-hide relative flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
+        >
+            <div ref={barRef} aria-hidden className="ncd-term-tab-indicator pointer-events-none absolute left-0 top-0 h-7 rounded-sm bg-inset" />
             {state.groups.map((group) => (
                 <Tab key={group.id} state={state} group={group} active={group.id === state.activeGroup} />
             ))}

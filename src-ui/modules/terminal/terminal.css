@@ -53,23 +53,103 @@
     pointer-events: none;
 }
 
-/* 面板浮在页面上：打开时从下面浮上来一点。只动 transform / opacity；
-   结束后不留 transform，免得面板里 fixed 定位的东西以它为参照 */
-@keyframes ncd-term-dock-in {
+/* 面板里的小动效。面板本身的开合、最大化由 TerminalDock 用 GSAP 做；这里是挂上时放一次的 CSS 动画，
+   只动 transform / opacity，用 backwards 填充，放完不留 transform。
+   面板根上 data-motion='on' 才放（跟着设置里的动效开关和系统的减少动态效果） */
+@keyframes ncd-term-fade-up {
     from {
         opacity: 0;
-        transform: translateY(14px) scale(0.995);
+        transform: translateY(4px) scale(0.96);
     }
 }
 
-.ncd-term-dock-enter {
-    animation: ncd-term-dock-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+@keyframes ncd-term-fade {
+    from {
+        opacity: 0.35;
+    }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    .ncd-term-dock-enter {
-        animation: none;
+@keyframes ncd-term-slide-left {
+    from {
+        opacity: 0;
+        transform: translateX(14px);
     }
+}
+
+@keyframes ncd-term-slide-down {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+}
+
+@keyframes ncd-term-pop {
+    from {
+        opacity: 0;
+        transform: scale(0.88);
+    }
+    60% {
+        opacity: 1;
+        transform: scale(1.04);
+    }
+}
+
+@keyframes ncd-term-dot-pop {
+    from {
+        transform: scale(0);
+    }
+    70% {
+        transform: scale(1.5);
+    }
+}
+
+.ncd-term[data-motion='on'] .ncd-term-tab {
+    animation: ncd-term-fade-up 180ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+/* 切标签：新的一组淡进来，不位移，免得终端文字晃 */
+.ncd-term[data-motion='on'] .ncd-term-group {
+    animation: ncd-term-fade 140ms ease-out backwards;
+}
+
+.ncd-term[data-motion='on'] .ncd-term-pane-in {
+    animation: ncd-term-slide-left 220ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+.ncd-term[data-motion='on'] .ncd-term-pane-in[data-split='column'] {
+    animation-name: ncd-term-slide-down;
+}
+
+.ncd-term[data-motion='on'] .ncd-term-slide-in {
+    animation: ncd-term-slide-left 200ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+.ncd-term[data-motion='on'] .ncd-term-drop-down {
+    animation: ncd-term-slide-down 160ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+.ncd-term[data-motion='on'] .ncd-term-pop {
+    animation: ncd-term-pop 260ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+.ncd-term[data-motion='on'] .ncd-term-dot {
+    animation: ncd-term-dot-pop 320ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+.ncd-term[data-motion='on'] .ncd-term-drop {
+    animation: ncd-term-fade 120ms ease-out backwards;
+}
+
+/* 当前标签的底色块：落位后切标签才滑；第一次落位 data-instant 不带过渡 */
+.ncd-term-tab-indicator {
+    opacity: 0;
+}
+
+.ncd-term[data-motion='on'] .ncd-term-tab-indicator[data-instant='false'] {
+    transition:
+        transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+        width 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+        opacity 120ms ease-out;
 }
 
 /* 面板顶边的拖动条：看不见，鼠标放上去才出现一条线。面板是圆角裁切的，条要放在里面 */

@@ -121,7 +121,7 @@ export function TerminalView({ sessionId, focused, dropHint }: Props) {
             {searchOpen && <TerminalSearchBar runtime={runtime} onClose={() => setSearchOpen(false)} />}
 
             {session.sudoPrompt && (
-                <div className="absolute bottom-3 right-5 z-20">
+                <div className="ncd-term-pop absolute bottom-3 right-5 z-20">
                     <Button
                         size="sm"
                         variant="primary"
