@@ -21,6 +21,7 @@ use super::schema::MaiBotAPIProvider;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const SLOW_TIMEOUT: Duration = Duration::from_secs(45);
+const POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 const COOKIE_NAME: &str = "maibot_session";
 
 #[derive(Debug)]
@@ -28,6 +29,24 @@ pub struct MaiBotWebUi {
     base: String,
     http: Client,
     cookie: String,
+}
+
+/// 所有实例共用一个连接池。远端实例走 SSH `-L`，每新开一条 TCP 就要开一个 direct-tcpip 通道，
+/// 每次调用都新建 Client 等于每次都重新打洞；空闲时限放短，麦麦重启后旧连接早点丢掉
+fn shared_http() -> Result<Client, AppFrameworkError> {
+    static HTTP: std::sync::OnceLock<Client> = std::sync::OnceLock::new();
+    if let Some(http) = HTTP.get() {
+        return Ok(http.clone());
+    }
+    let http = Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
+        .pool_idle_timeout(POOL_IDLE_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .build()
+        .map_err(|e| AppFrameworkError::DashboardUnreachable(e.to_string()))?;
+    Ok(HTTP.get_or_init(|| http).clone())
 }
 
 impl MaiBotWebUi {
@@ -41,16 +60,9 @@ impl MaiBotWebUi {
                 "没读到 WebUI token（data/webui.json 缺了或被清空）".into(),
             ));
         }
-        let http = Client::builder()
-            .connect_timeout(CONNECT_TIMEOUT)
-            .timeout(REQUEST_TIMEOUT)
-            .redirect(reqwest::redirect::Policy::none())
-            .no_proxy()
-            .build()
-            .map_err(|e| AppFrameworkError::DashboardUnreachable(e.to_string()))?;
         Ok(Self {
             base: format!("http://127.0.0.1:{port}"),
-            http,
+            http: shared_http()?,
             cookie: format!("{COOKIE_NAME}={token}"),
         })
     }

@@ -173,6 +173,18 @@ struct AppInstanceTunnel {
     handle: TunnelHandle,
 }
 
+/// 运行期接口每次都要的 WebUI 口和登录密钥。远端读一遍配置要十几次 SFTP 往返，
+/// 麦麦的表情包网格、导入进度轮询一秒好几个请求，每次现读页面就卡住了
+#[derive(Debug, Clone)]
+struct WebUiEndpoint {
+    listen_port: u16,
+    auth_key: String,
+    read_at: Instant,
+}
+
+/// 桌面端经手的改动当场作废；这个时限兜的是用户在应用自己的 WebUI 或盘上改了口令
+const WEBUI_ENDPOINT_TTL: Duration = Duration::from_secs(300);
+
 fn astrbot_api(
     adapter: &dyn AppFrameworkAdapter,
 ) -> Result<&dyn AstrBotRuntimeApi, AppFrameworkError> {
@@ -246,6 +258,7 @@ pub struct AppManager {
     install_watches: std::sync::Mutex<HashMap<AppInstanceId, String>>,
     /// 运行中写配置的下一个可用时刻（应用要求两次写之间留间隔时才记）
     config_write_slots: std::sync::Mutex<HashMap<AppInstanceId, Instant>>,
+    webui_endpoints: std::sync::Mutex<HashMap<AppInstanceId, WebUiEndpoint>>,
 }
 
 impl AppManager {
@@ -272,6 +285,7 @@ impl AppManager {
             tunnels: tokio::sync::Mutex::new(HashMap::new()),
             install_watches: std::sync::Mutex::new(HashMap::new()),
             config_write_slots: std::sync::Mutex::new(HashMap::new()),
+            webui_endpoints: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -374,13 +388,47 @@ impl AppManager {
 
     /// WebUI 在应用机上的 HTTP 口（AstrBot 是 dashboard.port，不是 OneBot 口）。
     pub async fn webui_listen_port(&self, instance: &AppInstance) -> u16 {
+        self.webui_endpoint(instance).await.listen_port
+    }
+
+    /// 口和密钥一次读齐记下来。读失败不记：给个兜底口，下次再读
+    async fn webui_endpoint(&self, instance: &AppInstance) -> WebUiEndpoint {
+        if let Some(hit) = self
+            .webui_endpoints
+            .lock()
+            .ok()
+            .and_then(|map| map.get(&instance.id).cloned())
+            .filter(|e| e.read_at.elapsed() < WEBUI_ENDPOINT_TTL)
+        {
+            return hit;
+        }
         match self.read_config(&instance.id).await {
-            Ok(env) => env.config.webui_port().unwrap_or(instance.port),
-            Err(_) => self
-                .registry
-                .get(&instance.framework_id)
-                .map(|adapter| adapter.webui_fallback_port(instance))
-                .unwrap_or(instance.port),
+            Ok(env) => {
+                let endpoint = WebUiEndpoint {
+                    listen_port: env.config.webui_port().unwrap_or(instance.port),
+                    auth_key: env.config.webui_auth_key().to_string(),
+                    read_at: Instant::now(),
+                };
+                if let Ok(mut map) = self.webui_endpoints.lock() {
+                    map.insert(instance.id.clone(), endpoint.clone());
+                }
+                endpoint
+            }
+            Err(_) => WebUiEndpoint {
+                listen_port: self
+                    .registry
+                    .get(&instance.framework_id)
+                    .map(|adapter| adapter.webui_fallback_port(instance))
+                    .unwrap_or(instance.port),
+                auth_key: String::new(),
+                read_at: Instant::now(),
+            },
+        }
+    }
+
+    fn forget_webui_endpoint(&self, id: &AppInstanceId) {
+        if let Ok(mut map) = self.webui_endpoints.lock() {
+            map.remove(id);
         }
     }
 
@@ -396,8 +444,8 @@ impl AppManager {
 
     /// 读盘拿到的 WebUI 登录密钥；配置读失败或没有密钥时返回空串。
     pub async fn webui_auth_key(&self, id: &AppInstanceId) -> String {
-        match self.read_config(id).await {
-            Ok(envelope) => envelope.config.webui_auth_key().to_string(),
+        match self.store.require(id).await {
+            Ok(instance) => self.webui_endpoint(&instance).await.auth_key,
             Err(_) => String::new(),
         }
     }
@@ -508,9 +556,11 @@ impl AppManager {
         }
         let password = resolve_webui_password(adapter.as_ref(), password)?;
         let host = self.resolve_host(&instance.host_id).await?;
-        adapter
+        let written = adapter
             .write_webui_password(host.as_ref(), &instance, &password)
-            .await?;
+            .await;
+        self.forget_webui_endpoint(id);
+        written?;
         self.remember_secret(id, SECRET_WEBUI_PASSWORD, &password);
         Ok(self
             .webui_account(&instance)
@@ -1004,6 +1054,8 @@ impl AppManager {
         id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
         let instance = self.store.require(id).await?;
+        // 手动刷新 / 冷启动对账：用户可能在盘上改过口令或端口
+        self.forget_webui_endpoint(id);
         if instance.state == AppInstanceState::Installing {
             // 任务还在跑就以任务为准，目录里的半成品不算数
             if self.install_watched(id) {
@@ -1214,6 +1266,8 @@ impl AppManager {
         if instance.state == AppInstanceState::Running {
             return Ok(instance);
         }
+        // 停着的时候配置可能被手改过，这一轮起来按盘上的重新认
+        self.forget_webui_endpoint(id);
         let adapter = self.registry.get(&instance.framework_id)?;
         let host = self.resolve_host(&instance.host_id).await?;
         let spec = self.component_spec(host.as_ref(), &instance);
@@ -1283,6 +1337,7 @@ impl AppManager {
         id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
         let instance = self.store.require(id).await?;
+        self.forget_webui_endpoint(id);
         let host = self.resolve_host(&instance.host_id).await?;
         self.runtime.stop(host, &instance).await?;
         let updated = self
@@ -1319,6 +1374,7 @@ impl AppManager {
         remove_files: bool,
     ) -> Result<(), AppFrameworkError> {
         let instance = self.store.require(id).await?;
+        self.forget_webui_endpoint(id);
         let host = self.resolve_host(&instance.host_id).await;
         if let Ok(host) = &host {
             if let Err(e) = self.runtime.stop(Arc::clone(host), &instance).await {
@@ -1575,6 +1631,8 @@ impl AppManager {
                 i.last_error = None;
             })
             .await?;
+        // Karin 的对接会改 .env 里的口和密钥，WebUI 也读这两项
+        self.forget_webui_endpoint(instance_id);
         self.publish(&updated, "linked");
         Ok(updated)
     }
@@ -1597,6 +1655,7 @@ impl AppManager {
             self.teardown_resident_best_effort(&instance, &link.bot_id).await;
         }
         self.drop_instance_tunnel(instance_id).await;
+        self.forget_webui_endpoint(instance_id);
         let updated = self
             .store
             .update(instance_id, |i| {
@@ -1809,6 +1868,21 @@ impl AppManager {
 
     /// `conf_id` 只对跑着的 AstrBot 有意义（写到选中的 abconf）；停着始终只 patch `cmd_config.json`。
     pub async fn write_config_profile(
+        &self,
+        id: &AppInstanceId,
+        config: AppInstanceConfig,
+        base_revision: Option<String>,
+        conf_id: Option<String>,
+    ) -> Result<AppConfigWriteResult, AppFrameworkError> {
+        let result = self
+            .write_config_profile_inner(id, config, base_revision, conf_id)
+            .await;
+        // 写到一半失败也可能已经动了盘上的口或口令，不论成败都重新读
+        self.forget_webui_endpoint(id);
+        result
+    }
+
+    async fn write_config_profile_inner(
         &self,
         id: &AppInstanceId,
         config: AppInstanceConfig,
@@ -2142,11 +2216,16 @@ impl AppManager {
             port,
             token: self.webui_auth_key(id).await,
         };
-        Ok(runtime.status(&session).await)
+        let status = runtime.status(&session).await;
+        // 详情页一直在轮询这个：token 在麦麦自己的 WebUI 里换过、或者口变了，
+        // 下一轮就按盘上的重新读，别的接口跟着恢复（上游只在登录接口上记错次数，带 Cookie 的请求错了不封）
+        if matches!(status.gate, MaiBotRuntimeGate::Auth | MaiBotRuntimeGate::Unreachable) {
+            self.forget_webui_endpoint(id);
+        }
+        Ok(status)
     }
 
-    /// 运行期调用都要实例在跑；口和 token 由这里备齐。token 每次从盘上读：
-    /// 用户在 WebUI 里重置过 token 也能跟上，不会拿旧的去撞上游的限流
+    /// 运行期调用都要实例在跑；口和 token 由这里备齐（按实例记着，见 `webui_endpoint`）
     async fn maibot_session(
         &self,
         id: &AppInstanceId,
@@ -2655,7 +2734,9 @@ impl AppManager {
                 text,
                 base_revision.as_deref(),
             )
-            .await?;
+            .await;
+        self.forget_webui_endpoint(id);
+        let written = written?;
         if let Some(before) = before
             && let Some(after) = self
                 .typed_snapshot(adapter.as_ref(), host.as_ref(), &instance)
@@ -4673,6 +4754,59 @@ mod tests {
                 matches!(&err, AppFrameworkError::Integration(m) if m == "API Key 无效或已过期"),
                 "改过没保存的按地址查；上游 502 的原话直接给用户：{err:?}"
             );
+        }
+
+        /// 口和 token 读一次记着（远端现读一遍要十几次 SFTP）；麦麦那边换了 token，
+        /// 详情页轮询的状态接口先撞上 401，作废后下一轮按盘上的新 token 恢复
+        #[tokio::test]
+        async fn maibot_webui_endpoint_is_cached_and_heals_after_auth_failure() {
+            use wiremock::matchers::{header, method, path};
+            use wiremock::{Mock, MockServer, ResponseTemplate};
+
+            let f = maibot_fixture("m-cache").await;
+            let server = MockServer::start().await;
+            let port = server.address().port();
+            std::fs::write(
+                f.inst_dir.join("config/bot_config.toml"),
+                format!("[inner]\nversion = \"8.14.40\"\n\n[webui]\nport = {port}\n\n[maim_message]\nws_server_port = 23002\n"),
+            )
+            .unwrap();
+            f.manager
+                .store
+                .update(&f.id, |i| {
+                    i.port = port;
+                    i.state = AppInstanceState::Running;
+                })
+                .await
+                .unwrap();
+            let status_ok = serde_json::json!({"running": true, "uptime": 1.0, "version": "1.2.5", "start_time": "x"});
+            let accept = |token: &str| {
+                Mock::given(method("GET"))
+                    .and(path("/api/webui/system/status"))
+                    .and(header("cookie", format!("maibot_session={token}").as_str()))
+                    .respond_with(ResponseTemplate::new(200).set_body_json(status_ok.clone()))
+                    .with_priority(1)
+            };
+            let reject = || {
+                Mock::given(method("GET"))
+                    .and(path("/api/webui/system/status"))
+                    .respond_with(ResponseTemplate::new(401))
+                    .with_priority(10)
+            };
+            accept("Ncd_tok").mount(&server).await;
+            reject().mount(&server).await;
+            assert_eq!(f.manager.maibot_status(&f.id).await.unwrap().gate, MaiBotRuntimeGate::Ok);
+
+            let webui_json = f.inst_dir.join("data/webui.json");
+            std::fs::write(&webui_json, "{\"access_token\":\"Ncd_new\",\"token_source\":\"configured\"}\n").unwrap();
+            assert_eq!(f.manager.webui_auth_key(&f.id).await, "Ncd_tok", "记着的不因为盘上变了就现读");
+
+            server.reset().await;
+            accept("Ncd_new").mount(&server).await;
+            reject().mount(&server).await;
+            assert_eq!(f.manager.maibot_status(&f.id).await.unwrap().gate, MaiBotRuntimeGate::Auth);
+            assert_eq!(f.manager.maibot_status(&f.id).await.unwrap().gate, MaiBotRuntimeGate::Ok);
+            assert_eq!(f.manager.webui_auth_key(&f.id).await, "Ncd_new");
         }
 
         #[tokio::test]
