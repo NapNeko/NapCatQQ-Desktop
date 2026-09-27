@@ -73,6 +73,9 @@ use crate::deploy::DeploymentTaskManager;
 use crate::events::{BroadcastEventBus, DomainEvent};
 use crate::metrics::now_ms;
 
+mod terminal;
+pub use terminal::AppTerminalContext;
+
 /// 本机实例目录：`data_root/apps/<framework>/<instance>`
 const LOCAL_APPS_DIR: &str = "apps";
 /// SecretStore 里 WebUI 账号的键后缀（`app:<instance_id>:<suffix>`）；明文只存这里，实例记录不带
