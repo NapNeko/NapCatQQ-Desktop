@@ -20,6 +20,8 @@ ncd-watch = { path = "../ncd-watch", default-features = false }
 ncd-backend-snowluma = { path = "../ncd-backend-snowluma" }
 ncd-backend-napcat = { path = "../ncd-backend-napcat" }
 async-trait = "0.1"
+# 内嵌终端的输出块（和 ncd-host 的 PtySession 同一个类型）
+bytes = "1"
 futures-util = "0.3"
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -17,6 +17,7 @@ pub mod launch;
 pub mod metrics;
 pub mod remote;
 pub mod snowluma;
+pub mod terminal;
 pub mod watch;
 
 // 配置横切已抽出 ncd-config；旧路径 re-export 保持 API。
