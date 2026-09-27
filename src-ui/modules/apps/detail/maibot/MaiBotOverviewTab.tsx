@@ -35,7 +35,7 @@ export const MaiBotOverviewTab: React.FC<{
     onOpenLink: () => void;
     onStart: () => void;
     starting: boolean;
-    /** path 是 WebUI 里的页，如 /chat；不给就开首页 */
+    /** path 是 WebUI 里的某一页；不给就开首页 */
     onOpenWebUi: (path?: string) => void;
 }> = ({ instance, config, onGoTab, onOpenLink, onStart, starting, onOpenWebUi }) => {
     const running = instance.state === 'running';
@@ -144,7 +144,7 @@ export const MaiBotOverviewTab: React.FC<{
                 </ul>
             </Card>
 
-            <MaiBotRuntimeCard instance={instance} onOpenChat={() => onOpenWebUi('/chat')} />
+            <MaiBotRuntimeCard instance={instance} onOpenChat={() => onGoTab('trychat')} />
 
             <Card padding="none" className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                 <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-text-secondary">

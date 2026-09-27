@@ -4,7 +4,13 @@
 import type { FrameworkNavGroup } from '../frameworkUi';
 
 export const MAIBOT_NAV: readonly FrameworkNavGroup[] = [
-    { id: 'home', items: [{ value: 'overview', label: '概览' }] },
+    {
+        id: 'home',
+        items: [
+            { value: 'overview', label: '概览' },
+            { value: 'trychat', label: '试聊' },
+        ],
+    },
     {
         id: 'ai',
         label: 'AI',

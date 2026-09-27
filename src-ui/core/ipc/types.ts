@@ -152,6 +152,7 @@ export type { MaiBotBehaviorQuery } from './generated/domain/MaiBotBehaviorQuery
 export type { MaiBotBehaviorSort } from './generated/domain/MaiBotBehaviorSort';
 export type { MaiBotBehaviorTag } from './generated/domain/MaiBotBehaviorTag';
 export type { MaiBotBehaviorTagKind } from './generated/domain/MaiBotBehaviorTagKind';
+export type { MaiBotChatTicket } from './generated/domain/MaiBotChatTicket';
 export type { MaiBotGroupCard } from './generated/domain/MaiBotGroupCard';
 export type { MaiBotPerson } from './generated/domain/MaiBotPerson';
 export type { MaiBotPersonAction } from './generated/domain/MaiBotPersonAction';

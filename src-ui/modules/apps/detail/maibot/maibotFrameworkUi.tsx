@@ -19,6 +19,7 @@ import { MaiBotEmojisTab } from './MaiBotEmojisTab';
 import { MaiBotPersonsTab } from './MaiBotPersonsTab';
 import { MaiBotKnowledgeTab } from './MaiBotKnowledgeTab';
 import { MaiBotBehaviorTab } from './MaiBotBehaviorTab';
+import { MaiBotTryChatTab } from './MaiBotTryChatTab';
 import type { KnowledgeView } from './maibotKnowledgeParts';
 import { usePromptDrafts } from './maibotPromptDrafts';
 import { NoneBot2StoreTab } from '../nonebot2/NoneBot2StoreTab';
@@ -36,7 +37,17 @@ import { MAIBOT_NAV, MAIBOT_SCHEMA_PAGES, maibotTabForIssue } from './maibotPage
 
 const TYPED_TABS = new Set(['overview', 'models', 'chat', 'connection', ...Object.keys(MAIBOT_SCHEMA_PAGES)]);
 // 插件商店、提示词、资源页这些自己落盘，不是表单：铺满内容区、不挂保存条
-const FILL_PANE = new Set(['plugins', 'prompts', 'emoji', 'expressions', 'jargon', 'persons', 'knowledge', 'behavior']);
+const FILL_PANE = new Set([
+    'trychat',
+    'plugins',
+    'prompts',
+    'emoji',
+    'expressions',
+    'jargon',
+    'persons',
+    'knowledge',
+    'behavior',
+]);
 
 function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
     const form = useMaiBotConfigForm(instance.id, true, instance.display_name);
@@ -91,6 +102,9 @@ function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
 
     return (
         <>
+            <TabsContent value="trychat" className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3 pt-2">
+                <MaiBotTryChatTab instance={instance} status={status} {...startProps} />
+            </TabsContent>
             <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
                 <NoneBot2StoreTab instance={instance} resource="plugin" />
             </TabsContent>
