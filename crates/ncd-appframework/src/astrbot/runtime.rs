@@ -1,11 +1,13 @@
 //! 运行期资源：人格 / 知识库 / 会话规则 / 多配置。只走 Dashboard API。
 
+use std::sync::Arc;
+
 use ncd_traits::AppFrameworkError;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use ts_rs::TS;
 
-use super::dashboard_client::DashboardClient;
+use super::dashboard_client::{DashboardClient, DashboardSessions};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -161,17 +163,19 @@ impl Default for AstrBotAbconfInfo {
 }
 
 pub async fn login_client(
+    sessions: &Arc<DashboardSessions>,
     instance_id: &str,
     port: u16,
     username: &str,
     password: &str,
 ) -> Result<DashboardClient, AppFrameworkError> {
-    let client = DashboardClient::connect(instance_id, "127.0.0.1", port)?;
+    let client = DashboardClient::connect(sessions, instance_id, "127.0.0.1", port)?;
     client.login(username, password).await?;
     Ok(client)
 }
 
 pub async fn probe_status(
+    sessions: &Arc<DashboardSessions>,
     instance_id: &str,
     port: u16,
     username: &str,
@@ -180,7 +184,7 @@ pub async fn probe_status(
     let Some(password) = password.filter(|s| !s.is_empty()) else {
         return AstrBotDashboardStatus::auth(false, "没有可用的 WebUI 密码。到连接页写下密码");
     };
-    let client = match DashboardClient::connect(instance_id, "127.0.0.1", port) {
+    let client = match DashboardClient::connect(sessions, instance_id, "127.0.0.1", port) {
         Ok(c) => c,
         Err(e) => return AstrBotDashboardStatus::unreachable(true, e.to_string()),
     };
@@ -503,8 +507,8 @@ mod tests {
             .mount(server)
             .await;
         let port: u16 = server.uri().rsplit(':').next().unwrap().parse().unwrap();
-        super::super::dashboard_client::clear_token(instance_id);
-        login_client(instance_id, port, "astrbot", "Abcdefg1")
+        let sessions = Arc::new(DashboardSessions::default());
+        login_client(&sessions, instance_id, port, "astrbot", "Abcdefg1")
             .await
             .unwrap()
     }
@@ -613,8 +617,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        super::super::dashboard_client::clear_token("rt-gate");
-        let status = probe_status("rt-gate", port, "astrbot", Some("Abcdefg1")).await;
+        let sessions = Arc::new(DashboardSessions::default());
+        let status = probe_status(&sessions, "rt-gate", port, "astrbot", Some("Abcdefg1")).await;
         assert_eq!(status.gate, AstrBotDashboardGate::Auth);
         assert!(!status.authenticated);
     }

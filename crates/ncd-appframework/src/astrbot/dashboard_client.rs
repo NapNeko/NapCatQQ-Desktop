@@ -2,7 +2,7 @@
 //! 登录体是 md5(明文)，对齐上游 v4.19 `/api/auth/login`。
 
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use ncd_traits::AppFrameworkError;
@@ -19,8 +19,49 @@ const UPLOAD_TIMEOUT: Duration = Duration::from_secs(120);
 const TOKEN_TTL: Duration = Duration::from_secs(7 * 24 * 3600);
 const TOKEN_SKEW: Duration = Duration::from_secs(60);
 
-static SESSIONS: LazyLock<Mutex<HashMap<String, CachedToken>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+/// 按实例记住登录拿到的 JWT。DashboardClient 每次调用都现建，没有这一份每个请求都得重新登录；
+/// 归 AstrBotAdapter 所有，跟着编排层手里那份注册表活，不做成进程级的全局表
+#[derive(Default)]
+pub struct DashboardSessions {
+    tokens: Mutex<HashMap<String, CachedToken>>,
+}
+
+// 手写而不是 derive：里面是登录凭据，不能跟着 Debug 进日志
+impl std::fmt::Debug for DashboardSessions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DashboardSessions").finish_non_exhaustive()
+    }
+}
+
+impl DashboardSessions {
+    fn cached(&self, instance_id: &str, username: &str) -> Option<String> {
+        let map = self.tokens.lock().ok()?;
+        let hit = map.get(instance_id)?;
+        if hit.username != username || Instant::now() + TOKEN_SKEW >= hit.exp {
+            return None;
+        }
+        Some(hit.token.clone())
+    }
+
+    fn store(&self, instance_id: &str, username: &str, token: &str) {
+        if let Ok(mut map) = self.tokens.lock() {
+            map.insert(
+                instance_id.to_string(),
+                CachedToken {
+                    token: token.to_string(),
+                    username: username.to_string(),
+                    exp: Instant::now() + TOKEN_TTL,
+                },
+            );
+        }
+    }
+
+    fn clear(&self, instance_id: &str) {
+        if let Ok(mut map) = self.tokens.lock() {
+            map.remove(instance_id);
+        }
+    }
+}
 
 #[derive(Clone)]
 struct CachedToken {
@@ -55,10 +96,16 @@ pub struct DashboardClient {
     port: u16,
     http: Client,
     token: Mutex<Option<String>>,
+    sessions: Arc<DashboardSessions>,
 }
 
 impl DashboardClient {
-    pub fn connect(instance_id: &str, host: &str, port: u16) -> Result<Self, AppFrameworkError> {
+    pub fn connect(
+        sessions: &Arc<DashboardSessions>,
+        instance_id: &str,
+        host: &str,
+        port: u16,
+    ) -> Result<Self, AppFrameworkError> {
         if !is_loopback(host) {
             return Err(AppFrameworkError::DashboardUnreachable(
                 "Dashboard 客户端只允许 127.0.0.1 / localhost".into(),
@@ -82,6 +129,7 @@ impl DashboardClient {
             port,
             http,
             token: Mutex::new(None),
+            sessions: Arc::clone(sessions),
         })
     }
 
@@ -102,7 +150,7 @@ impl DashboardClient {
                 "没有可用的 WebUI 密码。到连接页写下密码，或打开 WebUI 登录".into(),
             ));
         }
-        if let Some(token) = cached_token(&self.instance_id, username) {
+        if let Some(token) = self.sessions.cached(&self.instance_id, username) {
             self.set_token(Some(token));
             return Ok(());
         }
@@ -135,7 +183,7 @@ impl DashboardClient {
                         .unwrap_or_else(|| "登录未返回 token".into()),
                 )
             })?;
-        cache_token(&self.instance_id, username, token);
+        self.sessions.store(&self.instance_id, username, token);
         self.set_token(Some(token.to_string()));
         Ok(())
     }
@@ -352,7 +400,7 @@ impl DashboardClient {
         }
         let resp = req.send().await.map_err(map_transport)?;
         if resp.status() == StatusCode::UNAUTHORIZED && authed {
-            clear_token(&self.instance_id);
+            self.sessions.clear(&self.instance_id);
             self.set_token(None);
             if let Some((user, pass)) = retry_login {
                 // 重登写回自己的 token，否则同一个 client 的后续请求会每次都 401 再重登
@@ -378,36 +426,6 @@ fn authority_host(host: &str) -> String {
         bare.to_string()
     } else {
         format!("[{bare}]")
-    }
-}
-
-fn cached_token(instance_id: &str, username: &str) -> Option<String> {
-    let Ok(map) = SESSIONS.lock() else {
-        return None;
-    };
-    let hit = map.get(instance_id)?;
-    if hit.username != username || Instant::now() + TOKEN_SKEW >= hit.exp {
-        return None;
-    }
-    Some(hit.token.clone())
-}
-
-fn cache_token(instance_id: &str, username: &str, token: &str) {
-    if let Ok(mut map) = SESSIONS.lock() {
-        map.insert(
-            instance_id.to_string(),
-            CachedToken {
-                token: token.to_string(),
-                username: username.to_string(),
-                exp: Instant::now() + TOKEN_TTL,
-            },
-        );
-    }
-}
-
-pub(super) fn clear_token(instance_id: &str) {
-    if let Ok(mut map) = SESSIONS.lock() {
-        map.remove(instance_id);
     }
 }
 
@@ -498,24 +516,48 @@ mod tests {
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
+    fn sessions() -> Arc<DashboardSessions> {
+        Arc::new(DashboardSessions::default())
+    }
+
     #[test]
     fn connect_rejects_non_loopback() {
-        let err = DashboardClient::connect("a1", "10.0.0.1", 6185).unwrap_err();
+        let err = DashboardClient::connect(&sessions(), "a1", "10.0.0.1", 6185).unwrap_err();
         assert!(matches!(err, AppFrameworkError::DashboardUnreachable(_)));
     }
 
     #[test]
     fn connect_rejects_zero_port() {
-        let err = DashboardClient::connect("a1", "127.0.0.1", 0).unwrap_err();
+        let err = DashboardClient::connect(&sessions(), "a1", "127.0.0.1", 0).unwrap_err();
         assert!(matches!(err, AppFrameworkError::DashboardUnreachable(_)));
     }
 
     #[test]
     fn ipv6_literal_gets_brackets_in_base_url() {
-        let client = DashboardClient::connect("a1", "::1", 6185).unwrap();
+        let client = DashboardClient::connect(&sessions(), "a1", "::1", 6185).unwrap();
         assert_eq!(client.base, "http://[::1]:6185");
-        let bracketed = DashboardClient::connect("a1", "[::1]", 6185).unwrap();
+        let bracketed = DashboardClient::connect(&sessions(), "a1", "[::1]", 6185).unwrap();
         assert_eq!(bracketed.base, "http://[::1]:6185");
+    }
+
+    #[test]
+    fn sessions_debug_hides_tokens() {
+        let s = sessions();
+        s.store("a1", "astrbot", "jwt-secret");
+        assert!(!format!("{s:?}").contains("jwt-secret"));
+    }
+
+    // 两个适配器实例（比如测试里各建一套）各记各的，不会串到对方的登录态
+    #[test]
+    fn sessions_are_per_owner() {
+        let a = sessions();
+        let b = sessions();
+        a.store("i1", "astrbot", "jwt-a");
+        assert_eq!(a.cached("i1", "astrbot").as_deref(), Some("jwt-a"));
+        assert_eq!(b.cached("i1", "astrbot"), None);
+        assert_eq!(a.cached("i1", "other-user"), None);
+        a.clear("i1");
+        assert_eq!(a.cached("i1", "astrbot"), None);
     }
 
     #[tokio::test]
@@ -548,8 +590,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        clear_token("retry-1");
-        let client = DashboardClient::connect("retry-1", "127.0.0.1", port).unwrap();
+        let client = DashboardClient::connect(&sessions(), "retry-1", "127.0.0.1", port).unwrap();
         client.login("astrbot", "Abcdefg1").await.unwrap();
         let env: Envelope<Value> = client
             .send_json(
@@ -581,12 +622,14 @@ mod tests {
             .mount(&server)
             .await;
 
-        cache_token("stale-1", "astrbot", "jwt-stale");
-        let client = DashboardClient::connect("stale-1", "127.0.0.1", port).unwrap();
+        let cache = sessions();
+        cache.store("stale-1", "astrbot", "jwt-stale");
+        let client = DashboardClient::connect(&cache, "stale-1", "127.0.0.1", port).unwrap();
         client.login("astrbot", "Abcdefg1").await.unwrap();
         let err = client.verify("astrbot", "Abcdefg1").await.unwrap_err();
         assert!(matches!(err, AppFrameworkError::DashboardAuth(_)));
-        clear_token("stale-1");
+        // 401 之后缓存里那份过期的 token 也要作废，下次才会真去登录
+        assert_eq!(cache.cached("stale-1", "astrbot"), None);
     }
 
     #[tokio::test]
@@ -609,8 +652,7 @@ mod tests {
             })))
             .mount(&server)
             .await;
-        clear_token("err-1");
-        let client = DashboardClient::connect("err-1", "127.0.0.1", port).unwrap();
+        let client = DashboardClient::connect(&sessions(), "err-1", "127.0.0.1", port).unwrap();
         client.login("astrbot", "Abcdefg1").await.unwrap();
         let err = client
             .update_astrbot_config("default", &json!({}))
@@ -621,7 +663,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_without_password_is_auth() {
-        let err = DashboardClient::connect("x", "127.0.0.1", 6185)
+        let err = DashboardClient::connect(&sessions(), "x", "127.0.0.1", 6185)
             .unwrap()
             .login("astrbot", "")
             .await

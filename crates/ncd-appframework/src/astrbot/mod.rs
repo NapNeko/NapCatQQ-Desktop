@@ -58,6 +58,7 @@ use crate::adapter::PluginLogSink;
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use config::astrbot_config_documents;
 use config_json::{cmd_config_path, load_cmd_config, save_cmd_config};
+use dashboard_client::DashboardSessions;
 use manifest::ASTRBOT_STDOUT_LOG;
 use platform::upsert_claimed_row;
 
@@ -72,6 +73,8 @@ fn envelope(config: AstrBotInstanceConfig, snaps: &[DocumentSnapshot]) -> AppIns
 pub struct AstrBotAdapter {
     integration: AstrBotIntegration,
     runtime: api::DashboardRuntime,
+    /// 运行期接口和跑着改配置共用的 Dashboard 登录态
+    sessions: Arc<DashboardSessions>,
 }
 
 impl Default for AstrBotAdapter {
@@ -82,9 +85,11 @@ impl Default for AstrBotAdapter {
 
 impl AstrBotAdapter {
     pub fn new() -> Self {
+        let sessions = Arc::new(DashboardSessions::default());
         Self {
             integration: AstrBotIntegration::new(),
-            runtime: api::DashboardRuntime,
+            runtime: api::DashboardRuntime::new(Arc::clone(&sessions)),
+            sessions,
         }
     }
 
@@ -374,6 +379,7 @@ impl AppFrameworkAdapter for AstrBotAdapter {
         let install_dir = HostPath::from_posix(&instance.install_dir);
         let (config, snaps) = live::write_live(
             host,
+            &self.sessions,
             &install_dir,
             instance.id.as_str(),
             instance.port,

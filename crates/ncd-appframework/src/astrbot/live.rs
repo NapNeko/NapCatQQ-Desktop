@@ -1,5 +1,7 @@
 //! 跑着只打 Dashboard API：先 GET 全量再 merge，禁止浅覆盖整节。
 
+use std::sync::Arc;
+
 use ncd_host::{Host, HostPath};
 use ncd_traits::AppFrameworkError;
 use serde_json::Value;
@@ -9,7 +11,7 @@ use super::config::{
     AstrBotInstanceConfig, apply_onebot_to_root, claimed_platform_row, read_astrbot_config,
 };
 use super::config_json::{cmd_config_path, parse_cmd_config};
-use super::dashboard_client::DashboardClient;
+use super::dashboard_client::{DashboardClient, DashboardSessions};
 use super::platform::row_id;
 use crate::config_doc::DocumentSnapshot;
 
@@ -23,6 +25,7 @@ pub struct LiveTarget {
 
 pub async fn write_live(
     host: &dyn Host,
+    sessions: &Arc<DashboardSessions>,
     install_dir: &HostPath,
     instance_id: &str,
     listen_port: u16,
@@ -33,7 +36,7 @@ pub async fn write_live(
     if !issues.is_empty() {
         return Err(AppFrameworkError::ConfigInvalid(issues));
     }
-    let client = DashboardClient::connect(&target.instance_id, "127.0.0.1", target.port)?;
+    let client = DashboardClient::connect(sessions, &target.instance_id, "127.0.0.1", target.port)?;
     client.login(&target.username, &target.password).await?;
 
     let conf_id = if target.conf_id.trim().is_empty() {
@@ -160,7 +163,6 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
-    use super::super::dashboard_client::clear_token;
 
     async fn logged_in(server: &MockServer, instance_id: &str) -> DashboardClient {
         Mock::given(method("POST"))
@@ -185,8 +187,8 @@ mod tests {
                 .await;
         }
         let port: u16 = server.uri().rsplit(':').next().unwrap().parse().unwrap();
-        clear_token(instance_id);
-        let client = DashboardClient::connect(instance_id, "127.0.0.1", port).unwrap();
+        let sessions = Arc::new(DashboardSessions::default());
+        let client = DashboardClient::connect(&sessions, instance_id, "127.0.0.1", port).unwrap();
         client.login("astrbot", "Abcdefg1").await.unwrap();
         client
     }
