@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use ncd_domain::{AppInstance, AppStoreResource};
-use ncd_host::{ArchiveKind, Host, HostCommand, HostError, HostPath, Os};
+use ncd_host::{ArchiveKind, Host, HostCommand, HostError, HostPath};
 use ncd_traits::AppFrameworkError;
 use serde_json::{Map, Value};
 
@@ -549,33 +549,28 @@ async fn flatten_extract(host: &dyn Host, dest: &HostPath) -> Result<(), AppFram
     if !host.exists(&inner.join("metadata.yaml")).await.map_err(host_err)? {
         return Ok(());
     }
-    let mv = if host.os() == Os::Windows {
-        HostCommand::new("cmd")
-            .arg("/c")
-            .arg("move")
-            .arg("/y")
-            .arg(format!("{}\\*", inner.render_for(host.os())))
-            .arg(dest.render_for(host.os()))
-    } else {
-        HostCommand::new("sh")
-            .arg("-c")
-            .arg(format!(
-                "mv {:?}/* {:?} && rmdir {:?}",
-                inner.as_posix(),
-                dest.as_posix(),
-                inner.as_posix()
-            ))
-    };
-    let out = host
-        .run_to_string(mv.timeout(Duration::from_secs(30)))
-        .await
-        .map_err(host_err)?;
-    if !out.success() {
-        return Err(AppFrameworkError::Runtime(format!(
-            "无法展开 zip 目录: {}",
-            out.stderr.trim().lines().last().unwrap_or_default()
-        )));
+    // 目录名来自插件作者打的 zip，只能当路径交给 Host 改名，不能拼进 shell 命令。
+    // 先把顶层目录挪到固定的临时名，里面若有和它同名的子项也不会撞上它自己
+    let staging = dest.join(".ncd-flatten");
+    let flatten_err = |e: HostError| AppFrameworkError::Runtime(format!("无法展开 zip 目录: {e}"));
+    host.rename(&inner, &staging).await.map_err(flatten_err)?;
+    for child in host.list_dir(&staging).await.map_err(flatten_err)? {
+        if reject_unsafe_name(&child.name).is_err() {
+            continue;
+        }
+        let target = dest.join(&child.name);
+        // 远端 mv 遇到已存在的目录会挪进去而不是报错，先查一遍免得套成两层
+        if host.exists(&target).await.map_err(flatten_err)? {
+            return Err(AppFrameworkError::Runtime(format!(
+                "无法展开 zip 目录: 顶层已有同名项 {}",
+                child.name
+            )));
+        }
+        host.rename(&staging.join(&child.name), &target)
+            .await
+            .map_err(flatten_err)?;
     }
+    host.remove_dir_all(&staging).await.map_err(flatten_err)?;
     Ok(())
 }
 
@@ -777,5 +772,42 @@ mod tests {
         assert!(gh.iter().any(|u| u.contains("gh-proxy.com")));
         let other = github_download_candidates("https://example.com/a.zip");
         assert_eq!(other, vec!["https://example.com/a.zip".to_string()]);
+    }
+
+    // 顶层目录名是 zip 作者定的；带 shell 元字符也只能被当成普通名字挪走
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn flatten_moves_children_without_shell() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("plugin");
+        let inner = dest.join("x$(touch pwned)`id`");
+        std::fs::create_dir_all(inner.join("x$(touch pwned)`id`")).unwrap();
+        std::fs::write(inner.join("metadata.yaml"), b"name: demo\n").unwrap();
+        std::fs::write(inner.join(".env.example"), b"A=1\n").unwrap();
+
+        let host = ncd_host::local::LocalWindowsHost::new();
+        let dest_path = HostPath::from_windows(dest.to_str().unwrap());
+        flatten_extract(&host, &dest_path).await.unwrap();
+
+        assert!(dest.join("metadata.yaml").is_file());
+        assert!(dest.join(".env.example").is_file());
+        assert!(dest.join("x$(touch pwned)`id`").is_dir());
+        assert!(!dest.join(".ncd-flatten").exists());
+        assert!(!tmp.path().join("pwned").exists());
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn flatten_leaves_already_flat_plugin_alone() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("plugin");
+        std::fs::create_dir_all(dest.join("sub")).unwrap();
+        std::fs::write(dest.join("metadata.yaml"), b"name: demo\n").unwrap();
+
+        let host = ncd_host::local::LocalWindowsHost::new();
+        flatten_extract(&host, &HostPath::from_windows(dest.to_str().unwrap()))
+            .await
+            .unwrap();
+        assert!(dest.join("sub").is_dir());
     }
 }
