@@ -565,6 +565,11 @@ type DomainEventBody =
         kind: 'app_instance_log_appended';
         instance_id: string;
         line: string;
+    }
+    // 实例另起一轮输出（启动 / 麦麦运行卡重启），先于新一轮的第一行到
+    | {
+        kind: 'app_instance_log_reset';
+        instance_id: string;
     };
 
 // 所有发到 webview 的 IPC 事件 payload 都带顶层 v 版本号 envelope(R14:版本化)。

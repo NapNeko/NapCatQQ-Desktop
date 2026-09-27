@@ -187,6 +187,13 @@ fn maibot_api(adapter: &dyn AppFrameworkAdapter) -> Result<&dyn MaiBotRuntimeApi
     })
 }
 
+/// 桌面端起的进程输出写到哪：框架指定了就用框架的，没指定落到实例目录的 `.ncd-app.log`
+fn launch_log_file(adapter: &dyn AppFrameworkAdapter, instance: &AppInstance) -> HostPath {
+    adapter
+        .log_file(instance)
+        .unwrap_or_else(|| HostPath::from_posix(&instance.install_dir).join(".ncd-app.log"))
+}
+
 /// 提示词改在哪：跑着走 WebUI（上游改完会清它的缓存），停着改盘上文件
 enum PromptPlace {
     Live(MaiBotSession),
@@ -1083,17 +1090,13 @@ impl AppManager {
     }
 
     async fn resolve_log_file(&self, host: &dyn Host, instance: &AppInstance) -> HostPath {
-        let primary = self
-            .registry
-            .get(&instance.framework_id)
-            .ok()
-            .and_then(|a| a.log_file(instance))
-            .unwrap_or_else(|| HostPath::from_posix(&instance.install_dir).join(".ncd-app.log"));
-        if super::log_tail::file_size(host, &primary)
-            .await
-            .unwrap_or(0)
-            > 0
-        {
+        let primary = match self.registry.get(&instance.framework_id) {
+            Ok(adapter) => launch_log_file(adapter.as_ref(), instance),
+            Err(_) => HostPath::from_posix(&instance.install_dir).join(".ncd-app.log"),
+        };
+        // 桌面端起过的实例主日志一定在，新一轮刚开头可能还是空的：空也认它，
+        // 不然刚启动那一下会回落到别的 *.log，把上一轮的东西又翻出来
+        if host.exists(&primary).await.unwrap_or(false) {
             return primary;
         }
         if let Some(found) = super::log_tail::newest_project_log(host, &instance.install_dir).await {
@@ -1214,9 +1217,7 @@ impl AppManager {
         let adapter = self.registry.get(&instance.framework_id)?;
         let host = self.resolve_host(&instance.host_id).await?;
         let spec = self.component_spec(host.as_ref(), &instance);
-        let log_file = adapter
-            .log_file(&instance)
-            .unwrap_or_else(|| HostPath::from_posix(&instance.install_dir).join(".ncd-app.log"));
+        let log_file = launch_log_file(adapter.as_ref(), &instance);
         // 起不来的原因（缺 venv、条款没同意）也要落到 last_error：开机自启没人盯着看报错条
         let started = match adapter
             .launch_command(host.as_ref(), &spec, &LaunchArgs::default())
@@ -2166,10 +2167,22 @@ impl AppManager {
         Ok((adapter, session))
     }
 
-    /// 走上游自己的重启：工作进程退出码 42，bot.py 外层重新拉起，桌面端记着的进程不变
+    /// 走上游自己的重启：工作进程退出码 42，bot.py 外层重新拉起，桌面端记着的进程不变。
+    /// 输出却换了一轮，日志和面板都从这里重新开始，跟在桌面端点启动一样
     pub async fn maibot_restart(&self, id: &AppInstanceId) -> Result<(), AppFrameworkError> {
         let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.restart(&s).await
+        maibot_api(adapter.as_ref())?.restart(&s).await?;
+        let instance = self.store.require(id).await?;
+        let log_file = launch_log_file(adapter.as_ref(), &instance);
+        let reset = match self.resolve_host(&instance.host_id).await {
+            Ok(host) => self.runtime.reset_log(host, &instance, log_file).await,
+            Err(e) => Err(e),
+        };
+        // 重启本身已经成了，换日志失败只是面板里还留着上一轮
+        if let Err(e) = reset {
+            tracing::warn!(instance = id.as_str(), error = %e, "reset app log after restart");
+        }
+        Ok(())
     }
 
     pub async fn maibot_stats(

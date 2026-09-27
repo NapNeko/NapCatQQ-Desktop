@@ -239,6 +239,8 @@ as a quoted string",
                 cancellable: false,
             }),
             DomainEvent::desktop_log_appended("desktop line"),
+            DomainEvent::app_instance_log(ncd_domain::AppInstanceId::new("a1"), "line"),
+            DomainEvent::app_instance_log_reset(ncd_domain::AppInstanceId::new("a1")),
         ];
         for event in &all {
             let name = event.tauri_event_name();
@@ -308,6 +310,17 @@ as a quoted string",
     #[test]
     fn snowluma_daemon_log_round_trips() {
         assert_round_trip(DomainEvent::snowluma_daemon_log("hello world"));
+    }
+
+    #[test]
+    fn app_instance_log_reset_round_trips_with_stable_name() {
+        let event = DomainEvent::app_instance_log_reset(ncd_domain::AppInstanceId::new("a1"));
+        assert_round_trip(event.clone());
+        assert_eq!(event.tauri_event_name(), "app_instance_log_reset");
+        assert_eq!(event.kind(), DomainEventKind::AppInstanceLogReset);
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(value["kind"], "app_instance_log_reset");
+        assert_eq!(value["instance_id"], "a1");
     }
 
     #[test]

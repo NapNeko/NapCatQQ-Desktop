@@ -71,6 +71,8 @@ pub enum DomainEventKind {
     AppInstanceChanged,
     #[serde(rename = "app_instance_log_appended")]
     AppInstanceLogAppended,
+    #[serde(rename = "app_instance_log_reset")]
+    AppInstanceLogReset,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -198,6 +200,10 @@ pub enum DomainEvent {
     },
     #[serde(rename = "app_instance_log_appended")]
     AppInstanceLogAppended { instance_id: AppInstanceId, line: String },
+    /// 实例另起一轮输出（桌面端启动、麦麦运行卡重启）：之前的行属于上一轮，面板该清了。
+    /// 发在新一轮第一行之前，同一条总线上前端按顺序收到
+    #[serde(rename = "app_instance_log_reset")]
+    AppInstanceLogReset { instance_id: AppInstanceId },
 }
 
 pub const DOMAIN_EVENT_ENVELOPE_VERSION: u32 = 1;
@@ -252,6 +258,7 @@ impl DomainEvent {
             Self::HostConnectionRecovered { .. } => DomainEventKind::HostConnectionRecovered,
             Self::AppInstanceChanged { .. } => DomainEventKind::AppInstanceChanged,
             Self::AppInstanceLogAppended { .. } => DomainEventKind::AppInstanceLogAppended,
+            Self::AppInstanceLogReset { .. } => DomainEventKind::AppInstanceLogReset,
         }
     }
 
@@ -287,6 +294,7 @@ impl DomainEvent {
             Self::HostConnectionRecovered { .. } => "host_connection_recovered",
             Self::AppInstanceChanged { .. } => "app_instance_changed",
             Self::AppInstanceLogAppended { .. } => "app_instance_log_appended",
+            Self::AppInstanceLogReset { .. } => "app_instance_log_reset",
         }
     }
 
@@ -322,6 +330,7 @@ impl DomainEvent {
             Self::HostConnectionRecovered { .. } => None,
             Self::AppInstanceChanged { .. } => None,
             Self::AppInstanceLogAppended { .. } => None,
+            Self::AppInstanceLogReset { .. } => None,
         }
     }
 
@@ -339,6 +348,10 @@ impl DomainEvent {
             instance_id,
             line: line.into(),
         }
+    }
+
+    pub fn app_instance_log_reset(instance_id: AppInstanceId) -> Self {
+        Self::AppInstanceLogReset { instance_id }
     }
 
     pub fn bot_state_changed(snapshot: BotActorSnapshot, reason: impl Into<String>) -> Self {

@@ -6,6 +6,7 @@
 //!   `nohup setsid … &` + pid 文件投递；日志用 wc/tail 按偏移增量拉（同 bot_log_follow）
 //! - 冷启动 reconcile：pid 文件 + 进程身份校验（本机比进程名，远端比 /proc/pid/cwd），
 //!   防 pid 复用误杀
+//! - 每次启动另起一份日志：上一轮挪到 `<日志>.1`，先发 `app_instance_log_reset` 再推新一轮的行
 //!
 //! 进程退出 / 被停都由这里更新实例表状态并发 `app_instance_changed`。
 
@@ -220,6 +221,45 @@ impl NativeAppRuntime {
         }
     }
 
+    /// 进程没换、输出换了一轮：麦麦运行卡的重启是上游外层拉起新的工作进程，输出还走原来那根管子。
+    /// 写日志的一方还开着文件，挪走的话它会接着往 `.1` 里写，所以拷一份再原地截断；
+    /// 写入方都是追加打开的（本机泵 `append`、远端 `>>`），截断后接着从头写。
+    /// 按偏移跟文件的 follower 重挂一次从头读，免得新一轮刚好长过旧偏移时漏行
+    pub async fn reset_log(
+        &self,
+        host: Arc<dyn Host>,
+        instance: &AppInstance,
+        log_file: HostPath,
+    ) -> Result<(), AppFrameworkError> {
+        let following = self.followers.lock().await.contains_key(&instance.id);
+        self.stop_follow(&instance.id).await;
+        self.event_bus
+            .publish(DomainEvent::app_instance_log_reset(instance.id.clone()));
+        let previous = previous_run_log(&log_file);
+        match host.locality() {
+            Locality::Local => {
+                reset_local_log(
+                    &log_file.render(PathStyle::Windows),
+                    &previous.render(PathStyle::Windows),
+                )
+                .await;
+            }
+            Locality::Remote => {
+                let log = shell_quote(log_file.as_posix());
+                let prev = shell_quote(previous.as_posix());
+                let script =
+                    format!("if [ -f {log} ]; then cp -f {log} {prev} 2>/dev/null; : > {log}; fi");
+                host.run_to_string(HostCommand::new("sh").arg("-c").arg(script))
+                    .await
+                    .map_err(host_err)?;
+            }
+        }
+        if following {
+            self.attach(host, instance, log_file).await?;
+        }
+        Ok(())
+    }
+
     // ---- 本机 ----
 
     async fn start_local(
@@ -238,7 +278,16 @@ impl NativeAppRuntime {
         .await
         .map_err(host_err)?;
 
+        // 起来了才换日志：没起来时上一轮的输出还留在面板上，对着报错看。
+        // 文件由下面的泵写，泵开起来之前换掉就不会有新一轮的行落进 `.1`
         let log_path = spec.log_file.render(PathStyle::Windows);
+        rotate_local_log(
+            &log_path,
+            &previous_run_log(&spec.log_file).render(PathStyle::Windows),
+        )
+        .await;
+        self.event_bus
+            .publish(DomainEvent::app_instance_log_reset(instance.id.clone()));
         let mut tasks = Vec::new();
         if let Some(out) = process.take_stdout() {
             tasks.push(self.spawn_pump(instance.id.clone(), out, log_path.clone()));
@@ -387,18 +436,25 @@ impl NativeAppRuntime {
             )
             .await
             .map_err(host_err)?;
+        // 脚本已经把上一轮挪走了，这轮不管起没起来，文件里都是这一轮的
+        self.event_bus
+            .publish(DomainEvent::app_instance_log_reset(instance.id.clone()));
         let pid = out.stdout.lines().find_map(|l| {
             l.strip_prefix("RUNNING ")
                 .and_then(|p| p.trim().parse::<u32>().ok())
         });
         let Some(pid) = pid else {
+            for line in lines_after_exited(&out.stdout) {
+                publish_app_log(&self.event_bus, &instance.id, line);
+            }
             let detail = format!("{}\n{}", out.stdout.trim(), out.stderr.trim());
             return Err(AppFrameworkError::Runtime(format!(
                 "远端进程启动后立即退出：{}",
                 detail.trim()
             )));
         };
-        let task = self.spawn_remote_follow(host, instance.clone(), spec.log_file, false);
+        // 从头读：脚本里 sleep 1 的那一秒进程已经在写了，从当前大小开始会漏掉开头
+        let task = self.spawn_remote_follow(host, instance.clone(), spec.log_file, true);
         self.followers.lock().await.insert(instance.id.clone(), task);
         Ok(pid)
     }
@@ -620,6 +676,50 @@ fn process_tree(root: u32, table: &[ProcRow]) -> Vec<u32> {
     out
 }
 
+// ---- 日志轮换 ----
+
+/// 上一轮日志留一份在 `<日志>.1`：够回头看上次为什么退，又不会一轮轮攒下去。
+/// 后缀不是 `.log`，开页找日志时不会被当成项目日志挑中
+fn previous_run_log(log_file: &HostPath) -> HostPath {
+    HostPath::from_posix(format!("{}.1", log_file.as_posix()))
+}
+
+/// 本机新一轮开跑：上一轮挪到 `.1`。挪不动（被别的程序开着）就原地清空，再不行只能接着追加
+async fn rotate_local_log(path: &str, previous: &str) {
+    match tokio::fs::rename(path, previous).await {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => {
+            tracing::debug!(path, error = %e, "rotate app log failed; truncating in place");
+            if let Err(e) = truncate_local(path).await {
+                tracing::warn!(path, error = %e, "truncate app log failed");
+            }
+        }
+    }
+}
+
+/// 写入方还开着文件时用：拷一份给 `.1`，再原地截断
+async fn reset_local_log(path: &str, previous: &str) {
+    if tokio::fs::metadata(path).await.is_err() {
+        return;
+    }
+    if let Err(e) = tokio::fs::copy(path, previous).await {
+        tracing::debug!(path, error = %e, "keep previous app log failed");
+    }
+    if let Err(e) = truncate_local(path).await {
+        tracing::warn!(path, error = %e, "truncate app log failed");
+    }
+}
+
+async fn truncate_local(path: &str) -> std::io::Result<()> {
+    tokio::fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .await
+        .map(|_| ())
+}
+
 async fn local_read_from(path: &str, from: u64, to: u64) -> Option<Vec<u8>> {
     let mut f = tokio::fs::File::open(path).await.ok()?;
     f.seek(std::io::SeekFrom::Start(from)).await.ok()?;
@@ -636,7 +736,8 @@ fn shell_quote(s: &str) -> String {
 }
 
 /// `cd dir && export … && nohup setsid prog args >> log 2>&1 </dev/null & echo $! > pid`，
-/// 起完 sleep 1 再 kill -0 校验，失败带日志尾巴回来
+/// 起完 sleep 1 再 kill -0 校验，失败带日志尾巴回来。
+/// 开跑前上一轮挪到 `.1`；仍用 `>>` 追加打开，麦麦运行卡重启时原地截断，进程接着从头写
 fn remote_start_script(
     cmd: &HostCommand,
     install_dir: &str,
@@ -645,6 +746,7 @@ fn remote_start_script(
 ) -> String {
     let dir = shell_quote(install_dir);
     let log = shell_quote(log_file.as_posix());
+    let previous = shell_quote(previous_run_log(log_file).as_posix());
     let pid = shell_quote(pid_file.as_posix());
     let exports: String = cmd
         .environment
@@ -660,6 +762,7 @@ fn remote_start_script(
     format!(
         "cd {dir} || exit 97\n\
          {exports}\
+         if [ -f {log} ]; then mv -f {log} {previous} 2>/dev/null || : > {log}; fi\n\
          nohup setsid {invoke} >> {log} 2>&1 </dev/null &\n\
          pid=$!\n\
          printf '%s\\n%s\\n' \"$pid\" {prog} > {pid}\n\
@@ -746,12 +849,18 @@ fn log_follow_read_from(last_size: u64, size: u64) -> Option<u64> {
     }
 }
 
+/// 远端起完就退时，脚本在 `EXITED` 后面带回来的日志尾巴
+fn lines_after_exited(stdout: &str) -> impl Iterator<Item = &str> {
+    stdout.lines().skip_while(|l| l.trim() != "EXITED").skip(1)
+}
+
+/// 颜色码原样带给前端：麦麦默认只靠时间戳的颜色区分等级，剥掉就全成了灰字。
+/// 这里只按剥完的可见文字判空，别的控制序列前端解析时丢
 fn publish_app_log(bus: &BroadcastEventBus, id: &AppInstanceId, line: &str) {
-    let cleaned = ncd_deploy::strip_ansi_escapes(line);
-    if cleaned.trim().is_empty() {
+    if ncd_deploy::strip_ansi_escapes(line).trim().is_empty() {
         return;
     }
-    bus.publish(DomainEvent::app_instance_log(id.clone(), cleaned));
+    bus.publish(DomainEvent::app_instance_log(id.clone(), line));
 }
 
 #[cfg(test)]
@@ -893,6 +1002,84 @@ mod tests {
     #[test]
     fn shell_quote_escapes_single_quotes() {
         assert_eq!(shell_quote("it's"), "'it'\"'\"'s'");
+    }
+
+    #[test]
+    fn remote_script_moves_previous_run_aside_before_starting() {
+        let cmd = HostCommand::new("/usr/bin/python3").arg("bot.py");
+        let script = remote_start_script(
+            &cmd,
+            "/home/u/mai",
+            &HostPath::from_posix("/home/u/mai/.ncd-maibot.log"),
+            &HostPath::from_posix("/home/u/mai/.ncd-app.pid"),
+        );
+        let rotate = script
+            .find("mv -f '/home/u/mai/.ncd-maibot.log' '/home/u/mai/.ncd-maibot.log.1'")
+            .expect("上一轮挪到 .1");
+        let start = script.find("nohup setsid").unwrap();
+        assert!(rotate < start, "先挪走再起");
+        assert!(
+            script.contains(">> '/home/u/mai/.ncd-maibot.log' 2>&1"),
+            "仍追加打开：麦麦重启时原地截断，进程接着从头写"
+        );
+    }
+
+    #[test]
+    fn previous_run_log_is_not_picked_as_a_project_log() {
+        let prev = previous_run_log(&HostPath::from_posix("/a/.ncd-maibot.log"));
+        assert_eq!(prev.as_posix(), "/a/.ncd-maibot.log.1");
+        assert_eq!(super::super::log_tail::pick_first_log_path(prev.as_posix()), None);
+    }
+
+    #[test]
+    fn exited_tail_is_the_lines_after_the_marker() {
+        let out = "EXITED\nTraceback (most recent call last):\n  File \"bot.py\"\n";
+        assert_eq!(
+            lines_after_exited(out).collect::<Vec<_>>(),
+            vec!["Traceback (most recent call last):", "  File \"bot.py\""]
+        );
+        assert_eq!(lines_after_exited("RUNNING 42\n").count(), 0);
+    }
+
+    #[tokio::test]
+    async fn local_start_moves_previous_run_to_dot_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join(".ncd-app.log");
+        let prev = dir.path().join(".ncd-app.log.1");
+        let (log_s, prev_s) = (log.to_str().unwrap(), prev.to_str().unwrap());
+        std::fs::write(&prev, "older\n").unwrap();
+        std::fs::write(&log, "last run\n").unwrap();
+
+        rotate_local_log(log_s, prev_s).await;
+        assert!(!log.exists());
+        assert_eq!(std::fs::read_to_string(&prev).unwrap(), "last run\n");
+
+        // 上一轮没留下日志：什么都不动
+        rotate_local_log(log_s, prev_s).await;
+        assert_eq!(std::fs::read_to_string(&prev).unwrap(), "last run\n");
+    }
+
+    #[tokio::test]
+    async fn local_reset_truncates_under_an_open_append_writer() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join(".ncd-maibot.log");
+        let prev = dir.path().join(".ncd-maibot.log.1");
+        // 和泵一样追加打开，重启前后一直开着
+        let mut writer = tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log)
+            .await
+            .unwrap();
+        writer.write_all(b"before restart\n").await.unwrap();
+        writer.flush().await.unwrap();
+
+        reset_local_log(log.to_str().unwrap(), prev.to_str().unwrap()).await;
+        writer.write_all(b"after restart\n").await.unwrap();
+        writer.flush().await.unwrap();
+
+        assert_eq!(std::fs::read_to_string(&log).unwrap(), "after restart\n");
+        assert_eq!(std::fs::read_to_string(&prev).unwrap(), "before restart\n");
     }
 
     #[test]

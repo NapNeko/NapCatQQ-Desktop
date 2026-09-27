@@ -45,6 +45,7 @@ const DOMAIN_EVENT_NAMES = [
     // 应用端实例（Karin 等）
     'app_instance_changed',
     'app_instance_log_appended',
+    'app_instance_log_reset',
 ] as const;
 
 export const eventStreamService = {
