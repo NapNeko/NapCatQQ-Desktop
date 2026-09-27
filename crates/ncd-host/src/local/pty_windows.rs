@@ -143,12 +143,20 @@ impl AttributeList {
         // SAFETY: 第一次只量大小，按约定返回「缓冲区不足」，结果不用
         let _ = unsafe { InitializeProcThreadAttributeList(None, 1, None, &mut size) };
         let words = size.div_ceil(std::mem::size_of::<usize>()).max(1);
-        let mut list = Self {
-            buf: vec![0usize; words],
-        };
+        let mut buf = vec![0usize; words];
         // SAFETY: 缓冲区按上面量出的大小分配
-        unsafe { InitializeProcThreadAttributeList(Some(list.as_list_mut()), 1, None, &mut size) }
-            .map_err(|e| win_error("InitializeProcThreadAttributeList", &e))?;
+        unsafe {
+            InitializeProcThreadAttributeList(
+                Some(LPPROC_THREAD_ATTRIBUTE_LIST(buf.as_mut_ptr().cast())),
+                1,
+                None,
+                &mut size,
+            )
+        }
+        .map_err(|e| win_error("InitializeProcThreadAttributeList", &e))?;
+        // 初始化成功之后才包成 Self：失败时这里还只是个普通 Vec，析构不会去 Delete 一张没初始化的表。
+        // Vec 挪进结构体不会搬动堆上的缓冲区，表的地址不变
+        let mut list = Self { buf };
         // SAFETY: 伪终端属性的值就是句柄本身（不是指向句柄的指针），微软示例同样这么传
         unsafe {
             UpdateProcThreadAttribute(
