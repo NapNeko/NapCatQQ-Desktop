@@ -18,6 +18,7 @@ pub mod release;
 pub mod servers;
 pub mod snowluma;
 pub mod system_metrics;
+pub mod terminal;
 pub mod tray;
 pub mod window;
 
@@ -385,6 +386,7 @@ mod tests {
                 crate::commands::data_root_migrate::DataRootMigrateGate::default(),
             ),
             app_manager,
+            terminals: crate::commands::terminal::test_terminals(),
         };
         (state, bus)
     }

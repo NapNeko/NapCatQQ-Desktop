@@ -43,7 +43,14 @@ sha2 = "0.10"
 hex = "0.4"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    # 终端右键粘贴读剪贴板
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
 tauri-winrt-notification = "0.7"
 winreg = "0.52"
 

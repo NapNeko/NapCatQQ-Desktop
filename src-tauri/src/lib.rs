@@ -17,6 +17,7 @@ pub mod autostart;
 pub mod bootstrap;
 pub mod bot_host_resolver;
 pub mod bot_runtime_gate;
+pub mod clipboard;
 pub mod commands;
 pub mod desktop_consent;
 pub mod desktop_log;
@@ -74,6 +75,8 @@ pub struct AppState {
     pub(crate) migrate_gate: Arc<commands::data_root_migrate::DataRootMigrateGate>,
     /// 应用端框架（Karin 等）实例表 + 起停 + 对接编排
     pub(crate) app_manager: Arc<ncd_runtime::AppManager>,
+    /// 内嵌终端会话；和网页无关，进轻量模式也不断
+    pub(crate) terminals: Arc<ncd_runtime::terminal::TerminalManager>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -256,6 +259,7 @@ pub fn run() {
             Arc::clone(&local_host),
         ));
     let host_resolver_for_apps = Arc::clone(&host_resolver);
+    let host_resolver_for_terminals = Arc::clone(&host_resolver);
     // 远端库存缓存:组件页探测与 Bot 启动预检共用一份,安装完成后由 executor 清掉
     let host_probe_cache: Arc<Mutex<HashMap<String, ncd_runtime::RemoteInventory>>> =
         Arc::new(Mutex::new(HashMap::new()));
@@ -354,6 +358,16 @@ pub fn run() {
     let app_manager_reconcile = Arc::clone(&app_manager);
     let app_manager_host_recovery = Arc::clone(&app_manager);
 
+    let terminals = Arc::new(ncd_runtime::terminal::TerminalManager::new(Arc::new(
+        ncd_runtime::terminal::DesktopTerminalPlanner::new(
+            host_resolver_for_terminals,
+            Arc::clone(&server_manager),
+            Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::BotConfigPort>,
+            Arc::clone(&app_manager),
+            data_root.clone(),
+        ),
+    )));
+
     let bot_manager_bootstrap = Arc::clone(&bot_manager);
     let data_root_for_bootstrap = data_root.clone();
     let bot_manager_listener = Arc::clone(&bot_manager);
@@ -395,6 +409,7 @@ pub fn run() {
             metrics_collector: metrics_collector.clone(),
             migrate_gate: Arc::new(commands::data_root_migrate::DataRootMigrateGate::default()),
             app_manager: app_manager.clone(),
+            terminals,
         })
         .setup(move |app| {
             if startup_tray_only {
@@ -866,6 +881,29 @@ pub fn run() {
             commands::exit::prepare_exit_desktop,
             commands::exit::request_exit_app,
             commands::window::show_main_window,
+            commands::terminal::terminal_local_shells,
+            commands::terminal::terminal_list,
+            commands::terminal::terminal_open,
+            commands::terminal::terminal_attach,
+            commands::terminal::terminal_write,
+            commands::terminal::terminal_resize,
+            commands::terminal::terminal_ack,
+            commands::terminal::terminal_restart,
+            commands::terminal::terminal_close,
+            commands::terminal::terminal_clear_history,
+            commands::terminal::terminal_fill_sudo,
+            commands::terminal::terminal_open_external,
+            commands::terminal::terminal_stats,
+            commands::terminal::terminal_list_dir,
+            commands::terminal::terminal_read_text,
+            commands::terminal::terminal_write_text,
+            commands::terminal::terminal_make_dir,
+            commands::terminal::terminal_rename,
+            commands::terminal::terminal_remove,
+            commands::terminal::terminal_upload,
+            commands::terminal::terminal_download,
+            commands::terminal::terminal_export_text,
+            commands::terminal::read_clipboard_text,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

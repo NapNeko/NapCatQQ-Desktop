@@ -32,6 +32,10 @@ pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     if is_lightweight_mode() {
         return Ok(());
     }
+    // 终端输出通道挂在要销毁的网页上：先摘掉，输出照常收进回放，网页重建后重新接上
+    if let Some(state) = app.try_state::<crate::AppState>() {
+        state.terminals.detach_all();
+    }
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         window.destroy().map_err(|e| e.to_string())?;
     }

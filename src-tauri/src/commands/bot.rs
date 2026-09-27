@@ -585,6 +585,7 @@ mod tests {
                 crate::commands::data_root_migrate::DataRootMigrateGate::default(),
             ),
             app_manager,
+            terminals: crate::commands::terminal::test_terminals(),
         };
         (state, bus)
     }
