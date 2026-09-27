@@ -354,3 +354,79 @@ s.close()
 
     cleanup_tmpdir(&host, &dir).await;
 }
+
+// ============================================================
+// 交互终端
+// ============================================================
+
+/// 收终端输出直到出现 needle（或超时）
+async fn read_until(session: &mut ncd_host::PtySession, needle: &str) -> String {
+    let mut all = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_secs(15), async {
+        while let Some(chunk) = session.output.recv().await {
+            all.extend_from_slice(&chunk);
+            if String::from_utf8_lossy(&all).contains(needle) {
+                break;
+            }
+        }
+    })
+    .await;
+    String::from_utf8_lossy(&all).into_owned()
+}
+
+#[tokio::test]
+#[ignore]
+async fn smoke_pty_login_shell_round_trip() {
+    use ncd_host::{PtyExit, PtyProgram, PtyRequest, PtySize};
+
+    let host = make_host().await;
+    let mut session = host
+        .open_pty(PtyRequest::new(PtyProgram::LoginShell, PtySize::new(100, 30)))
+        .await
+        .unwrap();
+    session
+        .control
+        .write(bytes::Bytes::from_static(b"echo ncd-$((40+2)) $(tput cols)\n"))
+        .unwrap();
+    let text = read_until(&mut session, "ncd-42 100").await;
+    assert!(text.contains("ncd-42 100"), "output was: {text:?}");
+
+    session.control.resize(PtySize::new(132, 40)).unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    session
+        .control
+        .write(bytes::Bytes::from_static(b"echo cols=$(tput cols); exit 7\n"))
+        .unwrap();
+    let text = read_until(&mut session, "cols=132").await;
+    assert!(text.contains("cols=132"), "output was: {text:?}");
+    while session.output.recv().await.is_some() {}
+    let exit = tokio::time::timeout(Duration::from_secs(10), session.exit)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(exit, PtyExit::Exited(Some(7)));
+}
+
+#[tokio::test]
+#[ignore]
+async fn smoke_pty_program_in_directory() {
+    use ncd_host::{PtyProgram, PtyRequest, PtySize};
+
+    let host = make_host().await;
+    let dir = unique_tmpdir();
+    host.create_dir_all(&dir).await.unwrap();
+    let mut req = PtyRequest::new(
+        PtyProgram::Program {
+            program: "sh".into(),
+            args: vec!["-c".into(), "echo \"pwd=$(pwd) v=$NCD_PROBE\"".into()],
+        },
+        PtySize::default(),
+    );
+    req.cwd = Some(dir.clone());
+    req.env.insert("NCD_PROBE".into(), "a b".into());
+    let mut session = host.open_pty(req).await.unwrap();
+    let expected = format!("pwd={} v=a b", dir.as_posix());
+    let text = read_until(&mut session, &expected).await;
+    assert!(text.contains(&expected), "output was: {text:?}");
+    cleanup_tmpdir(&host, &dir).await;
+}

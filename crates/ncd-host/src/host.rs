@@ -258,6 +258,17 @@ pub trait Host: Send + Sync {
         })
     }
 
+    /// 开一个交互终端(伪终端)。本机走 ConPTY,远端走 SSH 的 pty 通道;
+    /// 其它主机返回 Unsupported
+    async fn open_pty(
+        &self,
+        _req: crate::pty::PtyRequest,
+    ) -> Result<crate::pty::PtySession, HostError> {
+        Err(HostError::Unsupported {
+            operation: "open_pty",
+        })
+    }
+
     /// 是否支持连接刷新/失效语义本地/stub 返回 false,远端返回 true
     fn supports_refresh(&self) -> bool {
         false

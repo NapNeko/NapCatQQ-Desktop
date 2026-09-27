@@ -35,6 +35,12 @@ russh-sftp = "2"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
     "Win32_Foundation",
+    # CreateProcessW 的参数类型挂在 Security 下(内嵌终端用)
+    "Win32_Security",
+    # ConPTY 的 COORD / HPCON;函数本身运行时从 kernel32 取
+    "Win32_System_Console",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Pipes",
     # SHELLEXECUTEINFOW 引用 HKEY,ShellExecuteExW 挂在 Registry feature 下
     "Win32_System_Registry",
     "Win32_System_Threading",

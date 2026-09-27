@@ -334,6 +334,15 @@ impl Host for LocalWindowsHost {
 
     // ===== 进程操作 =====
 
+    async fn open_pty(
+        &self,
+        req: crate::pty::PtyRequest,
+    ) -> Result<crate::pty::PtySession, HostError> {
+        tokio::task::spawn_blocking(move || super::pty_windows::open_conpty(req))
+            .await
+            .map_err(|e| HostError::Io(std::io::Error::other(format!("spawn_blocking failed: {e}"))))?
+    }
+
     async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
         if cmd.elevated {
             // 提权进程拿不到可异步轮询的句柄,HostProcess 语义撑不起来;

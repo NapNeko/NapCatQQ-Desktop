@@ -11,4 +11,9 @@ pub mod windows;
 pub(crate) mod elevate;
 
 #[cfg(windows)]
+pub(crate) mod pty_windows;
+
+#[cfg(windows)]
+pub use pty_windows::conpty_available;
+#[cfg(windows)]
 pub use windows::LocalWindowsHost;

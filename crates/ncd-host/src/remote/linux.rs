@@ -44,6 +44,8 @@ use super::credentials::{SshCredentials, SshKey};
 use super::host_key::{HostKeyCheck, HostKeyPolicy, KnownHostsStore};
 use super::tunnel::{TunnelDirection, TunnelHandle, TunnelSpec};
 
+mod pty;
+
 /// `(远端听地址, 远端听口)` → `(本机目标 host, 本机目标口)`
 type RemoteForwardTable = Arc<Mutex<HashMap<(String, u16), (String, u16)>>>;
 
@@ -819,6 +821,13 @@ impl Host for RemoteLinuxHost {
 
     async fn open_tunnel(&self, spec: TunnelSpec) -> Result<TunnelHandle, HostError> {
         RemoteLinuxHost::open_tunnel(self, spec).await
+    }
+
+    async fn open_pty(
+        &self,
+        req: crate::pty::PtyRequest,
+    ) -> Result<crate::pty::PtySession, HostError> {
+        self.open_pty_channel(req).await
     }
 
     fn supports_refresh(&self) -> bool {

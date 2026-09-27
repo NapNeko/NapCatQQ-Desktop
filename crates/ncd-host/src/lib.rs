@@ -35,6 +35,7 @@ pub mod package_manager;
 pub mod path;
 pub mod pkg_output;
 pub mod process;
+pub mod pty;
 pub mod remote;
 pub mod shell;
 pub mod stream_chunk;
@@ -55,6 +56,10 @@ pub use pkg_output::{
     truncate_pkg_line,
 };
 pub use process::{ExitStatus, HostProcess, ProcessId};
+pub use pty::{
+    PtyBackend, PtyControl, PtyExit, PtyInput, PtyProgram, PtyRequest, PtySession, PtySize,
+    pty_channel_pair,
+};
 pub use remote::download_progress::{CurlProgressParser, DownloadProgress, WgetProgressParser};
 pub use remote::url_download::{
     REMOTE_URL_DOWNLOAD_TIMEOUT, curl_url_download_command, wget_url_download_command,
