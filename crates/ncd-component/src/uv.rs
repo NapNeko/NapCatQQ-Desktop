@@ -27,6 +27,18 @@ use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 /// 默认锁定的 uv 版本（与上游 release tag 同形，不带 v）
 pub const UV_DEFAULT_VERSION: &str = "0.12.8";
 
+/// UV_DEFAULT_VERSION 各发行包的 sha256，取自 GitHub release 的 asset digest。
+/// 下载会走第三方镜像，只有钉在源码里的摘要挡得住被换过的包；升版本时这张表跟着一起换
+const UV_DEFAULT_SHA256: &[(&str, &str)] = &[
+    ("uv-x86_64-pc-windows-msvc.zip", "e07acf3f8a29fe41f9e04b799c3325cb0e0893836bb222bf102829b45c679ad6"),
+    ("uv-aarch64-pc-windows-msvc.zip", "84b821c551802c200a32e25f9d1d960ef15e248f54f6a1bd9e1eb62934669da8"),
+    ("uv-i686-pc-windows-msvc.zip", "9b38cad9b06e0a910e606510cdb4ad2c4eb4f320c4f4c4ba90dd13ed1115c5b0"),
+    ("uv-x86_64-unknown-linux-gnu.tar.gz", "2e2b37e9811e17675a9e70bed5e1a58fc8c0388be63d751d72cc735188c149ff"),
+    ("uv-aarch64-unknown-linux-gnu.tar.gz", "ba8661f4fd207c8e94814191598e619b355ac10d5014e851e21eb800f9ef2b00"),
+    ("uv-i686-unknown-linux-gnu.tar.gz", "739cfea6b2958da57106e6ff1b0f95ecb17522ce84fc8e07c8606b2f427a4e39"),
+    ("uv-armv7-unknown-linux-gnueabihf.tar.gz", "bc80826f631f8836a974a88b8cf797935bc83f15552828ad5de0195f6246e333"),
+];
+
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
     (Os::Linux, Locality::Local),
@@ -105,6 +117,17 @@ impl UvComponent {
         let triple = Self::target_triple(os, arch)?;
         let ext = if os == Os::Windows { "zip" } else { "tar.gz" };
         Ok(format!("uv-{triple}.{ext}"))
+    }
+
+    /// 只有默认版本有内置摘要；换了版本（或下载模板）的调用方自己负责来源
+    fn expected_sha256(&self, asset: &str) -> Option<&'static str> {
+        if self.version != UV_DEFAULT_VERSION {
+            return None;
+        }
+        UV_DEFAULT_SHA256
+            .iter()
+            .find(|(name, _)| *name == asset)
+            .map(|(_, sha)| *sha)
     }
 
     fn build_download_url(&self, os: Os, arch: Arch) -> Result<String, ActionError> {
@@ -216,13 +239,19 @@ impl Component for UvComponent {
         })
         .await;
         let url = self.build_download_url(host.os(), arch)?;
+        let asset = Self::asset_name(host.os(), arch)?;
+        let expected_sha256 = self.expected_sha256(&asset);
+        if expected_sha256.is_none() {
+            ctx.warn(format!("uv {} 没有内置校验值，下载后不做 sha256 校验", self.version))
+                .await;
+        }
         let ext = if host.os() == Os::Windows { "zip" } else { "tar.gz" };
         let file_name = format!("ncd-uv-{}-{}.{ext}", self.version, std::process::id());
         let local_tmp = std::env::temp_dir().join(&file_name);
         let helper = DownloadHelper::new()?;
         let mirrors = ncd_network::build_mirror_urls(&url, None);
         helper
-            .download_with_mirrors(&mirrors, &local_tmp, None, ctx, 1)
+            .download_with_mirrors(&mirrors, &local_tmp, expected_sha256, ctx, 1)
             .await?;
         ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
 
@@ -264,21 +293,30 @@ impl Component for UvComponent {
             message: format!("安装到 {}", self.install_dir.as_posix()),
         })
         .await;
-        let _ = host.remove_dir_all(&self.install_dir).await;
-        host.create_dir_all(&self.install_dir).await?;
+        // 攒到 install_dir 隔壁的 .new，装齐了再换过去：解压到一半失败也不会剩半个
+        // 目录顶掉能用的旧 uv，换过去那一下只差一次改名
+        let new_dir = match self.install_dir.parent() {
+            Some(parent) => parent.join(format!(
+                "{}.new",
+                self.install_dir.file_name().unwrap_or("uv")
+            )),
+            None => self.install_dir.join(".new"),
+        };
+        let _ = host.remove_dir_all(&new_dir).await;
+        host.create_dir_all(&new_dir).await?;
         if host.os() == Os::Windows {
             // zip 根目录即二进制
             for name in ["uv.exe", "uvx.exe", "uvw.exe"] {
                 let src = stage_dir.join(name);
                 if host.exists(&src).await? {
                     let bytes = host.read_file(&src).await?;
-                    host.write_file(&self.install_dir.join(name), &bytes).await?;
+                    host.write_file(&new_dir.join(name), &bytes).await?;
                 }
             }
         } else {
             let triple = Self::target_triple(host.os(), arch)?;
             let root = shell_quote(stage_dir.join(format!("uv-{triple}")).as_posix());
-            let dest = shell_quote(self.install_dir.as_posix());
+            let dest = shell_quote(new_dir.as_posix());
             let mv = HostCommand::new("sh").arg("-c").arg(format!(
                 "mv {root}/uv {root}/uvx {dest}/ && chmod +x {dest}/uv {dest}/uvx"
             ));
@@ -290,6 +328,8 @@ impl Component for UvComponent {
                 ));
             }
         }
+        let _ = host.remove_dir_all(&self.install_dir).await;
+        host.rename(&new_dir, &self.install_dir).await?;
         let _ = host.remove_dir_all(&stage_dir).await;
         let _ = host.remove_file(&remote_archive).await;
 
@@ -373,6 +413,28 @@ mod tests {
             "uv-aarch64-unknown-linux-gnu.tar.gz"
         );
         assert!(UvComponent::asset_name(Os::Windows, Arch::Armv7).is_err());
+    }
+
+    // 漏一格的后果是那台机器静默不校验，装 uv 时按发行包名逐个过一遍
+    #[test]
+    fn default_version_pins_sha256_for_every_shipped_asset() {
+        let comp = UvComponent::new(UV_DEFAULT_VERSION, HostPath::from_posix("/tmp/uv"));
+        for os in [Os::Windows, Os::Linux] {
+            for arch in [Arch::X86_64, Arch::Aarch64, Arch::X86, Arch::Armv7] {
+                let Ok(asset) = UvComponent::asset_name(os, arch) else {
+                    continue;
+                };
+                let sha = comp.expected_sha256(&asset);
+                assert!(sha.is_some(), "{asset}");
+                assert_eq!(sha.unwrap().len(), 64, "{asset}");
+            }
+        }
+    }
+
+    #[test]
+    fn other_versions_have_no_pinned_sha256() {
+        let comp = UvComponent::new("0.12.9", HostPath::from_posix("/tmp/uv"));
+        assert!(comp.expected_sha256("uv-x86_64-unknown-linux-gnu.tar.gz").is_none());
     }
 
     #[test]
