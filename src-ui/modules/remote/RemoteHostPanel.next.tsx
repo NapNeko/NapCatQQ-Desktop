@@ -430,7 +430,7 @@ function FloatingAddButton({ onClick }: { onClick: () => void }) {
         <button
             type="button"
             onClick={onClick}
-            className="pointer-events-auto fixed bottom-8 right-8 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-popover transition-all duration-150 hover:scale-105 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="float-above-terminal pointer-events-auto fixed bottom-8 right-8 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-popover transition-all duration-150 hover:scale-105 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             aria-label="添加服务器"
         >
             <ActionMotionIcon icon={Plus} size={20} strokeWidth={2.4} />

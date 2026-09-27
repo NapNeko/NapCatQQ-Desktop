@@ -1331,6 +1331,18 @@ samp,
     }
 }
 
+/* 贴着窗口底边悬浮的按钮 / 操作条：底部终端面板开着时抬到面板上面，面板铺满窗口时藏起来。
+   --terminal-dock-inset 和 data-terminal-covers 由终端面板按自己的实际高度写到根元素上，拖高度时也跟着走。
+   用 margin-bottom 抬而不是 translate，不跟元素自己的 bottom-* / -translate-x-1/2 和 GSAP 的位移打架；
+   藏起来要 !important，GSAP 进场时会往行内写 visibility / opacity。 */
+.float-above-terminal {
+    margin-bottom: var(--terminal-dock-inset, 0px);
+}
+
+:root[data-terminal-covers] .float-above-terminal {
+    display: none !important;
+}
+
 /* 仍需要完全隐藏滚动条时用 .scrollbar-hide（少用） */
 .scrollbar-hide {
     scrollbar-width: none;

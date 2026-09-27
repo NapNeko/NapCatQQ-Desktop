@@ -78,7 +78,7 @@ export function BatchBottomBar({
     // 内层 GsapPresence 自由动 x/y/scale 不影响居中。
     return (
         <BodyPortal>
-        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
+        <div className="float-above-terminal pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
             <GsapPresence visible={visible} onEnter={enter} onExit={exit}>
                 <BarBody>
                     <div
