@@ -2,6 +2,7 @@
 // 真相在 crates/ncd-appframework/src/karin/config.rs，这里的校验只做「保存前立刻提示」，
 // 后端仍会再校验一遍（ConfigInvalid 按 path 回填到字段）。
 
+import type { ConfigFormSpec } from './appConfigForm';
 import type {
     AppConfigIssue,
     KarinEnv,
@@ -261,11 +262,11 @@ export function validateKarinConfig(cfg: KarinInstanceConfig): AppConfigIssue[] 
     return out;
 }
 
-export function issuesByPath(issues: AppConfigIssue[]): Record<string, string> {
-    const map: Record<string, string> = {};
-    for (const i of issues) if (!(i.path in map)) map[i.path] = i.message;
-    return map;
-}
+export const KARIN_CONFIG_FORM: ConfigFormSpec<'karin'> = {
+    framework: 'karin',
+    validate: validateKarinConfig,
+    saveHint: (r) => (r.restart_required ? '有改动需重启实例后生效' : 'Karin 会自动热加载，无需重启'),
+};
 
 /** 对接依赖的两把钥匙是否变了（保存前提示「会重新对接」） */
 export function karinLinkInputsChanged(a: KarinEnv, b: KarinEnv): boolean {

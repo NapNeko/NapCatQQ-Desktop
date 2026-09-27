@@ -1,5 +1,6 @@
 // NoneBot2 窄配置的前端校验 / 默认值。规则与后端 `NoneBot2InstanceConfig::validate` 对齐。
 
+import type { ConfigFormSpec } from './appConfigForm';
 import type { AppConfigIssue, NoneBot2InstanceConfig } from '../../ipc/types';
 
 export const NONEBOT2_LOG_LEVELS = ['TRACE', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] as const;
@@ -39,6 +40,12 @@ export function validateNoneBot2Config(cfg: NoneBot2InstanceConfig): AppConfigIs
     });
     return out;
 }
+
+export const NONEBOT2_CONFIG_FORM: ConfigFormSpec<'nonebot2'> = {
+    framework: 'nonebot2',
+    validate: validateNoneBot2Config,
+    saveHint: (r) => (r.restart_required ? '改完要重启' : null),
+};
 
 export function nonebot2LinkInputsChanged(
     a: NoneBot2InstanceConfig['env_prod'],

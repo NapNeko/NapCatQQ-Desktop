@@ -5,7 +5,8 @@ import { KarinPermissionsTab } from './KarinPermissionsTab';
 import { KarinPluginsTab } from './KarinPluginsTab';
 import { KarinRenderStorageTab } from './KarinRenderStorageTab';
 import { KarinRulesTab } from './KarinRulesTab';
-import { useKarinConfigForm } from '../useKarinConfigForm';
+import { useAppConfigForm } from '../../../../hooks/apps/useAppConfigForm';
+import { KARIN_CONFIG_FORM } from '../../../../core/domain/apps/karinConfig';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import type { FrameworkDetailProps, FrameworkNavGroup, FrameworkUiModule } from '../frameworkUi';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
@@ -54,7 +55,7 @@ function tabForIssue(path: string): string {
 }
 
 function KarinFrameworkDetail({ instance, onSaveHandle }: FrameworkDetailProps) {
-    const form = useKarinConfigForm(instance.id, true, instance.display_name);
+    const form = useAppConfigForm(KARIN_CONFIG_FORM, instance.id, instance.display_name);
     useSyncFrameworkSaveHandle(onSaveHandle, form);
 
     if (form.isLoading && !form.form) {

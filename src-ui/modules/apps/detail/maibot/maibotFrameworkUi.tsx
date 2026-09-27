@@ -3,7 +3,12 @@
 
 import { useState, type ReactNode } from 'react';
 import { TabsContent } from '../../../../shared/ui';
-import { maibotChatDropsEverything, maibotModelSetupIssue } from '../../../../core/domain/apps/maibotConfig';
+import {
+    MAIBOT_CONFIG_FORM,
+    maibotChatDropsEverything,
+    maibotModelSetupIssue,
+} from '../../../../core/domain/apps/maibotConfig';
+import { useAppConfigForm } from '../../../../hooks/apps/useAppConfigForm';
 import { useAppInstances } from '../../../../hooks/apps/useAppInstances';
 import {
     useMaiBotChatSessions,
@@ -24,7 +29,6 @@ import type { KnowledgeView } from './maibotKnowledgeParts';
 import { usePromptDrafts } from './maibotPromptDrafts';
 import { AppStoreTab } from '../AppStoreTab';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
-import { useMaiBotConfigForm } from '../useMaiBotConfigForm';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
 import { useSyncNavBadges } from '../useSyncNavBadges';
 import type { FrameworkDetailProps, FrameworkUiModule, NavBadgeTone } from '../frameworkUi';
@@ -50,7 +54,7 @@ const FILL_PANE = new Set([
 ]);
 
 function MaiBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
-    const form = useMaiBotConfigForm(instance.id, true, instance.display_name);
+    const form = useAppConfigForm(MAIBOT_CONFIG_FORM, instance.id, instance.display_name);
     useSyncFrameworkSaveHandle(onSaveHandle, form);
     const apps = useAppInstances();
     const advancedSections = useAdvancedSections();

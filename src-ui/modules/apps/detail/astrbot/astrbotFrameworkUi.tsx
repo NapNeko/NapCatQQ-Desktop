@@ -4,7 +4,12 @@
 import type { ReactNode } from 'react';
 import { TabsContent } from '../../../../shared/ui';
 import { AppStoreTab } from '../AppStoreTab';
-import { astrbotConfigWarnings, astrbotSetup } from '../../../../core/domain/apps/astrbotConfig';
+import {
+    ASTRBOT_CONFIG_FORM,
+    astrbotConfigWarnings,
+    astrbotSetup,
+} from '../../../../core/domain/apps/astrbotConfig';
+import { useAppConfigForm } from '../../../../hooks/apps/useAppConfigForm';
 import { AstrBotOverviewTab } from './AstrBotOverviewTab';
 import { AstrBotConnectionsTab } from './AstrBotConnectionsTab';
 import { AstrBotModelsTab } from './AstrBotModelsTab';
@@ -13,7 +18,6 @@ import { AstrBotPersonaTab } from './AstrBotPersonaTab';
 import { AstrBotKbTab } from './AstrBotKbTab';
 import { AstrBotSubagentTab } from './AstrBotSubagentTab';
 import { AstrBotRulesTab } from './AstrBotRulesTab';
-import { useAstrBotConfigForm } from '../useAstrBotConfigForm';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import { WebUiAccountCard } from '../WebUiAccountCard';
 import type { FrameworkDetailProps, FrameworkUiModule, NavBadgeTone } from '../frameworkUi';
@@ -50,7 +54,7 @@ function tabForIssue(path: string): string {
 
 function AstrBotFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, onNavBadges }: FrameworkDetailProps) {
     const running = instance.state === 'running';
-    const form = useAstrBotConfigForm(instance.id, true, instance.display_name, running);
+    const form = useAppConfigForm(ASTRBOT_CONFIG_FORM, instance.id, instance.display_name, running);
     useSyncFrameworkSaveHandle(onSaveHandle, form);
     const apps = useAppInstances();
     const dash = useAstrBotDashboardStatus(instance.id, true);

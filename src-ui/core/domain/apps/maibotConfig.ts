@@ -1,6 +1,7 @@
 // MaiBot 类型化配置的前端校验 / 上手判定。规则与后端 `maibot::config::validate` 对齐，
 // 路径前缀同后端：`bot/…` 是 bot_config，`models/…` 是 model_config，`adapter/…` 是适配器名单。
 
+import type { ConfigFormSpec } from './appConfigForm';
 import type {
     AppConfigIssue,
     MaiBotAPIProvider,
@@ -325,3 +326,10 @@ export function validateMaiBotConfig(cfg: MaiBotInstanceConfig): AppConfigIssue[
     const seen = new Set<string>();
     return out.filter((i) => !seen.has(i.path) && !!seen.add(i.path));
 }
+
+export const MAIBOT_CONFIG_FORM: ConfigFormSpec<'maibot'> = {
+    framework: 'maibot',
+    validate: validateMaiBotConfig,
+    // 麦麦和适配器都热加载配置；只有端口、日志、插件运行时这些启动时读的要重启
+    saveHint: (r) => (r.restart_required ? '端口、日志这类启动时读的设置要重启麦麦才生效' : null),
+};

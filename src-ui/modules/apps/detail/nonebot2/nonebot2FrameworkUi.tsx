@@ -1,7 +1,8 @@
 import { TabsContent } from '../../../../shared/ui';
 import { NoneBot2ConnectionsTab } from './NoneBot2ConnectionsTab';
 import { AppStoreTab } from '../AppStoreTab';
-import { useNoneBot2ConfigForm } from '../useNoneBot2ConfigForm';
+import { useAppConfigForm } from '../../../../hooks/apps/useAppConfigForm';
+import { NONEBOT2_CONFIG_FORM } from '../../../../core/domain/apps/nonebot2Config';
 import { PaneLoadError, PaneLoading } from '../PaneStatus';
 import type { FrameworkDetailProps, FrameworkNavGroup, FrameworkUiModule } from '../frameworkUi';
 import { useSyncFrameworkSaveHandle } from '../useSyncFrameworkSaveHandle';
@@ -22,7 +23,7 @@ const TYPED_TABS = new Set(['connections']);
 const FILL_PANE = new Set(['adapters', 'plugins']);
 
 function NoneBot2FrameworkDetail({ instance, onSaveHandle }: FrameworkDetailProps) {
-    const form = useNoneBot2ConfigForm(instance.id, true, instance.display_name);
+    const form = useAppConfigForm(NONEBOT2_CONFIG_FORM, instance.id, instance.display_name);
     useSyncFrameworkSaveHandle(onSaveHandle, form);
 
     return (

@@ -1,5 +1,6 @@
 // AstrBot 窄配置的前端校验 / 默认值。规则与后端 `AstrBotInstanceConfig::validate` 对齐。
 
+import type { ConfigFormSpec } from './appConfigForm';
 import type {
     AppConfigIssue,
     AstrBotAiSettings,
@@ -264,6 +265,14 @@ export function validateAstrBotConfig(cfg: AstrBotInstanceConfig): AppConfigIssu
     });
     return out;
 }
+
+// 读路径没有 conf_id，只能写默认档案，写别的档案等于把默认档案的内容盖过去
+export const ASTRBOT_CONFIG_FORM: ConfigFormSpec<'astrbot'> = {
+    framework: 'astrbot',
+    validate: validateAstrBotConfig,
+    saveHint: (r, running) => (r.restart_required ? '改完要重启' : running ? '已热生效' : '已写入'),
+    confId: 'default',
+};
 
 export function astrbotLinkInputsChanged(a: AstrBotInstanceConfig, b: AstrBotInstanceConfig): boolean {
     return (
