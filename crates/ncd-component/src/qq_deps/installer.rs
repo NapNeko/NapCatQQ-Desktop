@@ -35,6 +35,17 @@ impl QqDependencyInstaller {
             });
         }
 
+        // 包名来自前端，下面要拿 root 跑；不像包名的一律拒绝，不做清洗后继续
+        if let Some(bad) = missing
+            .iter()
+            .find(|p| !LinuxPackageManager::is_valid_package_name(p))
+        {
+            return Err(ActionError::InstallStepFailed {
+                step: "install_qq_dependencies".into(),
+                reason: format!("非法包名: {bad}"),
+            });
+        }
+
         // 探测提权能力(SudoAccess),上层按结果决定注入密码还是弹窗
         let sudo_access = self.check_sudo_access(host).await?;
         ctx.info(format!("sudo 权限探测: {sudo_access:?}")).await;
