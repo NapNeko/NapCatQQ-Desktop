@@ -10,6 +10,7 @@ import React from 'react';
 import { Copy, Minus, Square, X } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useWindowControls } from '../../../hooks/desktop/useWindowControls';
+import { TerminalToggleButton } from './TerminalToggleButton';
 
 interface CustomTitleBarProps {
   className?: string;
@@ -27,6 +28,10 @@ export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ className }) => 
       )}
     >
       <div className="h-full flex-1" data-tauri-drag-region />
+
+      <div className="mr-2 flex items-center">
+        <TerminalToggleButton />
+      </div>
 
       <div className="flex items-center gap-0.5">
         <button

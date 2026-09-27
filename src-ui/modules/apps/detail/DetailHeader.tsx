@@ -11,10 +11,12 @@ import {
     Power,
     RefreshCw,
     Square,
+    SquareTerminal,
     Trash2,
     Unlink,
 } from 'lucide-react';
 import { Badge, Button, Popover, PopoverClose, PopoverContent, PopoverTrigger, Spinner, Switch } from '../../../shared/ui';
+import { openTerminal } from '../../../hooks/terminal/terminalStore';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../../shared/ui/motion';
 import { cn } from '../../../shared/utils/cn';
 import type { AppInstance, AppInstanceState } from '../../../core/ipc/types';
@@ -110,6 +112,17 @@ export const DetailHeader: React.FC<{
                     <Button size="sm" variant="ghost" disabled={busy} onClick={onTryChat}>
                         <ActionMotionIcon icon={MessageSquare} size={13} />
                         试聊
+                    </Button>
+                )}
+                {installed && (
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        title="在实例目录里开终端，node / uv / .venv 都接好了"
+                        onClick={() => void openTerminal({ kind: 'app_instance', instance_id: instance.id })}
+                    >
+                        <ActionMotionIcon icon={SquareTerminal} size={13} />
+                        终端
                     </Button>
                 )}
                 {installed && !running && (

@@ -38,6 +38,7 @@ import { pushInfoBar } from '../hooks/ui/globalInfoBarStore';
 import { useAppUiPreferencesBootstrap } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
 import { useTaskQueue, useTaskQueueActiveCount } from '../hooks/task-queue/useTaskQueue';
+import { useTerminalCoversPage } from '../hooks/terminal/terminalStore';
 import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
@@ -101,6 +102,10 @@ const DockerPageNext = lazy(loadDockerPage);
 const RemoteHostPanelNext = lazy(loadRemotePage);
 const SettingsPageNext = lazy(loadSettingsPage);
 const TaskQueuePageNext = lazy(loadTaskQueuePage);
+// 终端面板带着 xterm，单独一块懒加载，不压首屏
+const TerminalDock = lazy(() =>
+    import('../modules/terminal/TerminalDock').then((m) => ({ default: m.TerminalDock })),
+);
 
 const ROUTE_PRELOAD: Partial<Record<AppRoute, () => Promise<unknown>>> = {
     bots: loadBotPage,
@@ -167,6 +172,7 @@ export const AppNext: React.FC = () => {
 
     // 根组件只订阅任务数：整份队列每条进度事件都换新快照，订阅它会让整页跟着重渲
     const taskQueueActiveCount = useTaskQueueActiveCount();
+    const terminalCoversPage = useTerminalCoversPage();
 
     useAppUiPreferencesBootstrap();
 
@@ -370,7 +376,8 @@ export const AppNext: React.FC = () => {
                         <main
                             className={
                                 'relative z-10 flex min-w-0 flex-1 overflow-hidden ' +
-                                (motion.enabled ? 'ndf-shell-enter-main' : '')
+                                (motion.enabled ? 'ndf-shell-enter-main' : '') +
+                                (terminalCoversPage ? ' hidden' : '')
                             }
                         >
                             <div className="flex min-w-0 w-full max-w-full flex-col px-4 pb-6 pt-2 sm:px-6 lg:px-8 xl:mx-auto xl:max-w-[1280px]">
@@ -391,6 +398,10 @@ export const AppNext: React.FC = () => {
                                 </div>
                             </div>
                         </main>
+
+                        <Suspense fallback={null}>
+                            <TerminalDock />
+                        </Suspense>
                     </div>
                 </div>
 

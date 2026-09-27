@@ -16,6 +16,7 @@ import {
     Server,
     Settings,
     Square,
+    SquareTerminal,
     WifiOff,
 } from 'lucide-react';
 import {
@@ -54,6 +55,7 @@ import {
 } from '../../../../core/domain/bot/snowluma-remote-ui';
 import { cn } from '../../../../shared/utils/cn';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
+import { openTerminal } from '../../../../hooks/terminal/terminalStore';
 import { QrCodeDialog } from './QrCodeDialog';
 import { BotManageCard } from './BotManageCard';
 import { buildBotListCardStatus } from './botCardPresentation';
@@ -211,6 +213,7 @@ export function BotCard({
     const enabledChannels = config ? countEnabledChannels(config) : null;
     const restartHint = config ? formatRestartHint(config) : null;
     const runtimeTarget = config?.bot.runtime_target ?? null;
+    const isDockerBot = config?.bot.deploymentType === 'docker';
     const slStartMode = config?.bot.snowlumaStartMode;
 
     const handleRowClick = () => {
@@ -548,6 +551,18 @@ export function BotCard({
                                     </IconButton>
                                     <IconButton
                                         visible={true}
+                                        tooltip={isDockerBot ? '终端（进容器）' : '终端'}
+                                        onClick={stopAction(() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: false }))}
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={SquareTerminal}
+                                            size={14}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                    <IconButton
+                                        visible={true}
                                         tooltip="配置"
                                         onClick={stopAction(() => onConfigure(bot.bot_id))}
                                     >
@@ -646,6 +661,16 @@ export function BotCard({
                     <Monitor size={13} />
                     <span>运行监控</span>
                 </ContextMenuItem>
+                <ContextMenuItem onClick={() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: false })}>
+                    <SquareTerminal size={13} />
+                    <span>{isDockerBot ? '终端（进容器）' : '打开终端'}</span>
+                </ContextMenuItem>
+                {isDockerBot && (
+                    <ContextMenuItem onClick={() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: true })}>
+                        <SquareTerminal size={13} />
+                        <span>终端（宿主机部署目录）</span>
+                    </ContextMenuItem>
+                )}
 
                 <ContextMenuSeparator />
 

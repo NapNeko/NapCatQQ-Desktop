@@ -13,6 +13,7 @@ import {
     RefreshCw,
     ScrollText,
     Square,
+    SquareTerminal,
     Trash2,
     Unlink,
 } from 'lucide-react';
@@ -44,6 +45,7 @@ import { AppLinkDialog } from '../AppLinkDialog';
 import { DeleteInstanceDialog } from '../DeleteInstanceDialog';
 import { ImportInstanceDialog, type ImportInstanceTarget } from '../ImportInstanceDialog';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
+import { openTerminal } from '../../../hooks/terminal/terminalStore';
 import { hostIdDisplayLabel } from '../hostLabel';
 import { STATE_META, isInstalled } from '../instanceState';
 import { CardInstallProgress } from '../InstallProgress';
@@ -393,6 +395,14 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                     {installed && (
                         <FooterIcon label="日志" onClick={() => onOpen(i, 'log')}>
                             <ActionMotionIcon icon={ScrollText} size={15} strokeWidth={2.2} />
+                        </FooterIcon>
+                    )}
+                    {installed && (
+                        <FooterIcon
+                            label="终端"
+                            onClick={() => void openTerminal({ kind: 'app_instance', instance_id: i.id })}
+                        >
+                            <ActionMotionIcon icon={SquareTerminal} size={15} strokeWidth={2.2} />
                         </FooterIcon>
                     )}
                     {/* 装的过程中探测和删除都没意义，装完或失败后再出现 */}

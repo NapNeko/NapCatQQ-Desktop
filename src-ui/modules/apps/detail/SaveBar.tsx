@@ -5,7 +5,8 @@ import { AlertCircle, Save } from 'lucide-react';
 import { Button, Spinner } from '../../../shared/ui';
 import { ActionMotionIcon, ExpandPresence, infoToneMotion } from '../../../shared/ui/motion';
 
-/** Ctrl+S 存页面上的改动。焦点在对话框里时不管：那里的编辑是即时落库的，不归保存条 */
+/** Ctrl+S 存页面上的改动。焦点在对话框里时不管：那里的编辑是即时落库的，不归保存条；
+ *  焦点在终端里时也不管：nano 这类程序的 Ctrl+S 是它自己的保存 */
 function useSaveShortcut(enabled: boolean, onSave: () => void) {
     const onSaveRef = useRef(onSave);
     onSaveRef.current = onSave;
@@ -13,7 +14,7 @@ function useSaveShortcut(enabled: boolean, onSave: () => void) {
         if (!enabled) return;
         const onKey = (e: KeyboardEvent) => {
             if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's' || e.altKey || e.shiftKey) return;
-            if (e.target instanceof Element && e.target.closest('[role="dialog"]')) return;
+            if (e.target instanceof Element && e.target.closest('[role="dialog"], .xterm')) return;
             e.preventDefault();
             onSaveRef.current();
         };
