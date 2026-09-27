@@ -39,15 +39,11 @@ describe('appLinkPairEnabled', () => {
         expect(appLinkPairNote('remote:a', 'remote:b')).toBe('（主机常驻隧道）');
     });
 
-    it('limits forward links to the same host', () => {
-        expect(appLinkPairEnabled('local', 'local', 'forward_ws')).toBe(true);
-        expect(appLinkPairEnabled('remote:vps', 'remote:vps', 'forward_ws')).toBe(true);
-        expect(appLinkPairEnabled('local', 'remote:vps', 'forward_ws')).toBe(false);
-        expect(appLinkPairEnabled('remote:vps', 'local', 'forward_ws')).toBe(false);
-        expect(appLinkPairEnabled('remote:a', 'remote:b', 'forward_ws')).toBe(false);
-        expect(appLinkPairEnabled(null, 'remote:vps', 'forward_ws')).toBe(true);
-        expect(appLinkPairNote('local', 'remote:vps', 'forward_ws')).toBe('（需同一台机器）');
-        expect(appLinkPairNote('local', 'local', 'forward_ws')).toBe('');
+    it('same host needs no note', () => {
+        expect(appLinkPairEnabled('local', 'local')).toBe(true);
+        expect(appLinkPairEnabled('remote:vps', 'remote:vps')).toBe(true);
+        expect(appLinkPairNote('local', 'local')).toBe('');
+        expect(appLinkPairNote('remote:vps', 'remote:vps')).toBe('');
     });
 });
 

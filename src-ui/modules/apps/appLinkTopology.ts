@@ -1,7 +1,5 @@
 // 对接拓扑：按 Bot runtime_target 与实例 host_id，不看 NapCat / SnowLuma。
-// 正向（应用端连 Bot，如 MaiBot）听口在 Bot 侧，隧道方向和反向相反，后端目前只开同机。
-
-import type { OneBotLinkMode } from '../../core/ipc/types';
+// 正向（应用端连 Bot，如 MaiBot）听口在 Bot 侧，隧道方向和反向相反，但哪几种组合能连、要不要桌面端在线是一样的。
 
 export type AppLinkTopology =
     | 'same_host'
@@ -27,14 +25,9 @@ export function classifyAppLink(
     return null;
 }
 
-export function appLinkPairNote(
-    botHostId: string | null,
-    appHostId: string,
-    mode: OneBotLinkMode = 'reverse_ws',
-): string {
+export function appLinkPairNote(botHostId: string | null, appHostId: string): string {
     if (!botHostId) return '';
     const topology = classifyAppLink(botHostId, appHostId);
-    if (mode === 'forward_ws') return topology === 'same_host' ? '' : '（需同一台机器）';
     switch (topology) {
         case 'same_host':
             return '';
@@ -48,15 +41,9 @@ export function appLinkPairNote(
     }
 }
 
-export function appLinkPairEnabled(
-    botHostId: string | null,
-    appHostId: string,
-    mode: OneBotLinkMode = 'reverse_ws',
-): boolean {
+export function appLinkPairEnabled(botHostId: string | null, appHostId: string): boolean {
     if (!botHostId) return true;
-    const topology = classifyAppLink(botHostId, appHostId);
-    if (mode === 'forward_ws') return topology === 'same_host';
-    return topology !== null;
+    return classifyAppLink(botHostId, appHostId) !== null;
 }
 
 // Docker 部署的 Bot 在容器里：它开的服务、连的 127.0.0.1 都是容器自己的，宿主机上的应用端和隧道口碰不到

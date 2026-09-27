@@ -1,8 +1,9 @@
 // 「对接应用端」对话框：选协议 Bot / 应用实例 → 预览 OneBotLinkPlan → 应用。
 //
 // 应用端页面预填实例、Bot 配置页预填 Bot；两处共用同一份对话框。
-// 反向（Bot 连应用端）：同机可对接；本机 Bot↔远端应用、远端 Bot↔本机应用经桌面 SSH；两台远端走主机常驻隧道。
-// 正向（应用端连 Bot，框架 manifest 的首个 link_mode 是 forward_ws）：只开同机。
+// 同机直连；本机 Bot↔远端应用、远端 Bot↔本机应用经桌面 SSH；两台远端走主机常驻隧道。
+// 反向（Bot 连应用端）和正向（应用端连 Bot，框架 manifest 的首个 link_mode 是 forward_ws）组合一样，
+// 只是隧道方向相反；Docker 部署的 Bot 哪种都连不上，置灰。
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -117,16 +118,15 @@ export function AppLinkDialog({
         () =>
             instances.map((i) => {
                 const installed = i.state !== 'not_installed' && i.state !== 'installing';
-                const mode = linkModeOf(frameworks, i.framework_id);
-                const allowed = appLinkPairEnabled(botHost, i.host_id, mode);
-                const note = !installed ? '（未安装）' : appLinkPairNote(botHost, i.host_id, mode);
+                const allowed = appLinkPairEnabled(botHost, i.host_id);
+                const note = !installed ? '（未安装）' : appLinkPairNote(botHost, i.host_id);
                 return {
                     value: i.id,
                     label: `${i.display_name} · ${hostIdDisplayLabel(i.host_id, servers)}${note}`,
                     disabled: !installed || !allowed,
                 };
             }),
-        [instances, frameworks, botHost, servers],
+        [instances, botHost, servers],
     );
     const instanceMode = linkModeOf(frameworks, instance?.framework_id);
 
@@ -137,14 +137,11 @@ export function AppLinkDialog({
                 const name = cfg?.bot.name?.trim();
                 const host = cfg ? botHostId(cfg.bot.runtime_target) : null;
                 const docker = isDockerBot(cfg?.bot.deploymentType);
-                const allowed =
-                    !instance || !host
-                        ? true
-                        : appLinkPairEnabled(host, instance.host_id, instanceMode);
+                const allowed = !instance || !host ? true : appLinkPairEnabled(host, instance.host_id);
                 const note = docker
                     ? DOCKER_BOT_NOTE
                     : instance && host
-                      ? appLinkPairNote(host, instance.host_id, instanceMode)
+                      ? appLinkPairNote(host, instance.host_id)
                       : '';
                 const where = cfg ? runtimeTargetDisplayLabel(cfg.bot.runtime_target, servers) : '';
                 return {
@@ -153,7 +150,7 @@ export function AppLinkDialog({
                     disabled: docker || !allowed,
                 };
             }),
-        [snapshots, configs, instance, instanceMode, servers],
+        [snapshots, configs, instance, servers],
     );
 
     useEffect(() => {
@@ -309,6 +306,13 @@ function PlanPreview({
         : isResidentLink(topology)
           ? ' 隧道留在应用所在机，桌面退出仍连。'
           : '';
+    // 跨机时应用端连的是自己机上的隧道口，那个口开隧道时才分，预览里只说经隧道
+    const serverLine =
+        c.kind === 'ws_server'
+            ? topology && topology !== 'same_host'
+                ? `Bot 所在机监听 ${c.host}:${c.port}，应用端经隧道连过来`
+                : `监听 ${c.host}:${c.port}，应用端连过来`
+            : null;
     return (
         <div className="flex flex-col gap-3 rounded-md border border-border-subtle bg-inset/40 p-3">
             <div>
@@ -325,7 +329,7 @@ function PlanPreview({
                     </Badge>
                 </div>
                 <p className="mt-1 break-all font-mono text-2xs text-text-secondary">
-                    {c.kind === 'ws_server' ? `监听 ${c.host}:${c.port}，应用端连过来` : c.url}
+                    {serverLine ?? (c.kind === 'ws_client' ? c.url : '')}
                 </p>
                 <p className="mt-0.5 text-2xs text-text-tertiary">
                     token 已生成；同名连接会被替换。
