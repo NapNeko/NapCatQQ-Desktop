@@ -53,12 +53,31 @@
     pointer-events: none;
 }
 
-/* 面板顶边的拖动条：看不见，鼠标放上去才出现一条线 */
+/* 面板浮在页面上：打开时从下面浮上来一点。只动 transform / opacity；
+   结束后不留 transform，免得面板里 fixed 定位的东西以它为参照 */
+@keyframes ncd-term-dock-in {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.995);
+    }
+}
+
+.ncd-term-dock-enter {
+    animation: ncd-term-dock-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ncd-term-dock-enter {
+        animation: none;
+    }
+}
+
+/* 面板顶边的拖动条：看不见，鼠标放上去才出现一条线。面板是圆角裁切的，条要放在里面 */
 .ncd-term-resize {
     position: absolute;
     left: 0;
     right: 0;
-    top: -3px;
+    top: 0;
     height: 6px;
     z-index: 30;
     cursor: row-resize;
@@ -67,9 +86,9 @@
 .ncd-term-resize::after {
     content: '';
     position: absolute;
-    left: 0;
-    right: 0;
-    top: 2px;
+    left: 12px;
+    right: 12px;
+    top: 0;
     height: 2px;
     background: transparent;
     transition: background-color 120ms ease-out;

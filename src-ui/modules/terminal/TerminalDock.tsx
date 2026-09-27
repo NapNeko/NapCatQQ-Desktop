@@ -1,5 +1,5 @@
-// 底部终端面板（VS Code 那种）：多标签、标签里可以分两块；切页面、收起都不断，拖顶边改高度，能最大化。
-// 应用根上常驻一个：收起时只是不画，会话和 xterm 实例都还在。
+// 底部终端面板：浮在页面上面（不挤页面的空间），多标签、标签里可以分两块；切页面、收起都不断，
+// 拖顶边改高度，能最大化。应用根上常驻一个：收起时只是不画，会话和 xterm 实例都还在。
 
 import '@xterm/xterm/css/xterm.css';
 import './terminal.css';
@@ -9,6 +9,7 @@ import { ChevronDown, Columns2, Maximize2, Minimize2, Rows2, SquareTerminal } fr
 import { Button } from '../../shared/ui';
 import { cn } from '../../shared/utils/cn';
 import { useThemeTokens } from '../../hooks/theme/useThemeTokens';
+import { useMotion } from '../../hooks/preferences/useMotion';
 import {
     DOCK_HEIGHT_MIN,
     terminalLayout,
@@ -24,6 +25,9 @@ import { quotePath, shellSyntaxOf } from '../../core/domain/terminal/paths';
 import { getRuntime, setTerminalTheme, startTerminalRuntimes } from './registry';
 import { TerminalPane } from './TerminalPane';
 import { TerminalNewMenu, TerminalTabs } from './TerminalTabs';
+
+/** 面板顶上最高能拖到哪：标题栏（44）下面再留一截，看得见后面的页面；要全屏走最大化 */
+const DOCK_TOP_KEEP = 44 + 72;
 
 function useDrag(onMove: (e: PointerEvent) => void, onEnd?: () => void) {
     const [dragging, setDragging] = useState(false);
@@ -130,21 +134,29 @@ export function TerminalDock() {
     const dockRef = useRef<HTMLElement>(null);
     const [liveHeight, setLiveHeight] = useState<number | null>(null);
     const liveHeightRef = useRef<number | null>(null);
+    const motion = useMotion();
 
     useEffect(() => startTerminalRuntimes(), []);
 
-    // 页面上贴底悬浮的按钮（index.css 的 .float-above-terminal）靠这两样避开面板
+    // 页面上贴底悬浮的按钮（index.css 的 .float-above-terminal）靠这两样避开面板。
+    // 面板贴着窗口底边、离底有一截空隙，抬的高度按「面板顶边到窗口底」算
     useLayoutEffect(() => {
         const root = document.documentElement;
         const dock = dockRef.current;
         if (!dock) return;
-        const publish = () =>
-            root.style.setProperty('--terminal-dock-inset', `${Math.round(dock.getBoundingClientRect().height)}px`);
+        const publish = () => {
+            // offsetTop 不算 transform：打开时的上浮动画还没走完也能量到落定的位置
+            const top = (dock.offsetParent?.getBoundingClientRect().top ?? 0) + dock.offsetTop;
+            const inset = Math.max(0, Math.round(window.innerHeight - top));
+            root.style.setProperty('--terminal-dock-inset', `${inset}px`);
+        };
         publish();
         const observer = new ResizeObserver(publish);
         observer.observe(dock);
+        window.addEventListener('resize', publish);
         return () => {
             observer.disconnect();
+            window.removeEventListener('resize', publish);
             root.style.removeProperty('--terminal-dock-inset');
         };
     }, [state.open]);
@@ -184,7 +196,7 @@ export function TerminalDock() {
             const parent = dock?.parentElement;
             if (!dock || !parent) return;
             const bottom = dock.getBoundingClientRect().bottom;
-            const max = parent.getBoundingClientRect().height - 120;
+            const max = bottom - parent.getBoundingClientRect().top - DOCK_TOP_KEEP;
             const next = Math.round(Math.min(Math.max(bottom - e.clientY, DOCK_HEIGHT_MIN), Math.max(DOCK_HEIGHT_MIN, max)));
             liveHeightRef.current = next;
             setLiveHeight(next);
@@ -225,8 +237,11 @@ export function TerminalDock() {
             ref={dockRef}
             aria-label="终端"
             className={cn(
-                'relative z-20 flex min-h-0 flex-col border-t border-border-subtle bg-surface',
-                state.maximized ? 'flex-1' : 'shrink-0',
+                'absolute inset-x-2 bottom-2 z-20 flex min-h-0 flex-col overflow-hidden rounded-md',
+                'border border-border-subtle bg-surface shadow-popover',
+                // 最大化时顶到标题栏下面（标题栏 h-11）
+                state.maximized && 'top-11',
+                motion.enabled && 'ncd-term-dock-enter',
             )}
             style={{
                 height: state.maximized ? undefined : height,

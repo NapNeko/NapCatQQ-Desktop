@@ -207,8 +207,9 @@ export function TerminalNewMenu({ busy }: { busy: boolean }) {
     const { shells, servers } = useTerminalLaunchOptions(open);
     const openExternal = useTerminalExternal();
 
-    const item = (onClick: () => void, children: React.ReactNode) => (
+    const item = (key: string, onClick: () => void, children: React.ReactNode) => (
         <button
+            key={key}
             type="button"
             onClick={() => {
                 setOpen(false);
@@ -247,6 +248,7 @@ export function TerminalNewMenu({ busy }: { busy: boolean }) {
                     <p className="px-2 pb-1 pt-1.5 text-[11px] text-text-tertiary">本机</p>
                     {shells.map((shell) =>
                         item(
+                            shell.kind,
                             () => void terminalStore.open({ kind: 'local' }, { shell: shell.kind, forceNew: true }),
                             <>
                                 <TargetIcon target={{ kind: 'local' }} />
@@ -256,6 +258,7 @@ export function TerminalNewMenu({ busy }: { busy: boolean }) {
                     )}
                     {shells.length === 0 && <p className="px-2 py-1 text-[11px] text-text-tertiary">正在找本机的 shell…</p>}
                     {item(
+                        'external',
                         () => openExternal({ kind: 'local' }),
                         <>
                             <SquareArrowOutUpRight size={12} />
@@ -265,6 +268,7 @@ export function TerminalNewMenu({ busy }: { busy: boolean }) {
                     <p className="px-2 pb-1 pt-2.5 text-[11px] text-text-tertiary">远端主机</p>
                     {servers.map((server) =>
                         item(
+                            server.id,
                             () => void terminalStore.open({ kind: 'server', server_id: server.id }, { forceNew: true }),
                             <>
                                 <TargetIcon target={{ kind: 'server', server_id: server.id }} />
