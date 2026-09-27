@@ -5,4 +5,4 @@ import type { TerminalStatus } from "./TerminalStatus";
 /**
  * 事件通道推给前端的消息（终端输出另走二进制通道）
  */
-export type TerminalEvent = { "kind": "status", status: TerminalStatus, } | { "kind": "restarted", info: TerminalSessionInfo, } | { "kind": "dropped", bytes: number, };
+export type TerminalEvent = { "kind": "status", status: TerminalStatus, } | { "kind": "info", info: TerminalSessionInfo, } | { "kind": "dropped", bytes: number, };

@@ -5,4 +5,4 @@ import type { TerminalStatus } from "./TerminalStatus";
 /**
  * 带版本号的事件信封：`{"v":1,"kind":...}`
  */
-export type TerminalEventEnvelope = { v: number, } & ({ "kind": "status", status: TerminalStatus, } | { "kind": "restarted", info: TerminalSessionInfo, } | { "kind": "dropped", bytes: number, });
+export type TerminalEventEnvelope = { v: number, } & ({ "kind": "status", status: TerminalStatus, } | { "kind": "info", info: TerminalSessionInfo, } | { "kind": "dropped", bytes: number, });

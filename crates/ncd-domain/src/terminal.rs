@@ -197,8 +197,8 @@ pub struct TerminalSessionInfo {
 pub enum TerminalEvent {
     /// 状态变了：退出、断线
     Status { status: TerminalStatus },
-    /// 同一个标签重新开了（按回车重开），信息里是新的状态
-    Restarted { info: TerminalSessionInfo },
+    /// 会话信息整个换了：同一个标签重新开了（按回车重开），标题、功能、状态都以这份为准
+    Info { info: TerminalSessionInfo },
     /// 界面跟不上，中间跳过了一段输出
     Dropped {
         #[ts(type = "number")]
