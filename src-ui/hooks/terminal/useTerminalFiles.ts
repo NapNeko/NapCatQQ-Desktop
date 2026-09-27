@@ -89,12 +89,12 @@ export function useTerminalFiles(sessionId: string, hostOs: TerminalHostOs, cwd:
     );
 
     useEffect(() => {
-        if (path) void load(path);
+        if (path !== null) void load(path);
     }, [path, load]);
 
     useEffect(() => {
         const refresh = () => {
-            if (path) void load(path);
+            if (path !== null) void load(path);
         };
         const set = refreshers.get(sessionId) ?? new Set<() => void>();
         set.add(refresh);
@@ -124,7 +124,7 @@ export function useTerminalFiles(sessionId: string, hostOs: TerminalHostOs, cwd:
                 return false;
             } finally {
                 setBusy(null);
-                if (path) void load(path);
+                if (path !== null) void load(path);
             }
         },
         [load, path],
@@ -133,6 +133,7 @@ export function useTerminalFiles(sessionId: string, hostOs: TerminalHostOs, cwd:
     const upload = useCallback(
         async (localPaths: string[], destDir?: string) => {
             const dest = destDir ?? listing?.path ?? path;
+            // 空路径是盘列表，不是能放文件的目录
             if (!dest || localPaths.length === 0) return;
             await run(`上传 ${localPaths.length} 项`, async () => {
                 const count = await terminalService.upload(sessionId, localPaths, dest);
@@ -155,10 +156,11 @@ export function useTerminalFiles(sessionId: string, hostOs: TerminalHostOs, cwd:
         },
         navigate,
         up() {
-            if (listing?.parent) navigate(listing.parent);
+            // Windows 盘根的上一级是空路径（此电脑，列各个盘），不能按真假判断
+            if (listing?.parent != null) navigate(listing.parent);
         },
         refresh() {
-            if (path) void load(path);
+            if (path !== null) void load(path);
         },
         makeDir: (name) =>
             run('新建文件夹', () => terminalService.makeDir(sessionId, joinHostPath(hostOs, listing?.path ?? path ?? '', name))),

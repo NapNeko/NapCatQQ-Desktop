@@ -3,6 +3,8 @@ import { appendTail, isSudoPrompt, lastLine, stripAnsi } from './sudoPrompt';
 import { pushRecent, shouldRemember, targetKey } from './commands';
 import {
     baseName,
+    breadcrumbs,
+    navDirection,
     cdCommand,
     editorSyntaxOf,
     invalidFileName,
@@ -91,6 +93,36 @@ describe('paths', () => {
         expect(looksLikeText('qq.png')).toBe(false);
         expect(editorSyntaxOf('a.json')).toBe('json');
         expect(editorSyntaxOf('.env')).toBe('dot_env');
+    });
+
+    it('splits paths into clickable crumbs', () => {
+        expect(breadcrumbs('windows', 'D:\\apps\\karin')).toEqual([
+            { label: '此电脑', path: '' },
+            { label: 'D:', path: 'D:\\' },
+            { label: 'apps', path: 'D:\\apps' },
+            { label: 'karin', path: 'D:\\apps\\karin' },
+        ]);
+        expect(breadcrumbs('windows', '')).toEqual([{ label: '此电脑', path: '' }]);
+        expect(breadcrumbs('windows', 'C:\\')).toEqual([
+            { label: '此电脑', path: '' },
+            { label: 'C:', path: 'C:\\' },
+        ]);
+        expect(breadcrumbs('linux', '/home/u')).toEqual([
+            { label: '/', path: '/' },
+            { label: 'home', path: '/home' },
+            { label: 'u', path: '/home/u' },
+        ]);
+    });
+
+    it('tells going into a folder from going back', () => {
+        expect(navDirection('/home', '/home/u')).toBe('in');
+        expect(navDirection('/', '/etc')).toBe('in');
+        expect(navDirection('/home/u', '/home')).toBe('out');
+        expect(navDirection('/home/u', '/home/uu')).toBe('out');
+        expect(navDirection('', 'C:\\')).toBe('in');
+        expect(navDirection('C:\\', '')).toBe('out');
+        expect(navDirection('C:\\', 'C:\\Users')).toBe('in');
+        expect(navDirection('C:\\Users', 'D:\\')).toBe('out');
     });
 });
 

@@ -56,6 +56,45 @@ dir('/home/napcat/ncd/apps/maibot/m1', [
     ['maibot.log', false, 88231],
 ]);
 
+// 本机终端的假目录：空路径是「此电脑」，列各个盘（和后端一样，盘根的上一级就是它）
+const WIN_DIRS: Record<string, [string, boolean, number][]> = {
+    'C:\\': [['Program Files', true, 0], ['Users', true, 0], ['Windows', true, 0]],
+    'C:\\Users': [['napcat', true, 0], ['Public', true, 0]],
+    'C:\\Users\\napcat': [['Desktop', true, 0], ['Documents', true, 0], ['.gitconfig', false, 210]],
+    'D:\\': [['NapCatQQ', true, 0], ['backup.zip', false, 7_340_032]],
+    'D:\\NapCatQQ': [['apps', true, 0]],
+};
+
+function listWindows(path: string): TerminalDirListing {
+    if (path === '') {
+        return {
+            path: '',
+            entries: [
+                { name: '本地磁盘 (C:)', path: 'C:\\', is_dir: true, is_symlink: false, size: 0 },
+                { name: '本地磁盘 (D:)', path: 'D:\\', is_dir: true, is_symlink: false, size: 0 },
+                { name: '可移动磁盘 (E:)', path: 'E:\\', is_dir: true, is_symlink: false, size: 0 },
+            ],
+        };
+    }
+    const clean = /^[A-Za-z]:\\?$/.test(path) ? `${path.slice(0, 2)}\\` : path.replace(/\\+$/, '');
+    const items = WIN_DIRS[clean] ?? [];
+    const join = (name: string) => (clean.endsWith('\\') ? `${clean}${name}` : `${clean}\\${name}`);
+    const cut = clean.lastIndexOf('\\');
+    const parent = clean.length === 3 ? '' : cut <= 2 ? clean.slice(0, 3) : clean.slice(0, cut);
+    return {
+        path: clean,
+        parent,
+        entries: items.map(([name, isDir, size]) => ({
+            name,
+            path: join(name),
+            is_dir: isDir,
+            is_symlink: false,
+            size,
+            modified: Math.floor(Date.now() / 1000) - 3600,
+        })),
+    };
+}
+
 const TEXTS: Record<string, string> = {
     '/home/napcat/notes.txt': '# 备忘\n麦麦的配置在 ncd/apps/maibot/m1/config\n',
     '/home/napcat/ncd/apps/maibot/m1/pyproject.toml': '[project]\nname = "maibot"\nversion = "1.2.5"\n',
@@ -327,6 +366,7 @@ export const terminalMock = {
     },
 
     async listDir(_id: string, path: string): Promise<TerminalDirListing> {
+        if (path === '' || /^[A-Za-z]:/.test(path)) return listWindows(path);
         const clean = path.replace(/\/+$/, '') || '/';
         const entries = FILES[clean];
         if (!entries) throw new Error(`找不到 ${clean}`);

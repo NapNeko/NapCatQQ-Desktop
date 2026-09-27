@@ -65,6 +65,50 @@ export function baseName(path: string): string {
     return cut === -1 ? trimmed : trimmed.slice(cut + 1);
 }
 
+/** 文件栏里 Windows「此电脑」（列各个盘）用空路径表示 */
+export const DRIVES_PATH = '';
+
+export function isDrivesView(os: TerminalHostOs, path: string | null | undefined): boolean {
+    return os === 'windows' && path === DRIVES_PATH;
+}
+
+export interface Crumb {
+    label: string;
+    path: string;
+}
+
+/// 路径栏的面包屑，每一段都能点。Windows 最前面是「此电脑」，然后是盘；Linux 从 `/` 开始
+export function breadcrumbs(os: TerminalHostOs, path: string): Crumb[] {
+    if (os === 'windows') {
+        const crumbs: Crumb[] = [{ label: '此电脑', path: DRIVES_PATH }];
+        const m = /^([A-Za-z]:)\\?(.*)$/.exec(path);
+        if (!m) return path ? [...crumbs, { label: path, path }] : crumbs;
+        const drive = m[1] as string;
+        let current = `${drive}\\`;
+        crumbs.push({ label: drive, path: current });
+        for (const part of (m[2] as string).split('\\').filter(Boolean)) {
+            current = current.endsWith('\\') ? `${current}${part}` : `${current}\\${part}`;
+            crumbs.push({ label: part, path: current });
+        }
+        return crumbs;
+    }
+    const crumbs: Crumb[] = [{ label: '/', path: '/' }];
+    let current = '';
+    for (const part of path.split('/').filter(Boolean)) {
+        current = `${current}/${part}`;
+        crumbs.push({ label: part, path: current });
+    }
+    return crumbs;
+}
+
+/// 从 from 到 to 是往里走（进子目录、从此电脑进盘）还是往外 / 跳到别处；决定列表从哪边滑进来
+export function navDirection(from: string, to: string): 'in' | 'out' {
+    if (from === DRIVES_PATH) return 'in';
+    if (to === DRIVES_PATH) return 'out';
+    const base = from.replace(/[\\/]+$/, '');
+    return to.length > base.length && to.startsWith(base) && /[\\/]/.test(to.charAt(base.length)) ? 'in' : 'out';
+}
+
 /** 文件名里不能出现的字符（两边取并集，远端 Linux 其实只禁 `/`，但留着 `\` 会让人看不懂） */
 export function invalidFileName(name: string): boolean {
     const trimmed = name.trim();
