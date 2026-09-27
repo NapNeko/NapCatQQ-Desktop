@@ -6,8 +6,11 @@
 // 浏览器预览时（非 Tauri webview）由 services 层判断 isTauri，并 fallback 到
 // `core/ipc/mock/*` 提供的纯前端假数据。
 
-import { invoke as tauriInvoke } from '@tauri-apps/api/core';
+import { Channel, invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen as tauriListen, type UnlistenFn } from '@tauri-apps/api/event';
+
+/// 流式数据通道（终端输出）：比事件快、保序，原始字节不转 JSON。只由 services 层 new
+export { Channel };
 
 /// 是否运行在 Tauri webview 内（vs 浏览器预览模式）。
 export const isTauri =
@@ -110,6 +113,26 @@ export async function pickTextFiles(title: string): Promise<string[]> {
     });
     if (!selected) return [];
     return Array.isArray(selected) ? selected : [selected];
+}
+
+/// 选几个任意文件（终端文件栏上传），返回绝对路径；取消返回空数组。
+export async function pickAnyFiles(title: string): Promise<string[]> {
+    const selected = await tauriInvoke<string | string[] | null>('plugin:dialog|open', {
+        options: { directory: false, multiple: true, title },
+    });
+    if (!selected) return [];
+    return Array.isArray(selected) ? selected : [selected];
+}
+
+/// 另存为，默认文件名由调用方给；filters 为空时不限类型。取消返回 null。
+export async function saveFileAs(
+    title: string,
+    defaultFileName: string,
+    filters: { name: string; extensions: string[] }[] = [],
+): Promise<string | null> {
+    return tauriInvoke<string | null>('plugin:dialog|save', {
+        options: { title, defaultPath: defaultFileName, filters },
+    });
 }
 
 /// 另存为 ZIP，返回用户选的完整路径；取消返回 null。
