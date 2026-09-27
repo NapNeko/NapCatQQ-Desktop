@@ -19,6 +19,11 @@ describe('relativeTimeFromMs', () => {
         expect(relativeTimeFromMs(NOW - 800 * DAY, undefined, NOW)).toBe('2 年前');
     });
 
+    it('never says zero months or zero years at the unit seams', () => {
+        expect(relativeTimeFromMs(NOW - 28 * DAY, undefined, NOW)).toBe('1 个月前');
+        expect(relativeTimeFromMs(NOW - 362 * DAY, undefined, NOW)).toBe('1 年前');
+    });
+
     it('treats future timestamps as just now', () => {
         expect(relativeTimeFromMs(NOW + 10 * MIN, undefined, NOW)).toBe('刚刚');
     });

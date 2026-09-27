@@ -15,9 +15,10 @@ export function relativeTimeFromMs(ms: number, maxDays?: number, nowMs = Date.no
     if (day < 7) return `${day} 天前`;
     const week = Math.floor(day / 7);
     if (week < 4) return `${week} 周前`;
-    const month = Math.floor(day / 30);
+    // 28、29 天按周算已满 4 周、按月算还不到 1 个月，360 多天按月满 12、按年不到 1 年；这两段往上取到 1
+    const month = Math.max(1, Math.floor(day / 30));
     if (month < 12) return `${month} 个月前`;
-    const year = Math.floor(day / 365);
+    const year = Math.max(1, Math.floor(day / 365));
     return `${year} 年前`;
 }
 
