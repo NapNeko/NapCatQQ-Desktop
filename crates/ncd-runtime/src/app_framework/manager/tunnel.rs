@@ -200,23 +200,14 @@ impl AppManager {
                 "协议 Bot 的 WS 服务还没分配端口".into(),
             ));
         }
-        let key = forward_tunnel_key(&instance.id);
-        let reach: fn(&TunnelHandle) -> u16 = match topology {
-            AppLinkTopology::RemoteBotLocalApp => TunnelHandle::local_port,
-            _ => TunnelHandle::remote_listen_port,
-        };
-        if let Some(port) = self
-            .reuse_or_evict_tunnel(&key, bot_port, topology, reach)
-            .await
-        {
-            return Ok(port);
-        }
-        let tunnel_host = match topology {
-            AppLinkTopology::RemoteBotLocalApp => {
-                self.resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
-                    .await?
+        let (tunnel_host_id, reach): (String, fn(&TunnelHandle) -> u16) = match topology {
+            AppLinkTopology::RemoteBotLocalApp => (
+                host_id_of_runtime_target(&bot.bot.runtime_target),
+                TunnelHandle::local_port,
+            ),
+            AppLinkTopology::LocalBotRemoteApp => {
+                (instance.host_id.clone(), TunnelHandle::remote_listen_port)
             }
-            AppLinkTopology::LocalBotRemoteApp => self.resolve_host(&instance.host_id).await?,
             _ => {
                 return Err(AppFrameworkError::Validation(
                     "这种拓扑不走桌面端隧道".into(),
@@ -228,30 +219,27 @@ impl AppManager {
             AppLinkTopology::RemoteBotLocalApp => TunnelSpec::local_to_remote(q, bot_port),
             _ => TunnelSpec::remote_to_local(q, bot_port),
         };
-        let first = match preferred.filter(|p| *p != 0) {
-            Some(q) => tunnel_host.open_tunnel(spec_for(q)).await.ok(),
-            None => None,
-        };
-        let handle = match first {
-            Some(h) => h,
-            None => tunnel_host
-                .open_tunnel(spec_for(0))
-                .await
-                .map_err(host_err)?,
-        };
-        let q = reach(&handle);
-        if q == 0 {
-            return Err(AppFrameworkError::Host("SSH 隧道没分到端口".into()));
-        }
-        self.tunnels.lock().await.insert(
-            key,
-            AppInstanceTunnel {
-                app_port: bot_port,
-                topology,
-                handle,
+        // 复用、开完再核一遍、登记都走 ensure_desktop_tunnel:启动对账和用户重新对接并发时,
+        // 后开的那条不会顶掉先开的、而先开的那个口可能已经写进了适配器配置
+        self.ensure_desktop_tunnel(
+            forward_tunnel_key(&instance.id),
+            bot_port,
+            topology,
+            reach,
+            "SSH 隧道没分到端口",
+            async {
+                let tunnel_host = self.resolve_host(&tunnel_host_id).await?;
+                let first = match preferred.filter(|p| *p != 0) {
+                    Some(q) => tunnel_host.open_tunnel(spec_for(q)).await.ok(),
+                    None => None,
+                };
+                match first {
+                    Some(handle) => Ok(handle),
+                    None => tunnel_host.open_tunnel(spec_for(0)).await.map_err(host_err),
+                }
             },
-        );
-        Ok(q)
+        )
+        .await
     }
 
     pub(super) async fn ensure_resident_link(
