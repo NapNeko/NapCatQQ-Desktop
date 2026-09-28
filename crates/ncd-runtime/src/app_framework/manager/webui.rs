@@ -33,13 +33,7 @@ impl AppManager {
                 return name.to_string();
             }
         }
-        self.remembered_secret(instance, SECRET_WEBUI_USERNAME)
-            .unwrap_or_else(|| {
-                self.registry
-                    .get(&instance.framework_id)
-                    .map(|adapter| adapter.default_webui_username().to_string())
-                    .unwrap_or_default()
-            })
+        self.fallback_webui_username(instance)
     }
 
     /// 桌面端打开 WebUI 用的本机口：本机即实例口，远端是 SSH `-L` 分配口。
@@ -163,71 +157,34 @@ impl AppManager {
         };
         let can_reset = !matches!(instance.state, AppInstanceState::Running);
 
-        // 如果有明文密码（桌面端设置过），直接用明文
-        if let Some(ref pwd) = remembered
-            && !pwd.is_empty()
-        {
-            return Some(match probe {
-                Some(p) => AppWebUiAccount {
-                    username: p.username,
-                    password: Some(pwd.clone()),
-                    password_matches: p.password_matches,
-                    can_reset,
-                },
-                None => AppWebUiAccount {
-                    username: self
-                        .remembered_secret(instance, SECRET_WEBUI_USERNAME)
-                        .unwrap_or_default(),
-                    password: Some(pwd.clone()),
-                    password_matches: None,
-                    can_reset,
-                },
-            });
-        }
-
-        // 无明文密码：检查落盘是否为哈希
-        let stored_hash_is_hash = match &probe {
-            Some(p) => p.stored_is_hash,
-            None => false,
-        };
-
-        // 无明文且落盘是哈希 -> 不返回 password，password_matches = None，引导用户去 WebUI 登录或重置
-        if stored_hash_is_hash {
-            return Some(match probe {
-                Some(p) => AppWebUiAccount {
-                    username: p.username,
-                    password: None,
-                    password_matches: None,
-                    can_reset,
-                },
-                None => AppWebUiAccount {
-                    username: self
-                        .remembered_secret(instance, SECRET_WEBUI_USERNAME)
-                        .unwrap_or_default(),
-                    password: None,
-                    password_matches: None,
-                    can_reset,
-                },
-            });
-        }
-
-        // 无明文且落盘无哈希（首启状态）
+        // 明文只有桌面端自己设过才有；没有明文（首启，或落盘只剩哈希）就不给密码、也不判对不对，
+        // 引导用户去 WebUI 登录或重置
+        let password = remembered.filter(|p| !p.is_empty());
         Some(match probe {
             Some(p) => AppWebUiAccount {
                 username: p.username,
-                password: None,
-                password_matches: None,
+                password_matches: password.as_ref().and(p.password_matches),
+                password,
                 can_reset,
             },
             None => AppWebUiAccount {
-                username: self
-                    .remembered_secret(instance, SECRET_WEBUI_USERNAME)
-                    .unwrap_or_default(),
-                password: None,
+                username: self.fallback_webui_username(instance),
+                password,
                 password_matches: None,
                 can_reset,
             },
         })
+    }
+
+    /// 落盘读不到时的用户名：桌面端记下的那个，没有就用框架首启时的默认名
+    fn fallback_webui_username(&self, instance: &AppInstance) -> String {
+        self.remembered_secret(instance, SECRET_WEBUI_USERNAME)
+            .unwrap_or_else(|| {
+                self.registry
+                    .get(&instance.framework_id)
+                    .map(|adapter| adapter.default_webui_username().to_string())
+                    .unwrap_or_default()
+            })
     }
 
     /// 重置 WebUI 密码（None = 随机生成）：实例必须已停止，写完下次启动生效。
