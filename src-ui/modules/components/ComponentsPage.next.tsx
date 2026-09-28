@@ -23,8 +23,12 @@ import { HostComponentsView } from './HostComponentsView';
 import { ReleaseNotesDialog } from './ReleaseNotesDialog';
 import { SnowLumaPackageDialog } from './SnowLumaPackageDialog';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
-import { CreateInstanceDialog, type CreateInstanceRequest } from '../apps/CreateInstanceDialog';
-import { ImportInstanceDialog, type ImportInstanceTarget } from '../apps/ImportInstanceDialog';
+import {
+    CreateInstanceDialog,
+    ImportInstanceDialog,
+    type CreateInstanceRequest,
+    type ImportInstanceTarget,
+} from '../apps';
 import { groupByHost, type ComponentRow, type MachineView } from '../../core/domain/components/types';
 import { componentMutationBlockedReason, componentLifecycleBlockedReason } from '../../core/domain/components/mutation-gate';
 import { buildDemoRemoteMachine } from '../../core/domain/onboarding/demoRemoteMachine';

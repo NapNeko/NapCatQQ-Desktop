@@ -1,11 +1,11 @@
-// 安装 / 更新进度的行内渲染子件。从 HostStatusRow 抽出来，给机器卡的组件行
-// 和旧的 HostStatusRow 共用，避免两份重复的进度 UI。
+// 安装 / 更新进度的行内渲染子件。组件页的机器行和 Docker 行、应用端实例的安装进度、
+// 任务详情都用它，放在 shared 里，免得几个模块互相伸手或各画一份进度 UI。
 
 import React from 'react';
 import { CheckCircle2, Loader2, Radio, Repeat } from 'lucide-react';
-import { Progress } from '../../shared/ui';
-import { MotionIcon } from '../../shared/ui/motion';
-import { cn } from '../../shared/utils/cn';
+import { Progress } from '../ui';
+import { MotionIcon } from '../ui/motion';
+import { cn } from '../utils/cn';
 import {
     type ActionProgressView,
     deriveEtaSeconds,

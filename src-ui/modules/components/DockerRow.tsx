@@ -15,7 +15,7 @@ import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { dockerStatusSummary } from '../../core/domain/docker/status';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { DockerStatus, Os } from '../../core/ipc/types';
-import { shouldShowProgressBar, ProgressBarOverlay } from './progressView';
+import { shouldShowProgressBar, ProgressBarOverlay } from '../../shared/components/progressView';
 import { ComponentManageCard } from './ComponentEntityCard';
 import { dockerRowStatusBadge } from './componentStatusPresentation';
 

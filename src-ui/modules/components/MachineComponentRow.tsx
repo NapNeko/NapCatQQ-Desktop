@@ -19,7 +19,7 @@ import {
     compareSemver,
     type ReleaseInfoView,
 } from '../../core/domain/release/normalize';
-import { ProgressLine, ProgressBarOverlay, shouldShowProgressBar } from './progressView';
+import { ProgressLine, ProgressBarOverlay, shouldShowProgressBar } from '../../shared/components/progressView';
 import { ComponentManageCard } from './ComponentEntityCard';
 import {
     hostComponentStatusBadge,

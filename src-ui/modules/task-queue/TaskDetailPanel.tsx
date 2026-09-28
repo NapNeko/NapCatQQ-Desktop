@@ -29,7 +29,7 @@ import {
 import { useNowMs } from '../../hooks/ui/useNowMs';
 import { Copy, Loader2, Trash2, XCircle } from 'lucide-react';
 import { MotionIcon } from '../../shared/ui/motion';
-import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../components/progressView';
+import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../../shared/components/progressView';
 import { DockerPullLayersPanel } from '../components/DockerPullLayersPanel';
 import { shouldShowDockerPullLayersInTaskDetail, shouldShowStepLogsInTaskDetail } from '../../core/domain/components/dockerPullProgress';
 import type { ActionProgressView } from '../../core/domain/components/progress';

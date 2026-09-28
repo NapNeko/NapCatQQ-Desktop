@@ -6,7 +6,7 @@ import { Progress } from '../../shared/ui';
 import { useAppInstallProgress } from '../../hooks/apps/useAppInstallProgress';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import { isIndeterminate } from '../../core/domain/components/progress';
-import { ProgressBarOverlay, ProgressLine, shouldShowProgressBar } from '../components/progressView';
+import { ProgressBarOverlay, ProgressLine, shouldShowProgressBar } from '../../shared/components/progressView';
 import type { AppInstance } from '../../core/ipc/types';
 
 /** 还在排队时进度里没有步骤文案，给一句人话 */
