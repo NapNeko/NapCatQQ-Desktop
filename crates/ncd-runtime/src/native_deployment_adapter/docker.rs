@@ -22,7 +22,7 @@ use tracing::warn;
 use crate::metrics::{BotRuntimeMetricsPrefs, prepare_docker_metrics_overlay, probe_remote_home};
 
 use super::config::{bot_config_for_start, status_for_deployment_state};
-use super::docker_helpers::{docker_project_dir, render_docker_config_on_host};
+use super::docker_helpers::render_docker_config_on_host;
 
 /// 过渡壳:让 DockerDeployment 穿上 BotBackend trait 外套
 pub struct DockerDeploymentBackend {
@@ -93,17 +93,8 @@ impl DockerDeploymentBackend {
             },
             bot_config.bot.qq_id,
         );
-        let project_dir = match docker_project_dir(self.host.as_ref(), &name).await {
-            Ok(p) => p,
-            Err(err) => {
-                warn!(
-                    target: "ncd_runtime::docker_metrics",
-                    err = %err,
-                    "Docker metrics: project_dir failed"
-                );
-                return Arc::clone(&self.deployment);
-            }
-        };
+        // HOME 上面刚探过,别再为项目目录多跑一趟 echo $HOME
+        let project_dir = ncd_domain::remote_paths::docker_bot_project_dir(&home, &name);
 
         // bot_id 与 watch metrics 一致：qq 字符串
         let bot_id = bot_config.bot.qq_id.to_string();
