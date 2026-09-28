@@ -14,12 +14,14 @@ const appLinkPlanKey = (instanceId: string, botId: string) => ['appLinkPlan', in
 export function useAppLinkPlan(instanceId: string, botId: string, enabled: boolean) {
     const on = enabled && !!instanceId && !!botId;
     const query = useQuery<OneBotLinkPlan, Error>({
-        queryKey: appLinkPlanKey(instanceId, botId),
+        // 关掉时换到一个不请求的空键上：只关 enabled 的话键不变，路上那次请求还算有人等，
+        // 换了键它没了观察者才会被取消、signal 跟着 abort
+        queryKey: on ? appLinkPlanKey(instanceId, botId) : appLinkPlanKey('', ''),
         queryFn: async ({ signal }) => {
             try {
                 return await appFrameworkService.previewLink(instanceId, botId);
             } catch (err) {
-                // 途中换了实例 / Bot，这份计划没人要了，失败也不报
+                // 途中换了实例 / Bot、关了对话框或认出是 Docker Bot，这份计划没人要了，失败也不报
                 if (!signal.aborted) {
                     pushAppErrorBar({
                         key: `app-link-preview:${instanceId}:${botId}`,
