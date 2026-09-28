@@ -6,7 +6,6 @@
 // 只是隧道方向相反；Docker 部署的 Bot 哪种都连不上，置灰。
 
 import { useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Link2 } from 'lucide-react';
 import {
     Badge,
@@ -22,19 +21,11 @@ import {
     type SelectItem,
 } from '../../shared/ui';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
-import { appFrameworkService } from '../../core/services/app-framework.service';
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
 import { useServerManager } from '../../hooks/remote/useServerManager';
-import {
-    useAppFrameworks,
-    useAppInstances,
-    invalidateBotConfigAfterLink,
-} from '../../hooks/apps/useAppInstances';
-import { appConfigKey } from '../../hooks/apps/useAppInstanceConfig';
-import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
-import { errorText } from '../../core/domain/errors';
-import { pushAppErrorBar } from '../../hooks/apps/pushAppErrorBar';
+import { useAppFrameworks, useAppInstances } from '../../hooks/apps/useAppInstances';
+import { useAppLinkPlan, useApplyAppLink } from '../../hooks/apps/useAppLink';
 import {
     remoteHostIdFromRuntimeTarget,
     isRuntimeTargetLocal,
@@ -88,8 +79,7 @@ export function AppLinkDialog({
     botId: presetBotId,
     onApplied,
 }: AppLinkDialogProps) {
-    const queryClient = useQueryClient();
-    const { instances, patch } = useAppInstances();
+    const { instances } = useAppInstances();
     const { data: frameworks = [] } = useAppFrameworks();
     const { data: snapshots = [] } = useBotSnapshots({ disablePolling: true });
     const configs = useBotConfigsMap(snapshots);
@@ -97,15 +87,11 @@ export function AppLinkDialog({
 
     const [instanceId, setInstanceId] = useState<string>(presetInstanceId ?? '');
     const [botId, setBotId] = useState<string>(presetBotId ?? '');
-    const [plan, setPlan] = useState<OneBotLinkPlan | null>(null);
-    const [previewing, setPreviewing] = useState(false);
-    const [applying, setApplying] = useState(false);
 
     useEffect(() => {
         if (!open) return;
         setInstanceId(presetInstanceId ?? '');
         setBotId(presetBotId ?? '');
-        setPlan(null);
     }, [open, presetInstanceId, presetBotId]);
 
     const instance = instances.find((i) => i.id === instanceId) ?? null;
@@ -113,6 +99,9 @@ export function AppLinkDialog({
     const botHost = botConfig ? botHostId(botConfig.bot.runtime_target) : null;
     // Bot 配置页进来时 Bot 是预填的，选不了别的，只能在这里说清楚为什么对接不了
     const botIsDocker = isDockerBot(botConfig?.bot.deploymentType);
+    const { plan, previewing } = useAppLinkPlan(instanceId, botId, open && !botIsDocker);
+    const applyLink = useApplyAppLink();
+    const applying = applyLink.isPending;
 
     const instanceItems: SelectItem[] = useMemo(
         () =>
@@ -153,63 +142,17 @@ export function AppLinkDialog({
         [snapshots, configs, instance, servers],
     );
 
-    useEffect(() => {
-        if (!open || !instanceId || !botId || botIsDocker) {
-            setPlan(null);
-            return;
-        }
-        let cancelled = false;
-        setPreviewing(true);
-        appFrameworkService
-            .previewLink(instanceId, botId)
-            .then((p) => {
-                if (!cancelled) setPlan(p);
-            })
-            .catch((err) => {
-                if (!cancelled) {
-                    setPlan(null);
-                    pushAppErrorBar({
-                        key: `app-link-preview:${instanceId}:${botId}`,
-                        title: '无法生成对接计划',
-                        raw: errorText(err),
-                    });
-                }
-            })
-            .finally(() => {
-                if (!cancelled) setPreviewing(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [open, instanceId, botId, botIsDocker]);
-
-    const apply = async () => {
+    const apply = () => {
         if (!plan || !instanceId || !botId) return;
-        setApplying(true);
-        try {
-            const next = await appFrameworkService.applyLink(instanceId, botId);
-            patch(next);
-            invalidateBotConfigAfterLink(queryClient, botId);
-            queryClient.invalidateQueries({ queryKey: appConfigKey(instanceId) });
-            queryClient.invalidateQueries({ queryKey: ['appConfigText', instanceId] });
-            pushInfoBar({
-                key: `app-link:${next.id}`,
-                tone: 'success',
-                title: '对接完成',
-                content: `Bot ${botId} 已加入连接 ${plan.connection.name}，运行中的 Bot 会热更新。`,
-                autoDismissMs: 4000,
-            });
-            onApplied?.(plan, next);
-            onOpenChange(false);
-        } catch (err) {
-            pushAppErrorBar({
-                key: `app-link:${instanceId}`,
-                title: '对接失败',
-                raw: errorText(err),
-            });
-        } finally {
-            setApplying(false);
-        }
+        applyLink.mutate(
+            { instanceId, botId, connectionName: plan.connection.name },
+            {
+                onSuccess: (next) => {
+                    onApplied?.(plan, next);
+                    onOpenChange(false);
+                },
+            },
+        );
     };
 
     const rebinding = instance?.link && instance.link.bot_id !== botId ? instance.link.bot_id : null;
