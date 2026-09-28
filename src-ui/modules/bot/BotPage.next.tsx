@@ -1,7 +1,4 @@
-// Bot 业务区路由壳（next）。
-//
-// 跟旧 BotPage.tsx 对应：3 视图 (list / config / log) 的浅路由切换。
-// Step 7 完成 list；Step 8 (本次) 完成 config 推倒重写。log 仍走旧 Fluent 树等 Step 9。
+// Bot 业务区路由壳：list / config / log / metrics 四个视图之间的浅路由切换。
 //
 // 回到 list 时在过渡结束后再清 selectedBotId；退场动画期间仍要带着 botId，
 // 否则配置页会瞬间变成「新建 Bot」标题。

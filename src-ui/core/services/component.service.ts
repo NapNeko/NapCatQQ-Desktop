@@ -1,8 +1,6 @@
 // Component 安装 / 探测 / 操作 IPC 服务。
-// 唯一持有 list_components / detect_component / run_component_action /
-// cancel_component_action 这 4 个命令名字符串的位置，后端改命令名只用改这一处。
+// 本域的命令名只在此文件出现，后端改命令名只改这一处。
 //
-// 后端工单 3：4 个 command 暴露 ncd-deploy DeployPlan 单 step 路径。
 // 浏览器预览模式直接走 mock，给前端 UI 实时进度动画。
 
 import { invoke, isTauri } from '../ipc/transport';
