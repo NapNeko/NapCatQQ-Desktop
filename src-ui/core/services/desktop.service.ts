@@ -1,10 +1,21 @@
 // 桌面壳：窗口控制 + 托盘行为（IPC 字符串集中在此 service）。
 
+import type { DesktopExitBlocked } from '../ipc/generated/DesktopExitBlocked';
 import type { SnowLumaWebuiEndpoint } from '../ipc/generated/SnowLumaWebuiEndpoint';
 import type { WindowSignal } from '../ipc/generated/WindowSignal';
 import type { LogSnapshot } from '../ipc/types';
 import { preferencesStore } from '../../hooks/preferences/preferencesStore';
-import { invoke, isTauri } from '../ipc/transport';
+import { invoke, isTauri, listen } from '../ipc/transport';
+
+// 不走 DomainEvent 总线的几条窗口通知，名字和信封版本对应 src-tauri/src/window_events.rs，
+// 那边的测试会读这个文件核对，改名时两边一起改
+const WINDOW_EVENT = {
+    requestClose: 'desktop-request-close',
+    exitBlocked: 'desktop-exit-blocked',
+    trayPanelShow: 'tray_panel_show',
+} as const;
+
+const WINDOW_SIGNAL: WindowSignal = { v: 1 };
 
 type WindowController = {
     minimize: () => Promise<void>;
@@ -58,8 +69,7 @@ export const windowControlService = {
             }
             const { emit } = await import('@tauri-apps/api/event');
             // 后端关窗时发的是同一个事件，信封也对齐
-            const signal: WindowSignal = { v: 1 };
-            await emit('desktop-request-close', signal);
+            await emit(WINDOW_EVENT.requestClose, WINDOW_SIGNAL);
         } catch (err) {
             console.error('关闭窗口失败:', err);
         }
@@ -101,6 +111,27 @@ export const trayService = {
     countLocalActiveBots: (): Promise<number> =>
         invoke<number>('count_local_active_bots'),
     requestExit: (): Promise<void> => invoke<void>('request_exit_app'),
+};
+
+export const windowEventService = {
+    /** 关窗动作是「退出」：后端关窗和标题栏关闭都发这条，主窗据此走退出闸门。 */
+    onRequestClose: (cb: (signal: WindowSignal) => void): Promise<() => void> =>
+        listen<WindowSignal>(WINDOW_EVENT.requestClose, cb),
+
+    /** 托盘退出被本机 Bot 拦下。 */
+    onExitBlocked: (cb: (payload: DesktopExitBlocked) => void): Promise<() => void> =>
+        listen<DesktopExitBlocked>(WINDOW_EVENT.exitBlocked, cb),
+
+    /** 托盘面板每次展开前后端发给面板窗口；拿不到窗口 API 时返回空退订。 */
+    onTrayPanelShow: async (cb: (signal: WindowSignal) => void): Promise<() => void> => {
+        try {
+            const { getCurrentWindow } = await import('@tauri-apps/api/window');
+            const win = getCurrentWindow();
+            return await win.listen<WindowSignal>(WINDOW_EVENT.trayPanelShow, (e) => cb(e.payload));
+        } catch {
+            return () => {};
+        }
+    },
 };
 
 export const diagnosticsService = {

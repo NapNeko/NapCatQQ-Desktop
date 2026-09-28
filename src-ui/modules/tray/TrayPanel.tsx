@@ -15,7 +15,7 @@ import {
     Square,
 } from 'lucide-react';
 import { botService } from '../../core/services/bot.service';
-import { trayService } from '../../core/services/desktop.service';
+import { trayService, windowEventService } from '../../core/services/desktop.service';
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
 import { useBotFlavorMap } from '../../hooks/bot/useBotFlavorMap';
@@ -370,14 +370,9 @@ export const TrayPanel: React.FC = () => {
     useEffect(() => {
         let unlisten: (() => void) | undefined;
         const setup = async () => {
-            try {
-                const { getCurrentWindow } = await import('@tauri-apps/api/window');
-                unlisten = await getCurrentWindow().listen('tray_panel_show', () => {
-                    refreshAndResize();
-                });
-            } catch {
-                // 忽略非 Tauri 环境
-            }
+            unlisten = await windowEventService.onTrayPanelShow(() => {
+                refreshAndResize();
+            });
         };
         void setup();
         return () => {

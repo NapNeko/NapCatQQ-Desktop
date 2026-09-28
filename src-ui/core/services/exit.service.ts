@@ -1,10 +1,7 @@
+import type { PrepareExitDesktopResponse } from '../ipc/generated/PrepareExitDesktopResponse';
 import { invoke } from '../ipc/transport';
 
-export interface PrepareExitDesktopResponse {
-    local_active: number;
-    remote_active: number;
-    can_exit: boolean;
-}
+export type { PrepareExitDesktopResponse };
 
 export async function prepareExitDesktop(): Promise<PrepareExitDesktopResponse> {
     return invoke<PrepareExitDesktopResponse>('prepare_exit_desktop');

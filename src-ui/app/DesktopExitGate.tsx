@@ -1,9 +1,8 @@
 // 标题栏关闭 / 托盘退出：本机 Bot 须先停；允许退出时远端保持运行。
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
-import type { DesktopExitBlocked } from '../core/ipc/generated/DesktopExitBlocked';
 import { isTauri } from '../core/ipc/transport';
+import { windowEventService } from '../core/services/desktop.service';
 import {
     prepareExitDesktop,
     requestExitApp,
@@ -49,12 +48,12 @@ export const DesktopExitGate: React.FC = () => {
         const unsubs: Array<() => void> = [];
         void (async () => {
             unsubs.push(
-                await listen('desktop-request-close', () => {
+                await windowEventService.onRequestClose(() => {
                     void runExitFlow();
                 }),
             );
             unsubs.push(
-                await listen<DesktopExitBlocked>('desktop-exit-blocked', () => {
+                await windowEventService.onExitBlocked(() => {
                     void runExitFlow();
                 }),
             );

@@ -2,10 +2,12 @@
 
 use serde::Serialize;
 use tauri::AppHandle;
+use ts_rs::TS;
 
 use crate::AppState;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
 pub struct PrepareExitDesktopResponse {
     pub local_active: usize,
     pub remote_active: usize,
