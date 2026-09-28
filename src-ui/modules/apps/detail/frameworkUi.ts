@@ -48,8 +48,8 @@ export type FrameworkUiModule = {
 };
 
 /** 原始文件、日志由外壳自己渲染，所有框架都挂在这一组末尾 */
-export const INSTANCE_GROUP_ID = 'instance';
-export const SHELL_TABS: readonly FrameworkTabDef[] = [
+const INSTANCE_GROUP_ID = 'instance';
+const SHELL_TABS: readonly FrameworkTabDef[] = [
     { value: 'raw', label: '原始文件' },
     { value: 'log', label: '日志' },
 ];

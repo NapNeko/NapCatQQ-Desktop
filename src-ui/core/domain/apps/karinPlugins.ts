@@ -26,7 +26,7 @@ export type VisiblePlugin = {
 /** 拉目录失败时标题里的叫法 */
 export const KARIN_CATALOG = '插件目录';
 
-export function appFileBasename(url: string): string {
+function appFileBasename(url: string): string {
     const path = (url.split('?')[0] ?? '').split('#')[0] ?? '';
     return path.split('/').pop() ?? '';
 }

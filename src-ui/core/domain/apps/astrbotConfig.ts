@@ -36,7 +36,7 @@ export function isEmbeddingProviderType(t: string): boolean {
     return t === 'embedding';
 }
 
-export function astrbotDefaultAi(): AstrBotAiSettings {
+function astrbotDefaultAi(): AstrBotAiSettings {
     return {
         enable: true,
         default_provider_id: '',
@@ -71,15 +71,15 @@ export function astrbotDefaultAi(): AstrBotAiSettings {
     };
 }
 
-export function astrbotDefaultStt(): AstrBotSttSettings {
+function astrbotDefaultStt(): AstrBotSttSettings {
     return { enable: false, provider_id: '' };
 }
 
-export function astrbotDefaultTts(): AstrBotTtsSettings {
+function astrbotDefaultTts(): AstrBotTtsSettings {
     return { enable: false, provider_id: '', dual_output: false, trigger_probability: 1 };
 }
 
-export function astrbotDefaultWebSearch(): AstrBotWebSearchSettings {
+function astrbotDefaultWebSearch(): AstrBotWebSearchSettings {
     return {
         enable: false,
         provider: 'default',
@@ -90,11 +90,11 @@ export function astrbotDefaultWebSearch(): AstrBotWebSearchSettings {
     };
 }
 
-export function astrbotDefaultKb(): AstrBotKbBind {
+function astrbotDefaultKb(): AstrBotKbBind {
     return { names: [], fusion_top_k: 20, final_top_k: 5, agentic_mode: false };
 }
 
-export function astrbotDefaultGates(): AstrBotPlatformGates {
+function astrbotDefaultGates(): AstrBotPlatformGates {
     return {
         wake_prefix: ['/'],
         unique_session: false,
@@ -108,7 +108,7 @@ export function astrbotDefaultGates(): AstrBotPlatformGates {
     };
 }
 
-export function astrbotDefaultSubagent(): AstrBotSubagentConfig {
+function astrbotDefaultSubagent(): AstrBotSubagentConfig {
     return {
         main_enable: false,
         remove_main_duplicate_tools: false,

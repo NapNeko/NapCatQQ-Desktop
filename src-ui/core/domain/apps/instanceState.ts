@@ -23,7 +23,7 @@ export function isInstalled(i: AppInstance): boolean {
 
 const INSTALL_ACTIONS = new Set(['ensure_installed', 'force_install', 'update']);
 
-export function appInstallTaskTarget(instance: AppInstance): string {
+function appInstallTaskTarget(instance: AppInstance): string {
     return `${instance.framework_id}@${instance.id}`;
 }
 

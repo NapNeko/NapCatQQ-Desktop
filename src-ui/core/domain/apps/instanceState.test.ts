@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appInstallTaskTarget, latestAppInstallTask, matchesAppInstallTask } from './instanceState';
+import { latestAppInstallTask, matchesAppInstallTask } from './instanceState';
 import type { AppInstance, DeploymentTaskSnapshot } from '../../ipc/types';
 
 const instance: AppInstance = {
@@ -32,7 +32,6 @@ function task(target: string, action = 'ensure_installed'): DeploymentTaskSnapsh
 
 describe('matchesAppInstallTask', () => {
     it('matches nonebot2@instance_id', () => {
-        expect(appInstallTaskTarget(instance)).toBe('nonebot2@6d4853b2');
         expect(matchesAppInstallTask(task('nonebot2@6d4853b2'), instance)).toBe(true);
     });
 

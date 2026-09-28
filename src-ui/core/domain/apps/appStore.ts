@@ -164,10 +164,10 @@ export function filterAppStore(args: {
 }
 
 /** 量不到格子时的回退：3×4，对齐官方店默认 12 条。 */
-export const STORE_PAGE_SIZE = 12;
-export const STORE_GRID_GAP_PX = 12;
-export const STORE_CARD_MIN_WIDTH_PX = 280;
-export const STORE_CARD_MIN_HEIGHT_PX = 148;
+const STORE_PAGE_SIZE = 12;
+const STORE_GRID_GAP_PX = 12;
+const STORE_CARD_MIN_WIDTH_PX = 280;
+const STORE_CARD_MIN_HEIGHT_PX = 148;
 
 export type StoreGridFit = {
     cols: number;
