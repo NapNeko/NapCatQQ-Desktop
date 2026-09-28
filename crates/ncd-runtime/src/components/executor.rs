@@ -23,6 +23,8 @@ use ncd_domain::{
 use ncd_host::{Host, Locality};
 use ncd_server::ServerManager;
 use tokio::sync::{RwLock, oneshot};
+use tokio::task::JoinHandle;
+use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::components::action_policy::{
     RemoteHostProbe, RemoteLayout, component_action_cancellable,
@@ -626,15 +628,12 @@ impl ComponentTaskRunner {
         let (mut ctx, mut rx) = ActionCtx::new();
         let cancel_token = ctx.cancel_token();
         let task_id = task_ctx.task_id().to_string();
-        self.active_tasks.insert(task_id.clone(), cancel_token.clone());
-
-        // 队列取消 → ActionCtx 取消
-        let task_cancel = task_ctx.cancel_token();
-        let action_cancel = cancel_token.clone();
-        tokio::spawn(async move {
-            task_cancel.cancelled().await;
-            action_cancel.cancel();
-        });
+        // 从哪条路返回都会摘掉,取消命令不会拿到已结束任务的令牌
+        let registered = self
+            .active_tasks
+            .register(task_id.clone(), cancel_token.clone());
+        let (_stop_cancel_forward, _) =
+            forward_cancel(task_ctx.cancel_token(), cancel_token.clone());
 
         // ActionCtx 进度 → task 记录 + 领域事件
         let event_bus = self.event_bus.clone();
@@ -651,7 +650,7 @@ impl ComponentTaskRunner {
         });
 
         if cancel_token.is_cancelled() {
-            self.active_tasks.remove(&task_id);
+            drop(registered);
             self.emit(&task_ctx, &task_id, ProgressKind::Finished { ok: false })
                 .await;
             return DeploymentTaskRunResult::failed("任务已取消");
@@ -659,23 +658,26 @@ impl ComponentTaskRunner {
 
         // plan 进 'static 闭包要 owned;取出来换个空的占位
         let plan = std::mem::replace(&mut self.plan, DeployPlan::builder().build());
-        let outcome: Result<DeployOutcome, String> = if self.remote_long_install {
-            let Some(id) = self.server_id.clone() else {
-                return DeploymentTaskRunResult::failed("missing remote server id");
-            };
-            self.server_manager
-                .with_isolated_connection(&id, move |iso_host| {
-                    Box::pin(async move {
-                        plan.run(iso_host.as_ref(), &mut ctx)
-                            .await
-                            .map_err(|e| format!("{e}"))
+        let isolated_server = self
+            .server_id
+            .clone()
+            .filter(|_| self.remote_long_install);
+        let outcome: Result<DeployOutcome, String> = match isolated_server {
+            Some(id) => {
+                self.server_manager
+                    .with_isolated_connection(&id, move |iso_host| {
+                        Box::pin(async move {
+                            plan.run(iso_host.as_ref(), &mut ctx)
+                                .await
+                                .map_err(|e| format!("{e}"))
+                        })
                     })
-                })
+                    .await
+            }
+            None => plan
+                .run(self.host.as_ref(), &mut ctx)
                 .await
-        } else {
-            plan.run(self.host.as_ref(), &mut ctx)
-                .await
-                .map_err(|e| format!("{e}"))
+                .map_err(|e| format!("{e}")),
         };
 
         if outcome.is_err() {
@@ -684,7 +686,7 @@ impl ComponentTaskRunner {
             }
         }
 
-        self.active_tasks.remove(&task_id);
+        drop(registered);
         if let Some(ref id) = self.server_id {
             self.inventory.invalidate(id).await;
         }
@@ -794,6 +796,23 @@ fn uuid_v4() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+/// 队列取消转给 ActionCtx。guard 一丢转发就收尾:正常跑完的任务
+/// 不会留下一个永远等着取消信号的 watcher
+fn forward_cancel(
+    from: CancellationToken,
+    to: CancellationToken,
+) -> (DropGuard, JoinHandle<()>) {
+    let done = CancellationToken::new();
+    let stop = done.clone();
+    let handle = tokio::spawn(async move {
+        tokio::select! {
+            () = from.cancelled() => to.cancel(),
+            () = stop.cancelled() => {}
+        }
+    });
+    (done.drop_guard(), handle)
+}
+
 /// root 任务刚入队、还没开跑时给 UI 的一句话;没什么可等就 None。
 /// 前置任务优先于包管理器锁:有前置时锁的等待藏在前置之后,不值得同时说
 fn queue_note(waiting_on: &[(DependencyTarget, String)], needs_package_manager: bool) -> Option<String> {
@@ -835,6 +854,27 @@ mod tests {
             queue_note(&waiting, true).as_deref(),
             Some("等待前置:QQ、tar")
         );
+    }
+
+    #[tokio::test]
+    async fn cancel_forward_passes_cancel_and_ends_with_its_guard() {
+        let from = CancellationToken::new();
+        let to = CancellationToken::new();
+        let (_guard, handle) = forward_cancel(from.clone(), to.clone());
+        from.cancel();
+        handle.await.unwrap();
+        assert!(to.is_cancelled());
+
+        // 没人取消:guard 一丢 watcher 就退出,目标令牌不受影响
+        let from = CancellationToken::new();
+        let to = CancellationToken::new();
+        let (guard, handle) = forward_cancel(from, to.clone());
+        drop(guard);
+        tokio::time::timeout(std::time::Duration::from_secs(1), handle)
+            .await
+            .expect("watcher should end once its guard is dropped")
+            .unwrap();
+        assert!(!to.is_cancelled());
     }
 
     #[test]
