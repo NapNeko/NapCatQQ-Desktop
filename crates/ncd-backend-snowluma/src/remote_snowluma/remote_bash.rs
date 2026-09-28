@@ -1,55 +1,16 @@
-//! 远端 bash 路径按 `Host::id` 缓存，避免每条短脚本都 SSH `command -v bash`
-
-use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+//! 远端 bash 的路径。`Host::which` 在远端按连接记住找到的结果，每条短脚本不会都多一趟 SSH
 
 use ncd_host::{Host, HostCommand};
 use ncd_traits::runtime_backend::BotBackendError;
 
-static BASH_BY_HOST: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
-
-fn bash_cache() -> &'static Mutex<HashMap<String, String>> {
-    BASH_BY_HOST.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn cached_bash(host_id: &str) -> Option<String> {
-    bash_cache()
-        .lock()
-        .ok()
-        .and_then(|g| g.get(host_id).cloned())
-}
-
-fn remember_bash(host_id: &str, bash: &str) {
-    if let Ok(mut g) = bash_cache().lock() {
-        g.insert(host_id.to_string(), bash.to_string());
-    }
-}
-
-#[cfg(test)]
-pub(crate) fn clear_remote_bash_cache() {
-    if let Ok(mut g) = bash_cache().lock() {
-        g.clear();
-    }
-}
-
-/// 解析远端 bash；同一 `host.id()` 只探测一次。
+/// 解析远端 bash：PATH 里找不到时再看 /bin/bash（非交互 SSH 的 PATH 可能很短）
 pub async fn resolve_remote_bash(host: &dyn Host) -> Result<String, BotBackendError> {
-    let id = host.id();
-    if let Some(cached) = cached_bash(id) {
-        return Ok(cached);
-    }
-
-    let cmd = HostCommand::new("sh").arg("-c").arg("command -v bash");
-    let out = host
-        .run_to_string(cmd)
+    if let Some(path) = host
+        .which("bash")
         .await
-        .map_err(|e| BotBackendError::Io(e.to_string()))?;
-    if out.success() {
-        let line = out.stdout.lines().next().unwrap_or("").trim();
-        if !line.is_empty() {
-            remember_bash(id, line);
-            return Ok(line.to_string());
-        }
+        .map_err(|e| BotBackendError::Io(e.to_string()))?
+    {
+        return Ok(path);
     }
     if host
         .run_to_string(HostCommand::new("sh").arg("-c").arg("test -x /bin/bash"))
@@ -57,7 +18,6 @@ pub async fn resolve_remote_bash(host: &dyn Host) -> Result<String, BotBackendEr
         .ok()
         .is_some_and(|o| o.success())
     {
-        remember_bash(id, "/bin/bash");
         return Ok("/bin/bash".into());
     }
     Err(BotBackendError::InvalidConfig(
@@ -91,16 +51,26 @@ mod tests {
     }
     static NOOP_SHELL: NoopShell = NoopShell;
 
+    #[derive(Clone, Copy)]
+    enum Bash {
+        InPath,
+        OnlyAtBinBash,
+        Missing,
+        SshDown,
+    }
+
     struct CountingHost {
         id: String,
         hits: AtomicUsize,
+        bash: Bash,
     }
 
     impl CountingHost {
-        fn new(id: &str) -> Self {
+        fn new(id: &str, bash: Bash) -> Self {
             Self {
                 id: id.to_string(),
                 hits: AtomicUsize::new(0),
+                bash,
             }
         }
     }
@@ -163,32 +133,53 @@ mod tests {
         async fn spawn(&self, _: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
             Err(HostError::Unsupported { operation: "mock" })
         }
-        async fn run_to_string(&self, _: HostCommand) -> Result<CommandOutput, HostError> {
+        async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
             self.hits.fetch_add(1, Ordering::SeqCst);
-            Ok(CommandOutput {
+            let script = cmd.args.last().cloned().unwrap_or_default();
+            let found = |stdout: &str| CommandOutput {
                 exit_code: Some(0),
-                stdout: "/bin/bash\n".into(),
+                stdout: stdout.into(),
                 stderr: String::new(),
-            })
+            };
+            let absent = CommandOutput {
+                exit_code: Some(1),
+                stdout: String::new(),
+                stderr: String::new(),
+            };
+            match (self.bash, script.starts_with("command -v")) {
+                (Bash::SshDown, _) => Err(HostError::Unsupported { operation: "ssh down" }),
+                (Bash::InPath, true) => Ok(found("/usr/bin/bash\n")),
+                (Bash::OnlyAtBinBash, false) => Ok(found("")),
+                _ => Ok(absent),
+            }
         }
     }
 
-    #[test]
-    fn cache_returns_stored_path() {
-        clear_remote_bash_cache();
-        remember_bash("h1", "/usr/bin/bash");
-        assert_eq!(cached_bash("h1").as_deref(), Some("/usr/bin/bash"));
-        assert_eq!(cached_bash("h2"), None);
+    #[tokio::test]
+    async fn bash_in_path_is_used() {
+        let host = CountingHost::new("h", Bash::InPath);
+        assert_eq!(resolve_remote_bash(&host).await.unwrap(), "/usr/bin/bash");
+        assert_eq!(host.hits.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
-    async fn resolve_remote_bash_hits_host_once_per_id() {
-        clear_remote_bash_cache();
-        let host = CountingHost::new("bash-cache-once");
-        let first = resolve_remote_bash(&host).await.expect("first");
-        let second = resolve_remote_bash(&host).await.expect("second");
-        assert_eq!(first, "/bin/bash");
-        assert_eq!(second, "/bin/bash");
-        assert_eq!(host.hits.load(Ordering::SeqCst), 1);
+    async fn falls_back_to_bin_bash_when_path_is_short() {
+        let host = CountingHost::new("h", Bash::OnlyAtBinBash);
+        assert_eq!(resolve_remote_bash(&host).await.unwrap(), "/bin/bash");
+    }
+
+    #[tokio::test]
+    async fn missing_bash_says_so() {
+        let host = CountingHost::new("h", Bash::Missing);
+        let err = resolve_remote_bash(&host).await.unwrap_err();
+        assert!(matches!(err, BotBackendError::InvalidConfig(_)));
+    }
+
+    // 连不上不能报成「缺 bash」，不然用户会去装一个早就有的东西
+    #[tokio::test]
+    async fn ssh_failure_is_io_not_missing_bash() {
+        let host = CountingHost::new("h", Bash::SshDown);
+        let err = resolve_remote_bash(&host).await.unwrap_err();
+        assert!(matches!(err, BotBackendError::Io(_)));
     }
 }

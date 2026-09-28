@@ -209,13 +209,15 @@ pub trait Host: Send + Sync {
     /// command -v,Windows 走 where探测本身失败(连接抖动等)按"不存在"
     /// 保守返回 false,让调用方走"装一下"或报错路径,而不是把探测错误当致命
     async fn command_exists(&self, command: &str) -> bool {
-        let probe = match self.os() {
-            Os::Windows => HostCommand::new("where").arg(command),
-            _ => HostCommand::new("sh")
-                .arg("-c")
-                .arg(format!("command -v {command}")),
-        };
-        matches!(self.run_to_string(probe).await, Ok(out) if out.success())
+        matches!(self.run_to_string(which_probe(self.os(), command)).await, Ok(out) if out.success())
+    }
+
+    /// 命令在主机上的绝对路径（`command -v` / `where` 输出的第一行），不在 PATH 里是 Ok(None)。
+    /// 和 command_exists 不同，探测本身失败（SSH 断了）要报出来：调用方拿这个决定报「缺 bash」
+    /// 还是报连不上。远端实现会记住找到的结果，同一台机上一条条跑短脚本不必每次多一趟 SSH
+    async fn which(&self, command: &str) -> Result<Option<String>, HostError> {
+        let out = self.run_to_string(which_probe(self.os(), command)).await?;
+        Ok(first_path_line(&out))
     }
 
     /// 运行命令并把 stdout / stderr 逐行流式回调,适合 docker pull / compose up
@@ -295,9 +297,54 @@ pub trait Host: Send + Sync {
     }
 }
 
+/// 查命令在不在 PATH 里的那条命令。命令名单独转义：它会被拼进 `sh -c` 的脚本里
+pub(crate) fn which_probe(os: Os, command: &str) -> HostCommand {
+    match os {
+        Os::Windows => HostCommand::new("where").arg(command),
+        _ => HostCommand::new("sh")
+            .arg("-c")
+            .arg(format!("command -v {}", crate::shell::BashShell.escape(command))),
+    }
+}
+
+pub(crate) fn first_path_line(out: &CommandOutput) -> Option<String> {
+    if !out.success() {
+        return None;
+    }
+    out.stdout
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(str::to_string)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn which_probe_quotes_the_command() {
+        let cmd = which_probe(Os::Linux, "bash; id");
+        assert_eq!(cmd.args, vec!["-c".to_string(), "command -v 'bash; id'".to_string()]);
+        let cmd = which_probe(Os::Windows, "node");
+        assert_eq!(cmd.program, "where");
+    }
+
+    #[test]
+    fn first_path_line_skips_blanks_and_failures() {
+        let ok = CommandOutput {
+            exit_code: Some(0),
+            stdout: "\n/usr/bin/bash\r\n/bin/bash\n".into(),
+            stderr: String::new(),
+        };
+        assert_eq!(first_path_line(&ok).as_deref(), Some("/usr/bin/bash"));
+        let missing = CommandOutput {
+            exit_code: Some(1),
+            stdout: String::new(),
+            stderr: String::new(),
+        };
+        assert_eq!(first_path_line(&missing), None);
+    }
 
     #[test]
     fn os_serialization_uses_snake_case() {

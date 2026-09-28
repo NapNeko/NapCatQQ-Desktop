@@ -191,6 +191,8 @@ pub struct RemoteLinuxHost {
     /// 连接配置:拨号身份给跨机常驻隧道;`connect` 后由上层重连
     config: ConnectionConfig,
     remote_forwards: RemoteForwardTable,
+    /// `which` 找到过的命令路径。跟着这个连接对象活：换了服务器档案会重建连接，自然作废
+    which_found: std::sync::Mutex<HashMap<String, String>>,
 }
 
 impl RemoteLinuxHost {
@@ -290,6 +292,7 @@ impl RemoteLinuxHost {
             elevation_password: Arc::new(Mutex::new(None)),
             config,
             remote_forwards,
+            which_found: std::sync::Mutex::new(HashMap::new()),
         })
     }
 
@@ -548,6 +551,26 @@ impl Host for RemoteLinuxHost {
         // 暂不实装 apt PackageManager,Component 直接走 spawn(apt-get install ...)
         // 后续可统一加 AptPackageManager / DnfPackageManager
         None
+    }
+
+    // 只记找到的：没装的命令用户随时可能去装上，记住「没有」反而会一直报缺
+    async fn which(&self, command: &str) -> Result<Option<String>, HostError> {
+        if let Some(hit) = self
+            .which_found
+            .lock()
+            .ok()
+            .and_then(|found| found.get(command).cloned())
+        {
+            return Ok(Some(hit));
+        }
+        let out = self
+            .run_to_string(crate::host::which_probe(Os::Linux, command))
+            .await?;
+        let path = crate::host::first_path_line(&out);
+        if let (Some(path), Ok(mut found)) = (&path, self.which_found.lock()) {
+            found.insert(command.to_string(), path.clone());
+        }
+        Ok(path)
     }
 
     // ===== 进程操作(基于 SSH exec channel)=====
