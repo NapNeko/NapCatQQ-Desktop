@@ -5,7 +5,6 @@ use ncd_domain::{InstallDependenciesResult, QqDependencyReport};
 use ncd_host::Os;
 use tauri::State;
 
-use super::executor;
 use crate::AppState;
 use crate::commands::host_resolve::resolve_host_with_autoconnect;
 
@@ -37,7 +36,8 @@ pub async fn install_qq_dependencies(
     if host.os() != Os::Linux {
         return Err("QQ dependencies installation is only supported on Linux".to_string());
     }
-    executor(&state)
+    state
+        .components
         .install_qq_dependencies(&host_id, host, packages, sudo_password)
         .await
 }

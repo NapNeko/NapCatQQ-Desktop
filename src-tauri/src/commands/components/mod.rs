@@ -13,8 +13,8 @@ use ncd_deploy::StepKind;
 use ncd_domain::{NodeEnvironmentCandidate, NodeProbeResult};
 use ncd_host::{Host, HostPath, local::LocalWindowsHost};
 use ncd_runtime::{
-    ComponentActionRequest, ComponentExecutor, RemoteHostProbe, RemoteSelectedPaths,
-    SnowLumaLinuxPackage, component_catalog,
+    ComponentActionRequest, RemoteHostProbe, RemoteSelectedPaths, SnowLumaLinuxPackage,
+    component_catalog,
 };
 use tauri::State;
 
@@ -127,10 +127,6 @@ async fn ensure_host_idle_for_component_mutation(
     ))
 }
 
-pub(crate) fn executor(state: &AppState) -> &ComponentExecutor {
-    &state.components
-}
-
 /// 取(或探测并缓存)一台主机的 home + layout + 库存选中路径
 pub(crate) async fn cached_host_probe(
     host_id: &str,
@@ -152,9 +148,9 @@ pub(crate) fn test_components(
     deployment_tasks: &ncd_runtime::DeploymentTaskManager,
     server_manager: &std::sync::Arc<ncd_runtime::ServerManager>,
     app_settings: &std::sync::Arc<tokio::sync::RwLock<ncd_domain::AppSettings>>,
-) -> std::sync::Arc<ComponentExecutor> {
+) -> std::sync::Arc<ncd_runtime::ComponentExecutor> {
     use std::sync::Arc;
-    Arc::new(ComponentExecutor::new(
+    Arc::new(ncd_runtime::ComponentExecutor::new(
         ncd_runtime::components::ComponentExecutorDeps {
             deployment_tasks: deployment_tasks.clone(),
             server_manager: Arc::clone(server_manager),
