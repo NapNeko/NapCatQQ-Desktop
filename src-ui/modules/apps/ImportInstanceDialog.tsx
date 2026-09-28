@@ -61,14 +61,18 @@ export const ImportInstanceDialog: React.FC<{
     const [hostId, setHostId] = useState('local');
     const [path, setPath] = useState('');
     const [displayName, setDisplayName] = useState('');
-    const [probe, setProbe] = useState<AppProjectProbe | null>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
     const [mounted, setMounted] = useState<ImportInstanceTarget | null>(null);
     const probeProject = useProbeAppProject();
+    // 检查结果只认最近一次：框架、主机、目录一改或对话框开关就 reset，路上那次回来时
+    // 已经摘掉了观察者，不会再填回结果、弹条，导入也就不会拿旧目录去接管
+    const probe = probeProject.data ?? null;
     const probing = probeProject.isPending;
+    const { reset: resetProbe } = probeProject;
     const pickDirectory = usePickDirectory();
 
     useEffect(() => {
+        resetProbe();
         if (!target) return;
         setMounted(target);
         const first = target.manifest ?? frameworks[0];
@@ -76,10 +80,9 @@ export const ImportInstanceDialog: React.FC<{
         setHostId(target.lockedHostId ?? 'local');
         setPath('');
         setDisplayName('');
-        setProbe(null);
         setPickerOpen(false);
         clearProbeBars();
-    }, [target, frameworks]);
+    }, [target, frameworks, resetProbe]);
 
     const manifest =
         mounted?.manifest ?? frameworks.find((m) => m.id === frameworkId) ?? null;
@@ -109,7 +112,7 @@ export const ImportInstanceDialog: React.FC<{
         label: m.display_name,
     }));
 
-    const runProbe = async () => {
+    const runProbe = () => {
         if (!canProbe) return;
         if (remotePathInvalid) {
             pushErrorBar({
@@ -119,34 +122,42 @@ export const ImportInstanceDialog: React.FC<{
             });
             return;
         }
-        setProbe(null);
         clearProbeBars();
-        try {
-            const next = await probeProject.mutateAsync({ hostId, frameworkId, path: path.trim() });
-            setProbe(next);
-            if (!displayName.trim()) setDisplayName(next.display_name);
-            const notes = next.warnings.filter((w) => !w.includes('快照'));
-            if (notes.length > 0) {
-                pushInfoBar({
-                    key: PROBE_WARN_KEY,
-                    tone: 'warning',
-                    title: notes[0],
-                    content: notes.slice(1).join(' ') || undefined,
-                });
-            }
-        } catch (e) {
-            pushErrorBar({
-                key: PROBE_ERROR_KEY,
-                title: '检查项目失败',
-                raw: errorText(e),
-            });
-        }
+        // 用 mutate 的单次回调而不是 await mutateAsync：reset 之后前者不再触发，后者照样 resolve
+        probeProject.mutate(
+            { hostId, frameworkId, path: path.trim() },
+            {
+                onSuccess: (next) => {
+                    setDisplayName((cur) => (cur.trim() ? cur : next.display_name));
+                    const notes = next.warnings.filter((w) => !w.includes('快照'));
+                    if (notes.length > 0) {
+                        pushInfoBar({
+                            key: PROBE_WARN_KEY,
+                            tone: 'warning',
+                            title: notes[0],
+                            content: notes.slice(1).join(' ') || undefined,
+                        });
+                    }
+                },
+                onError: (e) => {
+                    pushErrorBar({
+                        key: PROBE_ERROR_KEY,
+                        title: '检查项目失败',
+                        raw: errorText(e),
+                    });
+                },
+            },
+        );
+    };
+
+    const dropProbe = () => {
+        resetProbe();
+        clearProbeBars();
     };
 
     const markPathDirty = (next: string) => {
         setPath(next);
-        setProbe(null);
-        clearProbeBars();
+        dropProbe();
     };
 
     return (
@@ -169,8 +180,7 @@ export const ImportInstanceDialog: React.FC<{
                                     value={frameworkId}
                                     onValueChange={(v) => {
                                         setFrameworkId(v);
-                                        setProbe(null);
-                                        clearProbeBars();
+                                        dropProbe();
                                     }}
                                     disabled={lockedFramework}
                                 />
@@ -181,8 +191,7 @@ export const ImportInstanceDialog: React.FC<{
                                     onValueChange={(v) => {
                                         setHostId(v);
                                         setPath('');
-                                        setProbe(null);
-                                        clearProbeBars();
+                                        dropProbe();
                                     }}
                                     disabled={lockedHost !== null}
                                 />
@@ -199,7 +208,7 @@ export const ImportInstanceDialog: React.FC<{
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
                                                 e.preventDefault();
-                                                void runProbe();
+                                                runProbe();
                                             }
                                         }}
                                     />
@@ -229,7 +238,7 @@ export const ImportInstanceDialog: React.FC<{
                                         size="md"
                                         className="shrink-0"
                                         disabled={!canProbe}
-                                        onClick={() => void runProbe()}
+                                        onClick={runProbe}
                                     >
                                         {probing && <Spinner size="sm" />}
                                         检查
