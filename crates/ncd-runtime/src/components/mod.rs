@@ -6,6 +6,7 @@ pub mod executor;
 pub mod factory;
 pub mod graph;
 pub mod package_lock;
+pub mod readiness_gate;
 pub mod resolver;
 pub mod system_package;
 
@@ -28,6 +29,7 @@ pub use graph::{
     ClosureNode, catalog_version_reqs_for, graph_component, graph_component_ids,
     render_dependency_graph, requirement_closure,
 };
+pub use readiness_gate::ComponentRuntimeGate;
 pub use resolver::{
     ComponentBuilder, ResolveCtx, resolve_dependencies, resolve_runtime_readiness,
 };

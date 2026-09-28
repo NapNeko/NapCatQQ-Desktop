@@ -1,8 +1,8 @@
 //! Bot 启动前的运行时依赖预检:框架组件 + 它的 Run 依赖是否都在
 //!
-//! 依赖图与探测在 components::resolver;这里只定义 BotManager 依赖的口子,
-//! 因为把 BotConfig 变成 (host, 构建输入) 需要 ServerManager / 库存 / 设置,
-//! 那些在 src-tauri wiring 里才齐,由那边实现并注入。
+//! 依赖图与探测在 components::resolver;这里只定义 BotManager 依赖的口子。
+//! 实装是 components::readiness_gate,它要的主机解析和组件执行器由启动 wiring 注入,
+//! BotManager 不直接依赖它们。
 
 use async_trait::async_trait;
 use ncd_component::{ComponentId, RequirementStatus, RuntimeReadiness};

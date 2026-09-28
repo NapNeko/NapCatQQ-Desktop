@@ -246,6 +246,21 @@ impl ComponentExecutor {
             .await
     }
 
+    /// root 现在能不能跑(root 自己 + Run 依赖);组件页门禁和 Bot 启动预检共用。
+    /// 远端库存探不到直接报错:按猜的布局算出的「缺什么」对不上那台机器
+    pub async fn runtime_readiness(
+        &self,
+        root: ComponentId,
+        host_id: &str,
+        host: &dyn Host,
+    ) -> Result<RuntimeReadiness, String> {
+        let (probe, selected) = self.inventory.host_probe(host_id, host).await?;
+        self.build_inputs(host, &probe, selected, None)
+            .await
+            .readiness(root, host)
+            .await
+    }
+
     /// 提交 root 动作及其未满足的前置;返回 root 的 task id
     pub async fn submit(&self, req: ComponentActionRequest) -> Result<String, String> {
         let ComponentActionRequest {

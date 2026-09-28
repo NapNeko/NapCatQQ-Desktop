@@ -11,10 +11,10 @@ use ncd_component::{
 };
 use ncd_deploy::StepKind;
 use ncd_domain::{NodeEnvironmentCandidate, NodeProbeResult};
-use ncd_host::{Host, HostPath, Locality, local::LocalWindowsHost};
+use ncd_host::{Host, HostPath, local::LocalWindowsHost};
 use ncd_runtime::{
     ComponentActionRequest, ComponentBuildInputs, ComponentExecutor, RemoteHostProbe,
-    RemoteSelectedPaths, SnowLumaLinuxPackage, component_catalog, infer_snowluma_linux_package,
+    RemoteSelectedPaths, SnowLumaLinuxPackage, component_catalog,
 };
 use tauri::State;
 
@@ -207,12 +207,9 @@ pub async fn resolve_runtime_readiness(
     state: State<'_, AppState>,
 ) -> Result<RuntimeReadiness, String> {
     let host = resolve_host_with_autoconnect(&host_id, &state).await?;
-    let (probe, selected) = cached_host_probe(&host_id, host.as_ref(), &state).await;
-    let package = (host.locality() != Locality::Local)
-        .then(|| infer_snowluma_linux_package(selected.as_ref()));
-    build_inputs(&state, host.as_ref(), &probe, selected, package)
-        .await
-        .readiness(component_id, host.as_ref())
+    state
+        .components
+        .runtime_readiness(component_id, &host_id, host.as_ref())
         .await
 }
 

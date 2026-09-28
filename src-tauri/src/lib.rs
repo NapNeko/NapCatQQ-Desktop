@@ -15,7 +15,6 @@ use tokio_util::sync::CancellationToken;
 pub mod autostart;
 pub mod bootstrap;
 pub mod bot_host_resolver;
-pub mod bot_runtime_gate;
 pub mod clipboard;
 pub mod commands;
 pub mod desktop_consent;
@@ -268,7 +267,7 @@ pub fn run() {
         },
     ));
     let runtime_gate: Arc<dyn ncd_runtime::RuntimeReadinessGate> =
-        Arc::new(bot_runtime_gate::TauriRuntimeGate::new(
+        Arc::new(ncd_runtime::components::ComponentRuntimeGate::new(
             Arc::clone(&host_resolver),
             Arc::clone(&components),
         ));
