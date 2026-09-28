@@ -725,7 +725,7 @@ impl AppConfigIssue {
 /// 打开应用端 WebUI 时返回给前端的入口。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AppInstanceWebUi {
     pub url: String,
     /// Karin `HTTP_AUTH_KEY`；空则前端不写剪贴板。
@@ -739,7 +739,7 @@ pub struct AppInstanceWebUi {
 /// 其它命令仍返回 String，这里只在需要分流的地方升级。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum AppConfigErrorKind {
     Conflict,
     Invalid,
@@ -751,7 +751,7 @@ pub enum AppConfigErrorKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src-ui/core/ipc/generated/")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AppConfigError {
     pub kind: AppConfigErrorKind,
     pub message: String,

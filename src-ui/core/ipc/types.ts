@@ -89,7 +89,7 @@ export type { KarinPluginInstalled } from './generated/domain/KarinPluginInstall
 export type { OneBotLinkEndpoint } from './generated/domain/OneBotLinkEndpoint';
 export type { OneBotLinkMode } from './generated/domain/OneBotLinkMode';
 export type { OneBotLinkPlan } from './generated/domain/OneBotLinkPlan';
-export type { AppInstanceWebUi } from './generated/AppInstanceWebUi';
+export type { AppInstanceWebUi } from './generated/domain/AppInstanceWebUi';
 export type { AppWebUiAuthKind } from './generated/domain/AppWebUiAuthKind';
 export type { AppWebUiAccount } from './generated/domain/AppWebUiAccount';
 export type { AppPluginConfigFieldKind } from './generated/domain/AppPluginConfigFieldKind';
@@ -216,8 +216,8 @@ export type { AppConfigDocumentRevision } from './generated/domain/AppConfigDocu
 export type { AppInstanceConfig } from './generated/domain/AppInstanceConfig';
 export type { AppInstanceConfigEnvelope } from './generated/domain/AppInstanceConfigEnvelope';
 export type { AppConfigWriteResult } from './generated/domain/AppConfigWriteResult';
-export type { AppConfigError } from './generated/AppConfigError';
-export type { AppConfigErrorKind } from './generated/AppConfigErrorKind';
+export type { AppConfigError } from './generated/domain/AppConfigError';
+export type { AppConfigErrorKind } from './generated/domain/AppConfigErrorKind';
 export type { NoneBot2InstanceConfig } from './generated/domain/NoneBot2InstanceConfig';
 export type { NoneBot2EnvProd } from './generated/domain/NoneBot2EnvProd';
 export type { NoneBot2EnvEntry } from './generated/domain/NoneBot2EnvEntry';
