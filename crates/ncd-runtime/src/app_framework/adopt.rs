@@ -39,39 +39,44 @@ impl AdoptStore {
         self.dir.join(format!("{}.json", id.as_str()))
     }
 
-    pub fn load(&self, id: &AppInstanceId) -> Result<Option<AdoptSnapshot>, AppFrameworkError> {
-        let path = self.path(id);
-        if !path.exists() {
-            return Ok(None);
-        }
-        let bytes = std::fs::read(&path)
-            .map_err(|e| AppFrameworkError::Store(format!("读导入快照失败: {e}")))?;
+    pub async fn load(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Option<AdoptSnapshot>, AppFrameworkError> {
+        let bytes = match tokio::fs::read(self.path(id)).await {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(AppFrameworkError::Store(format!("读导入快照失败: {e}"))),
+        };
         let snap = serde_json::from_slice(&bytes)
             .map_err(|e| AppFrameworkError::Store(format!("解析导入快照失败: {e}")))?;
         Ok(Some(snap))
     }
 
-    pub fn save(&self, snap: &AdoptSnapshot) -> Result<(), AppFrameworkError> {
-        std::fs::create_dir_all(&self.dir)
+    pub async fn save(&self, snap: &AdoptSnapshot) -> Result<(), AppFrameworkError> {
+        tokio::fs::create_dir_all(&self.dir)
+            .await
             .map_err(|e| AppFrameworkError::Store(format!("创建导入快照目录失败: {e}")))?;
         let bytes = serde_json::to_vec_pretty(snap)
             .map_err(|e| AppFrameworkError::Store(e.to_string()))?;
         let path = self.path(&AppInstanceId::new(&snap.instance_id));
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, bytes)
+        tokio::fs::write(&tmp, bytes)
+            .await
             .map_err(|e| AppFrameworkError::Store(format!("写导入快照失败: {e}")))?;
-        std::fs::rename(&tmp, &path)
+        tokio::fs::rename(&tmp, &path)
+            .await
             .map_err(|e| AppFrameworkError::Store(format!("落盘导入快照失败: {e}")))?;
         Ok(())
     }
 
-    pub fn remove(&self, id: &AppInstanceId) -> Result<(), AppFrameworkError> {
-        let path = self.path(id);
-        if path.exists() {
-            std::fs::remove_file(&path)
-                .map_err(|e| AppFrameworkError::Store(format!("删除导入快照失败: {e}")))?;
+    pub async fn remove(&self, id: &AppInstanceId) -> Result<(), AppFrameworkError> {
+        match tokio::fs::remove_file(self.path(id)).await {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                Err(AppFrameworkError::Store(format!("删除导入快照失败: {e}")))
+            }
+            _ => Ok(()),
         }
-        Ok(())
     }
 }
 
@@ -101,8 +106,8 @@ pub async fn capture_snapshot(
 mod tests {
     use super::*;
 
-    #[test]
-    fn persist_round_trip() {
+    #[tokio::test]
+    async fn persist_round_trip() {
         let tmp = tempfile::tempdir().unwrap();
         let store = AdoptStore::new(tmp.path());
         let id = AppInstanceId::new("abcd1234");
@@ -120,11 +125,12 @@ mod tests {
             }],
             supervisors: vec!["bot-xiuxian".into()],
         };
-        store.save(&snap).unwrap();
-        let loaded = store.load(&id).unwrap().expect("snapshot");
+        store.save(&snap).await.unwrap();
+        let loaded = store.load(&id).await.unwrap().expect("snapshot");
         assert_eq!(loaded.files[0].text.as_deref(), Some("PORT=1\n"));
         assert_eq!(loaded.supervisors, vec!["bot-xiuxian".to_string()]);
-        store.remove(&id).unwrap();
-        assert!(store.load(&id).unwrap().is_none());
+        store.remove(&id).await.unwrap();
+        assert!(store.load(&id).await.unwrap().is_none());
+        store.remove(&id).await.unwrap();
     }
 }

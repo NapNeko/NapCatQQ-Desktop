@@ -212,7 +212,7 @@ impl AppManager {
         )
         .await?;
         let saved = self.store.upsert(instance).await?;
-        if let Err(e) = self.adopt_store.save(&snapshot) {
+        if let Err(e) = self.adopt_store.save(&snapshot).await {
             let _ = self.store.remove(&saved.id).await;
             return Err(e);
         }
@@ -222,7 +222,7 @@ impl AppManager {
             if let Err(e) =
                 super::supervisor::disable_now(host.as_ref(), &probe.supervisors).await
             {
-                let _ = self.adopt_store.remove(&saved.id);
+                let _ = self.adopt_store.remove(&saved.id).await;
                 let _ = self.store.remove(&saved.id).await;
                 return Err(e);
             }
@@ -545,6 +545,7 @@ impl AppManager {
             let units = self
                 .adopt_store
                 .load(&instance.id)
+                .await
                 .ok()
                 .flatten()
                 .map(|s| s.supervisors)
@@ -818,9 +819,9 @@ impl AppManager {
             if host.exists(&dir).await.map_err(host_err)? {
                 host.remove_dir_all(&dir).await.map_err(host_err)?;
             }
-            let _ = self.adopt_store.remove(id);
+            let _ = self.adopt_store.remove(id).await;
         } else {
-            let _ = self.adopt_store.remove(id);
+            let _ = self.adopt_store.remove(id).await;
         }
         if let Some(removed) = self.store.remove(id).await? {
             self.forget_secrets(id);
@@ -836,7 +837,7 @@ impl AppManager {
         host: &dyn Host,
     ) -> Result<(), AppFrameworkError> {
         let root = HostPath::from_posix(&instance.install_dir);
-        let snap = self.adopt_store.load(&instance.id)?;
+        let snap = self.adopt_store.load(&instance.id).await?;
         if let Some(snap) = &snap {
             restore_adopted_files(host, &root, &snap.files, AdoptRestoreScope::All).await?;
             if let Err(e) = remove_ncd_debris(host, &root, &snap.files).await {
@@ -854,7 +855,7 @@ impl AppManager {
                 super::supervisor::enable_now(host, &units).await?;
             }
         }
-        self.adopt_store.remove(&instance.id)
+        self.adopt_store.remove(&instance.id).await
     }
 
     pub(super) async fn ensure_port_free(

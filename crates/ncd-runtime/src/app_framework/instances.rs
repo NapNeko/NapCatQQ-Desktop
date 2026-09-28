@@ -4,11 +4,12 @@
 //! [AppInstanceStore::update] 保证读改写不撕裂。
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use ncd_domain::{AppInstance, AppInstanceId};
 use ncd_traits::{AppFrameworkError, ConfigStore};
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::config_store_impl::LocalConfigStore;
 
@@ -28,6 +29,9 @@ pub struct AppInstanceStore {
     store: LocalConfigStore,
     path: PathBuf,
     cache: RwLock<Vec<AppInstance>>,
+    /// 写盘在阻塞线程上跑，这把锁跟着写盘任务走：调用方的 future 半路被丢掉、缓存写锁先放了，
+    /// 下一次写盘也得等这次写完，新旧两版落盘的先后不会颠倒
+    write_gate: Arc<Mutex<()>>,
 }
 
 impl AppInstanceStore {
@@ -48,6 +52,7 @@ impl AppInstanceStore {
             store,
             path,
             cache: RwLock::new(instances),
+            write_gate: Arc::default(),
         })
     }
 
@@ -74,6 +79,7 @@ impl AppInstanceStore {
             store,
             path,
             cache: RwLock::new(Vec::new()),
+            write_gate: Arc::default(),
         }
     }
 
@@ -98,7 +104,7 @@ impl AppInstanceStore {
             Some(slot) => *slot = instance.clone(),
             None => cache.push(instance.clone()),
         }
-        self.persist(&cache)?;
+        self.persist(&cache).await?;
         Ok(instance)
     }
 
@@ -114,7 +120,7 @@ impl AppInstanceStore {
             .ok_or_else(|| AppFrameworkError::InstanceNotFound(id.as_str().to_string()))?;
         f(slot);
         let updated = slot.clone();
-        self.persist(&cache)?;
+        self.persist(&cache).await?;
         Ok(updated)
     }
 
@@ -123,20 +129,28 @@ impl AppInstanceStore {
         let pos = cache.iter().position(|i| &i.id == id);
         let removed = pos.map(|p| cache.remove(p));
         if removed.is_some() {
-            self.persist(&cache)?;
+            self.persist(&cache).await?;
         }
         Ok(removed)
     }
 
-    fn persist(&self, instances: &[AppInstance]) -> Result<(), AppFrameworkError> {
+    /// 调用方拿着缓存写锁等它写完，锁的范围和原来同步写时一样；只是文件 IO 挪到阻塞线程，不占异步线程
+    async fn persist(&self, instances: &[AppInstance]) -> Result<(), AppFrameworkError> {
         let payload = serde_json::to_value(AppInstancesFile {
             version: FILE_VERSION,
             instances: instances.to_vec(),
         })
         .map_err(|e| AppFrameworkError::Store(e.to_string()))?;
-        self.store
-            .write_json_atomic(&self.path, &payload)
-            .map_err(|e| AppFrameworkError::Store(e.to_string()))
+        let gate = Arc::clone(&self.write_gate).lock_owned().await;
+        let store = self.store.clone();
+        let path = self.path.clone();
+        tokio::task::spawn_blocking(move || {
+            let _gate = gate;
+            store.write_json_atomic(&path, &payload)
+        })
+        .await
+        .map_err(|e| AppFrameworkError::Store(e.to_string()))?
+        .map_err(|e| AppFrameworkError::Store(e.to_string()))
     }
 }
 

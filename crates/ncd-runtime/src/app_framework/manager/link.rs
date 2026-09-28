@@ -155,7 +155,7 @@ impl AppManager {
         upsert_link_endpoint(&mut bot, plan.connection.clone());
         if let Err(e) = self.bot_manager.upsert_bot_config(bot).await {
             if instance.origin.is_imported() {
-                if let Ok(Some(snap)) = self.adopt_store.load(&instance.id) {
+                if let Ok(Some(snap)) = self.adopt_store.load(&instance.id).await {
                     let root = HostPath::from_posix(&instance.install_dir);
                     if let Err(rb) = restore_adopted_files(
                         host.as_ref(),
