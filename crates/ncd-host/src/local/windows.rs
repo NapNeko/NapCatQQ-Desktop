@@ -425,12 +425,25 @@ impl Host for LocalWindowsHost {
             }
         }
 
+        // 不用 wait_with_output：它拿走 child，超时后就杀不了了。进程树不收掉的话超时
+        // 只是这边不等了，命令和它起的子进程照样跑下去，还攥着本进程当时可继承的句柄
         let timeout = cmd.timeout.unwrap_or(DEFAULT_COMMAND_TIMEOUT);
-        let output_future = child.wait_with_output();
-        let output = match tokio::time::timeout(timeout, output_future).await {
+        let stdout_pipe = child.stdout.take();
+        let stderr_pipe = child.stderr.take();
+        let collected = tokio::time::timeout(timeout, async {
+            let (status, stdout, stderr) = tokio::join!(
+                child.wait(),
+                read_pipe_to_end(stdout_pipe),
+                read_pipe_to_end(stderr_pipe)
+            );
+            Ok::<_, std::io::Error>((status?, stdout?, stderr?))
+        })
+        .await;
+        let (status, stdout, stderr) = match collected {
             Ok(Ok(out)) => out,
             Ok(Err(e)) => return Err(HostError::Io(e)),
             Err(_) => {
+                force_kill_local_child(&mut child).await;
                 return Err(HostError::Timeout {
                     operation: "run_to_string",
                 });
@@ -438,9 +451,9 @@ impl Host for LocalWindowsHost {
         };
 
         Ok(CommandOutput {
-            exit_code: output.status.code(),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            exit_code: status.code(),
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
         })
     }
 
@@ -600,6 +613,16 @@ impl Host for LocalWindowsHost {
             stderr: stderr_lines.join("\n"),
         })
     }
+}
+
+async fn read_pipe_to_end(
+    pipe: Option<impl tokio::io::AsyncRead + Unpin>,
+) -> std::io::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    if let Some(mut pipe) = pipe {
+        pipe.read_to_end(&mut buf).await?;
+    }
+    Ok(buf)
 }
 
 /// 强杀本机子进程树。docker pull 常挂着 CLI 子进程,只 kill 父进程会卡住 wait。
@@ -994,6 +1017,32 @@ mod tests {
             .timeout(Duration::from_millis(300));
         let err = host.run_to_string(cmd).await.unwrap_err();
         assert!(matches!(err, HostError::Timeout { .. }));
+    }
+
+    // 超时后 cmd 若还活着，ping 结束就会接着写标记文件
+    #[tokio::test]
+    async fn run_to_string_timeout_kills_the_command_tree() {
+        let host = LocalWindowsHost::new();
+        let ws = tempdir().unwrap();
+        let cmd = HostCommand::new("cmd.exe")
+            .args([
+                "/c",
+                "ping",
+                "-n",
+                "3",
+                "127.0.0.1",
+                ">nul",
+                "&",
+                "echo",
+                "x>",
+                "still-running",
+            ])
+            .working_dir(HostPath::from_windows(&ws.path().to_string_lossy()))
+            .timeout(Duration::from_millis(300));
+        let err = host.run_to_string(cmd).await.unwrap_err();
+        assert!(matches!(err, HostError::Timeout { .. }));
+        tokio::time::sleep(Duration::from_millis(3500)).await;
+        assert!(!ws.path().join("still-running").exists());
     }
 
     #[tokio::test]
