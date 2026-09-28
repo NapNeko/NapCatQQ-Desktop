@@ -14,9 +14,9 @@ import type {
     MaiBotRuntimeStatus,
 } from '../../../../core/ipc/types';
 import type { MaiBotEmojiConfig } from '../../../../core/ipc/generated/maibot/MaiBotEmojiConfig';
-import { maibotResourcesService as svc } from '../../../../core/services/maibot-resources.service';
 import {
     useMaiBotEmojiAction,
+    useMaiBotEmojiFiles,
     useMaiBotEmojiOverview,
     useMaiBotEmojis,
     useMaiBotEmojiUpload,
@@ -69,13 +69,15 @@ export const MaiBotEmojisTab: React.FC<{
     const overview = useMaiBotEmojiOverview(instance.id, live);
     const act = useMaiBotEmojiAction(instance.id);
     const upload = useMaiBotEmojiUpload(instance.id);
+    const emojiFiles = useMaiBotEmojiFiles();
 
     const addFiles = async (paths: string[]) => {
         if (paths.length === 0) return;
-        const seen = await svc.localImages(paths);
-        setFiles((prev) => mergeFiles(prev, seen));
+        const seen = await emojiFiles.read(paths);
+        // 读失败已经弹过错误条，别再开一个空的上传框
+        if (seen.length > 0) setFiles((prev) => mergeFiles(prev, seen));
     };
-    const pickFiles = async () => addFiles(await svc.pickEmojiFiles());
+    const pickFiles = async () => addFiles(await emojiFiles.pick());
     const { dragging } = useTauriFileDrop(live, (paths) => void addFiles(paths));
 
     if (!live) return <MaiBotLiveGate status={status} what="表情包" onStart={onStart} starting={starting} />;

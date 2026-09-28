@@ -11,6 +11,7 @@ import {
 } from '../../core/services/maibot-chat.service';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushAppErrorBar } from './pushAppErrorBar';
+import { localFilesOrNothing } from './maibotResourceAction';
 
 export type MaiBotChatItem =
     | { kind: 'message'; key: string; message: MaiBotChatMessage }
@@ -144,4 +145,15 @@ export function useMaiBotChat(instanceId: string, live: boolean) {
     }, [instanceId]);
 
     return { state, userName, send, rename, clear, clearing };
+}
+
+const chatImages = {
+    pick: () => localFilesOrNothing(maibotChatService.pickImages(), 'maibotChat-images', '图片没读出来'),
+    read: (paths: string[]) =>
+        localFilesOrNothing(maibotChatService.localImages(paths), 'maibotChat-images', '图片没读出来'),
+};
+
+/** 输入框挑图、拖进窗口的图：读成能发的样子，预览就是要发出去的那份 */
+export function useMaiBotChatImages() {
+    return chatImages;
 }

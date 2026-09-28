@@ -12,10 +12,10 @@ import type {
     MaiBotMemoryTask,
     MaiBotMemoryTaskStatus,
 } from '../../../../core/ipc/types';
-import { maibotMemoryService as svc } from '../../../../core/services/maibot-memory.service';
 import {
     taskActive,
     useMaiBotMemoryImport,
+    useMaiBotMemoryImportFiles,
     useMaiBotMemoryImportSetup,
     useMaiBotMemoryTask,
     useMaiBotMemoryTaskAction,
@@ -105,9 +105,10 @@ export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode
         }
     }, [tasks.data, refresh, labels]);
 
+    const importFiles = useMaiBotMemoryImportFiles();
     const addFiles = async (paths: string[]) => {
         if (paths.length === 0) return;
-        const seen = await svc.localTexts(paths);
+        const seen = await importFiles.read(paths);
         setFiles((prev) => [...prev, ...seen.filter((f) => !prev.some((p) => p.path === f.path))]);
     };
     const { dragging } = useTauriFileDrop(true, (paths) => {
@@ -175,7 +176,7 @@ export const KnowledgeImport: React.FC<{ instanceId: string; switcher: ReactNode
                             </span>
                         </>
                     ) : (
-                        <FilePicker files={files} limits={limits} onPick={() => void svc.pickFiles().then(addFiles)} onRemove={(p) => setFiles((fs) => fs.filter((f) => f.path !== p))} />
+                        <FilePicker files={files} limits={limits} onPick={() => void importFiles.pick().then(addFiles)} onRemove={(p) => setFiles((fs) => fs.filter((f) => f.path !== p))} />
                     )}
                     <div className="grid gap-3 md:grid-cols-2">
                         <div className="flex flex-col gap-1">

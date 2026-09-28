@@ -3,9 +3,19 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
+import { errorText } from '../../core/domain/errors';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushAppErrorBar } from './pushAppErrorBar';
 import type { MaiBotResourceDone } from '../../core/ipc/types';
+
+/** 挑本机文件、读拖进来的文件（试聊的图、表情包上传、知识库导入）：只碰本机，不碰实例。
+ *  失败弹错误条、当什么都没挑，页面上不用各自兜 */
+export function localFilesOrNothing<T>(run: Promise<T[]>, key: string, title: string): Promise<T[]> {
+    return run.catch((err: unknown): T[] => {
+        pushAppErrorBar({ key, title, raw: errorText(err) });
+        return [];
+    });
+}
 
 export type ResourceActionOpts = {
     /** 成功时弹一条提示；精选这种一点一下的就不弹，列表变了就是结果 */

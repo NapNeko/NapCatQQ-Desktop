@@ -6,6 +6,7 @@ import { maibotMemoryService as svc } from '../../core/services/maibot-memory.se
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushAppErrorBar } from './pushAppErrorBar';
+import { localFilesOrNothing } from './maibotResourceAction';
 import type {
     MaiBotMemoryDeleteAction,
     MaiBotMemoryDeleteResult,
@@ -87,6 +88,16 @@ export function useMaiBotMemoryTaskAction(instanceId: string) {
             pushAppErrorBar({ key: `maibotMemoryTask-fail:${instanceId}`, title: '导入任务没改成', raw: toAppConfigError(err).message });
         },
     });
+}
+
+const importFiles = {
+    pick: () => localFilesOrNothing(svc.pickFiles(), 'maibotMemory-pick', '打不开选文件框'),
+    read: (paths: string[]) => localFilesOrNothing(svc.localTexts(paths), 'maibotMemory-read', '读不出这些文件'),
+};
+
+/** 导入前从系统对话框挑文件、看拖进窗口的文件 */
+export function useMaiBotMemoryImportFiles() {
+    return importFiles;
 }
 
 /** 导完一批要让记录、来源、图谱都刷新 */

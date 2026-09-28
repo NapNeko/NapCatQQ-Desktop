@@ -7,8 +7,8 @@ import { Button } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 import { CHAT_IMAGE_MAX, splitDataUrl, type MaiBotChatImage } from '../../../../core/domain/apps/maibotChat';
 import { errorText } from '../../../../core/domain/errors';
-import { maibotChatService } from '../../../../core/services/maibot-chat.service';
 import type { MaiBotLocalImage } from '../../../../core/ipc/types';
+import { useMaiBotChatImages } from '../../../../hooks/apps/useMaiBotChat';
 import { useTauriFileDrop } from '../../../../hooks/ui/useTauriFileDrop';
 
 type Attachment = { key: string; name: string; src?: string; problem?: string };
@@ -63,7 +63,8 @@ export const ChatComposer: React.FC<{
             })),
         );
 
-    const { dragging } = useTauriFileDrop(ready, (paths) => void maibotChatService.localImages(paths).then(addLocal));
+    const images = useMaiBotChatImages();
+    const { dragging } = useTauriFileDrop(ready, (paths) => void images.read(paths).then(addLocal));
 
     const fit = () => {
         const el = area.current;
@@ -141,7 +142,7 @@ export const ChatComposer: React.FC<{
                     aria-label="发图片"
                     title="发图片，也可以直接粘贴或拖进窗口"
                     disabled={!ready || atts.length >= CHAT_IMAGE_MAX}
-                    onClick={() => void maibotChatService.pickImages().then(addLocal)}
+                    onClick={() => void images.pick().then(addLocal)}
                 >
                     <ImagePlus size={16} />
                 </Button>

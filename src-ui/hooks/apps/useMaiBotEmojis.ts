@@ -5,7 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { maibotResourcesService as svc } from '../../core/services/maibot-resources.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
 import { pushAppErrorBar } from './pushAppErrorBar';
-import { useResourceAction } from './maibotResourceAction';
+import { localFilesOrNothing, useResourceAction } from './maibotResourceAction';
 import type {
     MaiBotEmojiAction,
     MaiBotEmojiImage,
@@ -54,6 +54,16 @@ export function useMaiBotEmojiImage(instanceId: string, emojiId: number, origina
         retry: 2,
         retryDelay: 1500,
     });
+}
+
+const emojiFiles = {
+    pick: () => localFilesOrNothing(svc.pickEmojiFiles(), 'maibotEmoji-pick', '打不开选图框'),
+    read: (paths: string[]) => localFilesOrNothing(svc.localImages(paths), 'maibotEmoji-read', '读不出这些图'),
+};
+
+/** 上传前从系统对话框挑图、看拖进窗口的图 */
+export function useMaiBotEmojiFiles() {
+    return emojiFiles;
 }
 
 export function useMaiBotEmojiUpload(instanceId: string) {
