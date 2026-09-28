@@ -22,7 +22,7 @@ import {
     dropAppInstanceLogs,
     hydrateAppInstanceLogs,
 } from './appInstanceLogStore';
-import type { DomainEvent } from '../../core/ipc/types';
+import type { DomainEvent, LogSnapshot } from '../../core/ipc/types';
 
 type StreamHandler = (event: DomainEvent) => void;
 
@@ -119,7 +119,7 @@ describe('appInstanceLogStore', () => {
     });
 
     it('拉历史途中另起了一轮：晚到的旧快照不盖掉新一轮', async () => {
-        let resolveTail!: (v: { lines: string[]; total_lines: number }) => void;
+        let resolveTail!: (v: LogSnapshot) => void;
         tailLogMock.mockReturnValueOnce(
             new Promise((resolve) => {
                 resolveTail = resolve;

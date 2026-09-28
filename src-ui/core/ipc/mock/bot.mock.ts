@@ -5,6 +5,7 @@ import type {
     BatchResultResponse,
     BotActorSnapshot,
     BotStatus,
+    LogSnapshot,
 } from '../types';
 import type { BotConfig } from '../generated/domain/BotConfig';
 import { emitMockEvent } from './events.mock';
@@ -271,7 +272,7 @@ export async function mockDeleteBotConfig(botId: string): Promise<void> {
     return new Promise((resolve) => setTimeout(() => resolve(), 200));
 }
 
-export const mockLogSnapshot = {
+export const mockLogSnapshot: LogSnapshot = {
     lines: [
         '[mock] BotLogPage 处于浏览器预览模式',
         '[mock] 真实日志会在 Tauri 应用内显示',

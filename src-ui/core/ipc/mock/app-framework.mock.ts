@@ -36,6 +36,7 @@ import type {
     ImportAppInstanceRequest,
     KarinPluginInstalled,
     KarinPluginMarketEntry,
+    LogSnapshot,
     OneBotLinkPlan,
     ProgressEvent,
     ProgressKind,
@@ -446,7 +447,7 @@ export const mockAppFrameworkApi = {
 
     refresh: async (id: string): Promise<AppInstance> => withMockDelay(require(id)),
 
-    tailLog: async (id: string, _lines = 1000): Promise<{ lines: string[]; total_lines: number }> => {
+    tailLog: async (id: string, _lines = 1000): Promise<LogSnapshot> => {
         const lines = mockAppLogTail(require(id));
         return withMockDelay({ lines, total_lines: lines.length });
     },
