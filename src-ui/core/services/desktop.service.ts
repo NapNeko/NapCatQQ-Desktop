@@ -107,10 +107,6 @@ export const windowControlService = {
 
 export const trayService = {
     showMainWindow: (): Promise<void> => invoke<void>('window_show'),
-    hideMainWindow: (): Promise<void> => invoke<void>('window_hide_to_tray'),
-    countLocalActiveBots: (): Promise<number> =>
-        invoke<number>('count_local_active_bots'),
-    requestExit: (): Promise<void> => invoke<void>('request_exit_app'),
 };
 
 export const windowEventService = {
