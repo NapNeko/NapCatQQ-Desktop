@@ -103,12 +103,7 @@ pub async fn install_app_instance(
 ) -> Result<String, String> {
     state
         .app_manager
-        .install_instance(
-            &AppInstanceId::new(instance_id),
-            task_id,
-            &state.components,
-            state.deployment_tasks.clone(),
-        )
+        .install_instance(&AppInstanceId::new(instance_id), task_id)
         .await
         .map_err(|e| e.to_string())
 }
@@ -1283,7 +1278,6 @@ pub async fn submit_app_plugin_op(
             &plugin_name,
             action,
             resource.unwrap_or(AppStoreResource::Plugin),
-            &state.deployment_tasks,
         )
         .await
         .map_err(|e| e.to_string())

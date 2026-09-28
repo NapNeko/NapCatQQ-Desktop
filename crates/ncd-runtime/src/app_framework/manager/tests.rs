@@ -214,6 +214,27 @@ mod write_config {
         id: AppInstanceId,
     }
 
+    /// 和生产一样接一个组件执行器:插件任务、安装任务都排进它那条队列,测试也从那条队列盯
+    fn test_components(root: &Path, bus: &BroadcastEventBus) -> Arc<ComponentExecutor> {
+        Arc::new(ComponentExecutor::new(
+            crate::components::ComponentExecutorDeps {
+                deployment_tasks: DeploymentTaskManager::new(bus.clone()),
+                server_manager: Arc::new(ncd_server::ServerManager::new(
+                    root,
+                    Arc::new(ncd_server::InMemoryCredentialStore::default()),
+                )),
+                event_bus: bus.clone(),
+                app_settings: Arc::new(
+                    tokio::sync::RwLock::new(ncd_domain::AppSettings::default()),
+                ),
+                data_root: root.to_path_buf(),
+                local_snowluma_version: None,
+                desktop_product_version: "0.0.0".into(),
+                registry: Arc::new(AppFrameworkRegistry::with_builtin()),
+            },
+        ))
+    }
+
     async fn fixture(linked: bool) -> Fixture {
         fixture_on_host(linked, LOCAL_HOST_ID, AppPlacement::LocalNative).await
     }
@@ -247,15 +268,19 @@ mod write_config {
             ]),
             upserts: Mutex::new(0),
         });
-        let manager = Arc::new(AppManager::new(
-            Arc::new(AppFrameworkRegistry::with_builtin()),
-            Arc::clone(&store),
-            Arc::new(NativeAppRuntime::new(Arc::clone(&bus), Arc::clone(&store))),
-            Arc::new(ncd_server::LocalOnlyHostResolver::new(local)),
-            bots.clone(),
-            bus,
-            &root,
-        ));
+        let components = test_components(&root, &bus);
+        let manager = Arc::new(
+            AppManager::new(
+                Arc::new(AppFrameworkRegistry::with_builtin()),
+                Arc::clone(&store),
+                Arc::new(NativeAppRuntime::new(Arc::clone(&bus), Arc::clone(&store))),
+                Arc::new(ncd_server::LocalOnlyHostResolver::new(local)),
+                bots.clone(),
+                bus,
+                &root,
+            )
+            .with_component_executor(components),
+        );
         let id = AppInstanceId::new("k1");
         let install_dir = HostPath::from_windows(inst_dir.to_string_lossy().as_ref());
         store
@@ -357,15 +382,19 @@ mod write_config {
             ]),
             upserts: Mutex::new(0),
         });
-        let manager = Arc::new(AppManager::new(
-            Arc::new(AppFrameworkRegistry::with_builtin()),
-            Arc::clone(&store),
-            Arc::new(NativeAppRuntime::new(Arc::clone(&bus), Arc::clone(&store))),
-            resolver,
-            bots.clone(),
-            bus,
-            &root,
-        ));
+        let components = test_components(&root, &bus);
+        let manager = Arc::new(
+            AppManager::new(
+                Arc::new(AppFrameworkRegistry::with_builtin()),
+                Arc::clone(&store),
+                Arc::new(NativeAppRuntime::new(Arc::clone(&bus), Arc::clone(&store))),
+                resolver,
+                bots.clone(),
+                bus,
+                &root,
+            )
+            .with_component_executor(components),
+        );
         let id = AppInstanceId::new(instance_id);
         let install_dir = HostPath::from_windows(inst_dir.to_string_lossy().as_ref());
         store
@@ -914,14 +943,10 @@ mod write_config {
     async fn install_state_follows_the_task_not_the_half_built_dir() {
         let f = maibot_fixture("m-inst-ok").await;
         make_dir_look_installed(&f);
-        let tasks = DeploymentTaskManager::new((*f.manager.event_bus).clone());
+        let tasks = f.manager.task_queue().unwrap().clone();
         let release = gated_install_task(&tasks, "t-ok").await;
 
-        let inst = f
-            .manager
-            .track_install(&f.id, "t-ok".into(), tasks.clone())
-            .await
-            .unwrap();
+        let inst = f.manager.track_install(&f.id, "t-ok".into()).await.unwrap();
         assert_eq!(inst.state, AppInstanceState::Installing);
         // 过一轮兜底轮询，再手动刷新一次：任务没完就一直是安装中
         tokio::time::sleep(INSTALL_POLL_INTERVAL + Duration::from_millis(500)).await;
@@ -937,10 +962,10 @@ mod write_config {
     #[tokio::test]
     async fn install_failure_lands_as_not_installed_with_the_task_error() {
         let f = maibot_fixture("m-inst-fail").await;
-        let tasks = DeploymentTaskManager::new((*f.manager.event_bus).clone());
+        let tasks = f.manager.task_queue().unwrap().clone();
         let release = gated_install_task(&tasks, "t-fail").await;
         f.manager
-            .track_install(&f.id, "t-fail".into(), tasks.clone())
+            .track_install(&f.id, "t-fail".into())
             .await
             .unwrap();
 
@@ -974,9 +999,8 @@ mod write_config {
 
         // 任务在队列里查不到（结束后被清掉了）：同样按目录收尾，目录是好的就算装好
         make_dir_look_installed(&f);
-        let tasks = DeploymentTaskManager::new((*f.manager.event_bus).clone());
         f.manager
-            .track_install(&f.id, "t-gone".into(), tasks)
+            .track_install(&f.id, "t-gone".into())
             .await
             .unwrap();
         let inst = wait_state(&f, AppInstanceState::Installed).await;
@@ -1344,7 +1368,7 @@ mod write_config {
             .update(&f.id, |i| i.state = AppInstanceState::NotInstalled)
             .await
             .unwrap();
-        let tasks = DeploymentTaskManager::new((*f.manager.event_bus).clone());
+        let tasks = f.manager.task_queue().unwrap().clone();
         let task_id = f
             .manager
             .submit_store_op(
@@ -1352,7 +1376,6 @@ mod write_config {
                 "karin-plugin-foo",
                 AppPluginAction::Uninstall,
                 AppStoreResource::Plugin,
-                &tasks,
             )
             .await
             .unwrap();

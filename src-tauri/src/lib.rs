@@ -364,7 +364,8 @@ pub fn run() {
                 Arc::new(event_bus.clone()),
                 &data_root,
             )
-            .with_secret_store(Arc::clone(&secrets)),
+            .with_secret_store(Arc::clone(&secrets))
+            .with_component_executor(Arc::clone(&components)),
         )
     };
     let app_manager_reconcile = Arc::clone(&app_manager);

@@ -240,9 +240,8 @@ impl AppManager {
         self: &Arc<Self>,
         id: &AppInstanceId,
         task_id: Option<String>,
-        components: &ComponentExecutor,
-        tasks: DeploymentTaskManager,
     ) -> Result<String, AppFrameworkError> {
+        let components = Arc::clone(self.component_executor()?);
         let instance = self.store.require(id).await?;
         let component_id = self
             .registry
@@ -271,7 +270,7 @@ impl AppManager {
             })
             .await
             .map_err(AppFrameworkError::Validation)?;
-        self.track_install(id, submitted.clone(), tasks).await?;
+        self.track_install(id, submitted.clone()).await?;
         Ok(submitted)
     }
 
@@ -284,8 +283,8 @@ impl AppManager {
         self: &Arc<Self>,
         id: &AppInstanceId,
         task_id: String,
-        tasks: DeploymentTaskManager,
     ) -> Result<AppInstance, AppFrameworkError> {
+        let tasks = self.task_queue()?.clone();
         let updated = self
             .store
             .update(id, |i| {

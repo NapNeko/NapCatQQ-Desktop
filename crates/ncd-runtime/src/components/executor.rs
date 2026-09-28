@@ -231,6 +231,11 @@ impl ComponentExecutor {
         &self.active_tasks
     }
 
+    /// 组件任务排进的那条队列;要盯自己提交的任务、或往同一条队列里排任务的用这个
+    pub fn deployment_tasks(&self) -> &DeploymentTaskManager {
+        &self.deployment_tasks
+    }
+
     /// 在已探好的布局上收集构建输入;本机 SnowLuma 的包类型与 Node 覆盖路径来自设置
     pub async fn build_inputs(
         &self,

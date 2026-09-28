@@ -110,8 +110,8 @@ impl AppManager {
         name: &str,
         action: AppPluginAction,
         resource: AppStoreResource,
-        tasks: &DeploymentTaskManager,
     ) -> Result<String, AppFrameworkError> {
+        let tasks = self.task_queue()?;
         let instance = self.store.require(id).await?;
         // 先连上主机：连不上当场报错，不排一个注定失败的任务
         self.resolve_host(&instance.host_id).await?;

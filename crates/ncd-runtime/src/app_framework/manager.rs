@@ -245,6 +245,8 @@ pub struct AppManager {
     npm_registry: Option<String>,
     /// 用户名密码类 WebUI 的明文密码落点；None（测试）时创建实例不种密码，交给框架首启自生成
     secrets: Option<Arc<dyn SecretStore + Send + Sync>>,
+    /// 安装交给它排任务，插件装卸更也排进它那条队列，盯任务也盯同一条;启动时接上一次
+    components: Option<Arc<ComponentExecutor>>,
     /// Desktop 握着的跨机隧道。key = instance id；解绑 / 删实例 / 改端口时释放。
     tunnels: tokio::sync::Mutex<HashMap<String, AppInstanceTunnel>>,
     /// 正在盯的安装：instance id → task id。不在表里的「安装中」是上次装到一半桌面端退了
@@ -276,6 +278,7 @@ impl AppManager {
             adopt_store: AdoptStore::new(data_root),
             npm_registry: None,
             secrets: None,
+            components: None,
             tunnels: tokio::sync::Mutex::new(HashMap::new()),
             install_watches: std::sync::Mutex::new(HashMap::new()),
             config_write_slots: std::sync::Mutex::new(HashMap::new()),
@@ -292,6 +295,22 @@ impl AppManager {
     pub fn with_secret_store(mut self, secrets: Arc<dyn SecretStore + Send + Sync>) -> Self {
         self.secrets = Some(secrets);
         self
+    }
+
+    pub fn with_component_executor(mut self, components: Arc<ComponentExecutor>) -> Self {
+        self.components = Some(components);
+        self
+    }
+
+    fn component_executor(&self) -> Result<&Arc<ComponentExecutor>, AppFrameworkError> {
+        self.components
+            .as_ref()
+            .ok_or_else(|| AppFrameworkError::Runtime("组件执行器没有接上".into()))
+    }
+
+    /// 插件任务、应用端安装任务所在的队列
+    fn task_queue(&self) -> Result<&DeploymentTaskManager, AppFrameworkError> {
+        Ok(self.component_executor()?.deployment_tasks())
     }
 
     fn remembered_secret(&self, instance: &AppInstance, suffix: &str) -> Option<String> {
