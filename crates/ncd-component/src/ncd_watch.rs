@@ -7,8 +7,7 @@
 use std::path::PathBuf;
 
 use async_trait::async_trait;
-use ncd_host::shell::BashShell;
-use ncd_host::{Arch, Host, HostCommand, HostPath, HostShell, Locality, Os};
+use ncd_host::{Arch, Host, HostCommand, HostPath, Locality, Os, shell_single_quote};
 use ncd_network::build_mirror_urls;
 
 use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
@@ -299,6 +298,9 @@ impl NcdWatchComponent {
             .await
             .map_err(|e| ActionError::install_step("mkdir systemd user", e.to_string()))?;
         let unit_path = unit_dir.join("ncd-watch.service");
+        // HOME 里带空格时不加引号 systemd 会把路径拆成几个参数,服务起不来
+        let unit_bin = systemd_quote(&bin);
+        let unit_root = systemd_quote(&root);
         let unit = format!(
             "[Unit]\n\
              Description=NapCatQQ Desktop remote watch\n\
@@ -306,7 +308,7 @@ impl NcdWatchComponent {
              \n\
              [Service]\n\
              Type=simple\n\
-             ExecStart={bin} --root {root} run\n\
+             ExecStart={unit_bin} --root {unit_root} run\n\
              Restart=on-failure\n\
              RestartSec=5\n\
              Environment=RUST_LOG=info\n\
@@ -319,14 +321,16 @@ impl NcdWatchComponent {
             .map_err(|e| ActionError::install_step("write unit", e.to_string()))?;
 
         // enable --now 在已 active 时不会换二进制;更新后必须 restart
+        let q_bin = shell_single_quote(&bin);
+        let q_root = shell_single_quote(&root);
         let script = format!(
             "if command -v systemctl >/dev/null 2>&1; then \
                systemctl --user daemon-reload && \
                systemctl --user enable ncd-watch.service && \
                systemctl --user restart ncd-watch.service; \
              else \
-               pkill -f '{bin}' 2>/dev/null || true; \
-               nohup {bin} --root {root} run >/dev/null 2>&1 & \
+               pkill -f {q_bin} 2>/dev/null || true; \
+               nohup {q_bin} --root {q_root} run >/dev/null 2>&1 & \
              fi"
         );
         ctx.emit(ProgressKind::Log {
@@ -419,12 +423,13 @@ impl Component for NcdWatchComponent {
         // 覆盖安装/更新:先停再写,避免 ETXTBSY / 旧进程占文件
         let home = self.require_home()?;
         let root = format!("{home}/{INSTALL_DIR_NAME}");
+        // 整条路径只加一层引号;转义结果再套一层单引号,HOME 带空格时 pkill 会拿到两个参数
+        let pattern = shell_single_quote(&format!("{root}/bin/{BIN_NAME}"));
         let stop = format!(
             "systemctl --user stop ncd-watch.service 2>/dev/null || true; \
              pkill -x '{BIN_NAME}' 2>/dev/null || true; \
-             pkill -f '{}/bin/{BIN_NAME}' 2>/dev/null || true; \
-             sleep 0.3; true",
-            BashShell.escape(&root)
+             pkill -f {pattern} 2>/dev/null || true; \
+             sleep 0.3; true"
         );
         ctx.emit(ProgressKind::Log {
             level: ProgressLogLevel::Info,
@@ -477,11 +482,10 @@ impl Component for NcdWatchComponent {
             message: "停止服务".into(),
         })
         .await;
+        let pattern = shell_single_quote(&format!("{root}/bin/{BIN_NAME}"));
         let stop = format!(
             "systemctl --user disable --now ncd-watch.service 2>/dev/null || \
-             pkill -f '{}/bin/{}' 2>/dev/null || true",
-            BashShell.escape(&root),
-            BIN_NAME
+             pkill -f {pattern} 2>/dev/null || true"
         );
         let _ = host
             .run_to_string(HostCommand::new("sh").arg("-c").arg(&stop))
@@ -652,6 +656,28 @@ pub fn ncd_watch_asset_name(tag: &str, arch: Arch) -> Option<String> {
 }
 
 /// 开发期本机 cargo 产物探测(仅调试;正式安装/更新不走这条)
+/// systemd unit 里 ExecStart 的一个参数:双引号包起来,里面的 \ 和 " 转义,
+/// % 与 $ 写两遍,免得被当成 specifier / 环境变量展开
+fn systemd_quote(arg: &str) -> String {
+    let mut out = String::with_capacity(arg.len() + 2);
+    out.push('"');
+    for c in arg.chars() {
+        match c {
+            '\\' | '"' => {
+                out.push('\\');
+                out.push(c);
+            }
+            '%' | '$' => {
+                out.push(c);
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 pub fn discover_local_ncd_watch_binary() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?;
@@ -682,6 +708,15 @@ mod tests {
             c.bin_path().unwrap().as_posix(),
             "/home/u/ncd-watch/bin/ncd-watch"
         );
+    }
+
+    #[test]
+    fn systemd_quote_keeps_spaced_path_as_one_argument() {
+        assert_eq!(
+            systemd_quote("/home/a b/ncd-watch"),
+            "\"/home/a b/ncd-watch\""
+        );
+        assert_eq!(systemd_quote(r#"/x"y\z%h$H"#), r#""/x\"y\\z%%h$$H""#);
     }
 
     #[test]
