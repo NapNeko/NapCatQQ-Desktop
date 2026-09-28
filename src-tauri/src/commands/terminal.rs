@@ -3,7 +3,6 @@
 //! 终端输出走 `Channel<InvokeResponseBody>` 原始字节：比事件快、有序，大块走 fetch 不转 JSON。
 //! 状态事件走另一条 JSON 通道，带 `v` 信封。
 
-use std::path::Path;
 use std::sync::Arc;
 
 use ncd_domain::{
@@ -257,19 +256,17 @@ pub async fn terminal_download(
         .map_err(|e| e.to_string())
 }
 
-/// 导出终端输出。路径来自用户在另存为对话框里选的，只收 .txt / .log，不当成通用写文件口子用
 #[tauri::command]
-pub async fn terminal_export_text(path: String, content: String) -> Result<(), String> {
-    let ext = Path::new(&path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(str::to_ascii_lowercase);
-    if !matches!(ext.as_deref(), Some("txt" | "log")) {
-        return Err("只能导出成 .txt 或 .log".into());
-    }
-    tokio::fs::write(&path, content.as_bytes())
+pub async fn terminal_export_text(
+    state: State<'_, AppState>,
+    path: String,
+    content: String,
+) -> Result<(), String> {
+    state
+        .terminals
+        .export_text(&path, &content)
         .await
-        .map_err(|e| format!("写不了 {path}：{e}"))
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

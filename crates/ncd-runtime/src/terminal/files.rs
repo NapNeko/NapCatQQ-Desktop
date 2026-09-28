@@ -334,6 +334,24 @@ impl TerminalManager {
             .await
             .map_err(file_error)
     }
+
+    /// 把终端输出存到本机。路径是用户在另存为对话框里选的，只收 .txt / .log，
+    /// 免得这个口子被拿去往任意位置写任意文件
+    pub async fn export_text(&self, path: &str, content: &str) -> Result<(), TerminalError> {
+        let target = Path::new(path);
+        if !is_export_target(target) {
+            return Err(TerminalError::Invalid("只能导出成 .txt 或 .log".into()));
+        }
+        tokio::fs::write(target, content.as_bytes())
+            .await
+            .map_err(|e| TerminalError::Host(format!("写不了 {path}：{e}")))
+    }
+}
+
+fn is_export_target(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("txt") || e.eq_ignore_ascii_case("log"))
 }
 
 fn too_big_to_edit() -> TerminalError {
@@ -416,6 +434,14 @@ mod tests {
         let linux = TerminalHostOs::Linux;
         assert_eq!(normalize(linux, &HostPath::from_posix("/srv/app/")), "/srv/app");
         assert_eq!(normalize(linux, &HostPath::from_posix("/")), "/");
+    }
+
+    #[test]
+    fn export_only_takes_text_extensions() {
+        assert!(is_export_target(Path::new(r"C:\Users\u\terminal.txt")));
+        assert!(is_export_target(Path::new(r"C:\Users\u\out.LOG")));
+        assert!(!is_export_target(Path::new(r"C:\Users\u\run.bat")));
+        assert!(!is_export_target(Path::new(r"C:\Users\u\noext")));
     }
 
     #[test]
