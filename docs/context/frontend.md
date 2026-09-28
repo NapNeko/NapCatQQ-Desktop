@@ -59,6 +59,7 @@ flowchart TB
 - transport 之外直接碰 `@tauri-apps/*`：`main.tsx`、`app/{AppBootGate,DesktopExitGate}.tsx`、`core/services/desktop.service.ts`、`hooks/ui/useTauriFileDrop.ts`、`hooks/terminal/useTerminalFileDrop.ts`、`modules/settings/useTauriDropTarget.ts`、`modules/tray/TrayPanel.tsx`。`tray_panel_show` / `desktop-exit-blocked` / `desktop-request-close` 这几路监听等 IPC 收口那一轮一起挪进 service。
 - `app/AppNext.tsx` 直接用 `desktopUpdateService`。
 - `hooks/preferences/useBackendSettings.ts` 反过来 import `modules/settings/settings-draft`。
+- `hooks/apps/useAppInstances.ts` 的新建、导入、启停、自动启动、重新探测还拿调用结果回写实例列表，这些后端都会发 `app_instance_changed`，照第 3 节交给事件桥即可。对接、解绑已经不回写。
 - 模块互相伸手：`bot/metrics` → `bootstrap/widgets/occupancyChartGeometry`、`components` → `docker/SudoPasswordDialog`（两处）、`remote/ServerCard` → `bot/list/next/BotManageCard`、`task-queue/TaskDetailPanel` → `components/DockerPullLayersPanel`；`shared/components/next/OnboardingPreviews.tsx` 引了 `bot/.../BotManageCard` 和 `components/ComponentEntityCard`。
 
 ## 3. 落点约定（放哪儿、只留几份）

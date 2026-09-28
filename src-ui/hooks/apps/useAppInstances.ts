@@ -149,12 +149,9 @@ export function useAppInstances() {
 
     const unlinkMutation = useMutation({
         mutationFn: (id: string) => appFrameworkService.unlink(id),
-        onSuccess: (inst, _id, _ctx) => {
-            patch(inst);
-            // 解绑改了 Bot 的连接表，Bot 配置缓存要失效
+        onSuccess: (inst) => {
+            // 实例列表和应用端配置由事件桥跟着 unlinked 事件更新；解绑改了 Bot 的连接表，Bot 配置缓存这里失效
             queryClient.invalidateQueries({ queryKey: ['botConfig'] });
-            queryClient.invalidateQueries({ queryKey: ['appInstanceConfig', inst.id] });
-            queryClient.invalidateQueries({ queryKey: ['appConfigText', inst.id] });
             pushInfoBar({
                 key: `app-unlink:${inst.id}`,
                 tone: 'success',
