@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -52,16 +51,10 @@ pub struct AppState {
     pub(crate) bot_manager: Arc<AppBotManager>,
     pub(crate) server_manager: Arc<ncd_runtime::ServerManager>,
     pub(crate) snowluma_daemon: Arc<ncd_runtime::SnowLumaDaemon>,
-    /// Components 页活跃 task 注册表,task_id → CancellationToken
-    /// run_component_action 启动时插入;plan 完成 / 取消时移除
-    pub(crate) active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
     /// 部署/安装任务事实源与资源调度器。
     pub(crate) deployment_tasks: ncd_runtime::DeploymentTaskManager,
-    /// 远端主机布局探测缓存:host_id → (home, layout)
-    /// detect_component 对同一台机器的 home/layout 探测结果是稳定的,缓存后
-    /// 5 个并发组件 detect 只探一次,不再各跑一遍 echo $HOME + layout 检查
-    /// run_component_action 会清掉对应条目,因为安装可能改变布局
-    pub(crate) host_probe_cache: Arc<Mutex<HashMap<String, ncd_runtime::RemoteInventory>>>,
+    /// 组件动作执行器:活跃任务表、远端库存缓存都归它,Bot 启动预检共用这一份
+    pub(crate) components: Arc<ncd_runtime::ComponentExecutor>,
     pub(crate) desktop_notify: Arc<RwLock<DesktopNotifySettings>>,
     pub(crate) app_settings: Arc<RwLock<ncd_domain::AppSettings>>,
     /// 离线告警 fan-out(桌面 Toast / Webhook / Email / OneBot)
@@ -262,17 +255,22 @@ pub fn run() {
         ));
     let host_resolver_for_apps = Arc::clone(&host_resolver);
     let host_resolver_for_terminals = Arc::clone(&host_resolver);
-    // 远端库存缓存:组件页探测与 Bot 启动预检共用一份,安装完成后由 executor 清掉
-    let host_probe_cache: Arc<Mutex<HashMap<String, ncd_runtime::RemoteInventory>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    let deployment_tasks = ncd_runtime::DeploymentTaskManager::new(event_bus.clone());
+    let components = Arc::new(ncd_runtime::ComponentExecutor::new(
+        ncd_runtime::components::ComponentExecutorDeps {
+            deployment_tasks: deployment_tasks.clone(),
+            server_manager: Arc::clone(&server_manager),
+            event_bus: event_bus.clone(),
+            app_settings: Arc::clone(&app_settings_shared),
+            data_root: data_root.clone(),
+            local_snowluma_version: snapshot.local_versions.snowluma.clone(),
+            desktop_product_version: desktop_update::product_version_str().to_string(),
+        },
+    ));
     let runtime_gate: Arc<dyn ncd_runtime::RuntimeReadinessGate> =
         Arc::new(bot_runtime_gate::TauriRuntimeGate::new(
             Arc::clone(&host_resolver),
-            Arc::clone(&server_manager),
-            Arc::clone(&host_probe_cache),
-            Arc::clone(&app_settings_shared),
-            data_root.clone(),
-            snapshot.local_versions.snowluma.clone(),
+            Arc::clone(&components),
         ));
     let bot_manager = Arc::new(
         BotManager::new(
@@ -405,9 +403,8 @@ pub fn run() {
             bot_manager,
             server_manager,
             snowluma_daemon: Arc::clone(&snowluma_daemon),
-            active_tasks: Arc::new(Mutex::new(HashMap::new())),
-            deployment_tasks: ncd_runtime::DeploymentTaskManager::new(event_bus.clone()),
-            host_probe_cache,
+            deployment_tasks,
+            components,
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings_shared),
             offline_notifier: Arc::clone(&offline_notifier),

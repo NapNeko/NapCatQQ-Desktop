@@ -357,25 +357,33 @@ mod tests {
             &bus,
             Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::BotConfigPort>,
         );
+        let server_manager = Arc::new(ServerManager::new(
+            root,
+            Arc::new(InMemoryCredentialStore::default()),
+        ));
+        let deployment_tasks = ncd_runtime::DeploymentTaskManager::new(bus.clone());
+        let components = crate::commands::components::test_components(
+            root,
+            &bus,
+            &deployment_tasks,
+            &server_manager,
+            &app_settings,
+        );
         let state = AppState {
             data_root: root.to_path_buf(),
             snapshot: BootstrapSnapshot::ready(),
             event_bus: bus.clone(),
             runtime,
             bot_manager,
-            server_manager: Arc::new(ServerManager::new(
-                root,
-                Arc::new(InMemoryCredentialStore::default()),
-            )),
+            server_manager,
             snowluma_daemon: ncd_runtime::SnowLumaDaemon::new(
                 root.join("data").join("snowluma"),
                 root.join("runtime").join("snowluma"),
                 Arc::new(bus.clone()),
                 Arc::new(ncd_runtime::ReqwestSnowLumaWebUiClientFactory::new()),
             ),
-            active_tasks: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
-            deployment_tasks: ncd_runtime::DeploymentTaskManager::new(bus.clone()),
-            host_probe_cache: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+            deployment_tasks,
+            components,
             desktop_notify: Arc::clone(&desktop_notify),
             app_settings: Arc::clone(&app_settings),
             offline_notifier: composite_offline,

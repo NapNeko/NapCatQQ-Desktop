@@ -93,5 +93,5 @@ impl LightweightScheduler {
 
 async fn has_active_component_tasks(app: &tauri::AppHandle) -> bool {
     let state = app.state::<crate::AppState>();
-    !state.active_tasks.lock().await.is_empty()
+    !state.components.active_tasks().is_empty()
 }

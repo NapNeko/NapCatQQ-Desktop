@@ -3,84 +3,13 @@
 //! 这层只管"档案"——服务器列表,连接测试,连接缓存组件部署走 components.rs
 //! 的 run_component_action(host_id = "remote:<server_id>")
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use ncd_host::Host;
-use ncd_runtime::{
-    DiscoveredSshHost, ProbeReport, RemoteInventory, ServerManager, ServerProfile,
-    inventory_is_stale, probe_remote_inventory,
-};
+use ncd_runtime::{DiscoveredSshHost, ProbeReport, RemoteInventory, ServerProfile};
 use tauri::State;
-use tokio::sync::Mutex;
 
 use crate::AppState;
-
-pub(crate) fn remote_host_id(server_id: &str) -> String {
-    format!("remote:{server_id}")
-}
-
-pub(crate) async fn ensure_remote_inventory(
-    server_id: &str,
-    host: &dyn Host,
-    state: &AppState,
-    force: bool,
-) -> Result<RemoteInventory, String> {
-    ensure_remote_inventory_with(
-        server_id,
-        host,
-        &state.server_manager,
-        &state.host_probe_cache,
-        force,
-    )
-    .await
-}
-
-/// 不依赖 AppState 的版本;Bot 启动预检在 AppState 装好之前就要用
-pub(crate) async fn ensure_remote_inventory_with(
-    server_id: &str,
-    host: &dyn Host,
-    server_manager: &ServerManager,
-    host_probe_cache: &Mutex<HashMap<String, RemoteInventory>>,
-    force: bool,
-) -> Result<RemoteInventory, String> {
-    let cache_key = remote_host_id(server_id);
-    if !force {
-        if let Some(cached) = host_probe_cache.lock().await.get(&cache_key) {
-            if !inventory_is_stale(&cached.probed_at, chrono::Utc::now()) {
-                return Ok(cached.clone());
-            }
-        }
-        let profile = server_manager
-            .list_servers()
-            .await
-            .into_iter()
-            .find(|p| p.id == server_id);
-        if let Some(inv) = profile.as_ref().and_then(|p| p.inventory.as_ref()) {
-            if !inventory_is_stale(&inv.probed_at, chrono::Utc::now()) {
-                host_probe_cache
-                    .lock()
-                    .await
-                    .insert(cache_key, inv.clone());
-                return Ok(inv.clone());
-            }
-        }
-    }
-    let profile = server_manager
-        .list_servers()
-        .await
-        .into_iter()
-        .find(|p| p.id == server_id);
-    let overrides = profile.as_ref().and_then(|p| p.path_overrides.clone());
-    let previous = profile.as_ref().and_then(|p| p.inventory.clone());
-    let inv = probe_remote_inventory(host, overrides.as_ref(), previous.as_ref()).await?;
-    let _ = server_manager.set_inventory(server_id, inv.clone()).await;
-    host_probe_cache
-        .lock()
-        .await
-        .insert(cache_key, inv.clone());
-    Ok(inv)
-}
 
 #[tauri::command]
 pub async fn list_servers(state: State<'_, AppState>) -> Result<Vec<ServerProfile>, String> {
@@ -100,7 +29,7 @@ pub async fn test_server_connection(
     if report.success {
         if let Some(host) = state.server_manager.get_host(&id).await {
             let host: Arc<dyn Host> = host;
-            let _ = ensure_remote_inventory(&id, host.as_ref(), &state, true).await;
+            let _ = state.components.inventory().ensure(&id, host.as_ref(), true).await;
         }
     }
     Ok(report)
@@ -117,7 +46,11 @@ pub async fn refresh_remote_inventory(
         .ensure_connected(&server_id)
         .await
         .map_err(|e| format!("无法连接远端主机: {e}"))?;
-    ensure_remote_inventory(&server_id, host.as_ref(), &state, true).await
+    state
+        .components
+        .inventory()
+        .ensure(&server_id, host.as_ref(), true)
+        .await
 }
 
 /// 用户在 host key 指纹确认弹窗点"信任"后调用:把这把 key 写进 known_hosts,

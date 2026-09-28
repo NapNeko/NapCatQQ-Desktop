@@ -18,18 +18,19 @@ use ncd_deploy::{DeployOutcome, DeployPlan, StepKind};
 use ncd_domain::release_snapshot::ReleaseSnapshot;
 use ncd_domain::{
     AppSettings, DeploymentTaskKind, DeploymentTaskResource, InstallDependenciesResult,
-    RemoteInventory, RemoteSelectedPaths, SnowLumaLinuxPackage,
+    RemoteSelectedPaths, SnowLumaLinuxPackage,
 };
 use ncd_host::{Host, Locality};
 use ncd_server::ServerManager;
-use tokio::sync::{Mutex, RwLock, oneshot};
-use tokio_util::sync::CancellationToken;
+use tokio::sync::{RwLock, oneshot};
 
 use crate::components::action_policy::{
-    RemoteLayout, component_action_cancellable, component_action_needs_runtime_closure,
-    component_dedupe_key, component_needs_package_manager, component_target_label,
-    component_task_resources, dependency_target_display_name,
+    RemoteHostProbe, RemoteLayout, component_action_cancellable,
+    component_action_needs_runtime_closure, component_dedupe_key,
+    component_needs_package_manager, component_target_label, component_task_resources,
+    dependency_target_display_name,
 };
+use crate::components::active_tasks::ActiveTasks;
 use crate::components::factory::{AppComponentHint, BuildComponentCtx, build_component_for_host};
 use crate::components::resolver::{ResolveCtx, resolve_dependencies, resolve_runtime_readiness};
 use crate::components::system_package::{
@@ -40,8 +41,10 @@ use crate::deploy::tasks::{
     DeploymentTaskContext, DeploymentTaskManager, DeploymentTaskRequest, DeploymentTaskRunResult,
 };
 use crate::events::{BroadcastEventBus, DomainEvent, EventBus};
+use crate::release::read_cached_release_snapshot;
+use crate::remote::inventory::RemoteInventoryService;
 
-/// 实例化组件所需的全部输入,owned,能跨 task 边界。L4 从 AppState 收集一次
+/// 实例化组件所需的全部输入,owned,能跨 task 边界。由 ComponentExecutor::build_inputs 收集
 #[derive(Debug, Clone)]
 pub struct ComponentBuildInputs {
     pub data_root: PathBuf,
@@ -137,38 +140,110 @@ pub struct ComponentActionRequest {
     pub inputs: ComponentBuildInputs,
 }
 
-/// 组件页所有会排任务的动作都从这里走;AppState 持有一份
+/// ComponentExecutor 的构造参数;启动时凑齐一次
+pub struct ComponentExecutorDeps {
+    pub deployment_tasks: DeploymentTaskManager,
+    pub server_manager: Arc<ServerManager>,
+    pub event_bus: BroadcastEventBus,
+    /// 本机 SnowLuma 的包类型 / Node 覆盖路径从这里读,装卸完回写包类型
+    pub app_settings: Arc<RwLock<AppSettings>>,
+    pub data_root: PathBuf,
+    /// 启动时读到的本机 SnowLuma 版本;GitHub 版本快照拿不到时靠它定 release tag
+    pub local_snowluma_version: Option<String>,
+    /// Desktop 产品版本(构建时注入),DesktopSelf 组件用
+    pub desktop_product_version: String,
+}
+
+/// 组件页所有会排任务的动作都从这里走;启动时建一份,AppState 与 Bot 启动预检共用
 pub struct ComponentExecutor {
     deployment_tasks: DeploymentTaskManager,
     server_manager: Arc<ServerManager>,
     event_bus: BroadcastEventBus,
-    /// task_id → ActionCtx 的取消令牌;cancel 命令用
-    active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
-    /// 动作完成后清掉该 host 的布局缓存(安装可能改变布局)
-    host_probe_cache: Arc<Mutex<HashMap<String, RemoteInventory>>>,
+    active_tasks: ActiveTasks,
+    /// 动作完成后清掉该主机的库存副本(安装可能改变布局)
+    inventory: Arc<RemoteInventoryService>,
     app_settings: Arc<RwLock<AppSettings>>,
     data_root: PathBuf,
+    local_snowluma_version: Option<String>,
+    desktop_product_version: String,
 }
 
 impl ComponentExecutor {
-    pub fn new(
-        deployment_tasks: DeploymentTaskManager,
-        server_manager: Arc<ServerManager>,
-        event_bus: BroadcastEventBus,
-        active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
-        host_probe_cache: Arc<Mutex<HashMap<String, RemoteInventory>>>,
-        app_settings: Arc<RwLock<AppSettings>>,
-        data_root: PathBuf,
-    ) -> Self {
-        Self {
+    pub fn new(deps: ComponentExecutorDeps) -> Self {
+        let ComponentExecutorDeps {
             deployment_tasks,
             server_manager,
             event_bus,
-            active_tasks,
-            host_probe_cache,
             app_settings,
             data_root,
+            local_snowluma_version,
+            desktop_product_version,
+        } = deps;
+        Self {
+            deployment_tasks,
+            inventory: Arc::new(RemoteInventoryService::new(Arc::clone(&server_manager))),
+            server_manager,
+            event_bus,
+            active_tasks: ActiveTasks::default(),
+            app_settings,
+            data_root,
+            local_snowluma_version,
+            desktop_product_version,
         }
+    }
+
+    pub fn inventory(&self) -> &RemoteInventoryService {
+        &self.inventory
+    }
+
+    pub fn active_tasks(&self) -> &ActiveTasks {
+        &self.active_tasks
+    }
+
+    /// 在已探好的布局上收集构建输入;本机 SnowLuma 的包类型与 Node 覆盖路径来自设置
+    pub async fn build_inputs(
+        &self,
+        host: &dyn Host,
+        probe: &RemoteHostProbe,
+        selected: Option<RemoteSelectedPaths>,
+        snowluma_linux_package: Option<SnowLumaLinuxPackage>,
+    ) -> ComponentBuildInputs {
+        let local = host.locality() == Locality::Local;
+        let (persisted_package, snowluma_node_path) = if local {
+            let settings = self.app_settings.read().await;
+            (settings.snowluma_package, settings.snowluma_node_path.clone())
+        } else {
+            (None, None)
+        };
+        let snowluma_linux_package = snowluma_linux_package.or_else(|| {
+            local.then(|| {
+                persisted_package.unwrap_or_else(|| infer_local_snowluma_package(&self.data_root))
+            })
+        });
+        ComponentBuildInputs {
+            data_root: self.data_root.clone(),
+            remote_home: probe.home.clone(),
+            layout: probe.layout,
+            snapshot: read_cached_release_snapshot(&self.data_root),
+            local_snowluma_version: self.local_snowluma_version.clone(),
+            desktop_product_version: self.desktop_product_version.clone(),
+            selected,
+            snowluma_linux_package,
+            snowluma_node_path,
+            app_component: None,
+        }
+    }
+
+    /// 取(或探测)主机库存再收集构建输入;远端探不到时按本机默认布局构建
+    pub async fn inputs_for(
+        &self,
+        host_id: &str,
+        host: &dyn Host,
+        snowluma_linux_package: Option<SnowLumaLinuxPackage>,
+    ) -> ComponentBuildInputs {
+        let (probe, selected) = self.inventory.host_probe_or_default(host_id, host).await;
+        self.build_inputs(host, &probe, selected, snowluma_linux_package)
+            .await
     }
 
     /// 提交 root 动作及其未满足的前置;返回 root 的 task id
@@ -286,10 +361,7 @@ impl ComponentExecutor {
     }
 
     pub async fn cancel(&self, task_id: &str) -> Result<(), String> {
-        let token = self.active_tasks.lock().await.get(task_id).cloned();
-        if let Some(t) = token {
-            t.cancel();
-        }
+        self.active_tasks.cancel(task_id);
         self.deployment_tasks.cancel(task_id).await
     }
 
@@ -487,10 +559,9 @@ impl ComponentExecutor {
             server_id,
             remote_long_install,
             snowluma_linux_package: inputs.snowluma_linux_package,
-            host_probe_cache: Arc::clone(&self.host_probe_cache),
-            probe_cache_key: host_id_owned.clone(),
+            inventory: Arc::clone(&self.inventory),
             event_bus: self.event_bus.clone(),
-            active_tasks: Arc::clone(&self.active_tasks),
+            active_tasks: self.active_tasks.clone(),
             app_settings: Arc::clone(&self.app_settings),
             data_root: self.data_root.clone(),
             server_manager: Arc::clone(&self.server_manager),
@@ -527,10 +598,9 @@ struct ComponentTaskRunner {
     /// 远端长安装走独立 SSH 连接,不占共享会话
     remote_long_install: bool,
     snowluma_linux_package: Option<SnowLumaLinuxPackage>,
-    host_probe_cache: Arc<Mutex<HashMap<String, RemoteInventory>>>,
-    probe_cache_key: String,
+    inventory: Arc<RemoteInventoryService>,
     event_bus: BroadcastEventBus,
-    active_tasks: Arc<Mutex<HashMap<String, CancellationToken>>>,
+    active_tasks: ActiveTasks,
     app_settings: Arc<RwLock<AppSettings>>,
     data_root: PathBuf,
     server_manager: Arc<ServerManager>,
@@ -541,10 +611,7 @@ impl ComponentTaskRunner {
         let (mut ctx, mut rx) = ActionCtx::new();
         let cancel_token = ctx.cancel_token();
         let task_id = task_ctx.task_id().to_string();
-        self.active_tasks
-            .lock()
-            .await
-            .insert(task_id.clone(), cancel_token.clone());
+        self.active_tasks.insert(task_id.clone(), cancel_token.clone());
 
         // 队列取消 → ActionCtx 取消
         let task_cancel = task_ctx.cancel_token();
@@ -569,7 +636,7 @@ impl ComponentTaskRunner {
         });
 
         if cancel_token.is_cancelled() {
-            self.active_tasks.lock().await.remove(&task_id);
+            self.active_tasks.remove(&task_id);
             self.emit(&task_ctx, &task_id, ProgressKind::Finished { ok: false })
                 .await;
             return DeploymentTaskRunResult::failed("任务已取消");
@@ -602,11 +669,10 @@ impl ComponentTaskRunner {
             }
         }
 
-        self.active_tasks.lock().await.remove(&task_id);
-        self.host_probe_cache
-            .lock()
-            .await
-            .remove(&self.probe_cache_key);
+        self.active_tasks.remove(&task_id);
+        if let Some(ref id) = self.server_id {
+            self.inventory.invalidate(id).await;
+        }
 
         match outcome {
             Ok(outcome) if outcome.ok => {

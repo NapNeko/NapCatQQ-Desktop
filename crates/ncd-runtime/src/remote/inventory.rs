@@ -2,14 +2,15 @@
 //!
 //! 禁止 `find` / `locate` / 扫盘。路径是真相。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
 
 use ncd_domain::{
     BackendType, DeploymentType, DiscoveredRemoteBot, DiscoveredRemoteBotSource,
     REMOTE_INVENTORY_VERSION, RemoteInventory, RemoteInventoryItem, RemoteInventoryKind,
     RemoteInventorySource, RemotePathOverrides, RemoteSelectedPaths, infer_snowluma_linux_package,
-    qq_bin as join_qq_bin,
+    qq_bin as join_qq_bin, server_id_of_host,
 };
 
 pub use ncd_domain::{
@@ -17,6 +18,8 @@ pub use ncd_domain::{
     snowluma_workspace_from_dir,
 };
 use ncd_host::{Host, HostCommand};
+use ncd_server::ServerManager;
+use tokio::sync::Mutex;
 
 use crate::components::action_policy::{RemoteHostProbe, RemoteLayout};
 
@@ -707,6 +710,95 @@ pub async fn probe_remote_inventory(
     inventory_from_stdout(&out.stdout, previous, probed_at)
 }
 
+/// 远端库存的内存副本：组件页探测、Bot 启动预检和组件动作共用一份。
+/// 同一台机器的 home / 布局很稳定，5 个组件并发 detect 只该探一次
+pub struct RemoteInventoryService {
+    server_manager: Arc<ServerManager>,
+    /// server_id → 最近一次拿到的库存
+    cache: Mutex<HashMap<String, RemoteInventory>>,
+}
+
+impl RemoteInventoryService {
+    pub fn new(server_manager: Arc<ServerManager>) -> Self {
+        Self {
+            server_manager,
+            cache: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// force=false 时先用内存里、再用档案里没过期的那份；都过期或 force 才真去探，
+    /// 探到的写回档案。写档案失败不影响这次返回
+    pub async fn ensure(
+        &self,
+        server_id: &str,
+        host: &dyn Host,
+        force: bool,
+    ) -> Result<RemoteInventory, String> {
+        let now = chrono::Utc::now();
+        if !force {
+            if let Some(cached) = self.cache.lock().await.get(server_id) {
+                if !inventory_is_stale(&cached.probed_at, now) {
+                    return Ok(cached.clone());
+                }
+            }
+        }
+        let profile = self
+            .server_manager
+            .list_servers()
+            .await
+            .into_iter()
+            .find(|p| p.id == server_id);
+        let previous = profile.as_ref().and_then(|p| p.inventory.clone());
+        if !force {
+            if let Some(inv) = previous.as_ref().filter(|i| !inventory_is_stale(&i.probed_at, now)) {
+                self.remember(server_id, inv).await;
+                return Ok(inv.clone());
+            }
+        }
+        let overrides = profile.as_ref().and_then(|p| p.path_overrides.clone());
+        let inv = probe_remote_inventory(host, overrides.as_ref(), previous.as_ref()).await?;
+        let _ = self.server_manager.set_inventory(server_id, inv.clone()).await;
+        self.remember(server_id, &inv).await;
+        Ok(inv)
+    }
+
+    /// 装 / 卸完之后布局可能变了，丢掉内存那份
+    pub async fn invalidate(&self, server_id: &str) {
+        self.cache.lock().await.remove(server_id);
+    }
+
+    /// host_id 对应的 home / 布局 / 选中路径。本机没有库存；远端探不到时报错
+    pub async fn host_probe(
+        &self,
+        host_id: &str,
+        host: &dyn Host,
+    ) -> Result<(RemoteHostProbe, Option<RemoteSelectedPaths>), String> {
+        let Some(server_id) = server_id_of_host(host_id) else {
+            return Ok((RemoteHostProbe::local_default(), None));
+        };
+        let inv = self.ensure(server_id, host, false).await?;
+        Ok((probe_from_inventory(&inv), Some(inv.selected)))
+    }
+
+    /// 同 host_probe，远端探不到时回落本机默认，由组件构建自己报缺 home
+    pub async fn host_probe_or_default(
+        &self,
+        host_id: &str,
+        host: &dyn Host,
+    ) -> (RemoteHostProbe, Option<RemoteSelectedPaths>) {
+        self.host_probe(host_id, host)
+            .await
+            .unwrap_or_else(|_| (RemoteHostProbe::local_default(), None))
+    }
+
+    async fn remember(&self, server_id: &str, inv: &RemoteInventory) {
+        self.cache
+            .lock()
+            .await
+            .insert(server_id.to_string(), inv.clone());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1098,5 +1190,46 @@ mod tests {
             Some("/home/u/Napcat")
         );
         assert_eq!(inv.selected.snowluma_dir.as_deref(), Some("/data/sl"));
+    }
+
+    #[tokio::test]
+    async fn inventory_service_reuses_fresh_probe_until_invalidated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let service = RemoteInventoryService::new(Arc::new(ServerManager::new(
+            tmp.path(),
+            Arc::new(ncd_server::InMemoryCredentialStore::default()),
+        )));
+        let first = ScriptedHost {
+            stdout: sample_stdout("/home/a", ""),
+        };
+        let second = ScriptedHost {
+            stdout: sample_stdout("/home/b", ""),
+        };
+
+        assert_eq!(service.ensure("s1", &first, false).await.unwrap().home, "/home/a");
+        // 没过期就不再探，换了输出也还是上次那份
+        assert_eq!(service.ensure("s1", &second, false).await.unwrap().home, "/home/a");
+        let (probe, selected) = service.host_probe("remote:s1", &second).await.unwrap();
+        assert_eq!(probe.home.as_deref(), Some("/home/a"));
+        assert_eq!(selected.unwrap().home, "/home/a");
+
+        service.invalidate("s1").await;
+        assert_eq!(service.ensure("s1", &second, false).await.unwrap().home, "/home/b");
+        assert_eq!(service.ensure("s1", &first, true).await.unwrap().home, "/home/a");
+    }
+
+    #[tokio::test]
+    async fn inventory_service_local_host_has_no_inventory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let service = RemoteInventoryService::new(Arc::new(ServerManager::new(
+            tmp.path(),
+            Arc::new(ncd_server::InMemoryCredentialStore::default()),
+        )));
+        let host = ScriptedHost {
+            stdout: String::new(),
+        };
+        let (probe, selected) = service.host_probe("local", &host).await.unwrap();
+        assert!(probe.home.is_none());
+        assert!(selected.is_none());
     }
 }

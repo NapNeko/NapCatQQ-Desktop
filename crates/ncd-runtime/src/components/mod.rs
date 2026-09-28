@@ -1,6 +1,7 @@
 //! 组件安装策略 / 工厂 / 依赖图与解析 / 动作执行器 / 包管理锁。
 
 pub mod action_policy;
+pub mod active_tasks;
 pub mod executor;
 pub mod factory;
 pub mod graph;
@@ -17,8 +18,10 @@ pub use action_policy::{
     parse_remote_host_probe_stdout, require_remote_home, snowluma_github_release_tag,
     snowluma_linux_release_asset, snowluma_windows_release_asset,
 };
+pub use active_tasks::{ActiveTaskGuard, ActiveTasks};
 pub use executor::{
-    ComponentActionRequest, ComponentBuildInputs, ComponentExecutor, infer_local_snowluma_package,
+    ComponentActionRequest, ComponentBuildInputs, ComponentExecutor, ComponentExecutorDeps,
+    infer_local_snowluma_package,
 };
 pub use factory::{AppComponentHint, BuildComponentCtx, build_component_for_host};
 pub use graph::{

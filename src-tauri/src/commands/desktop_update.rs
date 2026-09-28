@@ -112,9 +112,8 @@ pub async fn install_desktop_update(
         .unwrap_or_else(|| Uuid::new_v4().to_string());
     let cancel = CancellationToken::new();
     state
-        .active_tasks
-        .lock()
-        .await
+        .components
+        .active_tasks()
         .insert(task_id.clone(), cancel.clone());
 
     let progress_ui = Arc::new(DesktopUpdateProgressSink::new(
@@ -133,7 +132,7 @@ pub async fn install_desktop_update(
             progress_ui.emit_log(ProgressLogLevel::Error, e.clone());
             progress_ui.emit_step_end(1, false);
             progress_ui.emit_finished(false);
-            state.active_tasks.lock().await.remove(&task_id);
+            state.components.active_tasks().remove(&task_id);
             return Err(e);
         }
     };
@@ -146,7 +145,7 @@ pub async fn install_desktop_update(
             progress_ui.emit_log(ProgressLogLevel::Info, msg);
             progress_ui.emit_step_end(1, true);
             progress_ui.emit_finished(true);
-            state.active_tasks.lock().await.remove(&task_id);
+            state.components.active_tasks().remove(&task_id);
             return Err(msg.into());
         }
         Err(e) => {
@@ -154,7 +153,7 @@ pub async fn install_desktop_update(
             progress_ui.emit_log(ProgressLogLevel::Error, msg.clone());
             progress_ui.emit_step_end(1, false);
             progress_ui.emit_finished(false);
-            state.active_tasks.lock().await.remove(&task_id);
+            state.components.active_tasks().remove(&task_id);
             return Err(msg);
         }
     };
@@ -167,7 +166,7 @@ pub async fn install_desktop_update(
         progress_ui.emit_log(ProgressLogLevel::Error, msg.clone());
         progress_ui.emit_step_end(1, false);
         progress_ui.emit_finished(false);
-        state.active_tasks.lock().await.remove(&task_id);
+        state.components.active_tasks().remove(&task_id);
         return Err(msg);
     }
 
@@ -178,7 +177,7 @@ pub async fn install_desktop_update(
             progress_ui.emit_log(ProgressLogLevel::Error, msg.clone());
             progress_ui.emit_step_end(1, false);
             progress_ui.emit_finished(false);
-            state.active_tasks.lock().await.remove(&task_id);
+            state.components.active_tasks().remove(&task_id);
             return Err(msg);
         }
     };
@@ -192,7 +191,7 @@ pub async fn install_desktop_update(
         progress_ui.emit_log(ProgressLogLevel::Error, msg.clone());
         progress_ui.emit_step_end(1, false);
         progress_ui.emit_finished(false);
-        state.active_tasks.lock().await.remove(&task_id);
+        state.components.active_tasks().remove(&task_id);
         return Err(msg);
     }
 
@@ -215,7 +214,7 @@ pub async fn install_desktop_update(
         .install_with_graceful_shutdown(server_update, running_bots, snowluma_running)
         .await;
 
-    state.active_tasks.lock().await.remove(&task_id);
+    state.components.active_tasks().remove(&task_id);
 
     match install_result {
         Ok(()) => {
