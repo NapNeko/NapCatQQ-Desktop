@@ -22,7 +22,7 @@ pub use action_policy::{
 pub use active_tasks::{ActiveTaskGuard, ActiveTasks};
 pub use executor::{
     ComponentActionRequest, ComponentBuildInputs, ComponentExecutor, ComponentExecutorDeps,
-    infer_local_snowluma_package,
+    infer_local_snowluma_package, local_snowluma_node_path,
 };
 pub use factory::{AppComponentHint, BuildComponentCtx, build_component_for_host};
 pub use graph::{
