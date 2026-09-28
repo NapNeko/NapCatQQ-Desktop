@@ -32,7 +32,7 @@ use ncd_host::{Arch, ArchiveKind, Host, HostCommand, HostError, HostPath, Locali
 use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
-use crate::requirement::{Requirement, VersionReq};
+use crate::requirement::{Requirement, VersionReq, all_versions_match};
 use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{
@@ -106,7 +106,7 @@ async fn classify_node_candidate(
     let source = path.as_posix().to_string();
     Ok(match probe_node_bin_status(host, path).await? {
         NodeBinProbe::Missing => None,
-        NodeBinProbe::Version(ver) if VersionReq::all_match(accept, &ver) => {
+        NodeBinProbe::Version(ver) if all_versions_match(accept, &ver) => {
             Some(DetectOutcome::Installed(DetectedVersion {
                 version: ver,
                 source,
@@ -327,7 +327,7 @@ impl Component for NodeJsComponent {
             Ok(out) if out.success() => {
                 let ver = out.stdout.trim().trim_start_matches('v').to_string();
                 if !ver.is_empty() {
-                    if VersionReq::all_match(&self.accept, &ver) {
+                    if all_versions_match(&self.accept, &ver) {
                         return Ok(DetectOutcome::Installed(DetectedVersion {
                             version: ver,
                             source: "$PATH/node".into(),
@@ -597,7 +597,7 @@ pub async fn probe_local_system_nodes(
         if !trimmed.is_empty() {
             let hp = HostPath::from_windows(trimmed);
             if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
-                let is_valid = VersionReq::all_match(accept, &ver);
+                let is_valid = all_versions_match(accept, &ver);
                 let path_str = hp.render(ncd_host::PathStyle::Windows);
                 seen_paths.insert(path_str.to_lowercase());
                 results.push(NodeEnvironmentCandidate {
@@ -614,7 +614,7 @@ pub async fn probe_local_system_nodes(
     // 2. Independent NodeJs component
     if let Some(cp) = component_path {
         if let Ok(Some(ver)) = probe_node_raw_version(host, cp).await {
-            let is_valid = VersionReq::all_match(accept, &ver);
+            let is_valid = all_versions_match(accept, &ver);
             let path_str = cp.render(ncd_host::PathStyle::Windows);
             if !seen_paths.contains(&path_str.to_lowercase()) {
                 seen_paths.insert(path_str.to_lowercase());
@@ -648,7 +648,7 @@ pub async fn probe_local_system_nodes(
                         continue;
                     }
                     if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
-                        let is_valid = VersionReq::all_match(accept, &ver);
+                        let is_valid = all_versions_match(accept, &ver);
                         seen_paths.insert(path_str.to_lowercase());
                         results.push(NodeEnvironmentCandidate {
                             path: path_str,
@@ -692,7 +692,7 @@ pub async fn probe_local_system_nodes(
                 let path_str = hp.render(ncd_host::PathStyle::Windows);
                 if !seen_paths.contains(&path_str.to_lowercase()) {
                     if let Ok(Some(ver)) = probe_node_raw_version(host, &hp).await {
-                        let is_valid = VersionReq::all_match(accept, &ver);
+                        let is_valid = all_versions_match(accept, &ver);
                         seen_paths.insert(path_str.to_lowercase());
                         results.push(NodeEnvironmentCandidate {
                             path: path_str,

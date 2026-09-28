@@ -13,6 +13,7 @@ pub mod bot_actor;
 pub mod bot_config;
 pub mod bot_runtime_metrics;
 pub mod bot_status;
+pub mod component;
 pub mod daemon_state;
 pub mod data_root_migrate;
 pub mod deployment_task;
@@ -91,6 +92,10 @@ pub use bot_runtime_metrics::{
     history_min_interval_ms,
 };
 pub use bot_status::{BotStatus, ProcessHandle};
+pub use component::{
+    ComponentId, DependencyNode, DependencyPlan, DependencyTarget, HostPackageGroup, Requirement,
+    RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
+};
 pub use daemon_state::{DaemonState, SnowLumaLoginState};
 pub use data_root_migrate::{
     DataRootMigratePhase, DataRootMigratePreview, DataRootMigrateProgress, DataRootMigrateResult,

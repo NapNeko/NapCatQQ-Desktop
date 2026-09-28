@@ -10,6 +10,7 @@ use ncd_component::qq_deps::{QqDependencyDetector, qq_qqnt_dependencies_v3_2_25}
 use ncd_component::{
     Component, ComponentId, DependencyNode, DependencyPlan, DependencyTarget, DetectOutcome,
     HostPackageGroup, RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
+    all_versions_match,
 };
 use ncd_appframework::AppFrameworkRegistry;
 use ncd_host::Host;
@@ -117,7 +118,7 @@ async fn probe_built_component(
         Ok(DetectOutcome::Installed(found)) => {
             // 组件自己(如注入了 accept 的 Node)一般已按约束挑过候选;
             // 这里再核一遍,兜住没做内部过滤的组件
-            if VersionReq::all_match(version_reqs, &found.version) {
+            if all_versions_match(version_reqs, &found.version) {
                 RequirementStatus::Satisfied {
                     version: Some(found.version),
                     source: Some(found.source),

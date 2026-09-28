@@ -258,7 +258,7 @@ pub async fn probe_node_binary_version(
         .catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
     match ncd_component::nodejs::probe_node_raw_version(&host, &hp).await {
         Ok(Some(raw_ver)) => {
-            let is_valid = ncd_component::VersionReq::all_match(&accept, &raw_ver);
+            let is_valid = ncd_component::all_versions_match(&accept, &raw_ver);
             let error = (!is_valid)
                 .then(|| ncd_component::nodejs::version_mismatch_reason(&raw_ver, &accept));
             Ok(NodeProbeResult {
