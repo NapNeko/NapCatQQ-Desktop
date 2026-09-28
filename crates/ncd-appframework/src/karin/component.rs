@@ -246,7 +246,8 @@ impl KarinComponent {
         .await;
         let preferred = self.preferred_nodes(host).await;
         let tc = resolve_node_toolchain(host, &preferred).await?;
-        ctx.info(format!("Node.js: {}", tc.node_bin.render_for(host.os()))).await;
+        ctx.info(format!("Node.js: {}", tc.node_bin.render_for(host.os())))
+            .await;
         host.create_dir_all(&self.install_dir).await?;
         // 记下本次 node，起停 / 探测复用；远端 SSH 非交互会话 PATH 里往往没有 node
         write_node_marker(host, &self.install_dir, &tc).await?;
@@ -267,7 +268,10 @@ impl KarinComponent {
         ];
         npm_args.extend(self.registry_arg());
         let npm_cmd = tc
-            .npm(host.os(), &npm_args.iter().map(String::as_str).collect::<Vec<_>>())
+            .npm(
+                host.os(),
+                &npm_args.iter().map(String::as_str).collect::<Vec<_>>(),
+            )
             .working_dir(self.install_dir.clone());
         self.run_step(host, ctx, 2, "安装项目私有 pnpm", npm_cmd)
             .await?;
@@ -291,7 +295,8 @@ impl KarinComponent {
             .working_dir(self.install_dir.clone())
             .env("KARIN_CLI", "true")
             .env("INIT_CWD", self.install_dir.render_for(host.os()));
-        self.run_step(host, ctx, 4, "初始化 Karin 项目", init).await?;
+        self.run_step(host, ctx, 4, "初始化 Karin 项目", init)
+            .await?;
 
         // 5. 二次 install：workspace 已声明 onlyBuiltDependencies，原生依赖此时才允许构建
         let mut again: Vec<String> = vec!["install".into()];
@@ -332,7 +337,11 @@ impl KarinComponent {
         Ok(())
     }
 
-    async fn adopt_provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn adopt_provision(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
@@ -357,7 +366,10 @@ impl KarinComponent {
         ];
         npm_args.extend(self.registry_arg());
         let npm_cmd = tc
-            .npm(host.os(), &npm_args.iter().map(String::as_str).collect::<Vec<_>>())
+            .npm(
+                host.os(),
+                &npm_args.iter().map(String::as_str).collect::<Vec<_>>(),
+            )
             .working_dir(self.install_dir.clone());
         self.run_step(host, ctx, 2, "安装项目私有 pnpm", npm_cmd)
             .await?;
@@ -390,7 +402,8 @@ impl KarinComponent {
                 "private": true,
                 "type": "module"
             });
-            host.write_file(&pkg, format!("{body:#}\n").as_bytes()).await?;
+            host.write_file(&pkg, format!("{body:#}\n").as_bytes())
+                .await?;
         }
         let npmrc = self.install_dir.join(".npmrc");
         if !host.exists(&npmrc).await? {
@@ -425,8 +438,9 @@ impl KarinComponent {
             return Ok(None);
         }
         let bytes = host.read_file(&pkg).await?;
-        let value: serde_json::Value = serde_json::from_slice(&bytes)
-            .map_err(|e| ActionError::detect_failed("karin", format!("package.json 解析失败: {e}")))?;
+        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
+            ActionError::detect_failed("karin", format!("package.json 解析失败: {e}"))
+        })?;
         Ok(value
             .get("version")
             .and_then(|v| v.as_str())
@@ -512,7 +526,11 @@ impl Component for KarinComponent {
         Ok(report)
     }
 
-    fn launch_command(&self, host: &dyn Host, args: &LaunchArgs) -> Result<HostCommand, ActionError> {
+    fn launch_command(
+        &self,
+        host: &dyn Host,
+        args: &LaunchArgs,
+    ) -> Result<HostCommand, ActionError> {
         // 同步版只能用已知 node 路径或 PATH；运行时请用 resolve_launch_command
         let node = self
             .node_bin
@@ -536,7 +554,11 @@ mod tests {
     fn renderer_pnpm_args_adds_workspace_flag() {
         assert_eq!(
             renderer_pnpm_args(false),
-            vec!["add".to_string(), "@karinjs/plugin-puppeteer".to_string(), "--save".to_string()]
+            vec![
+                "add".to_string(),
+                "@karinjs/plugin-puppeteer".to_string(),
+                "--save".to_string()
+            ]
         );
         assert_eq!(renderer_pnpm_args(true)[3], "-w");
     }
@@ -550,8 +572,15 @@ mod tests {
             vec![Requirement::component_version(ComponentId::NodeJs, ">=18")]
         );
         assert_eq!(comp.id(), ComponentId::Karin);
-        assert!(comp.supported_targets().contains(&(Os::Windows, Locality::Local)));
-        assert!(!comp.supported_targets().contains(&(Os::Windows, Locality::Remote)));
+        assert!(
+            comp.supported_targets()
+                .contains(&(Os::Windows, Locality::Local))
+        );
+        assert!(
+            !comp
+                .supported_targets()
+                .contains(&(Os::Windows, Locality::Remote))
+        );
     }
 
     #[test]

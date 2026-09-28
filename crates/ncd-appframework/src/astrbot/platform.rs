@@ -6,8 +6,8 @@ use ncd_traits::AppFrameworkError;
 use serde_json::{Map, Value};
 
 use super::manifest::{
-    ASTRBOT_DEFAULT_DASHBOARD_PORT, KEY_WS_REVERSE_HOST, KEY_WS_REVERSE_PORT,
-    KEY_WS_REVERSE_TOKEN, PLATFORM_TYPE_AIOCQHTTP,
+    ASTRBOT_DEFAULT_DASHBOARD_PORT, KEY_WS_REVERSE_HOST, KEY_WS_REVERSE_PORT, KEY_WS_REVERSE_TOKEN,
+    PLATFORM_TYPE_AIOCQHTTP,
 };
 use crate::config_doc::IssueSink;
 
@@ -127,10 +127,7 @@ pub fn claim_for_probe(rows: &[Value]) -> Option<usize> {
         [] => None,
         [i] => Some(*i),
         _ => {
-            let enabled: Vec<usize> = all
-                .into_iter()
-                .filter(|i| is_enabled(&rows[*i]))
-                .collect();
+            let enabled: Vec<usize> = all.into_iter().filter(|i| is_enabled(&rows[*i])).collect();
             match enabled.as_slice() {
                 [i] => Some(*i),
                 _ => None,
@@ -146,7 +143,10 @@ pub fn claim_for_upsert(
     port: u16,
 ) -> Result<Claim, AppFrameworkError> {
     let want_id = ncd_platform_id(instance_id);
-    if let Some(i) = rows.iter().position(|row| row_id(row) == Some(want_id.as_str())) {
+    if let Some(i) = rows
+        .iter()
+        .position(|row| row_id(row) == Some(want_id.as_str()))
+    {
         if !is_aiocqhttp(&rows[i]) {
             return Err(AppFrameworkError::Validation(format!(
                 "id={want_id} 不是 aiocqhttp，拒绝改写成 OneBot"
@@ -193,10 +193,7 @@ pub fn seed_row(instance_id: &str, port: u16, token: &str) -> Value {
     m.insert("id".into(), Value::String(ncd_platform_id(instance_id)));
     m.insert("type".into(), Value::String(PLATFORM_TYPE_AIOCQHTTP.into()));
     m.insert("enable".into(), Value::Bool(true));
-    m.insert(
-        KEY_WS_REVERSE_HOST.into(),
-        Value::String("0.0.0.0".into()),
-    );
+    m.insert(KEY_WS_REVERSE_HOST.into(), Value::String("0.0.0.0".into()));
     m.insert(KEY_WS_REVERSE_PORT.into(), Value::from(port));
     m.insert(
         KEY_WS_REVERSE_TOKEN.into(),
@@ -213,10 +210,7 @@ pub fn apply_claimed_fields(row: &mut Value, instance_id: &str, port: u16, token
     obj.insert("id".into(), Value::String(ncd_platform_id(instance_id)));
     obj.insert("type".into(), Value::String(PLATFORM_TYPE_AIOCQHTTP.into()));
     obj.insert("enable".into(), Value::Bool(true));
-    obj.insert(
-        KEY_WS_REVERSE_HOST.into(),
-        Value::String("0.0.0.0".into()),
-    );
+    obj.insert(KEY_WS_REVERSE_HOST.into(), Value::String("0.0.0.0".into()));
     obj.insert(KEY_WS_REVERSE_PORT.into(), Value::from(port));
     obj.insert(
         KEY_WS_REVERSE_TOKEN.into(),
@@ -328,10 +322,7 @@ pub fn default_empty_root() -> Value {
     let mut dash = Map::new();
     dash.insert("enable".into(), Value::Bool(true));
     dash.insert("host".into(), Value::String("0.0.0.0".into()));
-    dash.insert(
-        "port".into(),
-        Value::from(ASTRBOT_DEFAULT_DASHBOARD_PORT),
-    );
+    dash.insert("port".into(), Value::from(ASTRBOT_DEFAULT_DASHBOARD_PORT));
     let mut root = Map::new();
     root.insert("config_version".into(), Value::from(3));
     root.insert("dashboard".into(), Value::Object(dash));

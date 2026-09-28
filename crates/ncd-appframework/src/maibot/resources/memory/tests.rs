@@ -11,13 +11,21 @@ fn runtime(v: serde_json::Value) -> MaiBotMemoryStatus {
 
 #[test]
 fn runtime_config_maps_to_a_state() {
-    let off = runtime(json!({"success": true, "memory_enabled": false, "disabled": true, "reason": "a_memorix_disabled"}));
+    let off = runtime(
+        json!({"success": true, "memory_enabled": false, "disabled": true, "reason": "a_memorix_disabled"}),
+    );
     assert_eq!(off.state, MaiBotMemoryState::Disabled);
-    let starting = runtime(json!({"success": true, "reason": "a_memorix_initializing", "message": "A_Memorix 正在初始化"}));
+    let starting = runtime(
+        json!({"success": true, "reason": "a_memorix_initializing", "message": "A_Memorix 正在初始化"}),
+    );
     assert_eq!(starting.state, MaiBotMemoryState::Starting);
-    let failed =
-        runtime(json!({"success": true, "reason": "a_memorix_initialization_failed", "message": "A_Memorix 初始化失败: boom"}));
-    assert_eq!((failed.state, failed.message.as_str()), (MaiBotMemoryState::Failed, "A_Memorix 初始化失败: boom"));
+    let failed = runtime(
+        json!({"success": true, "reason": "a_memorix_initialization_failed", "message": "A_Memorix 初始化失败: boom"}),
+    );
+    assert_eq!(
+        (failed.state, failed.message.as_str()),
+        (MaiBotMemoryState::Failed, "A_Memorix 初始化失败: boom")
+    );
     let ready = runtime(json!({
         "success": true, "memory_enabled": true, "embedding_degraded": true,
         "vector_rebuild_required": true, "vector_rebuild_message": ""
@@ -28,9 +36,17 @@ fn runtime_config_maps_to_a_state() {
 
 #[test]
 fn envelope_failures_become_errors_with_upstream_words() {
-    let off = unwrap::<serde_json::Value>(json!({"success": false, "disabled": true, "error": "x"}), "/p").unwrap_err();
+    let off = unwrap::<serde_json::Value>(
+        json!({"success": false, "disabled": true, "error": "x"}),
+        "/p",
+    )
+    .unwrap_err();
     assert!(off.to_string().contains("长期记忆没开"));
-    let bad = unwrap::<serde_json::Value>(json!({"success": false, "error": "任务队列已满，请稍后重试"}), "/p").unwrap_err();
+    let bad = unwrap::<serde_json::Value>(
+        json!({"success": false, "error": "任务队列已满，请稍后重试"}),
+        "/p",
+    )
+    .unwrap_err();
     assert_eq!(bad.to_string(), "任务队列已满，请稍后重试");
     assert!(unwrap::<serde_json::Value>(json!({"success": true}), "/p").is_ok());
 }
@@ -67,11 +83,24 @@ async fn local_texts_are_checked_before_import() {
     let empty = dir.path().join("空.txt");
     std::fs::write(&empty, b"").unwrap();
     let s = |p: &std::path::Path| p.to_string_lossy().into_owned();
-    let got = inspect_local_texts(vec![s(&ok), s(&gbk), s(&doc), s(&empty), "rel/x.txt".into()]).await;
+    let got = inspect_local_texts(vec![
+        s(&ok),
+        s(&gbk),
+        s(&doc),
+        s(&empty),
+        "rel/x.txt".into(),
+    ])
+    .await;
     let problems: Vec<_> = got.iter().map(|f| f.problem.as_deref()).collect();
     assert_eq!(
         problems,
-        [None, Some("不是 UTF-8 编码，另存为 UTF-8 再导"), Some("只收 txt / md / json"), Some("是个空文件"), Some("路径不对")]
+        [
+            None,
+            Some("不是 UTF-8 编码，另存为 UTF-8 再导"),
+            Some("只收 txt / md / json"),
+            Some("是个空文件"),
+            Some("路径不对")
+        ]
     );
 }
 
@@ -80,7 +109,12 @@ fn client(server: &MockServer) -> MaiBotWebUi {
 }
 
 fn options(kind: MaiBotMemoryImportKind, chat_id: &str) -> MaiBotMemoryImportOptions {
-    MaiBotMemoryImportOptions { kind, chat_id: chat_id.into(), use_llm: true, force: false }
+    MaiBotMemoryImportOptions {
+        kind,
+        chat_id: chat_id.into(),
+        use_llm: true,
+        force: false,
+    }
 }
 
 #[tokio::test]
@@ -110,7 +144,10 @@ async fn chat_log_paste_goes_as_narrative_scoped_to_the_chat() {
         options: options(MaiBotMemoryImportKind::ChatLog, "c1"),
     };
     let task = import(&client(&server), &req).await.unwrap();
-    assert_eq!((task.id.as_str(), task.status), ("t1", MaiBotMemoryTaskStatus::Queued));
+    assert_eq!(
+        (task.id.as_str(), task.status),
+        ("t1", MaiBotMemoryTaskStatus::Queued)
+    );
 }
 
 #[tokio::test]
@@ -118,10 +155,17 @@ async fn upstream_rejections_come_back_as_errors() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/api/webui/memory/import/paste"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"success": false, "error": "任务队列已满，请稍后重试"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"success": false, "error": "任务队列已满，请稍后重试"})),
+        )
         .mount(&server)
         .await;
-    let req = MaiBotMemoryImport::Paste { name: String::new(), content: "x".into(), options: options(MaiBotMemoryImportKind::Auto, "") };
+    let req = MaiBotMemoryImport::Paste {
+        name: String::new(),
+        content: "x".into(),
+        options: options(MaiBotMemoryImportKind::Auto, ""),
+    };
     let err = import(&client(&server), &req).await.unwrap_err();
     assert_eq!(err.to_string(), "任务队列已满，请稍后重试");
 }
@@ -140,8 +184,16 @@ async fn source_delete_preview_selects_by_source_name() {
         })))
         .mount(&server)
         .await;
-    let target = MaiBotMemoryDeleteTarget { kind: MaiBotMemoryDeleteKind::Source, ids: vec!["设定.md".into()] };
-    let r = delete(&client(&server), &MaiBotMemoryDeleteAction::Preview { target }).await.unwrap();
+    let target = MaiBotMemoryDeleteTarget {
+        kind: MaiBotMemoryDeleteKind::Source,
+        ids: vec!["设定.md".into()],
+    };
+    let r = delete(
+        &client(&server),
+        &MaiBotMemoryDeleteAction::Preview { target },
+    )
+    .await
+    .unwrap();
     assert_eq!((r.counts.paragraphs, r.counts.relations), (3, 2));
     assert_eq!(r.samples[0].preview, "麦麦喜欢猫");
 }
@@ -167,5 +219,8 @@ async fn task_list_reads_summaries() {
     let list = tasks(&client(&server)).await.unwrap();
     assert_eq!(list.len(), 2, "没有 task_id 的不给");
     assert_eq!(list[0].status, MaiBotMemoryTaskStatus::Running);
-    assert_eq!((list[1].status, list[1].progress), (MaiBotMemoryTaskStatus::DoneWithErrors, 1.0));
+    assert_eq!(
+        (list[1].status, list[1].progress),
+        (MaiBotMemoryTaskStatus::DoneWithErrors, 1.0)
+    );
 }

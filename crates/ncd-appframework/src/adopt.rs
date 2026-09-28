@@ -17,13 +17,7 @@ const APP_PID: &str = ".ncd-app.pid";
 const NB_LOG: &str = ".ncd-nonebot2.log";
 const KARIN_LOG: &str = ".ncd-karin.log";
 
-const NCD_FILES: &[&str] = &[
-    UV_MARKER_FILE,
-    NODE_MARKER,
-    APP_PID,
-    NB_LOG,
-    KARIN_LOG,
-];
+const NCD_FILES: &[&str] = &[UV_MARKER_FILE, NODE_MARKER, APP_PID, NB_LOG, KARIN_LOG];
 const NCD_DIRS: &[&str] = &[TOOLS_DIR];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,9 +42,7 @@ impl AdoptRestoreScope {
         match self {
             Self::All => true,
             Self::Link => {
-                rel == ".env"
-                    || rel.starts_with(".env.")
-                    || rel.ends_with("adapter.json")
+                rel == ".env" || rel.starts_with(".env.") || rel.ends_with("adapter.json")
             }
         }
     }
@@ -250,7 +242,10 @@ async fn remove_bak_sidecars(
             continue;
         }
         let rel = entry.name;
-        if keep.iter().any(|k| *k == rel || k.ends_with(&format!("/{rel}"))) {
+        if keep
+            .iter()
+            .any(|k| *k == rel || k.ends_with(&format!("/{rel}")))
+        {
             continue;
         }
         remove_if_exists(host, &dir.join(&rel)).await?;
@@ -297,7 +292,13 @@ mod tests {
         assert_eq!(snap.len(), 3);
         assert_eq!(snap[0].rel_path, ".env");
         assert_eq!(snap[0].text.as_deref(), Some("PORT=13120\n"));
-        assert!(!snap.iter().find(|f| f.rel_path == ".env.prod").unwrap().existed);
+        assert!(
+            !snap
+                .iter()
+                .find(|f| f.rel_path == ".env.prod")
+                .unwrap()
+                .existed
+        );
 
         std::fs::write(dir.join(".env"), "PORT=1\nONEBOT_ACCESS_TOKEN=x\n").unwrap();
         std::fs::write(dir.join(".env.prod"), "DRIVER=~fastapi\n").unwrap();
@@ -309,8 +310,14 @@ mod tests {
             .unwrap();
         remove_ncd_debris(&host, &root, &snap).await.unwrap();
 
-        assert_eq!(std::fs::read_to_string(dir.join(".env")).unwrap(), "PORT=13120\n");
-        assert_eq!(std::fs::read_to_string(dir.join("bot.py")).unwrap(), "import nonebot\n");
+        assert_eq!(
+            std::fs::read_to_string(dir.join(".env")).unwrap(),
+            "PORT=13120\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("bot.py")).unwrap(),
+            "import nonebot\n"
+        );
         assert!(!dir.join(".env.prod").exists());
         assert!(!dir.join(".ncd-uv").exists());
         assert!(!dir.join(".env.ncd.bak").exists());
@@ -323,20 +330,22 @@ mod tests {
         std::fs::write(tmp.path().join("bot.py"), "old\n").unwrap();
         let host = host();
         let root = root_of(tmp.path());
-        let snap = capture_adopted_files(
-            &host,
-            &root,
-            &[".env".into(), "bot.py".into()],
-        )
-        .await
-        .unwrap();
+        let snap = capture_adopted_files(&host, &root, &[".env".into(), "bot.py".into()])
+            .await
+            .unwrap();
         std::fs::write(tmp.path().join(".env"), "A=2\n").unwrap();
         std::fs::write(tmp.path().join("bot.py"), "new\n").unwrap();
         restore_adopted_files(&host, &root, &snap, AdoptRestoreScope::Link)
             .await
             .unwrap();
-        assert_eq!(std::fs::read_to_string(tmp.path().join(".env")).unwrap(), "A=1\n");
-        assert_eq!(std::fs::read_to_string(tmp.path().join("bot.py")).unwrap(), "new\n");
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join(".env")).unwrap(),
+            "A=1\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("bot.py")).unwrap(),
+            "new\n"
+        );
     }
 
     #[test]

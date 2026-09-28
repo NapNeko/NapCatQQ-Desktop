@@ -45,7 +45,10 @@ pub fn link_comment(instance_id: &AppInstanceId) -> String {
 }
 
 pub fn pubkey_type_and_blob(pubkey_line: &str) -> Result<(String, String), String> {
-    let line = pubkey_line.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    let line = pubkey_line
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("");
     let mut parts = line.split_whitespace();
     let kind = parts.next().ok_or("公钥为空")?.to_string();
     let blob = parts.next().ok_or("公钥缺少 key 本体")?.to_string();
@@ -84,7 +87,11 @@ fn line_belongs_to_instance(line: &str, instance_id: &AppInstanceId) -> bool {
     line.split_whitespace().any(|w| w == needle)
 }
 
-pub fn upsert_authorized_key(existing: &str, new_line: &str, instance_id: &AppInstanceId) -> String {
+pub fn upsert_authorized_key(
+    existing: &str,
+    new_line: &str,
+    instance_id: &AppInstanceId,
+) -> String {
     let mut out: Vec<&str> = existing
         .lines()
         .filter(|l| !line_belongs_to_instance(l, instance_id))
@@ -126,8 +133,12 @@ pub fn render_run_sh(input: &ResidentLinkScriptInput<'_>) -> String {
     let ssh_port = input.dial.port;
     let listen = input.listen_port;
     let tunnel = match input.forward {
-        ResidentForward::ExposeApp { app_port } => format!("-R 127.0.0.1:{listen}:127.0.0.1:{app_port}"),
-        ResidentForward::ReachBot { bot_port } => format!("-L 127.0.0.1:{listen}:127.0.0.1:{bot_port}"),
+        ResidentForward::ExposeApp { app_port } => {
+            format!("-R 127.0.0.1:{listen}:127.0.0.1:{app_port}")
+        }
+        ResidentForward::ReachBot { bot_port } => {
+            format!("-L 127.0.0.1:{listen}:127.0.0.1:{bot_port}")
+        }
     };
     format!(
         "#!/bin/sh\n\
@@ -206,7 +217,9 @@ async fn ensure_resident_link_inner(
             return Err(AppFrameworkError::Validation("应用实例端口无效".into()));
         }
         ResidentForward::ReachBot { bot_port: 0 } => {
-            return Err(AppFrameworkError::Validation("协议 Bot 的 WS 服务还没分配端口".into()));
+            return Err(AppFrameworkError::Validation(
+                "协议 Bot 的 WS 服务还没分配端口".into(),
+            ));
         }
         _ => {}
     }
@@ -235,10 +248,7 @@ async fn ensure_resident_link_inner(
 
     let home_b = remote_home(app_host).await?;
     let link_dir = remote_link_dir(&home_b, &spec.instance.id);
-    app_host
-        .create_dir_all(&link_dir)
-        .await
-        .map_err(host_err)?;
+    app_host.create_dir_all(&link_dir).await.map_err(host_err)?;
     *created_dir = true;
     app_host
         .write_file(&link_dir.join(LINK_KNOWN_HOSTS), known.as_bytes())
@@ -335,7 +345,10 @@ async fn remote_home(host: &dyn Host) -> Result<String, AppFrameworkError> {
     Ok(home.to_string())
 }
 
-async fn ssh_keyscan(app_host: &dyn Host, dial: &SshDialTarget) -> Result<String, AppFrameworkError> {
+async fn ssh_keyscan(
+    app_host: &dyn Host,
+    dial: &SshDialTarget,
+) -> Result<String, AppFrameworkError> {
     let out = app_host
         .run_to_string(
             HostCommand::new("ssh-keyscan")
@@ -387,8 +400,8 @@ async fn allocate_forward_port(
     }
     let mut blocked = taken.to_vec();
     for _ in 0..48 {
-        let port = allocate_listen_port(None, &blocked, false)
-            .map_err(AppFrameworkError::Validation)?;
+        let port =
+            allocate_listen_port(None, &blocked, false).map_err(AppFrameworkError::Validation)?;
         if !remote_loopback_busy(bot_host, port).await {
             return Ok(port);
         }
@@ -481,7 +494,9 @@ async fn strip_bot_authorized_key(
     write_authorized_keys(bot_host, &path, &next).await
 }
 
-async fn read_authorized_keys(bot_host: &dyn Host) -> Result<(HostPath, String), AppFrameworkError> {
+async fn read_authorized_keys(
+    bot_host: &dyn Host,
+) -> Result<(HostPath, String), AppFrameworkError> {
     let home = remote_home(bot_host).await?;
     let ssh_dir = HostPath::from_posix(&home).join(".ssh");
     bot_host.create_dir_all(&ssh_dir).await.map_err(host_err)?;
@@ -595,7 +610,9 @@ async fn start_resident_script(
         } else {
             detail
         };
-        return Err(AppFrameworkError::Host(format!("拉起常驻隧道失败: {detail}")));
+        return Err(AppFrameworkError::Host(format!(
+            "拉起常驻隧道失败: {detail}"
+        )));
     }
     Ok(())
 }
@@ -709,14 +726,25 @@ mod tests {
             listen_port: 34567,
             dial: &dial,
         });
-        assert!(script.contains("-N -L 127.0.0.1:34567:127.0.0.1:23456"), "{script}");
+        assert!(
+            script.contains("-N -L 127.0.0.1:34567:127.0.0.1:23456"),
+            "{script}"
+        );
         assert!(!script.contains("-R "));
 
         let line = authorized_keys_line("ssh-ed25519 AAAa c", &id(), reach, 34567).unwrap();
         assert!(line.contains("permitopen=\"127.0.0.1:23456\""), "{line}");
         assert!(!line.contains("permitlisten"), "{line}");
         assert!(line.contains("command=\"/bin/false\"") && line.ends_with("ncd-link:k1"));
-        assert!(authorized_keys_line("ssh-ed25519 AAAa c", &id(), ResidentForward::ReachBot { bot_port: 0 }, 1).is_err());
+        assert!(
+            authorized_keys_line(
+                "ssh-ed25519 AAAa c",
+                &id(),
+                ResidentForward::ReachBot { bot_port: 0 },
+                1
+            )
+            .is_err()
+        );
     }
 
     #[test]

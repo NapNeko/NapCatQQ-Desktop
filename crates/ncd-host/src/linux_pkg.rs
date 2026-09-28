@@ -57,7 +57,8 @@ impl LinuxPackageManager {
         let mut chars = name.chars();
         matches!(chars.next(), Some(c) if c.is_ascii_alphanumeric())
             && chars.all(|c| {
-                c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '+' | '-' | ':' | '@' | '=' | '~')
+                c.is_ascii_alphanumeric()
+                    || matches!(c, '.' | '_' | '+' | '-' | ':' | '@' | '=' | '~')
             })
     }
 
@@ -195,10 +196,25 @@ mod tests {
 
     #[test]
     fn package_name_validation() {
-        for ok in ["libnss3", "libstdc++6", "libasound2t64", "gtk3:amd64", "py3-pip@edge", "nodejs=20.1-r0"] {
+        for ok in [
+            "libnss3",
+            "libstdc++6",
+            "libasound2t64",
+            "gtk3:amd64",
+            "py3-pip@edge",
+            "nodejs=20.1-r0",
+        ] {
             assert!(LinuxPackageManager::is_valid_package_name(ok), "{ok}");
         }
-        for bad in ["", "-oDebug::pkgProblemResolver=1", "a b", "a;b", "$(id)", "a/b", "../x"] {
+        for bad in [
+            "",
+            "-oDebug::pkgProblemResolver=1",
+            "a b",
+            "a;b",
+            "$(id)",
+            "a/b",
+            "../x",
+        ] {
             assert!(!LinuxPackageManager::is_valid_package_name(bad), "{bad}");
         }
     }

@@ -44,7 +44,10 @@ pub(crate) struct UpstreamPage<T> {
 
 impl<T> Default for UpstreamPage<T> {
     fn default() -> Self {
-        Self { total: None, data: None }
+        Self {
+            total: None,
+            data: None,
+        }
     }
 }
 
@@ -88,7 +91,10 @@ impl UpstreamChat {
     pub(crate) fn into_chat(self) -> Option<MaiBotLearningChat> {
         let chat_id = self.chat_id.or(self.session_id).filter(|s| !s.is_empty())?;
         Some(MaiBotLearningChat {
-            chat_name: self.chat_name.filter(|n| !n.is_empty()).unwrap_or_else(|| chat_id.clone()),
+            chat_name: self
+                .chat_name
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| chat_id.clone()),
             chat_id,
             platform: text(self.platform),
             is_group: self.is_group.unwrap_or(false),

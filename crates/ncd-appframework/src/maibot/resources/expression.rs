@@ -7,7 +7,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ts_rs::TS;
 
-use super::{MaiBotLearningChat, MaiBotResourceDone, UpstreamChat, UpstreamData, UpstreamMessage, UpstreamPage, text};
+use super::{
+    MaiBotLearningChat, MaiBotResourceDone, UpstreamChat, UpstreamData, UpstreamMessage,
+    UpstreamPage, text,
+};
 use crate::maibot::webui_client::{MaiBotWebUi, Request};
 
 const BASE: &str = "/api/webui/expression";
@@ -120,14 +123,21 @@ struct UpstreamExpression {
 impl UpstreamExpression {
     fn into_item(self) -> Option<MaiBotExpression> {
         let curated = self.checked.unwrap_or(false)
-            && self.modified_by.as_deref().is_some_and(|m| m.eq_ignore_ascii_case("user"));
+            && self
+                .modified_by
+                .as_deref()
+                .is_some_and(|m| m.eq_ignore_ascii_case("user"));
         let chat_id = text(self.chat_id);
         Some(MaiBotExpression {
             id: self.id?,
             situation: text(self.situation),
             style: text(self.style),
             chat_name: self.chat_name.filter(|n| !n.is_empty()).unwrap_or_else(|| {
-                if chat_id.is_empty() { "全局".into() } else { chat_id.clone() }
+                if chat_id.is_empty() {
+                    "全局".into()
+                } else {
+                    chat_id.clone()
+                }
             }),
             chat_id,
             curated,
@@ -159,7 +169,11 @@ async fn page(
     let page = q.page.max(1).to_string();
     let size = q.page_size.clamp(1, 100).to_string();
     let search = q.search.trim();
-    let mut query = vec![("page", page.as_str()), ("page_size", size.as_str()), ("review_filter", review_filter(q.filter))];
+    let mut query = vec![
+        ("page", page.as_str()),
+        ("page_size", size.as_str()),
+        ("review_filter", review_filter(q.filter)),
+    ];
     if !search.is_empty() {
         query.push(("search", search));
     }
@@ -169,25 +183,53 @@ async fn page(
     c.get(&format!("{BASE}/list"), &query).await
 }
 
-pub(crate) async fn list(c: &MaiBotWebUi, q: &MaiBotExpressionQuery) -> Result<MaiBotExpressionPage, AppFrameworkError> {
+pub(crate) async fn list(
+    c: &MaiBotWebUi,
+    q: &MaiBotExpressionQuery,
+) -> Result<MaiBotExpressionPage, AppFrameworkError> {
     let up = page(c, q).await?;
     Ok(MaiBotExpressionPage {
         total: up.total.unwrap_or(0),
-        items: up.data.unwrap_or_default().into_iter().filter_map(UpstreamExpression::into_item).collect(),
+        items: up
+            .data
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(UpstreamExpression::into_item)
+            .collect(),
     })
 }
 
-pub(crate) async fn overview(c: &MaiBotWebUi) -> Result<MaiBotExpressionOverview, AppFrameworkError> {
+pub(crate) async fn overview(
+    c: &MaiBotWebUi,
+) -> Result<MaiBotExpressionOverview, AppFrameworkError> {
     let all: UpstreamData<Vec<UpstreamChat>> = c.get(&format!("{BASE}/chat-targets"), &[]).await?;
     let used: UpstreamData<Vec<UpstreamChat>> = c.get(&format!("{BASE}/chats"), &[]).await?;
-    let summary: UpstreamData<UpstreamSummary> = c.get(&format!("{BASE}/stats/summary"), &[]).await?;
+    let summary: UpstreamData<UpstreamSummary> =
+        c.get(&format!("{BASE}/stats/summary"), &[]).await?;
     // 精选 / 未精选的条数按列表同一套范围数：上游 /review/stats 不按账号过滤，和列表对不上
-    let count = |filter| MaiBotExpressionQuery { page: 1, page_size: 1, search: String::new(), chat_id: String::new(), filter };
-    let curated = page(c, &count(MaiBotExpressionFilter::Curated)).await?.total.unwrap_or(0);
-    let uncurated = page(c, &count(MaiBotExpressionFilter::Uncurated)).await?.total.unwrap_or(0);
+    let count = |filter| MaiBotExpressionQuery {
+        page: 1,
+        page_size: 1,
+        search: String::new(),
+        chat_id: String::new(),
+        filter,
+    };
+    let curated = page(c, &count(MaiBotExpressionFilter::Curated))
+        .await?
+        .total
+        .unwrap_or(0);
+    let uncurated = page(c, &count(MaiBotExpressionFilter::Uncurated))
+        .await?
+        .total
+        .unwrap_or(0);
     let summary = summary.data.unwrap_or_default();
     Ok(MaiBotExpressionOverview {
-        chats: all.data.unwrap_or_default().into_iter().filter_map(UpstreamChat::into_chat).collect(),
+        chats: all
+            .data
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(UpstreamChat::into_chat)
+            .collect(),
         used_chat_ids: used
             .data
             .unwrap_or_default()
@@ -208,23 +250,39 @@ fn required(situation: &str, style: &str) -> Result<(), AppFrameworkError> {
     Ok(())
 }
 
-pub(crate) async fn act(c: &MaiBotWebUi, a: &MaiBotExpressionAction) -> Result<MaiBotResourceDone, AppFrameworkError> {
+pub(crate) async fn act(
+    c: &MaiBotWebUi,
+    a: &MaiBotExpressionAction,
+) -> Result<MaiBotResourceDone, AppFrameworkError> {
     match a {
-        MaiBotExpressionAction::Create { situation, style, chat_id } => {
+        MaiBotExpressionAction::Create {
+            situation,
+            style,
+            chat_id,
+        } => {
             required(situation, style)?;
-            let body = json!({ "situation": situation.trim(), "style": style.trim(), "chat_id": chat_id });
+            let body =
+                json!({ "situation": situation.trim(), "style": style.trim(), "chat_id": chat_id });
             // 上游这条要带尾斜杠，不带会落到网页的兜底路由上回 405
-            let up: UpstreamMessage = c.call(Request::new(Method::POST, &format!("{BASE}/")).body(&body)).await?;
+            let up: UpstreamMessage = c
+                .call(Request::new(Method::POST, &format!("{BASE}/")).body(&body))
+                .await?;
             Ok(done(1, up, "加好了"))
         }
-        MaiBotExpressionAction::Update { id, situation, style, chat_id } => {
+        MaiBotExpressionAction::Update {
+            id,
+            situation,
+            style,
+            chat_id,
+        } => {
             required(situation, style)?;
             let mut body = json!({ "situation": situation.trim(), "style": style.trim() });
             if let Some(chat_id) = chat_id {
                 body["chat_id"] = json!(chat_id);
             }
-            let up: UpstreamMessage =
-                c.call(Request::new(Method::PATCH, &format!("{BASE}/{id}")).body(&body)).await?;
+            let up: UpstreamMessage = c
+                .call(Request::new(Method::PATCH, &format!("{BASE}/{id}")).body(&body))
+                .await?;
             Ok(done(1, up, "改好了"))
         }
         MaiBotExpressionAction::Curate { ids, curated } => {
@@ -232,21 +290,35 @@ pub(crate) async fn act(c: &MaiBotWebUi, a: &MaiBotExpressionAction) -> Result<M
             let body = json!({ "approved": curated });
             for id in ids {
                 let path = format!("{BASE}/{id}/review-status");
-                c.send(Request::new(Method::PATCH, &path).body(&body)).await?;
+                c.send(Request::new(Method::PATCH, &path).body(&body))
+                    .await?;
             }
-            let message = if *curated { "已精选" } else { "已取消精选" };
-            Ok(MaiBotResourceDone { affected: ids.len() as u32, message: message.into() })
+            let message = if *curated {
+                "已精选"
+            } else {
+                "已取消精选"
+            };
+            Ok(MaiBotResourceDone {
+                affected: ids.len() as u32,
+                message: message.into(),
+            })
         }
         MaiBotExpressionAction::Delete { ids } => match ids.as_slice() {
-            [] => Ok(MaiBotResourceDone { affected: 0, message: String::new() }),
+            [] => Ok(MaiBotResourceDone {
+                affected: 0,
+                message: String::new(),
+            }),
             [id] => {
-                let up: UpstreamMessage = c.call(Request::new(Method::DELETE, &format!("{BASE}/{id}"))).await?;
+                let up: UpstreamMessage = c
+                    .call(Request::new(Method::DELETE, &format!("{BASE}/{id}")))
+                    .await?;
                 Ok(done(1, up, "删掉了"))
             }
             _ => {
                 let body = json!({ "ids": ids });
-                let up: UpstreamMessage =
-                    c.call(Request::new(Method::POST, &format!("{BASE}/batch/delete")).body(&body)).await?;
+                let up: UpstreamMessage = c
+                    .call(Request::new(Method::POST, &format!("{BASE}/batch/delete")).body(&body))
+                    .await?;
                 Ok(done(ids.len() as u32, up, "删掉了"))
             }
         },
@@ -256,7 +328,10 @@ pub(crate) async fn act(c: &MaiBotWebUi, a: &MaiBotExpressionAction) -> Result<M
 fn done(affected: u32, up: UpstreamMessage, fallback: &str) -> MaiBotResourceDone {
     MaiBotResourceDone {
         affected: up.deleted_count.unwrap_or(affected),
-        message: up.message.filter(|m| !m.is_empty()).unwrap_or_else(|| fallback.into()),
+        message: up
+            .message
+            .filter(|m| !m.is_empty())
+            .unwrap_or_else(|| fallback.into()),
     }
 }
 
@@ -271,7 +346,12 @@ mod tests {
             {"id":8,"situation":"被问到不会的","style":"这个我不太懂","last_active_time":null,"chat_id":"","chat_name":null,"checked":true,"modified_by":"ai"}
         ]}"#;
         let up: UpstreamPage<UpstreamExpression> = serde_json::from_str(raw).unwrap();
-        let items: Vec<_> = up.data.unwrap().into_iter().filter_map(UpstreamExpression::into_item).collect();
+        let items: Vec<_> = up
+            .data
+            .unwrap()
+            .into_iter()
+            .filter_map(UpstreamExpression::into_item)
+            .collect();
         assert_eq!(items.len(), 2);
         assert!(items[0].curated);
         assert_eq!(items[0].chat_name, "麦麦测试群");
@@ -284,7 +364,13 @@ mod tests {
     #[test]
     fn filters_map_to_upstream_values() {
         assert_eq!(review_filter(MaiBotExpressionFilter::All), "all");
-        assert_eq!(review_filter(MaiBotExpressionFilter::Curated), "user_checked");
-        assert_eq!(review_filter(MaiBotExpressionFilter::Uncurated), "unchecked");
+        assert_eq!(
+            review_filter(MaiBotExpressionFilter::Curated),
+            "user_checked"
+        );
+        assert_eq!(
+            review_filter(MaiBotExpressionFilter::Uncurated),
+            "unchecked"
+        );
     }
 }

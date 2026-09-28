@@ -225,10 +225,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 TickDecision::Wait(_) => {}
                 TickDecision::Idle => {
                     // 启用了 cron 却解析不出来：存量手改 bot.json 才会到这里，提示一次
-                    if schedule.enable
-                        && schedule.mode == AutoRestartMode::Cron
-                        && !was_tracked
-                    {
+                    if schedule.enable && schedule.mode == AutoRestartMode::Cron && !was_tracked {
                         if let Err(err) = parse_cron(&schedule.cron) {
                             warn!(
                                 target: "ncd_runtime::bot_manager",
@@ -288,7 +285,10 @@ mod tests {
 
     #[test]
     fn parse_cron_rejects_garbage_and_empty() {
-        assert!(matches!(parse_cron(""), Err(BotConfigError::InvalidCron(_))));
+        assert!(matches!(
+            parse_cron(""),
+            Err(BotConfigError::InvalidCron(_))
+        ));
         assert!(matches!(
             parse_cron("   "),
             Err(BotConfigError::InvalidCron(_))
@@ -354,7 +354,10 @@ mod tests {
             planner.on_tick(&bot(), &sched, at(1, 30)),
             TickDecision::Wait(Some(at(2, 0)))
         );
-        assert_eq!(planner.on_tick(&bot(), &sched, at(2, 0)), TickDecision::Fire);
+        assert_eq!(
+            planner.on_tick(&bot(), &sched, at(2, 0)),
+            TickDecision::Fire
+        );
         // 触发后周期从触发点重算
         assert_eq!(
             planner.on_tick(&bot(), &sched, at(2, 30)),
@@ -402,7 +405,10 @@ mod tests {
             planner.on_tick(&bot(), &sched, at(3, 59)),
             TickDecision::Wait(Some(at(4, 0)))
         );
-        assert_eq!(planner.on_tick(&bot(), &sched, at(4, 0)), TickDecision::Fire);
+        assert_eq!(
+            planner.on_tick(&bot(), &sched, at(4, 0)),
+            TickDecision::Fire
+        );
         // 同一分钟内再巡检不重复触发
         assert!(matches!(
             planner.on_tick(&bot(), &sched, at(4, 0)),
@@ -438,6 +444,9 @@ mod tests {
             planner.on_tick(&bot(), &sched, at(1, 0)),
             TickDecision::Wait(None)
         );
-        assert_eq!(planner.on_tick(&bot(), &sched, at(9, 0)), TickDecision::Idle);
+        assert_eq!(
+            planner.on_tick(&bot(), &sched, at(9, 0)),
+            TickDecision::Idle
+        );
     }
 }

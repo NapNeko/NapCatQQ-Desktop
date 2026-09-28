@@ -363,7 +363,11 @@ impl Component for NodeJsComponent {
         .await;
 
         let url = self.build_download_url(host)?;
-        let archive_ext = if host.os() == Os::Windows { "zip" } else { "tar.xz" };
+        let archive_ext = if host.os() == Os::Windows {
+            "zip"
+        } else {
+            "tar.xz"
+        };
         let local_tmp = std::env::temp_dir().join(format!(
             "ncd-nodejs-{}-{}.{}",
             self.version,
@@ -479,8 +483,10 @@ impl Component for NodeJsComponent {
         }
 
         if !host.exists(&self.install_dir).await? {
-            ctx.info("Node.js 独立组件在目标路径未安装（当前环境为外部或系统 PATH），无需删除目录。")
-                .await;
+            ctx.info(
+                "Node.js 独立组件在目标路径未安装（当前环境为外部或系统 PATH），无需删除目录。",
+            )
+            .await;
             ctx.emit(ProgressKind::StepEnd { step: 1, ok: true }).await;
             ctx.emit(ProgressKind::Finished { ok: true }).await;
             return Ok(());
@@ -677,7 +683,9 @@ pub async fn probe_local_system_nodes(
         }
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let fnm = std::path::PathBuf::from(&local_app_data).join("fnm_multishells");
-            let volta = std::path::PathBuf::from(&local_app_data).join("Volta").join("bin");
+            let volta = std::path::PathBuf::from(&local_app_data)
+                .join("Volta")
+                .join("bin");
             let pnpm = std::path::PathBuf::from(&local_app_data).join("pnpm");
             check_dirs.push(fnm);
             check_dirs.push(volta);
@@ -874,16 +882,21 @@ mod tests {
                 Err(HostError::Unsupported { operation: "test" })
             }
             async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
-                assert_eq!(cmd.args, ["--version"], "unexpected args for {}", cmd.program);
+                assert_eq!(
+                    cmd.args,
+                    ["--version"],
+                    "unexpected args for {}",
+                    cmd.program
+                );
                 match self.responses.get(cmd.program.as_str()) {
                     Some(Scripted::Output(code, stdout, stderr)) => Ok(CommandOutput {
                         exit_code: Some(*code),
                         stdout: (*stdout).to_string(),
                         stderr: (*stderr).to_string(),
                     }),
-                    Some(Scripted::NotFound) | None => Err(HostError::Io(
-                        std::io::Error::from(std::io::ErrorKind::NotFound),
-                    )),
+                    Some(Scripted::NotFound) | None => Err(HostError::Io(std::io::Error::from(
+                        std::io::ErrorKind::NotFound,
+                    ))),
                 }
             }
         }
@@ -927,10 +940,8 @@ mod tests {
 
         #[tokio::test]
         async fn path_node_below_range_is_unusable_with_version() {
-            let host = ScriptedHost::new(
-                &[],
-                vec![("node", Scripted::Output(0, "v18.19.1\r\n", ""))],
-            );
+            let host =
+                ScriptedHost::new(&[], vec![("node", Scripted::Output(0, "v18.19.1\r\n", ""))]);
             let outcome = comp().detect_outcome(&host).await.unwrap();
             assert_eq!(
                 outcome,
@@ -945,12 +956,9 @@ mod tests {
         // 没有任何消费方约束时,找到什么版本都算装好
         #[tokio::test]
         async fn without_constraints_any_version_is_installed() {
-            let host = ScriptedHost::new(
-                &[],
-                vec![("node", Scripted::Output(0, "v18.19.1\r\n", ""))],
-            );
-            let unconstrained =
-                NodeJsComponent::new("22.13.0", HostPath::from_posix(MANAGED_DIR));
+            let host =
+                ScriptedHost::new(&[], vec![("node", Scripted::Output(0, "v18.19.1\r\n", ""))]);
+            let unconstrained = NodeJsComponent::new("22.13.0", HostPath::from_posix(MANAGED_DIR));
             assert_eq!(
                 unconstrained.detect_outcome(&host).await.unwrap(),
                 DetectOutcome::Installed(DetectedVersion {

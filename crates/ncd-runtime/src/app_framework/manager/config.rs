@@ -62,7 +62,8 @@ impl AppManager {
 
         let decided_running = matches!(instance.state, AppInstanceState::Running);
         let live = decided_running && adapter.supports_live_config();
-        self.wait_config_write_slot(adapter.as_ref(), &instance).await;
+        self.wait_config_write_slot(adapter.as_ref(), &instance)
+            .await;
         let after = if live {
             let port = self.desktop_webui_loopback_port(&instance).await?;
             let again = self.store.require(id).await?;
@@ -147,7 +148,11 @@ impl AppManager {
         let instance = self.store.require(id).await?;
         let adapter = self.registry.get(&instance.framework_id)?;
         match self.resolve_host(&instance.host_id).await {
-            Ok(host) => adapter.list_config_documents(host.as_ref(), &instance).await,
+            Ok(host) => {
+                adapter
+                    .list_config_documents(host.as_ref(), &instance)
+                    .await
+            }
             Err(_) => Ok(adapter.config_documents(&instance)),
         }
     }
@@ -175,7 +180,8 @@ impl AppManager {
         let before = self
             .typed_snapshot(adapter.as_ref(), host.as_ref(), &instance)
             .await;
-        self.wait_config_write_slot(adapter.as_ref(), &instance).await;
+        self.wait_config_write_slot(adapter.as_ref(), &instance)
+            .await;
         let written = adapter
             .write_config_text(
                 host.as_ref(),
@@ -197,7 +203,10 @@ impl AppManager {
                 && let Err(e) = self.ensure_port_free(&instance, new_port).await
             {
                 tracing::warn!(instance = id.as_str(), error = %e, "raw edit picked a taken port");
-            } else if let Err(e) = self.sync_after_config_write(&instance, &before, &after).await {
+            } else if let Err(e) = self
+                .sync_after_config_write(&instance, &before, &after)
+                .await
+            {
                 tracing::warn!(instance = id.as_str(), error = %e, "sync after raw config write");
             }
         }

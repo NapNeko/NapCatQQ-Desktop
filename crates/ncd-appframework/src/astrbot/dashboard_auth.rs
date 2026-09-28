@@ -259,7 +259,10 @@ mod tests {
         assert_eq!(parts[3].len(), 64);
         assert!(verify_password(&h, "Abcdefg1"));
         assert!(!verify_password(&h, "Abcdefg2"));
-        assert!(verify_password("77b90590a8945a7d36c963981a307dc9", "astrbot"));
+        assert!(verify_password(
+            "77b90590a8945a7d36c963981a307dc9",
+            "astrbot"
+        ));
         assert!(!verify_password("garbage", "astrbot"));
     }
 
@@ -273,7 +276,12 @@ mod tests {
         let d = root["dashboard"].as_object().unwrap();
         assert_eq!(d["username"], "admin");
         assert_eq!(d["password"], md5_hex("Abcdefg1"));
-        assert!(d["pbkdf2_password"].as_str().unwrap().starts_with("pbkdf2_sha256$"));
+        assert!(
+            d["pbkdf2_password"]
+                .as_str()
+                .unwrap()
+                .starts_with("pbkdf2_sha256$")
+        );
         assert_eq!(d["password_storage_upgraded"], true);
         assert_eq!(d["password_change_required"], false);
         assert_eq!(d["port"], 6185);
@@ -283,8 +291,7 @@ mod tests {
 
     #[test]
     fn set_account_keeps_username_when_none() {
-        let mut root: Value =
-            serde_json::from_str(r#"{"dashboard":{"username":"ops"}}"#).unwrap();
+        let mut root: Value = serde_json::from_str(r#"{"dashboard":{"username":"ops"}}"#).unwrap();
         set_dashboard_account(&mut root, None, "Abcdefg1").unwrap();
         assert_eq!(root["dashboard"]["username"], "ops");
         let mut empty = Value::Object(Map::new());
@@ -300,7 +307,8 @@ mod tests {
 
     #[test]
     fn read_account_defaults_and_unset_hash() {
-        let root: Value = serde_json::from_str(r#"{"dashboard":{"password":"","pbkdf2_password":""}}"#).unwrap();
+        let root: Value =
+            serde_json::from_str(r#"{"dashboard":{"password":"","pbkdf2_password":""}}"#).unwrap();
         let acc = read_dashboard_account(&root);
         assert_eq!(acc.username, "astrbot");
         assert_eq!(acc.stored_hash, None);
@@ -321,9 +329,20 @@ mod tests {
         let valid_pbkdf2 = format!("pbkdf2_sha256$600000${}${}", salt_32, digest_64);
         assert!(is_hash_format(&valid_pbkdf2));
         assert!(is_hash_format(&format!("  {}  ", valid_pbkdf2)));
-        assert!(!is_hash_format("pbkdf2_sha256$abc$1234567890abcdef$1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")); // bad iter
-        assert!(!is_hash_format(&format!("pbkdf2_sha256$600000$short${}", digest_64))); // bad salt
-        assert!(!is_hash_format(&format!("pbkdf2_sha256$600000${}$short", salt_32))); // bad digest
-        assert!(!is_hash_format(&format!("other_algo$600000${}${}", salt_32, digest_64)));
+        assert!(!is_hash_format(
+            "pbkdf2_sha256$abc$1234567890abcdef$1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        )); // bad iter
+        assert!(!is_hash_format(&format!(
+            "pbkdf2_sha256$600000$short${}",
+            digest_64
+        ))); // bad salt
+        assert!(!is_hash_format(&format!(
+            "pbkdf2_sha256$600000${}$short",
+            salt_32
+        ))); // bad digest
+        assert!(!is_hash_format(&format!(
+            "other_algo$600000${}${}",
+            salt_32, digest_64
+        )));
     }
 }

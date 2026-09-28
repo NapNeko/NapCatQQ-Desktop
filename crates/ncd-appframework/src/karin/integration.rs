@@ -9,8 +9,8 @@ use ncd_domain::{
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 use super::manifest::{
-    ENV_HTTP_PORT, ENV_WS_SERVER_AUTH_KEY, KARIN_ENV_FILE, KARIN_REVERSE_WS_PATH,
-    KARIN_WEBUI_PATH, karin_manifest,
+    ENV_HTTP_PORT, ENV_WS_SERVER_AUTH_KEY, KARIN_ENV_FILE, KARIN_REVERSE_WS_PATH, KARIN_WEBUI_PATH,
+    karin_manifest,
 };
 use crate::env_file::EnvWrite;
 
@@ -186,7 +186,11 @@ mod tests {
         assert_eq!(plan.app_side_writes.len(), 1);
         assert_eq!(plan.app_side_writes[0].path, ".env");
         assert!(plan.app_side_writes[0].summary.contains("HTTP_PORT=7801"));
-        assert!(plan.app_side_writes[0].summary.contains("WS_SERVER_AUTH_KEY=<token>"));
+        assert!(
+            plan.app_side_writes[0]
+                .summary
+                .contains("WS_SERVER_AUTH_KEY=<token>")
+        );
         assert!(!plan.app_side_writes[0].summary.contains("tok-abc"));
     }
 

@@ -5,6 +5,8 @@
 //! `defaults/` 是上游自己写出来的完整默认文件，实例还没有 `model_config.toml`（从没启动过）时
 //! 按它读，也拿它当新文件的底稿，带着上游的注释。
 
+// 生成文件保持 codegen 原样输出，cargo fmt 改了它下次重跑又会整份变回去
+#[rustfmt::skip]
 mod generated;
 
 pub use generated::*;
@@ -111,10 +113,17 @@ mod tests {
     #[test]
     fn upstream_default_files_read_back_as_the_generated_defaults() {
         let bot = read_bot_config_file(Some(DEFAULT_BOT_CONFIG)).unwrap();
-        assert_eq!(bot, MaiBotBotConfigFile::default(), "上游写出来的默认文件应该原样读回生成的默认值");
+        assert_eq!(
+            bot,
+            MaiBotBotConfigFile::default(),
+            "上游写出来的默认文件应该原样读回生成的默认值"
+        );
         assert_eq!(read_bot_config_file(None).unwrap(), bot);
         let model = read_model_config_file(None).unwrap();
-        assert_eq!(model, read_model_config_file(Some(DEFAULT_MODEL_CONFIG)).unwrap());
+        assert_eq!(
+            model,
+            read_model_config_file(Some(DEFAULT_MODEL_CONFIG)).unwrap()
+        );
         assert!(!model.api_providers.is_empty() && !model.models.is_empty());
     }
 
@@ -126,7 +135,11 @@ mod tests {
         assert_eq!(bot.maim_message.ws_server_port, 29951);
         let d = MaiBotBotConfigFile::default();
         assert_eq!(bot.personality, d.personality);
-        assert_eq!(bot.chat.reply_timing.talk_value_rules.len(), 2, "默认两条频率规则");
+        assert_eq!(
+            bot.chat.reply_timing.talk_value_rules.len(),
+            2,
+            "默认两条频率规则"
+        );
     }
 
     #[test]
@@ -147,7 +160,11 @@ mod tests {
     #[test]
     fn extra_params_round_trip_through_text() {
         let model = read_model_config_file(None).unwrap();
-        let think = model.models.iter().find(|m| m.name == "deepseek-v4-pro-think").unwrap();
+        let think = model
+            .models
+            .iter()
+            .find(|m| m.name == "deepseek-v4-pro-think")
+            .unwrap();
         let table = any_table::to_value(&think.extra_params).unwrap();
         assert_eq!(table["thinking"]["type"].as_str(), Some("enabled"));
         assert_eq!(table["reasoning_effort"].as_str(), Some("high"));
@@ -156,7 +173,10 @@ mod tests {
 
         let back = model_config_to_toml(&model).unwrap();
         let first = back["models"].as_array().unwrap()[0].as_table().unwrap();
-        assert!(first["extra_params"].is_table(), "写回文件时要是表：{first:?}");
+        assert!(
+            first["extra_params"].is_table(),
+            "写回文件时要是表：{first:?}"
+        );
     }
 
     #[test]
@@ -172,7 +192,10 @@ mod tests {
             &bot_config_to_toml(&after).unwrap(),
             &crate::toml_patch::no_identity,
         );
-        assert_eq!(changed, vec!["chat.reply_timing.talk_value", "expression.learning_list"]);
+        assert_eq!(
+            changed,
+            vec!["chat.reply_timing.talk_value", "expression.learning_list"]
+        );
         let out = doc.to_string();
         let diff: Vec<(&str, &str)> = DEFAULT_BOT_CONFIG
             .lines()
@@ -181,7 +204,11 @@ mod tests {
             .collect();
         assert_eq!(DEFAULT_BOT_CONFIG.lines().count(), out.lines().count());
         assert_eq!(diff.len(), 2, "{diff:#?}");
-        assert!(diff[0].1.starts_with("talk_value = 0.35 # "), "行尾注释要留着：{:?}", diff[0].1);
+        assert!(
+            diff[0].1.starts_with("talk_value = 0.35 # "),
+            "行尾注释要留着：{:?}",
+            diff[0].1
+        );
         assert!(diff[1].1.contains("learn = false"), "{:?}", diff[1].1);
         assert_eq!(read_bot_config_file(Some(&out)).unwrap(), after);
     }
@@ -206,6 +233,9 @@ mod tests {
         let bot = read_bot_config_file(None).unwrap();
         let table = bot_config_to_toml(&bot).unwrap();
         let item = &table["expression"]["learning_list"].as_array().unwrap()[0];
-        assert!(item.get("type").is_some() && item.get("use").is_some(), "{item:?}");
+        assert!(
+            item.get("type").is_some() && item.get("use").is_some(),
+            "{item:?}"
+        );
     }
 }

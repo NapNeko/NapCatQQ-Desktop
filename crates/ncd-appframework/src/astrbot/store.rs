@@ -25,7 +25,9 @@ pub fn astrbot_plugin_market_urls() -> Vec<String> {
     ]
 }
 
-pub fn parse_astrbot_plugins_json(text: &str) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+pub fn parse_astrbot_plugins_json(
+    text: &str,
+) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
     let v: Value = serde_json::from_str(text)
         .map_err(|e| AppFrameworkError::Validation(format!("解析 AstrBot 插件目录失败: {e}")))?;
     let obj = v
@@ -65,11 +67,7 @@ pub fn parse_astrbot_plugins_json(text: &str) -> Result<Vec<AppStoreMarketEntry>
         out.push(AppStoreMarketEntry {
             resource: AppStoreResource::Plugin,
             id: plugin_id,
-            name: if name.is_empty() {
-                key.clone()
-            } else {
-                name
-            },
+            name: if name.is_empty() { key.clone() } else { name },
             description: desc,
             version: str_field(item, "version"),
             author: author.clone(),
@@ -165,13 +163,10 @@ impl PluginMetadata {
 
 fn reject_unsafe_name(name: &str) -> Result<(), AppFrameworkError> {
     let t = name.trim();
-    if t.is_empty()
-        || t.contains("..")
-        || t.contains('/')
-        || t.contains('\\')
-        || t == "."
-    {
-        return Err(AppFrameworkError::Validation(format!("非法插件目录名: {name}")));
+    if t.is_empty() || t.contains("..") || t.contains('/') || t.contains('\\') || t == "." {
+        return Err(AppFrameworkError::Validation(format!(
+            "非法插件目录名: {name}"
+        )));
     }
     Ok(())
 }
@@ -224,8 +219,9 @@ pub(super) async fn read_text(
 
 async fn load_prefs(host: &dyn Host, instance: &AppInstance) -> Result<Value, AppFrameworkError> {
     match read_text(host, &prefs_path(instance)).await? {
-        Some(text) if !text.trim().is_empty() => serde_json::from_str(&text)
-            .map_err(|e| AppFrameworkError::Integration(format!("shared_preferences.json 无法解析: {e}"))),
+        Some(text) if !text.trim().is_empty() => serde_json::from_str(&text).map_err(|e| {
+            AppFrameworkError::Integration(format!("shared_preferences.json 无法解析: {e}"))
+        }),
         _ => Ok(Value::Object(Map::new())),
     }
 }
@@ -286,7 +282,10 @@ async fn sync_prefs_db(host: &dyn Host, instance: &AppInstance, root: &Value) {
     let _ = host.run_to_string(cmd).await;
 }
 
-async fn read_inactivated(host: &dyn Host, instance: &AppInstance) -> Result<Vec<String>, AppFrameworkError> {
+async fn read_inactivated(
+    host: &dyn Host,
+    instance: &AppInstance,
+) -> Result<Vec<String>, AppFrameworkError> {
     Ok(inactivated_from_prefs(&load_prefs(host, instance).await?))
 }
 
@@ -441,7 +440,10 @@ async fn download_file(
         return run_host_cmd(host, cmd, "curl", log).await;
     }
     if host.command_exists("wget").await {
-        let cmd = HostCommand::new("wget").arg("-O").arg(dest.render_for(host.os())).arg(url);
+        let cmd = HostCommand::new("wget")
+            .arg("-O")
+            .arg(dest.render_for(host.os()))
+            .arg(url);
         return run_host_cmd(host, cmd, "wget", log).await;
     }
     Err(AppFrameworkError::Host(
@@ -474,7 +476,9 @@ async fn git_clone_try(
             let _ = host.remove_dir_all(dest).await;
         }
     }
-    Err(AppFrameworkError::Runtime(format!("git clone 失败: {last}")))
+    Err(AppFrameworkError::Runtime(format!(
+        "git clone 失败: {last}"
+    )))
 }
 
 async fn confirm_metadata(
@@ -493,7 +497,9 @@ async fn confirm_metadata(
     }
     let expect = entry.id.to_ascii_lowercase();
     let got = meta.plugin_id().to_ascii_lowercase();
-    if !expect.is_empty() && expect != got && !expect.ends_with(&format!("/{}", meta.name.to_ascii_lowercase()))
+    if !expect.is_empty()
+        && expect != got
+        && !expect.ends_with(&format!("/{}", meta.name.to_ascii_lowercase()))
     {
         return Err(AppFrameworkError::Validation(format!(
             "插件身份不符：目录是 {}，市场是 {}",
@@ -534,7 +540,11 @@ async fn pip_requirements(
 }
 
 async fn flatten_extract(host: &dyn Host, dest: &HostPath) -> Result<(), AppFrameworkError> {
-    if host.exists(&dest.join("metadata.yaml")).await.map_err(host_err)? {
+    if host
+        .exists(&dest.join("metadata.yaml"))
+        .await
+        .map_err(host_err)?
+    {
         return Ok(());
     }
     let entries = host.list_dir(dest).await.map_err(host_err)?;
@@ -547,7 +557,11 @@ async fn flatten_extract(host: &dyn Host, dest: &HostPath) -> Result<(), AppFram
     };
     let inner_name = inner_entry.name.clone();
     let inner = dest.join(&inner_name);
-    if !host.exists(&inner.join("metadata.yaml")).await.map_err(host_err)? {
+    if !host
+        .exists(&inner.join("metadata.yaml"))
+        .await
+        .map_err(host_err)?
+    {
         return Ok(());
     }
     let flatten_err = |e: HostError| AppFrameworkError::Runtime(format!("无法展开 zip 目录: {e}"));
@@ -616,7 +630,11 @@ pub async fn install_item(
         .await
         .map_err(host_err)?;
 
-    let zip_url = entry.files.first().map(|f| f.url.as_str()).filter(|s| !s.is_empty());
+    let zip_url = entry
+        .files
+        .first()
+        .map(|f| f.url.as_str())
+        .filter(|s| !s.is_empty());
     if let Some(url) = zip_url {
         let zip = plugins_root(instance).join(format!(".ncd-{name}.zip"));
         download_file_with_mirrors(host, url, &zip, log).await?;
@@ -650,7 +668,8 @@ pub async fn update_item(
     if !host.exists(&dest).await.map_err(host_err)? {
         return install_item(host, instance, entry, log).await;
     }
-    if host.exists(&dest.join(".git")).await.map_err(host_err)? && host.command_exists("git").await {
+    if host.exists(&dest.join(".git")).await.map_err(host_err)? && host.command_exists("git").await
+    {
         emit_log(log, format!("git pull --ff-only {name}"));
         let cmd = HostCommand::new("git")
             .arg("-C")
@@ -683,7 +702,10 @@ pub async fn uninstall_item(
     emit_log(log, format!("删除 data/plugins/{name}"));
     host.remove_dir_all(&dest).await.map_err(host_err)?;
     let mut prefs = load_prefs(host, instance).await?;
-    if let Some(arr) = prefs.get_mut("inactivated_plugins").and_then(Value::as_array_mut) {
+    if let Some(arr) = prefs
+        .get_mut("inactivated_plugins")
+        .and_then(Value::as_array_mut)
+    {
         arr.retain(|v| {
             v.as_str()
                 .is_none_or(|p| !p.starts_with(&format!("data.plugins.{name}.")))
@@ -778,7 +800,10 @@ mod tests {
     #[test]
     fn module_path_matches_upstream() {
         assert_eq!(module_path_for("demo", true), "data.plugins.demo.main");
-        assert_eq!(module_path_for("weather", false), "data.plugins.weather.weather");
+        assert_eq!(
+            module_path_for("weather", false),
+            "data.plugins.weather.weather"
+        );
     }
 
     #[test]

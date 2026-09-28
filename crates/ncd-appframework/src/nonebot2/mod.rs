@@ -29,6 +29,7 @@ pub use store::{
     parse_nonebot_adapters_json, parse_nonebot_plugins_json,
 };
 
+use crate::adapter::PluginLogSink;
 use crate::adapter::{
     AppComponentSpec, AppFrameworkAdapter, apply_with_backup_ex, restore_from_backup,
 };
@@ -37,13 +38,15 @@ use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
 };
 use crate::env_file::EnvFile;
-use crate::adapter::PluginLogSink;
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use config::nonebot2_config_documents;
 use driver::ensure_reverse_driver;
 use manifest::{ENV_DRIVER, NONEBOT2_ENV_FILE, NONEBOT2_STDOUT_LOG};
 
-fn envelope(config: NoneBot2InstanceConfig, snaps: &[DocumentSnapshot]) -> AppInstanceConfigEnvelope {
+fn envelope(
+    config: NoneBot2InstanceConfig,
+    snaps: &[DocumentSnapshot],
+) -> AppInstanceConfigEnvelope {
     AppInstanceConfigEnvelope {
         config: AppInstanceConfig::NoneBot2(config),
         revision: combined_revision_of(snaps),
@@ -83,7 +86,10 @@ impl NoneBot2Adapter {
         Ok(root.join(layout.write_rel))
     }
 
-    async fn read_text(host: &dyn Host, path: &HostPath) -> Result<Option<String>, AppFrameworkError> {
+    async fn read_text(
+        host: &dyn Host,
+        path: &HostPath,
+    ) -> Result<Option<String>, AppFrameworkError> {
         if !host
             .exists(path)
             .await
@@ -219,7 +225,10 @@ impl AppFrameworkAdapter for NoneBot2Adapter {
         let path = Self::write_target(host, instance).await?;
         let text = Self::read_text(host, &path).await?.unwrap_or_default();
         let mut env = EnvFile::parse(&text);
-        env.apply(&NoneBot2Integration::env_writes(instance, &plan.access_token));
+        env.apply(&NoneBot2Integration::env_writes(
+            instance,
+            &plan.access_token,
+        ));
         let current = env.get(ENV_DRIVER).unwrap_or_default();
         env.set(ENV_DRIVER, &ensure_reverse_driver(&current));
         let out = env.render();

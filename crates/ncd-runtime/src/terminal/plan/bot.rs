@@ -53,7 +53,10 @@ impl DesktopTerminalPlanner {
                         dir.display()
                     )));
                 }
-                let banner = vec![dir_line(&format!("{backend} 运行目录"), &dir.to_string_lossy())];
+                let banner = vec![dir_line(
+                    &format!("{backend} 运行目录"),
+                    &dir.to_string_lossy(),
+                )];
                 let host = self.resolve(&RuntimeTarget::Local).await?;
                 self.local_plan(
                     host,
@@ -134,7 +137,9 @@ impl DesktopTerminalPlanner {
                         RemoteStart::Dir(dirs),
                         Vec::new(),
                         Vec::new(),
-                        vec![format!("{name} 的部署目录，docker-compose.yml 和数据卷在这里")],
+                        vec![format!(
+                            "{name} 的部署目录，docker-compose.yml 和数据卷在这里"
+                        )],
                         snippets,
                     )
                     .await

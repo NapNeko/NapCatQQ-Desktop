@@ -133,7 +133,10 @@ impl AppManager {
         unassigned: &str,
         open: impl Future<Output = Result<TunnelHandle, AppFrameworkError>>,
     ) -> Result<u16, AppFrameworkError> {
-        if let Some(port) = self.reuse_or_evict_tunnel(&key, app_port, topology, reach).await {
+        if let Some(port) = self
+            .reuse_or_evict_tunnel(&key, app_port, topology, reach)
+            .await
+        {
             return Ok(port);
         }
         let handle = open.await?;
@@ -193,14 +196,19 @@ impl AppManager {
         preferred: Option<u16>,
     ) -> Result<u16, AppFrameworkError> {
         if bot_port == 0 {
-            return Err(AppFrameworkError::Validation("协议 Bot 的 WS 服务还没分配端口".into()));
+            return Err(AppFrameworkError::Validation(
+                "协议 Bot 的 WS 服务还没分配端口".into(),
+            ));
         }
         let key = forward_tunnel_key(&instance.id);
         let reach: fn(&TunnelHandle) -> u16 = match topology {
             AppLinkTopology::RemoteBotLocalApp => TunnelHandle::local_port,
             _ => TunnelHandle::remote_listen_port,
         };
-        if let Some(port) = self.reuse_or_evict_tunnel(&key, bot_port, topology, reach).await {
+        if let Some(port) = self
+            .reuse_or_evict_tunnel(&key, bot_port, topology, reach)
+            .await
+        {
             return Ok(port);
         }
         let tunnel_host = match topology {
@@ -310,7 +318,11 @@ impl AppManager {
     }
 
     /// 应用机上已经用掉的口：那台机上的实例口，加别的正向常驻隧道在那台机上的听口
-    async fn taken_forward_listen_ports(&self, current: &AppInstanceId, app_host_id: &str) -> Vec<u16> {
+    async fn taken_forward_listen_ports(
+        &self,
+        current: &AppInstanceId,
+        app_host_id: &str,
+    ) -> Vec<u16> {
         let mut taken = Vec::new();
         for inst in self.store.list().await {
             if inst.host_id != app_host_id {
@@ -339,7 +351,11 @@ impl AppManager {
                 taken.push(inst.port);
             }
             // 正向的常驻口开在应用机上，不占 Bot 机的口
-            let Some(link) = inst.link.as_ref().filter(|l| l.mode == OneBotLinkMode::ReverseWs) else {
+            let Some(link) = inst
+                .link
+                .as_ref()
+                .filter(|l| l.mode == OneBotLinkMode::ReverseWs)
+            else {
                 continue;
             };
             let Some(port) = link.resident_forward_port else {
@@ -358,7 +374,11 @@ impl AppManager {
         taken
     }
 
-    pub(super) async fn teardown_resident_best_effort(&self, instance: &AppInstance, bot_id: &BotId) {
+    pub(super) async fn teardown_resident_best_effort(
+        &self,
+        instance: &AppInstance,
+        bot_id: &BotId,
+    ) {
         let app_host = match self.resolve_host(&instance.host_id).await {
             Ok(h) => h,
             Err(e) => {
@@ -392,7 +412,10 @@ impl AppManager {
         }
     }
 
-    pub(super) async fn reconcile_resident_link(&self, instance: &AppInstance) -> Result<(), AppFrameworkError> {
+    pub(super) async fn reconcile_resident_link(
+        &self,
+        instance: &AppInstance,
+    ) -> Result<(), AppFrameworkError> {
         let Some(link) = instance.link.as_ref() else {
             return Ok(());
         };
@@ -454,7 +477,9 @@ impl AppManager {
             return Ok(());
         }
         if link.mode == OneBotLinkMode::ForwardWs {
-            return self.reconcile_forward_tunnel(instance, &bot, topology).await;
+            return self
+                .reconcile_forward_tunnel(instance, &bot, topology)
+                .await;
         }
         let local_port = self.ensure_link_tunnel(instance, &bot).await?;
         let Some(conn) = bot

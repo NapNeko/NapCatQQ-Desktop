@@ -7,7 +7,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ts_rs::TS;
 
-use super::{MaiBotLearningChat, MaiBotResourceDone, UpstreamChat, UpstreamData, UpstreamMessage, UpstreamPage, text};
+use super::{
+    MaiBotLearningChat, MaiBotResourceDone, UpstreamChat, UpstreamData, UpstreamMessage,
+    UpstreamPage, text,
+};
 use crate::maibot::webui_client::{MaiBotWebUi, Request};
 
 const BASE: &str = "/api/webui/jargon";
@@ -138,7 +141,10 @@ impl UpstreamJargon {
             count: self.count.unwrap_or(0),
             is_jargon: self.is_jargon.unwrap_or(false),
             is_global: self.is_global.unwrap_or(false),
-            pinned: self.created_by.as_deref().is_some_and(|c| c.eq_ignore_ascii_case("manual")),
+            pinned: self
+                .created_by
+                .as_deref()
+                .is_some_and(|c| c.eq_ignore_ascii_case("manual")),
             complete: self.is_complete.unwrap_or(false),
         })
     }
@@ -153,7 +159,10 @@ struct UpstreamStats {
     global_count: Option<u32>,
 }
 
-pub(crate) async fn list(c: &MaiBotWebUi, q: &MaiBotJargonQuery) -> Result<MaiBotJargonPage, AppFrameworkError> {
+pub(crate) async fn list(
+    c: &MaiBotWebUi,
+    q: &MaiBotJargonQuery,
+) -> Result<MaiBotJargonPage, AppFrameworkError> {
     let page = q.page.max(1).to_string();
     let size = q.page_size.clamp(1, 100).to_string();
     let search = q.search.trim();
@@ -174,7 +183,12 @@ pub(crate) async fn list(c: &MaiBotWebUi, q: &MaiBotJargonQuery) -> Result<MaiBo
     let up: UpstreamPage<UpstreamJargon> = c.get(&format!("{BASE}/list"), &query).await?;
     Ok(MaiBotJargonPage {
         total: up.total.unwrap_or(0),
-        items: up.data.unwrap_or_default().into_iter().filter_map(UpstreamJargon::into_item).collect(),
+        items: up
+            .data
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(UpstreamJargon::into_item)
+            .collect(),
     })
 }
 
@@ -193,7 +207,12 @@ pub(crate) async fn overview(c: &MaiBotWebUi) -> Result<MaiBotJargonOverview, Ap
             .filter(|c| c.platform.as_deref().is_some_and(|p| !p.is_empty()))
             .filter_map(UpstreamChat::into_chat)
             .collect(),
-        used_chat_ids: used.data.unwrap_or_default().into_iter().filter_map(|c| c.into_chat().map(|c| c.chat_id)).collect(),
+        used_chat_ids: used
+            .data
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|c| c.into_chat().map(|c| c.chat_id))
+            .collect(),
         total: stats.total.unwrap_or(0),
         confirmed: stats.confirmed_jargon.unwrap_or(0),
         pinned: stats.manual_jargon.unwrap_or(0),
@@ -201,9 +220,17 @@ pub(crate) async fn overview(c: &MaiBotWebUi) -> Result<MaiBotJargonOverview, Ap
     })
 }
 
-pub(crate) async fn act(c: &MaiBotWebUi, a: &MaiBotJargonAction) -> Result<MaiBotResourceDone, AppFrameworkError> {
+pub(crate) async fn act(
+    c: &MaiBotWebUi,
+    a: &MaiBotJargonAction,
+) -> Result<MaiBotResourceDone, AppFrameworkError> {
     match a {
-        MaiBotJargonAction::Create { content, meaning, chat_ids, is_global } => {
+        MaiBotJargonAction::Create {
+            content,
+            meaning,
+            chat_ids,
+            is_global,
+        } => {
             if content.trim().is_empty() {
                 return Err(AppFrameworkError::Validation("黑话内容不能空".into()));
             }
@@ -216,10 +243,20 @@ pub(crate) async fn act(c: &MaiBotWebUi, a: &MaiBotJargonAction) -> Result<MaiBo
                 "session_ids": chat_ids,
                 "is_global": is_global,
             });
-            let up: UpstreamMessage = c.call(Request::new(Method::POST, &format!("{BASE}/")).body(&body)).await?;
+            let up: UpstreamMessage = c
+                .call(Request::new(Method::POST, &format!("{BASE}/")).body(&body))
+                .await?;
             Ok(done(1, up, "加好了"))
         }
-        MaiBotJargonAction::Update { id, content, meaning, chat_ids, is_global, is_jargon, pinned } => {
+        MaiBotJargonAction::Update {
+            id,
+            content,
+            meaning,
+            chat_ids,
+            is_global,
+            is_jargon,
+            pinned,
+        } => {
             if content.trim().is_empty() {
                 return Err(AppFrameworkError::Validation("黑话内容不能空".into()));
             }
@@ -236,33 +273,54 @@ pub(crate) async fn act(c: &MaiBotWebUi, a: &MaiBotJargonAction) -> Result<MaiBo
                 }
                 body["session_ids"] = json!(ids);
             }
-            let up: UpstreamMessage =
-                c.call(Request::new(Method::PATCH, &format!("{BASE}/{id}")).body(&body)).await?;
+            let up: UpstreamMessage = c
+                .call(Request::new(Method::PATCH, &format!("{BASE}/{id}")).body(&body))
+                .await?;
             Ok(done(1, up, "改好了"))
         }
         MaiBotJargonAction::SetJargon { ids, is_jargon } => {
             if ids.is_empty() {
-                return Ok(MaiBotResourceDone { affected: 0, message: String::new() });
+                return Ok(MaiBotResourceDone {
+                    affected: 0,
+                    message: String::new(),
+                });
             }
             // 这条上游走查询参数、没有 body
             let flag = if *is_jargon { "true" } else { "false" };
             let id_strs: Vec<String> = ids.iter().map(i64::to_string).collect();
-            let mut query: Vec<(&str, &str)> = id_strs.iter().map(|s| ("ids", s.as_str())).collect();
+            let mut query: Vec<(&str, &str)> =
+                id_strs.iter().map(|s| ("ids", s.as_str())).collect();
             query.push(("is_jargon", flag));
             let path = format!("{BASE}/batch/set-jargon");
-            let up: UpstreamMessage = c.call(Request::new(Method::POST, &path).query(&query)).await?;
-            Ok(done(ids.len() as u32, up, if *is_jargon { "标成黑话了" } else { "标成不是黑话了" }))
+            let up: UpstreamMessage = c
+                .call(Request::new(Method::POST, &path).query(&query))
+                .await?;
+            Ok(done(
+                ids.len() as u32,
+                up,
+                if *is_jargon {
+                    "标成黑话了"
+                } else {
+                    "标成不是黑话了"
+                },
+            ))
         }
         MaiBotJargonAction::Delete { ids } => match ids.as_slice() {
-            [] => Ok(MaiBotResourceDone { affected: 0, message: String::new() }),
+            [] => Ok(MaiBotResourceDone {
+                affected: 0,
+                message: String::new(),
+            }),
             [id] => {
-                let up: UpstreamMessage = c.call(Request::new(Method::DELETE, &format!("{BASE}/{id}"))).await?;
+                let up: UpstreamMessage = c
+                    .call(Request::new(Method::DELETE, &format!("{BASE}/{id}")))
+                    .await?;
                 Ok(done(1, up, "删掉了"))
             }
             _ => {
                 let body = json!({ "ids": ids });
-                let up: UpstreamMessage =
-                    c.call(Request::new(Method::POST, &format!("{BASE}/batch/delete")).body(&body)).await?;
+                let up: UpstreamMessage = c
+                    .call(Request::new(Method::POST, &format!("{BASE}/batch/delete")).body(&body))
+                    .await?;
                 Ok(done(ids.len() as u32, up, "删掉了"))
             }
         },
@@ -272,7 +330,10 @@ pub(crate) async fn act(c: &MaiBotWebUi, a: &MaiBotJargonAction) -> Result<MaiBo
 fn done(affected: u32, up: UpstreamMessage, fallback: &str) -> MaiBotResourceDone {
     MaiBotResourceDone {
         affected: up.deleted_count.unwrap_or(affected),
-        message: up.message.filter(|m| !m.is_empty()).unwrap_or_else(|| fallback.into()),
+        message: up
+            .message
+            .filter(|m| !m.is_empty())
+            .unwrap_or_else(|| fallback.into()),
     }
 }
 
@@ -289,7 +350,13 @@ mod tests {
              "created_timestamp":"2026-09-01 10:00:00.000000","updated_timestamp":"2026-09-02T10:00:00"}
         ]}"#;
         let up: UpstreamPage<UpstreamJargon> = serde_json::from_str(raw).unwrap();
-        let item = up.data.unwrap().into_iter().next().and_then(UpstreamJargon::into_item).unwrap();
+        let item = up
+            .data
+            .unwrap()
+            .into_iter()
+            .next()
+            .and_then(UpstreamJargon::into_item)
+            .unwrap();
         assert_eq!(item.content, "yyds");
         assert_eq!(item.chat_ids, ["a", "b"]);
         assert!(item.pinned && item.is_jargon && !item.is_global);
@@ -303,7 +370,12 @@ mod tests {
             {"session_id":"","chat_name":"空"}
         ]}"#;
         let up: UpstreamData<Vec<UpstreamChat>> = serde_json::from_str(raw).unwrap();
-        let chats: Vec<_> = up.data.unwrap().into_iter().filter_map(UpstreamChat::into_chat).collect();
+        let chats: Vec<_> = up
+            .data
+            .unwrap()
+            .into_iter()
+            .filter_map(UpstreamChat::into_chat)
+            .collect();
         assert_eq!(chats.len(), 2);
         assert_eq!((chats[0].chat_id.as_str(), chats[0].is_group), ("s1", true));
         assert_eq!(chats[1].chat_name, "c2");

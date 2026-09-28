@@ -112,7 +112,9 @@ impl DockerDeployment {
                 "无法探测远端 HOME，拒绝回退到临时目录部署 Docker bot".into(),
             )
         })?;
-        Ok(ncd_domain::remote_paths::docker_bot_project_dir(&home, name))
+        Ok(ncd_domain::remote_paths::docker_bot_project_dir(
+            &home, name,
+        ))
     }
 
     fn compose_secret_for(&self, backend: BackendType) -> Result<String, DeploymentError> {
@@ -502,7 +504,10 @@ pub fn bot_docker_container_candidates(
         BackendType::NapCat => BackendType::SnowLuma,
         BackendType::SnowLuma => BackendType::NapCat,
     };
-    [container_name_for(backend, &qq), container_name_for(other, &qq)]
+    [
+        container_name_for(backend, &qq),
+        container_name_for(other, &qq),
+    ]
 }
 
 /// 按 qq 在远端查找实际 bot 容器名。

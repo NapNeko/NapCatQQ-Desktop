@@ -47,7 +47,10 @@ pub struct TerminalLaunchPlan {
 /// 会话管理层需要的外部能力：规划、sudo 密码、本机 shell 列表
 #[async_trait]
 pub trait TerminalPlanner: Send + Sync {
-    async fn plan(&self, request: &TerminalOpenRequest) -> Result<TerminalLaunchPlan, TerminalError>;
+    async fn plan(
+        &self,
+        request: &TerminalOpenRequest,
+    ) -> Result<TerminalLaunchPlan, TerminalError>;
     /// 这台主机存的提权密码；只在用户点了「填入密码」时取，直接写进终端
     fn sudo_password(&self, host_id: &str) -> Option<String>;
     fn local_shells(&self) -> Vec<LocalShellOption>;
@@ -63,7 +66,8 @@ struct RemoteShellInfo {
     home: String,
 }
 
-const REMOTE_SHELL_PROBE: &str = r#"printf '%s\n%s\n' "${SHELL:-}" "$HOME"; command -v bash || true"#;
+const REMOTE_SHELL_PROBE: &str =
+    r#"printf '%s\n%s\n' "${SHELL:-}" "$HOME"; command -v bash || true"#;
 
 fn parse_remote_shell_probe(stdout: &str) -> RemoteShellInfo {
     let mut lines = stdout.lines().map(str::trim);
@@ -79,7 +83,11 @@ fn parse_remote_shell_probe(stdout: &str) -> RemoteShellInfo {
         posix,
         login_is_bash: name == "bash",
         has_bash: !bash.is_empty(),
-        home: if home.is_empty() { "~".to_string() } else { home.to_string() },
+        home: if home.is_empty() {
+            "~".to_string()
+        } else {
+            home.to_string()
+        },
     }
 }
 
@@ -177,7 +185,13 @@ impl DesktopTerminalPlanner {
 
     fn server_label(profile: Option<&ServerProfile>, server_id: &str) -> String {
         profile
-            .map(|p| if p.name.trim().is_empty() { p.host.clone() } else { p.name.clone() })
+            .map(|p| {
+                if p.name.trim().is_empty() {
+                    p.host.clone()
+                } else {
+                    p.name.clone()
+                }
+            })
             .unwrap_or_else(|| server_id.to_string())
     }
 
@@ -207,7 +221,11 @@ impl DesktopTerminalPlanner {
         let file = dir.join("ncd-bashrc.sh");
         std::fs::create_dir_all(&dir).ok()?;
         std::fs::write(&file, git_bash_rc()).ok()?;
-        Some(HostPath::from_windows(&file.to_string_lossy()).as_posix().to_string())
+        Some(
+            HostPath::from_windows(&file.to_string_lossy())
+                .as_posix()
+                .to_string(),
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -296,7 +314,11 @@ impl DesktopTerminalPlanner {
         let (program, integration, cwd_display) = match &start {
             RemoteStart::Home if info.login_is_bash => {
                 let rc = bash_rc(&bash_env_section(&path_prefix, &env, &[]));
-                (PtyProgram::Script(remote_bash_exec_line(&rc, None)), true, info.home.clone())
+                (
+                    PtyProgram::Script(remote_bash_exec_line(&rc, None)),
+                    true,
+                    info.home.clone(),
+                )
             }
             RemoteStart::Home => (PtyProgram::LoginShell, false, info.home.clone()),
             RemoteStart::Dir(dirs) if !info.posix => {
@@ -324,7 +346,11 @@ impl DesktopTerminalPlanner {
             RemoteStart::Container(names) => {
                 files = false;
                 if info.posix {
-                    (PtyProgram::Script(docker_exec_script(names)), false, info.home.clone())
+                    (
+                        PtyProgram::Script(docker_exec_script(names)),
+                        false,
+                        info.home.clone(),
+                    )
                 } else {
                     banner.push(format!(
                         "登录 shell 不是 bash 这一类，没法自动进容器；手动 docker exec -it {} sh",
@@ -381,7 +407,16 @@ impl DesktopTerminalPlanner {
         request: &TerminalOpenRequest,
     ) -> Result<TerminalLaunchPlan, TerminalError> {
         let host = self.resolve(&RuntimeTarget::Local).await?;
-        self.local_plan(host, request, None, None, Vec::new(), Vec::new(), Vec::new(), Vec::new())
+        self.local_plan(
+            host,
+            request,
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
     }
 
     async fn plan_server(&self, server_id: &str) -> Result<TerminalLaunchPlan, TerminalError> {
@@ -461,14 +496,19 @@ impl DesktopTerminalPlanner {
 
 #[async_trait]
 impl TerminalPlanner for DesktopTerminalPlanner {
-    async fn plan(&self, request: &TerminalOpenRequest) -> Result<TerminalLaunchPlan, TerminalError> {
+    async fn plan(
+        &self,
+        request: &TerminalOpenRequest,
+    ) -> Result<TerminalLaunchPlan, TerminalError> {
         match &request.target {
             TerminalTarget::Local => self.plan_local_home(request).await,
             TerminalTarget::Server { server_id } => self.plan_server(server_id).await,
             TerminalTarget::Bot { bot_id, host_dir } => {
                 self.plan_bot(request, bot_id, *host_dir).await
             }
-            TerminalTarget::AppInstance { instance_id } => self.plan_app(request, instance_id).await,
+            TerminalTarget::AppInstance { instance_id } => {
+                self.plan_app(request, instance_id).await
+            }
         }
     }
 
@@ -521,8 +561,14 @@ mod tests {
     #[test]
     fn title_skips_host_already_in_name() {
         assert_eq!(with_host_label("麦麦 · 本机", "本机"), "麦麦 · 本机");
-        assert_eq!(with_host_label("Karin · production", "production"), "Karin · production");
-        assert_eq!(with_host_label("AstrBot a1b2", "vps1"), "AstrBot a1b2 · vps1");
+        assert_eq!(
+            with_host_label("Karin · production", "production"),
+            "Karin · production"
+        );
+        assert_eq!(
+            with_host_label("AstrBot a1b2", "vps1"),
+            "AstrBot a1b2 · vps1"
+        );
         assert_eq!(with_host_label("10001", "本机"), "10001 · 本机");
     }
 

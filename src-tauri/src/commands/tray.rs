@@ -6,9 +6,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
-use crate::commands::exit;
-use crate::window_events::{DesktopExitBlocked, DESKTOP_EXIT_BLOCKED};
 use crate::AppState;
+use crate::commands::exit;
+use crate::window_events::{DESKTOP_EXIT_BLOCKED, DesktopExitBlocked};
 
 static TRAY_ATTACHED: AtomicBool = AtomicBool::new(false);
 

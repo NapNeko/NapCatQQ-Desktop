@@ -436,12 +436,8 @@ impl TerminalManager {
         }
         match result {
             Ok((plan, pty)) => {
-                let info = info_from_plan(
-                    &st.info.id,
-                    &request.target,
-                    &plan,
-                    st.info.created_at_ms,
-                );
+                let info =
+                    info_from_plan(&st.info.id, &request.target, &plan, st.info.created_at_ms);
                 st.info = info.clone();
                 st.control = Some(pty.control.clone());
                 st.host = Some(Arc::clone(&plan.host));

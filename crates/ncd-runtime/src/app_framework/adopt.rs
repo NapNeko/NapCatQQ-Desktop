@@ -57,8 +57,8 @@ impl AdoptStore {
         tokio::fs::create_dir_all(&self.dir)
             .await
             .map_err(|e| AppFrameworkError::Store(format!("创建导入快照目录失败: {e}")))?;
-        let bytes = serde_json::to_vec_pretty(snap)
-            .map_err(|e| AppFrameworkError::Store(e.to_string()))?;
+        let bytes =
+            serde_json::to_vec_pretty(snap).map_err(|e| AppFrameworkError::Store(e.to_string()))?;
         let path = self.path(&AppInstanceId::new(&snap.instance_id));
         let tmp = path.with_extension("json.tmp");
         tokio::fs::write(&tmp, bytes)

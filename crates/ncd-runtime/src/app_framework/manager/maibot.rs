@@ -2,7 +2,9 @@
 
 use super::*;
 
-fn maibot_api(adapter: &dyn AppFrameworkAdapter) -> Result<&dyn MaiBotRuntimeApi, AppFrameworkError> {
+fn maibot_api(
+    adapter: &dyn AppFrameworkAdapter,
+) -> Result<&dyn MaiBotRuntimeApi, AppFrameworkError> {
     adapter.maibot_runtime().ok_or_else(|| {
         AppFrameworkError::ConfigUnsupported(adapter.manifest().id.as_str().to_string())
     })
@@ -18,7 +20,10 @@ impl PromptPlace {
     fn target(&self) -> MaiBotPromptTarget<'_> {
         match self {
             Self::Live(s) => MaiBotPromptTarget::Live(s),
-            Self::Disk(host, instance) => MaiBotPromptTarget::Disk { host: host.as_ref(), instance },
+            Self::Disk(host, instance) => MaiBotPromptTarget::Disk {
+                host: host.as_ref(),
+                instance,
+            },
         }
     }
 }
@@ -37,7 +42,10 @@ impl AppManager {
         let port = match self.desktop_webui_loopback_port(&instance).await {
             Ok(p) => p,
             Err(e) => {
-                return Ok(MaiBotRuntimeStatus::gate(MaiBotRuntimeGate::Unreachable, e.to_string()));
+                return Ok(MaiBotRuntimeStatus::gate(
+                    MaiBotRuntimeGate::Unreachable,
+                    e.to_string(),
+                ));
             }
         };
         let endpoint = self.webui_endpoint(&instance).await;
@@ -50,7 +58,10 @@ impl AppManager {
         let status = runtime.status(&session).await;
         // 详情页一直在轮询这个：token 在麦麦自己的 WebUI 里换过、或者口变了，
         // 下一轮就按盘上的重新读，别的接口跟着恢复（上游只在登录接口上记错次数，带 Cookie 的请求错了不封）
-        if matches!(status.gate, MaiBotRuntimeGate::Auth | MaiBotRuntimeGate::Unreachable) {
+        if matches!(
+            status.gate,
+            MaiBotRuntimeGate::Auth | MaiBotRuntimeGate::Unreachable
+        ) {
             self.forget_webui_endpoint(id);
         }
         Ok(status)
@@ -79,7 +90,9 @@ impl AppManager {
         let port = self.desktop_webui_loopback_port(&instance).await?;
         let again = self.store.require(&instance.id).await?;
         if !matches!(again.state, AppInstanceState::Running) {
-            return Err(AppFrameworkError::StateChanged("实例状态已变，请重试".into()));
+            return Err(AppFrameworkError::StateChanged(
+                "实例状态已变，请重试".into(),
+            ));
         }
         let endpoint = self.webui_endpoint(&instance).await;
         Ok(MaiBotSession {
@@ -153,7 +166,9 @@ impl AppManager {
         provider: &MaiBotAPIProvider,
     ) -> MaiBotProviderSource {
         match self.read_config(id).await.map(|env| env.config) {
-            Ok(AppInstanceConfig::MaiBot(saved)) if saved.models.api_providers.contains(provider) => {
+            Ok(AppInstanceConfig::MaiBot(saved))
+                if saved.models.api_providers.contains(provider) =>
+            {
                 MaiBotProviderSource::Saved
             }
             _ => MaiBotProviderSource::Draft,
@@ -184,13 +199,17 @@ impl AppManager {
         let instance = self.store.require(id).await?;
         let api = maibot_api(self.registry.adapter(&instance.framework_id)?)?;
         let place = match instance.state {
-            AppInstanceState::Running => PromptPlace::Live(self.maibot_live_session(instance).await?),
+            AppInstanceState::Running => {
+                PromptPlace::Live(self.maibot_live_session(instance).await?)
+            }
             AppInstanceState::Installed | AppInstanceState::Stopped => {
                 let host = self.resolve_host(&instance.host_id).await?;
                 PromptPlace::Disk(host, instance)
             }
             AppInstanceState::NotInstalled | AppInstanceState::Installing => {
-                return Err(AppFrameworkError::NotRunning("麦麦装好后才能改提示词".into()));
+                return Err(AppFrameworkError::NotRunning(
+                    "麦麦装好后才能改提示词".into(),
+                ));
             }
         };
         Ok((api, place))
@@ -313,12 +332,18 @@ impl AppManager {
         api.behavior(&s, behavior_id).await
     }
 
-    pub async fn maibot_chat_ticket(&self, id: &AppInstanceId) -> Result<MaiBotChatTicket, AppFrameworkError> {
+    pub async fn maibot_chat_ticket(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotChatTicket, AppFrameworkError> {
         let (api, s) = self.maibot_session(id).await?;
         api.chat_ticket(&s).await
     }
 
-    pub async fn maibot_chat_clear(&self, id: &AppInstanceId) -> Result<MaiBotResourceDone, AppFrameworkError> {
+    pub async fn maibot_chat_clear(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError> {
         let (api, s) = self.maibot_session(id).await?;
         api.chat_clear(&s).await
     }
@@ -404,7 +429,10 @@ impl AppManager {
         ncd_appframework::inspect_local_texts(paths).await
     }
 
-    pub async fn maibot_memory_status(&self, id: &AppInstanceId) -> Result<MaiBotMemoryStatus, AppFrameworkError> {
+    pub async fn maibot_memory_status(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<MaiBotMemoryStatus, AppFrameworkError> {
         let (api, s) = self.maibot_session(id).await?;
         api.memory_status(&s).await
     }
@@ -426,7 +454,10 @@ impl AppManager {
         api.memory_import(&s, &req).await
     }
 
-    pub async fn maibot_memory_tasks(&self, id: &AppInstanceId) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError> {
+    pub async fn maibot_memory_tasks(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError> {
         let (api, s) = self.maibot_session(id).await?;
         api.memory_tasks(&s).await
     }
@@ -468,7 +499,10 @@ impl AppManager {
         api.memory_record(&s, kind, record_id).await
     }
 
-    pub async fn maibot_memory_sources(&self, id: &AppInstanceId) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError> {
+    pub async fn maibot_memory_sources(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError> {
         let (api, s) = self.maibot_session(id).await?;
         api.memory_sources(&s).await
     }

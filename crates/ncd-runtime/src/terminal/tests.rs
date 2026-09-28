@@ -112,7 +112,10 @@ struct FakePlanner {
 
 #[async_trait]
 impl TerminalPlanner for FakePlanner {
-    async fn plan(&self, _request: &TerminalOpenRequest) -> Result<TerminalLaunchPlan, TerminalError> {
+    async fn plan(
+        &self,
+        _request: &TerminalOpenRequest,
+    ) -> Result<TerminalLaunchPlan, TerminalError> {
         if self.fail.load(Ordering::SeqCst) {
             return Err(TerminalError::Plan("连不上主机：测试".into()));
         }
@@ -134,7 +137,11 @@ impl TerminalPlanner for FakePlanner {
     }
 
     fn sudo_password(&self, host_id: &str) -> Option<String> {
-        if host_id == "remote:fake" { self.password.clone() } else { None }
+        if host_id == "remote:fake" {
+            self.password.clone()
+        } else {
+            None
+        }
     }
 
     fn local_shells(&self) -> Vec<LocalShellOption> {
@@ -186,14 +193,24 @@ fn request() -> TerminalOpenRequest {
     }
 }
 
-fn fixture(password: Option<&str>) -> (TerminalManager, mpsc::UnboundedReceiver<PtyBackend>, Arc<FakePlanner>) {
+fn fixture(
+    password: Option<&str>,
+) -> (
+    TerminalManager,
+    mpsc::UnboundedReceiver<PtyBackend>,
+    Arc<FakePlanner>,
+) {
     fixture_with_stat(password, None)
 }
 
 fn fixture_with_stat(
     password: Option<&str>,
     stat_size: Option<u64>,
-) -> (TerminalManager, mpsc::UnboundedReceiver<PtyBackend>, Arc<FakePlanner>) {
+) -> (
+    TerminalManager,
+    mpsc::UnboundedReceiver<PtyBackend>,
+    Arc<FakePlanner>,
+) {
     let (tx, rx) = mpsc::unbounded_channel();
     let planner = Arc::new(FakePlanner {
         host: Arc::new(FakeHost {
@@ -227,7 +244,11 @@ async fn attach_gets_banner_then_live_output() {
     manager.attach(info.id.as_str(), sink.clone()).unwrap();
     assert!(sink.text().contains("banner line"));
 
-    backend.output.send(Bytes::from_static(b"hello")).await.unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"hello"))
+        .await
+        .unwrap();
     eventually("live output", || sink.text().contains("hello")).await;
 }
 
@@ -238,7 +259,11 @@ async fn reattach_replays_history_and_takes_over() {
     let backend = backends.recv().await.unwrap();
     let first = RecordingSink::new();
     manager.attach(info.id.as_str(), first.clone()).unwrap();
-    backend.output.send(Bytes::from_static(b"before\r\n")).await.unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"before\r\n"))
+        .await
+        .unwrap();
     eventually("first output", || first.text().contains("before")).await;
 
     let second = RecordingSink::new();
@@ -246,7 +271,11 @@ async fn reattach_replays_history_and_takes_over() {
     assert!(second.text().contains("banner line"));
     assert!(second.text().contains("before"));
 
-    backend.output.send(Bytes::from_static(b"after")).await.unwrap();
+    backend
+        .output
+        .send(Bytes::from_static(b"after"))
+        .await
+        .unwrap();
     eventually("output on the new sink", || second.text().contains("after")).await;
     assert!(!first.text().contains("after"));
 }
@@ -283,16 +312,25 @@ async fn exit_is_reported_and_restart_reopens_the_same_tab() {
     eventually("exit line", || sink.text().contains("退出码 3")).await;
     assert!(sink.events().iter().any(|e| matches!(
         e,
-        TerminalEvent::Status { status: TerminalStatus::Exited { code: Some(3) } }
+        TerminalEvent::Status {
+            status: TerminalStatus::Exited { code: Some(3) }
+        }
     )));
-    assert!(matches!(manager.write(&id, "x"), Err(TerminalError::NotRunning)));
+    assert!(matches!(
+        manager.write(&id, "x"),
+        Err(TerminalError::NotRunning)
+    ));
 
     let reopened = manager.restart(&id).await.unwrap();
     assert_eq!(reopened.status, TerminalStatus::Running);
     assert_eq!(reopened.id, info.id);
     let fresh = backends.recv().await.unwrap();
     assert!(sink.text().contains("重新打开"));
-    assert!(sink.events().iter().any(|e| matches!(e, TerminalEvent::Info { .. })));
+    assert!(
+        sink.events()
+            .iter()
+            .any(|e| matches!(e, TerminalEvent::Info { .. }))
+    );
     manager.write(&id, "pwd\r").unwrap();
     drop(fresh);
 }
@@ -323,9 +361,15 @@ async fn close_tells_the_backend_and_forgets_the_session() {
     let info = manager.open(request()).await.unwrap();
     let mut backend = backends.recv().await.unwrap();
     manager.close(info.id.as_str());
-    assert!(matches!(backend.input.recv().await, Some(PtyInput::Close) | None));
+    assert!(matches!(
+        backend.input.recv().await,
+        Some(PtyInput::Close) | None
+    ));
     assert!(manager.list().is_empty());
-    assert!(matches!(manager.write(info.id.as_str(), "x"), Err(TerminalError::NotFound)));
+    assert!(matches!(
+        manager.write(info.id.as_str(), "x"),
+        Err(TerminalError::NotFound)
+    ));
 }
 
 #[tokio::test]
@@ -342,7 +386,10 @@ async fn sudo_fill_types_the_saved_password() {
     let (no_password, mut others, _) = fixture(None);
     let other = no_password.open(request()).await.unwrap();
     let _backend = others.recv().await.unwrap();
-    assert!(matches!(no_password.fill_sudo(other.id.as_str()), Err(TerminalError::Invalid(_))));
+    assert!(matches!(
+        no_password.fill_sudo(other.id.as_str()),
+        Err(TerminalError::Invalid(_))
+    ));
 }
 
 #[tokio::test]
@@ -359,7 +406,12 @@ async fn slow_client_holds_back_reading_until_it_acks() {
     let mut sent = 0usize;
     let mut blocked = false;
     for _ in 0..1000 {
-        match tokio::time::timeout(Duration::from_millis(100), backend.output.send(chunk.clone())).await {
+        match tokio::time::timeout(
+            Duration::from_millis(100),
+            backend.output.send(chunk.clone()),
+        )
+        .await
+        {
             Ok(Ok(())) => sent += 1,
             Ok(Err(_)) => panic!("output channel closed"),
             Err(_) => {

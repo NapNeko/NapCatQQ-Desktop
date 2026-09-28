@@ -277,7 +277,10 @@ pub async fn resolve_remote_vnc_secret_from_x11vnc(
     let script = r#"ps -eo pid,args 2>/dev/null | awk '/x11vnc/ && !/awk/ {print; exit}' \
 | grep -oE '\-passwdfile[[:space:]]+[^[:space:]]+' | awk '{print $2}'"#;
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
-    let out = host.run_to_string(cmd).await.map_err(|e| BotBackendError::Io(e.to_string()))?;
+    let out = host
+        .run_to_string(cmd)
+        .await
+        .map_err(|e| BotBackendError::Io(e.to_string()))?;
     let path = out.stdout.trim();
     if path.is_empty() {
         return Ok(None);
@@ -298,7 +301,11 @@ pub async fn resolve_remote_webui_secret_near_snowluma_dir(
         return Ok(None);
     }
     let candidate = format!("{parent}/webui.secret");
-    if host.exists(&HostPath::from_posix(&candidate)).await.unwrap_or(false) {
+    if host
+        .exists(&HostPath::from_posix(&candidate))
+        .await
+        .unwrap_or(false)
+    {
         return Ok(Some(candidate));
     }
     Ok(None)
@@ -711,7 +718,10 @@ mod tests {
     #[test]
     fn parent_dir_of_snowluma_dir_is_extracted_for_webui_secret_fallback() {
         // snowluma_dir=/opt/snowluma → 父目录 /opt 是外来启动脚本常见工作目录
-        let parent = "/opt/snowluma".rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+        let parent = "/opt/snowluma"
+            .rsplit_once('/')
+            .map(|(p, _)| p)
+            .unwrap_or("");
         assert_eq!(parent, "/opt");
         // 扁平系统目录根场景：/snowluma → 父目录空，不回退
         let root = "/snowluma".rsplit_once('/').map(|(p, _)| p).unwrap_or("");

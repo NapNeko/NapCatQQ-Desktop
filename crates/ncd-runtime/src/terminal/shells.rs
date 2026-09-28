@@ -243,7 +243,11 @@ mod windows_impl {
             .join("v1.0")
             .join("powershell.exe");
         if present(&ps51) {
-            out.push(option(LocalShellKind::WindowsPowershell, "Windows PowerShell", &ps51));
+            out.push(option(
+                LocalShellKind::WindowsPowershell,
+                "Windows PowerShell",
+                &ps51,
+            ));
         }
         let cmd = env_dir("ComSpec")
             .filter(|p| present(p))
@@ -300,8 +304,15 @@ mod tests {
 
     #[test]
     fn picks_wanted_then_default_order() {
-        let all = vec![opt(LocalShellKind::Cmd), opt(LocalShellKind::WindowsPowershell), opt(LocalShellKind::GitBash)];
-        assert_eq!(pick_shell(&all, None).map(|o| o.kind), Some(LocalShellKind::WindowsPowershell));
+        let all = vec![
+            opt(LocalShellKind::Cmd),
+            opt(LocalShellKind::WindowsPowershell),
+            opt(LocalShellKind::GitBash),
+        ];
+        assert_eq!(
+            pick_shell(&all, None).map(|o| o.kind),
+            Some(LocalShellKind::WindowsPowershell)
+        );
         assert_eq!(
             pick_shell(&all, Some(LocalShellKind::GitBash)).map(|o| o.kind),
             Some(LocalShellKind::GitBash)
@@ -333,17 +344,30 @@ mod tests {
     fn git_bash_without_rc_falls_back_to_login_shell() {
         let shell = opt(LocalShellKind::GitBash);
         let with_rc = launch_for(&shell, Some("/c/ProgramData/x/rc.sh"));
-        assert_eq!(with_rc.args, vec!["--rcfile", "/c/ProgramData/x/rc.sh", "-i"]);
+        assert_eq!(
+            with_rc.args,
+            vec!["--rcfile", "/c/ProgramData/x/rc.sh", "-i"]
+        );
         assert!(with_rc.integration);
         let plain = launch_for(&shell, None);
         assert_eq!(plain.args, vec!["--login", "-i"]);
         assert!(!plain.integration);
-        assert!(plain.env.iter().any(|(k, v)| k == "CHERE_INVOKING" && v == "1"));
+        assert!(
+            plain
+                .env
+                .iter()
+                .any(|(k, v)| k == "CHERE_INVOKING" && v == "1")
+        );
     }
 
     #[test]
     fn cmd_gets_the_marking_prompt() {
         let launch = launch_for(&opt(LocalShellKind::Cmd), None);
-        assert!(launch.env.iter().any(|(k, v)| k == "PROMPT" && v.contains("]9;9;$P")));
+        assert!(
+            launch
+                .env
+                .iter()
+                .any(|(k, v)| k == "PROMPT" && v.contains("]9;9;$P"))
+        );
     }
 }

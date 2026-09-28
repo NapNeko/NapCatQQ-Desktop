@@ -25,7 +25,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 
-use crate::command::{CommandOutput, HostCommand, HostProcessWaitPolicy, DEFAULT_COMMAND_TIMEOUT};
+use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand, HostProcessWaitPolicy};
 use crate::error::HostError;
 use crate::host::{Arch, Host, Locality, Os};
 use crate::path::{ArchiveKind, DirEntry, HostPath, PathStyle};
@@ -345,7 +345,9 @@ impl Host for LocalWindowsHost {
     ) -> Result<crate::pty::PtySession, HostError> {
         tokio::task::spawn_blocking(move || super::pty_windows::open_conpty(req))
             .await
-            .map_err(|e| HostError::Io(std::io::Error::other(format!("spawn_blocking failed: {e}"))))?
+            .map_err(|e| {
+                HostError::Io(std::io::Error::other(format!("spawn_blocking failed: {e}")))
+            })?
     }
 
     async fn spawn(&self, cmd: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {

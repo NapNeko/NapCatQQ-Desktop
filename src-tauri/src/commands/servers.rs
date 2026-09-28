@@ -29,7 +29,11 @@ pub async fn test_server_connection(
     if report.success {
         if let Some(host) = state.server_manager.get_host(&id).await {
             let host: Arc<dyn Host> = host;
-            let _ = state.components.inventory().ensure(&id, host.as_ref(), true).await;
+            let _ = state
+                .components
+                .inventory()
+                .ensure(&id, host.as_ref(), true)
+                .await;
         }
     }
     Ok(report)

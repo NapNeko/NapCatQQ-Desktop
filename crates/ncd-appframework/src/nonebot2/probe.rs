@@ -169,7 +169,11 @@ pub fn port_from_python_source(text: &str) -> Option<u16> {
             from = abs + 4;
             continue;
         };
-        let digits: String = after.trim_start().chars().take_while(|c| c.is_ascii_digit()).collect();
+        let digits: String = after
+            .trim_start()
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
         if let Ok(p) = digits.parse::<u16>()
             && p > 0
         {
@@ -210,7 +214,10 @@ dependencies = ["nonebot2[httpx,websockets]>=2.5.0"]
 plugin_dirs = ["src/plugins"]
 "#;
         assert!(pyproject_looks_like_nonebot2(text));
-        assert_eq!(display_name_from_pyproject(text).as_deref(), Some("bot-xiuxian"));
+        assert_eq!(
+            display_name_from_pyproject(text).as_deref(),
+            Some("bot-xiuxian")
+        );
         assert!(bot_py_looks_like_nonebot(
             "import nonebot\nfrom nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter\n"
         ));

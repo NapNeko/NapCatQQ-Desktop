@@ -52,7 +52,10 @@ mod tests {
 
     #[test]
     fn payloads_carry_version() {
-        assert_eq!(serde_json::to_value(WindowSignal::V1).unwrap(), serde_json::json!({ "v": 1 }));
+        assert_eq!(
+            serde_json::to_value(WindowSignal::V1).unwrap(),
+            serde_json::json!({ "v": 1 })
+        );
         assert_eq!(
             serde_json::to_value(DesktopExitBlocked::new(2)).unwrap(),
             serde_json::json!({ "v": 1, "local_active": 2 })

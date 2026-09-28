@@ -344,7 +344,9 @@ pub fn run() {
                 desktop_log::write_session_line(
                     "EROR",
                     "ncd::app_framework",
-                    &format!("app-instances.json unreadable, starting empty, original kept at {kept}: {err}"),
+                    &format!(
+                        "app-instances.json unreadable, starting empty, original kept at {kept}: {err}"
+                    ),
                 );
                 Arc::new(store)
             }
@@ -613,7 +615,9 @@ pub fn run() {
                 app_manager_reconcile.reconcile_all().await;
                 // 对账完成后自动启动实例
                 let global_enabled = app_settings_for_auto.read().await.app_instances_auto_start;
-                app_manager_auto_start.auto_start_instances(global_enabled).await;
+                app_manager_auto_start
+                    .auto_start_instances(global_enabled)
+                    .await;
             });
             // 远端 ncd-watch:周期写 desktop_present + 同步 notify.json
             commands::ncd_watch::spawn_ncd_watch_heartbeat(app.handle().clone());

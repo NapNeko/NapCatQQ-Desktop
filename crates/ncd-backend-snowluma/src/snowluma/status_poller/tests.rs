@@ -297,10 +297,7 @@ async fn tick_once_emits_waiting_for_qr_when_launch_pid_diverges() {
     tick_once(&bot_id, &deps, &mut state).await;
 
     assert_eq!(state.uin, None);
-    assert_eq!(
-        state.last_state,
-        Some(SnowLumaLoginState::WaitingForQrScan)
-    );
+    assert_eq!(state.last_state, Some(SnowLumaLoginState::WaitingForQrScan));
 
     let evt = tokio::time::timeout(Duration::from_secs(1), sub.next())
         .await

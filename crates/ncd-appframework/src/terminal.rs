@@ -99,7 +99,8 @@ pub async fn node_profile(
 ) -> AppTerminalProfile {
     let mut path_prefix = vec![
         spec.install_dir.join("node_modules/.bin"),
-        spec.install_dir.join(format!("{TOOLS_DIR}/node_modules/.bin")),
+        spec.install_dir
+            .join(format!("{TOOLS_DIR}/node_modules/.bin")),
     ];
     let mut preferred = Vec::with_capacity(2);
     if let Some(p) = &spec.node_bin {
@@ -132,7 +133,10 @@ mod tests {
     #[test]
     fn venv_bin_follows_os_layout() {
         let dir = HostPath::from_posix("/home/u/ncd/apps/maibot/m1");
-        assert_eq!(venv_bin(&dir, Os::Linux).as_posix(), "/home/u/ncd/apps/maibot/m1/.venv/bin");
+        assert_eq!(
+            venv_bin(&dir, Os::Linux).as_posix(),
+            "/home/u/ncd/apps/maibot/m1/.venv/bin"
+        );
         let win = HostPath::from_windows(r"C:\data\apps\maibot\m1");
         assert_eq!(
             venv_bin(&win, Os::Windows).render_for(Os::Windows),
@@ -180,7 +184,10 @@ mod tests {
             .map(|p| p.render_for(Os::Windows))
             .collect();
         let venv_scripts = dir.path().join(".venv").join("Scripts");
-        assert_eq!(rendered[0].to_lowercase(), venv_scripts.to_string_lossy().to_lowercase());
+        assert_eq!(
+            rendered[0].to_lowercase(),
+            venv_scripts.to_string_lossy().to_lowercase()
+        );
         assert_eq!(rendered[1], r"C:\tools\uv");
         let venv = profile
             .env

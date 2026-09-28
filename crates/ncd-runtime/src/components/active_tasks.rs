@@ -28,7 +28,11 @@ impl ActiveTasks {
     }
 
     /// 登记一条,返回的 guard 丢掉时自动摘除;runner 中途 return 也不会留下死条目
-    pub fn register(&self, task_id: impl Into<String>, token: CancellationToken) -> ActiveTaskGuard {
+    pub fn register(
+        &self,
+        task_id: impl Into<String>,
+        token: CancellationToken,
+    ) -> ActiveTaskGuard {
         let task_id = task_id.into();
         self.insert(task_id.clone(), token);
         ActiveTaskGuard {

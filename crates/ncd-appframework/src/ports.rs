@@ -84,7 +84,11 @@ mod tests {
   sl  local_address                         remote_address                        st\n\
    0: 00000000000000000000000001000000:1F41 00000000000000000000000000000000:0000 0A 0 0 0\n\
    1: 00000000000000000000000000000000:1B59 00000000000000000000000000000000:0000 0A 0 0 0\n";
-        assert_eq!(parse_proc_net_listen(text), vec![22, 7001, 8001], "去重、只留 LISTEN（0A）");
+        assert_eq!(
+            parse_proc_net_listen(text),
+            vec![22, 7001, 8001],
+            "去重、只留 LISTEN（0A）"
+        );
         assert!(parse_proc_net_listen("").is_empty());
     }
 

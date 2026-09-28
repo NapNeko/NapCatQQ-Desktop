@@ -15,9 +15,8 @@ use super::orchestrator::{
     daemon_start, daemon_stop, remote_daemon_already_ready, write_status_daemon_json,
 };
 use super::probe::{
-    resolve_remote_novnc_port, resolve_remote_vnc_secret_from_x11vnc,
-    resolve_remote_webui_port, resolve_remote_webui_secret_near_snowluma_dir,
-    wait_remote_webui_ready,
+    resolve_remote_novnc_port, resolve_remote_vnc_secret_from_x11vnc, resolve_remote_webui_port,
+    resolve_remote_webui_secret_near_snowluma_dir, wait_remote_webui_ready,
 };
 use super::stack::restart_node_with_env;
 use super::tunnel::{RemoteSnowLumaTunnelEndpoints, RemoteSnowLumaTunnelRegistry};
@@ -357,9 +356,10 @@ impl RemoteSnowLumaDaemon {
         let webui_plain = match webui_password.map(str::trim).filter(|s| !s.is_empty()) {
             Some(pwd) => pwd.to_string(),
             None => {
-                let primary = read_remote_file_trimmed(host.as_ref(), &self.layout.paths.webui_secret)
-                    .await
-                    .unwrap_or_default();
+                let primary =
+                    read_remote_file_trimmed(host.as_ref(), &self.layout.paths.webui_secret)
+                        .await
+                        .unwrap_or_default();
                 if primary.is_empty() {
                     // 外来安装（systemd 自启等）常把 webui.secret 放在 snowluma_dir 父目录，
                     // 不在 Desktop 假设的 {workspace}/webui.secret 下；以实际文件为准回退。

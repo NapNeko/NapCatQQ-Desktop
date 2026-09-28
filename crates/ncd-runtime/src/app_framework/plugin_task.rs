@@ -63,8 +63,11 @@ pub async fn run_app_plugin_task(
 
     match result {
         Ok(()) => {
-            ctx.push_progress(ProgressEvent::new(ProgressKind::StepEnd { step: 1, ok: true }))
-                .await;
+            ctx.push_progress(ProgressEvent::new(ProgressKind::StepEnd {
+                step: 1,
+                ok: true,
+            }))
+            .await;
             ctx.push_progress(ProgressEvent::new(ProgressKind::Finished { ok: true }))
                 .await;
             DeploymentTaskRunResult::ok("完成")
@@ -76,8 +79,11 @@ pub async fn run_app_plugin_task(
                 message: msg.clone(),
             }))
             .await;
-            ctx.push_progress(ProgressEvent::new(ProgressKind::StepEnd { step: 1, ok: false }))
-                .await;
+            ctx.push_progress(ProgressEvent::new(ProgressKind::StepEnd {
+                step: 1,
+                ok: false,
+            }))
+            .await;
             ctx.push_progress(ProgressEvent::new(ProgressKind::Finished { ok: false }))
                 .await;
             DeploymentTaskRunResult::failed(msg)

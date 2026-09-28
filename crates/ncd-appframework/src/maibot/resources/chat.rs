@@ -31,7 +31,10 @@ struct UpstreamWsToken {
     message: Option<String>,
 }
 
-pub(crate) async fn ticket(c: &MaiBotWebUi, port: u16) -> Result<MaiBotChatTicket, AppFrameworkError> {
+pub(crate) async fn ticket(
+    c: &MaiBotWebUi,
+    port: u16,
+) -> Result<MaiBotChatTicket, AppFrameworkError> {
     // token 不对时上游回 200 + success=false（怕前端见 401 就刷新），要自己拆
     let up: UpstreamWsToken = c.get("/api/webui/ws-token", &[]).await?;
     let token = up
@@ -40,21 +43,34 @@ pub(crate) async fn ticket(c: &MaiBotWebUi, port: u16) -> Result<MaiBotChatTicke
         .ok_or_else(|| {
             AppFrameworkError::DashboardAuth(format!(
                 "麦麦没给聊天连接的票：{}",
-                up.message.filter(|m| !m.is_empty()).unwrap_or_else(|| "没说原因".into())
+                up.message
+                    .filter(|m| !m.is_empty())
+                    .unwrap_or_else(|| "没说原因".into())
             ))
         })?;
-    let url = Url::parse_with_params(&format!("ws://127.0.0.1:{port}/api/webui/ws"), &[("token", token.as_str())])
-        .map_err(|e| AppFrameworkError::Integration(format!("拼聊天连接地址失败：{e}")))?;
-    Ok(MaiBotChatTicket { url: url.into(), user_id: CHAT_USER_ID.into() })
+    let url = Url::parse_with_params(
+        &format!("ws://127.0.0.1:{port}/api/webui/ws"),
+        &[("token", token.as_str())],
+    )
+    .map_err(|e| AppFrameworkError::Integration(format!("拼聊天连接地址失败：{e}")))?;
+    Ok(MaiBotChatTicket {
+        url: url.into(),
+        user_id: CHAT_USER_ID.into(),
+    })
 }
 
 /// 清掉桌面端这段私聊的记录。麦麦对这个人的印象、学到的东西不跟着清
-pub(crate) async fn clear_history(c: &MaiBotWebUi) -> Result<MaiBotResourceDone, AppFrameworkError> {
+pub(crate) async fn clear_history(
+    c: &MaiBotWebUi,
+) -> Result<MaiBotResourceDone, AppFrameworkError> {
     let req = Request::new(Method::DELETE, "/api/chat/history").query(&[("user_id", CHAT_USER_ID)]);
     let up: UpstreamMessage = c.call(req).await?;
     Ok(MaiBotResourceDone {
         affected: up.deleted_count.unwrap_or(0),
-        message: up.message.filter(|m| !m.is_empty()).unwrap_or_else(|| "记录清空了".into()),
+        message: up
+            .message
+            .filter(|m| !m.is_empty())
+            .unwrap_or_else(|| "记录清空了".into()),
     })
 }
 
@@ -74,9 +90,10 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/api/webui/ws-token"))
             .and(header("cookie", "maibot_session=tok"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(
-                r#"{"success":true,"token":"Ab-c_9","expires_in":60}"#,
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(r#"{"success":true,"token":"Ab-c_9","expires_in":60}"#),
+            )
             .mount(&server)
             .await;
         let t = ticket(&client(&server), 18001).await.unwrap();
@@ -95,7 +112,10 @@ mod tests {
             .mount(&server)
             .await;
         let err = ticket(&client(&server), 18001).await.unwrap_err();
-        assert!(matches!(&err, AppFrameworkError::DashboardAuth(m) if m.contains("认证已过期")), "{err}");
+        assert!(
+            matches!(&err, AppFrameworkError::DashboardAuth(m) if m.contains("认证已过期")),
+            "{err}"
+        );
     }
 
     #[tokio::test]
@@ -104,7 +124,10 @@ mod tests {
         Mock::given(method("DELETE"))
             .and(path("/api/chat/history"))
             .and(query_param("user_id", CHAT_USER_ID))
-            .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"success":true,"message":"已清空 12 条聊天记录"}"#))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(r#"{"success":true,"message":"已清空 12 条聊天记录"}"#),
+            )
             .expect(1)
             .mount(&server)
             .await;

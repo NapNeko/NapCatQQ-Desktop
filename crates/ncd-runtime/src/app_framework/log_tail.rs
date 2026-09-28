@@ -48,7 +48,12 @@ pub async fn newest_project_log(host: &dyn Host, install_dir: &str) -> Option<Ho
     }
 }
 
-pub async fn tail_journal(host: &dyn Host, units: &[String], pid: Option<u32>, lines: usize) -> Vec<String> {
+pub async fn tail_journal(
+    host: &dyn Host,
+    units: &[String],
+    pid: Option<u32>,
+    lines: usize,
+) -> Vec<String> {
     if host.locality() != Locality::Remote || lines == 0 {
         return Vec::new();
     }
@@ -98,10 +103,7 @@ fn newest_local_log(install_dir: &str) -> Option<HostPath> {
     let rendered = root.render(PathStyle::Windows);
     let dir = std::path::Path::new(&rendered);
     let mut best: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
-    let candidates = [
-        dir.to_path_buf(),
-        dir.join("logs"),
-    ];
+    let candidates = [dir.to_path_buf(), dir.join("logs")];
     for folder in candidates {
         let Ok(entries) = std::fs::read_dir(&folder) else {
             continue;
@@ -161,11 +163,9 @@ async fn tail_remote(host: &dyn Host, path: &str, lines: usize) -> Vec<String> {
 async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
     let quoted = shell_single_quote(path);
     let out = host
-        .run_to_string(
-            HostCommand::new("sh")
-                .arg("-c")
-                .arg(format!("if [ -f {quoted} ]; then wc -c < {quoted}; else echo 0; fi")),
-        )
+        .run_to_string(HostCommand::new("sh").arg("-c").arg(format!(
+            "if [ -f {quoted} ]; then wc -c < {quoted}; else echo 0; fi"
+        )))
         .await
         .ok()?;
     out.stdout.trim().parse().ok()

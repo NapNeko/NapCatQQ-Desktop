@@ -5,9 +5,9 @@
 
 pub mod credential_sync;
 pub mod host_resolver;
+pub mod openssh_known_hosts;
 pub mod server_manager;
 pub mod server_profile_migration;
-pub mod openssh_known_hosts;
 pub mod ssh_config;
 pub mod ssh_keygen;
 
@@ -17,9 +17,9 @@ pub use server_manager::{
     AuthMethod, ConnectionHealth, HostKeyPrompt, InMemoryCredentialStore, KeyringCredentialStore,
     ProbeReport, ServerCredentialStore, ServerManager, ServerProfile, ServerState,
 };
-pub use ssh_config::{DiscoveredSshHost, default_ssh_username, discover_ssh_hosts};
 pub use server_profile_migration::{
     SERVER_PROFILE_COMPAT_VERSION, ServerProfileMigrationResult,
     migrate_legacy_single_server_app_config, migrate_server_profiles_payload,
 };
+pub use ssh_config::{DiscoveredSshHost, default_ssh_username, discover_ssh_hosts};
 pub use ssh_keygen::{GeneratedKeyPair, SshKeygenError, generate_ed25519};

@@ -22,7 +22,9 @@ pub(crate) async fn docker_project_dir(
     name: &str,
 ) -> Result<String, BotBackendError> {
     let home = probe_home(host).await?;
-    Ok(ncd_domain::remote_paths::docker_bot_project_dir(&home, name))
+    Ok(ncd_domain::remote_paths::docker_bot_project_dir(
+        &home, name,
+    ))
 }
 
 async fn probe_home(host: &dyn Host) -> Result<String, BotBackendError> {

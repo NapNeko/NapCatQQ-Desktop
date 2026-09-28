@@ -6,9 +6,9 @@ pub mod config;
 mod integration;
 pub mod manifest;
 pub mod release;
+pub mod resources;
 pub mod runtime;
 pub mod schema;
-pub mod resources;
 pub mod store;
 pub mod terms;
 pub mod webui_client;
@@ -33,18 +33,18 @@ pub use config::{
     maibot_config_documents,
 };
 pub use integration::MaiBotIntegration;
-use webui_client::MaiBotWebUi;
 pub use manifest::{MAIBOT_FRAMEWORK_ID, maibot_manifest};
+use webui_client::MaiBotWebUi;
 
 use crate::adapter::{
     AppComponentSpec, AppFrameworkAdapter, PluginLogSink, apply_with_backup_ex, restore_from_backup,
 };
-use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use crate::adopt::write_project_sidecar;
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
     read_documents,
 };
+use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use manifest::{
     ADAPTER_CONFIG, ADAPTER_DIR, BOT_CONFIG, CONFIG_PY, MAIBOT_STDOUT_LOG, MODEL_CONFIG, WEBUI_JSON,
 };
@@ -73,10 +73,14 @@ fn invalid(doc: &str, e: String) -> AppFrameworkError {
     AppFrameworkError::ConfigInvalid(vec![ncd_domain::AppConfigIssue::new(doc, e)])
 }
 
-fn maibot_config_of(config: &AppInstanceConfig) -> Result<&MaiBotInstanceConfig, AppFrameworkError> {
+fn maibot_config_of(
+    config: &AppInstanceConfig,
+) -> Result<&MaiBotInstanceConfig, AppFrameworkError> {
     match config {
         AppInstanceConfig::MaiBot(cfg) => Ok(cfg),
-        _ => Err(AppFrameworkError::Validation("写入的不是 MaiBot 配置".to_string())),
+        _ => Err(AppFrameworkError::Validation(
+            "写入的不是 MaiBot 配置".to_string(),
+        )),
     }
 }
 
@@ -85,8 +89,9 @@ fn seed_version(config_py: &str, bot_text: Option<&str>) -> Result<String, AppFr
     if bot_text.is_some() {
         return Ok(String::new());
     }
-    read_config_version(config_py)
-        .ok_or_else(|| AppFrameworkError::Integration(format!("{CONFIG_PY} 里找不到 CONFIG_VERSION")))
+    read_config_version(config_py).ok_or_else(|| {
+        AppFrameworkError::Integration(format!("{CONFIG_PY} 里找不到 CONFIG_VERSION"))
+    })
 }
 
 fn snapshot_text<'a>(snaps: &'a [DocumentSnapshot], id: &str) -> Option<&'a str> {
@@ -149,7 +154,9 @@ impl MaiBotAdapter {
         let current = self.read_config(host, instance).await?;
         match current.config {
             AppInstanceConfig::MaiBot(before) => Ok(before),
-            _ => Err(AppFrameworkError::Validation("读回来的不是 MaiBot 配置".to_string())),
+            _ => Err(AppFrameworkError::Validation(
+                "读回来的不是 MaiBot 配置".to_string(),
+            )),
         }
     }
 
@@ -164,7 +171,10 @@ impl MaiBotAdapter {
             return Ok(None);
         };
         if before.adapter.as_ref().map(|a| &a.chat) == Some(&adapter.chat)
-            || !host.exists(&root.join(ADAPTER_DIR)).await.map_err(host_err)?
+            || !host
+                .exists(&root.join(ADAPTER_DIR))
+                .await
+                .map_err(host_err)?
         {
             return Ok(None);
         }
@@ -199,7 +209,11 @@ impl MaiBotAdapter {
 
     /// 模型能用了就把 WebUI 的首次配置向导标成完成（D0-4）。尽力而为：配置已经存好了，
     /// 这一步失败只是用户第一次开 WebUI 时多看一次向导，不该让保存报错
-    async fn mark_setup_if_ready(host: &dyn Host, instance: &AppInstance, cfg: &MaiBotInstanceConfig) {
+    async fn mark_setup_if_ready(
+        host: &dyn Host,
+        instance: &AppInstance,
+        cfg: &MaiBotInstanceConfig,
+    ) {
         if !config::models_ready(&cfg.models) {
             return;
         }
@@ -207,7 +221,9 @@ impl MaiBotAdapter {
         let Ok(Some(current)) = read_text(host, &path).await else {
             return;
         };
-        let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.6f").to_string();
+        let now = chrono::Local::now()
+            .format("%Y-%m-%dT%H:%M:%S%.6f")
+            .to_string();
         if let Some(next) = config::mark_setup_completed(&current, &now)
             && let Err(e) = host.write_file(&path, next.as_bytes()).await
         {
@@ -343,7 +359,11 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         .await
     }
 
-    async fn unlink(&self, host: &dyn Host, instance: &AppInstance) -> Result<(), AppFrameworkError> {
+    async fn unlink(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<(), AppFrameworkError> {
         Self::write_adapter_config(host, instance, config::write_adapter_disabled).await
     }
 
@@ -417,7 +437,9 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
         if resource != AppStoreResource::Plugin {
-            return Err(AppFrameworkError::PluginUnsupported("MaiBot 只有插件商店".into()));
+            return Err(AppFrameworkError::PluginUnsupported(
+                "MaiBot 只有插件商店".into(),
+            ));
         }
         store::uninstall_item(host, instance, id, log).await
     }
@@ -432,7 +454,9 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         _overwrite: bool,
     ) -> Result<(), AppFrameworkError> {
         if resource != AppStoreResource::Plugin {
-            return Err(AppFrameworkError::PluginUnsupported("MaiBot 只有插件商店".into()));
+            return Err(AppFrameworkError::PluginUnsupported(
+                "MaiBot 只有插件商店".into(),
+            ));
         }
         store::set_enabled(host, instance, id, enabled).await
     }
@@ -467,7 +491,9 @@ impl AppFrameworkAdapter for MaiBotAdapter {
     ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
         match resource {
             AppStoreResource::Plugin => store::parse_maibot_plugins_json(text),
-            AppStoreResource::Adapter => Err(AppFrameworkError::PluginUnsupported("MaiBot 只有插件商店".into())),
+            AppStoreResource::Adapter => Err(AppFrameworkError::PluginUnsupported(
+                "MaiBot 只有插件商店".into(),
+            )),
         }
     }
 
@@ -485,10 +511,15 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         let snaps = read_documents(host, &root, &maibot_config_documents()).await?;
         let bot = schema::read_bot_config_file(snapshot_text(&snaps, config::DOC_BOT_CONFIG))
             .map_err(AppFrameworkError::Integration)?;
-        let models = schema::read_model_config_file(snapshot_text(&snaps, config::DOC_MODEL_CONFIG))
-            .map_err(AppFrameworkError::Integration)?;
+        let models =
+            schema::read_model_config_file(snapshot_text(&snaps, config::DOC_MODEL_CONFIG))
+                .map_err(AppFrameworkError::Integration)?;
         let token_json = read_text(host, &root.join(WEBUI_JSON)).await?;
-        let adapter = if host.exists(&root.join(ADAPTER_DIR)).await.map_err(host_err)? {
+        let adapter = if host
+            .exists(&root.join(ADAPTER_DIR))
+            .await
+            .map_err(host_err)?
+        {
             Some(config::read_adapter_config(snapshot_text(
                 &snaps,
                 config::DOC_ADAPTER_CONFIG,
@@ -517,16 +548,22 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         let cfg = maibot_config_of(config)?;
         let before = self.before_write(host, instance, cfg).await?;
         let root = HostPath::from_posix(&instance.install_dir);
-        let config_py = read_text(host, &root.join(CONFIG_PY)).await?.unwrap_or_default();
+        let config_py = read_text(host, &root.join(CONFIG_PY))
+            .await?
+            .unwrap_or_default();
         // 没变的文件不写，免得版本号跳了、白白提示重启
         let mut writes: Vec<(HostPath, String)> = Vec::new();
 
         let bot_path = root.join(BOT_CONFIG);
         let bot_text = read_text(host, &bot_path).await?;
         let bot_version = seed_version(&config_py, bot_text.as_deref())?;
-        if let Some(next) =
-            config::files::patch_bot_config(bot_text.as_deref(), &bot_version, &before.bot, &cfg.bot)
-                .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?
+        if let Some(next) = config::files::patch_bot_config(
+            bot_text.as_deref(),
+            &bot_version,
+            &before.bot,
+            &cfg.bot,
+        )
+        .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?
         {
             writes.push((bot_path, next));
         }
@@ -575,31 +612,45 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         let before = self.before_write(host, instance, cfg).await?;
         let root = HostPath::from_posix(&instance.install_dir);
         let token_json = read_text(host, &root.join(WEBUI_JSON)).await?;
-        let webui = MaiBotWebUi::connect(loopback_port, &config::read_webui_token(token_json.as_deref()))?;
+        let webui = MaiBotWebUi::connect(
+            loopback_port,
+            &config::read_webui_token(token_json.as_deref()),
+        )?;
 
-        let before_bot = schema::bot_config_to_toml(&before.bot).map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?;
-        let after_bot = schema::bot_config_to_toml(&cfg.bot).map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?;
+        let before_bot = schema::bot_config_to_toml(&before.bot)
+            .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?;
+        let after_bot =
+            schema::bot_config_to_toml(&cfg.bot).map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?;
         if before_bot != after_bot {
             if crate::toml_patch::removed_keys(&before_bot, &after_bot).is_empty() {
-                let partial = serde_json::to_value(crate::toml_patch::changes(&before_bot, &after_bot))
-                    .map_err(|e| invalid(config::DOC_BOT_CONFIG, e.to_string()))?;
+                let partial =
+                    serde_json::to_value(crate::toml_patch::changes(&before_bot, &after_bot))
+                        .map_err(|e| invalid(config::DOC_BOT_CONFIG, e.to_string()))?;
                 webui.merge_bot_config(&partial).await?;
             } else {
                 // 部分合并删不掉键（清空的可选项、删掉的映射项），只能整份：在盘上原文上差量改好再交给它
                 let bot_text = read_text(host, &root.join(BOT_CONFIG)).await?;
-                let config_py = read_text(host, &root.join(CONFIG_PY)).await?.unwrap_or_default();
+                let config_py = read_text(host, &root.join(CONFIG_PY))
+                    .await?
+                    .unwrap_or_default();
                 let version = seed_version(&config_py, bot_text.as_deref())?;
-                if let Some(next) =
-                    config::files::patch_bot_config(bot_text.as_deref(), &version, &before.bot, &cfg.bot)
-                        .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?
+                if let Some(next) = config::files::patch_bot_config(
+                    bot_text.as_deref(),
+                    &version,
+                    &before.bot,
+                    &cfg.bot,
+                )
+                .map_err(|e| invalid(config::DOC_BOT_CONFIG, e))?
                 {
                     webui.write_bot_config_raw(&next).await?;
                 }
             }
         }
         if before.models != cfg.models {
-            let full = schema::model_config_to_toml(&cfg.models).map_err(|e| invalid(config::DOC_MODEL_CONFIG, e))?;
-            let body = serde_json::to_value(full).map_err(|e| invalid(config::DOC_MODEL_CONFIG, e.to_string()))?;
+            let full = schema::model_config_to_toml(&cfg.models)
+                .map_err(|e| invalid(config::DOC_MODEL_CONFIG, e))?;
+            let body = serde_json::to_value(full)
+                .map_err(|e| invalid(config::DOC_MODEL_CONFIG, e.to_string()))?;
             webui.write_model_config(&body).await?;
         }
 

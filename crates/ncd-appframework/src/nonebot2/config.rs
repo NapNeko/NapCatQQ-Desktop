@@ -7,9 +7,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::adapter::apply_with_backup_ex;
-use crate::config_doc::{
-    DocumentSnapshot, IssueSink, read_documents, revision_of,
-};
+use crate::config_doc::{DocumentSnapshot, IssueSink, read_documents, revision_of};
 use crate::env_file::EnvFile;
 
 use super::env_layout::{self, NoneBotEnvLayout};
@@ -144,11 +142,8 @@ impl NoneBot2EnvProd {
         env.set_ci(ENV_COMMAND_START, &render_list(&self.command_start));
         env.set_ci(ENV_COMMAND_SEP, &render_list(&self.command_sep));
 
-        let keep: std::collections::BTreeSet<&str> = self
-            .custom
-            .iter()
-            .map(|e| e.key.as_str())
-            .collect();
+        let keep: std::collections::BTreeSet<&str> =
+            self.custom.iter().map(|e| e.key.as_str()).collect();
         for entry in env.entries() {
             if !is_system_env_key(&entry.key)
                 && !entry.key.eq_ignore_ascii_case("ENVIRONMENT")
@@ -192,7 +187,10 @@ impl NoneBot2InstanceConfig {
         }
         for (i, c) in self.env_prod.custom.iter().enumerate() {
             if !valid_env_key(&c.key) {
-                sink.push(format!("env_prod/custom/{i}/key"), "键名只能是字母数字下划线");
+                sink.push(
+                    format!("env_prod/custom/{i}/key"),
+                    "键名只能是字母数字下划线",
+                );
             }
             if !valid_env_value(&c.value) {
                 sink.push(format!("env_prod/custom/{i}/value"), "值不能包含换行");
@@ -215,7 +213,11 @@ fn config_doc(id: &str, rel: &str, format: AppConfigFormat) -> AppConfigDocument
 pub fn nonebot2_config_documents() -> Vec<AppConfigDocument> {
     vec![
         config_doc(DOC_ENV, NONEBOT2_ENV_FILE, AppConfigFormat::DotEnv),
-        config_doc(DOC_ENV_PROD, NONEBOT2_ENV_PROD_FILE, AppConfigFormat::DotEnv),
+        config_doc(
+            DOC_ENV_PROD,
+            NONEBOT2_ENV_PROD_FILE,
+            AppConfigFormat::DotEnv,
+        ),
         config_doc(DOC_PYPROJECT, NONEBOT2_PYPROJECT, AppConfigFormat::Toml),
     ]
 }
@@ -262,7 +264,9 @@ pub fn link_inputs_changed(before: &NoneBot2EnvProd, after: &NoneBot2EnvProd) ->
     before.port != after.port || before.onebot_access_token != after.onebot_access_token
 }
 
-pub fn parse_nonebot2_config(snaps: &[DocumentSnapshot]) -> Result<NoneBot2InstanceConfig, AppFrameworkError> {
+pub fn parse_nonebot2_config(
+    snaps: &[DocumentSnapshot],
+) -> Result<NoneBot2InstanceConfig, AppFrameworkError> {
     let base = snaps
         .iter()
         .find(|s| s.doc.id == DOC_ENV)
@@ -521,7 +525,12 @@ mod tests {
         assert_eq!(parsed.port, 8080);
         assert_eq!(parsed.log_level, "DEBUG");
         assert!(parsed.custom.iter().any(|e| e.key == "ONEBOT_WS_URLS"));
-        assert!(!parsed.custom.iter().any(|e| e.key.eq_ignore_ascii_case("ENVIRONMENT")));
+        assert!(
+            !parsed
+                .custom
+                .iter()
+                .any(|e| e.key.eq_ignore_ascii_case("ENVIRONMENT"))
+        );
     }
 
     #[test]

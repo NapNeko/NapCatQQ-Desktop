@@ -8,8 +8,8 @@ use std::sync::Arc;
 use ncd_appframework::{AppComponentSpec, AppFrameworkRegistry};
 use ncd_component::{
     Component, ComponentId, DependencyTarget, DesktopSelfComponent, NapCatComponent,
-    NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent, Requirement,
-    RequirementPhase, SnowLumaComponent, UvComponent, VersionReq,
+    NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent, Requirement, RequirementPhase,
+    SnowLumaComponent, UvComponent, VersionReq,
 };
 use ncd_domain::SnowLumaLinuxPackage;
 use ncd_host::{HostPath, Locality, Os};
@@ -225,10 +225,7 @@ pub fn render_dependency_graph(registry: &AppFrameworkRegistry) -> String {
                     (ComponentId::SnowLuma, SnowLumaLinuxPackage::Lite) => "[lite]",
                     _ => "",
                 };
-                out.push_str(&format!(
-                    "{os:?}/{locality:?} {}{variant}\n",
-                    id.as_str()
-                ));
+                out.push_str(&format!("{os:?}/{locality:?} {}{variant}\n", id.as_str()));
                 for req in comp.requirements(os, locality) {
                     out.push_str(&format!("  {}\n", render_requirement(&req)));
                 }
@@ -418,7 +415,11 @@ Linux/Remote nonebot2
         let ids = graph_component_ids(&registry);
         for m in registry.manifests() {
             let id = ComponentId::parse(&m.component_id).expect("framework component_id");
-            assert!(ids.contains(&id), "{} 必须进依赖图，不能靠手写名单", m.component_id);
+            assert!(
+                ids.contains(&id),
+                "{} 必须进依赖图，不能靠手写名单",
+                m.component_id
+            );
             assert!(graph_component(&registry, id, SnowLumaLinuxPackage::Full).is_ok());
         }
         let host: Vec<ComponentId> = ids
@@ -444,7 +445,8 @@ Linux/Remote nonebot2
     #[test]
     fn uv_constraints_come_from_nonebot2_only() {
         let registry = AppFrameworkRegistry::with_builtin();
-        let reqs = catalog_version_reqs_for(&registry, ComponentId::Uv, Os::Linux, Locality::Remote);
+        let reqs =
+            catalog_version_reqs_for(&registry, ComponentId::Uv, Os::Linux, Locality::Remote);
         assert_eq!(reqs, vec![VersionReq::semver(">=0.4")]);
         // Python 系框架不拖 Node，Node 系框架不拖 uv
         let nb2 =

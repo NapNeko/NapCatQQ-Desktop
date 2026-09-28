@@ -171,7 +171,9 @@ pub async fn probe_status(
     }
 }
 
-pub async fn list_personas(client: &DashboardClient) -> Result<Vec<AstrBotPersona>, AppFrameworkError> {
+pub async fn list_personas(
+    client: &DashboardClient,
+) -> Result<Vec<AstrBotPersona>, AppFrameworkError> {
     let data: Value = client.get_json("/api/persona/list").await?;
     Ok(parse_persona_list(&data))
 }
@@ -196,18 +198,26 @@ pub async fn upsert_persona(
     }
 }
 
-pub async fn delete_persona(client: &DashboardClient, persona_id: &str) -> Result<(), AppFrameworkError> {
+pub async fn delete_persona(
+    client: &DashboardClient,
+    persona_id: &str,
+) -> Result<(), AppFrameworkError> {
     client
         .post_ok("/api/persona/delete", &json!({ "persona_id": persona_id }))
         .await
 }
 
-pub async fn list_kbs(client: &DashboardClient) -> Result<Vec<AstrBotKnowledgeBase>, AppFrameworkError> {
+pub async fn list_kbs(
+    client: &DashboardClient,
+) -> Result<Vec<AstrBotKnowledgeBase>, AppFrameworkError> {
     let pages = fetch_all_pages(client, "/api/kb/list", 100, "items").await?;
     Ok(pages.iter().flat_map(parse_kb_list).collect())
 }
 
-pub async fn create_kb(client: &DashboardClient, req: &AstrBotKbCreate) -> Result<(), AppFrameworkError> {
+pub async fn create_kb(
+    client: &DashboardClient,
+    req: &AstrBotKbCreate,
+) -> Result<(), AppFrameworkError> {
     if req.embedding_provider_id.trim().is_empty() {
         return Err(AppFrameworkError::Validation(
             "创建知识库需要先有 embedding 提供商".into(),
@@ -226,7 +236,9 @@ pub async fn create_kb(client: &DashboardClient, req: &AstrBotKbCreate) -> Resul
 }
 
 pub async fn delete_kb(client: &DashboardClient, kb_id: &str) -> Result<(), AppFrameworkError> {
-    client.post_ok("/api/kb/delete", &json!({ "kb_id": kb_id })).await
+    client
+        .post_ok("/api/kb/delete", &json!({ "kb_id": kb_id }))
+        .await
 }
 
 pub async fn list_session_rules(
@@ -268,12 +280,17 @@ pub async fn delete_session_rule(
         .await
 }
 
-pub async fn list_abconfs(client: &DashboardClient) -> Result<Vec<AstrBotAbconfInfo>, AppFrameworkError> {
+pub async fn list_abconfs(
+    client: &DashboardClient,
+) -> Result<Vec<AstrBotAbconfInfo>, AppFrameworkError> {
     let data: Value = client.get_json("/api/config/abconfs").await?;
     Ok(parse_abconfs(&data))
 }
 
-pub async fn create_abconf(client: &DashboardClient, name: &str) -> Result<String, AppFrameworkError> {
+pub async fn create_abconf(
+    client: &DashboardClient,
+    name: &str,
+) -> Result<String, AppFrameworkError> {
     let data: Value = client
         .post_json("/api/config/abconf/new", &json!({ "name": name }))
         .await?;
@@ -290,11 +307,16 @@ pub async fn delete_abconf(client: &DashboardClient, id: &str) -> Result<(), App
         .await
 }
 
-pub async fn write_subagent(client: &DashboardClient, body: &Value) -> Result<(), AppFrameworkError> {
+pub async fn write_subagent(
+    client: &DashboardClient,
+    body: &Value,
+) -> Result<(), AppFrameworkError> {
     client.post_ok("/api/subagent/config", body).await
 }
 
-pub async fn list_available_tools(client: &DashboardClient) -> Result<Vec<String>, AppFrameworkError> {
+pub async fn list_available_tools(
+    client: &DashboardClient,
+) -> Result<Vec<String>, AppFrameworkError> {
     let data: Value = client.get_json("/api/subagent/available-tools").await?;
     Ok(parse_tool_names(&data))
 }
@@ -356,7 +378,8 @@ fn parse_kb_list(data: &Value) -> Vec<AstrBotKnowledgeBase> {
                 kb_id: first_str(obj, &["kb_id", "id"]).unwrap_or_default(),
                 kb_name: first_str(obj, &["kb_name", "name"]).unwrap_or_default(),
                 description: first_str(obj, &["description"]).unwrap_or_default(),
-                embedding_provider_id: first_str(obj, &["embedding_provider_id"]).unwrap_or_default(),
+                embedding_provider_id: first_str(obj, &["embedding_provider_id"])
+                    .unwrap_or_default(),
             })
         })
         .filter(|k| !k.kb_id.is_empty() || !k.kb_name.is_empty())
@@ -542,7 +565,11 @@ mod tests {
             .await;
 
         let rules = list_session_rules(&client).await.unwrap();
-        assert_eq!(rules.len(), 3, "第二页没拉到，或者一个 UMO 的多条规则没展开");
+        assert_eq!(
+            rules.len(),
+            3,
+            "第二页没拉到，或者一个 UMO 的多条规则没展开"
+        );
         assert!(rules.iter().any(|r| r.umo == "aiocqhttp:FriendMessage:2"));
     }
 

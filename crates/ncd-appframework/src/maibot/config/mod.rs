@@ -137,13 +137,21 @@ pub fn read_bot_config_ports(text: Option<&str>) -> (u16, u16) {
     let root = parse_table(text);
     (
         port_of(sub(&root, "webui"), "port", MAIBOT_DEFAULT_WEBUI_PORT),
-        port_of(sub(&root, "maim_message"), "ws_server_port", DEFAULT_LEGACY_WS_PORT),
+        port_of(
+            sub(&root, "maim_message"),
+            "ws_server_port",
+            DEFAULT_LEGACY_WS_PORT,
+        ),
     )
 }
 
 pub fn read_webui_token(json: Option<&str>) -> String {
     json.and_then(|t| serde_json::from_str::<serde_json::Value>(t).ok())
-        .and_then(|v| v.get("access_token").and_then(|t| t.as_str()).map(str::to_string))
+        .and_then(|v| {
+            v.get("access_token")
+                .and_then(|t| t.as_str())
+                .map(str::to_string)
+        })
         .unwrap_or_default()
 }
 
@@ -152,12 +160,18 @@ pub fn read_webui_token(json: Option<&str>) -> String {
 pub fn mark_setup_completed(json: &str, now: &str) -> Option<String> {
     let mut v: serde_json::Value = serde_json::from_str(json).ok()?;
     let obj = v.as_object_mut()?;
-    if obj.get("first_setup_completed").and_then(serde_json::Value::as_bool) == Some(true) {
+    if obj
+        .get("first_setup_completed")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+    {
         return None;
     }
     obj.insert("first_setup_completed".into(), true.into());
     obj.insert("setup_completed_at".into(), now.into());
-    serde_json::to_string_pretty(&v).ok().map(|s| format!("{s}\n"))
+    serde_json::to_string_pretty(&v)
+        .ok()
+        .map(|s| format!("{s}\n"))
 }
 
 /// 模型能不能用，和前端 `maibotModelSetupIssue` 同一套判定：有提供商，回复 / 规划 / 杂务都挑了模型，
@@ -172,13 +186,18 @@ pub fn models_ready(models: &MaiBotModelConfigFile) -> bool {
     let used: std::collections::HashSet<&str> = models
         .models
         .iter()
-        .filter(|m| required.iter().any(|task| task.model_list.contains(&m.name)))
+        .filter(|m| {
+            required
+                .iter()
+                .any(|task| task.model_list.contains(&m.name))
+        })
         .map(|m| m.api_provider.as_str())
         .collect();
-    !models
-        .api_providers
-        .iter()
-        .any(|p| used.contains(p.name.as_str()) && p.auth_type != "none" && p.api_key.trim() == PLACEHOLDER_KEY)
+    !models.api_providers.iter().any(|p| {
+        used.contains(p.name.as_str())
+            && p.auth_type != "none"
+            && p.api_key.trim() == PLACEHOLDER_KEY
+    })
 }
 
 /// 首装种子：文件不存在时只写 `[inner].version` 和两个口，其余首启由上游按默认补齐
@@ -198,7 +217,12 @@ pub fn write_bot_config_ports(
         set_value(&mut doc, "inner", "version", config_version.into());
     }
     set_value(&mut doc, "webui", "port", i64::from(webui_port).into());
-    set_value(&mut doc, "maim_message", "ws_server_port", i64::from(legacy_ws_port).into());
+    set_value(
+        &mut doc,
+        "maim_message",
+        "ws_server_port",
+        i64::from(legacy_ws_port).into(),
+    );
     Ok(doc.to_string())
 }
 
@@ -236,8 +260,16 @@ mod tests {
         assert_eq!(v["setup_completed_at"], "2026-09-26T15:00:00.000000");
         assert_eq!(v["access_token"], "Ncd_tok");
         assert_eq!(v["token_source"], "configured");
-        assert_eq!(mark_setup_completed(&marked, "later"), None, "标过就不再改时间");
-        assert_eq!(mark_setup_completed("not json", "x"), None, "读不懂不动，免得把 token 写丢");
+        assert_eq!(
+            mark_setup_completed(&marked, "later"),
+            None,
+            "标过就不再改时间"
+        );
+        assert_eq!(
+            mark_setup_completed("not json", "x"),
+            None,
+            "读不懂不动，免得把 token 写丢"
+        );
     }
 
     #[test]
@@ -269,7 +301,10 @@ mod tests {
     fn port_edit_keeps_comments_version_and_other_keys() {
         let before = "[inner]\nversion = \"8.14.40\"\n\n[bot]\nnickname = \"麦麦\" # 名字\n\n[webui]\n# WebUI 端口\nport = 8001 # 默认\nhost = [\"127.0.0.1\"]\n";
         let after = write_bot_config_ports(Some(before), "9.9.9", 24001, 24002).unwrap();
-        assert!(after.contains("version = \"8.14.40\""), "已有版本号不能被桌面端改：{after}");
+        assert!(
+            after.contains("version = \"8.14.40\""),
+            "已有版本号不能被桌面端改：{after}"
+        );
         assert!(after.contains("nickname = \"麦麦\" # 名字"));
         assert!(after.contains("# WebUI 端口"));
         assert!(after.contains("port = 24001 # 默认"), "{after}");
@@ -309,10 +344,16 @@ mod tests {
         c.models.models[0].api_provider = "不存在".into();
         c.models.model_task_config.utils.model_list = vec!["没有这个".into()];
         let paths: Vec<String> = validate(&c).into_iter().map(|i| i.path).collect();
-        assert!(paths.contains(&"bot/maim_message/ws_server_port".to_string()), "{paths:?}");
+        assert!(
+            paths.contains(&"bot/maim_message/ws_server_port".to_string()),
+            "{paths:?}"
+        );
         assert!(paths.contains(&"adapter/chat/group_list".to_string()));
         assert!(paths.contains(&"bot/message_receive/ban_msgs_regex/1".to_string()));
-        assert!(!paths.contains(&"bot/message_receive/ban_msgs_regex/0".to_string()), "环视是合法的 Python 正则");
+        assert!(
+            !paths.contains(&"bot/message_receive/ban_msgs_regex/0".to_string()),
+            "环视是合法的 Python 正则"
+        );
         assert!(paths.contains(&"models/models/0/api_provider".to_string()));
         assert!(paths.contains(&"models/model_task_config/utils/model_list/0".to_string()));
     }

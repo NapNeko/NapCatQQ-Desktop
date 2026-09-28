@@ -206,7 +206,10 @@ impl UpstreamModelList {
             .into_iter()
             .filter_map(|m| {
                 let id = m.id.filter(|id| !id.is_empty())?;
-                let name = m.name.filter(|n| !n.is_empty()).unwrap_or_else(|| id.clone());
+                let name = m
+                    .name
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or_else(|| id.clone());
                 Some(MaiBotProviderModel { id, name })
             })
             .collect()
@@ -324,7 +327,10 @@ mod tests {
         .unwrap();
         assert_eq!(
             m.into_models(),
-            vec![MaiBotProviderModel { id: "deepseek-chat".into(), name: "deepseek-chat".into() }]
+            vec![MaiBotProviderModel {
+                id: "deepseek-chat".into(),
+                name: "deepseek-chat".into()
+            }]
         );
 
         let c: UpstreamProviderCheck = serde_json::from_str(
@@ -339,7 +345,10 @@ mod tests {
             "avg_response_time":2.5,"cache_hit_rate":null}"#,
         )
         .unwrap();
-        assert_eq!((st.total_messages, st.total_replies, st.total_tokens), (30, 7, 9000));
+        assert_eq!(
+            (st.total_messages, st.total_replies, st.total_tokens),
+            (30, 7, 9000)
+        );
 
         let mcp: UpstreamMcpStatus = serde_json::from_str(
             r#"{"initialized":true,"server_count":1,"servers":[{"name":"fs","transport":"stdio","connected":true,

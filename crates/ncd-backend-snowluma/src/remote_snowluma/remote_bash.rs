@@ -137,7 +137,9 @@ mod tests {
             // 只认 which 的那条探测：PATH 外兜底的目录得在同一条脚本里
             let probes_bin_dir = script.starts_with("command -v bash") && script.contains(" /bin;");
             match (self.bash, probes_bin_dir) {
-                (Bash::SshDown, _) => Err(HostError::Unsupported { operation: "ssh down" }),
+                (Bash::SshDown, _) => Err(HostError::Unsupported {
+                    operation: "ssh down",
+                }),
                 (Bash::InPath, true) => Ok(found("/usr/bin/bash\n")),
                 (Bash::OutsidePath, true) => Ok(found("/bin/bash\n")),
                 _ => Ok(absent),

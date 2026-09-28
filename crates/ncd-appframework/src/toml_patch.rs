@@ -27,7 +27,15 @@ pub fn apply(
     identity: IdentityOf<'_>,
 ) -> Vec<String> {
     let mut changed = Vec::new();
-    patch_table(doc.as_table_mut(), before, after, &mut Vec::new(), identity, true, &mut changed);
+    patch_table(
+        doc.as_table_mut(),
+        before,
+        after,
+        &mut Vec::new(),
+        identity,
+        true,
+        &mut changed,
+    );
     changed
 }
 
@@ -58,12 +66,19 @@ pub fn removed_keys(before: &toml::Table, after: &toml::Table) -> Vec<String> {
     out
 }
 
-fn collect_removed(before: &toml::Table, after: &toml::Table, path: &mut Vec<String>, out: &mut Vec<String>) {
+fn collect_removed(
+    before: &toml::Table,
+    after: &toml::Table,
+    path: &mut Vec<String>,
+    out: &mut Vec<String>,
+) {
     for (key, b) in before {
         path.push(key.clone());
         match (b, after.get(key)) {
             (_, None) => out.push(path.join(".")),
-            (toml::Value::Table(b), Some(toml::Value::Table(a))) => collect_removed(b, a, path, out),
+            (toml::Value::Table(b), Some(toml::Value::Table(a))) => {
+                collect_removed(b, a, path, out)
+            }
             _ => {}
         }
         path.pop();
@@ -93,11 +108,24 @@ fn patch_table(
             }
             (None, toml::Value::Table(a)) if table.get(key).is_none_or(Item::is_table_like) => {
                 if let Some(child) = ensure_table(table, key) {
-                    patch_table(child, &toml::Table::new(), a, path, identity, false, changed);
+                    patch_table(
+                        child,
+                        &toml::Table::new(),
+                        a,
+                        path,
+                        identity,
+                        false,
+                        changed,
+                    );
                 }
             }
-            (b, toml::Value::Array(items)) if items.iter().all(toml::Value::is_table) && !items.is_empty() => {
-                let old = b.and_then(toml::Value::as_array).cloned().unwrap_or_default();
+            (b, toml::Value::Array(items))
+                if items.iter().all(toml::Value::is_table) && !items.is_empty() =>
+            {
+                let old = b
+                    .and_then(toml::Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
                 let refs: Vec<&str> = path.iter().map(String::as_str).collect();
                 let id = identity(&refs);
                 replace_table_array(table, key, &old, items, id, at_root);
@@ -110,7 +138,11 @@ fn patch_table(
         }
         path.pop();
     }
-    let gone: Vec<String> = before.keys().filter(|k| !after.contains_key(*k)).cloned().collect();
+    let gone: Vec<String> = before
+        .keys()
+        .filter(|k| !after.contains_key(*k))
+        .cloned()
+        .collect();
     for key in gone {
         if table.remove(&key).is_some() {
             path.push(key);
@@ -153,7 +185,8 @@ fn replace_table_array(
         match identity {
             Some(id) => {
                 let want = new.get(id)?;
-                old.iter().position(|o| o.as_table().and_then(|t| t.get(id)) == Some(want))
+                old.iter()
+                    .position(|o| o.as_table().and_then(|t| t.get(id)) == Some(want))
             }
             None => (i < old.len()).then_some(i),
         }
@@ -174,18 +207,35 @@ fn replace_table_array(
             let Some(new) = item.as_table() else {
                 continue;
             };
-            let mut t = match matched(i, new).and_then(|j| old_tables.get(j).cloned().map(|t| (j, t))) {
-                Some((j, mut t)) => {
-                    let before = old[j].as_table().cloned().unwrap_or_default();
-                    patch_table(&mut t, &before, new, &mut Vec::new(), &no_identity, false, &mut Vec::new());
-                    t
-                }
-                None => {
-                    let mut t = Table::new();
-                    patch_table(&mut t, &toml::Table::new(), new, &mut Vec::new(), &no_identity, false, &mut Vec::new());
-                    t
-                }
-            };
+            let mut t =
+                match matched(i, new).and_then(|j| old_tables.get(j).cloned().map(|t| (j, t))) {
+                    Some((j, mut t)) => {
+                        let before = old[j].as_table().cloned().unwrap_or_default();
+                        patch_table(
+                            &mut t,
+                            &before,
+                            new,
+                            &mut Vec::new(),
+                            &no_identity,
+                            false,
+                            &mut Vec::new(),
+                        );
+                        t
+                    }
+                    None => {
+                        let mut t = Table::new();
+                        patch_table(
+                            &mut t,
+                            &toml::Table::new(),
+                            new,
+                            &mut Vec::new(),
+                            &no_identity,
+                            false,
+                            &mut Vec::new(),
+                        );
+                        t
+                    }
+                };
             t.set_implicit(false);
             aot.push(t);
         }
@@ -200,7 +250,10 @@ fn replace_table_array(
         return;
     }
     let old_inline: Vec<InlineTable> = match existing.and_then(Item::as_array) {
-        Some(arr) => arr.iter().filter_map(|v| v.as_inline_table().cloned()).collect(),
+        Some(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_inline_table().cloned())
+            .collect(),
         None => Vec::new(),
     };
     let mut arr = Array::new();
@@ -211,7 +264,15 @@ fn replace_table_array(
         let mut t = match matched(i, new).and_then(|j| old_inline.get(j).cloned().map(|t| (j, t))) {
             Some((j, mut t)) => {
                 let before = old[j].as_table().cloned().unwrap_or_default();
-                patch_table(&mut t, &before, new, &mut Vec::new(), &no_identity, false, &mut Vec::new());
+                patch_table(
+                    &mut t,
+                    &before,
+                    new,
+                    &mut Vec::new(),
+                    &no_identity,
+                    false,
+                    &mut Vec::new(),
+                );
                 t
             }
             None => inline_table(new),
@@ -287,10 +348,20 @@ mod tests {
     #[test]
     fn default_values_absent_from_the_file_stay_absent_until_changed() {
         let text = "[webui]\nport = 1\n";
-        let (out, _) = run(text, "[webui]\nport = 1\n[chat.reply_timing]\ntalk_value = 1.0\n", "[webui]\nport = 1\n[chat.reply_timing]\ntalk_value = 0.5\n");
+        let (out, _) = run(
+            text,
+            "[webui]\nport = 1\n[chat.reply_timing]\ntalk_value = 1.0\n",
+            "[webui]\nport = 1\n[chat.reply_timing]\ntalk_value = 0.5\n",
+        );
         let back = t(&out);
-        assert_eq!(back["chat"]["reply_timing"]["talk_value"].as_float(), Some(0.5));
-        assert!(!out.contains("[chat]\n"), "只装子表的父表不该多出空表头：{out}");
+        assert_eq!(
+            back["chat"]["reply_timing"]["talk_value"].as_float(),
+            Some(0.5)
+        );
+        assert!(
+            !out.contains("[chat]\n"),
+            "只装子表的父表不该多出空表头：{out}"
+        );
     }
 
     #[test]
@@ -301,10 +372,17 @@ mod tests {
             "[chat.reply_timing]\ntalk_value_rules = [{platform = \"\", value = 0.8}]\n",
             "[chat.reply_timing]\ntalk_value_rules = [{platform = \"qq\", value = 0.8}, {platform = \"\", value = 1.0}]\n",
         );
-        let rules = t(&out)["chat"]["reply_timing"]["talk_value_rules"].as_array().unwrap().clone();
+        let rules = t(&out)["chat"]["reply_timing"]["talk_value_rules"]
+            .as_array()
+            .unwrap()
+            .clone();
         assert_eq!(rules.len(), 2);
         assert_eq!(rules[0]["platform"].as_str(), Some("qq"));
-        assert_eq!(rules[0]["secret"].as_integer(), Some(1), "旧条目里不认识的键要带过去：{out}");
+        assert_eq!(
+            rules[0]["secret"].as_integer(),
+            Some(1),
+            "旧条目里不认识的键要带过去：{out}"
+        );
         assert!(rules[1].get("secret").is_none());
         assert!(out.contains("# 规则"), "{out}");
     }
@@ -314,7 +392,9 @@ mod tests {
         let text = "[[models]]\nname = \"a\"\nx = 1 # a 的注释\nunknown = true\n\n[[models]]\nname = \"b\"\nx = 2\n";
         let mut doc: DocumentMut = text.parse().unwrap();
         let before = t("[[models]]\nname = \"a\"\nx = 1\n[[models]]\nname = \"b\"\nx = 2\n");
-        let after = t("[[models]]\nname = \"b\"\nx = 3\n[[models]]\nname = \"a\"\nx = 1\n[[models]]\nname = \"c\"\nx = 9\n");
+        let after = t(
+            "[[models]]\nname = \"b\"\nx = 3\n[[models]]\nname = \"a\"\nx = 1\n[[models]]\nname = \"c\"\nx = 9\n",
+        );
         let id = |p: &[&str]| (p == ["models"]).then_some("name");
         apply(&mut doc, &before, &after, &id);
         let out = doc.to_string();
@@ -322,7 +402,11 @@ mod tests {
         let names: Vec<&str> = models.iter().map(|m| m["name"].as_str().unwrap()).collect();
         assert_eq!(names, vec!["b", "a", "c"]);
         assert_eq!(models[0]["x"].as_integer(), Some(3));
-        assert_eq!(models[1]["unknown"].as_bool(), Some(true), "按名字认回来的条目带着未知键：{out}");
+        assert_eq!(
+            models[1]["unknown"].as_bool(),
+            Some(true),
+            "按名字认回来的条目带着未知键：{out}"
+        );
         assert!(out.contains("x = 1 # a 的注释"), "{out}");
         assert!(out.contains("[[models]]"));
     }

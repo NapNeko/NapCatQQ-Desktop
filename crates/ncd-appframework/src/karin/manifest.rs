@@ -79,8 +79,15 @@ mod tests {
             back.supported_placements,
             vec![AppPlacement::LocalNative, AppPlacement::RemoteNative]
         );
-        assert!(!back.supported_placements.contains(&AppPlacement::RemoteDocker));
+        assert!(
+            !back
+                .supported_placements
+                .contains(&AppPlacement::RemoteDocker)
+        );
         assert!(back.has_install_renderer);
-        assert_eq!(back.store_resources, vec![ncd_domain::AppStoreResource::Plugin]);
+        assert_eq!(
+            back.store_resources,
+            vec![ncd_domain::AppStoreResource::Plugin]
+        );
     }
 }

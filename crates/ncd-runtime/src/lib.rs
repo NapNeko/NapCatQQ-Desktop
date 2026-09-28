@@ -143,8 +143,8 @@ pub mod bot_config {
 }
 
 pub use ncd_domain::{
-    AdvancedConfig, AutoRestartMode, AutoRestartSchedule, BackendKind, BackendType,
-    BotBasicConfig, BotConfig, BotConfigError, BotFlavor, BotId, BotStatus, ConnectConfig, DeploymentType,
+    AdvancedConfig, AutoRestartMode, AutoRestartSchedule, BackendKind, BackendType, BotBasicConfig,
+    BotConfig, BotConfigError, BotFlavor, BotId, BotStatus, ConnectConfig, DeploymentType,
     DesktopNotifySettings, DiscoveredRemoteBot, DiscoveredRemoteBotSource, HttpServerConfig,
     ImportableRemoteBot, ImportedNetworkConfig, LogLevel, MessagePostFormat, MigrationOutcome,
     MigrationStage, O3HookMode, PathError, REMOTE_INVENTORY_VERSION, RemoteInventory,
@@ -163,38 +163,18 @@ pub use app_framework::{
     AppInstanceStore, AppManager, BotConfigPort, NativeAppRuntime, OneBotExportError,
     app_link_connections, export_onebot_endpoint, run_app_plugin_task,
 };
-pub use ncd_appframework::{
-    AppConfigWriteResult, AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope,
-    AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
-    AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
-    KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider, MaiBotBehaviorDetail,
-    MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession, MaiBotChatTicket,
-    MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
-    MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotLocalImage,
-    MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
-    MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery,
-    MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
-    MaiBotLocalTextFile, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult,
-    MaiBotMemoryGraph, MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup,
-    MaiBotMemoryNodeDetail, MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind,
-    MaiBotMemoryRecordPage, MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask,
-    MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail,
-    MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest, MaiBotPromptAction,
-    MaiBotPromptCatalog, MaiBotPromptFile, MaiBotProviderCheck, MaiBotProviderModel,
-    MaiBotResourceDone, MaiBotRuntimeStatus, MaiBotStatsSummary, join_webui_url,
-};
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
 };
 pub use bot_actor::{BotActorError, BotActorHandle, BotActorSnapshot, BotActorState};
 pub use bot_config_repo_impl::LocalBotConfigRepo;
-pub use bot_manager::{
-    BatchResult, BootstrapResult, BotManager, BotManagerError, RuntimeReadinessGate,
-    describe_not_ready, framework_component_for,
-};
 pub use bot_manager::auto_restart::{
     PREVIEW_COUNT as AUTO_RESTART_PREVIEW_COUNT, preview_cron as preview_auto_restart_cron,
     validate_schedule as validate_auto_restart_schedule,
+};
+pub use bot_manager::{
+    BatchResult, BootstrapResult, BotManager, BotManagerError, RuntimeReadinessGate,
+    describe_not_ready, framework_component_for,
 };
 pub use component_action_policy::{
     RemoteHostProbe, RemoteLayout, asset_sha256, component_action_cancellable,
@@ -206,9 +186,9 @@ pub use component_action_policy::{
 };
 pub use component_factory::{BuildComponentCtx, build_component_for_host};
 pub use components::{
-    ClosureNode, ComponentActionRequest, ComponentBuildInputs, ComponentBuilder,
-    ComponentExecutor, ResolveCtx, catalog_version_reqs_for, graph_component_ids,
-    graph_component, infer_local_snowluma_package, render_dependency_graph, requirement_closure,
+    ClosureNode, ComponentActionRequest, ComponentBuildInputs, ComponentBuilder, ComponentExecutor,
+    ResolveCtx, catalog_version_reqs_for, graph_component, graph_component_ids,
+    infer_local_snowluma_package, render_dependency_graph, requirement_closure,
     resolve_dependencies, resolve_runtime_readiness,
 };
 pub use config_store_impl::LocalConfigStore;
@@ -240,6 +220,26 @@ pub use napcat::webui_client::{NapCatWebUiClient, NapCatWebUiError, ReqwestNapCa
 pub use native_deployment_adapter::{
     DockerDeploymentBackend, EventBusSink, NativeDeploymentBackend, RemoteNativeDeploymentBackend,
     RuntimeLaunchPlannerAdapter,
+};
+pub use ncd_appframework::{
+    AppConfigWriteResult, AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope,
+    AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
+    AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
+    KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider, MaiBotBehaviorDetail,
+    MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession,
+    MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
+    MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotExpressionAction,
+    MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery, MaiBotJargonAction,
+    MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotLocalImage,
+    MaiBotLocalTextFile, MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest,
+    MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult, MaiBotMemoryGraph,
+    MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup, MaiBotMemoryNodeDetail,
+    MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage,
+    MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask, MaiBotMemoryTaskAction,
+    MaiBotMemoryTaskDetail, MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage,
+    MaiBotPersonQuery, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
+    MaiBotProviderCheck, MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus,
+    MaiBotStatsSummary, join_webui_url,
 };
 pub use ncd_server::DiscoveredSshHost;
 pub use notify::{

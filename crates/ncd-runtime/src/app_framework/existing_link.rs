@@ -5,8 +5,8 @@
 use std::collections::HashSet;
 
 use ncd_domain::{
-    APP_LINK_ADOPTED_FORWARD, AppLinkRecord, BotConfig, BotId, OneBotLinkMode,
-    is_loopback_host, parse_ws_url, runtime_target_matches_host,
+    APP_LINK_ADOPTED_FORWARD, AppLinkRecord, BotConfig, BotId, OneBotLinkMode, is_loopback_host,
+    parse_ws_url, runtime_target_matches_host,
 };
 
 use crate::metrics::now_ms;
@@ -34,19 +34,8 @@ pub fn discover_existing_link(
 ) -> Option<AppLinkRecord> {
     let mut hits: Vec<Candidate> = Vec::new();
     for bot in bots {
-        hits.extend(reverse_hits(
-            app_host_id,
-            app_port,
-            app_token,
-            claimed,
-            bot,
-        ));
-        hits.extend(forward_hits(
-            app_host_id,
-            app_token,
-            outbound_urls,
-            bot,
-        ));
+        hits.extend(reverse_hits(app_host_id, app_port, app_token, claimed, bot));
+        hits.extend(forward_hits(app_host_id, app_token, outbound_urls, bot));
     }
     pick_unique(hits).map(|c| AppLinkRecord {
         bot_id: c.bot_id,
@@ -275,9 +264,11 @@ mod tests {
     #[test]
     fn reverse_same_host_port_without_token() {
         let mut b = bot(10001, RuntimeTarget::server("km"));
-        b.connect
-            .websocket_clients
-            .push(ws_client("xiuxian", "ws://127.0.0.1:13120/onebot/v11/ws", ""));
+        b.connect.websocket_clients.push(ws_client(
+            "xiuxian",
+            "ws://127.0.0.1:13120/onebot/v11/ws",
+            "",
+        ));
         let hit = discover("remote:km", 13120, None, &[], &[b]).unwrap();
         assert_eq!(hit.bot_id.as_str(), "10001");
         assert_eq!(hit.connection_name, "xiuxian");
@@ -287,14 +278,7 @@ mod tests {
     fn forward_same_host_ws_server() {
         let mut b = bot(20002, RuntimeTarget::server("km"));
         b.connect.websocket_servers.push(ws_server(3001, ""));
-        let hit = discover(
-            "remote:km",
-            13120,
-            None,
-            &["ws://127.0.0.1:3001"],
-            &[b],
-        )
-        .unwrap();
+        let hit = discover("remote:km", 13120, None, &["ws://127.0.0.1:3001"], &[b]).unwrap();
         assert_eq!(hit.bot_id.as_str(), "20002");
         assert_eq!(hit.connection_name, APP_LINK_ADOPTED_FORWARD);
     }
@@ -302,18 +286,13 @@ mod tests {
     #[test]
     fn prefers_reverse_when_both_point_at_same_bot() {
         let mut b = bot(10001, RuntimeTarget::Local);
-        b.connect
-            .websocket_clients
-            .push(ws_client("ncd-app:old", "ws://127.0.0.1:8080/onebot/v11/ws", "tok"));
+        b.connect.websocket_clients.push(ws_client(
+            "ncd-app:old",
+            "ws://127.0.0.1:8080/onebot/v11/ws",
+            "tok",
+        ));
         b.connect.websocket_servers.push(ws_server(3001, ""));
-        let hit = discover(
-            "local",
-            8080,
-            Some("tok"),
-            &["ws://127.0.0.1:3001"],
-            &[b],
-        )
-        .unwrap();
+        let hit = discover("local", 8080, Some("tok"), &["ws://127.0.0.1:3001"], &[b]).unwrap();
         assert_eq!(hit.connection_name, "ncd-app:old");
     }
 
@@ -344,33 +323,20 @@ mod tests {
     #[test]
     fn skips_claimed_reverse_client() {
         let mut b = bot(10001, RuntimeTarget::Local);
-        b.connect
-            .websocket_clients
-            .push(ws_client("xiuxian", "ws://127.0.0.1:8080/onebot/v11/ws", ""));
+        b.connect.websocket_clients.push(ws_client(
+            "xiuxian",
+            "ws://127.0.0.1:8080/onebot/v11/ws",
+            "",
+        ));
         let mut claimed = HashSet::new();
         claimed.insert(("10001".into(), "xiuxian".into()));
-        assert!(discover_existing_link(
-            "local",
-            8080,
-            None,
-            &[],
-            &claimed,
-            &[b]
-        )
-        .is_none());
+        assert!(discover_existing_link("local", 8080, None, &[], &claimed, &[b]).is_none());
     }
 
     #[test]
     fn ignores_other_host_forward_without_token() {
         let mut b = bot(10001, RuntimeTarget::server("other"));
         b.connect.websocket_servers.push(ws_server(3001, ""));
-        assert!(discover(
-            "remote:km",
-            13120,
-            None,
-            &["ws://127.0.0.1:3001"],
-            &[b]
-        )
-        .is_none());
+        assert!(discover("remote:km", 13120, None, &["ws://127.0.0.1:3001"], &[b]).is_none());
     }
 }

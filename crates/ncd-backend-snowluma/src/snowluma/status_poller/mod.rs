@@ -419,7 +419,10 @@ fn is_real_uin(s: &str) -> bool {
 ///
 /// 本机 Windows 后代枚举正常时,后代与 /api/processes 有交集,走原路径不变,
 /// 多 Bot 场景仍由后续 try_lock_uin 策略做账号隔离,不受影响。
-fn reconcile_candidates(descendants: BTreeSet<u32>, processes: &[HookProcessInfo]) -> BTreeSet<u32> {
+fn reconcile_candidates(
+    descendants: BTreeSet<u32>,
+    processes: &[HookProcessInfo],
+) -> BTreeSet<u32> {
     let has_intersection = processes.iter().any(|p| descendants.contains(&p.pid));
     if has_intersection {
         return descendants;

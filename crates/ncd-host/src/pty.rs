@@ -40,7 +40,10 @@ impl PtySize {
 
 impl Default for PtySize {
     fn default() -> Self {
-        Self { cols: 120, rows: 30 }
+        Self {
+            cols: 120,
+            rows: 30,
+        }
     }
 }
 
@@ -168,7 +171,11 @@ pub fn pty_channel_pair() -> (PtySession, PtyBackend) {
 ///
 /// 反斜杠只有挨着双引号时才要翻倍，其余原样；空参数也要一对引号占位
 pub fn quote_windows_arg(arg: &str) -> String {
-    if !arg.is_empty() && !arg.chars().any(|c| matches!(c, ' ' | '\t' | '\n' | '\u{b}' | '"')) {
+    if !arg.is_empty()
+        && !arg
+            .chars()
+            .any(|c| matches!(c, ' ' | '\t' | '\n' | '\u{b}' | '"'))
+    {
         return arg.to_string();
     }
     let mut out = String::with_capacity(arg.len() + 2);
@@ -212,17 +219,29 @@ mod tests {
     fn size_is_clamped_to_something_conpty_accepts() {
         assert_eq!(PtySize::new(0, 0), PtySize { cols: 2, rows: 1 });
         assert_eq!(PtySize::new(80, 24), PtySize { cols: 80, rows: 24 });
-        assert_eq!(PtySize::new(5000, 5000), PtySize { cols: 1000, rows: 500 });
+        assert_eq!(
+            PtySize::new(5000, 5000),
+            PtySize {
+                cols: 1000,
+                rows: 500
+            }
+        );
     }
 
     #[test]
     fn windows_args_follow_argv_quoting_rules() {
         assert_eq!(quote_windows_arg("plain"), "plain");
         assert_eq!(quote_windows_arg(""), "\"\"");
-        assert_eq!(quote_windows_arg("C:\\Program Files\\x"), "\"C:\\Program Files\\x\"");
+        assert_eq!(
+            quote_windows_arg("C:\\Program Files\\x"),
+            "\"C:\\Program Files\\x\""
+        );
         assert_eq!(quote_windows_arg("say \"hi\""), "\"say \\\"hi\\\"\"");
         // 结尾的反斜杠挨着收尾引号，必须翻倍，不然引号被吃掉
-        assert_eq!(quote_windows_arg("C:\\dir with space\\"), "\"C:\\dir with space\\\\\"");
+        assert_eq!(
+            quote_windows_arg("C:\\dir with space\\"),
+            "\"C:\\dir with space\\\\\""
+        );
         assert_eq!(quote_windows_arg("a\\b"), "a\\b");
     }
 
@@ -230,7 +249,11 @@ mod tests {
     fn command_line_joins_quoted_parts() {
         let line = windows_command_line(
             "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-            &["-NoLogo".to_string(), "-Command".to_string(), "Write-Host 'a b'".to_string()],
+            &[
+                "-NoLogo".to_string(),
+                "-Command".to_string(),
+                "Write-Host 'a b'".to_string(),
+            ],
         );
         assert_eq!(
             line,

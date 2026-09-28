@@ -65,8 +65,12 @@ pub fn patch_model_config(
         None => {
             let mut doc = parse(DEFAULT_MODEL_CONFIG, "内置默认 model_config.toml")?;
             if let Some(version) = model_config_version
-                && let Some(inner) = doc.get_mut("inner").and_then(toml_edit::Item::as_table_like_mut)
-                && let Some(v) = inner.get_mut("version").and_then(toml_edit::Item::as_value_mut)
+                && let Some(inner) = doc
+                    .get_mut("inner")
+                    .and_then(toml_edit::Item::as_table_like_mut)
+                && let Some(v) = inner
+                    .get_mut("version")
+                    .and_then(toml_edit::Item::as_value_mut)
             {
                 let decor = v.decor().clone();
                 *v = version.into();
@@ -86,15 +90,23 @@ pub fn patch_model_config(
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::schema::{DEFAULT_BOT_CONFIG, read_bot_config_file, read_model_config_file};
+    use super::super::super::schema::{
+        DEFAULT_BOT_CONFIG, read_bot_config_file, read_model_config_file,
+    };
     use super::*;
 
     #[test]
     fn untouched_config_writes_nothing() {
         let bot = read_bot_config_file(Some(DEFAULT_BOT_CONFIG)).unwrap();
-        assert_eq!(patch_bot_config(Some(DEFAULT_BOT_CONFIG), "8.14.40", &bot, &bot).unwrap(), None);
+        assert_eq!(
+            patch_bot_config(Some(DEFAULT_BOT_CONFIG), "8.14.40", &bot, &bot).unwrap(),
+            None
+        );
         let models = read_model_config_file(None).unwrap();
-        assert_eq!(patch_model_config(None, Some("1.17.9"), &models, &models).unwrap(), None);
+        assert_eq!(
+            patch_model_config(None, Some("1.17.9"), &models, &models).unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -103,7 +115,9 @@ mod tests {
         let before = read_bot_config_file(Some(seed)).unwrap();
         let mut after = before.clone();
         after.bot.nickname = "小麦".into();
-        let out = patch_bot_config(Some(seed), "8.14.40", &before, &after).unwrap().unwrap();
+        let out = patch_bot_config(Some(seed), "8.14.40", &before, &after)
+            .unwrap()
+            .unwrap();
         assert!(out.starts_with(seed), "原有内容一字不动：{out}");
         assert!(out.contains("[bot]\nnickname = \"小麦\""), "{out}");
         assert_eq!(read_bot_config_file(Some(&out)).unwrap(), after);
@@ -114,10 +128,16 @@ mod tests {
         let before = read_model_config_file(None).unwrap();
         let mut after = before.clone();
         after.api_providers[0].api_key = "sk-test".into();
-        let out = patch_model_config(None, Some("1.18.0"), &before, &after).unwrap().unwrap();
+        let out = patch_model_config(None, Some("1.18.0"), &before, &after)
+            .unwrap()
+            .unwrap();
         let root: toml::Table = toml::from_str(&out).unwrap();
         assert_eq!(root["inner"]["version"].as_str(), Some("1.18.0"));
-        assert!(out.contains("# 模型标识符"), "上游注释要带着：{}", &out[..200.min(out.len())]);
+        assert!(
+            out.contains("# 模型标识符"),
+            "上游注释要带着：{}",
+            &out[..200.min(out.len())]
+        );
         assert_eq!(read_model_config_file(Some(&out)).unwrap(), after);
     }
 
@@ -127,7 +147,9 @@ mod tests {
         let before = read_model_config_file(Some(text)).unwrap();
         let mut after = before.clone();
         after.api_providers.reverse();
-        let out = patch_model_config(Some(text), None, &before, &after).unwrap().unwrap();
+        let out = patch_model_config(Some(text), None, &before, &after)
+            .unwrap()
+            .unwrap();
         let root: toml::Table = toml::from_str(&out).unwrap();
         let providers = root["api_providers"].as_array().unwrap();
         assert_eq!(providers[0]["name"].as_str(), Some("b"));

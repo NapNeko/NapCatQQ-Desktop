@@ -381,12 +381,17 @@ async fn smoke_pty_login_shell_round_trip() {
 
     let host = make_host().await;
     let mut session = host
-        .open_pty(PtyRequest::new(PtyProgram::LoginShell, PtySize::new(100, 30)))
+        .open_pty(PtyRequest::new(
+            PtyProgram::LoginShell,
+            PtySize::new(100, 30),
+        ))
         .await
         .unwrap();
     session
         .control
-        .write(bytes::Bytes::from_static(b"echo ncd-$((40+2)) $(tput cols)\n"))
+        .write(bytes::Bytes::from_static(
+            b"echo ncd-$((40+2)) $(tput cols)\n",
+        ))
         .unwrap();
     let text = read_until(&mut session, "ncd-42 100").await;
     assert!(text.contains("ncd-42 100"), "output was: {text:?}");
@@ -395,7 +400,9 @@ async fn smoke_pty_login_shell_round_trip() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     session
         .control
-        .write(bytes::Bytes::from_static(b"echo cols=$(tput cols); exit 7\n"))
+        .write(bytes::Bytes::from_static(
+            b"echo cols=$(tput cols); exit 7\n",
+        ))
         .unwrap();
     let text = read_until(&mut session, "cols=132").await;
     assert!(text.contains("cols=132"), "output was: {text:?}");

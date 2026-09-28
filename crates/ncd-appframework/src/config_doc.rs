@@ -153,7 +153,13 @@ impl IssueSink {
 
     /// 闭区间；两头都可以不限
     pub fn range(&mut self, path: &str, value: f64, min: Option<f64>, max: Option<f64>) {
-        let fmt = |v: f64| if v.fract() == 0.0 { format!("{v:.0}") } else { v.to_string() };
+        let fmt = |v: f64| {
+            if v.fract() == 0.0 {
+                format!("{v:.0}")
+            } else {
+                v.to_string()
+            }
+        };
         match (min, max) {
             (Some(lo), Some(hi)) if !(lo..=hi).contains(&value) => {
                 self.push(path, format!("要在 {} 到 {} 之间", fmt(lo), fmt(hi)));
@@ -166,7 +172,10 @@ impl IssueSink {
 
     pub fn one_of(&mut self, path: &str, value: &str, options: &[&str]) {
         if !options.contains(&value) {
-            self.push(path, format!("只能是 {} 之一，现在是 {value:?}", options.join(" / ")));
+            self.push(
+                path,
+                format!("只能是 {} 之一，现在是 {value:?}", options.join(" / ")),
+            );
         }
     }
 }
@@ -367,16 +376,10 @@ mod tests {
     #[test]
     fn listen_port_reads_astrbot_onebot_port() {
         let mut cfg = crate::astrbot::AstrBotInstanceConfig::default();
-        assert_eq!(
-            AppInstanceConfig::AstrBot(cfg.clone()).listen_port(),
-            6199
-        );
+        assert_eq!(AppInstanceConfig::AstrBot(cfg.clone()).listen_port(), 6199);
         cfg.onebot.ws_reverse_port = 6201;
         assert_eq!(AppInstanceConfig::AstrBot(cfg.clone()).listen_port(), 6201);
-        assert_eq!(
-            AppInstanceConfig::AstrBot(cfg).webui_port(),
-            Some(6185)
-        );
+        assert_eq!(AppInstanceConfig::AstrBot(cfg).webui_port(), Some(6185));
         assert_eq!(
             AppInstanceConfig::AstrBot(crate::astrbot::AstrBotInstanceConfig::default())
                 .webui_auth_key(),
@@ -434,9 +437,8 @@ mod tests {
         assert!(a.link_inputs_changed(&port));
         env = crate::nonebot2::config::NoneBot2EnvProd::default();
         env.onebot_access_token = "tok".into();
-        let token = AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig {
-            env_prod: env,
-        });
+        let token =
+            AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig { env_prod: env });
         assert!(a.link_inputs_changed(&token));
     }
 
@@ -460,9 +462,18 @@ mod tests {
     #[test]
     fn combined_revision_depends_on_each_part() {
         let base = combined_revision([("env", "aaaa"), ("config", "bbbb")]);
-        assert_eq!(base, combined_revision([("env", "aaaa"), ("config", "bbbb")]));
-        assert_ne!(base, combined_revision([("env", "aaaa"), ("config", "cccc")]));
-        assert_ne!(base, combined_revision([("config", "bbbb"), ("env", "aaaa")]));
+        assert_eq!(
+            base,
+            combined_revision([("env", "aaaa"), ("config", "bbbb")])
+        );
+        assert_ne!(
+            base,
+            combined_revision([("env", "aaaa"), ("config", "cccc")])
+        );
+        assert_ne!(
+            base,
+            combined_revision([("config", "bbbb"), ("env", "aaaa")])
+        );
     }
 
     #[test]

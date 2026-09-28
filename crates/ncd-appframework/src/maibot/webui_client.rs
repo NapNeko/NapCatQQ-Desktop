@@ -13,8 +13,8 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 use super::runtime::{
-    MaiBotStatsSummary, UpstreamMcpStatus, UpstreamMcpTest, UpstreamModelList, UpstreamProviderCheck,
-    UpstreamSessions, UpstreamStatus,
+    MaiBotStatsSummary, UpstreamMcpStatus, UpstreamMcpTest, UpstreamModelList,
+    UpstreamProviderCheck, UpstreamSessions, UpstreamStatus,
 };
 use super::schema::MaiBotAPIProvider;
 
@@ -52,7 +52,9 @@ fn shared_http() -> Result<Client, AppFrameworkError> {
 impl MaiBotWebUi {
     pub fn connect(port: u16, token: &str) -> Result<Self, AppFrameworkError> {
         if port == 0 {
-            return Err(AppFrameworkError::DashboardUnreachable("WebUI 口无效".into()));
+            return Err(AppFrameworkError::DashboardUnreachable(
+                "WebUI 口无效".into(),
+            ));
         }
         let token = token.trim();
         if token.is_empty() {
@@ -92,7 +94,11 @@ impl MaiBotWebUi {
 
     /// 图片这类二进制（表情包缩略图、原图）。上游缩略图还在生成时回 202，文件被清理过回 404，
     /// 这两种都不算错，交给调用方决定等一会儿再要还是显示「图没了」
-    pub(crate) async fn fetch_bytes(&self, path: &str, query: &[(&str, &str)]) -> Result<Fetched, AppFrameworkError> {
+    pub(crate) async fn fetch_bytes(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<Fetched, AppFrameworkError> {
         let resp = self
             .http
             .get(format!("{}{path}", self.base))
@@ -120,11 +126,18 @@ impl MaiBotWebUi {
             .map(|v| v.split(';').next().unwrap_or(v).trim().to_string())
             .unwrap_or_default();
         let bytes = resp.bytes().await.map_err(transport_err)?;
-        Ok(Fetched::Ready { mime, bytes: bytes.to_vec() })
+        Ok(Fetched::Ready {
+            mime,
+            bytes: bytes.to_vec(),
+        })
     }
 
     /// multipart 表单（上传表情包）。上游处理图片要一会儿，按慢请求等
-    pub(crate) async fn send_form(&self, path: &str, form: reqwest::multipart::Form) -> Result<Value, AppFrameworkError> {
+    pub(crate) async fn send_form(
+        &self,
+        path: &str,
+        form: reqwest::multipart::Form,
+    ) -> Result<Value, AppFrameworkError> {
         let resp = self
             .http
             .post(format!("{}{path}", self.base))
@@ -148,12 +161,17 @@ impl MaiBotWebUi {
         path: &str,
         query: &[(&str, &str)],
     ) -> Result<T, AppFrameworkError> {
-        let value = self.send(Request::new(Method::GET, path).query(query)).await?;
+        let value = self
+            .send(Request::new(Method::GET, path).query(query))
+            .await?;
         parse(value, path)
     }
 
     /// 发出去并按 `T` 收；认不出时报的是这条路径
-    pub(crate) async fn call<T: DeserializeOwned>(&self, req: Request<'_>) -> Result<T, AppFrameworkError> {
+    pub(crate) async fn call<T: DeserializeOwned>(
+        &self,
+        req: Request<'_>,
+    ) -> Result<T, AppFrameworkError> {
         let path = req.path;
         parse(self.send(req).await?, path)
     }
@@ -161,20 +179,26 @@ impl MaiBotWebUi {
     /// 只带改了的键：上游在它自己的进程里合并进当前文件（保注释），和它别处的写入不打架。
     /// 删不掉键；有删除的改动走 [`Self::write_bot_config_raw`]
     pub async fn merge_bot_config(&self, partial: &Value) -> Result<(), AppFrameworkError> {
-        let req = Request::new(Method::POST, "/api/webui/config/bot").body(partial).doc("bot_config");
+        let req = Request::new(Method::POST, "/api/webui/config/bot")
+            .body(partial)
+            .doc("bot_config");
         self.send(req).await.map(|_| ())
     }
 
     /// 整份原文：上游先按它的类校验，通过了原样写盘
     pub async fn write_bot_config_raw(&self, text: &str) -> Result<(), AppFrameworkError> {
         let body = json!({ "raw_content": text });
-        let req = Request::new(Method::POST, "/api/webui/config/bot/raw").body(&body).doc("bot_config");
+        let req = Request::new(Method::POST, "/api/webui/config/bot/raw")
+            .body(&body)
+            .doc("bot_config");
         self.send(req).await.map(|_| ())
     }
 
     /// 模型配置整份给：上游要求提供商和模型都不空，改名这类跨表的改动也得一次到位。写完它会自己重载
     pub async fn write_model_config(&self, full: &Value) -> Result<(), AppFrameworkError> {
-        let req = Request::new(Method::POST, "/api/webui/config/model").body(full).doc("model_config");
+        let req = Request::new(Method::POST, "/api/webui/config/model")
+            .body(full)
+            .doc("model_config");
         self.send(req).await.map(|_| ())
     }
 
@@ -184,12 +208,18 @@ impl MaiBotWebUi {
 
     /// 上游 0.5 秒后让工作进程以 42 退出，bot.py 的外层看到 42 就重新拉起，进程号不变
     pub async fn restart(&self) -> Result<(), AppFrameworkError> {
-        self.send(Request::new(Method::POST, "/api/webui/system/restart")).await.map(|_| ())
+        self.send(Request::new(Method::POST, "/api/webui/system/restart"))
+            .await
+            .map(|_| ())
     }
 
     pub async fn stats_summary(&self, hours: u32) -> Result<MaiBotStatsSummary, AppFrameworkError> {
         let hours = hours.to_string();
-        self.get("/api/webui/statistics/summary", &[("hours", hours.as_str())]).await
+        self.get(
+            "/api/webui/statistics/summary",
+            &[("hours", hours.as_str())],
+        )
+        .await
     }
 
     /// 本地聊天这组接口不在 /api/webui 底下
@@ -205,7 +235,13 @@ impl MaiBotWebUi {
     ) -> Result<UpstreamModelList, AppFrameworkError> {
         let parser = if gemini { "gemini" } else { "openai" };
         let q = [("provider_name", name), ("parser", parser)];
-        let value = self.send(Request::new(Method::GET, "/api/webui/models/list").query(&q).slow()).await?;
+        let value = self
+            .send(
+                Request::new(Method::GET, "/api/webui/models/list")
+                    .query(&q)
+                    .slow(),
+            )
+            .await?;
         parse(value, "/models/list")
     }
 
@@ -214,7 +250,11 @@ impl MaiBotWebUi {
         &self,
         p: &MaiBotAPIProvider,
     ) -> Result<UpstreamModelList, AppFrameworkError> {
-        let parser = if p.client_type == "gemini" { "gemini" } else { "openai" };
+        let parser = if p.client_type == "gemini" {
+            "gemini"
+        } else {
+            "openai"
+        };
         let q = [
             ("base_url", p.base_url.as_str()),
             ("api_key", p.api_key.as_str()),
@@ -226,13 +266,20 @@ impl MaiBotWebUi {
             ("auth_header_prefix", p.auth_header_prefix.as_str()),
             ("auth_query_name", p.auth_query_name.as_str()),
         ];
-        let req = Request::new(Method::GET, "/api/webui/models/list-by-url").query(&q).slow();
+        let req = Request::new(Method::GET, "/api/webui/models/list-by-url")
+            .query(&q)
+            .slow();
         parse(self.send(req).await?, "/models/list-by-url")
     }
 
-    pub(crate) async fn test_provider_by_name(&self, name: &str) -> Result<UpstreamProviderCheck, AppFrameworkError> {
+    pub(crate) async fn test_provider_by_name(
+        &self,
+        name: &str,
+    ) -> Result<UpstreamProviderCheck, AppFrameworkError> {
         let q = [("provider_name", name)];
-        let req = Request::new(Method::POST, "/api/webui/models/test-connection-by-name").query(&q).slow();
+        let req = Request::new(Method::POST, "/api/webui/models/test-connection-by-name")
+            .query(&q)
+            .slow();
         parse(self.send(req).await?, "/models/test-connection-by-name")
     }
 
@@ -240,11 +287,16 @@ impl MaiBotWebUi {
         &self,
         p: &MaiBotAPIProvider,
     ) -> Result<UpstreamProviderCheck, AppFrameworkError> {
-        let mut q = vec![("base_url", p.base_url.as_str()), ("client_type", p.client_type.as_str())];
+        let mut q = vec![
+            ("base_url", p.base_url.as_str()),
+            ("client_type", p.client_type.as_str()),
+        ];
         if !p.api_key.trim().is_empty() {
             q.push(("api_key", p.api_key.as_str()));
         }
-        let req = Request::new(Method::GET, "/api/webui/models/test-connection").query(&q).slow();
+        let req = Request::new(Method::GET, "/api/webui/models/test-connection")
+            .query(&q)
+            .slow();
         parse(self.send(req).await?, "/models/test-connection")
     }
 
@@ -252,8 +304,13 @@ impl MaiBotWebUi {
         self.get("/api/webui/mcp/status", &[]).await
     }
 
-    pub(crate) async fn mcp_test(&self, server: &Value) -> Result<UpstreamMcpTest, AppFrameworkError> {
-        let req = Request::new(Method::POST, "/api/webui/mcp/test").body(server).slow();
+    pub(crate) async fn mcp_test(
+        &self,
+        server: &Value,
+    ) -> Result<UpstreamMcpTest, AppFrameworkError> {
+        let req = Request::new(Method::POST, "/api/webui/mcp/test")
+            .body(server)
+            .slow();
         parse(self.send(req).await?, "/mcp/test")
     }
 }
@@ -270,7 +327,14 @@ pub(crate) struct Request<'a> {
 
 impl<'a> Request<'a> {
     pub(crate) fn new(method: Method, path: &'a str) -> Self {
-        Self { method, path, query: &[], body: None, doc: None, timeout: None }
+        Self {
+            method,
+            path,
+            query: &[],
+            body: None,
+            doc: None,
+            timeout: None,
+        }
     }
 
     pub(crate) fn query(mut self, query: &'a [(&'a str, &'a str)]) -> Self {
@@ -321,7 +385,10 @@ fn failure(status: StatusCode, value: &Value, text: &str, doc: Option<&str>) -> 
             "麦麦 WebUI 不认这个 token，data/webui.json 里的 token 可能被改过".into(),
         ),
         (StatusCode::BAD_REQUEST | StatusCode::UNPROCESSABLE_ENTITY, Some(doc)) => {
-            AppFrameworkError::ConfigInvalid(vec![AppConfigIssue::new(doc, format!("麦麦没收下：{detail}"))])
+            AppFrameworkError::ConfigInvalid(vec![AppConfigIssue::new(
+                doc,
+                format!("麦麦没收下：{detail}"),
+            )])
         }
         // 上游把服务商那边的 401 / 403 换成 502 回来（免得前端当成 WebUI 登录失效），原话就够清楚
         (StatusCode::BAD_REQUEST | StatusCode::BAD_GATEWAY | StatusCode::GATEWAY_TIMEOUT, None) => {
@@ -332,8 +399,9 @@ fn failure(status: StatusCode, value: &Value, text: &str, doc: Option<&str>) -> 
 }
 
 pub(crate) fn parse<T: DeserializeOwned>(value: Value, path: &str) -> Result<T, AppFrameworkError> {
-    serde_json::from_value(value)
-        .map_err(|e| AppFrameworkError::Integration(format!("麦麦 WebUI {path} 回的内容认不出：{e}")))
+    serde_json::from_value(value).map_err(|e| {
+        AppFrameworkError::Integration(format!("麦麦 WebUI {path} 回的内容认不出：{e}"))
+    })
 }
 
 #[cfg(test)]

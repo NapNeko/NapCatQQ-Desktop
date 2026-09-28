@@ -32,13 +32,34 @@ pub const UV_DEFAULT_VERSION: &str = "0.12.8";
 /// UV_DEFAULT_VERSION 各发行包的 sha256，取自 GitHub release 的 asset digest。
 /// 下载会走第三方镜像，只有钉在源码里的摘要挡得住被换过的包；升版本时这张表跟着一起换
 const UV_DEFAULT_SHA256: &[(&str, &str)] = &[
-    ("uv-x86_64-pc-windows-msvc.zip", "e07acf3f8a29fe41f9e04b799c3325cb0e0893836bb222bf102829b45c679ad6"),
-    ("uv-aarch64-pc-windows-msvc.zip", "84b821c551802c200a32e25f9d1d960ef15e248f54f6a1bd9e1eb62934669da8"),
-    ("uv-i686-pc-windows-msvc.zip", "9b38cad9b06e0a910e606510cdb4ad2c4eb4f320c4f4c4ba90dd13ed1115c5b0"),
-    ("uv-x86_64-unknown-linux-gnu.tar.gz", "2e2b37e9811e17675a9e70bed5e1a58fc8c0388be63d751d72cc735188c149ff"),
-    ("uv-aarch64-unknown-linux-gnu.tar.gz", "ba8661f4fd207c8e94814191598e619b355ac10d5014e851e21eb800f9ef2b00"),
-    ("uv-i686-unknown-linux-gnu.tar.gz", "739cfea6b2958da57106e6ff1b0f95ecb17522ce84fc8e07c8606b2f427a4e39"),
-    ("uv-armv7-unknown-linux-gnueabihf.tar.gz", "bc80826f631f8836a974a88b8cf797935bc83f15552828ad5de0195f6246e333"),
+    (
+        "uv-x86_64-pc-windows-msvc.zip",
+        "e07acf3f8a29fe41f9e04b799c3325cb0e0893836bb222bf102829b45c679ad6",
+    ),
+    (
+        "uv-aarch64-pc-windows-msvc.zip",
+        "84b821c551802c200a32e25f9d1d960ef15e248f54f6a1bd9e1eb62934669da8",
+    ),
+    (
+        "uv-i686-pc-windows-msvc.zip",
+        "9b38cad9b06e0a910e606510cdb4ad2c4eb4f320c4f4c4ba90dd13ed1115c5b0",
+    ),
+    (
+        "uv-x86_64-unknown-linux-gnu.tar.gz",
+        "2e2b37e9811e17675a9e70bed5e1a58fc8c0388be63d751d72cc735188c149ff",
+    ),
+    (
+        "uv-aarch64-unknown-linux-gnu.tar.gz",
+        "ba8661f4fd207c8e94814191598e619b355ac10d5014e851e21eb800f9ef2b00",
+    ),
+    (
+        "uv-i686-unknown-linux-gnu.tar.gz",
+        "739cfea6b2958da57106e6ff1b0f95ecb17522ce84fc8e07c8606b2f427a4e39",
+    ),
+    (
+        "uv-armv7-unknown-linux-gnueabihf.tar.gz",
+        "bc80826f631f8836a974a88b8cf797935bc83f15552828ad5de0195f6246e333",
+    ),
 ];
 
 const SUPPORTED: &[(Os, Locality)] = &[
@@ -162,12 +183,12 @@ impl UvComponent {
     ) -> Result<Option<DetectedVersion>, ActionError> {
         let cmd = HostCommand::new(program).arg("--version");
         match host.run_to_string(cmd).await {
-            Ok(out) if out.success() => Ok(Self::parse_version_output(&out.stdout).map(|version| {
-                DetectedVersion {
+            Ok(out) if out.success() => Ok(Self::parse_version_output(&out.stdout).map(
+                |version| DetectedVersion {
                     version,
                     source: source.to_string(),
-                }
-            })),
+                },
+            )),
             // PATH 里没有 uv 是常态，不算探测出错
             Ok(_) | Err(HostError::CommandFailed { .. }) | Err(HostError::Io(_)) => Ok(None),
             Err(e) => Err(ActionError::Host(e)),
@@ -210,7 +231,10 @@ impl Component for UvComponent {
     async fn detect(&self, host: &dyn Host) -> Result<Option<DetectedVersion>, ActionError> {
         let managed = self.uv_binary_path(host);
         if host.exists(&managed).await? {
-            if let Some(v) = self.probe(host, managed.as_posix(), managed.as_posix()).await? {
+            if let Some(v) = self
+                .probe(host, managed.as_posix(), managed.as_posix())
+                .await?
+            {
                 return Ok(Some(v));
             }
         }
@@ -244,10 +268,17 @@ impl Component for UvComponent {
         let asset = Self::asset_name(host.os(), arch)?;
         let expected_sha256 = self.expected_sha256(&asset);
         if expected_sha256.is_none() {
-            ctx.warn(format!("uv {} 没有内置校验值，下载后不做 sha256 校验", self.version))
-                .await;
+            ctx.warn(format!(
+                "uv {} 没有内置校验值，下载后不做 sha256 校验",
+                self.version
+            ))
+            .await;
         }
-        let ext = if host.os() == Os::Windows { "zip" } else { "tar.gz" };
+        let ext = if host.os() == Os::Windows {
+            "zip"
+        } else {
+            "tar.gz"
+        };
         let file_name = format!("ncd-uv-{}-{}.{ext}", self.version, std::process::id());
         let local_tmp = std::env::temp_dir().join(&file_name);
         let helper = DownloadHelper::new()?;
@@ -372,8 +403,11 @@ impl Component for UvComponent {
     async fn verify(&self, host: &dyn Host) -> Result<VerifyReport, ActionError> {
         let bin = self.uv_binary_path(host);
         let exists = host.exists(&bin).await?;
-        let mut report =
-            VerifyReport::ok().with_check("uv binary exists", exists, Some(bin.as_posix().to_string()));
+        let mut report = VerifyReport::ok().with_check(
+            "uv binary exists",
+            exists,
+            Some(bin.as_posix().to_string()),
+        );
         if exists {
             match self.probe(host, bin.as_posix(), bin.as_posix()).await? {
                 Some(v) => {
@@ -391,7 +425,11 @@ impl Component for UvComponent {
         Ok(report)
     }
 
-    fn launch_command(&self, host: &dyn Host, args: &LaunchArgs) -> Result<HostCommand, ActionError> {
+    fn launch_command(
+        &self,
+        host: &dyn Host,
+        args: &LaunchArgs,
+    ) -> Result<HostCommand, ActionError> {
         Ok(args.apply_to(HostCommand::new(self.uv_binary_path(host).as_posix())))
     }
 }
@@ -436,7 +474,10 @@ mod tests {
     #[test]
     fn other_versions_have_no_pinned_sha256() {
         let comp = UvComponent::new("0.12.9", HostPath::from_posix("/tmp/uv"));
-        assert!(comp.expected_sha256("uv-x86_64-unknown-linux-gnu.tar.gz").is_none());
+        assert!(
+            comp.expected_sha256("uv-x86_64-unknown-linux-gnu.tar.gz")
+                .is_none()
+        );
     }
 
     #[test]

@@ -339,7 +339,8 @@ pub fn ai_from_root(root: &Value) -> AstrBotAiSettings {
         out.context_limit_reached_strategy = s.to_string();
     }
     out.llm_compress_instruction = str_of(ps, "llm_compress_instruction");
-    out.llm_compress_keep_recent = i64_of(ps, "llm_compress_keep_recent", out.llm_compress_keep_recent);
+    out.llm_compress_keep_recent =
+        i64_of(ps, "llm_compress_keep_recent", out.llm_compress_keep_recent);
     out.llm_compress_provider_id = str_of(ps, "llm_compress_provider_id");
     out.streaming_response = bool_of(ps, "streaming_response", out.streaming_response);
     out.display_reasoning_text = bool_of(ps, "display_reasoning_text", out.display_reasoning_text);
@@ -441,14 +442,21 @@ pub fn gates_from_root(root: &Value) -> AstrBotPlatformGates {
         return out;
     };
     out.unique_session = bool_of(ps, "unique_session", out.unique_session);
-    out.friend_message_needs_wake_prefix =
-        bool_of(ps, "friend_message_needs_wake_prefix", out.friend_message_needs_wake_prefix);
+    out.friend_message_needs_wake_prefix = bool_of(
+        ps,
+        "friend_message_needs_wake_prefix",
+        out.friend_message_needs_wake_prefix,
+    );
     out.enable_id_white_list = bool_of(ps, "enable_id_white_list", out.enable_id_white_list);
     out.id_whitelist = str_list_of(ps, "id_whitelist");
     out.id_whitelist_log = bool_of(ps, "id_whitelist_log", out.id_whitelist_log);
-    out.wl_ignore_admin_on_group = bool_of(ps, "wl_ignore_admin_on_group", out.wl_ignore_admin_on_group);
-    out.wl_ignore_admin_on_friend =
-        bool_of(ps, "wl_ignore_admin_on_friend", out.wl_ignore_admin_on_friend);
+    out.wl_ignore_admin_on_group =
+        bool_of(ps, "wl_ignore_admin_on_group", out.wl_ignore_admin_on_group);
+    out.wl_ignore_admin_on_friend = bool_of(
+        ps,
+        "wl_ignore_admin_on_friend",
+        out.wl_ignore_admin_on_friend,
+    );
     out
 }
 
@@ -458,8 +466,11 @@ pub fn subagent_from_root(root: &Value) -> AstrBotSubagentConfig {
         return out;
     };
     out.main_enable = bool_of(o, "main_enable", out.main_enable);
-    out.remove_main_duplicate_tools =
-        bool_of(o, "remove_main_duplicate_tools", out.remove_main_duplicate_tools);
+    out.remove_main_duplicate_tools = bool_of(
+        o,
+        "remove_main_duplicate_tools",
+        out.remove_main_duplicate_tools,
+    );
     if let Some(s) = o.get("router_system_prompt").and_then(Value::as_str) {
         out.router_system_prompt = s.to_string();
     }
@@ -563,7 +574,10 @@ pub fn apply_ai_patch(root: &mut Value, patch: &AstrBotAiPatch<'_>) -> Result<()
             "deerflow_agent_runner_provider_id".into(),
             Value::String(ai.deerflow_agent_runner_provider_id.clone()),
         );
-        ps.insert("max_context_length".into(), Value::from(ai.max_context_length));
+        ps.insert(
+            "max_context_length".into(),
+            Value::from(ai.max_context_length),
+        );
         ps.insert(
             "dequeue_context_length".into(),
             Value::from(ai.dequeue_context_length),
@@ -584,7 +598,10 @@ pub fn apply_ai_patch(root: &mut Value, patch: &AstrBotAiPatch<'_>) -> Result<()
             "llm_compress_provider_id".into(),
             Value::String(ai.llm_compress_provider_id.clone()),
         );
-        ps.insert("streaming_response".into(), Value::Bool(ai.streaming_response));
+        ps.insert(
+            "streaming_response".into(),
+            Value::Bool(ai.streaming_response),
+        );
         ps.insert(
             "display_reasoning_text".into(),
             Value::Bool(ai.display_reasoning_text),
@@ -608,7 +625,10 @@ pub fn apply_ai_patch(root: &mut Value, patch: &AstrBotAiPatch<'_>) -> Result<()
             Value::Bool(ai.show_tool_call_result),
         );
         ps.insert("max_agent_step".into(), Value::from(ai.max_agent_step));
-        ps.insert("tool_call_timeout".into(), Value::from(ai.tool_call_timeout));
+        ps.insert(
+            "tool_call_timeout".into(),
+            Value::from(ai.tool_call_timeout),
+        );
         ps.insert(
             "tool_schema_mode".into(),
             Value::String(ai.tool_schema_mode.clone()),
@@ -656,7 +676,10 @@ pub fn apply_ai_patch(root: &mut Value, patch: &AstrBotAiPatch<'_>) -> Result<()
             Value::Bool(gates.enable_id_white_list),
         );
         ps.insert("id_whitelist".into(), str_list_value(&gates.id_whitelist));
-        ps.insert("id_whitelist_log".into(), Value::Bool(gates.id_whitelist_log));
+        ps.insert(
+            "id_whitelist_log".into(),
+            Value::Bool(gates.id_whitelist_log),
+        );
         ps.insert(
             "wl_ignore_admin_on_group".into(),
             Value::Bool(gates.wl_ignore_admin_on_group),
@@ -697,7 +720,11 @@ pub fn apply_ai_patch(root: &mut Value, patch: &AstrBotAiPatch<'_>) -> Result<()
     Ok(())
 }
 
-pub fn restore_extras(root: &Value, sources: &mut [AstrBotProviderSource], models: &mut [AstrBotProviderModel]) {
+pub fn restore_extras(
+    root: &Value,
+    sources: &mut [AstrBotProviderSource],
+    models: &mut [AstrBotProviderModel],
+) {
     let old_sources = sources_from_root(root);
     for src in sources.iter_mut() {
         if src.extra.is_empty()
@@ -834,11 +861,7 @@ fn parse_model(row: &Value) -> Option<AstrBotProviderModel> {
         model: str_of(obj, "model"),
         modalities: {
             let v = str_list_of(obj, "modalities");
-            if v.is_empty() {
-                vec!["text".into()]
-            } else {
-                v
-            }
+            if v.is_empty() { vec!["text".into()] } else { v }
         },
         max_context_tokens: i64_of(obj, "max_context_tokens", 0),
         extra,
@@ -846,7 +869,9 @@ fn parse_model(row: &Value) -> Option<AstrBotProviderModel> {
 }
 
 fn patch_object(root: &mut Map<String, Value>, key: &str, f: impl FnOnce(&mut Map<String, Value>)) {
-    let entry = root.entry(key.to_string()).or_insert_with(|| Value::Object(Map::new()));
+    let entry = root
+        .entry(key.to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
     if !entry.is_object() {
         *entry = Value::Object(Map::new());
     }
@@ -883,7 +908,10 @@ fn bool_of(obj: &Map<String, Value>, key: &str, default: bool) -> bool {
 
 fn i64_of(obj: &Map<String, Value>, key: &str, default: i64) -> i64 {
     obj.get(key)
-        .and_then(|v| v.as_i64().or_else(|| v.as_u64().and_then(|n| i64::try_from(n).ok())))
+        .and_then(|v| {
+            v.as_i64()
+                .or_else(|| v.as_u64().and_then(|n| i64::try_from(n).ok()))
+        })
         .unwrap_or(default)
 }
 
@@ -1027,7 +1055,9 @@ mod tests {
             api_base: "https://api.deepseek.com/v1".into(),
             timeout: 90,
             proxy: "http://127.0.0.1:7890".into(),
-            extra: [("gm_native_search".to_string(), json!(true))].into_iter().collect(),
+            extra: [("gm_native_search".to_string(), json!(true))]
+                .into_iter()
+                .collect(),
             ..AstrBotProviderSource::default()
         }];
         let models = vec![AstrBotProviderModel {

@@ -9,20 +9,26 @@ use super::resources::behavior::{
 };
 use super::resources::chat::{self, MaiBotChatTicket};
 use super::resources::emoji::{
-    self, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
-    MaiBotEmojiUpload, MaiBotEmojiUploadDone,
+    self, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
+    MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone,
+};
+use super::resources::expression::{
+    self, MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage,
+    MaiBotExpressionQuery,
+};
+use super::resources::jargon::{
+    self, MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery,
 };
 use super::resources::memory::{
-    self, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult, MaiBotMemoryGraph,
-    MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup, MaiBotMemoryNodeDetail, MaiBotMemoryQuery,
-    MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage, MaiBotMemorySource, MaiBotMemoryStatus,
-    MaiBotMemoryTask, MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail,
+    self, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult,
+    MaiBotMemoryGraph, MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup,
+    MaiBotMemoryNodeDetail, MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind,
+    MaiBotMemoryRecordPage, MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask,
+    MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail,
 };
-use super::resources::person::{self, MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery};
-use super::resources::expression::{
-    self, MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
+use super::resources::person::{
+    self, MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
 };
-use super::resources::jargon::{self, MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery};
 use super::resources::prompts::{
     self, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotPromptTarget,
 };
@@ -65,7 +71,10 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         hours: u32,
     ) -> Result<MaiBotStatsSummary, AppFrameworkError>;
 
-    async fn chat_sessions(&self, session: &MaiBotSession) -> Result<Vec<MaiBotChatSession>, AppFrameworkError>;
+    async fn chat_sessions(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<Vec<MaiBotChatSession>, AppFrameworkError>;
 
     async fn provider_models(
         &self,
@@ -81,7 +90,10 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         source: MaiBotProviderSource,
     ) -> Result<MaiBotProviderCheck, AppFrameworkError>;
 
-    async fn mcp_status(&self, session: &MaiBotSession) -> Result<MaiBotMcpStatus, AppFrameworkError>;
+    async fn mcp_status(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotMcpStatus, AppFrameworkError>;
 
     async fn test_mcp(
         &self,
@@ -90,7 +102,10 @@ pub trait MaiBotRuntimeApi: Send + Sync {
     ) -> Result<MaiBotMcpTest, AppFrameworkError>;
 
     /// 提示词停着也能改：target 由编排层按实例状态给
-    async fn prompt_catalog(&self, target: MaiBotPromptTarget<'_>) -> Result<MaiBotPromptCatalog, AppFrameworkError>;
+    async fn prompt_catalog(
+        &self,
+        target: MaiBotPromptTarget<'_>,
+    ) -> Result<MaiBotPromptCatalog, AppFrameworkError>;
 
     async fn prompt_file(
         &self,
@@ -119,7 +134,10 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         query: &MaiBotExpressionQuery,
     ) -> Result<MaiBotExpressionPage, AppFrameworkError>;
 
-    async fn expression_overview(&self, session: &MaiBotSession) -> Result<MaiBotExpressionOverview, AppFrameworkError>;
+    async fn expression_overview(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotExpressionOverview, AppFrameworkError>;
 
     async fn expression_action(
         &self,
@@ -127,9 +145,16 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         action: &MaiBotExpressionAction,
     ) -> Result<MaiBotResourceDone, AppFrameworkError>;
 
-    async fn jargons(&self, session: &MaiBotSession, query: &MaiBotJargonQuery) -> Result<MaiBotJargonPage, AppFrameworkError>;
+    async fn jargons(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotJargonQuery,
+    ) -> Result<MaiBotJargonPage, AppFrameworkError>;
 
-    async fn jargon_overview(&self, session: &MaiBotSession) -> Result<MaiBotJargonOverview, AppFrameworkError>;
+    async fn jargon_overview(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotJargonOverview, AppFrameworkError>;
 
     async fn jargon_action(
         &self,
@@ -143,19 +168,39 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         query: &MaiBotBehaviorQuery,
     ) -> Result<MaiBotBehaviorPage, AppFrameworkError>;
 
-    async fn behavior_overview(&self, session: &MaiBotSession) -> Result<MaiBotBehaviorOverview, AppFrameworkError>;
+    async fn behavior_overview(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotBehaviorOverview, AppFrameworkError>;
 
     /// 一条经验连同它的观察和反馈记录；上游行为数据只读，没有对应的操作
-    async fn behavior(&self, session: &MaiBotSession, id: i64) -> Result<MaiBotBehaviorDetail, AppFrameworkError>;
+    async fn behavior(
+        &self,
+        session: &MaiBotSession,
+        id: i64,
+    ) -> Result<MaiBotBehaviorDetail, AppFrameworkError>;
 
     /// 试聊的一次性连接票；页面拿到就连
-    async fn chat_ticket(&self, session: &MaiBotSession) -> Result<MaiBotChatTicket, AppFrameworkError>;
+    async fn chat_ticket(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotChatTicket, AppFrameworkError>;
 
-    async fn chat_clear(&self, session: &MaiBotSession) -> Result<MaiBotResourceDone, AppFrameworkError>;
+    async fn chat_clear(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError>;
 
-    async fn persons(&self, session: &MaiBotSession, query: &MaiBotPersonQuery) -> Result<MaiBotPersonPage, AppFrameworkError>;
+    async fn persons(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotPersonQuery,
+    ) -> Result<MaiBotPersonPage, AppFrameworkError>;
 
-    async fn person_overview(&self, session: &MaiBotSession) -> Result<MaiBotPersonOverview, AppFrameworkError>;
+    async fn person_overview(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotPersonOverview, AppFrameworkError>;
 
     async fn person_action(
         &self,
@@ -163,9 +208,16 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         action: &MaiBotPersonAction,
     ) -> Result<MaiBotResourceDone, AppFrameworkError>;
 
-    async fn emojis(&self, session: &MaiBotSession, query: &MaiBotEmojiQuery) -> Result<MaiBotEmojiPage, AppFrameworkError>;
+    async fn emojis(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotEmojiQuery,
+    ) -> Result<MaiBotEmojiPage, AppFrameworkError>;
 
-    async fn emoji_overview(&self, session: &MaiBotSession) -> Result<MaiBotEmojiOverview, AppFrameworkError>;
+    async fn emoji_overview(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotEmojiOverview, AppFrameworkError>;
 
     async fn emoji_action(
         &self,
@@ -189,9 +241,15 @@ pub trait MaiBotRuntimeApi: Send + Sync {
     ) -> Result<MaiBotEmojiUploadDone, AppFrameworkError>;
 
     /// 长期记忆开没开、在不在初始化；关着时其余 memory_* 都会报错
-    async fn memory_status(&self, session: &MaiBotSession) -> Result<MaiBotMemoryStatus, AppFrameworkError>;
+    async fn memory_status(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotMemoryStatus, AppFrameworkError>;
 
-    async fn memory_import_setup(&self, session: &MaiBotSession) -> Result<MaiBotMemoryImportSetup, AppFrameworkError>;
+    async fn memory_import_setup(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotMemoryImportSetup, AppFrameworkError>;
 
     async fn memory_import(
         &self,
@@ -199,9 +257,16 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         req: &MaiBotMemoryImport,
     ) -> Result<MaiBotMemoryTask, AppFrameworkError>;
 
-    async fn memory_tasks(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError>;
+    async fn memory_tasks(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError>;
 
-    async fn memory_task(&self, session: &MaiBotSession, id: &str) -> Result<MaiBotMemoryTaskDetail, AppFrameworkError>;
+    async fn memory_task(
+        &self,
+        session: &MaiBotSession,
+        id: &str,
+    ) -> Result<MaiBotMemoryTaskDetail, AppFrameworkError>;
 
     async fn memory_task_action(
         &self,
@@ -222,7 +287,10 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         id: &str,
     ) -> Result<MaiBotMemoryRecordDetail, AppFrameworkError>;
 
-    async fn memory_sources(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError>;
+    async fn memory_sources(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError>;
 
     async fn memory_delete(
         &self,
@@ -230,9 +298,16 @@ pub trait MaiBotRuntimeApi: Send + Sync {
         action: &MaiBotMemoryDeleteAction,
     ) -> Result<MaiBotMemoryDeleteResult, AppFrameworkError>;
 
-    async fn memory_delete_ops(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemoryDeleteOp>, AppFrameworkError>;
+    async fn memory_delete_ops(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<Vec<MaiBotMemoryDeleteOp>, AppFrameworkError>;
 
-    async fn memory_graph(&self, session: &MaiBotSession, max_nodes: u32) -> Result<MaiBotMemoryGraph, AppFrameworkError>;
+    async fn memory_graph(
+        &self,
+        session: &MaiBotSession,
+        max_nodes: u32,
+    ) -> Result<MaiBotMemoryGraph, AppFrameworkError>;
 
     async fn memory_graph_node(
         &self,
@@ -268,7 +343,9 @@ impl MaiBotRuntimeApi for WebUiRuntime {
                 version: s.version.filter(|v| !v.is_empty()),
                 uptime_secs: s.uptime,
             },
-            Err(AppFrameworkError::DashboardAuth(m)) => MaiBotRuntimeStatus::gate(MaiBotRuntimeGate::Auth, m),
+            Err(AppFrameworkError::DashboardAuth(m)) => {
+                MaiBotRuntimeStatus::gate(MaiBotRuntimeGate::Auth, m)
+            }
             Err(AppFrameworkError::DashboardUnreachable(_)) => MaiBotRuntimeStatus::gate(
                 MaiBotRuntimeGate::Unreachable,
                 "麦麦的 WebUI 还没应答，刚启动的话等它起来",
@@ -289,7 +366,10 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         client(session)?.stats_summary(hours).await
     }
 
-    async fn chat_sessions(&self, session: &MaiBotSession) -> Result<Vec<MaiBotChatSession>, AppFrameworkError> {
+    async fn chat_sessions(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<Vec<MaiBotChatSession>, AppFrameworkError> {
         Ok(client(session)?.chat_sessions().await?.into_sessions())
     }
 
@@ -302,7 +382,8 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         let c = client(session)?;
         let list = match source {
             MaiBotProviderSource::Saved => {
-                c.provider_models_by_name(&provider.name, provider.client_type == "gemini").await?
+                c.provider_models_by_name(&provider.name, provider.client_type == "gemini")
+                    .await?
             }
             MaiBotProviderSource::Draft => c.provider_models_by_url(provider).await?,
         };
@@ -323,7 +404,10 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         Ok(check.into())
     }
 
-    async fn mcp_status(&self, session: &MaiBotSession) -> Result<MaiBotMcpStatus, AppFrameworkError> {
+    async fn mcp_status(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotMcpStatus, AppFrameworkError> {
         Ok(client(session)?.mcp_status().await?.into())
     }
 
@@ -337,7 +421,10 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         Ok(client(session)?.mcp_test(&body).await?.into())
     }
 
-    async fn prompt_catalog(&self, target: MaiBotPromptTarget<'_>) -> Result<MaiBotPromptCatalog, AppFrameworkError> {
+    async fn prompt_catalog(
+        &self,
+        target: MaiBotPromptTarget<'_>,
+    ) -> Result<MaiBotPromptCatalog, AppFrameworkError> {
         prompts::catalog(target).await
     }
 
@@ -376,7 +463,10 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         expression::list(&client(session)?, query).await
     }
 
-    async fn expression_overview(&self, session: &MaiBotSession) -> Result<MaiBotExpressionOverview, AppFrameworkError> {
+    async fn expression_overview(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotExpressionOverview, AppFrameworkError> {
         expression::overview(&client(session)?).await
     }
 
@@ -388,11 +478,18 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         expression::act(&client(session)?, action).await
     }
 
-    async fn jargons(&self, session: &MaiBotSession, query: &MaiBotJargonQuery) -> Result<MaiBotJargonPage, AppFrameworkError> {
+    async fn jargons(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotJargonQuery,
+    ) -> Result<MaiBotJargonPage, AppFrameworkError> {
         jargon::list(&client(session)?, query).await
     }
 
-    async fn jargon_overview(&self, session: &MaiBotSession) -> Result<MaiBotJargonOverview, AppFrameworkError> {
+    async fn jargon_overview(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotJargonOverview, AppFrameworkError> {
         jargon::overview(&client(session)?).await
     }
 
@@ -412,27 +509,47 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         behavior::list(&client(session)?, query, session.utc_offset_secs).await
     }
 
-    async fn behavior_overview(&self, session: &MaiBotSession) -> Result<MaiBotBehaviorOverview, AppFrameworkError> {
+    async fn behavior_overview(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotBehaviorOverview, AppFrameworkError> {
         behavior::overview(&client(session)?).await
     }
 
-    async fn behavior(&self, session: &MaiBotSession, id: i64) -> Result<MaiBotBehaviorDetail, AppFrameworkError> {
+    async fn behavior(
+        &self,
+        session: &MaiBotSession,
+        id: i64,
+    ) -> Result<MaiBotBehaviorDetail, AppFrameworkError> {
         behavior::detail(&client(session)?, id, session.utc_offset_secs).await
     }
 
-    async fn chat_ticket(&self, session: &MaiBotSession) -> Result<MaiBotChatTicket, AppFrameworkError> {
+    async fn chat_ticket(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotChatTicket, AppFrameworkError> {
         chat::ticket(&client(session)?, session.port).await
     }
 
-    async fn chat_clear(&self, session: &MaiBotSession) -> Result<MaiBotResourceDone, AppFrameworkError> {
+    async fn chat_clear(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotResourceDone, AppFrameworkError> {
         chat::clear_history(&client(session)?).await
     }
 
-    async fn persons(&self, session: &MaiBotSession, query: &MaiBotPersonQuery) -> Result<MaiBotPersonPage, AppFrameworkError> {
+    async fn persons(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotPersonQuery,
+    ) -> Result<MaiBotPersonPage, AppFrameworkError> {
         person::list(&client(session)?, query).await
     }
 
-    async fn person_overview(&self, session: &MaiBotSession) -> Result<MaiBotPersonOverview, AppFrameworkError> {
+    async fn person_overview(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotPersonOverview, AppFrameworkError> {
         person::overview(&client(session)?).await
     }
 
@@ -444,11 +561,18 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         person::act(&client(session)?, action).await
     }
 
-    async fn emojis(&self, session: &MaiBotSession, query: &MaiBotEmojiQuery) -> Result<MaiBotEmojiPage, AppFrameworkError> {
+    async fn emojis(
+        &self,
+        session: &MaiBotSession,
+        query: &MaiBotEmojiQuery,
+    ) -> Result<MaiBotEmojiPage, AppFrameworkError> {
         emoji::list(&client(session)?, query).await
     }
 
-    async fn emoji_overview(&self, session: &MaiBotSession) -> Result<MaiBotEmojiOverview, AppFrameworkError> {
+    async fn emoji_overview(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotEmojiOverview, AppFrameworkError> {
         emoji::overview(&client(session)?).await
     }
 
@@ -477,11 +601,17 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         emoji::upload(&client(session)?, upload).await
     }
 
-    async fn memory_status(&self, session: &MaiBotSession) -> Result<MaiBotMemoryStatus, AppFrameworkError> {
+    async fn memory_status(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotMemoryStatus, AppFrameworkError> {
         memory::status(&client(session)?).await
     }
 
-    async fn memory_import_setup(&self, session: &MaiBotSession) -> Result<MaiBotMemoryImportSetup, AppFrameworkError> {
+    async fn memory_import_setup(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<MaiBotMemoryImportSetup, AppFrameworkError> {
         memory::import_setup(&client(session)?).await
     }
 
@@ -493,11 +623,18 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         memory::import(&client(session)?, req).await
     }
 
-    async fn memory_tasks(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError> {
+    async fn memory_tasks(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError> {
         memory::tasks(&client(session)?).await
     }
 
-    async fn memory_task(&self, session: &MaiBotSession, id: &str) -> Result<MaiBotMemoryTaskDetail, AppFrameworkError> {
+    async fn memory_task(
+        &self,
+        session: &MaiBotSession,
+        id: &str,
+    ) -> Result<MaiBotMemoryTaskDetail, AppFrameworkError> {
         memory::task(&client(session)?, id).await
     }
 
@@ -526,7 +663,10 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         memory::record(&client(session)?, kind, id).await
     }
 
-    async fn memory_sources(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError> {
+    async fn memory_sources(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError> {
         memory::sources(&client(session)?).await
     }
 
@@ -538,11 +678,18 @@ impl MaiBotRuntimeApi for WebUiRuntime {
         memory::delete(&client(session)?, action).await
     }
 
-    async fn memory_delete_ops(&self, session: &MaiBotSession) -> Result<Vec<MaiBotMemoryDeleteOp>, AppFrameworkError> {
+    async fn memory_delete_ops(
+        &self,
+        session: &MaiBotSession,
+    ) -> Result<Vec<MaiBotMemoryDeleteOp>, AppFrameworkError> {
         memory::delete_ops(&client(session)?).await
     }
 
-    async fn memory_graph(&self, session: &MaiBotSession, max_nodes: u32) -> Result<MaiBotMemoryGraph, AppFrameworkError> {
+    async fn memory_graph(
+        &self,
+        session: &MaiBotSession,
+        max_nodes: u32,
+    ) -> Result<MaiBotMemoryGraph, AppFrameworkError> {
         memory::graph(&client(session)?, max_nodes).await
     }
 

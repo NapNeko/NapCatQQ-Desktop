@@ -275,7 +275,10 @@ pub fn is_loopback_host(host: &str) -> bool {
         .trim()
         .trim_matches(|c| c == '[' || c == ']')
         .to_ascii_lowercase();
-    matches!(h.as_str(), "127.0.0.1" | "localhost" | "::1" | "0.0.0.0" | "::")
+    matches!(
+        h.as_str(),
+        "127.0.0.1" | "localhost" | "::1" | "0.0.0.0" | "::"
+    )
 }
 
 /// 写入协议 Bot 的连接名前缀；全名 `ncd-app:<instance_id>`，重复对接按名替换，解绑按名删。
@@ -801,7 +804,10 @@ mod tests {
             serde_json::to_value(AppPlacement::RemoteNative).unwrap(),
             "remote_native"
         );
-        assert_eq!(AppPlacement::native_for_host("local"), AppPlacement::LocalNative);
+        assert_eq!(
+            AppPlacement::native_for_host("local"),
+            AppPlacement::LocalNative
+        );
         assert_eq!(
             AppPlacement::native_for_host("remote:srv-1"),
             AppPlacement::RemoteNative
@@ -837,7 +843,10 @@ mod tests {
     #[test]
     fn same_host_rule_matches_local_and_server() {
         assert!(runtime_target_matches_host(&RuntimeTarget::Local, "local"));
-        assert!(!runtime_target_matches_host(&RuntimeTarget::Local, "remote:a"));
+        assert!(!runtime_target_matches_host(
+            &RuntimeTarget::Local,
+            "remote:a"
+        ));
         let srv = RuntimeTarget::server("a");
         assert!(runtime_target_matches_host(&srv, "remote:a"));
         assert!(!runtime_target_matches_host(&srv, "remote:b"));
@@ -1015,7 +1024,10 @@ mod tests {
         assert_eq!(v["url"], "ws://127.0.0.1:7777/onebot/v11/ws");
         let back: OneBotLinkEndpoint = serde_json::from_value(v).unwrap();
         assert_eq!(back.mode(), OneBotLinkMode::ReverseWs);
-        assert_eq!(back.as_ws_client().map(|c| c.url.as_str()), Some("ws://127.0.0.1:7777/onebot/v11/ws"));
+        assert_eq!(
+            back.as_ws_client().map(|c| c.url.as_str()),
+            Some("ws://127.0.0.1:7777/onebot/v11/ws")
+        );
     }
 
     #[test]

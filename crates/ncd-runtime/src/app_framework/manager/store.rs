@@ -22,8 +22,13 @@ impl AppManager {
         framework_id: &str,
         resource: AppStoreResource,
     ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
-        super::plugin_market::fetch_store(&self.registry, &self.market_cache, framework_id, resource)
-            .await
+        super::plugin_market::fetch_store(
+            &self.registry,
+            &self.market_cache,
+            framework_id,
+            resource,
+        )
+        .await
     }
 
     pub async fn list_plugins(
@@ -152,7 +157,12 @@ impl AppManager {
                 runner: Box::new(move |ctx| {
                     Box::pin(async move {
                         plugin_task::run_app_plugin_task(
-                            app_manager, run_id, run_name, action, resource, ctx,
+                            app_manager,
+                            run_id,
+                            run_name,
+                            action,
+                            resource,
+                            ctx,
                         )
                         .await
                     })
@@ -212,10 +222,7 @@ impl AppManager {
                 let installed = adapter
                     .list_installed(host.as_ref(), &instance, resource)
                     .await?;
-                if let Some(found) = installed
-                    .iter()
-                    .find(|p| p.id == name || p.name == name)
-                {
+                if let Some(found) = installed.iter().find(|p| p.id == name || p.name == name) {
                     return adapter
                         .uninstall_store_item(
                             host.as_ref(),
@@ -262,12 +269,8 @@ impl AppManager {
         let adapter = self.registry.get(&instance.framework_id)?;
         if adapter.store_enable_via_config() {
             let envelope = self.read_config(id).await?;
-            let Some(cfg) = adapter.apply_store_enabled(
-                &envelope.config,
-                name,
-                resource,
-                enabled,
-            )?
+            let Some(cfg) =
+                adapter.apply_store_enabled(&envelope.config, name, resource, enabled)?
             else {
                 return Err(AppFrameworkError::Validation(
                     "该应用端声称走配置启停，但没有返回新配置".into(),
@@ -307,7 +310,9 @@ impl AppManager {
         resource: AppStoreResource,
         log: Option<&PluginLogSink>,
     ) -> Result<AppStoreMarketEntry, AppFrameworkError> {
-        let market = self.fetch_market(instance.framework_id.as_str(), resource).await;
+        let market = self
+            .fetch_market(instance.framework_id.as_str(), resource)
+            .await;
         let market_failed = market.is_err();
         let fallback_err = match market {
             Ok(list) => {
@@ -324,9 +329,10 @@ impl AppManager {
         // 目录挂了或条目下架时，NoneBot 还能用已装 PyPI 包名 `uv add pkg@latest`。
         // Karin git/app 缺 repo/url，不能合成空壳。
         let installed = adapter.list_installed(host, instance, resource).await?;
-        let Some(found) = installed.iter().find(|p| {
-            (p.id == name || p.name == name) && p.flavor == AppStoreFlavor::Pypi
-        }) else {
+        let Some(found) = installed
+            .iter()
+            .find(|p| (p.id == name || p.name == name) && p.flavor == AppStoreFlavor::Pypi)
+        else {
             return Err(fallback_err);
         };
         if market_failed && let Some(sink) = log {
@@ -365,9 +371,11 @@ impl AppManager {
     ) -> Result<(), AppFrameworkError> {
         for file in &entry.files {
             let basename = app_file_basename(&file.url)?;
-            let dest = adapter.store_app_file_dest(instance, &basename).ok_or_else(|| {
-                AppFrameworkError::PluginUnsupported(instance.framework_id.as_str().to_string())
-            })?;
+            let dest = adapter
+                .store_app_file_dest(instance, &basename)
+                .ok_or_else(|| {
+                    AppFrameworkError::PluginUnsupported(instance.framework_id.as_str().to_string())
+                })?;
             if let Some(sink) = log {
                 sink(format!("下载 {basename}"));
             }
@@ -404,14 +412,7 @@ impl AppManager {
             return Ok(());
         }
         adapter
-            .uninstall_store_item(
-                host,
-                instance,
-                &entry.id,
-                entry.flavor,
-                entry.resource,
-                log,
-            )
+            .uninstall_store_item(host, instance, &entry.id, entry.flavor, entry.resource, log)
             .await
     }
 }
@@ -482,8 +483,11 @@ mod installed_fallback_tests {
     #[test]
     fn installed_fallback_needs_package() {
         assert!(
-            installed_to_market_entry(&installed("", AppStoreFlavor::Pypi), AppStoreResource::Plugin)
-                .is_err()
+            installed_to_market_entry(
+                &installed("", AppStoreFlavor::Pypi),
+                AppStoreResource::Plugin
+            )
+            .is_err()
         );
         let entry = installed_to_market_entry(
             &installed("nonebot-plugin-foo", AppStoreFlavor::Pypi),

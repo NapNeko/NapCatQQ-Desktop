@@ -88,7 +88,12 @@ impl AppInstanceStore {
     }
 
     pub async fn get(&self, id: &AppInstanceId) -> Option<AppInstance> {
-        self.cache.read().await.iter().find(|i| &i.id == id).cloned()
+        self.cache
+            .read()
+            .await
+            .iter()
+            .find(|i| &i.id == id)
+            .cloned()
     }
 
     pub async fn require(&self, id: &AppInstanceId) -> Result<AppInstance, AppFrameworkError> {
@@ -109,7 +114,11 @@ impl AppInstanceStore {
     }
 
     /// 读改写一体；实例不存在返回 InstanceNotFound
-    pub async fn update<F>(&self, id: &AppInstanceId, f: F) -> Result<AppInstance, AppFrameworkError>
+    pub async fn update<F>(
+        &self,
+        id: &AppInstanceId,
+        f: F,
+    ) -> Result<AppInstance, AppFrameworkError>
     where
         F: FnOnce(&mut AppInstance),
     {
@@ -124,7 +133,10 @@ impl AppInstanceStore {
         Ok(updated)
     }
 
-    pub async fn remove(&self, id: &AppInstanceId) -> Result<Option<AppInstance>, AppFrameworkError> {
+    pub async fn remove(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Option<AppInstance>, AppFrameworkError> {
         let mut cache = self.cache.write().await;
         let pos = cache.iter().position(|i| &i.id == id);
         let removed = pos.map(|p| cache.remove(p));
@@ -200,16 +212,37 @@ mod tests {
         assert_eq!(list[0].state, AppInstanceState::Installed);
         assert_eq!(list[0].installed_version.as_deref(), Some("1.17.0"));
 
-        assert!(reloaded.remove(&AppInstanceId::new("a")).await.unwrap().is_some());
-        assert!(reloaded.remove(&AppInstanceId::new("a")).await.unwrap().is_none());
-        assert!(AppInstanceStore::load(temp.path()).unwrap().list().await.is_empty());
+        assert!(
+            reloaded
+                .remove(&AppInstanceId::new("a"))
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            reloaded
+                .remove(&AppInstanceId::new("a"))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            AppInstanceStore::load(temp.path())
+                .unwrap()
+                .list()
+                .await
+                .is_empty()
+        );
     }
 
     #[tokio::test]
     async fn update_missing_is_not_found() {
         let temp = ncd_test_support::TempWorkspace::new().unwrap();
         let store = AppInstanceStore::load(temp.path()).unwrap();
-        let err = store.update(&AppInstanceId::new("nope"), |_| {}).await.unwrap_err();
+        let err = store
+            .update(&AppInstanceId::new("nope"), |_| {})
+            .await
+            .unwrap_err();
         assert!(matches!(err, AppFrameworkError::InstanceNotFound(_)));
     }
 
@@ -228,6 +261,13 @@ mod tests {
             store.upsert(sample(&format!("i{n}"))).await.unwrap();
         }
         assert_eq!(std::fs::read(&kept).unwrap(), b"{ not json");
-        assert_eq!(AppInstanceStore::load(temp.path()).unwrap().list().await.len(), 6);
+        assert_eq!(
+            AppInstanceStore::load(temp.path())
+                .unwrap()
+                .list()
+                .await
+                .len(),
+            6
+        );
     }
 }

@@ -92,7 +92,9 @@ pub struct KarinPluginInstalled {
     pub enabled: bool,
 }
 
-pub fn parse_karin_plugins_list(json: &str) -> Result<Vec<KarinPluginMarketEntry>, AppFrameworkError> {
+pub fn parse_karin_plugins_list(
+    json: &str,
+) -> Result<Vec<KarinPluginMarketEntry>, AppFrameworkError> {
     let value: serde_json::Value = serde_json::from_str(json)
         .map_err(|e| AppFrameworkError::Validation(format!("插件目录 JSON 无效: {e}")))?;
     let Some(plugins) = value.get("plugins") else {
@@ -116,11 +118,7 @@ pub fn git_clone_url(entry: &KarinPluginMarketEntry) -> Option<&str> {
 /// 去掉 query 后必须是 `.js` / `.ts`；返回文件名（防路径穿越）。
 pub fn app_file_basename(url: &str) -> Result<String, AppFrameworkError> {
     let path = url.split(['?', '#']).next().unwrap_or(url);
-    let name = path
-        .rsplit('/')
-        .next()
-        .unwrap_or("")
-        .trim();
+    let name = path.rsplit('/').next().unwrap_or("").trim();
     if name.is_empty() || name.contains("..") || name.contains('\\') {
         return Err(AppFrameworkError::Validation(format!(
             "插件文件 URL 非法: {url}"
@@ -521,7 +519,10 @@ fn format_from_rel(rel: &str) -> AppConfigFormat {
 
 fn is_config_file_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    lower.ends_with(".json") || lower.ends_with(".toml") || lower.ends_with(".yaml") || lower.ends_with(".yml")
+    lower.ends_with(".json")
+        || lower.ends_with(".toml")
+        || lower.ends_with(".yaml")
+        || lower.ends_with(".yml")
 }
 
 fn reject_plugin_rel(plugin_name: &str, rel: &str) -> Result<(), AppFrameworkError> {
@@ -530,7 +531,9 @@ fn reject_plugin_rel(plugin_name: &str, rel: &str) -> Result<(), AppFrameworkErr
         return Err(AppFrameworkError::Validation("插件配置路径非法".into()));
     }
     if !is_config_file_name(rel) {
-        return Err(AppFrameworkError::Validation("只支持 JSON / TOML / YAML".into()));
+        return Err(AppFrameworkError::Validation(
+            "只支持 JSON / TOML / YAML".into(),
+        ));
     }
     Ok(())
 }
@@ -830,9 +833,7 @@ async fn merge_only_built_dependencies(
     let obj = value
         .as_object_mut()
         .ok_or_else(|| AppFrameworkError::Validation("package.json 须为对象".into()))?;
-    let pnpm = obj
-        .entry("pnpm")
-        .or_insert_with(|| serde_json::json!({}));
+    let pnpm = obj.entry("pnpm").or_insert_with(|| serde_json::json!({}));
     let pnpm_obj = pnpm
         .as_object_mut()
         .ok_or_else(|| AppFrameworkError::Validation("package.json pnpm 须为对象".into()))?;
@@ -1045,14 +1046,20 @@ mod tests {
 
     #[test]
     fn plugin_config_doc_id_round_trips() {
-        assert_eq!(plugin_data_dir_name("@karinjs/plugin-basic"), "@karinjs-plugin-basic");
+        assert_eq!(
+            plugin_data_dir_name("@karinjs/plugin-basic"),
+            "@karinjs-plugin-basic"
+        );
         let id = plugin_doc_id("@karinjs/plugin-basic", "config/config.json");
         assert_eq!(
             parse_plugin_doc_id(&id),
             Some(("@karinjs/plugin-basic", "config/config.json"))
         );
         let doc = plugin_config_document("@karinjs/plugin-basic", "config/config.json").unwrap();
-        assert_eq!(doc.rel_path, "@karinjs/@karinjs-plugin-basic/config/config.json");
+        assert_eq!(
+            doc.rel_path,
+            "@karinjs/@karinjs-plugin-basic/config/config.json"
+        );
         assert!(doc.hot_reload);
         assert!(plugin_config_document("@karinjs/plugin-basic", "../x.json").is_err());
     }
@@ -1204,7 +1211,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(docs.len(), 1);
-        assert_eq!(docs[0].rel_path, "@karinjs/@karinjs-plugin-basic/config/config.json");
+        assert_eq!(
+            docs[0].rel_path,
+            "@karinjs/@karinjs-plugin-basic/config/config.json"
+        );
         assert!(docs[0].hot_reload);
     }
 }

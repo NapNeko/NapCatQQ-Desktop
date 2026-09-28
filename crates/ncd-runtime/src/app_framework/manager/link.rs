@@ -3,7 +3,10 @@
 use super::*;
 
 impl AppManager {
-    pub(super) async fn discover_existing_link(&self, instance: &AppInstance) -> Option<AppLinkRecord> {
+    pub(super) async fn discover_existing_link(
+        &self,
+        instance: &AppInstance,
+    ) -> Option<AppLinkRecord> {
         let bots = self.bot_manager.list_bot_configs_for_link().await.ok()?;
         if bots.is_empty() {
             return None;
@@ -90,9 +93,8 @@ impl AppManager {
         bot_id: &BotId,
     ) -> Result<AppInstance, AppFrameworkError> {
         let (instance, mut bot, adapter, host) = self.link_context(instance_id, bot_id).await?;
-        let topology = classify_app_link(&bot.bot.runtime_target, &instance.host_id).ok_or_else(
-            || unsupported_link_topology(&bot.bot.runtime_target, &instance.host_id),
-        )?;
+        let topology = classify_app_link(&bot.bot.runtime_target, &instance.host_id)
+            .ok_or_else(|| unsupported_link_topology(&bot.bot.runtime_target, &instance.host_id))?;
         // 先把计划算完再动旧隧道，免得算不出来还拆掉现有对接
         let mut plan = self
             .plan_link_for(&instance, &bot, adapter.as_ref(), host.as_ref())
@@ -100,7 +102,8 @@ impl AppManager {
         let mode = plan.connection.mode();
         if let Some(old) = instance.link.as_ref() {
             if old.resident_forward_port.is_some() {
-                self.teardown_resident_best_effort(&instance, &old.bot_id).await;
+                self.teardown_resident_best_effort(&instance, &old.bot_id)
+                    .await;
             }
         }
         if !needs_desktop_ssh_tunnel(topology) {
@@ -142,7 +145,10 @@ impl AppManager {
             }
         }
 
-        if let Err(e) = adapter.apply_link(host.as_ref(), &instance, &app_plan).await {
+        if let Err(e) = adapter
+            .apply_link(host.as_ref(), &instance, &app_plan)
+            .await
+        {
             if resident_forward_port.is_some() {
                 self.teardown_resident_best_effort(&instance, bot_id).await;
             }
@@ -222,7 +228,10 @@ impl AppManager {
     }
 
     /// 解绑：按名从 Bot 对应那张连接表删并热推；应用端怎么收尾交给适配器（多数不动监听口）
-    pub async fn unlink(&self, instance_id: &AppInstanceId) -> Result<AppInstance, AppFrameworkError> {
+    pub async fn unlink(
+        &self,
+        instance_id: &AppInstanceId,
+    ) -> Result<AppInstance, AppFrameworkError> {
         let instance = self.store.require(instance_id).await?;
         let Some(link) = instance.link.clone() else {
             return Ok(instance);
@@ -236,7 +245,8 @@ impl AppManager {
             tracing::warn!(instance = instance_id.as_str(), error = %e, "app-side unlink");
         }
         if link.resident_forward_port.is_some() {
-            self.teardown_resident_best_effort(&instance, &link.bot_id).await;
+            self.teardown_resident_best_effort(&instance, &link.bot_id)
+                .await;
         }
         self.drop_instance_tunnel(instance_id).await;
         self.forget_webui_endpoint(instance_id);
@@ -467,16 +477,24 @@ pub fn upsert_link_endpoint(bot: &mut BotConfig, endpoint: OneBotLinkEndpoint) {
 }
 
 /// 按对接方向从对应的表摘掉同名连接；返回有没有摘到
-pub(super) fn remove_link_connection(bot: &mut BotConfig, name: &str, mode: OneBotLinkMode) -> bool {
+pub(super) fn remove_link_connection(
+    bot: &mut BotConfig,
+    name: &str,
+    mode: OneBotLinkMode,
+) -> bool {
     match mode {
         OneBotLinkMode::ReverseWs => {
             let before = bot.connect.websocket_clients.len();
-            bot.connect.websocket_clients.retain(|c| c.base.name != name);
+            bot.connect
+                .websocket_clients
+                .retain(|c| c.base.name != name);
             bot.connect.websocket_clients.len() != before
         }
         OneBotLinkMode::ForwardWs => {
             let before = bot.connect.websocket_servers.len();
-            bot.connect.websocket_servers.retain(|s| s.base.name != name);
+            bot.connect
+                .websocket_servers
+                .retain(|s| s.base.name != name);
             bot.connect.websocket_servers.len() != before
         }
     }

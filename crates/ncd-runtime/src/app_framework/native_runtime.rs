@@ -153,7 +153,8 @@ impl NativeAppRuntime {
         host: &dyn Host,
         instance: &AppInstance,
     ) -> Result<Option<u32>, AppFrameworkError> {
-        let kind = super::supervisor::AppProcessKind::from_framework(instance.framework_id.as_str());
+        let kind =
+            super::supervisor::AppProcessKind::from_framework(instance.framework_id.as_str());
         let found = match host.locality() {
             Locality::Remote => {
                 let listing =
@@ -196,7 +197,10 @@ impl NativeAppRuntime {
             }
             Locality::Remote => self.spawn_remote_follow(host, instance.clone(), log_file, true),
         };
-        self.followers.lock().await.insert(instance.id.clone(), task);
+        self.followers
+            .lock()
+            .await
+            .insert(instance.id.clone(), task);
         Ok(())
     }
 
@@ -385,7 +389,10 @@ impl NativeAppRuntime {
             let mut offset = if backfill {
                 0
             } else {
-                tokio::fs::metadata(&path).await.map(|m| m.len()).unwrap_or(0)
+                tokio::fs::metadata(&path)
+                    .await
+                    .map(|m| m.len())
+                    .unwrap_or(0)
             };
             let mut ticks: u32 = 0;
             loop {
@@ -457,7 +464,10 @@ impl NativeAppRuntime {
         };
         // 从头读：脚本里 sleep 1 的那一秒进程已经在写了，从当前大小开始会漏掉开头
         let task = self.spawn_remote_follow(host, instance.clone(), spec.log_file, true);
-        self.followers.lock().await.insert(instance.id.clone(), task);
+        self.followers
+            .lock()
+            .await
+            .insert(instance.id.clone(), task);
         Ok(pid)
     }
 
@@ -513,8 +523,7 @@ impl NativeAppRuntime {
                         Ok(None) => false,
                     };
                     if !alive {
-                        mark_stopped(&store, &bus, &id, "远端进程已退出".to_string(), false)
-                            .await;
+                        mark_stopped(&store, &bus, &id, "远端进程已退出".to_string(), false).await;
                         return;
                     }
                 }
@@ -605,7 +614,9 @@ pub(crate) fn discover_local_pid(
     let mut sys = System::new();
     sys.refresh_processes_specifics(
         ProcessesToUpdate::All,
-        ProcessRefreshKind::new().with_cwd(UpdateKind::Always).with_cmd(UpdateKind::Always),
+        ProcessRefreshKind::new()
+            .with_cwd(UpdateKind::Always)
+            .with_cmd(UpdateKind::Always),
     );
     let want = HostPath::from_posix(install_dir);
     let mut lines = String::new();
@@ -930,7 +941,11 @@ mod tests {
     #[test]
     fn process_tree_skips_stale_ppid_from_pid_reuse() {
         // 500 的原父进程早退了，pid 100 后来被复用；500 比新的 100 还早启动，不算它的子进程
-        let table = [row(100, None, 90), row(500, Some(100), 10), row(600, Some(100), 95)];
+        let table = [
+            row(100, None, 90),
+            row(500, Some(100), 10),
+            row(600, Some(100), 95),
+        ];
         let mut tree = process_tree(100, &table);
         tree.sort_unstable();
         assert_eq!(tree, vec![100, 600]);
@@ -944,8 +959,8 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn kill_local_tree_takes_grandchildren_with_it() {
-        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
         use std::time::Instant;
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
         let mut parent = std::process::Command::new("cmd")
             .args(["/c", "ping -n 60 127.0.0.1 >nul"])
@@ -975,7 +990,10 @@ mod tests {
         loop {
             let mut sys = System::new();
             let pid = Pid::from_u32(child);
-            sys.refresh_processes_specifics(ProcessesToUpdate::Some(&[pid]), ProcessRefreshKind::new());
+            sys.refresh_processes_specifics(
+                ProcessesToUpdate::Some(&[pid]),
+                ProcessRefreshKind::new(),
+            );
             if sys.process(pid).is_none() {
                 break;
             }
@@ -992,7 +1010,9 @@ mod tests {
         assert!(script.contains("kill -TERM $target"));
         assert!(script.contains("kill -KILL $target"));
         assert!(
-            !script.contains("kill -TERM --") && !script.contains("kill -KILL --") && !script.contains("kill -0 --"),
+            !script.contains("kill -TERM --")
+                && !script.contains("kill -KILL --")
+                && !script.contains("kill -0 --"),
             "dash 内建 kill 不认 --"
         );
     }
@@ -1021,7 +1041,10 @@ mod tests {
     fn previous_run_log_is_not_picked_as_a_project_log() {
         let prev = previous_run_log(&HostPath::from_posix("/a/.ncd-maibot.log"));
         assert_eq!(prev.as_posix(), "/a/.ncd-maibot.log.1");
-        assert_eq!(super::super::log_tail::pick_first_log_path(prev.as_posix()), None);
+        assert_eq!(
+            super::super::log_tail::pick_first_log_path(prev.as_posix()),
+            None
+        );
     }
 
     #[test]

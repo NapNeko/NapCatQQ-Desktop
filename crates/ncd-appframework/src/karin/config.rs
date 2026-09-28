@@ -600,7 +600,8 @@ pub const KARIN_GROUP_RULE_KEYS: [&str; 6] = [
     "Bot:selfId:guildId",
     "Bot:selfId:guildId:channelId",
 ];
-pub const KARIN_PRIVATE_RULE_KEYS: [&str; 4] = ["default", "global", "Bot:selfId", "Bot:selfId:userId"];
+pub const KARIN_PRIVATE_RULE_KEYS: [&str; 4] =
+    ["default", "global", "Bot:selfId", "Bot:selfId:userId"];
 
 pub fn default_groups() -> Vec<KarinScopeRule> {
     KARIN_GROUP_RULE_KEYS
@@ -866,7 +867,13 @@ fn is_http_url(url: &str) -> bool {
 
 // ---------- 文档清单与读写 ----------
 
-fn doc(id: &str, label: &str, rel_path: String, format: AppConfigFormat, hot_reload: bool) -> AppConfigDocument {
+fn doc(
+    id: &str,
+    label: &str,
+    rel_path: String,
+    format: AppConfigFormat,
+    hot_reload: bool,
+) -> AppConfigDocument {
     AppConfigDocument {
         id: id.to_string(),
         label: label.to_string(),
@@ -880,13 +887,55 @@ fn doc(id: &str, label: &str, rel_path: String, format: AppConfigFormat, hot_rel
 pub fn karin_config_documents() -> Vec<AppConfigDocument> {
     let json = |name: &str| format!("{KARIN_CONFIG_DIR}/{name}.json");
     vec![
-        doc(DOC_ENV, ".env", KARIN_ENV_FILE.to_string(), AppConfigFormat::DotEnv, true),
-        doc(DOC_CONFIG, "config.json", json("config"), AppConfigFormat::Json, true),
-        doc(DOC_ADAPTER, "adapter.json", json("adapter"), AppConfigFormat::Json, true),
-        doc(DOC_GROUPS, "groups.json", json("groups"), AppConfigFormat::Json, true),
-        doc(DOC_PRIVATES, "privates.json", json("privates"), AppConfigFormat::Json, true),
-        doc(DOC_RENDER, "render.json", json("render"), AppConfigFormat::Json, true),
-        doc(DOC_REDIS, "redis.json", json("redis"), AppConfigFormat::Json, false),
+        doc(
+            DOC_ENV,
+            ".env",
+            KARIN_ENV_FILE.to_string(),
+            AppConfigFormat::DotEnv,
+            true,
+        ),
+        doc(
+            DOC_CONFIG,
+            "config.json",
+            json("config"),
+            AppConfigFormat::Json,
+            true,
+        ),
+        doc(
+            DOC_ADAPTER,
+            "adapter.json",
+            json("adapter"),
+            AppConfigFormat::Json,
+            true,
+        ),
+        doc(
+            DOC_GROUPS,
+            "groups.json",
+            json("groups"),
+            AppConfigFormat::Json,
+            true,
+        ),
+        doc(
+            DOC_PRIVATES,
+            "privates.json",
+            json("privates"),
+            AppConfigFormat::Json,
+            true,
+        ),
+        doc(
+            DOC_RENDER,
+            "render.json",
+            json("render"),
+            AppConfigFormat::Json,
+            true,
+        ),
+        doc(
+            DOC_REDIS,
+            "redis.json",
+            json("redis"),
+            AppConfigFormat::Json,
+            false,
+        ),
     ]
 }
 
@@ -907,7 +956,9 @@ fn parse_json_doc<T: for<'de> Deserialize<'de> + Default>(
 }
 
 /// 从已读快照拼出类型化配置（`.env` 必须存在；JSON 缺文件按上游默认补）
-pub fn parse_karin_config(snaps: &[DocumentSnapshot]) -> Result<KarinInstanceConfig, AppFrameworkError> {
+pub fn parse_karin_config(
+    snaps: &[DocumentSnapshot],
+) -> Result<KarinInstanceConfig, AppFrameworkError> {
     let env_text = snapshot(snaps, DOC_ENV)
         .and_then(|s| s.text.as_deref())
         .ok_or_else(|| {
@@ -1083,7 +1134,10 @@ mod tests {
         // 缺键回落默认
         assert_eq!(env.http_host, "0.0.0.0");
         assert_eq!(env.log_max_connections, 5);
-        assert_eq!(env.comments.get("HTTP_PORT").map(String::as_str), Some("HTTP监听端口"));
+        assert_eq!(
+            env.comments.get("HTTP_PORT").map(String::as_str),
+            Some("HTTP监听端口")
+        );
         let custom: Vec<(&str, &str, &str)> = env
             .custom
             .iter()
@@ -1092,7 +1146,11 @@ mod tests {
         assert_eq!(
             custom,
             [
-                ("LOG_API_MAX_CONNECTIONS", "5", "日志实时Api最多支持同时连接数"),
+                (
+                    "LOG_API_MAX_CONNECTIONS",
+                    "5",
+                    "日志实时Api最多支持同时连接数"
+                ),
                 ("MY_FLAG", "1", "")
             ]
         );
@@ -1171,10 +1229,26 @@ mod tests {
         cfg.env.http_port = 0;
         cfg.env.log_level = "loud".into();
         cfg.env.custom = vec![
-            KarinEnvEntry { key: "HTTP_PORT".into(), value: "1".into(), comment: String::new() },
-            KarinEnvEntry { key: "A".into(), value: "1".into(), comment: String::new() },
-            KarinEnvEntry { key: "A".into(), value: "2".into(), comment: String::new() },
-            KarinEnvEntry { key: "9x".into(), value: "2".into(), comment: String::new() },
+            KarinEnvEntry {
+                key: "HTTP_PORT".into(),
+                value: "1".into(),
+                comment: String::new(),
+            },
+            KarinEnvEntry {
+                key: "A".into(),
+                value: "1".into(),
+                comment: String::new(),
+            },
+            KarinEnvEntry {
+                key: "A".into(),
+                value: "2".into(),
+                comment: String::new(),
+            },
+            KarinEnvEntry {
+                key: "9x".into(),
+                value: "2".into(),
+                comment: String::new(),
+            },
         ];
         cfg.adapter.onebot.ws_client[0].url = "http://nope".into();
         cfg.adapter.onebot.http_server[0].url = "ws://nope".into();
@@ -1211,7 +1285,10 @@ mod tests {
         assert_eq!(cfg.groups.len(), 6);
         assert_eq!(cfg.config.master, vec!["console"]);
         let bad = snaps_from(Some(ENV_TEXT), &[(DOC_REDIS, "{not json")]);
-        assert!(matches!(parse_karin_config(&bad), Err(AppFrameworkError::Integration(_))));
+        assert!(matches!(
+            parse_karin_config(&bad),
+            Err(AppFrameworkError::Integration(_))
+        ));
     }
 
     #[test]
@@ -1229,7 +1306,10 @@ mod tests {
         // 未改动：只有缺失的 JSON 文件会被创建
         let writes = plan_karin_writes(&install, &cfg, &current).unwrap();
         let ids: Vec<&str> = writes.iter().map(|w| w.doc_id.as_str()).collect();
-        assert_eq!(ids, ["env", "config", "adapter", "groups", "privates", "render"]);
+        assert_eq!(
+            ids,
+            ["env", "config", "adapter", "groups", "privates", "render"]
+        );
         // env 变了是因为补齐了缺失系统键；确认 redis 未在列表
         assert!(writes[0].text.contains("HTTP_HOST=0.0.0.0"));
 
@@ -1237,7 +1317,10 @@ mod tests {
         cfg.config.master.push("123".into());
         let writes = plan_karin_writes(&install, &cfg, &current).unwrap();
         let redis = writes.iter().find(|w| w.doc_id == DOC_REDIS).unwrap();
-        assert_eq!(redis.path.as_posix(), "/srv/karin/@karinjs/config/redis.json");
+        assert_eq!(
+            redis.path.as_posix(),
+            "/srv/karin/@karinjs/config/redis.json"
+        );
         assert!(redis.text.ends_with("}\n"));
         let v: Value = serde_json::from_str(&redis.text).unwrap();
         assert_eq!(v["database"], json!(3));

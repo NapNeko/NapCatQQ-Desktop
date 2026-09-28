@@ -148,9 +148,15 @@ pub struct MaiBotMemoryDeleteTarget {
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum MaiBotMemoryDeleteAction {
     /// 只算会删掉哪些，不动
-    Preview { target: MaiBotMemoryDeleteTarget },
-    Execute { target: MaiBotMemoryDeleteTarget },
-    Restore { operation_id: String },
+    Preview {
+        target: MaiBotMemoryDeleteTarget,
+    },
+    Execute {
+        target: MaiBotMemoryDeleteTarget,
+    },
+    Restore {
+        operation_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -228,15 +234,24 @@ impl UpstreamRecord {
             status,
             created_at: self.created_at,
             updated_at: self.updated_at,
-            knowledge_type: meta.knowledge_type.filter(|_| kind == MaiBotMemoryRecordKind::Paragraph),
-            mentions: meta.appearance_count.filter(|_| kind == MaiBotMemoryRecordKind::Entity),
-            confidence: meta.confidence.filter(|_| kind == MaiBotMemoryRecordKind::Relation),
+            knowledge_type: meta
+                .knowledge_type
+                .filter(|_| kind == MaiBotMemoryRecordKind::Paragraph),
+            mentions: meta
+                .appearance_count
+                .filter(|_| kind == MaiBotMemoryRecordKind::Entity),
+            confidence: meta
+                .confidence
+                .filter(|_| kind == MaiBotMemoryRecordKind::Relation),
         })
     }
 }
 
 fn records_of(list: Option<Vec<UpstreamRecord>>) -> Vec<MaiBotMemoryRecord> {
-    list.unwrap_or_default().into_iter().filter_map(UpstreamRecord::into_record).collect()
+    list.unwrap_or_default()
+        .into_iter()
+        .filter_map(UpstreamRecord::into_record)
+        .collect()
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -255,18 +270,36 @@ struct MaiBotMemoryKindCountsIn {
     fact: Option<u32>,
 }
 
-pub(crate) async fn records(c: &MaiBotWebUi, q: &MaiBotMemoryQuery) -> Result<MaiBotMemoryRecordPage, AppFrameworkError> {
+pub(crate) async fn records(
+    c: &MaiBotWebUi,
+    q: &MaiBotMemoryQuery,
+) -> Result<MaiBotMemoryRecordPage, AppFrameworkError> {
     let limit = q.limit.clamp(1, 200).to_string();
-    let types = q.kinds.iter().map(|k| k.as_str()).collect::<Vec<_>>().join(",");
+    let types = q
+        .kinds
+        .iter()
+        .map(|k| k.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
     let search = q.search.trim();
-    let mut query = vec![("limit", limit.as_str()), ("include_inactive", if q.include_inactive { "true" } else { "false" })];
+    let mut query = vec![
+        ("limit", limit.as_str()),
+        (
+            "include_inactive",
+            if q.include_inactive { "true" } else { "false" },
+        ),
+    ];
     if !search.is_empty() {
         query.push(("query", search));
     }
     if !types.is_empty() {
         query.push(("types", types.as_str()));
     }
-    let up: UpstreamSearch = call(c, Request::new(Method::GET, &format!("{BASE}/records/search")).query(&query)).await?;
+    let up: UpstreamSearch = call(
+        c,
+        Request::new(Method::GET, &format!("{BASE}/records/search")).query(&query),
+    )
+    .await?;
     let n = up.counts.unwrap_or_default();
     Ok(MaiBotMemoryRecordPage {
         items: records_of(up.items),
@@ -302,7 +335,11 @@ pub(crate) async fn record(
 ) -> Result<MaiBotMemoryRecordDetail, AppFrameworkError> {
     let id = check_id(id, "记忆")?;
     let path = format!("{BASE}/records/{}/{id}", kind.as_str());
-    let up: UpstreamDetail = call(c, Request::new(Method::GET, &path).query(&[("limit", "30")])).await?;
+    let up: UpstreamDetail = call(
+        c,
+        Request::new(Method::GET, &path).query(&[("limit", "30")]),
+    )
+    .await?;
     let record = up
         .record
         .and_then(UpstreamRecord::into_record)
@@ -310,7 +347,10 @@ pub(crate) async fn record(
     let rel = up.related.unwrap_or_default();
     // 上游把自己也放进了同类的相关列表里，去掉免得详情里重复出现
     let others = |list: Option<Vec<UpstreamRecord>>| -> Vec<MaiBotMemoryRecord> {
-        records_of(list).into_iter().filter(|r| r.id != record.id).collect()
+        records_of(list)
+            .into_iter()
+            .filter(|r| r.id != record.id)
+            .collect()
     };
     Ok(MaiBotMemoryRecordDetail {
         paragraphs: others(rel.paragraphs),
@@ -336,7 +376,8 @@ struct UpstreamSource {
 }
 
 pub(crate) async fn sources(c: &MaiBotWebUi) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError> {
-    let up: UpstreamSources = call(c, Request::new(Method::GET, &format!("{BASE}/sources"))).await?;
+    let up: UpstreamSources =
+        call(c, Request::new(Method::GET, &format!("{BASE}/sources"))).await?;
     Ok(up
         .items
         .unwrap_or_default()
@@ -402,7 +443,12 @@ fn target_body(t: &MaiBotMemoryDeleteTarget) -> Result<serde_json::Value, AppFra
     if t.ids.iter().all(|s| s.trim().is_empty()) {
         return Err(AppFrameworkError::Validation("没挑要删的".into()));
     }
-    let ids: Vec<&str> = t.ids.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let ids: Vec<&str> = t
+        .ids
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     let (mode, key) = match t.kind {
         MaiBotMemoryDeleteKind::Paragraph => ("paragraph", "hashes"),
         MaiBotMemoryDeleteKind::Entity => ("entity", "hashes"),
@@ -419,19 +465,31 @@ fn target_body(t: &MaiBotMemoryDeleteTarget) -> Result<serde_json::Value, AppFra
     Ok(json!({ "mode": mode, "selector": selector }))
 }
 
-pub(crate) async fn delete(c: &MaiBotWebUi, a: &MaiBotMemoryDeleteAction) -> Result<MaiBotMemoryDeleteResult, AppFrameworkError> {
+pub(crate) async fn delete(
+    c: &MaiBotWebUi,
+    a: &MaiBotMemoryDeleteAction,
+) -> Result<MaiBotMemoryDeleteResult, AppFrameworkError> {
     match a {
         MaiBotMemoryDeleteAction::Preview { target } => {
             let body = target_body(target)?;
-            let up: UpstreamPreview =
-                call(c, Request::new(Method::POST, &format!("{BASE}/delete/preview")).body(&body).slow()).await?;
+            let up: UpstreamPreview = call(
+                c,
+                Request::new(Method::POST, &format!("{BASE}/delete/preview"))
+                    .body(&body)
+                    .slow(),
+            )
+            .await?;
             Ok(MaiBotMemoryDeleteResult {
                 counts: up.counts.unwrap_or_default().into(),
                 samples: up
                     .items
                     .unwrap_or_default()
                     .into_iter()
-                    .map(|i| MaiBotMemoryDeleteSample { kind: text(i.item_type), label: text(i.label), preview: text(i.preview) })
+                    .map(|i| MaiBotMemoryDeleteSample {
+                        kind: text(i.item_type),
+                        label: text(i.label),
+                        preview: text(i.preview),
+                    })
                     .collect(),
                 operation_id: String::new(),
                 message: String::new(),
@@ -441,8 +499,13 @@ pub(crate) async fn delete(c: &MaiBotWebUi, a: &MaiBotMemoryDeleteAction) -> Res
             let mut body = target_body(target)?;
             body["reason"] = json!("desktop");
             body["requested_by"] = json!("desktop");
-            let up: UpstreamExecuted =
-                call(c, Request::new(Method::POST, &format!("{BASE}/delete/execute")).body(&body).slow()).await?;
+            let up: UpstreamExecuted = call(
+                c,
+                Request::new(Method::POST, &format!("{BASE}/delete/execute"))
+                    .body(&body)
+                    .slow(),
+            )
+            .await?;
             let fallback: MaiBotMemoryCounts = up.counts.unwrap_or_default().into();
             let counts = MaiBotMemoryCounts {
                 paragraphs: up.deleted_paragraph_count.unwrap_or(fallback.paragraphs),
@@ -460,8 +523,13 @@ pub(crate) async fn delete(c: &MaiBotWebUi, a: &MaiBotMemoryDeleteAction) -> Res
         MaiBotMemoryDeleteAction::Restore { operation_id } => {
             let id = check_id(operation_id, "删除记录")?;
             let body = json!({ "operation_id": id, "requested_by": "desktop", "reason": "desktop_restore" });
-            let _: serde_json::Value =
-                call(c, Request::new(Method::POST, &format!("{BASE}/delete/restore")).body(&body).slow()).await?;
+            let _: serde_json::Value = call(
+                c,
+                Request::new(Method::POST, &format!("{BASE}/delete/restore"))
+                    .body(&body)
+                    .slow(),
+            )
+            .await?;
             Ok(MaiBotMemoryDeleteResult {
                 counts: MaiBotMemoryCounts::default(),
                 samples: Vec::new(),
@@ -474,12 +542,20 @@ pub(crate) async fn delete(c: &MaiBotWebUi, a: &MaiBotMemoryDeleteAction) -> Res
 
 /// 「删掉了 3 段、2 条关系」这种
 fn describe(n: &MaiBotMemoryCounts, verb: &str) -> String {
-    let parts: Vec<String> = [(n.paragraphs, "段"), (n.entities, "个实体"), (n.relations, "条关系")]
-        .into_iter()
-        .filter(|(k, _)| *k > 0)
-        .map(|(k, unit)| format!("{k} {unit}"))
-        .collect();
-    if parts.is_empty() { verb.to_string() } else { format!("{verb} {}", parts.join("、")) }
+    let parts: Vec<String> = [
+        (n.paragraphs, "段"),
+        (n.entities, "个实体"),
+        (n.relations, "条关系"),
+    ]
+    .into_iter()
+    .filter(|(k, _)| *k > 0)
+    .map(|(k, unit)| format!("{k} {unit}"))
+    .collect();
+    if parts.is_empty() {
+        verb.to_string()
+    } else {
+        format!("{verb} {}", parts.join("、"))
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -506,9 +582,14 @@ struct UpstreamOpSummary {
     counts: Option<UpstreamCounts>,
 }
 
-pub(crate) async fn delete_ops(c: &MaiBotWebUi) -> Result<Vec<MaiBotMemoryDeleteOp>, AppFrameworkError> {
-    let up: UpstreamOps =
-        call(c, Request::new(Method::GET, &format!("{BASE}/delete/operations")).query(&[("limit", "30")])).await?;
+pub(crate) async fn delete_ops(
+    c: &MaiBotWebUi,
+) -> Result<Vec<MaiBotMemoryDeleteOp>, AppFrameworkError> {
+    let up: UpstreamOps = call(
+        c,
+        Request::new(Method::GET, &format!("{BASE}/delete/operations")).query(&[("limit", "30")]),
+    )
+    .await?;
     Ok(up
         .items
         .unwrap_or_default()

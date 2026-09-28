@@ -79,7 +79,11 @@ pub async fn resolve_node_toolchain(
                 ));
             }
             Ok(out) => {
-                last_err = Some(format!("{cand}: exit={:?} {}", out.exit_code, out.stderr.trim()));
+                last_err = Some(format!(
+                    "{cand}: exit={:?} {}",
+                    out.exit_code,
+                    out.stderr.trim()
+                ));
             }
             Err(e) => {
                 last_err = Some(format!("{cand}: {e}"));
@@ -202,7 +206,10 @@ mod tests {
         let win = npm_cli_for(&HostPath::from_windows(r"C:\node\node.exe"), Os::Windows);
         assert_eq!(win.as_posix(), "/c/node/node_modules/npm/bin/npm-cli.js");
         let linux = npm_cli_for(&HostPath::from_posix("/opt/node/bin/node"), Os::Linux);
-        assert_eq!(linux.as_posix(), "/opt/node/lib/node_modules/npm/bin/npm-cli.js");
+        assert_eq!(
+            linux.as_posix(),
+            "/opt/node/lib/node_modules/npm/bin/npm-cli.js"
+        );
     }
 
     #[test]
@@ -283,7 +290,9 @@ mod tests {
             node_bin: HostPath::from_windows(r"C:\node\node.exe"),
             npm_cli: HostPath::from_windows(r"C:\node\node_modules\npm\bin\npm-cli.js"),
         };
-        write_node_marker(&host, &dir, &tc).await.expect("write marker");
+        write_node_marker(&host, &dir, &tc)
+            .await
+            .expect("write marker");
         let read = read_node_marker(&host, &dir).await.expect("marker present");
         assert_eq!(read, tc.node_bin);
     }

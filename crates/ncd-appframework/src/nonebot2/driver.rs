@@ -93,7 +93,9 @@ pub fn ensure_reverse_driver(current: &str) -> String {
     format!("{DRIVER_FASTAPI}+{t}")
 }
 
-pub fn required_forward_mixins<'a>(modules: impl IntoIterator<Item = &'a str>) -> Vec<&'static str> {
+pub fn required_forward_mixins<'a>(
+    modules: impl IntoIterator<Item = &'a str>,
+) -> Vec<&'static str> {
     modules
         .into_iter()
         .map(adapter_driver_mixins)
@@ -168,9 +170,6 @@ mod tests {
             ensure_reverse_driver("~httpx+~websockets"),
             "~fastapi+~httpx+~websockets"
         );
-        assert_eq!(
-            ensure_reverse_driver("~fastapi+~httpx"),
-            "~fastapi+~httpx"
-        );
+        assert_eq!(ensure_reverse_driver("~fastapi+~httpx"), "~fastapi+~httpx");
     }
 }

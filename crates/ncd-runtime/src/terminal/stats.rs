@@ -53,7 +53,9 @@ fn parse_stats(stdout: &str) -> Option<RawStats> {
     if parts.len() < 7 {
         return None;
     }
-    let mut load = parts[0].split_whitespace().map(|n| n.parse::<f32>().unwrap_or(0.0));
+    let mut load = parts[0]
+        .split_whitespace()
+        .map(|n| n.parse::<f32>().unwrap_or(0.0));
     let load = (
         load.next().unwrap_or(0.0),
         load.next().unwrap_or(0.0),
@@ -106,7 +108,11 @@ fn parse_stats(stdout: &str) -> Option<RawStats> {
         .next()
         .and_then(|n| n.parse::<f64>().ok())
         .map_or(0, |s| s as u64);
-    let cores = parts[6].lines().next().and_then(|n| n.trim().parse().ok()).unwrap_or(1);
+    let cores = parts[6]
+        .lines()
+        .next()
+        .and_then(|n| n.trim().parse().ok())
+        .unwrap_or(1);
 
     Some(RawStats {
         load,
@@ -130,12 +136,17 @@ fn build_stats(raw: &RawStats, previous: Option<&StatsSample>, now: Instant) -> 
         Some(prev) => {
             let total = raw.cpu_total.saturating_sub(prev.cpu_total);
             let idle = raw.cpu_idle.saturating_sub(prev.cpu_idle);
-            let cpu = (total > 0).then(|| (total.saturating_sub(idle)) as f32 / total as f32 * 100.0);
+            let cpu =
+                (total > 0).then(|| (total.saturating_sub(idle)) as f32 / total as f32 * 100.0);
             let secs = now.duration_since(prev.at).as_secs_f64();
             let rate = |cur: u64, old: u64| {
                 (secs > 0.0).then(|| (cur.saturating_sub(old) as f64 / secs) as u64)
             };
-            (cpu, rate(raw.net_rx, prev.net_rx), rate(raw.net_tx, prev.net_tx))
+            (
+                cpu,
+                rate(raw.net_rx, prev.net_rx),
+                rate(raw.net_tx, prev.net_tx),
+            )
         }
         None => (None, None, None),
     };
@@ -161,7 +172,9 @@ impl TerminalManager {
     pub async fn host_stats(&self, id: &str) -> Result<ServerStats, TerminalError> {
         let (host, os, host_id) = self.session_host(id)?;
         if os != TerminalHostOs::Linux {
-            return Err(TerminalError::Unsupported("只有远端 Linux 主机有状态条".into()));
+            return Err(TerminalError::Unsupported(
+                "只有远端 Linux 主机有状态条".into(),
+            ));
         }
         let out = host
             .run_to_string(
@@ -228,7 +241,10 @@ Inter-|   Receive                                                |  Transmit
         assert_eq!(raw.cpu_total, 1000);
         assert_eq!(raw.cpu_idle, 850);
         assert_eq!((raw.net_rx, raw.net_tx), (1000, 2000));
-        assert_eq!((raw.disk_total_kb, raw.disk_used_kb), (41_152_832, 12_345_678));
+        assert_eq!(
+            (raw.disk_total_kb, raw.disk_used_kb),
+            (41_152_832, 12_345_678)
+        );
         assert_eq!(raw.uptime_secs, 86_400);
         assert_eq!(raw.cores, 2);
     }

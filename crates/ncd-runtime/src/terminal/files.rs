@@ -38,7 +38,11 @@ fn normalize(os: TerminalHostOs, path: &HostPath) -> String {
     match os {
         TerminalHostOs::Linux => {
             let trimmed = rendered.trim_end_matches('/');
-            if trimmed.is_empty() { "/".to_string() } else { trimmed.to_string() }
+            if trimmed.is_empty() {
+                "/".to_string()
+            } else {
+                trimmed.to_string()
+            }
         }
         TerminalHostOs::Windows => {
             let trimmed = rendered.trim_end_matches('\\');
@@ -59,7 +63,11 @@ pub(crate) fn parent_of(os: TerminalHostOs, path: &str) -> Option<String> {
                 return None;
             }
             let (dir, _) = trimmed.rsplit_once('/')?;
-            Some(if dir.is_empty() { "/".to_string() } else { dir.to_string() })
+            Some(if dir.is_empty() {
+                "/".to_string()
+            } else {
+                dir.to_string()
+            })
         }
         TerminalHostOs::Windows => {
             let trimmed = path.trim_end_matches('\\');
@@ -91,7 +99,11 @@ pub(crate) fn join_child(os: TerminalHostOs, dir: &str, name: &str) -> String {
 /// `C:\` 这种盘根
 pub(crate) fn is_drive_root(os: TerminalHostOs, path: &str) -> bool {
     let b = path.as_bytes();
-    os == TerminalHostOs::Windows && b.len() == 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'\\'
+    os == TerminalHostOs::Windows
+        && b.len() == 3
+        && b[0].is_ascii_alphabetic()
+        && b[1] == b':'
+        && b[2] == b'\\'
 }
 
 fn drive_label(kind: DriveKind) -> &'static str {
@@ -136,13 +148,18 @@ fn file_error(err: HostError) -> TerminalError {
         HostError::PermissionDenied { path, .. } => {
             TerminalError::Host(format!("没有权限：{}", path.as_posix()))
         }
-        HostError::Unsupported { .. } => TerminalError::Unsupported("这台主机不支持这个操作".into()),
+        HostError::Unsupported { .. } => {
+            TerminalError::Unsupported("这台主机不支持这个操作".into())
+        }
         other => TerminalError::Host(other.to_string()),
     }
 }
 
 impl TerminalManager {
-    fn files_host(&self, id: &str) -> Result<(std::sync::Arc<dyn Host>, TerminalHostOs), TerminalError> {
+    fn files_host(
+        &self,
+        id: &str,
+    ) -> Result<(std::sync::Arc<dyn Host>, TerminalHostOs), TerminalError> {
         let (host, os, _) = self.session_host(id)?;
         Ok((host, os))
     }
@@ -174,7 +191,11 @@ impl TerminalManager {
         })
     }
 
-    pub async fn list_dir(&self, id: &str, path: &str) -> Result<TerminalDirListing, TerminalError> {
+    pub async fn list_dir(
+        &self,
+        id: &str,
+        path: &str,
+    ) -> Result<TerminalDirListing, TerminalError> {
         let (host, os) = self.files_host(id)?;
         if os == TerminalHostOs::Windows && path.trim().is_empty() {
             return self.list_drives(host.as_ref()).await;
@@ -220,7 +241,11 @@ impl TerminalManager {
         let crlf = text.contains("\r\n");
         Ok(TerminalTextFile {
             path: normalize(os, &file),
-            content: if crlf { text.replace("\r\n", "\n") } else { text },
+            content: if crlf {
+                text.replace("\r\n", "\n")
+            } else {
+                text
+            },
             crlf,
         })
     }
@@ -239,7 +264,9 @@ impl TerminalManager {
         } else {
             content.to_string()
         };
-        host.write_file(&file, data.as_bytes()).await.map_err(file_error)
+        host.write_file(&file, data.as_bytes())
+            .await
+            .map_err(file_error)
     }
 
     pub async fn make_dir(&self, id: &str, path: &str) -> Result<(), TerminalError> {
@@ -260,7 +287,12 @@ impl TerminalManager {
             .map_err(file_error)
     }
 
-    pub async fn remove_path(&self, id: &str, path: &str, is_dir: bool) -> Result<(), TerminalError> {
+    pub async fn remove_path(
+        &self,
+        id: &str,
+        path: &str,
+        is_dir: bool,
+    ) -> Result<(), TerminalError> {
         let (host, os) = self.files_host(id)?;
         let target = to_host_path(os, path)?;
         let result = if is_dir {
@@ -296,14 +328,12 @@ impl TerminalManager {
                 host.create_dir_all(&to_host_path(os, &remote)?)
                     .await
                     .map_err(file_error)?;
-                let mut children = tokio::fs::read_dir(&local)
-                    .await
-                    .map_err(|e| TerminalError::Invalid(format!("读不了 {}：{e}", local.display())))?;
-                while let Some(child) = children
-                    .next_entry()
-                    .await
-                    .map_err(|e| TerminalError::Invalid(format!("读不了 {}：{e}", local.display())))?
-                {
+                let mut children = tokio::fs::read_dir(&local).await.map_err(|e| {
+                    TerminalError::Invalid(format!("读不了 {}：{e}", local.display()))
+                })?;
+                while let Some(child) = children.next_entry().await.map_err(|e| {
+                    TerminalError::Invalid(format!("读不了 {}：{e}", local.display()))
+                })? {
                     let child_path = child.path();
                     let file_type = child.file_type().await.map_err(|e| {
                         TerminalError::Invalid(format!("读不了 {}：{e}", child_path.display()))
@@ -311,7 +341,9 @@ impl TerminalManager {
                     // 文件夹里指向目录的链接（含 Windows 的 junction）不跟进去：指回上层就转不出来，
                     // pnpm 那种 junction 跟进去还会把别处整棵树再传一遍。指向文件的照常传内容
                     if file_type.is_symlink()
-                        && tokio::fs::metadata(&child_path).await.is_ok_and(|m| m.is_dir())
+                        && tokio::fs::metadata(&child_path)
+                            .await
+                            .is_ok_and(|m| m.is_dir())
                     {
                         continue;
                     }
@@ -328,7 +360,12 @@ impl TerminalManager {
         Ok(count)
     }
 
-    pub async fn download(&self, id: &str, path: &str, local_dest: &str) -> Result<(), TerminalError> {
+    pub async fn download(
+        &self,
+        id: &str,
+        path: &str,
+        local_dest: &str,
+    ) -> Result<(), TerminalError> {
         let (host, os) = self.files_host(id)?;
         host.download(&to_host_path(os, path)?, Path::new(local_dest))
             .await
@@ -402,11 +439,20 @@ mod tests {
 
     #[test]
     fn parents_stop_at_roots() {
-        assert_eq!(parent_of(TerminalHostOs::Linux, "/home/u/app"), Some("/home/u".into()));
+        assert_eq!(
+            parent_of(TerminalHostOs::Linux, "/home/u/app"),
+            Some("/home/u".into())
+        );
         assert_eq!(parent_of(TerminalHostOs::Linux, "/home"), Some("/".into()));
         assert_eq!(parent_of(TerminalHostOs::Linux, "/"), None);
-        assert_eq!(parent_of(TerminalHostOs::Windows, r"C:\Users\x"), Some(r"C:\Users".into()));
-        assert_eq!(parent_of(TerminalHostOs::Windows, r"C:\Users"), Some(r"C:\".into()));
+        assert_eq!(
+            parent_of(TerminalHostOs::Windows, r"C:\Users\x"),
+            Some(r"C:\Users".into())
+        );
+        assert_eq!(
+            parent_of(TerminalHostOs::Windows, r"C:\Users"),
+            Some(r"C:\".into())
+        );
         assert_eq!(parent_of(TerminalHostOs::Windows, r"C:\"), None);
     }
 
@@ -421,18 +467,30 @@ mod tests {
     #[test]
     fn children_join_with_host_separator() {
         assert_eq!(join_child(TerminalHostOs::Linux, "/", "etc"), "/etc");
-        assert_eq!(join_child(TerminalHostOs::Linux, "/home/u", "a b"), "/home/u/a b");
+        assert_eq!(
+            join_child(TerminalHostOs::Linux, "/home/u", "a b"),
+            "/home/u/a b"
+        );
         assert_eq!(join_child(TerminalHostOs::Windows, r"C:\", "x"), r"C:\x");
-        assert_eq!(join_child(TerminalHostOs::Windows, r"D:\data", "y"), r"D:\data\y");
+        assert_eq!(
+            join_child(TerminalHostOs::Windows, r"D:\data", "y"),
+            r"D:\data\y"
+        );
     }
 
     #[test]
     fn normalizes_trailing_separators() {
         let os = TerminalHostOs::Windows;
         assert_eq!(normalize(os, &HostPath::from_windows(r"C:\")), r"C:\");
-        assert_eq!(normalize(os, &HostPath::from_windows(r"C:\Users\")), r"C:\Users");
+        assert_eq!(
+            normalize(os, &HostPath::from_windows(r"C:\Users\")),
+            r"C:\Users"
+        );
         let linux = TerminalHostOs::Linux;
-        assert_eq!(normalize(linux, &HostPath::from_posix("/srv/app/")), "/srv/app");
+        assert_eq!(
+            normalize(linux, &HostPath::from_posix("/srv/app/")),
+            "/srv/app"
+        );
         assert_eq!(normalize(linux, &HostPath::from_posix("/")), "/");
     }
 

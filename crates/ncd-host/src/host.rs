@@ -299,9 +299,10 @@ pub trait Host: Send + Sync {
 pub(crate) fn which_probe(os: Os, command: &str) -> HostCommand {
     match os {
         Os::Windows => HostCommand::new("where").arg(command),
-        _ => HostCommand::new("sh")
-            .arg("-c")
-            .arg(format!("command -v {}", crate::shell::BashShell.escape(command))),
+        _ => HostCommand::new("sh").arg("-c").arg(format!(
+            "command -v {}",
+            crate::shell::BashShell.escape(command)
+        )),
     }
 }
 
@@ -342,7 +343,10 @@ mod tests {
     #[test]
     fn which_probe_quotes_the_command() {
         let cmd = which_probe(Os::Linux, "bash; id");
-        assert_eq!(cmd.args, vec!["-c".to_string(), "command -v 'bash; id'".to_string()]);
+        assert_eq!(
+            cmd.args,
+            vec!["-c".to_string(), "command -v 'bash; id'".to_string()]
+        );
         let cmd = which_probe(Os::Windows, "node");
         assert_eq!(cmd.program, "where");
     }

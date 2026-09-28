@@ -199,7 +199,10 @@ pub enum DomainEvent {
         reason: Option<String>,
     },
     #[serde(rename = "app_instance_log_appended")]
-    AppInstanceLogAppended { instance_id: AppInstanceId, line: String },
+    AppInstanceLogAppended {
+        instance_id: AppInstanceId,
+        line: String,
+    },
     /// 实例另起一轮输出（桌面端启动、麦麦运行卡重启）：之前的行属于上一轮，面板该清了。
     /// 发在新一轮第一行之前，同一条总线上前端按顺序收到
     #[serde(rename = "app_instance_log_reset")]

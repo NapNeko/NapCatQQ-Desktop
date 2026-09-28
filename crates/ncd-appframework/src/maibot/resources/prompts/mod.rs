@@ -90,8 +90,16 @@ pub enum MaiBotPromptAction {
         version_id: Option<String>,
     },
     /// 换成某个版本的内容
-    Activate { language: String, name: String, version_id: String },
-    DeleteVersion { language: String, name: String, version_id: String },
+    Activate {
+        language: String,
+        name: String,
+        version_id: String,
+    },
+    DeleteVersion {
+        language: String,
+        name: String,
+        version_id: String,
+    },
     /// 恢复默认：删掉覆盖，版本都留着
     Restore { language: String, name: String },
 }
@@ -110,7 +118,10 @@ impl MaiBotPromptAction {
 /// 在哪改：跑着走接口，停着改盘上文件
 pub enum MaiBotPromptTarget<'a> {
     Live(&'a MaiBotSession),
-    Disk { host: &'a dyn Host, instance: &'a AppInstance },
+    Disk {
+        host: &'a dyn Host,
+        instance: &'a AppInstance,
+    },
 }
 
 pub async fn catalog(t: MaiBotPromptTarget<'_>) -> Result<MaiBotPromptCatalog, AppFrameworkError> {
@@ -120,11 +131,17 @@ pub async fn catalog(t: MaiBotPromptTarget<'_>) -> Result<MaiBotPromptCatalog, A
     }
 }
 
-pub async fn file(t: MaiBotPromptTarget<'_>, language: &str, name: &str) -> Result<MaiBotPromptFile, AppFrameworkError> {
+pub async fn file(
+    t: MaiBotPromptTarget<'_>,
+    language: &str,
+    name: &str,
+) -> Result<MaiBotPromptFile, AppFrameworkError> {
     check_names(language, name)?;
     match t {
         MaiBotPromptTarget::Live(s) => live::file(s, language, name).await,
-        MaiBotPromptTarget::Disk { host, instance } => disk::file(host, instance, language, name).await,
+        MaiBotPromptTarget::Disk { host, instance } => {
+            disk::file(host, instance, language, name).await
+        }
     }
 }
 
@@ -139,15 +156,23 @@ pub async fn version(
     check_version_id(version_id)?;
     match t {
         MaiBotPromptTarget::Live(s) => live::version(s, language, name, version_id).await,
-        MaiBotPromptTarget::Disk { host, instance } => disk::version(host, instance, language, name, version_id).await,
+        MaiBotPromptTarget::Disk { host, instance } => {
+            disk::version(host, instance, language, name, version_id).await
+        }
     }
 }
 
-pub async fn act(t: MaiBotPromptTarget<'_>, action: &MaiBotPromptAction) -> Result<MaiBotPromptFile, AppFrameworkError> {
+pub async fn act(
+    t: MaiBotPromptTarget<'_>,
+    action: &MaiBotPromptAction,
+) -> Result<MaiBotPromptFile, AppFrameworkError> {
     let (language, name) = action.target();
     check_names(language, name)?;
     match action {
-        MaiBotPromptAction::Save { version_id: Some(id), .. }
+        MaiBotPromptAction::Save {
+            version_id: Some(id),
+            ..
+        }
         | MaiBotPromptAction::Activate { version_id: id, .. }
         | MaiBotPromptAction::DeleteVersion { version_id: id, .. } => check_version_id(id)?,
         _ => {}
@@ -162,16 +187,22 @@ pub async fn act(t: MaiBotPromptTarget<'_>, action: &MaiBotPromptAction) -> Resu
 fn check_names(language: &str, name: &str) -> Result<(), AppFrameworkError> {
     let lang_ok = !language.is_empty()
         && language.len() <= 32
-        && language.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+        && language
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
     let stem = name.strip_suffix(".prompt").unwrap_or("");
     let name_ok = !stem.is_empty()
         && name.len() <= 128
         && !stem.contains("..")
-        && stem.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+        && stem
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
     if lang_ok && name_ok {
         Ok(())
     } else {
-        Err(AppFrameworkError::Validation(format!("提示词名不对：{language}/{name}")))
+        Err(AppFrameworkError::Validation(format!(
+            "提示词名不对：{language}/{name}"
+        )))
     }
 }
 
@@ -180,7 +211,9 @@ fn check_version_id(id: &str) -> Result<(), AppFrameworkError> {
         && id != "."
         && id != ".."
         && id.len() <= 64
-        && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
     if ok {
         Ok(())
     } else {
@@ -273,7 +306,11 @@ pub fn check_prompt(content: &str, default_content: &str) -> Result<(), String> 
     if !extra.is_empty() {
         parts.push(format!("多了 {}（麦麦给不出这些参数）", extra.join("、")));
     }
-    if parts.is_empty() { Ok(()) } else { Err(parts.join("；")) }
+    if parts.is_empty() {
+        Ok(())
+    } else {
+        Err(parts.join("；"))
+    }
 }
 
 #[cfg(test)]

@@ -71,12 +71,14 @@ fn load_conpty_api() -> Option<ConPtyApi> {
         let resize = GetProcAddress(module, s!("ResizePseudoConsole"))?;
         let close = GetProcAddress(module, s!("ClosePseudoConsole"))?;
         Some(ConPtyApi {
-            create: std::mem::transmute::<unsafe extern "system" fn() -> isize, CreatePseudoConsoleFn>(
-                create,
-            ),
-            resize: std::mem::transmute::<unsafe extern "system" fn() -> isize, ResizePseudoConsoleFn>(
-                resize,
-            ),
+            create: std::mem::transmute::<
+                unsafe extern "system" fn() -> isize,
+                CreatePseudoConsoleFn,
+            >(create),
+            resize: std::mem::transmute::<
+                unsafe extern "system" fn() -> isize,
+                ResizePseudoConsoleFn,
+            >(resize),
             close: std::mem::transmute::<unsafe extern "system" fn() -> isize, ClosePseudoConsoleFn>(
                 close,
             ),
@@ -113,11 +115,7 @@ impl PseudoConsole {
 
     fn close(&self) {
         // 先拿出来再关，关的过程中别的线程改大小不用陪着等
-        let taken = self
-            .handle
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .take();
+        let taken = self.handle.lock().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(hpc) = taken {
             // SAFETY: take 保证每个句柄只关一次
             unsafe { (self.api.close)(hpc) };
@@ -294,7 +292,13 @@ pub(crate) fn open_conpty(req: PtyRequest) -> Result<PtySession, HostError> {
     };
 
     let (session, backend) = pty_channel_pair();
-    start_threads(console, process, File::from(out_read), File::from(in_write), backend)?;
+    start_threads(
+        console,
+        process,
+        File::from(out_read),
+        File::from(in_write),
+        backend,
+    )?;
     Ok(session)
 }
 
@@ -373,7 +377,10 @@ fn start_threads(
                 match output_pipe.read(&mut buf) {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
-                        if output.blocking_send(Bytes::copy_from_slice(&buf[..n])).is_err() {
+                        if output
+                            .blocking_send(Bytes::copy_from_slice(&buf[..n]))
+                            .is_err()
+                        {
                             break;
                         }
                     }
@@ -470,7 +477,10 @@ mod tests {
             }
         })
         .await;
-        let exit = timeout(Duration::from_secs(10), session.exit).await.ok().and_then(Result::ok);
+        let exit = timeout(Duration::from_secs(10), session.exit)
+            .await
+            .ok()
+            .and_then(Result::ok);
         (String::from_utf8_lossy(&all).into_owned(), exit)
     }
 
@@ -491,10 +501,11 @@ mod tests {
     #[tokio::test]
     async fn runs_a_command_and_reports_its_exit_code() {
         assert!(conpty_available(), "ConPTY should exist on the dev machine");
-        let session = tokio::task::spawn_blocking(|| open_conpty(cmd(&["/c", "echo ncd-hello& exit 3"])))
-            .await
-            .unwrap()
-            .unwrap();
+        let session =
+            tokio::task::spawn_blocking(|| open_conpty(cmd(&["/c", "echo ncd-hello& exit 3"])))
+                .await
+                .unwrap()
+                .unwrap();
         let (text, exit) = collect(session).await;
         assert!(text.contains("ncd-hello"), "output was: {text:?}");
         assert_eq!(exit, Some(PtyExit::Exited(Some(3))));
@@ -516,7 +527,10 @@ mod tests {
             .unwrap();
         let text = wait_for_text(&mut session, "probe-value").await;
         assert!(text.contains("probe-value"), "output was: {text:?}");
-        session.control.write(Bytes::from_static(b"exit 0\r")).unwrap();
+        session
+            .control
+            .write(Bytes::from_static(b"exit 0\r"))
+            .unwrap();
         let (_, exit) = collect(session).await;
         assert_eq!(exit, Some(PtyExit::Exited(Some(0))));
     }
@@ -530,7 +544,8 @@ mod tests {
                     "-NoLogo".into(),
                     "-NoProfile".into(),
                     "-Command".into(),
-                    "Start-Sleep -Milliseconds 800; 'cols=' + $Host.UI.RawUI.WindowSize.Width".into(),
+                    "Start-Sleep -Milliseconds 800; 'cols=' + $Host.UI.RawUI.WindowSize.Width"
+                        .into(),
                 ],
             },
             PtySize::new(90, 20),
@@ -546,15 +561,19 @@ mod tests {
 
     #[tokio::test]
     async fn close_ends_the_whole_tree() {
-        let session = tokio::task::spawn_blocking(|| open_conpty(cmd(&["/c", "ping -n 30 127.0.0.1"])))
-            .await
-            .unwrap()
-            .unwrap();
+        let session =
+            tokio::task::spawn_blocking(|| open_conpty(cmd(&["/c", "ping -n 30 127.0.0.1"])))
+                .await
+                .unwrap()
+                .unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
         session.control.close();
         let started = Instant::now();
         let (_, exit) = collect(session).await;
-        assert!(matches!(exit, Some(PtyExit::Exited(_))), "exit was {exit:?}");
+        assert!(
+            matches!(exit, Some(PtyExit::Exited(_))),
+            "exit was {exit:?}"
+        );
         assert!(started.elapsed() < Duration::from_secs(8));
     }
 
@@ -562,7 +581,10 @@ mod tests {
     fn missing_directory_is_reported_before_spawning() {
         let mut req = cmd(&["/c", "echo x"]);
         req.cwd = Some(HostPath::from_windows("C:\\definitely\\not\\here\\ncd"));
-        let err = open_conpty(req).err().map(|e| e.to_string()).unwrap_or_default();
+        let err = open_conpty(req)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
         assert!(err.contains("目录不存在"), "error was {err}");
     }
 
@@ -583,6 +605,12 @@ mod tests {
         sorted.sort();
         assert_eq!(keys, sorted);
         assert!(entries.contains(&"Path=C:\\x"));
-        assert_eq!(entries.iter().filter(|e| e.to_uppercase().starts_with("PATH=")).count(), 1);
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|e| e.to_uppercase().starts_with("PATH="))
+                .count(),
+            1
+        );
     }
 }

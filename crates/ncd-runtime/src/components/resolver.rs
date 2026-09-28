@@ -6,20 +6,21 @@
 
 use std::sync::Arc;
 
+use ncd_appframework::AppFrameworkRegistry;
 use ncd_component::qq_deps::{QqDependencyDetector, qq_qqnt_dependencies_v3_2_25};
 use ncd_component::{
     Component, ComponentId, DependencyNode, DependencyPlan, DependencyTarget, DetectOutcome,
     HostPackageGroup, RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
     all_versions_match,
 };
-use ncd_appframework::AppFrameworkRegistry;
 use ncd_host::Host;
 
 use crate::components::graph::{ClosureNode, requirement_closure};
 
 /// 按 id 实例化依赖组件;通常是 build_component_for_host 的闭包。
 /// 失败(比如远端 $HOME 探不到)时该节点记 Unknown,不中断整张图。
-pub type ComponentBuilder<'a> = dyn Fn(ComponentId) -> Result<Arc<dyn Component>, String> + Sync + 'a;
+pub type ComponentBuilder<'a> =
+    dyn Fn(ComponentId) -> Result<Arc<dyn Component>, String> + Sync + 'a;
 
 pub struct ResolveCtx<'a> {
     pub host: &'a dyn Host,
@@ -77,9 +78,7 @@ pub async fn resolve_runtime_readiness(
 
 async fn probe_node(node: &ClosureNode, ctx: &ResolveCtx<'_>) -> RequirementStatus {
     match &node.target {
-        DependencyTarget::Component { id } => {
-            probe_component(*id, &node.version_reqs, ctx).await
-        }
+        DependencyTarget::Component { id } => probe_component(*id, &node.version_reqs, ctx).await,
         DependencyTarget::HostCommand { command, .. } => {
             if ctx.host.command_exists(command).await {
                 RequirementStatus::Satisfied {
@@ -468,12 +467,23 @@ mod tests {
         assert_eq!(readiness.root.status, RequirementStatus::Missing);
         assert_eq!(
             readiness.root.target,
-            DependencyTarget::Component { id: ComponentId::NapCat }
+            DependencyTarget::Component {
+                id: ComponentId::NapCat
+            }
         );
-        let labels: Vec<String> = readiness.plan.nodes.iter().map(|n| n.target.label()).collect();
+        let labels: Vec<String> = readiness
+            .plan
+            .nodes
+            .iter()
+            .map(|n| n.target.label())
+            .collect();
         assert_eq!(labels, vec!["qq_dependencies", "qq"]);
         assert!(!readiness.ready());
-        let blocking: Vec<String> = readiness.blocking().iter().map(|n| n.target.label()).collect();
+        let blocking: Vec<String> = readiness
+            .blocking()
+            .iter()
+            .map(|n| n.target.label())
+            .collect();
         assert_eq!(blocking, vec!["napcat", "qq_dependencies"]);
     }
 

@@ -90,13 +90,21 @@ pub(super) async fn catalog(s: &MaiBotSession) -> Result<MaiBotPromptCatalog, Ap
     })
 }
 
-async fn default_content(c: &MaiBotWebUi, language: &str, name: &str) -> Result<String, AppFrameworkError> {
+async fn default_content(
+    c: &MaiBotWebUi,
+    language: &str,
+    name: &str,
+) -> Result<String, AppFrameworkError> {
     let path = format!("{BASE}/{language}/{name}/default");
     let up: UpstreamFile = c.get(&path, &[]).await?;
     Ok(up.content.unwrap_or_default())
 }
 
-pub(super) async fn file(s: &MaiBotSession, language: &str, name: &str) -> Result<MaiBotPromptFile, AppFrameworkError> {
+pub(super) async fn file(
+    s: &MaiBotSession,
+    language: &str,
+    name: &str,
+) -> Result<MaiBotPromptFile, AppFrameworkError> {
     let c = connect(s)?;
     let path = format!("{BASE}/{language}/{name}");
     let up: UpstreamFile = c.get(&path, &[]).await?;
@@ -115,13 +123,21 @@ pub(super) async fn version(
     Ok(up.content.unwrap_or_default())
 }
 
-pub(super) async fn act(s: &MaiBotSession, action: &MaiBotPromptAction) -> Result<MaiBotPromptFile, AppFrameworkError> {
+pub(super) async fn act(
+    s: &MaiBotSession,
+    action: &MaiBotPromptAction,
+) -> Result<MaiBotPromptFile, AppFrameworkError> {
     let c = connect(s)?;
     let (language, name) = action.target();
     let default = default_content(&c, language, name).await?;
     let file_path = format!("{BASE}/{language}/{name}");
     let up: UpstreamFile = match action {
-        MaiBotPromptAction::Save { content, label, version_id, .. } => {
+        MaiBotPromptAction::Save {
+            content,
+            label,
+            version_id,
+            ..
+        } => {
             check_prompt(content, &default).map_err(AppFrameworkError::Validation)?;
             // 上游：version_id 空就新建；给了就覆盖那个版本并设成在用
             let body = json!({
@@ -130,7 +146,8 @@ pub(super) async fn act(s: &MaiBotSession, action: &MaiBotPromptAction) -> Resul
                 "label": label,
                 "create_version": version_id.is_none(),
             });
-            c.call(Request::new(Method::PUT, &file_path).body(&body)).await?
+            c.call(Request::new(Method::PUT, &file_path).body(&body))
+                .await?
         }
         MaiBotPromptAction::Activate { version_id, .. } => {
             let path = format!("{file_path}/versions/{version_id}/activate");
@@ -140,12 +157,19 @@ pub(super) async fn act(s: &MaiBotSession, action: &MaiBotPromptAction) -> Resul
             let path = format!("{file_path}/versions/{version_id}");
             c.call(Request::new(Method::DELETE, &path)).await?
         }
-        MaiBotPromptAction::Restore { .. } => c.call(Request::new(Method::DELETE, &file_path)).await?,
+        MaiBotPromptAction::Restore { .. } => {
+            c.call(Request::new(Method::DELETE, &file_path)).await?
+        }
     };
     Ok(to_file(language, name, up, default))
 }
 
-fn to_file(language: &str, name: &str, up: UpstreamFile, default_content: String) -> MaiBotPromptFile {
+fn to_file(
+    language: &str,
+    name: &str,
+    up: UpstreamFile,
+    default_content: String,
+) -> MaiBotPromptFile {
     let versions = up
         .versions
         .unwrap_or_default()
@@ -153,7 +177,10 @@ fn to_file(language: &str, name: &str, up: UpstreamFile, default_content: String
         .filter_map(|v| {
             let id = v.id.filter(|i| !i.is_empty())?;
             Some(MaiBotPromptVersion {
-                label: v.label.filter(|l| !l.is_empty()).unwrap_or_else(|| id.clone()),
+                label: v
+                    .label
+                    .filter(|l| !l.is_empty())
+                    .unwrap_or_else(|| id.clone()),
                 id,
                 created_at: v.created_at.unwrap_or(0.0),
                 modified_at: v.modified_at.unwrap_or(0.0),

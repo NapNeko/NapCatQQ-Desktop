@@ -8,7 +8,8 @@ use std::collections::HashSet;
 use ncd_domain::AppConfigIssue;
 
 use super::super::schema::{
-    IssueSink, MaiBotBotConfigFile, MaiBotKeywordRuleConfig, MaiBotModelConfigFile, MaiBotTaskConfig,
+    IssueSink, MaiBotBotConfigFile, MaiBotKeywordRuleConfig, MaiBotModelConfigFile,
+    MaiBotTaskConfig,
 };
 use super::MaiBotInstanceConfig;
 
@@ -47,15 +48,31 @@ fn ports(bot: &MaiBotBotConfigFile, sink: &mut IssueSink) {
     let webui = bot.webui.port;
     let legacy = bot.maim_message.ws_server_port;
     sink.range("bot/webui/port", webui as f64, Some(1.0), Some(65535.0));
-    sink.range("bot/maim_message/ws_server_port", legacy as f64, Some(1.0), Some(65535.0));
+    sink.range(
+        "bot/maim_message/ws_server_port",
+        legacy as f64,
+        Some(1.0),
+        Some(65535.0),
+    );
     if webui == legacy {
-        sink.push("bot/maim_message/ws_server_port", "不能和 WebUI 用同一个端口");
+        sink.push(
+            "bot/maim_message/ws_server_port",
+            "不能和 WebUI 用同一个端口",
+        );
     }
     if bot.maim_message.enable_api_server {
         let api = bot.maim_message.api_server_port;
-        sink.range("bot/maim_message/api_server_port", api as f64, Some(1.0), Some(65535.0));
+        sink.range(
+            "bot/maim_message/api_server_port",
+            api as f64,
+            Some(1.0),
+            Some(65535.0),
+        );
         if api == webui || api == legacy {
-            sink.push("bot/maim_message/api_server_port", "不能和 WebUI 或旧版消息服务用同一个端口");
+            sink.push(
+                "bot/maim_message/api_server_port",
+                "不能和 WebUI 或旧版消息服务用同一个端口",
+            );
         }
     }
 }
@@ -81,11 +98,19 @@ fn keyword_rule(sink: &mut IssueSink, path: &str, rule: &MaiBotKeywordRuleConfig
 
 fn bot_rules(bot: &MaiBotBotConfigFile, sink: &mut IssueSink) {
     for (i, pattern) in bot.message_receive.ban_msgs_regex.iter().enumerate() {
-        check_regex(sink, &format!("bot/message_receive/ban_msgs_regex/{i}"), pattern);
+        check_regex(
+            sink,
+            &format!("bot/message_receive/ban_msgs_regex/{i}"),
+            pattern,
+        );
     }
     let kw = &bot.keyword_reaction;
     for (i, rule) in kw.keyword_rules.iter().enumerate() {
-        keyword_rule(sink, &format!("bot/keyword_reaction/keyword_rules/{i}"), rule);
+        keyword_rule(
+            sink,
+            &format!("bot/keyword_reaction/keyword_rules/{i}"),
+            rule,
+        );
     }
     for (i, rule) in kw.regex_rules.iter().enumerate() {
         keyword_rule(sink, &format!("bot/keyword_reaction/regex_rules/{i}"), rule);
@@ -113,19 +138,50 @@ fn bot_rules(bot: &MaiBotBotConfigFile, sink: &mut IssueSink) {
     }
     let int = &mem.integration;
     let base = "bot/a_memorix/integration";
-    sink.range(&format!("{base}/fuzzy_modify_confirm_threshold"), int.fuzzy_modify_confirm_threshold, Some(0.0), Some(1.0));
-    sink.range(&format!("{base}/feedback_correction_auto_apply_threshold"), int.feedback_correction_auto_apply_threshold, Some(0.0), Some(1.0));
+    sink.range(
+        &format!("{base}/fuzzy_modify_confirm_threshold"),
+        int.fuzzy_modify_confirm_threshold,
+        Some(0.0),
+        Some(1.0),
+    );
+    sink.range(
+        &format!("{base}/feedback_correction_auto_apply_threshold"),
+        int.feedback_correction_auto_apply_threshold,
+        Some(0.0),
+        Some(1.0),
+    );
     if int.feedback_correction_window_hours <= 0.0 {
-        sink.push(format!("{base}/feedback_correction_window_hours"), "要大于 0");
+        sink.push(
+            format!("{base}/feedback_correction_window_hours"),
+            "要大于 0",
+        );
     }
     for (name, v) in [
-        ("fuzzy_modify_candidate_limit", int.fuzzy_modify_candidate_limit),
+        (
+            "fuzzy_modify_candidate_limit",
+            int.fuzzy_modify_candidate_limit,
+        ),
         ("fuzzy_modify_max_targets", int.fuzzy_modify_max_targets),
-        ("feedback_correction_check_interval_minutes", int.feedback_correction_check_interval_minutes),
-        ("feedback_correction_batch_size", int.feedback_correction_batch_size),
-        ("feedback_correction_max_feedback_messages", int.feedback_correction_max_feedback_messages),
-        ("feedback_correction_reconcile_interval_minutes", int.feedback_correction_reconcile_interval_minutes),
-        ("feedback_correction_reconcile_batch_size", int.feedback_correction_reconcile_batch_size),
+        (
+            "feedback_correction_check_interval_minutes",
+            int.feedback_correction_check_interval_minutes,
+        ),
+        (
+            "feedback_correction_batch_size",
+            int.feedback_correction_batch_size,
+        ),
+        (
+            "feedback_correction_max_feedback_messages",
+            int.feedback_correction_max_feedback_messages,
+        ),
+        (
+            "feedback_correction_reconcile_interval_minutes",
+            int.feedback_correction_reconcile_interval_minutes,
+        ),
+        (
+            "feedback_correction_reconcile_batch_size",
+            int.feedback_correction_reconcile_batch_size,
+        ),
     ] {
         sink.range(&format!("{base}/{name}"), v as f64, Some(1.0), None);
     }
@@ -133,12 +189,18 @@ fn bot_rules(bot: &MaiBotBotConfigFile, sink: &mut IssueSink) {
     let mcp = &bot.mcp;
     for (i, root) in mcp.client.roots.items.iter().enumerate() {
         if root.enabled && root.uri.trim().is_empty() {
-            sink.push(format!("bot/mcp/client/roots/items/{i}/uri"), "启用的目录要填 uri");
+            sink.push(
+                format!("bot/mcp/client/roots/items/{i}/uri"),
+                "启用的目录要填 uri",
+            );
         }
     }
     let eli = &mcp.client.elicitation;
     if eli.enable && !(eli.allow_form || eli.allow_url) {
-        sink.push("bot/mcp/client/elicitation/allow_form", "开启后至少允许一种方式");
+        sink.push(
+            "bot/mcp/client/elicitation/allow_form",
+            "开启后至少允许一种方式",
+        );
     }
     let mut names = HashSet::new();
     for (i, server) in mcp.servers.iter().enumerate() {
@@ -161,8 +223,13 @@ fn bot_rules(bot: &MaiBotBotConfigFile, sink: &mut IssueSink) {
             }
             _ => {}
         }
-        if server.authorization.mode == "bearer" && server.authorization.bearer_token.trim().is_empty() {
-            sink.push(format!("{path}/authorization/bearer_token"), "bearer 认证要填 token");
+        if server.authorization.mode == "bearer"
+            && server.authorization.bearer_token.trim().is_empty()
+        {
+            sink.push(
+                format!("{path}/authorization/bearer_token"),
+                "bearer 认证要填 token",
+            );
         }
     }
 }
@@ -204,7 +271,10 @@ fn model_rules(models: &MaiBotModelConfigFile, sink: &mut IssueSink) {
             sink.push(format!("{path}/name"), "和别的模型重名了");
         }
         if m.model_identifier.trim().is_empty() {
-            sink.push(format!("{path}/model_identifier"), "要填服务商那边的模型标识");
+            sink.push(
+                format!("{path}/model_identifier"),
+                "要填服务商那边的模型标识",
+            );
         }
         if !providers.contains(m.api_provider.as_str()) {
             sink.push(format!("{path}/api_provider"), "选一个已有的提供商");

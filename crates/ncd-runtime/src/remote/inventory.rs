@@ -750,14 +750,20 @@ impl RemoteInventoryService {
             .find(|p| p.id == server_id);
         let previous = profile.as_ref().and_then(|p| p.inventory.clone());
         if !force {
-            if let Some(inv) = previous.as_ref().filter(|i| !inventory_is_stale(&i.probed_at, now)) {
+            if let Some(inv) = previous
+                .as_ref()
+                .filter(|i| !inventory_is_stale(&i.probed_at, now))
+            {
                 self.remember(server_id, inv).await;
                 return Ok(inv.clone());
             }
         }
         let overrides = profile.as_ref().and_then(|p| p.path_overrides.clone());
         let inv = probe_remote_inventory(host, overrides.as_ref(), previous.as_ref()).await?;
-        let _ = self.server_manager.set_inventory(server_id, inv.clone()).await;
+        let _ = self
+            .server_manager
+            .set_inventory(server_id, inv.clone())
+            .await;
         self.remember(server_id, &inv).await;
         Ok(inv)
     }
@@ -1203,16 +1209,28 @@ mod tests {
             stdout: sample_stdout("/home/b", ""),
         };
 
-        assert_eq!(service.ensure("s1", &first, false).await.unwrap().home, "/home/a");
+        assert_eq!(
+            service.ensure("s1", &first, false).await.unwrap().home,
+            "/home/a"
+        );
         // 没过期就不再探，换了输出也还是上次那份
-        assert_eq!(service.ensure("s1", &second, false).await.unwrap().home, "/home/a");
+        assert_eq!(
+            service.ensure("s1", &second, false).await.unwrap().home,
+            "/home/a"
+        );
         let (probe, selected) = service.host_probe("remote:s1", &second).await.unwrap();
         assert_eq!(probe.home.as_deref(), Some("/home/a"));
         assert_eq!(selected.unwrap().home, "/home/a");
 
         service.invalidate("s1").await;
-        assert_eq!(service.ensure("s1", &second, false).await.unwrap().home, "/home/b");
-        assert_eq!(service.ensure("s1", &first, true).await.unwrap().home, "/home/a");
+        assert_eq!(
+            service.ensure("s1", &second, false).await.unwrap().home,
+            "/home/b"
+        );
+        assert_eq!(
+            service.ensure("s1", &first, true).await.unwrap().home,
+            "/home/a"
+        );
     }
 
     #[tokio::test]

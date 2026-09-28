@@ -70,7 +70,10 @@ struct HostRange {
 pub fn adapter_host_range(json: &str) -> Option<(String, String)> {
     let m: AdapterManifest = serde_json::from_str(json).ok()?;
     let r = m.host_application?;
-    Some((r.min_version.trim().to_string(), r.max_version.trim().to_string()))
+    Some((
+        r.min_version.trim().to_string(),
+        r.max_version.trim().to_string(),
+    ))
 }
 
 /// 三段式版本，容忍 tag 前缀 `v`
@@ -90,7 +93,8 @@ pub fn parse_semver(s: &str) -> Option<(u64, u64, u64)> {
 /// 上游插件运行时的判定（`update_compatibility_notice._is_host_compatible`）：
 /// 落在 [min, max]，或与 max 同 major.minor、补丁号更高
 pub fn host_compatible(version: &str, min: &str, max: &str) -> bool {
-    let (Some(v), Some(lo), Some(hi)) = (parse_semver(version), parse_semver(min), parse_semver(max))
+    let (Some(v), Some(lo), Some(hi)) =
+        (parse_semver(version), parse_semver(min), parse_semver(max))
     else {
         return false;
     };
@@ -117,7 +121,10 @@ pub async fn fetch_stable_release_tags(repo: &str) -> Result<Vec<String>, String
         .await
         .map_err(|e| format!("请求 {repo} 的 Release 失败: {e}"))?;
     if !resp.status().is_success() {
-        return Err(format!("请求 {repo} 的 Release 失败: HTTP {}", resp.status()));
+        return Err(format!(
+            "请求 {repo} 的 Release 失败: HTTP {}",
+            resp.status()
+        ));
     }
     let text = resp
         .text()
@@ -137,7 +144,11 @@ mod tests {
             "https://github.com/Mai-with-u/MaiBot/archive/refs/tags/1.2.5.zip"
         );
         assert_eq!(
-            archive_url("Mai-with-u/MaiBot-Napcat-Adapter", "v1.4.0", ArchiveExt::TarGz),
+            archive_url(
+                "Mai-with-u/MaiBot-Napcat-Adapter",
+                "v1.4.0",
+                ArchiveExt::TarGz
+            ),
             "https://github.com/Mai-with-u/MaiBot-Napcat-Adapter/archive/refs/tags/v1.4.0.tar.gz"
         );
     }
@@ -171,7 +182,10 @@ mod tests {
         assert!(host_compatible("1.2.5", "1.2.0", "1.2.99"));
         assert!(!host_compatible("1.3.0", "1.2.0", "1.2.99"));
         assert!(!host_compatible("1.1.4", "1.2.0", "1.2.99"));
-        assert!(host_compatible("1.2.7", "1.2.0", "1.2.5"), "同 major.minor 的更高补丁放行");
+        assert!(
+            host_compatible("1.2.7", "1.2.0", "1.2.5"),
+            "同 major.minor 的更高补丁放行"
+        );
         assert!(!host_compatible("garbage", "1.2.0", "1.2.99"));
         assert_eq!(parse_semver("v1.4.0"), Some((1, 4, 0)));
         assert_eq!(parse_semver("1.2"), None);
@@ -184,7 +198,10 @@ mod tests {
             .iter()
             .map(|s| s.to_string())
             .collect();
-        assert_eq!(pick_maibot_tag(&tags, "1.2.0", "1.2.99").as_deref(), Some("1.2.10"));
+        assert_eq!(
+            pick_maibot_tag(&tags, "1.2.0", "1.2.99").as_deref(),
+            Some("1.2.10")
+        );
         assert_eq!(pick_maibot_tag(&tags, "2.0.0", "2.0.99"), None);
     }
 }

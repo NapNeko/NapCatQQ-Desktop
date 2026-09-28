@@ -270,7 +270,10 @@ pub(crate) fn normalize_tags(raw: &[String]) -> Vec<String> {
     out
 }
 
-pub(crate) async fn list(c: &MaiBotWebUi, q: &MaiBotEmojiQuery) -> Result<MaiBotEmojiPage, AppFrameworkError> {
+pub(crate) async fn list(
+    c: &MaiBotWebUi,
+    q: &MaiBotEmojiQuery,
+) -> Result<MaiBotEmojiPage, AppFrameworkError> {
     let page = q.page.max(1).to_string();
     let size = q.page_size.clamp(1, 100).to_string();
     let search = q.search.trim();
@@ -279,7 +282,12 @@ pub(crate) async fn list(c: &MaiBotWebUi, q: &MaiBotEmojiQuery) -> Result<MaiBot
         MaiBotEmojiSort::MostUsed => "usage_count",
         MaiBotEmojiSort::RecentlyUsed => "last_used_time",
     };
-    let mut query = vec![("page", page.as_str()), ("page_size", size.as_str()), ("sort_by", sort_by), ("sort_order", "desc")];
+    let mut query = vec![
+        ("page", page.as_str()),
+        ("page_size", size.as_str()),
+        ("sort_by", sort_by),
+        ("sort_order", "desc"),
+    ];
     if !search.is_empty() {
         query.push(("search", search));
     }
@@ -296,7 +304,12 @@ pub(crate) async fn list(c: &MaiBotWebUi, q: &MaiBotEmojiQuery) -> Result<MaiBot
     let up: UpstreamPage<UpstreamEmoji> = c.get(&format!("{BASE}/list"), &query).await?;
     Ok(MaiBotEmojiPage {
         total: up.total.unwrap_or(0),
-        items: up.data.unwrap_or_default().into_iter().filter_map(UpstreamEmoji::into_item).collect(),
+        items: up
+            .data
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(UpstreamEmoji::into_item)
+            .collect(),
     })
 }
 
@@ -312,34 +325,66 @@ pub(crate) async fn overview(c: &MaiBotWebUi) -> Result<MaiBotEmojiOverview, App
     })
 }
 
-pub(crate) async fn act(c: &MaiBotWebUi, a: &MaiBotEmojiAction) -> Result<MaiBotResourceDone, AppFrameworkError> {
-    let patch = |body: serde_json::Value| move |id: i64| (Method::PATCH, format!("{BASE}/{id}"), Some(body.clone()));
+pub(crate) async fn act(
+    c: &MaiBotWebUi,
+    a: &MaiBotEmojiAction,
+) -> Result<MaiBotResourceDone, AppFrameworkError> {
+    let patch = |body: serde_json::Value| {
+        move |id: i64| (Method::PATCH, format!("{BASE}/{id}"), Some(body.clone()))
+    };
     match a {
         MaiBotEmojiAction::Tag { id, tags } => {
             let body = json!({ "description": normalize_tags(tags).join(",") });
-            let _: UpstreamMessage = c.call(Request::new(Method::PATCH, &format!("{BASE}/{id}")).body(&body)).await?;
-            Ok(MaiBotResourceDone { affected: 1, message: "标签改好了".into() })
+            let _: UpstreamMessage = c
+                .call(Request::new(Method::PATCH, &format!("{BASE}/{id}")).body(&body))
+                .await?;
+            Ok(MaiBotResourceDone {
+                affected: 1,
+                message: "标签改好了".into(),
+            })
         }
         MaiBotEmojiAction::Adopt { ids } => {
-            each(c, ids, "收下", |id| (Method::POST, format!("{BASE}/{id}/register"), None)).await
+            each(c, ids, "收下", |id| {
+                (Method::POST, format!("{BASE}/{id}/register"), None)
+            })
+            .await
         }
-        MaiBotEmojiAction::Unadopt { ids } => each(c, ids, "不再发", patch(json!({ "is_registered": false }))).await,
+        MaiBotEmojiAction::Unadopt { ids } => {
+            each(c, ids, "不再发", patch(json!({ "is_registered": false }))).await
+        }
         MaiBotEmojiAction::Discard { ids } => {
-            each(c, ids, "丢弃", |id| (Method::POST, format!("{BASE}/{id}/ban"), None)).await
+            each(c, ids, "丢弃", |id| {
+                (Method::POST, format!("{BASE}/{id}/ban"), None)
+            })
+            .await
         }
-        MaiBotEmojiAction::Restore { ids } => each(c, ids, "捡回", patch(json!({ "is_banned": false }))).await,
+        MaiBotEmojiAction::Restore { ids } => {
+            each(c, ids, "捡回", patch(json!({ "is_banned": false }))).await
+        }
         MaiBotEmojiAction::Delete { ids } => match ids.as_slice() {
-            [] => Ok(MaiBotResourceDone { affected: 0, message: String::new() }),
+            [] => Ok(MaiBotResourceDone {
+                affected: 0,
+                message: String::new(),
+            }),
             [id] => {
-                let _: UpstreamMessage = c.call(Request::new(Method::DELETE, &format!("{BASE}/{id}"))).await?;
-                Ok(MaiBotResourceDone { affected: 1, message: "删掉了".into() })
+                let _: UpstreamMessage = c
+                    .call(Request::new(Method::DELETE, &format!("{BASE}/{id}")))
+                    .await?;
+                Ok(MaiBotResourceDone {
+                    affected: 1,
+                    message: "删掉了".into(),
+                })
             }
             _ => {
                 let body = json!({ "emoji_ids": ids });
-                let up: UpstreamMessage =
-                    c.call(Request::new(Method::POST, &format!("{BASE}/batch/delete")).body(&body)).await?;
+                let up: UpstreamMessage = c
+                    .call(Request::new(Method::POST, &format!("{BASE}/batch/delete")).body(&body))
+                    .await?;
                 let n = up.deleted_count.unwrap_or(ids.len() as u32);
-                Ok(MaiBotResourceDone { affected: n, message: format!("删掉了 {n} 张") })
+                Ok(MaiBotResourceDone {
+                    affected: n,
+                    message: format!("删掉了 {n} 张"),
+                })
             }
         },
     }
@@ -375,7 +420,10 @@ async fn each(
             affected: ok,
             message: format!("{verb}了 {ok} 张，{failed} 张没成：{}", reason(&e)),
         }),
-        None => Ok(MaiBotResourceDone { affected: ok, message: format!("{verb}了 {ok} 张") }),
+        None => Ok(MaiBotResourceDone {
+            affected: ok,
+            message: format!("{verb}了 {ok} 张"),
+        }),
     }
 }
 
@@ -388,27 +436,46 @@ fn reason(e: &AppFrameworkError) -> String {
 }
 
 /// 缩略图第一次要时上游才开始生成，回 202 叫隔一秒再来；这里等几轮再放弃
-pub(crate) async fn image(c: &MaiBotWebUi, id: i64, original: bool) -> Result<MaiBotEmojiImage, AppFrameworkError> {
+pub(crate) async fn image(
+    c: &MaiBotWebUi,
+    id: i64,
+    original: bool,
+) -> Result<MaiBotEmojiImage, AppFrameworkError> {
     let path = format!("{BASE}/{id}/thumbnail");
-    let query: &[(&str, &str)] = if original { &[("original", "true")] } else { &[] };
+    let query: &[(&str, &str)] = if original {
+        &[("original", "true")]
+    } else {
+        &[]
+    };
     for attempt in 0..6u64 {
         match c.fetch_bytes(&path, query).await? {
             Fetched::Ready { mime, bytes } => {
                 if bytes.len() > ORIGINAL_MAX_BYTES {
-                    return Err(AppFrameworkError::Validation("这张图太大，桌面端不显示".into()));
+                    return Err(AppFrameworkError::Validation(
+                        "这张图太大，桌面端不显示".into(),
+                    ));
                 }
                 let mime = sniff_image(&bytes).map_or(mime, str::to_string);
-                return Ok(MaiBotEmojiImage { data_url: Some(data_url(&mime, &bytes)) });
+                return Ok(MaiBotEmojiImage {
+                    data_url: Some(data_url(&mime, &bytes)),
+                });
             }
             Fetched::Missing => return Ok(MaiBotEmojiImage { data_url: None }),
-            Fetched::Pending => tokio::time::sleep(Duration::from_millis(400 + 200 * attempt)).await,
+            Fetched::Pending => {
+                tokio::time::sleep(Duration::from_millis(400 + 200 * attempt)).await
+            }
         }
     }
-    Err(AppFrameworkError::Integration("缩略图还没生成好，过会儿再看".into()))
+    Err(AppFrameworkError::Integration(
+        "缩略图还没生成好，过会儿再看".into(),
+    ))
 }
 
 /// 一张一张传：上游的批量接口不收每张各自的标签，出错也只给文件名
-pub(crate) async fn upload(c: &MaiBotWebUi, up: &MaiBotEmojiUpload) -> Result<MaiBotEmojiUploadDone, AppFrameworkError> {
+pub(crate) async fn upload(
+    c: &MaiBotWebUi,
+    up: &MaiBotEmojiUpload,
+) -> Result<MaiBotEmojiUploadDone, AppFrameworkError> {
     let paths = up.paths.clone();
     let (files, mut failed) = tokio::task::spawn_blocking(move || load_uploads(&paths))
         .await
@@ -420,7 +487,10 @@ pub(crate) async fn upload(c: &MaiBotWebUi, up: &MaiBotEmojiUpload) -> Result<Ma
             .file_name(f.name.clone())
             .mime_str(f.mime)
             .map_err(|e| AppFrameworkError::Integration(e.to_string()))?;
-        let form = Form::new().part("file", part).text("description", tags.clone()).text("is_registered", "true");
+        let form = Form::new()
+            .part("file", part)
+            .text("description", tags.clone())
+            .text("is_registered", "true");
         match c.send_form(&format!("{BASE}/upload"), form).await {
             Ok(v) => {
                 let msg: UpstreamMessage = serde_json::from_value(v).unwrap_or_default();
@@ -431,10 +501,17 @@ pub(crate) async fn upload(c: &MaiBotWebUi, up: &MaiBotEmojiUpload) -> Result<Ma
                     uploaded += 1;
                 }
             }
-            Err(e) => failed.push(MaiBotUploadFailure { name: f.name, reason: reason(&e) }),
+            Err(e) => failed.push(MaiBotUploadFailure {
+                name: f.name,
+                reason: reason(&e),
+            }),
         }
     }
-    Ok(MaiBotEmojiUploadDone { uploaded, existed, failed })
+    Ok(MaiBotEmojiUploadDone {
+        uploaded,
+        existed,
+        failed,
+    })
 }
 
 /// 选好、拖进来的图先在本机过一遍：传不了的当场说，能传的给预览
@@ -467,7 +544,13 @@ fn inspect_one(path: &str) -> MaiBotLocalImage {
             problem: None,
             preview: (size <= PREVIEW_MAX_BYTES).then(|| data_url(mime, &bytes)),
         },
-        Err((size, problem)) => MaiBotLocalImage { path: path.to_string(), name, size, problem: Some(problem), preview: None },
+        Err((size, problem)) => MaiBotLocalImage {
+            path: path.to_string(),
+            name,
+            size,
+            problem: Some(problem),
+            preview: None,
+        },
     }
 }
 
@@ -490,7 +573,9 @@ fn load_uploads(paths: &[String]) -> (Vec<LocalFile>, Vec<MaiBotUploadFailure>) 
 }
 
 fn file_name(path: &str) -> String {
-    Path::new(path).file_name().map_or_else(|| path.to_string(), |n| n.to_string_lossy().into_owned())
+    Path::new(path)
+        .file_name()
+        .map_or_else(|| path.to_string(), |n| n.to_string_lossy().into_owned())
 }
 
 /// 只收本机绝对路径下的普通文件，10 MB 以内，按文件头认得出是 PNG / JPG / GIF / WebP
@@ -531,8 +616,15 @@ pub(crate) fn sniff_image(bytes: &[u8]) -> Option<&'static str> {
 }
 
 fn data_url(mime: &str, bytes: &[u8]) -> String {
-    let mime = if mime.is_empty() { "application/octet-stream" } else { mime };
-    format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
+    let mime = if mime.is_empty() {
+        "application/octet-stream"
+    } else {
+        mime
+    };
+    format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )
 }
 
 #[cfg(test)]

@@ -12,9 +12,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use ncd_component::{
-    ActionCtx, ActionError, Component, ComponentId, DetectOutcome, DetectedVersion,
-    DownloadHelper, LaunchArgs, ProgressKind, Requirement, UnusableInstall, VerifyReport,
-    probe_remote_arch,
+    ActionCtx, ActionError, Component, ComponentId, DetectOutcome, DetectedVersion, DownloadHelper,
+    LaunchArgs, ProgressKind, Requirement, UnusableInstall, VerifyReport, probe_remote_arch,
 };
 use ncd_host::{Arch, ArchiveKind, Host, HostCommand, HostPath, Locality, Os};
 use ncd_network::build_mirror_urls;
@@ -24,8 +23,8 @@ use super::config::write_bot_config_ports;
 use super::manifest::{
     ADAPTER_DIR, ADAPTER_MANIFEST_FILE, ADAPTER_REPO, BOT_CONFIG, BOT_PY, CONFIG_PY,
     MAIBOT_MIN_FREE_KB, MAIBOT_MIN_GLIBC, MAIBOT_PYTHON_REQUIRES, MAIBOT_REPO,
-    MAIBOT_UV_VERSION_RANGE, PINNED_ADAPTER_TAG, PINNED_MAIBOT_TAG, PRESERVED_ON_UPDATE,
-    PYPROJECT, PYPROJECT_NAME, PYTHON_SCRATCH_DIR, STAGE_DIR, WEBUI_JSON,
+    MAIBOT_UV_VERSION_RANGE, PINNED_ADAPTER_TAG, PINNED_MAIBOT_TAG, PRESERVED_ON_UPDATE, PYPROJECT,
+    PYPROJECT_NAME, PYTHON_SCRATCH_DIR, STAGE_DIR, WEBUI_JSON,
 };
 use super::release::{
     ArchiveExt, adapter_host_range, archive_url, fetch_stable_release_tags, host_compatible,
@@ -200,10 +199,12 @@ impl MaiBotComponent {
                         .await?;
                     let (min, max) = self.adapter_range(host, &adapter).await?;
                     if !host_compatible(PINNED_MAIBOT_TAG, &min, &max) {
-                        ctx.warn("内置组合的版本范围对不上，适配器可能不会被加载").await;
+                        ctx.warn("内置组合的版本范围对不上，适配器可能不会被加载")
+                            .await;
                     }
                 } else if !host_compatible(PINNED_MAIBOT_TAG, &min, &max) {
-                    ctx.warn("内置组合的版本范围对不上，适配器可能不会被加载").await;
+                    ctx.warn("内置组合的版本范围对不上，适配器可能不会被加载")
+                        .await;
                 }
                 PINNED_MAIBOT_TAG.to_string()
             }
@@ -228,7 +229,10 @@ impl MaiBotComponent {
         adapter_host_range(&text).ok_or_else(|| {
             ActionError::install_step(
                 "adapter-manifest",
-                format!("适配器 {} 的 _manifest.json 缺少 host_application", adapter.tag),
+                format!(
+                    "适配器 {} 的 _manifest.json 缺少 host_application",
+                    adapter.tag
+                ),
             )
         })
     }
@@ -252,7 +256,11 @@ impl MaiBotComponent {
     }
 
     /// 适配器整目录换代码，只留用户的 config.toml
-    async fn place_adapter(&self, host: &dyn Host, staged: &StagedSource) -> Result<(), ActionError> {
+    async fn place_adapter(
+        &self,
+        host: &dyn Host,
+        staged: &StagedSource,
+    ) -> Result<(), ActionError> {
         let dest = self.install_dir.join(ADAPTER_DIR);
         if !host.exists(&dest).await? {
             if let Some(parent) = dest.parent() {
@@ -402,10 +410,22 @@ impl MaiBotComponent {
         end(ctx, 1).await;
 
         let (maibot, adapter) = self.stage_sources(host, ctx).await?;
-        ctx.info(format!("安装 MaiBot {} + NapCat 适配器 {}", maibot.tag, adapter.tag))
-            .await;
+        ctx.info(format!(
+            "安装 MaiBot {} + NapCat 适配器 {}",
+            maibot.tag, adapter.tag
+        ))
+        .await;
 
-        begin(ctx, 4, if updating { "替换源码（保留配置、数据与插件）" } else { "放置源码" }).await;
+        begin(
+            ctx,
+            4,
+            if updating {
+                "替换源码（保留配置、数据与插件）"
+            } else {
+                "放置源码"
+            },
+        )
+        .await;
         self.place_maibot(host, &maibot, updating).await?;
         self.place_adapter(host, &adapter).await?;
         let _ = host.remove_dir_all(&self.stage_dir()).await;
@@ -432,8 +452,14 @@ impl MaiBotComponent {
             .arg(MAIBOT_PYTHON_REQUIRES)
             .working_dir(self.install_dir.clone())
             .env("UV_PROJECT_ENVIRONMENT", ".venv");
-        self.run_step(host, ctx, 6, "同步 Python 依赖（uv sync，首次要下几百 MB）", sync)
-            .await?;
+        self.run_step(
+            host,
+            ctx,
+            6,
+            "同步 Python 依赖（uv sync，首次要下几百 MB）",
+            sync,
+        )
+        .await?;
 
         begin(ctx, 7, "预置端口、WebUI token 与协议确认").await;
         self.seed(host, ctx, updating).await?;
@@ -443,7 +469,12 @@ impl MaiBotComponent {
     }
 
     /// 只补缺的文件，已有的一律不碰（更新时用户在 WebUI 里改过的都在这些文件里）
-    async fn seed(&self, host: &dyn Host, ctx: &ActionCtx, updating: bool) -> Result<(), ActionError> {
+    async fn seed(
+        &self,
+        host: &dyn Host,
+        ctx: &ActionCtx,
+        updating: bool,
+    ) -> Result<(), ActionError> {
         let bot_config = self.install_dir.join(BOT_CONFIG);
         if !host.exists(&bot_config).await? {
             let config_py = read_text(host, &self.install_dir.join(CONFIG_PY))
@@ -458,7 +489,8 @@ impl MaiBotComponent {
             let legacy = self.pick_legacy_port(host).await;
             let text = write_bot_config_ports(None, &version, self.webui_port, legacy)
                 .map_err(|e| ActionError::install_step("seed-config", e))?;
-            host.create_dir_all(&self.install_dir.join("config")).await?;
+            host.create_dir_all(&self.install_dir.join("config"))
+                .await?;
             host.write_file(&bot_config, text.as_bytes()).await?;
             ctx.info(format!(
                 "WebUI 端口 {}，旧版消息服务端口 {legacy}",
@@ -469,8 +501,11 @@ impl MaiBotComponent {
         let webui_json = self.install_dir.join(WEBUI_JSON);
         if !host.exists(&webui_json).await? {
             host.create_dir_all(&self.install_dir.join("data")).await?;
-            host.write_file(&webui_json, render_webui_json(&generate_webui_token()).as_bytes())
-                .await?;
+            host.write_file(
+                &webui_json,
+                render_webui_json(&generate_webui_token()).as_bytes(),
+            )
+            .await?;
         }
         // 用户在新建对话框里同意过才走到首装；更新后条款变了要重新问，不能在这里补写
         if !updating {
@@ -489,7 +524,10 @@ impl MaiBotComponent {
             return port;
         }
         // 探不出来就给第一个候选，真被占了上游启动日志会说是哪个口
-        candidates.first().copied().unwrap_or(self.webui_port.wrapping_add(1))
+        candidates
+            .first()
+            .copied()
+            .unwrap_or(self.webui_port.wrapping_add(1))
     }
 
     async fn read_project(&self, host: &dyn Host) -> Result<Option<(String, String)>, ActionError> {
@@ -703,7 +741,12 @@ impl Component for MaiBotComponent {
         for (name, path) in [
             (BOT_PY, self.install_dir.join(BOT_PY)),
             ("python", self.venv_python(host.os())),
-            ("napcat-adapter", self.install_dir.join(ADAPTER_DIR).join(ADAPTER_MANIFEST_FILE)),
+            (
+                "napcat-adapter",
+                self.install_dir
+                    .join(ADAPTER_DIR)
+                    .join(ADAPTER_MANIFEST_FILE),
+            ),
         ] {
             let ok = host.exists(&path).await?;
             report = report.with_check(name, ok, Some(path.as_posix().to_string()));
@@ -711,7 +754,11 @@ impl Component for MaiBotComponent {
         Ok(report)
     }
 
-    fn launch_command(&self, host: &dyn Host, args: &LaunchArgs) -> Result<HostCommand, ActionError> {
+    fn launch_command(
+        &self,
+        host: &dyn Host,
+        args: &LaunchArgs,
+    ) -> Result<HostCommand, ActionError> {
         Ok(self.launch_with(host.os(), host.locality(), args, None))
     }
 }
@@ -731,7 +778,11 @@ async fn read_text(host: &dyn Host, path: &HostPath) -> Result<Option<String>, A
     Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
-async fn remove_existing(host: &dyn Host, path: &HostPath, is_dir: bool) -> Result<(), ActionError> {
+async fn remove_existing(
+    host: &dyn Host,
+    path: &HostPath,
+    is_dir: bool,
+) -> Result<(), ActionError> {
     if !host.exists(path).await? {
         return Ok(());
     }
@@ -751,9 +802,16 @@ mod tests {
     fn config_version_is_read_like_upstream() {
         let src = "MODEL_CONFIG_VERSION: str = \"1.17.9\"\nCONFIG_VERSION_OLD: str = \"1.0.0\"\nCONFIG_VERSION: str = \"8.14.40\"\n";
         assert_eq!(read_config_version(src).as_deref(), Some("8.14.40"));
-        assert_eq!(read_config_version("    CONFIG_VERSION: str = \"1\"\n"), None, "上游只认行首");
+        assert_eq!(
+            read_config_version("    CONFIG_VERSION: str = \"1\"\n"),
+            None,
+            "上游只认行首"
+        );
         assert_eq!(read_config_version("CONFIG_VERSION = \"1\"\n"), None);
-        assert_eq!(read_version_constant(src, "MODEL_CONFIG_VERSION").as_deref(), Some("1.17.9"));
+        assert_eq!(
+            read_version_constant(src, "MODEL_CONFIG_VERSION").as_deref(),
+            Some("1.17.9")
+        );
     }
 
     #[test]
@@ -772,7 +830,10 @@ mod tests {
         assert_eq!(v["access_token"], "Ncd_x");
         assert_eq!(v["token_source"], "configured");
         assert_eq!(v["first_setup_completed"], false);
-        assert_eq!(super::super::config::read_webui_token(Some(&render_webui_json("Ncd_x"))), "Ncd_x");
+        assert_eq!(
+            super::super::config::read_webui_token(Some(&render_webui_json("Ncd_x"))),
+            "Ncd_x"
+        );
     }
 
     #[test]
@@ -789,7 +850,12 @@ mod tests {
     fn launch_runs_bot_py_with_uv_on_path() {
         let comp = MaiBotComponent::new(HostPath::from_posix("/home/u/ncd/apps/maibot/m1"), 23001);
         let uv = HostPath::from_posix("/home/u/ncd/tools/uv");
-        let cmd = comp.launch_with(Os::Linux, Locality::Remote, &LaunchArgs::default(), Some(&uv));
+        let cmd = comp.launch_with(
+            Os::Linux,
+            Locality::Remote,
+            &LaunchArgs::default(),
+            Some(&uv),
+        );
         assert_eq!(cmd.program, "/home/u/ncd/apps/maibot/m1/.venv/bin/python");
         assert_eq!(cmd.args, vec!["bot.py".to_string()]);
         let path = cmd
@@ -797,13 +863,22 @@ mod tests {
             .iter()
             .find(|(k, _)| *k == "PATH")
             .map(|(_, v)| v.as_str());
-        assert_eq!(path, Some("/home/u/ncd/tools/uv:/usr/local/bin:/usr/bin:/bin"));
+        assert_eq!(
+            path,
+            Some("/home/u/ncd/tools/uv:/usr/local/bin:/usr/bin:/bin")
+        );
         assert!(
-            !cmd.environment.iter().any(|(k, _)| k == "MAIBOT_WORKER_PROCESS"),
+            !cmd.environment
+                .iter()
+                .any(|(k, _)| k == "MAIBOT_WORKER_PROCESS"),
             "要让 bot.py 以 Runner 身份起"
         );
         for key in ["HOST", "PORT", "WEBUI_HOST", "WEBUI_PORT"] {
-            assert_eq!(cmd.environment.get(key).map(String::as_str), Some(""), "{key} 置空，不让外面的值顶掉桌面端分的口");
+            assert_eq!(
+                cmd.environment.get(key).map(String::as_str),
+                Some(""),
+                "{key} 置空，不让外面的值顶掉桌面端分的口"
+            );
         }
 
         let bare = comp.launch_with(Os::Linux, Locality::Remote, &LaunchArgs::default(), None);

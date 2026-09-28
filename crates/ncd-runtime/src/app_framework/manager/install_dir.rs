@@ -32,13 +32,17 @@ pub fn parse_user_install_dir(raw: &str, os: Os) -> Result<HostPath, AppFramewor
 }
 
 impl AppManager {
-    pub(super) fn component_spec(&self, host: &dyn Host, instance: &AppInstance) -> AppComponentSpec {
+    pub(super) fn component_spec(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> AppComponentSpec {
         AppComponentSpec {
             install_dir: HostPath::from_posix(&instance.install_dir),
             port: instance.port,
-            node_bin: self
-                .managed_component_dir(host, "NodeJs")
-                .map(|dir| ncd_component::NodeJsComponent::node_binary_path_for_os(&dir, host.os())),
+            node_bin: self.managed_component_dir(host, "NodeJs").map(|dir| {
+                ncd_component::NodeJsComponent::node_binary_path_for_os(&dir, host.os())
+            }),
             uv_bin: self
                 .managed_component_dir(host, "Uv")
                 .map(|dir| ncd_component::UvComponent::uv_binary_path_for_os(&dir, host.os())),
@@ -99,9 +103,12 @@ impl AppManager {
             Some(raw) => parse_user_install_dir(raw, host.os())?,
         };
         let posix = path.as_posix();
-        let taken = self.store.list().await.into_iter().any(|i| {
-            i.host_id == host_id && i.id != *id && i.install_dir == posix
-        });
+        let taken = self
+            .store
+            .list()
+            .await
+            .into_iter()
+            .any(|i| i.host_id == host_id && i.id != *id && i.install_dir == posix);
         if taken {
             return Err(AppFrameworkError::Validation(
                 "该目录已被其它实例占用".to_string(),
@@ -136,14 +143,18 @@ impl AppManager {
         id: &AppInstanceId,
         override_dir: Option<&str>,
     ) -> Result<HostPath, AppFrameworkError> {
-        let raw = override_dir.map(str::trim).filter(|s| !s.is_empty()).ok_or_else(|| {
-            AppFrameworkError::Validation("导入必须指定已有项目目录".into())
-        })?;
+        let raw = override_dir
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| AppFrameworkError::Validation("导入必须指定已有项目目录".into()))?;
         let path = parse_user_install_dir(raw, host.os())?;
         let posix = path.as_posix();
-        let taken = self.store.list().await.into_iter().any(|i| {
-            i.host_id == host_id && i.id != *id && i.install_dir == posix
-        });
+        let taken = self
+            .store
+            .list()
+            .await
+            .into_iter()
+            .any(|i| i.host_id == host_id && i.id != *id && i.install_dir == posix);
         if taken {
             return Err(AppFrameworkError::Validation(
                 "该目录已被其它实例占用".to_string(),

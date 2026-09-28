@@ -3,8 +3,12 @@
 //! 从 L4 commands/components/{sys_pkg,qq_deps}.rs 下沉。任务提交在 executor.rs,
 //! 这里只负责在拿到 host 之后把事干完并往 task 推进度。
 
-use ncd_component::qq_deps::{QqDependencyDetector, QqDependencyInstaller, qq_qqnt_dependencies_v3_2_25};
-use ncd_component::{ActionCtx, DependencyTarget, HostPackageGroup, ProgressEvent, ProgressKind, ProgressLogLevel};
+use ncd_component::qq_deps::{
+    QqDependencyDetector, QqDependencyInstaller, qq_qqnt_dependencies_v3_2_25,
+};
+use ncd_component::{
+    ActionCtx, DependencyTarget, HostPackageGroup, ProgressEvent, ProgressKind, ProgressLogLevel,
+};
 use ncd_domain::InstallDependenciesResult;
 use ncd_host::{Host, LinuxPackageManager, Os};
 
@@ -14,7 +18,11 @@ pub async fn push_task_progress(task_ctx: &DeploymentTaskContext, kind: Progress
     task_ctx.push_progress(ProgressEvent::new(kind)).await;
 }
 
-async fn log(task_ctx: &DeploymentTaskContext, level: ProgressLogLevel, message: impl Into<String>) {
+async fn log(
+    task_ctx: &DeploymentTaskContext,
+    level: ProgressLogLevel,
+    message: impl Into<String>,
+) {
     push_task_progress(
         task_ctx,
         ProgressKind::Log {
@@ -68,10 +76,9 @@ pub async fn run_system_package_task(
         DependencyTarget::HostPackages {
             group: HostPackageGroup::QqDependencies,
         } => install_qq_dependencies_task(host, Vec::new(), None, task_ctx).await,
-        DependencyTarget::Component { id } => DeploymentTaskRunResult::failed(format!(
-            "{} 不是系统包目标",
-            id.as_str()
-        )),
+        DependencyTarget::Component { id } => {
+            DeploymentTaskRunResult::failed(format!("{} 不是系统包目标", id.as_str()))
+        }
     }
 }
 
@@ -93,7 +100,12 @@ pub async fn ensure_host_command_task(
     .await;
 
     if host.command_exists(command).await {
-        log(&task_ctx, ProgressLogLevel::Info, format!("{command} 已可用")).await;
+        log(
+            &task_ctx,
+            ProgressLogLevel::Info,
+            format!("{command} 已可用"),
+        )
+        .await;
         finish(&task_ctx, true).await;
         return DeploymentTaskRunResult::ok(format!("{command} 已就绪"));
     }
@@ -219,7 +231,8 @@ pub async fn install_qq_dependencies_task(
         Ok(result) if result.elevation_required => {
             fail(
                 &task_ctx,
-                "安装 QQ 系统依赖需要 sudo 密码，请在远端主机配置中保存 sudo 密码后重试".to_string(),
+                "安装 QQ 系统依赖需要 sudo 密码，请在远端主机配置中保存 sudo 密码后重试"
+                    .to_string(),
             )
             .await
         }

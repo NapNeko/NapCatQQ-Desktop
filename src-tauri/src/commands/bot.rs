@@ -105,10 +105,7 @@ pub async fn reconcile_bot_runtimes(
 
 /// 远端 SnowLuma WebUI/noVNC 隧道失败后的手动重试，不重启远端 Bot。
 #[tauri::command]
-pub async fn retry_snowluma_ui(
-    state: State<'_, AppState>,
-    bot_id: String,
-) -> Result<(), String> {
+pub async fn retry_snowluma_ui(state: State<'_, AppState>, bot_id: String) -> Result<(), String> {
     state
         .bot_manager
         .retry_snowluma_ui(&BotId::new(bot_id))

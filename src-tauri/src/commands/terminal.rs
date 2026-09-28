@@ -54,7 +54,11 @@ pub async fn terminal_open(
     state: State<'_, AppState>,
     request: TerminalOpenRequest,
 ) -> Result<TerminalSessionInfo, String> {
-    state.terminals.open(request).await.map_err(|e| e.to_string())
+    state
+        .terminals
+        .open(request)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -93,7 +97,11 @@ pub async fn terminal_resize(
 }
 
 #[tauri::command]
-pub async fn terminal_ack(state: State<'_, AppState>, id: String, bytes: u64) -> Result<(), String> {
+pub async fn terminal_ack(
+    state: State<'_, AppState>,
+    id: String,
+    bytes: u64,
+) -> Result<(), String> {
     state.terminals.ack(&id, bytes);
     Ok(())
 }
@@ -103,7 +111,11 @@ pub async fn terminal_restart(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<TerminalSessionInfo, String> {
-    state.terminals.restart(&id).await.map_err(|e| e.to_string())
+    state
+        .terminals
+        .restart(&id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

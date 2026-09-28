@@ -255,9 +255,9 @@ fn resolve_alias(
 
     let is_wildcard = is_glob_pattern(alias);
     let has_proxy = resolved.proxy_jump.is_some() || resolved.proxy_command.is_some();
-    let already_added = existing.iter().any(|p| {
-        p.host.eq_ignore_ascii_case(&host) && p.port == port && p.username == username
-    });
+    let already_added = existing
+        .iter()
+        .any(|p| p.host.eq_ignore_ascii_case(&host) && p.port == port && p.username == username);
 
     let skip_reason = if is_wildcard {
         Some(SKIP_WILDCARD.to_string())
@@ -291,10 +291,7 @@ fn pick_identity(raw_paths: &[String], home: &Path) -> (Option<String>, bool) {
     if let Some(found) = expanded.iter().find(|p| p.is_file()) {
         return (Some(found.to_string_lossy().into_owned()), false);
     }
-    (
-        Some(expanded[0].to_string_lossy().into_owned()),
-        true,
-    )
+    (Some(expanded[0].to_string_lossy().into_owned()), true)
 }
 
 fn block_matches(block: &HostBlock, alias: &str) -> bool {
@@ -490,10 +487,7 @@ fn expand_path(raw: &str, home: &Path) -> PathBuf {
     if raw == "~" {
         return home.to_path_buf();
     }
-    if let Some(rest) = raw
-        .strip_prefix("~/")
-        .or_else(|| raw.strip_prefix("~\\"))
-    {
+    if let Some(rest) = raw.strip_prefix("~/").or_else(|| raw.strip_prefix("~\\")) {
         return join_normalized(home, rest);
     }
     let p = PathBuf::from(raw);
@@ -756,10 +750,7 @@ Host prod
     fn host_foo_bar_splits_into_two_aliases() {
         let dir = tempdir().unwrap();
         let home = dir.path();
-        let cfg = write_config(
-            home,
-            "Host foo bar\n    HostName 1.1.1.1\n    User a\n",
-        );
+        let cfg = write_config(home, "Host foo bar\n    HostName 1.1.1.1\n    User a\n");
         let hosts = discover_ssh_hosts(&cfg, home, &[], "me").unwrap();
         let names: Vec<_> = hosts.iter().map(|h| h.alias.as_str()).collect();
         assert_eq!(names, vec!["foo", "bar"]);

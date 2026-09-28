@@ -225,7 +225,10 @@ mod tests {
     #[test]
     fn env_section_prepends_path_and_changes_dir() {
         let section = bash_env_section(
-            &["/srv/app/.venv/bin".to_string(), "/home/u/ncd/tools/uv".to_string()],
+            &[
+                "/srv/app/.venv/bin".to_string(),
+                "/home/u/ncd/tools/uv".to_string(),
+            ],
             &[
                 ("VIRTUAL_ENV".to_string(), "/srv/app/.venv".to_string()),
                 ("BAD NAME".to_string(), "x".to_string()),
@@ -246,7 +249,10 @@ mod tests {
         let section = bash_env_section(
             &[],
             &[],
-            &["/h/.napcat-bots/slbot-1".to_string(), "/h/.napcat-bots/ncbot-1".to_string()],
+            &[
+                "/h/.napcat-bots/slbot-1".to_string(),
+                "/h/.napcat-bots/ncbot-1".to_string(),
+            ],
         );
         assert_eq!(
             section,
@@ -261,7 +267,9 @@ mod tests {
         assert!(line.starts_with("if command -v bash >/dev/null 2>&1; then\n"));
         assert!(line.contains("exec bash --rcfile /dev/fd/3 -i 3<<'NCD_RC_EOF_7F3A'\n"));
         assert!(line.contains("exec 3<&-\nNCD_RC_EOF_7F3A\nelse\n"));
-        assert!(line.ends_with("cd -- '/srv/app' 2>/dev/null\nexec \"${SHELL:-/bin/sh}\" -l\nfi\n"));
+        assert!(
+            line.ends_with("cd -- '/srv/app' 2>/dev/null\nexec \"${SHELL:-/bin/sh}\" -l\nfi\n")
+        );
         assert!(!rc.contains(RC_DELIMITER));
     }
 

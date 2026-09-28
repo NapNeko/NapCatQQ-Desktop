@@ -71,7 +71,10 @@ pub async fn resolve_plugin_dir(
         .filter(|e| e.is_dir && !e.name.starts_with('.'))
         .map(|e| e.name)
         .collect();
-    if let Some(d) = dirs.iter().find(|d| d.as_str() == tail || d.as_str() == wanted) {
+    if let Some(d) = dirs
+        .iter()
+        .find(|d| d.as_str() == tail || d.as_str() == wanted)
+    {
         return Ok(Some(d.clone()));
     }
     if let Some(d) = dirs.iter().find(|d| d.eq_ignore_ascii_case(tail)) {
@@ -160,10 +163,14 @@ pub async fn read_plugin_config_text(
     let snap = read_document(host, &HostPath::from_posix(&instance.install_dir), &doc).await?;
     let schema = read_schema(host, instance, dir).await?;
     let text = match (snap.text, schema) {
-        (Some(text), Some(schema)) => match serde_json::from_str::<Value>(text.trim_start_matches('\u{feff}')) {
-            Ok(Value::Object(conf)) => render_json_pretty(&normalize_to_schema(&schema, &conf))?,
-            _ => text,
-        },
+        (Some(text), Some(schema)) => {
+            match serde_json::from_str::<Value>(text.trim_start_matches('\u{feff}')) {
+                Ok(Value::Object(conf)) => {
+                    render_json_pretty(&normalize_to_schema(&schema, &conf))?
+                }
+                _ => text,
+            }
+        }
         (Some(text), None) => text,
         (None, Some(schema)) => render_json_pretty(&schema_defaults(&schema))?,
         (None, None) => String::new(),
@@ -275,12 +282,16 @@ pub fn schema_defaults(schema: &Value) -> Value {
             if ty == "object" {
                 out.insert(
                     key.clone(),
-                    node.get("items").map(schema_defaults).unwrap_or_else(|| Value::Object(Map::new())),
+                    node.get("items")
+                        .map(schema_defaults)
+                        .unwrap_or_else(|| Value::Object(Map::new())),
                 );
             } else {
                 out.insert(
                     key.clone(),
-                    node.get("default").cloned().unwrap_or_else(|| type_default(ty)),
+                    node.get("default")
+                        .cloned()
+                        .unwrap_or_else(|| type_default(ty)),
                 );
             }
         }
@@ -301,9 +312,13 @@ pub fn normalize_to_schema(schema: &Value, conf: &Map<String, Value>) -> Value {
         }
         let ty = schema_type(node);
         let default = if ty == "object" {
-            node.get("items").map(schema_defaults).unwrap_or_else(|| Value::Object(Map::new()))
+            node.get("items")
+                .map(schema_defaults)
+                .unwrap_or_else(|| Value::Object(Map::new()))
         } else {
-            node.get("default").cloned().unwrap_or_else(|| type_default(ty))
+            node.get("default")
+                .cloned()
+                .unwrap_or_else(|| type_default(ty))
         };
         let value = match conf.get(key) {
             None | Some(Value::Null) => default,
@@ -354,7 +369,10 @@ mod tests {
 
     #[test]
     fn doc_id_round_trips_and_rejects_paths() {
-        assert_eq!(parse_plugin_doc_id(&plugin_doc_id("helloworld")), Some("helloworld"));
+        assert_eq!(
+            parse_plugin_doc_id(&plugin_doc_id("helloworld")),
+            Some("helloworld")
+        );
         assert_eq!(parse_plugin_doc_id("plugin:../x"), None);
         assert_eq!(parse_plugin_doc_id("plugin:a/b"), None);
         assert_eq!(parse_plugin_doc_id("cmd_config"), None);
@@ -367,7 +385,10 @@ mod tests {
     fn translate_skips_invisible_and_maps_kinds() {
         let fields = translate_schema(&schema());
         let keys: Vec<&str> = fields.iter().map(|f| f.key.as_str()).collect();
-        assert_eq!(keys, vec!["token", "mode", "prompt", "sub", "extra", "files"]);
+        assert_eq!(
+            keys,
+            vec!["token", "mode", "prompt", "sub", "extra", "files"]
+        );
         assert_eq!(fields[0].kind, AppPluginConfigFieldKind::String);
         assert!(fields[0].secret && fields[0].obvious_hint);
         assert_eq!(fields[0].label, "Bot Token");
@@ -401,7 +422,10 @@ mod tests {
         .unwrap();
         let out = normalize_to_schema(&schema(), &conf);
         let keys: Vec<&String> = out.as_object().unwrap().keys().collect();
-        assert_eq!(keys, vec!["token", "mode", "prompt", "hidden", "sub", "extra", "files"]);
+        assert_eq!(
+            keys,
+            vec!["token", "mode", "prompt", "hidden", "sub", "extra", "files"]
+        );
         assert_eq!(out["token"], "t");
         assert_eq!(out["mode"], "chat");
         assert_eq!(out["sub"]["time"], 7);

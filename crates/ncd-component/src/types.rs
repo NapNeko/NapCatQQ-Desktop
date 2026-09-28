@@ -288,7 +288,10 @@ mod tests {
             DetectOutcome::from_detected(Some(v.clone())),
             DetectOutcome::Installed(v)
         );
-        assert_eq!(DetectOutcome::from_detected(None), DetectOutcome::NotInstalled);
+        assert_eq!(
+            DetectOutcome::from_detected(None),
+            DetectOutcome::NotInstalled
+        );
     }
 
     /// unusable 缺省不落盘,老前端 / 旧 JSON 照常解析

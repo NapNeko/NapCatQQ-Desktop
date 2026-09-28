@@ -311,7 +311,10 @@ mod tests {
     #[test]
     fn windows_program_from_posix_keeps_bare_exe_names() {
         assert_eq!(HostPath::windows_program_from_posix("node"), "node");
-        assert_eq!(HostPath::windows_program_from_posix("where.exe"), "where.exe");
+        assert_eq!(
+            HostPath::windows_program_from_posix("where.exe"),
+            "where.exe"
+        );
         assert_eq!(
             HostPath::windows_program_from_posix(r"C:\Program Files\nodejs\node.exe"),
             r"C:\Program Files\nodejs\node.exe"

@@ -104,7 +104,9 @@ impl AstrBotInstanceConfig {
         let want_id = ncd_platform_id(instance_id);
         let idx = rows
             .iter()
-            .position(|row| platform::row_id(row) == Some(want_id.as_str()) && platform::is_aiocqhttp(row))
+            .position(|row| {
+                platform::row_id(row) == Some(want_id.as_str()) && platform::is_aiocqhttp(row)
+            })
             .or_else(|| claim_for_probe(rows));
         let onebot = if let Some(i) = idx {
             let row = &rows[i];
@@ -247,13 +249,7 @@ pub async fn write_astrbot_config(
     ai::apply_ai_patch(&mut root, &cfg.ai_patch(&sources, &models))
         .map_err(AppFrameworkError::Integration)?;
 
-    save_cmd_config(
-        host,
-        &install_dir,
-        &root,
-        write_project_sidecar(instance),
-    )
-    .await?;
+    save_cmd_config(host, &install_dir, &root, write_project_sidecar(instance)).await?;
     read_astrbot_config(host, &install_dir, instance.id.as_str(), instance.port).await
 }
 
@@ -262,11 +258,7 @@ pub fn apply_onebot_to_root(
     instance_id: &str,
     cfg: &AstrBotInstanceConfig,
 ) -> Result<Claim, AppFrameworkError> {
-    let claim = claim_for_upsert(
-        platforms(root),
-        instance_id,
-        cfg.onebot.ws_reverse_port,
-    )?;
+    let claim = claim_for_upsert(platforms(root), instance_id, cfg.onebot.ws_reverse_port)?;
     if !cfg.claimed && matches!(claim, Claim::Index(_)) {
         return Err(AppFrameworkError::Validation(
             platform::AMBIGUOUS_AIOCQHTTP.into(),
@@ -309,12 +301,18 @@ pub fn apply_onebot_to_root(
     Ok(claim)
 }
 
-pub fn claimed_platform_row<'a>(root: &'a Value, instance_id: &str, port: u16) -> Option<&'a Value> {
+pub fn claimed_platform_row<'a>(
+    root: &'a Value,
+    instance_id: &str,
+    port: u16,
+) -> Option<&'a Value> {
     let rows = platforms(root);
     let want_id = ncd_platform_id(instance_id);
     let idx = rows
         .iter()
-        .position(|row| platform::row_id(row) == Some(want_id.as_str()) && platform::is_aiocqhttp(row))
+        .position(|row| {
+            platform::row_id(row) == Some(want_id.as_str()) && platform::is_aiocqhttp(row)
+        })
         .or_else(|| match claim_for_upsert(rows, instance_id, port).ok()? {
             Claim::Index(i) => Some(i),
             Claim::Append => None,
@@ -327,7 +325,9 @@ pub fn read_access_token_from_root(root: &Value, instance_id: &str, port: u16) -
     let want_id = ncd_platform_id(instance_id);
     let idx = rows
         .iter()
-        .position(|row| platform::row_id(row) == Some(want_id.as_str()) && platform::is_aiocqhttp(row))
+        .position(|row| {
+            platform::row_id(row) == Some(want_id.as_str()) && platform::is_aiocqhttp(row)
+        })
         .or_else(|| {
             if port == 0 {
                 return None;

@@ -155,12 +155,7 @@ impl AppManager {
         let host = self.resolve_host(&req.host_id).await?;
         let id = AppInstanceId::new(short_id());
         let install_dir = self
-            .bind_existing_dir(
-                host.as_ref(),
-                &req.host_id,
-                &id,
-                Some(probe.path.as_str()),
-            )
+            .bind_existing_dir(host.as_ref(), &req.host_id, &id, Some(probe.path.as_str()))
             .await?;
         let siblings = self.store.list().await;
         let taken: Vec<u16> = siblings
@@ -219,8 +214,7 @@ impl AppManager {
         self.publish(&saved, "imported");
 
         if !probe.supervisors.is_empty() {
-            if let Err(e) =
-                super::supervisor::disable_now(host.as_ref(), &probe.supervisors).await
+            if let Err(e) = super::supervisor::disable_now(host.as_ref(), &probe.supervisors).await
             {
                 let _ = self.adopt_store.remove(&saved.id).await;
                 let _ = self.store.remove(&saved.id).await;
@@ -303,7 +297,10 @@ impl AppManager {
 
         // 重复点安装会命中同一个任务（去重），已经有人盯着就不再起一个
         {
-            let mut watches = self.install_watches.lock().unwrap_or_else(|e| e.into_inner());
+            let mut watches = self
+                .install_watches
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             if watches.get(id) == Some(&task_id) {
                 return Ok(updated);
             }
@@ -354,7 +351,10 @@ impl AppManager {
                 tracing::warn!(instance = id.as_str(), error = %e, "settle install");
             }
             // 收完尾再撤表：撤早了，并发的刷新会看到「安装中且没人盯」去按目录收尾
-            let mut watches = this.install_watches.lock().unwrap_or_else(|e| e.into_inner());
+            let mut watches = this
+                .install_watches
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             if watches.get(&id) == Some(&task_id) {
                 watches.remove(&id);
             }
@@ -380,9 +380,7 @@ impl AppManager {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
             let now = Instant::now();
-            let at = slots
-                .get(&instance.id)
-                .map_or(now, |next| (*next).max(now));
+            let at = slots.get(&instance.id).map_or(now, |next| (*next).max(now));
             slots.insert(instance.id.clone(), at + gap);
             at - now
         };
@@ -535,7 +533,9 @@ impl AppManager {
         };
         if running.is_some() && !self.runtime.is_following(&instance.id).await {
             let log = self.resolve_log_file(host.as_ref(), &instance).await;
-            self.runtime.attach(Arc::clone(&host), &instance, log).await?;
+            self.runtime
+                .attach(Arc::clone(&host), &instance, log)
+                .await?;
         }
         let updated = self
             .store
@@ -562,7 +562,9 @@ impl AppManager {
                 }
             })
             .await?;
-        if updated.state != instance.state || updated.installed_version != instance.installed_version {
+        if updated.state != instance.state
+            || updated.installed_version != instance.installed_version
+        {
             self.publish(&updated, "refreshed");
         }
         if updated.origin.is_imported() && updated.link.is_none() {
@@ -614,7 +616,8 @@ impl AppManager {
         if host.exists(&primary).await.unwrap_or(false) {
             return primary;
         }
-        if let Some(found) = super::log_tail::newest_project_log(host, &instance.install_dir).await {
+        if let Some(found) = super::log_tail::newest_project_log(host, &instance.install_dir).await
+        {
             if super::log_tail::file_size(host, &found).await.unwrap_or(0) > 0 {
                 return found;
             }
@@ -742,7 +745,9 @@ impl AppManager {
         {
             Ok(command) => {
                 let launch = AppLaunchSpec { command, log_file };
-                self.runtime.start(Arc::clone(&host), &instance, launch).await
+                self.runtime
+                    .start(Arc::clone(&host), &instance, launch)
+                    .await
             }
             Err(e) => Err(e),
         };
@@ -822,10 +827,7 @@ impl AppManager {
         id: &AppInstanceId,
         auto_start: bool,
     ) -> Result<AppInstance, AppFrameworkError> {
-        let updated = self
-            .store
-            .update(id, |i| i.auto_start = auto_start)
-            .await?;
+        let updated = self.store.update(id, |i| i.auto_start = auto_start).await?;
         self.publish(&updated, "auto_start_changed");
         Ok(updated)
     }

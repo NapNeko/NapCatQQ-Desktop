@@ -147,12 +147,18 @@ mod tests {
             .unwrap();
         assert_eq!(plan.mode, OneBotLinkMode::ForwardWs);
         assert_eq!(plan.connection.mode(), OneBotLinkMode::ForwardWs);
-        let s = plan.connection.as_ws_server().expect("正向对接是服务端条目");
+        let s = plan
+            .connection
+            .as_ws_server()
+            .expect("正向对接是服务端条目");
         assert_eq!(s.base.name, "ncd-app:m1");
         assert_eq!(s.base.token, "tok-abc");
         assert_eq!(s.host, "127.0.0.1");
         assert_eq!(s.port, 0, "听口由编排层回填");
-        assert_eq!(plan.app_side_writes[0].path, "plugins/MaiBot-Napcat-Adapter/config.toml");
+        assert_eq!(
+            plan.app_side_writes[0].path,
+            "plugins/MaiBot-Napcat-Adapter/config.toml"
+        );
         assert!(!plan.app_side_writes[0].summary.contains("tok-abc"));
     }
 
@@ -163,7 +169,9 @@ mod tests {
             Err(AppFrameworkError::Validation(_))
         ));
         assert_eq!(
-            MaiBotIntegration::new().webui_url(&instance(), "127.0.0.1").as_deref(),
+            MaiBotIntegration::new()
+                .webui_url(&instance(), "127.0.0.1")
+                .as_deref(),
             Some("http://127.0.0.1:23001/")
         );
     }

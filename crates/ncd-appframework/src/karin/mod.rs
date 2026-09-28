@@ -4,8 +4,8 @@ mod component;
 pub mod config;
 mod integration;
 pub mod manifest;
-mod probe;
 pub mod plugin;
+mod probe;
 
 use std::sync::Arc;
 
@@ -24,7 +24,7 @@ pub use integration::KarinIntegration;
 pub use manifest::{KARIN_FRAMEWORK_ID, karin_manifest};
 pub use plugin::{
     KarinPluginAppFile, KarinPluginAuthor, KarinPluginInstalled, KarinPluginKind,
-    KarinPluginMarketEntry, KarinPluginRepo, apply_plugin_enabled, app_file_basename,
+    KarinPluginMarketEntry, KarinPluginRepo, app_file_basename, apply_plugin_enabled,
     confirm_plugin_on_disk, git_clone_url, parse_karin_plugins_list, write_app_file_bytes,
 };
 
@@ -32,12 +32,12 @@ use crate::adapter::{
     AppComponentSpec, AppFrameworkAdapter, apply_with_backup_ex, restore_from_backup,
 };
 use crate::adopt::{self, write_project_sidecar};
-use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, MISSING_REVISION,
     combined_revision_of, read_document,
 };
 use crate::env_file::EnvFile;
+use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use manifest::{ENV_WS_SERVER_AUTH_KEY, KARIN_ADAPTER_JSON, KARIN_ENV_FILE, KARIN_STDOUT_LOG};
 
 fn envelope(config: KarinInstanceConfig, snaps: &[DocumentSnapshot]) -> AppInstanceConfigEnvelope {
@@ -73,7 +73,10 @@ impl KarinAdapter {
         HostPath::from_posix(&instance.install_dir).join(KARIN_ADAPTER_JSON)
     }
 
-    async fn read_text(host: &dyn Host, path: &HostPath) -> Result<Option<String>, AppFrameworkError> {
+    async fn read_text(
+        host: &dyn Host,
+        path: &HostPath,
+    ) -> Result<Option<String>, AppFrameworkError> {
         if !host
             .exists(path)
             .await
@@ -353,9 +356,9 @@ impl AppFrameworkAdapter for KarinAdapter {
         entry: &AppStoreMarketEntry,
         log: Option<&plugin::PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
-        let karin = entry.to_karin().ok_or_else(|| {
-            AppFrameworkError::Validation("Karin 不能安装 PyPI 条目".to_string())
-        })?;
+        let karin = entry
+            .to_karin()
+            .ok_or_else(|| AppFrameworkError::Validation("Karin 不能安装 PyPI 条目".to_string()))?;
         plugin::install_plugin(host, instance, &karin, log).await
     }
 
@@ -366,9 +369,9 @@ impl AppFrameworkAdapter for KarinAdapter {
         entry: &AppStoreMarketEntry,
         log: Option<&plugin::PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
-        let karin = entry.to_karin().ok_or_else(|| {
-            AppFrameworkError::Validation("Karin 不能更新 PyPI 条目".to_string())
-        })?;
+        let karin = entry
+            .to_karin()
+            .ok_or_else(|| AppFrameworkError::Validation("Karin 不能更新 PyPI 条目".to_string()))?;
         plugin::update_plugin(host, instance, &karin, log).await
     }
 
@@ -381,9 +384,9 @@ impl AppFrameworkAdapter for KarinAdapter {
         _resource: AppStoreResource,
         log: Option<&plugin::PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
-        let kind = flavor.to_karin().ok_or_else(|| {
-            AppFrameworkError::Validation("Karin 不能卸载 PyPI 条目".to_string())
-        })?;
+        let kind = flavor
+            .to_karin()
+            .ok_or_else(|| AppFrameworkError::Validation("Karin 不能卸载 PyPI 条目".to_string()))?;
         plugin::uninstall_plugin(host, instance, id, kind, log).await
     }
 
@@ -427,7 +430,8 @@ impl AppFrameworkAdapter for KarinAdapter {
             });
         }
         if let Some((name, rel)) = plugin::parse_plugin_doc_id(doc_id) {
-            if let Some(text) = plugin::read_plugin_package_default(host, instance, name, rel).await?
+            if let Some(text) =
+                plugin::read_plugin_package_default(host, instance, name, rel).await?
             {
                 return Ok(AppConfigText {
                     doc_id: doc.id,
@@ -511,7 +515,8 @@ mod tests {
 
     #[test]
     fn enable_ws_server_only_rewrites_when_disabled() {
-        let already = r#"{"console":{"isLocal":true},"onebot":{"ws_server":{"enable":true,"timeout":120}}}"#;
+        let already =
+            r#"{"console":{"isLocal":true},"onebot":{"ws_server":{"enable":true,"timeout":120}}}"#;
         assert_eq!(KarinAdapter::enable_ws_server(already).unwrap(), None);
 
         let disabled = r#"{"onebot":{"ws_server":{"enable":false,"timeout":120},"ws_client":[]}}"#;
@@ -526,9 +531,7 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&created).unwrap();
         assert_eq!(v["onebot"]["ws_server"]["enable"], true);
 
-        let from_root = KarinAdapter::enable_ws_server(r#"{}"#)
-            .unwrap()
-            .unwrap();
+        let from_root = KarinAdapter::enable_ws_server(r#"{}"#).unwrap().unwrap();
         let v: serde_json::Value = serde_json::from_str(&from_root).unwrap();
         assert_eq!(v["onebot"]["ws_server"]["enable"], true);
     }

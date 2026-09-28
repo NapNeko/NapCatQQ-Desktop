@@ -151,10 +151,7 @@ async fn maibot_remote_smoke() {
 
     #[async_trait::async_trait]
     impl HostResolver for SmokeResolver {
-        async fn resolve(
-            &self,
-            target: &RuntimeTarget,
-        ) -> Result<Arc<dyn Host>, HostResolveError> {
+        async fn resolve(&self, target: &RuntimeTarget) -> Result<Arc<dyn Host>, HostResolveError> {
             Ok(if target.is_local() {
                 Arc::clone(&self.local)
             } else {

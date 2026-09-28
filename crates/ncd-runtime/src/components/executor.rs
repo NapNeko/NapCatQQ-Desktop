@@ -29,9 +29,8 @@ use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::components::action_policy::{
     RemoteHostProbe, RemoteLayout, component_action_cancellable,
-    component_action_needs_runtime_closure, component_dedupe_key,
-    component_needs_package_manager, component_target_label, component_task_resources,
-    dependency_target_display_name,
+    component_action_needs_runtime_closure, component_dedupe_key, component_needs_package_manager,
+    component_target_label, component_task_resources, dependency_target_display_name,
 };
 use crate::components::active_tasks::ActiveTasks;
 use crate::components::factory::{AppComponentHint, BuildComponentCtx, build_component_for_host};
@@ -302,7 +301,11 @@ impl ComponentExecutor {
 
         let dedupe =
             component_dedupe_key(&host_id, component_id, kind, inputs.scope_for(component_id));
-        if let Some(existing) = self.deployment_tasks.active_task_by_dedupe_key(&dedupe).await {
+        if let Some(existing) = self
+            .deployment_tasks
+            .active_task_by_dedupe_key(&dedupe)
+            .await
+        {
             return Ok(existing);
         }
 
@@ -392,13 +395,14 @@ impl ComponentExecutor {
         // dedupe 命中已有任务时不补写,免得往别人的日志里塞排队提示
         let fresh = requested.as_deref().is_none_or(|t| t == submitted_id);
         if let (true, Some(message)) = (fresh, queue_note) {
-            self.event_bus.publish(DomainEvent::component_action_progress(
-                submitted_id.clone(),
-                ProgressEvent::new(ProgressKind::Log {
-                    level: ProgressLogLevel::Info,
-                    message,
-                }),
-            ));
+            self.event_bus
+                .publish(DomainEvent::component_action_progress(
+                    submitted_id.clone(),
+                    ProgressEvent::new(ProgressKind::Log {
+                        level: ProgressLogLevel::Info,
+                        message,
+                    }),
+                ));
         }
         Ok(submitted_id)
     }
@@ -426,7 +430,11 @@ impl ComponentExecutor {
                 .and_then(|id| self.server_manager.sudo_password(id))
         });
         let server_manager = Arc::clone(&self.server_manager);
-        let local_host = if server_id.is_none() { Some(host) } else { None };
+        let local_host = if server_id.is_none() {
+            Some(host)
+        } else {
+            None
+        };
         let group = "qq_dependencies";
         let submitted = self
             .deployment_tasks
@@ -684,10 +692,7 @@ impl ComponentTaskRunner {
 
         // plan 进 'static 闭包要 owned;取出来换个空的占位
         let plan = std::mem::replace(&mut self.plan, DeployPlan::builder().build());
-        let isolated_server = self
-            .server_id
-            .clone()
-            .filter(|_| self.remote_long_install);
+        let isolated_server = self.server_id.clone().filter(|_| self.remote_long_install);
         let outcome: Result<DeployOutcome, String> = match isolated_server {
             Some(id) => {
                 self.server_manager
@@ -775,7 +780,10 @@ impl ComponentTaskRunner {
         let event = ProgressEvent::new(kind);
         task_ctx.push_progress(event.clone()).await;
         self.event_bus
-            .publish(DomainEvent::component_action_progress(task_id.to_string(), event));
+            .publish(DomainEvent::component_action_progress(
+                task_id.to_string(),
+                event,
+            ));
     }
 }
 
@@ -834,10 +842,7 @@ fn uuid_v4() -> String {
 
 /// 队列取消转给 ActionCtx。guard 一丢转发就收尾:正常跑完的任务
 /// 不会留下一个永远等着取消信号的 watcher
-fn forward_cancel(
-    from: CancellationToken,
-    to: CancellationToken,
-) -> (DropGuard, JoinHandle<()>) {
+fn forward_cancel(from: CancellationToken, to: CancellationToken) -> (DropGuard, JoinHandle<()>) {
     let done = CancellationToken::new();
     let stop = done.clone();
     let handle = tokio::spawn(async move {
@@ -851,7 +856,10 @@ fn forward_cancel(
 
 /// root 任务刚入队、还没开跑时给 UI 的一句话;没什么可等就 None。
 /// 前置任务优先于包管理器锁:有前置时锁的等待藏在前置之后,不值得同时说
-fn queue_note(waiting_on: &[(DependencyTarget, String)], needs_package_manager: bool) -> Option<String> {
+fn queue_note(
+    waiting_on: &[(DependencyTarget, String)],
+    needs_package_manager: bool,
+) -> Option<String> {
     if !waiting_on.is_empty() {
         let labels: Vec<String> = waiting_on
             .iter()
@@ -875,7 +883,9 @@ mod tests {
         );
         let waiting = vec![
             (
-                DependencyTarget::Component { id: ComponentId::Qq },
+                DependencyTarget::Component {
+                    id: ComponentId::Qq,
+                },
                 "t1".to_string(),
             ),
             (
@@ -920,7 +930,10 @@ mod tests {
         settings.snowluma_node_path = Some("   ".into());
         assert_eq!(local_snowluma_node_path(&settings), None);
         settings.snowluma_node_path = Some("  D:\\node\\node.exe ".into());
-        assert_eq!(local_snowluma_node_path(&settings), Some("D:\\node\\node.exe"));
+        assert_eq!(
+            local_snowluma_node_path(&settings),
+            Some("D:\\node\\node.exe")
+        );
     }
 
     #[test]

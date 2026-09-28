@@ -51,8 +51,15 @@ pub struct MaiBotMemoryImportOptions {
 #[serde(tag = "op", rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum MaiBotMemoryImport {
-    Paste { name: String, content: String, options: MaiBotMemoryImportOptions },
-    Files { paths: Vec<String>, options: MaiBotMemoryImportOptions },
+    Paste {
+        name: String,
+        content: String,
+        options: MaiBotMemoryImportOptions,
+    },
+    Files {
+        paths: Vec<String>,
+        options: MaiBotMemoryImportOptions,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -148,9 +155,13 @@ pub struct MaiBotMemoryTaskDetail {
 #[serde(tag = "op", rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub enum MaiBotMemoryTaskAction {
-    Cancel { id: String },
+    Cancel {
+        id: String,
+    },
     /// 只重跑失败的块，建一个新任务；参数沿用原任务的
-    Retry { id: String },
+    Retry {
+        id: String,
+    },
 }
 
 /// 导入前在本机看一眼要导的文件
@@ -253,7 +264,10 @@ impl UpstreamTask {
                 warnings: f.warnings.unwrap_or_default(),
             })
             .collect();
-        Some(MaiBotMemoryTaskDetail { task: self.into_task()?, files })
+        Some(MaiBotMemoryTaskDetail {
+            task: self.into_task()?,
+            files,
+        })
     }
 }
 
@@ -269,8 +283,14 @@ struct TasksEnvelope {
     items: Option<Vec<UpstreamTask>>,
 }
 
-pub(crate) async fn import_setup(c: &MaiBotWebUi) -> Result<MaiBotMemoryImportSetup, AppFrameworkError> {
-    let s: SettingsEnvelope = call(c, Request::new(Method::GET, &format!("{BASE}/import/settings"))).await?;
+pub(crate) async fn import_setup(
+    c: &MaiBotWebUi,
+) -> Result<MaiBotMemoryImportSetup, AppFrameworkError> {
+    let s: SettingsEnvelope = call(
+        c,
+        Request::new(Method::GET, &format!("{BASE}/import/settings")),
+    )
+    .await?;
     let s = s.settings.unwrap_or_default();
     // 聊天列表是普通的 FastAPI 回包，不带 A_Memorix 那层壳
     let chats: ChatsEnvelope = c.get(&format!("{BASE}/import/chat-targets"), &[]).await?;
@@ -281,7 +301,12 @@ pub(crate) async fn import_setup(c: &MaiBotWebUi) -> Result<MaiBotMemoryImportSe
             max_paste_chars: s.max_paste_chars.unwrap_or(200_000),
             poll_ms: s.poll_interval_ms.unwrap_or(1000).max(500),
         },
-        chats: chats.data.unwrap_or_default().into_iter().filter_map(UpstreamChat::into_chat).collect(),
+        chats: chats
+            .data
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(UpstreamChat::into_chat)
+            .collect(),
     })
 }
 
@@ -307,18 +332,35 @@ fn options_json(o: &MaiBotMemoryImportOptions) -> serde_json::Value {
     })
 }
 
-pub(crate) async fn import(c: &MaiBotWebUi, req: &MaiBotMemoryImport) -> Result<MaiBotMemoryTask, AppFrameworkError> {
+pub(crate) async fn import(
+    c: &MaiBotWebUi,
+    req: &MaiBotMemoryImport,
+) -> Result<MaiBotMemoryTask, AppFrameworkError> {
     let env: TaskEnvelope = match req {
-        MaiBotMemoryImport::Paste { name, content, options } => {
+        MaiBotMemoryImport::Paste {
+            name,
+            content,
+            options,
+        } => {
             if content.trim().is_empty() {
                 return Err(AppFrameworkError::Validation("没有要导的内容".into()));
             }
             let mut body = options_json(options);
             body["content"] = json!(content);
-            if let Some(n) = Path::new(name.trim()).file_name().and_then(|n| n.to_str()).filter(|n| !n.is_empty()) {
+            if let Some(n) = Path::new(name.trim())
+                .file_name()
+                .and_then(|n| n.to_str())
+                .filter(|n| !n.is_empty())
+            {
                 body["name"] = json!(n);
             }
-            call(c, Request::new(Method::POST, &format!("{BASE}/import/paste")).body(&body).slow()).await?
+            call(
+                c,
+                Request::new(Method::POST, &format!("{BASE}/import/paste"))
+                    .body(&body)
+                    .slow(),
+            )
+            .await?
         }
         MaiBotMemoryImport::Files { paths, options } => {
             let paths = paths.clone();
@@ -343,20 +385,38 @@ pub(crate) async fn import(c: &MaiBotWebUi, req: &MaiBotMemoryImport) -> Result<
 }
 
 pub(crate) async fn tasks(c: &MaiBotWebUi) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError> {
-    let env: TasksEnvelope =
-        call(c, Request::new(Method::GET, &format!("{BASE}/import/tasks")).query(&[("limit", "30")])).await?;
-    Ok(env.items.unwrap_or_default().into_iter().filter_map(UpstreamTask::into_task).collect())
+    let env: TasksEnvelope = call(
+        c,
+        Request::new(Method::GET, &format!("{BASE}/import/tasks")).query(&[("limit", "30")]),
+    )
+    .await?;
+    Ok(env
+        .items
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(UpstreamTask::into_task)
+        .collect())
 }
 
-pub(crate) async fn task(c: &MaiBotWebUi, id: &str) -> Result<MaiBotMemoryTaskDetail, AppFrameworkError> {
+pub(crate) async fn task(
+    c: &MaiBotWebUi,
+    id: &str,
+) -> Result<MaiBotMemoryTaskDetail, AppFrameworkError> {
     let id = check_id(id, "导入任务")?;
-    let env: TaskEnvelope = call(c, Request::new(Method::GET, &format!("{BASE}/import/tasks/{id}"))).await?;
-    env.task
-        .and_then(UpstreamTask::into_detail)
-        .ok_or_else(|| AppFrameworkError::Validation("这个导入任务没了（麦麦重启过就会清空）".into()))
+    let env: TaskEnvelope = call(
+        c,
+        Request::new(Method::GET, &format!("{BASE}/import/tasks/{id}")),
+    )
+    .await?;
+    env.task.and_then(UpstreamTask::into_detail).ok_or_else(|| {
+        AppFrameworkError::Validation("这个导入任务没了（麦麦重启过就会清空）".into())
+    })
 }
 
-pub(crate) async fn task_action(c: &MaiBotWebUi, a: &MaiBotMemoryTaskAction) -> Result<MaiBotMemoryTask, AppFrameworkError> {
+pub(crate) async fn task_action(
+    c: &MaiBotWebUi,
+    a: &MaiBotMemoryTaskAction,
+) -> Result<MaiBotMemoryTask, AppFrameworkError> {
     let (id, verb) = match a {
         MaiBotMemoryTaskAction::Cancel { id } => (id, "cancel"),
         MaiBotMemoryTaskAction::Retry { id } => (id, "retry"),
@@ -364,11 +424,14 @@ pub(crate) async fn task_action(c: &MaiBotWebUi, a: &MaiBotMemoryTaskAction) -> 
     let id = check_id(id, "导入任务")?;
     // retry 不带参数：上游会拿原任务的参数重跑，带了就把原任务的设置改掉了
     let body = json!({});
-    let env: TaskEnvelope =
-        call(c, Request::new(Method::POST, &format!("{BASE}/import/tasks/{id}/{verb}")).body(&body)).await?;
-    env.task
-        .and_then(UpstreamTask::into_task)
-        .ok_or_else(|| AppFrameworkError::Validation("这个导入任务没了（麦麦重启过就会清空）".into()))
+    let env: TaskEnvelope = call(
+        c,
+        Request::new(Method::POST, &format!("{BASE}/import/tasks/{id}/{verb}")).body(&body),
+    )
+    .await?;
+    env.task.and_then(UpstreamTask::into_task).ok_or_else(|| {
+        AppFrameworkError::Validation("这个导入任务没了（麦麦重启过就会清空）".into())
+    })
 }
 
 /// 挑好、拖进来的文件先在本机过一遍，导不了的当场说
@@ -379,8 +442,18 @@ pub async fn inspect_local_texts(paths: Vec<String>) -> Vec<MaiBotLocalTextFile>
             .map(|path| {
                 let name = file_name(path);
                 match read_text(path) {
-                    Ok((size, _, _)) => MaiBotLocalTextFile { path: path.to_string(), name, size, problem: None },
-                    Err((size, problem)) => MaiBotLocalTextFile { path: path.to_string(), name, size, problem: Some(problem) },
+                    Ok((size, _, _)) => MaiBotLocalTextFile {
+                        path: path.to_string(),
+                        name,
+                        size,
+                        problem: None,
+                    },
+                    Err((size, problem)) => MaiBotLocalTextFile {
+                        path: path.to_string(),
+                        name,
+                        size,
+                        problem: Some(problem),
+                    },
                 }
             })
             .collect()
@@ -407,7 +480,10 @@ fn load_texts(paths: &[String]) -> Result<Vec<LocalText>, AppFrameworkError> {
         }
     }
     if !bad.is_empty() {
-        return Err(AppFrameworkError::Validation(format!("这些文件导不了：{}", bad.join("；"))));
+        return Err(AppFrameworkError::Validation(format!(
+            "这些文件导不了：{}",
+            bad.join("；")
+        )));
     }
     if files.is_empty() {
         return Err(AppFrameworkError::Validation("没挑文件".into()));
@@ -426,7 +502,9 @@ fn dedupe(paths: &[String]) -> Vec<&str> {
 }
 
 fn file_name(path: &str) -> String {
-    Path::new(path).file_name().map_or_else(|| path.to_string(), |n| n.to_string_lossy().into_owned())
+    Path::new(path)
+        .file_name()
+        .map_or_else(|| path.to_string(), |n| n.to_string_lossy().into_owned())
 }
 
 /// 只收本机绝对路径下的 txt / md / json，20 MB 以内，UTF-8 编码
@@ -435,7 +513,12 @@ fn read_text(path: &str) -> Result<(u64, &'static str, Vec<u8>), (u64, String)> 
     if !p.is_absolute() {
         return Err((0, "路径不对".into()));
     }
-    let mime = match p.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
+    let mime = match p
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
         Some("txt") => "text/plain",
         Some("md") => "text/markdown",
         Some("json") => "application/json",

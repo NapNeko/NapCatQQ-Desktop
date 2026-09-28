@@ -67,7 +67,9 @@ pub fn allocate_stable_port(seed: &str, taken: &[u16], probe_local: bool) -> Res
 const STABLE_TRIES: u32 = 512;
 
 fn fnv1a(s: &str) -> u32 {
-    s.bytes().fold(0x811c_9dc5_u32, |h, b| (h ^ u32::from(b)).wrapping_mul(0x0100_0193))
+    s.bytes().fold(0x811c_9dc5_u32, |h, b| {
+        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+    })
 }
 
 fn accept_port(port: u16, taken: &[u16], probe_local: bool) -> Result<u16, String> {
@@ -86,7 +88,9 @@ fn accept_port(port: u16, taken: &[u16], probe_local: bool) -> Result<u16, Strin
 /// 远端 Linux 上正在监听的 TCP 口。桌面端登记表只认得自己装的东西，服务器上用户另跑的程序
 /// 占着的口要靠这个避开；读不到给空，照旧只按登记表
 pub async fn remote_listening_ports(host: &dyn Host) -> Vec<u16> {
-    ports::remote_listening_ports(host).await.unwrap_or_default()
+    ports::remote_listening_ports(host)
+        .await
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -109,13 +113,17 @@ mod tests {
 
     #[test]
     fn requested_free_is_kept() {
-        assert_eq!(allocate_listen_port(Some(32100), &[], false).unwrap(), 32100);
+        assert_eq!(
+            allocate_listen_port(Some(32100), &[], false).unwrap(),
+            32100
+        );
     }
 
     #[test]
     fn auto_picks_the_only_free_port_in_a_tiny_range() {
         let mut rng = StdRng::seed_from_u64(1);
-        let port = allocate_listen_port_in(None, &[20_000], false, 20_000, 20_001, &mut rng).unwrap();
+        let port =
+            allocate_listen_port_in(None, &[20_000], false, 20_000, 20_001, &mut rng).unwrap();
         assert_eq!(port, 20_001);
     }
 

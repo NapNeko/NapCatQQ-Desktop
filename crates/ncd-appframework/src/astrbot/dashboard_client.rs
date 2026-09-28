@@ -177,8 +177,7 @@ impl DashboardClient {
             .filter(|s| !s.is_empty())
             .ok_or_else(|| {
                 AppFrameworkError::DashboardAuth(
-                    env.message
-                        .unwrap_or_else(|| "登录未返回 token".into()),
+                    env.message.unwrap_or_else(|| "登录未返回 token".into()),
                 )
             })?;
         self.sessions.store(&self.instance_id, username, token);
@@ -227,12 +226,22 @@ impl DashboardClient {
 
     pub async fn platform_new(&self, row: &Value) -> Result<(), AppFrameworkError> {
         let env: Envelope<Value> = self
-            .send_json(Method::POST, "/api/config/platform/new", Some(row), true, None)
+            .send_json(
+                Method::POST,
+                "/api/config/platform/new",
+                Some(row),
+                true,
+                None,
+            )
             .await?;
         expect_ok(env, "新增平台失败")
     }
 
-    pub async fn platform_update(&self, origin_id: &str, row: &Value) -> Result<(), AppFrameworkError> {
+    pub async fn platform_update(
+        &self,
+        origin_id: &str,
+        row: &Value,
+    ) -> Result<(), AppFrameworkError> {
         let body = json!({ "id": origin_id, "config": row });
         let env: Envelope<Value> = self
             .send_json(
@@ -279,7 +288,10 @@ impl DashboardClient {
         expect_ok(env, "删除提供商失败")
     }
 
-    pub async fn provider_source_models(&self, source_id: &str) -> Result<Vec<String>, AppFrameworkError> {
+    pub async fn provider_source_models(
+        &self,
+        source_id: &str,
+    ) -> Result<Vec<String>, AppFrameworkError> {
         let path = format!(
             "/api/config/provider_sources/models?source_id={}",
             urlencoding_lite(source_id)
@@ -301,12 +313,22 @@ impl DashboardClient {
 
     pub async fn provider_new(&self, row: &Value) -> Result<(), AppFrameworkError> {
         let env: Envelope<Value> = self
-            .send_json(Method::POST, "/api/config/provider/new", Some(row), true, None)
+            .send_json(
+                Method::POST,
+                "/api/config/provider/new",
+                Some(row),
+                true,
+                None,
+            )
             .await?;
         expect_ok(env, "新增模型失败")
     }
 
-    pub async fn provider_update(&self, origin_id: &str, row: &Value) -> Result<(), AppFrameworkError> {
+    pub async fn provider_update(
+        &self,
+        origin_id: &str,
+        row: &Value,
+    ) -> Result<(), AppFrameworkError> {
         let body = json!({ "id": origin_id, "config": row });
         let env: Envelope<Value> = self
             .send_json(
@@ -365,16 +387,14 @@ impl DashboardClient {
         form: reqwest::multipart::Form,
     ) -> Result<(), AppFrameworkError> {
         let url = format!("{}{path}", self.base);
-        let mut req = self
-            .http
-            .post(&url)
-            .timeout(UPLOAD_TIMEOUT)
-            .multipart(form);
+        let mut req = self.http.post(&url).timeout(UPLOAD_TIMEOUT).multipart(form);
         if let Some(token) = self.token() {
             req = req.bearer_auth(token);
         }
         let resp = req.send().await.map_err(map_transport)?;
-        parse_envelope::<Value>(resp).await.and_then(|env| expect_ok(env, "上传失败"))
+        parse_envelope::<Value>(resp)
+            .await
+            .and_then(|env| expect_ok(env, "上传失败"))
     }
 
     async fn send_json<B: Serialize, T: DeserializeOwned>(
@@ -388,9 +408,9 @@ impl DashboardClient {
         let url = format!("{}{path}", self.base);
         let mut req = self.http.request(method.clone(), &url);
         if authed {
-            let token = self.token().ok_or_else(|| {
-                AppFrameworkError::DashboardAuth("尚未登录 Dashboard".into())
-            })?;
+            let token = self
+                .token()
+                .ok_or_else(|| AppFrameworkError::DashboardAuth("尚未登录 Dashboard".into()))?;
             req = req.bearer_auth(token);
         }
         if let Some(body) = body {
@@ -427,16 +447,15 @@ fn authority_host(host: &str) -> String {
     }
 }
 
-fn reject_totp(message: &Option<String>, data: &Option<LoginData>) -> Result<(), AppFrameworkError> {
+fn reject_totp(
+    message: &Option<String>,
+    data: &Option<LoginData>,
+) -> Result<(), AppFrameworkError> {
     let msg = message.as_deref().unwrap_or("");
     let looks_2fa = msg.to_ascii_lowercase().contains("totp")
         || msg.contains("验证码")
         || msg.contains("双因素")
-        || data
-            .as_ref()
-            .and_then(|d| d.token.as_deref())
-            .is_none()
-            && msg.contains("二次");
+        || data.as_ref().and_then(|d| d.token.as_deref()).is_none() && msg.contains("二次");
     if looks_2fa {
         return Err(AppFrameworkError::DashboardAuth(
             "WebUI 开了双因素认证，Desktop 不能代登录。到 AstrBot WebUI 操作，或先关掉 TOTP".into(),
@@ -489,9 +508,8 @@ async fn parse_envelope<T: DeserializeOwned>(
             status.as_u16()
         )));
     }
-    serde_json::from_str(&text).map_err(|e| {
-        AppFrameworkError::Integration(format!("Dashboard 响应无法解析: {e}"))
-    })
+    serde_json::from_str(&text)
+        .map_err(|e| AppFrameworkError::Integration(format!("Dashboard 响应无法解析: {e}")))
 }
 
 fn urlencoding_lite(s: &str) -> String {

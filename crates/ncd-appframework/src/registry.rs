@@ -37,7 +37,10 @@ impl AppFrameworkRegistry {
         self.adapters.insert(id, adapter);
     }
 
-    pub fn get(&self, id: &AppFrameworkId) -> Result<Arc<dyn AppFrameworkAdapter>, AppFrameworkError> {
+    pub fn get(
+        &self,
+        id: &AppFrameworkId,
+    ) -> Result<Arc<dyn AppFrameworkAdapter>, AppFrameworkError> {
         self.adapters
             .get(id.as_str())
             .cloned()
@@ -45,7 +48,10 @@ impl AppFrameworkRegistry {
     }
 
     /// 同 `get`，但借用注册表：从适配器上取出的能力对象（如麦麦运行期接口）能跟着注册表的借用一起传出去
-    pub fn adapter(&self, id: &AppFrameworkId) -> Result<&dyn AppFrameworkAdapter, AppFrameworkError> {
+    pub fn adapter(
+        &self,
+        id: &AppFrameworkId,
+    ) -> Result<&dyn AppFrameworkAdapter, AppFrameworkError> {
         self.adapters
             .get(id.as_str())
             .map(|a| a.as_ref())
@@ -61,7 +67,10 @@ impl AppFrameworkRegistry {
     }
 
     pub fn manifests(&self) -> Vec<AppFrameworkManifest> {
-        self.adapters.values().map(|a| a.manifest().clone()).collect()
+        self.adapters
+            .values()
+            .map(|a| a.manifest().clone())
+            .collect()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -102,7 +111,10 @@ mod tests {
         assert!(reg.by_component_id("karin").is_some());
         assert!(reg.by_component_id("nonebot2").is_some());
         assert!(reg.by_component_id("astrbot").is_some());
-        assert!(reg.by_component_id("uv").is_none(), "运行时依赖不是应用端框架");
+        assert!(
+            reg.by_component_id("uv").is_none(),
+            "运行时依赖不是应用端框架"
+        );
     }
 
     /// 每个框架的 component_id 必须是 `ComponentId` 里标了 is_app_framework 的变体，
@@ -112,7 +124,11 @@ mod tests {
         for m in AppFrameworkRegistry::with_builtin().manifests() {
             let id = ncd_component::ComponentId::parse(&m.component_id)
                 .unwrap_or_else(|| panic!("{} 不是合法 ComponentId", m.component_id));
-            assert!(id.is_app_framework(), "{} 未标 is_app_framework", m.component_id);
+            assert!(
+                id.is_app_framework(),
+                "{} 未标 is_app_framework",
+                m.component_id
+            );
         }
     }
 
@@ -145,7 +161,12 @@ mod tests {
             from_reqs.sort();
             let mut declared = m.runtime_component_ids.clone();
             declared.sort();
-            assert_eq!(declared, from_reqs, "{} 的 runtime_component_ids 与 requirements 不一致", m.id.as_str());
+            assert_eq!(
+                declared,
+                from_reqs,
+                "{} 的 runtime_component_ids 与 requirements 不一致",
+                m.id.as_str()
+            );
         }
     }
 

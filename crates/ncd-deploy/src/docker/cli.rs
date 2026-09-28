@@ -434,8 +434,8 @@ impl<'h> DockerCli<'h> {
         cancel: Option<tokio_util::sync::CancellationToken>,
         mut on_line: impl FnMut(StreamSource, String) + Send + 'static,
     ) -> Result<(), DockerCliError> {
-        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let now_ms = || {

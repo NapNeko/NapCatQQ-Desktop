@@ -273,7 +273,11 @@ impl NoneBot2Component {
     }
 
     /// 已有项目：只补 uv 标记 + sync，不改 bot.py / dotenv
-    async fn adopt_provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn adopt_provision(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 2 }).await;
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
@@ -390,7 +394,10 @@ if __name__ == "__main__":
     /// 已有文件不覆盖：用户自己加的插件 / 配置不被重装抹掉
     async fn ensure_project_scaffold(&self, host: &dyn Host) -> Result<(), ActionError> {
         let files: [(HostPath, String); 4] = [
-            (self.pyproject(), Self::render_pyproject(&self.project_name())),
+            (
+                self.pyproject(),
+                Self::render_pyproject(&self.project_name()),
+            ),
             (self.bot_py(), Self::render_bot_py().to_string()),
             (self.env_file(), "ENVIRONMENT=prod\n".to_string()),
             (
@@ -577,7 +584,11 @@ impl Component for NoneBot2Component {
         Ok(report)
     }
 
-    fn launch_command(&self, host: &dyn Host, args: &LaunchArgs) -> Result<HostCommand, ActionError> {
+    fn launch_command(
+        &self,
+        host: &dyn Host,
+        args: &LaunchArgs,
+    ) -> Result<HostCommand, ActionError> {
         Ok(self.launch_with(host.os(), args))
     }
 }
@@ -594,13 +605,21 @@ mod tests {
             vec![Requirement::component_version(ComponentId::Uv, ">=0.4")]
         );
         assert_eq!(comp.id(), ComponentId::NoneBot2);
-        assert!(comp.supported_targets().contains(&(Os::Windows, Locality::Local)));
-        assert!(!comp.supported_targets().contains(&(Os::Windows, Locality::Remote)));
+        assert!(
+            comp.supported_targets()
+                .contains(&(Os::Windows, Locality::Local))
+        );
+        assert!(
+            !comp
+                .supported_targets()
+                .contains(&(Os::Windows, Locality::Remote))
+        );
     }
 
     #[test]
     fn instance_paths_follow_locked_layout() {
-        let comp = NoneBot2Component::new(HostPath::from_posix("/home/u/ncd/apps/nonebot2/n1"), 8081);
+        let comp =
+            NoneBot2Component::new(HostPath::from_posix("/home/u/ncd/apps/nonebot2/n1"), 8081);
         assert_eq!(
             comp.env_prod_file().as_posix(),
             "/home/u/ncd/apps/nonebot2/n1/.env.prod"
@@ -622,7 +641,10 @@ mod tests {
         assert!(text.contains("\"nonebot-adapter-onebot\""));
         assert!(text.contains("module_name = \"nonebot.adapters.onebot.v11\""));
         assert!(text.contains("tomli; python_version < '3.11'"));
-        assert!(!text.contains("[build-system]"), "无 build-system → uv 视为虚拟项目，不打包");
+        assert!(
+            !text.contains("[build-system]"),
+            "无 build-system → uv 视为虚拟项目，不打包"
+        );
         let bot = NoneBot2Component::render_bot_py();
         assert!(bot.contains("# ncd-managed-bot-py:2"));
         assert!(bot.contains("importlib.import_module"));
@@ -663,7 +685,10 @@ version = "2.4.6"
             Some("2.4.6".to_string())
         );
         assert_eq!(NoneBot2Component::lock_package_version(lock, "httpx"), None);
-        assert_eq!(NoneBot2Component::lock_package_version("", "nonebot2"), None);
+        assert_eq!(
+            NoneBot2Component::lock_package_version("", "nonebot2"),
+            None
+        );
     }
 
     #[test]

@@ -23,7 +23,10 @@ impl NoneBotEnvLayout {
 }
 
 /// `base` = `.env` 原文；`overlay_exists` = `.env.{environment}` 是否在磁盘上。
-pub fn layout_from_base(base: Option<&str>, overlay_exists: impl Fn(&str) -> bool) -> NoneBotEnvLayout {
+pub fn layout_from_base(
+    base: Option<&str>,
+    overlay_exists: impl Fn(&str) -> bool,
+) -> NoneBotEnvLayout {
     let environment = environment_from_dotenv(base.unwrap_or(""));
     let overlay_rel = format!(".env.{environment}");
     let write_rel = if overlay_exists(&overlay_rel) {

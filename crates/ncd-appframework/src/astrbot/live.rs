@@ -203,7 +203,9 @@ mod tests {
             ..Default::default()
         };
 
-        sync_providers(&client, &payload, &[src], &[]).await.unwrap();
+        sync_providers(&client, &payload, &[src], &[])
+            .await
+            .unwrap();
 
         assert_eq!(
             write_paths(&server).await,

@@ -54,7 +54,10 @@ impl NoVncComponent {
     }
 
     /// 图形栈的包名只按 deb / rpm 两族维护,其它包管理器直接报不支持
-    async fn detect_pkg_manager(&self, host: &dyn Host) -> Result<LinuxPackageManager, ActionError> {
+    async fn detect_pkg_manager(
+        &self,
+        host: &dyn Host,
+    ) -> Result<LinuxPackageManager, ActionError> {
         match LinuxPackageManager::detect(host).await {
             Some(pm @ (LinuxPackageManager::Apt | LinuxPackageManager::Dnf)) => Ok(pm),
             Some(other) => Err(ActionError::install_step(

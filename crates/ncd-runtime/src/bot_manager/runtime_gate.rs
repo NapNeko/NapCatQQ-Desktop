@@ -90,7 +90,9 @@ mod tests {
                 phase: RequirementPhase::Run,
                 nodes: vec![
                     node(
-                        DependencyTarget::Component { id: ComponentId::Qq },
+                        DependencyTarget::Component {
+                            id: ComponentId::Qq,
+                        },
                         RequirementStatus::Missing,
                     ),
                     DependencyNode {
@@ -147,7 +149,9 @@ mod tests {
                 host_id: "remote:a".into(),
                 phase: RequirementPhase::Run,
                 nodes: vec![node(
-                    DependencyTarget::Component { id: ComponentId::Qq },
+                    DependencyTarget::Component {
+                        id: ComponentId::Qq,
+                    },
                     RequirementStatus::Missing,
                 )],
             },
@@ -175,7 +179,9 @@ mod tests {
                 host_id: "remote:a".into(),
                 phase: RequirementPhase::Run,
                 nodes: vec![node(
-                    DependencyTarget::Component { id: ComponentId::Qq },
+                    DependencyTarget::Component {
+                        id: ComponentId::Qq,
+                    },
                     RequirementStatus::Unknown {
                         error: "ssh timeout".into(),
                     },

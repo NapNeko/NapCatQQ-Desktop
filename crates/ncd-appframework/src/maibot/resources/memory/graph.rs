@@ -116,9 +116,18 @@ struct UpstreamEdge {
     evidence_count: Option<u32>,
 }
 
-pub(crate) async fn graph(c: &MaiBotWebUi, max_nodes: u32) -> Result<MaiBotMemoryGraph, AppFrameworkError> {
+pub(crate) async fn graph(
+    c: &MaiBotWebUi,
+    max_nodes: u32,
+) -> Result<MaiBotMemoryGraph, AppFrameworkError> {
     let path = format!("{BASE}/graph");
-    let up: UpstreamGraph = call(c, Request::new(Method::GET, &path).query(&[("limit", FETCH_LIMIT)]).slow()).await?;
+    let up: UpstreamGraph = call(
+        c,
+        Request::new(Method::GET, &path)
+            .query(&[("limit", FETCH_LIMIT)])
+            .slow(),
+    )
+    .await?;
     Ok(pick_core(up, max_nodes.clamp(10, 500) as usize))
 }
 
@@ -129,7 +138,10 @@ fn pick_core(up: UpstreamGraph, keep: usize) -> MaiBotMemoryGraph {
         .unwrap_or_default()
         .into_iter()
         .filter_map(|e| {
-            let label = e.label.filter(|l| !l.trim().is_empty()).unwrap_or_else(|| e.predicates.unwrap_or_default().join("、"));
+            let label = e
+                .label
+                .filter(|l| !l.trim().is_empty())
+                .unwrap_or_else(|| e.predicates.unwrap_or_default().join("、"));
             Some(MaiBotMemoryGraphEdge {
                 source: e.source.filter(|s| !s.is_empty())?,
                 target: e.target.filter(|s| !s.is_empty())?,
@@ -150,7 +162,10 @@ fn pick_core(up: UpstreamGraph, keep: usize) -> MaiBotMemoryGraph {
         .unwrap_or_default()
         .into_iter()
         .filter_map(|n| n.id.filter(|s| !s.is_empty()))
-        .map(|id| MaiBotMemoryGraphNode { degree: degree.get(id.as_str()).copied().unwrap_or(0), id })
+        .map(|id| MaiBotMemoryGraphNode {
+            degree: degree.get(id.as_str()).copied().unwrap_or(0),
+            id,
+        })
         .collect();
     let total_nodes = up.total_nodes.unwrap_or(nodes.len() as u32);
     let total_edges = up.total_edges.unwrap_or(edges.len() as u32);
@@ -162,7 +177,12 @@ fn pick_core(up: UpstreamGraph, keep: usize) -> MaiBotMemoryGraph {
         .filter(|e| kept.contains(e.source.as_str()) && kept.contains(e.target.as_str()))
         .cloned()
         .collect();
-    MaiBotMemoryGraph { nodes, edges, total_nodes, total_edges }
+    MaiBotMemoryGraph {
+        nodes,
+        edges,
+        total_nodes,
+        total_edges,
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -201,17 +221,30 @@ struct UpstreamParagraph {
     created_at: Option<f64>,
 }
 
-pub(crate) async fn graph_node(c: &MaiBotWebUi, node_id: &str) -> Result<MaiBotMemoryNodeDetail, AppFrameworkError> {
+pub(crate) async fn graph_node(
+    c: &MaiBotWebUi,
+    node_id: &str,
+) -> Result<MaiBotMemoryNodeDetail, AppFrameworkError> {
     let id = node_id.trim();
     if id.is_empty() {
         return Err(AppFrameworkError::Validation("没指定看哪个点".into()));
     }
-    let query = [("node_id", id), ("relation_limit", "40"), ("paragraph_limit", "12")];
-    let up: UpstreamNodeDetail =
-        call(c, Request::new(Method::GET, &format!("{BASE}/graph/node-detail")).query(&query)).await?;
+    let query = [
+        ("node_id", id),
+        ("relation_limit", "40"),
+        ("paragraph_limit", "12"),
+    ];
+    let up: UpstreamNodeDetail = call(
+        c,
+        Request::new(Method::GET, &format!("{BASE}/graph/node-detail")).query(&query),
+    )
+    .await?;
     let node = up.node.unwrap_or_default();
     Ok(MaiBotMemoryNodeDetail {
-        id: node.id.filter(|s| !s.is_empty()).unwrap_or_else(|| id.to_string()),
+        id: node
+            .id
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| id.to_string()),
         hash: text(node.hash),
         mentions: node.appearance_count.unwrap_or(0),
         relations: up
@@ -261,21 +294,36 @@ struct UpstreamHit {
     subject: Option<String>,
 }
 
-pub(crate) async fn graph_search(c: &MaiBotWebUi, query: &str) -> Result<Vec<MaiBotMemoryGraphHit>, AppFrameworkError> {
+pub(crate) async fn graph_search(
+    c: &MaiBotWebUi,
+    query: &str,
+) -> Result<Vec<MaiBotMemoryGraphHit>, AppFrameworkError> {
     let q = query.trim();
     if q.is_empty() {
         return Ok(Vec::new());
     }
     let path = format!("{BASE}/graph/search");
-    let up: UpstreamHits = call(c, Request::new(Method::GET, &path).query(&[("query", q), ("limit", "20")])).await?;
+    let up: UpstreamHits = call(
+        c,
+        Request::new(Method::GET, &path).query(&[("query", q), ("limit", "20")]),
+    )
+    .await?;
     Ok(up
         .items
         .unwrap_or_default()
         .into_iter()
         .filter_map(|h| {
             let kind = text(h.kind);
-            let node = if kind == "relation" { h.subject } else { h.entity_name.or(h.title.clone()) };
-            Some(MaiBotMemoryGraphHit { title: text(h.title), node: node.filter(|s| !s.is_empty())?, kind })
+            let node = if kind == "relation" {
+                h.subject
+            } else {
+                h.entity_name.or(h.title.clone())
+            };
+            Some(MaiBotMemoryGraphHit {
+                title: text(h.title),
+                node: node.filter(|s| !s.is_empty())?,
+                kind,
+            })
         })
         .collect())
 }

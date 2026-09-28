@@ -8,7 +8,9 @@
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use ncd_domain::{AppConfigDocument, AppConfigFormat, AppInstance, AppInstanceState, AppStoreResource};
+use ncd_domain::{
+    AppConfigDocument, AppConfigFormat, AppInstance, AppInstanceState, AppStoreResource,
+};
 use ncd_host::{ArchiveKind, Host, HostError, HostPath, Locality};
 use ncd_traits::AppFrameworkError;
 use serde_json::{Map, Value};
@@ -21,7 +23,8 @@ pub const PLUGINS_DIR: &str = "plugins";
 const STAGE: &str = ".ncd-stage";
 const MANIFEST: &str = "_manifest.json";
 const PLUGIN_CONFIG: &str = "config.toml";
-const MARKET_RAW: &str = "https://raw.githubusercontent.com/Mai-with-u/plugin-repo/main/plugin_details.json";
+const MARKET_RAW: &str =
+    "https://raw.githubusercontent.com/Mai-with-u/plugin-repo/main/plugin_details.json";
 
 /// 桌面端装实例时放进去、对接时写配置的 NapCat 适配器：商店里只读，
 /// 换版本得跟着 MaiBot 本体走（它的清单卡着宿主版本范围）
@@ -45,11 +48,18 @@ fn host_err(e: HostError) -> AppFrameworkError {
 }
 
 fn text(obj: &Map<String, Value>, key: &str) -> String {
-    obj.get(key).and_then(Value::as_str).unwrap_or("").trim().to_string()
+    obj.get(key)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string()
 }
 
 fn first_text(obj: &Map<String, Value>, keys: &[&str]) -> String {
-    keys.iter().map(|k| text(obj, k)).find(|s| !s.is_empty()).unwrap_or_default()
+    keys.iter()
+        .map(|k| text(obj, k))
+        .find(|s| !s.is_empty())
+        .unwrap_or_default()
 }
 
 fn repository_of(manifest: &Map<String, Value>) -> String {
@@ -72,11 +82,15 @@ fn is_locked(id: &str, dir: &str) -> bool {
 pub fn validate_plugin_id(id: &str) -> Result<&str, AppFrameworkError> {
     let id = id.trim();
     let bad = id.is_empty()
-        || ["/", "\\", "\0", "..", "\n", "\r", "\t"].iter().any(|p| id.contains(p))
+        || ["/", "\\", "\0", "..", "\n", "\r", "\t"]
+            .iter()
+            .any(|p| id.contains(p))
         || id.starts_with('.')
         || id.ends_with('.');
     if bad {
-        return Err(AppFrameworkError::Validation(format!("插件 id 不合法：{id:?}")));
+        return Err(AppFrameworkError::Validation(format!(
+            "插件 id 不合法：{id:?}"
+        )));
     }
     Ok(id)
 }
@@ -86,7 +100,9 @@ pub fn plugin_dir_for(id: &str) -> String {
     id.replace('.', "_")
 }
 
-pub fn parse_maibot_plugins_json(text_body: &str) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+pub fn parse_maibot_plugins_json(
+    text_body: &str,
+) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
     let root: Value = serde_json::from_str(text_body)
         .map_err(|e| AppFrameworkError::Validation(format!("解析 MaiBot 插件目录失败: {e}")))?;
     let items = root
@@ -94,8 +110,12 @@ pub fn parse_maibot_plugins_json(text_body: &str) -> Result<Vec<AppStoreMarketEn
         .ok_or_else(|| AppFrameworkError::Validation("MaiBot 插件目录根必须是数组".into()))?;
     let mut out = Vec::new();
     for item in items {
-        let Some(item) = item.as_object() else { continue };
-        let Some(m) = item.get("manifest").and_then(Value::as_object) else { continue };
+        let Some(item) = item.as_object() else {
+            continue;
+        };
+        let Some(m) = item.get("manifest").and_then(Value::as_object) else {
+            continue;
+        };
         if m.get("manifest_version").and_then(Value::as_u64) != Some(MANIFEST_VERSION) {
             continue;
         }
@@ -105,7 +125,11 @@ pub fn parse_maibot_plugins_json(text_body: &str) -> Result<Vec<AppStoreMarketEn
         let name = text(m, "name");
         let version = text(m, "version");
         let repo = repository_of(m);
-        if validate_plugin_id(&id).is_err() || name.is_empty() || version.is_empty() || repo.is_empty() {
+        if validate_plugin_id(&id).is_err()
+            || name.is_empty()
+            || version.is_empty()
+            || repo.is_empty()
+        {
             continue;
         }
         let author = match m.get("author") {
@@ -115,13 +139,29 @@ pub fn parse_maibot_plugins_json(text_body: &str) -> Result<Vec<AppStoreMarketEn
         };
         let homepage = {
             let h = first_text(m, &["homepage_url"]);
-            let from_urls = m.get("urls").and_then(Value::as_object).map(|u| text(u, "homepage"));
-            if !h.is_empty() { h } else { from_urls.filter(|s| !s.is_empty()).unwrap_or_else(|| repo.clone()) }
+            let from_urls = m
+                .get("urls")
+                .and_then(Value::as_object)
+                .map(|u| text(u, "homepage"));
+            if !h.is_empty() {
+                h
+            } else {
+                from_urls
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| repo.clone())
+            }
         };
         let tags = m
             .get("keywords")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+                    .collect()
+            })
             .unwrap_or_default();
         out.push(AppStoreMarketEntry {
             resource: AppStoreResource::Plugin,
@@ -166,11 +206,16 @@ async fn read_text(host: &dyn Host, path: &HostPath) -> Result<Option<String>, A
     Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
-async fn read_manifest(host: &dyn Host, dir: &HostPath) -> Result<Option<Map<String, Value>>, AppFrameworkError> {
+async fn read_manifest(
+    host: &dyn Host,
+    dir: &HostPath,
+) -> Result<Option<Map<String, Value>>, AppFrameworkError> {
     let Some(raw) = read_text(host, &dir.join(MANIFEST)).await? else {
         return Ok(None);
     };
-    Ok(serde_json::from_str::<Value>(&raw).ok().and_then(|v| v.as_object().cloned()))
+    Ok(serde_json::from_str::<Value>(&raw)
+        .ok()
+        .and_then(|v| v.as_object().cloned()))
 }
 
 /// 同上游 `_read_plugin_enabled`：没配置文件、没 `[plugin]`、没 `enabled` 都算开着；字符串按常见的否定词认
@@ -180,9 +225,10 @@ pub fn plugin_enabled(config_toml: Option<&str>) -> bool {
     };
     match table.get("plugin").and_then(|p| p.get("enabled")) {
         Some(toml::Value::Boolean(b)) => *b,
-        Some(toml::Value::String(s)) => {
-            !matches!(s.trim().to_ascii_lowercase().as_str(), "false" | "0" | "no" | "off" | "disabled")
-        }
+        Some(toml::Value::String(s)) => !matches!(
+            s.trim().to_ascii_lowercase().as_str(),
+            "false" | "0" | "no" | "off" | "disabled"
+        ),
         Some(toml::Value::Integer(i)) => *i != 0,
         _ => true,
     }
@@ -202,7 +248,9 @@ pub(super) async fn find_installed_dir(
         if !entry.is_dir || is_reserved(&entry.name) {
             continue;
         }
-        let Some(m) = read_manifest(host, &root.join(&entry.name)).await? else { continue };
+        let Some(m) = read_manifest(host, &root.join(&entry.name)).await? else {
+            continue;
+        };
         let got = text(&m, "id");
         if got == id {
             return Ok(Some(entry.name));
@@ -230,15 +278,25 @@ pub async fn list_installed(
         }
         let dir = root.join(&entry.name);
         // 没有清单的是卸载残留（只剩 config.toml）或者根本不是插件，上游也不认
-        let Some(m) = read_manifest(host, &dir).await? else { continue };
+        let Some(m) = read_manifest(host, &dir).await? else {
+            continue;
+        };
         let id = text(&m, "id");
-        let id = if id.is_empty() { entry.name.clone() } else { id };
+        let id = if id.is_empty() {
+            entry.name.clone()
+        } else {
+            id
+        };
         let name = text(&m, "name");
         let version = text(&m, "version");
         let config = read_text(host, &dir.join(PLUGIN_CONFIG)).await?;
         out.push(AppStoreInstalled {
             locked: is_locked(&id, &entry.name),
-            name: if name.is_empty() { entry.name.clone() } else { name },
+            name: if name.is_empty() {
+                entry.name.clone()
+            } else {
+                name
+            },
             id,
             resource: AppStoreResource::Plugin,
             flavor: AppStoreFlavor::Git,
@@ -260,7 +318,8 @@ fn emit(log: Option<&PluginLogSink>, line: impl Into<String>) {
 fn refuse_locked(id: &str, dir: &str) -> Result<(), AppFrameworkError> {
     if is_locked(id, dir) {
         return Err(AppFrameworkError::Validation(
-            "NapCat 适配器由桌面端管理（装实例时放进去、对接时写配置），这里不能卸、停或更新".into(),
+            "NapCat 适配器由桌面端管理（装实例时放进去、对接时写配置），这里不能卸、停或更新"
+                .into(),
         ));
     }
     Ok(())
@@ -268,16 +327,21 @@ fn refuse_locked(id: &str, dir: &str) -> Result<(), AppFrameworkError> {
 
 /// 只接受 GitHub 仓库：下载走 `archive/HEAD.<ext>`（跟默认分支），不依赖主机上有 git
 fn archive_url(repository: &str, ext: &str) -> Result<String, AppFrameworkError> {
-    let repo = repository.trim().trim_end_matches('/').trim_end_matches(".git");
-    let rest = repo
-        .strip_prefix("https://github.com/")
-        .ok_or_else(|| AppFrameworkError::Validation(format!("只装得了 GitHub 上的插件：{repository}")))?;
+    let repo = repository
+        .trim()
+        .trim_end_matches('/')
+        .trim_end_matches(".git");
+    let rest = repo.strip_prefix("https://github.com/").ok_or_else(|| {
+        AppFrameworkError::Validation(format!("只装得了 GitHub 上的插件：{repository}"))
+    })?;
     let mut parts = rest.split('/');
     match (parts.next(), parts.next(), parts.next()) {
-        (Some(owner), Some(name), None) if !owner.is_empty() && !name.is_empty() => {
-            Ok(format!("https://github.com/{owner}/{name}/archive/HEAD.{ext}"))
-        }
-        _ => Err(AppFrameworkError::Validation(format!("认不出仓库地址：{repository}"))),
+        (Some(owner), Some(name), None) if !owner.is_empty() && !name.is_empty() => Ok(format!(
+            "https://github.com/{owner}/{name}/archive/HEAD.{ext}"
+        )),
+        _ => Err(AppFrameworkError::Validation(format!(
+            "认不出仓库地址：{repository}"
+        ))),
     }
 }
 
@@ -293,7 +357,10 @@ fn archive_format(locality: Locality) -> (&'static str, ArchiveKind) {
 const DESKTOP_FETCH_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// 远端实例的插件包由桌面端按 GitHub 镜像表挨个试着下
-async fn fetch_on_desktop(url: &str, log: Option<&PluginLogSink>) -> Result<Vec<u8>, AppFrameworkError> {
+async fn fetch_on_desktop(
+    url: &str,
+    log: Option<&PluginLogSink>,
+) -> Result<Vec<u8>, AppFrameworkError> {
     let mut last = String::from("没有可用下载地址");
     for candidate in ncd_network::build_mirror_urls(url, None) {
         emit(log, format!("桌面端下载 {candidate}"));
@@ -315,11 +382,20 @@ async fn fetch_on_desktop(url: &str, log: Option<&PluginLogSink>) -> Result<Vec<
 }
 
 fn stamp() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
 }
 
-async fn new_stage(host: &dyn Host, root: &HostPath, id: &str) -> Result<HostPath, AppFrameworkError> {
-    let stage = root.join(STAGE).join(format!("{}-{}", plugin_dir_for(id), stamp()));
+async fn new_stage(
+    host: &dyn Host,
+    root: &HostPath,
+    id: &str,
+) -> Result<HostPath, AppFrameworkError> {
+    let stage = root
+        .join(STAGE)
+        .join(format!("{}-{}", plugin_dir_for(id), stamp()));
     host.create_dir_all(&stage).await.map_err(host_err)?;
     Ok(stage)
 }
@@ -340,7 +416,11 @@ async fn unpack_stage(
     host.extract_archive(archive, &unpacked, kind)
         .await
         .map_err(host_err)?;
-    let plugin_root = if host.exists(&unpacked.join(MANIFEST)).await.map_err(host_err)? {
+    let plugin_root = if host
+        .exists(&unpacked.join(MANIFEST))
+        .await
+        .map_err(host_err)?
+    {
         unpacked
     } else {
         let dirs: Vec<_> = host
@@ -351,10 +431,19 @@ async fn unpack_stage(
             .filter(|e| e.is_dir)
             .collect();
         match dirs.as_slice() {
-            [only] if host.exists(&unpacked.join(&only.name).join(MANIFEST)).await.map_err(host_err)? => {
+            [only]
+                if host
+                    .exists(&unpacked.join(&only.name).join(MANIFEST))
+                    .await
+                    .map_err(host_err)? =>
+            {
                 unpacked.join(&only.name)
             }
-            _ => return Err(AppFrameworkError::Validation("包里没有 _manifest.json，不是 MaiBot 插件".into())),
+            _ => {
+                return Err(AppFrameworkError::Validation(
+                    "包里没有 _manifest.json，不是 MaiBot 插件".into(),
+                ));
+            }
         }
     };
     let m = read_manifest(host, &plugin_root)
@@ -367,7 +456,9 @@ async fn unpack_stage(
     }
     let got = text(&m, "id");
     if !got.eq_ignore_ascii_case(id) {
-        return Err(AppFrameworkError::Validation(format!("插件身份不符：包里是 {got:?}，市场上是 {id:?}")));
+        return Err(AppFrameworkError::Validation(format!(
+            "插件身份不符：包里是 {got:?}，市场上是 {id:?}"
+        )));
     }
     Ok(plugin_root)
 }
@@ -405,7 +496,12 @@ async fn stage_plugin(
 }
 
 /// 新装：一次改名挪进去，暂存目录不论成败都清掉
-async fn place(host: &dyn Host, plugin_root: &HostPath, dest: &HostPath, stage: &HostPath) -> Result<(), AppFrameworkError> {
+async fn place(
+    host: &dyn Host,
+    plugin_root: &HostPath,
+    dest: &HostPath,
+    stage: &HostPath,
+) -> Result<(), AppFrameworkError> {
     let moved = host.rename(plugin_root, dest).await.map_err(host_err);
     let _ = host.remove_dir_all(stage).await;
     moved
@@ -457,22 +553,35 @@ pub async fn install_item(
     refuse_locked(id, &dir)?;
     let root = plugins_root(instance);
     if let Some(found) = find_installed_dir(host, &root, id).await? {
-        return Err(AppFrameworkError::Validation(format!("已经装了（plugins/{found}）")));
+        return Err(AppFrameworkError::Validation(format!(
+            "已经装了（plugins/{found}）"
+        )));
     }
     let dest = root.join(&dir);
     if !clear_residue(host, &dest).await? {
-        return Err(AppFrameworkError::Validation(format!("plugins/{dir} 已被别的东西占着")));
+        return Err(AppFrameworkError::Validation(format!(
+            "plugins/{dir} 已被别的东西占着"
+        )));
     }
     let (plugin_root, stage) = stage_plugin(host, &root, entry, id, log).await?;
     place(host, &plugin_root, &dest, &stage).await?;
-    emit(log, format!("已放进 plugins/{dir}，麦麦在跑的话会自己载入并装依赖"));
+    emit(
+        log,
+        format!("已放进 plugins/{dir}，麦麦在跑的话会自己载入并装依赖"),
+    );
     Ok(())
 }
 
 /// 用户改过的只有配置：新版本换进来前把 `config.toml` 和上游 WebUI 的配置备份目录带过去
-async fn carry_user_files(host: &dyn Host, from: &HostPath, to: &HostPath) -> Result<(), AppFrameworkError> {
+async fn carry_user_files(
+    host: &dyn Host,
+    from: &HostPath,
+    to: &HostPath,
+) -> Result<(), AppFrameworkError> {
     if let Some(cfg) = read_text(host, &from.join(PLUGIN_CONFIG)).await? {
-        host.write_file(&to.join(PLUGIN_CONFIG), cfg.as_bytes()).await.map_err(host_err)?;
+        host.write_file(&to.join(PLUGIN_CONFIG), cfg.as_bytes())
+            .await
+            .map_err(host_err)?;
     }
     let backups = from.join("config_back");
     if host.exists(&backups).await.map_err(host_err)? {
@@ -482,8 +591,13 @@ async fn carry_user_files(host: &dyn Host, from: &HostPath, to: &HostPath) -> Re
             if e.is_dir {
                 continue;
             }
-            let bytes = host.read_file(&backups.join(&e.name)).await.map_err(host_err)?;
-            host.write_file(&target.join(&e.name), &bytes).await.map_err(host_err)?;
+            let bytes = host
+                .read_file(&backups.join(&e.name))
+                .await
+                .map_err(host_err)?;
+            host.write_file(&target.join(&e.name), &bytes)
+                .await
+                .map_err(host_err)?;
         }
     }
     Ok(())
@@ -503,16 +617,24 @@ pub async fn update_item(
     refuse_locked(id, &dir)?;
     let (plugin_root, stage) = stage_plugin(host, &root, entry, id, log).await?;
     swap_in(host, &root.join(&dir), &plugin_root, &stage).await?;
-    emit(log, format!("plugins/{dir} 换成了 {}，配置原样保留", entry.version));
+    emit(
+        log,
+        format!("plugins/{dir} 换成了 {}，配置原样保留", entry.version),
+    );
     Ok(())
 }
 
 /// 改 `[plugin].enabled`，其余内容和注释原样。没有配置文件就只写这一项（上游切换时也是这么补的）
-pub fn set_enabled_in(config_toml: Option<&str>, enabled: bool) -> Result<String, AppFrameworkError> {
+pub fn set_enabled_in(
+    config_toml: Option<&str>,
+    enabled: bool,
+) -> Result<String, AppFrameworkError> {
     let mut doc = config_toml
         .unwrap_or("")
         .parse::<toml_edit::DocumentMut>()
-        .map_err(|e| AppFrameworkError::Validation(format!("插件的 config.toml 不是合法的 TOML：{e}")))?;
+        .map_err(|e| {
+            AppFrameworkError::Validation(format!("插件的 config.toml 不是合法的 TOML：{e}"))
+        })?;
     if !doc.contains_table("plugin") {
         doc["plugin"] = toml_edit::table();
     }
@@ -535,7 +657,9 @@ pub async fn set_enabled(
     let path = root.join(&dir).join(PLUGIN_CONFIG);
     let current = read_text(host, &path).await?;
     let next = set_enabled_in(current.as_deref(), enabled)?;
-    host.write_file(&path, next.as_bytes()).await.map_err(host_err)
+    host.write_file(&path, next.as_bytes())
+        .await
+        .map_err(host_err)
 }
 
 pub async fn uninstall_item(
@@ -557,7 +681,9 @@ pub async fn uninstall_item(
         tokio::time::sleep(Duration::from_millis(1500)).await;
     }
     emit(log, format!("删除 plugins/{dir}"));
-    host.remove_dir_all(&root.join(&dir)).await.map_err(host_err)
+    host.remove_dir_all(&root.join(&dir))
+        .await
+        .map_err(host_err)
 }
 
 pub fn plugin_doc_id(dir: &str) -> String {
@@ -566,7 +692,12 @@ pub fn plugin_doc_id(dir: &str) -> String {
 
 pub fn parse_plugin_doc_id(doc_id: &str) -> Option<&str> {
     let dir = doc_id.strip_prefix(PLUGIN_DOC_PREFIX)?;
-    if dir.is_empty() || dir.contains('/') || dir.contains('\\') || dir.contains("..") || is_reserved(dir) {
+    if dir.is_empty()
+        || dir.contains('/')
+        || dir.contains('\\')
+        || dir.contains("..")
+        || is_reserved(dir)
+    {
         return None;
     }
     Some(dir)
@@ -616,10 +747,17 @@ mod tests {
     fn market_keeps_installable_v2_entries_keyed_by_manifest_id() {
         let list = parse_maibot_plugins_json(MARKET).unwrap();
         let ids: Vec<&str> = list.iter().map(|e| e.id.as_str()).collect();
-        assert_eq!(ids, vec!["sengokucola.mute-plugin", "maibot-team.napcat-adapter"], "老清单、没仓库、非法 id 都跳过");
+        assert_eq!(
+            ids,
+            vec!["sengokucola.mute-plugin", "maibot-team.napcat-adapter"],
+            "老清单、没仓库、非法 id 都跳过"
+        );
         assert_eq!(list[0].author, "SengokuCola");
         assert_eq!(list[0].package, "https://github.com/SengokuCola/MutePlugin");
-        assert_eq!(list[0].homepage, "https://github.com/SengokuCola/MutePlugin", "没主页就用仓库");
+        assert_eq!(
+            list[0].homepage, "https://github.com/SengokuCola/MutePlugin",
+            "没主页就用仓库"
+        );
         assert_eq!(list[0].tags, vec!["群管".to_string()]);
         assert!(!list[0].is_official);
         assert_eq!(list[1].author, "MaiBot Team", "作者写成字符串也认");
@@ -628,7 +766,10 @@ mod tests {
 
     #[test]
     fn plugin_dir_matches_upstream_and_ids_are_path_safe() {
-        assert_eq!(plugin_dir_for("sengokucola.mute-plugin"), "sengokucola_mute-plugin");
+        assert_eq!(
+            plugin_dir_for("sengokucola.mute-plugin"),
+            "sengokucola_mute-plugin"
+        );
         for bad in ["", "a/b", "a\\b", "..", ".hidden", "trailing.", "a..b"] {
             assert!(validate_plugin_id(bad).is_err(), "{bad:?}");
         }
@@ -646,12 +787,19 @@ mod tests {
 
     #[test]
     fn toggling_keeps_the_rest_of_the_file() {
-        let before = "# 插件配置\n[plugin]\nenabled = true # 总开关\nname = \"x\"\n\n[extra]\nk = 1\n";
+        let before =
+            "# 插件配置\n[plugin]\nenabled = true # 总开关\nname = \"x\"\n\n[extra]\nk = 1\n";
         let after = set_enabled_in(Some(before), false).unwrap();
         assert!(after.contains("enabled = false"), "{after}");
-        assert!(after.contains("# 插件配置") && after.contains("[extra]\nk = 1"), "{after}");
+        assert!(
+            after.contains("# 插件配置") && after.contains("[extra]\nk = 1"),
+            "{after}"
+        );
         assert!(!plugin_enabled(Some(&after)));
-        assert_eq!(set_enabled_in(None, false).unwrap().trim(), "[plugin]\nenabled = false");
+        assert_eq!(
+            set_enabled_in(None, false).unwrap().trim(),
+            "[plugin]\nenabled = false"
+        );
     }
 
     #[test]
@@ -668,7 +816,11 @@ mod tests {
     #[test]
     fn remote_hosts_get_tarballs() {
         assert_eq!(archive_format(Locality::Local), ("zip", ArchiveKind::Zip));
-        assert_eq!(archive_format(Locality::Remote), ("tar.gz", ArchiveKind::TarGz), "服务器上 unzip 常缺");
+        assert_eq!(
+            archive_format(Locality::Remote),
+            ("tar.gz", ArchiveKind::TarGz),
+            "服务器上 unzip 常缺"
+        );
         assert_eq!(
             archive_url("https://github.com/a/b", "tar.gz").unwrap(),
             "https://github.com/a/b/archive/HEAD.tar.gz"
@@ -677,8 +829,18 @@ mod tests {
 
     #[test]
     fn plugin_docs_reject_escapes_and_reserved_dirs() {
-        assert_eq!(parse_plugin_doc_id("plugin:sengokucola_mute-plugin"), Some("sengokucola_mute-plugin"));
-        for bad in ["plugin:", "plugin:../x", "plugin:a/b", "plugin:.ncd-stage", "plugin:data", "bot_config"] {
+        assert_eq!(
+            parse_plugin_doc_id("plugin:sengokucola_mute-plugin"),
+            Some("sengokucola_mute-plugin")
+        );
+        for bad in [
+            "plugin:",
+            "plugin:../x",
+            "plugin:a/b",
+            "plugin:.ncd-stage",
+            "plugin:data",
+            "bot_config",
+        ] {
             assert_eq!(parse_plugin_doc_id(bad), None, "{bad:?}");
         }
         let doc = plugin_config_document("x");
@@ -691,7 +853,10 @@ mod tests {
         assert!(is_locked("maibot-team.napcat-adapter", "whatever"));
         assert!(is_locked("MaiBot-Team.Napcat-Adapter", "x"));
         assert!(is_locked("", "MaiBot-Napcat-Adapter"));
-        assert!(!is_locked("sengokucola.mute-plugin", "sengokucola_mute-plugin"));
+        assert!(!is_locked(
+            "sengokucola.mute-plugin",
+            "sengokucola_mute-plugin"
+        ));
     }
 
     mod on_disk {
@@ -723,7 +888,9 @@ mod tests {
         }
 
         fn manifest(id: &str, version: &str) -> String {
-            format!(r#"{{"manifest_version": 2, "id": "{id}", "name": "禁言", "version": "{version}", "urls": {{"repository": "https://github.com/a/mute"}}}}"#)
+            format!(
+                r#"{{"manifest_version": 2, "id": "{id}", "name": "禁言", "version": "{version}", "urls": {{"repository": "https://github.com/a/mute"}}}}"#
+            )
         }
 
         /// 仿 GitHub 源码包：一层 `<仓库>-<分支>/` 顶层目录
@@ -738,7 +905,12 @@ mod tests {
             zip.finish().unwrap();
         }
 
-        async fn staged(host: &LocalWindowsHost, root: &HostPath, id: &str, files: &[(&str, &str)]) -> (HostPath, HostPath) {
+        async fn staged(
+            host: &LocalWindowsHost,
+            root: &HostPath,
+            id: &str,
+            files: &[(&str, &str)],
+        ) -> (HostPath, HostPath) {
             let stage = new_stage(host, root, id).await.unwrap();
             let plugin_root = unpack_zip(host, &stage, id, files).await.unwrap();
             (plugin_root, stage)
@@ -763,29 +935,82 @@ mod tests {
             let root = plugins_root(&inst);
             let id = "sengokucola.mute-plugin";
 
-            let (plugin_root, stage) = staged(&host, &root, id, &[("_manifest.json", &manifest(id, "1.0.0")), ("plugin.py", "v1")]).await;
+            let (plugin_root, stage) = staged(
+                &host,
+                &root,
+                id,
+                &[
+                    ("_manifest.json", &manifest(id, "1.0.0")),
+                    ("plugin.py", "v1"),
+                ],
+            )
+            .await;
             let dest = root.join(plugin_dir_for(id));
             place(&host, &plugin_root, &dest, &stage).await.unwrap();
             assert!(!host.exists(&stage).await.unwrap(), "暂存目录用完就清");
 
-            let listed = list_installed(&host, &inst, AppStoreResource::Plugin).await.unwrap();
+            let listed = list_installed(&host, &inst, AppStoreResource::Plugin)
+                .await
+                .unwrap();
             assert_eq!(listed.len(), 1);
-            assert_eq!((listed[0].id.as_str(), listed[0].version.as_deref(), listed[0].enabled), (id, Some("1.0.0"), true));
-            assert_eq!(find_installed_dir(&host, &root, "SengokuCola.Mute-Plugin").await.unwrap().as_deref(), Some("sengokucola_mute-plugin"));
+            assert_eq!(
+                (
+                    listed[0].id.as_str(),
+                    listed[0].version.as_deref(),
+                    listed[0].enabled
+                ),
+                (id, Some("1.0.0"), true)
+            );
+            assert_eq!(
+                find_installed_dir(&host, &root, "SengokuCola.Mute-Plugin")
+                    .await
+                    .unwrap()
+                    .as_deref(),
+                Some("sengokucola_mute-plugin")
+            );
 
             set_enabled(&host, &inst, id, false).await.unwrap();
-            std::fs::write(dest.join(PLUGIN_CONFIG).as_posix(), "[plugin]\nenabled = false\n\n[mute]\nminutes = 10\n").unwrap();
+            std::fs::write(
+                dest.join(PLUGIN_CONFIG).as_posix(),
+                "[plugin]\nenabled = false\n\n[mute]\nminutes = 10\n",
+            )
+            .unwrap();
 
-            let (plugin_root, stage) = staged(&host, &root, id, &[("_manifest.json", &manifest(id, "2.0.0")), ("plugin.py", "v2")]).await;
+            let (plugin_root, stage) = staged(
+                &host,
+                &root,
+                id,
+                &[
+                    ("_manifest.json", &manifest(id, "2.0.0")),
+                    ("plugin.py", "v2"),
+                ],
+            )
+            .await;
             swap_in(&host, &dest, &plugin_root, &stage).await.unwrap();
-            assert_eq!(std::fs::read_to_string(dest.join("plugin.py").as_posix()).unwrap(), "v2");
+            assert_eq!(
+                std::fs::read_to_string(dest.join("plugin.py").as_posix()).unwrap(),
+                "v2"
+            );
             let cfg = std::fs::read_to_string(dest.join(PLUGIN_CONFIG).as_posix()).unwrap();
-            assert!(cfg.contains("minutes = 10") && cfg.contains("enabled = false"), "更新保留用户配置：{cfg}");
-            let listed = list_installed(&host, &inst, AppStoreResource::Plugin).await.unwrap();
-            assert_eq!((listed[0].version.as_deref(), listed[0].enabled), (Some("2.0.0"), false));
+            assert!(
+                cfg.contains("minutes = 10") && cfg.contains("enabled = false"),
+                "更新保留用户配置：{cfg}"
+            );
+            let listed = list_installed(&host, &inst, AppStoreResource::Plugin)
+                .await
+                .unwrap();
+            assert_eq!(
+                (listed[0].version.as_deref(), listed[0].enabled),
+                (Some("2.0.0"), false)
+            );
 
             uninstall_item(&host, &inst, id, None).await.unwrap();
-            assert!(list_installed(&host, &inst, AppStoreResource::Plugin).await.unwrap().is_empty());
+            assert!(
+                list_installed(&host, &inst, AppStoreResource::Plugin)
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
         }
 
         #[tokio::test]
@@ -796,18 +1021,30 @@ mod tests {
             let id = "sengokucola.mute-plugin";
 
             let stage = new_stage(&host, &root, id).await.unwrap();
-            let err = unpack_zip(&host, &stage, id, &[("_manifest.json", &manifest("someone.else", "1.0.0"))])
-                .await
-                .unwrap_err();
+            let err = unpack_zip(
+                &host,
+                &stage,
+                id,
+                &[("_manifest.json", &manifest("someone.else", "1.0.0"))],
+            )
+            .await
+            .unwrap_err();
             assert!(err.to_string().contains("身份不符"), "{err}");
 
             let stage = new_stage(&host, &root, id).await.unwrap();
-            let v1 = format!(r#"{{"manifest_version": 1, "id": "{id}", "name": "x", "version": "1"}}"#);
-            let err = unpack_zip(&host, &stage, id, &[("_manifest.json", &v1)]).await.unwrap_err();
+            let v1 =
+                format!(r#"{{"manifest_version": 1, "id": "{id}", "name": "x", "version": "1"}}"#);
+            let err = unpack_zip(&host, &stage, id, &[("_manifest.json", &v1)])
+                .await
+                .unwrap_err();
             assert!(err.to_string().contains("老版清单"), "{err}");
 
             let stage = new_stage(&host, &root, id).await.unwrap();
-            assert!(unpack_zip(&host, &stage, id, &[("README.md", "no manifest")]).await.is_err());
+            assert!(
+                unpack_zip(&host, &stage, id, &[("README.md", "no manifest")])
+                    .await
+                    .is_err()
+            );
         }
 
         /// 真下载：`archive/HEAD.zip` 要跟 GitHub 跳到 codeload，镜像也得能用。手动跑：
@@ -818,16 +1055,31 @@ mod tests {
             let tmp = tempfile::tempdir().unwrap();
             let host = LocalWindowsHost::new();
             let inst = instance(tmp.path(), AppInstanceState::Installed);
-            let text = reqwest::get(MARKET_RAW).await.unwrap().text().await.unwrap();
+            let text = reqwest::get(MARKET_RAW)
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
             let market = parse_maibot_plugins_json(&text).unwrap();
-            let entry = market.iter().find(|e| e.id == "sengokucola.mute-plugin").expect("市场里有禁言插件");
+            let entry = market
+                .iter()
+                .find(|e| e.id == "sengokucola.mute-plugin")
+                .expect("市场里有禁言插件");
             install_item(&host, &inst, entry, None).await.unwrap();
-            let listed = list_installed(&host, &inst, AppStoreResource::Plugin).await.unwrap();
+            let listed = list_installed(&host, &inst, AppStoreResource::Plugin)
+                .await
+                .unwrap();
             assert_eq!(listed.len(), 1, "{listed:?}");
             assert_eq!(listed[0].id, entry.id);
             update_item(&host, &inst, entry, None).await.unwrap();
             uninstall_item(&host, &inst, &entry.id, None).await.unwrap();
-            assert!(list_installed(&host, &inst, AppStoreResource::Plugin).await.unwrap().is_empty());
+            assert!(
+                list_installed(&host, &inst, AppStoreResource::Plugin)
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
         }
 
         #[tokio::test]
@@ -838,12 +1090,26 @@ mod tests {
             let root = plugins_root(&inst);
             let adapter = root.join(LOCKED_PLUGIN_DIR);
             std::fs::create_dir_all(adapter.as_posix()).unwrap();
-            std::fs::write(adapter.join(MANIFEST).as_posix(), manifest(LOCKED_PLUGIN_ID, "1.4.0")).unwrap();
+            std::fs::write(
+                adapter.join(MANIFEST).as_posix(),
+                manifest(LOCKED_PLUGIN_ID, "1.4.0"),
+            )
+            .unwrap();
 
-            let listed = list_installed(&host, &inst, AppStoreResource::Plugin).await.unwrap();
+            let listed = list_installed(&host, &inst, AppStoreResource::Plugin)
+                .await
+                .unwrap();
             assert!(listed[0].locked);
-            assert!(set_enabled(&host, &inst, LOCKED_PLUGIN_ID, false).await.is_err());
-            assert!(uninstall_item(&host, &inst, LOCKED_PLUGIN_ID, None).await.is_err());
+            assert!(
+                set_enabled(&host, &inst, LOCKED_PLUGIN_ID, false)
+                    .await
+                    .is_err()
+            );
+            assert!(
+                uninstall_item(&host, &inst, LOCKED_PLUGIN_ID, None)
+                    .await
+                    .is_err()
+            );
             assert!(host.exists(&adapter).await.unwrap());
 
             // 上游卸载失败留下的只有 config.toml 的目录：装之前清掉
@@ -854,7 +1120,10 @@ mod tests {
             assert!(!host.exists(&residue).await.unwrap());
             std::fs::create_dir_all(residue.as_posix()).unwrap();
             std::fs::write(residue.join("plugin.py").as_posix(), "x").unwrap();
-            assert!(!clear_residue(&host, &residue).await.unwrap(), "有别的文件就不是残留，不动");
+            assert!(
+                !clear_residue(&host, &residue).await.unwrap(),
+                "有别的文件就不是残留，不动"
+            );
         }
     }
 }

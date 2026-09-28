@@ -19,9 +19,7 @@ use super::platform::{
     next_dashboard_port, platforms, read_aiocqhttp_port, set_dashboard_port, upsert_claimed_row,
 };
 use crate::ports::PortUsage;
-use crate::uv_tooling::{
-    read_uv_marker, resolve_uv, venv_python, venv_script, write_uv_marker,
-};
+use crate::uv_tooling::{read_uv_marker, resolve_uv, venv_python, venv_script, write_uv_marker};
 
 const SUPPORTED: &[(Os, Locality)] = &[
     (Os::Windows, Locality::Local),
@@ -66,7 +64,11 @@ impl AstrBotComponent {
         self
     }
 
-    pub fn with_webui_account(mut self, username: Option<String>, password: Option<String>) -> Self {
+    pub fn with_webui_account(
+        mut self,
+        username: Option<String>,
+        password: Option<String>,
+    ) -> Self {
         self.webui_username = username.filter(|s| !s.trim().is_empty());
         self.webui_password = password.filter(|s| !s.is_empty());
         self
@@ -251,7 +253,11 @@ impl AstrBotComponent {
     }
 
     /// 已有工作目录：只升级包，不跑 `init`、不改 cmd_config。
-    async fn upgrade_provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn upgrade_provision(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
@@ -272,7 +278,8 @@ impl AstrBotComponent {
                 .arg(ASTRBOT_PYTHON_REQUIRES)
                 .arg(".venv")
                 .working_dir(self.install_dir.clone());
-            self.run_step(host, ctx, 2, "创建实例虚拟环境", venv).await?;
+            self.run_step(host, ctx, 2, "创建实例虚拟环境", venv)
+                .await?;
         } else {
             ctx.emit(ProgressKind::StepBegin {
                 step: 2,
@@ -295,7 +302,11 @@ impl AstrBotComponent {
         Ok(())
     }
 
-    async fn adopt_provision(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn adopt_provision(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
@@ -316,7 +327,8 @@ impl AstrBotComponent {
                 .arg(ASTRBOT_PYTHON_REQUIRES)
                 .arg(".venv")
                 .working_dir(self.install_dir.clone());
-            self.run_step(host, ctx, 2, "创建实例虚拟环境", venv).await?;
+            self.run_step(host, ctx, 2, "创建实例虚拟环境", venv)
+                .await?;
         } else {
             ctx.emit(ProgressKind::StepBegin {
                 step: 2,
@@ -487,7 +499,11 @@ impl Component for AstrBotComponent {
         Ok(report)
     }
 
-    fn launch_command(&self, host: &dyn Host, args: &LaunchArgs) -> Result<HostCommand, ActionError> {
+    fn launch_command(
+        &self,
+        host: &dyn Host,
+        args: &LaunchArgs,
+    ) -> Result<HostCommand, ActionError> {
         Ok(self.launch_with(host.os(), args))
     }
 }

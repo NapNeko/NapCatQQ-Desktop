@@ -21,7 +21,10 @@ pub struct UvToolchain {
 }
 
 /// 按 `preferred` 顺序尝试，最后看 PATH 的 `uv`；以 `uv --version` 能跑为准。
-pub async fn resolve_uv(host: &dyn Host, preferred: &[HostPath]) -> Result<UvToolchain, ActionError> {
+pub async fn resolve_uv(
+    host: &dyn Host,
+    preferred: &[HostPath],
+) -> Result<UvToolchain, ActionError> {
     let mut candidates: Vec<String> = Vec::new();
     for p in preferred {
         let s = p.as_posix().to_string();
@@ -47,7 +50,11 @@ pub async fn resolve_uv(host: &dyn Host, preferred: &[HostPath]) -> Result<UvToo
                 }
             },
             Ok(out) => {
-                last_err = Some(format!("{cand}: exit={:?} {}", out.exit_code, out.stderr.trim()));
+                last_err = Some(format!(
+                    "{cand}: exit={:?} {}",
+                    out.exit_code,
+                    out.stderr.trim()
+                ));
             }
             Err(e) => {
                 last_err = Some(format!("{cand}: {e}"));
@@ -131,7 +138,11 @@ pub fn parse_linux_libc(getconf: &str, ldd: &str) -> LinuxLibc {
     let version = |s: &str| -> Option<(u32, u32)> {
         let mut it = s.trim().split('.');
         let major = it.next()?.trim().parse().ok()?;
-        let minor: String = it.next()?.chars().take_while(char::is_ascii_digit).collect();
+        let minor: String = it
+            .next()?
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect();
         Some((major, minor.parse().ok()?))
     };
     if let Some(rest) = getconf.trim().strip_prefix("glibc")
@@ -159,7 +170,10 @@ pub async fn probe_linux_libc(host: &dyn Host) -> LinuxLibc {
     let Ok(out) = host.run_to_string(cmd).await else {
         return LinuxLibc::Unknown;
     };
-    let (getconf, ldd) = out.stdout.split_once("--ncd--").unwrap_or((out.stdout.as_str(), ""));
+    let (getconf, ldd) = out
+        .stdout
+        .split_once("--ncd--")
+        .unwrap_or((out.stdout.as_str(), ""));
     parse_linux_libc(getconf, ldd.trim_start())
 }
 
@@ -169,7 +183,10 @@ pub async fn probe_free_kb(host: &dyn Host, dir: &HostPath) -> Option<u64> {
         "d={}; while [ ! -d \"$d\" ] && [ \"$d\" != / ]; do d=$(dirname \"$d\"); done; df -Pk \"$d\" | tail -n 1",
         shell_single_quote(dir.as_posix())
     );
-    let cmd = HostCommand::new("sh").arg("-c").arg(script).timeout(Duration::from_secs(15));
+    let cmd = HostCommand::new("sh")
+        .arg("-c")
+        .arg(script)
+        .timeout(Duration::from_secs(15));
     let out = host.run_to_string(cmd).await.ok()?;
     parse_df_available_kb(&out.stdout)
 }
@@ -181,8 +198,10 @@ pub fn parse_df_available_kb(line: &str) -> Option<u64> {
 
 /// 主机自己下解释器的时限。uv 默认从 `releases.astral.sh` 下，二十来 MB，连不上时它自己几十秒就报错
 const PYTHON_DIRECT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
-const PYTHON_BUILDS_GITHUB: &str = "https://github.com/astral-sh/python-build-standalone/releases/download/";
-const PYTHON_BUILDS_ASTRAL: &str = "https://releases.astral.sh/github/python-build-standalone/releases/download/";
+const PYTHON_BUILDS_GITHUB: &str =
+    "https://github.com/astral-sh/python-build-standalone/releases/download/";
+const PYTHON_BUILDS_ASTRAL: &str =
+    "https://releases.astral.sh/github/python-build-standalone/releases/download/";
 
 /// 实例要的解释器没有就装一个 uv 托管的，免得 `uv sync` 在装依赖中途才去下、失败了只剩一句网络错误。
 /// 先让主机自己下；远端下不动时由桌面端按 uv 给的地址镜像竞速下好传上去，
@@ -211,24 +230,41 @@ pub async fn ensure_python(
     if found.is_ok_and(|out| out.success()) {
         return Ok(());
     }
-    ctx.info(format!("主机上没有 Python {request}，先装一个 uv 托管的")).await;
+    ctx.info(format!("主机上没有 Python {request}，先装一个 uv 托管的"))
+        .await;
     let direct = host
         .run_to_string(uv_cmd(&["python", "install", request]).timeout(PYTHON_DIRECT_TIMEOUT))
         .await;
     let direct_err = match direct {
         Ok(out) if out.success() => return Ok(()),
-        Ok(out) => out.stderr.trim().lines().last().unwrap_or_default().to_string(),
+        Ok(out) => out
+            .stderr
+            .trim()
+            .lines()
+            .last()
+            .unwrap_or_default()
+            .to_string(),
         Err(e) => e.to_string(),
     };
     if host.locality() != Locality::Remote {
         return Err(python_install_failed(request, &direct_err));
     }
-    ctx.warn(format!("主机自己下载解释器失败（{direct_err}），改由桌面端下载后传上去")).await;
+    ctx.warn(format!(
+        "主机自己下载解释器失败（{direct_err}），改由桌面端下载后传上去"
+    ))
+    .await;
 
     let listed = host
         .run_to_string(
-            uv_cmd(&["python", "list", request, "--only-downloads", "--output-format", "json"])
-                .timeout(Duration::from_secs(30)),
+            uv_cmd(&[
+                "python",
+                "list",
+                request,
+                "--only-downloads",
+                "--output-format",
+                "json",
+            ])
+            .timeout(Duration::from_secs(30)),
         )
         .await?;
     let url = pick_python_download(&listed.stdout)
@@ -250,7 +286,10 @@ pub async fn ensure_python(
     let installed = host
         .run_to_string(
             uv_cmd(&["python", "install", request])
-                .env("UV_PYTHON_INSTALL_MIRROR", format!("file://{}", scratch.as_posix()))
+                .env(
+                    "UV_PYTHON_INSTALL_MIRROR",
+                    format!("file://{}", scratch.as_posix()),
+                )
                 .timeout(PYTHON_DIRECT_TIMEOUT),
         )
         .await;
@@ -259,13 +298,18 @@ pub async fn ensure_python(
     if out.success() {
         return Ok(());
     }
-    Err(python_install_failed(request, out.stderr.trim().lines().last().unwrap_or_default()))
+    Err(python_install_failed(
+        request,
+        out.stderr.trim().lines().last().unwrap_or_default(),
+    ))
 }
 
 fn python_install_failed(request: &str, detail: &str) -> ActionError {
     ActionError::install_step(
         "python",
-        format!("装不上 Python {request}：{detail}。可以先在主机上自己装好 Python {request} 再重试"),
+        format!(
+            "装不上 Python {request}：{detail}。可以先在主机上自己装好 Python {request} 再重试"
+        ),
     )
 }
 
@@ -274,7 +318,10 @@ pub fn pick_python_download(json: &str) -> Option<String> {
     let entries: Vec<serde_json::Value> = serde_json::from_str(json.trim()).ok()?;
     entries.iter().find_map(|e| {
         let is_cpython = e.get("implementation").and_then(|v| v.as_str()) == Some("cpython");
-        let plain = e.get("variant").and_then(|v| v.as_str()).is_none_or(|v| v == "default");
+        let plain = e
+            .get("variant")
+            .and_then(|v| v.as_str())
+            .is_none_or(|v| v == "default");
         let url = e.get("url").and_then(|v| v.as_str())?;
         (is_cpython && plain && url.starts_with("http")).then(|| url.to_string())
     })
@@ -289,7 +336,10 @@ pub fn python_build_rel(url: &str) -> Option<(String, String)> {
     if tag.is_empty() || file.is_empty() || file.contains('/') {
         return None;
     }
-    Some((tag.to_string(), file.replace("%2B", "+").replace("%2b", "+")))
+    Some((
+        tag.to_string(),
+        file.replace("%2B", "+").replace("%2b", "+"),
+    ))
 }
 
 /// 原地址先上，再补 GitHub 原站和它的镜像
@@ -339,21 +389,60 @@ mod tests {
 
     #[test]
     fn libc_is_read_from_getconf_then_ldd() {
-        assert_eq!(parse_linux_libc("glibc 2.35\n", ""), LinuxLibc::Glibc { major: 2, minor: 35 });
+        assert_eq!(
+            parse_linux_libc("glibc 2.35\n", ""),
+            LinuxLibc::Glibc {
+                major: 2,
+                minor: 35
+            }
+        );
         assert_eq!(
             parse_linux_libc("", "ldd (Ubuntu GLIBC 2.35-0ubuntu3.8) 2.35\n"),
-            LinuxLibc::Glibc { major: 2, minor: 35 }
+            LinuxLibc::Glibc {
+                major: 2,
+                minor: 35
+            }
         );
         assert_eq!(
             parse_linux_libc("", "ldd (GNU libc) 2.17\nCopyright (C) 2012"),
-            LinuxLibc::Glibc { major: 2, minor: 17 }
+            LinuxLibc::Glibc {
+                major: 2,
+                minor: 17
+            }
         );
-        assert_eq!(parse_linux_libc("", "musl libc (x86_64)\nVersion 1.2.4"), LinuxLibc::Musl);
-        assert_eq!(parse_linux_libc("", "sh: ldd: not found"), LinuxLibc::Unknown);
+        assert_eq!(
+            parse_linux_libc("", "musl libc (x86_64)\nVersion 1.2.4"),
+            LinuxLibc::Musl
+        );
+        assert_eq!(
+            parse_linux_libc("", "sh: ldd: not found"),
+            LinuxLibc::Unknown
+        );
 
-        assert!(!LinuxLibc::Glibc { major: 2, minor: 27 }.glibc_at_least(2, 28), "Ubuntu 18.04");
-        assert!(LinuxLibc::Glibc { major: 2, minor: 28 }.glibc_at_least(2, 28), "Debian 10");
-        assert!(LinuxLibc::Glibc { major: 2, minor: 36 }.glibc_at_least(2, 28), "Debian 12");
+        assert!(
+            !LinuxLibc::Glibc {
+                major: 2,
+                minor: 27
+            }
+            .glibc_at_least(2, 28),
+            "Ubuntu 18.04"
+        );
+        assert!(
+            LinuxLibc::Glibc {
+                major: 2,
+                minor: 28
+            }
+            .glibc_at_least(2, 28),
+            "Debian 10"
+        );
+        assert!(
+            LinuxLibc::Glibc {
+                major: 2,
+                minor: 36
+            }
+            .glibc_at_least(2, 28),
+            "Debian 12"
+        );
         assert!(!LinuxLibc::Musl.glibc_at_least(2, 28));
         assert!(LinuxLibc::Unknown.glibc_at_least(2, 28), "认不出不拦");
     }
@@ -362,7 +451,10 @@ mod tests {
     fn df_available_column() {
         let out = "Filesystem     1024-blocks     Used Available Capacity Mounted on\n/dev/vda1         41152812 10485760  28571428      27% /\n";
         assert_eq!(parse_df_available_kb(out), Some(28_571_428));
-        assert_eq!(parse_df_available_kb("/dev/vda1 41152812 10485760 28571428 27% /"), Some(28_571_428));
+        assert_eq!(
+            parse_df_available_kb("/dev/vda1 41152812 10485760 28571428 27% /"),
+            Some(28_571_428)
+        );
         assert_eq!(parse_df_available_kb(""), None);
     }
 
@@ -379,9 +471,14 @@ mod tests {
 
         let (tag, file) = python_build_rel(&url).unwrap();
         assert_eq!(tag, "20260623");
-        assert_eq!(file, "cpython-3.12.13+20260623-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz");
         assert_eq!(
-            python_build_rel("https://github.com/astral-sh/python-build-standalone/releases/download/t/a%2Bb.tar.gz"),
+            file,
+            "cpython-3.12.13+20260623-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+        );
+        assert_eq!(
+            python_build_rel(
+                "https://github.com/astral-sh/python-build-standalone/releases/download/t/a%2Bb.tar.gz"
+            ),
             Some(("t".into(), "a+b.tar.gz".into()))
         );
         assert_eq!(python_build_rel("https://example.com/a.tar.gz"), None);

@@ -7,10 +7,10 @@ use std::sync::Arc;
 
 use ncd_appframework::{AppComponentSpec, AppFrameworkRegistry};
 use ncd_component::{
-    ncd_watch_asset_name, ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
     Component, ComponentId, DesktopSelfComponent, NapCatComponent, NcdWatchComponent,
     NoVncComponent, NodeJsComponent, QQComponent, SnowLumaComponent, UV_DEFAULT_VERSION,
-    UvComponent,
+    UvComponent, ncd_watch_asset_name, ncd_watch_release_download_url,
+    ncd_watch_release_download_url_for_tag,
 };
 use ncd_domain::RemoteSelectedPaths;
 use ncd_domain::SnowLumaLinuxPackage;
@@ -126,10 +126,9 @@ pub fn build_component_for_host(
                     .snowluma_linux_package
                     .unwrap_or_else(|| infer_snowluma_linux_package(ctx.selected));
                 let asset = snowluma_windows_release_asset(&tag, package);
-                let mut comp = SnowLumaComponent::for_windows_with_package(install, tag.clone(), package);
-                if let Some(sha) = latest
-                    .and_then(|info| asset_sha256(info, &asset))
-                {
+                let mut comp =
+                    SnowLumaComponent::for_windows_with_package(install, tag.clone(), package);
+                if let Some(sha) = latest.and_then(|info| asset_sha256(info, &asset)) {
                     comp = comp.with_sha256(sha);
                 }
                 Arc::new(comp)
@@ -285,9 +284,9 @@ fn build_app_framework_component(
     data_root_host: &HostPath,
     remote_home: Option<&str>,
 ) -> Result<Arc<dyn Component>, String> {
-    let hint = ctx.app_component.ok_or_else(|| {
-        "应用端组件按实例安装，请从「应用端」页面操作".to_string()
-    })?;
+    let hint = ctx
+        .app_component
+        .ok_or_else(|| "应用端组件按实例安装，请从「应用端」页面操作".to_string())?;
     let adapter = ctx
         .registry
         .by_component_id(id.as_str())

@@ -73,7 +73,10 @@ pub fn units_from_probe(stdout: &str, install_dir: &str) -> Vec<String> {
     units
 }
 
-pub async fn disable_now(host: &dyn Host, units: &[String]) -> Result<Vec<String>, AppFrameworkError> {
+pub async fn disable_now(
+    host: &dyn Host,
+    units: &[String],
+) -> Result<Vec<String>, AppFrameworkError> {
     if units.is_empty() || host.locality() != Locality::Remote {
         return Ok(Vec::new());
     }
@@ -93,7 +96,10 @@ pub async fn disable_now(host: &dyn Host, units: &[String]) -> Result<Vec<String
 }
 
 /// 把接管时停掉的单元还给系统。失败不吞，调用方据此决定要不要注销实例。
-pub async fn enable_now(host: &dyn Host, units: &[String]) -> Result<Vec<String>, AppFrameworkError> {
+pub async fn enable_now(
+    host: &dyn Host,
+    units: &[String],
+) -> Result<Vec<String>, AppFrameworkError> {
     if units.is_empty() || host.locality() != Locality::Remote {
         return Ok(Vec::new());
     }
@@ -281,6 +287,9 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
         let (pid, prog) = pick_app_pid(lines, AppProcessKind::MaiBot).unwrap();
         assert_eq!(pid, 3301, "Runner 先起，pid 更小");
         assert_eq!(prog, "python");
-        assert!(matches!(AppProcessKind::from_framework("maibot"), AppProcessKind::MaiBot));
+        assert!(matches!(
+            AppProcessKind::from_framework("maibot"),
+            AppProcessKind::MaiBot
+        ));
     }
 }

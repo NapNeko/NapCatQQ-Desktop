@@ -41,7 +41,9 @@ async fn open(kind: LocalShellKind, rc: Option<&str>) -> Option<PtySession> {
     let mut env = BTreeMap::new();
     env.extend(launch.env);
     request.env = env;
-    request.cwd = Some(HostPath::from_windows(&std::env::temp_dir().to_string_lossy()));
+    request.cwd = Some(HostPath::from_windows(
+        &std::env::temp_dir().to_string_lossy(),
+    ));
     LocalWindowsHost::new().open_pty(request).await.ok()
 }
 
@@ -49,13 +51,22 @@ async fn open(kind: LocalShellKind, rc: Option<&str>) -> Option<PtySession> {
 async fn check_marks(mut session: PtySession, cd: &str, cwd_mark: &str, fail: Option<&str>) {
     let first = read_until(&mut session, "633;B").await;
     assert!(first.contains("633;A"), "no prompt mark: {first:?}");
-    session.control.write(Bytes::from(format!("{cd}\r"))).unwrap();
+    session
+        .control
+        .write(Bytes::from(format!("{cd}\r")))
+        .unwrap();
     let after_cd = read_until(&mut session, cwd_mark).await;
     assert!(after_cd.contains(cwd_mark), "no cwd mark: {after_cd:?}");
     if let Some(fail) = fail {
-        session.control.write(Bytes::from(format!("{fail}\r"))).unwrap();
+        session
+            .control
+            .write(Bytes::from(format!("{fail}\r")))
+            .unwrap();
         let after_fail = read_until(&mut session, "633;D;5").await;
-        assert!(after_fail.contains("633;D;5"), "no exit mark: {after_fail:?}");
+        assert!(
+            after_fail.contains("633;D;5"),
+            "no exit mark: {after_fail:?}"
+        );
     }
     session.control.close();
 }
@@ -93,9 +104,17 @@ async fn git_bash_reports_cwd_and_exit_code() {
     let dir = tempfile::tempdir().unwrap();
     let rc = dir.path().join("ncd-bashrc.sh");
     std::fs::write(&rc, git_bash_rc()).unwrap();
-    let rc_posix = HostPath::from_windows(&rc.to_string_lossy()).as_posix().to_string();
+    let rc_posix = HostPath::from_windows(&rc.to_string_lossy())
+        .as_posix()
+        .to_string();
     let Some(session) = open(LocalShellKind::GitBash, Some(&rc_posix)).await else {
         return;
     };
-    check_marks(session, "cd /c/Windows", "633;P;Cwd=/c/Windows", Some("sh -c 'exit 5'")).await;
+    check_marks(
+        session,
+        "cd /c/Windows",
+        "633;P;Cwd=/c/Windows",
+        Some("sh -c 'exit 5'"),
+    )
+    .await;
 }

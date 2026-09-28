@@ -59,12 +59,23 @@ async fn read_text(host: &dyn Host, path: &HostPath) -> Result<Option<String>, A
         return Ok(None);
     }
     let bytes = host.read_file(path).await.map_err(host_err)?;
-    Ok(Some(String::from_utf8_lossy(&bytes).replace("\r\n", "\n").replace('\r', "\n")))
+    Ok(Some(
+        String::from_utf8_lossy(&bytes)
+            .replace("\r\n", "\n")
+            .replace('\r', "\n"),
+    ))
 }
 
-async fn write_text(host: &dyn Host, dir: &HostPath, path: &HostPath, text: &str) -> Result<(), AppFrameworkError> {
+async fn write_text(
+    host: &dyn Host,
+    dir: &HostPath,
+    path: &HostPath,
+    text: &str,
+) -> Result<(), AppFrameworkError> {
     host.create_dir_all(dir).await.map_err(host_err)?;
-    host.write_file(path, text.as_bytes()).await.map_err(host_err)
+    host.write_file(path, text.as_bytes())
+        .await
+        .map_err(host_err)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -101,7 +112,11 @@ pub(super) fn parse_manifest(raw: &str) -> Option<Manifest> {
                         extra.remove(k);
                     }
                     Some(Entry {
-                        label: e.get("label").and_then(Value::as_str).unwrap_or_default().to_string(),
+                        label: e
+                            .get("label")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                            .to_string(),
                         created_at: num("created_at"),
                         modified_at: num("modified_at"),
                         id,
@@ -111,7 +126,13 @@ pub(super) fn parse_manifest(raw: &str) -> Option<Manifest> {
                 .collect()
         })
         .unwrap_or_default();
-    Some(Manifest { active: obj.get("active_version_id").and_then(Value::as_str).map(str::to_string), entries })
+    Some(Manifest {
+        active: obj
+            .get("active_version_id")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        entries,
+    })
 }
 
 /// 写法同上游：`json.dumps(ensure_ascii=False, indent=2)`，键序 active_version_id、versions，结尾不换行
@@ -130,7 +151,10 @@ pub(super) fn render_manifest(m: &Manifest) -> String {
         })
         .collect();
     let mut root = Map::new();
-    root.insert("active_version_id".into(), m.active.clone().map_or(Value::Null, Value::from));
+    root.insert(
+        "active_version_id".into(),
+        m.active.clone().map_or(Value::Null, Value::from),
+    );
     root.insert("versions".into(), Value::Array(versions));
     serde_json::to_string_pretty(&Value::Object(root)).unwrap_or_default()
 }
@@ -138,17 +162,27 @@ pub(super) fn render_manifest(m: &Manifest) -> String {
 async fn load_manifest(host: &dyn Host, p: &Paths) -> Result<Manifest, AppFrameworkError> {
     match read_text(host, &p.versions.join(MANIFEST)).await? {
         None => Ok(Manifest::default()),
-        Some(raw) => parse_manifest(&raw)
-            .ok_or_else(|| AppFrameworkError::Integration("提示词的版本清单坏了，打开「原始文件」看看".into())),
+        Some(raw) => parse_manifest(&raw).ok_or_else(|| {
+            AppFrameworkError::Integration("提示词的版本清单坏了，打开「原始文件」看看".into())
+        }),
     }
 }
 
 async fn save_manifest(host: &dyn Host, p: &Paths, m: &Manifest) -> Result<(), AppFrameworkError> {
-    write_text(host, &p.versions, &p.versions.join(MANIFEST), &render_manifest(m)).await
+    write_text(
+        host,
+        &p.versions,
+        &p.versions.join(MANIFEST),
+        &render_manifest(m),
+    )
+    .await
 }
 
 fn now_secs() -> f64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
 }
 
 /// 版本号同上游：本地时间 `v%Y%m%d%H%M%S`，同一秒撞了往后加 -2、-3
@@ -156,7 +190,11 @@ async fn new_version_id(host: &dyn Host, p: &Paths) -> Result<String, AppFramewo
     let base = chrono::Local::now().format("v%Y%m%d%H%M%S").to_string();
     let mut id = base.clone();
     let mut n = 2;
-    while host.exists(&p.versions.join(format!("{id}.prompt"))).await.map_err(host_err)? {
+    while host
+        .exists(&p.versions.join(format!("{id}.prompt")))
+        .await
+        .map_err(host_err)?
+    {
         id = format!("{base}-{n}");
         n += 1;
     }
@@ -169,7 +207,10 @@ async fn default_of(host: &dyn Host, p: &Paths, name: &str) -> Result<String, Ap
         .ok_or_else(|| AppFrameworkError::Validation(format!("没有这个提示词：{name}")))
 }
 
-pub(super) async fn catalog(host: &dyn Host, instance: &AppInstance) -> Result<MaiBotPromptCatalog, AppFrameworkError> {
+pub(super) async fn catalog(
+    host: &dyn Host,
+    instance: &AppInstance,
+) -> Result<MaiBotPromptCatalog, AppFrameworkError> {
     let root = HostPath::from_posix(&instance.install_dir);
     let prompts_root = root.join(PROMPTS_DIR);
     let mut languages = Vec::new();
@@ -188,14 +229,24 @@ pub(super) async fn catalog(host: &dyn Host, instance: &AppInstance) -> Result<M
             languages.push(MaiBotPromptLanguage { language, prompts });
         }
     }
-    Ok(MaiBotPromptCatalog { languages, active_language: ACTIVE_LANGUAGE.into(), live: false })
+    Ok(MaiBotPromptCatalog {
+        languages,
+        active_language: ACTIVE_LANGUAGE.into(),
+        live: false,
+    })
 }
 
 async fn names_in(host: &dyn Host, dir: &HostPath) -> Result<BTreeSet<String>, AppFrameworkError> {
     if !host.exists(dir).await.map_err(host_err)? {
         return Ok(BTreeSet::new());
     }
-    Ok(host.list_dir(dir).await.map_err(host_err)?.into_iter().map(|e| e.name).collect())
+    Ok(host
+        .list_dir(dir)
+        .await
+        .map_err(host_err)?
+        .into_iter()
+        .map(|e| e.name)
+        .collect())
 }
 
 async fn language_prompts(
@@ -213,15 +264,23 @@ async fn language_prompts(
     let customized = names_in(host, &custom_dir).await?;
     let with_versions = names_in(host, &custom_dir.join(VERSIONS_DIR)).await?;
 
-    let mut names: Vec<String> =
-        entries.iter().filter(|e| !e.is_dir && e.name.ends_with(".prompt")).map(|e| e.name.clone()).collect();
+    let mut names: Vec<String> = entries
+        .iter()
+        .filter(|e| !e.is_dir && e.name.ends_with(".prompt"))
+        .map(|e| e.name.clone())
+        .collect();
     names.sort();
     let mut out = Vec::with_capacity(names.len());
     for name in names {
         let stem = name.trim_end_matches(".prompt").to_string();
         // 同目录 `<名>.meta.toml` 比 `.meta.toml` 优先，逐键合并
-        let own_meta = if entries.iter().any(|e| e.name == format!("{stem}.meta.toml")) {
-            read_text(host, &dir.join(format!("{stem}.meta.toml"))).await?.and_then(|t| t.parse::<toml::Table>().ok())
+        let own_meta = if entries
+            .iter()
+            .any(|e| e.name == format!("{stem}.meta.toml"))
+        {
+            read_text(host, &dir.join(format!("{stem}.meta.toml")))
+                .await?
+                .and_then(|t| t.parse::<toml::Table>().ok())
         } else {
             None
         };
@@ -239,8 +298,12 @@ async fn language_prompts(
             0
         };
         out.push(MaiBotPromptInfo {
-            display_name: pick("display_name").and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default(),
-            description: pick("description").and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default(),
+            display_name: pick("display_name")
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default(),
+            description: pick("description")
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default(),
             advanced: pick("advanced").and_then(|v| v.as_bool()).unwrap_or(false),
             customized: is_custom,
             version_count,
@@ -259,7 +322,10 @@ fn meta_value(table: &toml::Table, stem: &str, key: &str) -> Option<toml::Value>
         .and_then(toml::Value::as_table);
     match scoped {
         Some(t) => t.get(key).cloned(),
-        None if ["display_name", "advanced", "description"].iter().any(|k| table.contains_key(*k)) => {
+        None if ["display_name", "advanced", "description"]
+            .iter()
+            .any(|k| table.contains_key(*k)) =>
+        {
             table.get(key).cloned()
         }
         None => None,
@@ -267,13 +333,25 @@ fn meta_value(table: &toml::Table, stem: &str, key: &str) -> Option<toml::Value>
 }
 
 /// 清单里文件还在的条目；有覆盖、清单没记在用、一条也没有时补一条旧格式的
-async fn versions_of(host: &dyn Host, p: &Paths, customized: bool) -> Result<Vec<MaiBotPromptVersion>, AppFrameworkError> {
+async fn versions_of(
+    host: &dyn Host,
+    p: &Paths,
+    customized: bool,
+) -> Result<Vec<MaiBotPromptVersion>, AppFrameworkError> {
     let m = load_manifest(host, p).await?;
     let mut out = Vec::new();
     for e in &m.entries {
-        if host.exists(&p.versions.join(format!("{}.prompt", e.id))).await.map_err(host_err)? {
+        if host
+            .exists(&p.versions.join(format!("{}.prompt", e.id)))
+            .await
+            .map_err(host_err)?
+        {
             out.push(MaiBotPromptVersion {
-                label: if e.label.is_empty() { e.id.clone() } else { e.label.clone() },
+                label: if e.label.is_empty() {
+                    e.id.clone()
+                } else {
+                    e.label.clone()
+                },
                 id: e.id.clone(),
                 created_at: e.created_at,
                 modified_at: e.modified_at,
@@ -305,7 +383,10 @@ pub(super) async fn file(
     let custom = read_text(host, &p.custom).await?;
     let m = load_manifest(host, &p).await?;
     let versions = versions_of(host, &p, custom.is_some()).await?;
-    let active_version_id = m.active.clone().or_else(|| custom.as_ref().map(|_| LEGACY_ID.to_string()));
+    let active_version_id = m
+        .active
+        .clone()
+        .or_else(|| custom.as_ref().map(|_| LEGACY_ID.to_string()));
     Ok(MaiBotPromptFile {
         language: language.into(),
         name: name.into(),
@@ -328,9 +409,19 @@ pub(super) async fn version(
     version_content(host, &p, version_id).await
 }
 
-async fn version_content(host: &dyn Host, p: &Paths, id: &str) -> Result<String, AppFrameworkError> {
-    let path = if id == LEGACY_ID { p.custom.clone() } else { p.versions.join(format!("{id}.prompt")) };
-    read_text(host, &path).await?.ok_or_else(|| AppFrameworkError::Validation("这个版本已经不在了".into()))
+async fn version_content(
+    host: &dyn Host,
+    p: &Paths,
+    id: &str,
+) -> Result<String, AppFrameworkError> {
+    let path = if id == LEGACY_ID {
+        p.custom.clone()
+    } else {
+        p.versions.join(format!("{id}.prompt"))
+    };
+    read_text(host, &path)
+        .await?
+        .ok_or_else(|| AppFrameworkError::Validation("这个版本已经不在了".into()))
 }
 
 pub(super) async fn act(
@@ -343,17 +434,20 @@ pub(super) async fn act(
     let default = default_of(host, &p, name).await?;
     let mut m = load_manifest(host, &p).await?;
     match action {
-        MaiBotPromptAction::Save { content, label, version_id, .. } => {
+        MaiBotPromptAction::Save {
+            content,
+            label,
+            version_id,
+            ..
+        } => {
             check_prompt(content, &default).map_err(AppFrameworkError::Validation)?;
             let now = now_secs();
             let label = label.trim();
             let id = match version_id.as_deref().filter(|id| *id != LEGACY_ID) {
                 Some(id) => {
-                    let entry = m
-                        .entries
-                        .iter_mut()
-                        .find(|e| e.id == id)
-                        .ok_or_else(|| AppFrameworkError::Validation("这个版本已经不在了".into()))?;
+                    let entry = m.entries.iter_mut().find(|e| e.id == id).ok_or_else(|| {
+                        AppFrameworkError::Validation("这个版本已经不在了".into())
+                    })?;
                     if !label.is_empty() {
                         entry.label = label.to_string();
                     }
@@ -364,15 +458,30 @@ pub(super) async fn act(
                     let id = new_version_id(host, &p).await?;
                     let stem = name.trim_end_matches(".prompt");
                     let label = if label.is_empty() {
-                        format!("{stem} 自定义版本 {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"))
+                        format!(
+                            "{stem} 自定义版本 {}",
+                            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+                        )
                     } else {
                         label.to_string()
                     };
-                    m.entries.push(Entry { id: id.clone(), label, created_at: now, modified_at: now, extra: Map::new() });
+                    m.entries.push(Entry {
+                        id: id.clone(),
+                        label,
+                        created_at: now,
+                        modified_at: now,
+                        extra: Map::new(),
+                    });
                     id
                 }
             };
-            write_text(host, &p.versions, &p.versions.join(format!("{id}.prompt")), content).await?;
+            write_text(
+                host,
+                &p.versions,
+                &p.versions.join(format!("{id}.prompt")),
+                content,
+            )
+            .await?;
             m.active = Some(id);
             save_manifest(host, &p, &m).await?;
             write_text(host, &p.custom_dir, &p.custom, content).await?;

@@ -53,11 +53,13 @@ pub(super) async fn fetch_karin_plugin_market(
     registry: &AppFrameworkRegistry,
     cache: &MarketCache,
 ) -> Result<Vec<KarinPluginMarketEntry>, AppFrameworkError> {
-    Ok(fetch_store(registry, cache, "karin", AppStoreResource::Plugin)
-        .await?
-        .into_iter()
-        .filter_map(|e| e.to_karin())
-        .collect())
+    Ok(
+        fetch_store(registry, cache, "karin", AppStoreResource::Plugin)
+            .await?
+            .into_iter()
+            .filter_map(|e| e.to_karin())
+            .collect(),
+    )
 }
 
 pub(super) async fn fetch_store(
@@ -102,7 +104,9 @@ const MARKET_BODY_LIMIT: usize = 8 * 1024 * 1024;
 
 async fn fetch_text_first_ok(urls: &[String], label: &str) -> Result<String, AppFrameworkError> {
     if urls.is_empty() {
-        return Err(AppFrameworkError::Validation(format!("拉取{label}失败: 没有可用源")));
+        return Err(AppFrameworkError::Validation(format!(
+            "拉取{label}失败: 没有可用源"
+        )));
     }
     let mut set = JoinSet::new();
     for url in urls {
@@ -159,7 +163,7 @@ async fn fetch_text(url: &str, label: &str) -> Result<String, AppFrameworkError>
 mod tests {
     use super::*;
     use ncd_appframework::{
-        KarinAdapter, NoneBot2Adapter, NONEBOT_ADAPTERS_URL, NONEBOT_PLUGINS_URL,
+        KarinAdapter, NONEBOT_ADAPTERS_URL, NONEBOT_PLUGINS_URL, NoneBot2Adapter,
         nonebot_registry_urls,
     };
 
@@ -223,8 +227,16 @@ mod tests {
         let adapters = nonebot_registry_urls("adapters.json");
         assert_eq!(plugins[0], NONEBOT_PLUGINS_URL);
         assert_eq!(adapters[0], NONEBOT_ADAPTERS_URL);
-        assert!(plugins.iter().any(|u| u.contains("jsdelivr.net/gh/nonebot/registry@results")));
-        assert!(plugins.iter().any(|u| u.contains("raw.githubusercontent.com/nonebot/registry/results")));
+        assert!(
+            plugins
+                .iter()
+                .any(|u| u.contains("jsdelivr.net/gh/nonebot/registry@results"))
+        );
+        assert!(
+            plugins
+                .iter()
+                .any(|u| u.contains("raw.githubusercontent.com/nonebot/registry/results"))
+        );
     }
 
     #[tokio::test]
@@ -259,12 +271,9 @@ mod tests {
             .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("[]"))
             .mount(&good)
             .await;
-        let text = fetch_text_first_ok(
-            &[bad.uri(), good.uri()],
-            "适配器目录",
-        )
-        .await
-        .unwrap();
+        let text = fetch_text_first_ok(&[bad.uri(), good.uri()], "适配器目录")
+            .await
+            .unwrap();
         assert_eq!(text, "[]");
     }
 }

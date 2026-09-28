@@ -15,10 +15,10 @@ use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 use crate::astrbot::api::AstrBotRuntimeApi;
-use crate::maibot::api::MaiBotRuntimeApi;
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, read_document, write_document_text,
 };
+use crate::maibot::api::MaiBotRuntimeApi;
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 
 /// 装更卸命令行输出；编排层转成任务 `ProgressKind::Log`。
@@ -603,11 +603,11 @@ pub async fn restore_from_backup(
 mod tests {
     use ncd_domain::AppStoreResource;
 
-    use crate::config_doc::AppInstanceConfig;
-    use crate::karin::config::KarinInstanceConfig;
-    use crate::karin::KarinAdapter;
-    use crate::nonebot2::NoneBot2Adapter;
     use crate::AppFrameworkAdapter;
+    use crate::config_doc::AppInstanceConfig;
+    use crate::karin::KarinAdapter;
+    use crate::karin::config::KarinInstanceConfig;
+    use crate::nonebot2::NoneBot2Adapter;
 
     #[test]
     fn karin_store_enable_goes_through_typed_config() {
@@ -615,7 +615,12 @@ mod tests {
         assert!(adapter.store_enable_via_config());
         let cfg = AppInstanceConfig::Karin(KarinInstanceConfig::upstream_default());
         let next = adapter
-            .apply_store_enabled(&cfg, "@karinjs/plugin-basic", AppStoreResource::Plugin, false)
+            .apply_store_enabled(
+                &cfg,
+                "@karinjs/plugin-basic",
+                AppStoreResource::Plugin,
+                false,
+            )
             .unwrap()
             .expect("Karin 启停应返回改过的配置");
         let AppInstanceConfig::Karin(k) = next else {
@@ -635,10 +640,12 @@ mod tests {
         let cfg = AppInstanceConfig::NoneBot2(crate::nonebot2::NoneBot2InstanceConfig {
             env_prod: crate::nonebot2::config::NoneBot2EnvProd::default(),
         });
-        assert!(adapter
-            .apply_store_enabled(&cfg, "nonebot_plugin_foo", AppStoreResource::Plugin, false)
-            .unwrap()
-            .is_none());
+        assert!(
+            adapter
+                .apply_store_enabled(&cfg, "nonebot_plugin_foo", AppStoreResource::Plugin, false)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -648,8 +655,16 @@ mod tests {
             adapter.store_market_urls(AppStoreResource::Plugin),
             vec![crate::karin::plugin::KARIN_PLUGINS_LIST_URL.to_string()]
         );
-        assert!(adapter.store_market_urls(AppStoreResource::Adapter).is_empty());
-        assert!(adapter.store_market_cache_key(AppStoreResource::Plugin).is_none());
+        assert!(
+            adapter
+                .store_market_urls(AppStoreResource::Adapter)
+                .is_empty()
+        );
+        assert!(
+            adapter
+                .store_market_cache_key(AppStoreResource::Plugin)
+                .is_none()
+        );
     }
 
     #[test]
@@ -659,7 +674,11 @@ mod tests {
         let adapters = adapter.store_market_urls(AppStoreResource::Adapter);
         assert_eq!(plugins[0], "https://registry.nonebot.dev/plugins.json");
         assert_eq!(adapters[0], "https://registry.nonebot.dev/adapters.json");
-        assert!(plugins.iter().any(|u| u.contains("jsdelivr.net/gh/nonebot/registry@results")));
+        assert!(
+            plugins
+                .iter()
+                .any(|u| u.contains("jsdelivr.net/gh/nonebot/registry@results"))
+        );
         assert_eq!(
             adapter.store_market_cache_key(AppStoreResource::Plugin),
             Some("plugins")
@@ -673,8 +692,16 @@ mod tests {
     #[test]
     fn astrbot_store_is_plugins_only() {
         let adapter = crate::astrbot::AstrBotAdapter::new();
-        assert!(!adapter.store_market_urls(AppStoreResource::Plugin).is_empty());
-        assert!(adapter.store_market_urls(AppStoreResource::Adapter).is_empty());
+        assert!(
+            !adapter
+                .store_market_urls(AppStoreResource::Plugin)
+                .is_empty()
+        );
+        assert!(
+            adapter
+                .store_market_urls(AppStoreResource::Adapter)
+                .is_empty()
+        );
         assert_eq!(
             adapter.store_market_cache_key(AppStoreResource::Plugin),
             Some("astrbot-plugins")
@@ -711,7 +738,10 @@ mod tests {
         let dest = KarinAdapter::new()
             .store_app_file_dest(&instance, "index.js")
             .expect("Karin 收 app 文件");
-        assert_eq!(dest.as_posix(), "/apps/karin/k1/plugins/karin-plugin-example/index.js");
+        assert_eq!(
+            dest.as_posix(),
+            "/apps/karin/k1/plugins/karin-plugin-example/index.js"
+        );
         assert!(
             NoneBot2Adapter::new()
                 .store_app_file_dest(&instance, "index.js")

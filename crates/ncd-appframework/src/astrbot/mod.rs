@@ -35,16 +35,15 @@ pub use ai::{
 pub use api::{AstrBotRuntimeApi, AstrBotSession};
 pub use component::AstrBotComponent;
 pub use config::{AstrBotInstanceConfig, AstrBotOneBotRow};
-pub use integration::{join_webui_url, AstrBotIntegration};
+pub use integration::{AstrBotIntegration, join_webui_url};
 pub use manifest::{ASTRBOT_FRAMEWORK_ID, astrbot_manifest};
 pub use runtime::{
     AstrBotAbconfInfo, AstrBotDashboardGate, AstrBotDashboardStatus, AstrBotKbCreate,
     AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
 };
-pub use store::{
-    ASTRBOT_PLUGINS_URL, astrbot_plugin_market_urls, parse_astrbot_plugins_json,
-};
+pub use store::{ASTRBOT_PLUGINS_URL, astrbot_plugin_market_urls, parse_astrbot_plugins_json};
 
+use crate::adapter::PluginLogSink;
 use crate::adapter::{
     AppComponentSpec, AppFrameworkAdapter, WebUiAccountProbe, apply_with_backup_ex,
     restore_from_backup,
@@ -54,7 +53,6 @@ use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
     read_document,
 };
-use crate::adapter::PluginLogSink;
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use config::astrbot_config_documents;
 use config_json::{cmd_config_path, load_cmd_config, save_cmd_config};
@@ -62,7 +60,10 @@ use dashboard_client::DashboardSessions;
 use manifest::ASTRBOT_STDOUT_LOG;
 use platform::upsert_claimed_row;
 
-fn envelope(config: AstrBotInstanceConfig, snaps: &[DocumentSnapshot]) -> AppInstanceConfigEnvelope {
+fn envelope(
+    config: AstrBotInstanceConfig,
+    snaps: &[DocumentSnapshot],
+) -> AppInstanceConfigEnvelope {
     AppInstanceConfigEnvelope {
         config: AppInstanceConfig::AstrBot(config),
         revision: combined_revision_of(snaps),
@@ -94,10 +95,14 @@ impl AstrBotAdapter {
     }
 
     fn component_for(spec: &AppComponentSpec) -> AstrBotComponent {
-        AstrBotComponent::new(spec.install_dir.clone(), spec.port, spec.instance_id.clone())
-            .with_uv_bin(spec.uv_bin.clone())
-            .with_adopt_existing(spec.adopt_existing)
-            .with_webui_account(spec.webui_username.clone(), spec.webui_password.clone())
+        AstrBotComponent::new(
+            spec.install_dir.clone(),
+            spec.port,
+            spec.instance_id.clone(),
+        )
+        .with_uv_bin(spec.uv_bin.clone())
+        .with_adopt_existing(spec.adopt_existing)
+        .with_webui_account(spec.webui_username.clone(), spec.webui_password.clone())
     }
 }
 
@@ -185,10 +190,7 @@ impl AppFrameworkAdapter for AstrBotAdapter {
         let dotenv = crate::adopt::list_dotenv_rels(host, root).await?;
         Ok(crate::adopt::merge_rels(
             dotenv,
-            &[
-                manifest::ASTRBOT_CMD_CONFIG,
-                manifest::ASTRBOT_SHARED_PREFS,
-            ],
+            &[manifest::ASTRBOT_CMD_CONFIG, manifest::ASTRBOT_SHARED_PREFS],
         ))
     }
 
@@ -278,7 +280,9 @@ impl AppFrameworkAdapter for AstrBotAdapter {
     ) -> Result<(), AppFrameworkError> {
         restore_from_backup(
             host,
-            &[cmd_config_path(&HostPath::from_posix(&instance.install_dir))],
+            &[cmd_config_path(&HostPath::from_posix(
+                &instance.install_dir,
+            ))],
         )
         .await
     }
@@ -329,13 +333,9 @@ impl AppFrameworkAdapter for AstrBotAdapter {
         instance: &AppInstance,
     ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
         let install_dir = HostPath::from_posix(&instance.install_dir);
-        let (config, snaps) = config::read_astrbot_config(
-            host,
-            &install_dir,
-            instance.id.as_str(),
-            instance.port,
-        )
-        .await?;
+        let (config, snaps) =
+            config::read_astrbot_config(host, &install_dir, instance.id.as_str(), instance.port)
+                .await?;
         Ok(envelope(config, &snaps))
     }
 

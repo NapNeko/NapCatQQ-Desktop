@@ -225,10 +225,16 @@ struct UpstreamTag {
 
 impl UpstreamTag {
     fn into_tag(self) -> Option<MaiBotBehaviorTag> {
-        let tag = self.tag.map(|t| t.trim().to_string()).filter(|t| !t.is_empty())?;
+        let tag = self
+            .tag
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())?;
         // 标签形如 `domain:游戏`；簇的 key 也可能是随机的 tc_<uuid>，这时只能靠 display 给名字
         let (kind, key) = tag.split_once(':').unwrap_or(("", tag.as_str()));
-        let display = self.display.map(|d| d.trim().to_string()).filter(|d| !d.is_empty() && *d != tag);
+        let display = self
+            .display
+            .map(|d| d.trim().to_string())
+            .filter(|d| !d.is_empty() && *d != tag);
         let label = match display {
             Some(d) => d,
             None if key.starts_with("tc_") || key.is_empty() => return None,
@@ -275,13 +281,18 @@ fn iso_secs(raw: Option<&str>, offset: Option<i32>) -> Option<f64> {
         .ok()?;
     let millis = match offset.and_then(chrono::FixedOffset::east_opt) {
         Some(tz) => naive.and_local_timezone(tz).single()?.timestamp_millis(),
-        None => naive.and_local_timezone(chrono::Local).earliest()?.timestamp_millis(),
+        None => naive
+            .and_local_timezone(chrono::Local)
+            .earliest()?
+            .timestamp_millis(),
     };
     Some(millis as f64 / 1000.0)
 }
 
 fn chat_id(session_id: Option<String>) -> String {
-    session_id.filter(|s| !s.is_empty()).unwrap_or_else(|| GLOBAL_CHAT.into())
+    session_id
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| GLOBAL_CHAT.into())
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -307,8 +318,12 @@ struct UpstreamPath {
 
 impl UpstreamPath {
     fn into_item(self, offset: Option<i32>) -> Option<MaiBotBehavior> {
-        let mut scene: Vec<MaiBotBehaviorTag> =
-            self.scene_cluster_tags.unwrap_or_default().into_iter().filter_map(UpstreamTag::into_tag).collect();
+        let mut scene: Vec<MaiBotBehaviorTag> = self
+            .scene_cluster_tags
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(UpstreamTag::into_tag)
+            .collect();
         scene.sort_by(|a, b| b.weight.total_cmp(&a.weight));
         Some(MaiBotBehavior {
             id: self.id?,
@@ -419,14 +434,23 @@ pub(crate) async fn list(
     let up: UpstreamPage<UpstreamPath> = c.get(&format!("{BASE}/paths"), &query).await?;
     Ok(MaiBotBehaviorPage {
         total: up.total.unwrap_or(0),
-        items: up.data.unwrap_or_default().into_iter().filter_map(|p| p.into_item(offset)).collect(),
+        items: up
+            .data
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|p| p.into_item(offset))
+            .collect(),
     })
 }
 
 /// 上游没有统计接口：在用、停用各查一页只取总数
 async fn count(c: &MaiBotWebUi, enabled: &str) -> Result<u32, AppFrameworkError> {
-    let up: UpstreamPage<IgnoredAny> =
-        c.get(&format!("{BASE}/paths"), &[("page_size", "1"), ("enabled", enabled)]).await?;
+    let up: UpstreamPage<IgnoredAny> = c
+        .get(
+            &format!("{BASE}/paths"),
+            &[("page_size", "1"), ("enabled", enabled)],
+        )
+        .await?;
     Ok(up.total.unwrap_or(0))
 }
 
@@ -442,7 +466,10 @@ pub(crate) async fn overview(c: &MaiBotWebUi) -> Result<MaiBotBehaviorOverview, 
             .map(|ch| {
                 let chat_id = chat_id(ch.session_id);
                 MaiBotBehaviorChat {
-                    chat_name: ch.display_name.filter(|n| !n.is_empty()).unwrap_or_else(|| chat_id.clone()),
+                    chat_name: ch
+                        .display_name
+                        .filter(|n| !n.is_empty())
+                        .unwrap_or_else(|| chat_id.clone()),
                     chat_id,
                     is_group: ch.chat_type.as_deref() == Some("group"),
                     count: ch.path_count.unwrap_or(0),
@@ -494,7 +521,11 @@ pub(crate) async fn detail(
             at: iso_secs(f.created_at.as_deref(), offset),
         })
         .collect();
-    Ok(MaiBotBehaviorDetail { item, evidence, feedback })
+    Ok(MaiBotBehaviorDetail {
+        item,
+        evidence,
+        feedback,
+    })
 }
 
 #[cfg(test)]
@@ -519,7 +550,11 @@ mod tests {
         let up: UpstreamPath = serde_json::from_str(PATH_ROW).unwrap();
         let item = up.into_item(None).unwrap();
         assert_eq!(item.chat_id, GLOBAL_CHAT, "不挂聊天的按上游的筛选值给");
-        let labels: Vec<_> = item.scene.iter().map(|t| (t.kind, t.label.as_str())).collect();
+        let labels: Vec<_> = item
+            .scene
+            .iter()
+            .map(|t| (t.kind, t.label.as_str()))
+            .collect();
         // 按分量排；随机 key 又没解析出名字的不要，没解析出名字但 key 可读的用 key
         assert_eq!(
             labels,
@@ -531,7 +566,10 @@ mod tests {
         );
         assert_eq!(item.actor, MaiBotBehaviorActor::Maibot);
         assert!(item.self_reflection && !item.enabled);
-        assert_eq!((item.seen, item.used, item.succeeded, item.failed), (3, 5, 2, 1));
+        assert_eq!(
+            (item.seen, item.used, item.succeeded, item.failed),
+            (3, 5, 2, 1)
+        );
         assert!(item.active_at.is_some() && item.last_feedback_at.is_none());
     }
 
@@ -541,7 +579,10 @@ mod tests {
         let b = iso_secs(Some("2026-09-20T10:00:00.500000"), None).unwrap();
         assert!((b - a - 0.5).abs() < 1e-6);
         assert_eq!(iso_secs(Some("2026-09-20 10:00:00"), None), Some(a));
-        assert_eq!(iso_secs(Some("1970-01-01T00:00:10+00:00"), None), Some(10.0));
+        assert_eq!(
+            iso_secs(Some("1970-01-01T00:00:10+00:00"), None),
+            Some(10.0)
+        );
         assert_eq!(iso_secs(Some("昨天"), None), None);
         assert_eq!(iso_secs(Some(""), None), None);
     }
@@ -549,9 +590,16 @@ mod tests {
     /// 云服务器多是 UTC：同一个不带时区的时间，按麦麦那台机器的时区折，和桌面端在哪无关
     #[test]
     fn naive_times_follow_the_host_clock() {
-        assert_eq!(iso_secs(Some("1970-01-01T08:00:00"), Some(8 * 3600)), Some(0.0));
+        assert_eq!(
+            iso_secs(Some("1970-01-01T08:00:00"), Some(8 * 3600)),
+            Some(0.0)
+        );
         assert_eq!(iso_secs(Some("1970-01-01T00:00:00"), Some(0)), Some(0.0));
-        assert_eq!(iso_secs(Some("1970-01-01T00:00:10+00:00"), Some(8 * 3600)), Some(10.0), "自带时区的不折");
+        assert_eq!(
+            iso_secs(Some("1970-01-01T00:00:10+00:00"), Some(8 * 3600)),
+            Some(10.0),
+            "自带时区的不折"
+        );
     }
 
     fn client(server: &MockServer) -> MaiBotWebUi {
@@ -615,7 +663,10 @@ mod tests {
         assert_eq!((ov.total, ov.enabled, ov.disabled), (9, 6, 3));
         assert_eq!(ov.chats[0].chat_id, "s1");
         assert!(ov.chats[0].is_group);
-        assert_eq!((ov.chats[1].chat_id.as_str(), ov.chats[1].count), (GLOBAL_CHAT, 2));
+        assert_eq!(
+            (ov.chats[1].chat_id.as_str(), ov.chats[1].count),
+            (GLOBAL_CHAT, 2)
+        );
     }
 
     #[tokio::test]
@@ -641,8 +692,18 @@ mod tests {
             .await;
         let d = detail(&client(&server), 12, None).await.unwrap();
         assert_eq!(d.item.id, 12);
-        let ev: Vec<_> = d.evidence.iter().map(|e| (e.action.as_str(), e.messages, e.actor)).collect();
-        assert_eq!(ev, [("a2", 1, MaiBotBehaviorActor::Maibot), ("a1", 2, MaiBotBehaviorActor::Others)]);
+        let ev: Vec<_> = d
+            .evidence
+            .iter()
+            .map(|e| (e.action.as_str(), e.messages, e.actor))
+            .collect();
+        assert_eq!(
+            ev,
+            [
+                ("a2", 1, MaiBotBehaviorActor::Maibot),
+                ("a1", 2, MaiBotBehaviorActor::Others)
+            ]
+        );
         let kinds: Vec<_> = d.feedback.iter().map(|f| f.kind).collect();
         assert_eq!(
             kinds,
@@ -660,7 +721,9 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/api/webui/behavior/paths/99"))
-            .respond_with(ResponseTemplate::new(404).set_body_string(r#"{"detail":"行为经验路径不存在"}"#))
+            .respond_with(
+                ResponseTemplate::new(404).set_body_string(r#"{"detail":"行为经验路径不存在"}"#),
+            )
             .mount(&server)
             .await;
         let err = detail(&client(&server), 99, None).await.unwrap_err();

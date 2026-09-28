@@ -1515,24 +1515,28 @@ mod tests {
     #[test]
     fn supported_targets_include_windows_and_linux() {
         let c = comp();
-        assert!(c
-            .supported_targets()
-            .contains(&(Os::Linux, Locality::Local)));
-        assert!(c
-            .supported_targets()
-            .contains(&(Os::Linux, Locality::Remote)));
-        assert!(c
-            .supported_targets()
-            .contains(&(Os::Windows, Locality::Local)));
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Linux, Locality::Local))
+        );
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Linux, Locality::Remote))
+        );
+        assert!(
+            c.supported_targets()
+                .contains(&(Os::Windows, Locality::Local))
+        );
     }
 
     #[test]
     fn info_lists_windows_local_in_supported_targets() {
         let info = QQComponent::info();
-        assert!(info
-            .supported_targets
-            .iter()
-            .any(|t| { t.os == Os::Windows && t.locality == Locality::Local }));
+        assert!(
+            info.supported_targets
+                .iter()
+                .any(|t| { t.os == Os::Windows && t.locality == Locality::Local })
+        );
     }
 
     #[test]

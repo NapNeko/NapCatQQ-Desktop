@@ -72,6 +72,9 @@ mod tests {
     fn reads_the_desktop_clipboard() {
         let text = super::read_text();
         assert!(text.is_ok(), "{text:?}");
-        println!("clipboard text length: {}", text.map(|t| t.chars().count()).unwrap_or(0));
+        println!(
+            "clipboard text length: {}",
+            text.map(|t| t.chars().count()).unwrap_or(0)
+        );
     }
 }

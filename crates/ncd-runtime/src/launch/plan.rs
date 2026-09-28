@@ -260,7 +260,9 @@ async fn build_snowluma_launch_plan(
     }))
 }
 
-async fn resolve_snowluma_node_exe(snowluma_runtime_root: &Path) -> Result<PathBuf, RuntimeLaunchPlanError> {
+async fn resolve_snowluma_node_exe(
+    snowluma_runtime_root: &Path,
+) -> Result<PathBuf, RuntimeLaunchPlanError> {
     let bundled = snowluma_runtime_root.join("node.exe");
     if is_regular_file(&bundled).await {
         return Ok(bundled);
@@ -553,7 +555,10 @@ mod snowluma_plan_tests {
             build_runtime_launch_plan(&bot_id, &config, runtime_root, runtime_root, data_root)
                 .await;
 
-        assert!(result.is_ok(), "PATH Node.js should satisfy the launch plan: {result:?}");
+        assert!(
+            result.is_ok(),
+            "PATH Node.js should satisfy the launch plan: {result:?}"
+        );
     }
 
     /// HotStart 路径:跳过 QQ install path 解析(即便 Windows 注册表查询失败也应该 OK)

@@ -144,9 +144,7 @@ impl AppManager {
         id: &AppInstanceId,
     ) -> Result<Vec<AstrBotSessionRule>, AppFrameworkError> {
         let (adapter, s) = self.astrbot_session(id).await?;
-        astrbot_api(adapter.as_ref())?
-            .list_session_rules(&s)
-            .await
+        astrbot_api(adapter.as_ref())?.list_session_rules(&s).await
     }
 
     pub async fn astrbot_update_session_rule(
@@ -186,9 +184,7 @@ impl AppManager {
         name: &str,
     ) -> Result<Vec<AstrBotAbconfInfo>, AppFrameworkError> {
         let (adapter, s) = self.astrbot_session(id).await?;
-        astrbot_api(adapter.as_ref())?
-            .create_abconf(&s, name)
-            .await
+        astrbot_api(adapter.as_ref())?.create_abconf(&s, name).await
     }
 
     pub async fn astrbot_delete_abconf(
@@ -218,8 +214,6 @@ impl AppManager {
         id: &AppInstanceId,
     ) -> Result<Vec<String>, AppFrameworkError> {
         let (adapter, s) = self.astrbot_session(id).await?;
-        astrbot_api(adapter.as_ref())?
-            .list_subagent_tools(&s)
-            .await
+        astrbot_api(adapter.as_ref())?.list_subagent_tools(&s).await
     }
 }

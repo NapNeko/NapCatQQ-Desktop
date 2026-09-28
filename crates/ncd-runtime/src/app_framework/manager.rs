@@ -17,49 +17,46 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use ncd_appframework::{
-    AppComponentSpec, AppConfigWriteResult, AppFrameworkAdapter, AppFrameworkRegistry,
-    AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor, AppStoreInstalled,
-    AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
-    AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession, AstrBotSessionRule,
-    KarinPluginInstalled, MaiBotAPIProvider, MaiBotBehaviorDetail, MaiBotBehaviorOverview,
-    MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession, MaiBotChatTicket, MaiBotMCPServerItemConfig,
-    MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
-    MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotLocalImage,
+    AdoptRestoreScope, AppComponentSpec, AppConfigWriteResult, AppFrameworkAdapter,
+    AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor,
+    AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
+    AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession,
+    AstrBotSessionRule, KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider,
+    MaiBotBehaviorDetail, MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery,
+    MaiBotChatSession, MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview,
+    MaiBotEmojiPage, MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone,
     MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
-    MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotResourceDone,
-    MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
-    MaiBotLocalTextFile, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult,
+    MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery,
+    MaiBotLocalImage, MaiBotLocalTextFile, MaiBotMCPServerItemConfig, MaiBotMcpStatus,
+    MaiBotMcpTest, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult,
     MaiBotMemoryGraph, MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup,
     MaiBotMemoryNodeDetail, MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind,
     MaiBotMemoryRecordPage, MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask,
-    MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail,
-    MaiBotMcpStatus, MaiBotMcpTest, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
+    MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail, MaiBotPersonAction, MaiBotPersonOverview,
+    MaiBotPersonPage, MaiBotPersonQuery, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
     MaiBotPromptTarget, MaiBotProviderCheck, MaiBotProviderModel, MaiBotProviderSource,
-    MaiBotRuntimeApi, MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotSession, MaiBotStatsSummary,
-    KarinPluginMarketEntry, PluginLogSink, app_file_basename, join_webui_url,
-    restore_adopted_files, remove_ncd_debris, AdoptRestoreScope,
+    MaiBotResourceDone, MaiBotRuntimeApi, MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotSession,
+    MaiBotStatsSummary, PluginLogSink, app_file_basename, join_webui_url, remove_ncd_debris,
+    restore_adopted_files,
 };
 use ncd_component::{ComponentId, DetectOutcome, LaunchArgs};
 use ncd_deploy::StepKind;
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkId, AppFrameworkManifest, AppInstance,
-    AppInstanceId, AppInstanceState, AppInstanceWebUi, AppLinkRecord, AppLinkTopology,
-    AppPlacement, AppPluginAction,
-    AppInstanceOrigin, AppPendingTerms, AppPluginConfigSchema, AppProjectProbe, AppStoreResource,
-    AppWebUiAccount,
-    AppWebUiAuthKind, BotConfig, BotId,
+    AppInstanceId, AppInstanceOrigin, AppInstanceState, AppInstanceWebUi, AppLinkRecord,
+    AppLinkTopology, AppPendingTerms, AppPlacement, AppPluginAction, AppPluginConfigSchema,
+    AppProjectProbe, AppStoreResource, AppWebUiAccount, AppWebUiAuthKind, BotConfig, BotId,
     CreateAppInstanceRequest, DeploymentTaskKind, DeploymentTaskResource, DeploymentType,
-    DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID,
-    REMOTE_HOST_ID_PREFIX,
-    OneBotLinkEndpoint, OneBotLinkMode, OneBotLinkPlan, RuntimeTarget, app_link_connection_name,
+    DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID, OneBotLinkEndpoint, OneBotLinkMode,
+    OneBotLinkPlan, REMOTE_HOST_ID_PREFIX, RuntimeTarget, app_link_connection_name,
     classify_app_link, host_id_of_runtime_target, is_app_link_connection_name, parse_ws_url,
     rewrite_ws_loopback_port, runtime_target_matches_host, server_id_of_host,
 };
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
 use ncd_server::HostResolver;
-use ncd_traits::{AppFrameworkError, EventBus, EventFilter, SecretStore};
 use ncd_traits::runtime_backend::LogSnapshot;
+use ncd_traits::{AppFrameworkError, EventBus, EventFilter, SecretStore};
 use rand::Rng;
 use rand::distributions::Alphanumeric;
 
@@ -91,9 +88,9 @@ mod terminal;
 mod tunnel;
 mod webui;
 
+use install_dir::parse_user_install_dir;
 pub use link::{app_link_connections, upsert_ws_client};
 pub use terminal::AppTerminalContext;
-use install_dir::parse_user_install_dir;
 use tunnel::AppInstanceTunnel;
 use webui::WebUiEndpoint;
 
@@ -122,11 +119,17 @@ fn resolve_webui_password(
     adapter: &dyn AppFrameworkAdapter,
     requested: Option<String>,
 ) -> Result<String, AppFrameworkError> {
-    match requested.map(|p| p.trim().to_string()).filter(|p| !p.is_empty()) {
+    match requested
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+    {
         Some(p) => {
-            adapter
-                .validate_webui_password(&p)
-                .map_err(|m| AppFrameworkError::ConfigInvalid(vec![ncd_domain::AppConfigIssue::new("webui_password", m)]))?;
+            adapter.validate_webui_password(&p).map_err(|m| {
+                AppFrameworkError::ConfigInvalid(vec![ncd_domain::AppConfigIssue::new(
+                    "webui_password",
+                    m,
+                )])
+            })?;
             Ok(p)
         }
         None => Ok(adapter.generate_webui_password()),
@@ -185,7 +188,9 @@ fn parse_utc_offset(raw: &str) -> Option<i32> {
 }
 
 async fn remote_utc_offset(host: &dyn Host) -> Option<i32> {
-    let cmd = HostCommand::new("date").arg("+%z").timeout(Duration::from_secs(10));
+    let cmd = HostCommand::new("date")
+        .arg("+%z")
+        .timeout(Duration::from_secs(10));
     let out = host.run_to_string(cmd).await.ok()?;
     parse_utc_offset(&out.stdout)
 }

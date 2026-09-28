@@ -1182,11 +1182,7 @@ fn wrap_with_sudo(inner_line: &str, shell: &dyn HostShell, has_password: bool) -
 /// `lock_acquired`: 是否在短超时内拿到 session 锁。
 /// 拿不到锁说明有命令正在用这条 SSH，视为活着；拿到锁则看句柄是否还在。
 fn session_lock_means_healthy(lock_acquired: bool, handle_present: bool) -> bool {
-    if lock_acquired {
-        handle_present
-    } else {
-        true
-    }
+    if lock_acquired { handle_present } else { true }
 }
 
 fn ensure_trailing_newline(pw: &[u8]) -> Vec<u8> {
@@ -1497,11 +1493,9 @@ impl RemoteLinuxHost {
         let requested = spec.remote_port as u32;
         let replied = {
             let mut guard = self.handle.lock().await;
-            let session = guard
-                .as_mut()
-                .ok_or_else(|| HostError::RemoteConnection {
-                    reason: "ssh session poisoned".into(),
-                })?;
+            let session = guard.as_mut().ok_or_else(|| HostError::RemoteConnection {
+                reason: "ssh session poisoned".into(),
+            })?;
             session
                 .tcpip_forward(spec.remote_host.clone(), requested)
                 .await

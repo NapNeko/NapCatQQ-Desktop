@@ -178,7 +178,11 @@ mod tests {
         assert_eq!(plan.app_side_writes.len(), 1);
         assert_eq!(plan.app_side_writes[0].path, ".env.prod");
         assert!(plan.app_side_writes[0].summary.contains("PORT=8081"));
-        assert!(plan.app_side_writes[0].summary.contains("ONEBOT_ACCESS_TOKEN=<token>"));
+        assert!(
+            plan.app_side_writes[0]
+                .summary
+                .contains("ONEBOT_ACCESS_TOKEN=<token>")
+        );
         assert!(!plan.app_side_writes[0].summary.contains("tok-abc"));
     }
 

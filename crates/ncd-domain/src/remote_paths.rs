@@ -509,7 +509,10 @@ mod tests {
             docker_bot_project_dir("/home/u/", "slbot-1"),
             "/home/u/.napcat-bots/slbot-1"
         );
-        assert_eq!(docker_bot_project_dir("/", "ncbot-1"), "/.napcat-bots/ncbot-1");
+        assert_eq!(
+            docker_bot_project_dir("/", "ncbot-1"),
+            "/.napcat-bots/ncbot-1"
+        );
     }
 
     #[test]

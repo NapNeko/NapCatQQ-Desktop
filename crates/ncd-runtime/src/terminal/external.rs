@@ -45,7 +45,9 @@ impl TerminalManager {
             ));
         }
         let PtyProgram::Program { program, .. } = &plan.program else {
-            return Err(TerminalError::Unsupported("这个终端没法在系统终端里打开".into()));
+            return Err(TerminalError::Unsupported(
+                "这个终端没法在系统终端里打开".into(),
+            ));
         };
         let cwd = plan.cwd.as_ref().map(|p| p.render(PathStyle::Windows));
         spawn_console(
@@ -83,7 +85,9 @@ fn spawn_console(
     _cwd: Option<&str>,
     _env: &BTreeMap<String, String>,
 ) -> Result<(), TerminalError> {
-    Err(TerminalError::Unsupported("只在 Windows 上能打开系统终端".into()))
+    Err(TerminalError::Unsupported(
+        "只在 Windows 上能打开系统终端".into(),
+    ))
 }
 
 #[cfg(test)]

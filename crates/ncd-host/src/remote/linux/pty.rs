@@ -12,7 +12,9 @@ use russh::client::Msg;
 use crate::command::HostCommand;
 use crate::error::HostError;
 use crate::host::Host;
-use crate::pty::{PtyBackend, PtyExit, PtyInput, PtyProgram, PtyRequest, PtySession, pty_channel_pair};
+use crate::pty::{
+    PtyBackend, PtyExit, PtyInput, PtyProgram, PtyRequest, PtySession, pty_channel_pair,
+};
 use crate::shell::{BashShell, HostShell};
 
 use super::{RemoteLinuxHost, build_remote_command_line};
@@ -201,7 +203,10 @@ mod tests {
 
     #[test]
     fn login_shell_asks_for_a_plain_shell() {
-        assert_eq!(remote_pty_command_line(&request(PtyProgram::LoginShell)), None);
+        assert_eq!(
+            remote_pty_command_line(&request(PtyProgram::LoginShell)),
+            None
+        );
     }
 
     #[test]
@@ -213,14 +218,18 @@ mod tests {
         req.cwd = Some(HostPath::from_posix("/home/u/my dir"));
         req.env.insert("LANG".into(), "C.UTF-8".into());
         let line = remote_pty_command_line(&req).unwrap_or_default();
-        assert_eq!(line, "cd '/home/u/my dir' && LANG=C.UTF-8 docker exec -it ncbot-1 sh");
+        assert_eq!(
+            line,
+            "cd '/home/u/my dir' && LANG=C.UTF-8 docker exec -it ncbot-1 sh"
+        );
     }
 
     #[test]
     fn script_keeps_body_and_skips_bad_env_names() {
         let mut req = request(PtyProgram::Script("exec bash -l".into()));
         req.cwd = Some(HostPath::from_posix("/srv/app"));
-        req.env.insert("VIRTUAL_ENV".into(), "/srv/app/.venv".into());
+        req.env
+            .insert("VIRTUAL_ENV".into(), "/srv/app/.venv".into());
         req.env.insert("BAD;rm -rf".into(), "x".into());
         let line = remote_pty_command_line(&req).unwrap_or_default();
         assert_eq!(

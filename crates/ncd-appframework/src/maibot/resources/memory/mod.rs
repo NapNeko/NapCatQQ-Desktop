@@ -12,18 +12,19 @@ pub(crate) use import::{import, import_setup, task, task_action, tasks};
 pub(crate) use records::{delete, delete_ops, record, records, sources};
 
 pub use graph::{
-    MaiBotMemoryGraph, MaiBotMemoryGraphEdge, MaiBotMemoryGraphHit, MaiBotMemoryGraphNode, MaiBotMemoryGraphParagraph,
-    MaiBotMemoryGraphRelation, MaiBotMemoryNodeDetail,
+    MaiBotMemoryGraph, MaiBotMemoryGraphEdge, MaiBotMemoryGraphHit, MaiBotMemoryGraphNode,
+    MaiBotMemoryGraphParagraph, MaiBotMemoryGraphRelation, MaiBotMemoryNodeDetail,
 };
 pub use import::{
-    MaiBotLocalTextFile, MaiBotMemoryImport, MaiBotMemoryImportKind, MaiBotMemoryImportLimits, MaiBotMemoryImportOptions,
-    MaiBotMemoryImportSetup, MaiBotMemoryTask, MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail, MaiBotMemoryTaskFile,
-    MaiBotMemoryTaskStatus, inspect_local_texts,
+    MaiBotLocalTextFile, MaiBotMemoryImport, MaiBotMemoryImportKind, MaiBotMemoryImportLimits,
+    MaiBotMemoryImportOptions, MaiBotMemoryImportSetup, MaiBotMemoryTask, MaiBotMemoryTaskAction,
+    MaiBotMemoryTaskDetail, MaiBotMemoryTaskFile, MaiBotMemoryTaskStatus, inspect_local_texts,
 };
 pub use records::{
-    MaiBotMemoryDeleteAction, MaiBotMemoryDeleteKind, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult,
-    MaiBotMemoryDeleteSample, MaiBotMemoryDeleteTarget, MaiBotMemoryKindCounts, MaiBotMemoryQuery, MaiBotMemoryRecord,
-    MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage, MaiBotMemorySource,
+    MaiBotMemoryDeleteAction, MaiBotMemoryDeleteKind, MaiBotMemoryDeleteOp,
+    MaiBotMemoryDeleteResult, MaiBotMemoryDeleteSample, MaiBotMemoryDeleteTarget,
+    MaiBotMemoryKindCounts, MaiBotMemoryQuery, MaiBotMemoryRecord, MaiBotMemoryRecordDetail,
+    MaiBotMemoryRecordKind, MaiBotMemoryRecordPage, MaiBotMemorySource,
 };
 
 use ncd_traits::AppFrameworkError;
@@ -80,20 +81,34 @@ struct Envelope {
 }
 
 /// 发请求、拆壳、按 `T` 收。关着和 `success: false` 都报成错，原因用上游的原话
-pub(super) async fn call<T: DeserializeOwned>(c: &MaiBotWebUi, req: Request<'_>) -> Result<T, AppFrameworkError> {
+pub(super) async fn call<T: DeserializeOwned>(
+    c: &MaiBotWebUi,
+    req: Request<'_>,
+) -> Result<T, AppFrameworkError> {
     let path = req.path();
     let value = c.send(req).await?;
     unwrap(value, path)
 }
 
-pub(super) fn unwrap<T: DeserializeOwned>(value: Value, path: &str) -> Result<T, AppFrameworkError> {
+pub(super) fn unwrap<T: DeserializeOwned>(
+    value: Value,
+    path: &str,
+) -> Result<T, AppFrameworkError> {
     let env: Envelope = serde_json::from_value(value.clone()).unwrap_or_default();
     if env.disabled == Some(true) {
-        return Err(AppFrameworkError::Validation("长期记忆没开，在「记忆」页打开后再用".into()));
+        return Err(AppFrameworkError::Validation(
+            "长期记忆没开，在「记忆」页打开后再用".into(),
+        ));
     }
     if env.success == Some(false) {
-        let why = env.error.or(env.message).or(env.detail).filter(|s| !s.trim().is_empty());
-        return Err(AppFrameworkError::Validation(why.unwrap_or_else(|| "长期记忆没办成这件事".into())));
+        let why = env
+            .error
+            .or(env.message)
+            .or(env.detail)
+            .filter(|s| !s.trim().is_empty());
+        return Err(AppFrameworkError::Validation(
+            why.unwrap_or_else(|| "长期记忆没办成这件事".into()),
+        ));
     }
     parse(value, path)
 }
@@ -102,8 +117,16 @@ pub(super) fn unwrap<T: DeserializeOwned>(value: Value, path: &str) -> Result<T,
 pub(super) fn check_id<'a>(id: &'a str, what: &str) -> Result<&'a str, AppFrameworkError> {
     let ok = !id.is_empty()
         && id.len() <= 200
-        && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | ':' | '.'));
-    if ok { Ok(id) } else { Err(AppFrameworkError::Validation(format!("{what} id 不对：{id}"))) }
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | ':' | '.'));
+    if ok {
+        Ok(id)
+    } else {
+        Err(AppFrameworkError::Validation(format!(
+            "{what} id 不对：{id}"
+        )))
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -122,7 +145,12 @@ struct UpstreamRuntime {
 
 /// `/runtime/config` 关着、初始化中也回 200，是唯一一个不用拆壳就能判状态的接口
 pub(crate) async fn status(c: &MaiBotWebUi) -> Result<MaiBotMemoryStatus, AppFrameworkError> {
-    let v = c.send(Request::new(reqwest::Method::GET, &format!("{BASE}/runtime/config"))).await?;
+    let v = c
+        .send(Request::new(
+            reqwest::Method::GET,
+            &format!("{BASE}/runtime/config"),
+        ))
+        .await?;
     Ok(status_from(serde_json::from_value(v).unwrap_or_default()))
 }
 
@@ -133,8 +161,12 @@ fn status_from(up: UpstreamRuntime) -> MaiBotMemoryStatus {
     } else {
         match up.reason.as_deref() {
             Some("a_memorix_initializing") => (MaiBotMemoryState::Starting, String::new()),
-            Some("a_memorix_initialization_failed") => (MaiBotMemoryState::Failed, text(up.message)),
-            _ if up.success == Some(false) => (MaiBotMemoryState::Failed, text(up.error.or(up.message))),
+            Some("a_memorix_initialization_failed") => {
+                (MaiBotMemoryState::Failed, text(up.message))
+            }
+            _ if up.success == Some(false) => {
+                (MaiBotMemoryState::Failed, text(up.error.or(up.message)))
+            }
             _ => (MaiBotMemoryState::Ready, String::new()),
         }
     };
@@ -145,10 +177,18 @@ fn status_from(up: UpstreamRuntime) -> MaiBotMemoryStatus {
         }
         if up.vector_rebuild_required == Some(true) {
             let m = text(up.vector_rebuild_message);
-            notes.push(if m.is_empty() { "嵌入模型换过，向量要重建后才找得准".to_string() } else { m });
+            notes.push(if m.is_empty() {
+                "嵌入模型换过，向量要重建后才找得准".to_string()
+            } else {
+                m
+            });
         }
     }
-    MaiBotMemoryStatus { state, message, notes }
+    MaiBotMemoryStatus {
+        state,
+        message,
+        notes,
+    }
 }
 
 #[cfg(test)]

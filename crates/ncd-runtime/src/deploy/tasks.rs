@@ -819,8 +819,16 @@ mod tests {
         let manager = DeploymentTaskManager::new(BroadcastEventBus::default());
         {
             let mut state = manager.inner.lock().await;
-            insert_request(&mut state, request("run", vec![]), DeploymentTaskStatus::Running);
-            insert_request(&mut state, request("bad", vec![]), DeploymentTaskStatus::Failed);
+            insert_request(
+                &mut state,
+                request("run", vec![]),
+                DeploymentTaskStatus::Running,
+            );
+            insert_request(
+                &mut state,
+                request("bad", vec![]),
+                DeploymentTaskStatus::Failed,
+            );
             state.tasks.get_mut("bad").unwrap().snapshot.error = Some("boom".into());
         }
 

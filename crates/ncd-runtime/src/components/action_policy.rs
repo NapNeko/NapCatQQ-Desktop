@@ -229,10 +229,7 @@ pub fn snowluma_linux_release_asset(
 }
 
 /// 官方 Windows 发行物：完整包自带 node.exe，lite 需用户自备或由桌面端安装 Node 22.13+。
-pub fn snowluma_windows_release_asset(
-    tag: &str,
-    package: SnowLumaLinuxPackage,
-) -> String {
+pub fn snowluma_windows_release_asset(tag: &str, package: SnowLumaLinuxPackage) -> String {
     let lite = match package {
         SnowLumaLinuxPackage::Full => "",
         SnowLumaLinuxPackage::Lite => "-lite",
@@ -492,13 +489,28 @@ mod tests {
     #[test]
     fn app_framework_components_are_scoped_per_instance() {
         assert_eq!(
-            component_dedupe_key("local", ComponentId::Karin, StepKind::EnsureInstalled, Some("k1")),
+            component_dedupe_key(
+                "local",
+                ComponentId::Karin,
+                StepKind::EnsureInstalled,
+                Some("k1")
+            ),
             "component:local:karin@k1:ensure_installed"
         );
         // 协议组件忽略 scope：一台 host 只有一份 NapCat
         assert_eq!(
-            component_dedupe_key("local", ComponentId::NapCat, StepKind::EnsureInstalled, Some("k1")),
-            component_dedupe_key("local", ComponentId::NapCat, StepKind::EnsureInstalled, None),
+            component_dedupe_key(
+                "local",
+                ComponentId::NapCat,
+                StepKind::EnsureInstalled,
+                Some("k1")
+            ),
+            component_dedupe_key(
+                "local",
+                ComponentId::NapCat,
+                StepKind::EnsureInstalled,
+                None
+            ),
         );
         let resources = component_task_resources(
             ComponentId::Karin,

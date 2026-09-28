@@ -635,10 +635,7 @@ impl SnowLumaConfigRenderer {
         // (is-object 校验,缺字段直接 400)。写盘走 loadOneBotConfig 会补默认,但
         // WebUI POST /api/config/:uin 走 assertValidOneBotConfig 严格校验原始 body,
         // 不补默认 → 缺字段就 success:false。这里始终输出,让两条路径格式同源。
-        let sc = config
-            .status_command
-            .clone()
-            .unwrap_or_default();
+        let sc = config.status_command.clone().unwrap_or_default();
         obj.insert("statusCommand".into(), snowluma_status_command_json(&sc));
         obj.insert("historySync".into(), json!({ "enabled": false }));
         Value::Object(obj)

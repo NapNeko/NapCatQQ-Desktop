@@ -13,7 +13,10 @@ pub fn package_looks_like_karin(text: &str) -> bool {
     text.contains(KARIN_NPM_PACKAGE) || text.contains("\"karin\"")
 }
 
-pub async fn probe_karin(host: &dyn Host, path: &HostPath) -> Result<AppProjectProbe, AppFrameworkError> {
+pub async fn probe_karin(
+    host: &dyn Host,
+    path: &HostPath,
+) -> Result<AppProjectProbe, AppFrameworkError> {
     let pkg_root = path.join("package.json");
     if !host
         .exists(&pkg_root)

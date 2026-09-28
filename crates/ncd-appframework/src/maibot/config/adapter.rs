@@ -88,7 +88,10 @@ pub struct MaiBotAdapterConfig {
 
 /// 名单项上游按字符串存，但手写成数字也认（`_normalize_string_list`）
 fn string_list(table: Option<&toml::Table>, key: &str) -> Vec<String> {
-    let Some(items) = table.and_then(|t| t.get(key)).and_then(toml::Value::as_array) else {
+    let Some(items) = table
+        .and_then(|t| t.get(key))
+        .and_then(toml::Value::as_array)
+    else {
         return Vec::new();
     };
     items
@@ -155,19 +158,54 @@ fn ensure_adapter_version(doc: &mut DocumentMut) {
         .and_then(toml_edit::Item::as_str)
         .is_some_and(|s| !s.trim().is_empty());
     if !has {
-        set_value(doc, "plugin", "config_version", ADAPTER_CONFIG_VERSION.into());
+        set_value(
+            doc,
+            "plugin",
+            "config_version",
+            ADAPTER_CONFIG_VERSION.into(),
+        );
     }
 }
 
 pub fn write_adapter_chat(text: Option<&str>, chat: &MaiBotChatFilter) -> Result<String, String> {
     let mut doc = parse_doc(text)?;
     ensure_adapter_version(&mut doc);
-    set_value(&mut doc, "chat", "enable_chat_list_filter", chat.enable_chat_list_filter.into());
-    set_value(&mut doc, "chat", "group_list_type", chat.group_list_type.as_str().into());
-    set_value(&mut doc, "chat", "group_list", string_array(&chat.group_list));
-    set_value(&mut doc, "chat", "private_list_type", chat.private_list_type.as_str().into());
-    set_value(&mut doc, "chat", "private_list", string_array(&chat.private_list));
-    set_value(&mut doc, "chat", "ban_user_id", string_array(&chat.ban_user_id));
+    set_value(
+        &mut doc,
+        "chat",
+        "enable_chat_list_filter",
+        chat.enable_chat_list_filter.into(),
+    );
+    set_value(
+        &mut doc,
+        "chat",
+        "group_list_type",
+        chat.group_list_type.as_str().into(),
+    );
+    set_value(
+        &mut doc,
+        "chat",
+        "group_list",
+        string_array(&chat.group_list),
+    );
+    set_value(
+        &mut doc,
+        "chat",
+        "private_list_type",
+        chat.private_list_type.as_str().into(),
+    );
+    set_value(
+        &mut doc,
+        "chat",
+        "private_list",
+        string_array(&chat.private_list),
+    );
+    set_value(
+        &mut doc,
+        "chat",
+        "ban_user_id",
+        string_array(&chat.ban_user_id),
+    );
     Ok(doc.to_string())
 }
 

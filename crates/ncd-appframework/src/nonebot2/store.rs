@@ -16,13 +16,12 @@ use super::config::{DOC_ENV_PROD, nonebot2_config_documents};
 use super::driver::{merge_driver, required_forward_mixins};
 use super::manifest::{
     DRIVER_FASTAPI, DRIVER_HTTPX, DRIVER_WEBSOCKETS, ENV_DRIVER, NONEBOT2_BOT_PY,
-    NONEBOT2_PYPROJECT, NONEBOT2_UV_LOCK, PYPI_ADAPTER_ONEBOT,
-    PYPI_NONEBOT2_FORWARD,
+    NONEBOT2_PYPROJECT, NONEBOT2_UV_LOCK, PYPI_ADAPTER_ONEBOT, PYPI_NONEBOT2_FORWARD,
 };
+use crate::adapter::PluginLogSink;
 use crate::adapter::apply_with_backup_ex;
 use crate::adopt::write_project_sidecar;
 use crate::env_file::EnvFile;
-use crate::adapter::PluginLogSink;
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 use crate::uv_tooling::{read_uv_marker, resolve_uv};
 
@@ -143,7 +142,9 @@ impl RawTag {
     }
 }
 
-pub fn parse_nonebot_adapters_json(text: &str) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+pub fn parse_nonebot_adapters_json(
+    text: &str,
+) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
     let rows: Vec<RawAdapter> = parse_json_array(text, "adapters")?;
     Ok(rows
         .into_iter()
@@ -162,7 +163,12 @@ pub fn parse_nonebot_adapters_json(text: &str) -> Result<Vec<AppStoreMarketEntry
             flavor: AppStoreFlavor::Pypi,
             is_official: r.is_official,
             valid: true,
-            tags: r.tags.into_iter().map(|t| t.label()).filter(|s| !s.is_empty()).collect(),
+            tags: r
+                .tags
+                .into_iter()
+                .map(|t| t.label())
+                .filter(|s| !s.is_empty())
+                .collect(),
             supported_adapters: Vec::new(),
             authors: Vec::new(),
             repos: Vec::new(),
@@ -172,7 +178,9 @@ pub fn parse_nonebot_adapters_json(text: &str) -> Result<Vec<AppStoreMarketEntry
         .collect())
 }
 
-pub fn parse_nonebot_plugins_json(text: &str) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+pub fn parse_nonebot_plugins_json(
+    text: &str,
+) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
     let rows: Vec<RawPlugin> = parse_json_array(text, "plugins")?;
     Ok(rows
         .into_iter()
@@ -192,7 +200,12 @@ pub fn parse_nonebot_plugins_json(text: &str) -> Result<Vec<AppStoreMarketEntry>
             flavor: AppStoreFlavor::Pypi,
             is_official: r.is_official,
             valid: true,
-            tags: r.tags.into_iter().map(|t| t.label()).filter(|s| !s.is_empty()).collect(),
+            tags: r
+                .tags
+                .into_iter()
+                .map(|t| t.label())
+                .filter(|s| !s.is_empty())
+                .collect(),
             supported_adapters: r.supported_adapters.unwrap_or_default(),
             authors: Vec::new(),
             repos: Vec::new(),
@@ -208,9 +221,8 @@ fn parse_json_array<T: for<'de> Deserialize<'de>>(
 ) -> Result<Vec<T>, AppFrameworkError> {
     let trimmed = text.trim_start();
     if trimmed.starts_with('[') {
-        return serde_json::from_str(trimmed).map_err(|e| {
-            AppFrameworkError::Validation(format!("解析官方目录失败: {e}"))
-        });
+        return serde_json::from_str(trimmed)
+            .map_err(|e| AppFrameworkError::Validation(format!("解析官方目录失败: {e}")));
     }
     let v: serde_json::Value = serde_json::from_str(text)
         .map_err(|e| AppFrameworkError::Validation(format!("解析官方目录失败: {e}")))?;
@@ -427,7 +439,10 @@ fn parse_ncd_items(table: &Table, key: &str) -> Vec<CatalogItem> {
                     .and_then(|x| x.as_str())
                     .unwrap_or("")
                     .to_string(),
-                enabled: table.get("enabled").and_then(|x| x.as_bool()).unwrap_or(true),
+                enabled: table
+                    .get("enabled")
+                    .and_then(|x| x.as_bool())
+                    .unwrap_or(true),
                 name,
                 module_name,
             })
@@ -440,7 +455,11 @@ fn write_catalog(doc: &mut DocumentMut, catalog: &NoneBotCatalog) {
         let nonebot = ensure_table_path(doc, &["tool", "nonebot"]);
         match catalog.adapter_style {
             AdapterTomlStyle::Inline => {
-                write_inline_or_replace(nonebot, "adapters", enabled_adapter_array(&catalog.adapters));
+                write_inline_or_replace(
+                    nonebot,
+                    "adapters",
+                    enabled_adapter_array(&catalog.adapters),
+                );
             }
             AdapterTomlStyle::ArrayOfTables => write_adapters_aot(nonebot, &catalog.adapters),
         }
@@ -587,8 +606,10 @@ fn write_plugins_table(nonebot: &mut Table, items: &[CatalogItem]) {
 
     for item in enabled {
         let present = plugins.iter().any(|(_, v)| {
-            v.as_array()
-                .is_some_and(|a| a.iter().any(|x| x.as_str() == Some(item.module_name.as_str())))
+            v.as_array().is_some_and(|a| {
+                a.iter()
+                    .any(|x| x.as_str() == Some(item.module_name.as_str()))
+            })
         });
         if present {
             continue;
@@ -677,9 +698,9 @@ fn resolve_catalog_item<'a>(
     list: &'a [CatalogItem],
     id: &str,
 ) -> Result<&'a CatalogItem, AppFrameworkError> {
-    list.iter().find(|i| item_matches(i, id)).ok_or_else(|| {
-        AppFrameworkError::Validation(format!("未安装该条目: {id}"))
-    })
+    list.iter()
+        .find(|i| item_matches(i, id))
+        .ok_or_else(|| AppFrameworkError::Validation(format!("未安装该条目: {id}")))
 }
 
 pub async fn list_installed(
@@ -688,9 +709,11 @@ pub async fn list_installed(
     resource: AppStoreResource,
 ) -> Result<Vec<AppStoreInstalled>, AppFrameworkError> {
     let root = HostPath::from_posix(&instance.install_dir);
-    let text = read_text(host, &root.join(NONEBOT2_PYPROJECT)).await?.ok_or_else(|| {
-        AppFrameworkError::Integration("NoneBot2 实例缺少 pyproject.toml，请先完成安装".into())
-    })?;
+    let text = read_text(host, &root.join(NONEBOT2_PYPROJECT))
+        .await?
+        .ok_or_else(|| {
+            AppFrameworkError::Integration("NoneBot2 实例缺少 pyproject.toml，请先完成安装".into())
+        })?;
     let catalog = parse_catalog(&text)?;
     let lock = read_text(host, &root.join("uv.lock")).await?;
     let items = match resource {
@@ -829,7 +852,13 @@ pub async fn uninstall_item(
     })
     .await?;
     if let Some(pkg) = remove_pkg {
-        uv_remove_at(host, &HostPath::from_posix(&instance.install_dir), &pkg, log).await?;
+        uv_remove_at(
+            host,
+            &HostPath::from_posix(&instance.install_dir),
+            &pkg,
+            log,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -883,12 +912,7 @@ pub async fn ensure_dynamic_bot_py(
     if instance.origin.is_imported() {
         return Ok(());
     }
-    ensure_dynamic_bot_py_at(
-        host,
-        &HostPath::from_posix(&instance.install_dir),
-        log,
-    )
-    .await
+    ensure_dynamic_bot_py_at(host, &HostPath::from_posix(&instance.install_dir), log).await
 }
 
 pub async fn ensure_dynamic_bot_py_at(
@@ -920,12 +944,7 @@ pub async fn ensure_forward_driver(
     instance: &AppInstance,
     log: Option<&PluginLogSink>,
 ) -> Result<(), AppFrameworkError> {
-    ensure_forward_driver_at(
-        host,
-        &HostPath::from_posix(&instance.install_dir),
-        log,
-    )
-    .await
+    ensure_forward_driver_at(host, &HostPath::from_posix(&instance.install_dir), log).await
 }
 
 pub async fn ensure_forward_driver_at(
@@ -958,7 +977,10 @@ pub async fn ensure_forward_driver_at(
         .unwrap_or_else(|| DRIVER_FASTAPI.to_string());
     let next = merge_driver(&current, &mixins);
     if next != current {
-        emit_log(log, format!("DRIVER={next}（已启用适配器需要对应客户端 mixin）"));
+        emit_log(
+            log,
+            format!("DRIVER={next}（已启用适配器需要对应客户端 mixin）"),
+        );
         env.set(ENV_DRIVER, &next);
         host.write_file(&env_path, env.render().as_bytes())
             .await
@@ -1054,7 +1076,10 @@ where
     .await
 }
 
-fn catalog_list_mut(catalog: &mut NoneBotCatalog, resource: AppStoreResource) -> &mut Vec<CatalogItem> {
+fn catalog_list_mut(
+    catalog: &mut NoneBotCatalog,
+    resource: AppStoreResource,
+) -> &mut Vec<CatalogItem> {
     match resource {
         AppStoreResource::Adapter => &mut catalog.adapters,
         AppStoreResource::Plugin => &mut catalog.plugins,
@@ -1062,10 +1087,7 @@ fn catalog_list_mut(catalog: &mut NoneBotCatalog, resource: AppStoreResource) ->
 }
 
 fn upsert_item(list: &mut Vec<CatalogItem>, item: CatalogItem) {
-    if let Some(existing) = list
-        .iter_mut()
-        .find(|i| i.module_name == item.module_name)
-    {
+    if let Some(existing) = list.iter_mut().find(|i| i.module_name == item.module_name) {
         *existing = item;
         return;
     }
@@ -1093,10 +1115,7 @@ async fn uv_add_at(
                 .as_deref()
                 .filter(|dep| !same_pypi_name(dep, package) && reject_package(dep).is_ok())
             {
-                emit_log(
-                    log,
-                    format!("依赖 {dep} 编译失败，改用预编译版本再试"),
-                );
+                emit_log(log, format!("依赖 {dep} 编译失败，改用预编译版本再试"));
                 if run_uv(host, root, &["add", &spec, dep], log).await.is_ok() {
                     return Ok(());
                 }
@@ -1192,7 +1211,8 @@ fn analyze_uv_output(output: &str) -> UvFailure {
             build_package: None,
         };
     }
-    if output.contains("No solution found") || output.to_ascii_lowercase().contains("failed to resolve")
+    if output.contains("No solution found")
+        || output.to_ascii_lowercase().contains("failed to resolve")
     {
         return UvFailure {
             message: first_useful_uv_line(output)
@@ -1276,7 +1296,10 @@ async fn run_host_cmd(
         })?
     };
     if !out.success() {
-        return Err(analyze_uv_output(&format!("{}\n{}", out.stderr, out.stdout)));
+        return Err(analyze_uv_output(&format!(
+            "{}\n{}",
+            out.stderr, out.stdout
+        )));
     }
     Ok(())
 }
@@ -1331,7 +1354,9 @@ fn host_err(e: HostError) -> AppFrameworkError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ncd_domain::{AppFrameworkId, AppInstanceId, AppInstanceState, AppLinkRecord, AppPlacement};
+    use ncd_domain::{
+        AppFrameworkId, AppInstanceId, AppInstanceState, AppLinkRecord, AppPlacement,
+    };
 
     const SCAFFOLD: &str = r#"[project]
 name = "nonebot2-n1"
@@ -1390,7 +1415,11 @@ plugins = []
         let text = apply_catalog(SCAFFOLD, &next).unwrap();
         assert!(text.contains("nonebot.adapters.onebot.v11"));
         assert!(text.contains("nonebot.adapters.onebot.v12"));
-        assert!(package_still_needed(&next.adapters, PYPI_ADAPTER_ONEBOT, "nonebot.adapters.onebot.v12"));
+        assert!(package_still_needed(
+            &next.adapters,
+            PYPI_ADAPTER_ONEBOT,
+            "nonebot.adapters.onebot.v12"
+        ));
     }
 
     #[test]
@@ -1566,7 +1595,12 @@ plugin_dirs = ["plugins"]
         let again = parse_catalog(&out).unwrap();
         assert_eq!(again.plugin_style, PluginTomlStyle::Table);
         assert!(again.plugins.iter().any(|p| p.module_name == "echo_ext"));
-        assert!(again.plugins.iter().any(|p| p.module_name == "nonebot_plugin_foo"));
+        assert!(
+            again
+                .plugins
+                .iter()
+                .any(|p| p.module_name == "nonebot_plugin_foo")
+        );
     }
 
     #[test]
@@ -1677,6 +1711,9 @@ hint: If you want to add the package regardless of the failed resolution, provid
         let fail = analyze_uv_output("error sending request\nhint: try again");
         assert_eq!(fail.message, "无法连接软件源，检查网络或代理后重试");
         assert_eq!(fail.build_package, None);
-        assert!(same_pypi_name("nonebot_plugin_txt2img", "nonebot-plugin-txt2img"));
+        assert!(same_pypi_name(
+            "nonebot_plugin_txt2img",
+            "nonebot-plugin-txt2img"
+        ));
     }
 }

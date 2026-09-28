@@ -106,9 +106,13 @@ pub enum TerminalStatus {
         code: Option<i32>,
     },
     /// 连接断了（远端掉线）
-    Disconnected { reason: String },
+    Disconnected {
+        reason: String,
+    },
     /// 没开起来
-    Failed { message: String },
+    Failed {
+        message: String,
+    },
 }
 
 impl TerminalStatus {
