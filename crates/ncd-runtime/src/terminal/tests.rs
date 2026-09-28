@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -24,6 +24,9 @@ use super::{TerminalError, TerminalLaunchPlan, TerminalManager, TerminalPlanner,
 
 struct FakeHost {
     backends: mpsc::UnboundedSender<PtyBackend>,
+    /// stat 报的文件大小；None 时 stat 失败
+    stat_size: Option<u64>,
+    reads: AtomicUsize,
 }
 
 #[async_trait]
@@ -44,6 +47,7 @@ impl Host for FakeHost {
         &BashShell
     }
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
+        self.reads.fetch_add(1, Ordering::SeqCst);
         Err(HostError::PathNotFound { path: path.clone() })
     }
     async fn write_file(&self, _: &HostPath, _: &[u8]) -> Result<(), HostError> {
@@ -81,10 +85,17 @@ impl Host for FakeHost {
     async fn spawn(&self, _: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
         Err(HostError::Unsupported { operation: "spawn" })
     }
-    async fn run_to_string(&self, _: HostCommand) -> Result<CommandOutput, HostError> {
-        Err(HostError::Unsupported {
-            operation: "run_to_string",
-        })
+    async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
+        match self.stat_size {
+            Some(size) if cmd.program == "stat" => Ok(CommandOutput {
+                exit_code: Some(0),
+                stdout: format!("{size}\n"),
+                stderr: String::new(),
+            }),
+            _ => Err(HostError::Unsupported {
+                operation: "run_to_string",
+            }),
+        }
     }
     async fn open_pty(&self, _req: PtyRequest) -> Result<PtySession, HostError> {
         let (session, backend) = pty_channel_pair();
@@ -176,9 +187,20 @@ fn request() -> TerminalOpenRequest {
 }
 
 fn fixture(password: Option<&str>) -> (TerminalManager, mpsc::UnboundedReceiver<PtyBackend>, Arc<FakePlanner>) {
+    fixture_with_stat(password, None)
+}
+
+fn fixture_with_stat(
+    password: Option<&str>,
+    stat_size: Option<u64>,
+) -> (TerminalManager, mpsc::UnboundedReceiver<PtyBackend>, Arc<FakePlanner>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let planner = Arc::new(FakePlanner {
-        host: Arc::new(FakeHost { backends: tx }),
+        host: Arc::new(FakeHost {
+            backends: tx,
+            stat_size,
+            reads: AtomicUsize::new(0),
+        }),
         password: password.map(str::to_string),
         fail: AtomicBool::new(false),
     });
@@ -354,4 +376,32 @@ async fn slow_client_holds_back_reading_until_it_acks() {
         .await
         .expect("reading resumes after the ack")
         .unwrap();
+}
+
+#[tokio::test]
+async fn big_file_is_refused_before_it_is_read() {
+    let (manager, mut backends, planner) = fixture_with_stat(None, Some(3 * 1024 * 1024));
+    let info = manager.open(request()).await.unwrap();
+    let _backend = backends.recv().await.unwrap();
+    let err = manager
+        .read_text(info.id.as_str(), "/var/log/big.log")
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("2 MB"), "{err}");
+    assert_eq!(planner.host.reads.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn small_or_unknown_size_goes_on_to_read() {
+    for stat in [Some(10), None] {
+        let (manager, mut backends, planner) = fixture_with_stat(None, stat);
+        let info = manager.open(request()).await.unwrap();
+        let _backend = backends.recv().await.unwrap();
+        let err = manager
+            .read_text(info.id.as_str(), "/etc/hosts")
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("找不到"), "{err}");
+        assert_eq!(planner.host.reads.load(Ordering::SeqCst), 1);
+    }
 }
