@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "tray-panel",
+  "description": "Tray panel window: bot status and start/stop via app commands, open WebUI / noVNC in the browser",
+  "windows": [
+    "tray-panel"
+  ],
+  "permissions": [
+    "core:default",
+    "opener:allow-open-url",
+    "opener:allow-default-urls"
+  ]
+}
