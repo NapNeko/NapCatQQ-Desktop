@@ -745,8 +745,8 @@ async fn batch_start_starts_multiple_bots_concurrently() {
     }
 
     let result = manager.batch_start(&ids).await.unwrap();
+    assert!(result.failed.is_empty(), "failed: {:?}", result.failed);
     assert_eq!(result.succeeded.len(), 3);
-    assert!(result.failed.is_empty());
 
     // 所有 bot 都进入 Running
     for id in &ids {

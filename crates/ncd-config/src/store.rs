@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
@@ -15,12 +16,54 @@ use crate::data_paths::{DataPaths, MAX_JSON_BAK_FILES, MAX_MIGRATION_BACKUPS};
 #[derive(Debug, Clone)]
 pub struct LocalConfigStore {
     paths: DataPaths,
+    /// 同时来的几笔写会碰同一个文件（批量启动 NapCat Bot 时每个都写共享的 napcat.json），
+    /// 同一秒内还共用一个备份目录：这边刚看到文件在，那边已经把它挪去当备份，挪或拷时找不到文件；
+    /// 两边往备份目录拷同名快照也会撞上占用。写一律排队，克隆出来的共用这一把
+    write_lock: Arc<Mutex<()>>,
 }
 
 impl LocalConfigStore {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self {
             paths: DataPaths::new(root),
+            write_lock: Arc::new(Mutex::new(())),
+        }
+    }
+
+    fn lock_writes(&self) -> MutexGuard<'_, ()> {
+        self.write_lock.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn write_json_atomic_locked(&self, path: &Path, payload: &Value) -> Result<(), ConfigError> {
+        self.ensure_within_root(path)?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(to_io_error)?;
+        }
+
+        let temp = Self::unique_sibling(path, "tmp");
+        let backup = Self::unique_sibling(path, "bak");
+        let bytes = serde_json::to_vec_pretty(payload)
+            .map_err(|error| ConfigError::Json(error.to_string()))?;
+        fs::write(&temp, bytes).map_err(to_io_error)?;
+
+        let mut moved_to_backup = false;
+        if path.exists() && !backup.exists() {
+            fs::rename(path, &backup).map_err(to_io_error)?;
+            moved_to_backup = true;
+        }
+
+        match fs::rename(&temp, path) {
+            Ok(()) => {
+                prune_json_bak_files(path, MAX_JSON_BAK_FILES);
+                Ok(())
+            }
+            Err(error) => {
+                let _ = fs::remove_file(&temp);
+                if moved_to_backup && backup.exists() && !path.exists() {
+                    let _ = fs::rename(&backup, path);
+                }
+                Err(to_io_error(error))
+            }
         }
     }
 
@@ -180,36 +223,8 @@ impl ConfigStore for LocalConfigStore {
     }
 
     fn write_json_atomic(&self, path: &Path, payload: &Value) -> Result<(), ConfigError> {
-        self.ensure_within_root(path)?;
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(to_io_error)?;
-        }
-
-        let temp = Self::unique_sibling(path, "tmp");
-        let backup = Self::unique_sibling(path, "bak");
-        let bytes = serde_json::to_vec_pretty(payload)
-            .map_err(|error| ConfigError::Json(error.to_string()))?;
-        fs::write(&temp, bytes).map_err(to_io_error)?;
-
-        let mut moved_to_backup = false;
-        if path.exists() && !backup.exists() {
-            fs::rename(path, &backup).map_err(to_io_error)?;
-            moved_to_backup = true;
-        }
-
-        match fs::rename(&temp, path) {
-            Ok(()) => {
-                prune_json_bak_files(path, MAX_JSON_BAK_FILES);
-                Ok(())
-            }
-            Err(error) => {
-                let _ = fs::remove_file(&temp);
-                if moved_to_backup && backup.exists() && !path.exists() {
-                    let _ = fs::rename(&backup, path);
-                }
-                Err(to_io_error(error))
-            }
-        }
+        let _writes = self.lock_writes();
+        self.write_json_atomic_locked(path, payload)
     }
 
     fn apply_transaction(
@@ -219,6 +234,7 @@ impl ConfigStore for LocalConfigStore {
         if transaction.is_empty() {
             return Ok(TransactionReport::default());
         }
+        let _writes = self.lock_writes();
 
         let backup_root = self.create_backup_root()?;
         let mut backup_files = Vec::new();
@@ -237,7 +253,7 @@ impl ConfigStore for LocalConfigStore {
 
         let mut written = Vec::new();
         for write in transaction.writes {
-            if let Err(error) = self.write_json_atomic(&write.path, &write.payload) {
+            if let Err(error) = self.write_json_atomic_locked(&write.path, &write.payload) {
                 restore_transaction_state(&backup_root, &written, &[]);
                 return Err(error);
             }
@@ -430,6 +446,42 @@ mod tests {
             .count();
         assert!(bak_count <= MAX_JSON_BAK_FILES, "bak_count={bak_count}");
         assert_eq!(store.read_json(&path).unwrap()["n"], 5);
+    }
+
+    // 和批量启动一样：每笔写自己的文件，同时都写一个共享文件
+    #[test]
+    fn concurrent_transactions_sharing_a_file_all_succeed() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = Arc::new(LocalConfigStore::new(temp.path()));
+        let shared = store.config_dir().join("napcat.json");
+        store
+            .write_json_atomic(&shared, &serde_json::json!({ "n": -1 }))
+            .unwrap();
+
+        let workers: Vec<_> = (0..8)
+            .map(|i| {
+                let store = Arc::clone(&store);
+                let shared = shared.clone();
+                std::thread::spawn(move || {
+                    let own = store.config_dir().join(format!("napcat_{i}.json"));
+                    for round in 0..10 {
+                        let txn = JsonTransaction::new()
+                            .write(own.clone(), serde_json::json!({ "n": i, "round": round }))
+                            .write(shared.clone(), serde_json::json!({ "n": i }));
+                        store.apply_transaction(txn).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+
+        assert!(store.read_json(&shared).unwrap()["n"].as_i64().unwrap() >= 0);
+        for i in 0..8 {
+            let own = store.config_dir().join(format!("napcat_{i}.json"));
+            assert_eq!(store.read_json(&own).unwrap()["round"], 9);
+        }
     }
 
     #[test]
