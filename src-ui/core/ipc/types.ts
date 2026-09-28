@@ -322,7 +322,8 @@ export type { DockerFlavor } from './generated/domain/DockerFlavor';
 export type { DockerPullLayerSnapshot } from './generated/domain/DockerPullLayerSnapshot';
 export type { DockerPullSpec } from './generated/domain/DockerPullSpec';
 export type { DockerDeploySpec } from './generated/domain/DockerDeploySpec';
-export type { DeployedContainer } from './generated/domain/DeployedContainer';
+// Rust 侧 DeployedContainer 只是 DockerImageReady 的类型别名，ts-rs 不给别名单独生成文件
+export type { DockerImageReady as DeployedContainer } from './generated/domain/DockerImageReady';
 export type { PortMapping } from './generated/domain/PortMapping';
 export type { DockerInstallReport } from './generated/domain/DockerInstallReport';
 export type { DockerInstallStatus } from './generated/domain/DockerInstallStatus';
