@@ -98,6 +98,15 @@ pub async fn ensure_host_command_task(
         return DeploymentTaskRunResult::ok(format!("{command} 已就绪"));
     }
 
+    // 自动补装只认 Linux 包管理器;别的系统直接说清楚,别报成「没识别到包管理器」
+    if host.os() != Os::Linux {
+        return fail(
+            &task_ctx,
+            format!("缺少 {command}，自动安装只支持 Linux 主机，请手动安装 {package} 后重试"),
+        )
+        .await;
+    }
+
     let Some(pm) = LinuxPackageManager::detect(host).await else {
         return fail(
             &task_ctx,
@@ -287,7 +296,8 @@ pub fn qq_install_failure_message(result: &InstallDependenciesResult) -> String 
     }
 }
 
-/// 把 installer 的 ActionCtx 进度转发到 task
+/// 把 installer 的 ActionCtx 进度转发到 task。转完才返回:调用方紧接着推的
+/// 结果日志和 Finished 必须排在 installer 自己的日志后面
 async fn run_qq_installer(
     host: &dyn Host,
     packages: Vec<String>,
@@ -296,12 +306,16 @@ async fn run_qq_installer(
 ) -> Result<InstallDependenciesResult, ncd_component::ActionError> {
     let (mut ctx, mut rx) = ActionCtx::new();
     let forward_to = task_ctx.clone();
-    tokio::spawn(async move {
+    let forwarder = tokio::spawn(async move {
         while let Some(event) = rx.recv().await {
             forward_to.push_progress(event).await;
         }
     });
-    QqDependencyInstaller
+    let result = QqDependencyInstaller
         .install(host, packages, sudo_password.as_deref(), &mut ctx)
-        .await
+        .await;
+    // 发送端全丢掉,转发任务把剩下的推完就会退出
+    drop(ctx);
+    let _ = forwarder.await;
+    result
 }
