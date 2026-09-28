@@ -17,6 +17,7 @@ pub mod karin;
 pub mod maibot;
 pub mod node_tooling;
 pub mod nonebot2;
+pub mod ports;
 pub mod registry;
 pub mod store;
 pub mod terminal;
@@ -111,6 +112,7 @@ pub use astrbot::{
     AstrBotSubagentConfig, AstrBotSubagentRow, AstrBotTtsSettings, AstrBotWebSearchSettings,
     astrbot_manifest, astrbot_plugin_market_urls, parse_astrbot_plugins_json,
 };
+pub use ports::{PortUsage, local_port_free, parse_proc_net_listen, remote_listening_ports};
 pub use registry::AppFrameworkRegistry;
 pub use store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 pub use terminal::AppTerminalProfile;

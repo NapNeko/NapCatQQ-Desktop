@@ -32,6 +32,7 @@ use super::release::{
     pick_maibot_tag,
 };
 use super::terms::write_confirmations;
+use crate::ports::PortUsage;
 use crate::uv_tooling::{
     LinuxLibc, ensure_python, probe_free_kb, probe_linux_libc, read_uv_marker, resolve_uv,
     venv_python, write_uv_marker,
@@ -481,12 +482,11 @@ impl MaiBotComponent {
     }
 
     async fn pick_legacy_port(&self, host: &dyn Host) -> u16 {
-        let python = self.venv_python(host.os());
         let candidates = legacy_port_candidates(self.webui_port);
-        for port in &candidates {
-            if port_free(host, *port, &python).await {
-                return *port;
-            }
+        if let Some(usage) = PortUsage::probe(host).await
+            && let Some(port) = candidates.iter().copied().find(|p| usage.is_free(*p))
+        {
+            return port;
         }
         // 探不出来就给第一个候选，真被占了上游启动日志会说是哪个口
         candidates.first().copied().unwrap_or(self.webui_port.wrapping_add(1))
@@ -631,21 +631,6 @@ pub fn legacy_port_candidates(webui_port: u16) -> Vec<u16> {
     let up = (1..=PORT_PROBE_TRIES).filter_map(|i| webui_port.checked_add(i));
     let down = (1..=PORT_PROBE_TRIES).filter_map(|i| webui_port.checked_sub(i));
     up.chain(down).filter(|p| *p != 0).collect()
-}
-
-async fn port_free(host: &dyn Host, port: u16, python: &HostPath) -> bool {
-    if host.locality() == Locality::Local {
-        return std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).is_ok();
-    }
-    let snippet = format!("import socket;s=socket.socket();s.bind(('127.0.0.1',{port}))");
-    let cmd = HostCommand::new(python.as_posix())
-        .arg("-c")
-        .arg(snippet)
-        .timeout(Duration::from_secs(8));
-    match host.run_to_string(cmd).await {
-        Ok(out) => out.success(),
-        Err(_) => true,
-    }
 }
 
 #[async_trait]

@@ -18,6 +18,7 @@ use super::manifest::{
 use super::platform::{
     next_dashboard_port, platforms, read_aiocqhttp_port, set_dashboard_port, upsert_claimed_row,
 };
+use crate::ports::PortUsage;
 use crate::uv_tooling::{
     read_uv_marker, resolve_uv, venv_python, venv_script, write_uv_marker,
 };
@@ -382,13 +383,14 @@ impl AstrBotComponent {
 }
 
 async fn pick_free_dashboard_port(host: &dyn Host, ws_port: u16, extra_taken: &[u16]) -> u16 {
+    // 读不到占用情况就只避开已知的口，真撞上了 AstrBot 启动日志会报
+    let Some(usage) = PortUsage::probe(host).await else {
+        tracing::warn!("listening ports unknown, dashboard port only avoids known ones");
+        return next_dashboard_port(ws_port, extra_taken);
+    };
     let mut p = super::manifest::ASTRBOT_DEFAULT_DASHBOARD_PORT;
     for _ in 0..64 {
-        if p != 0
-            && p != ws_port
-            && !extra_taken.contains(&p)
-            && port_appears_free(host, p).await
-        {
+        if p != 0 && p != ws_port && !extra_taken.contains(&p) && usage.is_free(p) {
             return p;
         }
         p = p.saturating_add(1);
@@ -397,26 +399,6 @@ async fn pick_free_dashboard_port(host: &dyn Host, ws_port: u16, extra_taken: &[
         }
     }
     next_dashboard_port(ws_port, extra_taken)
-}
-
-async fn port_appears_free(host: &dyn Host, port: u16) -> bool {
-    if host.locality() == Locality::Local {
-        return std::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, port)).is_ok();
-    }
-    let snippet = format!("import socket;s=socket.socket();s.bind(('0.0.0.0',{port}))");
-    for py in ["python3", "python"] {
-        if !host.command_exists(py).await {
-            continue;
-        }
-        let cmd = HostCommand::new(py)
-            .arg("-c")
-            .arg(&snippet)
-            .timeout(Duration::from_secs(8));
-        if let Ok(out) = host.run_to_string(cmd).await {
-            return out.success();
-        }
-    }
-    true
 }
 
 #[async_trait]
