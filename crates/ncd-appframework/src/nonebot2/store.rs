@@ -1335,7 +1335,6 @@ fn host_err(e: HostError) -> AppFrameworkError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::component::is_legacy_bot_py;
     use ncd_domain::{AppFrameworkId, AppInstanceId, AppInstanceState, AppLinkRecord, AppPlacement};
 
     const SCAFFOLD: &str = r#"[project]
@@ -1442,16 +1441,6 @@ plugins = []
         .unwrap();
         assert_eq!(plugins.len(), 1);
         assert_eq!(plugins[0].supported_adapters[0], ONEBOT_V11_MODULE);
-    }
-
-    #[test]
-    fn legacy_bot_py_is_the_hardcoded_v11_template() {
-        assert!(is_legacy_bot_py(
-            "from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter\n"
-        ));
-        assert!(!is_legacy_bot_py(
-            "import importlib\nmod = importlib.import_module(name)\ndriver.register_adapter(mod.Adapter)\n"
-        ));
     }
 
     #[test]

@@ -24,12 +24,6 @@ use super::manifest::{
 use crate::env_file::EnvFile;
 use crate::uv_tooling::{read_uv_marker, resolve_uv, venv_python, write_uv_marker};
 
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn is_legacy_bot_py(text: &str) -> bool {
-    text.contains("from nonebot.adapters.onebot.v11 import")
-        || (text.contains("OneBotV11Adapter") && !text.contains("importlib"))
-}
-
 fn managed_bot_py_rev(text: &str) -> Option<u32> {
     text.lines().find_map(|line| {
         line.trim()

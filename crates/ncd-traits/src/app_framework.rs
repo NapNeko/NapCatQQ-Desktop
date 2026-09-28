@@ -1,13 +1,12 @@
-//! 应用端框架契约：Integration（每框架一个，纯计算）+ Runtime（编排层实现，骨架共用）。
+//! 应用端框架契约：Integration（每框架一个，纯计算）+ 编排层共用的错误类型。
 //!
-//! - Deploy 安装/更新/检测走既有 Component × Host × Action（R12），不在此重复定义。
+//! - 安装/更新/检测走既有 Component × Host × Action，不在此重复定义。
 //! - 本 crate 不依赖 ncd-host（host 依赖 traits，反向会成环），所以「把计划写进应用端文件」
 //!   这一步由 Layer3 的框架适配器承担；这里只定义不碰 IO 的计划函数。
 
-use async_trait::async_trait;
 use ncd_domain::{
     AppConfigError, AppConfigErrorKind, AppConfigIssue, AppFrameworkId, AppFrameworkManifest,
-    AppInstance, AppInstanceId, BotConfig, OneBotLinkPlan, StopMode,
+    AppInstance, BotConfig, OneBotLinkPlan,
 };
 
 /// 把协议 Bot 的 OneBot 出口翻译成该应用端的对接计划（差异最大的扩展点）。
@@ -31,21 +30,6 @@ pub trait AppIntegration: Send + Sync {
     /// 该实例的 WebUI 地址；无 WebUI 返回 None。`public_host` 是从 Desktop 侧可达的主机名
     ///（本机 127.0.0.1，远端为 server 地址）。
     fn webui_url(&self, instance: &AppInstance, public_host: &str) -> Option<String>;
-}
-
-/// 应用端运行时最小面：启停 / 状态 / 日志。由编排层（AppManager）实现，框架无关。
-/// 不负责 QQ 登录；不替代上游应用端业务 UI。
-#[async_trait]
-pub trait AppRuntime: Send + Sync {
-    async fn start(&self, instance_id: &AppInstanceId) -> Result<AppInstance, AppFrameworkError>;
-
-    async fn stop(
-        &self,
-        instance_id: &AppInstanceId,
-        mode: StopMode,
-    ) -> Result<AppInstance, AppFrameworkError>;
-
-    async fn status(&self, instance_id: &AppInstanceId) -> Result<AppInstance, AppFrameworkError>;
 }
 
 #[derive(Debug, thiserror::Error)]

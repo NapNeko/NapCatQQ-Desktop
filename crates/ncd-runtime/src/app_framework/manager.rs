@@ -8,8 +8,8 @@
 //! 桌面端 `-L`，本机 Bot→远端应用桌面端对应用机 `-R`，两台远端应用机常驻 `ssh -L`；Bot 写 P，应用端连隧道口 Q。
 //! Docker 部署的 Bot 不给对接：容器里的 127.0.0.1 不是宿主机。
 //!
-//! 安装本身走既有 ComponentExecutor（R12），这里只给 hint、置 Installing、盯任务结束后
-//! 用 detect 对账；框架差异全部封在 `ncd_appframework::AppFrameworkAdapter` 后面。
+//! 安装交给组件执行器排任务（依赖闭包、去重、进度都在那边，不另写一套），这里只备实例级输入、
+//! 置 Installing、盯任务结束后用 detect 对账；框架差异全部封在 `ncd_appframework::AppFrameworkAdapter` 后面。
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};

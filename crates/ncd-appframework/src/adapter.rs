@@ -65,7 +65,7 @@ pub trait AppFrameworkAdapter: Send + Sync {
     /// 纯计划侧
     fn integration(&self) -> &dyn AppIntegration;
 
-    /// 安装 / 探测 / 启动命令（R12：走既有 Component × Host × Action）
+    /// 安装 / 探测 / 启动命令（走既有 Component × Host × Action，不另起一套安装流程）
     fn component(&self, spec: &AppComponentSpec) -> Arc<dyn Component>;
 
     /// 探测已有目录能不能当这个框架的实例领养

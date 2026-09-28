@@ -7,8 +7,8 @@ rust-version.workspace = true
 [lib]
 path = "src/lib.rs"
 
-# 应用端框架适配器（Karin / NoneBot2 …）：manifest + Component + Integration。
-# 只依赖 domain / traits / component / host；禁止依赖 ncd-backend-*。
+# 应用端框架适配器（Karin / NoneBot2 / AstrBot / MaiBot）：manifest + Component + Integration。
+# 内部 crate 只依赖 domain / traits / component / host / network；禁止依赖 ncd-backend-* 和 ncd-runtime。
 [dependencies]
 ncd-domain = { path = "../ncd-domain" }
 ncd-traits = { path = "../ncd-traits" }

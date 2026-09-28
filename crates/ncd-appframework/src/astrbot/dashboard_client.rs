@@ -85,8 +85,6 @@ struct Envelope<T> {
 #[derive(Debug, Deserialize)]
 struct LoginData {
     token: Option<String>,
-    #[allow(dead_code)]
-    username: Option<String>,
 }
 
 #[derive(Debug)]

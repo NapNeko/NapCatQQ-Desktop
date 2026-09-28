@@ -16,7 +16,7 @@ pub mod path_probe;
 pub mod runtime_backend;
 pub mod secret_store;
 
-pub use app_framework::{AppFrameworkError, AppIntegration, AppRuntime};
+pub use app_framework::{AppFrameworkError, AppIntegration};
 pub use backend_config_renderer::{BackendConfigRenderer, RenderError};
 pub use bot_config_repo::BotConfigRepo;
 pub use config_store::{ConfigStore, JsonTransaction, JsonWrite, TransactionReport};
