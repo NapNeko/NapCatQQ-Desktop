@@ -44,6 +44,14 @@ impl AppFrameworkRegistry {
             .ok_or_else(|| AppFrameworkError::NotRegistered(id.as_str().to_string()))
     }
 
+    /// 同 `get`，但借用注册表：从适配器上取出的能力对象（如麦麦运行期接口）能跟着注册表的借用一起传出去
+    pub fn adapter(&self, id: &AppFrameworkId) -> Result<&dyn AppFrameworkAdapter, AppFrameworkError> {
+        self.adapters
+            .get(id.as_str())
+            .map(|a| a.as_ref())
+            .ok_or_else(|| AppFrameworkError::NotRegistered(id.as_str().to_string()))
+    }
+
     /// 按 component wire 字面量反查（factory 用）
     pub fn by_component_id(&self, component_id: &str) -> Option<Arc<dyn AppFrameworkAdapter>> {
         self.adapters

@@ -30,8 +30,7 @@ impl AppManager {
         id: &AppInstanceId,
     ) -> Result<MaiBotRuntimeStatus, AppFrameworkError> {
         let instance = self.store.require(id).await?;
-        let adapter = self.registry.get(&instance.framework_id)?;
-        let runtime = maibot_api(adapter.as_ref())?;
+        let runtime = maibot_api(self.registry.adapter(&instance.framework_id)?)?;
         if !matches!(instance.state, AppInstanceState::Running) {
             return Ok(MaiBotRuntimeStatus::not_running());
         }
@@ -57,39 +56,47 @@ impl AppManager {
         Ok(status)
     }
 
-    /// 运行期调用都要实例在跑；口和 token 由这里备齐（按实例记着，见 `webui_endpoint`）
+    /// 运行期调用都要实例在跑；口和 token 由这里备齐（按实例记着，见 `webui_endpoint`）。
+    /// 接口借自注册表里的适配器，是不是麦麦只在这里查一遍，调用方拿到直接用
     async fn maibot_session(
         &self,
         id: &AppInstanceId,
-    ) -> Result<(Arc<dyn AppFrameworkAdapter>, MaiBotSession), AppFrameworkError> {
+    ) -> Result<(&dyn MaiBotRuntimeApi, MaiBotSession), AppFrameworkError> {
         let instance = self.store.require(id).await?;
-        let adapter = self.registry.get(&instance.framework_id)?;
-        maibot_api(adapter.as_ref())?;
+        let api = maibot_api(self.registry.adapter(&instance.framework_id)?)?;
+        let session = self.maibot_live_session(instance).await?;
+        Ok((api, session))
+    }
+
+    /// 已确认是麦麦的实例：要在跑，WebUI 隧道开好，口和 token 备齐
+    async fn maibot_live_session(
+        &self,
+        instance: AppInstance,
+    ) -> Result<MaiBotSession, AppFrameworkError> {
         if !matches!(instance.state, AppInstanceState::Running) {
             return Err(AppFrameworkError::NotRunning("启动麦麦后才能用".into()));
         }
         let port = self.desktop_webui_loopback_port(&instance).await?;
-        let again = self.store.require(id).await?;
+        let again = self.store.require(&instance.id).await?;
         if !matches!(again.state, AppInstanceState::Running) {
             return Err(AppFrameworkError::StateChanged("实例状态已变，请重试".into()));
         }
         let endpoint = self.webui_endpoint(&instance).await;
-        let session = MaiBotSession {
+        Ok(MaiBotSession {
             instance_id: instance.id.as_str().to_string(),
             port,
             token: endpoint.auth_key,
             utc_offset_secs: endpoint.utc_offset_secs,
-        };
-        Ok((adapter, session))
+        })
     }
 
     /// 走上游自己的重启：工作进程退出码 42，bot.py 外层重新拉起，桌面端记着的进程不变。
     /// 输出却换了一轮，日志和面板都从这里重新开始，跟在桌面端点启动一样
     pub async fn maibot_restart(&self, id: &AppInstanceId) -> Result<(), AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.restart(&s).await?;
+        let (api, s) = self.maibot_session(id).await?;
+        api.restart(&s).await?;
         let instance = self.store.require(id).await?;
-        let log_file = launch_log_file(adapter.as_ref(), &instance);
+        let log_file = launch_log_file(self.registry.adapter(&instance.framework_id)?, &instance);
         let reset = match self.resolve_host(&instance.host_id).await {
             Ok(host) => self.runtime.reset_log(host, &instance, log_file).await,
             Err(e) => Err(e),
@@ -106,18 +113,16 @@ impl AppManager {
         id: &AppInstanceId,
         hours: u32,
     ) -> Result<MaiBotStatsSummary, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?
-            .stats_summary(&s, hours.clamp(1, 24 * 90))
-            .await
+        let (api, s) = self.maibot_session(id).await?;
+        api.stats_summary(&s, hours.clamp(1, 24 * 90)).await
     }
 
     pub async fn maibot_chat_sessions(
         &self,
         id: &AppInstanceId,
     ) -> Result<Vec<MaiBotChatSession>, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.chat_sessions(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.chat_sessions(&s).await
     }
 
     pub async fn maibot_provider_models(
@@ -125,11 +130,9 @@ impl AppManager {
         id: &AppInstanceId,
         provider: MaiBotAPIProvider,
     ) -> Result<Vec<MaiBotProviderModel>, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
+        let (api, s) = self.maibot_session(id).await?;
         let source = self.maibot_provider_source(id, &provider).await;
-        maibot_api(adapter.as_ref())?
-            .provider_models(&s, &provider, source)
-            .await
+        api.provider_models(&s, &provider, source).await
     }
 
     pub async fn maibot_test_provider(
@@ -137,11 +140,9 @@ impl AppManager {
         id: &AppInstanceId,
         provider: MaiBotAPIProvider,
     ) -> Result<MaiBotProviderCheck, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
+        let (api, s) = self.maibot_session(id).await?;
         let source = self.maibot_provider_source(id, &provider).await;
-        maibot_api(adapter.as_ref())?
-            .test_provider(&s, &provider, source)
-            .await
+        api.test_provider(&s, &provider, source).await
     }
 
     /// 盘上有一模一样的提供商就按名字查：上游用它自己读到的配置，放行回环 / 内网地址。
@@ -163,8 +164,8 @@ impl AppManager {
         &self,
         id: &AppInstanceId,
     ) -> Result<MaiBotMcpStatus, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.mcp_status(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.mcp_status(&s).await
     }
 
     pub async fn maibot_test_mcp(
@@ -172,38 +173,35 @@ impl AppManager {
         id: &AppInstanceId,
         server: MaiBotMCPServerItemConfig,
     ) -> Result<MaiBotMcpTest, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.test_mcp(&s, &server).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.test_mcp(&s, &server).await
     }
 
     async fn maibot_prompt_place(
         &self,
         id: &AppInstanceId,
-    ) -> Result<(Arc<dyn AppFrameworkAdapter>, PromptPlace), AppFrameworkError> {
+    ) -> Result<(&dyn MaiBotRuntimeApi, PromptPlace), AppFrameworkError> {
         let instance = self.store.require(id).await?;
-        let adapter = self.registry.get(&instance.framework_id)?;
-        maibot_api(adapter.as_ref())?;
-        match instance.state {
-            AppInstanceState::Running => {
-                let (adapter, s) = self.maibot_session(id).await?;
-                Ok((adapter, PromptPlace::Live(s)))
-            }
+        let api = maibot_api(self.registry.adapter(&instance.framework_id)?)?;
+        let place = match instance.state {
+            AppInstanceState::Running => PromptPlace::Live(self.maibot_live_session(instance).await?),
             AppInstanceState::Installed | AppInstanceState::Stopped => {
                 let host = self.resolve_host(&instance.host_id).await?;
-                Ok((adapter, PromptPlace::Disk(host, instance)))
+                PromptPlace::Disk(host, instance)
             }
             AppInstanceState::NotInstalled | AppInstanceState::Installing => {
-                Err(AppFrameworkError::NotRunning("麦麦装好后才能改提示词".into()))
+                return Err(AppFrameworkError::NotRunning("麦麦装好后才能改提示词".into()));
             }
-        }
+        };
+        Ok((api, place))
     }
 
     pub async fn maibot_prompt_catalog(
         &self,
         id: &AppInstanceId,
     ) -> Result<MaiBotPromptCatalog, AppFrameworkError> {
-        let (adapter, place) = self.maibot_prompt_place(id).await?;
-        maibot_api(adapter.as_ref())?.prompt_catalog(place.target()).await
+        let (api, place) = self.maibot_prompt_place(id).await?;
+        api.prompt_catalog(place.target()).await
     }
 
     pub async fn maibot_prompt_file(
@@ -212,10 +210,8 @@ impl AppManager {
         language: &str,
         name: &str,
     ) -> Result<MaiBotPromptFile, AppFrameworkError> {
-        let (adapter, place) = self.maibot_prompt_place(id).await?;
-        maibot_api(adapter.as_ref())?
-            .prompt_file(place.target(), language, name)
-            .await
+        let (api, place) = self.maibot_prompt_place(id).await?;
+        api.prompt_file(place.target(), language, name).await
     }
 
     pub async fn maibot_prompt_version(
@@ -225,9 +221,8 @@ impl AppManager {
         name: &str,
         version_id: &str,
     ) -> Result<String, AppFrameworkError> {
-        let (adapter, place) = self.maibot_prompt_place(id).await?;
-        maibot_api(adapter.as_ref())?
-            .prompt_version(place.target(), language, name, version_id)
+        let (api, place) = self.maibot_prompt_place(id).await?;
+        api.prompt_version(place.target(), language, name, version_id)
             .await
     }
 
@@ -236,10 +231,8 @@ impl AppManager {
         id: &AppInstanceId,
         action: MaiBotPromptAction,
     ) -> Result<MaiBotPromptFile, AppFrameworkError> {
-        let (adapter, place) = self.maibot_prompt_place(id).await?;
-        maibot_api(adapter.as_ref())?
-            .prompt_action(place.target(), &action)
-            .await
+        let (api, place) = self.maibot_prompt_place(id).await?;
+        api.prompt_action(place.target(), &action).await
     }
 
     pub async fn maibot_expressions(
@@ -247,16 +240,16 @@ impl AppManager {
         id: &AppInstanceId,
         query: MaiBotExpressionQuery,
     ) -> Result<MaiBotExpressionPage, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.expressions(&s, &query).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.expressions(&s, &query).await
     }
 
     pub async fn maibot_expression_overview(
         &self,
         id: &AppInstanceId,
     ) -> Result<MaiBotExpressionOverview, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.expression_overview(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.expression_overview(&s).await
     }
 
     pub async fn maibot_expression_action(
@@ -264,8 +257,8 @@ impl AppManager {
         id: &AppInstanceId,
         action: MaiBotExpressionAction,
     ) -> Result<MaiBotResourceDone, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.expression_action(&s, &action).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.expression_action(&s, &action).await
     }
 
     pub async fn maibot_jargons(
@@ -273,16 +266,16 @@ impl AppManager {
         id: &AppInstanceId,
         query: MaiBotJargonQuery,
     ) -> Result<MaiBotJargonPage, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.jargons(&s, &query).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.jargons(&s, &query).await
     }
 
     pub async fn maibot_jargon_overview(
         &self,
         id: &AppInstanceId,
     ) -> Result<MaiBotJargonOverview, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.jargon_overview(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.jargon_overview(&s).await
     }
 
     pub async fn maibot_jargon_action(
@@ -290,8 +283,8 @@ impl AppManager {
         id: &AppInstanceId,
         action: MaiBotJargonAction,
     ) -> Result<MaiBotResourceDone, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.jargon_action(&s, &action).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.jargon_action(&s, &action).await
     }
 
     pub async fn maibot_behaviors(
@@ -299,16 +292,16 @@ impl AppManager {
         id: &AppInstanceId,
         query: MaiBotBehaviorQuery,
     ) -> Result<MaiBotBehaviorPage, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.behaviors(&s, &query).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.behaviors(&s, &query).await
     }
 
     pub async fn maibot_behavior_overview(
         &self,
         id: &AppInstanceId,
     ) -> Result<MaiBotBehaviorOverview, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.behavior_overview(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.behavior_overview(&s).await
     }
 
     pub async fn maibot_behavior(
@@ -316,18 +309,18 @@ impl AppManager {
         id: &AppInstanceId,
         behavior_id: i64,
     ) -> Result<MaiBotBehaviorDetail, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.behavior(&s, behavior_id).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.behavior(&s, behavior_id).await
     }
 
     pub async fn maibot_chat_ticket(&self, id: &AppInstanceId) -> Result<MaiBotChatTicket, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.chat_ticket(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.chat_ticket(&s).await
     }
 
     pub async fn maibot_chat_clear(&self, id: &AppInstanceId) -> Result<MaiBotResourceDone, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.chat_clear(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.chat_clear(&s).await
     }
 
     pub async fn maibot_persons(
@@ -335,16 +328,16 @@ impl AppManager {
         id: &AppInstanceId,
         query: MaiBotPersonQuery,
     ) -> Result<MaiBotPersonPage, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.persons(&s, &query).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.persons(&s, &query).await
     }
 
     pub async fn maibot_person_overview(
         &self,
         id: &AppInstanceId,
     ) -> Result<MaiBotPersonOverview, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.person_overview(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.person_overview(&s).await
     }
 
     pub async fn maibot_person_action(
@@ -352,8 +345,8 @@ impl AppManager {
         id: &AppInstanceId,
         action: MaiBotPersonAction,
     ) -> Result<MaiBotResourceDone, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.person_action(&s, &action).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.person_action(&s, &action).await
     }
 
     pub async fn maibot_emojis(
@@ -361,16 +354,16 @@ impl AppManager {
         id: &AppInstanceId,
         query: MaiBotEmojiQuery,
     ) -> Result<MaiBotEmojiPage, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.emojis(&s, &query).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.emojis(&s, &query).await
     }
 
     pub async fn maibot_emoji_overview(
         &self,
         id: &AppInstanceId,
     ) -> Result<MaiBotEmojiOverview, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.emoji_overview(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.emoji_overview(&s).await
     }
 
     pub async fn maibot_emoji_action(
@@ -378,8 +371,8 @@ impl AppManager {
         id: &AppInstanceId,
         action: MaiBotEmojiAction,
     ) -> Result<MaiBotResourceDone, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.emoji_action(&s, &action).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.emoji_action(&s, &action).await
     }
 
     pub async fn maibot_emoji_image(
@@ -388,8 +381,8 @@ impl AppManager {
         emoji_id: i64,
         original: bool,
     ) -> Result<MaiBotEmojiImage, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.emoji_image(&s, emoji_id, original).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.emoji_image(&s, emoji_id, original).await
     }
 
     pub async fn maibot_emoji_upload(
@@ -397,8 +390,8 @@ impl AppManager {
         id: &AppInstanceId,
         upload: MaiBotEmojiUpload,
     ) -> Result<MaiBotEmojiUploadDone, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.emoji_upload(&s, &upload).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.emoji_upload(&s, &upload).await
     }
 
     /// 上传前在本机看一眼要传的图，不碰实例：拖进来时麦麦停着也能先挑
@@ -412,16 +405,16 @@ impl AppManager {
     }
 
     pub async fn maibot_memory_status(&self, id: &AppInstanceId) -> Result<MaiBotMemoryStatus, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_status(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_status(&s).await
     }
 
     pub async fn maibot_memory_import_setup(
         &self,
         id: &AppInstanceId,
     ) -> Result<MaiBotMemoryImportSetup, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_import_setup(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_import_setup(&s).await
     }
 
     pub async fn maibot_memory_import(
@@ -429,13 +422,13 @@ impl AppManager {
         id: &AppInstanceId,
         req: MaiBotMemoryImport,
     ) -> Result<MaiBotMemoryTask, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_import(&s, &req).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_import(&s, &req).await
     }
 
     pub async fn maibot_memory_tasks(&self, id: &AppInstanceId) -> Result<Vec<MaiBotMemoryTask>, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_tasks(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_tasks(&s).await
     }
 
     pub async fn maibot_memory_task(
@@ -443,8 +436,8 @@ impl AppManager {
         id: &AppInstanceId,
         task_id: &str,
     ) -> Result<MaiBotMemoryTaskDetail, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_task(&s, task_id).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_task(&s, task_id).await
     }
 
     pub async fn maibot_memory_task_action(
@@ -452,8 +445,8 @@ impl AppManager {
         id: &AppInstanceId,
         action: MaiBotMemoryTaskAction,
     ) -> Result<MaiBotMemoryTask, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_task_action(&s, &action).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_task_action(&s, &action).await
     }
 
     pub async fn maibot_memory_records(
@@ -461,8 +454,8 @@ impl AppManager {
         id: &AppInstanceId,
         query: MaiBotMemoryQuery,
     ) -> Result<MaiBotMemoryRecordPage, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_records(&s, &query).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_records(&s, &query).await
     }
 
     pub async fn maibot_memory_record(
@@ -471,13 +464,13 @@ impl AppManager {
         kind: MaiBotMemoryRecordKind,
         record_id: &str,
     ) -> Result<MaiBotMemoryRecordDetail, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_record(&s, kind, record_id).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_record(&s, kind, record_id).await
     }
 
     pub async fn maibot_memory_sources(&self, id: &AppInstanceId) -> Result<Vec<MaiBotMemorySource>, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_sources(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_sources(&s).await
     }
 
     pub async fn maibot_memory_delete(
@@ -485,16 +478,16 @@ impl AppManager {
         id: &AppInstanceId,
         action: MaiBotMemoryDeleteAction,
     ) -> Result<MaiBotMemoryDeleteResult, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_delete(&s, &action).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_delete(&s, &action).await
     }
 
     pub async fn maibot_memory_delete_ops(
         &self,
         id: &AppInstanceId,
     ) -> Result<Vec<MaiBotMemoryDeleteOp>, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_delete_ops(&s).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_delete_ops(&s).await
     }
 
     pub async fn maibot_memory_graph(
@@ -502,8 +495,8 @@ impl AppManager {
         id: &AppInstanceId,
         max_nodes: u32,
     ) -> Result<MaiBotMemoryGraph, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_graph(&s, max_nodes).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_graph(&s, max_nodes).await
     }
 
     pub async fn maibot_memory_graph_node(
@@ -511,8 +504,8 @@ impl AppManager {
         id: &AppInstanceId,
         node_id: &str,
     ) -> Result<MaiBotMemoryNodeDetail, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_graph_node(&s, node_id).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_graph_node(&s, node_id).await
     }
 
     pub async fn maibot_memory_graph_search(
@@ -520,7 +513,7 @@ impl AppManager {
         id: &AppInstanceId,
         query: &str,
     ) -> Result<Vec<MaiBotMemoryGraphHit>, AppFrameworkError> {
-        let (adapter, s) = self.maibot_session(id).await?;
-        maibot_api(adapter.as_ref())?.memory_graph_search(&s, query).await
+        let (api, s) = self.maibot_session(id).await?;
+        api.memory_graph_search(&s, query).await
     }
 }
