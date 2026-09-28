@@ -1,6 +1,6 @@
 # 前端分层铁律 + 落点约定 + 推倒重写记录 + 前端能力速查
 
-> 动前端代码前必读本文。功能域 → 代码落点查同目录 `codemap.md`；后端能力、踩坑记录在本地 `.claude/kb/`（不入库）。
+> 动前端代码前必读本文。功能域 → 代码落点查同目录 `codemap.md`，后端已有能力查 `capabilities.md`，踩坑查 `lessons.md`；NapCat / SnowLuma 运行语义在本地 `.claude/kb/`（不入库）。
 > 旧版本文把 `src-ui/modules/` 叫 `features/`，现在统一叫 modules。
 
 ---
@@ -43,7 +43,7 @@ flowchart TB
 - 应用端：`app-framework`（实例、配置、商店、AstrBot / 麦麦运行期接口）/ `maibot-chat` / `maibot-memory` / `maibot-resources`
 - 事件：`event-stream.service.ts`（`DOMAIN_EVENT_NAMES` 是事件名单一来源）+ `domain-event-hub.ts`（全应用只 listen 一份再分发，业务侧一律 `subscribeDomainEvents`）
 
-跨 IPC 的类型由 Rust 侧 ts-rs 导出到 `core/ipc/generated/<short-name>/`，`core/ipc/types.ts` 只 re-export。service 里手写的载荷接口（`bot.service.ts` 的 `LogSnapshot` / `SnowLumaAgreementsPayload`、`settings.service.ts` 的 `BackendSettings` 等）是待换成生成类型的旧账，别再加新的。
+跨 IPC 的类型由 Rust 侧 ts-rs 导出到 `core/ipc/generated/<short-name>/`，`core/ipc/types.ts` 只 re-export。service 里手写的载荷接口（`bot.service.ts` 的 `SnowLumaAgreementsPayload` / `QQProcessInfo`、`settings.service.ts` 的 `BackendSettings` 等）是待换成生成类型的旧账，别再加新的。
 
 `core/domain/*`：零运行时依赖，禁止 `import 'react'` / `'@tauri-apps/*'` / `'@tanstack/*'`。只放纯函数 + 类型 + reducer + 文案表，配单测。可以 import `core/ipc/types` 与 `core/ipc/generated/**`。按域分目录：`apps/`（实例状态、对接拓扑、商店与插件目录、各框架配置校验、麦麦的试聊 / 表情包 / 提示词…）/ `bot/` / `bootstrap/` / `components/` / `docker/` / `events/`（登录、SnowLuma 聚合，日志缓冲）/ `onboarding/` / `overview/` / `performance/` / `release/` / `remote-host/` / `settings/` / `task-queue/` / `terminal/` / `ui/`（错误条文案、相对时间）/ `webui/`，根上还有 `errors.ts`（`errorText`，把 invoke 抛出的裸字符串和 Error 统一成人话）/ `app-meta.ts` / `credits.ts` / `desktop-log.ts`。
 
@@ -55,9 +55,10 @@ flowchart TB
 
 ### 现存偏差（改到附近时顺手收掉，别照抄）
 
-- modules 直连服务：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/{ImportRemoteBotsDialog,SnowLumaConsentDialog}.tsx`、`bot/list/BotListPage.next.tsx`、`bot/list/next/BotCard.tsx`、`components/{ComponentsPage.next,QqDependencyDialog}.tsx`、`remote/{AddServerDialog,ImportSshConfigDialog}.tsx`、`settings/{ConfigImportDialog,DataRootMigrateDialog}.tsx`、`settings/settings-draft.ts`、`settings/tabs/{AboutTab,NcdWatchRemoteSection,NotificationsTab,RuntimeTab,WindowTab}.tsx`、`settings/tabs/notifications/{DeliveryHistoryDialog,OneBotMessengerPicker}.tsx`、`task-queue/{TaskDetailPanel,TaskQueueListItem,TaskQueuePage.next}.tsx`、`tray/TrayPanel.tsx`。`modules/apps/**` 和 `shared/**` 已经清零，保持住。
-- transport 之外直接碰 `@tauri-apps/*`：`main.tsx`、`app/AppBootGate.tsx`、`core/services/desktop.service.ts`、`hooks/ui/useTauriFileDrop.ts`、`hooks/terminal/useTerminalFileDrop.ts`、`modules/settings/useTauriDropTarget.ts`、`modules/tray/TrayPanel.tsx`。
+- modules 直连服务：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/{ImportRemoteBotsDialog,SnowLumaConsentDialog}.tsx`、`bot/list/BotListPage.next.tsx`、`bot/list/next/BotCard.tsx`、`components/{ComponentsPage.next,QqDependencyDialog}.tsx`、`remote/{AddServerDialog,ImportSshConfigDialog}.tsx`、`settings/{ConfigImportDialog,DataRootMigrateDialog}.tsx`、`settings/settings-draft.ts`、`settings/tabs/{AboutTab,NcdWatchRemoteSection,NotificationsTab,RuntimeTab,WindowTab}.tsx`、`settings/tabs/notifications/{DeliveryHistoryDialog,OneBotMessengerPicker}.tsx`、`task-queue/{TaskDetailPanel,TaskQueueListItem,TaskQueuePage.next}.tsx`、`tray/TrayPanel.tsx`（另有三处动态 `import('../../core/ipc/transport')` 直接 invoke `tray_panel_*`，命令名漏到了 modules）。`modules/apps/**` 和 `shared/**` 已经清零，保持住。
+- transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（动态 import）、`app/AppBootGate.tsx`（直接 `invoke`，另从 transport 取 `isTauri`）、`core/services/desktop.service.ts`、`hooks/ui/useTauriFileDrop.ts`、`hooks/terminal/useTerminalFileDrop.ts`、`modules/settings/useTauriDropTarget.ts`、`modules/tray/TrayPanel.tsx`（`hidePanel` 动态 import 窗口 API 调 `hide()`；面板的 capability 不给 hide，这句一直被拒，收面板已由后端 `window_show` 做）。
 - `app/AppNext.tsx` 直接用 `desktopUpdateService`。
+- 外链没走同一个口子：`hooks/docker/useDockerHosts.ts` 的 `openDownloadPage` 把 `openExternalUrl` 的 Promise 原样交出去，`components/ComponentsPage.next.tsx` 拿到后 `.catch(() => undefined)` 吞掉，链接被拒没人报；`hooks/terminal/terminalIo.ts` 的 `openLink` 逐行抄了一份 `useOpenExternal`。两处该和 `useOpenExternal` 共用一个「打开，失败弹条」的函数。`useOpenExternal` 自己弹的「无法打开链接」没带 `key`，连点几次会叠几条。
 - `hooks/preferences/useBackendSettings.ts` 反过来 import `modules/settings/settings-draft`。
 - `hooks/apps/useAppInstances.ts` 的新建、导入、启停、自动启动、重新探测还拿调用结果回写实例列表，这些后端都会发 `app_instance_changed`，照第 3 节交给事件桥即可。对接、解绑已经不回写。
 - 模块互相伸手：`bot/metrics` → `bootstrap/widgets/occupancyChartGeometry`、`components` → `docker/SudoPasswordDialog`（两处）、`remote/ServerCard` → `bot/list/next/BotManageCard`、`task-queue/TaskDetailPanel` → `components/DockerPullLayersPanel`；`shared/components/next/OnboardingPreviews.tsx` 引了 `bot/.../BotManageCard` 和 `components/ComponentEntityCard`。
@@ -76,7 +77,7 @@ flowchart TB
   - 每次打开都得是当下状态的（对接计划 `useAppLinkPlan`、插件配置文件列表 `useAppPluginConfigDocs`）：`staleTime: 0` + `gcTime: 0`，重新拉的途中不给旧数据。
   - 只给发起方用一次的结果（导入前检查项目、拉模型列表、测连接）：`useMutation`，不进缓存。
   - 后端会推事件的改动（实例状态、对接）不在调用结果里重复回写，交给根上的 `useAppInstanceEventsBridge`。
-- 外链一律 `hooks/useOpenExternal.ts`（被 scheme 白名单拒了会弹错误条）；选本机目录 `hooks/usePickDirectory.ts`；麦麦挑图、挑文件走 `useMaiBotChatImages` / `useMaiBotEmojiFiles` / `useMaiBotMemoryImportFiles`（失败统一经 `hooks/apps/maibotResourceAction.ts` 的 `localFilesOrNothing` 弹条、当没挑）。modules 里不出现 `openExternalUrl` / `pick*`。
+- 外链一律 `hooks/useOpenExternal.ts`（被 scheme 白名单拒了会弹错误条）；要先问后端拿地址再打开的（打开 WebUI、noVNC）在各自的 hook 里调 `openExternalUrl`，失败由那个 hook 报或抛给调用方报，不许吞；选本机目录 `hooks/usePickDirectory.ts`；麦麦挑图、挑文件走 `useMaiBotChatImages` / `useMaiBotEmojiFiles` / `useMaiBotMemoryImportFiles`（失败统一经 `hooks/apps/maibotResourceAction.ts` 的 `localFilesOrNothing` 弹条、当没挑）。modules 里不出现 `openExternalUrl` / `pick*`。
 - 失败别吞：`.catch(() => {})` 只留给确实无所谓的收尾；用户在等结果的一律 `pushErrorBar`，带 `key`。
 - 模块之间共用：
   - 纯展示、几个模块都要的 → `shared/`（`shared/` 自己不许 import modules）。
@@ -90,9 +91,10 @@ flowchart TB
 
 - 新增 Tauri command 名只出现在某个 `core/services/*.service.ts`，不泄漏到 hooks 或 modules
 - 新增事件：Rust 侧 payload 带 `v` 信封并导出 ts-rs 类型，`DomainEvent`（`core/ipc/types.ts`）接上，事件名加到 `event-stream.service.ts` 的 `DOMAIN_EVENT_NAMES`，聚合 reducer 写在 `core/domain/events/`，最后写 hook（订阅走 `subscribeDomainEvents`）
-- modules / shared 文件 grep，输出只能是第 2 节「现存偏差」里的旧账，不能多：
+- modules / shared / app 文件 grep，静态 import 和动态 `import()` 各查一遍，输出只能是第 2 节「现存偏差」里的旧账，不能多：
 
-      grep -rnE "from ['\"][^'\"]*(core/services|core/ipc/(transport|mock)|@tauri-apps)" src-ui/modules src-ui/shared
+      grep -rnE "from ['\"][^'\"]*(core/services|core/ipc/(transport|mock)|@tauri-apps)" src-ui/modules src-ui/shared src-ui/app
+      grep -rnE "import\(['\"][^'\"]*(core/services|core/ipc/(transport|mock)|@tauri-apps)" src-ui/modules src-ui/shared src-ui/app
 
 - `pnpm run typecheck` + `pnpm run test:unit` 通过；动了依赖或分包再跑 `pnpm exec vite build --config src-ui/vite.config.ts`
 
