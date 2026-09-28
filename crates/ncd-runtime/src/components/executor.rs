@@ -241,7 +241,7 @@ impl ComponentExecutor {
             let settings = self.app_settings.read().await;
             (
                 settings.snowluma_package,
-                local_snowluma_node_path(&settings).map(str::to_string),
+                settings.snowluma_node_override().map(str::to_string),
             )
         } else {
             (None, None)
@@ -814,16 +814,6 @@ async fn persist_local_snowluma_package(
     .map(|_| ())
 }
 
-/// 设置里本机 SnowLuma 的自定义 Node 路径;只填了空白当没设。
-/// 启动、保存设置、组件探测都按这一个口径读
-pub fn local_snowluma_node_path(settings: &AppSettings) -> Option<&str> {
-    settings
-        .snowluma_node_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-}
-
 /// 本机 SnowLuma 目录里有 node.exe 就是完整包;没装按完整包(不会平白拉 Node)
 pub fn infer_local_snowluma_package(data_root: &Path) -> SnowLumaLinuxPackage {
     let install_dir = data_root.join("components").join("SnowLuma");
@@ -1027,19 +1017,6 @@ mod tests {
         executor.cancel("desktop").await.unwrap();
         assert!(token.is_cancelled());
         assert!(executor.cancel("gone").await.is_err());
-    }
-
-    #[test]
-    fn blank_node_path_setting_means_unset() {
-        let mut settings = AppSettings::default();
-        assert_eq!(local_snowluma_node_path(&settings), None);
-        settings.snowluma_node_path = Some("   ".into());
-        assert_eq!(local_snowluma_node_path(&settings), None);
-        settings.snowluma_node_path = Some("  D:\\node\\node.exe ".into());
-        assert_eq!(
-            local_snowluma_node_path(&settings),
-            Some("D:\\node\\node.exe")
-        );
     }
 
     #[test]

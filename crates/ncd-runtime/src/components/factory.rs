@@ -205,8 +205,9 @@ pub fn build_component_for_host(
                 if let Some(bin) = nodejs_extra_detect_bin(ctx.selected) {
                     comp = comp.with_extra_detect_bin(bin);
                 }
-                if let Some(path) = ctx.snowluma_node_path.filter(|p| !p.trim().is_empty()) {
-                    comp = comp.with_extra_detect_bin(HostPath::from_windows(path.trim()));
+                // 执行器按 AppSettings::snowluma_node_override 取值,空白已经当没设
+                if let Some(path) = ctx.snowluma_node_path {
+                    comp = comp.with_extra_detect_bin(HostPath::from_windows(path));
                 }
                 Arc::new(comp)
             } else {

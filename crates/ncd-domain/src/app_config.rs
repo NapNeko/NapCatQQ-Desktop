@@ -456,6 +456,15 @@ impl AppSettings {
         self.poller.offline_notify_behavior.normalize();
     }
 
+    /// 本机 SnowLuma 的自定义 Node 路径;只填了空白当没设。
+    /// 启动、保存设置、组件探测都按这一个口径读
+    pub fn snowluma_node_override(&self) -> Option<&str> {
+        self.snowluma_node_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+    }
+
     /// 规范化性能监控采样间隔
     pub fn normalize_performance_monitor(&mut self) {
         self.performance_monitor_interval_ms =
@@ -547,6 +556,19 @@ pub struct SystemResourceSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blank_node_path_setting_means_unset() {
+        let mut settings = AppSettings::default();
+        assert_eq!(settings.snowluma_node_override(), None);
+        settings.snowluma_node_path = Some("   ".into());
+        assert_eq!(settings.snowluma_node_override(), None);
+        settings.snowluma_node_path = Some("  D:\\node\\node.exe ".into());
+        assert_eq!(
+            settings.snowluma_node_override(),
+            Some("D:\\node\\node.exe")
+        );
+    }
 
     /// Legacy PySide6 版本规范 JSON
     const LEGACY_CANONICAL_JSON: &str = r#"{"botLoginCheckInterval":5000,"botOfflineWebHookNotice":false,"botOfflineEmailNotice":false}"#;

@@ -310,9 +310,7 @@ pub fn run() {
         Arc::new(event_bus.clone()),
         snowluma_factory,
     );
-    snowluma_daemon.set_node_bin_override(
-        ncd_runtime::components::local_snowluma_node_path(&app_settings).map(PathBuf::from),
-    );
+    snowluma_daemon.set_node_bin_override(app_settings.snowluma_node_override().map(PathBuf::from));
     let snowluma_backend: Arc<dyn ncd_traits::runtime_backend::BotBackend> =
         Arc::new(ncd_runtime::SnowLumaRuntimeBackend::new(
             ncd_domain::ids::BotId::new("snowluma-backend-local"),

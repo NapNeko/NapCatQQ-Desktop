@@ -96,7 +96,9 @@ pub async fn set_app_settings(
 
     // 热更新 SnowLumaDaemon 的 node 路径覆盖
     state.snowluma_daemon.set_node_bin_override(
-        ncd_runtime::components::local_snowluma_node_path(&settings).map(std::path::PathBuf::from),
+        settings
+            .snowluma_node_override()
+            .map(std::path::PathBuf::from),
     );
 
     // 本机指标采集 prefs 热更新（间隔/开关/保留天数）
