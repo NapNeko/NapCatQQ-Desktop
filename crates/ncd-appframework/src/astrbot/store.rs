@@ -539,25 +539,47 @@ async fn flatten_extract(host: &dyn Host, dest: &HostPath) -> Result<(), AppFram
     }
     let entries = host.list_dir(dest).await.map_err(host_err)?;
     let dirs: Vec<_> = entries
-        .into_iter()
+        .iter()
         .filter(|e| e.is_dir && !e.name.starts_with('.') && reject_unsafe_name(&e.name).is_ok())
         .collect();
-    if dirs.len() != 1 {
+    let [inner_entry] = dirs.as_slice() else {
         return Ok(());
-    }
-    let inner = dest.join(&dirs[0].name);
+    };
+    let inner_name = inner_entry.name.clone();
+    let inner = dest.join(&inner_name);
     if !host.exists(&inner.join("metadata.yaml")).await.map_err(host_err)? {
         return Ok(());
     }
-    // 目录名来自插件作者打的 zip，只能当路径交给 Host 改名，不能拼进 shell 命令。
-    // 先把顶层目录挪到固定的临时名，里面若有和它同名的子项也不会撞上它自己
-    let staging = dest.join(".ncd-flatten");
     let flatten_err = |e: HostError| AppFrameworkError::Runtime(format!("无法展开 zip 目录: {e}"));
-    host.rename(&inner, &staging).await.map_err(flatten_err)?;
-    for child in host.list_dir(&staging).await.map_err(flatten_err)? {
+    let children = host.list_dir(&inner).await.map_err(flatten_err)?;
+    // 动手前先把每个子项过一遍：挪不了的名字不能等到最后跟着暂存目录一起被删掉
+    for child in &children {
         if reject_unsafe_name(&child.name).is_err() {
-            continue;
+            return Err(AppFrameworkError::Runtime(format!(
+                "无法展开 zip 目录: 不支持的文件名 {}",
+                child.name
+            )));
         }
+        if child.name != inner_name && entries.iter().any(|e| e.name == child.name) {
+            return Err(AppFrameworkError::Runtime(format!(
+                "无法展开 zip 目录: 顶层已有同名项 {}",
+                child.name
+            )));
+        }
+    }
+    // 目录名来自插件作者打的 zip，只能当路径交给 Host 改名，不能拼进 shell 命令。
+    // 先把顶层目录挪到暂存名，里面若有和它同名的子项也不会撞上它自己；
+    // 暂存名避开顶层和子项里已有的名字，zip 里自带一个同名目录也不会被当成暂存目录删掉
+    let taken = |name: &str| entries.iter().chain(&children).any(|e| e.name == name);
+    let mut staging_name = String::from(".ncd-flatten");
+    let mut n = 0u32;
+    while taken(&staging_name) {
+        n += 1;
+        staging_name = format!(".ncd-flatten-{n}");
+    }
+    let staging = dest.join(&staging_name);
+    host.rename(&inner, &staging).await.map_err(flatten_err)?;
+    for child in &children {
         let target = dest.join(&child.name);
         // 远端 mv 遇到已存在的目录会挪进去而不是报错，先查一遍免得套成两层
         if host.exists(&target).await.map_err(flatten_err)? {
@@ -809,5 +831,52 @@ mod tests {
             .await
             .unwrap();
         assert!(dest.join("sub").is_dir());
+    }
+
+    // zip 顶层自带一个和暂存名同名的目录：换个暂存名，自带的那个原样留着
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn flatten_staging_avoids_existing_names() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("plugin");
+        std::fs::create_dir_all(dest.join(".ncd-flatten")).unwrap();
+        std::fs::write(dest.join(".ncd-flatten").join("keep.txt"), b"k").unwrap();
+        let inner = dest.join("demo-main");
+        std::fs::create_dir_all(&inner).unwrap();
+        std::fs::write(inner.join("metadata.yaml"), b"name: demo\n").unwrap();
+        std::fs::write(inner.join("main.py"), b"pass\n").unwrap();
+
+        let host = ncd_host::local::LocalWindowsHost::new();
+        flatten_extract(&host, &HostPath::from_windows(dest.to_str().unwrap()))
+            .await
+            .unwrap();
+
+        assert!(dest.join("metadata.yaml").is_file());
+        assert!(dest.join("main.py").is_file());
+        assert!(dest.join(".ncd-flatten").join("keep.txt").is_file());
+        assert!(!dest.join(".ncd-flatten-1").exists());
+        assert!(!inner.exists());
+    }
+
+    // 挪不了的文件名直接报错，而且什么都还没动：不能挪完别的再把它跟暂存目录一起删掉
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn flatten_refuses_unsafe_child_name_before_moving_anything() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("plugin");
+        let inner = dest.join("demo-main");
+        std::fs::create_dir_all(&inner).unwrap();
+        std::fs::write(inner.join("metadata.yaml"), b"name: demo\n").unwrap();
+        std::fs::write(inner.join("notes..txt"), b"n").unwrap();
+
+        let host = ncd_host::local::LocalWindowsHost::new();
+        let err = flatten_extract(&host, &HostPath::from_windows(dest.to_str().unwrap()))
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("notes..txt"), "{err}");
+        assert!(inner.join("notes..txt").is_file());
+        assert!(inner.join("metadata.yaml").is_file());
+        assert!(!dest.join("metadata.yaml").exists());
     }
 }
