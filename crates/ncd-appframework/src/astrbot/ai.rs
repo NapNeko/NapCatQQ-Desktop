@@ -936,6 +936,180 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// 一份上游文档：已知键之外夹着上游新加、桌面端不认得的键，顶层顺序也不是字母序
+    fn upstream_root() -> Value {
+        json!({
+            "config_version": 2,
+            "provider_sources": [{
+                "id": "ds", "provider": "deepseek", "type": "openai_chat_completion",
+                "provider_type": "chat_completion", "enable": true, "key": ["sk-1"],
+                "api_base": "https://api.deepseek.com/v1", "timeout": 90, "proxy": "",
+                "gm_native_search": true
+            }],
+            "platform": [{"id": "p1", "type": "aiocqhttp"}],
+            "provider": [{
+                "id": "ds/chat", "enable": true, "provider_source_id": "ds", "model": "deepseek-chat",
+                "modalities": ["text", "image"], "max_context_tokens": 64000,
+                "custom_extra_body": {"x": 1}
+            }],
+            "provider_settings": {"enable": true, "default_provider_id": "ds/chat", "future_switch": "on"},
+            "provider_stt_settings": {"enable": false, "provider_id": "", "stt_extra": 3},
+            "provider_tts_settings": {"enable": true, "provider_id": "tts", "trigger_probability": 0.5, "tts_extra": [1]},
+            "platform_settings": {"unique_session": true, "rate_limit": {"time": 60}},
+            "wake_prefix": ["/"],
+            "admins_id": ["10001"],
+            "kb_names": ["docs"],
+            "kb_fusion_top_k": 20,
+            "kb_final_top_k": 5,
+            "kb_agentic_mode": false,
+            "subagent_orchestrator": {"main_enable": false, "agents": [], "sub_extra": "keep"},
+            "dashboard": {"enable": true, "port": 6185},
+            "zzz_trailing": null
+        })
+    }
+
+    /// 从文档读出全部投影再原样写回，和表单什么都没改就点保存一样
+    fn reapply(root: &mut Value) {
+        let sources = sources_from_root(root);
+        let models = models_from_root(root);
+        let ai = ai_from_root(root);
+        let stt = stt_from_root(root);
+        let tts = tts_from_root(root);
+        let websearch = websearch_from_root(root);
+        let kb = kb_from_root(root);
+        let gates = gates_from_root(root);
+        let subagent = subagent_from_root(root);
+        apply_ai_patch(
+            root, &sources, &models, &ai, &stt, &tts, &websearch, &kb, &gates, &subagent,
+        )
+        .unwrap();
+    }
+
+    fn keys(v: &Value) -> Vec<String> {
+        v.as_object().unwrap().keys().cloned().collect()
+    }
+
+    #[test]
+    fn reapply_keeps_unknown_keys() {
+        let before = upstream_root();
+        let mut root = before.clone();
+        reapply(&mut root);
+        assert_eq!(root["config_version"], 2);
+        assert_eq!(root["platform"], before["platform"]);
+        assert_eq!(root["dashboard"], before["dashboard"]);
+        assert_eq!(root.get("zzz_trailing"), Some(&Value::Null));
+        assert_eq!(root["provider_sources"][0]["gm_native_search"], true);
+        assert_eq!(root["provider"][0]["custom_extra_body"], json!({"x": 1}));
+        assert_eq!(root["provider_settings"]["future_switch"], "on");
+        assert_eq!(root["provider_stt_settings"]["stt_extra"], 3);
+        assert_eq!(root["provider_tts_settings"]["tts_extra"], json!([1]));
+        assert_eq!(root["platform_settings"]["rate_limit"], json!({"time": 60}));
+        assert_eq!(root["subagent_orchestrator"]["sub_extra"], "keep");
+    }
+
+    #[test]
+    fn reapply_keeps_top_level_key_order() {
+        let before = upstream_root();
+        let mut root = before.clone();
+        reapply(&mut root);
+        assert_eq!(keys(&root), keys(&before));
+
+        // 原来没有的键追加在末尾，已有的不挪位置
+        let mut sparse = json!({"zzz": 1, "provider_settings": {"enable": true}, "aaa": 2});
+        reapply(&mut sparse);
+        assert_eq!(keys(&sparse)[..3], ["zzz", "provider_settings", "aaa"]);
+        assert!(keys(&sparse).contains(&"subagent_orchestrator".to_string()));
+    }
+
+    #[test]
+    fn typed_values_round_trip_through_the_document() {
+        let sources = vec![AstrBotProviderSource {
+            id: "ds".into(),
+            provider: "deepseek".into(),
+            enable: false,
+            key: vec!["sk-1".into(), "sk-2".into()],
+            api_base: "https://api.deepseek.com/v1".into(),
+            timeout: 90,
+            proxy: "http://127.0.0.1:7890".into(),
+            extra: [("gm_native_search".to_string(), json!(true))].into_iter().collect(),
+            ..AstrBotProviderSource::default()
+        }];
+        let models = vec![AstrBotProviderModel {
+            id: "ds/chat".into(),
+            enable: true,
+            provider_source_id: "ds".into(),
+            model: "deepseek-chat".into(),
+            modalities: vec!["text".into(), "image".into()],
+            max_context_tokens: 64000,
+            extra: Extra::new(),
+        }];
+        let ai = AstrBotAiSettings {
+            enable: false,
+            default_provider_id: "ds/chat".into(),
+            fallback_chat_models: vec!["ds/reasoner".into()],
+            wake_prefix: "chat".into(),
+            max_context_length: 40,
+            streaming_response: true,
+            tool_schema_mode: "skills_like".into(),
+            ..AstrBotAiSettings::default()
+        };
+        let stt = AstrBotSttSettings {
+            enable: true,
+            provider_id: "whisper".into(),
+        };
+        let tts = AstrBotTtsSettings {
+            enable: true,
+            provider_id: "edge".into(),
+            dual_output: true,
+            trigger_probability: 0.25,
+        };
+        let websearch = AstrBotWebSearchSettings {
+            enable: true,
+            provider: "tavily".into(),
+            tavily_key: vec!["tv".into()],
+            bocha_key: Vec::new(),
+            baidu_app_builder_key: "bd".into(),
+            show_link: true,
+        };
+        let kb = AstrBotKbBind {
+            names: vec!["docs".into()],
+            fusion_top_k: 10,
+            final_top_k: 3,
+            agentic_mode: true,
+        };
+        let gates = AstrBotPlatformGates {
+            wake_prefix: vec!["#".into()],
+            unique_session: true,
+            enable_id_white_list: false,
+            id_whitelist: vec!["123".into()],
+            admins_id: vec!["10001".into()],
+            ..AstrBotPlatformGates::default()
+        };
+        let subagent = AstrBotSubagentConfig {
+            main_enable: true,
+            remove_main_duplicate_tools: true,
+            router_system_prompt: "route".into(),
+            agents: vec![AstrBotSubagentRow {
+                provider_id: "ds/chat".into(),
+                persona_id: "p".into(),
+            }],
+        };
+        let mut root = json!({});
+        apply_ai_patch(
+            &mut root, &sources, &models, &ai, &stt, &tts, &websearch, &kb, &gates, &subagent,
+        )
+        .unwrap();
+        assert_eq!(sources_from_root(&root), sources);
+        assert_eq!(models_from_root(&root), models);
+        assert_eq!(ai_from_root(&root), ai);
+        assert_eq!(stt_from_root(&root), stt);
+        assert_eq!(tts_from_root(&root), tts);
+        assert_eq!(websearch_from_root(&root), websearch);
+        assert_eq!(kb_from_root(&root), kb);
+        assert_eq!(gates_from_root(&root), gates);
+        assert_eq!(subagent_from_root(&root), subagent);
+    }
+
     #[test]
     fn apply_ai_patch_keeps_provider_settings_siblings() {
         let mut root = json!({
