@@ -144,6 +144,12 @@ pub trait Host: Send + Sync {
     /// 检查路径是否存在
     async fn exists(&self, path: &HostPath) -> Result<bool, HostError>;
 
+    /// 文件字节数，跟着链接走到目标。目录、不存在或这类主机给不出大小时是 Ok(None)，
+    /// 调用方按「不知道多大」处理
+    async fn file_size(&self, _path: &HostPath) -> Result<Option<u64>, HostError> {
+        Ok(None)
+    }
+
     /// 上传本地文件到主机(本地 Host 等同于 copy)
     async fn upload(&self, local: &Path, remote: &HostPath) -> Result<(), HostError>;
 

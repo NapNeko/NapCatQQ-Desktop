@@ -24,9 +24,11 @@ use super::{TerminalError, TerminalLaunchPlan, TerminalManager, TerminalPlanner,
 
 struct FakeHost {
     backends: mpsc::UnboundedSender<PtyBackend>,
-    /// stat 报的文件大小；None 时 stat 失败
-    stat_size: Option<u64>,
+    /// file_size 报的大小；None 是给不出
+    file_size: Option<u64>,
     reads: AtomicUsize,
+    /// upload 收到的目标路径，按收到的顺序
+    uploads: Mutex<Vec<String>>,
 }
 
 #[async_trait]
@@ -68,7 +70,14 @@ impl Host for FakeHost {
     async fn exists(&self, _: &HostPath) -> Result<bool, HostError> {
         Ok(false)
     }
-    async fn upload(&self, _: &Path, _: &HostPath) -> Result<(), HostError> {
+    async fn file_size(&self, _: &HostPath) -> Result<Option<u64>, HostError> {
+        Ok(self.file_size)
+    }
+    async fn upload(&self, _: &Path, remote: &HostPath) -> Result<(), HostError> {
+        self.uploads
+            .lock()
+            .unwrap()
+            .push(remote.as_posix().to_string());
         Ok(())
     }
     async fn download(&self, _: &HostPath, _: &Path) -> Result<(), HostError> {
@@ -85,17 +94,10 @@ impl Host for FakeHost {
     async fn spawn(&self, _: HostCommand) -> Result<Box<dyn HostProcess>, HostError> {
         Err(HostError::Unsupported { operation: "spawn" })
     }
-    async fn run_to_string(&self, cmd: HostCommand) -> Result<CommandOutput, HostError> {
-        match self.stat_size {
-            Some(size) if cmd.program == "stat" => Ok(CommandOutput {
-                exit_code: Some(0),
-                stdout: format!("{size}\n"),
-                stderr: String::new(),
-            }),
-            _ => Err(HostError::Unsupported {
-                operation: "run_to_string",
-            }),
-        }
+    async fn run_to_string(&self, _: HostCommand) -> Result<CommandOutput, HostError> {
+        Err(HostError::Unsupported {
+            operation: "run_to_string",
+        })
     }
     async fn open_pty(&self, _req: PtyRequest) -> Result<PtySession, HostError> {
         let (session, backend) = pty_channel_pair();
@@ -200,12 +202,12 @@ fn fixture(
     mpsc::UnboundedReceiver<PtyBackend>,
     Arc<FakePlanner>,
 ) {
-    fixture_with_stat(password, None)
+    fixture_with_size(password, None)
 }
 
-fn fixture_with_stat(
+fn fixture_with_size(
     password: Option<&str>,
-    stat_size: Option<u64>,
+    file_size: Option<u64>,
 ) -> (
     TerminalManager,
     mpsc::UnboundedReceiver<PtyBackend>,
@@ -215,8 +217,9 @@ fn fixture_with_stat(
     let planner = Arc::new(FakePlanner {
         host: Arc::new(FakeHost {
             backends: tx,
-            stat_size,
+            file_size,
             reads: AtomicUsize::new(0),
+            uploads: Mutex::new(Vec::new()),
         }),
         password: password.map(str::to_string),
         fail: AtomicBool::new(false),
@@ -432,7 +435,7 @@ async fn slow_client_holds_back_reading_until_it_acks() {
 
 #[tokio::test]
 async fn big_file_is_refused_before_it_is_read() {
-    let (manager, mut backends, planner) = fixture_with_stat(None, Some(3 * 1024 * 1024));
+    let (manager, mut backends, planner) = fixture_with_size(None, Some(3 * 1024 * 1024));
     let info = manager.open(request()).await.unwrap();
     let _backend = backends.recv().await.unwrap();
     let err = manager
@@ -445,8 +448,8 @@ async fn big_file_is_refused_before_it_is_read() {
 
 #[tokio::test]
 async fn small_or_unknown_size_goes_on_to_read() {
-    for stat in [Some(10), None] {
-        let (manager, mut backends, planner) = fixture_with_stat(None, stat);
+    for size in [Some(10), None] {
+        let (manager, mut backends, planner) = fixture_with_size(None, size);
         let info = manager.open(request()).await.unwrap();
         let _backend = backends.recv().await.unwrap();
         let err = manager
@@ -456,4 +459,86 @@ async fn small_or_unknown_size_goes_on_to_read() {
         assert!(err.to_string().contains("找不到"), "{err}");
         assert_eq!(planner.host.reads.load(Ordering::SeqCst), 1);
     }
+}
+
+/// 在 link 处建一个指向 target 目录的链接;Windows 用 junction,不用开发者模式也建得出来
+fn link_dir(target: &Path, link: &Path) {
+    #[cfg(windows)]
+    {
+        let status = std::process::Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(link)
+            .arg(target)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "mklink /J failed");
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(target, link).unwrap();
+}
+
+#[tokio::test]
+async fn folder_upload_skips_links_to_directories() {
+    let tmp = tempfile::tempdir().unwrap();
+    let proj = tmp.path().join("proj");
+    std::fs::create_dir_all(proj.join("sub")).unwrap();
+    std::fs::write(proj.join("a.txt"), b"a").unwrap();
+    std::fs::write(proj.join("sub").join("b.txt"), b"b").unwrap();
+    // 指回上层:跟进去就转不出来
+    link_dir(&proj, &proj.join("loop"));
+
+    let (manager, mut backends, planner) = fixture(None);
+    let info = manager.open(request()).await.unwrap();
+    let _backend = backends.recv().await.unwrap();
+    let count = tokio::time::timeout(
+        Duration::from_secs(5),
+        manager.upload(
+            info.id.as_str(),
+            &[proj.to_string_lossy().into_owned()],
+            "/home/u",
+        ),
+    )
+    .await
+    .expect("upload must not loop through the link")
+    .unwrap();
+
+    let mut uploads = planner.host.uploads.lock().unwrap().clone();
+    uploads.sort();
+    assert_eq!(
+        uploads,
+        vec!["/home/u/proj/a.txt", "/home/u/proj/sub/b.txt"]
+    );
+    assert_eq!(count, 2);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn folder_upload_sends_file_links_as_content() {
+    let tmp = tempfile::tempdir().unwrap();
+    let proj = tmp.path().join("proj");
+    std::fs::create_dir_all(&proj).unwrap();
+    std::fs::write(proj.join("a.txt"), b"a").unwrap();
+    std::os::unix::fs::symlink(proj.join("a.txt"), proj.join("alias.txt")).unwrap();
+
+    let (manager, mut backends, planner) = fixture(None);
+    let info = manager.open(request()).await.unwrap();
+    let _backend = backends.recv().await.unwrap();
+    manager
+        .upload(
+            info.id.as_str(),
+            &[proj.to_string_lossy().into_owned()],
+            "/home/u",
+        )
+        .await
+        .unwrap();
+
+    let mut uploads = planner.host.uploads.lock().unwrap().clone();
+    uploads.sort();
+    assert_eq!(
+        uploads,
+        vec!["/home/u/proj/a.txt", "/home/u/proj/alias.txt"]
+    );
 }

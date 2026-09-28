@@ -226,6 +226,16 @@ impl Host for LocalWindowsHost {
         }
     }
 
+    async fn file_size(&self, path: &HostPath) -> Result<Option<u64>, HostError> {
+        // metadata 跟随链接，拿到的是目标的大小
+        match tokio::fs::metadata(self.to_local(path)).await {
+            Ok(m) if m.is_file() => Ok(Some(m.len())),
+            Ok(_) => Ok(None),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(HostError::Io(e)),
+        }
+    }
+
     async fn upload(&self, local_src: &Path, remote: &HostPath) -> Result<(), HostError> {
         // 本地 Host 的 upload 等同于 copy,目标用 HostPath 表达
         let dest = self.to_local(remote);
@@ -851,6 +861,25 @@ mod tests {
         host.write_file(&path, b"hello world").await.unwrap();
         let bytes = host.read_file(&path).await.unwrap();
         assert_eq!(bytes.as_ref(), b"hello world");
+    }
+
+    #[tokio::test]
+    async fn file_size_is_for_regular_files_only() {
+        let host = LocalWindowsHost::new();
+        let ws = tempdir().unwrap();
+        let file = temp_host_path(&ws, "d/hello.txt");
+        host.write_file(&file, b"hello").await.unwrap();
+        assert_eq!(host.file_size(&file).await.unwrap(), Some(5));
+        assert_eq!(
+            host.file_size(&temp_host_path(&ws, "d")).await.unwrap(),
+            None
+        );
+        assert_eq!(
+            host.file_size(&temp_host_path(&ws, "missing.txt"))
+                .await
+                .unwrap(),
+            None
+        );
     }
 
     #[tokio::test]

@@ -982,6 +982,28 @@ impl Host for RemoteLinuxHost {
         }
     }
 
+    async fn file_size(&self, path: &HostPath) -> Result<Option<u64>, HostError> {
+        let remote = self.to_remote(path);
+        let sftp = self.sftp_session().await?;
+        // SFTP 的 STAT 跟随链接;LSTAT 才是链接本身
+        match sftp.metadata(&remote).await {
+            Ok(m) if m.is_dir() => Ok(None),
+            Ok(m) => Ok(m.size),
+            Err(russh_sftp::client::error::Error::Status(s))
+                if s.status_code == russh_sftp::protocol::StatusCode::NoSuchFile =>
+            {
+                Ok(None)
+            }
+            Err(e) => {
+                let err = sftp_err_to_host(&remote, "file_size", e);
+                if err.is_disconnect() {
+                    self.invalidate_connection().await;
+                }
+                Err(err)
+            }
+        }
+    }
+
     async fn upload(&self, local: &Path, remote: &HostPath) -> Result<(), HostError> {
         let remote_str = self.to_remote(remote);
 

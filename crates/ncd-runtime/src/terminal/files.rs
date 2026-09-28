@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use ncd_domain::{TerminalDirListing, TerminalFileEntry, TerminalHostOs, TerminalTextFile};
-use ncd_host::{DirEntry, DriveKind, Host, HostCommand, HostError, HostPath, PathStyle};
+use ncd_host::{DirEntry, DriveKind, Host, HostError, HostPath, PathStyle};
 
 use super::TerminalError;
 use super::manager::TerminalManager;
@@ -225,7 +225,7 @@ impl TerminalManager {
     pub async fn read_text(&self, id: &str, path: &str) -> Result<TerminalTextFile, TerminalError> {
         let (host, os) = self.files_host(id)?;
         let file = to_host_path(os, path)?;
-        if size_before_read(host.as_ref(), os, &file)
+        if size_before_read(host.as_ref(), &file)
             .await
             .is_some_and(|size| size > TEXT_EDIT_LIMIT as u64)
         {
@@ -395,36 +395,10 @@ fn too_big_to_edit() -> TerminalError {
     TerminalError::Invalid("文件超过 2 MB，下载下来用编辑器打开".into())
 }
 
-/// 读之前先看大小，免得几个 G 的日志整个拉进内存才发现打不开。远端 stat -L 一次拿到，
-/// 符号链接看的是指向的文件；本机从父目录列表里找，列表给的是链接本身的大小，碰到链接
-/// 就只能读完再判。拿不到给 None，是不是真打不开交给读那一步报
-async fn size_before_read(host: &dyn Host, os: TerminalHostOs, file: &HostPath) -> Option<u64> {
-    match os {
-        TerminalHostOs::Linux => {
-            let cmd = HostCommand::new("stat")
-                .arg("-L")
-                .arg("-c")
-                .arg("%s")
-                .arg("--")
-                .arg(file.as_posix());
-            let out = host.run_to_string(cmd).await.ok()?;
-            if !out.success() {
-                return None;
-            }
-            out.stdout.trim().parse().ok()
-        }
-        TerminalHostOs::Windows => {
-            let shown = normalize(os, file);
-            let parent = parent_of(os, &shown)?;
-            let (_, name) = shown.rsplit_once('\\')?;
-            host.list_dir(&HostPath::from_windows(&parent))
-                .await
-                .ok()?
-                .into_iter()
-                .find(|e| e.name == name && !e.is_symlink)
-                .map(|e| e.size)
-        }
-    }
+/// 读之前先看大小，免得几个 G 的日志整个拉进内存才发现打不开。大小跟着链接取目标的，
+/// 本机一次 metadata、远端一次 SFTP stat。拿不到给 None，是不是真打不开交给读那一步报
+async fn size_before_read(host: &dyn Host, file: &HostPath) -> Option<u64> {
+    host.file_size(file).await.ok().flatten()
 }
 
 fn file_name(path: &Path) -> Result<String, TerminalError> {
