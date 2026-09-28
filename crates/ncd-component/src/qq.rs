@@ -329,33 +329,28 @@ impl QQComponent {
 
     /// 探测远端有 dpkg-deb 还是 rpm2cpio,dpkg 优先(deb 更普遍)
     async fn detect_package_format(&self, host: &dyn Host) -> Result<PackageFormat, ActionError> {
-        // 用 sh -c "command -v X" 探测,退出码 0 = 存在
         for (binary, fmt) in &[
             ("dpkg-deb", PackageFormat::Deb),
             ("rpm2cpio", PackageFormat::Rpm),
         ] {
-            let cmd = HostCommand::new("sh")
-                .arg("-c")
-                .arg(format!("command -v {binary}"));
-            if let Ok(out) = host.run_to_string(cmd).await {
-                if out.success() && !out.stdout.trim().is_empty() {
-                    if *fmt == PackageFormat::Rpm && !self.command_available(host, "cpio").await {
-                        // 只在报错时探包管理器，提示里给这台机能直接跑的那条
-                        let pm = match LinuxPackageManager::detect(host).await {
-                            Some(pm @ LinuxPackageManager::Yum) => pm,
-                            _ => LinuxPackageManager::Dnf,
-                        };
-                        return Err(ActionError::install_step(
-                            "detect_pkg_format",
-                            format!(
-                                "已找到 rpm2cpio，但缺少 cpio，无法解包 LinuxQQ rpm。请在远端执行 sudo {} 后重试",
-                                pm.install_hint(&["cpio"])
-                            ),
-                        ));
-                    }
-                    return Ok(*fmt);
-                }
+            if !host.command_exists(binary).await {
+                continue;
             }
+            if *fmt == PackageFormat::Rpm && !host.command_exists("cpio").await {
+                // 只在报错时探包管理器，提示里给这台机能直接跑的那条
+                let pm = match LinuxPackageManager::detect(host).await {
+                    Some(pm @ LinuxPackageManager::Yum) => pm,
+                    _ => LinuxPackageManager::Dnf,
+                };
+                return Err(ActionError::install_step(
+                    "detect_pkg_format",
+                    format!(
+                        "已找到 rpm2cpio，但缺少 cpio，无法解包 LinuxQQ rpm。请在远端执行 sudo {} 后重试",
+                        pm.install_hint(&["cpio"])
+                    ),
+                ));
+            }
+            return Ok(*fmt);
         }
         let how = match LinuxPackageManager::detect(host).await {
             Some(pm @ LinuxPackageManager::Apt) => {
@@ -438,13 +433,6 @@ impl QQComponent {
         ctx.info(format!("成功安装 {} 个依赖", result.installed.len()))
             .await;
         Ok(())
-    }
-
-    async fn command_available(&self, host: &dyn Host, binary: &str) -> bool {
-        let cmd = HostCommand::new("sh")
-            .arg("-c")
-            .arg(format!("command -v {binary}"));
-        matches!(host.run_to_string(cmd).await, Ok(out) if out.success() && !out.stdout.trim().is_empty())
     }
 
     fn qq_base_path(&self) -> HostPath {
