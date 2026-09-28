@@ -8,6 +8,20 @@ pub(super) struct AppInstanceTunnel {
     handle: TunnelHandle,
 }
 
+/// 键上登记着同一个口、同一种拓扑、`reach` 那一侧也分到了口的隧道
+fn live_tunnel_port(
+    map: &HashMap<String, AppInstanceTunnel>,
+    key: &str,
+    app_port: u16,
+    topology: AppLinkTopology,
+    reach: fn(&TunnelHandle) -> u16,
+) -> Option<u16> {
+    map.get(key)
+        .filter(|t| t.app_port == app_port && t.topology == topology)
+        .map(|t| reach(&t.handle))
+        .filter(|port| *port != 0)
+}
+
 /// 正向对接时 Bot 在自己机上开的那个服务口
 fn forward_listen_port(bot: &BotConfig, connection_name: &str) -> Option<u16> {
     bot.connect
@@ -65,43 +79,20 @@ impl AppManager {
         if remote_port == 0 {
             return Err(AppFrameworkError::Validation("应用实例端口无效".into()));
         }
-        {
-            let mut map = self.tunnels.lock().await;
-            if let Some(existing) = map.get(&key) {
-                if existing.app_port == remote_port
-                    && existing.topology == AppLinkTopology::LocalBotRemoteApp
-                {
-                    return Ok(existing.handle.local_port());
-                }
-            }
-            map.remove(&key);
-        }
-        let host = self.resolve_host(&instance.host_id).await?;
-        let handle = host
-            .open_tunnel(TunnelSpec::local_to_remote(0, remote_port))
-            .await
-            .map_err(host_err)?;
-        let local_port = handle.local_port();
-        if local_port == 0 {
-            return Err(AppFrameworkError::Host("SSH 隧道未分配本地端口".into()));
-        }
-        let mut map = self.tunnels.lock().await;
-        if let Some(existing) = map.get(&key) {
-            if existing.app_port == remote_port
-                && existing.topology == AppLinkTopology::LocalBotRemoteApp
-            {
-                return Ok(existing.handle.local_port());
-            }
-        }
-        map.insert(
+        self.ensure_desktop_tunnel(
             key,
-            AppInstanceTunnel {
-                app_port: remote_port,
-                topology: AppLinkTopology::LocalBotRemoteApp,
-                handle,
+            remote_port,
+            AppLinkTopology::LocalBotRemoteApp,
+            TunnelHandle::local_port,
+            "SSH 隧道未分配本地端口",
+            async {
+                let host = self.resolve_host(&instance.host_id).await?;
+                host.open_tunnel(TunnelSpec::local_to_remote(0, remote_port))
+                    .await
+                    .map_err(host_err)
             },
-        );
-        Ok(local_port)
+        )
+        .await
     }
 
     async fn ensure_remote_to_local_tunnel(
@@ -112,48 +103,73 @@ impl AppManager {
         if instance.port == 0 {
             return Err(AppFrameworkError::Validation("应用实例端口无效".into()));
         }
-        let key = instance.id.as_str().to_string();
-        {
-            let mut map = self.tunnels.lock().await;
-            if let Some(existing) = map.get(&key) {
-                if existing.app_port == instance.port
-                    && existing.topology == AppLinkTopology::RemoteBotLocalApp
-                    && existing.handle.remote_listen_port() != 0
-                {
-                    return Ok(existing.handle.remote_listen_port());
-                }
-            }
-            map.remove(&key);
+        self.ensure_desktop_tunnel(
+            instance.id.as_str().to_string(),
+            instance.port,
+            AppLinkTopology::RemoteBotLocalApp,
+            TunnelHandle::remote_listen_port,
+            "SSH 隧道未分配远端端口",
+            async {
+                let host = self
+                    .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
+                    .await?;
+                host.open_tunnel(TunnelSpec::remote_to_local(0, instance.port))
+                    .await
+                    .map_err(host_err)
+            },
+        )
+        .await
+    }
+
+    /// 桌面端握着的隧道：键上有能用的就复用，没有就现开一条登记上。开隧道要走 SSH，不能拿着表锁等；
+    /// 开完再看一眼，并发的另一次已经登记了能用的就用它的，刚开的这条随手丢掉。
+    /// `reach` 取调用方要的那一侧：`-L` 是本机听口，`-R` 是远端听口
+    async fn ensure_desktop_tunnel(
+        &self,
+        key: String,
+        app_port: u16,
+        topology: AppLinkTopology,
+        reach: fn(&TunnelHandle) -> u16,
+        unassigned: &str,
+        open: impl Future<Output = Result<TunnelHandle, AppFrameworkError>>,
+    ) -> Result<u16, AppFrameworkError> {
+        if let Some(port) = self.reuse_or_evict_tunnel(&key, app_port, topology, reach).await {
+            return Ok(port);
         }
-        let host = self
-            .resolve_host(&host_id_of_runtime_target(&bot.bot.runtime_target))
-            .await?;
-        let handle = host
-            .open_tunnel(TunnelSpec::remote_to_local(0, instance.port))
-            .await
-            .map_err(host_err)?;
-        let bot_port = handle.remote_listen_port();
-        if bot_port == 0 {
-            return Err(AppFrameworkError::Host("SSH 隧道未分配远端端口".into()));
+        let handle = open.await?;
+        let port = reach(&handle);
+        if port == 0 {
+            return Err(AppFrameworkError::Host(unassigned.to_string()));
         }
         let mut map = self.tunnels.lock().await;
-        if let Some(existing) = map.get(&key) {
-            if existing.app_port == instance.port
-                && existing.topology == AppLinkTopology::RemoteBotLocalApp
-                && existing.handle.remote_listen_port() != 0
-            {
-                return Ok(existing.handle.remote_listen_port());
-            }
+        if let Some(existing) = live_tunnel_port(&map, &key, app_port, topology, reach) {
+            return Ok(existing);
         }
         map.insert(
             key,
             AppInstanceTunnel {
-                app_port: instance.port,
-                topology: AppLinkTopology::RemoteBotLocalApp,
+                app_port,
+                topology,
                 handle,
             },
         );
-        Ok(bot_port)
+        Ok(port)
+    }
+
+    /// 键上的隧道还能用就给出它的口；用不了先摘掉，调用方再去现开
+    async fn reuse_or_evict_tunnel(
+        &self,
+        key: &str,
+        app_port: u16,
+        topology: AppLinkTopology,
+        reach: fn(&TunnelHandle) -> u16,
+    ) -> Option<u16> {
+        let mut map = self.tunnels.lock().await;
+        if let Some(port) = live_tunnel_port(&map, key, app_port, topology, reach) {
+            return Some(port);
+        }
+        map.remove(key);
+        None
     }
 
     pub(super) async fn drop_instance_tunnel(&self, id: &AppInstanceId) {
@@ -180,20 +196,12 @@ impl AppManager {
             return Err(AppFrameworkError::Validation("协议 Bot 的 WS 服务还没分配端口".into()));
         }
         let key = forward_tunnel_key(&instance.id);
-        let reach = |h: &TunnelHandle| match topology {
-            AppLinkTopology::RemoteBotLocalApp => h.local_port(),
-            _ => h.remote_listen_port(),
+        let reach: fn(&TunnelHandle) -> u16 = match topology {
+            AppLinkTopology::RemoteBotLocalApp => TunnelHandle::local_port,
+            _ => TunnelHandle::remote_listen_port,
         };
-        {
-            let mut map = self.tunnels.lock().await;
-            if let Some(existing) = map.get(&key)
-                && existing.app_port == bot_port
-                && existing.topology == topology
-                && reach(&existing.handle) != 0
-            {
-                return Ok(reach(&existing.handle));
-            }
-            map.remove(&key);
+        if let Some(port) = self.reuse_or_evict_tunnel(&key, bot_port, topology, reach).await {
+            return Ok(port);
         }
         let tunnel_host = match topology {
             AppLinkTopology::RemoteBotLocalApp => {
