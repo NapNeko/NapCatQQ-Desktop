@@ -74,13 +74,15 @@ impl LinuxPackageManager {
         }
     }
 
-    /// 刷完索引接着装,一条 sh -c 跑完。全新机器上 apt / apk 还没有包索引,不先刷会找不到包;
-    /// 装包时自己会刷的管理器只剩安装那一句
+    /// 刷完索引接着装,一条 sh -c 跑完。全新机器上 apt 还没有包索引,不先刷会找不到包。
+    /// 刷新失败(比如某个第三方源连不上)不拦安装,成败只看安装那句,和把两句分开跑的
+    /// 调用方一个口径。apk 的 --no-cache 自己会拉索引,dnf / pacman 装包时自己会刷,
+    /// 这几种只剩安装那一句
     pub fn refresh_and_install_script(self, packages: &[&str]) -> String {
         let install = self.install_script(packages);
-        match self.refresh_script() {
-            Some(refresh) => format!("{refresh} && {install}"),
-            None => install,
+        match (self, self.refresh_script()) {
+            (Self::Apk, _) | (_, None) => install,
+            (_, Some(refresh)) => format!("{refresh}; {install}"),
         }
     }
 
@@ -174,7 +176,7 @@ mod tests {
     fn refresh_and_install_refreshes_only_where_needed() {
         assert_eq!(
             LinuxPackageManager::Apt.refresh_and_install_script(&["unzip"]),
-            "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq unzip"
+            "apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq unzip"
         );
         assert_eq!(
             LinuxPackageManager::Dnf.refresh_and_install_script(&["tar"]),
@@ -182,7 +184,7 @@ mod tests {
         );
         assert_eq!(
             LinuxPackageManager::Apk.refresh_and_install_script(&["unzip"]),
-            "apk update && apk add --no-cache unzip"
+            "apk add --no-cache unzip"
         );
     }
 
