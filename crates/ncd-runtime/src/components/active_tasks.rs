@@ -19,22 +19,19 @@ impl ActiveTasks {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    pub fn insert(&self, task_id: impl Into<String>, token: CancellationToken) {
-        self.map().insert(task_id.into(), token);
-    }
-
-    pub fn remove(&self, task_id: &str) {
+    fn remove(&self, task_id: &str) {
         self.map().remove(task_id);
     }
 
-    /// 登记一条,返回的 guard 丢掉时自动摘除;runner 中途 return 也不会留下死条目
+    /// 登记一条,返回的 guard 丢掉时自动摘除;runner 中途 return 也不会留下死条目。
+    /// 只有这一个登记口,外面没法插进一条没人摘的
     pub fn register(
         &self,
         task_id: impl Into<String>,
         token: CancellationToken,
     ) -> ActiveTaskGuard {
         let task_id = task_id.into();
-        self.insert(task_id.clone(), token);
+        self.map().insert(task_id.clone(), token);
         ActiveTaskGuard {
             tasks: self.clone(),
             task_id,
