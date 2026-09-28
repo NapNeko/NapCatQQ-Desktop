@@ -65,10 +65,17 @@ impl PortUsage {
 
     pub fn is_free(&self, port: u16) -> bool {
         match self {
-            Self::Local => local_port_free(port),
+            Self::Local => local_port_free(port) && !loopback_accepts(port),
             Self::Remote(busy) => !busy.contains(&port),
         }
     }
+}
+
+/// 别的进程在 0.0.0.0 上听着(AstrBot 的 dashboard 就是)时,Windows 上照样能再 bind 回环,
+/// 光试 bind 看不出来;那种监听也收回环连接,连一下就知道。没人听时连接超时或被拒,只多等一小会
+fn loopback_accepts(port: u16) -> bool {
+    let addr = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, port));
+    std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(100)).is_ok()
 }
 
 #[cfg(test)]
@@ -97,6 +104,13 @@ mod tests {
         let usage = PortUsage::Remote(vec![22, 6185]);
         assert!(!usage.is_free(6185));
         assert!(usage.is_free(6186));
+    }
+
+    #[test]
+    fn local_usage_sees_a_wildcard_listener() {
+        let held = std::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+        let port = held.local_addr().unwrap().port();
+        assert!(!PortUsage::Local.is_free(port));
     }
 
     #[test]
