@@ -5,15 +5,19 @@
 import type { AppConfigError, AppConfigErrorKind } from '../../ipc/types';
 import { errorText } from '../errors';
 
-const KINDS: ReadonlySet<string> = new Set<AppConfigErrorKind>([
-    'conflict',
-    'invalid',
-    'unsupported',
-    'not_running',
-    'auth',
-    'unreachable',
-    'other',
-]);
+// 按生成的联合类型逐个列：Rust 那边加了一种 kind 而这里没跟上，typecheck 就过不去，
+// 不会让新 kind 的错误被当成裸字符串归进 other
+const KIND_TABLE = {
+    conflict: true,
+    invalid: true,
+    unsupported: true,
+    not_running: true,
+    auth: true,
+    unreachable: true,
+    other: true,
+} satisfies Record<AppConfigErrorKind, true>;
+
+const KINDS: ReadonlySet<string> = new Set(Object.keys(KIND_TABLE));
 
 export function isAppConfigError(err: unknown): err is AppConfigError {
     if (!err || typeof err !== 'object') return false;
