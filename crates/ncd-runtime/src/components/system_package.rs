@@ -278,9 +278,21 @@ pub async fn run_qq_dependency_install_for_command(
     )
     .await;
 
-    let result = run_qq_installer(host, packages, sudo_password, &task_ctx)
-        .await
-        .map_err(|e| e.to_string())?;
+    // 出错也要把原因写进步骤日志并收尾,不然任务详情一直转着圈、看不到为什么失败
+    let result = match run_qq_installer(host, packages, sudo_password, &task_ctx).await {
+        Ok(result) => result,
+        Err(err) => {
+            let msg = err.to_string();
+            log(
+                &task_ctx,
+                ProgressLogLevel::Error,
+                format!("安装 QQ 系统依赖失败: {msg}"),
+            )
+            .await;
+            finish(&task_ctx, false).await;
+            return Err(msg);
+        }
+    };
 
     let ok = result.success && !result.elevation_required;
     if ok {
