@@ -5,7 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { maibotMemoryService as svc } from '../../core/services/maibot-memory.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import { localFilesOrNothing } from './maibotResourceAction';
 import type {
     MaiBotMemoryDeleteAction,
@@ -74,7 +74,7 @@ export function useMaiBotMemoryImport(instanceId: string) {
         mutationFn: (req) => svc.importMemory(instanceId, req),
         onSuccess: () => void qc.invalidateQueries({ queryKey: tasksKey(instanceId) }),
         onError: (err) => {
-            pushAppErrorBar({ key: `maibotMemoryImport-fail:${instanceId}`, title: '没导进去', raw: toAppConfigError(err).message });
+            pushErrorBar({ key: `maibotMemoryImport-fail:${instanceId}`, title: '没导进去', raw: toAppConfigError(err).message });
         },
     });
 }
@@ -85,7 +85,7 @@ export function useMaiBotMemoryTaskAction(instanceId: string) {
         mutationFn: (a) => svc.taskAction(instanceId, a),
         onSuccess: () => void qc.invalidateQueries({ queryKey: tasksKey(instanceId) }),
         onError: (err) => {
-            pushAppErrorBar({ key: `maibotMemoryTask-fail:${instanceId}`, title: '导入任务没改成', raw: toAppConfigError(err).message });
+            pushErrorBar({ key: `maibotMemoryTask-fail:${instanceId}`, title: '导入任务没改成', raw: toAppConfigError(err).message });
         },
     });
 }
@@ -160,7 +160,7 @@ export function useMaiBotMemoryDelete(instanceId: string) {
             }
         },
         onError: (err) => {
-            pushAppErrorBar({ key: `maibotMemoryDelete-fail:${instanceId}`, title: '没删成', raw: toAppConfigError(err).message });
+            pushErrorBar({ key: `maibotMemoryDelete-fail:${instanceId}`, title: '没删成', raw: toAppConfigError(err).message });
         },
     });
 }

@@ -77,7 +77,7 @@ flowchart TB
   - 只给发起方用一次的结果（导入前检查项目、拉模型列表、测连接）：`useMutation`，不进缓存。
   - 后端会推事件的改动（实例状态、对接）不在调用结果里重复回写，交给根上的 `useAppInstanceEventsBridge`。
 - 外链一律 `hooks/useOpenExternal.ts`（被 scheme 白名单拒了会弹错误条）；选本机目录 `hooks/usePickDirectory.ts`；麦麦挑图、挑文件走 `useMaiBotChatImages` / `useMaiBotEmojiFiles` / `useMaiBotMemoryImportFiles`（失败统一经 `hooks/apps/maibotResourceAction.ts` 的 `localFilesOrNothing` 弹条、当没挑）。modules 里不出现 `openExternalUrl` / `pick*`。
-- 失败别吞：`.catch(() => {})` 只留给确实无所谓的收尾；用户在等结果的一律 `pushErrorBar` / `pushAppErrorBar`，带 `key`。
+- 失败别吞：`.catch(() => {})` 只留给确实无所谓的收尾；用户在等结果的一律 `pushErrorBar`，带 `key`。
 - 模块之间共用：
   - 纯展示、几个模块都要的 → `shared/`（`shared/` 自己不许 import modules）。
   - 某模块的功能件给别的模块用 → 在该模块根上开 `index.ts` 当入口，别处只从入口拿。现有 `modules/apps/index.ts`（组件页按主机新建、导入实例用的两个对话框）。入口只挂别处真要静态引入的东西，不挂页面、详情 Tab，否则引入口的页面会把它们的依赖一起打进包。
@@ -197,7 +197,7 @@ flowchart TB
 - `useGlobalInfoBars.ts`：React hook，返回 `{ bars, push, dismiss, remove }`，`useSyncExternalStore` 订阅 store。
 - `app/AppNext.tsx`：顶层挂一次 `<InfoBarStack items={bars} onDismiss={dismiss} onAutoDismiss={remove} />`，整个 App 唯一渲染处。跨路由切换 banner 不丢。
 
-报错统一用 `pushErrorBar`（`hooks/ui/pushErrorBar.ts`，应用端 hook 里同一个函数叫 `pushAppErrorBar`）：传 `title` + 后端原话 `raw`，原话进 console，条上的正文由 `core/domain/ui/errorBarCopy.ts` 压成一句人话。
+报错统一用 `pushErrorBar`（`hooks/ui/pushErrorBar.ts`）：传 `title` + 后端原话 `raw`，原话进 console，条上的正文由 `core/domain/ui/errorBarCopy.ts` 压成一句人话。
 
 用法：
 

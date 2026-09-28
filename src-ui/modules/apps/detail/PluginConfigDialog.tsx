@@ -17,7 +17,7 @@ import {
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import { useAppConfigText, useAppPluginConfigDocs } from '../../../hooks/apps/useAppInstanceConfig';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
-import { pushAppErrorBar } from '../../../hooks/apps/pushAppErrorBar';
+import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { errorText } from '../../../core/domain/errors';
 import { cn } from '../../../shared/utils/cn';
 import { ConfigConflictDialog } from './ConfigConflictDialog';
@@ -62,7 +62,7 @@ export const PluginConfigDialog: React.FC<{
 
     useEffect(() => {
         if (!docsError || !pluginName) return;
-        pushAppErrorBar({
+        pushErrorBar({
             key: `plugin-cfg-docs:${instanceId}:${pluginName}`,
             title: '读取插件配置失败',
             raw: docsError,
@@ -145,7 +145,7 @@ const PluginConfigWorkspace: React.FC<{
 
     useEffect(() => {
         if (!text.error) return;
-        pushAppErrorBar({
+        pushErrorBar({
             key: `plugin-cfg-read:${instanceId}:${active?.id ?? ''}`,
             title: '读取插件配置失败',
             raw: text.error.message,
@@ -197,7 +197,7 @@ const PluginConfigWorkspace: React.FC<{
                 setSyntaxError(err.issues[0]?.message ?? err.message);
                 return;
             }
-            pushAppErrorBar({
+            pushErrorBar({
                 key: `plugin-cfg-save:${instanceId}:${active.id}`,
                 title: '保存失败',
                 raw: err.message,

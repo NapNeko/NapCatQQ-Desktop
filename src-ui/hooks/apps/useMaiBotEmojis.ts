@@ -4,7 +4,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { maibotResourcesService as svc } from '../../core/services/maibot-resources.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import { localFilesOrNothing, useResourceAction } from './maibotResourceAction';
 import type {
     MaiBotEmojiAction,
@@ -72,7 +72,7 @@ export function useMaiBotEmojiUpload(instanceId: string) {
         mutationFn: (up) => svc.emojiUpload(instanceId, up),
         onSuccess: () => void qc.invalidateQueries({ queryKey: emojiKey(instanceId) }),
         onError: (err) => {
-            pushAppErrorBar({ key: `maibotEmojiUpload-fail:${instanceId}`, title: '表情包没传上去', raw: toAppConfigError(err).message });
+            pushErrorBar({ key: `maibotEmojiUpload-fail:${instanceId}`, title: '表情包没传上去', raw: toAppConfigError(err).message });
         },
     });
 }

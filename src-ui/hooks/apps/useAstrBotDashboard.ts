@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import type {
     AstrBotAbconfInfo,
     AstrBotDashboardStatus,
@@ -20,7 +20,7 @@ export const astrbotToolsKey = (id: string) => ['astrbotSubagentTools', id] as c
 
 function fail(title: string, key: string) {
     return (err: unknown) => {
-        pushAppErrorBar({ key, title, raw: toAppConfigError(err).message });
+        pushErrorBar({ key, title, raw: toAppConfigError(err).message });
     };
 }
 

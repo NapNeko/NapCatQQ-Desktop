@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import type {
     MaiBotAPIProvider,
     MaiBotChatSession,
@@ -24,7 +24,7 @@ const NOT_RUNNING: MaiBotRuntimeStatus = { gate: 'not_running', message: '启动
 
 function fail(title: string, key: string) {
     return (err: unknown) => {
-        pushAppErrorBar({ key, title, raw: toAppConfigError(err).message });
+        pushErrorBar({ key, title, raw: toAppConfigError(err).message });
     };
 }
 

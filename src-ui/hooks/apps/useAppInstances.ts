@@ -8,7 +8,7 @@ import { appFrameworkService } from '../../core/services/app-framework.service';
 import { openExternalUrl } from '../../core/ipc/transport';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import { useAppInstanceAlerts } from './useAppInstanceAlerts';
 import { dropAppInstanceLogs, ensureAppInstanceLogStore } from './appInstanceLogStore';
 import { showWebUiAccountDialog } from './webuiAccountDialogStore';
@@ -55,7 +55,7 @@ export function useAppInstances() {
     useAppInstanceAlerts(query.data ?? [], query.error ? errorText(query.error) : null);
 
     const fail = (title: string, key: string) => (err: unknown) => {
-        pushAppErrorBar({ key, title, raw: errorText(err) });
+        pushErrorBar({ key, title, raw: errorText(err) });
     };
 
     const createMutation = useMutation({
@@ -193,7 +193,7 @@ export function useAppInstances() {
             }
             await openExternalUrl(url);
         } catch (err) {
-            pushAppErrorBar({
+            pushErrorBar({
                 key: `app-webui:${id}`,
                 title: '打开 WebUI 失败',
                 raw: errorText(err),

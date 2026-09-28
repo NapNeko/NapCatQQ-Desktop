@@ -10,7 +10,7 @@ import {
     type MaiBotChatStatus,
 } from '../../core/services/maibot-chat.service';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import { localFilesOrNothing } from './maibotResourceAction';
 
 export type MaiBotChatItem =
@@ -138,7 +138,7 @@ export function useMaiBotChat(instanceId: string, live: boolean) {
             dispatch({ type: 'cleared' });
             pushInfoBar({ key: `maibotChat:${instanceId}`, tone: 'success', title: done.message, autoDismissMs: 2500 });
         } catch (err) {
-            pushAppErrorBar({ key: `maibotChat-fail:${instanceId}`, title: '没清掉', raw: toAppConfigError(err).message });
+            pushErrorBar({ key: `maibotChat-fail:${instanceId}`, title: '没清掉', raw: toAppConfigError(err).message });
         } finally {
             setClearing(false);
         }

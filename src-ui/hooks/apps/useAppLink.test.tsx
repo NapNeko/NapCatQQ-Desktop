@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { OneBotLinkPlan } from '../../core/ipc/types';
 
 const previewLink = vi.fn();
-const pushAppErrorBar = vi.fn();
+const pushErrorBar = vi.fn();
 
 vi.mock('../../core/services/app-framework.service', () => ({
     appFrameworkService: {
@@ -13,8 +13,8 @@ vi.mock('../../core/services/app-framework.service', () => ({
     },
 }));
 
-vi.mock('./pushAppErrorBar', () => ({
-    pushAppErrorBar: (...args: unknown[]) => pushAppErrorBar(...args),
+vi.mock('../ui/pushErrorBar', () => ({
+    pushErrorBar: (...args: unknown[]) => pushErrorBar(...args),
 }));
 
 import { useAppLinkPlan } from './useAppLink';
@@ -46,7 +46,7 @@ function mount(initial: { instanceId: string; botId: string; enabled: boolean })
 
 beforeEach(() => {
     previewLink.mockReset();
-    pushAppErrorBar.mockReset();
+    pushErrorBar.mockReset();
 });
 
 describe('useAppLinkPlan', () => {
@@ -78,7 +78,7 @@ describe('useAppLinkPlan', () => {
         await waitFor(() => expect(result.current.previewing).toBe(false));
         expect(result.current.plan).toBeNull();
         expect(previewLink).toHaveBeenCalledTimes(1);
-        expect(pushAppErrorBar).toHaveBeenCalledTimes(1);
+        expect(pushErrorBar).toHaveBeenCalledTimes(1);
     });
 
     it('关掉对话框后才失败的那次不再弹错误条', async () => {
@@ -92,7 +92,7 @@ describe('useAppLinkPlan', () => {
 
         pending.reject('Bot 不在线');
         await new Promise((r) => setTimeout(r, 0));
-        expect(pushAppErrorBar).not.toHaveBeenCalled();
+        expect(pushErrorBar).not.toHaveBeenCalled();
         expect(previewLink).toHaveBeenCalledTimes(1);
     });
 });

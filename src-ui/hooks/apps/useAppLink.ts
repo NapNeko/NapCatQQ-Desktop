@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { errorText } from '../../core/domain/errors';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import { botConfigKey } from '../bot/useBotConfigsMap';
 import type { AppInstance, OneBotLinkPlan } from '../../core/ipc/types';
 
@@ -23,7 +23,7 @@ export function useAppLinkPlan(instanceId: string, botId: string, enabled: boole
             } catch (err) {
                 // 途中换了实例 / Bot、关了对话框或认出是 Docker Bot，这份计划没人要了，失败也不报
                 if (!signal.aborted) {
-                    pushAppErrorBar({
+                    pushErrorBar({
                         key: `app-link-preview:${instanceId}:${botId}`,
                         title: '无法生成对接计划',
                         raw: errorText(err),
@@ -60,7 +60,7 @@ export function useApplyAppLink() {
             });
         },
         onError: (err, { instanceId }) => {
-            pushAppErrorBar({
+            pushErrorBar({
                 key: `app-link:${instanceId}`,
                 title: '对接失败',
                 raw: errorText(err),

@@ -4,7 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { maibotResourcesService as svc } from '../../core/services/maibot-resources.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import type { MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile } from '../../core/ipc/types';
 
 /** disk：停着改盘；live：跑着且 WebUI 应答了；waiting：跑着但 WebUI 还没起来 */
@@ -59,7 +59,7 @@ export function useMaiBotPromptAction(instanceId: string, mode: PromptMode) {
             void qc.invalidateQueries({ queryKey: ['maibotPromptCatalog', instanceId] });
         },
         onError: (err) => {
-            pushAppErrorBar({
+            pushErrorBar({
                 key: `maibot-prompt:${instanceId}`,
                 title: '提示词没存上',
                 raw: toAppConfigError(err).message,

@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppInstanceConfig } from './useAppInstanceConfig';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import {
     configDataOf,
     configSaveSummary,
@@ -57,7 +57,7 @@ export function useAppConfigForm<F extends AppConfigFramework>(
 
     useEffect(() => {
         if (!remote.error) return;
-        pushAppErrorBar({
+        pushErrorBar({
             key: `app-config-load:${instanceId}`,
             title: '读取配置失败',
             raw: remote.error.message,
@@ -164,7 +164,7 @@ export function useAppConfigForm<F extends AppConfigFramework>(
                     });
                     return { kind: 'invalid', issues: err.issues };
                 }
-                pushAppErrorBar({
+                pushErrorBar({
                     key: `app-config-save-failed:${instanceId}`,
                     title: '保存失败',
                     raw: err.message,

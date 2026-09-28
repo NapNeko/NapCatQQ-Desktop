@@ -16,7 +16,7 @@ import {
     type PluginTaskHint,
 } from '../../core/domain/apps/pluginCatalog';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import { deploymentTaskStore } from '../task-queue/deploymentTaskStore';
 import type { AppInstance, AppPluginAction, AppStoreResource } from '../../core/ipc/types';
 
@@ -24,7 +24,7 @@ import type { AppInstance, AppPluginAction, AppStoreResource } from '../../core/
 export function reportCatalogError(key: string, e: unknown, catalog?: string): never {
     const raw = errorText(e);
     const copy = pluginCatalogErrorCopy(raw, catalog);
-    pushAppErrorBar({
+    pushErrorBar({
         key,
         title: copy.title,
         raw,
@@ -112,7 +112,7 @@ export function usePluginOps(instance: AppInstance, options: PluginOpsOptions) {
                     autoDismissMs: 4000,
                 });
             } else if (task.status === 'failed') {
-                pushAppErrorBar({
+                pushErrorBar({
                     key: `${barKey}-fail:${task.taskId}`,
                     title: `${failNoun}${verb}失败`,
                     raw: task.error && errorCopy ? errorCopy(task.error) : task.error,
@@ -133,7 +133,7 @@ export function usePluginOps(instance: AppInstance, options: PluginOpsOptions) {
                 if (!queued) await reloadInstalled();
             } catch (e) {
                 const raw = errorText(e);
-                pushAppErrorBar({
+                pushErrorBar({
                     key: `${barKey}-op:${instance.id}:${name}`,
                     title: submitFailTitle,
                     raw: errorCopy ? errorCopy(raw) : raw,
@@ -160,7 +160,7 @@ export function usePluginOps(instance: AppInstance, options: PluginOpsOptions) {
                     setConflict({ name, enabled });
                     return;
                 }
-                pushAppErrorBar({
+                pushErrorBar({
                     key: `${barKey}-enable:${instance.id}:${name}`,
                     title: '切换启用失败',
                     raw: errorText(e),

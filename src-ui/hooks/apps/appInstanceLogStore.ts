@@ -7,7 +7,7 @@ import { createStore } from '../utils/createStore';
 import { subscribeDomainEvents } from '../../core/services/domain-event-hub';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { errorText } from '../../core/domain/errors';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 import {
     appendLine,
     buildHistoryEntries,
@@ -138,7 +138,7 @@ export function useAppInstanceLog(instanceId: string | null, running = false) {
     useEffect(() => {
         if (!instanceId || !running) return;
         appFrameworkService.refresh(instanceId).catch((err) => {
-            pushAppErrorBar({ key: `app-log-follow:${instanceId}`, title: '接不上实例日志', raw: errorText(err) });
+            pushErrorBar({ key: `app-log-follow:${instanceId}`, title: '接不上实例日志', raw: errorText(err) });
         });
     }, [instanceId, running]);
     const snapshot = useSyncExternalStore(subscribe, store.getSnapshot, store.getSnapshot);

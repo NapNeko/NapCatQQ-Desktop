@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import type { AppInstance } from '../../core/ipc/types';
 import { dismissInfoBar } from '../ui/globalInfoBarStore';
-import { pushAppErrorBar } from './pushAppErrorBar';
+import { pushErrorBar } from '../ui/pushErrorBar';
 
 const prevLastError = new Map<string, string>();
 
@@ -18,7 +18,7 @@ export function useAppInstanceAlerts(instances: AppInstance[], listError: string
             dismissInfoBar('key:app-list-load');
             return;
         }
-        pushAppErrorBar({
+        pushErrorBar({
             key: 'app-list-load',
             title: '读取实例失败',
             raw: listError,
@@ -38,7 +38,7 @@ export function useAppInstanceAlerts(instances: AppInstance[], listError: string
             }
             if (prevLastError.get(inst.id) === err) continue;
             prevLastError.set(inst.id, err);
-            pushAppErrorBar({
+            pushErrorBar({
                 key,
                 title: `${inst.display_name} 出错`,
                 raw: err,

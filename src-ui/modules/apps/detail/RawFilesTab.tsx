@@ -6,7 +6,7 @@ import { Button, Spinner, SyntaxTextEditor, type SyntaxMode } from '../../../sha
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import { useAppConfigDocuments, useAppConfigText } from '../../../hooks/apps/useAppInstanceConfig';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
-import { pushAppErrorBar } from '../../../hooks/apps/pushAppErrorBar';
+import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { cn } from '../../../shared/utils/cn';
 import { ConfigConflictDialog } from './ConfigConflictDialog';
 import { PaneLoading } from './PaneStatus';
@@ -54,7 +54,7 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
 
     useEffect(() => {
         if (!docsQuery.error) return;
-        pushAppErrorBar({
+        pushErrorBar({
             key: `app-raw-docs:${instance.id}`,
             title: '读取配置文件列表失败',
             raw: docsQuery.error.message,
@@ -63,7 +63,7 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
 
     useEffect(() => {
         if (!text.error) return;
-        pushAppErrorBar({
+        pushErrorBar({
             key: `app-raw-read:${instance.id}:${activeId ?? ''}`,
             title: '读取配置文件失败',
             raw: text.error.message,
@@ -113,7 +113,7 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
                 setSyntaxError(err.issues[0]?.message ?? err.message);
                 return;
             }
-            pushAppErrorBar({
+            pushErrorBar({
                 key: `app-raw-save-failed:${instance.id}`,
                 title: '保存失败',
                 raw: err.message,

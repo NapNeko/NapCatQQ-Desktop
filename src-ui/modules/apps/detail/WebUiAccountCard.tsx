@@ -17,7 +17,7 @@ import {
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import { useWebUiAccount } from '../../../hooks/apps/useWebUiAccount';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
-import { pushAppErrorBar } from '../../../hooks/apps/pushAppErrorBar';
+import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { validateWebUiPassword } from '../../../core/domain/apps/webuiAccount';
 import { WebUiAccountFields } from '../WebUiAccountFields';
 import type { AppInstance } from '../../../core/ipc/types';
@@ -44,7 +44,7 @@ export const WebUiAccountCard: React.FC<{ instance: AppInstance }> = ({ instance
                 autoDismissMs: 12_000,
             });
         } catch (e) {
-            pushAppErrorBar({
+            pushErrorBar({
                 key: `webui-account-reset:${instance.id}`,
                 title: '重置密码失败',
                 raw: (e as { message?: string }).message ?? String(e),
