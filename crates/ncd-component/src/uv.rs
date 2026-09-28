@@ -14,13 +14,15 @@
 
 use async_trait::async_trait;
 
-use ncd_host::{Arch, ArchiveKind, Host, HostCommand, HostError, HostPath, Locality, Os};
+use ncd_host::shell::BashShell;
+use ncd_host::{
+    Arch, ArchiveKind, Host, HostCommand, HostError, HostPath, HostShell, Locality, Os,
+};
 
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
 use crate::requirement::Requirement;
-use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
@@ -315,8 +317,8 @@ impl Component for UvComponent {
             }
         } else {
             let triple = Self::target_triple(host.os(), arch)?;
-            let root = shell_quote(stage_dir.join(format!("uv-{triple}")).as_posix());
-            let dest = shell_quote(new_dir.as_posix());
+            let root = BashShell.escape(stage_dir.join(format!("uv-{triple}")).as_posix());
+            let dest = BashShell.escape(new_dir.as_posix());
             let mv = HostCommand::new("sh").arg("-c").arg(format!(
                 "mv {root}/uv {root}/uvx {dest}/ && chmod +x {dest}/uv {dest}/uvx"
             ));

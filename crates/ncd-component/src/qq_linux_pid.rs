@@ -15,12 +15,12 @@ pub fn linux_qq_running_pid_script(
     qq_bin: Option<&str>,
     allow_single_main_fallback: bool,
 ) -> String {
-    let pid_file = pid_file.unwrap_or("").replace('\'', "'\"'\"'");
-    let qq_bin = qq_bin.unwrap_or("").replace('\'', "'\"'\"'");
+    let pid_file = ncd_host::shell_single_quote(pid_file.unwrap_or(""));
+    let qq_bin = ncd_host::shell_single_quote(qq_bin.unwrap_or(""));
     let allow_single = if allow_single_main_fallback { "1" } else { "0" };
     format!(
-        r#"pidfile='{pid_file}'
-qqbin='{qq_bin}'
+        r#"pidfile={pid_file}
+qqbin={qq_bin}
 qid='{qq_id}'
 allow_single='{allow_single}'
 if [ -n "$pidfile" ] && [ -f "$pidfile" ]; then
@@ -171,7 +171,8 @@ mod tests {
     #[test]
     fn script_escapes_quotes_in_paths() {
         let script = linux_qq_running_pid_script(1, Some("/tmp/a'b"), Some("/opt/x'y"), false);
-        assert!(script.contains("a'\"'\"'b"));
+        assert!(script.contains(r"pidfile='/tmp/a'\''b'"));
+        assert!(script.contains(r"qqbin='/opt/x'\''y'"));
     }
 
     #[test]

@@ -7,13 +7,13 @@
 use std::path::PathBuf;
 
 use async_trait::async_trait;
-use ncd_host::{Arch, Host, HostCommand, HostPath, Locality, Os};
+use ncd_host::shell::BashShell;
+use ncd_host::{Arch, Host, HostCommand, HostPath, HostShell, Locality, Os};
 use ncd_network::build_mirror_urls;
 
 use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
-use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
@@ -425,7 +425,7 @@ impl Component for NcdWatchComponent {
              pkill -x '{BIN_NAME}' 2>/dev/null || true; \
              pkill -f '{}/bin/{BIN_NAME}' 2>/dev/null || true; \
              sleep 0.3; true",
-            shell_quote(&root)
+            BashShell.escape(&root)
         );
         ctx.emit(ProgressKind::Log {
             level: ProgressLogLevel::Info,
@@ -481,7 +481,7 @@ impl Component for NcdWatchComponent {
         let stop = format!(
             "systemctl --user disable --now ncd-watch.service 2>/dev/null || \
              pkill -f '{}/bin/{}' 2>/dev/null || true",
-            shell_quote(&root),
+            BashShell.escape(&root),
             BIN_NAME
         );
         let _ = host

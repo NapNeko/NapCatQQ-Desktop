@@ -39,13 +39,13 @@
 
 use async_trait::async_trait;
 
-use ncd_host::{Arch, Host, HostCommand, HostError, HostPath, Locality, Os, PathStyle};
+use ncd_host::shell::BashShell;
+use ncd_host::{Arch, Host, HostCommand, HostError, HostPath, HostShell, Locality, Os, PathStyle};
 
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
 use crate::requirement::{HostPackageGroup, Requirement};
-use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
@@ -709,8 +709,8 @@ impl QQComponent {
                 .arg(install_base),
             PackageFormat::Rpm => HostCommand::new("sh").arg("-c").arg(format!(
                 "rpm2cpio {} | (cd {} && cpio -idm)",
-                shell_quote(pkg_path),
-                shell_quote(install_base)
+                BashShell.escape(pkg_path),
+                BashShell.escape(install_base)
             )),
         };
         let out = host.run_to_string(extract_cmd).await?;

@@ -5,11 +5,11 @@
 
 use std::time::Duration;
 
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand, HostPath, shell_single_quote};
 use ncd_traits::runtime_backend::BotBackendError;
 
 use super::helpers::{read_remote_log_tail, read_remote_log_tail_lines};
-use super::layout::{DEFAULT_WEBUI_PORT, SnowLumaRemotePaths, shell_single_quote};
+use super::layout::{DEFAULT_WEBUI_PORT, SnowLumaRemotePaths};
 use super::remote_bash::resolve_remote_bash;
 use crate::snowluma::session::parse_bound_webui_port_from_logs;
 

@@ -8,7 +8,10 @@ use std::sync::Arc;
 use ncd_component::{ProgressEvent, ProgressKind, ProgressLogLevel};
 use ncd_domain::DockerInstallReport;
 use ncd_host::remote::{SudoAccess, probe_sudo};
-use ncd_host::{Host, HostCommand, Os, host_command_wrap_dpkg_wait_for_apt, truncate_pkg_line};
+use ncd_host::{
+    Host, HostCommand, Os, host_command_wrap_dpkg_wait_for_apt, shell_single_quote,
+    truncate_pkg_line,
+};
 use tracing::{error, info, warn};
 
 use super::cli::{DockerCli, DockerCliError};
@@ -381,8 +384,7 @@ async fn install_docker_linux_with_progress(
 
 fn docker_usermod_script(ssh_linux_username: Option<&str>) -> String {
     if let Some(u) = ssh_linux_username.map(str::trim).filter(|s| !s.is_empty()) {
-        let escaped = u.replace('\'', "'\\''");
-        return format!("usermod -aG docker '{escaped}'");
+        return format!("usermod -aG docker {}", shell_single_quote(u));
     }
     "usermod -aG docker \"${SUDO_USER:-$(logname 2>/dev/null)}\"".to_string()
 }

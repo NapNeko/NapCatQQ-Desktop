@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use ncd_component::{Component, LaunchArgs, NapCatComponent, linux_qq_running_pid_script};
 use ncd_deploy::{DeploymentError, NativeLaunchCommand, NativeLaunchTranslator};
 use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, RemoteSelectedPaths};
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand, HostPath, shell_single_quote};
 
 use ncd_deploy::backend_config_renderer::render_napcat_docker_config_payloads;
 use ncd_traits::runtime_backend::BotBackendError;
@@ -288,10 +288,6 @@ async fn build_napcat_remote_launch(
             e
         },
     })
-}
-
-fn shell_single_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
 }
 
 /// 远端指标注入上下文（由 ncd-runtime 在 wiring 时注入）

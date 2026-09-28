@@ -1,6 +1,6 @@
 //! 远端文件/日志读取小工具
 
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand, HostPath, shell_single_quote};
 use ncd_traits::runtime_backend::BotBackendError;
 
 pub(crate) async fn host_file_nonempty(host: &dyn Host, path: &str) -> bool {
@@ -49,9 +49,9 @@ pub(crate) async fn read_remote_log_tail_lines(
     if max_raw_lines == 0 {
         return Ok(Vec::new());
     }
-    let quoted = path.replace('\'', "'\"'\"'");
+    let quoted = shell_single_quote(path);
     let cmd = HostCommand::new("sh").arg("-c").arg(format!(
-        "if [ -f '{quoted}' ]; then tail -n {max_raw_lines} -- '{quoted}'; else exit 0; fi"
+        "if [ -f {quoted} ]; then tail -n {max_raw_lines} -- {quoted}; else exit 0; fi"
     ));
     let out = host
         .run_to_string(cmd)

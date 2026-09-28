@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use ncd_component::{Component, LaunchArgs, QQComponent};
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand, HostPath, shell_single_quote};
 use serde_json::json;
 
 use ncd_traits::runtime_backend::BotBackendError;
@@ -13,7 +13,7 @@ pub use super::stack::{resolve_remote_bash, run_remote_bash as run_sh};
 
 use super::layout::{
     DEFAULT_DISPLAY_NUM, DEFAULT_NOVNC_PORT, DEFAULT_VNC_PORT, DEFAULT_WEBUI_PORT,
-    RemoteSnowLumaLayout, SnowLumaRemotePaths, shell_single_quote,
+    RemoteSnowLumaLayout, SnowLumaRemotePaths,
 };
 use super::stack::{
     LOG_PREV_MAX_BYTES, ensure_stack_running, is_stack_ready, run_remote_bash, stack_stop,

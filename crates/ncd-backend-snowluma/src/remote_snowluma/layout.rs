@@ -9,7 +9,7 @@ use ncd_domain::{
     derive_remote_linux_paths, join_under, qq_bin_candidates, qq_install_base_from_qq_bin,
     require_qq_install_base, require_snowluma_dir, snowluma_workspace_from_dir,
 };
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand, HostPath, shell_single_quote};
 
 use ncd_traits::runtime_backend::BotBackendError;
 
@@ -120,8 +120,8 @@ pub async fn probe_remote_home(host: &dyn Host) -> Result<String, BotBackendErro
 }
 
 async fn host_path_executable(host: &dyn Host, path: &str) -> bool {
-    let escaped = path.replace('\'', "'\"'\"'");
-    let script = format!("test -f '{escaped}' && test -x '{escaped}'");
+    let quoted = shell_single_quote(path);
+    let script = format!("test -f {quoted} && test -x {quoted}");
     let cmd = HostCommand::new("sh").arg("-c").arg(script);
     host.run_to_string(cmd)
         .await
@@ -294,10 +294,6 @@ pub fn layout_from_selected(
         qq_bin,
         qq_install_base,
     })
-}
-
-pub fn shell_single_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
 }
 
 #[cfg(test)]

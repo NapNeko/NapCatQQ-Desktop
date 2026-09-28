@@ -15,7 +15,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ncd_domain::{AppInstance, AppInstanceId, AppInstanceState};
-use ncd_host::{ExitStatus, Host, HostCommand, HostPath, HostProcess, Locality, PathStyle};
+use ncd_host::{
+    ExitStatus, Host, HostCommand, HostPath, HostProcess, Locality, PathStyle, shell_single_quote,
+};
 use ncd_traits::{AppFrameworkError, EventBus};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
@@ -245,8 +247,8 @@ impl NativeAppRuntime {
                 .await;
             }
             Locality::Remote => {
-                let log = shell_quote(log_file.as_posix());
-                let prev = shell_quote(previous.as_posix());
+                let log = shell_single_quote(log_file.as_posix());
+                let prev = shell_single_quote(previous.as_posix());
                 let script =
                     format!("if [ -f {log} ]; then cp -f {log} {prev} 2>/dev/null; : > {log}; fi");
                 host.run_to_string(HostCommand::new("sh").arg("-c").arg(script))
@@ -731,10 +733,6 @@ async fn local_read_from(path: &str, from: u64, to: u64) -> Option<Vec<u8>> {
 
 // ---- 远端进程 ----
 
-fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
-}
-
 /// `cd dir && export … && nohup setsid prog args >> log 2>&1 </dev/null & echo $! > pid`，
 /// 起完 sleep 1 再 kill -0 校验，失败带日志尾巴回来。
 /// 开跑前上一轮挪到 `.1`；仍用 `>>` 追加打开，麦麦运行卡重启时原地截断，进程接着从头写
@@ -744,18 +742,18 @@ fn remote_start_script(
     log_file: &HostPath,
     pid_file: &HostPath,
 ) -> String {
-    let dir = shell_quote(install_dir);
-    let log = shell_quote(log_file.as_posix());
-    let previous = shell_quote(previous_run_log(log_file).as_posix());
-    let pid = shell_quote(pid_file.as_posix());
+    let dir = shell_single_quote(install_dir);
+    let log = shell_single_quote(log_file.as_posix());
+    let previous = shell_single_quote(previous_run_log(log_file).as_posix());
+    let pid = shell_single_quote(pid_file.as_posix());
     let exports: String = cmd
         .environment
         .iter()
-        .map(|(k, v)| format!("export {k}={}\n", shell_quote(v)))
+        .map(|(k, v)| format!("export {k}={}\n", shell_single_quote(v)))
         .collect();
     let invoke = std::iter::once(cmd.program.as_str())
         .chain(cmd.args.iter().map(String::as_str))
-        .map(shell_quote)
+        .map(shell_single_quote)
         .collect::<Vec<_>>()
         .join(" ");
     let program_name = program_file_name(&cmd.program);
@@ -768,12 +766,12 @@ fn remote_start_script(
          printf '%s\\n%s\\n' \"$pid\" {prog} > {pid}\n\
          sleep 1\n\
          if kill -0 \"$pid\" 2>/dev/null; then echo \"RUNNING $pid\"; else echo EXITED; tail -n 40 {log} 2>/dev/null; exit 98; fi\n",
-        prog = shell_quote(&program_name),
+        prog = shell_single_quote(&program_name),
     )
 }
 
 async fn remote_pid_matches(host: &dyn Host, pid: u32, install_dir: &str) -> bool {
-    let dir = shell_quote(install_dir);
+    let dir = shell_single_quote(install_dir);
     let script = format!(
         "if kill -0 {pid} 2>/dev/null; then \
            cwd=$(readlink /proc/{pid}/cwd 2>/dev/null); \
@@ -819,7 +817,7 @@ fn remote_stop_script(pid: u32) -> String {
 }
 
 async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
-    let quoted = shell_quote(path);
+    let quoted = shell_single_quote(path);
     let cmd = HostCommand::new("sh").arg("-c").arg(format!(
         "if [ -f {quoted} ]; then wc -c < {quoted}; else echo 0; fi"
     ));
@@ -828,7 +826,7 @@ async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
 }
 
 async fn remote_read_from(host: &dyn Host, path: &str, offset: u64) -> Option<Vec<u8>> {
-    let quoted = shell_quote(path);
+    let quoted = shell_single_quote(path);
     let start = offset.saturating_add(1);
     let cmd = HostCommand::new("sh").arg("-c").arg(format!(
         "if [ -f {quoted} ]; then tail -c +{start} -- {quoted} | head -c {MAX_CHUNK}; fi"
@@ -997,11 +995,6 @@ mod tests {
             !script.contains("kill -TERM --") && !script.contains("kill -KILL --") && !script.contains("kill -0 --"),
             "dash 内建 kill 不认 --"
         );
-    }
-
-    #[test]
-    fn shell_quote_escapes_single_quotes() {
-        assert_eq!(shell_quote("it's"), "'it'\"'\"'s'");
     }
 
     #[test]

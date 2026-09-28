@@ -7,7 +7,7 @@
 use std::time::Duration;
 
 use ncd_component::{ActionCtx, ActionError, DownloadHelper, UvComponent};
-use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
+use ncd_host::{Host, HostCommand, HostPath, Locality, Os, shell_single_quote};
 
 /// 实例目录下记录「安装时用的 uv」的标记文件
 pub const UV_MARKER_FILE: &str = ".ncd-uv";
@@ -105,10 +105,6 @@ pub fn venv_script(install_dir: &HostPath, os: Os, name: &str) -> HostPath {
     }
 }
 
-fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
-}
-
 /// Linux 主机的 C 库。PyPI 上的 Linux 轮子按 glibc 版本分档（manylinux_2_28 就要 2.28 以上），
 /// musl 的轮子和 glibc 不通用；没有合适的轮子 uv 会退回源码编译，在服务器上基本编不过
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -171,7 +167,7 @@ pub async fn probe_linux_libc(host: &dyn Host) -> LinuxLibc {
 pub async fn probe_free_kb(host: &dyn Host, dir: &HostPath) -> Option<u64> {
     let script = format!(
         "d={}; while [ ! -d \"$d\" ] && [ \"$d\" != / ]; do d=$(dirname \"$d\"); done; df -Pk \"$d\" | tail -n 1",
-        shell_quote(dir.as_posix())
+        shell_single_quote(dir.as_posix())
     );
     let cmd = HostCommand::new("sh").arg("-c").arg(script).timeout(Duration::from_secs(15));
     let out = host.run_to_string(cmd).await.ok()?;

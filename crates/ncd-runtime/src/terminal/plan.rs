@@ -9,7 +9,7 @@ use ncd_domain::{
     AppInstanceId, LocalShellKind, LocalShellOption, RuntimeTarget, TerminalFeatures,
     TerminalHostOs, TerminalOpenRequest, TerminalSnippet, TerminalTarget, server_id_of_host,
 };
-use ncd_host::{Host, HostCommand, HostPath, PathStyle, PtyProgram};
+use ncd_host::{Host, HostCommand, HostPath, PathStyle, PtyProgram, shell_single_quote};
 use tokio::sync::Mutex;
 
 use crate::app_framework::{AppManager, BotConfigPort};
@@ -18,7 +18,7 @@ use crate::host_resolver::HostResolver;
 use crate::server_manager::{ServerManager, ServerProfile};
 
 use super::TerminalError;
-use super::integration::{bash_env_section, bash_rc, git_bash_rc, remote_bash_exec_line, sh_quote};
+use super::integration::{bash_env_section, bash_rc, git_bash_rc, remote_bash_exec_line};
 use super::shells::{detect_local_shells, fresh_local_path, launch_for, pick_shell};
 
 mod bot;
@@ -94,7 +94,7 @@ fn linux_snippets() -> Vec<TerminalSnippet> {
 
 /// 进容器：先看要不要 sudo，再按名字找在跑的那个（SnowLuma 有旧版留下的 ncbot 名字）
 fn docker_exec_script(names: &[String]) -> String {
-    let list: Vec<String> = names.iter().map(|n| sh_quote(n)).collect();
+    let list: Vec<String> = names.iter().map(|n| shell_single_quote(n)).collect();
     let shown = names.join(" / ");
     format!(
         r#"if docker info >/dev/null 2>&1; then D=docker; else D="sudo docker"; fi

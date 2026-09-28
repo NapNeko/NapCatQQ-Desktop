@@ -1,6 +1,6 @@
 //! 远端日志 tail 辅助
 
-use ncd_host::{Host, HostCommand};
+use ncd_host::{Host, HostCommand, shell_single_quote};
 use ncd_traits::runtime_backend::BotBackendError;
 
 /// 远端日志尾部：SSH `tail -n`，禁止 SFTP 整文件（crash dump 可至百 MB）。
@@ -12,9 +12,9 @@ pub(crate) async fn remote_tail_log_raw_lines(
     if max_raw_lines == 0 {
         return Ok(Vec::new());
     }
-    let quoted = path.replace('\'', "'\"'\"'");
+    let quoted = shell_single_quote(path);
     let cmd = HostCommand::new("sh").arg("-c").arg(format!(
-        "if [ -f '{quoted}' ]; then tail -n {max_raw_lines} -- '{quoted}'; else exit 0; fi"
+        "if [ -f {quoted} ]; then tail -n {max_raw_lines} -- {quoted}; else exit 0; fi"
     ));
     let out = host
         .run_to_string(cmd)

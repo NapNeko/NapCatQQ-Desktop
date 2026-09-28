@@ -27,13 +27,15 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use ncd_domain::{NodeEnvironmentCandidate, NodeSourceKind};
-use ncd_host::{Arch, ArchiveKind, Host, HostCommand, HostError, HostPath, Locality, Os};
+use ncd_host::shell::BashShell;
+use ncd_host::{
+    Arch, ArchiveKind, Host, HostCommand, HostError, HostPath, HostShell, Locality, Os,
+};
 
 use crate::context::{ActionCtx, ProgressKind, ProgressLogLevel};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
 use crate::requirement::{Requirement, VersionReq, all_versions_match};
-use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{
     ComponentId, DetectOutcome, DetectedVersion, LaunchArgs, UnusableInstall, VerifyReport,
@@ -433,8 +435,8 @@ impl Component for NodeJsComponent {
         if host.os() == Os::Windows {
             copy_dir_all(host, &root_subdir, &self.install_dir).await?;
         } else {
-            let root = shell_quote(root_subdir.as_posix());
-            let dest = shell_quote(self.install_dir.as_posix());
+            let root = BashShell.escape(root_subdir.as_posix());
+            let dest = BashShell.escape(self.install_dir.as_posix());
             let mv_cmd = HostCommand::new("sh").arg("-c").arg(format!(
                 "mv {root}/* {dest}/ && mv {root}/.* {dest}/ 2>/dev/null; true",
             ));

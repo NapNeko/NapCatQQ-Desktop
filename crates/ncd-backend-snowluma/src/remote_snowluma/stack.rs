@@ -6,11 +6,11 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand, HostPath, shell_single_quote};
 
 use super::layout::{
     DEFAULT_DISPLAY_NUM, DEFAULT_NOVNC_PORT, DEFAULT_VNC_PORT, RemoteSnowLumaLayout,
-    SnowLumaRemotePaths, shell_single_quote,
+    SnowLumaRemotePaths,
 };
 use super::probe::{resolve_remote_webui_port, wait_remote_webui_ready};
 

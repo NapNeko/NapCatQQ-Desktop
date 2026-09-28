@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use ncd_domain::{AppInstance, AppInstanceId};
-use ncd_host::{Host, HostCommand, HostError, HostPath, Os, SshDialTarget};
+use ncd_host::{Host, HostCommand, HostError, HostPath, Os, SshDialTarget, shell_single_quote};
 use ncd_traits::AppFrameworkError;
 
 use super::listen_port::allocate_listen_port;
@@ -122,7 +122,7 @@ pub struct ResidentLinkScriptInput<'a> {
 }
 
 pub fn render_run_sh(input: &ResidentLinkScriptInput<'_>) -> String {
-    let user_host = shell_quote(&format!("{}@{}", input.dial.username, input.dial.host));
+    let user_host = shell_single_quote(&format!("{}@{}", input.dial.username, input.dial.host));
     let ssh_port = input.dial.port;
     let listen = input.listen_port;
     let tunnel = match input.forward {
@@ -166,10 +166,6 @@ pub fn render_run_sh(input: &ResidentLinkScriptInput<'_>) -> String {
         key = LINK_KEY_NAME,
         known = LINK_KNOWN_HOSTS,
     )
-}
-
-fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
 }
 
 pub fn remote_link_dir(home: &str, instance_id: &AppInstanceId) -> HostPath {
@@ -533,7 +529,7 @@ async fn stop_resident_script(
     if !app_host.exists(link_dir).await.unwrap_or(false) {
         return Ok(());
     }
-    let dir = shell_quote(link_dir.as_posix());
+    let dir = shell_single_quote(link_dir.as_posix());
     let script = format!(
         "stop={dir}/{stop}; pidf={dir}/{pid};\n\
          touch \"$stop\" 2>/dev/null || true\n\
@@ -564,7 +560,7 @@ async fn start_resident_script(
     app_host: &dyn Host,
     link_dir: &HostPath,
 ) -> Result<(), AppFrameworkError> {
-    let dir = shell_quote(link_dir.as_posix());
+    let dir = shell_single_quote(link_dir.as_posix());
     let script = format!(
         "rm -f {dir}/{stop}\n\
          chmod 700 {dir}/{run} {dir}/{key} 2>/dev/null || true\n\
@@ -605,7 +601,7 @@ async fn start_resident_script(
 }
 
 async fn resident_pid_alive(app_host: &dyn Host, link_dir: &HostPath) -> bool {
-    let dir = shell_quote(link_dir.as_posix());
+    let dir = shell_single_quote(link_dir.as_posix());
     let script = format!(
         "pidf={dir}/{pid};\n\
          [ -f \"$pidf\" ] || exit 1\n\
@@ -728,10 +724,5 @@ mod tests {
         assert!(pubkey_type_and_blob("").is_err());
         assert!(pubkey_type_and_blob("not-a-key").is_err());
         assert!(authorized_keys_line("ssh-ed25519 blob c", &id(), EXPOSE, 0).is_err());
-    }
-
-    #[test]
-    fn shell_quote_escapes_single_quotes() {
-        assert_eq!(shell_quote("it's"), "'it'\"'\"'s'");
     }
 }

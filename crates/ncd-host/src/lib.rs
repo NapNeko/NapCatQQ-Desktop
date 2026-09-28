@@ -64,5 +64,5 @@ pub use remote::download_progress::{CurlProgressParser, DownloadProgress, WgetPr
 pub use remote::url_download::{
     REMOTE_URL_DOWNLOAD_TIMEOUT, curl_url_download_command, wget_url_download_command,
 };
-pub use shell::{HostShell, ShellKind};
+pub use shell::{HostShell, ShellKind, shell_single_quote};
 pub use subprocess::hide_console_window;

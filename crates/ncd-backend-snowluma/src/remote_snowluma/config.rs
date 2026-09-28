@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use ncd_deploy::backend_config_renderer::render_snowluma_docker_config_payloads;
 use ncd_domain::{BackendType, BotConfig, BotId, RuntimeScenario, SnowLumaStartMode};
-use ncd_host::{Host, HostCommand, HostError, HostPath};
+use ncd_host::{Host, HostCommand, HostError, HostPath, shell_single_quote};
 use ncd_traits::runtime_backend::BotBackendError;
 use serde_json::{Value, json};
 
@@ -57,11 +57,11 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
     } else {
         qq_bin.to_string()
     };
-    let qq_q = qq.replace('\'', "'\"'\"'");
+    let qq_q = shell_single_quote(&qq);
     let check = HostCommand::new("sh").arg("-c").arg(format!(
         "command -v Xvfb >/dev/null && command -v x11vnc >/dev/null && \
          command -v websockify >/dev/null && command -v dbus-launch >/dev/null && \
-         test -x '{qq_q}'"
+         test -x {qq_q}"
     ));
     let out = host
         .run_to_string(check)
@@ -72,7 +72,7 @@ pub(crate) async fn ensure_remote_daemon_prereqs(
             .run_to_string(
                 HostCommand::new("sh")
                     .arg("-c")
-                    .arg(format!("test -x '{qq_q}'")),
+                    .arg(format!("test -x {qq_q}")),
             )
             .await
             .ok()

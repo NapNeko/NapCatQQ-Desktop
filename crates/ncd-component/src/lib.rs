@@ -69,9 +69,3 @@ pub use types::{
     DetectedVersion, LaunchArgs, SupportedTarget, UnusableInstall, VerifyReport,
 };
 pub use uv::{UV_DEFAULT_VERSION, UvComponent};
-
-// sh -c 命令手动拼路径时用,委托 ncd_host::BashShell 的单引号转义
-pub(crate) fn shell_quote(s: &str) -> String {
-    use ncd_host::HostShell;
-    ncd_host::shell::BashShell.escape(s)
-}

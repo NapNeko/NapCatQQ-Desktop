@@ -2,12 +2,8 @@
 
 use std::time::Duration;
 
-use ncd_host::{Host, HostCommand, Locality};
+use ncd_host::{Host, HostCommand, Locality, shell_single_quote};
 use ncd_traits::AppFrameworkError;
-
-fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
-}
 
 /// ExecStart 像在跑框架入口，而不是项目里的 sidecar 脚本。
 pub fn exec_looks_like_app(exec: &str, install_dir: &str) -> bool {
@@ -36,7 +32,7 @@ pub async fn list_supervisors(
     if host.locality() != Locality::Remote {
         return Ok(Vec::new());
     }
-    let dir = shell_quote(install_dir);
+    let dir = shell_single_quote(install_dir);
     let script = format!(
         "dir={dir}\n\
          for f in /etc/systemd/system/*.service; do\n\
@@ -201,7 +197,7 @@ pub async fn list_cwd_processes(
     if host.locality() != Locality::Remote {
         return Ok(String::new());
     }
-    let dir = shell_quote(install_dir);
+    let dir = shell_single_quote(install_dir);
     let script = format!(
         "dir={dir}\n\
          for d in /proc/[0-9]*; do\n\

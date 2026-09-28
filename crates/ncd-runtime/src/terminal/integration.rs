@@ -7,6 +7,8 @@
 //! 序列：A 提示符开始，B 提示符结束（用户开始输入），E 命令原文，C 命令开始执行，
 //! D;<退出码> 命令结束，P;Cwd=<目录> 当前目录。原文和目录里的 `\` `;` 和控制字符要转义。
 
+use ncd_host::shell_single_quote;
+
 /// bash：照登录 shell 的样子读用户自己的配置
 ///
 /// 终端是带 `--rcfile` 的交互式非登录 shell（这样才能挂上我们的脚本），所以要自己把
@@ -126,11 +128,6 @@ pub(crate) const CMD_PROMPT: &str = r"$E]9;9;$P$E\$E]633;A$E\$P$G$E]633;B$E\";
 /// here-doc 结束标记，脚本里不会出现这一串
 const RC_DELIMITER: &str = "NCD_RC_EOF_7F3A";
 
-/// bash 单引号字面量
-pub(crate) fn sh_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', r"'\''"))
-}
-
 /// 读完用户配置之后接上的环境：PATH 前缀、变量、起始目录（给几个候选时进第一个存在的）
 pub(crate) fn bash_env_section(
     path_prefix: &[String],
@@ -139,7 +136,7 @@ pub(crate) fn bash_env_section(
 ) -> String {
     let mut out = String::new();
     if !path_prefix.is_empty() {
-        let joined: Vec<String> = path_prefix.iter().map(|p| sh_quote(p)).collect();
+        let joined: Vec<String> = path_prefix.iter().map(|p| shell_single_quote(p)).collect();
         out.push_str("export PATH=");
         out.push_str(&joined.join(":"));
         out.push_str(":\"$PATH\"\n");
@@ -148,18 +145,18 @@ pub(crate) fn bash_env_section(
         out.push_str("export ");
         out.push_str(key);
         out.push('=');
-        out.push_str(&sh_quote(value));
+        out.push_str(&shell_single_quote(value));
         out.push('\n');
     }
     match cwd {
         [] => {}
         [dir] => {
             out.push_str("cd -- ");
-            out.push_str(&sh_quote(dir));
+            out.push_str(&shell_single_quote(dir));
             out.push_str(" 2>/dev/null || true\n");
         }
         dirs => {
-            let list: Vec<String> = dirs.iter().map(|d| sh_quote(d)).collect();
+            let list: Vec<String> = dirs.iter().map(|d| shell_single_quote(d)).collect();
             out.push_str("for __ncd_d in ");
             out.push_str(&list.join(" "));
             out.push_str("; do if [ -d \"$__ncd_d\" ]; then cd -- \"$__ncd_d\"; break; fi; done; unset __ncd_d\n");
@@ -193,7 +190,7 @@ pub(crate) fn remote_bash_exec_line(rc: &str, fallback_cwd: Option<&str>) -> Str
     line.push_str("\nelse\n");
     if let Some(dir) = fallback_cwd {
         line.push_str("cd -- ");
-        line.push_str(&sh_quote(dir));
+        line.push_str(&shell_single_quote(dir));
         line.push_str(" 2>/dev/null\n");
     }
     line.push_str("exec \"${SHELL:-/bin/sh}\" -l\nfi\n");
@@ -224,12 +221,6 @@ fn is_env_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn sh_quote_survives_single_quotes() {
-        assert_eq!(sh_quote("a b"), "'a b'");
-        assert_eq!(sh_quote("it's"), r"'it'\''s'");
-    }
 
     #[test]
     fn env_section_prepends_path_and_changes_dir() {

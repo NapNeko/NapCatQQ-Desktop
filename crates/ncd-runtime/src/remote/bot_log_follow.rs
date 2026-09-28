@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ncd_backend_snowluma::SnowLumaLogNoiseFilter;
-use ncd_host::{Host, HostCommand};
+use ncd_host::{Host, HostCommand, shell_single_quote};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
@@ -123,7 +123,7 @@ impl RemoteBotLogFollowRegistry {
 }
 
 async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
-    let quoted = shell_quote(path);
+    let quoted = shell_single_quote(path);
     let cmd = HostCommand::new("sh").arg("-c").arg(format!(
         "if [ -f {quoted} ]; then wc -c < {quoted}; else echo 0; fi"
     ));
@@ -132,15 +132,11 @@ async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
 }
 
 async fn remote_read_from(host: &dyn Host, path: &str, offset: u64) -> Option<Vec<u8>> {
-    let quoted = shell_quote(path);
+    let quoted = shell_single_quote(path);
     let start = offset.saturating_add(1);
     let cmd = HostCommand::new("sh").arg("-c").arg(format!(
         "if [ -f {quoted} ]; then tail -c +{start} -- {quoted} | head -c {MAX_CHUNK}; fi"
     ));
     let out = host.run_to_string(cmd).await.ok()?;
     Some(out.stdout.into_bytes())
-}
-
-fn shell_quote(path: &str) -> String {
-    format!("'{}'", path.replace('\'', "'\"'\"'"))
 }

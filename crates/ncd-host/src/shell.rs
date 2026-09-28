@@ -77,15 +77,21 @@ impl HostShell for BashShell {
         if safe {
             arg.to_string()
         } else {
-            // 单引号包裹,内部 ' 替换为 '\''
-            let escaped = arg.replace('\'', "'\\''");
-            format!("'{escaped}'")
+            shell_single_quote(arg)
         }
     }
 
     fn line_separator(&self) -> &'static str {
         "\n"
     }
+}
+
+/// 不管内容都包成一个 POSIX sh 单引号 token,内部 ' 换成 '\''
+///
+/// 和 [BashShell] 的 escape 不同,安全字符也照样加引号:手拼 sh -c 脚本时输出形状固定,
+/// 读脚本和写断言都不用先想这个值算不算安全
+pub fn shell_single_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
 }
 
 // PowerShellShell
@@ -188,6 +194,14 @@ mod tests {
         assert_eq!(sh.escape("hello"), "hello");
         assert_eq!(sh.escape("hello world"), "'hello world'");
         assert_eq!(sh.escape("it's"), r"'it'\''s'");
+    }
+
+    #[test]
+    fn single_quote_always_wraps() {
+        assert_eq!(shell_single_quote("plain"), "'plain'");
+        assert_eq!(shell_single_quote(""), "''");
+        assert_eq!(shell_single_quote("it's"), r"'it'\''s'");
+        assert_eq!(shell_single_quote("$(id) `x`"), "'$(id) `x`'");
     }
 
     #[test]

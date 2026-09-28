@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use ncd_host::{
     CurlProgressParser, DownloadProgress, Host, HostCommand, HostPath, StreamSource,
-    WgetProgressParser, curl_url_download_command, wget_url_download_command,
+    WgetProgressParser, curl_url_download_command, shell_single_quote, wget_url_download_command,
 };
 use tokio::sync::mpsc;
 
@@ -264,11 +264,6 @@ fn redact_url_for_error(url: &str) -> String {
     }
 }
 
-fn shell_single_quote(s: &str) -> String {
-    // POSIX: 'foo'\''bar'
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
-
 fn fmt_bps(bps: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = 1024 * 1024;
@@ -295,10 +290,5 @@ mod tests {
             redact_url_for_error("https://dldir1.qq.com/a.deb"),
             "https://dldir1.qq.com/a.deb"
         );
-    }
-
-    #[test]
-    fn shell_single_quote_escapes_quote() {
-        assert_eq!(shell_single_quote("a'b"), "'a'\\''b'");
     }
 }

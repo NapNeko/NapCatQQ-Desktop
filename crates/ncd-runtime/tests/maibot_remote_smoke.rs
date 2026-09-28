@@ -92,14 +92,11 @@ async fn maibot_remote_smoke() {
         ActionCtx, Component, DetectOutcome, ProgressKind, UV_DEFAULT_VERSION, UvComponent,
     };
     use ncd_host::remote::{ConnectionConfig, HostKeyPolicy, RemoteLinuxHost, SshCredentials};
+    use ncd_host::shell_single_quote;
     use std::time::{Duration, Instant};
 
     fn stamp(t0: Instant) -> String {
         format!("[{:>7.1}s]", t0.elapsed().as_secs_f32())
-    }
-
-    fn quote(s: &str) -> String {
-        format!("'{}'", s.replace('\'', "'\"'\"'"))
     }
 
     async fn sh(host: &dyn Host, script: &str) -> String {
@@ -119,7 +116,7 @@ async fn maibot_remote_smoke() {
         let script = format!(
             "d={}; for p in /proc/[0-9]*; do c=$(readlink \"$p/cwd\" 2>/dev/null) || continue; \
                      case \"$c\" in \"$d\"|\"$d\"/*) echo \"${{p#/proc/}} $(tr '\\0' ' ' < \"$p/cmdline\" 2>/dev/null)\";; esac; done",
-            quote(dir)
+            shell_single_quote(dir)
         );
         sh(host, &script)
             .await
@@ -324,8 +321,8 @@ async fn maibot_remote_smoke() {
         remote.as_ref(),
         &format!(
             "cd {} && nohup setsid {} fake_bot.py {} handshake.txt >/dev/null 2>&1 & echo $!",
-            quote(work.as_posix()),
-            quote(python.as_posix()),
+            shell_single_quote(work.as_posix()),
+            shell_single_quote(python.as_posix()),
             server.port
         ),
     )
@@ -401,7 +398,7 @@ async fn maibot_remote_smoke() {
             remote.as_ref(),
             &format!(
                 "cat {} 2>/dev/null",
-                quote(work.join("handshake.txt").as_posix())
+                shell_single_quote(work.join("handshake.txt").as_posix())
             ),
         )
         .await;

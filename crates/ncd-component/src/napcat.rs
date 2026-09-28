@@ -19,14 +19,14 @@
 
 use async_trait::async_trait;
 
-use ncd_host::{Host, HostCommand, HostError, HostPath, Locality, Os};
+use ncd_host::shell::BashShell;
+use ncd_host::{Host, HostCommand, HostError, HostPath, HostShell, Locality, Os};
 use ncd_network::build_mirror_urls;
 
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
 use crate::error::ActionError;
 use crate::requirement::Requirement;
-use crate::shell_quote;
 use crate::traits::Component;
 use crate::types::{ComponentId, DetectedVersion, LaunchArgs, VerifyReport};
 
@@ -536,11 +536,10 @@ impl NapCatComponent {
         // System 布局下 napcat_dir 在 /opt/QQ 系统目录,create_dir_all 走 SFTP 不能
         // 提权,必须用 shell 命令 + .elevated()(Host 层按注入的密码决定 sudo -S/-n)
         // Rootless 布局 maybe_elevated 原样返回,退化到普通命令
-        let mkdir_cmd = self.maybe_elevated(
-            HostCommand::new("sh")
-                .arg("-c")
-                .arg(format!("mkdir -p {}", shell_quote(napcat_dir.as_posix()))),
-        );
+        let mkdir_cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+            "mkdir -p {}",
+            BashShell.escape(napcat_dir.as_posix())
+        )));
         let out = host.run_to_string(mkdir_cmd).await?;
         if !out.success() {
             return Err(ActionError::install_step(
@@ -551,9 +550,9 @@ impl NapCatComponent {
         // 官方 install.sh L730:cp -r -f ./NapCat/* TARGET_FOLDER/napcat/
         let cp_cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
             "cp -r -f {}/* {}/ && chmod -R +x {}/",
-            shell_quote(stage_dir.as_posix()),
-            shell_quote(napcat_dir.as_posix()),
-            shell_quote(napcat_dir.as_posix()),
+            BashShell.escape(stage_dir.as_posix()),
+            BashShell.escape(napcat_dir.as_posix()),
+            BashShell.escape(napcat_dir.as_posix()),
         )));
         let out = host.run_to_string(cp_cmd).await?;
         if !out.success() {
@@ -587,7 +586,7 @@ impl NapCatComponent {
             let tee_cmd = self
                 .maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
                     "tee {} > /dev/null",
-                    shell_quote(self.load_script_path().as_posix())
+                    BashShell.escape(self.load_script_path().as_posix())
                 )))
                 .stdin(load_script.into_bytes());
             let out = host.run_to_string(tee_cmd).await?;
@@ -677,11 +676,10 @@ impl NapCatComponent {
         // System 布局走 elevated tee(密码由 Host 注入);rootless 走 SFTP write_file
         if self.requires_sudo {
             let tee_cmd = self
-                .maybe_elevated(
-                    HostCommand::new("sh")
-                        .arg("-c")
-                        .arg(format!("tee {} > /dev/null", shell_quote(path.as_posix()))),
-                )
+                .maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+                    "tee {} > /dev/null",
+                    BashShell.escape(path.as_posix())
+                )))
                 .stdin(new_bytes);
             let out = host.run_to_string(tee_cmd).await?;
             if !out.success() {
@@ -871,11 +869,10 @@ impl NapCatComponent {
         // Step 1: 删 napcat_dir,rootless 走 SFTP;system 走 elevated rm -rf
         if host.exists(&napcat_dir).await? {
             if self.requires_sudo {
-                let cmd = self.maybe_elevated(
-                    HostCommand::new("sh")
-                        .arg("-c")
-                        .arg(format!("rm -rf {}", shell_quote(napcat_dir.as_posix()))),
-                );
+                let cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+                    "rm -rf {}",
+                    BashShell.escape(napcat_dir.as_posix())
+                )));
                 let out = host.run_to_string(cmd).await?;
                 if !out.success() {
                     return Err(ActionError::other(format!(
@@ -892,11 +889,10 @@ impl NapCatComponent {
         // Step 2: 删 loadNapCat.js
         if host.exists(&load_script).await? {
             if self.requires_sudo {
-                let cmd = self.maybe_elevated(
-                    HostCommand::new("sh")
-                        .arg("-c")
-                        .arg(format!("rm -f {}", shell_quote(load_script.as_posix()))),
-                );
+                let cmd = self.maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
+                    "rm -f {}",
+                    BashShell.escape(load_script.as_posix())
+                )));
                 let _ = host.run_to_string(cmd).await;
             } else {
                 let _ = host.remove_file(&load_script).await;
@@ -920,7 +916,7 @@ impl NapCatComponent {
                             let cmd = self
                                 .maybe_elevated(HostCommand::new("sh").arg("-c").arg(format!(
                                     "tee {} > /dev/null",
-                                    shell_quote(pkg_json.as_posix())
+                                    BashShell.escape(pkg_json.as_posix())
                                 )))
                                 .stdin(new_bytes);
                             let _ = host.run_to_string(cmd).await;

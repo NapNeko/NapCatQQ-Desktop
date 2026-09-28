@@ -1,6 +1,6 @@
 //! 应用端日志尾巴:开页拉取用,不走 broadcast(启动对账推的行前端还没订阅会丢)
 
-use ncd_host::{Host, HostCommand, HostPath, Locality, PathStyle};
+use ncd_host::{Host, HostCommand, HostPath, Locality, PathStyle, shell_single_quote};
 use std::time::Duration;
 
 const MAX_BYTES: u64 = 512 * 1024;
@@ -36,7 +36,7 @@ pub async fn tail_file(host: &dyn Host, path: &HostPath, lines: usize) -> Vec<St
 pub async fn newest_project_log(host: &dyn Host, install_dir: &str) -> Option<HostPath> {
     match host.locality() {
         Locality::Remote => {
-            let dir = shell_quote(install_dir);
+            let dir = shell_single_quote(install_dir);
             let cmd = HostCommand::new("sh").arg("-c").arg(format!(
                 "ls -1t {dir}/.ncd-*.log {dir}/logs/*.log {dir}/*.log 2>/dev/null | head -1"
             ));
@@ -150,7 +150,7 @@ async fn tail_local(path: &HostPath, lines: usize) -> Vec<String> {
 }
 
 async fn tail_remote(host: &dyn Host, path: &str, lines: usize) -> Vec<String> {
-    let quoted = shell_quote(path);
+    let quoted = shell_single_quote(path);
     run_sh(
         host,
         &format!("if [ -f {quoted} ]; then tail -n {lines} -- {quoted}; fi"),
@@ -159,7 +159,7 @@ async fn tail_remote(host: &dyn Host, path: &str, lines: usize) -> Vec<String> {
 }
 
 async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
-    let quoted = shell_quote(path);
+    let quoted = shell_single_quote(path);
     let out = host
         .run_to_string(
             HostCommand::new("sh")
@@ -189,10 +189,6 @@ async fn run_sh(host: &dyn Host, script: &str) -> Vec<String> {
             .collect(),
         Err(_) => Vec::new(),
     }
-}
-
-fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\"'\"'"))
 }
 
 #[cfg(test)]
