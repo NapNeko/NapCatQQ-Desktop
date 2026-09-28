@@ -13,12 +13,12 @@ import {
 } from '../../shared/ui';
 import { SimpleMarkdown } from '../../shared/ui/SimpleMarkdown';
 import { ActionMotionIcon } from '../../shared/ui/motion';
-import { openExternalUrl } from '../../core/ipc/transport';
 import { useTermsDialog } from '../../hooks/apps/termsDialogStore';
+import { useOpenExternal } from '../../hooks/useOpenExternal';
 
 export const TermsConsentDialogHost: React.FC = () => {
     const state = useTermsDialog();
-    const open = (url: string) => void openExternalUrl(url);
+    const open = useOpenExternal();
     return (
         <Dialog open={state !== null} onOpenChange={(o) => !o && state?.settle(false)}>
             <DialogContent size="sheet">

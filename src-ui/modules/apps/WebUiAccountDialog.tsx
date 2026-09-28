@@ -11,15 +11,16 @@ import {
     DialogTitle,
 } from '../../shared/ui';
 import { ActionMotionIcon } from '../../shared/ui/motion';
-import { openExternalUrl } from '../../core/ipc/transport';
 import {
     closeWebUiAccountDialog,
     useWebUiAccountDialog,
 } from '../../hooks/apps/webuiAccountDialogStore';
+import { useOpenExternal } from '../../hooks/useOpenExternal';
 import { WebUiAccountFields } from './WebUiAccountFields';
 
 export const WebUiAccountDialogHost: React.FC = () => {
     const state = useWebUiAccountDialog();
+    const openExternal = useOpenExternal();
     return (
         <Dialog open={state !== null} onOpenChange={(o) => !o && closeWebUiAccountDialog()}>
             <DialogContent size="sm">
@@ -36,7 +37,7 @@ export const WebUiAccountDialogHost: React.FC = () => {
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => void openExternalUrl(state.url)}
+                                onClick={() => openExternal(state.url)}
                             >
                                 <ActionMotionIcon icon={ExternalLink} size={13} />
                                 重新打开

@@ -15,7 +15,7 @@ import { PluginConfigDialog } from './PluginConfigDialog';
 import { PaneLoading } from './PaneStatus';
 import { StoreToolbar, UninstallDialog } from './storeToolbar';
 import { useAppStore } from '../../../hooks/apps/useAppStore';
-import { openExternalUrl } from '../../../core/ipc/transport';
+import { useOpenExternal } from '../../../hooks/useOpenExternal';
 import { cn } from '../../../shared/utils/cn';
 import styles from './appStoreGrid.module.css';
 import {
@@ -214,6 +214,7 @@ const StoreCard: React.FC<{
     const kindLabel = resource === 'adapter' ? '适配器' : '插件';
     const meta = [row.authorName || null, row.timeLabel].filter(Boolean).join(' · ');
     const home = row.homepage.trim();
+    const openExternal = useOpenExternal();
 
     return (
         <article
@@ -234,7 +235,7 @@ const StoreCard: React.FC<{
                                 type="button"
                                 aria-label="打开主页"
                                 className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-text-tertiary hover:bg-inset hover:text-text"
-                                onClick={() => void openExternalUrl(home)}
+                                onClick={() => openExternal(home)}
                             >
                                 <ExternalLink size={13} strokeWidth={2.2} />
                             </button>
