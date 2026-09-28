@@ -570,7 +570,6 @@ mod tests {
     };
     use ncd_host::{
         Arch, ArchiveKind, CommandOutput, DirEntry, HostError, HostShell, Locality, Os,
-        PackageManager,
     };
     use std::path::Path;
     use std::sync::{Arc, Mutex};
@@ -680,9 +679,6 @@ mod tests {
         }
         fn shell(&self) -> &dyn HostShell {
             &NoopShell
-        }
-        fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-            None
         }
         async fn read_file(&self, _: &HostPath) -> Result<Bytes, HostError> {
             Err(HostError::Unsupported { operation: "mock" })

@@ -186,7 +186,7 @@ mod tests {
     use ncd_host::shell::BashShell;
     use ncd_host::{
         Arch, ArchiveKind, CommandOutput, DirEntry, HostCommand, HostError, HostPath, HostProcess,
-        HostShell, Locality, Os, PackageManager,
+        HostShell, Locality, Os,
     };
 
     struct ScriptedHost {
@@ -211,9 +211,6 @@ mod tests {
         }
         fn shell(&self) -> &dyn HostShell {
             &self.shell
-        }
-        fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-            None
         }
         async fn read_file(&self, _: &HostPath) -> Result<Bytes, HostError> {
             Err(HostError::Unsupported { operation: "test" })

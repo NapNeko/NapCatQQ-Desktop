@@ -12,7 +12,7 @@
 //! Component × Host × Action 三维模型
 //!
 //! 实装清单:
-//! - Host / HostShell / PackageManager trait 定义
+//! - Host / HostShell trait 定义,Linux 包管理器身份与命令拼装([LinuxPackageManager])
 //! - HostPath / HostCommand / CommandOutput / HostProcess 跨平台数据类型
 //! - HostError 错误体系
 //! - LocalWindowsHost 实装(local::windows,#[cfg(windows)])
@@ -22,8 +22,8 @@
 //! 跨平台约束:
 //! - 所有路径用 [HostPath] 表达,内部统一 POSIX 风格,落地时由各 Host 实装做转换
 //! - 所有命令用 [HostCommand] 构建,shell escape 委托给 [HostShell]
-//! - 各 OS 差异由 [Host::os] / [Host::pkg_manager] / [Host::shell] 暴露,
-//!   Component 内部 match host.os() { ... } 决策
+//! - 各 OS 差异由 [Host::os] / [Host::shell] 暴露,Linux 上用哪个包管理器由
+//!   [LinuxPackageManager::detect] 现探,Component 内部 match host.os() { ... } 决策
 
 pub mod apt_lock;
 pub mod command;
@@ -31,7 +31,6 @@ pub mod error;
 pub mod host;
 pub mod linux_pkg;
 pub mod local;
-pub mod package_manager;
 pub mod path;
 pub mod pkg_output;
 pub mod process;
@@ -49,7 +48,6 @@ pub use command::{CommandOutput, HostCommand};
 pub use error::HostError;
 pub use host::{Arch, Host, Locality, Os, SshDialTarget, StreamSource};
 pub use linux_pkg::LinuxPackageManager;
-pub use package_manager::{PackageInfo, PackageManager, PackageManagerKind};
 pub use path::{ArchiveKind, DirEntry, DriveEntry, DriveKind, HostPath, PathStyle};
 pub use pkg_output::{
     PkgLineParse, PkgMgrFamily, PkgPhase, fallback_percent_from_line_no, parse_pkg_mgr_line,

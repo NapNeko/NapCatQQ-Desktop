@@ -32,7 +32,7 @@ mod tests {
     use bytes::Bytes;
     use ncd_host::{
         Arch, ArchiveKind, CommandOutput, DirEntry, HostError, HostPath, HostProcess, HostShell,
-        Locality, Os, PackageManager, ShellKind,
+        Locality, Os, ShellKind,
     };
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -91,9 +91,6 @@ mod tests {
         }
         fn shell(&self) -> &dyn HostShell {
             &NOOP_SHELL
-        }
-        fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-            None
         }
         async fn read_file(&self, _: &HostPath) -> Result<Bytes, HostError> {
             Err(HostError::Unsupported { operation: "mock" })

@@ -15,7 +15,6 @@ use std::path::Path;
 
 use crate::command::{CommandOutput, HostCommand};
 use crate::error::HostError;
-use crate::package_manager::PackageManager;
 use crate::path::{ArchiveKind, DirEntry, HostPath};
 use crate::process::HostProcess;
 use crate::shell::HostShell;
@@ -112,10 +111,6 @@ pub trait Host: Send + Sync {
 
     /// 拿到 shell 抽象(用于命令拼接 / SSH 远端)
     fn shell(&self) -> &dyn HostShell;
-
-    /// 拿到包管理器(若该主机配置了)
-    /// 调用方根据返回值是否 None 决定走包管理器路径还是手动下载路径
-    fn pkg_manager(&self) -> Option<&dyn PackageManager>;
 
     // ===== 文件操作 =====
 

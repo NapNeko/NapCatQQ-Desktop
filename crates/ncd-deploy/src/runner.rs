@@ -236,9 +236,6 @@ mod tests {
         fn shell(&self) -> &dyn ncd_host::HostShell {
             &ncd_host::shell::BashShell
         }
-        fn pkg_manager(&self) -> Option<&dyn ncd_host::PackageManager> {
-            None
-        }
         async fn read_file(&self, _: &HostPath) -> Result<bytes::Bytes, HostError> {
             Err(HostError::Unsupported { operation: "stub" })
         }

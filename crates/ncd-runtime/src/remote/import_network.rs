@@ -76,7 +76,7 @@ mod tests {
     use bytes::Bytes;
     use ncd_host::{
         Arch, ArchiveKind, CommandOutput, DirEntry, HostCommand, HostError, HostPath, HostProcess,
-        HostShell, Locality, Os, PackageManager, ShellKind,
+        HostShell, Locality, Os, ShellKind,
     };
     use serde_json::json;
 
@@ -143,9 +143,6 @@ mod tests {
         }
         fn shell(&self) -> &dyn HostShell {
             &NOOP_SHELL
-        }
-        fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-            None
         }
         async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
             self.files

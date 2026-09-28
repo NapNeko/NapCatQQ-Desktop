@@ -908,9 +908,7 @@ mod tests {
     use bytes::Bytes;
     use ncd_host::command::HostProcessWaitPolicy;
     use ncd_host::process::{ExitStatus, ProcessId};
-    use ncd_host::{
-        Arch, ArchiveKind, CommandOutput, DirEntry, HostShell, Locality, PackageManager,
-    };
+    use ncd_host::{Arch, ArchiveKind, CommandOutput, DirEntry, HostShell, Locality};
     use std::process::Stdio;
     use std::sync::Mutex as StdMutex;
     use tokio::sync::oneshot;
@@ -985,9 +983,6 @@ mod tests {
         }
         fn shell(&self) -> &dyn HostShell {
             &NoopShell
-        }
-        fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-            None
         }
         async fn read_file(&self, _: &HostPath) -> Result<Bytes, HostError> {
             Err(HostError::Unsupported { operation: "fake" })

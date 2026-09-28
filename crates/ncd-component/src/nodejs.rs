@@ -791,7 +791,7 @@ mod tests {
         use ncd_host::shell::PowerShellShell;
         use ncd_host::{
             ArchiveKind, CommandOutput, DirEntry, HostCommand, HostError, HostPath, HostProcess,
-            HostShell, PackageManager,
+            HostShell,
         };
 
         const MANAGED_DIR: &str = "/c/ProgramData/NapCatQQ Desktop/components/NodeJs";
@@ -834,9 +834,6 @@ mod tests {
             }
             fn shell(&self) -> &dyn HostShell {
                 &self.shell
-            }
-            fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-                None
             }
             async fn read_file(&self, _: &HostPath) -> Result<Bytes, HostError> {
                 Err(HostError::Unsupported { operation: "test" })
@@ -1010,7 +1007,7 @@ mod tests {
         use ncd_host::shell::PowerShellShell;
         use ncd_host::{
             ArchiveKind, CommandOutput, DirEntry, HostCommand, HostError, HostPath, HostProcess,
-            HostShell, PackageManager, PathStyle,
+            HostShell, PathStyle,
         };
         use tokio::sync::Mutex;
 
@@ -1048,10 +1045,6 @@ mod tests {
 
             fn shell(&self) -> &dyn HostShell {
                 &self.shell
-            }
-
-            fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-                None
             }
 
             async fn read_file(&self, _path: &HostPath) -> Result<Bytes, HostError> {

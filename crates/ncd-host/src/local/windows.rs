@@ -14,7 +14,6 @@
 //!
 //! 注意:
 //! - 本实装只在 target_os = "windows" 下编译(由 local/mod.rs 的 #[cfg(windows)] 控制)
-//! - PackageManager 默认返回 None(暂不接 winget / choco,后续统一处理)
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -29,7 +28,6 @@ use tokio::sync::mpsc;
 use crate::command::{CommandOutput, HostCommand, HostProcessWaitPolicy, DEFAULT_COMMAND_TIMEOUT};
 use crate::error::HostError;
 use crate::host::{Arch, Host, Locality, Os};
-use crate::package_manager::PackageManager;
 use crate::path::{ArchiveKind, DirEntry, HostPath, PathStyle};
 use crate::process::{ExitStatus, HostProcess, ProcessId};
 use crate::shell::{HostShell, PowerShellShell};
@@ -108,11 +106,6 @@ impl Host for LocalWindowsHost {
 
     fn shell(&self) -> &dyn HostShell {
         &self.shell
-    }
-
-    fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-        // 暂不实装 winget / choco;调用方应走"手动下载 + extract_archive"路径
-        None
     }
 
     // ===== 文件操作 =====
@@ -842,7 +835,6 @@ mod tests {
         assert_eq!(host.os(), Os::Windows);
         assert_eq!(host.locality(), Locality::Local);
         assert_eq!(host.id(), "local");
-        assert!(host.pkg_manager().is_none());
         assert!(host.ssh_dial_target().is_none());
         // shell 应是 PowerShell
         assert_eq!(host.shell().kind(), crate::shell::ShellKind::PowerShell);

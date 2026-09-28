@@ -10,7 +10,7 @@ use ncd_domain::{BackendType, BotConfig, BotFlavor, DeploymentType, RuntimeTarge
 use ncd_host::remote::{ConnectionConfig, HostKeyPolicy, RemoteWindowsHost, SshCredentials};
 use ncd_host::{
     Arch, ArchiveKind, CommandOutput, DirEntry, Host, HostCommand, HostError, HostPath,
-    HostProcess, HostShell, Locality, Os, PackageManager, ShellKind,
+    HostProcess, HostShell, Locality, Os, ShellKind,
 };
 use ncd_test_support::BotConfigBuilder;
 use ncd_traits::runtime_backend::{
@@ -100,10 +100,6 @@ impl Host for DockerRuntimeMockHost {
 
     fn shell(&self) -> &dyn HostShell {
         &NOOP_SHELL
-    }
-
-    fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-        None
     }
 
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {

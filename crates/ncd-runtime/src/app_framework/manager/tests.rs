@@ -552,9 +552,6 @@ mod write_config {
         fn shell(&self) -> &dyn ncd_host::HostShell {
             self.fs.shell()
         }
-        fn pkg_manager(&self) -> Option<&dyn ncd_host::PackageManager> {
-            None
-        }
         async fn read_file(&self, p: &HostPath) -> Result<bytes::Bytes, ncd_host::HostError> {
             self.fs.read_file(p).await
         }

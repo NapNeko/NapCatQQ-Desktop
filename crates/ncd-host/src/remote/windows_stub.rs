@@ -21,7 +21,6 @@ use bytes::Bytes;
 use crate::command::{CommandOutput, HostCommand};
 use crate::error::HostError;
 use crate::host::{Arch, Host, Locality, Os};
-use crate::package_manager::PackageManager;
 use crate::path::{ArchiveKind, DirEntry, HostPath};
 use crate::process::HostProcess;
 use crate::shell::{HostShell, PowerShellShell};
@@ -68,9 +67,6 @@ impl Host for RemoteWindowsHost {
     }
     fn shell(&self) -> &dyn HostShell {
         &self.shell
-    }
-    fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-        None
     }
 
     async fn read_file(&self, _path: &HostPath) -> Result<Bytes, HostError> {
@@ -138,7 +134,6 @@ mod tests {
         assert_eq!(h.os(), Os::Windows);
         assert_eq!(h.locality(), Locality::Remote);
         assert_eq!(h.id(), "remote-win");
-        assert!(h.pkg_manager().is_none());
     }
 
     #[tokio::test]

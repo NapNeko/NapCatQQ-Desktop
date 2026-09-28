@@ -13,7 +13,7 @@
 
 use crate::command::HostCommand;
 
-/// Shell 种类,用于 PackageManager / Host 决策时分发
+/// Shell 种类,Host 按它决定命令怎么拼
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShellKind {
     Bash,

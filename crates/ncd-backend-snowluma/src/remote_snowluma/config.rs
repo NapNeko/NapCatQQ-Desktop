@@ -331,7 +331,7 @@ mod tests {
     use bytes::Bytes;
     use ncd_host::{
         Arch, ArchiveKind, CommandOutput, DirEntry, HostCommand, HostError, HostProcess, HostShell,
-        Locality, Os, PackageManager, ShellKind,
+        Locality, Os, ShellKind,
     };
 
     struct NoopShell;
@@ -376,9 +376,6 @@ mod tests {
         }
         fn shell(&self) -> &dyn HostShell {
             &NOOP_SHELL
-        }
-        fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-            None
         }
         async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
             self.files

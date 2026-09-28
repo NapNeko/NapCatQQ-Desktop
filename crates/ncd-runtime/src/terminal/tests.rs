@@ -15,8 +15,8 @@ use ncd_domain::{
 use ncd_host::shell::BashShell;
 use ncd_host::{
     Arch, ArchiveKind, CommandOutput, DirEntry, Host, HostCommand, HostError, HostPath,
-    HostProcess, HostShell, Locality, Os, PackageManager, PtyBackend, PtyExit, PtyInput,
-    PtyProgram, PtyRequest, PtySession, PtySize, pty_channel_pair,
+    HostProcess, HostShell, Locality, Os, PtyBackend, PtyExit, PtyInput, PtyProgram, PtyRequest,
+    PtySession, PtySize, pty_channel_pair,
 };
 use tokio::sync::mpsc;
 
@@ -42,9 +42,6 @@ impl Host for FakeHost {
     }
     fn shell(&self) -> &dyn HostShell {
         &BashShell
-    }
-    fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-        None
     }
     async fn read_file(&self, path: &HostPath) -> Result<Bytes, HostError> {
         Err(HostError::PathNotFound { path: path.clone() })

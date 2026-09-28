@@ -34,7 +34,6 @@ use tracing::info;
 use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand, HostProcessWaitPolicy};
 use crate::error::HostError;
 use crate::host::{Arch, Host, Locality, Os, SshDialTarget};
-use crate::package_manager::PackageManager;
 use crate::path::{ArchiveKind, DirEntry, HostPath, PathStyle};
 use crate::process::{ExitStatus, HostProcess, ProcessId};
 use crate::shell::{BashShell, HostShell};
@@ -545,12 +544,6 @@ impl Host for RemoteLinuxHost {
 
     fn shell(&self) -> &dyn HostShell {
         &self.shell
-    }
-
-    fn pkg_manager(&self) -> Option<&dyn PackageManager> {
-        // 暂不实装 apt PackageManager,Component 直接走 spawn(apt-get install ...)
-        // 后续可统一加 AptPackageManager / DnfPackageManager
-        None
     }
 
     // 只记找到的：没装的命令用户随时可能去装上，记住「没有」反而会一直报缺
