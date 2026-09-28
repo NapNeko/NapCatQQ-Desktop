@@ -711,11 +711,15 @@ pub async fn probe_remote_inventory(
 }
 
 /// 远端库存的内存副本：组件页探测、Bot 启动预检和组件动作共用一份。
-/// 同一台机器的 home / 布局很稳定，5 个组件并发 detect 只该探一次
+/// 同一台机器的 home / 布局很稳定，组件页一次并发 detect 七八个组件只该探一次
 pub struct RemoteInventoryService {
     server_manager: Arc<ServerManager>,
     /// server_id → 最近一次拿到的库存
     cache: Mutex<HashMap<String, RemoteInventory>>,
+    /// 装 / 卸过的机器：下一次 ensure 不信内存也不信档案里的副本，重探一次
+    dirty: std::sync::Mutex<HashSet<String>>,
+    /// 每台机器一把探测锁：冷缓存时并发进来的调用排队，后到的拿锁后先看前一个探到的
+    probing: std::sync::Mutex<HashMap<String, Arc<Mutex<()>>>>,
 }
 
 impl RemoteInventoryService {
@@ -723,25 +727,37 @@ impl RemoteInventoryService {
         Self {
             server_manager,
             cache: Mutex::new(HashMap::new()),
+            dirty: std::sync::Mutex::new(HashSet::new()),
+            probing: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
-    /// force=false 时先用内存里、再用档案里没过期的那份；都过期或 force 才真去探，
-    /// 探到的写回档案。写档案失败不影响这次返回
+    /// force=false 时先用内存里、再用档案里没过期的那份；都过期、force 或装卸过才真去探，
+    /// 探到的写回档案。写档案失败不影响这次返回。
+    /// 装卸后的那次重探失败时回落档案里没过期的副本，SSH 抖一下不至于让探测整个报错
     pub async fn ensure(
         &self,
         server_id: &str,
         host: &dyn Host,
         force: bool,
     ) -> Result<RemoteInventory, String> {
-        let now = chrono::Utc::now();
-        if !force {
-            if let Some(cached) = self.cache.lock().await.get(server_id) {
-                if !inventory_is_stale(&cached.probed_at, now) {
-                    return Ok(cached.clone());
-                }
+        // 探的途中又装卸过一次时，内存里那份是装卸前探的，标记还在就不能拿
+        if !force && !self.is_dirty(server_id) {
+            if let Some(inv) = self.fresh_cached(server_id).await {
+                return Ok(inv);
             }
         }
+        let lock = self.probe_lock(server_id);
+        let _probing = lock.lock().await;
+        // 在锁里摘标记：排在后面的调用不会再各自重探一遍
+        let dirty = self.take_dirty(server_id);
+        let reuse = !force && !dirty;
+        if reuse {
+            if let Some(inv) = self.fresh_cached(server_id).await {
+                return Ok(inv);
+            }
+        }
+        let now = chrono::Utc::now();
         let profile = self
             .server_manager
             .list_servers()
@@ -749,17 +765,28 @@ impl RemoteInventoryService {
             .into_iter()
             .find(|p| p.id == server_id);
         let previous = profile.as_ref().and_then(|p| p.inventory.clone());
-        if !force {
-            if let Some(inv) = previous
-                .as_ref()
-                .filter(|i| !inventory_is_stale(&i.probed_at, now))
-            {
+        let saved_fresh = previous
+            .clone()
+            .filter(|i| !inventory_is_stale(&i.probed_at, now));
+        if reuse {
+            if let Some(inv) = &saved_fresh {
                 self.remember(server_id, inv).await;
                 return Ok(inv.clone());
             }
         }
         let overrides = profile.as_ref().and_then(|p| p.path_overrides.clone());
-        let inv = probe_remote_inventory(host, overrides.as_ref(), previous.as_ref()).await?;
+        let inv = match probe_remote_inventory(host, overrides.as_ref(), previous.as_ref()).await {
+            Ok(inv) => inv,
+            Err(err) => {
+                return match saved_fresh.filter(|_| !force) {
+                    Some(inv) => {
+                        tracing::warn!(server_id, error = %err, "re-probe after component action failed; using saved inventory");
+                        Ok(inv)
+                    }
+                    None => Err(err),
+                };
+            }
+        };
         let _ = self
             .server_manager
             .set_inventory(server_id, inv.clone())
@@ -768,9 +795,40 @@ impl RemoteInventoryService {
         Ok(inv)
     }
 
-    /// 装 / 卸完之后布局可能变了，丢掉内存那份
+    /// 装 / 卸完之后布局可能变了：丢掉内存那份并标记，下次 ensure 真去探
     pub async fn invalidate(&self, server_id: &str) {
+        self.dirty
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(server_id.to_string());
         self.cache.lock().await.remove(server_id);
+    }
+
+    async fn fresh_cached(&self, server_id: &str) -> Option<RemoteInventory> {
+        let cache = self.cache.lock().await;
+        cache
+            .get(server_id)
+            .filter(|c| !inventory_is_stale(&c.probed_at, chrono::Utc::now()))
+            .cloned()
+    }
+
+    fn is_dirty(&self, server_id: &str) -> bool {
+        self.dirty
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(server_id)
+    }
+
+    fn take_dirty(&self, server_id: &str) -> bool {
+        self.dirty
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(server_id)
+    }
+
+    fn probe_lock(&self, server_id: &str) -> Arc<Mutex<()>> {
+        let mut locks = self.probing.lock().unwrap_or_else(|e| e.into_inner());
+        Arc::clone(locks.entry(server_id.to_string()).or_default())
     }
 
     /// host_id 对应的 home / 布局 / 选中路径。本机没有库存；远端探不到时报错
@@ -1085,8 +1143,26 @@ mod tests {
         assert!(sel.needs_sudo);
     }
 
+    /// 每次探测都返回同一段 stdout;记探了几次,可以让探测慢一点或直接失败
+    #[derive(Default)]
     struct ScriptedHost {
         stdout: String,
+        probes: Arc<std::sync::atomic::AtomicUsize>,
+        delay: Duration,
+        fail: bool,
+    }
+
+    impl ScriptedHost {
+        fn new(stdout: impl Into<String>) -> Self {
+            Self {
+                stdout: stdout.into(),
+                ..Self::default()
+            }
+        }
+
+        fn probes(&self) -> usize {
+            self.probes.load(std::sync::atomic::Ordering::SeqCst)
+        }
     }
 
     #[async_trait::async_trait]
@@ -1171,6 +1247,14 @@ mod tests {
         ) -> Result<ncd_host::CommandOutput, ncd_host::HostError> {
             assert_eq!(cmd.program, "sh");
             assert_eq!(cmd.timeout, Some(INVENTORY_PROBE_TIMEOUT));
+            self.probes
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if !self.delay.is_zero() {
+                tokio::time::sleep(self.delay).await;
+            }
+            if self.fail {
+                return Err(ncd_host::HostError::Unsupported { operation: "down" });
+            }
             Ok(ncd_host::CommandOutput {
                 exit_code: Some(0),
                 stdout: self.stdout.clone(),
@@ -1185,7 +1269,7 @@ mod tests {
             "/home/u",
             "HIT kind=qq source=officialInstaller verified=1 root=/home/u/Napcat qqBin=/home/u/Napcat/opt/QQ/qq\nHIT kind=snowluma source=process verified=1 root=/data/sl indexMjs=/data/sl/index.mjs\n",
         );
-        let host = ScriptedHost { stdout };
+        let host = ScriptedHost::new(stdout);
         let inv = probe_remote_inventory(&host, None, None).await.unwrap();
         assert_eq!(inv.home, "/home/u");
         assert_eq!(
@@ -1195,19 +1279,43 @@ mod tests {
         assert_eq!(inv.selected.snowluma_dir.as_deref(), Some("/data/sl"));
     }
 
+    /// 带一份真实档案 s1 的 ServerManager:探到的库存能写回档案,也能从档案读回来
+    async fn manager_with_server(root: &std::path::Path) -> Arc<ServerManager> {
+        let manager = Arc::new(ServerManager::new(
+            root,
+            Arc::new(ncd_server::InMemoryCredentialStore::default()),
+        ));
+        manager
+            .add_server(
+                ncd_server::ServerProfile {
+                    id: "s1".into(),
+                    name: "s1".into(),
+                    host: "192.0.2.1".into(),
+                    port: 22,
+                    username: "root".into(),
+                    auth_method: ncd_server::AuthMethod::Key,
+                    private_key_path: None,
+                    remember_credential: false,
+                    state: ncd_server::ServerState::default(),
+                    health: None,
+                    webui_url: None,
+                    path_overrides: None,
+                    inventory: None,
+                },
+                None,
+            )
+            .await
+            .unwrap();
+        manager
+    }
+
     #[tokio::test]
     async fn inventory_service_reuses_fresh_probe_until_invalidated() {
         let tmp = tempfile::tempdir().unwrap();
-        let service = RemoteInventoryService::new(Arc::new(ServerManager::new(
-            tmp.path(),
-            Arc::new(ncd_server::InMemoryCredentialStore::default()),
-        )));
-        let first = ScriptedHost {
-            stdout: sample_stdout("/home/a", ""),
-        };
-        let second = ScriptedHost {
-            stdout: sample_stdout("/home/b", ""),
-        };
+        let manager = manager_with_server(tmp.path()).await;
+        let service = RemoteInventoryService::new(Arc::clone(&manager));
+        let first = ScriptedHost::new(sample_stdout("/home/a", ""));
+        let second = ScriptedHost::new(sample_stdout("/home/b", ""));
 
         assert_eq!(
             service.ensure("s1", &first, false).await.unwrap().home,
@@ -1221,10 +1329,24 @@ mod tests {
         let (probe, selected) = service.host_probe("remote:s1", &second).await.unwrap();
         assert_eq!(probe.home.as_deref(), Some("/home/a"));
         assert_eq!(selected.unwrap().home, "/home/a");
+        assert_eq!(second.probes(), 0);
 
+        // 档案里那份还没过期,装卸后也得真去探
         service.invalidate("s1").await;
         assert_eq!(
             service.ensure("s1", &second, false).await.unwrap().home,
+            "/home/b"
+        );
+        assert_eq!(
+            service.ensure("s1", &first, false).await.unwrap().home,
+            "/home/b"
+        );
+        assert_eq!(second.probes(), 1);
+
+        // 新的内存副本从档案里读回重探后的值
+        let fresh = RemoteInventoryService::new(Arc::clone(&manager));
+        assert_eq!(
+            fresh.ensure("s1", &first, false).await.unwrap().home,
             "/home/b"
         );
         assert_eq!(
@@ -1234,15 +1356,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn failed_reprobe_after_invalidate_falls_back_to_saved_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let service = RemoteInventoryService::new(manager_with_server(tmp.path()).await);
+        let ok = ScriptedHost::new(sample_stdout("/home/a", ""));
+        let down = ScriptedHost {
+            fail: true,
+            ..ScriptedHost::default()
+        };
+        service.ensure("s1", &ok, false).await.unwrap();
+
+        service.invalidate("s1").await;
+        assert_eq!(
+            service.ensure("s1", &down, false).await.unwrap().home,
+            "/home/a"
+        );
+        assert_eq!(down.probes(), 1);
+        // 强制刷新要的就是这台机器现在的样子,探不到照旧报错
+        assert!(service.ensure("s1", &down, true).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn concurrent_cold_ensure_probes_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let service = RemoteInventoryService::new(manager_with_server(tmp.path()).await);
+        let host = ScriptedHost {
+            delay: Duration::from_millis(50),
+            ..ScriptedHost::new(sample_stdout("/home/a", ""))
+        };
+
+        let calls = (0..6).map(|_| service.ensure("s1", &host, false));
+        for inv in futures_util::future::join_all(calls).await {
+            assert_eq!(inv.unwrap().home, "/home/a");
+        }
+        assert_eq!(host.probes(), 1);
+
+        // 装卸后同样只重探一次
+        service.invalidate("s1").await;
+        let calls = (0..6).map(|_| service.ensure("s1", &host, false));
+        futures_util::future::join_all(calls).await;
+        assert_eq!(host.probes(), 2);
+    }
+
+    #[tokio::test]
     async fn inventory_service_local_host_has_no_inventory() {
         let tmp = tempfile::tempdir().unwrap();
         let service = RemoteInventoryService::new(Arc::new(ServerManager::new(
             tmp.path(),
             Arc::new(ncd_server::InMemoryCredentialStore::default()),
         )));
-        let host = ScriptedHost {
-            stdout: String::new(),
-        };
+        let host = ScriptedHost::default();
         let (probe, selected) = service.host_probe("local", &host).await.unwrap();
         assert!(probe.home.is_none());
         assert!(selected.is_none());
