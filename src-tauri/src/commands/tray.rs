@@ -22,6 +22,8 @@ fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
 /// 显示并前置主窗口(从托盘或隐藏状态恢复;轻量模式下重建 WebView)
 #[tauri::command]
 pub async fn window_show(app: AppHandle) -> Result<(), String> {
+    // 托盘面板在这边收起:面板的 capability 不给窗口 hide,主窗没抢到焦点时面板就一直浮着
+    crate::tray_panel::hide_tray_panel(&app);
     let state = app.state::<AppState>();
     state.lightweight_scheduler.cancel_pending().await;
     if crate::lightweight::is_lightweight_mode() || app.get_webview_window("main").is_none() {
