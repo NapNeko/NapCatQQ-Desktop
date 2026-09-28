@@ -17,7 +17,7 @@ import {
     DialogTitle,
     SimpleMarkdown,
 } from '../../ui';
-import type { DesktopAgreementsPayload } from '../../../core/services/desktop-consent.service';
+import type { DesktopAgreementsPayload } from '../../../core/ipc/generated/DesktopAgreementsPayload';
 import type { DesktopConsentMode } from '../../../hooks/desktop/useDesktopConsentGate';
 import { cn } from '../../utils/cn';
 
