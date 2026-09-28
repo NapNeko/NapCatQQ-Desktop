@@ -23,4 +23,3 @@ pub use manager::{
 };
 pub use native_runtime::{APP_PID_FILE, AppLaunchSpec, NativeAppRuntime};
 pub use plugin_market::KARIN_PLUGINS_LIST_URL;
-pub use plugin_task::run_app_plugin_task;

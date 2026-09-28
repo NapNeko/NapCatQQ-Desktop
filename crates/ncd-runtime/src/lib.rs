@@ -161,7 +161,7 @@ pub use ncd_traits::{
 
 pub use app_framework::{
     AppInstanceStore, AppManager, BotConfigPort, NativeAppRuntime, OneBotExportError,
-    app_link_connections, export_onebot_endpoint, run_app_plugin_task,
+    app_link_connections, export_onebot_endpoint,
 };
 pub use backend_config_renderer::{
     DispatchRenderer, NapCatConfigRenderer, SnowLumaConfigRenderer, create_renderer,
@@ -239,7 +239,7 @@ pub use ncd_appframework::{
     MaiBotMemoryTaskDetail, MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage,
     MaiBotPersonQuery, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
     MaiBotProviderCheck, MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus,
-    MaiBotStatsSummary, join_webui_url,
+    MaiBotStatsSummary,
 };
 pub use ncd_server::DiscoveredSshHost;
 pub use notify::{

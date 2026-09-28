@@ -280,7 +280,7 @@ impl AppManager {
     /// 什么时候算装完只听任务的：事件为主，事件漏了按 task id 查队列兜底。不拿 detect 当信号，
     /// uv 先建 `.venv` 再装包，目录早早就「像装好了」，冷缓存时后面还要装好几分钟。
     /// 也不设截止时间：各安装步骤自己有超时，任务总会走到终态或被清出队列。
-    pub async fn track_install(
+    pub(super) async fn track_install(
         self: &Arc<Self>,
         id: &AppInstanceId,
         task_id: String,

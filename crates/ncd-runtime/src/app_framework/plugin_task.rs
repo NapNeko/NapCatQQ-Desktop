@@ -19,7 +19,7 @@ pub(super) fn action_verb(action: AppPluginAction) -> &'static str {
     }
 }
 
-pub async fn run_app_plugin_task(
+pub(crate) async fn run_app_plugin_task(
     app_manager: Arc<AppManager>,
     instance_id: AppInstanceId,
     plugin_name: String,
