@@ -1,5 +1,8 @@
 //! AstrBot AI 投影：从 `cmd_config.json` 抽出提供商 / 对话设置 / 平台门控 / 子代理。
-//! 未知键走 `extra` 回写，不进 IPC。
+//!
+//! 不把整份文档反序列化成结构体再整份写回，而是在上游文档上做类型化投影：读时逐字段宽松取值，
+//! 缺的、类型不对的落回默认，上游改了一个字段不至于整份读不出来；写时只改认得的键，
+//! 上游新加的键和原来的键顺序都原样留着（提供商 / 模型行里不认得的键走 `extra`，不进 IPC）。
 
 use ncd_domain::AppConfigIssue;
 use serde::{Deserialize, Serialize};
@@ -504,19 +507,33 @@ pub fn subagent_from_root(root: &Value) -> AstrBotSubagentConfig {
     out
 }
 
+/// 写回文档的全部 AI 投影，每组落到各自的上游键
+#[derive(Debug, Clone, Copy)]
+pub struct AstrBotAiPatch<'a> {
+    pub sources: &'a [AstrBotProviderSource],
+    pub models: &'a [AstrBotProviderModel],
+    pub ai: &'a AstrBotAiSettings,
+    pub stt: &'a AstrBotSttSettings,
+    pub tts: &'a AstrBotTtsSettings,
+    pub websearch: &'a AstrBotWebSearchSettings,
+    pub kb: &'a AstrBotKbBind,
+    pub gates: &'a AstrBotPlatformGates,
+    pub subagent: &'a AstrBotSubagentConfig,
+}
+
 /// 只改已知指针，其它键原样留着（含 `provider_settings` 兄弟字段）。
-pub fn apply_ai_patch(
-    root: &mut Value,
-    sources: &[AstrBotProviderSource],
-    models: &[AstrBotProviderModel],
-    ai: &AstrBotAiSettings,
-    stt: &AstrBotSttSettings,
-    tts: &AstrBotTtsSettings,
-    websearch: &AstrBotWebSearchSettings,
-    kb: &AstrBotKbBind,
-    gates: &AstrBotPlatformGates,
-    subagent: &AstrBotSubagentConfig,
-) -> Result<(), String> {
+pub fn apply_ai_patch(root: &mut Value, patch: &AstrBotAiPatch<'_>) -> Result<(), String> {
+    let AstrBotAiPatch {
+        sources,
+        models,
+        ai,
+        stt,
+        tts,
+        websearch,
+        kb,
+        gates,
+        subagent,
+    } = *patch;
     let obj = root
         .as_object_mut()
         .ok_or_else(|| "cmd_config.json 根必须是对象".to_string())?;
@@ -979,10 +996,18 @@ mod tests {
         let kb = kb_from_root(root);
         let gates = gates_from_root(root);
         let subagent = subagent_from_root(root);
-        apply_ai_patch(
-            root, &sources, &models, &ai, &stt, &tts, &websearch, &kb, &gates, &subagent,
-        )
-        .unwrap();
+        let patch = AstrBotAiPatch {
+            sources: &sources,
+            models: &models,
+            ai: &ai,
+            stt: &stt,
+            tts: &tts,
+            websearch: &websearch,
+            kb: &kb,
+            gates: &gates,
+            subagent: &subagent,
+        };
+        apply_ai_patch(root, &patch).unwrap();
     }
 
     fn keys(v: &Value) -> Vec<String> {
@@ -1095,10 +1120,18 @@ mod tests {
             }],
         };
         let mut root = json!({});
-        apply_ai_patch(
-            &mut root, &sources, &models, &ai, &stt, &tts, &websearch, &kb, &gates, &subagent,
-        )
-        .unwrap();
+        let patch = AstrBotAiPatch {
+            sources: &sources,
+            models: &models,
+            ai: &ai,
+            stt: &stt,
+            tts: &tts,
+            websearch: &websearch,
+            kb: &kb,
+            gates: &gates,
+            subagent: &subagent,
+        };
+        apply_ai_patch(&mut root, &patch).unwrap();
         assert_eq!(sources_from_root(&root), sources);
         assert_eq!(models_from_root(&root), models);
         assert_eq!(ai_from_root(&root), ai);
@@ -1120,21 +1153,14 @@ mod tests {
             },
             "keep": true
         });
-        let mut ai = AstrBotAiSettings::default();
-        ai.enable = false;
-        apply_ai_patch(
-            &mut root,
-            &[],
-            &[],
-            &ai,
-            &AstrBotSttSettings::default(),
-            &AstrBotTtsSettings::default(),
-            &AstrBotWebSearchSettings::default(),
-            &AstrBotKbBind::default(),
-            &AstrBotPlatformGates::default(),
-            &AstrBotSubagentConfig::default(),
-        )
-        .unwrap();
+        let cfg = crate::astrbot::AstrBotInstanceConfig {
+            ai: AstrBotAiSettings {
+                enable: false,
+                ..AstrBotAiSettings::default()
+            },
+            ..Default::default()
+        };
+        apply_ai_patch(&mut root, &cfg.ai_patch(&[], &[])).unwrap();
         assert_eq!(root["provider_settings"]["enable"], false);
         assert_eq!(root["provider_settings"]["mystery"], 1);
         assert_eq!(root["keep"], true);

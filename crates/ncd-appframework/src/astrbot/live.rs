@@ -55,19 +55,8 @@ pub async fn write_live(
     let mut sources = cfg.sources.clone();
     let mut models = cfg.models.clone();
     restore_extras(&live, &mut sources, &mut models);
-    apply_ai_patch(
-        &mut live,
-        &sources,
-        &models,
-        &cfg.ai,
-        &cfg.stt,
-        &cfg.tts,
-        &cfg.websearch,
-        &cfg.kb,
-        &cfg.gates,
-        &cfg.subagent,
-    )
-    .map_err(AppFrameworkError::Integration)?;
+    apply_ai_patch(&mut live, &cfg.ai_patch(&sources, &models))
+        .map_err(AppFrameworkError::Integration)?;
 
     if conf_id == "default" {
         sync_providers(&client, &payload, &sources, &models).await?;

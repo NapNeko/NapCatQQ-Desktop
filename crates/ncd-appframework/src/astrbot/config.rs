@@ -8,9 +8,9 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use super::ai::{
-    self, AstrBotAiSettings, AstrBotKbBind, AstrBotPlatformGates, AstrBotProviderModel,
-    AstrBotProviderSource, AstrBotSttSettings, AstrBotSubagentConfig, AstrBotTtsSettings,
-    AstrBotWebSearchSettings,
+    self, AstrBotAiPatch, AstrBotAiSettings, AstrBotKbBind, AstrBotPlatformGates,
+    AstrBotProviderModel, AstrBotProviderSource, AstrBotSttSettings, AstrBotSubagentConfig,
+    AstrBotTtsSettings, AstrBotWebSearchSettings,
 };
 use super::config_json::{
     cmd_config_documents, load_cmd_config, read_cmd_config_snapshots, save_cmd_config,
@@ -166,6 +166,25 @@ impl AstrBotInstanceConfig {
         sink.extend(ai::validate_ai(&self.sources, &self.models));
         sink.into_vec()
     }
+
+    /// 写回文档用的 AI 投影。提供商和模型由调用方传：先从文档里补回表单没带的上游字段
+    pub fn ai_patch<'a>(
+        &'a self,
+        sources: &'a [AstrBotProviderSource],
+        models: &'a [AstrBotProviderModel],
+    ) -> AstrBotAiPatch<'a> {
+        AstrBotAiPatch {
+            sources,
+            models,
+            ai: &self.ai,
+            stt: &self.stt,
+            tts: &self.tts,
+            websearch: &self.websearch,
+            kb: &self.kb,
+            gates: &self.gates,
+            subagent: &self.subagent,
+        }
+    }
 }
 
 pub fn link_inputs_changed(before: &AstrBotInstanceConfig, after: &AstrBotInstanceConfig) -> bool {
@@ -225,19 +244,8 @@ pub async fn write_astrbot_config(
     let mut sources = cfg.sources.clone();
     let mut models = cfg.models.clone();
     ai::restore_extras(&root, &mut sources, &mut models);
-    ai::apply_ai_patch(
-        &mut root,
-        &sources,
-        &models,
-        &cfg.ai,
-        &cfg.stt,
-        &cfg.tts,
-        &cfg.websearch,
-        &cfg.kb,
-        &cfg.gates,
-        &cfg.subagent,
-    )
-    .map_err(AppFrameworkError::Integration)?;
+    ai::apply_ai_patch(&mut root, &cfg.ai_patch(&sources, &models))
+        .map_err(AppFrameworkError::Integration)?;
 
     save_cmd_config(
         host,
