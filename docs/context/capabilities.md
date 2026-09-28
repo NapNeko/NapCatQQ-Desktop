@@ -121,4 +121,4 @@ ls 入口：`crates/ncd-domain/src/`、`crates/ncd-traits/src/`、`crates/ncd-ho
 - 插件：`tauri-plugin-opener`、`tauri-plugin-dialog`、`tauri-plugin-notification`、`tauri-plugin-single-instance`
 - 权限：`capabilities/main.json` 给主窗；`capabilities/tray-panel.json` 给托盘面板，只有 `core:default` 和按 http / https 打开链接。面板要做的窗口操作放后端命令里
 - 主窗和托盘面板之间的窗口通知：名字和信封版本在 `src-tauri/src/window_events.rs`，前端只在 `desktop.service.ts` 的 `windowEventService` 订
-- 退出收尾：`commands/exit.rs`；AppState 里放的是各 Manager 的句柄，不放业务缓存
+- 退出收尾：`commands/exit.rs`；AppState 挂的是 runtime 里各 Manager / 执行器的句柄，缓存和任务表由它们自己持有，别再往 AppState 上加；上面那份设置副本 `app_settings` 只经 `ncd_runtime::desktop` 的函数改
