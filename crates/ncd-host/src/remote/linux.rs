@@ -488,7 +488,8 @@ impl Host for RemoteLinuxHost {
         &self.shell
     }
 
-    // 只记找到的：没装的命令用户随时可能去装上，记住「没有」反而会一直报缺
+    // 只记找到的：没装的命令用户随时可能去装上，记住「没有」反而会一直报缺。
+    // PATH 外兜底找到的也记：不记的话 PATH 里没有 bash 的机器每条短脚本都要再探一遍
     async fn which(&self, command: &str) -> Result<Option<String>, HostError> {
         if let Some(hit) = self
             .which_found
@@ -499,7 +500,7 @@ impl Host for RemoteLinuxHost {
             return Ok(Some(hit));
         }
         let out = self
-            .run_to_string(crate::host::which_probe(Os::Linux, command))
+            .run_to_string(crate::host::which_path_probe(Os::Linux, command))
             .await?;
         let path = crate::host::first_path_line(&out);
         if let (Some(path), Ok(mut found)) = (&path, self.which_found.lock()) {

@@ -207,11 +207,14 @@ pub trait Host: Send + Sync {
         matches!(self.run_to_string(which_probe(self.os(), command)).await, Ok(out) if out.success())
     }
 
-    /// 命令在主机上的绝对路径（`command -v` / `where` 输出的第一行），不在 PATH 里是 Ok(None)。
+    /// 命令在主机上的绝对路径（`command -v` / `where` 输出的第一行）。Linux / macOS 上 PATH 里没有时
+    /// 再看几个常见的 bin 目录：非交互 SSH 的 PATH 常常很短，命令其实装在 /bin 下。都没有是 Ok(None)。
     /// 和 command_exists 不同，探测本身失败（SSH 断了）要报出来：调用方拿这个决定报「缺 bash」
     /// 还是报连不上。远端实现会记住找到的结果，同一台机上一条条跑短脚本不必每次多一趟 SSH
     async fn which(&self, command: &str) -> Result<Option<String>, HostError> {
-        let out = self.run_to_string(which_probe(self.os(), command)).await?;
+        let out = self
+            .run_to_string(which_path_probe(self.os(), command))
+            .await?;
         Ok(first_path_line(&out))
     }
 
@@ -302,6 +305,25 @@ pub(crate) fn which_probe(os: Os, command: &str) -> HostCommand {
     }
 }
 
+/// PATH 外兜底找的目录。只给 which 用：command_exists 回答的是「按名字能不能直接跑」，
+/// 装在这些目录但不在 PATH 里的命令按名字是跑不起来的
+const FALLBACK_BIN_DIRS: &str = "/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin";
+
+/// which 用的那条命令：先 command -v，找不到再挨个看 [FALLBACK_BIN_DIRS]，一趟 exec 做完。
+/// 带 `/` 的名字本身就是路径，不再往目录下拼
+pub(crate) fn which_path_probe(os: Os, command: &str) -> HostCommand {
+    if os == Os::Windows {
+        return which_probe(os, command);
+    }
+    let name = crate::shell::BashShell.escape(command);
+    HostCommand::new("sh").arg("-c").arg(format!(
+        "command -v {name} || {{ case {name} in */*) exit 1;; esac; \
+         for d in {FALLBACK_BIN_DIRS}; do \
+           if [ -f \"$d\"/{name} ] && [ -x \"$d\"/{name} ]; then printf '%s\\n' \"$d\"/{name}; exit 0; fi; \
+         done; exit 1; }}"
+    ))
+}
+
 pub(crate) fn first_path_line(out: &CommandOutput) -> Option<String> {
     if !out.success() {
         return None;
@@ -323,6 +345,26 @@ mod tests {
         assert_eq!(cmd.args, vec!["-c".to_string(), "command -v 'bash; id'".to_string()]);
         let cmd = which_probe(Os::Windows, "node");
         assert_eq!(cmd.program, "where");
+    }
+
+    #[test]
+    fn which_path_probe_looks_outside_path_in_the_same_exec() {
+        let cmd = which_path_probe(Os::Linux, "bash");
+        let script = cmd.args.last().unwrap();
+        assert!(script.starts_with("command -v bash || "), "{script}");
+        assert!(
+            script.contains(&format!("for d in {FALLBACK_BIN_DIRS};")),
+            "{script}"
+        );
+        assert!(FALLBACK_BIN_DIRS.split(' ').any(|d| d == "/bin"));
+        assert!(script.contains("printf '%s\\n' \"$d\"/bash"), "{script}");
+
+        let cmd = which_path_probe(Os::Linux, "a b; id");
+        let script = cmd.args.last().unwrap();
+        assert!(script.starts_with("command -v 'a b; id' || "), "{script}");
+        assert!(script.contains("\"$d\"/'a b; id'"), "{script}");
+
+        assert_eq!(which_path_probe(Os::Windows, "node").program, "where");
     }
 
     #[test]

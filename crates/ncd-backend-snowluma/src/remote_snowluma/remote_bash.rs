@@ -1,28 +1,19 @@
 //! 远端 bash 的路径。`Host::which` 在远端按连接记住找到的结果，每条短脚本不会都多一趟 SSH
 
-use ncd_host::{Host, HostCommand};
+use ncd_host::Host;
 use ncd_traits::runtime_backend::BotBackendError;
 
-/// 解析远端 bash：PATH 里找不到时再看 /bin/bash（非交互 SSH 的 PATH 可能很短）
+/// 解析远端 bash。非交互 SSH 的 PATH 可能很短，PATH 外的 /bin/bash 之类由 `Host::which`
+/// 在同一趟探测里兜底找，找到的也会被记住
 pub async fn resolve_remote_bash(host: &dyn Host) -> Result<String, BotBackendError> {
-    if let Some(path) = host
-        .which("bash")
+    host.which("bash")
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))?
-    {
-        return Ok(path);
-    }
-    if host
-        .run_to_string(HostCommand::new("sh").arg("-c").arg("test -x /bin/bash"))
-        .await
-        .ok()
-        .is_some_and(|o| o.success())
-    {
-        return Ok("/bin/bash".into());
-    }
-    Err(BotBackendError::InvalidConfig(
-        "远端 SnowLuma「直接运行」需要 bash。请安装：sudo apt install bash".into(),
-    ))
+        .ok_or_else(|| {
+            BotBackendError::InvalidConfig(
+                "远端 SnowLuma「直接运行」需要 bash。请安装：sudo apt install bash".into(),
+            )
+        })
 }
 
 #[cfg(test)]
@@ -31,8 +22,8 @@ mod tests {
     use async_trait::async_trait;
     use bytes::Bytes;
     use ncd_host::{
-        Arch, ArchiveKind, CommandOutput, DirEntry, HostError, HostPath, HostProcess, HostShell,
-        Locality, Os, ShellKind,
+        Arch, ArchiveKind, CommandOutput, DirEntry, HostCommand, HostError, HostPath, HostProcess,
+        HostShell, Locality, Os, ShellKind,
     };
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -143,10 +134,12 @@ mod tests {
                 stdout: String::new(),
                 stderr: String::new(),
             };
-            match (self.bash, script.starts_with("command -v")) {
+            // 只认 which 的那条探测：PATH 外兜底的目录得在同一条脚本里
+            let probes_bin_dir = script.starts_with("command -v bash") && script.contains(" /bin;");
+            match (self.bash, probes_bin_dir) {
                 (Bash::SshDown, _) => Err(HostError::Unsupported { operation: "ssh down" }),
                 (Bash::InPath, true) => Ok(found("/usr/bin/bash\n")),
-                (Bash::OnlyAtBinBash, false) => Ok(found("")),
+                (Bash::OnlyAtBinBash, true) => Ok(found("/bin/bash\n")),
                 _ => Ok(absent),
             }
         }
@@ -160,9 +153,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn falls_back_to_bin_bash_when_path_is_short() {
+    async fn bash_outside_path_is_found_in_the_same_probe() {
         let host = CountingHost::new("h", Bash::OnlyAtBinBash);
         assert_eq!(resolve_remote_bash(&host).await.unwrap(), "/bin/bash");
+        assert_eq!(host.hits.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
