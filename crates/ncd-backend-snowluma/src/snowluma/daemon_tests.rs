@@ -382,8 +382,10 @@ impl SnowLumaWebUiClientFactory for MockFactory {
     }
 }
 
-/// 构造 daemon + tempdir 持有句柄runtime_root 为空目录,spawn 时找不到
-/// node.exe 必然失败 —— 这是测试 spawn 失败回滚路径的关键
+/// 构造 daemon + tempdir 持有句柄runtime_root 里放一个起不来的 node.exe:
+/// 包里没有 node.exe 时 resolve_node_exe 会落到 PATH 上找,装了 Node 的机器
+/// 就真把 node 起起来了(mock 的 wait_ready 直接放行,daemon 进 Ready)。
+/// 让解析停在这个假文件上,spawn 在哪台机器上都失败 —— 这是测试 spawn 失败回滚路径的关键
 /// 同时 snowluma_data_root 也用 tempdir,保证 render_daemon_globals
 /// 写 session.json / runtime.json / webui.json 不污染真实数据根
 /// 返回 (daemon, runtime_dir, snowluma_dir, behavior);测试函数应把 dir
@@ -395,6 +397,8 @@ fn build_test_daemon() -> (
     Arc<TokioMutex<MockBehavior>>,
 ) {
     let runtime_dir = tempdir().expect("tempdir runtime");
+    std::fs::write(runtime_dir.path().join("node.exe"), b"not an executable")
+        .expect("write unstartable node.exe");
     let snowluma_dir = tempdir().expect("tempdir snowluma_data");
     let event_bus = Arc::new(BroadcastEventBus::default());
     let behavior = Arc::new(TokioMutex::new(MockBehavior::default()));
@@ -410,7 +414,7 @@ fn build_test_daemon() -> (
     (daemon, runtime_dir, snowluma_dir, behavior)
 }
 
-/// runtime_root 不含 node.exe → Command::spawn 失败 → starter 路径在
+/// runtime_root 里的 node.exe 起不来 → Command::spawn 失败 → starter 路径在
 /// step 3 早 fail → rollback_to_stopped → state == Stopped,ref_count == 0,
 /// last_error 非空事件序列:先 Starting,再 Stopped(reason=Some)
 #[tokio::test]
@@ -420,10 +424,14 @@ async fn daemon_spawn_failure_rolls_back_to_stopped() {
         DomainEventKind::SnowLumaDaemonStateChanged,
     ));
 
-    let result = daemon.ensure_running(Duration::from_secs(5)).await;
+    let err = daemon
+        .ensure_running(Duration::from_secs(5))
+        .await
+        .err()
+        .expect("spawn must fail with an unstartable node.exe in runtime_root");
     assert!(
-        result.is_err(),
-        "spawn must fail without node.exe in runtime_root"
+        matches!(err, SnowLumaDaemonError::Spawn(_)),
+        "expected spawn failure, got {err:?}"
     );
 
     assert_eq!(daemon.state().await, DaemonState::Stopped);
