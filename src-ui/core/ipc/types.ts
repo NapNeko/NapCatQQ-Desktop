@@ -51,6 +51,7 @@ export interface BootstrapSnapshot {
 // 与后端 ts-rs 派生的强类型对齐——直接 re-export 生成版本，避免手写漂移。
 export type { BotActorState } from './generated/BotActorState';
 export type { BotActorSnapshot } from './generated/BotActorSnapshot';
+export type { LogSnapshot } from './generated/domain/LogSnapshot';
 export type { LocalVersionSnapshot } from './generated/domain/LocalVersionSnapshot';
 export type { DataLayoutConsolidateSnapshot } from './generated/domain/DataLayoutConsolidateSnapshot';
 export type { DataRootMigratePreview } from './generated/domain/DataRootMigratePreview';

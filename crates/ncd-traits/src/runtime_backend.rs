@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 
 pub use ncd_domain::StopMode;
 use ncd_domain::bot_config::{BackendType, BotConfig};
+// 数据形状在 L1 定义并导出 TS，这里留原路径给各 backend 和命令层引用
+pub use ncd_domain::log_snapshot::LogSnapshot;
 pub use ncd_domain::bot_status::{BotStatus, ProcessHandle};
 use ncd_domain::ids::BotId;
 use ncd_domain::kinds::{BackendKind, BotFlavor, RuntimeTarget};
@@ -30,12 +32,6 @@ pub struct TailOpts {
 
 fn default_tail_lines() -> usize {
     200
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LogSnapshot {
-    pub lines: Vec<String>,
-    pub total_lines: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

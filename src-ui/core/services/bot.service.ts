@@ -3,7 +3,7 @@
 // / `probe_qq_login_info` 类 Tauri command 的字面量。
 
 import { invoke, isTauri } from '../ipc/transport';
-import type { BatchResultResponse, BotActorSnapshot } from '../ipc/types';
+import type { BatchResultResponse, BotActorSnapshot, LogSnapshot } from '../ipc/types';
 import type { BotConfig } from '../ipc/generated/domain/BotConfig';
 import type { ImportableRemoteBot } from '../ipc/generated/domain/ImportableRemoteBot';
 import type { BackendType } from '../ipc/generated/domain/BackendType';
@@ -39,12 +39,6 @@ import {
     mockStopBot,
     mockUpsertBotConfig,
 } from '../ipc/mock/bot.mock';
-
-/// 日志快照（与 Rust `LogSnapshot` 对齐）。
-export interface LogSnapshot {
-    lines: string[];
-    total_lines: number;
-}
 
 /// QQ 进程信息（SnowLuma HotStart 模式下的 PID picker）。
 export interface QQProcessInfo {

@@ -2,13 +2,9 @@
 
 import type { SnowLumaWebuiEndpoint } from '../ipc/generated/SnowLumaWebuiEndpoint';
 import type { WindowSignal } from '../ipc/generated/WindowSignal';
+import type { LogSnapshot } from '../ipc/types';
 import { preferencesStore } from '../../hooks/preferences/preferencesStore';
 import { invoke, isTauri } from '../ipc/transport';
-
-export interface LogSnapshot {
-    lines: string[];
-    total_lines: number;
-}
 
 type WindowController = {
     minimize: () => Promise<void>;

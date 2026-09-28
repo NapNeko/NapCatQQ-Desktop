@@ -38,6 +38,7 @@ import type {
     ImportAppInstanceRequest,
     KarinPluginInstalled,
     KarinPluginMarketEntry,
+    LogSnapshot,
     OneBotLinkPlan,
 } from '../ipc/types';
 import { mockAppFrameworkApi } from '../ipc/mock/app-framework.mock';
@@ -88,12 +89,9 @@ export const appFrameworkService = {
         return invoke<AppInstance>('refresh_app_instance', { instanceId });
     },
 
-    tailLog: async (
-        instanceId: string,
-        lines = 1000,
-    ): Promise<{ lines: string[]; total_lines: number }> => {
+    tailLog: async (instanceId: string, lines = 1000): Promise<LogSnapshot> => {
         if (!isTauri) return mockAppFrameworkApi.tailLog(instanceId, lines);
-        return invoke('tail_app_instance_log', { instanceId, lines });
+        return invoke<LogSnapshot>('tail_app_instance_log', { instanceId, lines });
     },
 
     start: async (instanceId: string): Promise<AppInstance> => {
