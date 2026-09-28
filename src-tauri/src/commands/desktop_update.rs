@@ -96,11 +96,7 @@ pub async fn install_desktop_update(
     expected: AvailableUpdate,
     task_id: Option<String>,
 ) -> Result<String, String> {
-    let local_active = state
-        .bot_manager
-        .count_local_active_bots()
-        .await
-        .map_err(|e| e.to_string())?;
+    let local_active = crate::commands::exit::local_active_bots(&state).await?;
     if local_active > 0 {
         return Err(format!(
             "有 {local_active} 个本机 Bot 正在运行，请先全部停止后再更新 Desktop"
@@ -227,12 +223,11 @@ pub async fn install_desktop_update(
                 "desktop MSI installer launched; exiting app for upgrade"
             );
 
-            // 先起 relaunch helper（带目标版本），再关 runtime / exit
+            // 先起 relaunch helper（带目标版本），再走和正常退出同一份收尾：
+            // 本机应用端实例、终端要跟着停，不然更新后成了没人管的孤儿进程
             spawn_post_install_relaunch_helper(&target_version);
 
-            crate::commands::ncd_watch::clear_present_on_all_remote_servers(state.inner()).await;
-            state.runtime.shutdown().await;
-            app.exit(0);
+            crate::commands::exit::shutdown_and_exit(&app, &state, "desktop_update").await;
             Ok(task_id)
         }
         Err(e) => {
