@@ -10,7 +10,6 @@ import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { errorText } from '../../core/domain/errors';
 import { pushAppErrorBar } from './pushAppErrorBar';
 import { useAppInstanceAlerts } from './useAppInstanceAlerts';
-import { botConfigKey } from '../bot/useBotConfigsMap';
 import { dropAppInstanceLogs, ensureAppInstanceLogStore } from './appInstanceLogStore';
 import { showWebUiAccountDialog } from './webuiAccountDialogStore';
 import { requestTermsConsent } from './termsDialogStore';
@@ -27,7 +26,6 @@ export { useAppInstanceLog } from './appInstanceLogStore';
 ensureAppInstanceLogStore();
 
 export const APP_FRAMEWORKS_KEY = ['appFrameworks'] as const;
-export { APP_INSTANCES_KEY };
 
 export function useAppFrameworks() {
     return useQuery<AppFrameworkManifest[], Error>({
@@ -208,7 +206,6 @@ export function useAppInstances() {
         isLoading: query.isLoading,
         error: query.error ? errorText(query.error) : null,
         refetch: query.refetch,
-        patch,
 
         create: createMutation.mutateAsync,
         isCreating: createMutation.isPending,
@@ -239,12 +236,4 @@ export function useAppInstances() {
                         ? unlinkMutation.variables
                         : null,
     };
-}
-
-/// 对接成功后让 Bot 配置缓存失效（连接表变了）。
-export function invalidateBotConfigAfterLink(
-    queryClient: ReturnType<typeof useQueryClient>,
-    botId: string,
-) {
-    queryClient.invalidateQueries({ queryKey: botConfigKey(botId) });
 }

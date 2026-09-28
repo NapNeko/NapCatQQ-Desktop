@@ -12,12 +12,6 @@ vi.mock('../../core/services/app-framework.service', () => ({
     },
 }));
 
-// 真模块一 import 就挂日志订阅，这里只用得到它导出的缓存失效函数
-vi.mock('./useAppInstances', () => ({
-    APP_INSTANCES_KEY: ['appInstances'],
-    invalidateBotConfigAfterLink: vi.fn(),
-}));
-
 import { useAppLinkPlan } from './useAppLink';
 
 function planFor(botId: string): OneBotLinkPlan {

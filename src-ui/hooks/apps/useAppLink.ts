@@ -6,7 +6,7 @@ import { appFrameworkService } from '../../core/services/app-framework.service';
 import { errorText } from '../../core/domain/errors';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushAppErrorBar } from './pushAppErrorBar';
-import { invalidateBotConfigAfterLink } from './useAppInstances';
+import { botConfigKey } from '../bot/useBotConfigsMap';
 import type { AppInstance, OneBotLinkPlan } from '../../core/ipc/types';
 
 const appLinkPlanKey = (instanceId: string, botId: string) => ['appLinkPlan', instanceId, botId] as const;
@@ -48,7 +48,7 @@ export function useApplyAppLink() {
         mutationFn: ({ instanceId, botId }) => appFrameworkService.applyLink(instanceId, botId),
         onSuccess: (next, { botId, connectionName }) => {
             // 实例列表和应用端配置由事件桥跟着 linked 事件更新；Bot 的连接表事件桥不管，这里失效
-            invalidateBotConfigAfterLink(queryClient, botId);
+            void queryClient.invalidateQueries({ queryKey: botConfigKey(botId) });
             pushInfoBar({
                 key: `app-link:${next.id}`,
                 tone: 'success',

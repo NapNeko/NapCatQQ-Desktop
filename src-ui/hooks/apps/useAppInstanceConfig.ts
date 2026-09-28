@@ -6,7 +6,7 @@ import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { appFrameworkService } from '../../core/services/app-framework.service';
 import { toAppConfigError } from '../../core/domain/apps/appConfigError';
-import { APP_INSTANCES_KEY } from './useAppInstances';
+import { APP_INSTANCES_KEY } from './appInstancesCache';
 import type {
     AppConfigDocument,
     AppConfigError,
