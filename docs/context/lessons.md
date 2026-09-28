@@ -102,7 +102,7 @@
 收尾与状态
 - 同一套收尾流程只能有一份实现。菜单退出、托盘退出、下载更新后重启各抄了一份，托盘退出和更新重启都漏了停本机应用端实例，Karin / AstrBot / MaiBot 成了孤儿进程。退出、重启统一走 `exit::shutdown_and_exit`，新入口只调它，不再自己拼步骤
 - 缓存和会话归持有它的对象，不放进程级 static / OnceLock。AstrBot Dashboard 登录态、插件市场目录、远端 bash 路径都这么放过：换服务器档案不失效，测试之间互相串。挂到 Manager / Adapter / Host 实例上，跟着实例的生命周期走
-- L4 不持有业务状态。远端库存缓存、活跃任务表、ComponentExecutor 曾放在 src-tauri 的 AppState，每个命令现建一个执行器，缓存过期也由命令自己判断。这些在 ncd-runtime 里建一次，命令只转参数和错误
+- L4 不持有业务状态。远端库存缓存、活跃任务表曾直接挂在 src-tauri 的 AppState 上，每个命令现建一个 ComponentExecutor，缓存过期也由命令自己判断。现在执行器启动时建一份，缓存和任务表归它持有，AppState 只放它的句柄，命令只转参数和错误
 - 一个文件只有一个写入口。`app-settings.json` 有两处写盘，读设置页时还顺手写，保存时把启动阶段的补记冲掉了。写入统一走 runtime 的那一个，内存和文件在同一把锁里改
 - 读不出来的持久化文件先挪开再重建。`app-instances.json` 解析失败就空表起步，靠一份 `.bak` 轮转保底，两次保存后原件就没了
 
