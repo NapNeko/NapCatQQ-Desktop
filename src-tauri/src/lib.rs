@@ -291,6 +291,7 @@ pub fn run() {
         )
         .with_host_resolver(host_resolver)
         .with_server_manager(Arc::clone(&server_manager))
+        .with_remote_inventory(components.shared_inventory())
         .with_runtime_gate(runtime_gate)
         .with_docker_webui_secret_store(Arc::clone(&secrets)),
     );

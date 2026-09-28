@@ -120,6 +120,8 @@ pub(crate) struct RuntimeBackendRouter {
     /// Docker bot 指标：本机 data_root + prefs（可选）
     docker_metrics: Option<(std::path::PathBuf, crate::metrics::BotRuntimeMetricsPrefs)>,
     server_manager: Option<Arc<crate::ServerManager>>,
+    /// 组件页、启动预检共用的库存副本;没接上时退回直接读档案 / 现探
+    remote_inventory: Option<Arc<crate::remote::inventory::RemoteInventoryService>>,
     /// 本机 SnowLuma 数据根（app-config 固定密码），远端接管启动时读取
     snowluma_data_root: Option<PathBuf>,
 }
@@ -150,8 +152,17 @@ impl RuntimeBackendRouter {
             remote_metrics_injector: None,
             docker_metrics: None,
             server_manager: None,
+            remote_inventory: None,
             snowluma_data_root: None,
         }
+    }
+
+    pub fn with_remote_inventory(
+        mut self,
+        inventory: Arc<crate::remote::inventory::RemoteInventoryService>,
+    ) -> Self {
+        self.remote_inventory = Some(inventory);
+        self
     }
 
     pub fn with_snowluma_data_root(mut self, path: impl Into<PathBuf>) -> Self {
@@ -388,6 +399,12 @@ impl RuntimeBackendRouter {
         server_id: &str,
         host: &dyn Host,
     ) -> Result<ncd_domain::RemoteInventory, RuntimeRouterError> {
+        if let Some(inventory) = &self.remote_inventory {
+            return inventory
+                .ensure(server_id, host, false)
+                .await
+                .map_err(RuntimeRouterError::Render);
+        }
         let mgr = self.server_manager.as_ref();
         let profile = if let Some(mgr) = mgr {
             mgr.list_servers()

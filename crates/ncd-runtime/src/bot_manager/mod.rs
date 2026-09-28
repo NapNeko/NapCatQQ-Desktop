@@ -204,6 +204,8 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// See RemoteQqEntryCoordinator for rationale and batch-start safety.
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
     server_manager: Option<Arc<crate::ServerManager>>,
+    /// 和组件执行器共用的远端库存副本;启动路由按它取选中路径,装卸后的重探对这边也生效
+    remote_inventory: Option<Arc<crate::remote::inventory::RemoteInventoryService>>,
     /// 启动前的框架 / 依赖预检;None 不检查(测试与纯本机 wiring)
     runtime_gate: Option<Arc<dyn RuntimeReadinessGate>>,
 }
@@ -238,6 +240,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_snowluma_tunnels: Arc::clone(&self.remote_snowluma_tunnels),
             remote_qq_entry_coordinator: Arc::clone(&self.remote_qq_entry_coordinator),
             server_manager: self.server_manager.clone(),
+            remote_inventory: self.remote_inventory.clone(),
             runtime_gate: self.runtime_gate.clone(),
         }
     }
@@ -285,12 +288,21 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
             remote_qq_entry_coordinator: Arc::new(RemoteQqEntryCoordinator::default()),
             server_manager: None,
+            remote_inventory: None,
             runtime_gate: None,
         }
     }
 
     pub fn with_server_manager(mut self, mgr: Arc<crate::ServerManager>) -> Self {
         self.server_manager = Some(mgr);
+        self
+    }
+
+    pub fn with_remote_inventory(
+        mut self,
+        inventory: Arc<crate::remote::inventory::RemoteInventoryService>,
+    ) -> Self {
+        self.remote_inventory = Some(inventory);
         self
     }
 
@@ -576,6 +588,9 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         );
         if let Some(mgr) = &self.server_manager {
             router = router.with_server_manager(Arc::clone(mgr));
+        }
+        if let Some(inventory) = &self.remote_inventory {
+            router = router.with_remote_inventory(Arc::clone(inventory));
         }
         // 远端 NC / Docker 启动注入探针：开关开时挂上（失败不阻断启动）
         if let Some(data_root) = self.store.config_dir().parent() {

@@ -219,6 +219,11 @@ impl ComponentExecutor {
         &self.inventory
     }
 
+    /// 给 Bot 启动路由共用同一份库存副本
+    pub fn shared_inventory(&self) -> Arc<RemoteInventoryService> {
+        Arc::clone(&self.inventory)
+    }
+
     pub fn active_tasks(&self) -> &ActiveTasks {
         &self.active_tasks
     }
