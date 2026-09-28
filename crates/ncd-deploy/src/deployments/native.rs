@@ -29,7 +29,7 @@ use std::sync::{
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, StopMode};
+use ncd_domain::{BackendType, BotConfig, BotFlavor, BotId, LogSnapshot, StopMode};
 use ncd_host::{Host, HostCommand, HostError, HostPath, HostProcess, Os};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
@@ -853,19 +853,12 @@ fn host_err_msg(err: HostError) -> String {
 
 // 给 BotManager / 日志页用的辅助方法
 
-/// tail_log 返回的快照:最近 N 行 + 累计总行数
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NativeLogSnapshot {
-    pub lines: Vec<String>,
-    pub total_lines: usize,
-}
-
 impl NativeDeployment {
-    /// 取当前内存里的日志快照,limit > 0 时只返回末尾 limit 行
-    pub async fn tail_log(&self, bot_id: &BotId, limit: usize) -> NativeLogSnapshot {
+    /// 取当前内存里的日志快照(最近 N 行 + 累计总行数),limit > 0 时只返回末尾 limit 行
+    pub async fn tail_log(&self, bot_id: &BotId, limit: usize) -> LogSnapshot {
         let guard = self.logs.lock().await;
         let Some(buffer) = guard.get(bot_id) else {
-            return NativeLogSnapshot {
+            return LogSnapshot {
                 lines: Vec::new(),
                 total_lines: 0,
             };
@@ -874,7 +867,7 @@ impl NativeDeployment {
         if limit > 0 && lines.len() > limit {
             lines = lines.split_off(lines.len() - limit);
         }
-        NativeLogSnapshot {
+        LogSnapshot {
             lines,
             total_lines: buffer.total_lines,
         }

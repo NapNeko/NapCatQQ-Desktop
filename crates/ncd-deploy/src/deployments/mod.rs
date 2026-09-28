@@ -15,6 +15,6 @@ pub use docker::{
 };
 pub use external::ExternalDeployment;
 pub use native::{
-    EventBusSink, NativeDeployment, NativeLogSnapshot, NativeRuntimeEventSink,
-    NullRuntimeEventSink, parse_napcat_webui_line, strip_ansi_escapes,
+    EventBusSink, NativeDeployment, NativeRuntimeEventSink, NullRuntimeEventSink,
+    parse_napcat_webui_line, strip_ansi_escapes,
 };

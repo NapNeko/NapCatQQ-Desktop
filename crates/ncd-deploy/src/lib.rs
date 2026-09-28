@@ -27,10 +27,9 @@ pub use deployment::{
     NativeLaunchCommand, NativeLaunchTranslator, NullProgressSink,
 };
 pub use deployments::{
-    DockerDeployment, EventBusSink, ExternalDeployment, NativeDeployment, NativeLogSnapshot,
-    NativeRuntimeEventSink, NullRuntimeEventSink, bot_docker_container_candidates,
-    bot_docker_container_name, parse_napcat_webui_line, resolve_bot_container_name,
-    strip_ansi_escapes,
+    DockerDeployment, EventBusSink, ExternalDeployment, NativeDeployment, NativeRuntimeEventSink,
+    NullRuntimeEventSink, bot_docker_container_candidates, bot_docker_container_name,
+    parse_napcat_webui_line, resolve_bot_container_name, strip_ansi_escapes,
 };
 pub use docker::{
     DOCKER_METRICS_CONTAINER_ROOT, DOCKER_NAPCAT_LOAD_CONTAINER_PATH, DOCKER_NAPCAT_MJS_URI,

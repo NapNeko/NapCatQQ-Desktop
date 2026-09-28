@@ -215,11 +215,7 @@ impl BotBackend for RemoteNativeDeploymentBackend {
         opts: TailOpts,
     ) -> Result<LogSnapshot, BotBackendError> {
         if self.flavor != BotFlavor::NapCat {
-            let snap = self.deployment.tail_log(&bot_id, opts.lines).await;
-            return Ok(LogSnapshot {
-                lines: snap.lines,
-                total_lines: snap.total_lines,
-            });
+            return Ok(self.deployment.tail_log(&bot_id, opts.lines).await);
         }
         let qq_id: u64 = bot_id
             .as_str()

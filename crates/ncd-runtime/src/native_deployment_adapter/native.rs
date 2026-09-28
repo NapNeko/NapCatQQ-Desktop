@@ -122,11 +122,7 @@ impl BotBackend for NativeDeploymentBackend {
         bot_id: BotId,
         opts: TailOpts,
     ) -> Result<LogSnapshot, BotBackendError> {
-        let snap = self.deployment.tail_log(&bot_id, opts.lines).await;
-        Ok(LogSnapshot {
-            lines: snap.lines,
-            total_lines: snap.total_lines,
-        })
+        Ok(self.deployment.tail_log(&bot_id, opts.lines).await)
     }
 }
 
