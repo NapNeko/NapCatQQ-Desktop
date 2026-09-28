@@ -25,8 +25,12 @@ export default defineConfig({
     clearMocks: true,
   },
   resolve: {
-    alias: {
-      '@': uiRoot,
-    },
+    alias: [
+      { find: '@', replacement: uiRoot },
+      // vitest 不认 module 字段，@gsap/react 会走 UMD 包去 require 另一份 CJS 的 gsap：
+      // 那份的 ticker 没人停，环境拆掉后还在要下一帧；useGSAP 的 context 也收不到业务那份 gsap 建的动画。
+      // 指到它的 ESM 入口，和打包时一样只有一份 gsap
+      { find: /^@gsap\/react$/, replacement: '@gsap/react/src/index.js' },
+    ],
   },
 });
