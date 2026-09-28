@@ -18,8 +18,8 @@ import {
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
 import type { useServerManager } from '../../hooks/remote/useServerManager';
 import { errorText } from '../../core/domain/errors';
-import { pickDirectory } from '../../core/ipc/transport';
-import { appFrameworkService } from '../../core/services/app-framework.service';
+import { useProbeAppProject } from '../../hooks/apps/useAppInstanceSetup';
+import { usePickDirectory } from '../../hooks/usePickDirectory';
 import { dismissInfoBar, pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 import { RemoteDirectoryPicker } from '../../shared/components/RemoteDirectoryPicker';
@@ -62,9 +62,11 @@ export const ImportInstanceDialog: React.FC<{
     const [path, setPath] = useState('');
     const [displayName, setDisplayName] = useState('');
     const [probe, setProbe] = useState<AppProjectProbe | null>(null);
-    const [probing, setProbing] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
     const [mounted, setMounted] = useState<ImportInstanceTarget | null>(null);
+    const probeProject = useProbeAppProject();
+    const probing = probeProject.isPending;
+    const pickDirectory = usePickDirectory();
 
     useEffect(() => {
         if (!target) return;
@@ -117,11 +119,10 @@ export const ImportInstanceDialog: React.FC<{
             });
             return;
         }
-        setProbing(true);
         setProbe(null);
         clearProbeBars();
         try {
-            const next = await appFrameworkService.probeProject(hostId, frameworkId, path.trim());
+            const next = await probeProject.mutateAsync({ hostId, frameworkId, path: path.trim() });
             setProbe(next);
             if (!displayName.trim()) setDisplayName(next.display_name);
             const notes = next.warnings.filter((w) => !w.includes('快照'));
@@ -139,8 +140,6 @@ export const ImportInstanceDialog: React.FC<{
                 title: '检查项目失败',
                 raw: errorText(e),
             });
-        } finally {
-            setProbing(false);
         }
     };
 

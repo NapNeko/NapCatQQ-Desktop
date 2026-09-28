@@ -19,8 +19,9 @@ import {
 } from '../../shared/ui';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../shared/ui/motion';
 import type { useServerManager } from '../../hooks/remote/useServerManager';
-import { openExternalUrl, pickDirectory } from '../../core/ipc/transport';
-import { appFrameworkService } from '../../core/services/app-framework.service';
+import { useAppInstallDirPreview } from '../../hooks/apps/useAppInstanceSetup';
+import { useOpenExternal } from '../../hooks/useOpenExternal';
+import { usePickDirectory } from '../../hooks/usePickDirectory';
 import { remoteServerIdFromHostId } from '../../core/domain/remote-host/posixPath';
 import { validateWebUiPassword, validateWebUiUsername } from '../../core/domain/apps/webuiAccount';
 import { RemoteDirectoryPicker } from '../../shared/components/RemoteDirectoryPicker';
@@ -60,8 +61,10 @@ export const CreateInstanceDialog: React.FC<{
     const [draft, setDraft] = useState<CreateInstanceDraft | null>(null);
     // 关闭动画期间保留内容，避免对话框在退场时先变空
     const [mounted, setMounted] = useState<CreateInstanceRequest | null>(null);
-    const [previewParent, setPreviewParent] = useState('');
     const [pickerOpen, setPickerOpen] = useState(false);
+    const previewParent = useAppInstallDirPreview(draft?.hostId ?? null, draft?.frameworkId ?? null);
+    const pickDirectory = usePickDirectory();
+    const openExternal = useOpenExternal();
 
     useEffect(() => {
         if (!request) return;
@@ -80,22 +83,6 @@ export const CreateInstanceDialog: React.FC<{
         });
         setPickerOpen(false);
     }, [request]);
-
-    useEffect(() => {
-        if (!draft) return;
-        let cancelled = false;
-        void appFrameworkService
-            .previewInstallDir(draft.hostId, draft.frameworkId)
-            .then((dir) => {
-                if (!cancelled) setPreviewParent(dir);
-            })
-            .catch(() => {
-                if (!cancelled) setPreviewParent('');
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [draft?.hostId, draft?.frameworkId]);
 
     const manifest = mounted?.manifest ?? null;
     const locked = mounted?.lockedHostId ?? null;
@@ -305,7 +292,7 @@ export const CreateInstanceDialog: React.FC<{
                                                 key={t.id}
                                                 variant="ghost"
                                                 size="sm"
-                                                onClick={() => void openExternalUrl(t.url)}
+                                                onClick={() => openExternal(t.url)}
                                             >
                                                 <ActionMotionIcon icon={ExternalLink} size={13} />
                                                 {t.title}
