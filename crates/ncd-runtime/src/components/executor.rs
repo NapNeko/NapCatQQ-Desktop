@@ -12,16 +12,18 @@ use std::sync::Arc;
 
 use ncd_appframework::AppFrameworkRegistry;
 use ncd_component::{
-    ActionCtx, Component, ComponentId, DependencyPlan, DependencyTarget, ProgressEvent,
-    ProgressKind, ProgressLogLevel, RequirementPhase, RuntimeReadiness, VersionReq,
+    ActionCtx, Component, ComponentId, DependencyPlan, DependencyTarget, NodeJsComponent,
+    ProgressEvent, ProgressKind, ProgressLogLevel, RequirementPhase, RuntimeReadiness, VersionReq,
 };
 use ncd_deploy::{DeployOutcome, DeployPlan, StepKind};
 use ncd_domain::release_snapshot::ReleaseSnapshot;
 use ncd_domain::{
     AppSettings, DeploymentTaskKind, DeploymentTaskResource, InstallDependenciesResult,
-    RemoteSelectedPaths, SnowLumaLinuxPackage, server_id_of_host,
+    NodeEnvironmentCandidate, NodeProbeResult, RemoteSelectedPaths, SnowLumaLinuxPackage,
+    server_id_of_host,
 };
-use ncd_host::{Host, Locality, Os};
+use ncd_host::local::LocalWindowsHost;
+use ncd_host::{Host, HostPath, Locality, Os};
 use ncd_server::ServerManager;
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::JoinHandle;
@@ -30,7 +32,8 @@ use tokio_util::sync::{CancellationToken, DropGuard};
 use crate::components::action_policy::{
     RemoteHostProbe, RemoteLayout, component_action_cancellable,
     component_action_needs_runtime_closure, component_dedupe_key, component_needs_package_manager,
-    component_target_label, component_task_resources, dependency_target_display_name,
+    component_target_label, component_task_resources, data_root_to_host_path,
+    dependency_target_display_name,
 };
 use crate::components::active_tasks::ActiveTasks;
 use crate::components::factory::{AppComponentHint, BuildComponentCtx, build_component_for_host};
@@ -291,6 +294,66 @@ impl ComponentExecutor {
             .await
             .readiness(root, host)
             .await
+    }
+
+    /// 本机能给 SnowLuma 用的 Node:Desktop 管的 NodeJs 组件、设置里的自定义路径、PATH 上的。
+    /// 版本约束来自本机上要用 Node 的组件声明
+    pub async fn probe_local_node_candidates(&self) -> Vec<NodeEnvironmentCandidate> {
+        let host = LocalWindowsHost::new();
+        let managed = NodeJsComponent::node_binary_path_for_os(
+            &data_root_to_host_path(&self.data_root, Os::Windows)
+                .join("components")
+                .join("NodeJs"),
+            Os::Windows,
+        );
+        let custom = self
+            .app_settings
+            .read()
+            .await
+            .snowluma_node_override()
+            .map(str::to_string);
+        let accept = self.catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
+        ncd_component::nodejs::probe_local_system_nodes(
+            &host,
+            Some(&managed),
+            custom.as_deref(),
+            &accept,
+        )
+        .await
+    }
+
+    /// 设置页填的 Node 路径能不能跑、版本够不够
+    pub async fn probe_node_binary(&self, path: String) -> NodeProbeResult {
+        let host = LocalWindowsHost::new();
+        let accept = self.catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
+        let missing = |error: String| NodeProbeResult {
+            path: path.clone(),
+            exists: false,
+            version: None,
+            is_valid: false,
+            error: Some(error),
+        };
+        match ncd_component::nodejs::probe_node_raw_version(
+            &host,
+            &HostPath::from_windows(path.trim()),
+        )
+        .await
+        {
+            Ok(Some(raw_ver)) => {
+                let is_valid = ncd_component::all_versions_match(&accept, &raw_ver);
+                let error = (!is_valid)
+                    .then(|| ncd_component::nodejs::version_mismatch_reason(&raw_ver, &accept));
+                NodeProbeResult {
+                    path,
+                    exists: true,
+                    version: Some(raw_ver),
+                    is_valid,
+                    error,
+                }
+            }
+            Ok(None) => missing("无法执行或未找到 node.exe".to_string()),
+            Err(err) => missing(err.to_string()),
+        }
     }
 
     /// 提交 root 动作及其未满足的前置;返回 root 的 task id

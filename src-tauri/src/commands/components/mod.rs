@@ -11,7 +11,7 @@ use ncd_component::{
 };
 use ncd_deploy::StepKind;
 use ncd_domain::{NodeEnvironmentCandidate, NodeProbeResult};
-use ncd_host::{Host, HostPath, local::LocalWindowsHost};
+use ncd_host::Host;
 use ncd_runtime::{
     ComponentActionRequest, RemoteHostProbe, RemoteSelectedPaths, SnowLumaLinuxPackage,
     component_catalog,
@@ -201,33 +201,7 @@ pub async fn resolve_runtime_readiness(
 pub async fn probe_local_node_candidates(
     state: State<'_, AppState>,
 ) -> Result<Vec<NodeEnvironmentCandidate>, String> {
-    let host = LocalWindowsHost::new();
-    let data_root = &state.data_root;
-    let comp_node = HostPath::from_windows(
-        data_root
-            .join("components")
-            .join("NodeJs")
-            .join("node.exe")
-            .to_str()
-            .unwrap_or_default(),
-    );
-    let custom = {
-        let settings = state.app_settings.read().await;
-        settings.snowluma_node_path.clone()
-    };
-    // 版本约束来自本机上要用 Node 的组件声明,不在这里写死
-    let accept =
-        state
-            .components
-            .catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
-    let candidates = ncd_component::nodejs::probe_local_system_nodes(
-        &host,
-        Some(&comp_node),
-        custom.as_deref(),
-        &accept,
-    )
-    .await;
-    Ok(candidates)
+    Ok(state.components.probe_local_node_candidates().await)
 }
 
 #[tauri::command]
@@ -235,38 +209,5 @@ pub async fn probe_node_binary_version(
     path: String,
     state: State<'_, AppState>,
 ) -> Result<NodeProbeResult, String> {
-    let host = LocalWindowsHost::new();
-    let hp = HostPath::from_windows(path.trim());
-    let accept =
-        state
-            .components
-            .catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
-    match ncd_component::nodejs::probe_node_raw_version(&host, &hp).await {
-        Ok(Some(raw_ver)) => {
-            let is_valid = ncd_component::all_versions_match(&accept, &raw_ver);
-            let error = (!is_valid)
-                .then(|| ncd_component::nodejs::version_mismatch_reason(&raw_ver, &accept));
-            Ok(NodeProbeResult {
-                path,
-                exists: true,
-                version: Some(raw_ver),
-                is_valid,
-                error,
-            })
-        }
-        Ok(None) => Ok(NodeProbeResult {
-            path,
-            exists: false,
-            version: None,
-            is_valid: false,
-            error: Some("无法执行或未找到 node.exe".to_string()),
-        }),
-        Err(err) => Ok(NodeProbeResult {
-            path,
-            exists: false,
-            version: None,
-            is_valid: false,
-            error: Some(format!("{err}")),
-        }),
-    }
+    Ok(state.components.probe_node_binary(path).await)
 }
