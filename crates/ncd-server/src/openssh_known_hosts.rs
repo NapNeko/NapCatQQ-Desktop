@@ -21,10 +21,21 @@ pub struct OpenSshHostKey {
 }
 
 /// 从 OpenSSH known_hosts 文本里取出 `host` 在 `port` 上的明文公钥。对不上返回空列表。
+/// 用户 `@revoked` 过的公钥一律不抄，不管那行写的是哪台主机：ssh 见到吊销的 key 照样拒，
+/// 这里通配符和哈希主机名都不解析，宁可多排除几把、退回确认框
 pub fn lookup_openssh_host_keys(content: &str, host: &str, port: u16) -> Vec<OpenSshHostKey> {
+    let lines: Vec<_> = content.lines().filter_map(parse_known_hosts_line).collect();
+    let revoked: Vec<(&str, &str)> = lines
+        .iter()
+        .filter(|l| l.marker == Some("@revoked"))
+        .map(|l| (l.kind, l.key_b64))
+        .collect();
     let mut out = Vec::new();
-    for line in content.lines().filter_map(parse_known_hosts_line) {
+    for line in &lines {
         if line.marker.is_some() || line.hosts.starts_with("|1|") {
+            continue;
+        }
+        if revoked.contains(&(line.kind, line.key_b64)) {
             continue;
         }
         if !known_hosts_host_matches(line.hosts, host, port) {
@@ -129,6 +140,21 @@ mod tests {
         let keys = lookup_openssh_host_keys(content, "192.0.2.10", 22);
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].key_b64, "AAAAok");
+    }
+
+    #[test]
+    fn lookup_never_copies_revoked_keys() {
+        let content = "192.0.2.10 ssh-ed25519 AAAAbad\n\
+                       192.0.2.10 ssh-rsa AAAAgood\n\
+                       @revoked * ssh-ed25519 AAAAbad\n";
+        let keys = lookup_openssh_host_keys(content, "192.0.2.10", 22);
+        assert_eq!(
+            keys,
+            vec![OpenSshHostKey {
+                key_kind: "ssh-rsa".into(),
+                key_b64: "AAAAgood".into(),
+            }]
+        );
     }
 
     #[tokio::test]
