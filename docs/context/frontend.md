@@ -56,7 +56,7 @@ flowchart TB
 ### 现存偏差（改到附近时顺手收掉，别照抄）
 
 - modules 直连服务：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/{ImportRemoteBotsDialog,SnowLumaConsentDialog}.tsx`、`bot/list/BotListPage.next.tsx`、`bot/list/next/BotCard.tsx`、`components/{ComponentsPage.next,QqDependencyDialog}.tsx`、`remote/{AddServerDialog,ImportSshConfigDialog}.tsx`、`settings/{ConfigImportDialog,DataRootMigrateDialog}.tsx`、`settings/settings-draft.ts`、`settings/tabs/{AboutTab,NcdWatchRemoteSection,NotificationsTab,RuntimeTab,WindowTab}.tsx`、`settings/tabs/notifications/{DeliveryHistoryDialog,OneBotMessengerPicker}.tsx`、`task-queue/{TaskDetailPanel,TaskQueueListItem,TaskQueuePage.next}.tsx`、`tray/TrayPanel.tsx`。`modules/apps/**` 和 `shared/**` 已经清零，保持住。
-- transport 之外直接碰 `@tauri-apps/*`：`main.tsx`、`app/{AppBootGate,DesktopExitGate}.tsx`、`core/services/desktop.service.ts`、`hooks/ui/useTauriFileDrop.ts`、`hooks/terminal/useTerminalFileDrop.ts`、`modules/settings/useTauriDropTarget.ts`、`modules/tray/TrayPanel.tsx`。`tray_panel_show` / `desktop-exit-blocked` / `desktop-request-close` 这几路监听等 IPC 收口那一轮一起挪进 service。
+- transport 之外直接碰 `@tauri-apps/*`：`main.tsx`、`app/AppBootGate.tsx`、`core/services/desktop.service.ts`、`hooks/ui/useTauriFileDrop.ts`、`hooks/terminal/useTerminalFileDrop.ts`、`modules/settings/useTauriDropTarget.ts`、`modules/tray/TrayPanel.tsx`。
 - `app/AppNext.tsx` 直接用 `desktopUpdateService`。
 - `hooks/preferences/useBackendSettings.ts` 反过来 import `modules/settings/settings-draft`。
 - `hooks/apps/useAppInstances.ts` 的新建、导入、启停、自动启动、重新探测还拿调用结果回写实例列表，这些后端都会发 `app_instance_changed`，照第 3 节交给事件桥即可。对接、解绑已经不回写。
@@ -176,7 +176,7 @@ flowchart TB
 
 | 页面 | 依赖 hook |
 | :--- | :--- |
-| `app/AppNext.tsx`（根上挂一次的桥和门） | `useComponentActionEventBridge` / `useDeploymentTaskBridge` / `useAppInstanceEventsBridge` / `useDockerInstallProgressBridge` / `useDockerDeployProgressBridge` / `useHostConnectionEvents` / `useHostHealthAlerts` / `useGlobalInfoBars` / `useBootstrap` / `useDesktopConsentGate` / `useOnboardingGate` |
+| `app/AppNext.tsx`（根上挂一次的桥和门） | `useComponentActionEventBridge` / `useDeploymentTaskBridge` / `useAppInstanceEventsBridge` / `useDockerInstallProgressBridge` / `useDockerDeployProgressBridge` / `useHostConnectionEvents` / `useHostHealthAlerts` / `useGlobalInfoBars` / `useBootstrap` / `useDesktopConsentGate` / `useOnboardingGate`；退出闸门 `DesktopExitGate` 用 `useDesktopExitGate` |
 | `BootstrapPanel` | `useBootstrap` / `useBackendSettings` / `useBotSnapshots` + `useBotConfigsMap` / `useReleases` / `useNoticeEvents` / `useServerManager` / `useOpenExternal` |
 | `RemoteHostPanel` | `useServerManager` |
 | `BotListPage` | `useBotSnapshots` / `useSortedBots` / `useSyncRemoteRuntimes` / `useBotMutations` / `useBotBatchSelection` / `useBotFlavorMap` / `useBotConfigsMap` / `useBotDockerStartGate` / `useBotRuntimeStartGate` / `useNapcatLogin`★ / `useSnowlumaState`★ / `useOpenWebui` / `useOpenSnowlumaNovnc` / `useBotSnapshotAlerts` |

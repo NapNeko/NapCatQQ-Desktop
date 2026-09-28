@@ -1,13 +1,7 @@
 // 标题栏关闭 / 托盘退出：本机 Bot 须先停；允许退出时远端保持运行。
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { isTauri } from '../core/ipc/transport';
-import { windowEventService } from '../core/services/desktop.service';
-import {
-    prepareExitDesktop,
-    requestExitApp,
-    type PrepareExitDesktopResponse,
-} from '../core/services/exit.service';
+import React from 'react';
+import { useDesktopExitGate } from '../hooks/desktop/useDesktopExitGate';
 import {
     Button,
     Dialog,
@@ -18,61 +12,8 @@ import {
     DialogTitle,
 } from '../shared/ui';
 
-type ExitDialogMode = 'confirm' | 'blocked';
-
 export const DesktopExitGate: React.FC = () => {
-    const [open, setOpen] = useState(false);
-    const [mode, setMode] = useState<ExitDialogMode>('confirm');
-    const [stats, setStats] = useState<PrepareExitDesktopResponse | null>(null);
-    const [exiting, setExiting] = useState(false);
-
-    const runExitFlow = useCallback(async () => {
-        if (!isTauri) return;
-        try {
-            const prep = await prepareExitDesktop();
-            setStats(prep);
-            if (!prep.can_exit) {
-                setMode('blocked');
-                setOpen(true);
-                return;
-            }
-            setMode('confirm');
-            setOpen(true);
-        } catch (err) {
-            console.error('prepare_exit_desktop failed:', err);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (!isTauri) return;
-        const unsubs: Array<() => void> = [];
-        void (async () => {
-            unsubs.push(
-                await windowEventService.onRequestClose(() => {
-                    void runExitFlow();
-                }),
-            );
-            unsubs.push(
-                await windowEventService.onExitBlocked(() => {
-                    void runExitFlow();
-                }),
-            );
-        })();
-        return () => {
-            for (const u of unsubs) u();
-        };
-    }, [runExitFlow]);
-
-    const handleConfirmExit = async () => {
-        setExiting(true);
-        try {
-            await requestExitApp();
-        } catch (err) {
-            console.error('request_exit_app failed:', err);
-            setExiting(false);
-            void runExitFlow();
-        }
-    };
+    const { open, mode, stats, exiting, setOpen, confirmExit } = useDesktopExitGate();
 
     if (!open || !stats) return null;
 
@@ -120,7 +61,7 @@ export const DesktopExitGate: React.FC = () => {
                     <Button
                         type="button"
                         disabled={exiting}
-                        onClick={() => void handleConfirmExit()}
+                        onClick={confirmExit}
                     >
                         {exiting ? '正在退出…' : '退出'}
                     </Button>
