@@ -19,7 +19,7 @@ use ncd_deploy::{DeployOutcome, DeployPlan, StepKind};
 use ncd_domain::release_snapshot::ReleaseSnapshot;
 use ncd_domain::{
     AppSettings, DeploymentTaskKind, DeploymentTaskResource, InstallDependenciesResult,
-    RemoteSelectedPaths, SnowLumaLinuxPackage,
+    RemoteSelectedPaths, SnowLumaLinuxPackage, server_id_of_host,
 };
 use ncd_host::{Host, Locality, Os};
 use ncd_server::ServerManager;
@@ -437,7 +437,7 @@ impl ComponentExecutor {
     ) -> Result<InstallDependenciesResult, String> {
         let (tx, rx) = oneshot::channel::<Result<InstallDependenciesResult, String>>();
         let task_id = uuid_v4();
-        let server_id = host_id.strip_prefix("remote:").map(str::to_string);
+        let server_id = server_id_of_host(host_id).map(str::to_string);
         let sudo_password = sudo_password.or_else(|| {
             server_id
                 .as_deref()
@@ -521,7 +521,7 @@ impl ComponentExecutor {
     ) -> String {
         let group = system_package_group(&target).unwrap_or_else(|| target.label());
         let title = system_package_title(&target);
-        let server_id = host_id.strip_prefix("remote:").map(str::to_string);
+        let server_id = server_id_of_host(host_id).map(str::to_string);
         let server_manager = Arc::clone(&self.server_manager);
         self.deployment_tasks
             .submit(DeploymentTaskRequest {
@@ -589,7 +589,7 @@ impl ComponentExecutor {
         plan.validate().map_err(|err| format!("{err}"))?;
 
         let host_id_owned = host_id.to_string();
-        let server_id = host_id_owned.strip_prefix("remote:").map(str::to_string);
+        let server_id = server_id_of_host(&host_id_owned).map(str::to_string);
         let remote_long_install = server_id.is_some()
             && matches!(
                 kind,
