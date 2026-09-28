@@ -26,7 +26,10 @@ pub mod windows_stub;
 pub use connection::ConnectionConfig;
 pub use credentials::{SshCredentials, SshKey};
 pub use download_progress::{CurlProgressParser, DownloadProgress, WgetProgressParser};
-pub use host_key::{HostKeyCheck, HostKeyPolicy, KnownHostsStore};
+pub use host_key::{
+    HostKeyCheck, HostKeyPolicy, KnownHostsLine, KnownHostsStore, known_hosts_host_matches,
+    parse_known_hosts_line,
+};
 pub use linux::{RemoteLinuxHost, SudoAccess, probe_sudo};
 pub use tunnel::{TunnelDirection, TunnelHandle, TunnelSpec};
 pub use url_download::{

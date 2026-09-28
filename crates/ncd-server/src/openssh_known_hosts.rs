@@ -10,7 +10,9 @@
 
 use std::path::Path;
 
-use ncd_host::remote::{HostKeyCheck, KnownHostsStore};
+use ncd_host::remote::{
+    HostKeyCheck, KnownHostsStore, known_hosts_host_matches, parse_known_hosts_line,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenSshHostKey {
@@ -21,33 +23,16 @@ pub struct OpenSshHostKey {
 /// 从 OpenSSH known_hosts 文本里取出 `host` 在 `port` 上的明文公钥。对不上返回空列表。
 pub fn lookup_openssh_host_keys(content: &str, host: &str, port: u16) -> Vec<OpenSshHostKey> {
     let mut out = Vec::new();
-    for raw in content.lines() {
-        let line = raw.trim();
-        if line.is_empty() || line.starts_with('#') {
+    for line in content.lines().filter_map(parse_known_hosts_line) {
+        if line.marker.is_some() || line.hosts.starts_with("|1|") {
             continue;
         }
-        if line.starts_with('@') {
-            continue;
-        }
-        let mut parts = line.split_whitespace();
-        let Some(hosts) = parts.next() else {
-            continue;
-        };
-        if hosts.starts_with("|1|") {
-            continue;
-        }
-        let Some(kind) = parts.next() else {
-            continue;
-        };
-        let Some(b64) = parts.next() else {
-            continue;
-        };
-        if !host_field_matches(hosts, host, port) {
+        if !known_hosts_host_matches(line.hosts, host, port) {
             continue;
         }
         let key = OpenSshHostKey {
-            key_kind: kind.to_string(),
-            key_b64: b64.to_string(),
+            key_kind: line.kind.to_string(),
+            key_b64: line.key_b64.to_string(),
         };
         if !out.contains(&key) {
             out.push(key);
@@ -88,29 +73,6 @@ pub async fn seed_app_known_hosts(
         }
     }
     appended
-}
-
-/// ssh 查 known_hosts 前先把主机名转小写，22 端口查裸主机名、别的端口查 `[host]:port`；
-/// 同一行里写了 `!host` 的，这台机器就不算在这行里
-fn host_field_matches(field: &str, host: &str, port: u16) -> bool {
-    if host.is_empty() {
-        return false;
-    }
-    let bracketed = format!("[{host}]:{port}");
-    let is_this_host = |name: &str| {
-        name.eq_ignore_ascii_case(&bracketed) || (port == 22 && name.eq_ignore_ascii_case(host))
-    };
-    let mut matched = false;
-    for part in field.split(',').map(str::trim) {
-        if let Some(negated) = part.strip_prefix('!') {
-            if is_this_host(negated) {
-                return false;
-            }
-        } else if is_this_host(part) {
-            matched = true;
-        }
-    }
-    matched
 }
 
 #[cfg(test)]

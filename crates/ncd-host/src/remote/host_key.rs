@@ -52,9 +52,8 @@ pub enum HostKeyCheck {
 
 /// 解析 OpenSSH 风格 known_hosts 文件
 ///
-/// 简化版只支持精确 host:port 匹配,不支持 hostname hash(|1|...|...)
-/// 与 wildcard生产场景 known_hosts 由 ncd-update 派生写入,不复用 OpenSSH 的
-/// 历史文件,故无需兼容旧风格
+/// 主机字段按 [known_hosts_host_matches] 比对,不支持 hostname hash(|1|...|...)
+/// 与 wildcard:这份文件只由应用自己写入(format_host),不复用 OpenSSH 的历史文件
 pub struct KnownHostsStore {
     path: PathBuf,
 }
@@ -79,34 +78,18 @@ impl KnownHostsStore {
             Err(e) => return Err(HostError::Io(e)),
         };
 
-        let target = format_host(host, port);
         // 同一主机多种算法(ed25519 / rsa / ecdsa)是 OpenSSH 常态。
         // 只有「同算法、不同公钥」才算 mismatch；别的算法当未知，允许再记一条。
         let mut saw_same_kind = false;
-        for raw in content.lines() {
-            let line = raw.trim();
-            if line.is_empty() || line.starts_with('#') {
+        for line in content.lines().filter_map(parse_known_hosts_line) {
+            // 应用自己的文件不写 @cert-authority / @revoked,有也不当普通条目
+            if line.marker.is_some() || !known_hosts_host_matches(line.hosts, host, port) {
                 continue;
             }
-            // OpenSSH 行:<host[,host2]> <key-type> <base64-key> [comment]
-            let mut parts = line.split_whitespace();
-            let hosts = match parts.next() {
-                Some(h) => h,
-                None => continue,
-            };
-            let kind = parts.next().unwrap_or("");
-            let b64 = parts.next().unwrap_or("");
-
-            // 多 host 用逗号分隔
-            let host_list: Vec<&str> = hosts.split(',').map(str::trim).collect();
-            let host_match = host_list.iter().any(|h| matches_host(h, &target, host));
-            if !host_match {
-                continue;
-            }
-            if kind == key_kind && b64 == key_b64 {
+            if line.kind == key_kind && line.key_b64 == key_b64 {
                 return Ok(HostKeyCheck::Match);
             }
-            if kind == key_kind {
+            if line.kind == key_kind {
                 saw_same_kind = true;
             }
         }
@@ -165,16 +148,59 @@ fn format_host(host: &str, port: u16) -> String {
     }
 }
 
-fn matches_host(entry: &str, target_full: &str, target_bare: &str) -> bool {
-    // 完全匹配 (含端口)
-    if entry == target_full {
-        return true;
+/// known_hosts 里的一行:`[@marker] <host[,host2]> <key-type> <base64-key> [comment]`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KnownHostsLine<'a> {
+    /// `@cert-authority` / `@revoked`,普通行是 None
+    pub marker: Option<&'a str>,
+    pub hosts: &'a str,
+    pub kind: &'a str,
+    pub key_b64: &'a str,
+}
+
+/// 空行、注释、缺字段的行是 None
+pub fn parse_known_hosts_line(raw: &str) -> Option<KnownHostsLine<'_>> {
+    let line = raw.trim();
+    if line.is_empty() || line.starts_with('#') {
+        return None;
     }
-    // 22 端口的简写形式:example.com 也认作 example.com:22
-    if entry == target_bare {
-        return true;
+    let mut parts = line.split_whitespace();
+    let first = parts.next()?;
+    let (marker, hosts) = if first.starts_with('@') {
+        (Some(first), parts.next()?)
+    } else {
+        (None, first)
+    };
+    Some(KnownHostsLine {
+        marker,
+        hosts,
+        kind: parts.next()?,
+        key_b64: parts.next()?,
+    })
+}
+
+/// 一行的主机字段是否覆盖 host:port。照 ssh 的规矩:主机名不分大小写,
+/// 22 端口认裸主机名、别的端口只认 `[host]:port`,同一行写了 `!host` 就不算。
+/// 裸主机名要是也认别的端口,同一 IP 转发出去的几台机器会互相顶成「指纹变了」
+pub fn known_hosts_host_matches(field: &str, host: &str, port: u16) -> bool {
+    if host.is_empty() {
+        return false;
     }
-    false
+    let bracketed = format!("[{host}]:{port}");
+    let is_this_host = |name: &str| {
+        name.eq_ignore_ascii_case(&bracketed) || (port == 22 && name.eq_ignore_ascii_case(host))
+    };
+    let mut matched = false;
+    for part in field.split(',').map(str::trim) {
+        if let Some(negated) = part.strip_prefix('!') {
+            if is_this_host(negated) {
+                return false;
+            }
+        } else if is_this_host(part) {
+            matched = true;
+        }
+    }
+    matched
 }
 
 #[cfg(test)]
@@ -242,6 +268,62 @@ mod tests {
                 .await
                 .unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn bare_port_22_entry_says_nothing_about_other_ports() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("known_hosts");
+        fs::write(&path, "1.2.3.4 ssh-ed25519 AAAAport22\n")
+            .await
+            .unwrap();
+        let store = KnownHostsStore::new(&path);
+        // 同一 IP 转发出去的另一台机器:不能拿 22 端口那条判成指纹变了
+        assert_eq!(
+            store
+                .check("1.2.3.4", 10022, "ssh-ed25519", "AAAAother")
+                .await
+                .unwrap(),
+            HostKeyCheck::Unknown
+        );
+        assert_eq!(
+            store
+                .check("1.2.3.4", 22, "ssh-ed25519", "AAAAport22")
+                .await
+                .unwrap(),
+            HostKeyCheck::Match
+        );
+    }
+
+    #[test]
+    fn host_field_ignores_case_and_honours_negation() {
+        assert!(known_hosts_host_matches("Box.Example", "box.example", 22));
+        assert!(known_hosts_host_matches(
+            "[Box.Example]:2222",
+            "box.example",
+            2222
+        ));
+        assert!(!known_hosts_host_matches(
+            "box.example",
+            "box.example",
+            2222
+        ));
+        assert!(!known_hosts_host_matches(
+            "box.example,!box.example",
+            "box.example",
+            22
+        ));
+    }
+
+    #[test]
+    fn line_parser_splits_marker() {
+        let line = parse_known_hosts_line("@revoked * ssh-ed25519 AAAA c").unwrap();
+        assert_eq!(line.marker, Some("@revoked"));
+        assert_eq!(line.hosts, "*");
+        assert_eq!(line.kind, "ssh-ed25519");
+        assert_eq!(line.key_b64, "AAAA");
+        assert!(parse_known_hosts_line("  # x").is_none());
+        assert!(parse_known_hosts_line("host ssh-ed25519").is_none());
     }
 
     #[tokio::test]
