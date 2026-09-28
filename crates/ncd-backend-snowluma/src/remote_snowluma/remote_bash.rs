@@ -45,7 +45,7 @@ mod tests {
     #[derive(Clone, Copy)]
     enum Bash {
         InPath,
-        OnlyAtBinBash,
+        OutsidePath,
         Missing,
         SshDown,
     }
@@ -139,7 +139,7 @@ mod tests {
             match (self.bash, probes_bin_dir) {
                 (Bash::SshDown, _) => Err(HostError::Unsupported { operation: "ssh down" }),
                 (Bash::InPath, true) => Ok(found("/usr/bin/bash\n")),
-                (Bash::OnlyAtBinBash, true) => Ok(found("/bin/bash\n")),
+                (Bash::OutsidePath, true) => Ok(found("/bin/bash\n")),
                 _ => Ok(absent),
             }
         }
@@ -154,7 +154,7 @@ mod tests {
 
     #[tokio::test]
     async fn bash_outside_path_is_found_in_the_same_probe() {
-        let host = CountingHost::new("h", Bash::OnlyAtBinBash);
+        let host = CountingHost::new("h", Bash::OutsidePath);
         assert_eq!(resolve_remote_bash(&host).await.unwrap(), "/bin/bash");
         assert_eq!(host.hits.load(Ordering::SeqCst), 1);
     }

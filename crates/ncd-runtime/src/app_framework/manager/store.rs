@@ -296,6 +296,7 @@ impl AppManager {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn resolve_store_entry(
         &self,
         host: &dyn Host,

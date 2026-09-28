@@ -59,7 +59,7 @@ pub async fn download_url_to_host_with_progress(
     let has_curl = !has_wget && host.command_exists("curl").await;
     if !has_wget && !has_curl {
         return Err(ActionError::Host(ncd_host::HostError::Unsupported {
-            operation: "download_url (wget/curl not found)".into(),
+            operation: "download_url (wget/curl not found)",
         }));
     }
 

@@ -196,6 +196,8 @@ pub fn run() {
             ncd_domain::kinds::BotFlavor::NapCat,
         ));
     // NapCat WebUI 登录轮询依赖:WebUI client + 离线告警 fan-out(桌面 Toast / Webhook / Email)
+    // 启动期建不起 HTTP 客户端就没法继续，只能带着原因退出
+    #[allow(clippy::expect_used)]
     let webui_client: Arc<dyn ncd_runtime::NapCatWebUiClient> = Arc::new(
         ReqwestNapCatWebUiClient::new()
             .expect("初始化 NapCat WebUI HTTP 客户端失败：rustls-tls 构建异常"),
@@ -316,6 +318,8 @@ pub fn run() {
             Arc::clone(&snowluma_daemon),
             Arc::new(event_bus.clone()),
         ));
+    // 到这里 bot_manager 还没交给任何人，try_unwrap 必然成功
+    #[allow(clippy::expect_used)]
     let bot_manager = Arc::new(
         Arc::try_unwrap(bot_manager)
             .ok()
@@ -390,6 +394,8 @@ pub fn run() {
     {
         builder = builder.plugin(single_instance::plugin());
     }
+    // Tauri 应用建不起来没有降级可走，expect 让 panic 钩子记下原因
+    #[allow(clippy::expect_used)]
     builder
         // 用系统默认浏览器打开外部 URL(例如 NapCat WebUI)
         // webview 自身不支持 target=_blank
@@ -577,7 +583,7 @@ pub fn run() {
                 }
             });
 
-            if let Err(err) = commands::window::apply_main_window_startup_geometry(&app.handle()) {
+            if let Err(err) = commands::window::apply_main_window_startup_geometry(app.handle()) {
                 desktop_log::write_session_line(
                     "WARN",
                     "ncd::window",
@@ -585,7 +591,7 @@ pub fn run() {
                 );
             }
 
-            if let Err(err) = window_icon::apply_main_window_icon(&app.handle()) {
+            if let Err(err) = window_icon::apply_main_window_icon(app.handle()) {
                 desktop_log::write_session_line(
                     "WARN",
                     "ncd::window",
@@ -593,7 +599,7 @@ pub fn run() {
                 );
             }
 
-            if let Err(err) = commands::tray::attach_tray(&app.handle()) {
+            if let Err(err) = commands::tray::attach_tray(app.handle()) {
                 desktop_log::write_session_line(
                     "WARN",
                     "ncd::tray",
@@ -655,7 +661,7 @@ pub fn run() {
                         if let Err(err) =
                             commands::tray::hide_main_window_to_tray(app.clone()).await
                         {
-                            eprintln!("[window] hide to tray failed: {err}");
+                            tracing::warn!("hide main window to tray failed: {err}");
                         }
                         return;
                     }

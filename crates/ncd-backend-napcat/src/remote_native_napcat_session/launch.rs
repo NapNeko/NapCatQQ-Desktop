@@ -58,52 +58,6 @@ pub async fn probe_remote_napcat_layout(
     Ok((home, layout))
 }
 
-#[cfg(test)]
-mod selected_tests {
-    use super::*;
-    use ncd_domain::RemoteSelectedPaths;
-
-    #[test]
-    fn napcat_paths_from_selected_custom_prefix() {
-        let selected = RemoteSelectedPaths {
-            home: "/home/u".into(),
-            qq_install_base: Some("/data/qq".into()),
-            qq_bin: Some("/data/qq/opt/QQ/qq".into()),
-            needs_sudo: false,
-            ..RemoteSelectedPaths::default()
-        };
-        let (home, layout, base) = napcat_paths_from_selected(&selected).unwrap();
-        assert_eq!(home, "/home/u");
-        assert_eq!(layout, RemoteNapcatLayout::Rootless);
-        assert_eq!(base.as_posix(), "/data/qq");
-    }
-
-    #[test]
-    fn napcat_paths_from_selected_missing_qq_errors() {
-        let selected = RemoteSelectedPaths {
-            home: "/home/u".into(),
-            ..RemoteSelectedPaths::default()
-        };
-        let err = napcat_paths_from_selected(&selected).unwrap_err();
-        assert!(err.contains("/home/u"));
-        assert!(err.contains("未发现"));
-        assert!(!err.contains("$HOME/Napcat"));
-    }
-
-    #[test]
-    fn napcat_paths_from_selected_derives_base_from_system_qq_bin() {
-        let selected = RemoteSelectedPaths {
-            home: "/root".into(),
-            qq_bin: Some("/opt/QQ/qq".into()),
-            needs_sudo: true,
-            ..RemoteSelectedPaths::default()
-        };
-        let (_home, layout, base) = napcat_paths_from_selected(&selected).unwrap();
-        assert_eq!(base.as_posix(), "/");
-        assert_eq!(layout, RemoteNapcatLayout::System);
-    }
-}
-
 fn napcat_config_dir(install_base: &HostPath) -> String {
     format!(
         "{}/opt/QQ/resources/app/app_launcher/napcat/config",
@@ -521,4 +475,50 @@ pub async fn remote_napcat_running_pid(
     line.parse()
         .map(Some)
         .map_err(|_| BotBackendError::InvalidConfig(format!("invalid qq pid: {line}")))
+}
+
+#[cfg(test)]
+mod selected_tests {
+    use super::*;
+    use ncd_domain::RemoteSelectedPaths;
+
+    #[test]
+    fn napcat_paths_from_selected_custom_prefix() {
+        let selected = RemoteSelectedPaths {
+            home: "/home/u".into(),
+            qq_install_base: Some("/data/qq".into()),
+            qq_bin: Some("/data/qq/opt/QQ/qq".into()),
+            needs_sudo: false,
+            ..RemoteSelectedPaths::default()
+        };
+        let (home, layout, base) = napcat_paths_from_selected(&selected).unwrap();
+        assert_eq!(home, "/home/u");
+        assert_eq!(layout, RemoteNapcatLayout::Rootless);
+        assert_eq!(base.as_posix(), "/data/qq");
+    }
+
+    #[test]
+    fn napcat_paths_from_selected_missing_qq_errors() {
+        let selected = RemoteSelectedPaths {
+            home: "/home/u".into(),
+            ..RemoteSelectedPaths::default()
+        };
+        let err = napcat_paths_from_selected(&selected).unwrap_err();
+        assert!(err.contains("/home/u"));
+        assert!(err.contains("未发现"));
+        assert!(!err.contains("$HOME/Napcat"));
+    }
+
+    #[test]
+    fn napcat_paths_from_selected_derives_base_from_system_qq_bin() {
+        let selected = RemoteSelectedPaths {
+            home: "/root".into(),
+            qq_bin: Some("/opt/QQ/qq".into()),
+            needs_sudo: true,
+            ..RemoteSelectedPaths::default()
+        };
+        let (_home, layout, base) = napcat_paths_from_selected(&selected).unwrap();
+        assert_eq!(base.as_posix(), "/");
+        assert_eq!(layout, RemoteNapcatLayout::System);
+    }
 }

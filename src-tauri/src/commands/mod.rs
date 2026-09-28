@@ -222,6 +222,31 @@ pub fn publish_demo_event(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+fn open_in_file_manager(path: &Path) -> Result<(), String> {
+    let mut command = if cfg!(target_os = "windows") {
+        let mut cmd = Command::new("explorer");
+        cmd.arg(path);
+        cmd
+    } else if cfg!(target_os = "macos") {
+        let mut cmd = Command::new("open");
+        cmd.arg(path);
+        cmd
+    } else {
+        let mut cmd = Command::new("xdg-open");
+        cmd.arg(path);
+        cmd
+    };
+
+    let status = command
+        .status()
+        .map_err(|err| format!("打开数据目录失败: {err}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("文件管理器退出失败: {status}"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -420,30 +445,5 @@ mod tests {
             }
             other => panic!("unexpected event: {other:?}"),
         }
-    }
-}
-
-fn open_in_file_manager(path: &Path) -> Result<(), String> {
-    let mut command = if cfg!(target_os = "windows") {
-        let mut cmd = Command::new("explorer");
-        cmd.arg(path);
-        cmd
-    } else if cfg!(target_os = "macos") {
-        let mut cmd = Command::new("open");
-        cmd.arg(path);
-        cmd
-    } else {
-        let mut cmd = Command::new("xdg-open");
-        cmd.arg(path);
-        cmd
-    };
-
-    let status = command
-        .status()
-        .map_err(|err| format!("打开数据目录失败: {err}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("文件管理器退出失败: {status}"))
     }
 }

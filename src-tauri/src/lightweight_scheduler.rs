@@ -41,7 +41,7 @@ impl LightweightScheduler {
             return;
         }
         match cfg.after_close_ui_behavior {
-            ncd_domain::AfterCloseUiBehavior::Hide => return,
+            ncd_domain::AfterCloseUiBehavior::Hide => {}
             ncd_domain::AfterCloseUiBehavior::ImmediateLightweight => {
                 if has_active_component_tasks(&app).await {
                     return;

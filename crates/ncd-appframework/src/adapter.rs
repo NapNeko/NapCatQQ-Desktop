@@ -272,6 +272,7 @@ pub trait AppFrameworkAdapter: Send + Sync {
         None
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn write_live_config(
         &self,
         _host: &dyn Host,

@@ -76,7 +76,7 @@ impl AstrBotDashboardStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AstrBotPersona {
@@ -86,18 +86,7 @@ pub struct AstrBotPersona {
     pub folder_id: String,
 }
 
-impl Default for AstrBotPersona {
-    fn default() -> Self {
-        Self {
-            persona_id: String::new(),
-            system_prompt: String::new(),
-            begin_dialogs: Vec::new(),
-            folder_id: String::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AstrBotKnowledgeBase {
@@ -105,17 +94,6 @@ pub struct AstrBotKnowledgeBase {
     pub kb_name: String,
     pub description: String,
     pub embedding_provider_id: String,
-}
-
-impl Default for AstrBotKnowledgeBase {
-    fn default() -> Self {
-        Self {
-            kb_id: String::new(),
-            kb_name: String::new(),
-            description: String::new(),
-            embedding_provider_id: String::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -145,21 +123,12 @@ impl Default for AstrBotSessionRule {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AstrBotAbconfInfo {
     pub id: String,
     pub name: String,
-}
-
-impl Default for AstrBotAbconfInfo {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            name: String::new(),
-        }
-    }
 }
 
 pub async fn login_client(

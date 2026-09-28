@@ -755,6 +755,7 @@ impl HostProcess for ChildHostProcess {
 
 /// 本机的盘。GetLogicalDrives 只读位掩码、GetDriveTypeW 只看类型，都不碰盘本身，
 /// 断开的网络盘、空光驱也不会卡住
+#[allow(unsafe_code)] // Windows FFI: 枚举盘符只有这两个 Win32 调用
 fn logical_drives() -> Vec<crate::path::DriveEntry> {
     use crate::path::{DriveEntry, DriveKind};
     use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};

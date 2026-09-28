@@ -169,14 +169,10 @@ pub(crate) async fn read_docker_imported_network(
             )
             .await?
             {
-                Some(value) => {
-                    return parse_snowluma_file(
-                        &format!(
-                            "docker://{docker_name}/app/snowluma-data/config/onebot_{qq_id}.json"
-                        ),
-                        &value,
-                    );
-                }
+                Some(value) => parse_snowluma_file(
+                    &format!("docker://{docker_name}/app/snowluma-data/config/onebot_{qq_id}.json"),
+                    &value,
+                ),
                 None => {
                     let host_path =
                         format!("{project_dir}/snowluma-data/config/onebot_{qq_id}.json");

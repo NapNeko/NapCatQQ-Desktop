@@ -233,9 +233,8 @@ impl NcdWatchComponent {
         helper
             .download_with_mirrors(&mirrors, &local_tmp, sha.as_deref(), ctx, 2)
             .await
-            .map_err(|e| {
+            .inspect_err(|_| {
                 let _ = std::fs::remove_file(&local_tmp);
-                e
             })?;
 
         ctx.emit(ProgressKind::Log {

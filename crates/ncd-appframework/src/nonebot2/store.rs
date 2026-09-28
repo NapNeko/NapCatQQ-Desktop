@@ -498,15 +498,10 @@ fn write_inline_or_replace(table: &mut Table, key: &str, arr: Array) {
 
 fn write_adapters_aot(nonebot: &mut Table, items: &[CatalogItem]) {
     let enabled: Vec<&CatalogItem> = items.iter().filter(|i| i.enabled).collect();
-    if nonebot
-        .get("adapters")
-        .and_then(Item::as_array_of_tables)
-        .is_some()
+    if let Some(aot) = nonebot
+        .get_mut("adapters")
+        .and_then(Item::as_array_of_tables_mut)
     {
-        let aot = nonebot
-            .get_mut("adapters")
-            .and_then(Item::as_array_of_tables_mut)
-            .expect("adapters AoT");
         let mut i = 0;
         while i < aot.len() {
             let module = aot
@@ -561,10 +556,9 @@ fn write_plugins_table(nonebot: &mut Table, items: &[CatalogItem]) {
     if nonebot.get("plugins").and_then(Item::as_table).is_none() {
         nonebot.insert("plugins", Item::Table(Table::new()));
     }
-    let plugins = nonebot
-        .get_mut("plugins")
-        .and_then(Item::as_table_mut)
-        .expect("plugins table");
+    let Some(plugins) = nonebot.get_mut("plugins").and_then(Item::as_table_mut) else {
+        return;
+    };
 
     let keys: Vec<String> = plugins.iter().map(|(k, _)| k.to_string()).collect();
     for key in keys {
@@ -617,11 +611,13 @@ fn write_plugins_table(nonebot: &mut Table, items: &[CatalogItem]) {
 fn tool_table<'a>(doc: &'a DocumentMut, rest: &[&str]) -> Option<&'a Table> {
     let mut cur = doc.get("tool")?.as_table()?;
     for key in rest {
-        cur = cur.get(*key)?.as_table()?;
+        cur = cur.get(key)?.as_table()?;
     }
     Some(cur)
 }
 
+// 循环里每一层不是表就换成表，最后一层（空路径时是文档根）一定是表，expect 不会触发
+#[allow(clippy::expect_used)]
 fn ensure_table_path<'a>(doc: &'a mut DocumentMut, path: &[&str]) -> &'a mut Table {
     let mut item = doc.as_item_mut();
     for key in path {
@@ -1090,7 +1086,7 @@ async fn uv_add_at(
     };
     emit_log(log, format!("uv add {spec}"));
     match run_uv(host, root, &["add", &spec], log).await {
-        Ok(()) => return Ok(()),
+        Ok(()) => Ok(()),
         Err(fail) => {
             if let Some(dep) = fail
                 .build_package

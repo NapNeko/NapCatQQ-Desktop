@@ -229,15 +229,12 @@ pub async fn layout_from_selected_or_probe(
 
 /// 库存里的 `/usr/bin/node` 不能直接拿来启动：完整包自带 Node 22，系统 Node 往往过旧。
 pub(crate) fn node_bin_needs_reprobe(selected_node: Option<&str>, snowluma_dir: &str) -> bool {
-    match selected_node.map(str::trim).filter(|s| !s.is_empty()) {
+    !matches!(
+        selected_node.map(str::trim).filter(|s| !s.is_empty()),
         Some(bin)
             if ncd_domain::is_bundled_snowluma_node(bin, Some(snowluma_dir))
-                || ncd_domain::is_portable_lite_node(bin, Some(snowluma_dir)) =>
-        {
-            false
-        }
-        _ => true,
-    }
+                || ncd_domain::is_portable_lite_node(bin, Some(snowluma_dir))
+    )
 }
 
 async fn find_snowluma_install(host: &dyn Host, home: &str) -> Option<String> {

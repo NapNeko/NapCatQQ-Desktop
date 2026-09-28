@@ -279,6 +279,7 @@ async fn bot_pid_if_running(
 }
 
 /// 冷启 QQ 的远端脚本。ptrace / libgcc 已在 spawn 前的 host 侧做过，这里不再重复。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn bot_cold_start_script(
     rt: &str,
     log_dir: &str,

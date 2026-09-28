@@ -80,7 +80,7 @@ pub fn build_component_for_host(
             }
         }
         let home = require_remote_home(remote_home)?;
-        let defaults = desktop_default_install_paths(&home)?;
+        let defaults = desktop_default_install_paths(home)?;
         defaults
             .qq_install_base
             .map(HostPath::from_posix)
@@ -143,7 +143,7 @@ pub fn build_component_for_host(
                         HostPath::from_posix(ws)
                     } else {
                         let home = require_remote_home(remote_home)?;
-                        let defaults = desktop_default_install_paths(&home)?;
+                        let defaults = desktop_default_install_paths(home)?;
                         HostPath::from_posix(defaults.snowluma_workspace.ok_or_else(|| {
                             format!("无法派生默认 SnowLuma workspace（home={home}）")
                         })?)
@@ -379,7 +379,7 @@ fn node_install_dir(
         }
     }
     let home = require_remote_home(remote_home)?;
-    let defaults = desktop_default_install_paths(&home)?;
+    let defaults = desktop_default_install_paths(home)?;
     let ws = defaults
         .snowluma_workspace
         .ok_or_else(|| format!("无法派生默认 Node 安装目录（home={home}）"))?;

@@ -162,21 +162,12 @@ impl Default for AstrBotAiSettings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AstrBotSttSettings {
     pub enable: bool,
     pub provider_id: String,
-}
-
-impl Default for AstrBotSttSettings {
-    fn default() -> Self {
-        Self {
-            enable: false,
-            provider_id: String::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -280,7 +271,7 @@ impl Default for AstrBotPlatformGates {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AstrBotSubagentRow {
@@ -288,16 +279,7 @@ pub struct AstrBotSubagentRow {
     pub persona_id: String,
 }
 
-impl Default for AstrBotSubagentRow {
-    fn default() -> Self {
-        Self {
-            provider_id: String::new(),
-            persona_id: String::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
 #[serde(default)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct AstrBotSubagentConfig {
@@ -307,28 +289,17 @@ pub struct AstrBotSubagentConfig {
     pub agents: Vec<AstrBotSubagentRow>,
 }
 
-impl Default for AstrBotSubagentConfig {
-    fn default() -> Self {
-        Self {
-            main_enable: false,
-            remove_main_duplicate_tools: false,
-            router_system_prompt: String::new(),
-            agents: Vec::new(),
-        }
-    }
-}
-
 pub fn sources_from_root(root: &Value) -> Vec<AstrBotProviderSource> {
     as_array(root, "provider_sources")
         .iter()
-        .filter_map(|row| parse_source(row))
+        .filter_map(parse_source)
         .collect()
 }
 
 pub fn models_from_root(root: &Value) -> Vec<AstrBotProviderModel> {
     as_array(root, "provider")
         .iter()
-        .filter_map(|row| parse_model(row))
+        .filter_map(parse_model)
         .collect()
 }
 

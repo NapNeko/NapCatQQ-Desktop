@@ -1146,7 +1146,7 @@ mod tests {
     }
 
     impl ControlledProcess {
-        fn new(
+        fn with_wait_sender(
             pid: u32,
         ) -> (
             Box<dyn HostProcess>,
@@ -1220,13 +1220,16 @@ mod tests {
         }
     }
 
+    /// bot_id、退出码、原因
+    type ExitRecord = (BotId, Option<i32>, Option<String>);
+
     /// CapturingEventSink:把所有事件录进 Vec,测试用断言
     /// 进程退出事件还会发给 oneshot,让测试方便等"watcher 跑完"
     #[derive(Default)]
     struct CapturingEventSink {
         log_lines: StdMutex<Vec<(BotId, String, String)>>,
         webui: StdMutex<Vec<(BotId, u16, String)>>,
-        exited: StdMutex<Vec<(BotId, Option<i32>, Option<String>)>>,
+        exited: StdMutex<Vec<ExitRecord>>,
         exit_signal: StdMutex<Option<oneshot::Sender<()>>>,
     }
 
@@ -1397,7 +1400,7 @@ mod tests {
     #[tokio::test]
     async fn launch_marks_host_command_as_long_running() {
         let host = FakeHost::new(Os::Windows);
-        let (process, wait_tx) = ControlledProcess::new(21001);
+        let (process, wait_tx) = ControlledProcess::with_wait_sender(21001);
         host.push_process(process);
         let dep = NativeDeployment::new(
             Arc::new(FakeTranslator {
@@ -1431,7 +1434,7 @@ mod tests {
         let (exit_tx, exit_rx) = oneshot::channel::<()>();
         let sink = Arc::new(CapturingEventSink::with_exit_signal(exit_tx));
         let host = FakeHost::new(Os::Windows);
-        let (process, wait_tx) = ControlledProcess::new(22001);
+        let (process, wait_tx) = ControlledProcess::with_wait_sender(22001);
         host.push_process(process);
         let dep = NativeDeployment::new(
             Arc::new(FakeTranslator {
@@ -1469,8 +1472,8 @@ mod tests {
     async fn old_generation_watcher_does_not_clear_new_generation() {
         let host = FakeHost::new(Os::Windows);
         let sink = Arc::new(CapturingEventSink::default());
-        let (first_process, first_wait_tx) = ControlledProcess::new(23001);
-        let (second_process, second_wait_tx) = ControlledProcess::new(23002);
+        let (first_process, first_wait_tx) = ControlledProcess::with_wait_sender(23001);
+        let (second_process, second_wait_tx) = ControlledProcess::with_wait_sender(23002);
         host.push_process(first_process);
         host.push_process(second_process);
         let dep = NativeDeployment::new(
@@ -1521,8 +1524,8 @@ mod tests {
     async fn stop_requested_suppresses_exit_event_and_wait_timeout_keeps_running() {
         let host = FakeHost::new(Os::Windows);
         let sink = Arc::new(CapturingEventSink::default());
-        let (timeout_process, timeout_wait_tx) = ControlledProcess::new(24001);
-        let (stopped_process, stopped_wait_tx) = ControlledProcess::new(24002);
+        let (timeout_process, timeout_wait_tx) = ControlledProcess::with_wait_sender(24001);
+        let (stopped_process, stopped_wait_tx) = ControlledProcess::with_wait_sender(24002);
         host.push_process(timeout_process);
         host.push_process(stopped_process);
         let dep = NativeDeployment::new(

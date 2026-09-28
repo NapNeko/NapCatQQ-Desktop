@@ -289,7 +289,7 @@ pub async fn ensure_onebot_messenger_http(
         resolve_local_onebot_messenger(bot_id.as_str(), "__candidate__", true, &servers_before)
     {
         let port = parse_port_from_base_url(&ready.base_url).unwrap_or(0);
-        let candidate = build_onebot_candidate(&bot_id.to_string(), &cfg, &snap.state, &host_info);
+        let candidate = build_onebot_candidate(bot_id.as_str(), &cfg, &snap.state, &host_info);
         return Ok(EnsureOneBotMessengerHttpResult {
             bot_id: bot_id.to_string(),
             action: "already_ready".to_string(),
@@ -392,7 +392,7 @@ pub async fn ensure_onebot_messenger_http(
         .get_snapshot(&bot_id)
         .await
         .map_err(|e| e.to_string())?;
-    let candidate = build_onebot_candidate(&bot_id.to_string(), &cfg, &snap.state, &host_info);
+    let candidate = build_onebot_candidate(bot_id.as_str(), &cfg, &snap.state, &host_info);
 
     Ok(EnsureOneBotMessengerHttpResult {
         bot_id: bot_id.to_string(),
@@ -494,7 +494,7 @@ async fn list_onebot_messenger_candidates_inner(
             continue;
         };
         out.push(build_onebot_candidate(
-            &bot_id.to_string(),
+            bot_id.as_str(),
             &cfg,
             &snap.state,
             &host_info,
