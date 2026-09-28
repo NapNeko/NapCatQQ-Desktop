@@ -15,8 +15,7 @@ import {
     type SyntaxMode,
 } from '../../../shared/ui';
 import { ActionMotionIcon } from '../../../shared/ui/motion';
-import { useAppConfigText } from '../../../hooks/apps/useAppInstanceConfig';
-import { appFrameworkService } from '../../../core/services/app-framework.service';
+import { useAppConfigText, useAppPluginConfigDocs } from '../../../hooks/apps/useAppInstanceConfig';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { pushAppErrorBar } from '../../../hooks/apps/pushAppErrorBar';
 import { errorText } from '../../../core/domain/errors';
@@ -26,6 +25,7 @@ import { PluginSchemaForm, type PluginConfigObject } from './PluginSchemaForm';
 import type { AppConfigDocument, AppConfigError, AppPluginConfigSchema } from '../../../core/ipc/types';
 
 const WORKSPACE = 'flex h-[min(64dvh,560px)] min-h-[22rem] min-w-0 flex-1 flex-col overflow-hidden';
+const NO_DOCS: AppConfigDocument[] = [];
 
 type ViewMode = 'form' | 'source';
 
@@ -48,50 +48,26 @@ export const PluginConfigDialog: React.FC<{
     pluginName: string | null;
     onClose: () => void;
 }> = ({ instanceId, pluginName, onClose }) => {
-    const [docs, setDocs] = useState<AppConfigDocument[]>([]);
-    const [schema, setSchema] = useState<AppPluginConfigSchema | null>(null);
-    const [docsError, setDocsError] = useState<string | null>(null);
-    const [docsLoading, setDocsLoading] = useState(false);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const listing = useAppPluginConfigDocs(instanceId, pluginName);
+    const docs = listing.data?.docs ?? NO_DOCS;
+    const schema = listing.data?.schema ?? null;
+    const docsError = listing.error ? errorText(listing.error) : null;
+    // 选中的文件跟着插件走：换了插件、关了再开都回到默认那份（有 schema 的那份，没有就第一份）
+    const [picked, setPicked] = useState<{ plugin: string; docId: string } | null>(null);
+    const selectedId = picked && picked.plugin === pluginName ? picked.docId : schema?.doc_id;
 
     useEffect(() => {
-        if (!pluginName) {
-            setDocs([]);
-            setSchema(null);
-            setSelectedId(null);
-            setDocsError(null);
-            return;
-        }
-        let cancelled = false;
-        setDocsLoading(true);
-        setDocsError(null);
-        void Promise.all([
-            appFrameworkService.listPluginConfigDocs(instanceId, pluginName),
-            appFrameworkService.pluginConfigSchema(instanceId, pluginName).catch(() => null),
-        ])
-            .then(([nextDocs, nextSchema]) => {
-                if (cancelled) return;
-                setDocs(nextDocs);
-                setSchema(nextSchema);
-                setSelectedId(nextSchema?.doc_id ?? nextDocs[0]?.id ?? null);
-            })
-            .catch((e) => {
-                if (cancelled) return;
-                const raw = errorText(e);
-                setDocsError(raw);
-                pushAppErrorBar({
-                    key: `plugin-cfg-docs:${instanceId}:${pluginName}`,
-                    title: '读取插件配置失败',
-                    raw,
-                });
-            })
-            .finally(() => {
-                if (!cancelled) setDocsLoading(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [instanceId, pluginName]);
+        if (!pluginName) setPicked(null);
+    }, [pluginName]);
+
+    useEffect(() => {
+        if (!docsError || !pluginName) return;
+        pushAppErrorBar({
+            key: `plugin-cfg-docs:${instanceId}:${pluginName}`,
+            title: '读取插件配置失败',
+            raw: docsError,
+        });
+    }, [docsError, instanceId, pluginName]);
 
     const active = docs.find((d) => d.id === selectedId) ?? docs[0] ?? null;
 
@@ -109,7 +85,7 @@ export const PluginConfigDialog: React.FC<{
                     )}
                 </DialogHeader>
 
-                {docsLoading ? (
+                {listing.isLoading ? (
                     <div className={cn(WORKSPACE, 'items-center justify-center gap-2 text-sm text-text-tertiary')}>
                         <Spinner size="sm" /> 读取配置…
                     </div>
@@ -128,7 +104,7 @@ export const PluginConfigDialog: React.FC<{
                         docs={docs}
                         active={active}
                         schema={active && schema?.doc_id === active.id ? schema : null}
-                        onSelect={setSelectedId}
+                        onSelect={(docId) => pluginName && setPicked({ plugin: pluginName, docId })}
                     />
                 )}
             </DialogContent>

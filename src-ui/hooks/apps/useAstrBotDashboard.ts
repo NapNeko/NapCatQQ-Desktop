@@ -122,6 +122,14 @@ export function useAstrBotAbconfs(instanceId: string, enabled: boolean) {
     return { ...query, create, remove };
 }
 
+/** 拉某个提供商能选的模型：结果只给发起的提供商对话框用，不进缓存 */
+export function useAstrBotSourceModels(instanceId: string) {
+    return useMutation<string[], unknown, string>({
+        mutationFn: (sourceId) => appFrameworkService.astrbotListSourceModels(instanceId, sourceId),
+        onError: (err, sourceId) => fail('拉取模型列表失败', `astrbot-models:${instanceId}:${sourceId}`)(err),
+    });
+}
+
 export function useAstrBotSubagentTools(instanceId: string, enabled: boolean) {
     return useQuery<string[], Error>({
         queryKey: astrbotToolsKey(instanceId),

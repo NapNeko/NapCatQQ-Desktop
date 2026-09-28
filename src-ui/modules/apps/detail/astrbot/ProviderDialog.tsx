@@ -17,9 +17,7 @@ import {
     newOpenAiModel,
     uniqueId,
 } from '../../../../core/domain/apps/astrbotConfig';
-import { appFrameworkService } from '../../../../core/services/app-framework.service';
-import { toAppConfigError } from '../../../../core/domain/apps/appConfigError';
-import { pushAppErrorBar } from '../../../../hooks/apps/pushAppErrorBar';
+import { useAstrBotSourceModels } from '../../../../hooks/apps/useAstrBotDashboard';
 import { cn } from '../../../../shared/utils/cn';
 import type { AstrBotInstanceConfig, AstrBotProviderModel, AstrBotProviderSource } from '../../../../core/ipc/types';
 
@@ -38,7 +36,8 @@ export const ProviderDialog: React.FC<{
     onConfirm: () => void;
 }> = ({ draft, config, savedIds, running, instanceId, errors, onChange, onCancel, onConfirm }) => {
     const [picks, setPicks] = useState<string[] | null>(null);
-    const [fetching, setFetching] = useState(false);
+    const listModels = useAstrBotSourceModels(instanceId);
+    const fetching = listModels.isPending;
     const [adv, setAdv] = useState(false);
     const [manual, setManual] = useState('');
 
@@ -88,20 +87,8 @@ export const ProviderDialog: React.FC<{
 
     const canFetch = running && isSaved && !fetching;
     const fetchTitle = !running ? '实例跑起来后才能拉取' : !isSaved ? '先保存，服务端才认这个提供商' : undefined;
-    const fetchModels = async () => {
-        if (!original) return;
-        setFetching(true);
-        try {
-            setPicks(await appFrameworkService.astrbotListSourceModels(instanceId, original.id));
-        } catch (e) {
-            pushAppErrorBar({
-                key: `astrbot-models:${instanceId}:${original.id}`,
-                title: '拉取模型列表失败',
-                raw: toAppConfigError(e).message,
-            });
-        } finally {
-            setFetching(false);
-        }
+    const fetchModels = () => {
+        if (original) listModels.mutate(original.id, { onSuccess: setPicks });
     };
     const unpicked = (picks ?? []).filter((name) => !kids.some((m) => m.model === name));
 
@@ -223,7 +210,7 @@ export const ProviderDialog: React.FC<{
                             variant="ghost"
                             disabled={!canFetch}
                             title={fetchTitle}
-                            onClick={() => void fetchModels()}
+                            onClick={fetchModels}
                         >
                             <RefreshCw size={12} className={fetching ? 'animate-spin' : undefined} />
                             拉取列表

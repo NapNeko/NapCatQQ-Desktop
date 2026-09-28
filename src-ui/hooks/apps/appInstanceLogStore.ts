@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { createStore } from '../utils/createStore';
 import { subscribeDomainEvents } from '../../core/services/domain-event-hub';
 import { appFrameworkService } from '../../core/services/app-framework.service';
+import { errorText } from '../../core/domain/errors';
+import { pushAppErrorBar } from './pushAppErrorBar';
 import {
     appendLine,
     buildHistoryEntries,
@@ -127,10 +129,18 @@ export const appInstanceLogStore = {
     },
 };
 
-export function useAppInstanceLog(instanceId: string | null) {
+// running：实例在跑时开页先对一次账，后端没在跟它的日志就接上。对账改了什么都会发实例事件，
+// 列表由事件桥更新，这里不回写，只把失败报出来，免得日志页一直空着也不知道为什么
+export function useAppInstanceLog(instanceId: string | null, running = false) {
     useEffect(() => {
         if (instanceId) hydrateAppInstanceLogs(instanceId);
     }, [instanceId]);
+    useEffect(() => {
+        if (!instanceId || !running) return;
+        appFrameworkService.refresh(instanceId).catch((err) => {
+            pushAppErrorBar({ key: `app-log-follow:${instanceId}`, title: '接不上实例日志', raw: errorText(err) });
+        });
+    }, [instanceId, running]);
     const snapshot = useSyncExternalStore(subscribe, store.getSnapshot, store.getSnapshot);
     const logs = useMemo(() => {
         if (!instanceId) return EMPTY;

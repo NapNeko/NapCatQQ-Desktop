@@ -14,6 +14,7 @@ import type {
     AppConfigWriteResult,
     AppInstanceConfig,
     AppInstanceConfigEnvelope,
+    AppPluginConfigSchema,
 } from '../../core/ipc/types';
 
 export const appConfigKey = (instanceId: string) => ['appInstanceConfig', instanceId] as const;
@@ -81,6 +82,25 @@ export function useAppConfigDocuments(instanceId: string | null) {
         queryFn: () => appFrameworkService.listConfigDocuments(instanceId!),
         enabled: !!instanceId,
         staleTime: Infinity,
+    });
+}
+
+// 某个插件有哪些配置文件、能不能出表单。插件装卸、升级都会改这张表，所以每次打开都重列、关了就丢。
+// schema 拿不到只是退回改原文，不算读取失败
+export function useAppPluginConfigDocs(instanceId: string, pluginName: string | null) {
+    return useQuery<{ docs: AppConfigDocument[]; schema: AppPluginConfigSchema | null }, Error>({
+        queryKey: ['appPluginConfigDocs', instanceId, pluginName ?? ''],
+        queryFn: async () => {
+            const [docs, schema] = await Promise.all([
+                appFrameworkService.listPluginConfigDocs(instanceId, pluginName!),
+                appFrameworkService.pluginConfigSchema(instanceId, pluginName!).catch(() => null),
+            ]);
+            return { docs, schema };
+        },
+        enabled: !!pluginName,
+        staleTime: 0,
+        gcTime: 0,
+        retry: false,
     });
 }
 
