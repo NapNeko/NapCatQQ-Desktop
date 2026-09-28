@@ -50,8 +50,7 @@ pub use host::{Arch, Host, Locality, Os, SshDialTarget, StreamSource};
 pub use linux_pkg::LinuxPackageManager;
 pub use path::{ArchiveKind, DirEntry, DriveEntry, DriveKind, HostPath, PathStyle};
 pub use pkg_output::{
-    PkgLineParse, PkgMgrFamily, PkgPhase, fallback_percent_from_line_no, parse_pkg_mgr_line,
-    truncate_pkg_line,
+    PkgLineParse, PkgPhase, fallback_percent_from_line_no, parse_pkg_mgr_line, truncate_pkg_line,
 };
 pub use process::{ExitStatus, HostProcess, ProcessId};
 pub use pty::{

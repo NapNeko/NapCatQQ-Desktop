@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use crate::command::HostCommand;
 use crate::host::Host;
-use crate::pkg_output::PkgMgrFamily;
 use crate::shell::{BashShell, HostShell};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -43,15 +42,6 @@ impl LinuxPackageManager {
         }
     }
 
-    /// 输出解析族(进度条用)
-    pub fn family(self) -> PkgMgrFamily {
-        match self {
-            Self::Apt => PkgMgrFamily::Apt,
-            Self::Dnf | Self::Yum => PkgMgrFamily::Dnf,
-            Self::Apk | Self::Pacman => PkgMgrFamily::Other,
-        }
-    }
-
     /// 刷新索引的 shell 片段;None 表示该管理器装包时自己会刷(dnf / pacman -Sy)
     pub fn refresh_script(self) -> Option<&'static str> {
         match self {
@@ -80,6 +70,16 @@ impl LinuxPackageManager {
             Self::Yum => format!("yum install -y {pkgs}"),
             Self::Apk => format!("apk add --no-cache {pkgs}"),
             Self::Pacman => format!("pacman -Sy --noconfirm --needed {pkgs}"),
+        }
+    }
+
+    /// 刷完索引接着装,一条 sh -c 跑完。全新机器上 apt / apk 还没有包索引,不先刷会找不到包;
+    /// 装包时自己会刷的管理器只剩安装那一句
+    pub fn refresh_and_install_script(self, packages: &[&str]) -> String {
+        let install = self.install_script(packages);
+        match self.refresh_script() {
+            Some(refresh) => format!("{refresh} && {install}"),
+            None => install,
         }
     }
 
@@ -156,6 +156,13 @@ mod tests {
     }
 
     #[test]
+    fn detection_order_prefers_apt_then_dnf_over_yum() {
+        assert_eq!(LinuxPackageManager::ALL[0], LinuxPackageManager::Apt);
+        let pos = |pm| LinuxPackageManager::ALL.iter().position(|p| *p == pm);
+        assert!(pos(LinuxPackageManager::Dnf) < pos(LinuxPackageManager::Yum));
+    }
+
+    #[test]
     fn refresh_only_where_needed() {
         assert!(LinuxPackageManager::Apt.refresh_command().is_some());
         assert!(LinuxPackageManager::Dnf.refresh_command().is_none());
@@ -163,9 +170,19 @@ mod tests {
     }
 
     #[test]
-    fn family_maps_yum_to_dnf_parser() {
-        assert_eq!(LinuxPackageManager::Yum.family(), PkgMgrFamily::Dnf);
-        assert_eq!(LinuxPackageManager::Apk.family(), PkgMgrFamily::Other);
+    fn refresh_and_install_refreshes_only_where_needed() {
+        assert_eq!(
+            LinuxPackageManager::Apt.refresh_and_install_script(&["unzip"]),
+            "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq unzip"
+        );
+        assert_eq!(
+            LinuxPackageManager::Dnf.refresh_and_install_script(&["tar"]),
+            "dnf install -y tar"
+        );
+        assert_eq!(
+            LinuxPackageManager::Apk.refresh_and_install_script(&["unzip"]),
+            "apk update && apk add --no-cache unzip"
+        );
     }
 
     #[test]

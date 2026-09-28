@@ -1,15 +1,8 @@
 //! apt / dnf / yum 安装过程 stdout 行解析,供流式进度与日志摘要使用
 //!
 //! Debian 在非 TTY 下多为 Get: / Fetched / Setting up;RHEL 系为
-//! Downloading / Installing / Complete解析只做启发式,不追求精确包计数
-
-/// 包管理器输出族(由行内容推断,不依赖事先知道是 apt 还是 dnf)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PkgMgrFamily {
-    Apt,
-    Dnf,
-    Other,
-}
+//! Downloading / Installing / Complete解析只做启发式,不追求精确包计数,
+//! 也不需要事先知道是哪个包管理器:按行内容认阶段
 
 /// 粗粒度阶段,用于映射建议进度百分比
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,7 +19,6 @@ pub enum PkgPhase {
 /// 单行解析结果
 #[derive(Debug, Clone)]
 pub struct PkgLineParse {
-    pub family: PkgMgrFamily,
     pub phase: PkgPhase,
     /// 给 UI / 任务队列的短摘要(已截断)
     pub summary: String,
@@ -56,7 +48,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
     if t.starts_with("NCD:") {
         let msg = t.strip_prefix("NCD:").unwrap_or(t).trim();
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Apt,
             phase: PkgPhase::Other,
             summary: truncate_pkg_line(msg, 160),
             suggest_percent: None,
@@ -65,7 +56,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
 
     if t.starts_with("E:") || t.starts_with("Err:") {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Apt,
             phase: PkgPhase::Error,
             summary: truncate_pkg_line(t, 200),
             suggest_percent: None,
@@ -79,7 +69,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
             Some(12)
         };
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Apt,
             phase: if t.starts_with("Ign:") {
                 PkgPhase::Noise
             } else {
@@ -92,7 +81,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
 
     if t.starts_with("Fetched") || lower.contains("reading package lists") {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Apt,
             phase: PkgPhase::Fetch,
             summary: truncate_pkg_line(t, 160),
             suggest_percent: Some(42),
@@ -101,7 +89,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
 
     if lower.contains("unpacking ") || t.contains("Unpacking ") {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Apt,
             phase: PkgPhase::Unpack,
             summary: truncate_pkg_line(t, 160),
             suggest_percent: Some(68),
@@ -110,7 +97,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
 
     if lower.contains("setting up ") || t.contains("Setting up ") {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Apt,
             phase: PkgPhase::Configure,
             summary: truncate_pkg_line(t, 160),
             suggest_percent: Some(82),
@@ -119,7 +105,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
 
     if lower.contains("preparing to unpack") || lower.contains("processing triggers") {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Apt,
             phase: PkgPhase::Unpack,
             summary: truncate_pkg_line(t, 160),
             suggest_percent: Some(60),
@@ -131,7 +116,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
         || lower.contains("determining fastest mirrors")
     {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Dnf,
             phase: PkgPhase::UpdateIndex,
             summary: truncate_pkg_line(t, 160),
             suggest_percent: Some(15),
@@ -140,7 +124,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
 
     if lower.contains("downloading packages") || lower.starts_with("downloading ") {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Dnf,
             phase: PkgPhase::Fetch,
             summary: truncate_pkg_line(t, 160),
             suggest_percent: Some(35),
@@ -152,7 +135,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
         || (lower.contains("installing ") && !lower.contains("installing group"))
     {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Dnf,
             phase: PkgPhase::Configure,
             summary: truncate_pkg_line(t, 160),
             suggest_percent: Some(72),
@@ -161,7 +143,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
 
     if lower.contains("complete!") || t == "Complete." {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Dnf,
             phase: PkgPhase::Other,
             summary: truncate_pkg_line(t, 120),
             suggest_percent: Some(90),
@@ -174,7 +155,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
         || lower.contains("failed to download")
     {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Dnf,
             phase: PkgPhase::Error,
             summary: truncate_pkg_line(t, 200),
             suggest_percent: None,
@@ -183,7 +163,6 @@ pub fn parse_pkg_mgr_line(line: &str) -> Option<PkgLineParse> {
 
     if t.contains("docker-ce") || t.contains("docker-compose-plugin") {
         return Some(PkgLineParse {
-            family: PkgMgrFamily::Other,
             phase: PkgPhase::Configure,
             summary: truncate_pkg_line(t, 160),
             suggest_percent: Some(58),
@@ -213,7 +192,6 @@ mod tests {
             "Get:1 http://archive.ubuntu.com/ubuntu jammy/main amd64 xvfb amd64 2:21.1.4-2ubuntu1 [866 kB]",
         )
         .unwrap();
-        assert_eq!(p.family, PkgMgrFamily::Apt);
         assert_eq!(p.phase, PkgPhase::Fetch);
         assert!(p.suggest_percent.unwrap() >= 10);
     }
@@ -228,7 +206,6 @@ mod tests {
     #[test]
     fn dnf_installing() {
         let p = parse_pkg_mgr_line("Installing: docker-ce;docker-ce-cli").unwrap();
-        assert_eq!(p.family, PkgMgrFamily::Dnf);
         assert!(p.suggest_percent.unwrap() > 50);
     }
 
