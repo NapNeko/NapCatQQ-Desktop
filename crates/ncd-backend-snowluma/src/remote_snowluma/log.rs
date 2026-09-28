@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::snowluma::log_noise::SnowLumaLogNoiseFilter;
-use ncd_host::{Host, HostCommand, shell_single_quote};
+use ncd_host::{Host, LOG_FOLLOW_CHUNK_BYTES as MAX_CHUNK, remote_file_size, remote_read_from};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
@@ -16,7 +16,6 @@ use ncd_domain::domain_event::DomainEvent;
 use ncd_traits::events::{BroadcastEventBus, EventBus};
 
 const POLL_SECS: u64 = 2;
-const MAX_CHUNK: u64 = 512 * 1024;
 
 struct FollowInner {
     task: Option<JoinHandle<()>>,
@@ -96,10 +95,11 @@ impl RemoteSnowLumaLogRegistry {
                 } else {
                     last_size
                 };
-                let chunk = match remote_read_from(host.as_ref(), &log_path, read_from).await {
-                    Some(c) => c,
-                    None => continue,
-                };
+                let chunk =
+                    match remote_read_from(host.as_ref(), &log_path, read_from, MAX_CHUNK).await {
+                        Some(c) => c,
+                        None => continue,
+                    };
                 last_size = size;
                 let text = String::from_utf8_lossy(&chunk);
                 for line in text.lines() {
@@ -116,23 +116,4 @@ impl RemoteSnowLumaLogRegistry {
         });
         self.by_server.lock().await.insert(sid, follow);
     }
-}
-
-async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
-    let quoted = shell_single_quote(path);
-    let cmd = HostCommand::new("sh").arg("-c").arg(format!(
-        "if [ -f {quoted} ]; then wc -c < {quoted}; else echo 0; fi"
-    ));
-    let out = host.run_to_string(cmd).await.ok()?;
-    out.stdout.trim().parse().ok()
-}
-
-async fn remote_read_from(host: &dyn Host, path: &str, offset: u64) -> Option<Vec<u8>> {
-    let quoted = shell_single_quote(path);
-    let start = offset.saturating_add(1);
-    let cmd = HostCommand::new("sh").arg("-c").arg(format!(
-        "if [ -f {quoted} ]; then tail -c +{start} -- {quoted} | head -c {MAX_CHUNK}; fi"
-    ));
-    let out = host.run_to_string(cmd).await.ok()?;
-    Some(out.stdout.into_bytes())
 }

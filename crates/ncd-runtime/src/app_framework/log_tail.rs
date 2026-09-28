@@ -19,7 +19,7 @@ pub async fn file_size(host: &dyn Host, path: &HostPath) -> Option<u64> {
             let rendered = path.render(host_path_style(host));
             tokio::fs::metadata(rendered).await.ok().map(|m| m.len())
         }
-        Locality::Remote => remote_file_size(host, path.as_posix()).await,
+        Locality::Remote => ncd_host::remote_file_size(host, path.as_posix()).await,
     }
 }
 
@@ -158,17 +158,6 @@ async fn tail_remote(host: &dyn Host, path: &str, lines: usize) -> Vec<String> {
         &format!("if [ -f {quoted} ]; then tail -n {lines} -- {quoted}; fi"),
     )
     .await
-}
-
-async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
-    let quoted = shell_single_quote(path);
-    let out = host
-        .run_to_string(HostCommand::new("sh").arg("-c").arg(format!(
-            "if [ -f {quoted} ]; then wc -c < {quoted}; else echo 0; fi"
-        )))
-        .await
-        .ok()?;
-    out.stdout.trim().parse().ok()
 }
 
 async fn run_sh(host: &dyn Host, script: &str) -> Vec<String> {

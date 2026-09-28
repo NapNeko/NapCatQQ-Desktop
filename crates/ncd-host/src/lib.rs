@@ -36,6 +36,7 @@ pub mod pkg_output;
 pub mod process;
 pub mod pty;
 pub mod remote;
+pub mod remote_file;
 pub mod shell;
 pub mod stream_chunk;
 pub mod subprocess;
@@ -60,6 +61,9 @@ pub use pty::{
 pub use remote::download_progress::{CurlProgressParser, DownloadProgress, WgetProgressParser};
 pub use remote::url_download::{
     REMOTE_URL_DOWNLOAD_TIMEOUT, curl_url_download_command, wget_url_download_command,
+};
+pub use remote_file::{
+    LOG_FOLLOW_CHUNK_BYTES, remote_file_size, remote_read_from, remote_tail_lines,
 };
 pub use shell::{HostShell, ShellKind, shell_single_quote};
 pub use subprocess::hide_console_window;

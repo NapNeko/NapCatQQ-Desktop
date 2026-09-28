@@ -16,7 +16,8 @@ use std::time::Duration;
 
 use ncd_domain::{AppInstance, AppInstanceId, AppInstanceState};
 use ncd_host::{
-    ExitStatus, Host, HostCommand, HostPath, HostProcess, Locality, PathStyle, shell_single_quote,
+    ExitStatus, Host, HostCommand, HostPath, HostProcess, LOG_FOLLOW_CHUNK_BYTES as MAX_CHUNK,
+    Locality, PathStyle, remote_file_size, remote_read_from, shell_single_quote,
 };
 use ncd_traits::{AppFrameworkError, EventBus};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader};
@@ -30,7 +31,6 @@ use crate::events::{BroadcastEventBus, DomainEvent};
 pub const APP_PID_FILE: &str = ".ncd-app.pid";
 const REMOTE_POLL: Duration = Duration::from_secs(2);
 const LOCAL_TAIL_POLL: Duration = Duration::from_secs(1);
-const MAX_CHUNK: u64 = 512 * 1024;
 
 /// 一次启动所需：命令 + 日志文件（框架适配器给）
 pub struct AppLaunchSpec {
@@ -503,7 +503,7 @@ impl NativeAppRuntime {
                     }
                     if let Some(read_from) = log_follow_read_from(last_size, size) {
                         if let Some(chunk) =
-                            remote_read_from(host.as_ref(), &log_path, read_from).await
+                            remote_read_from(host.as_ref(), &log_path, read_from, MAX_CHUNK).await
                         {
                             for line in String::from_utf8_lossy(&chunk).lines() {
                                 publish_app_log(&bus, &id, line);
@@ -825,25 +825,6 @@ fn remote_stop_script(pid: u32) -> String {
          kill -KILL $target 2>/dev/null\n\
          exit 0\n"
     )
-}
-
-async fn remote_file_size(host: &dyn Host, path: &str) -> Option<u64> {
-    let quoted = shell_single_quote(path);
-    let cmd = HostCommand::new("sh").arg("-c").arg(format!(
-        "if [ -f {quoted} ]; then wc -c < {quoted}; else echo 0; fi"
-    ));
-    let out = host.run_to_string(cmd).await.ok()?;
-    out.stdout.trim().parse().ok()
-}
-
-async fn remote_read_from(host: &dyn Host, path: &str, offset: u64) -> Option<Vec<u8>> {
-    let quoted = shell_single_quote(path);
-    let start = offset.saturating_add(1);
-    let cmd = HostCommand::new("sh").arg("-c").arg(format!(
-        "if [ -f {quoted} ]; then tail -c +{start} -- {quoted} | head -c {MAX_CHUNK}; fi"
-    ));
-    let out = host.run_to_string(cmd).await.ok()?;
-    Some(out.stdout.into_bytes())
 }
 
 /// attach 时 last_size=0,只吐尾巴,避免整文件灌事件总线

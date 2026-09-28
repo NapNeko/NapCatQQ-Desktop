@@ -17,7 +17,6 @@ use ncd_traits::runtime_backend::{
 };
 
 use super::config::{bot_config_for_start, status_for_deployment_state};
-use super::log_helpers::remote_tail_log_raw_lines;
 
 /// 远端「直接运行」:每 Bot 绑定一台 Host + 独立 NativeDeployment(translator 写远端路径)
 ///
@@ -234,7 +233,12 @@ impl BotBackend for RemoteNativeDeploymentBackend {
         let raw = self
             .with_host_refresh(|h| {
                 let p = log_path.clone();
-                async move { remote_tail_log_raw_lines(h.as_ref(), &p, raw_n).await }
+                async move {
+                    // 只让远端 tail -n,不走 SFTP 整读:崩溃转储能到上百 MB
+                    ncd_host::remote_tail_lines(h.as_ref(), &p, raw_n)
+                        .await
+                        .map_err(|e| BotBackendError::Io(e.to_string()))
+                }
             })
             .await
             .unwrap_or_default();

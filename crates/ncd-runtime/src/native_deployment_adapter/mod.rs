@@ -2,13 +2,12 @@
 //!
 //! - launch: RuntimeLaunchPlannerAdapter
 //! - native / remote / docker: 三类 BotBackend 过渡壳
-//! - config / docker_helpers / log_helpers: 共享辅助
+//! - config / docker_helpers: 共享辅助
 
 mod config;
 mod docker;
 pub(crate) mod docker_helpers;
 mod launch;
-mod log_helpers;
 mod native;
 mod remote;
 
