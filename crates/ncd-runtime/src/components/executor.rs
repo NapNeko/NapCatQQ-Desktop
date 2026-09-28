@@ -407,9 +407,18 @@ impl ComponentExecutor {
         Ok(submitted_id)
     }
 
+    /// 队列里的任务只按队列的规矩取消:在跑的不可取消任务由队列拒绝,可取消的经
+    /// forward_cancel 转给 ActionCtx。先直接掐 ActionCtx 的话,拒绝了也已经停下。
+    /// 队列不认识的只有 Desktop 自更新,它只登记在活跃表里
     pub async fn cancel(&self, task_id: &str) -> Result<(), String> {
-        self.active_tasks.cancel(task_id);
-        self.deployment_tasks.cancel(task_id).await
+        if self.deployment_tasks.status_of(task_id).await.is_some() {
+            return self.deployment_tasks.cancel(task_id).await;
+        }
+        if self.active_tasks.cancel(task_id) {
+            Ok(())
+        } else {
+            Err("任务不存在或已结束".to_string())
+        }
     }
 
     /// 用户显式「安装 QQ 依赖」:排一个系统包任务并等它跑完,把结果原样带回。
@@ -921,6 +930,98 @@ mod tests {
             .expect("watcher should end once its guard is dropped")
             .unwrap();
         assert!(!to.is_cancelled());
+    }
+
+    fn test_executor(root: &Path) -> ComponentExecutor {
+        let bus = BroadcastEventBus::default();
+        ComponentExecutor::new(ComponentExecutorDeps {
+            deployment_tasks: DeploymentTaskManager::new(bus.clone()),
+            server_manager: Arc::new(ServerManager::new(
+                root,
+                Arc::new(ncd_server::InMemoryCredentialStore::default()),
+            )),
+            event_bus: bus,
+            app_settings: Arc::new(RwLock::new(AppSettings::default())),
+            data_root: root.to_path_buf(),
+            local_snowluma_version: None,
+            desktop_product_version: "0.0.0".into(),
+            registry: Arc::new(AppFrameworkRegistry::new()),
+        })
+    }
+
+    /// 排一个和 ComponentTaskRunner 一样登记令牌、接上队列转发的任务,
+    /// 跑起来后一直等到令牌被取消;返回它的 ActionCtx 令牌
+    async fn submit_waiting_task(
+        executor: &ComponentExecutor,
+        task_id: &str,
+        cancellable: bool,
+    ) -> CancellationToken {
+        let (started_tx, started_rx) = oneshot::channel();
+        let active = executor.active_tasks().clone();
+        executor
+            .deployment_tasks
+            .submit(DeploymentTaskRequest {
+                task_id: task_id.to_string(),
+                kind: DeploymentTaskKind::ComponentAction {
+                    component_id: "qq".into(),
+                    action: "ensure_dependencies".into(),
+                },
+                host_id: "remote:s1".into(),
+                title: "t".into(),
+                resources: Vec::new(),
+                depends_on: Vec::new(),
+                dedupe_key: None,
+                cancellable,
+                runner: Box::new(move |task_ctx| {
+                    Box::pin(async move {
+                        let token = CancellationToken::new();
+                        let _registered = active.register(task_ctx.task_id(), token.clone());
+                        let (_forward, _) = forward_cancel(task_ctx.cancel_token(), token.clone());
+                        let _ = started_tx.send(token.clone());
+                        token.cancelled().await;
+                        DeploymentTaskRunResult::failed("任务已取消")
+                    })
+                }),
+            })
+            .await;
+        started_rx.await.expect("task should start")
+    }
+
+    #[tokio::test]
+    async fn cancel_refused_by_queue_leaves_running_action_alone() {
+        let tmp = tempfile::tempdir().unwrap();
+        let executor = test_executor(tmp.path());
+        let token = submit_waiting_task(&executor, "pkg", false).await;
+
+        let err = executor.cancel("pkg").await.unwrap_err();
+
+        assert!(err.contains("不能安全强制停止"));
+        assert!(!token.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn cancel_running_cancellable_task_goes_through_queue() {
+        let tmp = tempfile::tempdir().unwrap();
+        let executor = test_executor(tmp.path());
+        let token = submit_waiting_task(&executor, "dl", true).await;
+
+        executor.cancel("dl").await.unwrap();
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), token.cancelled())
+            .await
+            .expect("queue cancel should reach the action token");
+    }
+
+    #[tokio::test]
+    async fn cancel_outside_queue_uses_active_table() {
+        let tmp = tempfile::tempdir().unwrap();
+        let executor = test_executor(tmp.path());
+        let token = CancellationToken::new();
+        let _registered = executor.active_tasks().register("desktop", token.clone());
+
+        executor.cancel("desktop").await.unwrap();
+        assert!(token.is_cancelled());
+        assert!(executor.cancel("gone").await.is_err());
     }
 
     #[test]
