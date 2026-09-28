@@ -1,7 +1,7 @@
 # Codemap — 功能域 → 代码落点
 
 > 接手任务先查这张表锁域，再在闭包内搜/改。  
-> 生成：2026-07-09 | HEAD 参考：`8140ebd0` | 主体迁移已完成  
+> 生成：2026-07-09 | 路径最近一次逐条核对：2026-09-29（`4eb35382`） | 主体迁移已完成  
 > 旧 Python 对照根：**`.references/NapCatQQ-Desktop-main`**（不是 `legacy-python/`）
 
 ## 怎么用
@@ -15,26 +15,34 @@
 flowchart TB
   UI[src-ui React] --> IPC[src-tauri commands]
   IPC --> RT[ncd-runtime 编排]
+  IPC --> UPD[ncd-update]
+  RT --> AF[ncd-appframework]
   RT --> CFG[ncd-config]
   RT --> SRV[ncd-server]
   RT --> BN[ncd-backend-napcat]
   RT --> BS[ncd-backend-snowluma]
-  RT --> DEP[ncd-deploy]
-  RT --> HOST[ncd-host]
-  RT --> COMP[ncd-component]
-  RT --> DOM[ncd-domain]
+  RT --> WATCH[ncd-watch 配置 schema]
   CFG --> SRV
-  CFG --> DEP
+  CFG --> DEP[ncd-deploy]
+  BN --> DEP
+  BS --> DEP
+  AF --> COMP[ncd-component]
+  DEP --> COMP
+  DEP --> TPL[ncd-template]
+  COMP --> HOST[ncd-host]
+  COMP --> NET[ncd-network]
   SRV --> HOST
-  SRV --> TR[ncd-traits]
+  AF --> TR[ncd-traits]
+  SRV --> TR
   CFG --> TR
   BN --> TR
   BS --> TR
   DEP --> TR
-  HOST --> TR
-  COMP --> TR
-  TR --> DOM
+  TR --> DOM[ncd-domain]
+  HOST --> DOM
 ```
+
+图里只画主要的边：除 ncd-network / ncd-log / ncd-template 这几个无内部依赖的 crate，其余都直接依赖 ncd-domain；runtime 也直接用 host / component / deploy / network / log。两个 `ncd-backend-*` 互不依赖。
 
 ---
 
@@ -42,17 +50,17 @@ flowchart TB
 
 | 路径 | 职责 |
 |------|------|
-| `crates/ncd-domain/` | Layer1 强类型模型、事件 payload、配置/ID/错误 |
-| `crates/ncd-traits/` | Layer2 契约：BotBackend、ConfigStore、EventBus、SecretStore… |
-| `crates/ncd-runtime/` | Layer3 编排：BotManager、域目录 bootstrap/launch/remote/…；config/server re-export |
+| `crates/ncd-domain/` | Layer1 强类型模型、事件 payload、配置/ID/错误；跨 IPC 的类型大多在这里派生 ts-rs（`ComponentId` 与依赖图、`LogSnapshot`、应用端实例 / 配置错误…） |
+| `crates/ncd-traits/` | Layer2 契约：BotBackend、ConfigStore、EventBus、SecretStore、AppIntegration… |
+| `crates/ncd-runtime/` | Layer3 编排：BotManager、AppManager、ComponentExecutor、TerminalManager、DeploymentTaskManager，域目录 bootstrap/launch/remote/…；config/server re-export |
 | `crates/ncd-config/` | 配置横切：store/drift/migration/secret/path/discovery（runtime re-export 兼容） |
 | `crates/ncd-server/` | 远端主机档案 / 凭据 / SSH 密钥 / HostResolver（runtime re-export 兼容） |
 | `crates/ncd-backend-napcat/` | NapCat 本机+远端实现（WebUI/login poller/remote native） |
 | `crates/ncd-backend-snowluma/` | SnowLuma daemon/poller + remote stack/tunnel |
-| `crates/ncd-host/` | 本机 Windows / 远端 Linux SSH 主机抽象 |
+| `crates/ncd-host/` | 本机 Windows / 远端 Linux SSH 主机抽象；shell 引号 `shell_single_quote`、Linux 包管理器 `LinuxPackageManager`、远端读文件 `remote_file` 都在这层 |
 | `crates/ncd-watch/` | 远端主机侧监控 bin：探活 + Webhook（Desktop 退出后） |
-| `crates/ncd-component/` | 组件：Node/uv/QQ/NoVnc/NapCat/SnowLuma/DesktopSelf/NcdWatch + 应用端框架组件 id（Karin/NoneBot2，按实例装） |
-| `crates/ncd-appframework/` | 应用端框架适配器：registry + `karin/`、`nonebot2/`、`astrbot/`、`maibot/`（manifest / Component / Integration / 写配置备份还原） |
+| `crates/ncd-component/` | 组件：Node/uv/QQ/NoVnc/NapCat/SnowLuma/DesktopSelf/NcdWatch；`ComponentId`（含按实例装的 Karin / NoneBot2 / AstrBot / MaiBot）定义在 ncd-domain，这里转出 |
+| `crates/ncd-appframework/` | 应用端框架适配器：registry + `karin/`、`nonebot2/`、`astrbot/`、`maibot/`（manifest / Component / Integration / 写配置备份还原），共用的挑口查口 `ports.rs` |
 | `crates/ncd-deploy/` | 部署计划、Docker/Native、配置渲染、RemoteQq 协调 |
 | `crates/ncd-network/` | HTTP/下载/代理等 |
 | `crates/ncd-update/` | 应用自更新 |
@@ -64,7 +72,7 @@ flowchart TB
 | `.references/NapCatQQ-Desktop-main/` | 旧 PySide6 实现（只读对照） |
 | `.references/SnowLuma/`、`NapCatQQ/` 等 | 上游/周边参考（只读） |
 | `.claude/` | 本地 AI 状态/KB/plan（gitignore） |
-| `docs/context/` | 给人/Agent 的活上下文（本 codemap） |
+| `docs/context/` | 给人/Agent 的活上下文：本 codemap、后端能力速查 `capabilities.md`、前端分层 `frontend.md`、踩坑 `lessons.md` |
 | `docs/dev/` | 架构/归档（本地，gitignore） |
 
 ---
@@ -98,8 +106,8 @@ flowchart TB
 
 | 关注点 | 主路径 |
 |--------|--------|
-| 编排核心 | `crates/ncd-runtime/src/bot_manager/`（mod + helpers + listeners） |
-| 路由 NC/SL × Local/Server × Native/Docker | `crates/ncd-runtime/src/launch/router.rs` + `bot_manager` `backend_for_config` |
+| 编排核心 | `crates/ncd-runtime/src/bot_manager/`（mod + helpers + listeners + `auto_restart.rs`；启动预检接口 `runtime_gate.rs` 的 `RuntimeReadinessGate`，实现是 `components/readiness_gate.rs` 的 `ComponentRuntimeGate`） |
+| 路由 NC/SL × Local/Server × Native/Docker | `crates/ncd-runtime/src/launch/router.rs` + `bot_manager` `backend_for_config`；远端选中路径取自组件执行器那份 `RemoteInventoryService`（`BotManager::with_remote_inventory`） |
 | Actor 状态机 | `crates/ncd-runtime/src/bot_actor.rs` + `ncd-domain/bot_actor.rs` |
 | 本机启动计划 | `crates/ncd-runtime/src/launch/plan.rs` |
 | Docker 会话（隧道/日志/poller） | `crates/ncd-runtime/src/remote/docker_session.rs` |
@@ -122,8 +130,8 @@ KB：`.claude/kb/desktop-routing.md`, `nc-vs-sl.md`
 | 关注点 | 主路径 |
 |--------|--------|
 | crate 入口 | `crates/ncd-backend-napcat/src/lib.rs` |
-| WebUI 客户端 | `.../napcat/webui_client.rs` |
-| 登录轮询 | `.../napcat/login_poller.rs` |
+| WebUI 客户端 | `.../napcat/webui_client/`（trait / client / payloads / error） |
+| 登录轮询 | `.../napcat/login_poller/`（loop / transitions / types + 测试） |
 | 端点表 | `.../napcat/endpoint_table.rs` |
 | 离线通知 | `.../napcat/offline_notifier.rs` |
 | 远端 NapCat session | `.../remote_native_napcat_session/`（含 `launch.rs` 启动规划） |
@@ -146,14 +154,14 @@ KB：`.claude/kb/napcat-runtime.md`
 | 进程树 / login probe | `.../snowluma/proc_tree.rs`, `qq_login_probe.rs`, `linux_proc_probe.rs` |
 | 本机 runtime backend | `.../snowluma/runtime_backend.rs` |
 | 远端 backend 总装 | `.../remote_snowluma/`（backend/daemon/inject/config/helpers） |
-| 远端编排 / 栈 / 布局 / 隧道 / 日志 | `.../remote_snowluma/{orchestrator,stack,layout,tunnel,log}.rs` |
+| 远端编排 / 栈 / 布局 / 隧道 / 日志 | `.../remote_snowluma/{orchestrator,stack,layout,tunnel,log}.rs`；远端 bash 路径 `remote_bash.rs`（经 `Host::which` 按连接记住，不放进程级 static） |
 | 协议同意 / consent 文件 | `crates/ncd-runtime/src/snowluma/{agreements,consent_files}.rs` |
 | Tauri SL 命令 | `src-tauri/src/commands/snowluma.rs` |
 | 前端服务 | `src-ui/core/services/snowlumaApp.service.ts` |
 | domain | `ncd-domain/daemon_state.rs`, `snowluma_start_mode.rs` |
 
 KB：`.claude/kb/snowluma-runtime.md`, `snowluma-docker.md`  
-活 plan（登录态）：`.claude/plan/remote-snowluma-login-status-fix.md`
+已归档 plan（登录态）：`.claude/plan/archive/remote-snowluma-login-status-fix.md`
 
 ---
 
@@ -165,9 +173,11 @@ KB：`.claude/kb/snowluma-runtime.md`, `snowluma-docker.md`
 | 凭据同步 | `crates/ncd-server/src/credential_sync.rs` |
 | SSH keygen | `crates/ncd-server/src/ssh_keygen.rs` |
 | 本机 SSH config 发现 | `crates/ncd-server/src/ssh_config.rs` + `discover_local_ssh_hosts`；UI `ImportSshConfigDialog` |
-| 远端 Linux 安装库存 | `ncd-domain/remote_inventory.rs`；探测 `ncd-runtime/src/remote/inventory.rs`；档案字段 `ServerProfile.path_overrides/inventory`；命令 `refresh_remote_inventory`；UI `RemoteInventoryDialog` |
-| Host 解析 | `crates/ncd-server/src/host_resolver.rs`, `src-tauri/src/bot_host_resolver.rs` |
-| Host 抽象 | `crates/ncd-host/src/host.rs`, `local/`, `remote/` |
+| 远端 Linux 安装库存 | `ncd-domain/remote_inventory.rs`；探测和内存副本 `ncd-runtime/src/remote/inventory.rs`（`RemoteInventoryService`，归 ComponentExecutor 持有，组件页、Bot 启动路由和预检、组件动作共用；装卸后 `invalidate` 让下次一定重探，每台机一把探测锁）；档案字段 `ServerProfile.path_overrides/inventory`；命令 `refresh_remote_inventory`；UI `RemoteInventoryDialog` |
+| 远端默认布局 / Docker 目录 | `ncd-domain/remote_paths.rs`（`desktop_default_install_paths`、`docker_bot_project_dir`）；Bot 容器可能叫的名字 `ncd-deploy/src/deployments/docker.rs` 的 `bot_docker_container_candidates` |
+| Host 解析 | `crates/ncd-server/src/host_resolver.rs`, `src-tauri/src/bot_host_resolver.rs`；host_id ↔ server_id 用 `ncd-domain/app_framework.rs` 的 `server_id_of_host` / `host_id_of_runtime_target` |
+| Host 抽象 | `crates/ncd-host/src/host.rs`（`which` / `command_exists` / `rename` / `file_size` / `open_pty` / `list_drives`…）, `local/`, `remote/` |
+| known_hosts | 行解析和主机匹配 `crates/ncd-host/src/remote/host_key.rs`（`parse_known_hosts_line` / `known_hosts_host_matches`）；从本机 OpenSSH 抄指纹 `crates/ncd-server/src/openssh_known_hosts.rs` |
 | Server profile 迁移 | `crates/ncd-server/src/server_profile_migration.rs` |
 | Tauri | `src-tauri/src/commands/servers.rs`, `host_resolve.rs` |
 | 前端页 | `src-ui/modules/remote/*`（`RemoteHostPanel`, `ServerCard`, `AddServerDialog`） |
@@ -176,7 +186,7 @@ KB：`.claude/kb/snowluma-runtime.md`, `snowluma-docker.md`
 | domain UI | `src-ui/core/domain/remote-host/` |
 
 归档设计：`docs/dev/archive/bugfix/remote-ssh-stability/`  
-Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `package_manager.rs`
+Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`；shell 引号 `shell.rs`（`shell_single_quote`，拼 `sh -c` 只用它或 `HostShell::escape`）；Linux 包管理器 `linux_pkg.rs`（`LinuxPackageManager`）+ 装包输出解析 `pkg_output.rs` + dpkg 锁 `apt_lock.rs`；远端读文件大小 / 偏移 / 尾巴 `remote_file.rs`
 
 ---
 
@@ -185,12 +195,14 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | 关注点 | 主路径 |
 |--------|--------|
 | 组件实现 | `crates/ncd-component/src/{nodejs,uv,qq,novnc,napcat,snowluma,desktop_self,ncd_watch}.rs`；应用端框架组件在 `ncd-appframework`（见 14） |
+| ComponentId 与依赖图类型 | 定义在 `ncd-domain/component.rs`（`ComponentId`、`DependencyPlan`、`RuntimeReadiness`、`RequirementStatus`…，跨 IPC）；按 semver 比版本 `ncd-component/src/requirement.rs`（`VersionMatch` / `all_versions_match`） |
 | ComponentId 穷尽点 | `ncd-runtime/src/components/{factory,graph,action_policy}.rs`（新组件必碰：工厂臂 / 依赖图黄金 / 下载槽·catalog） |
+| 动作执行器 | `ncd-runtime/src/components/executor.rs`（`ComponentExecutor`：启动时建一份放进 AppState，排依赖闭包任务、取消、`runtime_readiness`、QQ 依赖安装、本机 Node 探测；持有活跃任务表 `active_tasks.rs` 和远端库存）；Bot 启动预检 `readiness_gate.rs`（`ComponentRuntimeGate`，和组件页 `resolve_runtime_readiness` 共用 `runtime_readiness`）；补主机命令 / QQ 依赖的任务 `system_package.rs`；包管理锁 `package_lock.rs` |
 | 上下文 / 进度 | `crates/ncd-component/src/context.rs`, `ncd-domain/progress.rs` |
 | QQ 系统依赖 | `ncd-component/qq_deps/`, `ncd-domain/qq_dependency.rs` |
 | 远端 QQ 入口 | `ncd-component/remote_qq_entry.rs` + `ncd-deploy/remote_coordinator.rs` |
-| Tauri | `src-tauri/src/commands/components.rs` |
-| 前端页 | `src-ui/modules/components/*`（`ComponentsPage`, `HostComponentsView`, `HostSwitcher`…） |
+| Tauri | `src-tauri/src/commands/components/`（`mod.rs` 转发执行器，`qq_deps.rs`） |
+| 前端页 | `src-ui/modules/components/*`（`ComponentsPage`, `HostComponentsView`, `HostSwitcher`…）；进度行 `src-ui/shared/components/progressView.tsx`（组件页、应用端安装进度、任务详情共用）；按主机新建 / 导入应用端实例的对话框从 `src-ui/modules/apps/index.ts` 拿 |
 | hooks | `src-ui/hooks/components/` |
 | 服务 | `src-ui/core/services/component.service.ts` |
 
@@ -208,7 +220,7 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | 配置渲染（NC/SL docker payload） | `crates/ncd-deploy/src/backend_config_renderer.rs`（runtime 可能 re-export） |
 | 模板 | `crates/ncd-template/` |
 | 部署任务队列 | `crates/ncd-runtime/src/deploy/tasks.rs` + domain `deployment_task.rs` |
-| Tauri | `src-tauri/src/commands/docker.rs`, `deployment_tasks.rs` |
+| Tauri | `src-tauri/src/commands/docker/`（`deploy` / `install` / `ops` / `progress`）, `deployment_tasks.rs` |
 | 前端 Docker 页 | `src-ui/modules/docker/*` |
 | 任务队列页 | `src-ui/modules/task-queue/*` |
 | hooks | `src-ui/hooks/docker/`, `task-queue/` |
@@ -221,7 +233,7 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | 关注点 | 主路径 |
 |--------|--------|
 | App 配置模型 | `crates/ncd-domain/src/app_config.rs` |
-| **应用端框架轴（AppFramework）** | `ncd-domain/app_framework.rs`；traits `AppIntegration`/`AppRuntime`；runtime `app_framework/`（OneBot 导出 + Stub）；**不**进 `BackendType`；真框架对接未排期 |
+| **应用端框架轴（AppFramework）** | `ncd-domain/app_framework.rs`；trait `AppIntegration`（纯计划）；适配器 `ncd-appframework`；编排 `ncd-runtime/src/app_framework/`；**不**进 `BackendType`；详见第 14 节 |
 | Bot 配置模型 | `crates/ncd-domain/src/bot_config.rs` |
 | ConfigStore / Repo trait | `ncd-traits/config_store.rs`, `bot_config_repo.rs` |
 | 本地实现 | `ncd-config/{store,bot_repo}.rs`（runtime 旧路径 `config_store_impl` / `bot_config_repo_impl` re-export） |
@@ -229,7 +241,8 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | Bot/App 迁移 | `ncd-config/{bot_migration,app_migration,migration}.rs` |
 | SecretStore | `ncd-config/secret_store.rs` + trait |
 | DataPaths / PathProbe | `ncd-config/{data_paths,path_probe}.rs` |
-| Tauri | `commands/app_settings.rs`, `config_transfer.rs` |
+| App 设置读写 | `ncd-runtime/src/desktop/settings.rs`（`app-settings.json` 唯一写入口：`update_app_settings` / `replace_app_settings_with` 在同一把锁里改内存和文件，读用 `load_app_settings` / `read_app_settings_file`）；归一化只调 `AppSettings::normalize` |
+| Tauri | `commands/app_settings.rs`（设置页）, `config_transfer.rs`（导入在设置写锁里提交） |
 | 前端设置页 | `src-ui/modules/settings/*`（`SettingsPage`, `tabs/`, `settings-draft.ts`） |
 | Bot 配置 UI | `src-ui/modules/bot/config/` |
 | 服务 | `settings.service.ts`, `config-transfer.service.ts` |
@@ -246,11 +259,11 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | runtime 事件辅助 | `crates/ncd-runtime/src/events.rs` |
 | 前端事件流 | `src-ui/core/services/event-stream.service.ts`, `domain-event-hub.ts` |
 | hooks | `src-ui/hooks/events/` |
-| 生成 TS | `src-ui/core/ipc/generated/**` |
+| 生成 TS | `src-ui/core/ipc/generated/**`（子目录 `domain/`、`maibot/`、`qq/`、`update/`，另有一批直接在根上，如退出闸门的 `WindowSignal` / `DesktopExitBlocked` / `PrepareExitDesktopResponse`）；ncd-domain 的在 `generated/domain/`，含 `LogSnapshot`、`ComponentId` 与依赖图、`AppInstanceWebUi` / `AppConfigError` |
 | transport | `src-ui/core/ipc/transport.ts`, `types.ts` |
 | mock | `src-ui/core/ipc/mock/` |
 | 命令注册表 | `src-tauri/src/commands/mod.rs` |
-| capabilities | `src-tauri/capabilities/main.json` |
+| capabilities | `src-tauri/capabilities/{main,tray-panel}.json`（托盘面板只给 `core:default` 和按 http / https 开链接，面板要的窗口操作放后端命令） |
 
 事件 payload 带 `v: u32` envelope（R14）。`tauri_event_name()` 与 serde `kind` 单一字面量来源（R3）。
 
@@ -261,18 +274,17 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | 关注点 | 主路径 |
 |--------|--------|
 | 轻量模式 | `src-tauri/src/lightweight.rs`, `lightweight_scheduler.rs` |
-| 托盘 | `tray_icon.rs`, `tray_menu.rs`, `tray_summary.rs` + `commands/tray.rs` |
-| 退出闸门 | `commands/exit.rs` + `src-ui/app/DesktopExitGate.tsx` + `exit.service.ts` |
+| 托盘 | `tray_icon.rs`, `tray_panel.rs`（自绘托盘面板窗口）, `tray_summary.rs` + `commands/tray.rs`；前端面板 `src-ui/modules/tray/TrayPanel.tsx` |
+| 退出闸门 | `commands/exit.rs`（`shutdown_and_exit`：菜单退出、托盘退出、应用内更新后重启共用一份收尾；`local_active_bots` 给闸门计数）+ 窗口通知名和信封 `src-tauri/src/window_events.rs`；前端 `src-ui/app/DesktopExitGate.tsx`（只渲染对话框）+ `hooks/desktop/useDesktopExitGate.ts` + `exit.service.ts`，三条窗口通知只经 `desktop.service.ts` 的 `windowEventService` 订 |
 | 窗口 | `commands/window.rs`, `window_icon.rs` |
 | 桌面日志 | `desktop_log.rs`, `desktop_log_format.rs`, `commands/desktop_log.rs` |
 | 通知 / Toast | `desktop_notify.rs`, `windows_toast.rs` |
 | 离线多渠道 | `crates/ncd-runtime/src/notify/` + 设计归档 `docs/dev/archive/ncd-watch/offline-onebot-notice.md` |
 | 远端脱管后监控（设计） | 设计归档 `docs/dev/archive/ncd-watch/`；活 plan `.claude/plan/ncd-watch.md`；crate `crates/ncd-watch` |
-
 | 单实例 | `single_instance.rs` |
 | hooks | `src-ui/hooks/desktop/` |
 
-产品口径：托盘隐藏 ≠ 退出；退出停本机 Bot、远端脱管；再开走 bootstrap reconcile。
+产品口径：托盘隐藏 ≠ 退出；退出停本机 Bot 和本机应用端实例、关终端，远端脱管；再开走 bootstrap reconcile。新的退出或重启入口只调 `shutdown_and_exit`，不再自己拼收尾。
 
 ---
 
@@ -300,7 +312,7 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | Bot 运行时指标（内存/OneBot 收发） | `crates/ncd-runtime/src/metrics/`（collector/inject/remote/docker/history）+ `ncd-domain/bot_runtime_metrics.rs` + `src-tauri/src/commands/bot_metrics.rs` + UI `src-ui/modules/bot/metrics/` |
 | OneBot 流量探针 | `src-tauri/resources/metrics/ncd-ob11-stats.cjs`（`include_str!` 进 `metrics/inject.rs`；只挂 node 核心模块，改动跑 `pnpm run test:probe`） |
 | 远端续采 | `crates/ncd-watch/src/metrics.rs` + `ncd-runtime/src/watch/sync.rs` |
-| 外链打开 | `src-ui/hooks/useOpenExternal.ts`（R4：走 opener 插件） |
+| 外链打开 | `src-ui/hooks/useOpenExternal.ts`（走 opener 插件，transport 只放行 http / https，被拒弹错误条） |
 
 ---
 
@@ -322,16 +334,17 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 | 关注点 | 主路径 |
 |--------|--------|
 | 领域模型 | `crates/ncd-domain/src/app_framework.rs`（`AppInstance` / `AppFrameworkManifest` / `OneBotLinkPlan` / `AppLinkRecord`；对接方向 `OneBotLinkMode { ReverseWs, ForwardWs }`，计划里的端点 `OneBotLinkEndpoint { WsClient, WsServer }`（内部标签 `kind`）；上游条款 `AppFrameworkManifest.terms: Vec<AppTermsDoc>` + `AppPendingTerms`，`CreateAppInstanceRequest.accept_terms`；配置文档 `AppConfigDocument` / `AppConfigFormat` / `AppConfigText` / `AppConfigIssue`）；事件 `AppInstanceChanged` / `AppInstanceLogAppended` / `AppInstanceLogReset`（另起一轮输出，先于新一轮的第一行） |
-| 契约 | `crates/ncd-traits/src/app_framework.rs`（`AppIntegration` 纯计划 / `AppRuntime`；错误 `ConfigConflict` / `ConfigInvalid` / `ConfigUnsupported` / `PluginUnsupported`）；碰 Host 的 `apply_link/unlink/rollback` + `config_documents/read_config/write_config/read_config_text/write_config_text` + 插件默认方法在 `ncd-appframework/src/adapter.rs::AppFrameworkAdapter`（默认 `ConfigUnsupported` / `PluginUnsupported`） |
-| 框架适配器 | `crates/ncd-appframework/src/{karin,nonebot2,astrbot,maibot}/{manifest,component,integration,mod}.rs`；NoneBot2 另有 `config.rs`（窄 `.env.prod`）+ `store.rs`（toml 代管 + `uv add/remove`）；MaiBot 另有 `release.rs`（适配器最新 Release 的 `_manifest.json` 声明宿主范围 → 范围内最新 MaiBot Release，拿不到回落内置 `1.2.5` + `v1.4.0`）、`terms.rs`（EULA / 隐私条款 LF 归一后 md5 比对 `eula.confirmed` / `privacy.confirmed`）、`config/`、`schema/`（`scripts/maibot/codegen.py` 从上游 pydantic 类生成的强类型 + 默认文件）、`webui_client.rs`（回环 WebUI，Cookie `maibot_session`）、`api.rs` + `runtime.rs`（运行期能力 `MaiBotRuntimeApi`：状态 / 用量 / 会话 / 提供商与 MCP 探测 / 重启）、`resources/`（主配置之外的 WebUI 数据，一块一个文件：`prompts/` 提示词模板跑着走接口、停着改盘（`live.rs` / `disk.rs`），`expression` / `jargon` / `person` / `emoji`（缩略图取字节转 data URL、本机图片上传）、`memory/` 长期记忆（导入与任务、查、按来源删与恢复、图谱），`behavior` 学到的行为（上游只读），`chat` 试聊的一次性 ws 连接票与清空记录；不读上游 SQLite）、`store.rs`（官方 plugin-repo 市场，装到 `plugins/<id 点换下划线>/`，暂存在 `plugins/.ncd-stage/`，NapCat 适配器 `locked`；远端实例由桌面端走镜像下 `archive/HEAD.tar.gz` 写上去，服务器不用连 GitHub、不用 unzip）；源码包解压到实例内 `.ncd-stage/` 再 `Host::rename` 就位，`uv sync --locked --no-dev --no-install-project`；装之前 Linux 主机预检（架构只认 x86_64 / aarch64、glibc ≥ 2.28 因为锁里 pyarrow 只有 manylinux_2_28、musl 拒、剩余空间不足 3 GB 提醒），`uv_tooling::ensure_python` 先把 3.12 装好（主机自己下不动时桌面端按 `uv python list --output-format json` 的地址镜像竞速下好传到实例 `.ncd-python/`，`UV_PYTHON_INSTALL_MIRROR=file://` 装，`UV_PYTHON_INSTALL_BIN=0` / `REGISTRY=0` 不动用户 PATH 和注册表）；条款钩子 `AppFrameworkAdapter::{pending_terms,accept_terms}`（默认无条款）；`registry.rs::with_builtin` 注册；`env_file.rs` 保序 dotenv；`store.rs` 框架无关商店条目；`node_tooling.rs` / `uv_tooling.rs` |
-| 商店代管 | 契约 `AppFrameworkAdapter::{list_installed,install/update/uninstall_store_item,set_store_enabled}` + `AppStoreResource { Plugin, Adapter }`；Karin 插件：`karin/plugin.rs`；NoneBot 适配器/插件：`nonebot2/store.rs`（官方 JSON 白名单、`[tool.nonebot]` + `[tool.ncd.nonebot]`、已对接禁卸/关 OneBot V11）；市场 HTTP：`plugin_market.rs`（Karin `@karinjs/plugins-list`、NoneBot 对齐 nb-cli：`registry.nonebot.dev` + registry `results` 镜像竞速 + 30min 缓存）；任务 `DeploymentTaskKind::AppPlugin.resource` |
+| 契约 | `crates/ncd-traits/src/app_framework.rs`（`AppIntegration` 纯计划；错误 `ConfigConflict` / `ConfigInvalid` / `ConfigUnsupported` / `PluginUnsupported`）；没有单独的运行时 trait，起停由 ncd-runtime 的 `NativeAppRuntime`（`app_framework/native_runtime.rs`）经 `AppManager` 做；碰 Host 的 `apply_link/unlink/rollback` + `config_documents/read_config/write_config/read_config_text/write_config_text` + 插件默认方法在 `ncd-appframework/src/adapter.rs::AppFrameworkAdapter`（默认 `ConfigUnsupported` / `PluginUnsupported`） |
+| 框架适配器 | `crates/ncd-appframework/src/{karin,nonebot2,astrbot,maibot}/{manifest,component,integration,mod}.rs`；NoneBot2 另有 `config.rs`（窄 `.env.prod`）+ `store.rs`（toml 代管 + `uv add/remove`）；MaiBot 另有 `release.rs`（适配器最新 Release 的 `_manifest.json` 声明宿主范围 → 范围内最新 MaiBot Release，拿不到回落内置 `1.2.5` + `v1.4.0`）、`terms.rs`（EULA / 隐私条款 LF 归一后 md5 比对 `eula.confirmed` / `privacy.confirmed`）、`config/`、`schema/`（`scripts/maibot/codegen.py` 从上游 pydantic 类生成的强类型 + 默认文件）、`webui_client.rs`（回环 WebUI，Cookie `maibot_session`）、`api.rs` + `runtime.rs`（运行期能力 `MaiBotRuntimeApi`：状态 / 用量 / 会话 / 提供商与 MCP 探测 / 重启）、`resources/`（主配置之外的 WebUI 数据，一块一个文件：`prompts/` 提示词模板跑着走接口、停着改盘（`live.rs` / `disk.rs`），`expression` / `jargon` / `person` / `emoji`（缩略图取字节转 data URL、本机图片上传）、`memory/` 长期记忆（导入与任务、查、按来源删与恢复、图谱），`behavior` 学到的行为（上游只读），`chat` 试聊的一次性 ws 连接票与清空记录；不读上游 SQLite）、`store.rs`（官方 plugin-repo 市场，装到 `plugins/<id 点换下划线>/`，暂存在 `plugins/.ncd-stage/`，NapCat 适配器 `locked`；远端实例由桌面端走镜像下 `archive/HEAD.tar.gz` 写上去，服务器不用连 GitHub、不用 unzip）；源码包解压到实例内 `.ncd-stage/` 再 `Host::rename` 就位，`uv sync --locked --no-dev --no-install-project`；装之前 Linux 主机预检（架构只认 x86_64 / aarch64、glibc ≥ 2.28 因为锁里 pyarrow 只有 manylinux_2_28、musl 拒、剩余空间不足 3 GB 提醒），`uv_tooling::ensure_python` 先把 3.12 装好（主机自己下不动时桌面端按 `uv python list --output-format json` 的地址镜像竞速下好传到实例 `.ncd-python/`，`UV_PYTHON_INSTALL_MIRROR=file://` 装，`UV_PYTHON_INSTALL_BIN=0` / `REGISTRY=0` 不动用户 PATH 和注册表）；条款钩子 `AppFrameworkAdapter::{pending_terms,accept_terms}`（默认无条款）；`registry.rs::with_builtin` 注册；`env_file.rs` 保序 dotenv；`store.rs` 框架无关商店条目；`node_tooling.rs` / `uv_tooling.rs`；挑口查口 `ports.rs`（`PortUsage`：本机 bind 回环再连一下，远端一次读 `/proc/net/tcp{,6}`）；AstrBot Dashboard 登录态 `DashboardSessions`（`astrbot/dashboard_client.rs`）归 `AstrBotAdapter` 持有，运行期接口和跑着改配置共用一份，不放进程级 static；落盘账号的哈希格式在 `astrbot/dashboard_auth.rs` |
+| 商店代管 | 契约 `AppFrameworkAdapter::{list_installed,install/update/uninstall_store_item,set_store_enabled}` + `AppStoreResource { Plugin, Adapter }`；Karin 插件：`karin/plugin.rs`；NoneBot 适配器/插件：`nonebot2/store.rs`（官方 JSON 白名单、`[tool.nonebot]` + `[tool.ncd.nonebot]`、已对接禁卸/关 OneBot V11）；市场 HTTP：`ncd-runtime/src/app_framework/plugin_market.rs`（Karin `@karinjs/plugins-list`、NoneBot 对齐 nb-cli：`registry.nonebot.dev` + registry `results` 镜像竞速 + 30min 缓存，缓存 `MarketCache` 归 AppManager 持有）；任务 `DeploymentTaskKind::AppPlugin.resource` |
 | 配置模型 | `config_doc.rs`（`AppInstanceConfig`：`karin` / `nonebot2` / `astrbot` / `maibot`）；`karin/config.rs` 六份 JSON + `.env`；`nonebot2/config.rs` 只写 `.env.prod` 对接与常用键（PORT / token / SUPERUSERS…），适配器/插件列表不进连接 Tab；`maibot/config/` 管 `bot_config.toml` / `model_config.toml` 全字段（生成的强类型）和适配器 `plugins/MaiBot-Napcat-Adapter/config.toml` 的聊天名单：停止时 `toml_patch.rs` 差量写（只动改了的键，保注释和不认识的键），运行中两份主配置交给 MaiBot 自己的 WebUI 写（`write_live_config`），写入间隔 1.5s（`config_write_min_interval`）；需重启按字段判（`restart_inputs_changed`）；校验 `config/validate.rs`（生成的范围 / 选项 + 上游跨字段规则）；模型能用时标记 `data/webui.json` 首次配置完成 |
-| 编排 | `AppManager`：`list_store` / `list_store_installed` / `run_store_op` / `set_store_enabled`（Karin 启停仍走 `write_config` + `apply_plugin_enabled`）；NoneBot 改端口/token 且已对接则 relink，运行中改冷文件 `restart_required`；对接拓扑 `classify_app_link`（同机 / 本机 Bot→远端应用 Desktop `-L` / 远端 Bot→本机应用 Desktop `-R` / 两台远端应用机常驻 `-R`，不看 `BackendType`）；Docker 部署的 Bot 在 `link_context` 直接拒（容器里的 127.0.0.1 不是宿主机）；常驻编排 `resident_link.rs`（`ResidentForward::{ExposeApp, ReachBot}`：反向 `-R` + `permitlisten`，正向 `-L` + `permitopen`）；正向对接（MaiBot）听口 P 开在 Bot 那台机上，由 `listen_port.rs::allocate_stable_port` 回填（复用旧口，否则 FNV 起点避开 Bot 主机上的 Bot 服务口和实例口，本机再探 bind、远端避开 `/proc/net/tcp` 里在听的口），Bot 侧按名写 `websocket_servers`；跨机时应用端连自己机回环上的隧道口 Q：远端 Bot→本机麦麦桌面端 `-L`、本机 Bot→远端麦麦桌面端对应用机 `-R`（`ensure_forward_tunnel`，`tunnels` 键 `<id>:fwd`，Q 以适配器配置为准，冷启动 `reconcile_forward_tunnel` 先要原口、要不到才改适配器），两台远端应用机常驻 `ssh -L`（Q 记在 `resident_forward_port`）；远端建实例 / 改端口同样避开服务器上在听的口；条款 `pending_terms` / `accept_terms`，`create_instance` 缺 `accept_terms` 直接拒；MaiBot 运行期 `maibot_*`（`maibot_session` 备回环口 + 盘上 token + 远端主机 UTC 偏移，口 / 密钥 / 偏移按实例记在 `webui_endpoints`：远端现读一遍配置要十几次 SFTP，启停 / 写配置 / 写原文 / 对接 / 刷新时作废，状态接口回 401 或连不上也作废，另有 5 分钟时限；AstrBot / Karin 开 WebUI 同样走它；提供商探测按「盘上一模一样按名字 / 否则按草稿地址」路由）；停实例连进程树一起收（`native_runtime.rs`：本机 sysinfo 子孙，远端组长才 `kill -TERM -<pgid>`）；日志每轮另起（`native_runtime.rs`）：启动时上一轮挪到 `<日志>.1`，先发 `app_instance_log_reset` 再推新行，行里的终端颜色码原样带给前端；麦麦运行卡重启是上游拉新 worker、进程不换，`maibot_restart` 之后 `reset_log` 拷 `.1` 再原地截断；开页 `tail_log` 主日志文件在就认它（空也认），不回落到别的 `*.log`；开机自启 `auto_start_instances`（实例 `auto_start` + 全局 `appInstancesAutoStart`，后者界面没露） |
+| AppManager 结构 | `crates/ncd-runtime/src/app_framework/manager.rs` 只留结构体、构建（`with_component_executor` / `with_secret_store` / `with_npm_registry`）和共用小工具；按职责拆在 `manager/`：`lifecycle.rs`（新建、导入、`install_instance`、启停、删除、实例口分配、`auto_start_instances`）、`install_dir.rs`（默认 / 自选目录、按实例目录探测组件）、`config.rs`（类型化 + 原始文件读写，写盘后联动端口、对接、重启）、`link.rs`（发现已有对接、预览、应用、解绑、`upsert_ws_client`）、`tunnel.rs`（桌面端握着的 SSH 转发和应用机常驻 ssh：`ensure_desktop_tunnel` 先看能不能复用、开完再核一遍再登记，`-L` / `-R` / 正向三条共用；对账、拆除）、`store.rs`（商店列表、`submit_store_op` 排任务、`run_store_op` 在任务里干活、启停）、`webui.rs`（`open_webui`、登录用户名兜底、WebUI 口和密钥缓存）、`astrbot.rs` / `maibot.rs`（运行期接口）、`terminal.rs`（`terminal_context`）。同目录另有 `native_runtime.rs`、`instances.rs`（`AppInstanceStore`）、`supervisor.rs`、`plugin_task.rs`、`resident_link.rs`、`existing_link.rs`、`listen_port.rs`、`log_tail.rs`、`export.rs` |
+| 编排 | `AppManager`：安装经启动时接上的 `ComponentExecutor` 排任务（依赖闭包、去重、进度都在执行器），这里置 Installing、盯任务结束后 detect 对账；商店 `list_store` / `list_store_installed` / `submit_store_op` / `set_store_enabled`（Karin 启停仍走 `write_config` + `apply_plugin_enabled`）；NoneBot 改端口/token 且已对接则 relink，运行中改冷文件 `restart_required`；对接拓扑 `classify_app_link`（同机 / 本机 Bot→远端应用 Desktop `-L` / 远端 Bot→本机应用 Desktop `-R` / 两台远端应用机常驻 `-R`，不看 `BackendType`）；Docker 部署的 Bot 在 `link_context` 直接拒（容器里的 127.0.0.1 不是宿主机）；常驻编排 `resident_link.rs`（`ResidentForward::{ExposeApp, ReachBot}`：反向 `-R` + `permitlisten`，正向 `-L` + `permitopen`）；正向对接（MaiBot）听口 P 开在 Bot 那台机上，由 `listen_port.rs::allocate_stable_port` 回填（复用旧口，否则 FNV 起点避开 Bot 主机上的 Bot 服务口和实例口，本机再探 bind、远端避开 `/proc/net/tcp` 里在听的口，探测都借 `ncd_appframework::ports`），Bot 侧按名写 `websocket_servers`；跨机时应用端连自己机回环上的隧道口 Q：远端 Bot→本机麦麦桌面端 `-L`、本机 Bot→远端麦麦桌面端对应用机 `-R`（`ensure_forward_tunnel`，和反向两条一样走 `ensure_desktop_tunnel`，`tunnels` 键 `<id>:fwd`，Q 以适配器配置为准，冷启动 `reconcile_forward_tunnel` 先要原口、要不到才改适配器），两台远端应用机常驻 `ssh -L`（Q 记在 `resident_forward_port`）；远端建实例 / 改端口同样避开服务器上在听的口；条款 `pending_terms` / `accept_terms`，`create_instance` 缺 `accept_terms` 直接拒；MaiBot 运行期 `maibot_*`（`maibot_session` 备回环口 + 盘上 token + 远端主机 UTC 偏移，口 / 密钥 / 偏移按实例记在 `webui_endpoints`：远端现读一遍配置要十几次 SFTP，启停 / 写配置 / 写原文 / 对接 / 刷新时作废，状态接口回 401 或连不上也作废，另有 5 分钟时限；AstrBot / Karin 开 WebUI 同样走它；提供商探测按「盘上一模一样按名字 / 否则按草稿地址」路由）；停实例连进程树一起收（`native_runtime.rs`：本机 sysinfo 子孙，远端组长才 `kill -TERM -<pgid>`）；日志每轮另起（`native_runtime.rs`）：启动时上一轮挪到 `<日志>.1`，先发 `app_instance_log_reset` 再推新行，行里的终端颜色码原样带给前端；麦麦运行卡重启是上游拉新 worker、进程不换，`maibot_restart` 之后 `reset_log` 拷 `.1` 再原地截断；开页 `tail_log` 主日志文件在就认它（空也认），不回落到别的 `*.log`；开机自启 `auto_start_instances`（实例 `auto_start` + 全局 `appInstancesAutoStart`，后者界面没露） |
 | 运行时依赖 | `ncd-component/src/{nodejs,uv}.rs`（远端 `Host::arch()` 写死 x86_64，uv 装之前按 `uname -m` 选包；NodeJs 还没改）；工厂 `components/factory.rs`（`ComponentId::is_app_framework()` 的都按 `AppComponentHint` 实例化） |
 | Tauri | 配置 5 条同上；商店 `list_app_store` / `list_app_store_installed` / `submit_app_plugin_op(resource)` / `set_app_plugin_enabled(resource)`；条款 `app_pending_terms` / `accept_app_terms`；Karin 旧命令保留 |
-| 前端页 | 详情外壳 `AppInstancePage.next.tsx`：头部 `DetailHeader`（运行状态徽章 + 身份行 + 更多菜单，菜单顶上「随桌面端启动」开关写实例 `auto_start`）+ 左侧分组导航 `DetailSideNav`（`shared/ui` 的 `TabsSideList` / `TabsSideTrigger`）+ 底部 `SaveBar`（有改动或有错才出现，错在别页时给「去看看」）。各框架在 `detail/<fw>/<fw>FrameworkUi.tsx` 给 `nav` 分组，原始文件 / 日志由 `frameworkUi.ts::buildDetailNav` 挂到「实例」组末尾；侧栏圆点由框架经 `onNavBadges`（`useSyncNavBadges`）上报，填错的页由外壳按保存句柄的 `issuePaths` 亮红点。Karin：配置（基础 / 权限 / 响应规则 / 渲染与存储）· 扩展（插件）· 实例（连接）。NoneBot2：扩展（适配器 / 插件，商店栅格 + `app-store-toolbar-slot`，槽位在内容区右上）· 实例（连接）；商店 `detail/nonebot2/{NoneBot2StoreTab,nonebot2StoreModel}` + `useNoneBot2Store`，连接 `NoneBot2ConnectionsTab` + `useNoneBot2ConfigForm`。AstrBot：概览（默认页，`AstrBotOverviewTab` 状态卡 + 设置摘要）· AI（模型 / 人格 / 知识库 / 子代理）· 消息（回复设置 / 会话规则）· 扩展（插件）· 实例（连接与账号）；页名唯一来源 `astrbot/astrbotNav.ts`；提供商编辑模型页和概览共用 `astrbot/{providerDraft.ts,providerEditor.tsx,ProviderDialog.tsx}`；上手判定 / 唤醒文案 / 配置冲突在 `core/domain/apps/astrbotConfig.ts`（`astrbotSetup` / `astrbotWakeHint` / `astrbotConfigWarnings`）。AstrBot 每个设置只在一页改：默认 / 备用模型在模型页，默认人格在人格页，挂载知识库和检索参数在知识库页。MaiBot：概览（状态卡判对接 / 模型 / 名单放行 / 在跑；运行卡 `MaiBotRuntimeCard` 版本 / 时长 / 24h 用量 / 试聊 / 重启）· 试聊（`MaiBotTryChatTab` + `maibotChat{Parts,Composer}`，页面直连上游 WebSocket）· AI（模型 / 人格 / 提示词 / 记忆 / 表达学习）· 消息（聊天名单 / 回复设置 / 会话规则）· 资源（表情包 / 表达方式 / 黑话 / 人物 / 知识库 / 行为，改了就落库、不挂保存条，骨架 `detail/resourceParts.tsx`、共用件 `detail/entityParts.tsx`，没在跑时整页换成 `MaiBotLiveGate`）· 扩展（插件 / MCP）· 实例（连接 / 高级）；页名和「哪页铺哪几节 bot_config、校验路径落哪页」唯一来源 `maibot/maibotPages.ts`，schema 页由 `SchemaForm.tsx` + `MaiBotSchemaTab.tsx` 照 `core/domain/apps/maibotSchema/{bot,model}.json` 铺，模型页手写 `MaiBotModelsTab.tsx` + `maibotModelCards.tsx`，运行中小工具 `maibotProbes.tsx`（测连接 / 拉模型 / MCP 状态 / 从聊过的里选），列表控件 `listEditors.tsx`，小节标题右边的「高级选项」各节自己展开 `advancedToggle.tsx`（展开状态整个详情页共用，校验错误落在收起的字段上时自动展开）；`useMaiBotConfigForm`。上游条款：新建对话框有条款时要勾选才能创建；启动前 `useAppInstances.startMutation` 先查 `pendingTerms`，有就经 `hooks/apps/termsDialogStore.ts` 弹 `TermsConsentDialog`（宿主挂在应用端页）。对接对话框按 manifest 的 `link_modes` 认方向（正向反向能配的组合一样，只是跨机预览写「应用端经隧道连过来」），Docker 部署的 Bot 置灰并说明（`appLinkTopology.ts::isDockerBot`） |
+| 前端页 | 详情外壳 `AppInstancePage.next.tsx`：头部 `DetailHeader`（运行状态徽章 + 身份行 + 更多菜单，菜单顶上「随桌面端启动」开关写实例 `auto_start`）+ 左侧分组导航 `DetailSideNav`（`shared/ui` 的 `TabsSideList` / `TabsSideTrigger`）+ 底部 `SaveBar`（有改动或有错才出现，错在别页时给「去看看」）。各框架在 `detail/<fw>/<fw>FrameworkUi.tsx` 给 `nav` 分组，原始文件 / 日志由 `frameworkUi.ts::buildDetailNav` 挂到「实例」组末尾；侧栏圆点由框架经 `onNavBadges`（`useSyncNavBadges`）上报，填错的页由外壳按保存句柄的 `issuePaths` 亮红点。Karin：配置（基础 / 权限 / 响应规则 / 渲染与存储）· 扩展（插件）· 实例（连接）。NoneBot2：扩展（适配器 / 插件，商店栅格 + `app-store-toolbar-slot`，槽位在内容区右上）· 实例（连接）；商店用通用的 `detail/AppStoreTab.tsx` + `hooks/apps/useAppStore.ts` + `core/domain/apps/appStore.ts`（工具条、槽位 id、卸载确认在 `detail/storeToolbar.tsx`，和 Karin 插件页共用），连接 `detail/nonebot2/NoneBot2ConnectionsTab.tsx`。四个框架的配置表单状态都走 `hooks/apps/useAppConfigForm.ts`，各框架只给校验和保存文案（`core/domain/apps/<框架>Config.ts`），字段错误按路径挂 `core/domain/apps/appConfigForm.ts` 的 `issuesByPath`。AstrBot：概览（默认页，`AstrBotOverviewTab` 状态卡 + 设置摘要）· AI（模型 / 人格 / 知识库 / 子代理）· 消息（回复设置 / 会话规则）· 扩展（插件）· 实例（连接与账号）；页名唯一来源 `astrbot/astrbotNav.ts`；提供商编辑模型页和概览共用 `astrbot/{providerDraft.ts,providerEditor.tsx,ProviderDialog.tsx}`；上手判定 / 唤醒文案 / 配置冲突在 `core/domain/apps/astrbotConfig.ts`（`astrbotSetup` / `astrbotWakeHint` / `astrbotConfigWarnings`）。AstrBot 每个设置只在一页改：默认 / 备用模型在模型页，默认人格在人格页，挂载知识库和检索参数在知识库页。MaiBot：概览（状态卡判对接 / 模型 / 名单放行 / 在跑；运行卡 `MaiBotRuntimeCard` 版本 / 时长 / 24h 用量 / 试聊 / 重启）· 试聊（`MaiBotTryChatTab` + `maibotChat{Parts,Composer}`，页面直连上游 WebSocket）· AI（模型 / 人格 / 提示词 / 记忆 / 表达学习）· 消息（聊天名单 / 回复设置 / 会话规则）· 资源（表情包 / 表达方式 / 黑话 / 人物 / 知识库 / 行为，改了就落库、不挂保存条，骨架 `detail/resourceParts.tsx`、共用件 `detail/entityParts.tsx`，没在跑时整页换成 `MaiBotLiveGate`）· 扩展（插件 / MCP）· 实例（连接 / 高级）；页名和「哪页铺哪几节 bot_config、校验路径落哪页」唯一来源 `maibot/maibotPages.ts`，schema 页由 `SchemaForm.tsx` + `MaiBotSchemaTab.tsx` 照 `core/domain/apps/maibotSchema/{bot,model}.json` 铺，模型页手写 `MaiBotModelsTab.tsx` + `maibotModelCards.tsx`，运行中小工具 `maibotProbes.tsx`（测连接 / 拉模型 / MCP 状态 / 从聊过的里选），列表控件 `listEditors.tsx`，小节标题右边的「高级选项」各节自己展开 `advancedToggle.tsx`（展开状态整个详情页共用，校验错误落在收起的字段上时自动展开）；表单状态同样是 `useAppConfigForm`。上游条款：新建对话框有条款时要勾选才能创建；启动前 `useAppInstances.startMutation` 先查 `pendingTerms`，有就经 `hooks/apps/termsDialogStore.ts` 弹 `TermsConsentDialog`（宿主挂在应用端页）。对接对话框按 manifest 的 `link_modes` 认方向（正向反向能配的组合一样，只是跨机预览写「应用端经隧道连过来」），Docker 部署的 Bot 置灰并说明（`appLinkTopology.ts::isDockerBot`） |
 | 日志 | 缓冲 `hooks/apps/appInstanceLogStore.ts`（收到 reset 清空；这一轮是从开头看着收的就不再拿盘上尾巴盖，桌面端打开前就在跑的才拉 `tail_log`）；面板和 Bot 日志页共用 `shared/log/LogConsole.tsx`（长行换行、虚拟列表按行 id 量高、按样式段上色、续行不重复时间和标签）；颜色码解析 `core/domain/events/ansi.ts`，拆时间 / 等级 `log-buffer.ts`（麦麦 lite 样式按时间戳颜色判等级，AstrBot / hypercorn 方括号时间，前导方括号组里的等级标签挖掉，无时间无等级的行继承上一条）；配色 `shared/log/ansi-style.ts`（OKLCH 亮度夹进 tokens `--log-ansi-l-min/max`，灰白走正文色）；mock 日志 `core/ipc/mock/app-log.mock.ts` |
-| hooks / 服务 / mock | `useKarinPlugins` / `useNoneBot2Store` / `useMaiBotRuntime`；MaiBot 数据页 `useMaiBot{Prompts,Learning,Emojis,Persons,Memory,Chat}`（操作共用 `maibotResourceAction.ts`：成功刷列表、失败走错误条）；`core/domain/apps/{karinConfig,nonebot2Config,maibotConfig,appConfigError}.ts`、`maibotSchema/`（界面 schema + 照 schema 查范围 `schemaIssues`）、`maibot{Prompts,Emoji,Chat}.ts`（`maibotChat.ts` 是试聊协议：上游帧解析 / 发出的帧 / 时间分组）、`graphLayout.ts`（知识库图谱布局）、`textDiff.ts`；`app-framework.service.ts` 的 `listStore*` / `pendingTerms` / `acceptTerms` / `maibot*`，数据页走 `maibot-resources.service.ts` / `maibot-memory.service.ts`，试聊连接 `maibot-chat.service.ts`（要票、握手开会话、心跳、断线带 restore 重连）；mock 含 Karin、NoneBot2、AstrBot、MaiBot 实例（MaiBot 走正向预览、条款弹框、`maibot-runtime.mock.ts` 运行期接口和插件商店，数据页 `maibot-{prompts,learning,emoji,person,memory,behavior,chat}.mock.ts`） |
+| hooks / 服务 / mock | `useKarinPlugins` / `useAppStore`（装、卸、启停任务都经 `usePluginOps`，插件目录的筛选 / 排序 / 已装对照在 `core/domain/apps/pluginCatalog.ts`）/ `useAppConfigForm` / `useMaiBotRuntime`；实例列表缓存键和 `upsertInstance` 在 `hooks/apps/appInstancesCache.ts`，实例状态和对接由根上的 `useAppInstanceEventsBridge` 跟着事件改；实例状态、对接拓扑的纯逻辑 `core/domain/apps/{instanceState,appLinkTopology}.ts`；MaiBot 数据页 `useMaiBot{Prompts,Learning,Emojis,Persons,Memory,Chat}`（操作共用 `maibotResourceAction.ts`：成功刷列表、失败走错误条）；`core/domain/apps/{karinConfig,nonebot2Config,astrbotConfig,maibotConfig,appConfigError,appConfigForm,appStore,karinPlugins}.ts`、`maibotSchema/`（界面 schema + 照 schema 查范围 `schemaIssues`）、`maibot{Prompts,Emoji,Chat}.ts`（`maibotChat.ts` 是试聊协议：上游帧解析 / 发出的帧 / 时间分组）、`graphLayout.ts`（知识库图谱布局）、`textDiff.ts`；`app-framework.service.ts` 的 `listStore*` / `pendingTerms` / `acceptTerms` / `maibot*`，数据页走 `maibot-resources.service.ts` / `maibot-memory.service.ts`，试聊连接 `maibot-chat.service.ts`（要票、握手开会话、心跳、断线带 restore 重连）；mock 含 Karin、NoneBot2、AstrBot、MaiBot 实例（MaiBot 走正向预览、条款弹框、`maibot-runtime.mock.ts` 运行期接口和插件商店，数据页 `maibot-{prompts,learning,emoji,person,memory,behavior,chat}.mock.ts`） |
 | 上游事实 | `.references/Karin/`、`.references/MaiBot/`、`.references/MaiBot-Napcat-Adapter/`（只读）；键名 / 路径锁在各 `manifest.rs` 头注释；配置默认值 / 热加载列表见 `karin/config.rs` 头注释 |
 | 活 plan | `.claude/plan/app-framework-d2-karin.md`、`app-instance-config-karin.md`、`karin-plugin-proxy.md`、`app-instance-nonebot2.md`、`app-remote-link-ssh-tunnel.md`（P0 `-L` / P1 `-R`）、`app-remote-link-p2.md`（两台远端常驻 `-R`）、`app-framework-maibot.md`（正向对接 + MaiBot）、`maibot-deep-config.md`（MaiBot 深度配置 / 运行期 / 插件）、`maibot-webui-parity.md`（MaiBot WebUI 数据页搬进桌面端：提示词 / 学到的 / 人物 / 表情包 / 知识库 / 行为 / 试聊）、`app-log-console.md`（应用端日志上色 / 换行 / 每轮另起 / 自启开关）、`maibot-remote.md`（麦麦远端：同机做扎实 + 正向跨机对接 + Docker Bot 挡掉；远端冒烟 `maibot_remote_smoke`） |
 
@@ -349,14 +362,14 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 |--------|--------|
 | PTY 契约 | `crates/ncd-host/src/pty.rs`（`PtyRequest` / `PtyProgram { LoginShell, Program, Script }` / `PtySession` / `PtyExit`）；`Host::open_pty` 默认 Unsupported |
 | 本机 ConPTY | `crates/ncd-host/src/local/pty_windows.rs`（`CreatePseudoConsole` 等运行时 `GetProcAddress`，1809 以前的系统照常启动、只是开不了终端；读 / 写 / 等退出三线程） |
-| 远端 pty 通道 | `crates/ncd-host/src/remote/linux/pty.rs`（只在开通道时拿会话锁；输出发不出去时照收输入）；真机冒烟 `tests/remote_linux_smoke.rs` 的 `smoke_pty_*`（ignore） |
+| 远端 pty 通道 | `crates/ncd-host/src/remote/linux/pty.rs`（只在开通道时拿会话锁；输出发不出去时照收输入）；真机冒烟 `crates/ncd-host/tests/remote_linux_smoke.rs` 的 `smoke_pty_*`（ignore） |
 | 领域模型 | `crates/ncd-domain/src/terminal.rs`（`TerminalTarget { local, server, bot{host_dir}, app_instance }`、`TerminalSessionInfo`、`TerminalStatus`、`TerminalEvent` + 带 `v` 的 envelope、文件栏 / 状态条类型） |
 | 会话层 | `crates/ncd-runtime/src/terminal/manager.rs`（会话表上限 16、1 MiB 回放按行截、4 ms 攒批、按前端确认字节流控 2 MiB 停读 / 512 KiB 恢复、重开用 epoch 防旧 PTY 收尾误伤、`detach_all` / `close_all`、sudo 代填主机存的密码直写 PTY） |
 | 目标 → 启动方案 | `terminal/plan.rs` + `plan/bot.rs`（本机 shell 探测 `shells.rs`；远端登录 shell 按主机缓存；Bot 运行目录 / Docker 容器 `docker exec` / 宿主机部署目录；实例目录 + `AppManager::terminal_context` 给的 PATH 和环境；标签名 `with_host_label` 不重复主机名） |
 | shell 集成 | `terminal/integration.rs`（bash rcfile 走 fd 3 here-doc，PowerShell prompt 包装，cmd `PROMPT`，Git Bash rcfile 在 `data_root/cache/terminal/`；发 OSC 633 / 9;9） |
-| 附加 | `terminal/stats.rs`（一次 exec 读 `/proc` + `df`）、`files.rs`（文件栏）、`external.rs`（系统终端打开） |
+| 附加 | `terminal/stats.rs`（一次 exec 读 `/proc` + `df`）、`files.rs`（文件栏：打开文本前经 `Host::file_size` 看大小，超过 2 MB 不读；上传文件夹不跟进指向目录的链接；导出终端输出 `export_text`）、`external.rs`（系统终端打开） |
 | 应用端环境 | `crates/ncd-appframework/src/terminal.rs`（`AppTerminalProfile`、`uv_venv_profile` / `node_profile`），各框架 `mod.rs` 给常用命令 |
-| Tauri | `src-tauri/src/commands/terminal.rs`（输出走 `Channel<InvokeResponseBody::Raw>`，事件走另一条 JSON 通道）、`src-tauri/src/clipboard.rs`（右键粘贴读剪贴板，Win32）；退出 / 托盘退出 `close_all`，进轻量模式 `detach_all` |
+| Tauri | `src-tauri/src/commands/terminal.rs`（输出走 `Channel<InvokeResponseBody::Raw>`，事件走另一条 JSON 通道）、`src-tauri/src/clipboard.rs`（右键粘贴读剪贴板，Win32）；退出收尾 `shutdown_and_exit` 里 `close_all`，进轻量模式 `detach_all` |
 | 前端 | 面板 `src-ui/modules/terminal/`（`TerminalDock` 标签 / 分屏 / 拖高 / 最大化，`TerminalPane` 标题行 + 文件栏 + 状态条，`TerminalView` 右键菜单 / 粘贴确认 / sudo 按钮，`runtime.ts` 一会话一个 xterm 常驻模块里、DOM 挪进挪出，`registry.ts` 跟着会话表建销）；状态 `src-ui/hooks/terminal/`（`terminalStore` 会话 + 标签，`terminalPrefs` 偏好 + 布局，`terminalIo` 给 modules 用的 service 包装，文件栏 / 状态条 / 拖放）；纯逻辑 `src-ui/core/domain/terminal/`（OSC 解析、关键字高亮、sudo 提示、路径引号、配色）；服务 `terminal.service.ts` + mock `terminal.mock.ts`（假 shell）；设置 `modules/settings/tabs/TerminalTab.tsx` |
 | 入口 | 标题栏 `TerminalToggleButton`（Ctrl+`）、`BotCard`、`ServerCard`、应用端 `DetailHeader` / `AppInstanceListPage`；页面贴底悬浮按钮加 `.float-above-terminal`（`app/index.css`，靠面板写的 `--terminal-dock-inset` / `data-terminal-covers`） |
 | 活 plan | `.claude/plan/terminal.md` |
@@ -390,7 +403,7 @@ Host 层命令/流：`ncd-host` `command.rs` `process.rs` `stream_chunk.rs` `pac
 Rust: <crates/...>
 Tauri: <src-tauri/src/commands/...>
 UI: <src-ui/modules/... + hooks + services>
-生成类型: <是否需要 npm run ts-bindings>
+生成类型: <是否需要 pnpm run ts-bindings>
 KB: <是否读 .claude/kb/...>
 不碰: <邻域>
 ```
@@ -401,8 +414,10 @@ KB: <是否读 .claude/kb/...>
 
 | 场景 | 命令 |
 |------|------|
-| 前端类型 | `npm run typecheck` |
-| 全量门禁 | `npm run verify` |
+| 前端类型 | `pnpm run typecheck` |
+| 前端单测 | `pnpm run test:unit` |
+| 全量门禁 | `pnpm run verify`（ts-bindings + typecheck + `cargo check --workspace --all-targets`） |
 | 单 crate | `cargo check -p <crate>` / `cargo test -p <crate>` |
 | Tauri 壳 | `cargo check -p ncd-tauri` |
-| 重生 TS 绑定 | `npm run ts-bindings` |
+| 重生 TS 绑定 | `pnpm run ts-bindings` |
+| OneBot 流量探针 | `pnpm run test:probe` |
