@@ -9,8 +9,8 @@ use ncd_component::{ProgressEvent, ProgressKind, ProgressLogLevel};
 use ncd_domain::DockerInstallReport;
 use ncd_host::remote::{SudoAccess, probe_sudo};
 use ncd_host::{
-    Host, HostCommand, Os, host_command_wrap_dpkg_wait_for_apt, shell_single_quote,
-    truncate_pkg_line,
+    Host, HostCommand, LinuxPackageManager, Os, host_command_wrap_dpkg_wait_for_apt,
+    shell_single_quote, truncate_pkg_line,
 };
 use tracing::{error, info, warn};
 
@@ -335,7 +335,13 @@ async fn install_docker_linux_with_progress(
     if !status.ready_to_deploy() {
         emit_step_end(&emit, 6, false);
         let msg = if status.installed && status.daemon_running {
-            "Docker 已安装但缺 compose v2 插件，请在远端执行 sudo apt-get install -y docker-compose-plugin（dnf/yum 同名包）后重试".to_string()
+            let pm = LinuxPackageManager::detect(host)
+                .await
+                .unwrap_or(LinuxPackageManager::Apt);
+            format!(
+                "Docker 已安装但缺 compose v2 插件，请在远端执行 sudo {} 后重试",
+                pm.install_hint(&["docker-compose-plugin"])
+            )
         } else if status.installed {
             "Docker 已安装但 daemon 未运行，请在远端执行 sudo systemctl start docker".to_string()
         } else {
@@ -390,22 +396,24 @@ fn docker_usermod_script(ssh_linux_username: Option<&str>) -> String {
 }
 
 async fn try_install_compose_plugin(host: &dyn Host) -> Result<(), DockerCliError> {
-    let script = r#"set -e
-if command -v apt-get >/dev/null 2>&1; then
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update
-  apt-get install -y docker-compose-plugin
-elif command -v dnf >/dev/null 2>&1; then
-  dnf install -y docker-compose-plugin
-elif command -v yum >/dev/null 2>&1; then
-  yum install -y docker-compose-plugin
-else
-  exit 1
-fi"#;
+    let failed = |exit_code, stderr| {
+        DockerCliError::Host(ncd_host::HostError::CommandFailed {
+            program: "docker-compose-plugin install".into(),
+            exit_code,
+            stderr,
+        })
+    };
+    // docker-compose-plugin 只在装 Docker 时配的 docker-ce 仓库里有,那套仓库只配了 apt / dnf / yum
+    let pm = match LinuxPackageManager::detect(host).await {
+        Some(
+            pm @ (LinuxPackageManager::Apt | LinuxPackageManager::Dnf | LinuxPackageManager::Yum),
+        ) => pm,
+        _ => return Err(failed(None, "未识别到 apt-get / dnf / yum".into())),
+    };
     let cmd = host_command_wrap_dpkg_wait_for_apt(
         HostCommand::new("sh")
             .arg("-c")
-            .arg(script)
+            .arg(pm.refresh_and_install_script(&["docker-compose-plugin"]))
             .elevated()
             .timeout(std::time::Duration::from_secs(300)),
     );
@@ -413,11 +421,7 @@ fi"#;
     if out.success() {
         Ok(())
     } else {
-        Err(DockerCliError::Host(ncd_host::HostError::CommandFailed {
-            program: "docker-compose-plugin install".into(),
-            exit_code: out.exit_code,
-            stderr: out.stderr,
-        }))
+        Err(failed(out.exit_code, out.stderr))
     }
 }
 

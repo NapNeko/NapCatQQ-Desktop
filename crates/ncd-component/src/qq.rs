@@ -40,7 +40,10 @@
 use async_trait::async_trait;
 
 use ncd_host::shell::BashShell;
-use ncd_host::{Arch, Host, HostCommand, HostError, HostPath, HostShell, Locality, Os, PathStyle};
+use ncd_host::{
+    Arch, Host, HostCommand, HostError, HostPath, HostShell, LinuxPackageManager, Locality, Os,
+    PathStyle,
+};
 
 use crate::context::{ActionCtx, ProgressKind};
 use crate::download::DownloadHelper;
@@ -337,18 +340,40 @@ impl QQComponent {
             if let Ok(out) = host.run_to_string(cmd).await {
                 if out.success() && !out.stdout.trim().is_empty() {
                     if *fmt == PackageFormat::Rpm && !self.command_available(host, "cpio").await {
+                        // 只在报错时探包管理器，提示里给这台机能直接跑的那条
+                        let pm = match LinuxPackageManager::detect(host).await {
+                            Some(pm @ LinuxPackageManager::Yum) => pm,
+                            _ => LinuxPackageManager::Dnf,
+                        };
                         return Err(ActionError::install_step(
                             "detect_pkg_format",
-                            "已找到 rpm2cpio，但缺少 cpio，无法解包 LinuxQQ rpm。请在远端执行 sudo dnf install -y rpm2cpio cpio（或 yum 同名包）后重试",
+                            format!(
+                                "已找到 rpm2cpio，但缺少 cpio，无法解包 LinuxQQ rpm。请在远端执行 sudo {} 后重试",
+                                pm.install_hint(&["cpio"])
+                            ),
                         ));
                     }
                     return Ok(*fmt);
                 }
             }
         }
+        let how = match LinuxPackageManager::detect(host).await {
+            Some(pm @ LinuxPackageManager::Apt) => {
+                format!("执行 sudo {}", pm.install_hint(&["dpkg"]))
+            }
+            Some(pm @ (LinuxPackageManager::Dnf | LinuxPackageManager::Yum)) => {
+                format!("执行 sudo {}", pm.install_hint(&["rpm2cpio", "cpio"]))
+            }
+            _ => format!(
+                "安装 dpkg 或执行 sudo {}",
+                LinuxPackageManager::Dnf.install_hint(&["rpm2cpio", "cpio"])
+            ),
+        };
         Err(ActionError::install_step(
             "detect_pkg_format",
-            "远端缺少 LinuxQQ 解包工具：既没有 dpkg-deb，也没有 rpm2cpio + cpio。请先安装 dpkg 或执行 sudo dnf install -y rpm2cpio cpio 后重试",
+            format!(
+                "远端缺少 LinuxQQ 解包工具：既没有 dpkg-deb，也没有 rpm2cpio + cpio。请先{how} 后重试"
+            ),
         ))
     }
 

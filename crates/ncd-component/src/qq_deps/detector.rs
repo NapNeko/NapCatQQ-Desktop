@@ -3,7 +3,7 @@
 //! 混合策略:QQ 已装时用 ldd 检测动态库,未装时用包管理器预检
 
 use ncd_domain::{DetectionMethod, DistroFamily, DistroInfo, PackageStatus, QqDependencyReport};
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand, HostPath, LinuxPackageManager};
 
 use crate::error::ActionError;
 use crate::qq_deps::QQDependencyManifest;
@@ -227,23 +227,78 @@ impl QqDependencyDetector {
     }
 
     /// 构建安装命令(用于用户复制粘贴)
+    ///
+    /// 清单只按 deb / rpm 两族维护,别的发行版给不出。缺失项有的来自远端 ldd 输出,
+    /// 用户会拿这行去 sudo 跑,不像包名的不放进去,和安装器拒收的口径一致
     fn build_install_command(
         &self,
         distro: &DistroInfo,
         missing: &[PackageStatus],
     ) -> Option<String> {
-        if missing.is_empty() {
+        let pm = match distro.family {
+            DistroFamily::Debian => LinuxPackageManager::Apt,
+            DistroFamily::Rhel => LinuxPackageManager::Dnf,
+            _ => return None,
+        };
+        let names: Vec<&str> = missing
+            .iter()
+            .map(|p| p.name.as_str())
+            .filter(|name| LinuxPackageManager::is_valid_package_name(name))
+            .collect();
+        if names.is_empty() {
             return None;
         }
+        Some(format!("sudo {}", pm.install_hint(&names)))
+    }
+}
 
-        let pkg_names: Vec<String> = missing.iter().map(|p| p.name.clone()).collect();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::qq_deps::qq_qqnt_dependencies_v3_2_25;
 
-        match distro.family {
-            DistroFamily::Debian => {
-                Some(format!("sudo apt-get install -y {}", pkg_names.join(" ")))
-            }
-            DistroFamily::Rhel => Some(format!("sudo dnf install -y {}", pkg_names.join(" "))),
-            _ => None,
+    fn distro(family: DistroFamily) -> DistroInfo {
+        DistroInfo {
+            family,
+            name: String::new(),
+            version: String::new(),
         }
+    }
+
+    fn missing(names: &[&str]) -> Vec<PackageStatus> {
+        names
+            .iter()
+            .map(|name| PackageStatus {
+                name: name.to_string(),
+                installed_version: None,
+                detection_method: DetectionMethod::Ldd,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn install_hint_follows_distro_and_drops_names_that_are_not_packages() {
+        let detector = QqDependencyDetector::new(qq_qqnt_dependencies_v3_2_25());
+        let hint = detector
+            .build_install_command(
+                &distro(DistroFamily::Debian),
+                &missing(&["libnss3", "-oAPT::x=1", "libgbm1"]),
+            )
+            .unwrap();
+        assert_eq!(hint, "sudo apt-get install -y libnss3 libgbm1");
+        let hint = detector
+            .build_install_command(&distro(DistroFamily::Rhel), &missing(&["nss"]))
+            .unwrap();
+        assert_eq!(hint, "sudo dnf install -y nss");
+        assert!(
+            detector
+                .build_install_command(&distro(DistroFamily::Unknown), &missing(&["x"]))
+                .is_none()
+        );
+        assert!(
+            detector
+                .build_install_command(&distro(DistroFamily::Debian), &missing(&[]))
+                .is_none()
+        );
     }
 }
