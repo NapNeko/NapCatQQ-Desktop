@@ -344,21 +344,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
 
     /// 从 data_root 读 AppSettings 派生指标偏好（缺文件/解析失败 → 默认关）
     fn load_metrics_prefs(data_root: &std::path::Path) -> crate::metrics::BotRuntimeMetricsPrefs {
-        use crate::metrics::BotRuntimeMetricsPrefs;
-        let settings_path = data_root.join("config").join("app-settings.json");
-        let mut prefs = BotRuntimeMetricsPrefs::default();
-        if !settings_path.is_file() {
-            return prefs;
-        }
-        let Ok(text) = std::fs::read_to_string(&settings_path) else {
-            return prefs;
-        };
-        let Ok(app) = serde_json::from_str::<ncd_domain::AppSettings>(&text) else {
-            return prefs;
-        };
-        prefs = BotRuntimeMetricsPrefs::from_app(&app);
-        prefs.normalize();
-        prefs
+        crate::metrics::BotRuntimeMetricsPrefs::from_data_root(data_root)
     }
 
     /// 启动前按 AppSettings 注入指标探针（本机）；失败只记日志，不阻断启动

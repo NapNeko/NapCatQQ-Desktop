@@ -84,6 +84,17 @@ impl BotRuntimeMetricsPrefs {
         }
     }
 
+    /// 从盘上的 app-settings.json 派生;缺文件 / 解析失败 → 默认关
+    pub fn from_data_root(data_root: &std::path::Path) -> Self {
+        crate::desktop::read_app_settings_file(data_root)
+            .map(|app| {
+                let mut prefs = Self::from_app(&app);
+                prefs.normalize();
+                prefs
+            })
+            .unwrap_or_default()
+    }
+
     pub fn normalize(&mut self) {
         self.interval_ms = ncd_domain::clamp_bot_runtime_metrics_interval_ms(self.interval_ms);
         self.retention_days =

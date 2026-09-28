@@ -444,6 +444,18 @@ impl Default for AppSettings {
 }
 
 impl AppSettings {
+    /// 设置页保存和配置导入写盘前都走这一个口，各字段的收敛规则不会两边各抄一份
+    pub fn normalize(&mut self) {
+        self.normalize_performance_monitor();
+        self.normalize_bot_runtime_metrics();
+        self.normalize_task_queue_cleanup();
+        self.normalize_lightweight_prefs();
+        self.normalize_remote_host_health_probe();
+        self.offline_webhook.normalize();
+        self.offline_onebot.normalize();
+        self.poller.offline_notify_behavior.normalize();
+    }
+
     /// 规范化性能监控采样间隔
     pub fn normalize_performance_monitor(&mut self) {
         self.performance_monitor_interval_ms =

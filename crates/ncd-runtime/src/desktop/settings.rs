@@ -21,6 +21,42 @@ fn write_app_settings_file(data_root: &Path, settings: &AppSettings) -> Result<(
         .map_err(|e| format!("写入 app-settings.json 失败: {e}"))
 }
 
+/// 盘上那份;文件缺失或解析不了是 None
+pub fn read_app_settings_file(data_root: &Path) -> Option<AppSettings> {
+    let store = LocalConfigStore::new(data_root);
+    let value = store
+        .read_json(&store.config_dir().join(APP_SETTINGS_FILE))
+        .ok()?;
+    serde_json::from_value(value).ok()
+}
+
+/// 启动和设置页读取用;没有文件(旧用户首次进设置页)或解析不了一律当默认值
+pub fn load_app_settings(data_root: &Path) -> AppSettings {
+    read_app_settings_file(data_root).unwrap_or_default()
+}
+
+/// 整份替换 app-settings.json 的写法(配置导入)走这里:`write` 在写锁里跑，
+/// 写完把内存换成盘上的新值，中间插不进一次拿旧副本回写的 update_app_settings。
+/// 本机 SnowLuma 包类型记的是这台机器装了什么，保留内存那份并写回文件
+pub async fn replace_app_settings_with<R>(
+    data_root: &Path,
+    current: &RwLock<AppSettings>,
+    write: impl FnOnce() -> Result<R, String>,
+) -> Result<R, String> {
+    let mut guard = current.write().await;
+    let out = write()?;
+    let mut next = load_app_settings(data_root);
+    if next.snowluma_package != guard.snowluma_package {
+        next.snowluma_package = guard.snowluma_package;
+        // 导入本身已经落盘，这里失败只让下次保存再对齐，不回头判导入失败
+        if let Err(err) = write_app_settings_file(data_root, &next) {
+            tracing::warn!(error = %err, "failed to keep local SnowLuma package after settings replace");
+        }
+    }
+    *guard = next;
+    Ok(out)
+}
+
 /// 在当前设置上改一处再落盘。写锁一直拿到文件写完，内存只在落盘成功后才换成新值
 pub async fn update_app_settings<R>(
     data_root: &Path,
@@ -95,6 +131,37 @@ mod tests {
         assert_eq!(on_disk.snowluma_package, Some(SnowLumaLinuxPackage::Lite));
         assert!(on_disk.launch_on_startup);
         assert_eq!(*current.read().await, on_disk);
+    }
+
+    #[tokio::test]
+    async fn replace_picks_up_file_but_keeps_local_package() {
+        let tmp = tempfile::tempdir().unwrap();
+        let current = RwLock::new(AppSettings {
+            snowluma_package: Some(SnowLumaLinuxPackage::Lite),
+            ..AppSettings::default()
+        });
+        let imported = AppSettings {
+            launch_on_startup: true,
+            snowluma_package: Some(SnowLumaLinuxPackage::Full),
+            ..AppSettings::default()
+        };
+
+        replace_app_settings_with(tmp.path(), &current, || {
+            write_app_settings_file(tmp.path(), &imported)
+        })
+        .await
+        .unwrap();
+
+        let now = current.read().await.clone();
+        assert!(now.launch_on_startup);
+        assert_eq!(now.snowluma_package, Some(SnowLumaLinuxPackage::Lite));
+        assert_eq!(read_back(tmp.path()), now);
+
+        // 之后的单项修改从导入后的值出发，不会把导入盖回去
+        update_app_settings(tmp.path(), &current, |s| s.snowluma_package = None)
+            .await
+            .unwrap();
+        assert!(read_back(tmp.path()).launch_on_startup);
     }
 
     #[test]

@@ -311,22 +311,6 @@ pub async fn build_napcat_launch_plan(
     build_napcat_launch_plan_inner(bot_id, config, runtime_root.as_ref(), &qq_install).await
 }
 
-/// 从 data_root/config/app-settings.json 读指标偏好；缺文件/解析失败 → 默认关
-fn load_metrics_prefs_from_data_root(data_root: &Path) -> crate::metrics::BotRuntimeMetricsPrefs {
-    use crate::metrics::BotRuntimeMetricsPrefs;
-    let settings_path = data_root.join("config").join("app-settings.json");
-    let mut prefs = BotRuntimeMetricsPrefs::default();
-    let Ok(text) = std::fs::read_to_string(&settings_path) else {
-        return prefs;
-    };
-    let Ok(app) = serde_json::from_str::<ncd_domain::AppSettings>(&text) else {
-        return prefs;
-    };
-    prefs = BotRuntimeMetricsPrefs::from_app(&app);
-    prefs.normalize();
-    prefs
-}
-
 async fn build_napcat_launch_plan_inner(
     bot_id: &BotId,
     config: &BotConfig,
@@ -362,7 +346,7 @@ async fn build_napcat_launch_plan_inner(
     // translate→build_plan 会写回无探针基线，且 spawn 环境也丢 NCD_METRICS_*。
     // runtime_root 是 components 目录，data_root 为其父。
     let data_root = runtime_root.parent().unwrap_or(runtime_root);
-    let metrics_prefs = load_metrics_prefs_from_data_root(data_root);
+    let metrics_prefs = crate::metrics::BotRuntimeMetricsPrefs::from_data_root(data_root);
     let metrics_plan =
         match crate::metrics::prepare_inject(data_root, bot_id.as_str(), config, &metrics_prefs) {
             Ok(p) => p,

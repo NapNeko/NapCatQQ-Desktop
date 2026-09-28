@@ -288,14 +288,7 @@ fn normalize_servers_import(value: serde_json::Value) -> Result<serde_json::Valu
 fn normalize_app_settings_import(value: serde_json::Value) -> Result<serde_json::Value, String> {
     let mut settings: ncd_domain::AppSettings = serde_json::from_value(value)
         .map_err(|e| format!("app-settings.json 不是合法应用设置,已中止导入: {e}"))?;
-    settings.normalize_performance_monitor();
-    settings.normalize_bot_runtime_metrics();
-    settings.normalize_task_queue_cleanup();
-    settings.normalize_lightweight_prefs();
-    settings.normalize_remote_host_health_probe();
-    settings.offline_webhook.normalize();
-    settings.offline_onebot.normalize();
-    settings.poller.offline_notify_behavior.normalize();
+    settings.normalize();
     serde_json::to_value(&settings).map_err(|e| format!("序列化 app-settings 失败: {e}"))
 }
 
@@ -375,10 +368,15 @@ pub async fn import_config(
     let secrets = SecretStoreImpl::new(state.data_root.join("secrets"));
     let (txn, files, skipped) = build_import_transaction(&staging, &state.data_root, &secrets)?;
 
+    // 事务里可能整份换掉 app-settings.json:放在设置写锁里提交并把内存副本换成新值,
+    // 否则重启前任何一次单项回写都会拿旧副本把导入盖回去
     let store = LocalConfigStore::new(&state.data_root);
-    store
-        .apply_transaction(txn)
-        .map_err(|e| format!("写入配置失败(已回滚): {e}"))?;
+    ncd_runtime::desktop::replace_app_settings_with(&state.data_root, &state.app_settings, || {
+        store
+            .apply_transaction(txn)
+            .map_err(|e| format!("写入配置失败(已回滚): {e}"))
+    })
+    .await?;
 
     Ok(ConfigImportResult { files, skipped })
 }
