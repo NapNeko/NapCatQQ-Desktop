@@ -1,5 +1,5 @@
 // ncd-watch 配置同步 IPC。
-// 命令字面量只在此文件出现（R3）。
+// 命令字面量只在此文件出现，后端改命令名只用改这一处。
 
 import { invoke, isTauri } from '../ipc/transport';
 

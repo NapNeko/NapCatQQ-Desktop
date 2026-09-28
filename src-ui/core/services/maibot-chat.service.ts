@@ -1,6 +1,6 @@
 // 试聊连接：先向后端要一张一次性票（WebUI 的会话 token 留在后端，远端实例给的是隧道口），
 // 页面自己连麦麦的统一 WebSocket；握手后开会话、定时 ping，断了重新要票、带 restore 重连。
-// 命令字面量只在此文件出现（R3）；浏览器预览走 mock。
+// 命令字面量只在此文件出现，后端改命令名只用改这一处；浏览器预览走 mock。
 
 import { APP_VERSION } from '../domain/app-meta';
 import { chatFrames, parseChatFrame, type MaiBotChatEvent, type MaiBotChatImage } from '../domain/apps/maibotChat';

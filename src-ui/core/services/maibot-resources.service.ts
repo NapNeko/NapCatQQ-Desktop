@@ -1,5 +1,5 @@
 // 麦麦 WebUI 里两份主配置之外的东西（提示词、表情包、学到的表达 / 黑话 / 行为、人物、长期记忆…）的 IPC。
-// 命令字面量只在此文件出现（R3）；浏览器预览走 mock。
+// 命令字面量只在此文件出现，后端改命令名只用改这一处；浏览器预览走 mock。
 
 import { invoke, isTauri, pickImageFiles } from '../ipc/transport';
 import type {

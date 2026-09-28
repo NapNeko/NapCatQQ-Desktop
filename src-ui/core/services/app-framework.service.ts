@@ -1,5 +1,5 @@
 // 应用端框架（Karin 等）IPC。
-// 命令字面量只在此文件出现（R3）；浏览器预览走 mock。
+// 命令字面量只在此文件出现，后端改命令名、查前端调了哪些命令都只看这一处；浏览器预览走 mock。
 
 import { invoke, isTauri } from '../ipc/transport';
 import type {

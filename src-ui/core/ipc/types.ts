@@ -572,7 +572,7 @@ type DomainEventBody =
         instance_id: string;
     };
 
-// 所有发到 webview 的 IPC 事件 payload 都带顶层 v 版本号 envelope(R14:版本化)。
+// 所有发到 webview 的 IPC 事件 payload 都带顶层 v 版本号 envelope,后端改了形状前端能按版本分辨。
 // 形如 { v: 1, kind: 'bot_log_appended', ... }。v 暂为可选,兼容历史 payload 与
 // mock 事件;按 kind 判别的逻辑不受影响。
 export type DomainEvent = DomainEventBody & { v?: number };

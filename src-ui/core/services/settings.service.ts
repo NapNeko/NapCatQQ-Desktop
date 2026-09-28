@@ -1,5 +1,5 @@
 // App 设置（后端持久化部分）IPC 服务。
-// 唯一持有 get_app_settings / set_app_settings 命令名的位置（R3：单一字面量来源）。
+// 唯一持有 get_app_settings / set_app_settings 命令名的位置，后端改命令名只用改这一处。
 //
 // 外观 / 动画 / 圆角等写入 app-settings.json 的 uiPreferences，与 localStorage 双写；
 // 启动时以磁盘为准（见 useAppUiPreferencesBootstrap）。

@@ -1,5 +1,5 @@
 // Desktop 自更新 IPC 服务。
-// 命令名字符串只在此处持有（R3 单一字面量来源）。
+// 命令名字符串只在此处持有，后端改命令名只用改这一处。
 // 安装成功后后端会 exit(0)，前端应把失败/取消展示给用户。
 
 import { invoke, isTauri } from '../ipc/transport';

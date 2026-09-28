@@ -1,5 +1,5 @@
 // 远端 release 快照 IPC 服务。
-// 唯一持有 `get_release_snapshot` 命令名字符串的位置（R3：单一字面量来源）。
+// 唯一持有 `get_release_snapshot` 命令名字符串的位置，后端改命令名只用改这一处。
 //
 // 后端实装在 `crates/ncd-runtime/src/release.rs` + `src-tauri/src/commands/release.rs`，
 // 默认 1 小时 TTL 复用本地缓存；force=true 跳过磁盘 TTL（用户点刷新）。

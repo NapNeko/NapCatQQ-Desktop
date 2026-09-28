@@ -1,5 +1,5 @@
 // Docker 管理面 IPC 服务层。
-// 唯一持有 docker_* Tauri command 名字符串的位置（R3：单一字面量来源）。
+// 唯一持有 docker_* Tauri command 名字符串的位置，后端改命令名只用改这一处。
 // 部署 / 容器管理都按 host_id（"local" 或 "remote:<id>"）选主机。
 
 import { invoke, isTauri } from '../ipc/transport';

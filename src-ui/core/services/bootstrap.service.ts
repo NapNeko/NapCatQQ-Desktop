@@ -1,5 +1,5 @@
 // Bootstrap & 全局诊断 IPC 服务。
-// 唯一持有这些 Tauri command 名字符串的位置（R3：单一字面量来源）。
+// 唯一持有这些 Tauri command 名字符串的位置，后端改命令名只用改这一处。
 
 import { invoke, isTauri } from '../ipc/transport';
 import type { BootstrapSnapshot } from '../ipc/types';
