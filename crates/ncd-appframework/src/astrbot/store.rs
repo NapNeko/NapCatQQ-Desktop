@@ -171,6 +171,11 @@ fn reject_unsafe_name(name: &str) -> Result<(), AppFrameworkError> {
     Ok(())
 }
 
+/// 目录里的一项能不能原名挪到上一层:空名、`.` / `..`、带路径分隔符的挪不了
+fn is_movable_child_name(name: &str) -> bool {
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\'])
+}
+
 fn plugin_dir_name(entry: &AppStoreMarketEntry) -> Result<String, AppFrameworkError> {
     let name = entry
         .id
@@ -566,9 +571,10 @@ async fn flatten_extract(host: &dyn Host, dest: &HostPath) -> Result<(), AppFram
     }
     let flatten_err = |e: HostError| AppFrameworkError::Runtime(format!("无法展开 zip 目录: {e}"));
     let children = host.list_dir(&inner).await.map_err(flatten_err)?;
-    // 动手前先把每个子项过一遍：挪不了的名字不能等到最后跟着暂存目录一起被删掉
+    // 动手前先把每个子项过一遍：挪不了的名字不能等到最后跟着暂存目录一起被删掉。
+    // 这里是 list_dir 给的单段文件名，notes..txt 这种名字里带 .. 的挪得动，不按市场目录名那么严
     for child in &children {
-        if reject_unsafe_name(&child.name).is_err() {
+        if !is_movable_child_name(&child.name) {
             return Err(AppFrameworkError::Runtime(format!(
                 "无法展开 zip 目录: 不支持的文件名 {}",
                 child.name
@@ -639,20 +645,29 @@ pub async fn install_item(
         let zip = plugins_root(instance).join(format!(".ncd-{name}.zip"));
         download_file_with_mirrors(host, url, &zip, log).await?;
         host.create_dir_all(&dest).await.map_err(host_err)?;
-        host.extract_archive(&zip, &dest, ArchiveKind::Zip)
-            .await
-            .map_err(host_err)?;
+        let unpacked = async {
+            host.extract_archive(&zip, &dest, ArchiveKind::Zip)
+                .await
+                .map_err(host_err)?;
+            flatten_extract(host, &dest).await?;
+            confirm_metadata(host, &dest, entry).await
+        }
+        .await;
         let _ = host.remove_file(&zip).await;
-        flatten_extract(host, &dest).await?;
+        if let Err(err) = unpacked {
+            // 解到一半的目录留着的话，重试一上来就报「已存在」，更新也会一直撞同一个错
+            let _ = host.remove_dir_all(&dest).await;
+            return Err(err);
+        }
     } else if !entry.package.is_empty() {
         let urls = github_clone_candidates(&entry.package)?;
         git_clone_try(host, &dest, &urls, log).await?;
+        confirm_metadata(host, &dest, entry).await?;
     } else {
         return Err(AppFrameworkError::Validation(
             "条目没有 download_url 也没有 repo".into(),
         ));
     }
-    confirm_metadata(host, &dest, entry).await?;
     pip_requirements(host, instance, &dest, log).await?;
     Ok(())
 }
@@ -883,10 +898,10 @@ mod tests {
         assert!(!inner.exists());
     }
 
-    // 挪不了的文件名直接报错，而且什么都还没动：不能挪完别的再把它跟暂存目录一起删掉
+    // 文件名里带 .. 只是普通单段名字，照常挪上来，不因此让整个插件装不上
     #[cfg(windows)]
     #[tokio::test]
-    async fn flatten_refuses_unsafe_child_name_before_moving_anything() {
+    async fn flatten_moves_names_with_double_dots() {
         let tmp = tempfile::tempdir().unwrap();
         let dest = tmp.path().join("plugin");
         let inner = dest.join("demo-main");
@@ -895,13 +910,22 @@ mod tests {
         std::fs::write(inner.join("notes..txt"), b"n").unwrap();
 
         let host = ncd_host::local::LocalWindowsHost::new();
-        let err = flatten_extract(&host, &HostPath::from_windows(dest.to_str().unwrap()))
+        flatten_extract(&host, &HostPath::from_windows(dest.to_str().unwrap()))
             .await
-            .unwrap_err();
+            .unwrap();
 
-        assert!(err.to_string().contains("notes..txt"), "{err}");
-        assert!(inner.join("notes..txt").is_file());
-        assert!(inner.join("metadata.yaml").is_file());
-        assert!(!dest.join("metadata.yaml").exists());
+        assert!(dest.join("notes..txt").is_file());
+        assert!(dest.join("metadata.yaml").is_file());
+        assert!(!inner.exists());
+    }
+
+    #[test]
+    fn child_names_that_cannot_move() {
+        for bad in ["", ".", "..", "a/b", "a\\b"] {
+            assert!(!is_movable_child_name(bad), "{bad:?}");
+        }
+        for ok in ["notes..txt", "v1..2.md", ".env", "main.py"] {
+            assert!(is_movable_child_name(ok), "{ok:?}");
+        }
     }
 }
