@@ -62,6 +62,7 @@ pub fn default_ssh_username() -> String {
 }
 
 /// 解析 `config_path`。文件不存在返回空列表；主文件读失败才 Err。
+/// 同步读文件、列目录，异步调用方要放到 spawn_blocking 里。
 pub fn discover_ssh_hosts(
     config_path: &Path,
     home: &Path,

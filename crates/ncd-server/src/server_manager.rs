@@ -472,7 +472,8 @@ impl ServerManager {
 
     /// 添加档案时，若本机 OpenSSH known_hosts 已有该主机明文指纹，抄进应用
     /// known_hosts。用户用 ssh 信任过的机器，导入后第一次连接不再弹 TOFU。
-    /// 抄不了（哈希主机名 / 没连过）就保持原样，仍走确认框。
+    /// 抄不了（哈希主机名 / 没连过）就保持原样，仍走确认框。只按 host 和端口找，
+    /// 档案名是用户随便起的，和 OpenSSH 记指纹用的名字无关。
     async fn seed_openssh_host_keys(&self, profile: &ServerProfile) {
         let Some(home) = dirs::home_dir() else {
             return;
@@ -483,7 +484,6 @@ impl ServerManager {
             &store,
             &openssh,
             &profile.host,
-            &[profile.name.as_str()],
             profile.port,
         )
         .await;
@@ -507,7 +507,12 @@ impl ServerManager {
         let config = home.join(".ssh").join("config");
         let existing = self.list_servers().await;
         let user = crate::ssh_config::default_ssh_username();
-        crate::ssh_config::discover_ssh_hosts(&config, &home, &existing, &user)
+        // 解析要跟着 Include 读一串文件、列目录，放阻塞线程上跑，别占着异步线程
+        tokio::task::spawn_blocking(move || {
+            crate::ssh_config::discover_ssh_hosts(&config, &home, &existing, &user)
+        })
+        .await
+        .map_err(|e| format!("扫描 SSH config 失败: {e}"))?
     }
 
     pub async fn add_server(
