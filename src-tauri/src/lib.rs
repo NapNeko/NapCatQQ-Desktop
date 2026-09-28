@@ -254,6 +254,8 @@ pub fn run() {
         ));
     let host_resolver_for_apps = Arc::clone(&host_resolver);
     let host_resolver_for_terminals = Arc::clone(&host_resolver);
+    // 应用端注册表只建这一份:组件执行器和 AppManager 用的是同一批适配器实例
+    let app_registry = Arc::new(ncd_runtime::AppFrameworkRegistry::with_builtin());
     let deployment_tasks = ncd_runtime::DeploymentTaskManager::new(event_bus.clone());
     let components = Arc::new(ncd_runtime::ComponentExecutor::new(
         ncd_runtime::components::ComponentExecutorDeps {
@@ -264,6 +266,7 @@ pub fn run() {
             data_root: data_root.clone(),
             local_snowluma_version: snapshot.local_versions.snowluma.clone(),
             desktop_product_version: desktop_update::product_version_str().to_string(),
+            registry: Arc::clone(&app_registry),
         },
     ));
     let runtime_gate: Arc<dyn ncd_runtime::RuntimeReadinessGate> =
@@ -348,7 +351,7 @@ pub fn run() {
         ));
         Arc::new(
             ncd_runtime::AppManager::new(
-                Arc::new(ncd_runtime::AppFrameworkRegistry::with_builtin()),
+                app_registry,
                 store,
                 app_runtime,
                 Arc::clone(&host_resolver_for_apps),

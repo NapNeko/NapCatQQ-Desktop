@@ -11,6 +11,7 @@ use ncd_component::{
     Component, ComponentId, DependencyNode, DependencyPlan, DependencyTarget, DetectOutcome,
     HostPackageGroup, RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,
 };
+use ncd_appframework::AppFrameworkRegistry;
 use ncd_host::Host;
 
 use crate::components::graph::{ClosureNode, requirement_closure};
@@ -23,12 +24,14 @@ pub struct ResolveCtx<'a> {
     pub host: &'a dyn Host,
     pub phase: RequirementPhase,
     pub build: &'a ComponentBuilder<'a>,
+    /// 展开闭包时实例化应用端占位组件用
+    pub registry: &'a AppFrameworkRegistry,
 }
 
 pub async fn resolve_dependencies(root: &dyn Component, ctx: &ResolveCtx<'_>) -> DependencyPlan {
     let os = ctx.host.os();
     let locality = ctx.host.locality();
-    let closure = requirement_closure(root, os, locality, ctx.phase);
+    let closure = requirement_closure(ctx.registry, root, os, locality, ctx.phase);
 
     let mut nodes = Vec::with_capacity(closure.len());
     for node in closure {
@@ -55,9 +58,8 @@ pub async fn resolve_runtime_readiness(
     ctx: &ResolveCtx<'_>,
 ) -> RuntimeReadiness {
     let run_ctx = ResolveCtx {
-        host: ctx.host,
         phase: RequirementPhase::Run,
-        build: ctx.build,
+        ..*ctx
     };
     let status = probe_built_component(root, &[], run_ctx.host).await;
     let plan = resolve_dependencies(root, &run_ctx).await;
@@ -357,6 +359,7 @@ mod tests {
                 host: &host,
                 phase: RequirementPhase::Install,
                 build: &build,
+                registry: &AppFrameworkRegistry::with_builtin(),
             },
         )
         .await;
@@ -418,6 +421,7 @@ mod tests {
                 host: &host,
                 phase: RequirementPhase::Run,
                 build: &build,
+                registry: &AppFrameworkRegistry::with_builtin(),
             },
         )
         .await;
@@ -458,6 +462,7 @@ mod tests {
                 // 传 Install 也按 Run 解析:unzip 这条安装期边不该出现
                 phase: RequirementPhase::Install,
                 build: &build,
+                registry: &AppFrameworkRegistry::with_builtin(),
             },
         )
         .await;
@@ -505,6 +510,7 @@ mod tests {
                 host: &host,
                 phase: RequirementPhase::Install,
                 build: &build,
+                registry: &AppFrameworkRegistry::with_builtin(),
             },
         )
         .await;

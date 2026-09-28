@@ -44,6 +44,8 @@ pub struct BuildComponentCtx<'a> {
     pub snowluma_node_path: Option<&'a str>,
     /// 应用端组件（Karin 等）按实例安装，必须带实例目录 / 端口；协议组件忽略
     pub app_component: Option<&'a AppComponentHint>,
+    /// 应用端组件从这里找适配器；Node 的版本约束也要把应用端算进来
+    pub registry: &'a AppFrameworkRegistry,
 }
 
 /// 应用端组件的实例级输入（组件页 catalog 不列应用端，只有应用端页面会填）
@@ -191,8 +193,12 @@ pub fn build_component_for_host(
         }
         ComponentId::NodeJs => {
             // Node 自己不知道谁要它;版本约束来自这台主机上所有可能依赖 Node 的组件
-            let accept =
-                catalog_version_reqs_for(ComponentId::NodeJs, ctx.host.os(), ctx.host.locality());
+            let accept = catalog_version_reqs_for(
+                ctx.registry,
+                ComponentId::NodeJs,
+                ctx.host.os(),
+                ctx.host.locality(),
+            );
             if ctx.host.os() == Os::Windows {
                 let install_dir = data_root_host.join("components").join("NodeJs");
                 let mut comp =
@@ -282,7 +288,8 @@ fn build_app_framework_component(
     let hint = ctx.app_component.ok_or_else(|| {
         "应用端组件按实例安装，请从「应用端」页面操作".to_string()
     })?;
-    let adapter = AppFrameworkRegistry::with_builtin()
+    let adapter = ctx
+        .registry
         .by_component_id(id.as_str())
         .ok_or_else(|| format!("应用端框架未注册: {}", id.as_str()))?;
     // 工具链取值口径与其他远端组件一致：用户 path_overrides 优先，其次桌面端管理的

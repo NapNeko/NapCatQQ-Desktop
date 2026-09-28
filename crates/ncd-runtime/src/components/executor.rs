@@ -10,9 +10,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use ncd_appframework::AppFrameworkRegistry;
 use ncd_component::{
     ActionCtx, Component, ComponentId, DependencyPlan, DependencyTarget, ProgressEvent,
-    ProgressKind, ProgressLogLevel, RequirementPhase, RuntimeReadiness,
+    ProgressKind, ProgressLogLevel, RequirementPhase, RuntimeReadiness, VersionReq,
 };
 use ncd_deploy::{DeployOutcome, DeployPlan, StepKind};
 use ncd_domain::release_snapshot::ReleaseSnapshot;
@@ -20,7 +21,7 @@ use ncd_domain::{
     AppSettings, DeploymentTaskKind, DeploymentTaskResource, InstallDependenciesResult,
     RemoteSelectedPaths, SnowLumaLinuxPackage,
 };
-use ncd_host::{Host, Locality};
+use ncd_host::{Host, Locality, Os};
 use ncd_server::ServerManager;
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::JoinHandle;
@@ -34,6 +35,7 @@ use crate::components::action_policy::{
 };
 use crate::components::active_tasks::ActiveTasks;
 use crate::components::factory::{AppComponentHint, BuildComponentCtx, build_component_for_host};
+use crate::components::graph::catalog_version_reqs_for;
 use crate::components::resolver::{ResolveCtx, resolve_dependencies, resolve_runtime_readiness};
 use crate::components::system_package::{
     qq_install_failure_message, run_qq_dependency_install_for_command, run_system_package_task,
@@ -47,7 +49,7 @@ use crate::release::read_cached_release_snapshot;
 use crate::remote::inventory::RemoteInventoryService;
 
 /// 实例化组件所需的全部输入,owned,能跨 task 边界。由 ComponentExecutor::build_inputs 收集
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ComponentBuildInputs {
     pub data_root: PathBuf,
     pub remote_home: Option<String>,
@@ -61,6 +63,8 @@ pub struct ComponentBuildInputs {
     pub snowluma_node_path: Option<String>,
     /// 应用端实例（Karin 等）的目录 / 端口；组件页动作为 None
     pub app_component: Option<AppComponentHint>,
+    /// 与 AppManager 同一份注册表,应用端组件的适配器从这里取
+    pub registry: Arc<AppFrameworkRegistry>,
 }
 
 impl ComponentBuildInputs {
@@ -79,6 +83,7 @@ impl ComponentBuildInputs {
                 snowluma_linux_package: self.snowluma_linux_package,
                 snowluma_node_path: self.snowluma_node_path.as_deref(),
                 app_component: self.app_component.as_ref(),
+                registry: &self.registry,
             },
         )
     }
@@ -107,6 +112,7 @@ impl ComponentBuildInputs {
                 host,
                 phase,
                 build: &build,
+                registry: &self.registry,
             },
         )
         .await)
@@ -126,6 +132,7 @@ impl ComponentBuildInputs {
                 host,
                 phase: RequirementPhase::Run,
                 build: &build,
+                registry: &self.registry,
             },
         )
         .await)
@@ -154,6 +161,8 @@ pub struct ComponentExecutorDeps {
     pub local_snowluma_version: Option<String>,
     /// Desktop 产品版本(构建时注入),DesktopSelf 组件用
     pub desktop_product_version: String,
+    /// 和 AppManager 共用的应用端注册表
+    pub registry: Arc<AppFrameworkRegistry>,
 }
 
 /// 组件页所有会排任务的动作都从这里走;启动时建一份,AppState 与 Bot 启动预检共用
@@ -168,6 +177,7 @@ pub struct ComponentExecutor {
     data_root: PathBuf,
     local_snowluma_version: Option<String>,
     desktop_product_version: String,
+    registry: Arc<AppFrameworkRegistry>,
 }
 
 impl ComponentExecutor {
@@ -180,6 +190,7 @@ impl ComponentExecutor {
             data_root,
             local_snowluma_version,
             desktop_product_version,
+            registry,
         } = deps;
         Self {
             deployment_tasks,
@@ -191,7 +202,18 @@ impl ComponentExecutor {
             data_root,
             local_snowluma_version,
             desktop_product_version,
+            registry,
         }
+    }
+
+    /// 依赖图里所有会用到 `target` 的组件(含已注册应用端)对它的版本约束
+    pub fn catalog_version_reqs_for(
+        &self,
+        target: ComponentId,
+        os: Os,
+        locality: Locality,
+    ) -> Vec<VersionReq> {
+        catalog_version_reqs_for(&self.registry, target, os, locality)
     }
 
     pub fn inventory(&self) -> &RemoteInventoryService {
@@ -233,6 +255,7 @@ impl ComponentExecutor {
             snowluma_linux_package,
             snowluma_node_path,
             app_component: None,
+            registry: Arc::clone(&self.registry),
         }
     }
 

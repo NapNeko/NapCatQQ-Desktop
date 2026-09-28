@@ -176,6 +176,7 @@ pub(crate) fn test_components(
             data_root: root.to_path_buf(),
             local_snowluma_version: None,
             desktop_product_version: crate::desktop_update::product_version_str().to_string(),
+            registry: Arc::new(ncd_runtime::AppFrameworkRegistry::with_builtin()),
         },
     ))
 }
@@ -232,7 +233,9 @@ pub async fn probe_local_node_candidates(
         settings.snowluma_node_path.clone()
     };
     // 版本约束来自本机上要用 Node 的组件声明,不在这里写死
-    let accept = ncd_runtime::catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
+    let accept = state
+        .components
+        .catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
     let candidates = ncd_component::nodejs::probe_local_system_nodes(
         &host,
         Some(&comp_node),
@@ -244,10 +247,15 @@ pub async fn probe_local_node_candidates(
 }
 
 #[tauri::command]
-pub async fn probe_node_binary_version(path: String) -> Result<NodeProbeResult, String> {
+pub async fn probe_node_binary_version(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<NodeProbeResult, String> {
     let host = LocalWindowsHost::new();
     let hp = HostPath::from_windows(path.trim());
-    let accept = ncd_runtime::catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
+    let accept = state
+        .components
+        .catalog_version_reqs_for(ComponentId::NodeJs, host.os(), host.locality());
     match ncd_component::nodejs::probe_node_raw_version(&host, &hp).await {
         Ok(Some(raw_ver)) => {
             let is_valid = ncd_component::VersionReq::all_match(&accept, &raw_ver);

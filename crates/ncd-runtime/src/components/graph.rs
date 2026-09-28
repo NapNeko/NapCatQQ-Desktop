@@ -42,9 +42,9 @@ const HOST_GRAPH_COMPONENT_IDS: [ComponentId; 8] = [
 ];
 
 /// 主机组件 + 已注册应用端。接新框架只改注册表，不用改这张名单。
-pub fn graph_component_ids() -> Vec<ComponentId> {
+pub fn graph_component_ids(registry: &AppFrameworkRegistry) -> Vec<ComponentId> {
     let mut ids = HOST_GRAPH_COMPONENT_IDS.to_vec();
-    for m in AppFrameworkRegistry::with_builtin().manifests() {
+    for m in registry.manifests() {
         if let Some(id) = ComponentId::parse(&m.component_id) {
             if !ids.contains(&id) {
                 ids.push(id);
@@ -54,16 +54,21 @@ pub fn graph_component_ids() -> Vec<ComponentId> {
     ids
 }
 
-/// 只为调 requirements() 的占位实例;路径都是假的,别拿去 detect / install
-pub fn graph_component(id: ComponentId, package: SnowLumaLinuxPackage) -> Arc<dyn Component> {
+/// 只为调 requirements() 的占位实例;路径都是假的,别拿去 detect / install。
+/// 没注册的应用端 / 漏写的主机组件给 Err,调用方跳过这棵子树,不拖垮整张图
+pub fn graph_component(
+    registry: &AppFrameworkRegistry,
+    id: ComponentId,
+    package: SnowLumaLinuxPackage,
+) -> Result<Arc<dyn Component>, String> {
     if id.is_app_framework() {
-        return AppFrameworkRegistry::with_builtin()
+        return registry
             .by_component_id(id.as_str())
-            .expect("app framework ComponentId must be registered")
-            .component(&graph_placeholder_spec());
+            .map(|adapter| adapter.component(&graph_placeholder_spec()))
+            .ok_or_else(|| format!("应用端框架未注册: {}", id.as_str()));
     }
     let x = HostPath::from_posix("/x");
-    match id {
+    let component: Arc<dyn Component> = match id {
         ComponentId::NapCat => Arc::new(NapCatComponent::new(x)),
         ComponentId::SnowLuma => Arc::new(
             SnowLumaComponent::new(x, "https://example.invalid/x.tar.gz").with_package(package),
@@ -74,8 +79,9 @@ pub fn graph_component(id: ComponentId, package: SnowLumaLinuxPackage) -> Arc<dy
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
         ComponentId::NcdWatch => Arc::new(NcdWatchComponent::new(None)),
         ComponentId::DesktopSelf => Arc::new(DesktopSelfComponent::new("0.0.0", x)),
-        _ => panic!("graph_component missing host arm for {}", id.as_str()),
-    }
+        _ => return Err(format!("依赖图缺 {} 的占位实例", id.as_str())),
+    };
+    Ok(component)
 }
 
 /// 递归闭包里的一个节点(未探测)
@@ -104,6 +110,7 @@ impl ClosureNode {
 /// root 的依赖闭包,拓扑序(被依赖者在前),同一目标合并。root 自己不在里面。
 /// 依赖组件用占位实例展开(依赖方永远不是 SnowLuma,变体只影响 root)
 pub fn requirement_closure(
+    registry: &AppFrameworkRegistry,
     root: &dyn Component,
     os: Os,
     locality: Locality,
@@ -111,11 +118,12 @@ pub fn requirement_closure(
 ) -> Vec<ClosureNode> {
     let mut out: Vec<ClosureNode> = Vec::new();
     let mut visiting: Vec<ComponentId> = vec![root.id()];
-    walk(root, os, locality, phase, &mut visiting, &mut out);
+    walk(registry, root, os, locality, phase, &mut visiting, &mut out);
     out
 }
 
 fn walk(
+    registry: &AppFrameworkRegistry,
     from: &dyn Component,
     os: Os,
     locality: Locality,
@@ -137,10 +145,15 @@ fn walk(
             if visiting.contains(&child_id) {
                 continue;
             }
-            visiting.push(child_id);
-            let child = graph_component(child_id, SnowLumaLinuxPackage::Full);
-            walk(child.as_ref(), os, locality, phase, visiting, out);
-            visiting.pop();
+            // 实例化不了只是不展开它自己的依赖,节点照常入图交给 resolver 探测
+            match graph_component(registry, child_id, SnowLumaLinuxPackage::Full) {
+                Ok(child) => {
+                    visiting.push(child_id);
+                    walk(registry, child.as_ref(), os, locality, phase, visiting, out);
+                    visiting.pop();
+                }
+                Err(err) => tracing::warn!(error = %err, "dependency subtree skipped"),
+            }
         }
         let mut node = ClosureNode {
             target,
@@ -154,14 +167,22 @@ fn walk(
 
 /// 该 (os, locality) 下 catalog 里所有组件(两种 SnowLuma 变体都算)对 `target`
 /// 的版本约束。被依赖方(Node)自己不知道范围,单独探测它时用这个注入
-pub fn catalog_version_reqs_for(target: ComponentId, os: Os, locality: Locality) -> Vec<VersionReq> {
+pub fn catalog_version_reqs_for(
+    registry: &AppFrameworkRegistry,
+    target: ComponentId,
+    os: Os,
+    locality: Locality,
+) -> Vec<VersionReq> {
     let mut reqs = Vec::new();
     for package in [SnowLumaLinuxPackage::Full, SnowLumaLinuxPackage::Lite] {
-        for id in graph_component_ids() {
+        for id in graph_component_ids(registry) {
             if id == target {
                 continue;
             }
-            for req in graph_component(id, package).requirements(os, locality) {
+            let Ok(consumer) = graph_component(registry, id, package) else {
+                continue;
+            };
+            for req in consumer.requirements(os, locality) {
                 if req.component_id() == Some(target) {
                     if let Some(v) = req.version_req() {
                         if !reqs.contains(v) {
@@ -177,7 +198,7 @@ pub fn catalog_version_reqs_for(target: ComponentId, os: Os, locality: Locality)
 
 /// 整张图的文本快照:组件 × 目标 × 变体 → 直接依赖边。测试用黄金文件,
 /// 改任何组件的 requirements() 都会让它 diff 出来
-pub fn render_dependency_graph() -> String {
+pub fn render_dependency_graph(registry: &AppFrameworkRegistry) -> String {
     let targets = [
         (Os::Windows, Locality::Local),
         (Os::Linux, Locality::Local),
@@ -185,14 +206,17 @@ pub fn render_dependency_graph() -> String {
     ];
     let mut out = String::new();
     for (os, locality) in targets {
-        for id in graph_component_ids() {
+        for id in graph_component_ids(registry) {
             let variants: &[SnowLumaLinuxPackage] = if id == ComponentId::SnowLuma {
                 &[SnowLumaLinuxPackage::Full, SnowLumaLinuxPackage::Lite]
             } else {
                 &[SnowLumaLinuxPackage::Full]
             };
             for package in variants {
-                let comp = graph_component(id, *package);
+                // 缺占位实例的组件直接不出现在快照里,黄金对比会把它暴露出来
+                let Ok(comp) = graph_component(registry, id, *package) else {
+                    continue;
+                };
                 if !comp.supported_targets().contains(&(os, locality)) {
                     continue;
                 }
@@ -315,7 +339,7 @@ Linux/Remote nonebot2
 
     #[test]
     fn dependency_graph_matches_golden_snapshot() {
-        let rendered = render_dependency_graph();
+        let rendered = render_dependency_graph(&AppFrameworkRegistry::with_builtin());
         assert!(
             rendered == GOLDEN,
             "dependency graph changed; update GOLDEN if intended.\n--- rendered ---\n{rendered}\n--- golden ---\n{GOLDEN}"
@@ -324,8 +348,11 @@ Linux/Remote nonebot2
 
     #[test]
     fn closure_is_topological_and_merges_shared_targets() {
-        let root = graph_component(ComponentId::SnowLuma, SnowLumaLinuxPackage::Lite);
+        let registry = AppFrameworkRegistry::with_builtin();
+        let root =
+            graph_component(&registry, ComponentId::SnowLuma, SnowLumaLinuxPackage::Lite).unwrap();
         let nodes = requirement_closure(
+            &registry,
             root.as_ref(),
             Os::Linux,
             Locality::Remote,
@@ -352,8 +379,11 @@ Linux/Remote nonebot2
 
     #[test]
     fn run_phase_drops_install_only_edges() {
-        let root = graph_component(ComponentId::SnowLuma, SnowLumaLinuxPackage::Lite);
+        let registry = AppFrameworkRegistry::with_builtin();
+        let root =
+            graph_component(&registry, ComponentId::SnowLuma, SnowLumaLinuxPackage::Lite).unwrap();
         let nodes = requirement_closure(
+            &registry,
             root.as_ref(),
             Os::Linux,
             Locality::Remote,
@@ -366,7 +396,9 @@ Linux/Remote nonebot2
     #[test]
     fn node_constraints_come_from_consumers_not_node_itself() {
         // 先按 full 包遍历（Karin 的约束先进），再 lite 包（SnowLuma lite 才要 Node）
-        let reqs = catalog_version_reqs_for(ComponentId::NodeJs, Os::Windows, Locality::Local);
+        let registry = AppFrameworkRegistry::with_builtin();
+        let reqs =
+            catalog_version_reqs_for(&registry, ComponentId::NodeJs, Os::Windows, Locality::Local);
         assert_eq!(
             reqs,
             vec![
@@ -374,17 +406,20 @@ Linux/Remote nonebot2
                 VersionReq::semver(SnowLumaComponent::NODE_VERSION_RANGE),
             ]
         );
-        assert!(catalog_version_reqs_for(ComponentId::Qq, Os::Linux, Locality::Remote).is_empty());
+        assert!(
+            catalog_version_reqs_for(&registry, ComponentId::Qq, Os::Linux, Locality::Remote)
+                .is_empty()
+        );
     }
 
     #[test]
     fn graph_ids_follow_host_catalog_then_registry() {
-        use ncd_appframework::AppFrameworkRegistry;
-        let ids = graph_component_ids();
-        for m in AppFrameworkRegistry::with_builtin().manifests() {
+        let registry = AppFrameworkRegistry::with_builtin();
+        let ids = graph_component_ids(&registry);
+        for m in registry.manifests() {
             let id = ComponentId::parse(&m.component_id).expect("framework component_id");
             assert!(ids.contains(&id), "{} 必须进依赖图，不能靠手写名单", m.component_id);
-            let _ = graph_component(id, SnowLumaLinuxPackage::Full);
+            assert!(graph_component(&registry, id, SnowLumaLinuxPackage::Full).is_ok());
         }
         let host: Vec<ComponentId> = ids
             .iter()
@@ -408,12 +443,38 @@ Linux/Remote nonebot2
 
     #[test]
     fn uv_constraints_come_from_nonebot2_only() {
-        let reqs = catalog_version_reqs_for(ComponentId::Uv, Os::Linux, Locality::Remote);
+        let registry = AppFrameworkRegistry::with_builtin();
+        let reqs = catalog_version_reqs_for(&registry, ComponentId::Uv, Os::Linux, Locality::Remote);
         assert_eq!(reqs, vec![VersionReq::semver(">=0.4")]);
         // Python 系框架不拖 Node，Node 系框架不拖 uv
-        let nb2 = graph_component(ComponentId::NoneBot2, SnowLumaLinuxPackage::Full);
-        let nodes = requirement_closure(nb2.as_ref(), Os::Linux, Locality::Remote, RequirementPhase::Install);
+        let nb2 =
+            graph_component(&registry, ComponentId::NoneBot2, SnowLumaLinuxPackage::Full).unwrap();
+        let nodes = requirement_closure(
+            &registry,
+            nb2.as_ref(),
+            Os::Linux,
+            Locality::Remote,
+            RequirementPhase::Install,
+        );
         let labels: Vec<String> = nodes.iter().map(|n| n.target.label()).collect();
         assert_eq!(labels, vec!["tar", "uv"]);
+    }
+
+    #[test]
+    fn unregistered_framework_is_an_error_not_a_panic() {
+        let empty = AppFrameworkRegistry::new();
+        assert!(graph_component(&empty, ComponentId::Karin, SnowLumaLinuxPackage::Full).is_err());
+        assert!(!graph_component_ids(&empty).contains(&ComponentId::Karin));
+        // 主机组件不靠注册表,空表也照常展开
+        let root =
+            graph_component(&empty, ComponentId::SnowLuma, SnowLumaLinuxPackage::Lite).unwrap();
+        let nodes = requirement_closure(
+            &empty,
+            root.as_ref(),
+            Os::Linux,
+            Locality::Remote,
+            RequirementPhase::Run,
+        );
+        assert_eq!(nodes.len(), 4);
     }
 }
