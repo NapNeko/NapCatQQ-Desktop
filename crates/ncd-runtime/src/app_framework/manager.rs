@@ -36,17 +36,20 @@ use ncd_appframework::{
     MaiBotMcpStatus, MaiBotMcpTest, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
     MaiBotPromptTarget, MaiBotProviderCheck, MaiBotProviderModel, MaiBotProviderSource,
     MaiBotRuntimeApi, MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotSession, MaiBotStatsSummary,
-    KarinPluginMarketEntry, PluginLogSink, app_file_basename, restore_adopted_files,
-    remove_ncd_debris, AdoptRestoreScope,
+    KarinPluginMarketEntry, PluginLogSink, app_file_basename, join_webui_url,
+    restore_adopted_files, remove_ncd_debris, AdoptRestoreScope,
 };
-use ncd_component::{DetectOutcome, LaunchArgs};
+use ncd_component::{ComponentId, DetectOutcome, LaunchArgs};
+use ncd_deploy::StepKind;
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkId, AppFrameworkManifest, AppInstance,
-    AppInstanceId, AppInstanceState, AppLinkRecord, AppLinkTopology, AppPlacement, AppPluginAction,
+    AppInstanceId, AppInstanceState, AppInstanceWebUi, AppLinkRecord, AppLinkTopology,
+    AppPlacement, AppPluginAction,
     AppInstanceOrigin, AppPendingTerms, AppPluginConfigSchema, AppProjectProbe, AppStoreResource,
     AppWebUiAccount,
     AppWebUiAuthKind, BotConfig, BotId,
-    CreateAppInstanceRequest, DeploymentType, DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID,
+    CreateAppInstanceRequest, DeploymentTaskKind, DeploymentTaskResource, DeploymentType,
+    DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID,
     REMOTE_HOST_ID_PREFIX,
     OneBotLinkEndpoint, OneBotLinkMode, OneBotLinkPlan, RuntimeTarget, app_link_connection_name,
     classify_app_link, host_id_of_runtime_target, is_app_link_connection_name, parse_ws_url,
@@ -68,10 +71,12 @@ use super::listen_port::{
 use super::native_runtime::{self, AppLaunchSpec, NativeAppRuntime};
 use super::resident_link::{self, ResidentForward, ResidentLinkSpec};
 // 子模块里的 `super::supervisor::…` 这类路径经由这几条落到 app_framework 下的同名模块
-use super::{download, existing_link, log_tail, plugin_market, supervisor};
+use super::{download, existing_link, log_tail, plugin_market, plugin_task, supervisor};
 use crate::bot_manager::BotManager;
-use crate::components::{AppComponentHint, data_root_to_host_path};
-use crate::deploy::DeploymentTaskManager;
+use crate::components::{
+    AppComponentHint, ComponentActionRequest, ComponentExecutor, data_root_to_host_path,
+};
+use crate::deploy::{DeploymentTaskManager, DeploymentTaskRequest};
 use crate::events::{BroadcastEventBus, DomainEvent};
 use crate::metrics::now_ms;
 
@@ -333,8 +338,8 @@ impl AppManager {
         self.store.require(id).await
     }
 
-    /// 给 L4 喂 ComponentExecutor 的实例级输入
-    pub fn component_hint(&self, instance: &AppInstance) -> AppComponentHint {
+    /// 安装时喂给组件执行器的实例级输入
+    fn component_hint(&self, instance: &AppInstance) -> AppComponentHint {
         AppComponentHint {
             instance_id: instance.id.as_str().to_string(),
             install_dir: HostPath::from_posix(&instance.install_dir),
@@ -347,6 +352,7 @@ impl AppManager {
         }
     }
 
+    /// 桌面端注入的解析器遇到还没连上的远端会现连一次（和组件页共用单飞连接），调用前不用另外预热
     async fn resolve_host(&self, host_id: &str) -> Result<Arc<dyn Host>, AppFrameworkError> {
         let target = if host_id == LOCAL_HOST_ID {
             RuntimeTarget::Local

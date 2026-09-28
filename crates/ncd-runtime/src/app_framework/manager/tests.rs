@@ -1337,6 +1337,37 @@ mod write_config {
         assert_eq!(f.manager.webui_auth_key(&f.id).await, "Ncd_new");
     }
 
+    // 插件任务的标题取框架清单里的名字，去重键按实例、资源、名字、动作拼
+    #[tokio::test]
+    async fn store_op_task_title_and_dedupe_key() {
+        let f = fixture(false).await;
+        // 没装好的实例：任务一跑就停在「尚未安装」，不会去拉插件目录
+        f.manager
+            .store
+            .update(&f.id, |i| i.state = AppInstanceState::NotInstalled)
+            .await
+            .unwrap();
+        let tasks = DeploymentTaskManager::new((*f.manager.event_bus).clone());
+        let task_id = f
+            .manager
+            .submit_store_op(
+                &f.id,
+                "karin-plugin-foo",
+                AppPluginAction::Uninstall,
+                AppStoreResource::Plugin,
+                &tasks,
+            )
+            .await
+            .unwrap();
+        let list = tasks.list().await;
+        let task = list.tasks.iter().find(|t| t.task_id == task_id).unwrap();
+        assert_eq!(task.title, "Karin · 卸载插件 karin-plugin-foo");
+        assert_eq!(
+            task.dedupe_key.as_deref(),
+            Some("app-plugin:k1:plugin:karin-plugin-foo:uninstall")
+        );
+    }
+
     // 落盘读不到账号、桌面端也没记用户名：AstrBot 用它首启写的默认用户名，没这个约定的框架给空
     #[tokio::test]
     async fn webui_login_username_falls_back_to_framework_default() {

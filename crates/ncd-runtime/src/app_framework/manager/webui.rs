@@ -115,6 +115,27 @@ impl AppManager {
             .await
     }
 
+    /// 桌面端要打开的 WebUI：地址一律是本机回环（远端经 SSH 隧道），`path` 接在后面进到指定页；
+    /// 连同登录密钥和账号一起给，前端好代填
+    pub async fn open_webui(
+        &self,
+        id: &AppInstanceId,
+        path: Option<&str>,
+    ) -> Result<AppInstanceWebUi, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let port = self.desktop_webui_loopback_port(&instance).await?;
+        let mut view = instance.clone();
+        view.port = port;
+        let base = self
+            .webui_url(&view, "127.0.0.1")
+            .ok_or_else(|| AppFrameworkError::Validation("该应用端没有 WebUI".into()))?;
+        Ok(AppInstanceWebUi {
+            url: join_webui_url(&base, path),
+            auth_key: self.webui_auth_key(&instance.id).await,
+            account: self.webui_account(&instance).await,
+        })
+    }
+
     /// 读盘拿到的 WebUI 登录密钥；配置读失败或没有密钥时返回空串。
     pub async fn webui_auth_key(&self, id: &AppInstanceId) -> String {
         match self.store.require(id).await {

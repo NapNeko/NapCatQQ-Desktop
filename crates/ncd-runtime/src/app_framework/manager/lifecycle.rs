@@ -241,6 +241,46 @@ impl AppManager {
         self.adopt_existing_link(&current.id).await
     }
 
+    /// 安装 / 重装：按实例目录把应用端组件交给组件执行器（缺的依赖一起排），再盯任务结束；返回 task id
+    pub async fn install_instance(
+        self: &Arc<Self>,
+        id: &AppInstanceId,
+        task_id: Option<String>,
+        components: &ComponentExecutor,
+        tasks: DeploymentTaskManager,
+    ) -> Result<String, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let component_id = self
+            .registry
+            .adapter(&instance.framework_id)
+            .ok()
+            .and_then(|adapter| ComponentId::parse(&adapter.manifest().component_id))
+            .ok_or_else(|| {
+                AppFrameworkError::Validation(format!(
+                    "应用端框架未注册组件: {}",
+                    instance.framework_id
+                ))
+            })?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        let mut inputs = components
+            .inputs_for(&instance.host_id, host.as_ref(), None)
+            .await;
+        inputs.app_component = Some(self.component_hint(&instance));
+        let submitted = components
+            .submit(ComponentActionRequest {
+                component_id,
+                host_id: instance.host_id.clone(),
+                kind: StepKind::EnsureInstalled,
+                task_id: task_id.filter(|s| !s.trim().is_empty()),
+                host,
+                inputs,
+            })
+            .await
+            .map_err(AppFrameworkError::Validation)?;
+        self.track_install(id, submitted.clone(), tasks).await?;
+        Ok(submitted)
+    }
+
     /// 安装任务已提交：置 Installing 并盯任务结束。
     ///
     /// 什么时候算装完只听任务的：事件为主，事件漏了按 task id 查队列兜底。不拿 detect 当信号，

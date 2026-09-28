@@ -10,6 +10,15 @@ use ncd_domain::{
 use super::manager::AppManager;
 use crate::deploy::tasks::{DeploymentTaskContext, DeploymentTaskRunResult};
 
+/// 任务标题和进度里用的动词
+pub(super) fn action_verb(action: AppPluginAction) -> &'static str {
+    match action {
+        AppPluginAction::Install => "安装",
+        AppPluginAction::Update => "更新",
+        AppPluginAction::Uninstall => "卸载",
+    }
+}
+
 pub async fn run_app_plugin_task(
     app_manager: Arc<AppManager>,
     instance_id: AppInstanceId,
@@ -21,11 +30,7 @@ pub async fn run_app_plugin_task(
     if ctx.is_cancelled() {
         return DeploymentTaskRunResult::failed("已取消");
     }
-    let verb = match action {
-        AppPluginAction::Install => "安装",
-        AppPluginAction::Update => "更新",
-        AppPluginAction::Uninstall => "卸载",
-    };
+    let verb = action_verb(action);
     ctx.push_progress(ProgressEvent::new(ProgressKind::Started { total_steps: 1 }))
         .await;
     ctx.push_progress(ProgressEvent::new(ProgressKind::StepBegin {

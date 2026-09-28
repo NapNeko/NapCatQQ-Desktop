@@ -98,6 +98,70 @@ impl AppManager {
             .await
     }
 
+    /// 装更卸排成部署任务，返回 task id；同一实例同一项的同一动作还在排着时，队列按去重键复用那个任务
+    pub async fn submit_store_op(
+        self: &Arc<Self>,
+        id: &AppInstanceId,
+        name: &str,
+        action: AppPluginAction,
+        resource: AppStoreResource,
+        tasks: &DeploymentTaskManager,
+    ) -> Result<String, AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        // 先连上主机：连不上当场报错，不排一个注定失败的任务
+        self.resolve_host(&instance.host_id).await?;
+        let framework = self
+            .registry
+            .adapter(&instance.framework_id)
+            .map(|adapter| adapter.manifest().display_name.clone())
+            .unwrap_or_else(|_| instance.framework_id.as_str().to_string());
+        let action_key = match action {
+            AppPluginAction::Install => "install",
+            AppPluginAction::Update => "update",
+            AppPluginAction::Uninstall => "uninstall",
+        };
+        let (kind_label, resource_key) = match resource {
+            AppStoreResource::Adapter => ("适配器", "adapter"),
+            AppStoreResource::Plugin => ("插件", "plugin"),
+        };
+        let verb = plugin_task::action_verb(action);
+        let app_manager = Arc::clone(self);
+        let run_id = instance.id.clone();
+        let run_name = name.to_string();
+        let submitted = tasks
+            .submit(DeploymentTaskRequest {
+                task_id: uuid::Uuid::new_v4().to_string(),
+                kind: DeploymentTaskKind::AppPlugin {
+                    instance_id: instance.id.as_str().to_string(),
+                    plugin_name: name.to_string(),
+                    action,
+                    resource,
+                },
+                host_id: instance.host_id.clone(),
+                title: format!("{framework} · {verb}{kind_label} {name}"),
+                resources: vec![DeploymentTaskResource::InstallTarget {
+                    host_id: instance.host_id.clone(),
+                    target: instance.install_dir.clone(),
+                }],
+                depends_on: vec![],
+                dedupe_key: Some(format!(
+                    "app-plugin:{}:{resource_key}:{name}:{action_key}",
+                    instance.id.as_str()
+                )),
+                cancellable: true,
+                runner: Box::new(move |ctx| {
+                    Box::pin(async move {
+                        plugin_task::run_app_plugin_task(
+                            app_manager, run_id, run_name, action, resource, ctx,
+                        )
+                        .await
+                    })
+                }),
+            })
+            .await;
+        Ok(submitted)
+    }
+
     pub async fn run_store_op(
         &self,
         id: &AppInstanceId,

@@ -13,8 +13,8 @@ use ncd_deploy::StepKind;
 use ncd_domain::{NodeEnvironmentCandidate, NodeProbeResult};
 use ncd_host::{Host, HostPath, local::LocalWindowsHost};
 use ncd_runtime::{
-    ComponentActionRequest, ComponentBuildInputs, ComponentExecutor, RemoteHostProbe,
-    RemoteSelectedPaths, SnowLumaLinuxPackage, component_catalog,
+    ComponentActionRequest, ComponentExecutor, RemoteHostProbe, RemoteSelectedPaths,
+    SnowLumaLinuxPackage, component_catalog,
 };
 use tauri::State;
 
@@ -141,19 +141,6 @@ pub(crate) async fn cached_host_probe(
         .components
         .inventory()
         .host_probe_or_default(host_id, host)
-        .await
-}
-
-pub(crate) async fn build_inputs(
-    state: &AppState,
-    host: &dyn Host,
-    probe: &RemoteHostProbe,
-    selected: Option<RemoteSelectedPaths>,
-    snowluma_linux_package: Option<SnowLumaLinuxPackage>,
-) -> ComponentBuildInputs {
-    state
-        .components
-        .build_inputs(host, probe, selected, snowluma_linux_package)
         .await
 }
 
