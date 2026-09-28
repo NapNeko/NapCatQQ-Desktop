@@ -112,7 +112,7 @@ impl DockerDeployment {
                 "无法探测远端 HOME，拒绝回退到临时目录部署 Docker bot".into(),
             )
         })?;
-        Ok(format!("{home}/.napcat-bots/{name}"))
+        Ok(ncd_domain::remote_paths::docker_bot_project_dir(&home, name))
     }
 
     fn compose_secret_for(&self, backend: BackendType) -> Result<String, DeploymentError> {
@@ -361,14 +361,8 @@ impl Deployment for DockerDeployment {
         let project_dir = Self::project_dir(host, &name).await?;
 
         // 上次失败/改口味可能留下同名容器;compose orphan 也可能是旧服务名
-        let _ = cli.remove(&name).await;
-        let legacy_nc = format!("ncbot-{}", config.bot.qq_id);
-        let legacy_sl = format!("slbot-{}", config.bot.qq_id);
-        if legacy_nc != name {
-            let _ = cli.remove(&legacy_nc).await;
-        }
-        if legacy_sl != name {
-            let _ = cli.remove(&legacy_sl).await;
+        for stale in bot_docker_container_candidates(config.bot.backend_type, config.bot.qq_id) {
+            let _ = cli.remove(&stale).await;
         }
 
         cli.compose_up(&project_dir).await.map_err(|e| {
@@ -412,7 +406,7 @@ impl Deployment for DockerDeployment {
             .await
             .ok()
             .flatten()
-            .unwrap_or_else(|| format!("ncbot-{}", bot_id.as_str()));
+            .unwrap_or_else(|| container_name_for(BackendType::NapCat, bot_id.as_str()));
         // 归到 Failed 状态(带原因)让上层显示,而不是抛错中断轮询
         match cli.list_containers().await {
             Ok(containers) => Ok(containers
@@ -484,12 +478,31 @@ impl Deployment for DockerDeployment {
     }
 }
 
+fn container_name_for(backend: BackendType, qq: impl std::fmt::Display) -> String {
+    match backend {
+        BackendType::SnowLuma => format!("slbot-{qq}"),
+        BackendType::NapCat => format!("ncbot-{qq}"),
+    }
+}
+
 /// NapCat ncbot-<qq>,SnowLuma slbot-<qq>
 pub fn bot_docker_container_name(backend: BackendType, qq_id: u64) -> String {
-    match backend {
-        BackendType::SnowLuma => format!("slbot-{qq_id}"),
-        BackendType::NapCat => format!("ncbot-{qq_id}"),
-    }
+    container_name_for(backend, qq_id)
+}
+
+/// 这个 QQ 的 bot 容器可能叫的名字,按口味当前的名字排前面
+///
+/// SnowLuma 旧版本也起过 ncbot-<qq>,改过口味的 bot 也会留下另一个名字的容器,
+/// 按名字找容器、清旧容器的地方都得两个都认
+pub fn bot_docker_container_candidates(
+    backend: BackendType,
+    qq: impl std::fmt::Display,
+) -> [String; 2] {
+    let other = match backend {
+        BackendType::NapCat => BackendType::SnowLuma,
+        BackendType::SnowLuma => BackendType::NapCat,
+    };
+    [container_name_for(backend, &qq), container_name_for(other, &qq)]
 }
 
 /// 按 qq 在远端查找实际 bot 容器名。
@@ -510,8 +523,8 @@ async fn resolve_bot_container_name_with_cli(
     cli: &DockerCli<'_>,
     bot_id: &BotId,
 ) -> Result<Option<String>, DeploymentError> {
-    let qq = bot_id.as_str();
-    let candidates = [format!("slbot-{qq}"), format!("ncbot-{qq}")];
+    // 这里不知道口味,slbot 在前:两个都在多半是 SnowLuma 留着旧名字的容器,新名字才是在用的
+    let candidates = bot_docker_container_candidates(BackendType::SnowLuma, bot_id.as_str());
     let containers = cli
         .list_containers()
         .await
@@ -834,6 +847,18 @@ mod tests {
         assert_eq!(
             DockerDeployment::build_spec(&sl_config).container_name,
             "slbot-10001"
+        );
+    }
+
+    #[test]
+    fn container_candidates_put_current_flavor_first() {
+        assert_eq!(
+            bot_docker_container_candidates(BackendType::NapCat, 10001u64),
+            ["ncbot-10001", "slbot-10001"]
+        );
+        assert_eq!(
+            bot_docker_container_candidates(BackendType::SnowLuma, "10001"),
+            ["slbot-10001", "ncbot-10001"]
         );
     }
 

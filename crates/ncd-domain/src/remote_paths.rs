@@ -1,7 +1,7 @@
-//! 远端 Linux Native 路径模板与派生。
+//! 远端 Linux 路径模板与派生：Native 安装布局，以及 Docker 部署的 compose 项目目录。
 //!
-//! 启动、安装、入口补丁只许从这里拼 POSIX 路径。禁止在 backend / 工厂再写
-//! `{home}/Napcat`。本模块零 I/O。
+//! 启动、安装、入口补丁、终端只许从这里拼 POSIX 路径。禁止在 backend / 工厂再写
+//! `{home}/Napcat`、`{home}/.napcat-bots`。本模块零 I/O。
 
 use crate::remote_inventory::RemoteSelectedPaths;
 use crate::snowluma_linux_package::SnowLumaLinuxPackage;
@@ -14,6 +14,8 @@ pub const REL_NAPCAT_MJS: &str = "opt/QQ/resources/app/app_launcher/napcat/napca
 pub const REL_NAPCAT_ROOT: &str = "opt/QQ/resources/app/app_launcher/napcat";
 pub const SYSTEM_QQ_BIN: &str = "/opt/QQ/qq";
 pub const SYSTEM_SNOWLUMA_DIR: &str = "/opt/snowluma";
+/// Docker 部署的 compose 项目都在 `$HOME` 下这一层，一个容器一个子目录
+pub const REL_DOCKER_BOT_PROJECTS: &str = ".napcat-bots";
 
 /// 从 `selected` 展开的具体文件路径（不落盘）
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,7 +199,14 @@ pub fn qq_bin_candidates(home: &str) -> Vec<String> {
     out
 }
 
-/// 仅组件**安装**在 selected 缺字段时使用。启动禁止调用。
+/// Docker 部署的 compose 项目目录。部署、导入迁移、终端进部署目录都按这个找，
+/// 各拼各的就会有一处对不上
+pub fn docker_bot_project_dir(home: &str, container_name: &str) -> String {
+    join_under(&join_under(home, REL_DOCKER_BOT_PROJECTS), container_name)
+}
+
+/// selected 缺字段时按桌面端的默认布局补：组件安装往这里装，终端没探测过时往这里进。
+/// 启动禁止调用，缺路径就该报错让用户去发现，不能悄悄跑到默认位置。
 pub fn desktop_default_install_paths(home: &str) -> Result<RemoteSelectedPaths, String> {
     let home = normalize_posix(home.trim());
     if home.is_empty() {
@@ -488,6 +497,19 @@ mod tests {
         let err = require_snowluma_dir(&selected).unwrap_err();
         assert!(err.contains("home=/root"));
         assert!(err.contains("SnowLuma"));
+    }
+
+    #[test]
+    fn docker_project_dir_sits_under_home() {
+        assert_eq!(
+            docker_bot_project_dir("/home/u", "ncbot-10001"),
+            "/home/u/.napcat-bots/ncbot-10001"
+        );
+        assert_eq!(
+            docker_bot_project_dir("/home/u/", "slbot-1"),
+            "/home/u/.napcat-bots/slbot-1"
+        );
+        assert_eq!(docker_bot_project_dir("/", "ncbot-1"), "/.napcat-bots/ncbot-1");
     }
 
     #[test]

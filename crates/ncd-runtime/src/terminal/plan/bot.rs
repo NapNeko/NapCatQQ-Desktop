@@ -1,6 +1,10 @@
 //! 协议 Bot 的终端：本机进运行目录，远端原生进运行目录，Docker 部署进容器或宿主机上的部署目录
 
-use ncd_domain::{BackendType, BotId, DeploymentType, RuntimeTarget, TerminalOpenRequest, TerminalSnippet};
+use ncd_domain::remote_paths::docker_bot_project_dir;
+use ncd_domain::{
+    BackendType, BotId, DeploymentType, RuntimeTarget, TerminalOpenRequest, TerminalSnippet,
+    derive_remote_linux_paths, desktop_default_install_paths,
+};
 
 use super::{
     DesktopTerminalPlanner, RemoteStart, TerminalLaunchPlan, dir_line, linux_snippets,
@@ -70,25 +74,20 @@ impl DesktopTerminalPlanner {
                 let info = self
                     .remote_shell(&remote_host_id(server_id), host.as_ref())
                     .await?;
-                // 路径以远端页探测过的为准（用户可能改过安装位置），没探测过按默认布局猜
+                // 路径以远端页探测过的为准（用户可能改过安装位置），没探测过按桌面端默认安装布局猜
                 let selected = self
                     .profile(server_id)
                     .await
                     .and_then(|p| p.inventory)
                     .map(|inv| inv.selected)
                     .unwrap_or_default();
+                let found = derive_remote_linux_paths(&selected);
+                let defaults = desktop_default_install_paths(&info.home).unwrap_or_default();
                 let (dir, prefix) = match basic.backend_type {
-                    BackendType::NapCat => (
-                        selected
-                            .napcat_root
-                            .unwrap_or_else(|| format!("{}/Napcat", info.home)),
-                        Vec::new(),
-                    ),
+                    BackendType::NapCat => (found.napcat_root.or(defaults.napcat_root), Vec::new()),
                     BackendType::SnowLuma => (
-                        selected.snowluma_dir.unwrap_or_else(|| {
-                            format!("{}/snowluma-remote/workspace/snowluma", info.home)
-                        }),
-                        selected
+                        found.snowluma_dir.or(defaults.snowluma_dir),
+                        found
                             .node_bin
                             .as_deref()
                             .and_then(posix_parent)
@@ -96,6 +95,7 @@ impl DesktopTerminalPlanner {
                             .collect(),
                     ),
                 };
+                let dir = dir.unwrap_or_else(|| info.home.clone());
                 let banner = vec![dir_line(&format!("{backend} 运行目录"), &dir)];
                 self.remote_plan(
                     host,
@@ -110,13 +110,9 @@ impl DesktopTerminalPlanner {
                 .await
             }
             (RuntimeTarget::Server(server_id), DeploymentType::Docker) => {
-                let primary = ncd_deploy::bot_docker_container_name(basic.backend_type, basic.qq_id);
-                // SnowLuma 的容器以前也叫 ncbot-，两个名字都试
-                let other = match basic.backend_type {
-                    BackendType::NapCat => format!("slbot-{}", basic.qq_id),
-                    BackendType::SnowLuma => format!("ncbot-{}", basic.qq_id),
-                };
-                let names = vec![primary, other];
+                let names =
+                    ncd_deploy::bot_docker_container_candidates(basic.backend_type, basic.qq_id)
+                        .to_vec();
                 let host = self.resolve(&basic.runtime_target).await?;
                 if host_dir {
                     let info = self
@@ -124,7 +120,7 @@ impl DesktopTerminalPlanner {
                         .await?;
                     let dirs: Vec<String> = names
                         .iter()
-                        .map(|n| format!("{}/.napcat-bots/{n}", info.home))
+                        .map(|n| docker_bot_project_dir(&info.home, n))
                         .collect();
                     let snippets = vec![
                         TerminalSnippet::new("容器状态", "docker compose ps"),

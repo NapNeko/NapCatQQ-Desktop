@@ -22,7 +22,7 @@ pub(crate) async fn docker_project_dir(
     name: &str,
 ) -> Result<String, BotBackendError> {
     let home = probe_home(host).await?;
-    Ok(format!("{home}/.napcat-bots/{name}"))
+    Ok(ncd_domain::remote_paths::docker_bot_project_dir(&home, name))
 }
 
 async fn probe_home(host: &dyn Host) -> Result<String, BotBackendError> {
@@ -138,11 +138,7 @@ pub(crate) async fn read_docker_imported_network(
     backend: BackendType,
     qq_id: &str,
 ) -> Result<Option<ImportedNetworkConfig>, String> {
-    let project_dir = format!(
-        "{}/.napcat-bots/{}",
-        home.trim_end_matches('/'),
-        docker_name
-    );
+    let project_dir = ncd_domain::remote_paths::docker_bot_project_dir(home, docker_name);
     match backend {
         BackendType::NapCat => {
             let host_path = format!("{project_dir}/napcat/config/onebot11_{qq_id}.json");
