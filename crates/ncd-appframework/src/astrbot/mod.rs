@@ -144,6 +144,10 @@ impl AppFrameworkAdapter for AstrBotAdapter {
         }))
     }
 
+    fn default_webui_username(&self) -> &str {
+        dashboard_auth::ASTRBOT_DEFAULT_USERNAME
+    }
+
     async fn write_webui_password(
         &self,
         host: &dyn Host,

@@ -104,6 +104,11 @@ pub trait AppFrameworkAdapter: Send + Sync {
         Ok(None)
     }
 
+    /// 落盘读不到账号、桌面端也没记用户名时登录先用的用户名，即框架首启自己写的那个；空 = 没有约定
+    fn default_webui_username(&self) -> &str {
+        ""
+    }
+
     /// 把新密码按框架哈希格式写进实例配置。调用方保证实例已停止（运行中改会被进程覆盖）。
     async fn write_webui_password(
         &self,

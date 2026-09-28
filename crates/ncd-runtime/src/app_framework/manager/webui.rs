@@ -34,7 +34,12 @@ impl AppManager {
             }
         }
         self.remembered_secret(instance, SECRET_WEBUI_USERNAME)
-            .unwrap_or_else(|| "astrbot".into())
+            .unwrap_or_else(|| {
+                self.registry
+                    .get(&instance.framework_id)
+                    .map(|adapter| adapter.default_webui_username().to_string())
+                    .unwrap_or_default()
+            })
     }
 
     /// 桌面端打开 WebUI 用的本机口：本机即实例口，远端是 SSH `-L` 分配口。

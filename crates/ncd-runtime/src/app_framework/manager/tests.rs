@@ -1337,6 +1337,18 @@ mod write_config {
         assert_eq!(f.manager.webui_auth_key(&f.id).await, "Ncd_new");
     }
 
+    // 落盘读不到账号、桌面端也没记用户名：AstrBot 用它首启写的默认用户名，没这个约定的框架给空
+    #[tokio::test]
+    async fn webui_login_username_falls_back_to_framework_default() {
+        let f = fixture(false).await;
+        let karin = f.manager.get_instance(&f.id).await.unwrap();
+        let mut astrbot = karin.clone();
+        astrbot.id = AppInstanceId::new("a1");
+        astrbot.framework_id = AppFrameworkId::new("astrbot");
+        assert_eq!(f.manager.webui_login_username(&astrbot).await, "astrbot");
+        assert_eq!(f.manager.webui_login_username(&karin).await, "");
+    }
+
     #[tokio::test]
     async fn creating_maibot_requires_accepting_terms() {
         let f = maibot_fixture("m6").await;
