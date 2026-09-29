@@ -7,6 +7,10 @@ import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
 import type { YunzaiBotConfig } from '../../../../core/ipc/types';
 import type { YunzaiTabProps } from './YunzaiBasicTab';
 
+// renderer.yaml 里「自动」是空串，Radix Select 的选项不能用空串当值，界面上换成哨兵
+const AUTO = '__auto__';
+const RENDERER_ITEMS = YUNZAI_RENDERERS.map((r) => ({ value: r.value || AUTO, label: r.label }));
+
 export const YunzaiRenderTab: React.FC<YunzaiTabProps> = ({ config, onChange, errors, disabled }) => {
     const bot = config.bot;
     const setBot = (patch: Partial<YunzaiBotConfig>) => onChange({ ...config, bot: { ...bot, ...patch } });
@@ -18,10 +22,10 @@ export const YunzaiRenderTab: React.FC<YunzaiTabProps> = ({ config, onChange, er
                     label="用哪个"
                     hint="自动：模板里有脚本走 puppeteer，没有走 shotium"
                     error={errors['renderer/name']}
-                    items={YUNZAI_RENDERERS}
-                    value={config.renderer.name}
+                    items={RENDERER_ITEMS}
+                    value={config.renderer.name || AUTO}
                     disabled={disabled}
-                    onValueChange={(name) => onChange({ ...config, renderer: { name } })}
+                    onValueChange={(v) => onChange({ ...config, renderer: { name: v === AUTO ? '' : v } })}
                 />
             </FormSection>
 
