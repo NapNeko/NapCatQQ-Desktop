@@ -1,5 +1,6 @@
 // 任务队列展示用纯函数（列表 / 详情 / 页头共用）。
 
+import type { DeploymentTaskSnapshot } from '../../ipc/types';
 import type { TaskQueueItem, TaskQueueStatus } from './types';
 
 export function isActiveTaskStatus(status: TaskQueueStatus): boolean {
@@ -29,6 +30,21 @@ export function canCancelTaskItem(item: TaskQueueItem): boolean {
         return item.cancellable === true;
     }
     return false;
+}
+
+// 排队和等输入的任务后端都能直接撤下；已经在跑的只有后端标了 cancellable 才停得住。
+// 没有任务快照（Desktop 自更新不进任务队列，或快照还没到）时照旧给取消，由后端决定
+export function canCancelDeploymentTask(task: DeploymentTaskSnapshot | undefined): boolean {
+    if (!task) return true;
+    switch (task.status) {
+        case 'queued':
+        case 'waiting_input':
+            return true;
+        case 'running':
+            return task.cancellable;
+        default:
+            return false;
+    }
 }
 
 export function isRunningTaskItem(item: TaskQueueItem): boolean {

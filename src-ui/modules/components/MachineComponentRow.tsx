@@ -15,6 +15,7 @@ import { useOpenExternal } from '../../hooks/useOpenExternal';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import type { MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
+import type { ComponentActionProgress } from '../../hooks/components/useComponentAction';
 import {
     compareSemver,
     type ReleaseInfoView,
@@ -57,7 +58,7 @@ interface Props {
     latestRemoteVersion: string | null;
     /** 远端 release 元数据（含更新日志）；null 表示尚未拉到 */
     latestRelease?: ReleaseInfoView | null;
-    activeProgress: { taskId: string; progress: ActionProgressView } | null;
+    activeProgress: ComponentActionProgress | null;
     disabled?: boolean;
     /** 本机有活跃 Bot 时限制 update/uninstall；安装仍可用 */
     lifecycleBlockedReason?: string | null;
@@ -84,6 +85,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
 
     const isCancelable =
         activeProgress != null &&
+        activeProgress.cancellable &&
         activeProgress.progress.status !== 'success' &&
         activeProgress.progress.status !== 'failed' &&
         activeProgress.progress.status !== 'cancelled';
@@ -329,7 +331,7 @@ function isTerminalStatus(status: ActionProgressView['status']): boolean {
  * 确保终态反馈恰好显示固定时长。
  */
 function useTerminalDismiss(
-    activeProgress: { taskId: string; progress: ActionProgressView } | null,
+    activeProgress: ComponentActionProgress | null,
 ): boolean {
     const [dismissed, setDismissed] = useState(false);
 
@@ -359,8 +361,8 @@ function useTerminalDismiss(
 const StatusMeta: React.FC<{
     status: MachineComponentRow['status'];
     latestRemoteVersion: string | null;
-    activeProgress: { taskId: string; progress: ActionProgressView } | null;
-}> = ({ status, latestRemoteVersion, activeProgress }) => {
+    activeProgress: ComponentActionProgress | null;
+}> =({ status, latestRemoteVersion, activeProgress }) => {
     const dismissProgress = useTerminalDismiss(activeProgress);
     if (activeProgress && !dismissProgress) {
         return <ProgressLine progress={activeProgress.progress} className="mt-0" />;

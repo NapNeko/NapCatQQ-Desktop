@@ -15,6 +15,7 @@ import { isHostConnectivityFailureReason } from '../../core/domain/components/ty
 import { componentDisplayName } from '../../core/domain/task-queue/labels';
 import type { MachineView, MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
+import type { ComponentActionProgress } from '../../hooks/components/useComponentAction';
 import type { ReleaseInfoView } from '../../core/domain/release/normalize';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
 import type {
@@ -41,7 +42,7 @@ interface HostComponentsViewProps {
     getProgress: (
         componentId: ComponentId,
         hostId: string,
-    ) => { taskId: string; progress: ActionProgressView } | null;
+    ) => ComponentActionProgress | null;
     onAction: (
         componentId: ComponentId,
         hostId: string,
@@ -340,7 +341,7 @@ const Group: React.FC<{
     getProgress: (
         componentId: ComponentId,
         hostId: string,
-    ) => { taskId: string; progress: ActionProgressView } | null;
+    ) => ComponentActionProgress | null;
     onAction: (
         componentId: ComponentId,
         hostId: string,
@@ -407,7 +408,7 @@ const RuntimeDepGroup: React.FC<{
     getProgress: (
         componentId: ComponentId,
         hostId: string,
-    ) => { taskId: string; progress: ActionProgressView } | null;
+    ) => ComponentActionProgress | null;
     onAction: (
         componentId: ComponentId,
         hostId: string,

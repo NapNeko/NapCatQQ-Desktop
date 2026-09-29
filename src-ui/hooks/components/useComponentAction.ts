@@ -14,8 +14,17 @@ import {
     componentActionStore,
     targetKey,
 } from './componentActionStore';
+import { deploymentTaskStore } from '../task-queue/deploymentTaskStore';
+import { canCancelDeploymentTask } from '../../core/domain/task-queue/display';
 import type { ActionProgressView } from '../../core/domain/components/progress';
 import type { ComponentId, SnowLumaLinuxPackage, StepKind } from '../../core/ipc/types';
+
+export interface ComponentActionProgress {
+    taskId: string;
+    progress: ActionProgressView;
+    /** 后端说这一步停不住时为 false，取消按钮不给 */
+    cancellable: boolean;
+}
 
 export interface UseComponentActionResult {
     /** 启动一次操作，返回 task_id。 */
@@ -31,7 +40,7 @@ export interface UseComponentActionResult {
     getProgressFor: (
         componentId: ComponentId,
         hostId: string,
-    ) => { taskId: string; progress: ActionProgressView } | null;
+    ) => ComponentActionProgress | null;
     /** 检查某 (component, host) 是否有进行中的任务。 */
     isInstalling: (componentId: ComponentId, hostId: string) => boolean;
     /**
@@ -54,6 +63,11 @@ export function useComponentAction(): UseComponentActionResult {
         componentActionStore.subscribe,
         componentActionStore.getSnapshot,
         componentActionStore.getSnapshot,
+    );
+    const deploymentTasks = useSyncExternalStore(
+        deploymentTaskStore.subscribe,
+        () => deploymentTaskStore.getSnapshot().tasks,
+        () => deploymentTaskStore.getSnapshot().tasks,
     );
 
     const startAction = useCallback(
@@ -106,9 +120,13 @@ export function useComponentAction(): UseComponentActionResult {
             if (!taskId) return null;
             const progress = state.tasks[taskId];
             if (!progress) return null;
-            return { taskId, progress };
+            return {
+                taskId,
+                progress,
+                cancellable: canCancelDeploymentTask(deploymentTasks[taskId]),
+            };
         },
-        [state],
+        [state, deploymentTasks],
     );
 
     const isInstalling = useCallback(
