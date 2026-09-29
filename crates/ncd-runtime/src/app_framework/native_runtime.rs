@@ -114,6 +114,28 @@ impl NativeAppRuntime {
         Ok(())
     }
 
+    /// 请应用自己退之后等它真退掉：本会话接管的看等待任务有没有摘掉条目，其余按 pid 文件认。
+    /// 到点还在返回 false，调用方接着收整棵树
+    pub async fn wait_exited(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        timeout: Duration,
+    ) -> bool {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            match self.reconcile_pid(host, instance).await {
+                Ok(None) => return true,
+                Ok(Some(_)) => {}
+                Err(e) => tracing::debug!(instance = instance.id.as_str(), error = %e, "poll app exit"),
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return false;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
+
     /// 冷启动 / 刷新用：实例现在有活进程吗（pid 文件 + 进程身份校验）
     pub async fn reconcile_pid(
         &self,
