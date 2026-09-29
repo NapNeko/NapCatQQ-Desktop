@@ -11,7 +11,7 @@ import { useComponentActionErrors } from '../../hooks/components/useComponentAct
 import { useComponentPageAlerts } from '../../hooks/components/useComponentPageAlerts';
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
-import { componentService } from '../../core/services/component.service';
+import { useQqDependencyOps } from '../../hooks/components/useQqDependencyOps';
 import { componentActionStore } from '../../hooks/components/componentActionStore';
 import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { useDockerHosts } from '../../hooks/docker/useDockerHosts';
@@ -45,7 +45,7 @@ import type {
     StepKind,
 } from '../../core/ipc/types';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
-import type { DockerInstallOptions } from '../../core/services/docker.service';
+import type { DockerInstallOptions } from '../../hooks/docker/useDockerHosts';
 import { globalInfoBarStore } from '../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 
@@ -71,6 +71,7 @@ export const ComponentsPageNext: React.FC = () => {
     const queryClient = useQueryClient();
     const { view, hosts, isLoading, error, refetch } = useComponents();
     const { startAction, cancelAction, getProgressFor, onTaskTerminal } = useComponentAction();
+    const { detectQqDependencies, rememberSudoPassword } = useQqDependencyOps();
     const { snapshot: releases, refetch: refetchReleases, isFetching: releasesFetching } =
         useReleases();
     const { data: botSnapshots = [] } = useBotSnapshots();
@@ -160,7 +161,7 @@ export const ComponentsPageNext: React.FC = () => {
                 [hostId]: { status: 'loading', report: null, error: null },
             }));
             try {
-                const report = await componentService.detectQqDependencies(hostId);
+                const report = await detectQqDependencies(hostId);
                 setQqDependencyByHost((prev) => ({
                     ...prev,
                     [hostId]: { status: 'ready', report, error: null },
@@ -176,7 +177,7 @@ export const ComponentsPageNext: React.FC = () => {
                 qqDependencyInFlightRef.current.delete(hostId);
             }
         },
-        [machines, qqDependencyByHost],
+        [machines, qqDependencyByHost, detectQqDependencies],
     );
 
     useEffect(() => {
@@ -567,7 +568,7 @@ export const ComponentsPageNext: React.FC = () => {
             if (sudoPrompt.purpose === 'qq_deps') {
                 const serverId = sudoPrompt.hostId.replace(/^remote:/, '');
                 if (remember) {
-                    await componentService.rememberSudoPassword(serverId, password);
+                    await rememberSudoPassword(serverId, password);
                 }
                 setSudoPrompt(null);
                 await startQqDepsRepair(sudoPrompt.hostId);
@@ -582,7 +583,7 @@ export const ComponentsPageNext: React.FC = () => {
             }
             setSudoPrompt(null);
         },
-        [sudoPrompt, runInstall, startQqDepsRepair],
+        [sudoPrompt, runInstall, startQqDepsRepair, rememberSudoPassword],
     );
 
     return (

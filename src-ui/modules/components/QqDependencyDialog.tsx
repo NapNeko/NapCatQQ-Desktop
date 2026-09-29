@@ -13,7 +13,7 @@ import {
     DialogDescription,
     DialogFooter,
 } from '../../shared/ui';
-import { componentService } from '../../core/services/component.service';
+import { useQqDependencyOps } from '../../hooks/components/useQqDependencyOps';
 import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 import { SudoPasswordDialog } from '../docker/SudoPasswordDialog';
 import type { QqDependencyReport } from '../../core/ipc/generated/qq/QqDependencyReport';
@@ -38,6 +38,7 @@ export function QqDependencyDialog({
     onClose,
     onInstalled,
 }: QqDependencyDialogProps) {
+    const { installQqDependencies, rememberSudoPassword } = useQqDependencyOps();
     const [phase, setPhase] = useState<Phase>('review');
     const [result, setResult] = useState<InstallDependenciesResult | null>(null);
     const [errorMsg, setErrorMsg] = useState<string>('');
@@ -55,7 +56,7 @@ export function QqDependencyDialog({
         try {
             const pkgs = missing.map((p: PackageStatus) => p.name);
             // 首次安装不传 sudo 密码，后端有缓存就用缓存，没有就返 elevation_required
-            const res = await componentService.installQqDependencies(hostId, pkgs);
+            const res = await installQqDependencies(hostId, pkgs);
 
             // 检测需要 sudo 密码
             if (res.elevationRequired) {
@@ -81,12 +82,12 @@ export function QqDependencyDialog({
             // 保存密码到 keyring
             if (remember) {
                 const serverId = hostId.replace('remote:', '');
-                await componentService.rememberSudoPassword(serverId, password);
+                await rememberSudoPassword(serverId, password);
             }
 
             // 重试安装，把密码传入后端注入 Host
             const pkgs = missing.map((p: PackageStatus) => p.name);
-            const res = await componentService.installQqDependencies(hostId, pkgs, password);
+            const res = await installQqDependencies(hostId, pkgs, password);
 
             // 重试后依然需要密码（理论上不应发生，但防御一下）
             if (res.elevationRequired) {

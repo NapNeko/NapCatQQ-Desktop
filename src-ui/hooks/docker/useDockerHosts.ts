@@ -21,6 +21,9 @@ import type {
     DockerStatus,
 } from '../../core/ipc/types';
 
+// 装 Docker 时的 sudo 选项是前端传参的形状，没有对应的生成类型，组件页从这里拿
+export type { DockerInstallOptions };
+
 const DOCKER_INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 
 /// Docker Desktop 下载页，Windows / macOS 走手动安装时引导用。
