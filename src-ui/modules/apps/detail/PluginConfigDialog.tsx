@@ -30,8 +30,7 @@ const NO_DOCS: AppConfigDocument[] = [];
 type ViewMode = 'form' | 'source';
 
 function editorMode(format: AppConfigDocument['format']): SyntaxMode {
-    if (format === 'json' || format === 'dot_env' || format === 'toml') return format;
-    return 'plain';
+    return format;
 }
 
 function parseObject(text: string): PluginConfigObject | null {

@@ -20,6 +20,7 @@ const EMPTY: Record<SyntaxMode, string> = {
     json: '{}',
     dot_env: '# KEY=value',
     toml: '# table',
+    yaml: '# key: value',
     plain: '',
     prompt: '',
 };
