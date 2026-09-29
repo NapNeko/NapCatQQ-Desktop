@@ -20,7 +20,7 @@ import {
     DialogClose,
     Button,
 } from '../../shared/ui';
-import { serverService } from '../../core/services/server.service';
+import { useLocalSshKeys } from '../../hooks/remote/useLocalSsh';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 import type { AuthMethod } from '../../core/ipc/generated/domain/AuthMethod';
 
@@ -90,22 +90,14 @@ export const AddServerDialog: React.FC<AddServerDialogProps> = ({
 
     // 切到密钥认证 / 打开弹窗时扫一次本地 ~/.ssh/。
     // 候选项不为空时默认选第一个（ed25519 优先），用户也可手填路径。
-    const [scannedKeys, setScannedKeys] = useState<string[]>([]);
+    const { data: scannedKeys = [] } = useLocalSshKeys(open && authMethod === 'key');
     useEffect(() => {
+        // keyPath 为空时自动填第一个候选；用户已选则不覆盖。重开弹窗时扫描结果可能没变，
+        // 上面那段已把 keyPath 清空，所以跟着 open / 认证方式也再填一次
         if (!open || authMethod !== 'key') return;
-        let cancelled = false;
-        serverService.scanLocalSshKeys().then((keys) => {
-            if (cancelled) return;
-            setScannedKeys(keys);
-            // keyPath 为空时自动填第一个候选；用户已选则不覆盖。
-            if (keys.length > 0) {
-                setKeyPath((current) => current || keys[0]);
-            }
-        });
-        return () => {
-            cancelled = true;
-        };
-    }, [open, authMethod]);
+        const first = scannedKeys[0];
+        if (first) setKeyPath((current) => current || first);
+    }, [scannedKeys, open, authMethod]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

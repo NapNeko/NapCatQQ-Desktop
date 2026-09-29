@@ -1,7 +1,6 @@
 // 从本机 ~/.ssh/config 勾选导入远端档案；导入后不测连接。
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Dialog,
     DialogContent,
@@ -14,7 +13,7 @@ import {
     Checkbox,
 } from '../../shared/ui';
 import { cn } from '../../shared/utils/cn';
-import { serverService } from '../../core/services/server.service';
+import { useImportSshProfiles, useLocalSshConfigHosts } from '../../hooks/remote/useLocalSsh';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 import { errorText } from '../../core/domain/errors';
@@ -31,18 +30,11 @@ export const ImportSshConfigDialog: React.FC<ImportSshConfigDialogProps> = ({
     open,
     onOpenChange,
 }) => {
-    const queryClient = useQueryClient();
+    const importProfiles = useImportSshProfiles();
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [importing, setImporting] = useState(false);
 
-    const { data, isLoading, isError, error, refetch } = useQuery({
-        queryKey: ['ssh-config-hosts'],
-        queryFn: () => serverService.discoverLocalSshHosts(),
-        enabled: open,
-        // 档案增删后「已添加」必须立刻变；不受 dev 全局 30s staleTime 拖累。
-        staleTime: 0,
-        refetchOnMount: 'always',
-    });
+    const { data, isLoading, isError, error, refetch } = useLocalSshConfigHosts(open);
 
     useEffect(() => {
         if (!open) return;
@@ -98,19 +90,10 @@ export const ImportSshConfigDialog: React.FC<ImportSshConfigDialogProps> = ({
         const toImport = hosts.filter((h) => h.selectable && selected.has(h.alias));
         if (toImport.length === 0) return;
         setImporting(true);
-        const created: string[] = [];
-        const failed: { alias: string; message: string }[] = [];
         try {
-            for (const host of toImport) {
-                try {
-                    await serverService.add(toProfile(host));
-                    created.push(host.alias);
-                } catch (err) {
-                    failed.push({ alias: host.alias, message: errorText(err) });
-                }
-            }
-            await queryClient.invalidateQueries({ queryKey: ['servers'] });
-            await queryClient.invalidateQueries({ queryKey: ['ssh-config-hosts'] });
+            const { created, failed } = await importProfiles(
+                toImport.map((host) => ({ alias: host.alias, profile: toProfile(host) })),
+            );
             if (failed.length === 0) {
                 pushInfoBar({
                     key: 'ssh-config-import',
@@ -121,7 +104,10 @@ export const ImportSshConfigDialog: React.FC<ImportSshConfigDialogProps> = ({
                 });
                 onOpenChange(false);
             } else {
-                console.error('[ssh-import] failed hosts', failed);
+                console.error(
+                    '[ssh-import] failed hosts',
+                    failed.map((f) => ({ alias: f.alias, message: errorText(f.error) })),
+                );
                 if (created.length > 0) {
                     pushInfoBar({
                         key: 'ssh-config-import',

@@ -1,7 +1,6 @@
 // 列表 Bot 卡：头像/标题行 + 中间配置 Chip/指标行 + 底栏状态与操作。
 
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import {
     Activity,
     Copy,
@@ -69,10 +68,8 @@ import {
     formatRestartHint,
 } from './botCardParts';
 import { formatRelativeTime } from '../../../../core/domain/ui/relativeTime';
-import { useIsHostReachable } from '../../../../hooks/remote/useIsHostReachable';
+import { useIsHostReachable, useServerProfiles } from '../../../../hooks/remote/useIsHostReachable';
 import { useBotRuntimeMetrics } from '../../../../hooks/bot/useBotRuntimeMetrics';
-import { serverService } from '../../../../core/services/server.service';
-import { isTauri } from '../../../../core/ipc/transport';
 import {
     isRuntimeTargetLocal,
     remoteHostIdFromRuntimeTarget,
@@ -161,12 +158,7 @@ export function BotCard({
         : null;
     const remoteReachable = useIsHostReachable(remoteHostIdForCheck);
     const transportFailed = isRemoteTarget && remoteHostIdForCheck != null && !remoteReachable;
-    const serversQuery = useQuery({
-        queryKey: ['servers'],
-        queryFn: () => serverService.list(),
-        enabled: isTauri && isRemoteTarget,
-        staleTime: 30_000,
-    });
+    const serversQuery = useServerProfiles(isRemoteTarget);
     const servers = serversQuery.data ?? [];
 
     // 状态切换反馈:

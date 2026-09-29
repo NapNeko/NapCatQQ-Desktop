@@ -14,20 +14,25 @@ import { serverService } from '../../core/services/server.service';
 import { isTauri } from '../../core/ipc/transport';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
 
+/** 远端档案列表，和 useServerManager 共用 ['servers'] 缓存；只读、不带增删改 */
+export function useServerProfiles(enabled = true) {
+    return useQuery({
+        queryKey: ['servers'],
+        queryFn: () => serverService.list(),
+        enabled: isTauri && enabled,
+        // 依赖外部事件驱动失效（host_connection_* 到达时 useHostConnectionEvents 会 invalidate）。
+        // 这里给一个较长的 staleTime，避免在无事件期间反复打后端；真正新鲜度由事件 + 手动 refetch 保障。
+        staleTime: 30_000,
+    });
+}
+
 /**
  * 判断 host 是否在传输层可达。
  * - hostId === 'local' 或 null/undefined → true（本机无 transport 问题）
  * - hostId === 'remote:<id>' → 查找对应 ServerProfile，state !== 'failed'
  */
 export function useIsHostReachable(hostId: string | null | undefined): boolean {
-    const serversQuery = useQuery({
-        queryKey: ['servers'],
-        queryFn: () => serverService.list(),
-        enabled: isTauri,
-        // 依赖外部事件驱动失效（host_connection_* 到达时 useHostConnectionEvents 会 invalidate）。
-        // 这里给一个较长的 staleTime，避免在无事件期间反复打后端；真正新鲜度由事件 + 手动 refetch 保障。
-        staleTime: 30_000,
-    });
+    const serversQuery = useServerProfiles();
 
     if (!hostId) return true;
     if (hostId === 'local') return true;
