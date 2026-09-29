@@ -93,6 +93,16 @@ sudo apt-get install -y \
    # 如果成功，按 Ctrl+C 退出，然后在 Desktop 中重新启动
    ```
 
+### 在远端 WebUI 里改的网络配置被还原了
+
+Desktop 每次启动远端 Bot 都会按自己保存的配置重写远端的 onebot 文件，所以在 NapCat / SnowLuma 自己的 WebUI 里改的连接，下次从 Desktop 启动时会被覆盖。
+
+改完以后打开这个 Bot 的配置页，进「连接」，点底部的「从远端读取」。Desktop 会列出远端比这边多了、少了、改了哪些连接，确认后填进表单，再点保存。
+
+### 远端掉线通知没发出来
+
+见 [ncd-watch 远端值守](./ncd-watch.md)。
+
 ---
 
 ## 更多帮助
