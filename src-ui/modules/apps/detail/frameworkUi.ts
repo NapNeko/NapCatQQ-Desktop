@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
 import { astrbotFrameworkUi } from './astrbot/astrbotFrameworkUi';
 import { karinFrameworkUi } from './karin/karinFrameworkUi';
+import { koishiFrameworkUi } from './koishi/koishiFrameworkUi';
 import { maibotFrameworkUi } from './maibot/maibotFrameworkUi';
 import { nonebot2FrameworkUi } from './nonebot2/nonebot2FrameworkUi';
 import { yunzaiFrameworkUi } from './yunzai/yunzaiFrameworkUi';
@@ -68,6 +69,7 @@ const MODULES: Record<string, FrameworkUiModule> = {
     nonebot2: nonebot2FrameworkUi,
     astrbot: astrbotFrameworkUi,
     maibot: maibotFrameworkUi,
+    koishi: koishiFrameworkUi,
     yunzai: yunzaiFrameworkUi,
 };
 

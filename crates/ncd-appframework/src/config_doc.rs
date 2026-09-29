@@ -13,6 +13,7 @@ use ts_rs::TS;
 use crate::adapter::apply_with_backup_ex;
 use crate::astrbot::config::AstrBotInstanceConfig;
 use crate::karin::config::KarinInstanceConfig;
+use crate::koishi::yml::KoishiInstanceConfig;
 use crate::maibot::config::MaiBotInstanceConfig;
 use crate::nonebot2::config::NoneBot2InstanceConfig;
 use crate::yunzai::config::YunzaiInstanceConfig;
@@ -31,6 +32,8 @@ pub enum AppInstanceConfig {
     AstrBot(AstrBotInstanceConfig),
     #[serde(rename = "maibot")]
     MaiBot(MaiBotInstanceConfig),
+    #[serde(rename = "koishi")]
+    Koishi(KoishiInstanceConfig),
     #[serde(rename = "yunzai")]
     Yunzai(YunzaiInstanceConfig),
 }
@@ -41,7 +44,7 @@ impl AppInstanceConfig {
         match self {
             Self::Karin(c) => c.env.http_auth_key.as_str(),
             Self::MaiBot(c) => c.webui_token.as_str(),
-            Self::NoneBot2(_) | Self::AstrBot(_) | Self::Yunzai(_) => "",
+            Self::NoneBot2(_) | Self::AstrBot(_) | Self::Koishi(_) | Self::Yunzai(_) => "",
         }
     }
 
@@ -53,6 +56,7 @@ impl AppInstanceConfig {
             Self::NoneBot2(c) => c.env_prod.port,
             Self::AstrBot(c) => c.onebot.ws_reverse_port,
             Self::MaiBot(c) => c.webui_port(),
+            Self::Koishi(c) => c.listen_port(),
             Self::Yunzai(c) => c.listen_port(),
         }
     }
@@ -64,6 +68,7 @@ impl AppInstanceConfig {
             Self::NoneBot2(_) => None,
             Self::AstrBot(c) => Some(c.dashboard_port).filter(|p| *p > 0),
             Self::MaiBot(c) => Some(c.webui_port()).filter(|p| *p > 0),
+            Self::Koishi(c) => Some(c.listen_port()).filter(|p| *p > 0),
             Self::Yunzai(_) => None,
         }
     }
@@ -82,6 +87,9 @@ impl AppInstanceConfig {
             }
             (Self::MaiBot(before), Self::MaiBot(after)) => {
                 crate::maibot::config::link_inputs_changed(before, after)
+            }
+            (Self::Koishi(before), Self::Koishi(after)) => {
+                before.listen_port() != after.listen_port()
             }
             (Self::Yunzai(before), Self::Yunzai(after)) => {
                 crate::yunzai::config::link_inputs_changed(before, after)

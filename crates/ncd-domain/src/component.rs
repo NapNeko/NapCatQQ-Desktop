@@ -24,6 +24,7 @@ use ts_rs::TS;
 /// - NoneBot2 → nonebot2（应用端框架；同 Karin 按实例目录安装）
 /// - AstrBot → astrbot（应用端框架；按实例目录安装，不进组件页 catalog）
 /// - MaiBot → maibot（应用端框架；按实例目录安装，不进组件页 catalog）
+/// - Koishi → koishi（应用端框架；按实例目录安装，不进组件页 catalog）
 /// - Git → git（版本管理工具；云崽装本体、装插件、群里 #更新 都要）
 /// - Redis → redis（键值库；云崽启动时自己拉起，桌面端只装二进制）
 /// - Yunzai → yunzai（应用端框架，TRSS-Yunzai；按实例目录安装，不进组件页 catalog）
@@ -58,6 +59,8 @@ pub enum ComponentId {
     AstrBot,
     #[serde(rename = "maibot")]
     MaiBot,
+    #[serde(rename = "koishi")]
+    Koishi,
     #[serde(rename = "git")]
     Git,
     #[serde(rename = "redis")]
@@ -81,6 +84,7 @@ impl ComponentId {
             Self::NoneBot2 => "nonebot2",
             Self::AstrBot => "astrbot",
             Self::MaiBot => "maibot",
+            Self::Koishi => "koishi",
             Self::Git => "git",
             Self::Redis => "redis",
             Self::Yunzai => "yunzai",
@@ -92,7 +96,12 @@ impl ComponentId {
     pub const fn is_app_framework(&self) -> bool {
         matches!(
             self,
-            Self::Karin | Self::NoneBot2 | Self::AstrBot | Self::MaiBot | Self::Yunzai
+            Self::Karin
+                | Self::NoneBot2
+                | Self::AstrBot
+                | Self::MaiBot
+                | Self::Koishi
+                | Self::Yunzai
         )
     }
 
@@ -427,6 +436,7 @@ mod tests {
             ComponentId::NoneBot2,
             ComponentId::AstrBot,
             ComponentId::MaiBot,
+            ComponentId::Koishi,
             ComponentId::Git,
             ComponentId::Redis,
             ComponentId::Yunzai,
@@ -442,6 +452,7 @@ mod tests {
         assert!(ComponentId::NoneBot2.is_app_framework());
         assert!(ComponentId::AstrBot.is_app_framework());
         assert!(ComponentId::MaiBot.is_app_framework());
+        assert!(ComponentId::Koishi.is_app_framework());
         assert!(ComponentId::Yunzai.is_app_framework());
         assert!(!ComponentId::Uv.is_app_framework());
         assert!(!ComponentId::Git.is_app_framework());
@@ -464,6 +475,7 @@ mod tests {
             ComponentId::NoneBot2,
             ComponentId::AstrBot,
             ComponentId::MaiBot,
+            ComponentId::Koishi,
             ComponentId::Git,
             ComponentId::Redis,
             ComponentId::Yunzai,

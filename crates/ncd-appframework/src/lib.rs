@@ -1,6 +1,6 @@
 //! ncd-appframework：应用端框架适配器集合。
 //!
-//! 每个框架一个子目录（`karin/`、`nonebot2/`、`astrbot/`、`maibot/`），各自提供：
+//! 每个框架一个子目录（`karin/`、`nonebot2/`、`astrbot/`、`maibot/`、`koishi/`），各自提供：
 //! - `manifest`：静态清单（UI 直接消费）
 //! - `component`：实现 `ncd_component::Component`，安装 / 探测 / 启动命令走 Component × Host × Action
 //! - `integration`：实现 `ncd_traits::AppIntegration`（纯计划）+ 写应用端配置（备份 → 写 → 失败还原）
@@ -14,6 +14,7 @@ pub mod astrbot;
 pub mod config_doc;
 pub mod env_file;
 pub mod karin;
+pub mod koishi;
 pub mod maibot;
 pub mod node_tooling;
 pub mod nonebot2;
@@ -58,6 +59,11 @@ pub use karin::plugin::{
 };
 pub use karin::{
     KARIN_FRAMEWORK_ID, KarinAdapter, KarinComponent, KarinIntegration, karin_manifest,
+};
+pub use koishi::{
+    KOISHI_FRAMEWORK_ID, KoishiAdapter, KoishiBotState, KoishiBotStatus, KoishiComponent,
+    KoishiInstanceConfig, KoishiIntegration, KoishiPackageInfo, KoishiPluginNode,
+    KoishiPluginSchema, KoishiRuntimeApi, KoishiRuntimeGate, KoishiRuntimeStatus, koishi_manifest,
 };
 pub use maibot::api::{MaiBotProviderSource, MaiBotRuntimeApi, MaiBotSession};
 pub use maibot::resources::behavior::{

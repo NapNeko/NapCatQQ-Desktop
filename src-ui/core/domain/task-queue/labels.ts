@@ -15,6 +15,7 @@ const COMPONENT_DISPLAY_NAME: Record<ComponentId, string> = {
     nonebot2: 'NoneBot2',
     astrbot: 'AstrBot',
     maibot: 'MaiBot',
+    koishi: 'Koishi',
     git: 'Git',
     redis: 'Redis',
     yunzai: 'TRSS-Yunzai',

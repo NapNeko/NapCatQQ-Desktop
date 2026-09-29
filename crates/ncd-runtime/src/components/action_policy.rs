@@ -487,6 +487,7 @@ mod tests {
             ComponentId::NoneBot2,
             ComponentId::AstrBot,
             ComponentId::MaiBot,
+            ComponentId::Koishi,
             ComponentId::Git,
             ComponentId::Redis,
             ComponentId::Yunzai,

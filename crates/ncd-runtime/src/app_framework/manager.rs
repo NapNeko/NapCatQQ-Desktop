@@ -21,7 +21,8 @@ use ncd_appframework::{
     AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor,
     AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
     AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession,
-    AstrBotSessionRule, KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider,
+    AstrBotSessionRule, KarinPluginInstalled, KarinPluginMarketEntry, KoishiPackageInfo,
+    KoishiPluginSchema, KoishiRuntimeApi, KoishiRuntimeGate, KoishiRuntimeStatus, MaiBotAPIProvider,
     MaiBotBehaviorDetail, MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery,
     MaiBotChatSession, MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview,
     MaiBotEmojiPage, MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone,
@@ -80,6 +81,7 @@ use crate::metrics::now_ms;
 mod astrbot;
 mod config;
 mod install_dir;
+mod koishi;
 mod lifecycle;
 mod link;
 mod maibot;

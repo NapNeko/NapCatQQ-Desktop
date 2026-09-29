@@ -225,6 +225,11 @@ const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>
         'remote:production': null,
         'remote:dev': null,
     },
+    koishi: {
+        local: null,
+        'remote:production': null,
+        'remote:dev': null,
+    },
     git: {
         local: { version: '2.56.0', source: 'cmd/git.exe' },
         'remote:production': { version: '2.43.0', source: '$PATH/git' },

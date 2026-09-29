@@ -1,0 +1,71 @@
+plugins:
+  group:server:
+    server:
+      port: 5140
+      maxPort: 5149
+    ~server-satori: {}
+    ~server-temp: {}
+  group:basic:
+    ~admin: {}
+    ~bind: {}
+    commands: {}
+    help: {}
+    http: {}
+    ~inspect: {}
+    locales: {}
+    proxy-agent: {}
+    rate-limit: {}
+    telemetry: {}
+  group:console:
+    actions: {}
+    analytics: {}
+    android:
+      $if: env.KOISHI_AGENT?.includes('Android')
+    ~auth: {}
+    config: {}
+    console:
+      open: true
+    dataview: {}
+    desktop:
+      $if: env.KOISHI_AGENT?.includes('Desktop')
+    explorer: {}
+    logger: {}
+    insight: {}
+    market:
+      search:
+        endpoint: https://registry.koishi.chat/index.json
+    notifier: {}
+    oobe: {}
+    sandbox: {}
+    status: {}
+    theme-vanilla: {}
+  group:storage:
+    ~database-mongo:
+      database: koishi
+    ~database-mysql:
+      database: koishi
+    ~database-postgres:
+      database: koishi
+    database-sqlite:
+      path: data/koishi.db
+    assets-local: {}
+  group:adapter:
+    ~adapter-dingtalk: {}
+    ~adapter-discord: {}
+    ~adapter-kook: {}
+    ~adapter-lark: {}
+    ~adapter-line: {}
+    ~adapter-mail: {}
+    ~adapter-matrix: {}
+    ~adapter-qq: {}
+    ~adapter-satori: {}
+    ~adapter-slack: {}
+    ~adapter-telegram: {}
+    ~adapter-wechat-official: {}
+    ~adapter-wecom: {}
+    ~adapter-whatsapp: {}
+    ~adapter-zulip: {}
+  group:develop:
+    $if: env.NODE_ENV === 'development'
+    hmr:
+      root: '.'

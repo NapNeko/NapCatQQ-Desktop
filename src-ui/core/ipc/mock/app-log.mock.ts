@@ -42,6 +42,11 @@ function karin(d: Date, level: 'MARK' | 'INFO' | 'WARN', text: string): string {
     return `${E}${tone}m[Karin][${millis(d)}][${level}]${E}39m ${text}`;
 }
 
+/** Koishi 自己的 logger：非终端时不带颜色，`日期 时间 [级别首字母] 模块 内容` */
+function koi(d: Date, level: 'I' | 'W' | 'S', scope: string, text: string): string {
+    return `${d.getFullYear()}-${monthDay(d)} ${clock(d)} [${level}] ${scope} ${text}`;
+}
+
 /** TRSS 的 chalk 被上游强制开到 level 3，重定向到文件也带色 */
 function trss(d: Date, level: 'MARK' | 'INFO' | 'WARN', text: string): string {
     const tone = { MARK: '90', INFO: '32', WARN: '33' }[level];
@@ -51,6 +56,19 @@ function trss(d: Date, level: 'MARK' | 'INFO' | 'WARN', text: string): string {
 function startup(inst: AppInstance, d: Date): string[] {
     const dir = inst.install_dir.replace(/\//g, '\\');
     switch (inst.framework_id) {
+        case 'koishi':
+            return [
+                koi(d, 'I', 'app', 'Koishi/4.18.11'),
+                koi(d, 'I', 'loader', 'apply plugin group:server'),
+                koi(d, 'I', 'loader', 'apply plugin server:cj4vi7'),
+                koi(d, 'I', 'loader', 'apply plugin group:console'),
+                koi(d, 'I', 'loader', 'apply plugin console:helk2a'),
+                koi(d, 'I', 'loader', 'apply plugin adapter-onebot:ncd-link'),
+                koi(d, 'I', 'server', `server listening at http://127.0.0.1:${inst.port}`),
+                koi(d, 'I', 'console', `webui is available at http://127.0.0.1:${inst.port}`),
+                koi(d, 'I', 'sqlite', 'auto creating table user'),
+                koi(d, 'S', 'telemetry', '欢迎使用 Koishi！在您点击「同意」前，telemetry 服务不会启动。'),
+            ];
         case 'yunzai':
             return [
                 trss(d, 'MARK', `${E}33mTRSS-Yunzai v3.1.3${E}39m 启动中`),
@@ -118,6 +136,8 @@ function startup(inst: AppInstance, d: Date): string[] {
 
 function heartbeat(inst: AppInstance, d: Date, n: number): string {
     switch (inst.framework_id) {
+        case 'koishi':
+            return koi(d, 'I', 'onebot', `[receive] heartbeat #${n}`);
         case 'yunzai':
             return trss(d, 'INFO', `${E}36m[10001]${E}39m 群消息：[测试群(123456), 小明(10002)] #帮助 ${n}`);
         case 'maibot':

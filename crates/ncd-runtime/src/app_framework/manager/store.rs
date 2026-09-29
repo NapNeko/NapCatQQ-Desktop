@@ -188,6 +188,7 @@ impl AppManager {
         }
         let adapter = self.registry.get(&instance.framework_id)?;
         let host = self.resolve_host(&instance.host_id).await?;
+        self.prime_live_port(adapter.as_ref(), &instance).await?;
         if let Some(sink) = log {
             sink("读取官方目录".into());
         }
@@ -285,6 +286,7 @@ impl AppManager {
         }
 
         let host = self.resolve_host(&instance.host_id).await?;
+        self.prime_live_port(adapter.as_ref(), &instance).await?;
         adapter
             .set_store_enabled(host.as_ref(), &instance, name, resource, enabled, overwrite)
             .await?;
@@ -293,7 +295,9 @@ impl AppManager {
             config: envelope.config,
             revision: envelope.revision,
             documents: envelope.documents,
-            restart_required: instance.state == AppInstanceState::Running,
+            // 走控制台启停的（Koishi）当场生效
+            restart_required: instance.state == AppInstanceState::Running
+                && !adapter.wants_live_port(),
             relinked: false,
             port_changed: false,
         })
