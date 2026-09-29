@@ -58,6 +58,7 @@ pub struct YunzaiBotConfig {
     pub chromium_path: String,
     pub puppeteer_ws: String,
     /// 截图超时（毫秒）；None 用渲染器默认
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub puppeteer_timeout: Option<u32>,
     pub proxy_address: String,
@@ -110,31 +111,43 @@ pub struct YunzaiGroupDefaults {
     pub disable: Vec<String>,
 }
 
-/// group.yaml 里的单独设置：`群号`、`Bot号:default`、`Bot号:群号`。没写的字段继承默认
+/// group.yaml 里的单独设置：`群号`、`Bot号:default`、`Bot号:群号`。没写的字段继承默认，
+/// 序列化时直接省掉（前端按「没有这个键」判继承）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
 pub struct YunzaiGroupOverride {
     pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub group_cd: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub single_cd: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub only_reply_at: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub bot_alias: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub add_limit: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub add_private: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub add_reply: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub add_at: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub add_recall: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub enable: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub disable: Option<Vec<String>>,
 }
@@ -1464,6 +1477,21 @@ mod tests {
         let only = auth_value(Some(&current), "new", false);
         assert!(only.get("X-Key").is_none());
         assert_eq!(auth_value(None, "", true), Value::Null);
+    }
+
+    #[test]
+    fn override_wire_shape_omits_inherited_fields() {
+        let o = YunzaiGroupOverride {
+            key: "123".into(),
+            group_cd: Some(0),
+            ..group_override_from("x".into(), &Mapping::new())
+        };
+        let json = serde_json::to_value(&o).unwrap();
+        assert_eq!(json, serde_json::json!({ "key": "123", "group_cd": 0 }));
+        let back: YunzaiGroupOverride = serde_json::from_value(json).unwrap();
+        assert_eq!(back, o);
+        let cfg = serde_json::to_value(YunzaiInstanceConfig::upstream_default()).unwrap();
+        assert!(cfg["bot"].get("puppeteer_timeout").is_none());
     }
 
     #[test]
