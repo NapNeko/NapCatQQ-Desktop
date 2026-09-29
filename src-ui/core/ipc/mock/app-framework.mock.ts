@@ -35,6 +35,9 @@ import type {
     DomainEvent,
     ImportAppInstanceRequest,
     KarinPluginInstalled,
+    KoishiPackageInfo,
+    KoishiPluginSchema,
+    KoishiRuntimeStatus,
     KarinPluginMarketEntry,
     LogSnapshot,
     OneBotLinkPlan,
@@ -49,8 +52,13 @@ import { nonebot2DefaultConfig } from '../../domain/apps/nonebot2Config';
 import { emitMockEvent } from './events.mock';
 import { withMockDelay } from './bootstrap.mock';
 import { mockAppLogTail, playMockAppRun } from './app-log.mock';
+import { koishiMockPackages, koishiMockSchemas, koishiMockStatus } from './koishi.mock';
+import { appendTo, isLinkNode, koishiShortName, linkNode, newPlugin, replaceAt, walk } from '../../domain/apps/koishiConfig';
+import type { KoishiInstanceConfig } from '../types';
 import {
     createMockAppConfigApi,
+    editKoishiConfig,
+    peekKoishiConfig,
     peekKarinHttpAuthKey,
     syncKarinLinkToken,
     syncMaiBotLink,
@@ -137,6 +145,24 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         ],
     },
 ];
+
+mockAppFrameworks.push({
+    id: 'koishi',
+    display_name: 'Koishi',
+    description: '跨平台聊天机器人框架，插件市场有几千个插件，自带控制台',
+    repo_url: 'https://github.com/koishijs/koishi',
+    docs_url: 'https://koishi.chat/zh-CN/',
+    supported_placements: ['local_native', 'remote_native'],
+    default_port: 5140,
+    has_webui: true,
+    link_modes: ['reverse_ws'],
+    component_id: 'koishi',
+    runtime_component_ids: ['nodejs'],
+    store_resources: ['plugin'],
+    has_install_renderer: false,
+    webui_auth: 'none',
+    terms: [],
+});
 
 /// 假装实例目录里的条款：MaiBot 实例启动前要同意一次，同意过的记在这里
 const mockAcceptedTerms = new Set<string>();
@@ -255,7 +281,52 @@ let instances: AppInstance[] = [
         origin: 'created',
         auto_start: false,
     },
+    {
+        id: 'ko90ab12',
+        framework_id: 'koishi',
+        display_name: 'Koishi · 本机',
+        placement: 'local_native',
+        host_id: 'local',
+        install_dir: 'D:/NapCatQQ/apps/koishi/ko90ab12',
+        port: 23140,
+        state: 'running',
+        installed_version: '4.18.11',
+        created_at_ms: Date.now() - 600_000,
+        install_renderer: false,
+        origin: 'created',
+        auto_start: true,
+    },
 ];
+
+/** 对接写 / 摘 koishi.yml 里的 adapter-onebot:ncd-link（真机由后端 apply_link / unlink 写） */
+function syncKoishiLink(inst: AppInstance, botId: string | null) {
+    editKoishiConfig(inst, (cfg: KoishiInstanceConfig) => {
+        const existing = linkNode(cfg);
+        if (!botId) {
+            if (!existing) return cfg;
+            const path = findPath(cfg, isLinkNode);
+            return path ? replaceAt(cfg, path, (n) => ({ ...n, enabled: false })) : cfg;
+        }
+        const config = { selfId: botId, token: 'mockmockmockmockmockmock', protocol: 'ws-reverse', path: '/onebot/ncd' };
+        const path = findPath(cfg, isLinkNode);
+        if (path) return replaceAt(cfg, path, (n) => ({ ...n, enabled: true, config: { ...n.config, ...config } }));
+        const group = cfg.plugins.findIndex((n) => n.name === 'group' && n.ident === 'adapter' && n.enabled);
+        const node = { ...newPlugin(cfg, 'adapter-onebot', true), ident: 'ncd-link', config };
+        return appendTo(cfg, group >= 0 ? [group] : [], node);
+    });
+}
+
+function findPath(cfg: KoishiInstanceConfig, pred: (n: KoishiInstanceConfig['plugins'][number]) => boolean): number[] | null {
+    const go = (list: KoishiInstanceConfig['plugins'], base: number[]): number[] | null => {
+        for (let i = 0; i < list.length; i += 1) {
+            if (pred(list[i])) return [...base, i];
+            const hit = go(list[i].children, [...base, i]);
+            if (hit) return hit;
+        }
+        return null;
+    };
+    return go(cfg.plugins, []);
+}
 
 function publish(instance: AppInstance, reason: string) {
     instances = instances.map((i) => (i.id === instance.id ? instance : i));
@@ -521,7 +592,9 @@ export const mockAppFrameworkApi = {
             bot_id: botId,
             connection: {
                 kind: 'ws_client',
-                url: `ws://127.0.0.1:${inst.port}${inst.framework_id === 'astrbot' ? '/ws' : '/onebot/v11/ws'}`,
+                url: `ws://127.0.0.1:${inst.port}${
+                    inst.framework_id === 'astrbot' ? '/ws' : inst.framework_id === 'koishi' ? '/onebot/ncd' : '/onebot/v11/ws'
+                }`,
                 reportSelfMessage: false,
                 heartInterval: 30000,
                 reconnectInterval: 30000,
@@ -532,10 +605,13 @@ export const mockAppFrameworkApi = {
                 token: 'mockmockmockmockmockmock',
                 debug: false,
             },
-            app_side_writes: [
-                { path: '.env', summary: `HTTP_PORT=${inst.port} / WS_SERVER_AUTH_KEY=mock****` },
-                { path: '@karinjs/config/adapter.json', summary: '开启 onebot.ws_server.enable' },
-            ],
+            app_side_writes:
+                inst.framework_id === 'koishi'
+                    ? [{ path: 'koishi.yml', summary: `adapter-onebot:ncd-link（selfId=${botId}，ws-reverse /onebot/ncd）` }]
+                    : [
+                          { path: '.env', summary: `HTTP_PORT=${inst.port} / WS_SERVER_AUTH_KEY=mock****` },
+                          { path: '@karinjs/config/adapter.json', summary: '开启 onebot.ws_server.enable' },
+                      ],
             access_token: 'mockmockmockmockmockmock',
         });
     },
@@ -553,6 +629,7 @@ export const mockAppFrameworkApi = {
             },
         };
         if (forward) syncMaiBotLink(inst, true);
+        else if (inst.framework_id === 'koishi') syncKoishiLink(inst, botId);
         else syncKarinLinkToken(instanceId);
         publish(next, 'linked');
         return withMockDelay(next);
@@ -561,6 +638,7 @@ export const mockAppFrameworkApi = {
     unlink: async (instanceId: string): Promise<AppInstance> => {
         const inst = require(instanceId);
         if (inst.framework_id === 'maibot') syncMaiBotLink(inst, false);
+        if (inst.framework_id === 'koishi') syncKoishiLink(inst, null);
         const next: AppInstance = { ...inst, link: undefined };
         publish(next, 'unlinked');
         return withMockDelay(next);
@@ -571,7 +649,7 @@ export const mockAppFrameworkApi = {
         const base =
             inst.framework_id === 'astrbot'
                 ? `http://127.0.0.1:6185`
-                : inst.framework_id === 'maibot'
+                : inst.framework_id === 'maibot' || inst.framework_id === 'koishi'
                   ? `http://127.0.0.1:${inst.port}/`
                   : `http://127.0.0.1:${inst.port}/web`;
         const suffix = path?.trim()
@@ -783,6 +861,9 @@ export const mockAppFrameworkApi = {
         if (frameworkId === 'maibot' && resource === 'plugin') {
             return withMockDelay(mockMaiBotPlugins.slice());
         }
+        if (frameworkId === 'koishi' && resource === 'plugin') {
+            return withMockDelay(mockKoishiPlugins.slice());
+        }
         return withMockDelay([]);
     },
 
@@ -790,7 +871,23 @@ export const mockAppFrameworkApi = {
         instanceId: string,
         resource: AppStoreResource,
     ): Promise<AppStoreInstalled[]> => {
-        require(instanceId);
+        const inst = require(instanceId);
+        if (inst.framework_id === 'koishi') {
+            const cfg = peekKoishiConfig(inst);
+            const on = new Set(walk(cfg.plugins).filter((n) => n.enabled).map((n) => n.name));
+            return withMockDelay(
+                koishiMockPackages(cfg).map((p) => ({
+                    id: p.package,
+                    name: p.name,
+                    resource: 'plugin' as const,
+                    flavor: 'npm' as const,
+                    version: p.version ?? undefined,
+                    enabled: on.has(p.name),
+                    package: p.package,
+                    locked: ['server', 'console', 'config', 'market', 'logger', 'adapter-onebot'].includes(p.name),
+                })),
+            );
+        }
         return withMockDelay(mockStoreInstalledFor(instanceId, resource));
     },
 
@@ -805,7 +902,11 @@ export const mockAppFrameworkApi = {
         action: AppPluginAction,
         resource?: AppStoreResource,
     ): Promise<string> => {
-        require(instanceId);
+        const target = require(instanceId);
+        if (target.framework_id === 'koishi') {
+            applyMockKoishiStoreOp(target, pluginName, action);
+            return withMockDelay(`mock-plugin-${instanceId}-${pluginName}`);
+        }
         if (require(instanceId).framework_id === 'nonebot2' || require(instanceId).framework_id === 'astrbot') {
             applyMockStoreOp(instanceId, pluginName, action, resource ?? 'plugin');
         } else {
@@ -822,6 +923,26 @@ export const mockAppFrameworkApi = {
         resource?: AppStoreResource,
     ): Promise<AppConfigWriteResult> => {
         const inst = require(instanceId);
+        if (inst.framework_id === 'koishi') {
+            const short = koishiShortName(pluginName);
+            editKoishiConfig(inst, (cfg) => {
+                let next = cfg;
+                if (!walk(cfg.plugins).some((n) => n.name === short)) {
+                    next = appendTo(next, [], newPlugin(next, short, enabled));
+                }
+                const flip = (list: KoishiInstanceConfig['plugins']): KoishiInstanceConfig['plugins'] =>
+                    list.map((n) => ({ ...n, enabled: n.name === short ? enabled : n.enabled, children: flip(n.children) }));
+                return { ...next, plugins: flip(next.plugins) };
+            });
+            return withMockDelay({
+                config: { framework: 'koishi', data: peekKoishiConfig(inst) },
+                revision: 'mock-r-plugin',
+                documents: [],
+                restart_required: false,
+                relinked: false,
+                port_changed: false,
+            });
+        }
         if (inst.framework_id === 'nonebot2' || inst.framework_id === 'astrbot') {
             const key = storeKey(instanceId, resource ?? 'plugin');
             const list = mockStoreInstalledFor(instanceId, resource ?? 'plugin');
@@ -937,6 +1058,23 @@ export const mockAppFrameworkApi = {
     astrbotListSubagentTools: (instanceId: string): Promise<string[]> => {
         const inst = require(instanceId);
         return mockAstrBotDashboard.listSubagentTools(inst, mockAccountView(inst));
+    },
+
+    koishiStatus: (instanceId: string): Promise<KoishiRuntimeStatus> => {
+        const inst = require(instanceId);
+        return koishiMockStatus(inst, peekKoishiConfig(inst));
+    },
+    koishiPluginSchemas: (instanceId: string, names: string[]): Promise<KoishiPluginSchema[]> => {
+        require(instanceId);
+        return withMockDelay(koishiMockSchemas(names));
+    },
+    koishiPackages: (instanceId: string): Promise<KoishiPackageInfo[]> =>
+        withMockDelay(koishiMockPackages(peekKoishiConfig(require(instanceId)))),
+    koishiRestart: async (instanceId: string): Promise<void> => {
+        const inst = require(instanceId);
+        if (inst.state !== 'running') throw new Error('Koishi 没在运行');
+        await withMockDelay(undefined);
+        playMockAppRun(inst, () => require(instanceId).state === 'running');
     },
 
     maibotStatus: (instanceId: string): Promise<MaiBotRuntimeStatus> => mockMaiBotRuntime.status(require(instanceId)),
@@ -1220,6 +1358,42 @@ const mockMaiBotPlugins: AppStoreMarketEntry[] = [
     maibotMarketEntry('a0000xz.maibot-tarots-plugin', '塔罗牌插件', '抽一张塔罗牌，麦麦来解读', 'A0000Xz', 'A0000Xz/MaiBot-Tarots-Plugin'),
 ];
 
+const koishiMarketEntry = (
+    pkg: string,
+    description: string,
+    author: string,
+    tags: string[],
+    version = '1.0.0',
+): AppStoreMarketEntry => ({
+    resource: 'plugin',
+    id: pkg,
+    name: koishiShortName(pkg),
+    description,
+    version,
+    author,
+    homepage: `https://www.npmjs.com/package/${pkg}`,
+    time: '2026-06-05T06:17:20.210Z',
+    package: pkg,
+    module_name: koishiShortName(pkg),
+    flavor: 'npm',
+    is_official: pkg.startsWith('@koishijs/'),
+    valid: true,
+    tags,
+    supported_adapters: [],
+    authors: [],
+    repos: [],
+    files: [],
+    allow_build: [],
+});
+
+const mockKoishiPlugins: AppStoreMarketEntry[] = [
+    koishiMarketEntry('koishi-plugin-adapter-onebot', 'OneBot 适配器', 'shigma', ['适配器', 'onebot'], '6.9.4'),
+    koishiMarketEntry('koishi-plugin-echo', '复读消息', 'shigma', ['实用工具'], '2.2.5'),
+    koishiMarketEntry('koishi-plugin-chatluna', '多平台模型接入的大语言模型聊天服务', 'dingyi222666', ['人工智能'], '1.3.0'),
+    koishiMarketEntry('koishi-plugin-puppeteer', '网页截图和图片渲染服务', 'shigma', ['扩展功能'], '3.9.0'),
+    koishiMarketEntry('@koishijs/plugin-help', '帮助指令', 'shigma', ['实用工具'], '2.4.6'),
+];
+
 const mockStoreInstalled = new Map<string, AppStoreInstalled[]>();
 
 function storeKey(instanceId: string, resource: AppStoreResource): string {
@@ -1303,6 +1477,20 @@ function mockStoreInstalledFor(instanceId: string, resource: AppStoreResource): 
         mockStoreInstalled.set(key, seedStoreInstalled(inst?.framework_id, resource));
     }
     return mockStoreInstalled.get(key) ?? [];
+}
+
+/** 装 = 插件树里加一条停用的；卸 = 所有同名条目摘掉（真机后端还要 yarn add / remove） */
+function applyMockKoishiStoreOp(inst: AppInstance, pluginName: string, action: AppPluginAction) {
+    const short = koishiShortName(pluginName);
+    editKoishiConfig(inst, (cfg) => {
+        if (action === 'uninstall') {
+            const drop = (list: KoishiInstanceConfig['plugins']): KoishiInstanceConfig['plugins'] =>
+                list.filter((n) => n.name !== short).map((n) => ({ ...n, children: drop(n.children) }));
+            return { ...cfg, plugins: drop(cfg.plugins) };
+        }
+        if (walk(cfg.plugins).some((n) => n.name === short)) return cfg;
+        return appendTo(cfg, [], newPlugin(cfg, short, false));
+    });
 }
 
 function applyMockStoreOp(

@@ -37,7 +37,9 @@ const FILTER_ITEMS = [
 export const AppStoreTab: React.FC<{
     instance: AppInstance;
     resource: AppStoreResource;
-}> = ({ instance, resource }) => {
+    /** 插件配置不在单独文件里的框架（Koishi 在插件树里）：齿轮跳过去，不开配置框 */
+    onConfigure?: (id: string, name: string) => void;
+}> = ({ instance, resource, onConfigure }) => {
     const p = useAppStore(instance, resource);
     const [uninstall, setUninstall] = useState<string | null>(null);
     const [configName, setConfigName] = useState<string | null>(null);
@@ -126,7 +128,13 @@ export const AppStoreTab: React.FC<{
                                         onUpdate={() => void p.runOp(row.id, 'update')}
                                         onUninstall={() => setUninstall(row.id)}
                                         onToggle={() => void p.applyEnabled(row.id, !row.enabled)}
-                                        onConfig={resource === 'plugin' ? () => setConfigName(row.id) : undefined}
+                                        onConfig={
+                                            resource !== 'plugin'
+                                                ? undefined
+                                                : onConfigure
+                                                  ? () => onConfigure(row.id, row.name)
+                                                  : () => setConfigName(row.id)
+                                        }
                                     />
                                 </ListItem>
                             ))}
@@ -182,7 +190,7 @@ export const AppStoreTab: React.FC<{
                 onConfirm={(id) => void p.runOp(id, 'uninstall')}
             />
 
-            {resource === 'plugin' && (
+            {resource === 'plugin' && !onConfigure && (
                 <PluginConfigDialog
                     instanceId={instance.id}
                     pluginName={configName}

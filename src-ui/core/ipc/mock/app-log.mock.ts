@@ -42,9 +42,27 @@ function karin(d: Date, level: 'MARK' | 'INFO' | 'WARN', text: string): string {
     return `${E}${tone}m[Karin][${millis(d)}][${level}]${E}39m ${text}`;
 }
 
+/** Koishi 自己的 logger：非终端时不带颜色，`日期 时间 [级别首字母] 模块 内容` */
+function koi(d: Date, level: 'I' | 'W' | 'S', scope: string, text: string): string {
+    return `${d.getFullYear()}-${monthDay(d)} ${clock(d)} [${level}] ${scope} ${text}`;
+}
+
 function startup(inst: AppInstance, d: Date): string[] {
     const dir = inst.install_dir.replace(/\//g, '\\');
     switch (inst.framework_id) {
+        case 'koishi':
+            return [
+                koi(d, 'I', 'app', 'Koishi/4.18.11'),
+                koi(d, 'I', 'loader', 'apply plugin group:server'),
+                koi(d, 'I', 'loader', 'apply plugin server:cj4vi7'),
+                koi(d, 'I', 'loader', 'apply plugin group:console'),
+                koi(d, 'I', 'loader', 'apply plugin console:helk2a'),
+                koi(d, 'I', 'loader', 'apply plugin adapter-onebot:ncd-link'),
+                koi(d, 'I', 'server', `server listening at http://127.0.0.1:${inst.port}`),
+                koi(d, 'I', 'console', `webui is available at http://127.0.0.1:${inst.port}`),
+                koi(d, 'I', 'sqlite', 'auto creating table user'),
+                koi(d, 'S', 'telemetry', '欢迎使用 Koishi！在您点击「同意」前，telemetry 服务不会启动。'),
+            ];
         case 'maibot':
             return [
                 mai(d, 'info', '主程序', '255;255;255', '正在启动MaiBot'),
@@ -100,6 +118,8 @@ function startup(inst: AppInstance, d: Date): string[] {
 
 function heartbeat(inst: AppInstance, d: Date, n: number): string {
     switch (inst.framework_id) {
+        case 'koishi':
+            return koi(d, 'I', 'onebot', `[receive] heartbeat #${n}`);
         case 'maibot':
             return mai(d, 'info', '心流', '255;135;175', `第 ${n} 次观察：群里没有新消息`);
         case 'astrbot':
