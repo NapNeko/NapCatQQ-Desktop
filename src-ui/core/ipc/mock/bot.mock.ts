@@ -8,6 +8,7 @@ import type {
     LogSnapshot,
 } from '../types';
 import type { BotConfig } from '../generated/domain/BotConfig';
+import type { ImportedNetworkConfig } from '../generated/domain/ImportedNetworkConfig';
 import { emitMockEvent } from './events.mock';
 
 export const mockBots: BotStatus[] = [
@@ -109,6 +110,47 @@ export function buildMockBotConfig(botId: string): BotConfig {
             o3HookMode: 1,
             bypass: { hook: false, window: false, module: false, process: false, container: false, js: false },
         },
+    };
+}
+
+/// 远端 onebot 回读：模拟用户在远端 WebUI 里多加了一条反向 WS
+export function mockRemoteNetwork(): ImportedNetworkConfig {
+    return {
+        connect: {
+            httpServers: [
+                {
+                    enable: true,
+                    name: 'HTTP-API',
+                    messagePostFormat: 'array',
+                    token: 'secret-123',
+                    debug: false,
+                    host: '0.0.0.0',
+                    port: 3000,
+                    enableCors: true,
+                    enableWebsocket: false,
+                    path: '/',
+                },
+            ],
+            httpSseServers: [],
+            httpClients: [],
+            websocketServers: [],
+            websocketClients: [
+                {
+                    enable: true,
+                    name: 'koishi',
+                    messagePostFormat: 'array',
+                    token: '',
+                    debug: false,
+                    url: 'ws://172.17.0.1:5140/onebot',
+                    reportSelfMessage: false,
+                    reconnectInterval: 5000,
+                    heartInterval: 30000,
+                    role: 'Universal',
+                },
+            ],
+            plugins: [],
+        },
+        parseMultMsg: true,
     };
 }
 

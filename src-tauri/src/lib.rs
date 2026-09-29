@@ -853,6 +853,7 @@ pub fn run() {
             commands::bot::delete_bot_config,
             commands::bot::start_bot,
             commands::bot::detect_bot_config_drift,
+            commands::bot::fetch_bot_remote_network,
             commands::bot::start_bot_with_drift_decisions,
             commands::bot::upsert_bot_config_with_decisions,
             commands::bot::stop_bot,

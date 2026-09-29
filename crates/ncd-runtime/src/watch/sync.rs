@@ -165,16 +165,18 @@ pub fn bot_to_notify_target_with_webui(
         }
     };
 
-    let (webui_port, webui_token) = match (config.bot.backend_type, webui) {
+    // webui 为 (0, token) 表示 token 已知、容器实际映射的口还没拿到(会话隧道没开起来)
+    let (webui_port, webui_token, webui_port_guessed) = match (config.bot.backend_type, webui) {
         (BackendType::NapCat, Some((port, token))) if port > 0 && !token.trim().is_empty() => {
-            (Some(port), Some(token))
+            (Some(port), Some(token), false)
         }
-        (BackendType::NapCat, None)
+        (BackendType::NapCat, webui)
             if matches!(config.bot.deployment_type, DeploymentType::Docker) =>
         {
-            (Some(napcat_docker_webui_host_port(qq)), None)
+            let token = webui.map(|(_, t)| t).filter(|t| !t.trim().is_empty());
+            (Some(napcat_docker_webui_host_port(qq)), token, true)
         }
-        _ => (None, None),
+        _ => (None, None, false),
     };
 
     NotifyBotTarget {
@@ -189,6 +191,7 @@ pub fn bot_to_notify_target_with_webui(
         webui_port,
         webui_token,
         enabled: true,
+        webui_port_guessed,
     }
 }
 
@@ -238,9 +241,10 @@ pub fn build_notify_config_with_extras(
 
 /// 心跳/同步在 WebUI 端点尚未入内存表时,不要用空 port/token 覆盖远端已有凭据。
 /// 否则 Bot 重启后一段空窗内会把 notify.json 的 webui 清掉,登录踢号探活哑火。
+/// 按规则推出来的口也算没有:导入的容器可能映射到别的口,不能拿推测值冲掉之前拿到的真实口。
 pub fn merge_notify_preserve_webui(new: &mut NotifyConfig, prev: &NotifyConfig) {
     for bot in &mut new.bots {
-        let has_port = bot.webui_port.filter(|p| *p > 0).is_some();
+        let has_port = !bot.webui_port_guessed && bot.webui_port.filter(|p| *p > 0).is_some();
         let has_token = bot
             .webui_token
             .as_ref()
@@ -562,16 +566,76 @@ mod tests {
         prev.bots[0].webui_port = Some(11111);
         prev.bots[0].webui_token = Some("stale".into());
 
-        let mut next = build_notify_config(
+        let mut map = std::collections::HashMap::new();
+        map.insert("9".into(), (22222, "fresh".into()));
+        let extras = WatchNotifyExtras {
+            webui_by_bot: map,
+            ..WatchNotifyExtras::default()
+        };
+        let mut next = build_notify_config_with_extras(
             "s1",
             &[sample_remote("s1", 9)],
             &OfflineWebhookSettings::default(),
+            &extras,
         );
-        next.bots[0].webui_port = Some(22222);
-        next.bots[0].webui_token = Some("fresh".into());
         merge_notify_preserve_webui(&mut next, &prev);
         assert_eq!(next.bots[0].webui_port, Some(22222));
         assert_eq!(next.bots[0].webui_token.as_deref(), Some("fresh"));
+    }
+
+    fn extras_with_webui(qq: &str, port: u16, token: &str) -> WatchNotifyExtras {
+        let mut map = std::collections::HashMap::new();
+        map.insert(qq.into(), (port, token.into()));
+        WatchNotifyExtras {
+            webui_by_bot: map,
+            ..WatchNotifyExtras::default()
+        }
+    }
+
+    #[test]
+    fn guessed_docker_port_does_not_overwrite_known_port() {
+        // 导入的容器映射到 16099;桌面端刚启动、隧道还没开时只知道 token
+        let mut prev = build_notify_config_with_extras(
+            "s1",
+            &[sample_remote("s1", 9)],
+            &OfflineWebhookSettings::default(),
+            &extras_with_webui("9", 16099, "tok"),
+        );
+        prev.bots[0].webui_port_guessed = false;
+
+        let mut next = build_notify_config_with_extras(
+            "s1",
+            &[sample_remote("s1", 9)],
+            &OfflineWebhookSettings::default(),
+            &extras_with_webui("9", 0, "tok"),
+        );
+        assert!(next.bots[0].webui_port_guessed);
+        assert_eq!(next.bots[0].webui_port, Some(napcat_docker_webui_host_port(9)));
+        assert_eq!(next.bots[0].webui_token.as_deref(), Some("tok"));
+
+        merge_notify_preserve_webui(&mut next, &prev);
+        assert_eq!(next.bots[0].webui_port, Some(16099));
+    }
+
+    #[test]
+    fn guessed_docker_port_is_kept_when_nothing_known() {
+        let prev = NotifyConfig::default();
+        let mut next = build_notify_config_with_extras(
+            "s1",
+            &[sample_remote("s1", 9)],
+            &OfflineWebhookSettings::default(),
+            &extras_with_webui("9", 0, "tok"),
+        );
+        merge_notify_preserve_webui(&mut next, &prev);
+        assert_eq!(next.bots[0].webui_port, Some(napcat_docker_webui_host_port(9)));
+    }
+
+    #[test]
+    fn guessed_flag_is_not_written_to_notify_json() {
+        let n = build_notify_config("s1", &[sample_remote("s1", 9)], &OfflineWebhookSettings::default());
+        assert!(n.bots[0].webui_port_guessed);
+        let raw = serde_json::to_string(&n).unwrap();
+        assert!(!raw.contains("guessed"), "{raw}");
     }
 
     #[test]

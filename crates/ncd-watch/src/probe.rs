@@ -276,6 +276,7 @@ mod tests {
             webui_port: None,
             webui_token: None,
             enabled: true,
+            webui_port_guessed: false,
         };
         let r = m.probe_bot(&bot);
         assert_eq!(r.status, ProbeStatus::Online);

@@ -12,6 +12,7 @@ use ncd_backend_snowluma::{
 use ncd_deploy::docker::DockerCli;
 use ncd_deploy::{Deployment, NativeRuntimeEventSink};
 use ncd_deploy::{DockerDeployment, NapcatLogNoiseFilter, resolve_bot_container_name};
+use ncd_domain::docker::DockerDeploySpec;
 use ncd_domain::{BackendType, BotConfig, DeploymentType};
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostError, StreamSource};
@@ -32,6 +33,41 @@ pub struct SnowLumaDockerEndpoints {
     pub vnc_password: String,
     /// SnowLuma WebUI 登录(SNOWLUMA_WEBUI_BOOTSTRAP_PASSWORD)
     pub webui_password: String,
+}
+
+/// 按容器实际的端口映射找宿主机口。导入的容器常是用户自己 compose 起的，不一定按
+/// 桌面端的 qq 偏移规则映射；查不到时仍按规则推，和桌面端自己部署的容器对得上。
+struct ContainerPorts<'h> {
+    cli: Option<DockerCli<'h>>,
+    container: &'h str,
+}
+
+impl<'h> ContainerPorts<'h> {
+    async fn probe(host: &'h dyn Host, container: &'h str) -> Self {
+        let cli = DockerCli::new(host);
+        let ready = cli.ensure_daemon_ready().await.is_ok();
+        Self {
+            cli: ready.then_some(cli),
+            container,
+        }
+    }
+
+    async fn host_port(&self, spec: &DockerDeploySpec, container_port: u16) -> u16 {
+        if let Some(cli) = &self.cli {
+            match cli.published_host_port(self.container, container_port).await {
+                Ok(Some(port)) => return port,
+                Ok(None) => {}
+                Err(error) => warn!(
+                    target: "ncd_runtime::docker_bot_session",
+                    container = %self.container,
+                    %error,
+                    "读取容器端口映射失败，按默认规则推端口"
+                ),
+            }
+        }
+        spec.host_port_for_container(container_port)
+            .unwrap_or(container_port)
+    }
 }
 
 struct SessionInner {
@@ -146,10 +182,11 @@ impl DockerBotSessionRegistry {
 
         let mut tunnels = Vec::new();
         let mut snowluma_eps = None;
+        let ports = ContainerPorts::probe(host.as_ref(), &container).await;
 
         match config.bot.backend_type {
             BackendType::NapCat => {
-                let remote_webui = spec.host_port_for_container(6099).unwrap_or(6099);
+                let remote_webui = ports.host_port(&spec, 6099).await;
                 if let Ok(handle) = open_loopback_tunnel(host.as_ref(), remote_webui).await {
                     let local_port = handle.local_port();
                     tunnels.push(handle);
@@ -170,8 +207,8 @@ impl DockerBotSessionRegistry {
                 }
             }
             BackendType::SnowLuma => {
-                let remote_webui = spec.host_port_for_container(5099).unwrap_or(5099);
-                let remote_novnc = spec.host_port_for_container(6081).unwrap_or(6081);
+                let remote_webui = ports.host_port(&spec, 5099).await;
+                let remote_novnc = ports.host_port(&spec, 6081).await;
                 let vnc = snowluma_vnc_passwd.unwrap_or_default();
                 let webui = snowluma_webui_bootstrap.unwrap_or_default();
                 match (

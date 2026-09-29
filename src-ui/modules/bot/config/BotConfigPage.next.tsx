@@ -30,7 +30,16 @@ import {
     validateBotConfig,
     defaultStatusCommandConfig,
 } from '../../../core/domain/bot/config-defaults';
-import { normalizeRuntimeTargetFromDisk } from '../../../core/domain/bot/runtime-target';
+import {
+    isRuntimeTargetConcreteRemote,
+    normalizeRuntimeTargetFromDisk,
+} from '../../../core/domain/bot/runtime-target';
+import {
+    isPreviewEmpty,
+    previewImportedNetwork,
+    type ImportedNetworkPreview,
+} from '../../../core/domain/bot/imported-network';
+import { useRemoteNetworkPull } from '../../../hooks/bot/useRemoteNetworkPull';
 import type { StatusCommandConfig } from '../../../core/ipc/generated/domain/StatusCommandConfig';
 import { describeSaveResult } from '../../../core/domain/bot/save-result';
 import { useBotDockerStartGate } from '../../../hooks/bot/useBotDockerStartGate';
@@ -50,6 +59,7 @@ import { IdentityTab } from './next/IdentityTab';
 import { ConnectionsTab } from './next/ConnectionsTab';
 import { AdvancedTab } from './next/AdvancedTab';
 import { ConfigDriftDialog } from '../dialogs/ConfigDriftDialog';
+import { RemoteNetworkPullDialog } from '../dialogs/RemoteNetworkPullDialog';
 import { BOT_TOUR_DEMO } from '../../../hooks/desktop/botTourBridge';
 
 interface BotConfigPageNextProps {
@@ -285,6 +295,52 @@ export function BotConfigPageNext({
                 ...patch,
             },
         }));
+    };
+
+    // 后端按已保存的 bot.json 找远端路径，所以看的是已保存的运行位置，不是表单里正在改的
+    const canPullRemote =
+        isEditMode &&
+        !tourDemoMode &&
+        loadedConfig != null &&
+        isRuntimeTargetConcreteRemote(loadedConfig.bot.runtime_target);
+    const { pullRemoteNetwork, pulling: pullingRemote } = useRemoteNetworkPull();
+    const [remotePreview, setRemotePreview] = useState<ImportedNetworkPreview | null>(null);
+
+    const handlePullRemote = async () => {
+        if (!botId) return;
+        try {
+            const imported = await pullRemoteNetwork(botId);
+            if (!imported) {
+                pushInfoBar({
+                    tone: 'info',
+                    title: '远端还没有 onebot 配置文件',
+                    content: '启动一次后桌面端会按当前配置写进去',
+                    autoDismissMs: 4000,
+                });
+                return;
+            }
+            const preview = previewImportedNetwork(formData, imported);
+            if (isPreviewEmpty(preview)) {
+                pushInfoBar({
+                    tone: 'success',
+                    title: '和远端一致',
+                    autoDismissMs: 3000,
+                });
+                return;
+            }
+            setRemotePreview(preview);
+        } catch (e) {
+            pushErrorBar({
+                key: 'bot-remote-network',
+                title: '读取远端配置失败',
+                raw: String(e),
+            });
+        }
+    };
+
+    const confirmPullRemote = () => {
+        if (remotePreview) setFormData(remotePreview.next);
+        setRemotePreview(null);
     };
 
     const normalizeLoadedConfig = (c: BotConfig): BotConfig => {
@@ -573,6 +629,8 @@ export function BotConfigPageNext({
                                     onChange={updateConnect}
                                     backendType={formData.bot.backend_type}
                                     botId={tourDemoMode ? null : botId}
+                                    onPullRemote={canPullRemote ? handlePullRemote : undefined}
+                                    pullingRemote={pullingRemote}
                                 />
                             </div>
                         </TabsContent>
@@ -630,6 +688,12 @@ export function BotConfigPageNext({
                     onCancel={handleSaveDriftCancel}
                 />
             )}
+
+            <RemoteNetworkPullDialog
+                preview={remotePreview}
+                onConfirm={confirmPullRemote}
+                onCancel={() => setRemotePreview(null)}
+            />
         </div>
     );
 }
