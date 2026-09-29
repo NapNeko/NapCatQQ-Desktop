@@ -76,6 +76,8 @@ export default defineConfig({
             if (id.includes('gsap')) return 'vendor-gsap';
             if (id.includes('@radix-ui')) return 'vendor-radix';
             if (id.includes('lucide-react')) return 'vendor-icons';
+            // xterm 只有终端面板用，单拆出来跟着懒加载的 TerminalDock 走，不进启动就加载的 vendor
+            if (id.includes('@xterm')) return 'vendor-xterm';
             return 'vendor';
           }
           return undefined;
