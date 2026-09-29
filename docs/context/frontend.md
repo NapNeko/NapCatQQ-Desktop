@@ -55,7 +55,7 @@ flowchart TB
 
 ### 现存偏差（改到附近时顺手收掉，别照抄）
 
-- modules 直连服务：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/{ImportRemoteBotsDialog,SnowLumaConsentDialog}.tsx`、`bot/list/BotListPage.next.tsx`、`bot/list/next/BotCard.tsx`、`components/{ComponentsPage.next,QqDependencyDialog}.tsx`、`remote/{AddServerDialog,ImportSshConfigDialog}.tsx`、`settings/{ConfigImportDialog,DataRootMigrateDialog}.tsx`、`settings/settings-draft.ts`、`settings/tabs/{AboutTab,NcdWatchRemoteSection,NotificationsTab,RuntimeTab,WindowTab}.tsx`、`settings/tabs/notifications/{DeliveryHistoryDialog,OneBotMessengerPicker}.tsx`、`task-queue/{TaskDetailPanel,TaskQueueListItem,TaskQueuePage.next}.tsx`、`tray/TrayPanel.tsx`（另有三处动态 `import('../../core/ipc/transport')` 直接 invoke `tray_panel_*`，命令名漏到了 modules）。`modules/apps/**` 和 `shared/**` 已经清零，保持住。
+- modules 直连服务：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/{ImportRemoteBotsDialog,SnowLumaConsentDialog}.tsx`、`bot/list/BotListPage.next.tsx`、`bot/list/next/BotCard.tsx`、`components/{ComponentsPage.next,QqDependencyDialog}.tsx`、`remote/{AddServerDialog,ImportSshConfigDialog}.tsx`、`settings/{ConfigImportDialog,DataRootMigrateDialog}.tsx`、`settings/settings-draft.ts`、`settings/tabs/{AboutTab,NcdWatchRemoteSection,NotificationsTab,RuntimeTab,WindowTab}.tsx`、`settings/tabs/notifications/{DeliveryHistoryDialog,OneBotMessengerPicker}.tsx`、`task-queue/{TaskDetailPanel,TaskQueueListItem,TaskQueuePage.next}.tsx`。`modules/apps/**` 和 `shared/**` 已经清零，保持住。
 - transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（启动时动态 import 窗口 API 认托盘面板窗口，还没挂 React，留着）、`core/services/desktop.service.ts`（窗口控制和托盘面板事件动态 import 窗口 API、标题栏关闭直接 `emit`）。
 - `app/AppNext.tsx` 直接用 `desktopUpdateService`。
 - `hooks/preferences/useBackendSettings.ts` 反过来 import `modules/settings/settings-draft`。

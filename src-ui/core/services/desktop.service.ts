@@ -113,6 +113,10 @@ export const windowControlService = {
 
 export const trayService = {
     showMainWindow: (): Promise<void> => invoke<void>('window_show'),
+    /** 托盘面板按内容高度调窗 */
+    resizePanel: (height: number): Promise<void> => invoke<void>('tray_panel_resize', { height }),
+    enterLightweight: (): Promise<void> => invoke<void>('tray_panel_enter_lightweight'),
+    quit: (): Promise<void> => invoke<void>('tray_panel_quit'),
 };
 
 export const windowEventService = {

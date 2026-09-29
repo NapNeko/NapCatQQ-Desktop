@@ -14,8 +14,11 @@ import {
     Play,
     Square,
 } from 'lucide-react';
-import { botService } from '../../core/services/bot.service';
-import { trayService, windowEventService } from '../../core/services/desktop.service';
+import {
+    reportTrayPanelHeight,
+    useTrayPanelActions,
+    useTrayPanelShown,
+} from '../../hooks/desktop/useTrayPanel';
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
 import { useBotConfigsMap } from '../../hooks/bot/useBotConfigsMap';
 import { useBotFlavorMap } from '../../hooks/bot/useBotFlavorMap';
@@ -29,21 +32,6 @@ import type { Flavor } from '../../core/domain/bot/flavor';
 import { cn } from '../../shared/utils/cn';
 import logoMark from '../../assets/logo.png';
 const PAGE_SIZE = 2;
-let lastReportedHeight = 0;
-
-// 高度自适应:量取 cardRef 自然内容高度并通知 Rust 动态调窗
-async function reportPanelHeight(el: HTMLElement): Promise<void> {
-    try {
-        const { invoke } = await import('../../core/ipc/transport');
-        const h = Math.ceil(el.getBoundingClientRect().height);
-        if (h > 60 && h < 600 && Math.abs(h - lastReportedHeight) >= 2) {
-            lastReportedHeight = h;
-            await invoke<void>('tray_panel_resize', { height: h });
-        }
-    } catch {
-        // 浏览器预览下没有 IPC,忽略
-    }
-}
 
 interface PanelActionProps {
     icon: React.ReactNode;
@@ -279,6 +267,7 @@ export const TrayPanel: React.FC = () => {
     const napcat = useNapcatLogin();
     const openWebui = useOpenWebui();
     const openSnowlumaNovnc = useOpenSnowlumaNovnc();
+    const tray = useTrayPanelActions();
     const [mutatingBotIds, setMutatingBotIds] = useState<Record<string, boolean>>({});
     const [actionError, setActionError] = useState<string | null>(null);
     const [page, setPage] = useState(1);
@@ -297,7 +286,7 @@ export const TrayPanel: React.FC = () => {
         setActionError(null);
         setMutatingBotIds((prev) => ({ ...prev, [botId]: true }));
         try {
-            await botService.start(botId);
+            await tray.startBot(botId);
         } catch (e) {
             console.error('启动 Bot 失败:', e);
             setActionError('启动失败，详情见日志');
@@ -311,7 +300,7 @@ export const TrayPanel: React.FC = () => {
         setActionError(null);
         setMutatingBotIds((prev) => ({ ...prev, [botId]: true }));
         try {
-            await botService.stop(botId);
+            await tray.stopBot(botId);
         } catch (e) {
             console.error('停止 Bot 失败:', e);
             setActionError('停止失败，详情见日志');
@@ -349,7 +338,7 @@ export const TrayPanel: React.FC = () => {
         void refetch();
         const el = cardRef.current;
         if (el) {
-            void reportPanelHeight(el);
+            reportTrayPanelHeight(el);
         }
     }, [refetch]);
 
@@ -357,25 +346,14 @@ export const TrayPanel: React.FC = () => {
         refreshAndResize();
     }, [refreshAndResize]);
 
-    // 监听托盘唤起事件:每次展开时实时刷新 Bot 排序、运行状态并校准高度
-    useEffect(() => {
-        let unlisten: (() => void) | undefined;
-        const setup = async () => {
-            unlisten = await windowEventService.onTrayPanelShow(() => {
-                refreshAndResize();
-            });
-        };
-        void setup();
-        return () => {
-            if (unlisten) unlisten();
-        };
-    }, [refreshAndResize]);
+    // 每次展开时刷新 Bot 排序、运行状态并校准高度
+    useTrayPanelShown(refreshAndResize);
 
     // 翻页或当前页 Bot 数量变动时，即时量取新高度并通知 Rust 调窗
     useEffect(() => {
         const el = cardRef.current;
         if (el) {
-            void reportPanelHeight(el);
+            reportTrayPanelHeight(el);
         }
     }, [currentPage, visibleBots.length]);
 
@@ -384,7 +362,7 @@ export const TrayPanel: React.FC = () => {
         const el = cardRef.current;
         if (!el || typeof ResizeObserver === 'undefined') return;
         const ro = new ResizeObserver(() => {
-            void reportPanelHeight(el);
+            reportTrayPanelHeight(el);
         });
         ro.observe(el);
         return () => {
@@ -400,19 +378,9 @@ export const TrayPanel: React.FC = () => {
                 : '全部已停止';
 
     // 面板由后端 window_show 收起，面板的 capability 不给窗口 hide
-    const handleShow = async () => {
-        await trayService.showMainWindow().catch(() => { });
-    };
-
-    const handleLightweight = async () => {
-        const { invoke } = await import('../../core/ipc/transport');
-        await invoke<void>('tray_panel_enter_lightweight').catch(() => { });
-    };
-
-    const handleQuit = async () => {
-        const { invoke } = await import('../../core/ipc/transport');
-        await invoke<void>('tray_panel_quit').catch(() => { });
-    };
+    const handleShow = tray.showMainWindow;
+    const handleLightweight = tray.enterLightweight;
+    const handleQuit = tray.quit;
 
     return (
         <div className="flex min-h-full w-full flex-col overflow-hidden bg-elevated select-none">
