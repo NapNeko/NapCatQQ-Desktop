@@ -231,7 +231,7 @@ impl BotBackend for RemoteNativeDeploymentBackend {
                 let p = log_path.clone();
                 async move {
                     // 只让远端 tail -n,不走 SFTP 整读:崩溃转储能到上百 MB
-                    ncd_host::remote_tail_lines(h.as_ref(), &p, raw_n)
+                    ncd_host::remote_tail_lines(h.as_ref(), &p, raw_n, None)
                         .await
                         .map_err(|e| BotBackendError::Io(e.to_string()))
                 }

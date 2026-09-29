@@ -3,6 +3,8 @@
 //! 跟随日志和取日志尾巴都走这几条:整文件走 SFTP 可能碰上上百 MB 的崩溃转储,
 //! 让远端先截好再传。脚本文本各处原来抄了好几份,改引号或截断上限只改这里。
 
+use std::time::Duration;
+
 use crate::command::HostCommand;
 use crate::error::HostError;
 use crate::host::Host;
@@ -46,19 +48,24 @@ pub async fn remote_read_from(
 }
 
 /// 末尾 n 行原样返回;文件不存在是空列表
+///
+/// timeout 为 None 时用 Host 默认上限;开页就拉的调用方给短一点的上限,SSH 卡住时页面不跟着干等
 pub async fn remote_tail_lines(
     host: &dyn Host,
     path: &str,
     n: usize,
+    timeout: Option<Duration>,
 ) -> Result<Vec<String>, HostError> {
     if n == 0 {
         return Ok(Vec::new());
     }
     let quoted = shell_single_quote(path);
-    let out = host
-        .run_to_string(sh(format!(
-            "if [ -f {quoted} ]; then tail -n {n} -- {quoted}; else exit 0; fi"
-        )))
-        .await?;
+    let mut cmd = sh(format!(
+        "if [ -f {quoted} ]; then tail -n {n} -- {quoted}; else exit 0; fi"
+    ));
+    if let Some(timeout) = timeout {
+        cmd = cmd.timeout(timeout);
+    }
+    let out = host.run_to_string(cmd).await?;
     Ok(out.stdout.lines().map(str::to_string).collect())
 }

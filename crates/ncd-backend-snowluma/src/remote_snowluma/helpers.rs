@@ -46,7 +46,7 @@ pub(crate) async fn read_remote_log_tail_lines(
     path: &str,
     max_raw_lines: usize,
 ) -> Result<Vec<String>, BotBackendError> {
-    ncd_host::remote_tail_lines(host, path, max_raw_lines)
+    ncd_host::remote_tail_lines(host, path, max_raw_lines, None)
         .await
         .map_err(|e| BotBackendError::Io(e.to_string()))
 }

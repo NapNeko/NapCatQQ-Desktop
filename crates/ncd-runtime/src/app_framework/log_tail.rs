@@ -151,13 +151,14 @@ async fn tail_local(path: &HostPath, lines: usize) -> Vec<String> {
     all.into_iter().skip(skip).map(str::to_string).collect()
 }
 
+// 开页拉取的远端命令上限:SSH 卡住时宁可先给空尾巴,也不让日志页一直转圈
+const REMOTE_TIMEOUT: Duration = Duration::from_secs(15);
+
 async fn tail_remote(host: &dyn Host, path: &str, lines: usize) -> Vec<String> {
-    let quoted = shell_single_quote(path);
-    run_sh(
-        host,
-        &format!("if [ -f {quoted} ]; then tail -n {lines} -- {quoted}; fi"),
-    )
-    .await
+    ncd_host::remote_tail_lines(host, path, lines, Some(REMOTE_TIMEOUT))
+        .await
+        .map(drop_blank_lines)
+        .unwrap_or_default()
 }
 
 async fn run_sh(host: &dyn Host, script: &str) -> Vec<String> {
@@ -166,18 +167,17 @@ async fn run_sh(host: &dyn Host, script: &str) -> Vec<String> {
             HostCommand::new("sh")
                 .arg("-c")
                 .arg(script)
-                .timeout(Duration::from_secs(15)),
+                .timeout(REMOTE_TIMEOUT),
         )
         .await;
     match out {
-        Ok(o) => o
-            .stdout
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .map(str::to_string)
-            .collect(),
+        Ok(o) => drop_blank_lines(o.stdout.lines().map(str::to_string).collect()),
         Err(_) => Vec::new(),
     }
+}
+
+fn drop_blank_lines(lines: Vec<String>) -> Vec<String> {
+    lines.into_iter().filter(|l| !l.trim().is_empty()).collect()
 }
 
 #[cfg(test)]
