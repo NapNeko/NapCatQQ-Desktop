@@ -11,7 +11,10 @@ fn main() {
 }
 
 fn inject_product_version() {
-    let conf_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
+    // 取运行时的变量而不是 env!：env! 把编译 build script 那一刻的路径写死，
+    // 同一个 target 目录被别的 checkout（worktree）编过时，会拿着已经不在的路径去读
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
+    let conf_path = std::path::Path::new(&manifest_dir).join("tauri.conf.json");
     let Ok(raw) = std::fs::read_to_string(&conf_path) else {
         println!("cargo:warning=cannot read tauri.conf.json for NCD_PRODUCT_VERSION");
         return;
