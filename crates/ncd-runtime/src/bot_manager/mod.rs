@@ -41,6 +41,7 @@ use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
 pub mod auto_restart;
 mod helpers;
 mod listeners;
+mod remote_network;
 pub mod runtime_gate;
 use helpers::{is_remote_transport_error, is_shared_napcat_json, set_value_at_dot_path};
 pub use runtime_gate::{RuntimeReadinessGate, describe_not_ready, framework_component_for};
@@ -91,6 +92,10 @@ pub enum BotManagerError {
 
     #[error("start cancelled (bot stopped before completion)")]
     Cancelled,
+
+    /// 从远端回读框架配置失败;文案直接给用户看,不加前缀
+    #[error("{0}")]
+    RemoteRead(String),
 }
 
 impl From<ncd_traits::RenderError> for BotManagerError {

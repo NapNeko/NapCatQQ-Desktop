@@ -245,6 +245,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | Tauri | `commands/app_settings.rs`（设置页）, `config_transfer.rs`（导入在设置写锁里提交） |
 | 前端设置页 | `src-ui/modules/settings/*`（`SettingsPage`, `tabs/`, `settings-draft.ts`） |
 | Bot 配置 UI | `src-ui/modules/bot/config/` |
+| 远端 onebot 回读 | 导入时：`ncd-runtime/src/remote/import_network.rs::fetch_imported_network`（NC/SL × Native/Docker 按库存路径读）；已有远端 Bot：`bot_manager/remote_network.rs::fetch_remote_network`（从 bot.json 推主机、容器名，复用上面那个）→ `commands/bot.rs::fetch_bot_remote_network`；前端连接页浮动条「从远端读取」→ `hooks/bot/useRemoteNetworkPull` → `core/domain/bot/imported-network.ts::previewImportedNetwork` 出增删改 → `modules/bot/dialogs/RemoteNetworkPullDialog.tsx` 确认后只改表单 |
 | 服务 | `settings.service.ts`, `config-transfer.service.ts` |
 | hooks | `src-ui/hooks/preferences/`, domain `settings/` |
 

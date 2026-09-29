@@ -23,6 +23,7 @@ import {
     mockBatchStop,
     mockDeleteBotConfig,
     mockLogSnapshot,
+    mockRemoteNetwork,
     mockSnapshots,
     mockStartBot,
     mockStopBot,
@@ -63,6 +64,15 @@ export const botService = {
                 dockerName: dockerName ?? null,
             });
         return Promise.resolve(null);
+    },
+
+    /** 已有的远端 Bot 回读远端 onebot 网络配置，只读；null = 远端没有这份文件 */
+    fetchBotRemoteNetwork: (botId: string): Promise<ImportedNetworkConfig | null> => {
+        if (isTauri)
+            return invoke<ImportedNetworkConfig | null>('fetch_bot_remote_network', { botId });
+        return new Promise((resolve) =>
+            setTimeout(() => resolve(mockRemoteNetwork()), 400),
+        );
     },
 
     listSnapshots: async (): Promise<BotActorSnapshot[]> => {

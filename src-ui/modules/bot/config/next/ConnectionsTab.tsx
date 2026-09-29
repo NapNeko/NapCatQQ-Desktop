@@ -2,7 +2,7 @@
 
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, Pencil, Lock, Link2 } from 'lucide-react';
+import { Plus, Trash2, Pencil, Lock, Link2, CloudDownload } from 'lucide-react';
 import {
     ActionMotionIcon,
     EMPHASIS_MOTION,
@@ -57,6 +57,9 @@ interface ConnectionsTabProps {
     backendType: BackendType;
     /** 已保存 Bot 的 QQ 号；新建（尚未保存）时为 null，「对接应用端」入口不可用。 */
     botId?: string | null;
+    /** 已保存的远端 Bot 才给；不给就不显示「从远端读取」 */
+    onPullRemote?: () => void;
+    pullingRemote?: boolean;
 }
 
 type EditingKey =
@@ -78,7 +81,14 @@ const KIND_BADGE: Record<ConnectionKind, string> = {
     websocketClient: 'WS-Client',
 };
 
-export function ConnectionsTab({ data, onChange, backendType, botId = null }: ConnectionsTabProps) {
+export function ConnectionsTab({
+    data,
+    onChange,
+    backendType,
+    botId = null,
+    onPullRemote,
+    pullingRemote = false,
+}: ConnectionsTabProps) {
     const [editing, setEditing] = useState<EditingKey>(null);
     /// 退场动画结束后再清，避免 open=false 时立刻卸掉表单导致收起动画闪空。
     const [editingMount, setEditingMount] = useState<EditingKey>(null);
@@ -182,6 +192,8 @@ export function ConnectionsTab({ data, onChange, backendType, botId = null }: Co
                 onPick={startCreate}
                 canLinkApp={botId !== null}
                 onLinkApp={() => setLinkOpen(true)}
+                onPullRemote={onPullRemote}
+                pullingRemote={pullingRemote}
             />
 
             {botId !== null && linkMounted && (
@@ -288,6 +300,8 @@ interface FloatingAddBarProps {
     onPick: (kind: ConnectionKind) => void;
     canLinkApp: boolean;
     onLinkApp: () => void;
+    onPullRemote?: () => void;
+    pullingRemote: boolean;
 }
 
 function FloatingAddBarPortal(props: FloatingAddBarProps) {
@@ -299,7 +313,14 @@ function FloatingAddBarPortal(props: FloatingAddBarProps) {
     return createPortal(<FloatingAddBar {...props} />, dock);
 }
 
-function FloatingAddBar({ backendType, onPick, canLinkApp, onLinkApp }: FloatingAddBarProps) {
+function FloatingAddBar({
+    backendType,
+    onPick,
+    canLinkApp,
+    onLinkApp,
+    onPullRemote,
+    pullingRemote,
+}: FloatingAddBarProps) {
     const linkBtn = (
         <Button variant="ghost" size="sm" disabled={!canLinkApp} onClick={onLinkApp}>
             <ActionMotionIcon icon={Link2} size={12} strokeWidth={2.4} motion={EMPHASIS_MOTION} />
@@ -317,6 +338,27 @@ function FloatingAddBar({ backendType, onPick, canLinkApp, onLinkApp }: Floating
                             <span>{linkBtn}</span>
                         </TooltipTrigger>
                         <TooltipContent>先保存 Bot，再对接应用端</TooltipContent>
+                    </Tooltip>
+                )}
+                {onPullRemote && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={pullingRemote}
+                                onClick={onPullRemote}
+                            >
+                                <ActionMotionIcon
+                                    icon={CloudDownload}
+                                    size={12}
+                                    strokeWidth={2.4}
+                                    motion={EMPHASIS_MOTION}
+                                />
+                                <span>{pullingRemote ? '读取中…' : '从远端读取'}</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>在远端 WebUI 里改过连接时，先拉回来再保存</TooltipContent>
                     </Tooltip>
                 )}
                 <span className="mx-0.5 h-4 w-px bg-border-subtle" aria-hidden />

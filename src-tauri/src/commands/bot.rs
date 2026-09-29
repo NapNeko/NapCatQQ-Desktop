@@ -284,6 +284,19 @@ pub async fn detect_bot_config_drift(
         .map_err(map_err)
 }
 
+/// 远端 Bot 回读远端 onebot 网络配置，只读不写；None 表示远端没有这份文件
+#[tauri::command]
+pub async fn fetch_bot_remote_network(
+    state: State<'_, AppState>,
+    bot_id: String,
+) -> Result<Option<ncd_domain::ImportedNetworkConfig>, String> {
+    state
+        .bot_manager
+        .fetch_remote_network(&BotId::new(bot_id))
+        .await
+        .map_err(map_err)
+}
+
 /// 带用户决议启动 Bot前端在 ConfigDriftDialog 确认后调此命令
 #[tauri::command]
 pub async fn start_bot_with_drift_decisions(

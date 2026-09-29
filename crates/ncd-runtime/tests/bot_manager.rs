@@ -726,6 +726,36 @@ async fn start_nonexistent_bot_returns_not_found() {
     assert!(matches!(err, BotManagerError::BotNotFound(_)));
 }
 
+#[tokio::test]
+async fn fetch_remote_network_rejects_local_bot_without_touching_host() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    // 不挂 HostResolver：本机 Bot 必须在解析主机之前就被挡下
+    let (_, _, _, manager) = make_manager(temp.path());
+    manager
+        .upsert_bot_config(bot_config(10001, "local"))
+        .await
+        .unwrap();
+
+    let err = manager
+        .fetch_remote_network(&BotId::new("10001"))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, BotManagerError::RemoteRead(_)), "{err:?}");
+    assert!(err.to_string().contains("本机"), "{err}");
+}
+
+#[tokio::test]
+async fn fetch_remote_network_unknown_bot_returns_not_found() {
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, _, manager) = make_manager(temp.path());
+
+    let err = manager
+        .fetch_remote_network(&BotId::new("99999"))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, BotManagerError::BotNotFound(_)));
+}
+
 // ─── 批量并发 ─────────────────────────────────────────────────────────────────
 
 #[tokio::test]
