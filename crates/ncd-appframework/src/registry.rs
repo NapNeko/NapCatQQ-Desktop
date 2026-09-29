@@ -9,6 +9,7 @@ use ncd_traits::AppFrameworkError;
 use crate::adapter::AppFrameworkAdapter;
 use crate::astrbot::AstrBotAdapter;
 use crate::karin::KarinAdapter;
+use crate::koishi::KoishiAdapter;
 use crate::maibot::MaiBotAdapter;
 use crate::nonebot2::NoneBot2Adapter;
 
@@ -29,6 +30,7 @@ impl AppFrameworkRegistry {
         reg.register(Arc::new(NoneBot2Adapter::new()));
         reg.register(Arc::new(AstrBotAdapter::new()));
         reg.register(Arc::new(MaiBotAdapter::new()));
+        reg.register(Arc::new(KoishiAdapter::new()));
         reg
     }
 
@@ -95,6 +97,7 @@ mod tests {
             vec![
                 "astrbot".to_string(),
                 "karin".to_string(),
+                "koishi".to_string(),
                 "maibot".to_string(),
                 "nonebot2".to_string()
             ]

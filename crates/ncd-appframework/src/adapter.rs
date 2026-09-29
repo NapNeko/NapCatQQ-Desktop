@@ -18,6 +18,7 @@ use crate::astrbot::api::AstrBotRuntimeApi;
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, read_document, write_document_text,
 };
+use crate::koishi::runtime::KoishiRuntimeApi;
 use crate::maibot::api::MaiBotRuntimeApi;
 use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
 
@@ -298,6 +299,19 @@ pub trait AppFrameworkAdapter: Send + Sync {
     fn maibot_runtime(&self) -> Option<&dyn MaiBotRuntimeApi> {
         None
     }
+
+    /// Koishi 的 Bot 在线 / 插件 schema / 重启 worker。同上，类型是 Koishi 专有的
+    fn koishi_runtime(&self) -> Option<&dyn KoishiRuntimeApi> {
+        None
+    }
+
+    /// 跑着的实例要经 WebUI 口（控制台）改应用端配置的框架：编排层在对接、商店装卸之前
+    /// 先把桌面端这边的回环口（远端是隧道口）告诉适配器
+    fn wants_live_port(&self) -> bool {
+        false
+    }
+
+    fn note_live_port(&self, _instance_id: &str, _port: u16) {}
 
     /// 读一份文档原文（缺文件返回空文本 + `"missing"` 版本号）
     async fn read_config_text(

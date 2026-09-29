@@ -16,6 +16,7 @@ const FORMAT_LABEL: Record<AppConfigDocument['format'], string> = {
     json: 'JSON',
     dot_env: 'dotenv',
     toml: 'TOML',
+    yaml: 'YAML',
 };
 
 function editorMode(format: AppConfigDocument['format']): SyntaxMode {

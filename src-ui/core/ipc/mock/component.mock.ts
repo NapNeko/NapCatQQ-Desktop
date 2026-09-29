@@ -201,6 +201,11 @@ const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>
         'remote:production': null,
         'remote:dev': null,
     },
+    koishi: {
+        local: null,
+        'remote:production': null,
+        'remote:dev': null,
+    },
 };
 
 export function mockDetect(
