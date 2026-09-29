@@ -125,6 +125,70 @@ impl LinuxPackageManager {
     }
 }
 
+/// 刷索引加装一个包那一条命令的上限。全新机器上 apt-get update 碰上慢镜像就要几分钟,
+/// 180 秒不够;两句分开各给 300 / 600 秒又太松,连不上时用户要干等一刻钟
+pub const ENSURE_COMMAND_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// 补装缺失命令没成的原因,文案由调用方按自己的场景写
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EnsureCommandError {
+    /// 探不到认识的包管理器
+    NoPackageManager,
+    /// 不是 root、没有免密 sudo,host 上也没注入提权密码
+    NeedsElevation(LinuxPackageManager),
+    /// 装过了命令仍然找不到;detail 是安装命令的退出码和 stderr,或它跑不起来的原因
+    StillMissing {
+        pm: LinuxPackageManager,
+        detail: String,
+    },
+}
+
+/// 缺命令时决定能不能自动装:已在 PATH 上返回 None,能装返回要用的包管理器。
+/// 和 [install_missing_command] 分两步,是为了让带进度的调用方在真正装之前先报一句用哪个管理器
+pub async fn plan_missing_command(
+    host: &dyn Host,
+    command: &str,
+) -> Result<Option<LinuxPackageManager>, EnsureCommandError> {
+    if host.command_exists(command).await {
+        return Ok(None);
+    }
+    let pm = LinuxPackageManager::detect(host)
+        .await
+        .ok_or(EnsureCommandError::NoPackageManager)?;
+    // 装包要 root:root / 免密 sudo 直接行,否则要 host 上注入了提权密码才能走 sudo -S,
+    // 都没有就先退回去让用户手动装,不在 sudo 等密码处挂住
+    let access = crate::remote::probe_sudo(host).await;
+    let elevation_ok = matches!(
+        access,
+        crate::remote::SudoAccess::RootAlready | crate::remote::SudoAccess::Passwordless
+    ) || host.has_elevation_password().await;
+    if !elevation_ok {
+        return Err(EnsureCommandError::NeedsElevation(pm));
+    }
+    Ok(Some(pm))
+}
+
+/// 提权刷索引并装 package,成败以装完后 command 能否找到为准
+pub async fn install_missing_command(
+    host: &dyn Host,
+    pm: LinuxPackageManager,
+    command: &str,
+    package: &str,
+) -> Result<(), EnsureCommandError> {
+    let cmd = sh(&pm.refresh_and_install_script(&[package]))
+        .elevated()
+        .timeout(ENSURE_COMMAND_TIMEOUT);
+    let detail = match host.run_to_string(cmd).await {
+        Ok(out) => format!("exit={:?} stderr={}", out.exit_code, out.stderr.trim()),
+        Err(err) => err.to_string(),
+    };
+    if host.command_exists(command).await {
+        Ok(())
+    } else {
+        Err(EnsureCommandError::StillMissing { pm, detail })
+    }
+}
+
 fn sh(script: &str) -> HostCommand {
     HostCommand::new("sh").arg("-c").arg(script)
 }

@@ -34,7 +34,9 @@ use tracing::info;
 use crate::command::{CommandOutput, DEFAULT_COMMAND_TIMEOUT, HostCommand, HostProcessWaitPolicy};
 use crate::error::HostError;
 use crate::host::{Arch, Host, Locality, Os, SshDialTarget};
-use crate::linux_pkg::LinuxPackageManager;
+use crate::linux_pkg::{
+    EnsureCommandError, LinuxPackageManager, install_missing_command, plan_missing_command,
+};
 use crate::path::{ArchiveKind, DirEntry, HostPath, PathStyle};
 use crate::process::{ExitStatus, HostProcess, ProcessId};
 use crate::shell::{BashShell, HostShell};
@@ -341,60 +343,33 @@ impl RemoteLinuxHost {
 
     /// 确保解压工具(unzip / tar)在远端可用,缺了就用包管理器装一次
     ///
-    /// 流程:先 command_exists 探,有就直接过(快路径,装好的机器零开销)没有
-    /// 就用 [LinuxPackageManager::detect] 探包管理器,提权装,
-    /// 装完再探一次确认探不到包管理器,或装完仍不在,就报带人话指引的 ExtractFailed
+    /// 已装好的机器只多一次 command_exists;装不上时报带人话指引的 ExtractFailed
     /// (告诉用户手动 apt-get install <tool>),不把人留在 exit 127 现场
     async fn ensure_archive_tool(&self, tool: &str) -> Result<(), HostError> {
-        if self.command_exists(tool).await {
-            return Ok(());
-        }
-
-        let Some(pm) = LinuxPackageManager::detect(self).await else {
-            return Err(HostError::ExtractFailed {
-                archive: HostPath::from_posix(tool),
-                reason: format!(
-                    "远端缺少 {tool} 且未识别到包管理器,请手动安装(如 {})后重试",
-                    LinuxPackageManager::Apt.install_hint(&[tool])
-                ),
-            });
+        let result = match plan_missing_command(self, tool).await {
+            Ok(None) => return Ok(()),
+            Ok(Some(pm)) => install_missing_command(self, pm, tool, tool).await,
+            Err(err) => Err(err),
         };
-
-        // 装包要 root判定能不能提权:root / 免密 sudo 直接行;否则看 host 有没有
-        // 注入提权密码(ServerManager 从 keyring 注入的登录/ sudo 密码),有就能走
-        // sudo -S 装两者都没有才退回让用户手动装的人话提示,而不是静默挂起
-        let access = probe_sudo(self).await;
-        let has_password = self.elevation_password.lock().await.is_some();
-        let elevation_ok =
-            matches!(access, SudoAccess::RootAlready | SudoAccess::Passwordless) || has_password;
-        if !elevation_ok {
-            return Err(HostError::ExtractFailed {
-                archive: HostPath::from_posix(tool),
-                reason: format!(
-                    "远端缺少 {tool},自动安装需要 root 权限但当前无免密 sudo 也未保存密码,请去远端页配置免密或手动执行 sudo {} 后重试",
-                    pm.install_hint(&[tool])
-                ),
-            });
-        }
-
-        let cmd = HostCommand::new("sh")
-            .arg("-c")
-            .arg(pm.refresh_and_install_script(&[tool]))
-            .elevated()
-            .timeout(Duration::from_secs(180));
-        let _ = self.run_to_string(cmd).await;
-
-        if self.command_exists(tool).await {
-            Ok(())
-        } else {
-            Err(HostError::ExtractFailed {
-                archive: HostPath::from_posix(tool),
-                reason: format!(
-                    "已尝试自动安装 {tool} 但仍不可用,请登录远端手动执行 sudo {} 后重试",
-                    pm.install_hint(&[tool])
-                ),
-            })
-        }
+        let reason = match result {
+            Ok(()) => return Ok(()),
+            Err(EnsureCommandError::NoPackageManager) => format!(
+                "远端缺少 {tool} 且未识别到包管理器,请手动安装(如 {})后重试",
+                LinuxPackageManager::Apt.install_hint(&[tool])
+            ),
+            Err(EnsureCommandError::NeedsElevation(pm)) => format!(
+                "远端缺少 {tool},自动安装需要 root 权限但当前无免密 sudo 也未保存密码,请去远端页配置免密或手动执行 sudo {} 后重试",
+                pm.install_hint(&[tool])
+            ),
+            Err(EnsureCommandError::StillMissing { pm, .. }) => format!(
+                "已尝试自动安装 {tool} 但仍不可用,请登录远端手动执行 sudo {} 后重试",
+                pm.install_hint(&[tool])
+            ),
+        };
+        Err(HostError::ExtractFailed {
+            archive: HostPath::from_posix(tool),
+            reason,
+        })
     }
 }
 

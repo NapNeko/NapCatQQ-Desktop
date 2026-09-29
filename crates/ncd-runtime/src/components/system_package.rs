@@ -10,7 +10,8 @@ use ncd_component::{
     ActionCtx, DependencyTarget, HostPackageGroup, ProgressEvent, ProgressKind, ProgressLogLevel,
 };
 use ncd_domain::InstallDependenciesResult;
-use ncd_host::{Host, LinuxPackageManager, Os};
+use ncd_host::linux_pkg::{EnsureCommandError, install_missing_command, plan_missing_command};
+use ncd_host::{Host, Os};
 
 use crate::deploy::tasks::{DeploymentTaskContext, DeploymentTaskRunResult};
 
@@ -119,29 +120,15 @@ pub async fn ensure_host_command_task(
         .await;
     }
 
-    let Some(pm) = LinuxPackageManager::detect(host).await else {
-        return fail(
-            &task_ctx,
-            format!("远端缺少 {command} 且未识别到包管理器，请手动安装 {package} 后重试"),
-        )
-        .await;
+    let pm = match plan_missing_command(host, command).await {
+        // 上面刚探过不在,这里又在了:别的任务刚装上,按已就绪算
+        Ok(None) => {
+            finish(&task_ctx, true).await;
+            return DeploymentTaskRunResult::ok(format!("{command} 已就绪"));
+        }
+        Ok(Some(pm)) => pm,
+        Err(err) => return fail(&task_ctx, ensure_failure_message(command, package, err)).await,
     };
-
-    let access = ncd_host::remote::probe_sudo(host).await;
-    let elevation_ok = matches!(
-        access,
-        ncd_host::remote::SudoAccess::RootAlready | ncd_host::remote::SudoAccess::Passwordless
-    ) || host.has_elevation_password().await;
-    if !elevation_ok {
-        return fail(
-            &task_ctx,
-            format!(
-                "安装 {package} 需要 sudo 密码，请在远端主机配置中保存 sudo 密码，或手动执行 sudo {} 后重试",
-                pm.install_hint(&[package])
-            ),
-        )
-        .await;
-    }
 
     log(
         &task_ctx,
@@ -149,30 +136,27 @@ pub async fn ensure_host_command_task(
         format!("通过 {} 安装 {package}", pm.binary()),
     )
     .await;
-    // 装前先刷索引(apt 不刷常见 404),失败不致命
-    if let Some(refresh) = pm.refresh_command() {
-        let _ = host.run_to_string(refresh.elevated()).await;
-    }
-    match host
-        .run_to_string(pm.install_command(&[package]).elevated())
-        .await
-    {
-        Ok(out) if out.success() && host.command_exists(command).await => {
+    match install_missing_command(host, pm, command, package).await {
+        Ok(()) => {
             finish(&task_ctx, true).await;
             DeploymentTaskRunResult::ok(format!("{command} 已安装"))
         }
-        Ok(out) => {
-            fail(
-                &task_ctx,
-                format!(
-                    "安装 {package} 后仍无法找到 {command}: exit={:?} stderr={}",
-                    out.exit_code,
-                    out.stderr.trim()
-                ),
-            )
-            .await
+        Err(err) => fail(&task_ctx, ensure_failure_message(command, package, err)).await,
+    }
+}
+
+fn ensure_failure_message(command: &str, package: &str, err: EnsureCommandError) -> String {
+    match err {
+        EnsureCommandError::NoPackageManager => {
+            format!("远端缺少 {command} 且未识别到包管理器，请手动安装 {package} 后重试")
         }
-        Err(err) => fail(&task_ctx, format!("安装 {package} 失败: {err}")).await,
+        EnsureCommandError::NeedsElevation(pm) => format!(
+            "安装 {package} 需要 sudo 密码，请在远端主机配置中保存 sudo 密码，或手动执行 sudo {} 后重试",
+            pm.install_hint(&[package])
+        ),
+        EnsureCommandError::StillMissing { detail, .. } => {
+            format!("安装 {package} 后仍无法找到 {command}: {detail}")
+        }
     }
 }
 
