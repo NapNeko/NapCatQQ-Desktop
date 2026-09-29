@@ -2,7 +2,7 @@
 //!
 //! 对齐 Desktop 离线通知子集: Webhook + Email + 同机 OneBot + NC 登录探活凭据。
 
-use ncd_deploy::bot_docker_container_name;
+use ncd_deploy::{DockerDeployment, bot_docker_container_name};
 use ncd_domain::bot_config::{BackendType, BotConfig, DeploymentType};
 use ncd_domain::docker::DockerDeploySpec;
 use ncd_domain::kinds::RuntimeTarget;
@@ -66,28 +66,61 @@ pub fn napcat_docker_webui_host_port(qq_id: u64) -> u16 {
         .unwrap_or(6099)
 }
 
-/// 从 Bot connect.httpServers 投影 watch 同机可达的 OneBot HTTP 根地址
+fn is_any_addr(host: &str) -> bool {
+    matches!(host.trim(), "" | "0.0.0.0" | "::" | "[::]")
+}
+
+fn is_loopback_or_any(host: &str) -> bool {
+    let host = host.trim();
+    is_any_addr(host)
+        || host == "127.0.0.1"
+        || host == "::1"
+        || host.eq_ignore_ascii_case("localhost")
+}
+
+/// 从 Bot connect.httpServers 投影出 watch 在同一台主机上能连到的 OneBot HTTP 发送方
 ///
-/// host 空/`0.0.0.0`/`127.0.0.1`/`localhost` → `http://127.0.0.1:port`
-/// 其它 host 视为非本机可达,跳过(跨机不写进该 server 的 notify)
-pub fn watch_onebot_http_from_bot(config: &BotConfig) -> Option<(String, String)> {
-    let server = config
+/// 直接运行:第一个监听在回环或通配地址上的服务 → `http://127.0.0.1:port`。
+/// Docker:只认监听在通配地址上的服务,容器里绑 127.0.0.1 的即使映射了端口也连不进去。
+/// 优先挑按部署规则映射到宿主机的那个;规则里没有就把 base_url 留空,带上容器名和
+/// 容器内端口,由 watch 发送前用 docker inspect 查实际映射(导入的容器常不按规则映射)。
+/// 其它 host 视为本机连不到,跳过。
+pub fn watch_onebot_messenger_from_bot(config: &BotConfig) -> Option<WatchOneBotMessenger> {
+    let bot_id = config.bot.qq_id.to_string();
+    let mut enabled = config
         .connect
         .http_servers
         .iter()
-        .find(|s| s.base.enable && s.port > 0)?;
-    let host = server.host.trim();
-    let loopback = host.is_empty()
-        || host == "0.0.0.0"
-        || host == "127.0.0.1"
-        || host.eq_ignore_ascii_case("localhost");
-    if !loopback {
-        return None;
+        .filter(|s| s.base.enable && s.port > 0);
+    match config.bot.deployment_type {
+        DeploymentType::Native => {
+            let server = enabled.find(|s| is_loopback_or_any(&s.host))?;
+            Some(WatchOneBotMessenger {
+                bot_id,
+                base_url: format!("http://127.0.0.1:{}", server.port),
+                access_token: server.base.token.clone(),
+                container_name: None,
+                container_port: None,
+            })
+        }
+        DeploymentType::Docker => {
+            let candidates: Vec<_> = enabled.filter(|s| is_any_addr(&s.host)).collect();
+            let spec = DockerDeployment::build_spec(config);
+            let (server, host_port) = candidates
+                .iter()
+                .find_map(|s| spec.host_port_for_container(s.port).map(|p| (*s, Some(p))))
+                .or_else(|| candidates.first().map(|s| (*s, None)))?;
+            Some(WatchOneBotMessenger {
+                bot_id,
+                base_url: host_port
+                    .map(|p| format!("http://127.0.0.1:{p}"))
+                    .unwrap_or_default(),
+                access_token: server.base.token.clone(),
+                container_name: Some(spec.container_name.clone()),
+                container_port: Some(server.port),
+            })
+        }
     }
-    Some((
-        format!("http://127.0.0.1:{}", server.port),
-        server.base.token.clone(),
-    ))
 }
 
 /// 仅收录与 `server_id` 同机、且配置了可用 HTTP 的 messenger
@@ -109,14 +142,9 @@ pub fn build_watch_onebot_for_server(
         if cfg.bot.runtime_target.server_id() != Some(server_id) {
             continue;
         }
-        let Some((base_url, access_token)) = watch_onebot_http_from_bot(cfg) else {
-            continue;
-        };
-        messengers.push(WatchOneBotMessenger {
-            bot_id: mid,
-            base_url,
-            access_token,
-        });
+        if let Some(messenger) = watch_onebot_messenger_from_bot(cfg) {
+            messengers.push(messenger);
+        }
     }
     let targets = onebot.effective_target_ids();
     WatchOneBotSettings {
@@ -668,7 +696,8 @@ mod tests {
 
     #[test]
     fn same_host_onebot_messengers_only() {
-        let m_s1 = with_http(sample_remote("s1", 10002), 3002);
+        // Docker 容器内 3000 → 宿主机 3000 + 10002 % 500
+        let m_s1 = with_http(sample_remote("s1", 10002), 3000);
         let m_s2 = with_http(sample_remote("s2", 10003), 3003);
         let mut local = with_http(sample_remote("s1", 10004), 3004);
         local.bot.runtime_target = RuntimeTarget::Local;
@@ -711,6 +740,60 @@ mod tests {
             enable_websocket: false,
             path: "/".into(),
         });
-        assert!(watch_onebot_http_from_bot(&m).is_none());
+        assert!(watch_onebot_messenger_from_bot(&m).is_none());
+    }
+
+    fn with_http_host(mut cfg: BotConfig, host: &str, port: u16) -> BotConfig {
+        cfg = with_http(cfg, port);
+        cfg.connect.http_servers.last_mut().unwrap().host = host.into();
+        cfg
+    }
+
+    #[test]
+    fn docker_messenger_unpublished_port_leaves_url_to_watch() {
+        // #137 的现场:容器内 HTTP 在 3010,compose 只映射了 3000/3001
+        let cfg = with_http(sample_remote("s1", 1277629216), 3010);
+        let m = watch_onebot_messenger_from_bot(&cfg).unwrap();
+        assert_eq!(m.base_url, "");
+        assert_eq!(m.container_name.as_deref(), Some("ncbot-1277629216"));
+        assert_eq!(m.container_port, Some(3010));
+        assert_eq!(m.access_token, "t");
+    }
+
+    #[test]
+    fn docker_messenger_prefers_published_server() {
+        let cfg = with_http(with_http(sample_remote("s1", 1277629216), 3010), 3001);
+        let m = watch_onebot_messenger_from_bot(&cfg).unwrap();
+        assert_eq!(m.base_url, "http://127.0.0.1:3217");
+        assert_eq!(m.container_port, Some(3001));
+    }
+
+    #[test]
+    fn docker_messenger_ignores_container_loopback() {
+        let cfg = with_http_host(sample_remote("s1", 10002), "127.0.0.1", 3000);
+        assert!(watch_onebot_messenger_from_bot(&cfg).is_none());
+    }
+
+    #[test]
+    fn native_messenger_skips_remote_host_and_takes_next() {
+        let mut cfg = with_http_host(sample_remote("s1", 10002), "10.0.0.5", 3000);
+        cfg = with_http_host(cfg, "127.0.0.1", 3100);
+        cfg.bot.deployment_type = DeploymentType::Native;
+        let m = watch_onebot_messenger_from_bot(&cfg).unwrap();
+        assert_eq!(m.base_url, "http://127.0.0.1:3100");
+        assert_eq!(m.container_name, None);
+    }
+
+    #[test]
+    fn messenger_container_fields_are_optional_in_json() {
+        let cfg = with_http_host(sample_remote("s1", 10002), "127.0.0.1", 3100);
+        let mut native = cfg.clone();
+        native.bot.deployment_type = DeploymentType::Native;
+        let raw = serde_json::to_string(&watch_onebot_messenger_from_bot(&native).unwrap()).unwrap();
+        assert!(!raw.contains("container"), "{raw}");
+        // 旧 notify.json 里没有这两个字段也要能读
+        let old: WatchOneBotMessenger =
+            serde_json::from_str(r#"{"botId":"1","baseUrl":"http://127.0.0.1:1"}"#).unwrap();
+        assert_eq!(old.container_port, None);
     }
 }

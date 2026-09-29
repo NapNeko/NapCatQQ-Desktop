@@ -544,9 +544,76 @@ impl DockerInstallReport {
     }
 }
 
+/// 传给 `docker inspect --format` 的模板,输出交给 [`parse_published_host_port`]
+pub const DOCKER_INSPECT_PORTS_FORMAT: &str =
+    "{{.HostConfig.NetworkMode}} {{json .NetworkSettings.Ports}}";
+
+/// 从 [`DOCKER_INSPECT_PORTS_FORMAT`] 的输出里找容器端口在宿主机上的实际去向,例如
+///     bridge {"6099/tcp":[{"HostIp":"0.0.0.0","HostPort":"6388"}],"3000/tcp":null}
+/// network_mode=host 时就是容器内端口。调用方都从宿主机 127.0.0.1 去连,所以只认
+/// 绑在通配或回环地址上的映射;只绑某个网卡 IP 的当作没映射。
+/// 桌面端(连 WebUI)和 ncd-watch(发 OneBot)共用,两边判断必须一致。
+pub fn parse_published_host_port(
+    inspect_out: &str,
+    container_port: u16,
+) -> Result<Option<u16>, String> {
+    #[derive(Deserialize)]
+    struct Binding {
+        #[serde(rename = "HostIp", default)]
+        host_ip: String,
+        #[serde(rename = "HostPort", default)]
+        host_port: String,
+    }
+
+    let line = inspect_out.trim();
+    let (mode, ports_json) = line.split_once(' ').unwrap_or((line, "null"));
+    if mode == "host" {
+        return Ok(Some(container_port));
+    }
+    let ports: Option<std::collections::HashMap<String, Option<Vec<Binding>>>> =
+        serde_json::from_str(ports_json).map_err(|e| format!("docker inspect ports: {e}"))?;
+    let Some(bindings) = ports
+        .and_then(|mut m| m.remove(&format!("{container_port}/tcp")))
+        .flatten()
+    else {
+        return Ok(None);
+    };
+    Ok(bindings
+        .iter()
+        .filter(|b| matches!(b.host_ip.as_str(), "" | "0.0.0.0" | "::" | "127.0.0.1" | "::1"))
+        .find_map(|b| b.host_port.parse::<u16>().ok().filter(|p| *p > 0)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn published_port_reads_custom_mapping() {
+        let out = r#"bridge {"6099/tcp":[{"HostIp":"0.0.0.0","HostPort":"16099"},{"HostIp":"::","HostPort":"16099"}],"3000/tcp":null}"#;
+        assert_eq!(parse_published_host_port(out, 6099).unwrap(), Some(16099));
+        assert_eq!(parse_published_host_port(out, 3000).unwrap(), None);
+        assert_eq!(parse_published_host_port(out, 3001).unwrap(), None);
+    }
+
+    #[test]
+    fn published_port_host_network_uses_container_port() {
+        assert_eq!(parse_published_host_port("host {}\n", 6099).unwrap(), Some(6099));
+    }
+
+    #[test]
+    fn published_port_skips_bindings_on_specific_ip() {
+        let out = r#"bridge {"6099/tcp":[{"HostIp":"192.168.1.5","HostPort":"7000"}]}"#;
+        assert_eq!(parse_published_host_port(out, 6099).unwrap(), None);
+        let mixed = r#"bridge {"6099/tcp":[{"HostIp":"192.168.1.5","HostPort":"7000"},{"HostIp":"127.0.0.1","HostPort":"7001"}]}"#;
+        assert_eq!(parse_published_host_port(mixed, 6099).unwrap(), Some(7001));
+    }
+
+    #[test]
+    fn published_port_handles_null_ports_and_bad_json() {
+        assert_eq!(parse_published_host_port("none null", 6099).unwrap(), None);
+        assert!(parse_published_host_port("bridge {oops", 6099).is_err());
+    }
 
     #[test]
     fn docker_status_ready_requires_all_three() {

@@ -117,7 +117,12 @@ sudo loginctl enable-linger "$USER"
 
 请求体模板里可以用这些占位：`{nickname}`（等同 `{bot_name}`，没填名字时是 QQ 号）、`{uin}`（等同 `{bot_qq_id}`）、`{event}`、`{time}`（等同 `{disconnect_time}`）。ncd-watch 发出的通知还多一个 `{source}`，值是 `watch`，可以用来区分是桌面端还是 ncd-watch 发的。
 
-`onebot`：`messengers` 是同机能用来发消息的 Bot（`baseUrl` 是它的 OneBot HTTP 地址，只收录监听在本机的 HTTP 服务器），`targetType` 是 `private` 或 `group`，`targetIds` 是发给谁，`messageTemplate` 是消息模板，占位和 Webhook 一样。跨机的 Bot 不会被写进来。
+`onebot`：`messengers` 是同机能用来发消息的 Bot，`targetType` 是 `private` 或 `group`，`targetIds` 是发给谁，`messageTemplate` 是消息模板，占位和 Webhook 一样。跨机的 Bot 不会被写进来。
+
+- 直接运行的 Bot：`baseUrl` 取它第一个监听在本机或 `0.0.0.0` 上的 HTTP 服务器。
+- Docker 部署的 Bot：只认监听在 `0.0.0.0` 上的 HTTP 服务器，容器里绑 `127.0.0.1` 的从宿主机连不进去。每一项多带 `containerName` 和 `containerPort`（容器内端口），ncd-watch 发送前用 `docker inspect` 查这个端口实际映射到宿主机哪里；查不到才用 `baseUrl`。端口没映射出来时 `baseUrl` 为空，这个 Bot 就发不了。
+- 掉线的 Bot 不会替自己发。只有一个 Bot 时 QQ 消息通知用不了，请配合 Webhook 或邮件。
+- 按顺序试，一个发送方完全发不出去就换下一个；已经有人收到的不会换发送方重发。
 
 ## 怎么判断掉线
 
