@@ -116,10 +116,18 @@ pub fn git_clone_url(entry: &KarinPluginMarketEntry) -> Option<&str> {
 }
 
 /// 去掉 query 后必须是 `.js` / `.ts`；返回文件名（防路径穿越）。
+/// URL 里的百分号编码先解开再查：云崽的单文件插件多是中文文件名，`%2F` 这种解开后是分隔符的照样拒
 pub fn app_file_basename(url: &str) -> Result<String, AppFrameworkError> {
     let path = url.split(['?', '#']).next().unwrap_or(url);
-    let name = path.rsplit('/').next().unwrap_or("").trim();
-    if name.is_empty() || name.contains("..") || name.contains('\\') {
+    let raw = path.rsplit('/').next().unwrap_or("").trim();
+    let decoded = crate::store::percent_decode_lossy(raw);
+    let name = decoded.trim();
+    if name.is_empty()
+        || name.contains("..")
+        || name.contains('\\')
+        || name.contains('/')
+        || name.chars().any(char::is_control)
+    {
         return Err(AppFrameworkError::Validation(format!(
             "插件文件 URL 非法: {url}"
         )));
