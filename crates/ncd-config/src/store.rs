@@ -46,10 +46,13 @@ impl LocalConfigStore {
             .map_err(|error| ConfigError::Json(error.to_string()))?;
         fs::write(&temp, bytes).map_err(to_io_error)?;
 
-        let mut moved_to_backup = false;
+        // 备份用拷贝,再把临时文件直接换上去:读的一方不排这把锁,原文件要是先挪走,
+        // 挪走到换上之间来读的就会报 NotFound;替换是原子的,读到的只会是旧的或新的
         if path.exists() && !backup.exists() {
-            fs::rename(path, &backup).map_err(to_io_error)?;
-            moved_to_backup = true;
+            if let Err(error) = fs::copy(path, &backup) {
+                let _ = fs::remove_file(&temp);
+                return Err(to_io_error(error));
+            }
         }
 
         match fs::rename(&temp, path) {
@@ -59,9 +62,6 @@ impl LocalConfigStore {
             }
             Err(error) => {
                 let _ = fs::remove_file(&temp);
-                if moved_to_backup && backup.exists() && !path.exists() {
-                    let _ = fs::rename(&backup, path);
-                }
                 Err(to_io_error(error))
             }
         }
@@ -482,6 +482,44 @@ mod tests {
             let own = store.config_dir().join(format!("napcat_{i}.json"));
             assert_eq!(store.read_json(&own).unwrap()["round"], 9);
         }
+    }
+
+    // 读的一方不排队:写的过程中目标文件任何时刻都得在,读到的是旧的或新的完整内容
+    #[test]
+    fn reads_during_writes_never_miss_the_file() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = Arc::new(LocalConfigStore::new(temp.path()));
+        let path = store.config_dir().join("napcat.json");
+        store
+            .write_json_atomic(&path, &serde_json::json!({ "n": 0 }))
+            .unwrap();
+
+        let done = Arc::new(AtomicBool::new(false));
+        let readers: Vec<_> = (0..4)
+            .map(|_| {
+                let store = Arc::clone(&store);
+                let path = path.clone();
+                let done = Arc::clone(&done);
+                std::thread::spawn(move || {
+                    while !done.load(Ordering::Relaxed) {
+                        let payload = store.read_json(&path).unwrap();
+                        assert!(payload["n"].is_i64());
+                    }
+                })
+            })
+            .collect();
+        for n in 1..=300 {
+            store
+                .write_json_atomic(&path, &serde_json::json!({ "n": n }))
+                .unwrap();
+        }
+        done.store(true, Ordering::Relaxed);
+        for reader in readers {
+            reader.join().unwrap();
+        }
+        assert_eq!(store.read_json(&path).unwrap()["n"], 300);
     }
 
     #[test]
