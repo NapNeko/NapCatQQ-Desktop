@@ -58,7 +58,6 @@ flowchart TB
 - modules 直连服务：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/{ImportRemoteBotsDialog,SnowLumaConsentDialog}.tsx`、`bot/list/BotListPage.next.tsx`、`bot/list/next/BotCard.tsx`、`components/{ComponentsPage.next,QqDependencyDialog}.tsx`、`remote/{AddServerDialog,ImportSshConfigDialog}.tsx`、`settings/{ConfigImportDialog,DataRootMigrateDialog}.tsx`、`settings/settings-draft.ts`、`settings/tabs/{AboutTab,NcdWatchRemoteSection,NotificationsTab,RuntimeTab,WindowTab}.tsx`、`settings/tabs/notifications/{DeliveryHistoryDialog,OneBotMessengerPicker}.tsx`、`task-queue/{TaskDetailPanel,TaskQueueListItem,TaskQueuePage.next}.tsx`、`tray/TrayPanel.tsx`（另有三处动态 `import('../../core/ipc/transport')` 直接 invoke `tray_panel_*`，命令名漏到了 modules）。`modules/apps/**` 和 `shared/**` 已经清零，保持住。
 - transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（动态 import）、`app/AppBootGate.tsx`（直接 `invoke`，另从 transport 取 `isTauri`）、`core/services/desktop.service.ts`、`hooks/ui/useTauriFileDrop.ts`、`hooks/terminal/useTerminalFileDrop.ts`、`modules/settings/useTauriDropTarget.ts`。
 - `app/AppNext.tsx` 直接用 `desktopUpdateService`。
-- 外链没走同一个口子：`hooks/docker/useDockerHosts.ts` 的 `openDownloadPage` 把 `openExternalUrl` 的 Promise 原样交出去，`components/ComponentsPage.next.tsx` 拿到后 `.catch(() => undefined)` 吞掉，链接被拒没人报；`hooks/terminal/terminalIo.ts` 的 `openLink` 逐行抄了一份 `useOpenExternal`。两处该和 `useOpenExternal` 共用一个「打开，失败弹条」的函数。`useOpenExternal` 自己弹的「无法打开链接」没带 `key`，连点几次会叠几条。
 - `hooks/preferences/useBackendSettings.ts` 反过来 import `modules/settings/settings-draft`。
 - `hooks/apps/useAppInstances.ts` 的新建、导入、启停、自动启动、重新探测还拿调用结果回写实例列表，这些后端都会发 `app_instance_changed`，照第 3 节交给事件桥即可。对接、解绑已经不回写。
 - 模块互相伸手：`bot/metrics` → `bootstrap/widgets/occupancyChartGeometry`、`components` → `docker/SudoPasswordDialog`（两处）、`remote/ServerCard` → `bot/list/next/BotManageCard`、`task-queue/TaskDetailPanel` → `components/DockerPullLayersPanel`；`shared/components/next/OnboardingPreviews.tsx` 引了 `bot/.../BotManageCard` 和 `components/ComponentEntityCard`。
@@ -77,7 +76,7 @@ flowchart TB
   - 每次打开都得是当下状态的（对接计划 `useAppLinkPlan`、插件配置文件列表 `useAppPluginConfigDocs`）：`staleTime: 0` + `gcTime: 0`，重新拉的途中不给旧数据。
   - 只给发起方用一次的结果（导入前检查项目、拉模型列表、测连接）：`useMutation`，不进缓存。
   - 后端会推事件的改动（实例状态、对接）不在调用结果里重复回写，交给根上的 `useAppInstanceEventsBridge`。
-- 外链一律 `hooks/useOpenExternal.ts`（被 scheme 白名单拒了会弹错误条）；要先问后端拿地址再打开的（打开 WebUI、noVNC）在各自的 hook 里调 `openExternalUrl`，失败由那个 hook 报或抛给调用方报，不许吞；选本机目录 `hooks/usePickDirectory.ts`；麦麦挑图、挑文件走 `useMaiBotChatImages` / `useMaiBotEmojiFiles` / `useMaiBotMemoryImportFiles`（失败统一经 `hooks/apps/maibotResourceAction.ts` 的 `localFilesOrNothing` 弹条、当没挑）。modules 里不出现 `openExternalUrl` / `pick*`。
+- 外链一律 `hooks/useOpenExternal.ts`（被 scheme 白名单拒了会弹错误条，同 key 只留一条），hook 外面的调用方（终端、Docker 下载页）用同文件的 `openExternalOrReport`；要先问后端拿地址再打开的（打开 WebUI、noVNC）在各自的 hook 里调 `openExternalUrl`，失败由那个 hook 报或抛给调用方报，不许吞；选本机目录 `hooks/usePickDirectory.ts`；麦麦挑图、挑文件走 `useMaiBotChatImages` / `useMaiBotEmojiFiles` / `useMaiBotMemoryImportFiles`（失败统一经 `hooks/apps/maibotResourceAction.ts` 的 `localFilesOrNothing` 弹条、当没挑）。modules 里不出现 `openExternalUrl` / `pick*`。
 - 失败别吞：`.catch(() => {})` 只留给确实无所谓的收尾；用户在等结果的一律 `pushErrorBar`，带 `key`。
 - 模块之间共用：
   - 纯展示、几个模块都要的 → `shared/`（`shared/` 自己不许 import modules）。

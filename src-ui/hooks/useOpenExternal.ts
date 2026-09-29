@@ -9,13 +9,17 @@ import { openExternalUrl } from '../core/ipc/transport';
 import { pushErrorBar } from './ui/pushErrorBar';
 import { errorText } from '../core/domain/errors';
 
-export function useOpenExternal() {
-    return useCallback((url: string) => {
-        void openExternalUrl(url).catch((err) => {
-            pushErrorBar({
-                title: '无法打开链接',
-                raw: errorText(err),
-            });
+// 不在组件里的调用方（终端、Docker 下载页）也走这一个口子；带 key 是为了连点几次只留一条
+export function openExternalOrReport(url: string): void {
+    void openExternalUrl(url).catch((err) => {
+        pushErrorBar({
+            key: 'open-external-failed',
+            title: '无法打开链接',
+            raw: errorText(err),
         });
-    }, []);
+    });
+}
+
+export function useOpenExternal() {
+    return useCallback((url: string) => openExternalOrReport(url), []);
 }

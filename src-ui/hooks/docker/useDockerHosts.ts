@@ -10,7 +10,7 @@ import { useSyncExternalStore } from 'react';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 
 import { dockerService, type DockerInstallOptions } from '../../core/services/docker.service';
-import { openExternalUrl } from '../../core/ipc/transport';
+import { openExternalOrReport } from '../useOpenExternal';
 import { dockerActionStore, dockerPullTargetKey } from './dockerActionStore';
 import { dockerInstallProgressStore } from './dockerInstallProgressStore';
 import type {
@@ -45,8 +45,8 @@ export interface UseDockerHostsResult {
     installingByHost: Record<string, boolean>;
     /// 安装中时 Docker 行展示的说明（无事件订阅时的兜底文案）。
     installHintByHost: Record<string, string>;
-    /// 打开 Docker Desktop 下载页（Windows / macOS 手动安装引导用）。
-    openDownloadPage: () => Promise<void>;
+    /// 打开 Docker Desktop 下载页（Windows / macOS 手动安装引导用），打不开自己弹条。
+    openDownloadPage: () => void;
     /// 在远端拉取 NapCat/SnowLuma 框架镜像（不创建容器）。
     /// mirror: auto 省略；hub 仅官方；或镜像站主机名如 docker.1ms.run
     pullFrameworkImage: (
@@ -266,7 +266,7 @@ export function useDockerHosts(hostIds: string[]): UseDockerHostsResult {
         isInstalling,
         installingByHost,
         installHintByHost,
-        openDownloadPage: () => openExternalUrl(DOCKER_DESKTOP_URL),
+        openDownloadPage: () => openExternalOrReport(DOCKER_DESKTOP_URL),
         pullFrameworkImage,
         isPullingFrameworkImage,
         isDeploying: pullMutation.isPending,

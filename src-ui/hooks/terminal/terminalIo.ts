@@ -1,7 +1,7 @@
 // 终端运行时（modules 里的 xterm 实例）要用的 IPC，从这里转一手：modules 层不直接碰 services。
 
 import { terminalService, type TerminalAttachHandlers } from '../../core/services/terminal.service';
-import { openExternalUrl } from '../../core/ipc/transport';
+import { openExternalOrReport } from '../useOpenExternal';
 import { errorText } from '../../core/domain/errors';
 import { pushErrorBar } from '../ui/pushErrorBar';
 import { pushInfoBar } from '../ui/globalInfoBarStore';
@@ -27,7 +27,7 @@ export const terminalIo = {
     },
 
     openLink(url: string) {
-        openExternalUrl(url).catch((err) => pushErrorBar({ title: '无法打开链接', raw: errorText(err) }));
+        openExternalOrReport(url);
     },
 
     async exportText(defaultName: string, content: string) {

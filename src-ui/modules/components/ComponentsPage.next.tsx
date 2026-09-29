@@ -659,9 +659,7 @@ export const ComponentsPageNext: React.FC = () => {
                         onInstallDocker={(hostId) => {
                             void handleInstallDocker(hostId);
                         }}
-                        onOpenDockerDownload={() => {
-                            void dockerHosts.openDownloadPage().catch(() => undefined);
-                        }}
+                        onOpenDockerDownload={dockerHosts.openDownloadPage}
                         onEnsureQqDependencies={(hostId) => {
                             void startQqDepsRepair(hostId);
                         }}
