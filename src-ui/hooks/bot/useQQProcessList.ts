@@ -14,7 +14,8 @@
 // UI 可以据此显示"未登录"灰字。
 
 import { useCallback, useState } from 'react';
-import { botService, type QQProcessInfo } from '../../core/services/bot.service';
+import { botService } from '../../core/services/bot.service';
+import type { QQProcessInfo } from '../../core/ipc/generated/QQProcessInfo';
 
 export type { QQProcessInfo };
 

@@ -2,13 +2,11 @@
 
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import { settingsService } from '../../../../core/services/settings.service';
+import type { OneBotMessengerCandidate } from '../../../../core/ipc/generated/domain/OneBotMessengerCandidate';
 import { Badge, Button, TextField } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 
-export type OneBotCandidate = Awaited<
-    ReturnType<typeof settingsService.listOneBotMessengerCandidates>
->[number];
+export type OneBotCandidate = OneBotMessengerCandidate;
 
 function backendLabel(backend: string): string {
     return backend === 'snowluma' ? 'SnowLuma' : 'NapCat';

@@ -9,7 +9,7 @@ import {
     DialogTitle,
     SimpleMarkdown,
 } from '../../../shared/ui';
-import type { SnowLumaAgreementsPayload } from '../../../core/services/bot.service';
+import type { SnowLumaAgreementsPayload } from '../../../core/ipc/generated/SnowLumaAgreementsPayload';
 
 interface SnowLumaConsentDialogProps {
     open: boolean;

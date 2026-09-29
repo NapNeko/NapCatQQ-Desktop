@@ -14,19 +14,8 @@ import type { ConfigDrift } from '../ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../ipc/generated/DriftDecision';
 import type { BotRuntimeMetrics } from '../ipc/generated/domain/BotRuntimeMetrics';
 import type { MetricsHistoryPoint } from '../ipc/generated/domain/MetricsHistoryPoint';
-
-export interface SnowLumaAgreementDoc {
-    id: string;
-    title: string;
-    declared_version: string;
-    text: string;
-}
-
-export interface SnowLumaAgreementsPayload {
-    version: string;
-    consent_required: boolean;
-    documents: SnowLumaAgreementDoc[];
-}
+import type { SnowLumaAgreementsPayload } from '../ipc/generated/SnowLumaAgreementsPayload';
+import type { QQProcessInfo } from '../ipc/generated/QQProcessInfo';
 import {
     buildMockBotConfig,
     mockBatchDelete,
@@ -41,13 +30,6 @@ import {
 } from '../ipc/mock/bot.mock';
 
 /// QQ 进程信息（SnowLuma HotStart 模式下的 PID picker）。
-export interface QQProcessInfo {
-    pid: number;
-    name: string;
-    started_at: number;
-    command_line: string;
-}
-
 export const botService = {
     // ── 快照 / 配置 ────────────────────────────────────────────────────────
     listImportableRemoteBots: async (): Promise<ImportableRemoteBot[]> => {
@@ -351,8 +333,8 @@ export const botService = {
     listQQProcesses: async (): Promise<QQProcessInfo[]> => {
         if (isTauri) return invoke<QQProcessInfo[]>('list_qq_processes');
         return Promise.resolve([
-            { pid: 12345, name: 'QQ.exe', started_at: 0, command_line: '' },
-            { pid: 23456, name: 'QQ.exe', started_at: 0, command_line: '' },
+            { pid: 12345, name: 'QQ.exe', started_at: 0n, command_line: '' },
+            { pid: 23456, name: 'QQ.exe', started_at: 0n, command_line: '' },
         ]);
     },
 

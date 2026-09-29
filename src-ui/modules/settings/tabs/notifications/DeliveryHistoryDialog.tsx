@@ -10,11 +10,9 @@ import {
     DialogHeader,
     DialogTitle,
 } from '../../../../shared/ui';
-import { settingsService } from '../../../../core/services/settings.service';
+import type { OfflineDeliveryRecord } from '../../../../core/ipc/generated/domain/OfflineDeliveryRecord';
 
-type HistoryItem = Awaited<
-    ReturnType<typeof settingsService.listOfflineDeliveryHistory>
->[number];
+type HistoryItem = OfflineDeliveryRecord;
 
 function historyKindLabel(kind: string): string {
     switch (kind) {

@@ -40,7 +40,7 @@ import {
     isSnowlumaRemoteNativeConfig,
 } from '../../../core/domain/bot/snowluma-remote-ui';
 import { botService } from '../../../core/services/bot.service';
-import type { SnowLumaAgreementsPayload } from '../../../core/services/bot.service';
+import type { SnowLumaAgreementsPayload } from '../../../core/ipc/generated/SnowLumaAgreementsPayload';
 import type { ConfigDrift } from '../../../core/ipc/generated/ConfigDrift';
 import type { DriftDecision } from '../../../core/ipc/generated/DriftDecision';
 import { BotCard } from './next/BotCard';
