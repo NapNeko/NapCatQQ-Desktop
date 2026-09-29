@@ -79,13 +79,15 @@ impl Doc {
             let child_indent = self.child_indent(start, end, indent, depth == 0);
             match self.find_key(start, end, child_indent, key) {
                 Some((line_idx, block_end)) => {
+                    // find_key 只返回能拆成键的行
+                    let Some(kl) = parse_key_line(&self.lines[line_idx]) else {
+                        return Err(format!("{key} 那一行看不懂"));
+                    };
                     if last {
-                        let kl = parse_key_line(&self.lines[line_idx]).expect("found key line");
                         let rendered = render_entry(child_indent, &kl.raw_key, value, &kl.comment);
                         self.lines.splice(line_idx..block_end, rendered);
                         return Ok(());
                     }
-                    let kl = parse_key_line(&self.lines[line_idx]).expect("found key line");
                     if !kl.value.trim().is_empty() {
                         // `default: {}` / `auth:` 后面写了东西：要往下加子键，先把这一行改成块头
                         if !is_empty_flow(&kl.value) && !is_null_text(&kl.value) {

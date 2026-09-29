@@ -11,6 +11,7 @@ use crate::astrbot::AstrBotAdapter;
 use crate::karin::KarinAdapter;
 use crate::maibot::MaiBotAdapter;
 use crate::nonebot2::NoneBot2Adapter;
+use crate::yunzai::YunzaiAdapter;
 
 #[derive(Default)]
 pub struct AppFrameworkRegistry {
@@ -29,6 +30,7 @@ impl AppFrameworkRegistry {
         reg.register(Arc::new(NoneBot2Adapter::new()));
         reg.register(Arc::new(AstrBotAdapter::new()));
         reg.register(Arc::new(MaiBotAdapter::new()));
+        reg.register(Arc::new(YunzaiAdapter::new()));
         reg
     }
 
@@ -96,9 +98,11 @@ mod tests {
                 "astrbot".to_string(),
                 "karin".to_string(),
                 "maibot".to_string(),
-                "nonebot2".to_string()
+                "nonebot2".to_string(),
+                "yunzai".to_string()
             ]
         );
+        assert!(reg.by_component_id("yunzai").is_some());
         assert!(reg.get(&AppFrameworkId::new("karin")).is_ok());
         assert!(reg.get(&AppFrameworkId::new("nonebot2")).is_ok());
         assert!(reg.get(&AppFrameworkId::new("astrbot")).is_ok());
@@ -179,7 +183,8 @@ mod tests {
             let adapter = reg.get(&m.id).expect("registered");
             for resource in &m.store_resources {
                 assert!(
-                    !adapter.store_market_urls(*resource).is_empty(),
+                    !adapter.store_market_urls(*resource).is_empty()
+                        || !adapter.store_market_parts(*resource).is_empty(),
                     "{} 声明了 {:?} 商店但没有目录 URL",
                     m.id.as_str(),
                     resource

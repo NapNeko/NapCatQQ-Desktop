@@ -202,8 +202,7 @@ impl GitComponent {
         .await;
         let _ = host.remove_dir_all(&self.install_dir).await;
         host.rename(&new_dir, &self.install_dir).await?;
-        let bin = Self::managed_binary_path_for_os(&self.install_dir, Os::Windows)
-            .expect("windows has a managed path");
+        let bin = self.install_dir.join("cmd").join("git.exe");
         if self
             .probe(host, bin.as_posix(), bin.as_posix())
             .await?

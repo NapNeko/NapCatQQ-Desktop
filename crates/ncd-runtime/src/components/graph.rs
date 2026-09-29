@@ -286,6 +286,10 @@ Windows/Local maibot
   component uv >=0.4 (Both)
 Windows/Local nonebot2
   component uv >=0.4 (Both)
+Windows/Local yunzai
+  component nodejs >=22.12.0 (Both)
+  component git (Both)
+  component redis (Both)
 Linux/Local napcat
   component qq (Both)
   host_command unzip <- unzip (Install)
@@ -315,6 +319,10 @@ Linux/Local maibot
   component uv >=0.4 (Both)
 Linux/Local nonebot2
   component uv >=0.4 (Both)
+Linux/Local yunzai
+  component nodejs >=22.12.0 (Both)
+  component git (Both)
+  component redis (Both)
 Linux/Remote napcat
   component qq (Both)
   host_command unzip <- unzip (Install)
@@ -346,6 +354,10 @@ Linux/Remote maibot
   component uv >=0.4 (Both)
 Linux/Remote nonebot2
   component uv >=0.4 (Both)
+Linux/Remote yunzai
+  component nodejs >=22.12.0 (Both)
+  component git (Both)
+  component redis (Both)
 ";
 
     #[test]
@@ -406,7 +418,8 @@ Linux/Remote nonebot2
 
     #[test]
     fn node_constraints_come_from_consumers_not_node_itself() {
-        // 先按 full 包遍历（Karin 的约束先进），再 lite 包（SnowLuma lite 才要 Node）
+        // 先按 full 包遍历（Karin、云崽的约束先进），再 lite 包（SnowLuma lite 才要 Node）。
+        // 托管的 Node 22.13 三条都满足
         let registry = AppFrameworkRegistry::with_builtin();
         let reqs =
             catalog_version_reqs_for(&registry, ComponentId::NodeJs, Os::Windows, Locality::Local);
@@ -414,9 +427,11 @@ Linux/Remote nonebot2
             reqs,
             vec![
                 VersionReq::semver(">=18"),
+                VersionReq::semver(">=22.12.0"),
                 VersionReq::semver(SnowLumaComponent::NODE_VERSION_RANGE),
             ]
         );
+        assert!(ncd_component::all_versions_match(&reqs, "22.13.0"));
         assert!(
             catalog_version_reqs_for(&registry, ComponentId::Qq, Os::Linux, Locality::Remote)
                 .is_empty()
