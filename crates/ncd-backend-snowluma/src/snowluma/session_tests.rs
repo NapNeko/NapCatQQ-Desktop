@@ -308,45 +308,44 @@ fn render_daemon_globals_uses_override_when_present() {
     }
 }
 
+// 选口顺序用假的空闲判断测：真去绑的话，Windows 的临时端口是挨着发的，
+// 并行的测试拿到的正是彼此相邻的口，一边刚放掉、另一边顺手占住，结果时好时坏
 #[test]
 fn find_available_webui_port_returns_preferred_when_free() {
-    // 直接探测一个当前可绑的口：先 bind 确认空闲，立刻 drop 后应仍返回该口。
-    // Windows 偶发 TIME_WAIT 时允许 +1 内重试，避免 flaky。
-    let listener = std::net::TcpListener::bind(("0.0.0.0", 0)).expect("bind ephemeral");
-    let port = listener.local_addr().expect("local_addr").port();
-    drop(listener);
-    let mut found = None;
-    for _ in 0..5 {
-        let candidate = find_available_webui_port(port).expect("should find free port");
-        if candidate == port {
-            found = Some(candidate);
-            break;
-        }
-        // 端口刚释放尚未可复用时，稍等再试
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
-    let found = found.unwrap_or_else(|| find_available_webui_port(port).expect("fallback find"));
-    assert!(
-        found >= port && found < port.saturating_add(50),
-        "expected free port near {port}, got {found}"
-    );
-    // 返回值本身必须可绑
-    let rebind = std::net::TcpListener::bind(("0.0.0.0", found));
-    assert!(rebind.is_ok(), "selected port {found} should be bindable");
+    assert_eq!(first_available_port(5099, |_| true).expect("free"), 5099);
 }
 
 #[test]
 fn find_available_webui_port_skips_occupied() {
-    let occupied = std::net::TcpListener::bind(("0.0.0.0", 0)).expect("bind occupied");
-    let start = occupied.local_addr().expect("local_addr").port();
-    // 再占 start+1 若可绑，确保至少跳过 start
-    let next = start.saturating_add(1);
-    let _hold_next = std::net::TcpListener::bind(("0.0.0.0", next)).ok();
-    let found = find_available_webui_port(start).expect("should find free port near start");
-    assert_ne!(found, start, "must not return occupied preferred port");
-    assert!(found > start, "should advance past occupied ports");
-    // 占用句柄仍在，返回口不能是仍被占的 start
-    drop(occupied);
+    let found = first_available_port(5099, |port| port > 5100).expect("free port after busy ones");
+    assert_eq!(found, 5101);
+}
+
+#[test]
+fn find_available_webui_port_errors_when_range_busy() {
+    let mut probed = Vec::new();
+    let err = first_available_port(5099, |port| {
+        probed.push(port);
+        false
+    })
+    .expect_err("every port in range is busy");
+    assert!(
+        err.to_string().contains("no available TCP port"),
+        "unexpected error: {err}"
+    );
+    assert_eq!(
+        probed,
+        (5099..5099 + WEBUI_PORT_MAX_TRIES).collect::<Vec<_>>()
+    );
+}
+
+// 真实探测只看自己攥着的口，别的测试动不了它
+#[test]
+fn find_available_webui_port_skips_port_held_by_listener() {
+    let held = std::net::TcpListener::bind(("0.0.0.0", 0)).expect("bind ephemeral");
+    let port = held.local_addr().expect("local_addr").port();
+    let found = find_available_webui_port(port).expect("free port near held one");
+    assert!(found > port, "must skip held port {port}, got {found}");
 }
 
 #[test]
@@ -388,39 +387,4 @@ fn parse_bound_webui_port_from_unknown_level_loopback_line() {
         "[12:21:56] [INFO/UNKNOWN] [WebUI] listening http://127.0.0.1:13105",
     ];
     assert_eq!(parse_bound_webui_port_from_logs(lines), Some(13105));
-}
-
-#[test]
-fn find_available_webui_port_errors_or_advances_when_range_busy() {
-    // 占住一段连续端口；函数要么跳到段外空闲口，要么返回 no available
-    let mut holders = Vec::new();
-    let start = {
-        let first = std::net::TcpListener::bind(("0.0.0.0", 0)).expect("bind start");
-        let p = first.local_addr().expect("addr").port();
-        holders.push(first);
-        p
-    };
-    for offset in 1..50u16 {
-        if let Some(port) = start.checked_add(offset) {
-            if let Ok(l) = std::net::TcpListener::bind(("0.0.0.0", port)) {
-                holders.push(l);
-            }
-        }
-    }
-    let result = find_available_webui_port(start);
-    match result {
-        Ok(port) => {
-            assert!(port >= start, "selected {port} should be >= {start}");
-            let rebind = std::net::TcpListener::bind(("0.0.0.0", port));
-            assert!(rebind.is_ok(), "selected port {port} not bindable");
-        }
-        Err(err) => {
-            let msg = err.to_string();
-            assert!(
-                msg.contains("no available TCP port"),
-                "unexpected error: {msg}"
-            );
-        }
-    }
-    drop(holders);
 }

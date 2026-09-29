@@ -255,6 +255,15 @@ fn is_tcp_port_available(port: u16) -> bool {
 /// 就会出现 wait_ready 30s 全失败。启动前先选空闲口并写入 runtime.json，
 /// 让 node 与 Desktop 使用同一端口。
 pub fn find_available_webui_port(preferred: u16) -> Result<u16, SnowLumaDaemonError> {
+    first_available_port(preferred, is_tcp_port_available)
+}
+
+/// 选口的顺序和上限；怎么判断空闲由调用方给。测试用假的判断，
+/// 不必真去绑那一段端口，和并行跑的测试抢同一片临时端口。
+fn first_available_port(
+    preferred: u16,
+    mut is_available: impl FnMut(u16) -> bool,
+) -> Result<u16, SnowLumaDaemonError> {
     let start = preferred.max(1);
     for offset in 0..WEBUI_PORT_MAX_TRIES {
         let Some(port) = start.checked_add(offset) else {
@@ -263,7 +272,7 @@ pub fn find_available_webui_port(preferred: u16) -> Result<u16, SnowLumaDaemonEr
         if port == 0 {
             continue;
         }
-        if is_tcp_port_available(port) {
+        if is_available(port) {
             return Ok(port);
         }
     }
