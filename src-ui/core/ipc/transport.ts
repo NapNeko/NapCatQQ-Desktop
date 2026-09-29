@@ -149,3 +149,38 @@ export async function saveZipFile(
     });
     return selected;
 }
+
+/// 窗口原生拖放的事件，坐标已换成网页里的逻辑像素；换算失败（拿不到缩放比）时为 null。
+export type FileDragDropEvent =
+    | { type: 'enter'; paths: string[]; position: { x: number; y: number } | null }
+    | { type: 'over'; position: { x: number; y: number } | null }
+    | { type: 'drop'; paths: string[]; position: { x: number; y: number } | null }
+    | { type: 'leave' };
+
+/// 订阅往窗口里拖文件。窗口开着 dragDropEnabled，网页里的 HTML5 drop 拿不到本机路径，只能走这条；
+/// 按需加载 webview / window 模块，没用到拖放的页面不带它们。
+export async function onFileDragDrop(
+    handler: (event: FileDragDropEvent) => void,
+): Promise<UnlistenFn> {
+    const [{ getCurrentWebview }, { getCurrentWindow }] = await Promise.all([
+        import('@tauri-apps/api/webview'),
+        import('@tauri-apps/api/window'),
+    ]);
+    return getCurrentWebview().onDragDropEvent(async (event) => {
+        const p = event.payload;
+        if (p.type === 'leave') {
+            handler(p);
+            return;
+        }
+        let position: { x: number; y: number } | null = null;
+        try {
+            // 每次都问缩放比：窗口拖到另一块屏上会变
+            const logical = p.position.toLogical(await getCurrentWindow().scaleFactor());
+            position = { x: logical.x, y: logical.y };
+        } catch {
+            position = null;
+        }
+        if (p.type === 'over') handler({ type: 'over', position });
+        else handler({ type: p.type, paths: p.paths, position });
+    });
+}

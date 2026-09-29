@@ -34,7 +34,7 @@ flowchart TB
 
 ## 2. 各层硬约束
 
-`core/ipc/transport.ts`：唯一允许 `import '@tauri-apps/api/core'` / `'@tauri-apps/api/event'` / `'@tauri-apps/plugin-opener'` 的位置。对外暴露 `invoke<T>` / `listen<T>` / `isTauri` / `Channel`（终端字节流）、`openExternalUrl`（只放行 http/https，别的 scheme 直接 reject），以及系统对话框 `pickDirectory` / `pickZipFile` / `pickImageFiles` / `pickTextFiles` / `pickAnyFiles` / `saveFileAs` / `saveZipFile`。不允许出现业务 command 名、event 名（对话框插件自己的 `plugin:dialog|*` 除外）。
+`core/ipc/transport.ts`：唯一允许 `import '@tauri-apps/*'`（`api/core` / `api/event` / `api/webview` / `api/window` / `plugin-opener`）的位置。对外暴露 `invoke<T>` / `listen<T>` / `isTauri` / `Channel`（终端字节流）、`openExternalUrl`（只放行 http/https，别的 scheme 直接 reject）、`onFileDragDrop`（窗口原生拖放，坐标已换成逻辑像素；hooks 里经 `hooks/ui/useTauriFileDrop.ts` 的 `useFileDragDrop` 用），以及系统对话框 `pickDirectory` / `pickZipFile` / `pickImageFiles` / `pickTextFiles` / `pickAnyFiles` / `saveFileAs` / `saveZipFile`。不允许出现业务 command 名、event 名（对话框插件自己的 `plugin:dialog|*` 除外）。
 
 `core/services/*.service.ts`：唯一允许出现 Tauri command / event 字符串字面量的位置，后端改命令名只改这一处。每个 service 按业务域聚合，浏览器预览走 `core/ipc/mock/*`（生产包里 mock 也留着，性能工具要用）。当前 services：
 - 启动与桌面：`bootstrap` / `desktop`（窗口、托盘）/ `desktop-consent` / `desktop-onboarding` / `desktop-update` / `exit` / `data-root-migrate` / `config-transfer` / `settings` / `system-metrics`
@@ -56,7 +56,7 @@ flowchart TB
 ### 现存偏差（改到附近时顺手收掉，别照抄）
 
 - modules 直连服务：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/{ImportRemoteBotsDialog,SnowLumaConsentDialog}.tsx`、`bot/list/BotListPage.next.tsx`、`bot/list/next/BotCard.tsx`、`components/{ComponentsPage.next,QqDependencyDialog}.tsx`、`remote/{AddServerDialog,ImportSshConfigDialog}.tsx`、`settings/{ConfigImportDialog,DataRootMigrateDialog}.tsx`、`settings/settings-draft.ts`、`settings/tabs/{AboutTab,NcdWatchRemoteSection,NotificationsTab,RuntimeTab,WindowTab}.tsx`、`settings/tabs/notifications/{DeliveryHistoryDialog,OneBotMessengerPicker}.tsx`、`task-queue/{TaskDetailPanel,TaskQueueListItem,TaskQueuePage.next}.tsx`、`tray/TrayPanel.tsx`（另有三处动态 `import('../../core/ipc/transport')` 直接 invoke `tray_panel_*`，命令名漏到了 modules）。`modules/apps/**` 和 `shared/**` 已经清零，保持住。
-- transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（动态 import）、`app/AppBootGate.tsx`（直接 `invoke`，另从 transport 取 `isTauri`）、`core/services/desktop.service.ts`、`hooks/ui/useTauriFileDrop.ts`、`hooks/terminal/useTerminalFileDrop.ts`、`modules/settings/useTauriDropTarget.ts`。
+- transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（启动时动态 import 窗口 API 认托盘面板窗口，还没挂 React，留着）、`core/services/desktop.service.ts`（窗口控制和托盘面板事件动态 import 窗口 API、标题栏关闭直接 `emit`）。
 - `app/AppNext.tsx` 直接用 `desktopUpdateService`。
 - `hooks/preferences/useBackendSettings.ts` 反过来 import `modules/settings/settings-draft`。
 - 模块互相伸手：`bot/metrics` → `bootstrap/widgets/occupancyChartGeometry`、`components` → `docker/SudoPasswordDialog`（两处）、`remote/ServerCard` → `bot/list/next/BotManageCard`、`task-queue/TaskDetailPanel` → `components/DockerPullLayersPanel`；`shared/components/next/OnboardingPreviews.tsx` 引了 `bot/.../BotManageCard` 和 `components/ComponentEntityCard`。

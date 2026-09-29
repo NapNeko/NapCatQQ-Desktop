@@ -2,10 +2,8 @@
 // 这里按松手的位置找落在哪个终端格子上（`data-terminal-drop="<会话 id>"`，文件栏再带
 // `data-terminal-drop-dir` 指明目录），交给调用方处理。
 
-import { isTauri } from '@tauri-apps/api/core';
-import { getCurrentWebview } from '@tauri-apps/api/webview';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useFileDragDrop } from '../ui/useTauriFileDrop';
 
 export interface TerminalDropTarget {
     sessionId: string;
@@ -21,47 +19,27 @@ function targetAt(x: number, y: number): TerminalDropTarget | null {
 
 export function useTerminalFileDrop(active: boolean, onDrop: (target: TerminalDropTarget, paths: string[]) => void) {
     const [hover, setHover] = useState<TerminalDropTarget | null>(null);
-    const onDropRef = useRef(onDrop);
-    onDropRef.current = onDrop;
 
     useEffect(() => {
-        if (!active || !isTauri()) {
+        if (!active) setHover(null);
+        return () => setHover(null);
+    }, [active]);
+
+    useFileDragDrop(active, (event) => {
+        if (event.type === 'leave') {
             setHover(null);
             return;
         }
-        let unlisten: (() => void) | undefined;
-        let cancelled = false;
-        void getCurrentWebview()
-            .onDragDropEvent(async (event) => {
-                if (cancelled) return;
-                const p = event.payload;
-                if (p.type === 'leave') {
-                    setHover(null);
-                    return;
-                }
-                const factor = await getCurrentWindow().scaleFactor();
-                const pos = p.position.toLogical(factor);
-                const target = targetAt(pos.x, pos.y);
-                if (p.type === 'drop') {
-                    setHover(null);
-                    if (target && p.paths.length) onDropRef.current(target, p.paths);
-                } else {
-                    setHover((prev) =>
-                        prev?.sessionId === target?.sessionId && prev?.dir === target?.dir ? prev : target,
-                    );
-                }
-            })
-            .then((fn) => {
-                if (cancelled) fn();
-                else unlisten = fn;
-            })
-            .catch(() => undefined);
-        return () => {
-            cancelled = true;
-            unlisten?.();
+        const target = event.position ? targetAt(event.position.x, event.position.y) : null;
+        if (event.type === 'drop') {
             setHover(null);
-        };
-    }, [active]);
+            if (target && event.paths.length) onDrop(target, event.paths);
+        } else {
+            setHover((prev) =>
+                prev?.sessionId === target?.sessionId && prev?.dir === target?.dir ? prev : target,
+            );
+        }
+    });
 
     return hover;
 }

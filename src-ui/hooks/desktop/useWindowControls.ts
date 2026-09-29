@@ -10,6 +10,13 @@ export interface WindowControls {
     close: () => void;
 }
 
+/** 启动门在 splash 首帧上屏后调一次；失败只记日志，窗口起不来也没处弹条 */
+export function revealMainWindow(): void {
+    void windowControlService.revealMainWindow().catch((err) => {
+        console.error('[AppBootGate] 显示主窗口失败:', err);
+    });
+}
+
 export function useWindowControls(): WindowControls {
     const [isMaximized, setIsMaximized] = useState(false);
 

@@ -36,6 +36,12 @@ async function getWindow(): Promise<WindowController | null> {
 }
 
 export const windowControlService = {
+    /** 主窗口建出来是隐藏的，首屏画好后由前端叫它出来；浏览器预览里什么都不做 */
+    revealMainWindow: async (): Promise<void> => {
+        if (!isTauri) return;
+        await invoke<void>('show_main_window');
+    },
+
     minimize: async (): Promise<void> => {
         const w = await getWindow();
         if (!w) return;

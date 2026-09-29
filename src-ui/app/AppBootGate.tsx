@@ -7,8 +7,7 @@ import { AppNext } from './AppNext';
 import { hydrateAppUiPreferencesFromDisk } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { applySideEffects } from '../hooks/preferences/preferencesStore';
 import { syncRootChromeBackground } from '../core/design/surfaceCanvas';
-import { invoke } from '@tauri-apps/api/core';
-import { isTauri } from '../core/ipc/transport';
+import { revealMainWindow } from '../hooks/desktop/useWindowControls';
 import { RouteErrorBoundary } from '../shared/ui/RouteErrorBoundary';
 import { perfMark, perfMeasure } from '../core/domain/performance/perfMarks';
 
@@ -47,10 +46,7 @@ export const AppBootGate: React.FC = () => {
                 if (windowShownRef.current) return;
                 windowShownRef.current = true;
                 perfMark('window_shown', { once: true });
-                if (!isTauri) return;
-                void invoke('show_main_window').catch((err) => {
-                    console.error('[AppBootGate] 显示主窗口失败:', err);
-                });
+                revealMainWindow();
             });
         });
         return () => {
