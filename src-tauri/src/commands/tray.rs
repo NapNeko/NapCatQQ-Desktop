@@ -58,16 +58,6 @@ pub async fn window_hide_to_tray(app: AppHandle) -> Result<(), String> {
     hide_main_window_to_tray(app).await
 }
 
-/// 本机 Bot 是否处于活跃态,用于退出前拦截(与旧版 has_running_local_bot 对齐)
-#[tauri::command]
-pub async fn count_local_active_bots(state: tauri::State<'_, AppState>) -> Result<usize, String> {
-    state
-        .bot_manager
-        .count_local_active_bots()
-        .await
-        .map_err(|e| e.to_string())
-}
-
 /// 在 setup 中注册托盘(幂等)。不再附原生菜单,右键走自绘面板;面板窗口在退出轻量模式后补建。
 pub fn attach_tray(app: &AppHandle) -> Result<(), String> {
     if TRAY_ATTACHED.swap(true, Ordering::SeqCst) {

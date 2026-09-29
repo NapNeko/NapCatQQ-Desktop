@@ -893,7 +893,6 @@ pub fn run() {
             commands::docker::ops::docker_compose_down,
             commands::tray::window_show,
             commands::tray::window_hide_to_tray,
-            commands::tray::count_local_active_bots,
             commands::tray::tray_panel_quit,
             commands::tray::tray_panel_enter_lightweight,
             tray_panel::tray_panel_resize,
