@@ -131,7 +131,9 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                     onTryChat={
                         running && instance.framework_id === 'astrbot'
                             ? () => void apps.openWebUi(instance.id, '/chat')
-                            : undefined
+                            : running && instance.framework_id === 'koishi'
+                              ? () => void apps.openWebUi(instance.id, '/sandbox')
+                              : undefined
                     }
                     onLink={() => setLinkOpen(true)}
                     onUnlink={() => apps.unlink(instance.id)}

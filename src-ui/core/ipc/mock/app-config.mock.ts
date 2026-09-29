@@ -12,6 +12,7 @@ import type {
     AppInstanceConfigEnvelope,
     AstrBotInstanceConfig,
     KarinInstanceConfig,
+    KoishiInstanceConfig,
     MaiBotInstanceConfig,
     NoneBot2InstanceConfig,
 } from '../types';
@@ -33,6 +34,8 @@ import {
     validateAstrBotConfig,
 } from '../../domain/apps/astrbotConfig';
 import { makeAppConfigError } from '../../domain/apps/appConfigError';
+import { koishiServer, validateKoishiConfig } from '../../domain/apps/koishiConfig';
+import { koishiMockConfig } from './koishi.mock';
 import { withMockDelay } from './bootstrap.mock';
 
 const KARIN_DOCS: AppConfigDocument[] = [
@@ -67,6 +70,18 @@ const MAIBOT_DOCS: AppConfigDocument[] = [
     },
 ];
 
+const KOISHI_DOCS: AppConfigDocument[] = [
+    { id: 'koishi', label: 'koishi.yml', rel_path: 'koishi.yml', format: 'yaml', hot_reload: false },
+    { id: 'env', label: '.env', rel_path: '.env', format: 'dot_env', hot_reload: false },
+    { id: 'package', label: 'package.json', rel_path: 'package.json', format: 'json', hot_reload: false },
+];
+
+const KOISHI_TEXT: Record<string, string> = {
+    koishi: 'plugins:\n  group:server:\n    server:cj4vi7:\n      port: 23140\n      host: 127.0.0.1\n',
+    env: 'GITHUB_MIRROR = https://ghproxy.com/https://github.com\n',
+    package: '{\n  "name": "@koishijs/boilerplate",\n  "version": "1.16.0"\n}\n',
+};
+
 const MAIBOT_TEXT: Record<string, string> = {
     bot_config: '[inner]\nversion = "8.14.40"\n\n[webui]\nport = 23001\n\n[maim_message]\nws_server_port = 23002\n',
     model_config: '[inner]\nversion = "1.17.9"\n',
@@ -81,6 +96,8 @@ function docsOf(frameworkId: string): AppConfigDocument[] {
             return ASTRBOT_DOCS;
         case 'maibot':
             return MAIBOT_DOCS;
+        case 'koishi':
+            return KOISHI_DOCS;
         default:
             return NONEBOT2_DOCS;
     }
@@ -125,6 +142,7 @@ const karinStates = new Map<string, KarinState>();
 const nbStates = new Map<string, { config: NoneBot2InstanceConfig; docRev: Record<string, number> }>();
 const abStates = new Map<string, { config: AstrBotInstanceConfig; docRev: Record<string, number> }>();
 const mbStates = new Map<string, { config: MaiBotInstanceConfig; docRev: Record<string, number> }>();
+const koStates = new Map<string, { config: KoishiInstanceConfig; docRev: Record<string, number> }>();
 const rawStates = new Map<string, { text: Record<string, string>; rev: Record<string, number> }>();
 let conflictOnce = false;
 
@@ -153,6 +171,37 @@ function mbEnvelope(s: { config: MaiBotInstanceConfig; docRev: Record<string, nu
             hot_reload: d.hot_reload,
         })),
     };
+}
+
+function koState(instance: AppInstance) {
+    let s = koStates.get(instance.id);
+    if (!s) {
+        s = { config: koishiMockConfig(instance.port), docRev: { koishi: 1, env: 1, package: 1 } };
+        koStates.set(instance.id, s);
+    }
+    return s;
+}
+
+function koEnvelope(s: { config: KoishiInstanceConfig; docRev: Record<string, number> }): AppInstanceConfigEnvelope {
+    return {
+        config: { framework: 'koishi', data: structuredClone(s.config) },
+        revision: combined(s.docRev, KOISHI_DOCS.slice(0, 1)),
+        documents: [{ doc_id: 'koishi', revision: rev(s.docRev.koishi ?? 0), hot_reload: false }],
+    };
+}
+
+export function peekKoishiConfig(instance: AppInstance): KoishiInstanceConfig {
+    return structuredClone(koState(instance).config);
+}
+
+/** 对接、商店装卸这些后端直接改 koishi.yml 的操作在 mock 里走这里 */
+export function editKoishiConfig(
+    instance: AppInstance,
+    edit: (cfg: KoishiInstanceConfig) => KoishiInstanceConfig,
+): void {
+    const s = koState(instance);
+    s.config = edit(structuredClone(s.config));
+    s.docRev.koishi = (s.docRev.koishi ?? 0) + 1;
 }
 
 /** 运行期 mock 读当前落盘的配置（MCP 服务列表、提供商） */
@@ -382,6 +431,9 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             if (inst.framework_id === 'maibot') {
                 return withMockDelay(mbEnvelope(mbState(inst)));
             }
+            if (inst.framework_id === 'koishi') {
+                return withMockDelay(koEnvelope(koState(inst)));
+            }
             if (inst.framework_id !== 'karin') {
                 throw makeAppConfigError('unsupported', `该应用端暂不支持类型化配置: ${inst.framework_id}`);
             }
@@ -519,6 +571,39 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     port_changed: portChanged,
                 });
             }
+            if (inst.framework_id === 'koishi' && config.framework === 'koishi') {
+                const s = koState(inst);
+                if (baseRevision != null && baseRevision !== combined(s.docRev, KOISHI_DOCS.slice(0, 1))) {
+                    throw makeAppConfigError('conflict', '配置已被修改（koishi.yml），请重新加载后再保存');
+                }
+                const next = structuredClone(config.data);
+                const issues = validateKoishiConfig(next);
+                if (issues.length) {
+                    throw makeAppConfigError(
+                        'invalid',
+                        `配置校验未通过：${issues.map((i) => `${i.path}: ${i.message}`).join('; ')}`,
+                        issues,
+                    );
+                }
+                if (JSON.stringify(s.config) !== JSON.stringify(next)) s.docRev.koishi = (s.docRev.koishi ?? 0) + 1;
+                s.config = next;
+                const port = koishiServer(next).port;
+                let portChanged = false;
+                if (port !== inst.port) {
+                    deps.publish({ ...inst, port }, 'port_changed');
+                    portChanged = true;
+                }
+                const env = koEnvelope(s);
+                return withMockDelay({
+                    config: env.config,
+                    revision: env.revision,
+                    documents: env.documents,
+                    // 跑着的时候后端走控制台，当场生效
+                    restart_required: false,
+                    relinked: portChanged && !!inst.link,
+                    port_changed: portChanged,
+                });
+            }
             if (inst.framework_id !== 'karin' || config.framework !== 'karin') {
                 throw makeAppConfigError('unsupported', `该应用端暂不支持类型化配置: ${inst.framework_id}`);
             }
@@ -613,7 +698,9 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                 raw =
                     inst.framework_id === 'maibot'
                         ? { text: { ...MAIBOT_TEXT }, rev: { bot_config: 1, model_config: 1, adapter_config: 1 } }
-                        : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
+                        : inst.framework_id === 'koishi'
+                          ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
+                          : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
                 rawStates.set(inst.id, raw);
             }
             return withMockDelay({ doc_id: docId, text: raw.text[docId] ?? '', revision: rev(raw.rev[docId] ?? 0) });
@@ -687,7 +774,9 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                         ? { text: { ...ASTRBOT_TEXT }, rev: { cmd_config: 1 } }
                         : inst.framework_id === 'maibot'
                           ? { text: { ...MAIBOT_TEXT }, rev: { bot_config: 1, model_config: 1, adapter_config: 1 } }
-                          : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
+                          : inst.framework_id === 'koishi'
+                            ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
+                            : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
                 rawStates.set(inst.id, raw);
             }
             const current = rev(raw.rev[docId] ?? 0);
@@ -711,6 +800,7 @@ export const mockAppConfigControls = {
         nbStates.clear();
         abStates.clear();
         mbStates.clear();
+        koStates.clear();
         rawStates.clear();
         conflictOnce = false;
     },

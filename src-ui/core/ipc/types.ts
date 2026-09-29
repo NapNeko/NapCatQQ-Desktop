@@ -98,6 +98,14 @@ export type { AppPluginConfigSchema } from './generated/domain/AppPluginConfigSc
 export type { AppTermsDoc } from './generated/domain/AppTermsDoc';
 export type { AppPendingTerms } from './generated/domain/AppPendingTerms';
 export type { MaiBotInstanceConfig } from './generated/domain/MaiBotInstanceConfig';
+export type { KoishiInstanceConfig } from './generated/koishi/KoishiInstanceConfig';
+export type { KoishiPluginNode } from './generated/koishi/KoishiPluginNode';
+export type { KoishiPluginSchema } from './generated/koishi/KoishiPluginSchema';
+export type { KoishiPackageInfo } from './generated/koishi/KoishiPackageInfo';
+export type { KoishiRuntimeStatus } from './generated/koishi/KoishiRuntimeStatus';
+export type { KoishiRuntimeGate } from './generated/koishi/KoishiRuntimeGate';
+export type { KoishiBotStatus } from './generated/koishi/KoishiBotStatus';
+export type { KoishiBotState } from './generated/koishi/KoishiBotState';
 export type { MaiBotAdapterConfig } from './generated/domain/MaiBotAdapterConfig';
 export type { MaiBotChatFilter } from './generated/domain/MaiBotChatFilter';
 export type { MaiBotListMode } from './generated/domain/MaiBotListMode';

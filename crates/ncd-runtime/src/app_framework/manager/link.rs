@@ -145,10 +145,15 @@ impl AppManager {
             }
         }
 
-        if let Err(e) = adapter
-            .apply_link(host.as_ref(), &instance, &app_plan)
-            .await
-        {
+        let applied = match self.prime_live_port(adapter.as_ref(), &instance).await {
+            Ok(()) => {
+                adapter
+                    .apply_link(host.as_ref(), &instance, &app_plan)
+                    .await
+            }
+            Err(e) => Err(e),
+        };
+        if let Err(e) = applied {
             if resident_forward_port.is_some() {
                 self.teardown_resident_best_effort(&instance, bot_id).await;
             }
@@ -240,7 +245,10 @@ impl AppManager {
             .await?;
         if let Ok(adapter) = self.registry.get(&instance.framework_id)
             && let Ok(host) = self.resolve_host(&instance.host_id).await
-            && let Err(e) = adapter.unlink(host.as_ref(), &instance).await
+            && let Err(e) = match self.prime_live_port(adapter.as_ref(), &instance).await {
+                Ok(()) => adapter.unlink(host.as_ref(), &instance).await,
+                Err(e) => Err(e),
+            }
         {
             tracing::warn!(instance = instance_id.as_str(), error = %e, "app-side unlink");
         }

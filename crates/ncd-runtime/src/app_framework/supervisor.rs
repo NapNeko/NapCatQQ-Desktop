@@ -158,11 +158,19 @@ pub fn pick_app_pid(lines: &str, kind: AppProcessKind) -> Option<(u32, String)> 
             }
             AppProcessKind::AstrBot => lower.contains("astrbot"),
             AppProcessKind::MaiBot => lower.contains("bot.py"),
+            AppProcessKind::Koishi => {
+                let slashed = lower.replace('\\', "/");
+                slashed.contains("koishi/lib/")
+                    || (slashed.contains(".yarn/releases/") && slashed.trim_end().ends_with(" start"))
+            }
         };
         if !hit {
             continue;
         }
-        if matches!(kind, AppProcessKind::MaiBot) && best.as_ref().is_some_and(|(p, _)| *p < pid) {
+        // Koishi 同理：yarn → koishi daemon → worker，最外层的 yarn 先起
+        if matches!(kind, AppProcessKind::MaiBot | AppProcessKind::Koishi)
+            && best.as_ref().is_some_and(|(p, _)| *p < pid)
+        {
             continue;
         }
         let program = if lower.contains("python") {
@@ -183,6 +191,7 @@ pub enum AppProcessKind {
     Karin,
     AstrBot,
     MaiBot,
+    Koishi,
 }
 
 impl AppProcessKind {
@@ -191,6 +200,7 @@ impl AppProcessKind {
             "karin" => Self::Karin,
             "astrbot" => Self::AstrBot,
             "maibot" => Self::MaiBot,
+            "koishi" => Self::Koishi,
             _ => Self::NoneBot2,
         }
     }
@@ -276,6 +286,22 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
         let (pid, prog) = pick_app_pid(lines, AppProcessKind::AstrBot).unwrap();
         assert_eq!(pid, 2202);
         assert_eq!(prog, "python");
+    }
+
+    #[test]
+    fn pick_koishi_yarn_launcher_and_skip_desktop_helpers() {
+        let lines = r"4410 C:\node\node.exe C:\apps\ko1\node_modules\koishi\lib\worker\index.js
+4405 C:\node\node.exe C:\apps\ko1\node_modules\koishi\lib\cli\index.js start
+4400 C:\node\node.exe C:\apps\ko1\.yarn\releases\yarn-4.12.0.cjs start
+4390 C:\node\node.exe C:\apps\ko1\.yarn\releases\yarn-4.12.0.cjs add koishi-plugin-foo
+";
+        let (pid, prog) = pick_app_pid(lines, AppProcessKind::Koishi).unwrap();
+        assert_eq!(pid, 4400, "装插件的 yarn 不算，最外层的 yarn start 先起");
+        assert_eq!(prog, "node");
+        assert!(matches!(
+            AppProcessKind::from_framework("koishi"),
+            AppProcessKind::Koishi
+        ));
     }
 
     #[test]
