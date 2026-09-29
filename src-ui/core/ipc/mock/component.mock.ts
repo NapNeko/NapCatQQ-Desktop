@@ -80,6 +80,30 @@ export const mockComponentCatalog: ComponentInfo[] = [
         category: 'runtime_dep',
     },
     {
+        id: 'git',
+        display_name: 'Git',
+        description: '版本管理工具，云崽装本体和插件要用',
+        repo_url: 'https://git-scm.com',
+        supported_targets: [
+            { os: 'windows', locality: 'local' },
+            { os: 'linux', locality: 'local' },
+            { os: 'linux', locality: 'remote' },
+        ],
+        category: 'runtime_dep',
+    },
+    {
+        id: 'redis',
+        display_name: 'Redis',
+        description: '键值数据库，云崽存账号绑定和冷却用',
+        repo_url: 'https://github.com/redis-windows/redis-windows',
+        supported_targets: [
+            { os: 'windows', locality: 'local' },
+            { os: 'linux', locality: 'local' },
+            { os: 'linux', locality: 'remote' },
+        ],
+        category: 'runtime_dep',
+    },
+    {
         id: 'novnc',
         display_name: 'noVNC',
         description: '远端扫码用的远程桌面',
@@ -197,6 +221,21 @@ const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>
         'remote:dev': null,
     },
     maibot: {
+        local: null,
+        'remote:production': null,
+        'remote:dev': null,
+    },
+    git: {
+        local: { version: '2.56.0', source: 'cmd/git.exe' },
+        'remote:production': { version: '2.43.0', source: '$PATH/git' },
+        'remote:dev': null,
+    },
+    redis: {
+        local: null,
+        'remote:production': { version: '9.0.6', source: 'bin/valkey-server' },
+        'remote:dev': null,
+    },
+    yunzai: {
         local: null,
         'remote:production': null,
         'remote:dev': null,

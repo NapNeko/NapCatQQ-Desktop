@@ -638,6 +638,7 @@ pub enum AppConfigFormat {
     Json,
     DotEnv,
     Toml,
+    Yaml,
 }
 
 /// 应用端实例的一个可编辑配置文件（框架适配器声明；原始文件 Tab 与类型化读写共用）

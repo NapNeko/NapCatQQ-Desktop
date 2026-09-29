@@ -35,6 +35,8 @@ toml_edit = "0.22"
 tracing = "0.1"
 ts-rs = { version = "12", features = ["serde-compat"] }
 fancy-regex = "0.14"
+# 云崽的配置全是 YAML：读用它解析，写回走 yaml_patch 按行改，免得丢注释
+serde_yaml = "0.9"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

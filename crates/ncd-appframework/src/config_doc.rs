@@ -278,6 +278,9 @@ pub fn validate_text(format: AppConfigFormat, text: &str) -> Result<(), AppFrame
         AppConfigFormat::Toml => toml::from_str::<toml::Value>(text)
             .err()
             .map(|e| format!("TOML 语法错误: {e}")),
+        AppConfigFormat::Yaml => serde_yaml::from_str::<serde_yaml::Value>(text)
+            .err()
+            .map(|e| format!("YAML 语法错误: {e}")),
         AppConfigFormat::DotEnv => None,
     };
     match err {

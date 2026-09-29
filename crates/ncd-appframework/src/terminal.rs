@@ -160,6 +160,8 @@ mod tests {
             port: 8080,
             node_bin: None,
             uv_bin: None,
+            git_bin: None,
+            redis_bin: None,
             npm_registry: None,
             install_renderer: false,
             adopt_existing: false,

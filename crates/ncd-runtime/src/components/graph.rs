@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use ncd_appframework::{AppComponentSpec, AppFrameworkRegistry};
 use ncd_component::{
-    Component, ComponentId, DependencyTarget, DesktopSelfComponent, NapCatComponent,
-    NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent, Requirement, RequirementPhase,
-    SnowLumaComponent, UvComponent, VersionReq,
+    Component, ComponentId, DependencyTarget, DesktopSelfComponent, GitComponent, NapCatComponent,
+    NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent, RedisComponent, Requirement,
+    RequirementPhase, SnowLumaComponent, UvComponent, VersionReq,
 };
 use ncd_domain::SnowLumaLinuxPackage;
 use ncd_host::{HostPath, Locality, Os};
@@ -20,6 +20,8 @@ fn graph_placeholder_spec() -> AppComponentSpec {
         port: 0,
         node_bin: None,
         uv_bin: None,
+        git_bin: None,
+        redis_bin: None,
         npm_registry: None,
         install_renderer: false,
         adopt_existing: false,
@@ -30,11 +32,13 @@ fn graph_placeholder_spec() -> AppComponentSpec {
 }
 
 /// catalog 顺序（与 component_catalog 一致）。应用端不写在这里，由注册表追加。
-const HOST_GRAPH_COMPONENT_IDS: [ComponentId; 8] = [
+const HOST_GRAPH_COMPONENT_IDS: [ComponentId; 10] = [
     ComponentId::NapCat,
     ComponentId::SnowLuma,
     ComponentId::NodeJs,
     ComponentId::Uv,
+    ComponentId::Git,
+    ComponentId::Redis,
     ComponentId::Qq,
     ComponentId::NoVnc,
     ComponentId::NcdWatch,
@@ -75,6 +79,8 @@ pub fn graph_component(
         ),
         ComponentId::NodeJs => Arc::new(NodeJsComponent::new("0.0.0", x)),
         ComponentId::Uv => Arc::new(UvComponent::new("0.0.0", x)),
+        ComponentId::Git => Arc::new(GitComponent::new("0.0.0", x)),
+        ComponentId::Redis => Arc::new(RedisComponent::new(x)),
         ComponentId::Qq => Arc::new(QQComponent::default_v3_2_25(x)),
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
         ComponentId::NcdWatch => Arc::new(NcdWatchComponent::new(None)),
@@ -268,6 +274,8 @@ Windows/Local snowluma[lite]
   component qq (Both)
 Windows/Local nodejs
 Windows/Local uv
+Windows/Local git
+Windows/Local redis
 Windows/Local qq
 Windows/Local desktop_self
 Windows/Local astrbot
@@ -291,6 +299,9 @@ Linux/Local snowluma[lite]
 Linux/Local nodejs
   host_command tar <- tar (Install)
 Linux/Local uv
+  host_command tar <- tar (Install)
+Linux/Local git
+Linux/Local redis
   host_command tar <- tar (Install)
 Linux/Local qq
   host_packages qq_dependencies (Both)
@@ -319,6 +330,9 @@ Linux/Remote snowluma[lite]
 Linux/Remote nodejs
   host_command tar <- tar (Install)
 Linux/Remote uv
+  host_command tar <- tar (Install)
+Linux/Remote git
+Linux/Remote redis
   host_command tar <- tar (Install)
 Linux/Remote qq
   host_packages qq_dependencies (Both)
@@ -434,6 +448,8 @@ Linux/Remote nonebot2
                 ComponentId::SnowLuma,
                 ComponentId::NodeJs,
                 ComponentId::Uv,
+                ComponentId::Git,
+                ComponentId::Redis,
                 ComponentId::Qq,
                 ComponentId::NoVnc,
                 ComponentId::NcdWatch,

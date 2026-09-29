@@ -15,6 +15,9 @@ const COMPONENT_DISPLAY_NAME: Record<ComponentId, string> = {
     nonebot2: 'NoneBot2',
     astrbot: 'AstrBot',
     maibot: 'MaiBot',
+    git: 'Git',
+    redis: 'Redis',
+    yunzai: 'TRSS-Yunzai',
 };
 
 const STEP_KIND_LABEL: Record<string, string> = {

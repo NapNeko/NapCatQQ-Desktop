@@ -16,9 +16,12 @@
  * - NoneBot2 → nonebot2（应用端框架；同 Karin 按实例目录安装）
  * - AstrBot → astrbot（应用端框架；按实例目录安装，不进组件页 catalog）
  * - MaiBot → maibot（应用端框架；按实例目录安装，不进组件页 catalog）
+ * - Git → git（版本管理工具；云崽装本体、装插件、群里 #更新 都要）
+ * - Redis → redis（键值库；云崽启动时自己拉起，桌面端只装二进制）
+ * - Yunzai → yunzai（应用端框架，TRSS-Yunzai；按实例目录安装，不进组件页 catalog）
  *
  * 与项目内 napcat_* / snowluma_* 事件名风格保持一致;不直接走 serde
  * 的 rename_all = "snake_case",因为它会把 NapCat 切成 nap_cat,
  * Qq 切成 qq 也算巧合,但 NapCat 不行,所以统一都用显式 rename
  */
-export type ComponentId = "napcat" | "snowluma" | "qq" | "nodejs" | "novnc" | "desktop_self" | "ncd_watch" | "karin" | "uv" | "nonebot2" | "astrbot" | "maibot";
+export type ComponentId = "napcat" | "snowluma" | "qq" | "nodejs" | "novnc" | "desktop_self" | "ncd_watch" | "karin" | "uv" | "nonebot2" | "astrbot" | "maibot" | "git" | "redis" | "yunzai";

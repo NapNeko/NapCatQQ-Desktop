@@ -46,6 +46,12 @@ impl AppManager {
             uv_bin: self
                 .managed_component_dir(host, "Uv")
                 .map(|dir| ncd_component::UvComponent::uv_binary_path_for_os(&dir, host.os())),
+            git_bin: self.managed_component_dir(host, "Git").and_then(|dir| {
+                ncd_component::GitComponent::managed_binary_path_for_os(&dir, host.os())
+            }),
+            redis_bin: self.managed_component_dir(host, "Redis").map(|dir| {
+                ncd_component::RedisComponent::managed_binary_path_for_os(&dir, host.os())
+            }),
             npm_registry: self.npm_registry.clone(),
             install_renderer: instance.install_renderer,
             adopt_existing: instance.origin.is_imported(),

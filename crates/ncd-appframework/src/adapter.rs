@@ -35,6 +35,10 @@ pub struct AppComponentSpec {
     pub node_bin: Option<HostPath>,
     /// 桌面端管理的 uv 二进制（Python 系框架用）；None 则只看实例标记 / PATH
     pub uv_bin: Option<HostPath>,
+    /// 桌面端管理的 git（只有 Windows 有托管落点，Linux 走系统包）；可能还没装，用前核对
+    pub git_bin: Option<HostPath>,
+    /// 桌面端管理的 redis-server（云崽写进 redis.yaml 的 path）；可能还没装，用前核对
+    pub redis_bin: Option<HostPath>,
     /// npm registry 镜像；None 用默认源
     pub npm_registry: Option<String>,
     /// Karin：provision 时一并 `pnpm add @karinjs/plugin-puppeteer`。NoneBot2 忽略。

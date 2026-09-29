@@ -3,4 +3,4 @@
 /**
  * 配置文件格式（原始文件 Tab 决定预检与高亮）
  */
-export type AppConfigFormat = "json" | "dot_env" | "toml";
+export type AppConfigFormat = "json" | "dot_env" | "toml" | "yaml";

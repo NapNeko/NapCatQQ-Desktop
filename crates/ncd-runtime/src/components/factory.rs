@@ -7,10 +7,10 @@ use std::sync::Arc;
 
 use ncd_appframework::{AppComponentSpec, AppFrameworkRegistry};
 use ncd_component::{
-    Component, ComponentId, DesktopSelfComponent, NapCatComponent, NcdWatchComponent,
-    NoVncComponent, NodeJsComponent, QQComponent, SnowLumaComponent, UV_DEFAULT_VERSION,
-    UvComponent, ncd_watch_asset_name, ncd_watch_release_download_url,
-    ncd_watch_release_download_url_for_tag,
+    Component, ComponentId, DesktopSelfComponent, GitComponent, MINGIT_DEFAULT_VERSION,
+    NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent,
+    RedisComponent, SnowLumaComponent, UV_DEFAULT_VERSION, UvComponent, ncd_watch_asset_name,
+    ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
 };
 use ncd_domain::RemoteSelectedPaths;
 use ncd_domain::SnowLumaLinuxPackage;
@@ -272,6 +272,19 @@ pub fn build_component_for_host(
             };
             Arc::new(UvComponent::new(UV_DEFAULT_VERSION, install_dir))
         }
+        // Linux 上 git 是系统包，组件目录只是占位
+        ComponentId::Git => Arc::new(GitComponent::new(
+            MINGIT_DEFAULT_VERSION,
+            data_root_host.join("components").join("Git"),
+        )),
+        ComponentId::Redis => {
+            let install_dir = if ctx.host.os() == Os::Windows {
+                data_root_host.join("components").join("Redis")
+            } else {
+                RedisComponent::default_remote_install_dir(require_remote_home(remote_home)?)
+            };
+            Arc::new(RedisComponent::new(install_dir))
+        }
         _ => {
             return Err(format!("组件工厂未覆盖: {}", id.as_str()));
         }
@@ -320,11 +333,31 @@ fn build_app_framework_component(
             )
         })
     };
+    // git 在 Linux 上是系统包，只有 Windows 有托管落点；redis 两边都有，框架组件用前自己核对在不在
+    let git_bin = GitComponent::managed_binary_path_for_os(
+        &data_root_host.join("components").join("Git"),
+        ctx.host.os(),
+    );
+    let redis_bin = if ctx.host.os() == Os::Windows {
+        Some(RedisComponent::managed_binary_path_for_os(
+            &data_root_host.join("components").join("Redis"),
+            Os::Windows,
+        ))
+    } else {
+        remote_home.map(|home| {
+            RedisComponent::managed_binary_path_for_os(
+                &RedisComponent::default_remote_install_dir(home),
+                ctx.host.os(),
+            )
+        })
+    };
     Ok(adapter.component(&AppComponentSpec {
         install_dir: hint.install_dir.clone(),
         port: hint.port,
         node_bin,
         uv_bin,
+        git_bin,
+        redis_bin,
         npm_registry: hint.npm_registry.clone(),
         install_renderer: hint.install_renderer,
         adopt_existing: hint.adopt_existing,

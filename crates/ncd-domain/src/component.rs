@@ -24,6 +24,9 @@ use ts_rs::TS;
 /// - NoneBot2 → nonebot2（应用端框架；同 Karin 按实例目录安装）
 /// - AstrBot → astrbot（应用端框架；按实例目录安装，不进组件页 catalog）
 /// - MaiBot → maibot（应用端框架；按实例目录安装，不进组件页 catalog）
+/// - Git → git（版本管理工具；云崽装本体、装插件、群里 #更新 都要）
+/// - Redis → redis（键值库；云崽启动时自己拉起，桌面端只装二进制）
+/// - Yunzai → yunzai（应用端框架，TRSS-Yunzai；按实例目录安装，不进组件页 catalog）
 ///
 /// 与项目内 napcat_* / snowluma_* 事件名风格保持一致;不直接走 serde
 /// 的 rename_all = "snake_case",因为它会把 NapCat 切成 nap_cat,
@@ -55,6 +58,12 @@ pub enum ComponentId {
     AstrBot,
     #[serde(rename = "maibot")]
     MaiBot,
+    #[serde(rename = "git")]
+    Git,
+    #[serde(rename = "redis")]
+    Redis,
+    #[serde(rename = "yunzai")]
+    Yunzai,
 }
 
 impl ComponentId {
@@ -72,6 +81,9 @@ impl ComponentId {
             Self::NoneBot2 => "nonebot2",
             Self::AstrBot => "astrbot",
             Self::MaiBot => "maibot",
+            Self::Git => "git",
+            Self::Redis => "redis",
+            Self::Yunzai => "yunzai",
         }
     }
 
@@ -80,7 +92,7 @@ impl ComponentId {
     pub const fn is_app_framework(&self) -> bool {
         matches!(
             self,
-            Self::Karin | Self::NoneBot2 | Self::AstrBot | Self::MaiBot
+            Self::Karin | Self::NoneBot2 | Self::AstrBot | Self::MaiBot | Self::Yunzai
         )
     }
 
@@ -415,6 +427,9 @@ mod tests {
             ComponentId::NoneBot2,
             ComponentId::AstrBot,
             ComponentId::MaiBot,
+            ComponentId::Git,
+            ComponentId::Redis,
+            ComponentId::Yunzai,
         ] {
             assert_eq!(ComponentId::parse(id.as_str()), Some(id));
         }
@@ -427,7 +442,10 @@ mod tests {
         assert!(ComponentId::NoneBot2.is_app_framework());
         assert!(ComponentId::AstrBot.is_app_framework());
         assert!(ComponentId::MaiBot.is_app_framework());
+        assert!(ComponentId::Yunzai.is_app_framework());
         assert!(!ComponentId::Uv.is_app_framework());
+        assert!(!ComponentId::Git.is_app_framework());
+        assert!(!ComponentId::Redis.is_app_framework());
         assert!(!ComponentId::NodeJs.is_app_framework());
     }
 
@@ -446,6 +464,9 @@ mod tests {
             ComponentId::NoneBot2,
             ComponentId::AstrBot,
             ComponentId::MaiBot,
+            ComponentId::Git,
+            ComponentId::Redis,
+            ComponentId::Yunzai,
         ] {
             let s = serde_json::to_string(&id).unwrap();
             let expected = format!("\"{}\"", id.as_str());
