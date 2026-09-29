@@ -229,10 +229,18 @@ impl NotifyBotTarget {
 #[serde(rename_all = "camelCase")]
 pub struct WatchOneBotMessenger {
     pub bot_id: String,
-    /// 例如 http://127.0.0.1:3000
+    /// 例如 http://127.0.0.1:3000。Docker messenger 按部署规则推不出宿主机口时为空,
+    /// 由 watch 按 container_name + container_port 现查
+    #[serde(default)]
     pub base_url: String,
     #[serde(default)]
     pub access_token: String,
+    /// Docker 部署的 messenger:容器名与 OneBot HTTP 在容器内的端口。
+    /// watch 发送前用 docker inspect 查实际映射,查到就优先于 base_url
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container_port: Option<u16>,
 }
 
 /// notify.json 内 OneBot 子集(仅同机 messenger;跨机不写)

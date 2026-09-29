@@ -657,7 +657,7 @@ impl<'h> DockerCli<'h> {
             .docker_cmd()
             .arg("inspect")
             .arg("--format")
-            .arg("{{.HostConfig.NetworkMode}} {{json .NetworkSettings.Ports}}")
+            .arg(ncd_domain::docker::DOCKER_INSPECT_PORTS_FORMAT)
             .arg(container);
         let out = self.host.run_to_string(cmd).await?;
         if !out.success() {
@@ -667,7 +667,8 @@ impl<'h> DockerCli<'h> {
                 stderr: out.stderr.trim().to_string(),
             });
         }
-        parse_published_port(&out.stdout, container_port)
+        ncd_domain::docker::parse_published_host_port(&out.stdout, container_port)
+            .map_err(DockerCliError::ParseFailed)
     }
 
     pub fn is_elevated(&self) -> bool {
@@ -952,39 +953,6 @@ impl Default for PullProgress {
     }
 }
 
-/// 解析 `{{.HostConfig.NetworkMode}} {{json .NetworkSettings.Ports}}`,例如
-///     bridge {"6099/tcp":[{"HostIp":"0.0.0.0","HostPort":"6388"}],"3000/tcp":null}
-/// 调用方都从宿主机 127.0.0.1 去连,所以只认绑在通配或回环地址上的映射;
-/// 只绑了某个网卡 IP 的当作没映射,交给调用方回退。
-fn parse_published_port(stdout: &str, container_port: u16) -> Result<Option<u16>, DockerCliError> {
-    #[derive(serde::Deserialize)]
-    struct Binding {
-        #[serde(rename = "HostIp", default)]
-        host_ip: String,
-        #[serde(rename = "HostPort", default)]
-        host_port: String,
-    }
-
-    let line = stdout.trim();
-    let (mode, ports_json) = line.split_once(' ').unwrap_or((line, "null"));
-    if mode == "host" {
-        return Ok(Some(container_port));
-    }
-    let ports: Option<HashMap<String, Option<Vec<Binding>>>> = serde_json::from_str(ports_json)
-        .map_err(|e| DockerCliError::ParseFailed(format!("docker inspect ports: {e}")))?;
-    let Some(bindings) = ports
-        .and_then(|mut m| m.remove(&format!("{container_port}/tcp")))
-        .flatten()
-    else {
-        return Ok(None);
-    };
-    let port = bindings
-        .iter()
-        .filter(|b| matches!(b.host_ip.as_str(), "" | "0.0.0.0" | "::" | "127.0.0.1" | "::1"))
-        .find_map(|b| b.host_port.parse::<u16>().ok().filter(|p| *p > 0));
-    Ok(port)
-}
-
 /// 解析 docker ps --format '{{json .}}' 的多行 JSON 输出
 /// 每行一个容器对象;空行跳过;单行解析失败时整体报 ParseFailed
 fn parse_ps_json(stdout: &str) -> Result<Vec<ContainerInfo>, DockerCliError> {
@@ -1091,33 +1059,6 @@ impl ImagesLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parse_published_port_reads_custom_mapping() {
-        let out = r#"bridge {"6099/tcp":[{"HostIp":"0.0.0.0","HostPort":"16099"},{"HostIp":"::","HostPort":"16099"}],"3000/tcp":null}"#;
-        assert_eq!(parse_published_port(out, 6099).unwrap(), Some(16099));
-        assert_eq!(parse_published_port(out, 3000).unwrap(), None);
-        assert_eq!(parse_published_port(out, 3001).unwrap(), None);
-    }
-
-    #[test]
-    fn parse_published_port_host_network_uses_container_port() {
-        assert_eq!(parse_published_port("host {}\n", 6099).unwrap(), Some(6099));
-    }
-
-    #[test]
-    fn parse_published_port_skips_bindings_on_specific_ip() {
-        let out = r#"bridge {"6099/tcp":[{"HostIp":"192.168.1.5","HostPort":"7000"}]}"#;
-        assert_eq!(parse_published_port(out, 6099).unwrap(), None);
-        let mixed = r#"bridge {"6099/tcp":[{"HostIp":"192.168.1.5","HostPort":"7000"},{"HostIp":"127.0.0.1","HostPort":"7001"}]}"#;
-        assert_eq!(parse_published_port(mixed, 6099).unwrap(), Some(7001));
-    }
-
-    #[test]
-    fn parse_published_port_handles_null_ports_and_bad_json() {
-        assert_eq!(parse_published_port("none null", 6099).unwrap(), None);
-        assert!(parse_published_port("bridge {oops", 6099).is_err());
-    }
 
     #[test]
     fn parse_images_json_single_line() {
