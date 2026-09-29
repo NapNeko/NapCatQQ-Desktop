@@ -167,8 +167,9 @@
    --botcard-min-width: 320px;
 
    /* component: 二维码（Bot 登录、配对码等）。
-       前景必须够深（手机摄像头最低对比阈值），背景跟随 dialog 表面色，让 QR
-       区域和弹窗融为一体；QR 容器组件也要用 surface-elevated，两边对齐。 */
+       一律浅底深码，码和底的对比度至少 3.5:1（themes.test.ts 卡着）。暗色主题取「最深底色的码 +
+       正文色的底」，不画成深底上的深码：实测 1.4:1 那档在屏幕反光、轻微失焦时 WeChat 引擎只扫出一半；
+       也不画反色码，OpenCV 默认检测器完全不认。弹窗里码外那圈内边距也铺 --qr-background 当静区。 */
    --qr-foreground: var(--neutral-900);
    --qr-background: var(--surface-elevated);
 
@@ -255,8 +256,8 @@
       --scrollbar-thumb-hover: rgba(255, 245, 235, 0.24);
       --scrollbar-thumb-active: rgba(255, 245, 235, 0.36);
 
-      --qr-foreground: var(--neutral-900);
-      --qr-background: var(--surface-elevated);
+      --qr-foreground: var(--surface-inset);
+      --qr-background: var(--text-primary);
 
       --infobar-info-bg: var(--surface-elevated);
       --infobar-success-bg: color-mix(in srgb, var(--green-500) 24%, var(--surface-card));
@@ -322,8 +323,8 @@
    --scrollbar-thumb-hover: rgba(255, 245, 235, 0.24);
    --scrollbar-thumb-active: rgba(255, 245, 235, 0.36);
 
-   --qr-foreground: var(--neutral-900);
-   --qr-background: var(--surface-elevated);
+   --qr-foreground: var(--surface-inset);
+   --qr-background: var(--text-primary);
 
    --infobar-info-bg: var(--surface-elevated);
    --infobar-success-bg: color-mix(in srgb, var(--green-500) 24%, var(--surface-card));
@@ -548,8 +549,10 @@
    --scrollbar-thumb-hover: rgba(198, 208, 245, 0.22);
    --scrollbar-thumb-active: rgba(198, 208, 245, 0.34);
 
-   --qr-foreground: #292c3c;
-   --qr-background: #414559;
+   --qr-foreground: #232634;
+   /* crust */
+   --qr-background: #c6d0f5;
+   /* text */
 }
 
 /* ── Macchiato（深暗 flavor）────────────────────────────────────────────────── */
@@ -651,8 +654,10 @@
    --scrollbar-thumb-hover: rgba(202, 211, 245, 0.21);
    --scrollbar-thumb-active: rgba(202, 211, 245, 0.33);
 
-   --qr-foreground: #1e2030;
-   --qr-background: #363a4f;
+   --qr-foreground: #181926;
+   /* crust */
+   --qr-background: #cad3f5;
+   /* text */
 }
 
 /* ── Mocha（最深 flavor，高对比）───────────────────────────────────────────── */
@@ -754,6 +759,8 @@
    --scrollbar-thumb-hover: rgba(205, 214, 244, 0.21);
    --scrollbar-thumb-active: rgba(205, 214, 244, 0.33);
 
-   --qr-foreground: #181825;
-   --qr-background: #313244;
+   --qr-foreground: #11111b;
+   /* crust */
+   --qr-background: #cdd6f4;
+   /* text */
 }

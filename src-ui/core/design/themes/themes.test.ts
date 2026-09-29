@@ -19,6 +19,19 @@ function varsOfBlock(css: string, selector: string): string[] {
     return [...declsOfBlock(css, selector).keys()];
 }
 
+/** 在主题块里解析一个变量，var() 先找本块再退到 :root，直到拿到 hex。 */
+function resolveHex(selector: string, name: string): string {
+    const own = declsOfBlock(tokensCss, selector);
+    const root = declsOfBlock(tokensCss, ':root {');
+    let value = own.get(name) ?? root.get(name) ?? '';
+    for (let i = 0; i < 5 && value.startsWith('var('); i++) {
+        const ref = value.slice(4, -1).trim();
+        value = own.get(ref) ?? root.get(ref) ?? '';
+    }
+    if (!/^#[0-9a-f]{6}$/i.test(value)) throw new Error(`${selector} ${name} 解析不出 hex：${value}`);
+    return value;
+}
+
 describe('theme registry', () => {
     it('keeps every theme id unique across hand-tuned and palette themes', () => {
         const ids = THEME_GROUPS.flatMap((g) => g.items.map((it) => it.value));
@@ -76,6 +89,33 @@ describe('palette theme css', () => {
         expect(contrastRatio(p.text, p.canvas)).toBeGreaterThanOrEqual(4.5);
         expect(contrastRatio(p.text, p.card)).toBeGreaterThanOrEqual(4.5);
         expect(contrastRatio(p.text2, p.canvas)).toBeGreaterThanOrEqual(3);
+    });
+
+    // 实测（屏幕反光 + 轻微失焦的拍屏模拟）：1.4:1 的深底深码 WeChat 引擎只扫出一半，
+    // 4:1 左右已经和高对比码一样稳。3.5 留一点余量。
+    const QR_MIN_CONTRAST = 3.5;
+
+    it.each([
+        ':root {',
+        '@media (prefers-color-scheme: dark)',
+        ':root[data-theme="dark"]',
+        ':root[data-theme="latte"]',
+        ':root[data-theme="frappe"]',
+        ':root[data-theme="macchiato"]',
+        ':root[data-theme="mocha"]',
+    ])('hand-tuned %s draws the QR code dark on light with enough contrast', (selector) => {
+        const fg = resolveHex(selector, '--qr-foreground');
+        const bg = resolveHex(selector, '--qr-background');
+        expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(QR_MIN_CONTRAST);
+        expect(contrastRatio(fg, '#000000')).toBeLessThan(contrastRatio(bg, '#000000'));
+    });
+
+    it.each(PALETTE_THEMES.map((p) => [p.id, p] as const))('%s draws the QR code dark on light with enough contrast', (_, p) => {
+        const css = buildPaletteThemeCss(p);
+        const fg = css.match(/--qr-foreground: (#[0-9a-f]{6});/i)![1];
+        const bg = css.match(/--qr-background: (#[0-9a-f]{6});/i)![1];
+        expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(QR_MIN_CONTRAST);
+        expect(contrastRatio(fg, '#000000')).toBeLessThan(contrastRatio(bg, '#000000'));
     });
 
     it('picks dark text on pastel brand colors and white on saturated ones', () => {

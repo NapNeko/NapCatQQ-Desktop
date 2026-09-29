@@ -28,7 +28,9 @@
 // BotCard 那层会显示自动 / 手动重启的对应文案。
 //
 // 主题适配：QR 前景 / 背景颜色从 design token 读取（--qr-foreground /
-// --qr-background），主题切换时自动重渲染，未来引入 ThemeProvider 不用改组件。
+// --qr-background），主题切换时自动重渲染。有码时码外那圈 p-6 也铺码的底色，
+// 当扫码静区用：暗色主题的码是浅底，外圈还是深色的话静区只剩码自带的 1 格。
+// 不靠加大码自带边距来补，那样总宽不变、每格变小，实测反而更难扫。
 
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
@@ -60,6 +62,12 @@ const QR_TOKEN_SPEC = {
     background: { name: '--qr-background', fallback: '#ffffff' },
 } as const;
 
+// 码区里的等待 / 出错文字也用码的前景色：暗色主题下码区是浅底，默认的浅色次要字会看不见。
+const QR_FRAME_STYLE = {
+    background: 'var(--qr-background)',
+    color: 'var(--qr-foreground)',
+};
+
 function isInlineImageSrc(value: string): boolean {
     // 只接 data:image/...；普通 http(s) URL 是 NapCat 二维码的 payload 字符串，
     // 必须走库编码不能当图片地址。
@@ -85,7 +93,13 @@ export function QrCodeDialog({
             <DialogContent size="sm">
                 <DialogTitle>扫码登录 · {botId}</DialogTitle>
 
-                <div className="mt-4 flex items-center justify-center rounded-md bg-elevated p-6 ring-1 ring-border-subtle">
+                <div
+                    className={
+                        'mt-4 flex items-center justify-center rounded-md p-6 ring-1 ring-border-subtle transition-colors ' +
+                        (qrcodeUrl ? '' : 'bg-elevated text-text-tertiary')
+                    }
+                    style={qrcodeUrl ? QR_FRAME_STYLE : undefined}
+                >
                     {qrcodeUrl ? <QrCanvas content={qrcodeUrl} /> : <QrPending />}
                 </div>
 
@@ -248,9 +262,9 @@ function QrCanvas({ content }: { content: string }) {
 
     if (error) {
         return (
-            <div className="flex h-[280px] w-[280px] flex-col items-center justify-center gap-1 text-center text-xs text-danger">
-                <span>二维码渲染失败</span>
-                <span className="text-2xs text-text-tertiary">{error}</span>
+            <div className="flex h-[280px] w-[280px] flex-col items-center justify-center gap-1 text-center text-xs">
+                <span className="font-medium">二维码渲染失败</span>
+                <span className="text-2xs opacity-70">{error}</span>
             </div>
         );
     }
@@ -272,7 +286,7 @@ function QrCanvas({ content }: { content: string }) {
 
 function QrPending() {
     return (
-        <div className="flex h-[280px] w-[280px] items-center justify-center text-sm text-text-tertiary">
+        <div className="flex h-[280px] w-[280px] items-center justify-center text-sm">
             等待二维码…
         </div>
     );

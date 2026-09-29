@@ -141,7 +141,7 @@ function darkDecls(p: ThemePalette, inset: string): string[] {
         `--scrollbar-thumb-rest: ${rgba(ink, 0.12)};`,
         `--scrollbar-thumb-hover: ${rgba(ink, 0.24)};`,
         `--scrollbar-thumb-active: ${rgba(ink, 0.36)};`,
-        // 深底上的二维码画成浅底深码：扫码端对反色码的支持参差不齐。
+        // 暗色主题的二维码也是浅底深码（理由见 tokens.css 二维码那段）。
         `--qr-foreground: ${inset};`,
         `--qr-background: ${p.text};`,
         '--infobar-info-bg: var(--surface-elevated);',
