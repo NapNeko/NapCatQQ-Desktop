@@ -2,7 +2,7 @@ import { render, renderHook } from '@testing-library/react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { useRef } from 'react';
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { ListItem } from './ListItem';
@@ -16,7 +16,6 @@ afterEach(() => {
     gsap.ticker.add(gsap.updateRoot);
     preferencesStore.reset();
 });
-afterAll(() => gsap.ticker.sleep());
 
 // 按 60 帧一格一格推：一次跳一大段时，同一帧里先收尾的进场和后渲染的悬停谁盖谁，和真实播放不一样
 const FRAME = 1 / 60;

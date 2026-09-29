@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { vi } from 'vitest';
+import { afterAll, vi } from 'vitest';
 
 class ResizeObserverMock {
   observe(): void {}
@@ -47,8 +47,32 @@ Object.defineProperty(window, 'IntersectionObserver', {
 globalThis.ResizeObserver = ResizeObserverMock;
 globalThis.IntersectionObserver = IntersectionObserverMock as typeof IntersectionObserver;
 
-const raf = vi.fn((callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 0));
-const caf = vi.fn((handle: number) => window.clearTimeout(handle));
+// 帧走 setTimeout，而 vitest 里 window.setTimeout 就是 Node 的定时器，jsdom 拆环境时不会替它清。
+// GSAP 一加载 ticker 就醒，没有动画也要跑到第 30 帧才睡；文件跑得快，拆环境时还挂着一帧，
+// 到点后回调里要下一帧，window 已经没了。所以没到的帧自己记着，文件跑完全撤掉、之后也不再排，
+// 和窗口关了就不再出帧一样
+const pendingFrames = new Set<number>();
+let windowClosed = false;
+
+const raf = vi.fn((callback: FrameRequestCallback) => {
+  if (windowClosed) return 0;
+  const handle = window.setTimeout(() => {
+    pendingFrames.delete(handle);
+    callback(performance.now());
+  }, 0);
+  pendingFrames.add(handle);
+  return handle;
+});
+const caf = vi.fn((handle: number) => {
+  if (!pendingFrames.delete(handle)) return;
+  window.clearTimeout(handle);
+});
+
+afterAll(() => {
+  windowClosed = true;
+  pendingFrames.forEach((handle) => window.clearTimeout(handle));
+  pendingFrames.clear();
+});
 
 Object.defineProperty(window, 'requestAnimationFrame', {
   writable: true,

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import gsap from 'gsap';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { preferencesStore } from '../../hooks/preferences/preferencesStore';
 import { Select } from './Select';
 
@@ -25,9 +25,6 @@ afterEach(() => {
     preferencesStore.reset();
     vi.restoreAllMocks();
 });
-
-// GSAP 的 ticker 会挂着下一帧定时器，不停掉会在环境拆掉后报 window is not defined
-afterAll(() => gsap.ticker.sleep());
 
 describe('Select 弹出层进场', () => {
     it('一次打开只进场一次：Radix 内部重渲、父级重渲都不重播', async () => {
