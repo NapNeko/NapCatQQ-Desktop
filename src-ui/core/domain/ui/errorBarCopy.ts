@@ -35,8 +35,3 @@ export function errorBarContent(raw?: string | null): string {
     if (brief.includes('详情见')) return brief;
     return `${brief}。${SEE_LOGS_HINT}`;
 }
-
-/** @deprecated 用 briefError */
-export const briefAppError = briefError;
-/** @deprecated 用 errorBarContent */
-export const appErrorBarContent = errorBarContent;
