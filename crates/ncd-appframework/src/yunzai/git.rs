@@ -101,7 +101,10 @@ pub fn clone_candidates(urls: &[String]) -> Vec<String> {
     }
     for url in urls {
         if url.starts_with("https://github.com/") {
-            for mirrored in ncd_network::build_mirror_urls(url, None).into_iter().skip(1) {
+            for mirrored in ncd_network::build_mirror_urls(url, None)
+                .into_iter()
+                .skip(1)
+            {
                 push(mirrored);
             }
         }
@@ -130,7 +133,9 @@ mod tests {
             vec!["-c", "safe.directory=*", "clone", "--depth", "1", "u", "d"]
         );
         assert_eq!(
-            cmd.environment.get("GIT_TERMINAL_PROMPT").map(String::as_str),
+            cmd.environment
+                .get("GIT_TERMINAL_PROMPT")
+                .map(String::as_str),
             Some("0")
         );
     }
@@ -142,8 +147,15 @@ mod tests {
             "https://gitcode.com/TimeRainStarSky/miao-plugin.git".to_string(),
         ]);
         assert_eq!(got[0], "https://github.com/yoimiya-kokomi/miao-plugin");
-        assert_eq!(got[1], "https://gitcode.com/TimeRainStarSky/miao-plugin.git");
-        assert!(got[2..].iter().all(|u| u.ends_with("/https://github.com/yoimiya-kokomi/miao-plugin")));
+        assert_eq!(
+            got[1],
+            "https://gitcode.com/TimeRainStarSky/miao-plugin.git"
+        );
+        assert!(
+            got[2..]
+                .iter()
+                .all(|u| u.ends_with("/https://github.com/yoimiya-kokomi/miao-plugin"))
+        );
         let gitee_only = clone_candidates(&["https://gitee.com/a/b".to_string()]);
         assert_eq!(gitee_only, vec!["https://gitee.com/a/b".to_string()]);
     }

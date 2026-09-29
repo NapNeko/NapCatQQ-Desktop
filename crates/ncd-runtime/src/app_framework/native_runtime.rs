@@ -127,7 +127,9 @@ impl NativeAppRuntime {
             match self.reconcile_pid(host, instance).await {
                 Ok(None) => return true,
                 Ok(Some(_)) => {}
-                Err(e) => tracing::debug!(instance = instance.id.as_str(), error = %e, "poll app exit"),
+                Err(e) => {
+                    tracing::debug!(instance = instance.id.as_str(), error = %e, "poll app exit")
+                }
             }
             if tokio::time::Instant::now() >= deadline {
                 return false;

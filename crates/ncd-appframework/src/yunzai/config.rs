@@ -346,7 +346,9 @@ fn as_u8(v: Option<&Value>) -> Option<u8> {
 }
 
 fn as_u16(v: Option<&Value>) -> Option<u16> {
-    as_u64(v).filter(|n| *n <= u16::MAX as u64).map(|n| n as u16)
+    as_u64(v)
+        .filter(|n| *n <= u16::MAX as u64)
+        .map(|n| n as u16)
 }
 
 fn as_string(v: Option<&Value>) -> Option<String> {
@@ -412,8 +414,8 @@ impl ConfigSource {
     ) -> Result<Self, AppFrameworkError> {
         let user = parse_mapping(user_text.as_deref(), &config_rel(name))?;
         // 默认那份坏了不挡读取：上游自己读坏文件也只是当它不存在
-        let default = parse_mapping(default_text.as_deref(), &default_config_rel(name))
-            .unwrap_or_default();
+        let default =
+            parse_mapping(default_text.as_deref(), &default_config_rel(name)).unwrap_or_default();
         Ok(Self {
             name,
             effective: merged(&default, &user),
@@ -611,7 +613,10 @@ pub fn config_from_sources(sources: &[ConfigSource]) -> YunzaiInstanceConfig {
 /// 类型化配置用到的六份（不含 db / milky / satori）
 pub const TYPED_NAMES: [&str; 6] = ["bot", "other", "group", "server", "redis", "renderer"];
 
-async fn read_optional(host: &dyn Host, path: &HostPath) -> Result<Option<String>, AppFrameworkError> {
+async fn read_optional(
+    host: &dyn Host,
+    path: &HostPath,
+) -> Result<Option<String>, AppFrameworkError> {
     if !host
         .exists(path)
         .await
@@ -687,7 +692,10 @@ pub fn validate(cfg: &YunzaiInstanceConfig) -> Vec<ncd_domain::AppConfigIssue> {
     if cfg.server.access_token.chars().any(char::is_whitespace) {
         sink.push("server/access_token", "不能带空格");
     }
-    for (path, v) in [("other/auto_friend", cfg.other.auto_friend), ("other/auto_group", cfg.other.auto_group)] {
+    for (path, v) in [
+        ("other/auto_friend", cfg.other.auto_friend),
+        ("other/auto_group", cfg.other.auto_group),
+    ] {
         if v > 1 {
             sink.push(path, "只能是 0 或 1");
         }
@@ -730,7 +738,10 @@ pub fn validate(cfg: &YunzaiInstanceConfig) -> Vec<ncd_domain::AppConfigIssue> {
             sink.push(path, "重复了");
         }
         if o.only_reply_at.is_some_and(|v| v > 2) {
-            sink.push(format!("group/overrides/{i}/only_reply_at"), "只能是 0、1、2");
+            sink.push(
+                format!("group/overrides/{i}/only_reply_at"),
+                "只能是 0、1、2",
+            );
         }
         if o.add_limit.is_some_and(|v| v > 2) {
             sink.push(format!("group/overrides/{i}/add_limit"), "只能是 0、1、2");
@@ -818,23 +829,106 @@ fn bot_patches(old: &YunzaiBotConfig, new: &YunzaiBotConfig, out: &mut Vec<Patch
     diff_field!(out, "bot", "log_level", old.log_level, new.log_level, s);
     diff_field!(out, "bot", "log_length", old.log_length, new.log_length, n);
     diff_field!(out, "bot", "log_object", old.log_object, new.log_object, b);
-    diff_field!(out, "bot", "plugin_load_timeout", old.plugin_load_timeout, new.plugin_load_timeout, n);
+    diff_field!(
+        out,
+        "bot",
+        "plugin_load_timeout",
+        old.plugin_load_timeout,
+        new.plugin_load_timeout,
+        n
+    );
     diff_field!(out, "bot", "file_watch", old.file_watch, new.file_watch, b);
-    diff_field!(out, "bot", "update_time", old.update_time, new.update_time, n);
-    diff_field!(out, "bot", "restart_time", old.restart_time, new.restart_time, n);
-    diff_field!(out, "bot", "update_cron", old.update_cron, new.update_cron, l);
-    diff_field!(out, "bot", "restart_cron", old.restart_cron, new.restart_cron, l);
+    diff_field!(
+        out,
+        "bot",
+        "update_time",
+        old.update_time,
+        new.update_time,
+        n
+    );
+    diff_field!(
+        out,
+        "bot",
+        "restart_time",
+        old.restart_time,
+        new.restart_time,
+        n
+    );
+    diff_field!(
+        out,
+        "bot",
+        "update_cron",
+        old.update_cron,
+        new.update_cron,
+        l
+    );
+    diff_field!(
+        out,
+        "bot",
+        "restart_cron",
+        old.restart_cron,
+        new.restart_cron,
+        l
+    );
     diff_field!(out, "bot", "stop_cron", old.stop_cron, new.stop_cron, l);
     diff_field!(out, "bot", "start_cron", old.start_cron, new.start_cron, l);
-    diff_field!(out, "bot", "cache_group_member", old.cache_group_member, new.cache_group_member, b);
-    diff_field!(out, "bot", "online_msg_exp", old.online_msg_exp, new.online_msg_exp, n);
-    diff_field!(out, "bot", "file_to_url_time", old.file_to_url_time, new.file_to_url_time, n);
+    diff_field!(
+        out,
+        "bot",
+        "cache_group_member",
+        old.cache_group_member,
+        new.cache_group_member,
+        b
+    );
+    diff_field!(
+        out,
+        "bot",
+        "online_msg_exp",
+        old.online_msg_exp,
+        new.online_msg_exp,
+        n
+    );
+    diff_field!(
+        out,
+        "bot",
+        "file_to_url_time",
+        old.file_to_url_time,
+        new.file_to_url_time,
+        n
+    );
     diff_field!(out, "bot", "/→#", old.slash_to_hash, new.slash_to_hash, b);
-    diff_field!(out, "bot", "chromium_path", old.chromium_path, new.chromium_path, s);
-    diff_field!(out, "bot", "puppeteer_ws", old.puppeteer_ws, new.puppeteer_ws, s);
-    diff_field!(out, "bot", "puppeteer_timeout", old.puppeteer_timeout, new.puppeteer_timeout,
-        |v: &Option<u32>| v.map(|x| num(u64::from(x))).unwrap_or(Value::Null));
-    diff_field!(out, "bot", "proxyAddress", old.proxy_address, new.proxy_address, s);
+    diff_field!(
+        out,
+        "bot",
+        "chromium_path",
+        old.chromium_path,
+        new.chromium_path,
+        s
+    );
+    diff_field!(
+        out,
+        "bot",
+        "puppeteer_ws",
+        old.puppeteer_ws,
+        new.puppeteer_ws,
+        s
+    );
+    diff_field!(
+        out,
+        "bot",
+        "puppeteer_timeout",
+        old.puppeteer_timeout,
+        new.puppeteer_timeout,
+        |v: &Option<u32>| v.map(|x| num(u64::from(x))).unwrap_or(Value::Null)
+    );
+    diff_field!(
+        out,
+        "bot",
+        "proxyAddress",
+        old.proxy_address,
+        new.proxy_address,
+        s
+    );
 }
 
 fn other_patches(
@@ -847,8 +941,22 @@ fn other_patches(
     let n = |v: &u32| num(u64::from(*v));
     let s = |v: &String| text_or_null(v);
     let ids = |v: &Vec<String>| id_list_value(v);
-    diff_field!(out, "other", "autoFriend", old.auto_friend, new.auto_friend, n8);
-    diff_field!(out, "other", "autoGroup", old.auto_group, new.auto_group, n8);
+    diff_field!(
+        out,
+        "other",
+        "autoFriend",
+        old.auto_friend,
+        new.auto_friend,
+        n8
+    );
+    diff_field!(
+        out,
+        "other",
+        "autoGroup",
+        old.auto_group,
+        new.auto_group,
+        n8
+    );
     diff_field!(out, "other", "autoQuit", old.auto_quit, new.auto_quit, n);
     // stdin 占位界面上看不到，写回时照原样留在最前面
     let kept = |key: &str, marker: &str| -> Vec<String> {
@@ -869,13 +977,62 @@ fn other_patches(
         all.extend(new.master.iter().map(|s| s.trim().to_string()));
         out.push(set("other", &["master"], list_value(&all)));
     }
-    diff_field!(out, "other", "disablePrivate", old.disable_private, new.disable_private, |v: &bool| Value::Bool(*v));
-    diff_field!(out, "other", "disableMsg", old.disable_msg, new.disable_msg, s);
-    diff_field!(out, "other", "disableAdopt", old.disable_adopt, new.disable_adopt, |v: &Vec<String>| list_value(v));
-    diff_field!(out, "other", "whiteGroup", old.white_group, new.white_group, ids);
-    diff_field!(out, "other", "whiteUser", old.white_user, new.white_user, ids);
-    diff_field!(out, "other", "blackGroup", old.black_group, new.black_group, ids);
-    diff_field!(out, "other", "blackUser", old.black_user, new.black_user, ids);
+    diff_field!(
+        out,
+        "other",
+        "disablePrivate",
+        old.disable_private,
+        new.disable_private,
+        |v: &bool| Value::Bool(*v)
+    );
+    diff_field!(
+        out,
+        "other",
+        "disableMsg",
+        old.disable_msg,
+        new.disable_msg,
+        s
+    );
+    diff_field!(
+        out,
+        "other",
+        "disableAdopt",
+        old.disable_adopt,
+        new.disable_adopt,
+        |v: &Vec<String>| list_value(v)
+    );
+    diff_field!(
+        out,
+        "other",
+        "whiteGroup",
+        old.white_group,
+        new.white_group,
+        ids
+    );
+    diff_field!(
+        out,
+        "other",
+        "whiteUser",
+        old.white_user,
+        new.white_user,
+        ids
+    );
+    diff_field!(
+        out,
+        "other",
+        "blackGroup",
+        old.black_group,
+        new.black_group,
+        ids
+    );
+    diff_field!(
+        out,
+        "other",
+        "blackUser",
+        old.black_user,
+        new.black_user,
+        ids
+    );
 }
 
 fn group_patches(old: &YunzaiGroupConfig, new: &YunzaiGroupConfig, out: &mut Vec<Patch>) {
@@ -902,7 +1059,11 @@ fn group_patches(old: &YunzaiGroupConfig, new: &YunzaiGroupConfig, out: &mut Vec
     default_field!("enable", enable, l);
     default_field!("disable", disable, l);
 
-    for gone in old.overrides.iter().filter(|o| !new.overrides.iter().any(|n| n.key == o.key)) {
+    for gone in old
+        .overrides
+        .iter()
+        .filter(|o| !new.overrides.iter().any(|n| n.key == o.key))
+    {
         out.push(remove("group", &[gone.key.as_str()]));
     }
     for rule in &new.overrides {
@@ -974,8 +1135,14 @@ pub fn url_with_port(url: &str, old_port: u16, new_port: u16) -> Option<String> 
     if !host_part.ends_with(&marker) {
         return None;
     }
-    let new_host = format!("{}:{new_port}", &host_part[..host_part.len() - marker.len()]);
-    Some(format!("{scheme_end}://{new_host}{}", &rest[host_part.len()..]))
+    let new_host = format!(
+        "{}:{new_port}",
+        &host_part[..host_part.len() - marker.len()]
+    );
+    Some(format!(
+        "{scheme_end}://{new_host}{}",
+        &rest[host_part.len()..]
+    ))
 }
 
 fn server_patches(
@@ -999,7 +1166,11 @@ fn server_patches(
     }
     if old.access_token != new.access_token {
         let current = source.and_then(|s| get(&s.effective, "auth"));
-        out.push(set("server", &["auth"], auth_value(current, &new.access_token, true)));
+        out.push(set(
+            "server",
+            &["auth"],
+            auth_value(current, &new.access_token, true),
+        ));
     }
 }
 
@@ -1007,10 +1178,14 @@ fn redis_patches(old: &YunzaiRedisConfig, new: &YunzaiRedisConfig, out: &mut Vec
     let s = |v: &String| text_or_null(v);
     diff_field!(out, "redis", "path", old.path, new.path, s);
     diff_field!(out, "redis", "host", old.host, new.host, s);
-    diff_field!(out, "redis", "port", old.port, new.port, |v: &u16| num(u64::from(*v)));
+    diff_field!(out, "redis", "port", old.port, new.port, |v: &u16| num(
+        u64::from(*v)
+    ));
     diff_field!(out, "redis", "username", old.username, new.username, s);
     diff_field!(out, "redis", "password", old.password, new.password, s);
-    diff_field!(out, "redis", "db", old.db, new.db, |v: &u32| num(u64::from(*v)));
+    diff_field!(out, "redis", "db", old.db, new.db, |v: &u32| num(
+        u64::from(*v)
+    ));
 }
 
 /// 盘上现状 → 目标配置，要重写的文件及其新内容（没变的文件不在里面）
@@ -1027,7 +1202,11 @@ pub fn render_changes(
     server_patches(&current.server, &next.server, src("server"), &mut patches);
     redis_patches(&current.redis, &next.redis, &mut patches);
     if current.renderer.name != next.renderer.name {
-        patches.push(set("renderer", &["name"], text_or_null(&next.renderer.name)));
+        patches.push(set(
+            "renderer",
+            &["name"],
+            text_or_null(&next.renderer.name),
+        ));
     }
 
     let mut out = Vec::new();
@@ -1091,7 +1270,8 @@ pub async fn write_yunzai_config(
 
 /// 对接依赖的两样：云崽监听口和反向 WS 的 token
 pub fn link_inputs_changed(before: &YunzaiInstanceConfig, after: &YunzaiInstanceConfig) -> bool {
-    before.server.port != after.server.port || before.server.access_token != after.server.access_token
+    before.server.port != after.server.port
+        || before.server.access_token != after.server.access_token
 }
 
 /// 上游只在启动时读的：监听口、Redis、文件监听开关、定时任务（启动时排好的）、插件加载超时
@@ -1131,7 +1311,11 @@ mod tests {
     fn upstream_defaults_read_back_as_upstream_default() {
         let cfg = config_from_sources(&fresh_sources());
         let d = YunzaiInstanceConfig::upstream_default();
-        assert_eq!(cfg.other.master_qq, Vec::<String>::new(), "stdin 占位不显示");
+        assert_eq!(
+            cfg.other.master_qq,
+            Vec::<String>::new(),
+            "stdin 占位不显示"
+        );
         assert_eq!(cfg.other.black_group, vec!["213938015".to_string()]);
         assert_eq!(cfg.other.disable_msg, d.other.disable_msg);
         assert_eq!(cfg.server.port, 2536);
@@ -1156,10 +1340,18 @@ mod tests {
         assert_eq!(changes.len(), 1);
         let (name, text) = &changes[0];
         assert_eq!(*name, "other");
-        assert!(text.contains("# 主人帐号\nmasterQQ:\n  - stdin\n  - 10001\n  - wx_abc\n# Bot账号:主人帐号"));
-        assert!(text.contains("# 禁用私聊Bot提示内容"), "抄默认那份时注释都在");
+        assert!(text.contains(
+            "# 主人帐号\nmasterQQ:\n  - stdin\n  - 10001\n  - wx_abc\n# Bot账号:主人帐号"
+        ));
+        assert!(
+            text.contains("# 禁用私聊Bot提示内容"),
+            "抄默认那份时注释都在"
+        );
         let parsed = ConfigSource::parse("other", Some(text.clone()), None).unwrap();
-        assert_eq!(config_from_sources(&[parsed]).other.master_qq, next.other.master_qq);
+        assert_eq!(
+            config_from_sources(&[parsed]).other.master_qq,
+            next.other.master_qq
+        );
     }
 
     #[test]
@@ -1173,7 +1365,9 @@ mod tests {
         let text = &changes.iter().find(|(n, _)| *n == "server").unwrap().1;
         assert!(text.contains("url: http://localhost:24100\n"));
         assert!(text.contains("port: 24100\n"));
-        assert!(text.contains("auth:\n  Authorization: Bearer tok123\n# Authorization: Bearer <access_token>"));
+        assert!(text.contains(
+            "auth:\n  Authorization: Bearer tok123\n# Authorization: Bearer <access_token>"
+        ));
         let parsed = ConfigSource::parse("server", Some(text.clone()), None).unwrap();
         let back = config_from_sources(&[parsed]);
         assert_eq!(back.server.access_token, "tok123");
@@ -1205,7 +1399,10 @@ mod tests {
         let back = config_from_sources(&[parsed]).group;
         assert_eq!(back.default.group_cd, 0);
         assert_eq!(
-            back.overrides.iter().map(|o| o.key.as_str()).collect::<Vec<_>>(),
+            back.overrides
+                .iter()
+                .map(|o| o.key.as_str())
+                .collect::<Vec<_>>(),
             vec!["114514:default", "114514:123456", "777888"]
         );
     }
@@ -1214,7 +1411,11 @@ mod tests {
     fn unchanged_config_writes_nothing() {
         let sources = fresh_sources();
         let current = config_from_sources(&sources);
-        assert!(render_changes(&sources, &current, &current).unwrap().is_empty());
+        assert!(
+            render_changes(&sources, &current, &current)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

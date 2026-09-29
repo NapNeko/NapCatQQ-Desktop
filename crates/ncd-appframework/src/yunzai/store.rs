@@ -22,7 +22,9 @@ use super::git::{GIT_LONG_TIMEOUT, GitTool, clone_candidates, last_line};
 use super::manifest::{YUNZAI_BUILTIN_PLUGIN_DIRS, YUNZAI_JS_PLUGIN_DIR, YUNZAI_PLUGINS_DIR};
 use crate::adapter::PluginLogSink;
 use crate::karin::plugin::{KarinPluginAppFile, KarinPluginAuthor, KarinPluginRepo};
-use crate::node_tooling::{local_path_env, path_prefix, pnpm_command, read_node_marker, resolve_node_toolchain};
+use crate::node_tooling::{
+    local_path_env, path_prefix, pnpm_command, read_node_marker, resolve_node_toolchain,
+};
 use crate::store::{
     AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry, StoreMarketPart, StoreMarketText,
     percent_decode_lossy,
@@ -93,8 +95,13 @@ pub fn md_links(cell: &str) -> Vec<(String, String)> {
         let Some(mid) = after.find("](") else { break };
         let text = &after[..mid];
         let url_part = &after[mid + 2..];
-        let Some(close) = url_part.find(')') else { break };
-        out.push((text.trim().to_string(), url_part[..close].trim().to_string()));
+        let Some(close) = url_part.find(')') else {
+            break;
+        };
+        out.push((
+            text.trim().to_string(),
+            url_part[..close].trim().to_string(),
+        ));
         rest = &url_part[close + 1..];
     }
     out
@@ -176,7 +183,11 @@ pub fn repo_root(url: &str) -> Option<String> {
 
 /// 仓库根 → 插件目录名（就是仓库名）
 pub fn repo_dir_name(root: &str) -> Option<String> {
-    let name = root.rsplit('/').next()?.trim_end_matches(".git").to_string();
+    let name = root
+        .rsplit('/')
+        .next()?
+        .trim_end_matches(".git")
+        .to_string();
     (!name.is_empty() && !name.contains("..")).then_some(name)
 }
 
@@ -198,15 +209,19 @@ fn is_git_host(url: &str) -> bool {
 pub fn js_raw_url(url: &str) -> Option<String> {
     let url = normalize_url(url)?;
     let (_, host, segs) = split_url(&url)?;
-    let tail_js = segs
-        .last()
-        .is_some_and(|s| percent_decode_lossy(s).to_ascii_lowercase().ends_with(".js"));
+    let tail_js = segs.last().is_some_and(|s| {
+        percent_decode_lossy(s)
+            .to_ascii_lowercase()
+            .ends_with(".js")
+    });
     if !tail_js {
         return None;
     }
     let path_after = |n: usize| segs[n..].join("/");
     let raw = match host {
-        "raw.githubusercontent.com" | "raw.gitcode.com" => url.split(['#', '?']).next()?.to_string(),
+        "raw.githubusercontent.com" | "raw.gitcode.com" => {
+            url.split(['#', '?']).next()?.to_string()
+        }
         "github.com" if segs.len() > 4 && segs[2] == "blob" => format!(
             "https://raw.githubusercontent.com/{}/{}/{}",
             segs[0],
@@ -271,13 +286,20 @@ const DIR_NAME_OVERRIDES: &[(&str, &str)] = &[
 
 /// 上游安装表里另给的镜像：gitee 上的喵喵要登录了，TRSS 在 gitcode 放了一份
 const EXTRA_MIRRORS: &[(&str, &str)] = &[
-    ("miao-plugin", "https://gitcode.com/TimeRainStarSky/miao-plugin"),
-    ("xiaoyao-cvs-plugin", "https://gitcode.com/TimeRainStarSky/xiaoyao-cvs-plugin"),
+    (
+        "miao-plugin",
+        "https://gitcode.com/TimeRainStarSky/miao-plugin",
+    ),
+    (
+        "xiaoyao-cvs-plugin",
+        "https://gitcode.com/TimeRainStarSky/xiaoyao-cvs-plugin",
+    ),
 ];
 
 fn owner_repo_key(root: &str) -> Option<String> {
     let (_, _, segs) = split_url(root)?;
-    (segs.len() >= 2).then(|| format!("{}/{}", segs[0], segs[1].trim_end_matches(".git")).to_ascii_lowercase())
+    (segs.len() >= 2)
+        .then(|| format!("{}/{}", segs[0], segs[1].trim_end_matches(".git")).to_ascii_lowercase())
 }
 
 /// 插件目录名：安装表里点过名的用它的，其余用仓库名
@@ -368,8 +390,12 @@ fn git_entry(cells: &[String], tag: &str) -> Option<AppStoreMarketEntry> {
         entry.repos.push(repo(root));
         // 备注里另给的「GitHub 镜像」「Gitee 仓库」也是同一个插件的源
         for (text, url) in md_links(note) {
-            let Some(url) = normalize_url(&url) else { continue };
-            let Some(mirror) = repo_root(&url).filter(|r| is_git_host(r)) else { continue };
+            let Some(url) = normalize_url(&url) else {
+                continue;
+            };
+            let Some(mirror) = repo_root(&url).filter(|r| is_git_host(r)) else {
+                continue;
+            };
             let looks_mirror = text.contains("镜像") || text.contains("仓库");
             if looks_mirror && !entry.repos.iter().any(|r| r.url == mirror) {
                 entry.repos.push(repo(mirror));
@@ -403,7 +429,9 @@ fn js_entry(cells: &[String]) -> Option<AppStoreMarketEntry> {
         .into_iter()
         .filter(|f| Some(&f.name) == first.as_ref())
         .collect();
-    let id = first.clone().unwrap_or_else(|| format!("link:{}", md_plain(&name)));
+    let id = first
+        .clone()
+        .unwrap_or_else(|| format!("link:{}", md_plain(&name)));
     let mut entry = base_entry(id, md_plain(&name), "单 JS");
     entry.flavor = AppStoreFlavor::App;
     entry.homepage = normalize_url(&home).unwrap_or_default();
@@ -447,7 +475,11 @@ fn builtin_entries() -> Vec<AppStoreMarketEntry> {
         repo("https://gitee.com/TimeRainStarSky/Yunzai-genshin".into()),
         repo("https://github.com/TimeRainStarSky/Yunzai-genshin".into()),
     ];
-    let mut trss = base_entry("TRSS-Plugin".into(), "TRSS 插件 (TRSS-Plugin)".into(), "推荐");
+    let mut trss = base_entry(
+        "TRSS-Plugin".into(),
+        "TRSS 插件 (TRSS-Plugin)".into(),
+        "推荐",
+    );
     trss.description = "TRSS 自带的工具箱：远程命令、文件操作、语音合成等".into();
     trss.author = "时雨🌌星空".into();
     trss.homepage = "https://github.com/TimeRainStarSky/TRSS-Plugin".into();
@@ -472,7 +504,9 @@ pub fn parse_index(parts: &[StoreMarketText]) -> Vec<AppStoreMarketEntry> {
             text
         };
         for line in body.lines() {
-            let Some(cells) = table_cells(line) else { continue };
+            let Some(cells) = table_cells(line) else {
+                continue;
+            };
             let entry = if part.id == "js" {
                 js_entry(&cells)
             } else {
@@ -530,7 +564,9 @@ pub fn reject_unsafe_name(name: &str) -> Result<(), AppFrameworkError> {
         || name.contains('\\')
         || name.chars().any(char::is_control);
     if bad {
-        return Err(AppFrameworkError::Validation(format!("插件名不合法: {name}")));
+        return Err(AppFrameworkError::Validation(format!(
+            "插件名不合法: {name}"
+        )));
     }
     Ok(())
 }
@@ -548,11 +584,19 @@ pub fn js_path(instance: &AppInstance, basename: &str) -> HostPath {
 }
 
 /// 装实例时用的 git；标记没有就看 PATH
-pub async fn instance_git(host: &dyn Host, instance: &AppInstance) -> Result<GitTool, AppFrameworkError> {
+pub async fn instance_git(
+    host: &dyn Host,
+    instance: &AppInstance,
+) -> Result<GitTool, AppFrameworkError> {
     let marker = HostPath::from_posix(&instance.install_dir).join(GIT_MARKER_FILE);
     let managed = match host.read_file(&marker).await {
         Ok(bytes) => {
-            let line = String::from_utf8_lossy(&bytes).lines().next().unwrap_or("").trim().to_string();
+            let line = String::from_utf8_lossy(&bytes)
+                .lines()
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
             (!line.is_empty()).then(|| HostPath::from_posix(line))
         }
         Err(_) => None,
@@ -602,7 +646,11 @@ async fn pnpm_install_if_needed(
     git: &GitTool,
     log: Option<&PluginLogSink>,
 ) -> Result<(), AppFrameworkError> {
-    if !host.exists(&dir.join("package.json")).await.map_err(host_err)? {
+    if !host
+        .exists(&dir.join("package.json"))
+        .await
+        .map_err(host_err)?
+    {
         return Ok(());
     }
     let root = HostPath::from_posix(&instance.install_dir);
@@ -650,7 +698,10 @@ pub async fn install_git_plugin(
     let git = instance_git(host, instance).await?;
     let dest = plugin_dir(instance, &entry.id);
     if host.exists(&dest).await.map_err(host_err)? {
-        return Err(AppFrameworkError::Validation(format!("plugins/{} 已经存在", entry.id)));
+        return Err(AppFrameworkError::Validation(format!(
+            "plugins/{} 已经存在",
+            entry.id
+        )));
     }
     host.create_dir_all(&HostPath::from_posix(&instance.install_dir).join(YUNZAI_PLUGINS_DIR))
         .await
@@ -661,7 +712,14 @@ pub async fn install_git_plugin(
     for url in clone_candidates(&urls) {
         emit(log, format!("git clone --depth 1 {url}"));
         let cmd = git
-            .command(["clone", "--depth", "1", "--single-branch", url.as_str(), dest_arg.as_str()])
+            .command([
+                "clone",
+                "--depth",
+                "1",
+                "--single-branch",
+                url.as_str(),
+                dest_arg.as_str(),
+            ])
             .working_dir(HostPath::from_posix(&instance.install_dir))
             .timeout(GIT_LONG_TIMEOUT);
         match run_logged(host, cmd, "git clone", log).await {
@@ -718,7 +776,9 @@ pub async fn remove_git_plugin(
 ) -> Result<(), AppFrameworkError> {
     reject_unsafe_name(name)?;
     if YUNZAI_BUILTIN_PLUGIN_DIRS.contains(&name) {
-        return Err(AppFrameworkError::Validation(format!("plugins/{name} 是云崽自带的，不能卸载")));
+        return Err(AppFrameworkError::Validation(format!(
+            "plugins/{name} 是云崽自带的，不能卸载"
+        )));
     }
     let dest = plugin_dir(instance, name);
     emit(log, format!("删除 plugins/{name}"));
@@ -782,7 +842,10 @@ async fn list_dir_or_empty(
 async fn package_version(host: &dyn Host, dir: &HostPath) -> Option<String> {
     let bytes = host.read_file(&dir.join("package.json")).await.ok()?;
     let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    v.get("version")?.as_str().map(str::to_string).filter(|s| !s.is_empty())
+    v.get("version")?
+        .as_str()
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
 }
 
 /// 已装：plugins 下除自带四个目录外的每个目录（目录插件），加 plugins/example 下的 .js（单 JS）
@@ -846,7 +909,10 @@ pub async fn confirm_on_disk(
     if host.exists(&path).await.map_err(host_err)? {
         Ok(())
     } else {
-        Err(AppFrameworkError::Runtime(format!("命令已结束，但没找到 {}", entry.id)))
+        Err(AppFrameworkError::Runtime(format!(
+            "命令已结束，但没找到 {}",
+            entry.id
+        )))
     }
 }
 
@@ -876,10 +942,15 @@ fn doc_format(rel: &str) -> Option<AppConfigFormat> {
 }
 
 /// 插件配置文档；rel 相对插件目录，不许跳出去
-pub fn plugin_config_document(plugin: &str, rel: &str) -> Result<AppConfigDocument, AppFrameworkError> {
+pub fn plugin_config_document(
+    plugin: &str,
+    rel: &str,
+) -> Result<AppConfigDocument, AppFrameworkError> {
     reject_unsafe_name(plugin)?;
     if rel.is_empty() || rel.contains("..") || rel.contains('\\') || rel.starts_with('/') {
-        return Err(AppFrameworkError::Validation(format!("配置路径不合法: {rel}")));
+        return Err(AppFrameworkError::Validation(format!(
+            "配置路径不合法: {rel}"
+        )));
     }
     let format = doc_format(rel)
         .ok_or_else(|| AppFrameworkError::Validation(format!("不是 YAML / JSON 文件: {rel}")))?;
@@ -916,7 +987,9 @@ pub async fn list_plugin_config_docs(
         }
     }
     rels.sort();
-    rels.iter().map(|rel| plugin_config_document(plugin, rel)).collect()
+    rels.iter()
+        .map(|rel| plugin_config_document(plugin, rel))
+        .collect()
 }
 
 #[cfg(test)]
@@ -936,7 +1009,9 @@ mod tests {
     }
 
     fn by_id<'a>(list: &'a [AppStoreMarketEntry], id: &str) -> &'a AppStoreMarketEntry {
-        list.iter().find(|e| e.id == id).unwrap_or_else(|| panic!("缺 {id}"))
+        list.iter()
+            .find(|e| e.id == id)
+            .unwrap_or_else(|| panic!("缺 {id}"))
     }
 
     #[test]
@@ -946,19 +1021,34 @@ mod tests {
         assert_eq!(meme.flavor, AppStoreFlavor::Git);
         assert_eq!(meme.tags, vec!["功能".to_string()]);
         assert_eq!(
-            meme.repos.iter().map(|r| r.url.as_str()).collect::<Vec<_>>(),
-            vec!["https://gitee.com/longhengmu/meme-plugin", "https://github.com/cchanlan/meme-plugin"]
+            meme.repos
+                .iter()
+                .map(|r| r.url.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "https://gitee.com/longhengmu/meme-plugin",
+                "https://github.com/cchanlan/meme-plugin"
+            ]
         );
-        assert_eq!(meme.description, "给云崽装上 900 多个表情包：中文指令出图。GitHub 镜像");
+        assert_eq!(
+            meme.description,
+            "给云崽装上 900 多个表情包：中文指令出图。GitHub 镜像"
+        );
         assert_eq!(meme.author, "龙横木");
 
         let bt = by_id(&list, "btpanel-plugin");
         assert_eq!(bt.homepage, "https://gitee.com/yll14/btpanel-plugin");
         assert_eq!(bt.repos[0].url, "https://gitee.com/yll14/btpanel-plugin");
         // 目录名取仓库名，不取表里的显示名
-        assert_eq!(by_id(&list, "daily-plugin").authors[0].home, "https://gitee.com/yll14");
+        assert_eq!(
+            by_id(&list, "daily-plugin").authors[0].home,
+            "https://gitee.com/yll14"
+        );
         let agents = by_id(&list, "agents-plugin");
-        assert_eq!(agents.repos[0].url, "https://github.com/yunhai89/agents-plugin");
+        assert_eq!(
+            agents.repos[0].url,
+            "https://github.com/yunhai89/agents-plugin"
+        );
         assert!(agents.description.contains("高危操作"));
         // 安装表点名的目录名
         let secluded = by_id(&list, "Secluded-Plugin");
@@ -966,7 +1056,10 @@ mod tests {
         // 同名的两条只留前面那条（索引按新到旧排）
         let wordle: Vec<_> = list.iter().filter(|e| e.id == "wordle-plugin").collect();
         assert_eq!(wordle.len(), 1);
-        assert_eq!(wordle[0].repos[0].url, "https://gitee.com/qingyingxbot/wordle-plugin");
+        assert_eq!(
+            wordle[0].repos[0].url,
+            "https://gitee.com/qingyingxbot/wordle-plugin"
+        );
     }
 
     #[test]
@@ -977,8 +1070,16 @@ mod tests {
         assert_eq!(code.files.len(), 1);
         assert_eq!(code.files[0].name, "兑换码.js");
         let miao = by_id(&list, "喵言喵语.js");
-        assert_eq!(miao.files.len(), 2, "GitHub 和 Gitee 两个源都留着，下载时依次试");
-        assert!(miao.files[1].url.starts_with("https://gitee.com/VanillaNahida/yunzai-js-plugin/raw/main/"));
+        assert_eq!(
+            miao.files.len(),
+            2,
+            "GitHub 和 Gitee 两个源都留着，下载时依次试"
+        );
+        assert!(
+            miao.files[1]
+                .url
+                .starts_with("https://gitee.com/VanillaNahida/yunzai-js-plugin/raw/main/")
+        );
         let bag = by_id(&list, "米游.js");
         assert_eq!(
             bag.files[0].url,
@@ -989,8 +1090,14 @@ mod tests {
             "https://raw.gitcode.com/T060925ZX/help-plugin/raw/main/Help_Lite.js"
         );
         let louvre = by_id(&list, "one-last-image.js");
-        assert_eq!(louvre.files[0].url, "https://raw.githubusercontent.com/AozoraYui/JS-Plugin/main/one-last-image.js");
-        assert_eq!(louvre.files[1].url, "https://gitee.com/aozorayui/JS-Plugin/raw/master/one-last-image.js");
+        assert_eq!(
+            louvre.files[0].url,
+            "https://raw.githubusercontent.com/AozoraYui/JS-Plugin/main/one-last-image.js"
+        );
+        assert_eq!(
+            louvre.files[1].url,
+            "https://gitee.com/aozorayui/JS-Plugin/raw/master/one-last-image.js"
+        );
         // 源码链接不是一个 .js 文件：留在商店里能点主页，但标成装不了
         let broken = by_id(&list, "link:消息追加文本");
         assert!(!broken.valid);
@@ -1006,7 +1113,9 @@ mod tests {
         let miao = by_id(&list, "miao-plugin");
         assert!(miao.is_official);
         assert!(
-            miao.repos.iter().any(|r| r.url == "https://gitcode.com/TimeRainStarSky/miao-plugin"),
+            miao.repos
+                .iter()
+                .any(|r| r.url == "https://gitcode.com/TimeRainStarSky/miao-plugin"),
             "补上 TRSS 的 gitcode 镜像"
         );
         assert_eq!(by_id(&list, "Guoba-Plugin").tags, vec!["推荐".to_string()]);
@@ -1022,7 +1131,8 @@ mod tests {
             .map(|c| std::str::from_utf8(c).unwrap())
             .collect::<Vec<_>>()
             .join("\n");
-        let json = serde_json::json!({ "type": "file", "encoding": "base64", "content": wrapped }).to_string();
+        let json = serde_json::json!({ "type": "file", "encoding": "base64", "content": wrapped })
+            .to_string();
         assert_eq!(decode_part_text(&json), FUNCTION);
         assert_eq!(decode_part_text("| a | b | c |"), "| a | b | c |");
     }
@@ -1038,7 +1148,10 @@ mod tests {
             plugin_dir_for("https://gitee.com/guoba-yunzai/guoba-plugin").as_deref(),
             Some("Guoba-Plugin")
         );
-        assert_eq!(plugin_dir_for("https://github.com/Nwflower/atlas").as_deref(), Some("Atlas"));
+        assert_eq!(
+            plugin_dir_for("https://github.com/Nwflower/atlas").as_deref(),
+            Some("Atlas")
+        );
         assert_eq!(repo_kind("https://gitcode.com/a/b"), "gitcode");
     }
 
@@ -1051,7 +1164,10 @@ mod tests {
         );
         let js = &parts[4].urls;
         assert!(js[0].starts_with("https://gitee.com/api/v5/repos/yhArcadia/Yunzai-Bot-plugins-index/contents/JS-Plugin.md"));
-        assert!(js.iter().any(|u| u.starts_with("https://cdn.jsdelivr.net/gh/")));
+        assert!(
+            js.iter()
+                .any(|u| u.starts_with("https://cdn.jsdelivr.net/gh/"))
+        );
     }
 
     #[test]
@@ -1061,7 +1177,10 @@ mod tests {
         assert!(reject_unsafe_name("兑换码.js").is_ok());
         let doc = plugin_config_document("miao-plugin", "config/cfg.yaml").unwrap();
         assert_eq!(doc.rel_path, "plugins/miao-plugin/config/cfg.yaml");
-        assert_eq!(parse_plugin_doc_id(&doc.id), Some(("miao-plugin", "config/cfg.yaml")));
+        assert_eq!(
+            parse_plugin_doc_id(&doc.id),
+            Some(("miao-plugin", "config/cfg.yaml"))
+        );
         assert!(plugin_config_document("miao-plugin", "../../config/config/other.yaml").is_err());
         assert!(plugin_config_document("miao-plugin", "config/a.js").is_err());
     }

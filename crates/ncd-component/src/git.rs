@@ -151,7 +151,11 @@ impl GitComponent {
         }
     }
 
-    async fn install_windows(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn install_windows(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
@@ -169,8 +173,11 @@ impl GitComponent {
             ))
             .await;
         }
-        let local_tmp =
-            std::env::temp_dir().join(format!("ncd-mingit-{}-{}.zip", self.version, std::process::id()));
+        let local_tmp = std::env::temp_dir().join(format!(
+            "ncd-mingit-{}-{}.zip",
+            self.version,
+            std::process::id()
+        ));
         let helper = DownloadHelper::new()?;
         let mirrors = ncd_network::build_mirror_urls(&url, None);
         helper
@@ -368,7 +375,10 @@ mod tests {
             GitComponent::parse_version_output("git version 2.39.5 (Apple Git-154)"),
             Some("2.39.5".into())
         );
-        assert_eq!(GitComponent::parse_version_output("svn, version 1.14"), None);
+        assert_eq!(
+            GitComponent::parse_version_output("svn, version 1.14"),
+            None
+        );
         assert_eq!(GitComponent::parse_version_output(""), None);
     }
 
@@ -418,7 +428,10 @@ mod tests {
     #[test]
     fn sibling_dir_sits_next_to_target() {
         let dir = HostPath::from_posix("/data/components/Git");
-        assert_eq!(sibling_dir(&dir, "new").as_posix(), "/data/components/Git.new");
+        assert_eq!(
+            sibling_dir(&dir, "new").as_posix(),
+            "/data/components/Git.new"
+        );
     }
 
     #[test]

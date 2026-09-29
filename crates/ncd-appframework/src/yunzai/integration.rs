@@ -53,7 +53,10 @@ pub fn link_server_yaml(text: &str, port: u16, token: &str) -> Result<String, Ap
         .unwrap_or(super::manifest::YUNZAI_DEFAULT_PORT);
     let mut out = yaml_patch::set_value(text, &["port"], &Value::Number(port.into()))
         .map_err(AppFrameworkError::Integration)?;
-    let url = current.get("url").and_then(Value::as_str).unwrap_or_default();
+    let url = current
+        .get("url")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let next_url = if url.is_empty() {
         Some(format!("http://localhost:{port}"))
     } else {
@@ -63,8 +66,12 @@ pub fn link_server_yaml(text: &str, port: u16, token: &str) -> Result<String, Ap
         out = yaml_patch::set_value(&out, &["url"], &Value::String(next_url))
             .map_err(AppFrameworkError::Integration)?;
     }
-    yaml_patch::set_value(&out, &["auth"], &auth_value(current.get("auth"), token, false))
-        .map_err(AppFrameworkError::Integration)
+    yaml_patch::set_value(
+        &out,
+        &["auth"],
+        &auth_value(current.get("auth"), token, false),
+    )
+    .map_err(AppFrameworkError::Integration)
 }
 
 impl AppIntegration for YunzaiIntegration {
@@ -135,13 +142,24 @@ mod tests {
         let out = link_server_yaml(SERVER, 24100, "tok").unwrap();
         assert!(out.contains("url: http://localhost:24100\n"));
         assert!(out.contains("port: 24100\n"));
-        assert!(out.contains("auth:\n  Authorization: Bearer tok\n# Authorization: Bearer <access_token>\nhttps:\n"));
+        assert!(out.contains(
+            "auth:\n  Authorization: Bearer tok\n# Authorization: Bearer <access_token>\nhttps:\n"
+        ));
 
-        let with_extra = out.replace("  Authorization: Bearer tok\n", "  X-Key: a\n  Authorization: Bearer old\n");
+        let with_extra = out.replace(
+            "  Authorization: Bearer tok\n",
+            "  X-Key: a\n  Authorization: Bearer old\n",
+        );
         let again = link_server_yaml(&with_extra, 24100, "new").unwrap();
         let v: Value = serde_yaml::from_str(&again).unwrap();
-        assert_eq!(v["auth"]["Authorization"], Value::String("Bearer new".into()));
-        assert!(v["auth"].get("X-Key").is_none(), "NapCat 带不了别的头，对接时去掉");
+        assert_eq!(
+            v["auth"]["Authorization"],
+            Value::String("Bearer new".into())
+        );
+        assert!(
+            v["auth"].get("X-Key").is_none(),
+            "NapCat 带不了别的头，对接时去掉"
+        );
     }
 
     #[test]

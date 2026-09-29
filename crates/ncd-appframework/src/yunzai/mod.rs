@@ -30,8 +30,7 @@ pub use integration::{YunzaiIntegration, link_server_yaml};
 pub use manifest::{YUNZAI_FRAMEWORK_ID, yunzai_manifest};
 
 use crate::adapter::{
-    AppComponentSpec, AppFrameworkAdapter, PluginLogSink, apply_with_backup_ex,
-    restore_from_backup,
+    AppComponentSpec, AppFrameworkAdapter, PluginLogSink, apply_with_backup_ex, restore_from_backup,
 };
 use crate::adopt::{self, write_project_sidecar};
 use crate::config_doc::{
@@ -108,8 +107,14 @@ impl YunzaiAdapter {
                 .map(|(_, v)| v)
             {
                 for (k, v) in auth {
-                    let key = k.as_str().map(str::to_string).or_else(|| k.as_u64().map(|n| n.to_string()));
-                    let val = v.as_str().map(str::to_string).or_else(|| v.as_u64().map(|n| n.to_string()));
+                    let key = k
+                        .as_str()
+                        .map(str::to_string)
+                        .or_else(|| k.as_u64().map(|n| n.to_string()));
+                    let val = v
+                        .as_str()
+                        .map(str::to_string)
+                        .or_else(|| v.as_u64().map(|n| n.to_string()));
                     if let (Some(k), Some(v)) = (key, val) {
                         headers.push((k, v));
                     }
@@ -121,7 +126,10 @@ impl YunzaiAdapter {
 
     async fn local_exit(port: u16, headers: &[(String, String)]) -> bool {
         // 上游只认 ::1 / ::ffff:127.0.0.1 来的请求：先走 IPv6 回环，连不上（没开 IPv6）再走 IPv4
-        for url in [format!("http://[::1]:{port}/exit"), format!("http://127.0.0.1:{port}/exit")] {
+        for url in [
+            format!("http://[::1]:{port}/exit"),
+            format!("http://127.0.0.1:{port}/exit"),
+        ] {
             let mut req = ncd_network::shared_client()
                 .get(&url)
                 .timeout(Duration::from_secs(3));
@@ -166,7 +174,11 @@ impl YunzaiAdapter {
 
 /// `rc=<curl 退出码> code=<HTTP 码>`：连不上（7）、没有 curl（127）、鉴权没过（401）算没送到
 fn remote_exit_sent(stdout: &str) -> bool {
-    let line = stdout.lines().rev().find(|l| l.starts_with("rc=")).unwrap_or_default();
+    let line = stdout
+        .lines()
+        .rev()
+        .find(|l| l.starts_with("rc="))
+        .unwrap_or_default();
     let mut rc = None;
     let mut code = "";
     for part in line.split_whitespace() {
@@ -214,7 +226,10 @@ impl AppFrameworkAdapter for YunzaiAdapter {
             .into_iter()
             .map(|d| d.rel_path)
             .collect();
-        Ok(adopt::merge_rels(dotenv, &owned.iter().map(String::as_str).collect::<Vec<_>>()))
+        Ok(adopt::merge_rels(
+            dotenv,
+            &owned.iter().map(String::as_str).collect::<Vec<_>>(),
+        ))
     }
 
     async fn request_graceful_stop(
@@ -272,7 +287,9 @@ impl AppFrameworkAdapter for YunzaiAdapter {
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v.to_string())),
         );
-        profile.hint = Some("node、pnpm（实例私有的那份）和 git 都能直接用；云崽在跑时别在这里再起一份".into());
+        profile.hint = Some(
+            "node、pnpm（实例私有的那份）和 git 都能直接用；云崽在跑时别在这里再起一份".into(),
+        );
         profile
     }
 
@@ -307,12 +324,17 @@ impl AppFrameworkAdapter for YunzaiAdapter {
         };
         let text = String::from_utf8_lossy(&current.unwrap_or_default()).into_owned();
         let out = link_server_yaml(&text, instance.port, &plan.access_token)?;
-        apply_with_backup_ex(host, std::slice::from_ref(&path), write_project_sidecar(instance), || async {
-            crate::config_doc::ensure_parent_dir(host, &path).await?;
-            host.write_file(&path, out.as_bytes())
-                .await
-                .map_err(|e| AppFrameworkError::Integration(e.to_string()))
-        })
+        apply_with_backup_ex(
+            host,
+            std::slice::from_ref(&path),
+            write_project_sidecar(instance),
+            || async {
+                crate::config_doc::ensure_parent_dir(host, &path).await?;
+                host.write_file(&path, out.as_bytes())
+                    .await
+                    .map_err(|e| AppFrameworkError::Integration(e.to_string()))
+            },
+        )
         .await
     }
 
@@ -500,7 +522,11 @@ impl AppFrameworkAdapter for YunzaiAdapter {
 
     fn store_app_file_dest(&self, instance: &AppInstance, basename: &str) -> Option<HostPath> {
         store::reject_unsafe_name(basename).ok()?;
-        Some(Self::root(instance).join(YUNZAI_JS_PLUGIN_DIR).join(basename))
+        Some(
+            Self::root(instance)
+                .join(YUNZAI_JS_PLUGIN_DIR)
+                .join(basename),
+        )
     }
 }
 
@@ -510,7 +536,10 @@ mod tests {
 
     #[test]
     fn remote_exit_result_reading() {
-        assert!(remote_exit_sent("rc=28 code=000\n"), "超时说明请求进去了，上游在收尾");
+        assert!(
+            remote_exit_sent("rc=28 code=000\n"),
+            "超时说明请求进去了，上游在收尾"
+        );
         assert!(remote_exit_sent("rc=52 code=000"));
         assert!(!remote_exit_sent("rc=7 code=000"));
         assert!(!remote_exit_sent("rc=127"));
@@ -521,9 +550,20 @@ mod tests {
     #[test]
     fn store_is_split_into_index_parts() {
         let adapter = YunzaiAdapter::new();
-        assert_eq!(adapter.store_market_parts(AppStoreResource::Plugin).len(), 5);
-        assert!(adapter.store_market_urls(AppStoreResource::Plugin).is_empty());
-        assert!(adapter.store_market_parts(AppStoreResource::Adapter).is_empty());
+        assert_eq!(
+            adapter.store_market_parts(AppStoreResource::Plugin).len(),
+            5
+        );
+        assert!(
+            adapter
+                .store_market_urls(AppStoreResource::Plugin)
+                .is_empty()
+        );
+        assert!(
+            adapter
+                .store_market_parts(AppStoreResource::Adapter)
+                .is_empty()
+        );
         assert_eq!(
             adapter.store_market_cache_key(AppStoreResource::Plugin),
             Some("yunzai-plugins")

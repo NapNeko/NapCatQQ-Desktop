@@ -11,7 +11,9 @@
 //! - Redis：`redis.yaml` 地址连不上且 host 是 127.0.0.1 时 `spawn(path, ["--port", port])`，cwd 是实例目录
 //! - 依赖里 engines 最高的是 puppeteer `>=22.12.0`；README 写的 23.11 只为 `process.execve` 原地重启
 
-use ncd_domain::{AppFrameworkId, AppFrameworkManifest, AppPlacement, AppStoreResource, OneBotLinkMode};
+use ncd_domain::{
+    AppFrameworkId, AppFrameworkManifest, AppPlacement, AppStoreResource, OneBotLinkMode,
+};
 
 pub const YUNZAI_FRAMEWORK_ID: &str = "yunzai";
 /// 与 `ComponentId::Yunzai` 的 serde 字面量一致
@@ -90,7 +92,11 @@ mod tests {
         assert_eq!(back.store_resources, vec![AppStoreResource::Plugin]);
         assert!(back.has_install_renderer);
         assert!(back.terms.is_empty());
-        assert!(!back.supported_placements.contains(&AppPlacement::RemoteDocker));
+        assert!(
+            !back
+                .supported_placements
+                .contains(&AppPlacement::RemoteDocker)
+        );
     }
 
     #[test]
@@ -100,7 +106,9 @@ mod tests {
         names.sort_unstable();
         assert_eq!(
             names,
-            vec!["bot", "db", "group", "milky", "other", "redis", "renderer", "satori", "server"]
+            vec![
+                "bot", "db", "group", "milky", "other", "redis", "renderer", "satori", "server"
+            ]
         );
     }
 }

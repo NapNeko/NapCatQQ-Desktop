@@ -145,7 +145,13 @@ impl Doc {
 
     /// 在 [start, end) 里找缩进为 `indent`、键名为 `key` 的行，返回 (行号, 块尾)。
     /// 块尾不含紧贴在下一个键前面、缩进不深于它的注释 / 空行：那些是下一个键的说明
-    fn find_key(&self, start: usize, end: usize, indent: usize, key: &str) -> Option<(usize, usize)> {
+    fn find_key(
+        &self,
+        start: usize,
+        end: usize,
+        indent: usize,
+        key: &str,
+    ) -> Option<(usize, usize)> {
         let idx = (start..end).find(|&i| {
             let line = &self.lines[i];
             !is_blank_or_comment(line)
@@ -213,7 +219,9 @@ fn parse_key_line(line: &str) -> Option<KeyLine> {
     if rest.is_empty() || rest.starts_with('#') || rest.starts_with("- ") || rest == "-" {
         return None;
     }
-    let (raw_key, key, after) = if let Some(q) = rest.chars().next().filter(|c| *c == '"' || *c == '\'') {
+    let (raw_key, key, after) = if let Some(q) =
+        rest.chars().next().filter(|c| *c == '"' || *c == '\'')
+    {
         let close = rest[1..].find(q)? + 1;
         let raw = &rest[..=close];
         let after = rest[close + 1..].strip_prefix(':')?;
@@ -226,7 +234,8 @@ fn parse_key_line(line: &str) -> Option<KeyLine> {
             if *b == b'#' && i > 0 && bytes[i - 1] == b' ' {
                 return None;
             }
-            if *b == b':' && (i + 1 == bytes.len() || bytes[i + 1] == b' ' || bytes[i + 1] == b'\t') {
+            if *b == b':' && (i + 1 == bytes.len() || bytes[i + 1] == b' ' || bytes[i + 1] == b'\t')
+            {
                 split = Some(i);
                 break;
             }
@@ -253,7 +262,10 @@ fn split_comment(s: &str) -> (&str, &str) {
         match b {
             b'\'' if !double => single = !single,
             b'"' if !single => double = !double,
-            b'#' if !single && !double && (i == 0 || bytes[i - 1] == b' ' || bytes[i - 1] == b'\t') => {
+            b'#' if !single
+                && !double
+                && (i == 0 || bytes[i - 1] == b' ' || bytes[i - 1] == b'\t') =>
+            {
                 let mut cut = i;
                 while cut > 0 && matches!(bytes[cut - 1], b' ' | b'\t') {
                     cut -= 1;
@@ -311,7 +323,10 @@ pub fn render_scalar(value: &Value) -> String {
 }
 
 fn is_scalar(v: &Value) -> bool {
-    matches!(v, Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_))
+    matches!(
+        v,
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_)
+    )
 }
 
 /// 一个键连同它的值渲染成若干行。原来那行的行尾注释：新值是标量就跟在值后面，是块就留在键那一行
@@ -420,7 +435,10 @@ default:
         let parsed: Value = serde_yaml::from_str(&out).unwrap();
         assert_eq!(parsed["114514:default"]["onlyReplyAt"], v("2"));
         assert_eq!(parsed["default"]["onlyReplyAt"], v("0"));
-        assert!(out.contains("# 群单独设置\n123456:"), "下一段的说明注释留在原处");
+        assert!(
+            out.contains("# 群单独设置\n123456:"),
+            "下一段的说明注释留在原处"
+        );
     }
 
     #[test]
@@ -480,7 +498,10 @@ default:
     fn top_level_list_with_same_indent_items() {
         let text = "masterQQ:\n- \"stdin\"\n# 注释\nmaster:\n  - \"stdin:stdin\"\n";
         let out = set_value(text, &["masterQQ"], &v("[stdin, 10001]")).unwrap();
-        assert_eq!(out, "masterQQ:\n  - stdin\n  - 10001\n# 注释\nmaster:\n  - \"stdin:stdin\"\n");
+        assert_eq!(
+            out,
+            "masterQQ:\n  - stdin\n  - 10001\n# 注释\nmaster:\n  - \"stdin:stdin\"\n"
+        );
     }
 
     #[test]
@@ -488,10 +509,23 @@ default:
         let text = "/→#: true\nchromium_path:\n";
         let out = set_value(text, &["/→#"], &v("false")).unwrap();
         assert!(out.starts_with("/→#: false\n"));
-        let out = set_value(&out, &["chromium_path"], &Value::String("C:\\Program Files\\Edge\\msedge.exe".into())).unwrap();
+        let out = set_value(
+            &out,
+            &["chromium_path"],
+            &Value::String("C:\\Program Files\\Edge\\msedge.exe".into()),
+        )
+        .unwrap();
         let parsed: Value = serde_yaml::from_str(&out).unwrap();
-        assert_eq!(parsed["chromium_path"], Value::String("C:\\Program Files\\Edge\\msedge.exe".into()));
-        let out = set_value("a: 1\n", &["msg"], &Value::String("私聊: 已禁用 # 真的".into())).unwrap();
+        assert_eq!(
+            parsed["chromium_path"],
+            Value::String("C:\\Program Files\\Edge\\msedge.exe".into())
+        );
+        let out = set_value(
+            "a: 1\n",
+            &["msg"],
+            &Value::String("私聊: 已禁用 # 真的".into()),
+        )
+        .unwrap();
         let parsed: Value = serde_yaml::from_str(&out).unwrap();
         assert_eq!(parsed["msg"], Value::String("私聊: 已禁用 # 真的".into()));
     }

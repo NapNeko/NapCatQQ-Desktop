@@ -224,8 +224,10 @@ mod tests {
     fn app_file_basename_decodes_then_rejects_traversal() {
         use crate::karin::plugin::app_file_basename;
         assert_eq!(
-            app_file_basename("https://raw.githubusercontent.com/o/r/main/%E5%85%91%E6%8D%A2%E7%A0%81.js")
-                .unwrap(),
+            app_file_basename(
+                "https://raw.githubusercontent.com/o/r/main/%E5%85%91%E6%8D%A2%E7%A0%81.js"
+            )
+            .unwrap(),
             "兑换码.js"
         );
         assert!(app_file_basename("https://x/a%2F..%2Fevil.js").is_err());

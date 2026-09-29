@@ -46,7 +46,10 @@ pub async fn probe_yunzai(
     };
     let value: serde_json::Value = serde_json::from_str(&pkg)
         .map_err(|e| AppFrameworkError::Validation(format!("package.json 解析失败: {e}")))?;
-    let name = value.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+    let name = value
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
     if let Some(hint) = foreign_yunzai_hint(name) {
         return Err(AppFrameworkError::Validation(hint));
     }
@@ -72,7 +75,9 @@ pub async fn probe_yunzai(
         warnings.push("还没跑过（没有 config/config），端口按默认 2536 算".into());
     }
     if cfg.redis.path == "redis-server" && !host.command_exists("redis-server").await {
-        warnings.push("redis.yaml 里的 redis-server 在这台机器上找不到，导入时会指向桌面端装的 Redis".into());
+        warnings.push(
+            "redis.yaml 里的 redis-server 在这台机器上找不到，导入时会指向桌面端装的 Redis".into(),
+        );
     }
     if !cfg.server.extra_auth_headers.is_empty() {
         warnings.push(format!(
@@ -104,7 +109,11 @@ mod tests {
     #[test]
     fn other_yunzai_flavors_get_actionable_hints() {
         assert!(foreign_yunzai_hint("trss-yunzai").is_none());
-        assert!(foreign_yunzai_hint("miao-yunzai").unwrap().contains("node trss.js"));
+        assert!(
+            foreign_yunzai_hint("miao-yunzai")
+                .unwrap()
+                .contains("node trss.js")
+        );
         assert!(foreign_yunzai_hint("yunzai-bot").is_some());
         assert!(foreign_yunzai_hint("karin-x").unwrap().contains("karin-x"));
     }

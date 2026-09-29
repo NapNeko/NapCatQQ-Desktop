@@ -197,7 +197,12 @@ impl YunzaiComponent {
     }
 
     /// 进程和它自己调的 pnpm / git 用的 PATH：私有 pnpm、node、托管 git 在前
-    pub fn path_entries(&self, host: &dyn Host, tc: &NodeToolchain, git: Option<&GitTool>) -> Vec<String> {
+    pub fn path_entries(
+        &self,
+        host: &dyn Host,
+        tc: &NodeToolchain,
+        git: Option<&GitTool>,
+    ) -> Vec<String> {
         let mut prefix = path_prefix(tc, &self.install_dir, host.os());
         if let Some(dir) = git.and_then(|g| g.dir.as_ref()) {
             prefix.push(dir.render_for(host.os()));
@@ -322,7 +327,11 @@ impl YunzaiComponent {
         };
         ctx.info(format!("源：{first}")).await;
         let mut order = vec![first.clone()];
-        order.extend(clone_candidates(&sources).into_iter().filter(|u| *u != first));
+        order.extend(
+            clone_candidates(&sources)
+                .into_iter()
+                .filter(|u| *u != first),
+        );
 
         let stage = self.install_dir.join(STAGE_DIR);
         let checkout = stage.join("Yunzai");
@@ -391,9 +400,13 @@ impl YunzaiComponent {
         ];
         args.extend(self.registry_arg());
         let cmd = tc
-            .npm(host.os(), &args.iter().map(String::as_str).collect::<Vec<_>>())
+            .npm(
+                host.os(),
+                &args.iter().map(String::as_str).collect::<Vec<_>>(),
+            )
             .working_dir(self.install_dir.clone());
-        self.run_step(host, ctx, step, "安装项目私有 pnpm", cmd).await
+        self.run_step(host, ctx, step, "安装项目私有 pnpm", cmd)
+            .await
     }
 
     async fn pnpm_install(
@@ -555,8 +568,12 @@ impl YunzaiComponent {
             for candidate in WINDOWS_BROWSERS {
                 let path = HostPath::from_windows(candidate);
                 if host.exists(&path).await? {
-                    self.patch_config(host, "bot", &[(&["chromium_path"], Value::String((*candidate).into()))])
-                        .await?;
+                    self.patch_config(
+                        host,
+                        "bot",
+                        &[(&["chromium_path"], Value::String((*candidate).into()))],
+                    )
+                    .await?;
                     ctx.info(format!("渲染用本机浏览器：{candidate}")).await;
                     break;
                 }
@@ -568,7 +585,10 @@ impl YunzaiComponent {
     /// 更新 / 导入：只补 redis.yaml 的 path——还是上游默认的 `redis-server` 而 PATH 上没有时指向托管的
     async fn repair_redis_path(&self, host: &dyn Host, ctx: &ActionCtx) -> Result<(), ActionError> {
         self.copy_default_configs(host).await?;
-        let text = self.read_text(host, &config_rel("redis")).await?.unwrap_or_default();
+        let text = self
+            .read_text(host, &config_rel("redis"))
+            .await?
+            .unwrap_or_default();
         let current = serde_yaml::from_str::<Value>(&text)
             .ok()
             .and_then(|v| v.get("path").and_then(Value::as_str).map(str::to_string))
@@ -586,10 +606,17 @@ impl YunzaiComponent {
             return Ok(());
         }
         if let Ok(redis) = self.resolve_redis(host).await {
-            self.patch_config(host, "redis", &[(&["path"], Value::String(redis.render_for(host.os())))])
-                .await?;
-            ctx.info(format!("redis.yaml 的 path 改成 {}", redis.render_for(host.os())))
-                .await;
+            self.patch_config(
+                host,
+                "redis",
+                &[(&["path"], Value::String(redis.render_for(host.os())))],
+            )
+            .await?;
+            ctx.info(format!(
+                "redis.yaml 的 path 改成 {}",
+                redis.render_for(host.os())
+            ))
+            .await;
         }
         Ok(())
     }
@@ -606,7 +633,11 @@ impl YunzaiComponent {
         ctx.emit(ProgressKind::StepEnd { step, ok: true }).await;
     }
 
-    async fn provision_fresh(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn provision_fresh(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         let total = if self.download_chrome { 6 } else { 5 };
         ctx.emit(ProgressKind::Started { total_steps: total }).await;
 
@@ -648,7 +679,11 @@ impl YunzaiComponent {
         Ok(())
     }
 
-    async fn provision_update(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn provision_update(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 5 }).await;
         self.begin(ctx, 1, "解析 Node.js / Git").await;
         let tc = resolve_node_toolchain(host, &self.preferred_nodes(host).await).await?;
@@ -666,7 +701,8 @@ impl YunzaiComponent {
             let reset = git.command(["-C", dir.as_str(), "reset", "--hard", "FETCH_HEAD"]);
             self.run_logged(host, ctx, "git reset", reset).await?;
         } else {
-            ctx.warn("实例目录不是 git 仓库，跳过拉代码，只同步依赖").await;
+            ctx.warn("实例目录不是 git 仓库，跳过拉代码，只同步依赖")
+                .await;
         }
         self.end(ctx, 2).await;
 
@@ -680,7 +716,11 @@ impl YunzaiComponent {
     }
 
     /// 导入已有项目：不拉代码、不改端口，只把依赖和 Redis 路径补齐
-    async fn provision_adopt(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn provision_adopt(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 4 }).await;
         self.begin(ctx, 1, "解析 Node.js / Git").await;
         let tc = resolve_node_toolchain(host, &self.preferred_nodes(host).await).await?;
@@ -703,8 +743,14 @@ impl YunzaiComponent {
         let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
             ActionError::detect_failed("yunzai", format!("package.json 解析失败: {e}"))
         })?;
-        let name = value.get("name").and_then(|v| v.as_str()).unwrap_or_default();
-        let version = value.get("version").and_then(|v| v.as_str()).unwrap_or_default();
+        let name = value
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        let version = value
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
         Ok(Some((name.to_string(), version.to_string())))
     }
 }
@@ -761,7 +807,8 @@ impl Component for YunzaiComponent {
             return self.provision_adopt(host, ctx).await;
         }
         // 装到一半重试：代码已经在了就不再 clone（clone 进非空目录会失败），走更新那条
-        if matches!(self.read_package(host).await?, Some((name, _)) if name == YUNZAI_PACKAGE_NAME) {
+        if matches!(self.read_package(host).await?, Some((name, _)) if name == YUNZAI_PACKAGE_NAME)
+        {
             return self.provision_update(host, ctx).await;
         }
         self.provision_fresh(host, ctx).await
@@ -802,7 +849,11 @@ impl Component for YunzaiComponent {
         Ok(report)
     }
 
-    fn launch_command(&self, host: &dyn Host, args: &LaunchArgs) -> Result<HostCommand, ActionError> {
+    fn launch_command(
+        &self,
+        host: &dyn Host,
+        args: &LaunchArgs,
+    ) -> Result<HostCommand, ActionError> {
         // 同步版只能用已知路径或 PATH；运行时走 resolve_launch_command
         let node = self
             .node_bin
@@ -840,7 +891,11 @@ mod tests {
             ]
         );
         assert_eq!(comp.id(), ComponentId::Yunzai);
-        assert!(!comp.supported_targets().contains(&(Os::Windows, Locality::Remote)));
+        assert!(
+            !comp
+                .supported_targets()
+                .contains(&(Os::Windows, Locality::Remote))
+        );
     }
 
     #[test]
@@ -850,7 +905,11 @@ mod tests {
         assert!(!c.contains(&24100));
         assert!(c.contains(&24099));
         assert!(redis_port_candidates(1030).iter().all(|p| *p > 1024));
-        assert!(redis_port_candidates(u16::MAX).iter().all(|p| *p < u16::MAX));
+        assert!(
+            redis_port_candidates(u16::MAX)
+                .iter()
+                .all(|p| *p < u16::MAX)
+        );
     }
 
     #[test]
@@ -859,13 +918,22 @@ mod tests {
             chrome_download_base(Some("https://registry.npmmirror.com")),
             Some("https://cdn.npmmirror.com/binaries/chrome-for-testing")
         );
-        assert_eq!(chrome_download_base(Some("https://registry.npmjs.org")), None);
+        assert_eq!(
+            chrome_download_base(Some("https://registry.npmjs.org")),
+            None
+        );
         assert_eq!(chrome_download_base(None), None);
     }
 
     #[test]
     fn url_follows_default_port_only() {
-        assert_eq!(url_for_port("http://localhost:2536", 24100), "http://localhost:24100");
-        assert_eq!(url_for_port("https://bot.example.com", 24100), "https://bot.example.com");
+        assert_eq!(
+            url_for_port("http://localhost:2536", 24100),
+            "http://localhost:24100"
+        );
+        assert_eq!(
+            url_for_port("https://bot.example.com", 24100),
+            "https://bot.example.com"
+        );
     }
 }

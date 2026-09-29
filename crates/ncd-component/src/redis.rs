@@ -219,7 +219,11 @@ impl RedisComponent {
         Ok(local_tmp)
     }
 
-    async fn install_windows(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn install_windows(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         ctx.emit(ProgressKind::Started { total_steps: 3 }).await;
         ctx.emit(ProgressKind::StepBegin {
             step: 1,
@@ -242,7 +246,9 @@ impl RedisComponent {
         let _ = host.remove_dir_all(&stage).await;
         host.create_dir_all(&stage).await?;
         let archive = HostPath::from_windows(local_tmp.to_string_lossy().as_ref());
-        let extracted = host.extract_archive(&archive, &stage, ArchiveKind::Zip).await;
+        let extracted = host
+            .extract_archive(&archive, &stage, ArchiveKind::Zip)
+            .await;
         let _ = tokio::fs::remove_file(&local_tmp).await;
         extracted?;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
@@ -296,7 +302,11 @@ impl RedisComponent {
         Ok(())
     }
 
-    async fn install_valkey(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
+    async fn install_valkey(
+        &self,
+        host: &dyn Host,
+        ctx: &mut ActionCtx,
+    ) -> Result<(), ActionError> {
         let arch = if host.locality() == Locality::Remote {
             crate::ncd_watch::probe_remote_arch(host).await?
         } else {
@@ -306,7 +316,9 @@ impl RedisComponent {
         let url = format!("https://download.valkey.io/releases/{asset}");
         let local_tmp = self.download(ctx, &url, &asset, 2).await?;
 
-        let remote_archive = self.tmp_dir.join(format!("ncd-{}-{asset}", std::process::id()));
+        let remote_archive = self
+            .tmp_dir
+            .join(format!("ncd-{}-{asset}", std::process::id()));
         host.create_dir_all(&self.tmp_dir).await?;
         let uploaded = host.upload(&local_tmp, &remote_archive).await;
         let _ = tokio::fs::remove_file(&local_tmp).await;
@@ -378,8 +390,10 @@ impl RedisComponent {
                 return Ok(());
             }
             Err(e) => {
-                ctx.warn(format!("Valkey 预编译包用不了：{e}；改用系统包管理器装 redis"))
-                    .await;
+                ctx.warn(format!(
+                    "Valkey 预编译包用不了：{e}；改用系统包管理器装 redis"
+                ))
+                .await;
                 ctx.emit(ProgressKind::StepEnd { step: 2, ok: false }).await;
             }
         }
