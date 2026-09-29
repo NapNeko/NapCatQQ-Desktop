@@ -58,6 +58,7 @@ export function useAppInstances() {
         pushErrorBar({ key, title, raw: errorText(err) });
     };
 
+    // 新建、导入还是拿结果回写：对话框一关就要在列表里看到它、按新 id 往下走，等不到事件
     const createMutation = useMutation({
         mutationFn: (req: CreateAppInstanceRequest) => appFrameworkService.create(req),
         onSuccess: patch,
@@ -97,6 +98,7 @@ export function useAppInstances() {
             }
             return appFrameworkService.start(id);
         },
+        // 后端见实例已在跑就原样返回、不发事件，这时列表若还当它停着只能靠结果纠正
         onSuccess: (inst) => {
             if (inst) patch(inst);
         },
@@ -105,7 +107,6 @@ export function useAppInstances() {
 
     const stopMutation = useMutation({
         mutationFn: (id: string) => appFrameworkService.stop(id),
-        onSuccess: patch,
         onError: (err, id) => fail('停止失败', `app-stop:${id}`)(err),
     });
 
@@ -120,13 +121,13 @@ export function useAppInstances() {
             if (prev) patch({ ...prev, auto_start: autoStart });
             return prev;
         },
-        onSuccess: patch,
         onError: (err, args, prev) => {
             if (prev) patch(prev);
             fail('自动启动没改成', `app-auto-start:${args.id}`)(err);
         },
     });
 
+    // 后端只在状态或版本变了才发事件，只换了 last_error 的探测结果得从这里写回
     const refreshMutation = useMutation({
         mutationFn: (id: string) => appFrameworkService.refresh(id),
         onSuccess: patch,

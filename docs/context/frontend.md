@@ -59,7 +59,6 @@ flowchart TB
 - transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（动态 import）、`app/AppBootGate.tsx`（直接 `invoke`，另从 transport 取 `isTauri`）、`core/services/desktop.service.ts`、`hooks/ui/useTauriFileDrop.ts`、`hooks/terminal/useTerminalFileDrop.ts`、`modules/settings/useTauriDropTarget.ts`。
 - `app/AppNext.tsx` 直接用 `desktopUpdateService`。
 - `hooks/preferences/useBackendSettings.ts` 反过来 import `modules/settings/settings-draft`。
-- `hooks/apps/useAppInstances.ts` 的新建、导入、启停、自动启动、重新探测还拿调用结果回写实例列表，这些后端都会发 `app_instance_changed`，照第 3 节交给事件桥即可。对接、解绑已经不回写。
 - 模块互相伸手：`bot/metrics` → `bootstrap/widgets/occupancyChartGeometry`、`components` → `docker/SudoPasswordDialog`（两处）、`remote/ServerCard` → `bot/list/next/BotManageCard`、`task-queue/TaskDetailPanel` → `components/DockerPullLayersPanel`；`shared/components/next/OnboardingPreviews.tsx` 引了 `bot/.../BotManageCard` 和 `components/ComponentEntityCard`。
 
 ## 3. 落点约定（放哪儿、只留几份）
@@ -75,7 +74,7 @@ flowchart TB
   - 缓存键就近导出成工厂（`appConfigKey(id)` / `astrbotPersonasKey(id)` …），只在本文件用的键不导出。根组件也要的键单独成文件：实例列表的 `APP_INSTANCES_KEY` + `upsertInstance` 在 `hooks/apps/appInstancesCache.ts`，免得事件桥把整套应用端 hook 拖进主包。
   - 每次打开都得是当下状态的（对接计划 `useAppLinkPlan`、插件配置文件列表 `useAppPluginConfigDocs`）：`staleTime: 0` + `gcTime: 0`，重新拉的途中不给旧数据。
   - 只给发起方用一次的结果（导入前检查项目、拉模型列表、测连接）：`useMutation`，不进缓存。
-  - 后端会推事件的改动（实例状态、对接）不在调用结果里重复回写，交给根上的 `useAppInstanceEventsBridge`。
+  - 后端会推事件的改动（实例状态、对接）不在调用结果里重复回写，交给根上的 `useAppInstanceEventsBridge`。`useAppInstances` 里还回写的三处是事件管不到的：新建 / 导入（对话框一关就按新 id 往下走）、启动（实例已在跑时后端原样返回不发事件）、重新探测（只换了 `last_error` 不发事件）。
 - 外链一律 `hooks/useOpenExternal.ts`（被 scheme 白名单拒了会弹错误条，同 key 只留一条），hook 外面的调用方（终端、Docker 下载页）用同文件的 `openExternalOrReport`；要先问后端拿地址再打开的（打开 WebUI、noVNC）在各自的 hook 里调 `openExternalUrl`，失败由那个 hook 报或抛给调用方报，不许吞；选本机目录 `hooks/usePickDirectory.ts`；麦麦挑图、挑文件走 `useMaiBotChatImages` / `useMaiBotEmojiFiles` / `useMaiBotMemoryImportFiles`（失败统一经 `hooks/apps/maibotResourceAction.ts` 的 `localFilesOrNothing` 弹条、当没挑）。modules 里不出现 `openExternalUrl` / `pick*`。
 - 失败别吞：`.catch(() => {})` 只留给确实无所谓的收尾；用户在等结果的一律 `pushErrorBar`，带 `key`。
 - 模块之间共用：
