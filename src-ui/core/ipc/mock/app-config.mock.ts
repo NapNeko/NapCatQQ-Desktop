@@ -14,7 +14,14 @@ import type {
     KarinInstanceConfig,
     MaiBotInstanceConfig,
     NoneBot2InstanceConfig,
+    YunzaiInstanceConfig,
 } from '../types';
+import {
+    validateYunzaiConfig,
+    yunzaiDefaultConfig,
+    yunzaiLinkInputsChanged,
+    yunzaiRestartInputsChanged,
+} from '../../domain/apps/yunzaiConfig';
 import { maibotDefaultConfig, validateMaiBotConfig } from '../../domain/apps/maibotConfig';
 import {
     karinDefaultConfig,
@@ -73,6 +80,29 @@ const MAIBOT_TEXT: Record<string, string> = {
     adapter_config: '[plugin]\nconfig_version = "0.1.0"\nenabled = false\n',
 };
 
+/** 和后端 yunzai_config_documents 一致：config/config 下九份，server / redis / db 只在启动时读 */
+const YUNZAI_DOCS: AppConfigDocument[] = ['bot', 'other', 'group', 'server', 'redis', 'renderer', 'db', 'milky', 'satori'].map(
+    (name) => ({
+        id: name,
+        label: `${name}.yaml`,
+        rel_path: `config/config/${name}.yaml`,
+        format: 'yaml',
+        hot_reload: !['server', 'redis', 'db'].includes(name),
+    }),
+);
+
+const YUNZAI_TEXT: Record<string, string> = {
+    bot: '# 日志等级\nlog_level: info\n# 渲染用的浏览器，留空用装时下载的\nchromium_path:\n',
+    other: '# 主人QQ号\nmasterQQ:\n# Bot号:主人号\nmaster:\n',
+    group: 'default:\n  groupCD: 500\n  singleCD: 2000\n  onlyReplyAt: 0\n  botAlias:\n    - 云崽\n    - 云宝\n',
+    server: 'url: http://localhost:2536\nport: 2536\nredirect: https://git.trss.me/Yunzai\nauth:\n',
+    redis: 'path: redis-server\nhost: 127.0.0.1\nport: 2537\nusername:\npassword:\ndb: 0\n',
+    renderer: '# 渲染后端，留空自动\nname:\n',
+    db: 'dialect: sqlite\nstorage: data/db/data.db\nlogging: false\n',
+    milky: '# Milky 协议端，Desktop 不用\n',
+    satori: '# Satori 协议端，Desktop 不用\n',
+};
+
 function docsOf(frameworkId: string): AppConfigDocument[] {
     switch (frameworkId) {
         case 'karin':
@@ -81,6 +111,8 @@ function docsOf(frameworkId: string): AppConfigDocument[] {
             return ASTRBOT_DOCS;
         case 'maibot':
             return MAIBOT_DOCS;
+        case 'yunzai':
+            return YUNZAI_DOCS;
         default:
             return NONEBOT2_DOCS;
     }
@@ -125,6 +157,7 @@ const karinStates = new Map<string, KarinState>();
 const nbStates = new Map<string, { config: NoneBot2InstanceConfig; docRev: Record<string, number> }>();
 const abStates = new Map<string, { config: AstrBotInstanceConfig; docRev: Record<string, number> }>();
 const mbStates = new Map<string, { config: MaiBotInstanceConfig; docRev: Record<string, number> }>();
+const yzStates = new Map<string, { config: YunzaiInstanceConfig; docRev: Record<string, number> }>();
 const rawStates = new Map<string, { text: Record<string, string>; rev: Record<string, number> }>();
 let conflictOnce = false;
 
@@ -173,6 +206,44 @@ export function syncMaiBotLink(instance: AppInstance, linked: boolean): void {
     s.docRev.adapter_config = (s.docRev.adapter_config ?? 0) + 1;
 }
 
+function yzState(instance: AppInstance) {
+    let s = yzStates.get(instance.id);
+    if (!s) {
+        const docRev: Record<string, number> = {};
+        for (const d of YUNZAI_DOCS) docRev[d.id] = 1;
+        s = { config: yunzaiDefaultConfig(instance.port), docRev };
+        s.config.redis.path = `${instance.install_dir}/../../../tools/redis/redis-server.exe`;
+        if (instance.link) s.config.server.access_token = 'mockmockmockmockmockmock';
+        yzStates.set(instance.id, s);
+    }
+    return s;
+}
+
+function yzEnvelope(s: { config: YunzaiInstanceConfig; docRev: Record<string, number> }): AppInstanceConfigEnvelope {
+    return {
+        config: { framework: 'yunzai', data: structuredClone(s.config) },
+        revision: combined(s.docRev, YUNZAI_DOCS),
+        documents: YUNZAI_DOCS.map((d) => ({
+            doc_id: d.id,
+            revision: rev(s.docRev[d.id] ?? 0),
+            hot_reload: d.hot_reload,
+        })),
+    };
+}
+
+/** 对接后假装 server.yaml 被写了：auth 只剩 Authorization: Bearer，端口是实例口 */
+export function syncYunzaiLink(instance: AppInstance, linked: boolean): void {
+    if (!linked) return;
+    const s = yzState(instance);
+    s.config.server = {
+        ...s.config.server,
+        port: instance.port,
+        access_token: s.config.server.access_token || 'mockmockmockmockmockmock',
+        extra_auth_headers: [],
+    };
+    s.docRev.server = (s.docRev.server ?? 0) + 1;
+}
+
 const rev = (n: number) => `mock-r${n}`;
 
 /// AstrBot 插件配置缺文件时后端按 schema 物化默认值；mock 里同一份形状。
@@ -193,6 +264,19 @@ function astrbotRaw(inst: AppInstance) {
     let raw = rawStates.get(inst.id);
     if (!raw) {
         raw = { text: { ...ASTRBOT_TEXT }, rev: { cmd_config: 1 } };
+        rawStates.set(inst.id, raw);
+    }
+    return raw;
+}
+
+const YUNZAI_PLUGIN_TEXT = '# 插件自己的配置，改完插件一般会自己重新读\nenable: true\n';
+
+function yunzaiRaw(inst: AppInstance) {
+    let raw = rawStates.get(inst.id);
+    if (!raw) {
+        const r: Record<string, number> = {};
+        for (const d of YUNZAI_DOCS) r[d.id] = 1;
+        raw = { text: { ...YUNZAI_TEXT }, rev: r };
         rawStates.set(inst.id, raw);
     }
     return raw;
@@ -382,6 +466,9 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             if (inst.framework_id === 'maibot') {
                 return withMockDelay(mbEnvelope(mbState(inst)));
             }
+            if (inst.framework_id === 'yunzai') {
+                return withMockDelay(yzEnvelope(yzState(inst)));
+            }
             if (inst.framework_id !== 'karin') {
                 throw makeAppConfigError('unsupported', `该应用端暂不支持类型化配置: ${inst.framework_id}`);
             }
@@ -519,6 +606,42 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     port_changed: portChanged,
                 });
             }
+            if (inst.framework_id === 'yunzai' && config.framework === 'yunzai') {
+                const s = yzState(inst);
+                if (baseRevision != null && baseRevision !== combined(s.docRev, YUNZAI_DOCS)) {
+                    throw makeAppConfigError('conflict', '配置已被修改（other），请重新加载后再保存');
+                }
+                const next = structuredClone(config.data);
+                const issues = validateYunzaiConfig(next);
+                if (issues.length) {
+                    throw makeAppConfigError(
+                        'invalid',
+                        `配置校验未通过：${issues.map((i) => `${i.path}: ${i.message}`).join('; ')}`,
+                        issues,
+                    );
+                }
+                const before = s.config;
+                const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
+                for (const key of ['bot', 'other', 'group', 'server', 'redis', 'renderer'] as const) {
+                    if (changed(before[key], next[key])) s.docRev[key] = (s.docRev[key] ?? 0) + 1;
+                }
+                // auth 里别的头是读出来给提示的，不从表单写回
+                s.config = { ...next, server: { ...next.server, extra_auth_headers: before.server.extra_auth_headers } };
+                let portChanged = false;
+                if (next.server.port !== inst.port) {
+                    deps.publish({ ...inst, port: next.server.port }, 'port_changed');
+                    portChanged = true;
+                }
+                const env = yzEnvelope(s);
+                return withMockDelay({
+                    config: env.config,
+                    revision: env.revision,
+                    documents: env.documents,
+                    restart_required: yunzaiRestartInputsChanged(before, next) && inst.state === 'running',
+                    relinked: !!inst.link && yunzaiLinkInputsChanged(before, next),
+                    port_changed: portChanged,
+                });
+            }
             if (inst.framework_id !== 'karin' || config.framework !== 'karin') {
                 throw makeAppConfigError('unsupported', `该应用端暂不支持类型化配置: ${inst.framework_id}`);
             }
@@ -588,6 +711,14 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     revision: rev(raw.rev[docId] ?? 0),
                 });
             }
+            if (inst.framework_id === 'yunzai') {
+                const raw = yunzaiRaw(inst);
+                return withMockDelay({
+                    doc_id: docId,
+                    text: raw.text[docId] ?? (docId.startsWith('plugin:') ? YUNZAI_PLUGIN_TEXT : ''),
+                    revision: rev(raw.rev[docId] ?? 0),
+                });
+            }
             if (docId.startsWith('plugin:')) {
                 const s = karinState(inst);
                 return withMockDelay({
@@ -626,6 +757,20 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
             baseRevision: string | null,
         ): Promise<AppConfigText> => {
             const inst = requireInstalled(instanceId);
+            if (inst.framework_id === 'yunzai') {
+                const raw = yunzaiRaw(inst);
+                const current = rev(raw.rev[docId] ?? 0);
+                if (baseRevision != null && baseRevision !== current) {
+                    throw makeAppConfigError('conflict', `配置已被修改（${docId}），请重新加载后再保存`);
+                }
+                raw.rev[docId] = (raw.rev[docId] ?? 0) + 1;
+                raw.text[docId] = text;
+                if (!docId.startsWith('plugin:')) {
+                    const s = yzState(inst);
+                    s.docRev[docId] = (s.docRev[docId] ?? 0) + 1;
+                }
+                return withMockDelay({ doc_id: docId, text, revision: rev(raw.rev[docId]) });
+            }
             if (docId.startsWith('plugin:')) {
                 try {
                     JSON.parse(text);
@@ -711,6 +856,7 @@ export const mockAppConfigControls = {
         nbStates.clear();
         abStates.clear();
         mbStates.clear();
+        yzStates.clear();
         rawStates.clear();
         conflictOnce = false;
     },

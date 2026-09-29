@@ -46,6 +46,7 @@ import { mockMaiBotRuntime } from './maibot-runtime.mock';
 import { karinDefaultConfig } from '../../domain/apps/karinConfig';
 import { astrbotDefaultConfig } from '../../domain/apps/astrbotConfig';
 import { nonebot2DefaultConfig } from '../../domain/apps/nonebot2Config';
+import { yunzaiDefaultConfig } from '../../domain/apps/yunzaiConfig';
 import { emitMockEvent } from './events.mock';
 import { withMockDelay } from './bootstrap.mock';
 import { mockAppLogTail, playMockAppRun } from './app-log.mock';
@@ -54,6 +55,7 @@ import {
     peekKarinHttpAuthKey,
     syncKarinLinkToken,
     syncMaiBotLink,
+    syncYunzaiLink,
 } from './app-config.mock';
 
 export const mockAppFrameworks: AppFrameworkManifest[] = [
@@ -135,6 +137,23 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
                 url: 'https://github.com/Mai-with-u/MaiBot/blob/main/PRIVACY.md',
             },
         ],
+    },
+    {
+        id: 'yunzai',
+        display_name: 'TRSS-Yunzai',
+        description: '云崽 Node.js 应用端，喵喵插件那一套生态',
+        repo_url: 'https://github.com/TimeRainStarSky/Yunzai',
+        docs_url: 'https://github.com/TimeRainStarSky/Yunzai/tree/docs',
+        supported_placements: ['local_native', 'remote_native'],
+        default_port: 2536,
+        has_webui: false,
+        link_modes: ['reverse_ws'],
+        component_id: 'yunzai',
+        runtime_component_ids: ['git', 'nodejs', 'redis'],
+        store_resources: ['plugin'],
+        has_install_renderer: true,
+        webui_auth: 'none',
+        terms: [],
     },
 ];
 
@@ -252,6 +271,21 @@ let instances: AppInstance[] = [
         installed_version: '1.2.5',
         created_at_ms: Date.now() - 1_200_000,
         install_renderer: false,
+        origin: 'created',
+        auto_start: false,
+    },
+    {
+        id: 'yz90ab12',
+        framework_id: 'yunzai',
+        display_name: '云崽 · 本机',
+        placement: 'local_native',
+        host_id: 'local',
+        install_dir: 'D:/NapCatQQ/apps/yunzai/yz90ab12',
+        port: 2536,
+        state: 'stopped',
+        installed_version: '3.1.3',
+        created_at_ms: Date.now() - 900_000,
+        install_renderer: true,
         origin: 'created',
         auto_start: false,
     },
@@ -515,6 +549,33 @@ export const mockAppFrameworkApi = {
                 access_token: 'mockmockmockmockmockmock',
             });
         }
+        if (inst.framework_id === 'yunzai') {
+            return withMockDelay({
+                mode: 'reverse_ws',
+                instance_id: instanceId,
+                bot_id: botId,
+                connection: {
+                    kind: 'ws_client',
+                    url: `ws://127.0.0.1:${inst.port}/OneBotv11`,
+                    reportSelfMessage: false,
+                    heartInterval: 30000,
+                    reconnectInterval: 30000,
+                    role: 'Universal',
+                    enable: true,
+                    name: `ncd-app:${instanceId}`,
+                    messagePostFormat: 'array',
+                    token: 'mockmockmockmockmockmock',
+                    debug: false,
+                },
+                app_side_writes: [
+                    {
+                        path: 'config/config/server.yaml',
+                        summary: `port=${inst.port} / auth.Authorization=Bearer <token>`,
+                    },
+                ],
+                access_token: 'mockmockmockmockmockmock',
+            });
+        }
         return withMockDelay({
             mode: 'reverse_ws',
             instance_id: instanceId,
@@ -553,6 +614,7 @@ export const mockAppFrameworkApi = {
             },
         };
         if (forward) syncMaiBotLink(inst, true);
+        else if (inst.framework_id === 'yunzai') syncYunzaiLink(inst, true);
         else syncKarinLinkToken(instanceId);
         publish(next, 'linked');
         return withMockDelay(next);
@@ -645,6 +707,19 @@ export const mockAppFrameworkApi = {
                     hot_reload: false,
                 },
             ]);
+        }
+        if (inst.framework_id === 'yunzai') {
+            // 单 JS 插件没有配置目录；目录插件列 config/ 下的 yaml
+            if (pluginName.endsWith('.js')) return withMockDelay([]);
+            return withMockDelay(
+                ['config/cfg.yaml', 'config/profile.yaml'].map((rel) => ({
+                    id: `plugin:${pluginName}:${rel}`,
+                    label: rel,
+                    rel_path: `plugins/${pluginName}/${rel}`,
+                    format: 'yaml' as const,
+                    hot_reload: true,
+                })),
+            );
         }
         if (inst.framework_id === 'maibot') {
             const dir = pluginName.replaceAll('.', '_');
@@ -783,6 +858,9 @@ export const mockAppFrameworkApi = {
         if (frameworkId === 'maibot' && resource === 'plugin') {
             return withMockDelay(mockMaiBotPlugins.slice());
         }
+        if (frameworkId === 'yunzai' && resource === 'plugin') {
+            return withMockDelay(mockYunzaiPlugins.slice());
+        }
         return withMockDelay([]);
     },
 
@@ -805,8 +883,7 @@ export const mockAppFrameworkApi = {
         action: AppPluginAction,
         resource?: AppStoreResource,
     ): Promise<string> => {
-        require(instanceId);
-        if (require(instanceId).framework_id === 'nonebot2' || require(instanceId).framework_id === 'astrbot') {
+        if (STORE_MOCK_FRAMEWORKS.has(require(instanceId).framework_id)) {
             applyMockStoreOp(instanceId, pluginName, action, resource ?? 'plugin');
         } else {
             applyMockPluginOp(instanceId, pluginName, action);
@@ -822,13 +899,24 @@ export const mockAppFrameworkApi = {
         resource?: AppStoreResource,
     ): Promise<AppConfigWriteResult> => {
         const inst = require(instanceId);
-        if (inst.framework_id === 'nonebot2' || inst.framework_id === 'astrbot') {
+        if (STORE_MOCK_FRAMEWORKS.has(inst.framework_id)) {
             const key = storeKey(instanceId, resource ?? 'plugin');
             const list = mockStoreInstalledFor(instanceId, resource ?? 'plugin');
             mockStoreInstalled.set(
                 key,
                 list.map((p) => (p.id === pluginName || p.name === pluginName ? { ...p, enabled } : p)),
             );
+            if (inst.framework_id === 'yunzai') {
+                // 单 JS 插件改名成 .js.disabled，云崽自己热卸载；没有配置文件要写
+                return withMockDelay({
+                    config: { framework: 'yunzai', data: yunzaiDefaultConfig(inst.port) },
+                    revision: 'mock-r-plugin',
+                    documents: [],
+                    restart_required: false,
+                    relinked: false,
+                    port_changed: false,
+                });
+            }
             if (inst.framework_id === 'astrbot') {
                 const config = astrbotDefaultConfig(inst.port);
                 return withMockDelay({
@@ -1220,6 +1308,64 @@ const mockMaiBotPlugins: AppStoreMarketEntry[] = [
     maibotMarketEntry('a0000xz.maibot-tarots-plugin', '塔罗牌插件', '抽一张塔罗牌，麦麦来解读', 'A0000Xz', 'A0000Xz/MaiBot-Tarots-Plugin'),
 ];
 
+/** 形状照后端 yunzai::store::parse_index：id 是 plugins/ 下的目录名，单 JS 是文件名 */
+const yunzaiEntry = (
+    id: string,
+    name: string,
+    description: string,
+    author: string,
+    home: string,
+    tags: string[],
+    extra: Partial<AppStoreMarketEntry> = {},
+): AppStoreMarketEntry => ({
+    resource: 'plugin',
+    id,
+    name,
+    description,
+    version: '',
+    author,
+    homepage: home,
+    time: '',
+    package: id,
+    module_name: id,
+    flavor: 'git',
+    is_official: tags.includes('推荐'),
+    valid: true,
+    tags,
+    supported_adapters: [],
+    authors: [{ name: author, home: '' }],
+    repos: [{ url: home, type: 'git', branch: '' }],
+    files: [],
+    allow_build: [],
+    ...extra,
+});
+
+const mockYunzaiPlugins: AppStoreMarketEntry[] = [
+    yunzaiEntry('genshin', '原神基础 (genshin)', 'TRSS 版原神基础功能，装喵喵插件前先装它', '时雨🌌星空', 'https://github.com/TimeRainStarSky/Yunzai-genshin', ['推荐']),
+    yunzaiEntry('TRSS-Plugin', 'TRSS 插件 (TRSS-Plugin)', 'TRSS 自带的工具箱：远程命令、文件操作、语音合成等', '时雨🌌星空', 'https://github.com/TimeRainStarSky/TRSS-Plugin', ['推荐']),
+    yunzaiEntry('miao-plugin', '喵喵插件 (miao-plugin)', '原神、星铁角色面板、伤害计算、抽卡统计', 'yoimiya-kokomi', 'https://gitee.com/yoimiya-kokomi/miao-plugin', ['推荐', '游戏']),
+    yunzaiEntry('xiaoyao-cvs-plugin', '逍遥图鉴', '原神图鉴、攻略、签到', 'Ctrlcvs', 'https://gitee.com/Ctrlcvs/xiaoyao-cvs-plugin', ['游戏']),
+    yunzaiEntry('earth-k-plugin', '土块插件', '点歌、AI 绘图、表情包合成', 'SmallK111407', 'https://gitee.com/SmallK111407/earth-k-plugin', ['功能']),
+    yunzaiEntry('xiuxian-plugin', '修仙文游', '群里一起修仙的文字游戏', 'ningmengchongshui', 'https://gitee.com/ningmengchongshui/xiuxian-plugin', ['文游']),
+    yunzaiEntry('link:某网盘插件', '某网盘插件', '主页不是仓库，只能照说明手动装', '佚名', 'https://example.com/plugin', ['功能'], {
+        valid: false,
+        repos: [],
+    }),
+    yunzaiEntry('chuo.js', '戳一戳回复', '被戳的时候随机回一句', 'Pinging', 'https://gitee.com/Pinging/js-plugin', ['单 JS'], {
+        flavor: 'app',
+        repos: [],
+        files: [{ name: 'chuo.js', url: 'https://gitee.com/Pinging/js-plugin/raw/master/chuo.js', description: '' }],
+    }),
+    yunzaiEntry('qianwen.js', '通义千问', '接通义千问聊天，要自己填 API Key', 'Lain', 'https://gitee.com/Lain/js', ['单 JS'], {
+        flavor: 'app',
+        repos: [],
+        files: [{ name: 'qianwen.js', url: 'https://gitee.com/Lain/js/raw/main/qianwen.js', description: '' }],
+    }),
+];
+
+/** 这几个框架的商店 mock 走通用的已装表（Karin、麦麦走各自的） */
+const STORE_MOCK_FRAMEWORKS = new Set(['nonebot2', 'astrbot', 'yunzai']);
+
 const mockStoreInstalled = new Map<string, AppStoreInstalled[]>();
 
 function storeKey(instanceId: string, resource: AppStoreResource): string {
@@ -1227,6 +1373,32 @@ function storeKey(instanceId: string, resource: AppStoreResource): string {
 }
 
 function seedStoreInstalled(framework: string | undefined, resource: AppStoreResource): AppStoreInstalled[] {
+    if (framework === 'yunzai') {
+        // 装了 TRSS 插件和一个停着的单 JS，没装 genshin / 喵喵：概览会提示去装
+        return resource === 'plugin'
+            ? [
+                  {
+                      id: 'TRSS-Plugin',
+                      name: 'TRSS-Plugin',
+                      resource: 'plugin',
+                      flavor: 'git',
+                      version: '1.0.0',
+                      enabled: true,
+                      package: 'TRSS-Plugin',
+                      locked: false,
+                  },
+                  {
+                      id: 'chuo.js',
+                      name: 'chuo.js',
+                      resource: 'plugin',
+                      flavor: 'app',
+                      enabled: false,
+                      package: 'chuo.js',
+                      locked: false,
+                  },
+              ]
+            : [];
+    }
     if (framework === 'maibot') {
         return resource === 'plugin'
             ? [
@@ -1325,6 +1497,7 @@ function applyMockStoreOp(
         ...(resource === 'adapter' ? mockNoneBotAdapters : mockNoneBotPlugins),
         ...mockAstrBotPlugins,
         ...mockMaiBotPlugins,
+        ...mockYunzaiPlugins,
     ].find((e) => e.id === pluginName || e.name === pluginName);
     mockStoreInstalled.set(key, [
         ...current,
