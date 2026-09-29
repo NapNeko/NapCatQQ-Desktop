@@ -117,6 +117,14 @@ Shell 与外部输入
 - 第二个框架接入时就抽通用件。四个框架各一份 180 行的配置表单 hook，Karin 和 NoneBot2 只差 37 行；两套插件商店逻辑逐字重复。照着第一份复制改名，后面每修一个 bug 都要修四遍
 - 前端依赖只能往下走。hooks 反过来 import modules 里的纯逻辑，modules 直接调 services / transport，对话框里手搓 fetch 和取消标记。纯逻辑进 core/domain，服务端数据走 hooks 里的 react-query，外链走 `useOpenExternal`（被拒的链接会弹错误条），细则见 frontend.md
 
+审查后期补出来的
+- 「作废缓存」要作废所有层。远端库存的 invalidate 只丢了内存副本，下一次探测又从主机档案里的持久化副本读回旧值，等于没重探。作废时连同后备来源一起标脏
+- 查端口占用只 bind 回环不够。别的进程监听在 0.0.0.0 时，Windows 上照样能 bind 127.0.0.1 的同一端口，结果把占用的口当成空闲。空闲判断要再试着连一下
+- 任务的收尾事件必须在所有出口都发。QQ 依赖安装器报错时直接返回，没发 StepEnd / Finished，前端的进度条一直转。失败路径和成功路径发同一组收尾
+- 超时不等于停止。本机命令超时后只是不再等，子进程还在跑；它占着的 ConPTY 管道又让同时跑的终端测试收不到退出。超时后要主动杀进程
+- 共享文件的并发写要排队。批量启动多个 NapCat Bot 时，每个 Bot 的渲染都写共用的 `napcat.json`，同一秒的事务还共用一个备份目录，随机有一个报 os error 2 / 32 起不来。整笔事务和单文件原子写走同一把锁
+- 测试别抢真实端口、别让定时器活过测试环境。拿临时端口 bind 一下再放掉的测试会和并行的测试撞口；GSAP ticker 在 jsdom 拆掉后还要下一帧，vitest 报 unhandled error 使退出码为 1。选口逻辑注入假的空闲判断，帧定时器在 setup 里统一回收
+
 文档与提交
 - CLAUDE.md 引用的文档不能悄悄删。本文、capabilities.md、frontend.md 在 6 月被当旧文档清掉，CLAUDE.md 还指着它们，之后三个月没有 agent 读得到前端分层铁律和这份自查清单，前端分层随之走样。删或挪文档时同步改所有引用
 - 忽略规则挡不住 `git add -f` 和一把梭的 add。`scripts/maibot/__pycache__/*.pyc` 在已有 `__pycache__/` 规则的情况下仍被提交。按路径 add，提交前看一眼 `git diff --cached --stat`
