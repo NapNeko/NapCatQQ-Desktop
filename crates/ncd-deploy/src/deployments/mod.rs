@@ -11,7 +11,7 @@ pub mod native;
 
 pub use docker::{
     DockerDeployment, bot_docker_container_candidates, bot_docker_container_name,
-    resolve_bot_container_name,
+    docker_project_dir, resolve_bot_container_name,
 };
 pub use external::ExternalDeployment;
 pub use native::{

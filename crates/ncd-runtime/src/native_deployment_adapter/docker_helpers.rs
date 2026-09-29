@@ -21,35 +21,9 @@ pub(crate) async fn docker_project_dir(
     host: &dyn Host,
     name: &str,
 ) -> Result<String, BotBackendError> {
-    let home = probe_home(host).await?;
-    Ok(ncd_domain::remote_paths::docker_bot_project_dir(
-        &home, name,
-    ))
-}
-
-async fn probe_home(host: &dyn Host) -> Result<String, BotBackendError> {
-    let cmd = ncd_host::HostCommand::new("sh").arg("-c").arg("echo $HOME");
-    match host.run_to_string(cmd).await {
-        Ok(out) if out.success() => {
-            let home = out.stdout.trim().to_string();
-            if home.is_empty() {
-                Err(BotBackendError::InvalidConfig(
-                    "Docker host HOME is empty; cannot determine deployment project directory"
-                        .into(),
-                ))
-            } else {
-                Ok(home)
-            }
-        }
-        Ok(out) => Err(BotBackendError::Io(format!(
-            "探测 Docker 主机 HOME 失败: exit={:?}, stderr={}",
-            out.exit_code,
-            out.stderr.trim()
-        ))),
-        Err(error) => Err(BotBackendError::Io(format!(
-            "探测 Docker 主机 HOME 失败: {error}"
-        ))),
-    }
+    ncd_deploy::docker_project_dir(host, name)
+        .await
+        .map_err(BotBackendError::Io)
 }
 
 fn docker_config_file_names(bot_id: &BotId) -> [String; 3] {

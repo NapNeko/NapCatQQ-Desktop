@@ -107,14 +107,11 @@ impl DockerDeployment {
 
     /// compose 项目目录(host 侧 POSIX 路径),远端 HOME 探测失败时 hard fail
     async fn project_dir(host: &dyn Host, name: &str) -> Result<String, DeploymentError> {
-        let home = probe_home(host).await.ok_or_else(|| {
-            DeploymentError::ConfigInvalid(
-                "无法探测远端 HOME，拒绝回退到临时目录部署 Docker bot".into(),
-            )
-        })?;
-        Ok(ncd_domain::remote_paths::docker_bot_project_dir(
-            &home, name,
-        ))
+        docker_project_dir(host, name).await.map_err(|reason| {
+            DeploymentError::ConfigInvalid(format!(
+                "{reason}，拒绝回退到临时目录部署 Docker bot"
+            ))
+        })
     }
 
     fn compose_secret_for(&self, backend: BackendType) -> Result<String, DeploymentError> {
@@ -191,15 +188,34 @@ fn dotenv_value(raw: &str) -> String {
     out
 }
 
-/// 远端探 $HOME,失败返回 None
-async fn probe_home(host: &dyn Host) -> Option<String> {
+/// bot 的 compose 项目目录(host 侧 POSIX 路径)
+///
+/// 部署和 runtime 渲染 Docker 配置都要落到同一个目录,探 HOME 只放这一份;
+/// 探不到时给出原因,由调用方包成各自的错误类型
+pub async fn docker_project_dir(host: &dyn Host, name: &str) -> Result<String, String> {
+    let home = probe_home(host).await?;
+    Ok(ncd_domain::remote_paths::docker_bot_project_dir(
+        &home, name,
+    ))
+}
+
+async fn probe_home(host: &dyn Host) -> Result<String, String> {
     let cmd = HostCommand::new("sh").arg("-c").arg("echo $HOME");
     match host.run_to_string(cmd).await {
         Ok(out) if out.success() => {
-            let h = out.stdout.trim().to_string();
-            if h.is_empty() { None } else { Some(h) }
+            let home = out.stdout.trim().to_string();
+            if home.is_empty() {
+                Err("Docker 主机 HOME 为空，无法确定部署项目目录".into())
+            } else {
+                Ok(home)
+            }
         }
-        _ => None,
+        Ok(out) => Err(format!(
+            "探测 Docker 主机 HOME 失败: exit={:?}, stderr={}",
+            out.exit_code,
+            out.stderr.trim()
+        )),
+        Err(error) => Err(format!("探测 Docker 主机 HOME 失败: {error}")),
     }
 }
 
