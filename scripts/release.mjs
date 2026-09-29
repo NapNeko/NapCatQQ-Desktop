@@ -169,7 +169,7 @@ async function cmdShip(versionPlain, { push, yes }) {
         previewOut,
     ]);
     const finalPreview = fs.readFileSync(previewOut, 'utf8');
-    if (finalPreview.includes('正文为自动草稿')) {
+    if (finalPreview.includes('ncd-release-notes: auto-draft')) {
         fail('render 仍为自动草稿，请检查 docs/releases 后重试');
     }
 
@@ -286,7 +286,7 @@ function cmdPrepare(versionPlain, { allowDirty, tag }) {
             out,
         ]);
         const text = fs.readFileSync(out, 'utf8');
-        if (text.includes('正文为自动草稿')) errors.push('render 仍是自动草稿');
+        if (text.includes('ncd-release-notes: auto-draft')) errors.push('render 仍是自动草稿');
         else console.log('[ok] notes render 策展正文');
     } catch (e) {
         errors.push(`render 失败: ${e.stderr || e.message || e}`);

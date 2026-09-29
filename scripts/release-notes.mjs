@@ -27,10 +27,36 @@ const RELEASES_DIR = path.join(ROOT, 'docs', 'releases');
 const REPO_DEFAULT = 'NapNeko/NapCatQQ-Desktop';
 const QQ_GROUP = 'https://qm.qq.com/q/8UK5ecfDyw';
 
+// 正文里的隐藏标记，GitHub 和应用内更新日志都不显示 HTML 注释。
+// AUTO_DRAFT_MARKER 让 release.mjs 认出「没策展就要发」。DOWNLOAD_BEGIN/END 夹住的下载块
+// 和 FOOTER_MARKER 之后的提交列表、反馈渠道，应用内更新日志都跳过（用户已经装着了）。
+// 改字面量要同步 src-ui/core/domain/release/release-notes-markdown.ts。
+const AUTO_DRAFT_MARKER = '<!-- ncd-release-notes: auto-draft -->';
+const DOWNLOAD_BEGIN = '<!-- ncd-release-notes: download -->';
+const DOWNLOAD_END = '<!-- ncd-release-notes: /download -->';
+const FOOTER_MARKER = '<!-- ncd-release-notes: footer -->';
+
+const SECTION_EMOJI = {
+    新增: '✨',
+    修复: '🐛',
+    改进: '⚡',
+    优化: '⚡',
+    安全: '🔒',
+    破坏性变更: '⚠️',
+    说明: '📌',
+    其他: '🧩',
+};
+
 const DROP_TYPE =
     /^(style|chore|test|ci|build|docs|refactor)(\([^)]*\))?:\s*/i;
 const KEEP_TYPE = /^(feat|fix|perf|security)(\([^)]*\))?:\s*/i;
 const TYPE_PREFIX = /^(feat|fix|perf|security|style|chore|test|ci|build|docs|refactor)(\([^)]*\))?:\s*/i;
+
+// 这些 scope 的 feat 是某个功能的后端那一半（类型、契约、命令薄壳），用户能感知的部分
+// 另有 feat(ui) 那条在说，草稿里再列一遍只会刷屏。fix / perf 不按 scope 过滤。
+const INTERNAL_FEAT_SCOPES = new Set([
+    'domain', 'traits', 'tauri', 'ipc', 'host', 'runtime', 'ncd-runtime', 'test-support',
+]);
 
 /** 与旧版 script/utils/.env.example 对齐的默认模型配置 */
 const AI_DEFAULTS = {
@@ -56,9 +82,7 @@ const AI_SYSTEM_PROMPT = `# NapCatQQ Desktop 发布说明生成器
 
 ## 输出模板（严格）
 
-**一句话版本定位（可含版本号）**
-
-可选第二句补充。
+一两句话说明本版重点。不要写产品名和版本号，Release 标题里已经有了。
 
 ### 更新内容
 
@@ -108,13 +132,18 @@ async function main() {
         return;
     }
     if (args.cmd === 'preview') {
-        const body = renderBody({ kind, versionPlain, tag, curatedPath, repo });
+        const { body } = renderBody({ kind, versionPlain, tag, curatedPath, repo });
         process.stdout.write(body);
         if (!body.endsWith('\n')) process.stdout.write('\n');
         return;
     }
     if (args.cmd === 'render') {
-        const body = renderBody({ kind, versionPlain, tag, curatedPath, repo });
+        const { body, curated } = renderBody({ kind, versionPlain, tag, curatedPath, repo });
+        if (!curated) {
+            const msg = `没有 ${rel(curatedPath)}，正文用的是按提交自动归类的草稿`;
+            // stderr 也会被 Actions 解析成 annotation，stdout 留给输出路径
+            console.error(process.env.GITHUB_ACTIONS ? `::warning::${msg}` : `[warn] ${msg}`);
+        }
         const out = args.out
             ? path.isAbsolute(args.out)
                 ? args.out
@@ -183,147 +212,122 @@ async function cmdDraft({ kind, versionPlain, tag, curatedPath, force, repo, noA
     );
 }
 
+/**
+ * 正文从上到下：本版重点 → 下载 → 分类更新内容 →（页脚）全部提交、遇到问题、完整变更。
+ *
+ * Release 标题已经是「NapCatQQ Desktop x.y.z」，正文不再重复产品名和版本号。
+ * 下载块放在前面给直链，Assets 区排在长正文下面还混着校验文件，不好找。
+ * 应用内更新日志会跳过下载块和页脚，见 release-notes-markdown.ts。
+ */
 function renderBody({ kind, versionPlain, tag, curatedPath, repo }) {
     const prev = findPrevTag(kind, tag);
-    let curated = '';
-    let source = 'fallback';
+    const head = refExists(tag) ? tag : 'HEAD';
+    const curated = fs.existsSync(curatedPath);
+    const raw = curated
+        ? fs.readFileSync(curatedPath, 'utf8')
+        : buildCuratedDraft({ kind, versionPlain, prev, groups: collectCommitGroups(prev, head) });
+    const core = linkIssueRefs(tidyCurated(stripCuratedBoilerplate(raw)), repo);
 
-    if (fs.existsSync(curatedPath)) {
-        curated = stripCuratedBoilerplate(fs.readFileSync(curatedPath, 'utf8'));
-        source = 'curated';
-    } else {
-        const groups = collectCommitGroups(prev, 'HEAD');
-        curated = buildCuratedDraft({ kind, versionPlain, prev, groups, repo, tag });
-        curated = stripCuratedBoilerplate(curated);
-        source = 'auto-draft';
+    // 开头那一两句本版重点留在下载块上面，分类条目放下面
+    const firstHeading = core.search(/^###\s/m);
+    const lead = firstHeading < 0 ? '' : core.slice(0, firstHeading).trim();
+    const changes = firstHeading < 0 ? core : core.slice(firstHeading).trim();
+
+    const download =
+        kind === 'watch'
+            ? watchDownload({ versionPlain, tag, repo })
+            : desktopDownload({ versionPlain, tag, repo });
+
+    const lines = [];
+    if (!curated) lines.push(AUTO_DRAFT_MARKER, '');
+    if (lead) lines.push(lead, '');
+    lines.push(DOWNLOAD_BEGIN, '', ...download, '', DOWNLOAD_END, '');
+    lines.push(changes, '', FOOTER_MARKER, '', '---', '');
+    lines.push(...commitDetails({ prev, head, repo }));
+    lines.push(...helpSection({ kind, tag, prev, repo }));
+    return { body: lines.join('\n'), curated };
+}
+
+function assetUrl(repo, tag, name) {
+    return `https://github.com/${repo}/releases/download/${tag}/${name}`;
+}
+
+function desktopDownload({ versionPlain, tag, repo }) {
+    const msi = `NapCatQQ-Desktop-${versionPlain}-x64.msi`;
+    return [
+        '### 📦 下载',
+        '',
+        `**[⬇️ Windows 安装包（x64 · MSI）](${assetUrl(repo, tag, msi)})**`,
+        '',
+        '适用于 Windows 10 / Server 2016 及以上。已装旧版的直接覆盖安装，Bot、远端主机和配置都会保留；也可以在应用里「检查更新」一键升级。',
+        '',
+        `文件名固定的同款安装包：[NapCatQQ-Desktop-x64.msi](${assetUrl(repo, tag, 'NapCatQQ-Desktop-x64.msi')})（给脚本用） · 校验和：[SHA256SUMS](${assetUrl(repo, tag, 'SHA256SUMS')})`,
+    ];
+}
+
+function watchDownload({ versionPlain, tag, repo }) {
+    const bin = (arch) => `ncd-watch-${versionPlain}-${arch}-unknown-linux-musl`;
+    return [
+        '### 📦 下载',
+        '',
+        '一般不用手动下：在桌面端「组件」页给远端主机装 NCD Watch 即可。手动部署时按 CPU 架构选：',
+        '',
+        `- **[x86_64](${assetUrl(repo, tag, bin('x86_64'))})**（大多数服务器）`,
+        `- **[aarch64](${assetUrl(repo, tag, bin('aarch64'))})**（ARM 服务器、树莓派 64 位）`,
+        '',
+        `静态链接 musl，常见发行版都能直接运行 · 校验和：[SHA256SUMS](${assetUrl(repo, tag, 'SHA256SUMS')})`,
+    ];
+}
+
+// 给想看细节的人留完整提交，默认折叠，不占正文篇幅
+function commitDetails({ prev, head, repo }) {
+    if (!prev) return [];
+    let log = '';
+    try {
+        log = git(['log', '--no-merges', '--format=%h%x09%H%x09%s', `${prev}..${head}`]);
+    } catch {
+        return [];
     }
-
-    const shell =
-        kind === 'watch'
-            ? renderWatchShell({ versionPlain, tag, prev, repo, curated, source })
-            : renderDesktopShell({ versionPlain, tag, prev, repo, curated, source });
-
-    return shell;
-}
-
-function renderDesktopShell({ versionPlain, tag, prev, repo, curated, source }) {
-    const msiVersioned = `NapCatQQ-Desktop-${versionPlain}-x64.msi`;
-    const msiAlias = 'NapCatQQ-Desktop-x64.msi';
-    const compare =
-        prev != null && prev !== ''
-            ? `https://github.com/${repo}/compare/${prev}...${tag}`
-            : `https://github.com/${repo}/releases/tag/${tag}`;
-
-    const lines = [
-        `## NapCatQQ Desktop \`${versionPlain}\``,
+    const rows = log
+        .split('\n')
+        .map((l) => l.split('\t'))
+        .filter((p) => p.length === 3 && !/^chore\(release\)/i.test(p[2]));
+    if (!rows.length) return [];
+    const shown = rows.slice(0, 300);
+    // 提交标题里的 <xxx> 会被当成 HTML 标签吞掉
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    return [
+        '<details>',
+        `<summary>全部提交（${rows.length} 条）</summary>`,
         '',
-        curated.trim(),
+        ...shown.map(([short, full, subject]) => `- ${esc(subject)} ([${short}](https://github.com/${repo}/commit/${full}))`),
+        ...(rows.length > shown.length ? [`- 另有 ${rows.length - shown.length} 条，见完整变更`] : []),
         '',
-        '### 安装',
+        '</details>',
         '',
-        `1. 下载 **\`${msiVersioned}\`**（或同内容别名 \`${msiAlias}\`）`,
-        '2. 双击安装并启动',
-        '3. 按提示完成协议 / 引导（如有）',
-        '',
-        '> **系统要求：** Windows 10 / Server 2016+ · x64  ',
-        '> 名字带 `watch-v` 的是远端监控小工具，**不是** 桌面安装包。',
-        '',
-        '### 升级说明',
-        '',
-        '- 与旧版 **同一 UpgradeCode**，可直接覆盖安装',
-        '- 生产数据根：`%ProgramData%\\NapCatQQ Desktop`（配置与程序分离）',
-        '- 建议升级前导出一次配置备份；装完后确认 Bot 列表与远端档案仍在',
-        '',
-        '### 资源',
-        '',
-        '| 文件 | 说明 |',
-        '| --- | --- |',
-        `| \`${msiVersioned}\` | 推荐下载 · 版本化 MSI |`,
-        `| \`${msiAlias}\` | 同内容别名（脚本可用固定文件名） |`,
-        '| `SHA256SUMS` | 校验和 |',
-        '',
-        '### 说明',
-        '',
-        '- 应用内「检查更新」从本仓库 GitHub Release 下载 MSI 安装',
-        '- 远端监控组件 **ncd-watch** 使用独立 tag `watch-v*`，不包含在本 MSI 内',
-        '',
-        '### 支持',
-        '',
-        `- Issues: https://github.com/${repo}/issues`,
-        `- QQ 群: ${QQ_GROUP}`,
-        `- 用户文档: https://github.com/${repo}/blob/main/docs/user/README.md`,
-        '',
-        '---',
-        '',
-        prev
-            ? `完整提交记录: ${compare}`
-            : `发布页: ${compare}`,
-        '',
-        `Tag \`${tag}\`${source === 'curated' ? '' : ' · 正文为自动草稿，建议发版前策展'} · [docs/releases](https://github.com/${repo}/tree/main/docs/releases)`,
     ];
-
-    return lines.join('\n');
 }
 
-function renderWatchShell({ versionPlain, tag, prev, repo, curated, source }) {
-    const binX64 = `ncd-watch-${versionPlain}-x86_64-unknown-linux-musl`;
-    const binArm = `ncd-watch-${versionPlain}-aarch64-unknown-linux-musl`;
-    const compare =
-        prev != null && prev !== ''
-            ? `https://github.com/${repo}/compare/${prev}...${tag}`
-            : `https://github.com/${repo}/releases/tag/${tag}`;
-
+function helpSection({ kind, tag, prev, repo }) {
+    const docs = `https://github.com/${repo}/blob/main/docs/user/README.md`;
     const lines = [
-        `## ncd-watch \`${versionPlain}\``,
+        '### 💬 遇到问题',
         '',
-        curated.trim(),
-        '',
-        '### 安装',
-        '',
-        '- 推荐：Desktop 组件页安装 **NCD Watch**',
-        '- 或本机构建后由 Desktop 上传到远端：`cargo build -p ncd-watch --release`',
-        '',
-        '### 资源',
-        '',
-        '| 文件 | 目标 |',
-        '| --- | --- |',
-        `| \`${binX64}\` | x86_64 Linux musl |`,
-        `| \`${binArm}\` | aarch64 Linux musl |`,
-        '| `SHA256SUMS` | 校验和 |',
-        '',
-        '### 说明',
-        '',
-        '- 静态链接 **musl**，**不**打进 Windows MSI',
-        '- 与 Desktop `v*` 发版分流；本产物不是桌面安装包',
-        '',
-        '### 支持',
-        '',
-        `- Issues: https://github.com/${repo}/issues`,
-        `- Desktop 发版: https://github.com/${repo}/releases?q=v`,
-        '',
-        '---',
-        '',
-        prev
-            ? `完整提交记录: ${compare}`
-            : `发布页: ${compare}`,
-        '',
-        `Tag \`${tag}\`${source === 'curated' ? '' : ' · 正文为自动草稿，建议发版前策展'} · [docs/releases](https://github.com/${repo}/tree/main/docs/releases)`,
+        `- 先看[使用文档](${docs})，里面有[常见问题](${docs}#常见问题)`,
+        `- 到 [Issues](https://github.com/${repo}/issues) 反馈，附上版本号和日志会快很多；也可以来 [QQ 群](${QQ_GROUP}) 问`,
+        kind === 'watch'
+            ? '- 这是远端 Linux 监控组件，不是桌面安装包；桌面端请看 `v` 开头的发布'
+            : '- `watch-v` 开头的发布是远端 Linux 监控组件 ncd-watch，不是桌面安装包',
     ];
-
-    return lines.join('\n');
+    if (prev) {
+        lines.push('', `**完整变更**：[${prev}...${tag}](https://github.com/${repo}/compare/${prev}...${tag})`);
+    }
+    return lines;
 }
 
-function buildCuratedDraft({ kind, versionPlain, prev, groups, repo, tag }) {
-    const title =
-        kind === 'watch'
-            ? `ncd-watch ${versionPlain}`
-            : `NapCatQQ Desktop ${versionPlain}`;
-
-    const summary =
-        kind === 'watch'
-            ? '远端 Linux 主机侧监控二进制（Desktop 退出后仍可 Webhook / 探活）。'
-            : 'Windows 桌面控制台更新（NapCat / SnowLuma 管理）。';
-
+// 草稿同时是 CI 没有策展文件时的兜底正文，所以给作者看的提示一律写成 HTML 注释，
+// 发出去的只剩分类条目。
+function buildCuratedDraft({ kind, versionPlain, prev, groups }) {
     const sections = [];
     const order = [
         ['新增', groups.feat],
@@ -341,38 +345,32 @@ function buildCuratedDraft({ kind, versionPlain, prev, groups, repo, tag }) {
     }
 
     if (!hasUserFacing) {
-        sections.push(
-            '_本区间暂无归类到用户向变更的提交；请手工补充本版要点，或查看完整提交记录。_',
-            '',
-        );
+        sections.push('本版是维护更新，没有需要单独说明的变化。', '');
     }
 
-    const compareHint = prev
-        ? `相对 \`${prev}\` 自动归类（已过滤 chore/ci/test/docs 等）。请删改本文件后再 \`preview\`。`
-        : '未找到上一 tag；请手工填写本版要点。';
+    const hint = prev
+        ? `相对 ${prev} 按提交前缀自动归类，已滤掉 chore/ci/test/docs。请删改本文件后再 preview。`
+        : '未找到上一 tag，请手工填写本版要点。';
 
     const lines = [
-        `<!-- 策展正文：只写用户向内容。安装/资源/支持由 scripts/release-notes.mjs 拼装。 -->`,
+        `<!-- 策展正文：只写用户向内容。安装/反馈页脚由 scripts/release-notes.mjs 拼装。 -->`,
         `<!-- 预览: pnpm run release:notes:preview -- --kind ${kind} --version ${versionPlain} -->`,
+        `<!-- ${hint} -->`,
         '',
-        `**${title}**`,
-        '',
-        summary,
+        '<!-- 在这里写一两句本版重点，不用写产品名和版本号，Release 标题里有。 -->',
         '',
         '### 更新内容',
         '',
         ...sections,
-        `> ${compareHint}`,
-        '',
     ];
 
-    // compare 链接只放在完整正文页脚，避免策展区与 shell 重复
+    // compare 链接只放在页脚，避免策展区与页脚重复
     return lines.join('\n');
 }
 
 function wrapCuratedFile({ kind, versionPlain, core, via }) {
     const header = [
-        `<!-- 策展正文：只写用户向内容。安装/资源/支持由 scripts/release-notes.mjs 拼装。 -->`,
+        `<!-- 策展正文：只写用户向内容。安装/反馈页脚由 scripts/release-notes.mjs 拼装。 -->`,
         `<!-- 预览: pnpm run release:notes:preview -- --kind ${kind} --version ${versionPlain} -->`,
         via === 'ai'
             ? `<!-- 草稿来源: AI（.env OPENAI_* / OPENROUTER_*）；请人工复核后发版 -->`
@@ -707,6 +705,31 @@ function stripCuratedBoilerplate(raw) {
     return text;
 }
 
+/**
+ * 统一策展正文的版式：
+ * - 旧策展文件开头的 `**NapCatQQ Desktop x.y.z**` 和 Release 标题重复，去掉
+ * - 「### 更新内容」下面就是全部内容，这层标题多余；去掉后把 #### 分类提一级
+ */
+function tidyCurated(text) {
+    let t = text.replace(/^\*\*(NapCatQQ Desktop|ncd-watch)\s+v?[\d.]+[^*\n]*\*\*[ \t]*\n+/i, '');
+    if (/^###\s+更新内容\s*$/m.test(t)) {
+        t = t.replace(/^###\s+更新内容\s*\n+/m, '').replace(/^####\s+/gm, '### ');
+    }
+    // 分类标题补 emoji，已经带了的不重复加
+    t = t.replace(/^###[ \t]+(\S+)[ \t]*$/gm, (line, label) =>
+        SECTION_EMOJI[label] ? `### ${SECTION_EMOJI[label]} ${label}` : line,
+    );
+    return t.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// 策展里的 #123 在 GitHub 上会自动变链接，应用内不会；统一写成显式链接
+function linkIssueRefs(text, repo) {
+    return text.replace(
+        /(^|[^\w/[&#])#(\d{1,6})\b/g,
+        (_, pre, n) => `${pre}[#${n}](https://github.com/${repo}/issues/${n})`,
+    );
+}
+
 function collectCommitGroups(prev, headRef) {
     const groups = { feat: [], fix: [], perf: [], security: [], other: [] };
     const range = prev ? `${prev}..${headRef}` : headRef;
@@ -732,6 +755,8 @@ function collectCommitGroups(prev, headRef) {
 
         const m = TYPE_PREFIX.exec(subject);
         const type = m ? m[1].toLowerCase() : 'other';
+        const scope = m && m[2] ? m[2].slice(1, -1).trim().toLowerCase() : '';
+        if (type === 'feat' && INTERNAL_FEAT_SCOPES.has(scope)) continue;
         if (type === 'feat') groups.feat.push(display);
         else if (type === 'fix') groups.fix.push(display);
         else if (type === 'perf') groups.perf.push(display);
@@ -753,7 +778,7 @@ function collectCommitGroups(prev, headRef) {
         if (groups[key].length > 20) {
             const extra = groups[key].length - 20;
             groups[key] = groups[key].slice(0, 20);
-            groups[key].push(`… 另有 ${extra} 条同类提交，见 compare`);
+            groups[key].push(`另有 ${extra} 条，见文末完整变更`);
         }
     }
     return groups;
