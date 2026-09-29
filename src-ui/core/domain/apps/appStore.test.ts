@@ -187,6 +187,42 @@ describe('filterAppStore', () => {
         });
         expect(rows.map((r) => r.id)).toEqual(['nonebot_plugin_foo']);
     });
+
+    const yunzai: AppStoreMarketEntry[] = [
+        { ...plugins[0], id: 'miao-plugin', name: '喵喵', supported_adapters: [], tags: ['推荐', '游戏'], is_official: true },
+        { ...plugins[0], id: 'xiuxian-plugin', name: '修仙', supported_adapters: [], tags: ['文游'] },
+        { ...plugins[0], id: 'link:网盘', name: '网盘', supported_adapters: [], tags: ['功能'], valid: false },
+    ];
+
+    it('tag filter keeps only that category and drops installed-only rows', () => {
+        const rows = filterAppStore({
+            resource: 'plugin',
+            entries: yunzai,
+            installed: [
+                { id: 'chuo.js', name: 'chuo.js', resource: 'plugin', flavor: 'app', enabled: true, package: '', locked: false },
+            ],
+            query: '',
+            kindFilter: 'tag:游戏',
+            enabledAdapterModules: [],
+            linked: false,
+        });
+        expect(rows.map((r) => r.id)).toEqual(['miao-plugin']);
+        expect(rows[0]?.tags).toEqual(['推荐', '游戏']);
+    });
+
+    it('entries the backend could not resolve are shown but not installable', () => {
+        const rows = filterAppStore({
+            resource: 'plugin',
+            entries: yunzai,
+            installed: [],
+            query: '网盘',
+            kindFilter: 'all',
+            enabledAdapterModules: [],
+            linked: false,
+        });
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.installable).toBe(false);
+    });
 });
 
 describe('overlayStoreInstalled', () => {

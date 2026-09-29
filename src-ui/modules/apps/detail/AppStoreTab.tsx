@@ -8,6 +8,7 @@ import {
     PopoverContent,
     PopoverTrigger,
     Spinner,
+    type SelectItem,
 } from '../../../shared/ui';
 import { ActionMotionIcon, ListItem } from '../../../shared/ui/motion';
 import { ConfigConflictDialog } from './ConfigConflictDialog';
@@ -23,21 +24,33 @@ import {
     storeGridFit,
     storePageItems,
     type StoreGridFit,
+    type StoreKindFilter,
     type VisibleStoreItem,
 } from '../../../core/domain/apps/appStore';
 import type { AppInstance, AppStoreResource } from '../../../core/ipc/types';
 
-const FILTER_ITEMS = [
-    { value: 'all', label: '全部' },
-    { value: 'official', label: '官方' },
-    { value: 'installed', label: '已装' },
-] as const;
+function filterItems(officialLabel: string, categories: readonly string[]): SelectItem<StoreKindFilter>[] {
+    return [
+        { value: 'all', label: '全部' },
+        { value: 'official', label: officialLabel },
+        ...categories.map((c) => ({ value: `tag:${c}` as const, label: c })),
+        { value: 'installed', label: '已装' },
+    ];
+}
 
-/** 应用端商店页：NoneBot2 的适配器、插件两页，AstrBot、MaiBot 的插件页 */
+/** 应用端商店页：NoneBot2 的适配器、插件两页，AstrBot、麦麦、云崽的插件页 */
 export const AppStoreTab: React.FC<{
     instance: AppInstance;
     resource: AppStoreResource;
-}> = ({ instance, resource }) => {
+    /** 目录里 is_official 那批叫什么；云崽的索引没有官方，只有推荐 */
+    officialLabel?: string;
+    /** 目录按分类打了标签时的筛选项（和条目 tags 对得上的那几个） */
+    categories?: readonly string[];
+    /** 哪些已装的能单独启停；不给就都能（云崽只有单 JS 能停，目录插件整个加载） */
+    toggleable?: (id: string) => boolean;
+    toggleBlockedReason?: string;
+}> = ({ instance, resource, officialLabel = '官方', categories, toggleable, toggleBlockedReason }) => {
+    const filters = useMemo(() => filterItems(officialLabel, categories ?? []), [officialLabel, categories]);
     const p = useAppStore(instance, resource);
     const [uninstall, setUninstall] = useState<string | null>(null);
     const [configName, setConfigName] = useState<string | null>(null);
@@ -87,7 +100,7 @@ export const AppStoreTab: React.FC<{
                 noun={kindLabel}
                 query={p.query}
                 onQueryChange={p.setQuery}
-                filters={FILTER_ITEMS}
+                filters={filters}
                 filter={p.kindFilter}
                 onFilterChange={p.setKindFilter}
                 count={count}
@@ -121,6 +134,11 @@ export const AppStoreTab: React.FC<{
                                     <StoreCard
                                         row={row}
                                         resource={resource}
+                                        officialLabel={officialLabel}
+                                        showTags={!!categories?.length}
+                                        toggleBlocked={
+                                            toggleable && !toggleable(row.id) ? (toggleBlockedReason ?? '不能单独启停') : null
+                                        }
                                         busy={p.busyNames.has(row.id) || p.busyNames.has(row.name)}
                                         onInstall={() => void p.runOp(row.id, 'install')}
                                         onUpdate={() => void p.runOp(row.id, 'update')}
@@ -204,13 +222,31 @@ export const AppStoreTab: React.FC<{
 const StoreCard: React.FC<{
     row: VisibleStoreItem;
     resource: AppStoreResource;
+    officialLabel: string;
+    showTags: boolean;
+    /** 不能单独启停时的原因；null 就是能 */
+    toggleBlocked: string | null;
     busy: boolean;
     onInstall: () => void;
     onUpdate: () => void;
     onUninstall: () => void;
     onToggle: () => void;
     onConfig?: () => void;
-}> = ({ row, resource, busy, onInstall, onUpdate, onUninstall, onToggle, onConfig }) => {
+}> = ({
+    row,
+    resource,
+    officialLabel,
+    showTags,
+    toggleBlocked,
+    busy,
+    onInstall,
+    onUpdate,
+    onUninstall,
+    onToggle,
+    onConfig,
+}) => {
+    // 「推荐」已经单独有徽章，分类徽章只放剩下的
+    const tags = showTags ? row.tags.filter((t) => t !== officialLabel) : [];
     const kindLabel = resource === 'adapter' ? '适配器' : '插件';
     const meta = [row.authorName || null, row.timeLabel].filter(Boolean).join(' · ');
     const home = row.homepage.trim();
@@ -258,16 +294,20 @@ const StoreCard: React.FC<{
                                 </button>
                             </PopoverTrigger>
                             <PopoverContent align="end" sideOffset={6} className="w-36 p-1">
-                                <PopoverClose asChild>
-                                    <button
-                                        type="button"
-                                        className={menuItem}
-                                        disabled={busy || row.locked}
-                                        onClick={onToggle}
-                                    >
-                                        {row.enabled ? '禁用' : '启用'}
-                                    </button>
-                                </PopoverClose>
+                                {toggleBlocked === null ? (
+                                    <PopoverClose asChild>
+                                        <button
+                                            type="button"
+                                            className={menuItem}
+                                            disabled={busy || row.locked}
+                                            onClick={onToggle}
+                                        >
+                                            {row.enabled ? '禁用' : '启用'}
+                                        </button>
+                                    </PopoverClose>
+                                ) : (
+                                    <p className="px-2 py-1.5 text-2xs leading-4 text-text-tertiary">{toggleBlocked}</p>
+                                )}
                                 <PopoverClose asChild>
                                     <button
                                         type="button"
@@ -297,9 +337,19 @@ const StoreCard: React.FC<{
                                 )}
                             </PopoverContent>
                         </Popover>
-                    ) : (
+                    ) : row.installable ? (
                         <button type="button" disabled={busy} onClick={onInstall} className={installBtn}>
                             安装
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            disabled={!home}
+                            title="目录里没有能直接装的地址，去主页看怎么装"
+                            onClick={() => openExternal(home)}
+                            className={installBtn}
+                        >
+                            手动装
                         </button>
                     )}
                 </div>
@@ -312,9 +362,14 @@ const StoreCard: React.FC<{
             <div className="flex h-5 min-w-0 items-center gap-1.5">
                 {row.official ? (
                     <Badge tone="brand" appearance="soft">
-                        官方
+                        {officialLabel}
                     </Badge>
                 ) : null}
+                {tags.map((t) => (
+                    <Badge key={t} tone="neutral" appearance="outline">
+                        {t}
+                    </Badge>
+                ))}
                 {row.installed ? (
                     <Badge tone={row.enabled ? 'brand' : 'neutral'} appearance="soft">
                         {row.enabled ? '已启用' : '已禁用'}
