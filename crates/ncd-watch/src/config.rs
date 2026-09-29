@@ -181,6 +181,10 @@ pub struct NotifyBotTarget {
     /// 是否监控该 bot
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// Desktop 组装时用:webui_port 是按部署偏移规则推的,不是从容器映射拿到的真实口。
+    /// 不写进文件;合并旧 notify.json 时推出来的口不盖掉远端已有的口
+    #[serde(skip)]
+    pub webui_port_guessed: bool,
 }
 
 fn default_backend() -> String {
@@ -361,6 +365,7 @@ impl NotifyConfig {
                 webui_port: None,
                 webui_token: None,
                 enabled: true,
+                webui_port_guessed: false,
             }],
             webhooks: vec![OfflineWebhookChannel {
                 id: "default".into(),

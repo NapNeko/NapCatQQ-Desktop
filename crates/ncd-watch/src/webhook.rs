@@ -148,6 +148,7 @@ mod tests {
             webui_port: None,
             webui_token: None,
             enabled: true,
+            webui_port_guessed: false,
         };
         let a = build_offline_alert(&bot, OfflineAlertKind::Manual);
         assert_eq!(a.qq_id, 12345);

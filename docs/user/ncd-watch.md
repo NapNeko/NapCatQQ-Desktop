@@ -100,7 +100,7 @@ sudo loginctl enable-linger "$USER"
 | `containerName` | Docker 容器名。NapCat 是 `ncbot-<QQ号>`，SnowLuma 是 `slbot-<QQ号>`，缺省时也按这个规则推 |
 | `processMatch` | 直接运行时用 `pgrep -f` 找 QQ 进程的匹配串，形如 `no-sandbox -q <QQ号>$` |
 | `pidFile` | 可选，按 pid 文件判断进程在不在 |
-| `webuiPort` | NapCat WebUI 在这台主机上的端口，ncd-watch 从 `127.0.0.1` 访问它来判断 QQ 账号是否在线 |
+| `webuiPort` | NapCat WebUI 在这台主机上的端口，ncd-watch 从 `127.0.0.1` 访问它来判断 QQ 账号是否在线。Docker 部署取容器实际的端口映射 |
 | `webuiToken` | NapCat WebUI token |
 | `enabled` | 是否盯这个 Bot |
 
@@ -146,14 +146,14 @@ RUST_LOG=debug ~/ncd-watch/bin/ncd-watch once
    sudo usermod -aG docker "$USER"
    ```
 
-3. WebUI 端口对不上。桌面端部署的 NapCat 容器会把 WebUI（容器内 6099）映射到宿主机 `6099 + QQ号 % 500`，例如 QQ 123456789 对应 6388，`notify.json` 里的 `webuiPort` 也按这个规则写。对一下实际映射：
+3. WebUI 端口对不上。桌面端连上 Docker Bot 时，会用 `docker inspect` 读 WebUI（容器内 6099）实际映射到宿主机的哪个端口，再写进 `notify.json` 的 `webuiPort`，自己用 compose 起、再导入的容器也一样。读不到时按桌面端部署的规则推算，也就是 `6099 + QQ号 % 500`，例如 QQ 123456789 对应 6388。推算出来的端口不会覆盖 `notify.json` 里已有的端口。对一下实际映射：
 
    ```bash
    docker port ncbot-<QQ号> 6099
    curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<webuiPort>/
    ```
 
-   `docker port` 给出的端口和 `webuiPort` 不一致，或者 `curl` 连不上，说明容器不是按桌面端的规则映射的，常见于自己用 compose 起、再导入桌面端的容器。`notify.json` 会被桌面端重写，改它不管用。目前的办法是在桌面端重新部署这个 Bot，或者把容器的 6099 映射到上面算出的端口。
+   两边不一致时，在桌面端把这个 Bot 连上一次（启动它，或者桌面端启动时它已经在跑），等一两分钟 `notify.json` 就会更新。如果 WebUI 只绑在某个网卡 IP 上（例如 `192.168.1.5:6099`），从 `127.0.0.1` 连不上，要改成绑 `0.0.0.0` 或 `127.0.0.1`。
 
 4. 防火墙。ncd-watch 访问的是本机回环地址 `127.0.0.1`，ufw、firewalld 默认不拦回环。上一步的 `curl` 能连上，就可以排除防火墙。云服务器的安全组只管外部流量，和这里无关。ncd-watch 需要能访问外网的只有 Webhook 地址和 SMTP 服务器。
 

@@ -1540,8 +1540,8 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
         self.repo.list().await.map_err(BotManagerError::from)
     }
 
-    /// 供 ncd-watch 同步:优先内存 endpoint(stdout 真实 port/token),
-    /// Docker 再回退 secret store 中的 token + 可推导 host 端口。
+    /// 供 ncd-watch 同步:优先内存 endpoint(真实 port/token),
+    /// Docker 再回退 secret store 中的 token,端口为 0 表示未知。
     /// 不创建新 secret,避免 watch 同步副作用写盘。
     pub async fn napcat_webui_for_watch(&self, bot_id: &BotId) -> Option<(u16, String)> {
         if let Some(ep) = self.napcat_endpoints.snapshot(bot_id).await {
@@ -1550,10 +1550,11 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
                 return Some((port, ep.token));
             }
         }
+        // 会话还没开起来就不知道容器实际映射到哪个口:只给 token,端口填 0,
+        // 由 notify 组装按规则推并标成推测值,不盖掉远端 notify.json 里已有的口
         let qq: u64 = bot_id.as_str().parse().ok()?;
         let token = self.peek_napcat_docker_webui_token(qq)?;
-        let port = crate::ncd_watch_sync::napcat_docker_webui_host_port(qq);
-        Some((port, token))
+        Some((0, token))
     }
 
     /// 列出当前内存中的 NapCat WebUI 端点(Desktop 本机可达 port + token)

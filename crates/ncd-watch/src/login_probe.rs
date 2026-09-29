@@ -200,6 +200,7 @@ mod tests {
             webui_port: Some(6099),
             webui_token: Some("t".into()),
             enabled: true,
+            webui_port_guessed: false,
         };
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -223,6 +224,7 @@ mod tests {
             webui_port: Some(6099),
             webui_token: Some("tok".into()),
             enabled: true,
+            webui_port_guessed: false,
         };
         assert!(has_webui_probe(&bot));
         bot.webui_token = Some("  ".into());
