@@ -45,15 +45,6 @@ async function reportPanelHeight(el: HTMLElement): Promise<void> {
     }
 }
 
-async function hidePanel(): Promise<void> {
-    try {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
-        await getCurrentWindow().hide();
-    } catch {
-        // 浏览器预览下没有 window API,忽略
-    }
-}
-
 interface PanelActionProps {
     icon: React.ReactNode;
     title: string;
@@ -408,8 +399,8 @@ export const TrayPanel: React.FC = () => {
                 ? `${runningCount}/${totalCount} 个 Bot 运行中`
                 : '全部已停止';
 
+    // 面板由后端 window_show 收起，面板的 capability 不给窗口 hide
     const handleShow = async () => {
-        await hidePanel();
         await trayService.showMainWindow().catch(() => { });
     };
 
