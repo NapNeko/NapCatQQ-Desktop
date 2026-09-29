@@ -27,6 +27,35 @@ describe('preprocessReleaseNotesMarkdown', () => {
         expect(out).toContain('## 修复功能');
         expect(out).toContain('## 重要提醒');
     });
+
+    it('drops the NCD download block and the footer after its marker', () => {
+        const raw = [
+            '<!-- ncd-release-notes: auto-draft -->',
+            '',
+            '<!-- ncd-release-notes: download -->',
+            '',
+            '### 📦 下载',
+            '',
+            '**[⬇️ Windows 安装包](https://example.com/a.msi)**',
+            '',
+            '<!-- ncd-release-notes: /download -->',
+            '',
+            '### 修复',
+            '',
+            '- 登录修复',
+            '',
+            '<!-- ncd-release-notes: footer -->',
+            '',
+            '---',
+            '',
+            '### 安装',
+            '',
+            '下载下方 Assets 里的 MSI',
+        ].join('\r\n');
+
+        const out = preprocessReleaseNotesMarkdown(raw);
+        expect(out).toBe('### 修复\n\n- 登录修复');
+    });
 });
 
 describe('parseMarkdownBlocks', () => {

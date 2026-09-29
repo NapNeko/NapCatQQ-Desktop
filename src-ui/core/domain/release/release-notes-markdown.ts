@@ -21,9 +21,16 @@ export type InlineToken =
     | { kind: 'code'; text: string }
     | { kind: 'link'; label: string; href: string };
 
-/** 剥 HTML 注释、统一换行，供后续块解析。 */
+// scripts/release-notes.mjs 放的标记。应用内看更新日志时已经装着了，下载块和页脚
+// （提交列表、反馈渠道）只在 GitHub 上有用，这里跳过。
+const NCD_DOWNLOAD_BLOCK = /<!-- ncd-release-notes: download -->[\s\S]*?<!-- ncd-release-notes: \/download -->/g;
+const NCD_FOOTER_MARKER = '<!-- ncd-release-notes: footer -->';
+
+/** 去掉 NCD 下载块和页脚、剥 HTML 注释、统一换行，供后续块解析。 */
 export function preprocessReleaseNotesMarkdown(raw: string): string {
-    return raw
+    const footerAt = raw.indexOf(NCD_FOOTER_MARKER);
+    const body = (footerAt >= 0 ? raw.slice(0, footerAt) : raw).replace(NCD_DOWNLOAD_BLOCK, '');
+    return body
         .replace(/\r\n/g, '\n')
         .replace(/\r/g, '\n')
         // 多行 HTML 注释（NCD AUTO RELEASE NOTES 标记）
