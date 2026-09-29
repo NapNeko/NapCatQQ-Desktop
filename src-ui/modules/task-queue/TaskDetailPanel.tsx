@@ -33,7 +33,7 @@ import { ProgressLine, shouldShowProgressBar, ProgressBarOverlay } from '../../s
 import { DockerPullLayersPanel } from '../components/DockerPullLayersPanel';
 import { shouldShowDockerPullLayersInTaskDetail, shouldShowStepLogsInTaskDetail } from '../../core/domain/components/dockerPullProgress';
 import type { ActionProgressView } from '../../core/domain/components/progress';
-import { deploymentTaskService } from '../../core/services/deployment-task.service';
+import { useTaskQueueActions } from '../../hooks/task-queue/useTaskQueueActions';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
 
@@ -347,6 +347,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
     const running = isRunningTaskItem(item);
     const canDelete = isTerminalTaskStatus(item.status);
 
+    const { cancelTask, deleteTask } = useTaskQueueActions();
     const [cancelBusy, setCancelBusy] = React.useState(false);
     const [cancelError, setCancelError] = React.useState<string | null>(null);
 
@@ -354,8 +355,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
         if (cancelBusy) return;
         setCancelBusy(true);
         setCancelError(null);
-        void deploymentTaskService
-            .cancel(item.id)
+        void cancelTask(item.id)
             .catch((err) => {
                 const msg = err instanceof Error ? err.message : String(err);
                 setCancelError(msg || '取消失败');
@@ -370,7 +370,7 @@ export const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ item }) => {
     };
 
     const handleDelete = () => {
-        void deploymentTaskService.delete(item.id).catch((err) => {
+        void deleteTask(item.id).catch((err) => {
             console.error('[TaskQueue] delete failed:', err);
         });
     };

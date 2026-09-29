@@ -43,7 +43,7 @@ flowchart TB
 - 应用端：`app-framework`（实例、配置、商店、AstrBot / 麦麦运行期接口）/ `maibot-chat` / `maibot-memory` / `maibot-resources`
 - 事件：`event-stream.service.ts`（`DOMAIN_EVENT_NAMES` 是事件名单一来源）+ `domain-event-hub.ts`（全应用只 listen 一份再分发，业务侧一律 `subscribeDomainEvents`）
 
-跨 IPC 的类型由 Rust 侧 ts-rs 导出到 `core/ipc/generated/<short-name>/`，`core/ipc/types.ts` 只 re-export。service 里手写的载荷接口（`bot.service.ts` 的 `SnowLumaAgreementsPayload` / `QQProcessInfo`、`settings.service.ts` 的 `BackendSettings` 等）是待换成生成类型的旧账，别再加新的。
+跨 IPC 的类型由 Rust 侧 ts-rs 导出到 `core/ipc/generated/<short-name>/`，`core/ipc/types.ts` 只 re-export。service 里手写的载荷接口是待换成生成类型的旧账，别再加新的；有生成类型的直接从 `generated/**` 引（`SnowLumaAgreementsPayload` / `QQProcessInfo` 已换）。还剩 `settings.service.ts` 的 `BackendSettings` / `AfterCloseUiBehavior` / `UiModeOnStartup`：那是设置页拍平过的形状（全 number、snake_case 枚举），生成的 `AppSettings` 和 PascalCase 枚举对不上，要换得先动映射。
 
 `core/domain/*`：零运行时依赖，禁止 `import 'react'` / `'@tauri-apps/*'` / `'@tanstack/*'`。只放纯函数 + 类型 + reducer + 文案表，配单测。可以 import `core/ipc/types` 与 `core/ipc/generated/**`。按域分目录：`apps/`（实例状态、对接拓扑、商店与插件目录、各框架配置校验、麦麦的试聊 / 表情包 / 提示词…）/ `bot/` / `bootstrap/` / `components/` / `docker/` / `events/`（登录、SnowLuma 聚合，日志缓冲）/ `onboarding/` / `overview/` / `performance/` / `release/` / `remote-host/` / `settings/` / `task-queue/` / `terminal/` / `ui/`（错误条文案、相对时间）/ `webui/`，根上还有 `errors.ts`（`errorText`，把 invoke 抛出的裸字符串和 Error 统一成人话）/ `app-meta.ts` / `credits.ts` / `desktop-log.ts`。
 
@@ -55,7 +55,7 @@ flowchart TB
 
 ### 现存偏差（改到附近时顺手收掉，别照抄）
 
-- modules 直连服务：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/{ImportRemoteBotsDialog,SnowLumaConsentDialog}.tsx`、`bot/list/BotListPage.next.tsx`、`bot/list/next/BotCard.tsx`、`components/{ComponentsPage.next,QqDependencyDialog}.tsx`、`remote/{AddServerDialog,ImportSshConfigDialog}.tsx`、`settings/{ConfigImportDialog,DataRootMigrateDialog}.tsx`、`settings/settings-draft.ts`、`settings/tabs/{AboutTab,NcdWatchRemoteSection,NotificationsTab,RuntimeTab,WindowTab}.tsx`、`settings/tabs/notifications/{DeliveryHistoryDialog,OneBotMessengerPicker}.tsx`、`task-queue/{TaskDetailPanel,TaskQueueListItem,TaskQueuePage.next}.tsx`。`modules/apps/**` 和 `shared/**` 已经清零，保持住。
+- modules 直连服务：`bot/config/BotConfigPage.next.tsx`、`bot/dialogs/ImportRemoteBotsDialog.tsx`、`bot/list/BotListPage.next.tsx`、`settings/DataRootMigrateDialog.tsx`、`settings/tabs/{NcdWatchRemoteSection,NotificationsTab}.tsx`（这几处调用多、夹着各自的状态流，得单独拆 hook）；`settings/settings-draft.ts`、`settings/tabs/WindowTab.tsx` 只引 `settings.service` 的类型和 `clientPrefsFromBackend`，没有对应的生成类型，见上面手写载荷那条。`modules/apps/**` 和 `shared/**` 已经清零，保持住。
 - transport 之外直接碰 `@tauri-apps/*`：`main.tsx`（启动时动态 import 窗口 API 认托盘面板窗口，还没挂 React，留着）、`core/services/desktop.service.ts`（窗口控制和托盘面板事件动态 import 窗口 API、标题栏关闭直接 `emit`）。
 - `app/AppNext.tsx` 直接用 `desktopUpdateService`。
 - `hooks/preferences/useBackendSettings.ts` 反过来 import `modules/settings/settings-draft`。

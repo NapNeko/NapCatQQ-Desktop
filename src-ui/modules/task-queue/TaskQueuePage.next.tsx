@@ -10,7 +10,7 @@ import { TaskQueueListItem } from './TaskQueueListItem';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { TaskQueueEmptyState } from './TaskQueueEmptyState';
 import { useTaskQueueSelection } from './useTaskQueueSelection';
-import { deploymentTaskService } from '../../core/services/deployment-task.service';
+import { useTaskQueueActions } from '../../hooks/task-queue/useTaskQueueActions';
 
 export type TaskQueueFilter = 'all' | 'active' | 'done';
 
@@ -46,6 +46,7 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
     onNavigate,
     showDocker = true,
 }) => {
+    const { clearFinished, deleteTask } = useTaskQueueActions();
     const [filter, setFilter] = useState<TaskQueueFilter>('all');
     const filtered = useMemo(() => filterItems(items, filter), [items, filter]);
     const { selectedId, setSelectedId, selected } = useTaskQueueSelection(filtered);
@@ -62,13 +63,13 @@ export const TaskQueuePageNext: React.FC<TaskQueuePageNextProps> = ({
     const showWorkbench = items.length > 0;
 
     const handleClearFinished = () => {
-        void deploymentTaskService.clearFinished().catch((err) => {
+        void clearFinished().catch((err) => {
             console.error('[TaskQueue] clear finished failed:', err);
         });
     };
 
     const handleDeleteTask = (taskId: string) => {
-        void deploymentTaskService.delete(taskId).catch((err) => {
+        void deleteTask(taskId).catch((err) => {
             console.error('[TaskQueue] delete task failed:', err);
         });
     };

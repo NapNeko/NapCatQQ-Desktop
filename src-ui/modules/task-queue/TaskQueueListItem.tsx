@@ -25,7 +25,7 @@ import {
 import { useNowMs } from '../../hooks/ui/useNowMs';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
-import { deploymentTaskService } from '../../core/services/deployment-task.service';
+import { useTaskQueueActions } from '../../hooks/task-queue/useTaskQueueActions';
 import { TASK_KIND_VISUAL, taskKindIconClasses } from './taskQueueKindVisual';
 
 const KIND_MOTION: Record<TaskQueueItem['kind'], typeof RESOURCE_MOTION> = {
@@ -70,6 +70,7 @@ export const TaskQueueListItem: React.FC<TaskQueueListItemProps> = ({
     onSelect,
     onDelete,
 }) => {
+    const { cancelTask } = useTaskQueueActions();
     const endedAt = getTaskEndedAt(item.progress, item.endedAt);
     const busy = isActiveTaskStatus(item.status);
     const nowMs = useNowMs(busy && endedAt === undefined);
@@ -83,7 +84,7 @@ export const TaskQueueListItem: React.FC<TaskQueueListItemProps> = ({
 
     const handleCancel = async () => {
         try {
-            await deploymentTaskService.cancel(item.id);
+            await cancelTask(item.id);
             pushInfoBar({
                 tone: 'info',
                 title: '已请求取消任务',
