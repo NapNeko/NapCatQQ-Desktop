@@ -807,4 +807,6 @@ impl KoishiRuntimeApi for KoishiAdapter {
 }
 
 #[cfg(test)]
+mod smoke;
+#[cfg(test)]
 mod tests;

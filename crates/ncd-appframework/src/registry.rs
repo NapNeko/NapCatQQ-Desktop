@@ -107,8 +107,9 @@ mod tests {
         assert!(reg.get(&AppFrameworkId::new("astrbot")).is_ok());
         assert!(reg.get(&AppFrameworkId::new("maibot")).is_ok());
         assert!(reg.by_component_id("maibot").is_some());
+        assert!(reg.by_component_id("koishi").is_some());
         assert!(matches!(
-            reg.get(&AppFrameworkId::new("koishi")),
+            reg.get(&AppFrameworkId::new("yunzai")),
             Err(AppFrameworkError::NotRegistered(_))
         ));
         assert!(reg.by_component_id("karin").is_some());

@@ -1768,6 +1768,70 @@ mod write_config {
         assert!(!msg.contains("open_tunnel"), "{msg}");
     }
 
+    /// 真机冒烟用：cwd 或命令行落在实例目录里的 `root` 进程（python / node），加上它们的子孙
+    /// （子进程不能早于父进程，防 ppid 复用）。起点只认这一种进程名：在实例目录里开过的 shell 也是这个 cwd，
+    /// 不限的话连带把 cargo 和测试自己扫进来
+    fn smoke_procs(dir: &str, root: &str) -> Vec<(u32, u64, String)> {
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            ProcessRefreshKind::new()
+                .with_cwd(UpdateKind::Always)
+                .with_cmd(UpdateKind::Always),
+        );
+        let norm = |s: &str| s.replace('\\', "/").trim_end_matches('/').to_lowercase();
+        let want = norm(dir);
+        let cmd_of = |p: &sysinfo::Process| {
+            p.cmd()
+                .iter()
+                .map(|s| s.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let mut hit: Vec<u32> = sys
+            .processes()
+            .iter()
+            .filter(|(_, p)| {
+                let is_root = p
+                    .name()
+                    .to_string_lossy()
+                    .to_lowercase()
+                    .starts_with(root);
+                let cwd = p
+                    .cwd()
+                    .map(|c| norm(&c.to_string_lossy()))
+                    .unwrap_or_default();
+                is_root && (cwd == want || norm(&cmd_of(p)).contains(&want))
+            })
+            .map(|(pid, _)| pid.as_u32())
+            .collect();
+        loop {
+            let before = hit.len();
+            for (pid, p) in sys.processes() {
+                let pid = pid.as_u32();
+                let Some(parent) = p.parent().and_then(|pp| sys.process(pp)) else {
+                    continue;
+                };
+                if !hit.contains(&pid)
+                    && hit.contains(&parent.pid().as_u32())
+                    && p.start_time() >= parent.start_time()
+                {
+                    hit.push(pid);
+                }
+            }
+            if hit.len() == before {
+                break;
+            }
+        }
+        hit.into_iter()
+            .filter_map(|pid| {
+                sys.process(Pid::from_u32(pid))
+                    .map(|p| (pid, p.start_time(), cmd_of(p)))
+            })
+            .collect()
+    }
+
     /// 真机冒烟，默认不跑：真下 MaiBot 源码、uv sync、对接、起、停一遍，要联网、几百 MB。
     ///   NCD_MAIBOT_SMOKE_DIR=D:/somewhere cargo test -p ncd-runtime --lib maibot_real_smoke -- --ignored --nocapture
     /// Bot 侧用一个只收握手头的 TCP 监听顶替 NapCat，看适配器是不是带着对的 token 连过来。
@@ -1778,73 +1842,11 @@ mod write_config {
         use ncd_appframework::maibot::MaiBotComponent;
         use ncd_component::{ActionCtx, Component, DetectOutcome, ProgressKind};
         use std::time::{Duration, Instant};
-        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         fn stamp(t0: Instant) -> String {
             format!("[{:>7.1}s]", t0.elapsed().as_secs_f32())
-        }
-
-        // cwd 或命令行落在实例目录里的 python，加上它们的子孙（子进程不能早于父进程，防 ppid 复用）。
-        // 起点只认 python：在实例目录里开过的 shell 也是这个 cwd，连带把 cargo 和测试自己扫进来
-        fn related(dir: &str) -> Vec<(u32, u64, String)> {
-            let mut sys = System::new();
-            sys.refresh_processes_specifics(
-                ProcessesToUpdate::All,
-                ProcessRefreshKind::new()
-                    .with_cwd(UpdateKind::Always)
-                    .with_cmd(UpdateKind::Always),
-            );
-            let norm = |s: &str| s.replace('\\', "/").trim_end_matches('/').to_lowercase();
-            let want = norm(dir);
-            let cmd_of = |p: &sysinfo::Process| {
-                p.cmd()
-                    .iter()
-                    .map(|s| s.to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            };
-            let mut hit: Vec<u32> = sys
-                .processes()
-                .iter()
-                .filter(|(_, p)| {
-                    let is_python = p
-                        .name()
-                        .to_string_lossy()
-                        .to_lowercase()
-                        .starts_with("python");
-                    let cwd = p
-                        .cwd()
-                        .map(|c| norm(&c.to_string_lossy()))
-                        .unwrap_or_default();
-                    is_python && (cwd == want || norm(&cmd_of(p)).contains(&want))
-                })
-                .map(|(pid, _)| pid.as_u32())
-                .collect();
-            loop {
-                let before = hit.len();
-                for (pid, p) in sys.processes() {
-                    let pid = pid.as_u32();
-                    let Some(parent) = p.parent().and_then(|pp| sys.process(pp)) else {
-                        continue;
-                    };
-                    if !hit.contains(&pid)
-                        && hit.contains(&parent.pid().as_u32())
-                        && p.start_time() >= parent.start_time()
-                    {
-                        hit.push(pid);
-                    }
-                }
-                if hit.len() == before {
-                    break;
-                }
-            }
-            hit.into_iter()
-                .filter_map(|pid| {
-                    sys.process(Pid::from_u32(pid))
-                        .map(|p| (pid, p.start_time(), cmd_of(p)))
-                })
-                .collect()
         }
 
         let base = std::path::PathBuf::from(
@@ -2024,7 +2026,7 @@ mod write_config {
                 break;
             }
             polls += 1;
-            if polls % 5 == 0 && related(&dir_str).is_empty() {
+            if polls % 5 == 0 && smoke_procs(&dir_str, "python").is_empty() {
                 eprintln!("{} 进程没了", stamp(t0));
                 break;
             }
@@ -2097,7 +2099,7 @@ mod write_config {
             stamp(t0)
         );
 
-        let procs = related(&dir_str);
+        let procs = smoke_procs(&dir_str, "python");
         eprintln!("{} 停之前的相关进程:", stamp(t0));
         for (pid, _, cmd) in &procs {
             eprintln!("  {pid} {cmd}");
@@ -2122,7 +2124,7 @@ mod write_config {
                     .is_some_and(|p| p.start_time() == *start)
             })
             .collect();
-        let after = related(&dir_str);
+        let after = smoke_procs(&dir_str, "python");
         let webui_after = tokio::net::TcpStream::connect(("127.0.0.1", WEBUI))
             .await
             .is_ok();
@@ -2150,6 +2152,292 @@ mod write_config {
         assert!(auth_ok, "适配器没带对的 token 连过来");
         assert!(leftovers.is_empty() && after.is_empty(), "停后有残留进程");
         assert!(!webui_after && !legacy_after, "停后端口没释放");
+    }
+
+    /// 真机冒烟，默认不跑：真下 Koishi 官方整包、装、对接、起、停一遍，要联网、两三百 MB。
+    ///   NCD_KOISHI_REAL_SMOKE_DIR=D:/somewhere cargo test -p ncd-runtime --lib koishi_real_smoke -- --ignored --nocapture
+    /// Bot 侧自己冒充 NapCat：带着对接写进 Bot 配置的 URL、token 去握反向 WS，再看控制台里有没有这个 Bot。
+    #[tokio::test]
+    #[ignore = "要联网下载 Koishi 并起真进程，设 NCD_KOISHI_REAL_SMOKE_DIR 后手动跑"]
+    #[allow(clippy::print_stderr)] // 这个测试就是给人看的报告，靠 --nocapture 打出来
+    async fn koishi_real_smoke() {
+        use ncd_appframework::KoishiComponent;
+        use ncd_component::{ActionCtx, Component, DetectOutcome, ProgressKind};
+        use std::time::{Duration, Instant};
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        fn stamp(t0: Instant) -> String {
+            format!("[{:>7.1}s]", t0.elapsed().as_secs_f32())
+        }
+
+        let base = std::path::PathBuf::from(
+            std::env::var("NCD_KOISHI_REAL_SMOKE_DIR").expect("设 NCD_KOISHI_REAL_SMOKE_DIR"),
+        );
+        // 只清自己建过的目录（带标记文件才删），环境变量指错了也不会误删别的东西
+        let work = base.join("ncd-koishi-smoke");
+        let marker = work.join(".ncd-smoke");
+        if work.exists() {
+            assert!(
+                marker.is_file(),
+                "{} 不是冒烟测试建的目录，不动它",
+                work.display()
+            );
+            std::fs::remove_dir_all(&work).unwrap();
+        }
+        std::fs::create_dir_all(&work).unwrap();
+        std::fs::write(&marker, b"").unwrap();
+        let inst_dir = work.join("inst");
+        let root = work.join("data");
+        std::fs::create_dir_all(&root).unwrap();
+        const PORT: u16 = 23941;
+        let t0 = Instant::now();
+        let local: Arc<dyn Host> = Arc::new(ncd_host::local::LocalWindowsHost::new());
+        let install_dir = HostPath::from_windows(inst_dir.to_string_lossy().as_ref());
+        let dir_str = inst_dir.to_string_lossy().to_string();
+
+        let component = KoishiComponent::new(install_dir.clone(), PORT);
+        let (mut ctx, mut rx) = ActionCtx::new();
+        let printer = tokio::spawn(async move {
+            let mut last: Option<(u32, u8)> = None;
+            while let Some(ev) = rx.recv().await {
+                if let ProgressKind::StepProgress { step, percent, .. } = &ev.kind {
+                    let bucket = percent / 20;
+                    if last == Some((*step, bucket)) {
+                        continue;
+                    }
+                    last = Some((*step, bucket));
+                }
+                eprintln!("{} {}", stamp(t0), serde_json::to_string(&ev.kind).unwrap());
+            }
+        });
+        let installed = component.install(local.as_ref(), &mut ctx).await;
+        drop(ctx);
+        let _ = printer.await;
+        installed.expect("安装失败");
+        let outcome = component.detect_outcome(local.as_ref()).await.unwrap();
+        eprintln!("{} 探测: {outcome:?}", stamp(t0));
+        let DetectOutcome::Installed(version) = outcome else {
+            panic!("装完探测不到");
+        };
+
+        let bus = Arc::new(BroadcastEventBus::default());
+        let store = Arc::new(AppInstanceStore::empty(&root));
+        let bots = Arc::new(MemoryBots {
+            bots: AsyncMutex::new(vec![bot()]),
+            upserts: Mutex::new(0),
+        });
+        let manager = Arc::new(AppManager::new(
+            Arc::new(AppFrameworkRegistry::with_builtin()),
+            Arc::clone(&store),
+            Arc::new(NativeAppRuntime::new(Arc::clone(&bus), Arc::clone(&store))),
+            Arc::new(ncd_server::LocalOnlyHostResolver::new(Arc::clone(&local))),
+            bots.clone(),
+            bus,
+            &root,
+        ));
+        let id = AppInstanceId::new("smoke1");
+        store
+            .upsert(AppInstance {
+                id: id.clone(),
+                framework_id: AppFrameworkId::new("koishi"),
+                display_name: "Koishi 冒烟".into(),
+                placement: AppPlacement::LocalNative,
+                host_id: LOCAL_HOST_ID.to_string(),
+                install_dir: install_dir.as_posix().to_string(),
+                port: PORT,
+                state: AppInstanceState::Stopped,
+                link: None,
+                installed_version: Some(version.version.clone()),
+                last_error: None,
+                created_at_ms: 1,
+                install_renderer: false,
+                origin: ncd_domain::AppInstanceOrigin::Created,
+                auto_start: false,
+            })
+            .await
+            .unwrap();
+
+        let AppInstanceConfig::Koishi(cfg) = manager.read_config(&id).await.unwrap().config else {
+            panic!("不是 Koishi 配置");
+        };
+        eprintln!(
+            "{} 配置: 口={} 插件 {} 个",
+            stamp(t0),
+            cfg.listen_port(),
+            cfg.plugins.len()
+        );
+        assert_eq!(cfg.listen_port(), PORT, "首装应把 server 口写成实例口");
+
+        // 停着对接：改文件；Bot 侧多一条反向 WS 客户端连过来
+        let linked = manager
+            .apply_link(&id, &BotId::new("10001"))
+            .await
+            .expect("对接失败");
+        let client = bots.bots.lock().await[0]
+            .connect
+            .websocket_clients
+            .iter()
+            .find(|c| c.base.name == app_link_connection_name(&id))
+            .cloned()
+            .expect("Bot 侧应多一条 WS 客户端");
+        eprintln!(
+            "{} 对接: {:?}，Bot 侧连 {}",
+            stamp(t0),
+            linked.link.as_ref().map(|l| &l.mode),
+            client.url
+        );
+
+        let started = manager.start_instance(&id).await;
+        eprintln!(
+            "{} 启动: {:?}",
+            stamp(t0),
+            started
+                .as_ref()
+                .map(|i| (&i.state, &i.last_error))
+                .map_err(|e| e.to_string())
+        );
+        started.expect("启动失败");
+
+        let mut port_up = false;
+        let deadline = Instant::now() + Duration::from_secs(300);
+        let mut polls = 0u32;
+        while Instant::now() < deadline {
+            if tokio::net::TcpStream::connect(("127.0.0.1", PORT)).await.is_ok() {
+                port_up = true;
+                break;
+            }
+            polls += 1;
+            if polls % 5 == 0 && smoke_procs(&dir_str, "node").is_empty() {
+                eprintln!("{} 进程没了", stamp(t0));
+                break;
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+        eprintln!("{} 口通: {port_up}", stamp(t0));
+
+        let mut index_ok = false;
+        let mut gate_ok = false;
+        let mut handshake = String::new();
+        let mut bot_seen = false;
+        if port_up {
+            // 控制台首页：用户点「打开控制台」看到的就是它
+            match reqwest::get(format!("http://127.0.0.1:{PORT}/")).await {
+                Ok(r) => {
+                    let status = r.status();
+                    let body = r.text().await.unwrap_or_default();
+                    index_ok = status.is_success() && body.to_ascii_lowercase().contains("<html");
+                    let head: String = body.chars().take(120).collect();
+                    eprintln!("{} 首页: {status} {head:?}", stamp(t0));
+                }
+                Err(e) => eprintln!("{} 首页: 请求失败 {e}", stamp(t0)),
+            }
+
+            let deadline = Instant::now() + Duration::from_secs(60);
+            while Instant::now() < deadline {
+                let s = manager.koishi_status(&id).await.unwrap();
+                if s.gate == ncd_appframework::KoishiRuntimeGate::Ok {
+                    gate_ok = true;
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            eprintln!("{} 控制台状态接口: {gate_ok}", stamp(t0));
+
+            // 冒充 NapCat 握手：URL、token 都照 Bot 配置里写的来
+            let path = client
+                .url
+                .split_once(&format!(":{PORT}"))
+                .map(|(_, p)| p.to_string())
+                .unwrap_or_default();
+            let mut sock = tokio::net::TcpStream::connect(("127.0.0.1", PORT)).await.unwrap();
+            let auth = if client.base.token.is_empty() {
+                String::new()
+            } else {
+                format!("Authorization: Bearer {}\r\n", client.base.token)
+            };
+            let req = format!(
+                "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
+                 Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\
+                 X-Self-ID: 10001\r\nX-Client-Role: Universal\r\n{auth}\r\n"
+            );
+            sock.write_all(req.as_bytes()).await.unwrap();
+            let mut buf = vec![0u8; 4096];
+            let n = tokio::time::timeout(Duration::from_secs(10), sock.read(&mut buf))
+                .await
+                .ok()
+                .and_then(Result::ok)
+                .unwrap_or(0);
+            handshake = String::from_utf8_lossy(&buf[..n])
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .to_string();
+            eprintln!("{} 反向 WS 握手: {handshake:?}（路径 {path}）", stamp(t0));
+
+            // 连接留着，等控制台推一轮状态
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while Instant::now() < deadline {
+                let s = manager.koishi_status(&id).await.unwrap();
+                if let Some(b) = s.bots.iter().find(|b| b.self_id == "10001") {
+                    eprintln!("{} 控制台里的 Bot: {} {:?}", stamp(t0), b.sid, b.state);
+                    bot_seen = true;
+                    break;
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            drop(sock);
+        }
+
+        let procs = smoke_procs(&dir_str, "node");
+        eprintln!("{} 停之前的相关进程:", stamp(t0));
+        for (pid, _, cmd) in &procs {
+            eprintln!("  {pid} {cmd}");
+        }
+        let stopped = manager.stop_instance(&id).await;
+        eprintln!(
+            "{} 停止: {:?}",
+            stamp(t0),
+            stopped
+                .as_ref()
+                .map(|i| &i.state)
+                .map_err(|e| e.to_string())
+        );
+        tokio::time::sleep(Duration::from_secs(3)).await;
+
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, ProcessRefreshKind::new());
+        let leftovers: Vec<_> = procs
+            .iter()
+            .filter(|(pid, start, _)| {
+                sys.process(Pid::from_u32(*pid))
+                    .is_some_and(|p| p.start_time() == *start)
+            })
+            .collect();
+        let after = smoke_procs(&dir_str, "node");
+        let port_after = tokio::net::TcpStream::connect(("127.0.0.1", PORT)).await.is_ok();
+        eprintln!(
+            "{} 停后残留: {leftovers:?}，重扫: {after:?}，口仍通: {port_after}",
+            stamp(t0)
+        );
+
+        let log = inst_dir.join(".ncd-koishi.log");
+        let text = std::fs::read(&log)
+            .map(|b| String::from_utf8_lossy(&b).to_string())
+            .unwrap_or_default();
+        let tail: Vec<&str> = text.lines().rev().take(60).collect();
+        eprintln!("---- {} 末 60 行 ----", log.display());
+        for line in tail.into_iter().rev() {
+            eprintln!("{line}");
+        }
+
+        assert!(port_up, "Koishi 口没起来");
+        assert!(index_ok, "控制台首页打不开");
+        assert!(gate_ok, "控制台状态接口不通");
+        assert!(handshake.contains(" 101 "), "反向 WS 握手没过: {handshake}");
+        assert!(bot_seen, "控制台里没看到连上来的 Bot");
+        assert!(leftovers.is_empty() && after.is_empty(), "停后有残留进程");
+        assert!(!port_after, "停后端口没释放");
     }
 }
 
