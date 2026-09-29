@@ -212,6 +212,8 @@ jobs:
           tag_name: ${{ needs.resolve.outputs.tag_name }}
           name: NapCatQQ Desktop ${{ needs.resolve.outputs.version_plain }}
           body_path: ${{ steps.notes.outputs.NOTES_PATH }}
+          # 仓库首页的 Latest 只给 Desktop;release-ncd-watch.yml 那边是 false
+          make_latest: "true"
           # 自更新走 GitHub Release MSI，不上传 latest.json / .sig
           files: |
             release-assets/*.msi

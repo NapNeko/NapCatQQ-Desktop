@@ -204,6 +204,9 @@ jobs:
           tag_name: ${{ needs.resolve.outputs.tag_name }}
           name: ncd-watch ${{ needs.resolve.outputs.version_plain }}
           body_path: ${{ steps.notes.outputs.NOTES_PATH }}
+          # 仓库首页的 Latest 留给 Desktop。API 默认会把新发布的正式版设成 Latest,
+          # 不关掉的话每发一次 watch 都会把 Desktop 顶下去
+          make_latest: "false"
           files: |
             release-assets/ncd-watch-*
             release-assets/SHA256SUMS
