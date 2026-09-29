@@ -266,6 +266,12 @@ export const terminalStore = {
         for (const id of group.panes) await terminalStore.close(id);
     },
 
+    /// 关掉全部终端（设置里关了内嵌终端）。面板没挂过时会话表还没拉，先拉一遍再关
+    async closeAll() {
+        await terminalStore.bootstrap();
+        for (const id of Object.keys(get().sessions)) await terminalStore.close(id);
+    },
+
     async closeOthers(groupId: string) {
         for (const g of get().groups.filter((x) => x.id !== groupId)) await terminalStore.closeGroup(g.id);
     },

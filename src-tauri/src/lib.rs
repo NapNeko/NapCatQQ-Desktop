@@ -614,7 +614,10 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 app_manager_reconcile.reconcile_all().await;
                 // 对账完成后自动启动实例
-                let global_enabled = app_settings_for_auto.read().await.app_instances_auto_start;
+                let global_enabled = app_settings_for_auto
+                    .read()
+                    .await
+                    .app_instances_auto_start_effective();
                 app_manager_auto_start
                     .auto_start_instances(global_enabled)
                     .await;

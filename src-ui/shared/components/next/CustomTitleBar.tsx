@@ -10,6 +10,7 @@ import React from 'react';
 import { Copy, Minus, Square, X } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useWindowControls } from '../../../hooks/desktop/useWindowControls';
+import { useFeatureEnabled } from '../../../hooks/preferences/featureTogglesStore';
 import { TerminalToggleButton } from './TerminalToggleButton';
 
 interface CustomTitleBarProps {
@@ -18,6 +19,7 @@ interface CustomTitleBarProps {
 
 export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ className }) => {
   const { isMaximized, minimize, toggleMaximize, close } = useWindowControls();
+  const terminalEnabled = useFeatureEnabled('terminal');
 
   return (
     <header
@@ -29,9 +31,11 @@ export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ className }) => 
     >
       <div className="h-full flex-1" data-tauri-drag-region />
 
-      <div className="mr-2 flex items-center">
-        <TerminalToggleButton />
-      </div>
+      {terminalEnabled && (
+        <div className="mr-2 flex items-center">
+          <TerminalToggleButton />
+        </div>
+      )}
 
       <div className="flex items-center gap-0.5">
         <button

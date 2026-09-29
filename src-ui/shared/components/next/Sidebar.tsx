@@ -44,8 +44,8 @@ interface SidebarProps {
     onPrefetch?: (route: AppRoute) => void;
     collapsed: boolean;
     onToggleCollapse: () => void;
-    // 是否显示 Docker 项。
-    showDocker?: boolean;
+    // 不显示的路由（容器页没有可用 Docker、功能开关关掉的模块）。引用要稳定，侧栏是 memo 的。
+    hiddenRoutes?: ReadonlySet<AppRoute>;
     taskQueueActiveCount?: number;
 }
 
@@ -86,12 +86,12 @@ export const Sidebar = memo(function Sidebar({
     onPrefetch,
     collapsed,
     onToggleCollapse,
-    showDocker = true,
+    hiddenRoutes,
     taskQueueActiveCount = 0,
 }: SidebarProps) {
-    const mainNavItems = showDocker
-        ? MAIN_NAV
-        : MAIN_NAV.filter((item) => item.id !== 'docker');
+    const mainNavItems = hiddenRoutes?.size
+        ? MAIN_NAV.filter((item) => !hiddenRoutes.has(item.id))
+        : MAIN_NAV;
 
     const m = useMotion();
     const navRef = useRef<HTMLElement | null>(null);
@@ -125,7 +125,7 @@ export const Sidebar = memo(function Sidebar({
             duration: m.duration('base'),
             ease: m.ease.hover,
         });
-    }, [active, collapsed, showDocker, m]);
+    }, [active, collapsed, hiddenRoutes, m]);
 
     return (
         <aside

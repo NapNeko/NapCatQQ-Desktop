@@ -32,6 +32,7 @@ import {
 } from '../../shared/ui';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import { openTerminal } from '../../hooks/terminal/terminalStore';
+import { useFeatureEnabled } from '../../hooks/preferences/featureTogglesStore';
 import { cn } from '../../shared/utils/cn';
 import { BotManageCard } from '../bot/list/next/BotManageCard';
 import type { ServerProfile } from '../../core/ipc/generated/domain/ServerProfile';
@@ -72,6 +73,7 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                 : '远端服务器';
 
     const accent = cardAccent(server.state);
+    const terminalEnabled = useFeatureEnabled('terminal');
     const sshEndpoint = `${server.username}@${displayHost}:${server.port}`;
 
     let webuiLine: string | null = null;
@@ -264,12 +266,14 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                                         <ActionMotionIcon icon={FolderSearch} size={16} strokeWidth={2} />
                                     </ServerIconButton>
                                 ) : null}
-                                <ServerIconButton
-                                    tooltip="终端"
-                                    onClick={stop(() => void openTerminal({ kind: 'server', server_id: server.id }))}
-                                >
-                                    <ActionMotionIcon icon={SquareTerminal} size={16} strokeWidth={2} />
-                                </ServerIconButton>
+                                {terminalEnabled ? (
+                                    <ServerIconButton
+                                        tooltip="终端"
+                                        onClick={stop(() => void openTerminal({ kind: 'server', server_id: server.id }))}
+                                    >
+                                        <ActionMotionIcon icon={SquareTerminal} size={16} strokeWidth={2} />
+                                    </ServerIconButton>
+                                ) : null}
                                 <ServerIconButton tooltip="编辑" onClick={stop(onEdit)}>
                                     <ActionMotionIcon icon={Pencil} size={16} strokeWidth={2} />
                                 </ServerIconButton>
@@ -301,10 +305,12 @@ export const ServerCard: React.FC<ServerCardProps> = ({
                     <span>测试连接</span>
                 </ContextMenuItem>
 
-                <ContextMenuItem onClick={() => void openTerminal({ kind: 'server', server_id: server.id })}>
-                    <SquareTerminal size={13} />
-                    <span>打开终端</span>
-                </ContextMenuItem>
+                {terminalEnabled && (
+                    <ContextMenuItem onClick={() => void openTerminal({ kind: 'server', server_id: server.id })}>
+                        <SquareTerminal size={13} />
+                        <span>打开终端</span>
+                    </ContextMenuItem>
+                )}
 
                 {onSetupKey && (
                     <ContextMenuItem onClick={onSetupKey}>

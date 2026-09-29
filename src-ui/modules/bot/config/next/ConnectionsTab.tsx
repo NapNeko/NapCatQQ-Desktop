@@ -37,6 +37,7 @@ import type { ConnectConfig } from '../../../../core/ipc/generated/domain/Connec
 import type { BackendType } from '../../../../core/ipc/generated/domain/BackendType';
 import type { OneBotLinkEndpoint } from '../../../../core/ipc/generated/domain/OneBotLinkEndpoint';
 import { ConnectionEditor } from './ConnectionEditor';
+import { useFeatureEnabled } from '../../../../hooks/preferences/featureTogglesStore';
 
 function upsertByName<T extends { name: string }>(list: readonly T[], item: T): T[] {
     const next = list.slice();
@@ -300,6 +301,8 @@ function FloatingAddBarPortal(props: FloatingAddBarProps) {
 }
 
 function FloatingAddBar({ backendType, onPick, canLinkApp, onLinkApp }: FloatingAddBarProps) {
+    // 设置里关了应用端就不给对接入口；已有的应用端连接照常列着、照常能改
+    const appsEnabled = useFeatureEnabled('apps');
     const linkBtn = (
         <Button variant="ghost" size="sm" disabled={!canLinkApp} onClick={onLinkApp}>
             <ActionMotionIcon icon={Link2} size={12} strokeWidth={2.4} motion={EMPHASIS_MOTION} />
@@ -309,17 +312,21 @@ function FloatingAddBar({ backendType, onPick, canLinkApp, onLinkApp }: Floating
     return (
         <div className="flex justify-center px-6 pb-3">
             <div className="inline-flex items-center gap-1 rounded-pill bg-elevated/95 px-2 py-1 shadow-popover ring-1 ring-border-subtle backdrop-blur-sm">
-                {canLinkApp ? (
-                    linkBtn
-                ) : (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <span>{linkBtn}</span>
-                        </TooltipTrigger>
-                        <TooltipContent>先保存 Bot，再对接应用端</TooltipContent>
-                    </Tooltip>
+                {appsEnabled && (
+                    <>
+                        {canLinkApp ? (
+                            linkBtn
+                        ) : (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span>{linkBtn}</span>
+                                </TooltipTrigger>
+                                <TooltipContent>先保存 Bot，再对接应用端</TooltipContent>
+                            </Tooltip>
+                        )}
+                        <span className="mx-0.5 h-4 w-px bg-border-subtle" aria-hidden />
+                    </>
                 )}
-                <span className="mx-0.5 h-4 w-px bg-border-subtle" aria-hidden />
                 <span className="px-1 text-2xs font-medium uppercase tracking-wide text-text-tertiary">
                     新增
                 </span>

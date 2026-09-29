@@ -14,6 +14,8 @@ import { dropAppInstanceLogs, ensureAppInstanceLogStore } from './appInstanceLog
 import { showWebUiAccountDialog } from './webuiAccountDialogStore';
 import { requestTermsConsent } from './termsDialogStore';
 import { APP_INSTANCES_KEY, upsertInstance } from './appInstancesCache';
+import { useFeatures } from '../preferences/featureTogglesStore';
+import { isAppFrameworkVisible } from '../../core/domain/settings/features';
 import type {
     AppFrameworkManifest,
     AppInstance,
@@ -27,7 +29,23 @@ ensureAppInstanceLogStore();
 
 export const APP_FRAMEWORKS_KEY = ['appFrameworks'] as const;
 
+/** 设置里没藏掉的框架：组件页、新建 / 导入、对接都只给这些。 */
 export function useAppFrameworks() {
+    const features = useFeatures();
+    const select = useCallback(
+        (list: AppFrameworkManifest[]) => list.filter((m) => isAppFrameworkVisible(features, m.id)),
+        [features],
+    );
+    return useQuery<AppFrameworkManifest[], Error, AppFrameworkManifest[]>({
+        queryKey: APP_FRAMEWORKS_KEY,
+        queryFn: appFrameworkService.listFrameworks,
+        staleTime: Infinity,
+        select,
+    });
+}
+
+/** 全部框架，不看设置（设置 · 功能要列出每个框架的开关）。 */
+export function useAppFrameworkCatalog() {
     return useQuery<AppFrameworkManifest[], Error>({
         queryKey: APP_FRAMEWORKS_KEY,
         queryFn: appFrameworkService.listFrameworks,

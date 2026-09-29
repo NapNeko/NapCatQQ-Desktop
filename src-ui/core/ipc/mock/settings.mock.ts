@@ -7,6 +7,7 @@ import {
 } from '../../domain/settings/offline-notify-defaults';
 import { defaultAppUiPreferencesFromPrefs } from '../../domain/settings/ui-preferences-bridge';
 import { DEFAULT_TASK_QUEUE_CLEANUP } from '../../domain/task-queue/cleanup';
+import { DEFAULT_FEATURES } from '../../domain/settings/features';
 import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
 
 export const mockBackendSettings: BackendSettings = {
@@ -30,6 +31,7 @@ export const mockBackendSettings: BackendSettings = {
     notifyOnBotCrashed: true,
     notifyOnLoginKicked: true,
     uiPreferences: defaultAppUiPreferencesFromPrefs(preferencesStore.get()),
+    features: { ...DEFAULT_FEATURES },
     remoteHostHealthProbeEnabled: true,
     remoteHostHealthProbeIntervalMs: 30_000,
     webHookChannels: [],

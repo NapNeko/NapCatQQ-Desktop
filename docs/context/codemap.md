@@ -244,6 +244,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | App 设置读写 | `ncd-runtime/src/desktop/settings.rs`（`app-settings.json` 唯一写入口：`update_app_settings` / `replace_app_settings_with` 在同一把锁里改内存和文件，读用 `load_app_settings` / `read_app_settings_file`）；归一化只调 `AppSettings::normalize` |
 | Tauri | `commands/app_settings.rs`（设置页）, `config_transfer.rs`（导入在设置写锁里提交） |
 | 前端设置页 | `src-ui/modules/settings/*`（`SettingsPage`, `tabs/`, `settings-draft.ts`） |
+| 功能模块开关 | 设置 · 功能（`tabs/FeaturesTab.tsx`）；存 `app-settings.json` 的 `features`（`ncd-domain` `FeatureToggles`：`napcat` / `snowluma` / `apps` + `hiddenAppFrameworks` / `dockerPage` / `ncdWatch` / `terminal`，缺字段当开，两个协议端至少留一个）；分组、文案、「关掉省什么」和拦不拦的规则都在 `core/domain/settings/features.ts`（`featureOffBlock` 等），运行时读 `hooks/preferences/featureTogglesStore.ts`（启动 hydrate、保存后 apply）。落点：`AppNext` 的 `hiddenRoutes`（侧栏 + 挡跳转）、容器页关时不探远端 Docker、终端关时不挂 `TerminalDock`（xterm 单拆 `vendor-xterm` 跟着懒加载）并 `terminalStore.closeAll()`；`useComponentsData` 按 `isComponentHiddenByFeatures` 滤组件目录（不列也不探测）；`useAppFrameworks` 滤掉藏起来的框架（设置页用不滤的 `useAppFrameworkCatalog`）；Bot `IdentityTab` 滤底座选项。后端：`app_instances_auto_start_effective()`；`commands/ncd_watch.rs` 心跳在 `ncdWatch` 关或该机没装 ncd-watch（`ncd_component::ncd_watch_bin_path` stat）时跳过。关掉会让东西没处管的由设置页拦住（有 Bot 用的协议端、有实例的框架、在跑的应用端、装着 ncd-watch 的远端）。新增一项：Rust 字段 → `FEATURE_GROUPS` → 各入口 `useFeatureEnabled` |
 | Bot 配置 UI | `src-ui/modules/bot/config/` |
 | 服务 | `settings.service.ts`, `config-transfer.service.ts` |
 | hooks | `src-ui/hooks/preferences/`, domain `settings/` |
@@ -321,7 +322,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 关注点 | 主路径 |
 |--------|--------|
 | 根应用 | `src-ui/app/AppNext.tsx` |
-| 路由枚举 / 侧栏 | `src-ui/shared/components/next/Sidebar.tsx` |
+| 路由枚举 / 侧栏 | `src-ui/shared/components/next/Sidebar.tsx`（不显示的页由 `AppNext` 算好 `hiddenRoutes` 传进来：没有可用 Docker、功能开关关掉的模块） |
 | 路由：overview / bots / apps / components / docker / remote / tasks / settings | 各 `src-ui/modules/*` |
 | 设计 token / 主题 | `src-ui/core/design/`, `hooks/theme/` |
 | 共享 UI | `src-ui/shared/ui/`, `shared/components/` |

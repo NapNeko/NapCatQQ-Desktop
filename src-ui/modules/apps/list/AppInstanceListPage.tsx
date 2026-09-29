@@ -46,6 +46,7 @@ import { DeleteInstanceDialog } from '../DeleteInstanceDialog';
 import { ImportInstanceDialog, type ImportInstanceTarget } from '../ImportInstanceDialog';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { openTerminal } from '../../../hooks/terminal/terminalStore';
+import { useFeatureEnabled } from '../../../hooks/preferences/featureTogglesStore';
 import { hostIdDisplayLabel } from '../hostLabel';
 import { STATE_META, isInstalled } from '../../../core/domain/apps/instanceState';
 import { CardInstallProgress } from '../InstallProgress';
@@ -285,6 +286,7 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
     const busy = pendingId === i.id || installing;
     const installed = isInstalled(i);
     const running = i.state === 'running';
+    const terminalEnabled = useFeatureEnabled('terminal');
     const accent = i.last_error ? 'danger' : running || installing ? 'brand' : 'none';
 
     const meta = [
@@ -397,7 +399,7 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                             <ActionMotionIcon icon={ScrollText} size={15} strokeWidth={2.2} />
                         </FooterIcon>
                     )}
-                    {installed && (
+                    {installed && terminalEnabled && (
                         <FooterIcon
                             label="终端"
                             onClick={() => void openTerminal({ kind: 'app_instance', instance_id: i.id })}

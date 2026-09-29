@@ -1,6 +1,6 @@
 // 身份 Tab：账号、底座、运行宿主与自愈。
 
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import {
     TextField,
     NumberField,
@@ -15,6 +15,7 @@ import {
 import { GsapPresence } from '../../../../shared/ui/motion/GsapPresence';
 import { AutoRestartScheduleEditor } from './AutoRestartScheduleEditor';
 import { useServerManager } from '../../../../hooks/remote/useServerManager';
+import { useFeatures } from '../../../../hooks/preferences/featureTogglesStore';
 import { useDockerHosts } from '../../../../hooks/docker/useDockerHosts';
 import {
     useComponentNames,
@@ -61,6 +62,19 @@ const DEPLOYMENT_ITEMS = [
 
 export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityTabProps) {
     const { servers, isLoading: serversLoading } = useServerManager();
+
+    // 设置里关掉的协议端不给选；已经是它的（老配置）照常显示
+    const features = useFeatures();
+    const backendItems = useMemo(
+        () => BACKEND_ITEMS.filter((i) => features[i.value] || i.value === data.backend_type),
+        [features, data.backend_type],
+    );
+    // 新建时默认的底座被关了，换成开着的那个（两个至少留一个）
+    useEffect(() => {
+        if (isEditMode || features[data.backend_type]) return;
+        onChange({ backend_type: features.napcat ? 'napcat' : 'snowluma' });
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- onChange 每次渲染都是新的
+    }, [isEditMode, features, data.backend_type]);
 
     const isRemote = !isRuntimeTargetLocal(data.runtime_target);
     const runtimeMode = runtimeModeForTarget(data.runtime_target);
@@ -189,7 +203,7 @@ export function IdentityTab({ data, onChange, isEditMode, isRunning }: IdentityT
                     </div>
                     <Select
                         label="底座类型"
-                        items={BACKEND_ITEMS}
+                        items={backendItems}
                         value={data.backend_type}
                         onValueChange={(v) => onChange({ backend_type: v })}
                         disabled={isRunning}

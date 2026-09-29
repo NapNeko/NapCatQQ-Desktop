@@ -55,6 +55,7 @@ import {
 import { cn } from '../../../../shared/utils/cn';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { openTerminal } from '../../../../hooks/terminal/terminalStore';
+import { useFeatureEnabled } from '../../../../hooks/preferences/featureTogglesStore';
 import { QrCodeDialog } from './QrCodeDialog';
 import { BotManageCard } from './BotManageCard';
 import { buildBotListCardStatus } from './botCardPresentation';
@@ -206,6 +207,7 @@ export function BotCard({
     const restartHint = config ? formatRestartHint(config) : null;
     const runtimeTarget = config?.bot.runtime_target ?? null;
     const isDockerBot = config?.bot.deploymentType === 'docker';
+    const terminalEnabled = useFeatureEnabled('terminal');
     const slStartMode = config?.bot.snowlumaStartMode;
 
     const handleRowClick = () => {
@@ -542,7 +544,7 @@ export function BotCard({
                                         />
                                     </IconButton>
                                     <IconButton
-                                        visible={true}
+                                        visible={terminalEnabled}
                                         tooltip={isDockerBot ? '终端（进容器）' : '终端'}
                                         onClick={stopAction(() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: false }))}
                                     >
@@ -653,11 +655,13 @@ export function BotCard({
                     <Monitor size={13} />
                     <span>运行监控</span>
                 </ContextMenuItem>
-                <ContextMenuItem onClick={() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: false })}>
-                    <SquareTerminal size={13} />
-                    <span>{isDockerBot ? '终端（进容器）' : '打开终端'}</span>
-                </ContextMenuItem>
-                {isDockerBot && (
+                {terminalEnabled && (
+                    <ContextMenuItem onClick={() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: false })}>
+                        <SquareTerminal size={13} />
+                        <span>{isDockerBot ? '终端（进容器）' : '打开终端'}</span>
+                    </ContextMenuItem>
+                )}
+                {terminalEnabled && isDockerBot && (
                     <ContextMenuItem onClick={() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: true })}>
                         <SquareTerminal size={13} />
                         <span>终端（宿主机部署目录）</span>

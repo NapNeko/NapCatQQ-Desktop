@@ -21,6 +21,8 @@ import { useQuery, useQueries, useQueryClient, type UseQueryResult } from '@tans
 import { useEffect, useMemo, useState } from 'react';
 import { isTauri } from '../../core/ipc/transport';
 import { componentService } from '../../core/services/component.service';
+import { isComponentHiddenByFeatures } from '../../core/domain/settings/features';
+import { useFeatures } from '../preferences/featureTogglesStore';
 import { serverService } from '../../core/services/server.service';
 import {
     deriveStatus,
@@ -195,7 +197,12 @@ function useComponentsData(options: ComponentsDataOptions = {}): ComponentsData 
         staleTime: 5 * 60 * 1000,
     });
 
-    const components = catalogQuery.data ?? [];
+    // 设置里关掉的组件（协议端、ncd-watch）不列也不探测，每台主机少几次远端命令
+    const features = useFeatures();
+    const components = useMemo(
+        () => (catalogQuery.data ?? []).filter((c) => !isComponentHiddenByFeatures(features, c.id)),
+        [catalogQuery.data, features],
+    );
 
     // 对每个 (component, host) 发一个 detect。
     // useQueries 让 react-query 自己管理缓存 + 并发；keys 稳定。

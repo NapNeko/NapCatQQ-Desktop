@@ -38,7 +38,8 @@ import { pushInfoBar } from '../hooks/ui/globalInfoBarStore';
 import { useAppUiPreferencesBootstrap } from '../hooks/preferences/useAppUiPreferencesBootstrap';
 import { useMotion } from '../hooks/preferences/useMotion';
 import { useTaskQueue, useTaskQueueActiveCount } from '../hooks/task-queue/useTaskQueue';
-import { useTerminalCoversPage } from '../hooks/terminal/terminalStore';
+import { terminalStore, useTerminalCoversPage } from '../hooks/terminal/terminalStore';
+import { useFeatures } from '../hooks/preferences/featureTogglesStore';
 import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
@@ -122,6 +123,8 @@ function preloadRoute(route: AppRoute): void {
     if (load) void load();
 }
 
+const NO_HOSTS: string[] = [];
+
 function RouteFallback() {
     return (
         <PagePlaceholder>
@@ -153,15 +156,25 @@ export const AppNext: React.FC = () => {
         () => servers.map((p) => `remote:${p.id}`),
         [servers],
     );
-    const dockerStatusByHost = useDockerStatusByHost(dockerHostIds);
+    const features = useFeatures();
+    // 容器页关了就不去每台远端探 Docker，这份探测只为决定侧栏要不要显示容器页
+    const dockerProbeHostIds = features.dockerPage ? dockerHostIds : NO_HOSTS;
+    const dockerStatusByHost = useDockerStatusByHost(dockerProbeHostIds);
     const showDocker = useMemo(
         () =>
-            dockerHostIds.some((hostId) => {
+            dockerProbeHostIds.some((hostId) => {
                 const status = dockerStatusByHost[hostId];
                 return status ? dockerStatusSummary(status).ready : false;
             }),
-        [dockerHostIds, dockerStatusByHost],
+        [dockerProbeHostIds, dockerStatusByHost],
     );
+    // 侧栏不显示、也不许切过去的页
+    const hiddenRoutes = useMemo(() => {
+        const hidden = new Set<AppRoute>();
+        if (!showDocker) hidden.add('docker');
+        if (!features.apps) hidden.add('apps');
+        return hidden;
+    }, [showDocker, features.apps]);
     const hostLabels = useMemo(() => {
         const map: Record<string, string> = { local: '本机' };
         for (const p of servers) {
@@ -186,22 +199,26 @@ export const AppNext: React.FC = () => {
     const { bars, dismiss, remove } = useGlobalInfoBars();
 
     useEffect(() => {
-        if (!showDocker && route === 'docker') {
+        if (hiddenRoutes.has(route)) {
             startTransition(() => setRoute('overview'));
         }
-    }, [showDocker, route]);
+    }, [hiddenRoutes, route]);
+
+    // 关了内嵌终端就把开着的都关掉，面板不挂以后它们没处看也没处关
+    useEffect(() => {
+        if (!features.terminal) void terminalStore.closeAll();
+    }, [features.terminal]);
 
     const navigate = useCallback((nextRoute: AppRoute) => {
-        const target =
-            nextRoute === 'docker' && !showDocker ? 'overview' : nextRoute;
+        const target = hiddenRoutes.has(nextRoute) ? 'overview' : nextRoute;
         // 侧栏点击必须是紧急更新：详情页一旦有持续 setState，startTransition 会一直交不出去。
         setRoute(target);
-    }, [showDocker]);
+    }, [hiddenRoutes]);
 
     const prefetchRoute = useCallback((nextRoute: AppRoute) => {
-        if (nextRoute === 'docker' && !showDocker) return;
+        if (hiddenRoutes.has(nextRoute)) return;
         preloadRoute(nextRoute);
-    }, [showDocker]);
+    }, [hiddenRoutes]);
 
     const toggleCollapsed = useCallback(() => setCollapsed((v) => !v), []);
 
@@ -352,7 +369,7 @@ export const AppNext: React.FC = () => {
                             onPrefetch={prefetchRoute}
                             collapsed={collapsed}
                             onToggleCollapse={toggleCollapsed}
-                            showDocker={showDocker}
+                            hiddenRoutes={hiddenRoutes}
                             taskQueueActiveCount={taskQueueActiveCount}
                         />
                     </div>
@@ -399,9 +416,11 @@ export const AppNext: React.FC = () => {
                             </div>
                         </main>
 
-                        <Suspense fallback={null}>
-                            <TerminalDock />
-                        </Suspense>
+                        {features.terminal && (
+                            <Suspense fallback={null}>
+                                <TerminalDock />
+                            </Suspense>
+                        )}
                     </div>
                 </div>
 

@@ -22,6 +22,7 @@ import {
     DEFAULT_WEBHOOK_BODY,
     type WebhookChannelDraft,
 } from '../domain/settings/offline-notify-defaults';
+import { normalizeFeatures, type FeatureToggles } from '../domain/settings/features';
 import { invoke, isTauri } from '../ipc/transport';
 import type { AppSettingsDto } from '../ipc/types';
 import type { SnowLumaLinuxPackage } from '../ipc/types';
@@ -72,6 +73,8 @@ export interface BackendSettings {
     notifyOnBotCrashed: boolean;
     notifyOnLoginKicked: boolean;
     uiPreferences: AppUiPreferences;
+    /** 可选功能模块开关（设置 · 功能） */
+    features: FeatureToggles;
     /** 后台远端主机健康探测 */
     remoteHostHealthProbeEnabled: boolean;
     remoteHostHealthProbeIntervalMs: number;
@@ -218,6 +221,7 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
         notifyOnBotCrashed: dto.settings.notifyOnBotCrashed ?? true,
         notifyOnLoginKicked: dto.settings.notifyOnLoginKicked ?? true,
         uiPreferences: ui,
+        features: normalizeFeatures(dto.settings.features),
         remoteHostHealthProbeEnabled: dto.settings.remoteHostHealthProbeEnabled ?? true,
         remoteHostHealthProbeIntervalMs: Number(dto.settings.remoteHostHealthProbeIntervalMs ?? 30_000),
         webHookChannels: channels,
@@ -283,6 +287,7 @@ type AppSettingsDtoInvoke = {
         notifyOnBotCrashed: boolean;
         notifyOnLoginKicked: boolean;
         uiPreferences: AppUiPreferences;
+        features: FeatureToggles;
         remoteHostHealthProbeEnabled: boolean;
         remoteHostHealthProbeIntervalMs: number;
         WebHook: {
@@ -386,6 +391,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             notifyOnBotCrashed: s.notifyOnBotCrashed,
             notifyOnLoginKicked: s.notifyOnLoginKicked,
             uiPreferences: uiPreferencesForInvoke(s.uiPreferences),
+            features: normalizeFeatures(s.features),
             remoteHostHealthProbeEnabled: s.remoteHostHealthProbeEnabled,
             remoteHostHealthProbeIntervalMs: Math.round(s.remoteHostHealthProbeIntervalMs),
             WebHook: {

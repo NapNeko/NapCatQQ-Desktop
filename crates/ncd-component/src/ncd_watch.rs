@@ -21,6 +21,17 @@ const BIN_NAME: &str = "ncd-watch";
 /// 与 GitHub Release asset / workflow 命名一致
 const RELEASE_REPO: &str = "NapNeko/NapCatQQ-Desktop";
 
+/// 远端 ncd-watch 可执行文件的位置：`root` 给了就用它（远端库存里选的目录），否则 `$HOME/ncd-watch`。
+/// 和组件自己的 `bin_path` 同一套布局；Desktop 心跳拿它判断这台机装没装
+pub fn ncd_watch_bin_path(home: &str, root: Option<&str>) -> HostPath {
+    let root = root
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+        .map(|r| HostPath::from_posix(r.to_string()))
+        .unwrap_or_else(|| HostPath::from_posix(format!("{home}/{INSTALL_DIR_NAME}")));
+    root.join("bin").join(BIN_NAME)
+}
+
 /// 远端 ncd-watch 组件
 #[derive(Debug, Clone)]
 pub struct NcdWatchComponent {

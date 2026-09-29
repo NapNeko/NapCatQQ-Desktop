@@ -37,6 +37,7 @@ import {
     SettingsTabSections,
 } from '../_shared';
 import { NcdWatchRemoteSection } from './NcdWatchRemoteSection';
+import { useFeatureEnabled } from '../../../hooks/preferences/featureTogglesStore';
 import { DeliveryHistoryDialog } from './notifications/DeliveryHistoryDialog';
 import {
     EmailEditorDialog,
@@ -104,6 +105,7 @@ export function NotificationsTab({
     settingsDirty = false,
 }: Props) {
     const [testing, setTesting] = useState<string | null>(null);
+    const ncdWatchEnabled = useFeatureEnabled('ncdWatch');
     const [editor, setEditor] = useState<ChannelEditorState | null>(null);
     const [editorMount, setEditorMount] = useState<ChannelEditorState | null>(
         null,
@@ -435,7 +437,7 @@ export function NotificationsTab({
                 </FieldRow>
             </SettingsSection>
 
-            <NcdWatchRemoteSection settingsDirty={settingsDirty} />
+            {ncdWatchEnabled && <NcdWatchRemoteSection settingsDirty={settingsDirty} />}
 
             <SettingsSection
                 title="投递行为"

@@ -21,6 +21,11 @@ export function isInstalled(i: AppInstance): boolean {
     return i.state !== 'not_installed' && i.state !== 'installing';
 }
 
+/** 在跑或在装：这时候把应用端整块藏起来，实例就没处看也没处停了 */
+export function isInstanceActive(i: AppInstance): boolean {
+    return i.state === 'running' || i.state === 'installing';
+}
+
 const INSTALL_ACTIONS = new Set(['ensure_installed', 'force_install', 'update']);
 
 function appInstallTaskTarget(instance: AppInstance): string {

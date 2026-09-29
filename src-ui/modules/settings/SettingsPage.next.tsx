@@ -9,6 +9,7 @@ import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
 import { AppearanceTab } from './tabs/AppearanceTab';
 import { WindowTab } from './tabs/WindowTab';
+import { FeaturesTab } from './tabs/FeaturesTab';
 import { TerminalTab } from './tabs/TerminalTab';
 import { RuntimeTab } from './tabs/RuntimeTab';
 import { MonitoringTab } from './tabs/MonitoringTab';
@@ -19,6 +20,7 @@ import { DesktopLogTab } from './tabs/DesktopLogTab';
 import { DesktopLogToolbar } from './tabs/DesktopLogToolbar';
 import { AboutTab } from './tabs/AboutTab';
 import { consumeSettingsLogTab } from '../../hooks/task-queue/settingsLogNavigation';
+import { useFeatureEnabled } from '../../hooks/preferences/featureTogglesStore';
 import {
     draftFromBackendAndPrefs,
     isSettingsDirty,
@@ -32,6 +34,12 @@ export function SettingsPageNext() {
     const [tab, setTab] = useState('appearance');
     const [draft, setDraft] = useState<SettingsDraft | null>(null);
     const logViewer = useDesktopLogViewer(tab === 'log');
+    // 终端页跟着已保存的开关走，草稿里关了、还没保存时照常能看
+    const terminalEnabled = useFeatureEnabled('terminal');
+
+    useEffect(() => {
+        if (!terminalEnabled && tab === 'terminal') setTab('features');
+    }, [terminalEnabled, tab]);
 
     useEffect(() => {
         if (consumeSettingsLogTab()) {
@@ -87,8 +95,9 @@ export function SettingsPageNext() {
                     <div className="flex min-w-0 items-center gap-2">
                         <TabsList className="scrollbar-hide min-w-0 shrink overflow-x-auto border-b-0">
                             <TabsTrigger value="appearance">外观</TabsTrigger>
+                            <TabsTrigger value="features">功能</TabsTrigger>
                             <TabsTrigger value="window">窗口</TabsTrigger>
-                            <TabsTrigger value="terminal">终端</TabsTrigger>
+                            {terminalEnabled && <TabsTrigger value="terminal">终端</TabsTrigger>}
                             <TabsTrigger value="runtime">运行</TabsTrigger>
                             <TabsTrigger value="monitoring">监控</TabsTrigger>
                             <TabsTrigger value="notifications">通知</TabsTrigger>
@@ -119,13 +128,19 @@ export function SettingsPageNext() {
                         <AppearanceTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
+                    <TabsContent value="features" className="pb-10 pt-7 focus-visible:outline-none">
+                        <FeaturesTab draft={draft} patchDraft={patchDraft} />
+                    </TabsContent>
+
                     <TabsContent value="window" className="pb-10 pt-7 focus-visible:outline-none">
                         <WindowTab draft={draft} patchDraft={patchDraft} />
                     </TabsContent>
 
-                    <TabsContent value="terminal" className="pb-10 pt-7 focus-visible:outline-none">
-                        <TerminalTab />
-                    </TabsContent>
+                    {terminalEnabled && (
+                        <TabsContent value="terminal" className="pb-10 pt-7 focus-visible:outline-none">
+                            <TerminalTab />
+                        </TabsContent>
+                    )}
 
                     <TabsContent value="runtime" className="pb-10 pt-7 focus-visible:outline-none">
                         <RuntimeTab draft={draft} patchDraft={patchDraft} />

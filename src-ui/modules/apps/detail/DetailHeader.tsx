@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Badge, Button, Popover, PopoverClose, PopoverContent, PopoverTrigger, Spinner, Switch } from '../../../shared/ui';
 import { openTerminal } from '../../../hooks/terminal/terminalStore';
+import { useFeatureEnabled } from '../../../hooks/preferences/featureTogglesStore';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../../shared/ui/motion';
 import { cn } from '../../../shared/utils/cn';
 import type { AppInstance, AppInstanceState } from '../../../core/ipc/types';
@@ -68,6 +69,7 @@ export const DetailHeader: React.FC<{
     onAutoStartChange,
 }) => {
     const running = instance.state === 'running';
+    const terminalEnabled = useFeatureEnabled('terminal');
     const installing = instance.state === 'installing';
     const look = STATE_LOOK[instance.state];
     // 默认名就是「AstrBot · 本机」这种，身份行再写一遍框架名是重复
@@ -114,7 +116,7 @@ export const DetailHeader: React.FC<{
                         试聊
                     </Button>
                 )}
-                {installed && (
+                {installed && terminalEnabled && (
                     <Button
                         size="sm"
                         variant="ghost"

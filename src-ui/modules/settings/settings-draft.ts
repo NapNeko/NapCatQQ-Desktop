@@ -9,6 +9,7 @@ import {
     type BackendSettings,
 } from '../../core/services/settings.service';
 import { webhookChannelsEqual } from '../../core/domain/settings/offline-notify-defaults';
+import { featuresEqual } from '../../core/domain/settings/features';
 import {
     appPreferencesToAppUiPreferences,
     infoBarDismissPrefsFromDraftFields,
@@ -25,6 +26,7 @@ import {
     normalizeCloseAction,
 } from '../../hooks/preferences/preferencesStore';
 import { infoBarDismissPrefsStore } from '../../hooks/preferences/infoBarDismissPrefsStore';
+import { featureTogglesStore } from '../../hooks/preferences/featureTogglesStore';
 import {
     taskQueueCleanupDraftFromStored,
     type TaskQueueCleanupDraftSlice,
@@ -84,6 +86,7 @@ export function draftFromBackendAndPrefs(
         notifyOnBotCrashed: backend.notifyOnBotCrashed,
         notifyOnLoginKicked: backend.notifyOnLoginKicked,
         uiPreferences: backend.uiPreferences,
+        features: { ...backend.features },
         remoteHostHealthProbeEnabled: backend.remoteHostHealthProbeEnabled,
         remoteHostHealthProbeIntervalMs: backend.remoteHostHealthProbeIntervalMs,
         webHookChannels: backend.webHookChannels.map((c) => ({ ...c })),
@@ -167,6 +170,7 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
             },
             dismiss,
         ),
+        features: { ...draft.features },
         remoteHostHealthProbeEnabled: draft.remoteHostHealthProbeEnabled,
         remoteHostHealthProbeIntervalMs: draft.remoteHostHealthProbeIntervalMs,
         webHookChannels: draft.webHookChannels.map((c) => ({ ...c })),
@@ -227,6 +231,7 @@ export function isSettingsDirty(
         draft.motionLevel !== baseline.motionLevel ||
         draft.motionSpeed !== baseline.motionSpeed ||
         draft.radiusStyle !== baseline.radiusStyle ||
+        !featuresEqual(draft.features, baseline.features) ||
         draft.infoBarDismissInfoEnabled !== baseline.infoBarDismissInfoEnabled ||
         draft.infoBarDismissInfoMs !== baseline.infoBarDismissInfoMs ||
         draft.infoBarDismissSuccessEnabled !== baseline.infoBarDismissSuccessEnabled ||
@@ -337,6 +342,7 @@ export async function applyClientPrefsFromDraft(draft: SettingsDraft): Promise<v
         taskQueueCleanupEnabled: draft.taskQueueCleanupEnabled,
         taskQueueCleanupLingerMs: draft.taskQueueCleanupLingerMs,
     });
+    featureTogglesStore.apply(draft.features);
 }
 
 export { normalizeCloseAction };

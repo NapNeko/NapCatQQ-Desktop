@@ -163,13 +163,22 @@ async fn push_notify_for_server(
             return Err(());
         }
     };
-    let (probe, _) = cached_host_probe(&host_id, host.as_ref(), state).await;
+    let (probe, selected) = cached_host_probe(&host_id, host.as_ref(), state).await;
     let Some(home) = probe.home.as_deref().filter(|s| !s.is_empty()) else {
         if matches!(mode, NotifyPushMode::AfterSettingsSave) {
             tracing::warn!(server_id = %profile.id, %log_tag, "ncd-watch no $HOME");
         }
         return Err(());
     };
+    // 心跳只写给装了 ncd-watch 的机：没人读的 present / notify / metrics 每轮要四五次 SFTP。
+    // 一次 stat 换这几次写；装上以后下一轮心跳（45 秒内，present 90 秒才过期）就接上
+    if matches!(mode, NotifyPushMode::Heartbeat) {
+        let root = selected.as_ref().and_then(|s| s.ncd_watch_root.as_deref());
+        let bin = ncd_component::ncd_watch_bin_path(home, root);
+        if !host.exists(&bin).await.unwrap_or(false) {
+            return Err(());
+        }
+    }
     if let Err(e) = write_desktop_present(host.as_ref(), home, Some(version)).await {
         match mode {
             NotifyPushMode::Heartbeat => {
@@ -255,6 +264,11 @@ async fn push_metrics_json_for_server(
 
 /// 对所有已连接远端 server 刷 present + 有远端 bot 时同步 notify
 pub async fn heartbeat_all_remote_servers(state: &AppState) {
+    // 设置里关了远端值守：不写心跳。设置页在还有机器装着 ncd-watch 时不让关，
+    // 所以这里停掉不会让某台 watch 以为桌面端走了、接手重复告警
+    if !state.app_settings.read().await.features.ncd_watch {
+        return;
+    }
     let servers = state.server_manager.list_servers().await;
     let bots = match state.bot_manager.list_bot_configs().await {
         Ok(b) => b,
@@ -273,6 +287,9 @@ pub async fn heartbeat_all_remote_servers(state: &AppState) {
 /// 保存 App 设置后立刻推 notify:对「该机有 Bot」的远端 try ensure_connected + 写盘。
 /// 失败只记日志,不回传给设置保存(本地设置已落盘优先)。
 pub async fn push_notify_after_app_settings_save(state: &AppState) {
+    if !state.app_settings.read().await.features.ncd_watch {
+        return;
+    }
     let servers = state.server_manager.list_servers().await;
     let bots = match state.bot_manager.list_bot_configs().await {
         Ok(b) => b,

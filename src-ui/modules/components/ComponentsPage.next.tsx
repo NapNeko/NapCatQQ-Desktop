@@ -17,6 +17,7 @@ import { useReleases } from '../../hooks/diagnostics/useReleases';
 import { useDockerHosts } from '../../hooks/docker/useDockerHosts';
 import { useDockerInstallProgress } from '../../hooks/docker/useDockerInstallProgress';
 import { useAppFrameworks, useAppInstances } from '../../hooks/apps/useAppInstances';
+import { useFeatureEnabled } from '../../hooks/preferences/featureTogglesStore';
 import { useServerManager } from '../../hooks/remote/useServerManager';
 import { HostSwitcher } from './HostSwitcher';
 import { HostComponentsView } from './HostComponentsView';
@@ -83,6 +84,8 @@ export const ComponentsPageNext: React.FC = () => {
     // 应用端：框架清单 + 实例（按实例安装；应用端页也能导入已有项目）
     const appFrameworks = useAppFrameworks();
     const apps = useAppInstances();
+    // 设置里关了应用端就不列应用端组
+    const appsEnabled = useFeatureEnabled('apps');
     const { servers } = useServerManager();
     const [createAppRequest, setCreateAppRequest] = useState<CreateInstanceRequest | null>(null);
     const [importAppTarget, setImportAppTarget] = useState<ImportInstanceTarget | null>(null);
@@ -636,7 +639,7 @@ export const ComponentsPageNext: React.FC = () => {
                 ) : activeMachine ? (
                     <HostComponentsView
                         machine={activeMachine}
-                        appFrameworks={appFrameworks.data ?? []}
+                        appFrameworks={appsEnabled ? (appFrameworks.data ?? []) : []}
                         appInstances={apps.instances}
                         onCreateAppInstance={handleCreateAppInstance}
                         onImportAppInstance={handleImportAppInstance}

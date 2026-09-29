@@ -9,6 +9,7 @@ use ts_rs::TS;
 
 use crate::snowluma_linux_package::SnowLumaLinuxPackage;
 
+use crate::app_framework::AppFrameworkId;
 use crate::macros::default_true;
 use crate::offline_alert::{
     OfflineEmailSettings, OfflineNotifyBehavior, OfflineOneBotSettings, OfflineWebhookSettings,
@@ -279,6 +280,62 @@ impl Default for AppUiPreferences {
     }
 }
 
+/// 可选功能模块开关（设置 · 功能）。关掉的模块从侧栏和各页入口里拿掉，默认全开；
+/// 只收能整块拿掉、不牵连主路径（装、配、启停 Bot）的模块
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct FeatureToggles {
+    /// 协议端 NapCat：组件页的 NapCat 行、新建 Bot 时的 NapCat 选项；关掉后不再探测它
+    #[serde(rename = "napcat", default = "default_true")]
+    pub napcat: bool,
+    /// 协议端 SnowLuma，同上。两个协议端至少留一个
+    #[serde(rename = "snowluma", default = "default_true")]
+    pub snowluma: bool,
+    /// 应用端（Karin / NoneBot2 / AstrBot / MaiBot）：应用端页、组件页的应用端组、
+    /// Bot 配置里的「对接应用端」；关掉时实例不再随桌面端启动
+    #[serde(rename = "apps", default = "default_true")]
+    pub apps: bool,
+    /// 应用端开着时单独藏掉的框架：组件页不列、新建和导入时不给选
+    #[serde(rename = "hiddenAppFrameworks", default)]
+    pub hidden_app_frameworks: Vec<AppFrameworkId>,
+    /// 容器页；开着时仍只在有远端主机 Docker 可用时出现。关掉后不再探测远端 Docker
+    #[serde(rename = "dockerPage", default = "default_true")]
+    pub docker_page: bool,
+    /// 远端值守 ncd-watch：组件页的 ncd-watch 行、设置 · 通知里的远端值守；
+    /// 关掉后不再给远端写心跳、不再探测它
+    #[serde(rename = "ncdWatch", default = "default_true")]
+    pub ncd_watch: bool,
+    /// 内嵌终端：标题栏开关、Ctrl+`、各卡片上的终端入口、设置 · 终端
+    #[serde(rename = "terminal", default = "default_true")]
+    pub terminal: bool,
+}
+
+impl Default for FeatureToggles {
+    fn default() -> Self {
+        Self {
+            napcat: true,
+            snowluma: true,
+            apps: true,
+            hidden_app_frameworks: Vec::new(),
+            docker_page: true,
+            ncd_watch: true,
+            terminal: true,
+        }
+    }
+}
+
+impl FeatureToggles {
+    /// 两个协议端都关了就把 NapCat 打开（一个都没有就建不了 Bot）；框架名单去重
+    pub fn normalize(&mut self) {
+        if !self.napcat && !self.snowluma {
+            self.napcat = true;
+        }
+        let mut seen = std::collections::HashSet::new();
+        self.hidden_app_frameworks
+            .retain(|id| !id.as_str().is_empty() && seen.insert(id.clone()));
+    }
+}
+
 /// 设置页 App 级配置聚合
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -380,6 +437,9 @@ pub struct AppSettings {
     /// 外观偏好
     #[serde(rename = "uiPreferences", default)]
     pub ui_preferences: AppUiPreferences,
+    /// 可选功能模块开关
+    #[serde(rename = "features", default)]
+    pub features: FeatureToggles,
     /// SnowLuma 本地 Node.js 运行环境指定路径（None 或空表示自动按优先级解析：自定义 > 内置 > 组件 > PATH）
     #[serde(rename = "snowlumaNodePath", default)]
     pub snowluma_node_path: Option<String>,
@@ -437,6 +497,7 @@ impl Default for AppSettings {
             notify_on_bot_crashed: true,
             notify_on_login_kicked: true,
             ui_preferences: AppUiPreferences::default(),
+            features: FeatureToggles::default(),
             snowluma_node_path: None,
             snowluma_package: None,
         }
@@ -451,9 +512,15 @@ impl AppSettings {
         self.normalize_task_queue_cleanup();
         self.normalize_lightweight_prefs();
         self.normalize_remote_host_health_probe();
+        self.features.normalize();
         self.offline_webhook.normalize();
         self.offline_onebot.normalize();
         self.poller.offline_notify_behavior.normalize();
+    }
+
+    /// 冷启动时要不要按实例的 auto_start 拉起应用端实例：全局开关开着、应用端功能也没关
+    pub fn app_instances_auto_start_effective(&self) -> bool {
+        self.app_instances_auto_start && self.features.apps
     }
 
     /// 本机 SnowLuma 的自定义 Node 路径;只填了空白当没设。
@@ -789,5 +856,44 @@ mod tests {
     fn app_settings_missing_snowluma_package_defaults_to_none() {
         let parsed: AppSettings = serde_json::from_str("{}").expect("缺字段应能反序列化");
         assert_eq!(parsed.snowluma_package, None);
+    }
+
+    #[test]
+    fn features_default_all_on_and_partial_keeps_others_on() {
+        let parsed: AppSettings = serde_json::from_str("{}").expect("缺字段应能反序列化");
+        assert_eq!(parsed.features, FeatureToggles::default());
+        assert!(parsed.features.apps && parsed.features.docker_page && parsed.features.terminal);
+
+        let parsed: AppSettings =
+            serde_json::from_str(r#"{"features":{"terminal":false}}"#).expect("反序列化失败");
+        assert!(!parsed.features.terminal);
+        assert!(parsed.features.apps && parsed.features.docker_page);
+    }
+
+    #[test]
+    fn features_normalize_keeps_one_protocol_and_dedupes_frameworks() {
+        let mut f = FeatureToggles {
+            napcat: false,
+            snowluma: false,
+            hidden_app_frameworks: vec!["karin".into(), "karin".into(), "maibot".into()],
+            ..FeatureToggles::default()
+        };
+        f.normalize();
+        assert!(f.napcat && !f.snowluma);
+        assert_eq!(
+            f.hidden_app_frameworks,
+            vec!["karin".into(), "maibot".into()]
+        );
+
+        let json = serde_json::to_string(&f).expect("serialize 不应失败");
+        assert!(json.contains(r#""hiddenAppFrameworks":["karin","maibot"]"#));
+    }
+
+    #[test]
+    fn apps_feature_off_disables_instance_auto_start() {
+        let mut cfg = AppSettings::default();
+        assert!(cfg.app_instances_auto_start_effective());
+        cfg.features.apps = false;
+        assert!(!cfg.app_instances_auto_start_effective());
     }
 }
