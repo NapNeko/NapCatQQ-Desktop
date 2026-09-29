@@ -5,9 +5,11 @@ use std::time::Duration;
 
 use ncd_host::{Host, HostCommand, Locality};
 
-/// 本机口能不能 bind。只试回环：bind 0.0.0.0 会真的 listen，Windows 上可能弹防火墙询问
+/// 本机口是否空闲：能 bind 回环，且回环上没人接连接。只试回环：bind 0.0.0.0 会真的 listen，
+/// Windows 上可能弹防火墙询问。应用组件挑口和 runtime 分配 / 校验实例口都走这一个
 pub fn local_port_free(port: u16) -> bool {
     std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).is_ok()
+        && !loopback_accepts(port)
 }
 
 /// 远端 Linux 上正在监听的 TCP 口，不依赖 ss / netstat 装没装。
@@ -65,7 +67,7 @@ impl PortUsage {
 
     pub fn is_free(&self, port: u16) -> bool {
         match self {
-            Self::Local => local_port_free(port) && !loopback_accepts(port),
+            Self::Local => local_port_free(port),
             Self::Remote(busy) => !busy.contains(&port),
         }
     }
@@ -111,6 +113,14 @@ mod tests {
         let held = std::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).unwrap();
         let port = held.local_addr().unwrap().port();
         assert!(!PortUsage::Local.is_free(port));
+    }
+
+    // runtime 分配和校验实例口直接调 local_port_free,它自己也得看出 0.0.0.0 上的监听
+    #[test]
+    fn local_port_free_sees_a_wildcard_listener() {
+        let held = std::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+        let port = held.local_addr().unwrap().port();
+        assert!(!local_port_free(port));
     }
 
     #[test]
