@@ -13,10 +13,8 @@ import {
     APP_VERSION_LABEL,
 } from '../../../core/domain/app-meta';
 import { APP_CREDIT_GROUPS } from '../../../core/domain/credits';
-import {
-    desktopUpdateService,
-    type AvailableUpdate,
-} from '../../../core/services/desktop-update.service';
+import type { AvailableUpdate } from '../../../core/ipc/generated/update/AvailableUpdate';
+import { useDesktopUpdateCheck } from '../../../hooks/desktop/useDesktopUpdateCheck';
 import { useComponentAction } from '../../../hooks/components/useComponentAction';
 import { useDesktopConsentGate } from '../../../hooks/desktop/useDesktopConsentGate';
 import { requestOnboardingFromSettings } from '../../../hooks/desktop/onboardingHost';
@@ -44,6 +42,7 @@ export function AboutTab() {
     const { startAction, isInstalling } = useComponentAction();
     const installing = isInstalling('desktop_self', 'local');
     const consent = useDesktopConsentGate();
+    const checkDesktopUpdate = useDesktopUpdateCheck();
     const [openingGuide, setOpeningGuide] = useState(false);
 
     const [checkState, setCheckState] = useState<CheckState>('idle');
@@ -69,7 +68,7 @@ export function AboutTab() {
     const handleCheckUpdate = useCallback(async () => {
         setCheckState('checking');
         try {
-            const next = await desktopUpdateService.check();
+            const next = await checkDesktopUpdate();
             if (!next) {
                 setAvailable(null);
                 setCheckState('latest');
@@ -96,7 +95,7 @@ export function AboutTab() {
                 raw: errorText(err),
             });
         }
-    }, []);
+    }, [checkDesktopUpdate]);
 
     const handleInstallUpdate = useCallback(async () => {
         if (!available || installing) return;

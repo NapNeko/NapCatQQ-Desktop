@@ -6,6 +6,17 @@ import { configTransferService } from '../../core/services/config-transfer.servi
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushErrorBar } from '../ui/pushErrorBar';
 
+/** 导入向导里的三步：挑 ZIP、预览、真导入。结果只给向导自己用，失败由向导按阶段显示 */
+export function useConfigImportOps() {
+    const preview = useMutation({ mutationFn: configTransferService.preview });
+    const runImport = useMutation({ mutationFn: configTransferService.import });
+    return {
+        pickZipSource: configTransferService.pickZipSource,
+        previewImport: preview.mutateAsync,
+        importConfig: runImport.mutateAsync,
+    };
+}
+
 export function useConfigTransfer() {
     const [importOpen, setImportOpen] = useState(false);
 

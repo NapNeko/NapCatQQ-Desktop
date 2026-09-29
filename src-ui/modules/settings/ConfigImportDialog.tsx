@@ -4,7 +4,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { PackageCheck, Sparkles, Upload, AlertCircle, Check } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
-import { configTransferService } from '../../core/services/config-transfer.service';
+import { useConfigImportOps } from '../../hooks/preferences/useConfigTransfer';
 import type { ConfigImportPreview } from '../../core/ipc/types';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import {
@@ -34,6 +34,7 @@ export function ConfigImportDialog({
     onImported,
 }: ConfigImportDialogProps) {
     const m = useMotion();
+    const { pickZipSource, previewImport, importConfig } = useConfigImportOps();
     const [phase, setPhase] = useState<Phase>('pick');
     const [preview, setPreview] = useState<ConfigImportPreview | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -62,7 +63,7 @@ export function ConfigImportDialog({
         setErrorMsg(null);
         try {
             await new Promise((r) => setTimeout(r, m.enabled ? 720 : 120));
-            const p = await configTransferService.preview(sourcePath);
+            const p = await previewImport(sourcePath);
             setPreview(p);
             if (!p.can_import) {
                 setErrorMsg(p.warnings[0] ?? '未识别到可导入的配置');
@@ -77,7 +78,7 @@ export function ConfigImportDialog({
     };
 
     const pickZip = async () => {
-        const path = await configTransferService.pickZipSource();
+        const path = await pickZipSource();
         if (path) await runPreview(path);
     };
 
@@ -97,7 +98,7 @@ export function ConfigImportDialog({
         if (!preview?.can_import) return;
         setPhase('import');
         try {
-            const result = await configTransferService.import(preview.source_path);
+            const result = await importConfig(preview.source_path);
             setPhase('done');
             onImported(result);
         } catch (e) {

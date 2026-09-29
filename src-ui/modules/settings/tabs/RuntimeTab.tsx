@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { clampRemoteHostHealthProbeIntervalMs } from '../../../core/domain/remote-host/healthProbeSettings';
 import { Button, NumberField, Select, Switch } from '../../../shared/ui';
-import type { NodeEnvironmentCandidate } from '../../../core/ipc/types';
-import { componentService } from '../../../core/services/component.service';
+import { useLocalNodeCandidates } from '../../../hooks/settings/useLocalNodeCandidates';
 import type { SettingsDraft } from '../settings-draft';
 import {
     FieldRow,
@@ -18,27 +17,7 @@ interface Props {
 }
 
 export function RuntimeTab({ draft, patchDraft }: Props) {
-    const [candidates, setCandidates] = useState<NodeEnvironmentCandidate[]>([]);
-    const [probing, setProbing] = useState(false);
-    const [probeComplete, setProbeComplete] = useState(false);
-
-    const loadCandidates = useCallback(async () => {
-        setProbing(true);
-        setProbeComplete(false);
-        try {
-            const list = await componentService.probeLocalNodeCandidates();
-            setCandidates(list.filter((c) => c.isValid));
-        } catch (err) {
-            console.error('[RuntimeTab] probe node candidates error:', err);
-        } finally {
-            setProbing(false);
-            setProbeComplete(true);
-        }
-    }, []);
-
-    useEffect(() => {
-        void loadCandidates();
-    }, [loadCandidates]);
+    const { candidates, probing, probeComplete, reprobe } = useLocalNodeCandidates();
 
     const configuredNode = draft?.snowlumaNodePath?.trim() ?? '';
     const configuredNodeIsValid = candidates.some(
@@ -115,7 +94,7 @@ export function RuntimeTab({ draft, patchDraft }: Props) {
                             variant="secondary"
                             size="sm"
                             disabled={probing}
-                            onClick={() => void loadCandidates()}
+                            onClick={reprobe}
                             title="重新探测本机环境"
                         >
                             <RefreshCw size={13} className={probing ? 'animate-spin' : ''} />
