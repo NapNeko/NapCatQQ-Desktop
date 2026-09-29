@@ -70,6 +70,7 @@ flowchart TB
   - 商店页的工具条、槽位 id、卸载确认 → `modules/apps/detail/storeToolbar.tsx`；通用商店页 `detail/AppStoreTab.tsx` + `hooks/apps/useAppStore.ts` + `core/domain/apps/appStore.ts`
   - 四个框架的配置表单状态 → `hooks/apps/useAppConfigForm.ts`，各框架只给一份 `validate` 和保存文案（`core/domain/apps/<框架>Config.ts`），字段错误按路径挂（`core/domain/apps/appConfigForm.ts` 的 `issuesByPath`）
   - 安装 / 下载进度行 → `shared/components/progressView.tsx`（组件页、应用端安装进度、任务详情共用）
+  - 主题 id、明暗、选择器分组 → `core/design/themes/registry.ts`；社区主题只加 `palettes.ts` 里一份调色板，token 由 `paletteCss.ts` 展开注入。样式里按明暗 / 纯色平面分支用 `<html>` 上的 `data-theme-scheme` / `data-theme-flat`，别逐个列主题名；跟随系统的暗色块写 `:root:not([data-theme])`
 - 服务端数据一律 react-query，别在组件里 `useEffect` + `let cancelled` 手搓 fetch：
   - 缓存键就近导出成工厂（`appConfigKey(id)` / `astrbotPersonasKey(id)` …），只在本文件用的键不导出。根组件也要的键单独成文件：实例列表的 `APP_INSTANCES_KEY` + `upsertInstance` 在 `hooks/apps/appInstancesCache.ts`，免得事件桥把整套应用端 hook 拖进主包。
   - 每次打开都得是当下状态的（对接计划 `useAppLinkPlan`、插件配置文件列表 `useAppPluginConfigDocs`）：`staleTime: 0` + `gcTime: 0`，重新拉的途中不给旧数据。

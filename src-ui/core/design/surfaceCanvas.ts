@@ -1,7 +1,6 @@
 // 与 tokens --surface-canvas 对齐，供首屏 / WebView 底色同步（避免暗色主题闪白）。
 
 const CANVAS_FALLBACK_LIGHT = '#faf7f2';
-const CANVAS_FALLBACK_DARK = '#211f1d';
 
 export function readSurfaceCanvasColor(): string {
     if (typeof document === 'undefined') return CANVAS_FALLBACK_LIGHT;
@@ -35,21 +34,4 @@ export function isDarkSurfaceCanvas(): boolean {
     const b = parseInt(hex.slice(4, 6), 16);
     const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     return lum < 0.45;
-}
-
-export function surfaceCanvasFallbackForBoot(): string {
-    if (typeof window === 'undefined') return CANVAS_FALLBACK_LIGHT;
-    const theme = document.documentElement.getAttribute('data-theme');
-    if (theme === 'light' || theme === 'latte') return CANVAS_FALLBACK_LIGHT;
-    if (
-        theme === 'dark' ||
-        theme === 'frappe' ||
-        theme === 'macchiato' ||
-        theme === 'mocha'
-    ) {
-        return theme === 'mocha' ? '#1e1e2e' : CANVAS_FALLBACK_DARK;
-    }
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? CANVAS_FALLBACK_DARK
-        : CANVAS_FALLBACK_LIGHT;
 }

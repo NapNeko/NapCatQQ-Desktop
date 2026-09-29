@@ -4,7 +4,7 @@
 // 调用 applySnapshot 一次性写入。其它页面只读（主题 / 动画 / 吉祥物 / 关闭行为）。
 //
 // 当前承载：
-//   theme           light / dark / auto
+//   theme           auto / light / dark / Catppuccin / 社区主题（见 core/design/themes）
 //   showMascot      true / false
 //   closeAction     close（关闭程序）/ tray（最小化到托盘）
 //   motionEnabled   动画总开关。系统级 prefers-reduced-motion 命中时也会被强制覆盖
@@ -26,8 +26,16 @@ import {
     applyRadiusStyle,
 } from '../../core/design/radius';
 import { syncRootChromeBackground } from '../../core/design/surfaceCanvas';
+import {
+    isFlatTheme,
+    normalizeTheme,
+    themeScheme,
+    type ThemeMode,
+} from '../../core/design/themes/registry';
+import { PALETTE_THEMES } from '../../core/design/themes/palettes';
+import { installPaletteThemeStyles } from '../../core/design/themes/paletteCss';
 
-export type ThemeMode = 'light' | 'dark' | 'auto' | 'latte' | 'frappe' | 'macchiato' | 'mocha';
+export type { ThemeMode } from '../../core/design/themes/registry';
 export type CloseAction = 'close' | 'tray';
 
 export function normalizeCloseAction(raw: unknown): CloseAction {
@@ -88,16 +96,6 @@ function persist() {
     }
 }
 
-const VALID_THEMES: ReadonlySet<ThemeMode> = new Set<ThemeMode>([
-    'auto', 'light', 'dark', 'latte', 'frappe', 'macchiato', 'mocha',
-]);
-
-function normalizeTheme(raw: unknown): ThemeMode {
-    return typeof raw === 'string' && VALID_THEMES.has(raw as ThemeMode)
-        ? (raw as ThemeMode)
-        : 'auto';
-}
-
 function normalizeMotionLevel(raw: unknown): MotionLevel {
     return raw === 'elegant' || raw === 'rich' ? raw : 'standard';
 }
@@ -123,13 +121,18 @@ function update(patch: Partial<AppPreferences>) {
 export function applySideEffects() {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
-    // 主题：auto 时 attribute 留空让 CSS 走 prefers-color-scheme；
-    // 其它值（light / dark / latte / frappe / macchiato / mocha）直接写入。
+    installPaletteThemeStyles(PALETTE_THEMES);
+    // 主题：auto 时 attribute 留空让 CSS 走 prefers-color-scheme；其它值直接写入。
+    // data-theme-scheme / data-theme-flat 给 index.css 按明暗、按「第三方纯色平面」分支用，
+    // 不用在样式里逐个列主题名。
     if (state.theme === 'auto') {
         root.removeAttribute('data-theme');
+        root.removeAttribute('data-theme-scheme');
     } else {
         root.setAttribute('data-theme', state.theme);
+        root.setAttribute('data-theme-scheme', themeScheme(state.theme) ?? 'light');
     }
+    root.toggleAttribute('data-theme-flat', isFlatTheme(state.theme));
     // 圆角风格：覆盖 :root 上的 --radius-* CSS 变量。
     applyRadiusStyle(state.radiusStyle);
     syncRootChromeBackground();

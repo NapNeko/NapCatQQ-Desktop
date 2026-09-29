@@ -16,6 +16,7 @@ import {
 } from '../../shared/ui/motion/GsapPresence';
 import gsap from 'gsap';
 import type { ThemeMode } from '../../hooks/preferences/preferencesStore';
+import { THEME_GROUPS, findThemePreview } from '../../core/design/themes/registry';
 import type { MotionLevel } from '../../core/design/motion';
 import type { RadiusStyle } from '../../core/design/radius';
 import {
@@ -172,86 +173,17 @@ export function FieldRow({
     );
 }
 
-/** 单个主题的预览色值。 */
-interface ThemeItem {
-    value: ThemeMode;
-    label: string;
-    canvas: string;
-    sidebar: string;
-    text: string;
-    subtext: string;
-    brand: string;
-    accent: string;
-}
-
-/** 主题分组：组名 + 子项列表。未来新增主题或自定义主题只需追加 ThemeGroup。 */
-interface ThemeGroup {
-    label: string;
-    items: ReadonlyArray<ThemeItem>;
-}
-
-const THEME_GROUPS: ReadonlyArray<ThemeGroup> = [
-    {
-        label: '基础',
-        items: [
-            {
-                value: 'auto', label: '系统',
-                canvas: '#faf7f2', sidebar: '#ffe3ee',
-                text: '#2c1f18', subtext: '#8a7d76', brand: '#ff6b3d', accent: '#f58fb6',
-            },
-            {
-                value: 'light', label: '浅色',
-                canvas: '#faf7f2', sidebar: '#ffe3ee',
-                text: '#2c1f18', subtext: '#8a7d76', brand: '#ff6b3d', accent: '#f58fb6',
-            },
-            {
-                value: 'dark', label: '暗色',
-                canvas: '#211f1d', sidebar: '#292725',
-                text: '#f5f1ed', subtext: '#9e9890', brand: '#ff8a57', accent: '#f58fb6',
-            },
-        ],
-    },
-    {
-        label: 'Catppuccin',
-        items: [
-            {
-                value: 'latte', label: 'Latte',
-                canvas: '#eff1f5', sidebar: '#e6e9ef',
-                text: '#4c4f69', subtext: '#6c6f85', brand: '#8839ef', accent: '#1e66f5',
-            },
-            {
-                value: 'frappe', label: 'Frappé',
-                canvas: '#303446', sidebar: '#292c3c',
-                text: '#c6d0f5', subtext: '#949cbb', brand: '#ca9ee6', accent: '#8caaee',
-            },
-            {
-                value: 'macchiato', label: 'Macchiato',
-                canvas: '#24273a', sidebar: '#1e2030',
-                text: '#cad3f5', subtext: '#939ab7', brand: '#c6a0f6', accent: '#8aadf4',
-            },
-            {
-                value: 'mocha', label: 'Mocha',
-                canvas: '#1e1e2e', sidebar: '#181825',
-                text: '#cdd6f4', subtext: '#9399b2', brand: '#cba6f7', accent: '#89b4fa',
-            },
-        ],
-    },
-];
-
-/** 从 THEME_GROUPS 中查找指定主题的元数据。 */
-function findThemeItem(value: ThemeMode): ThemeItem | undefined {
-    for (const group of THEME_GROUPS) {
-        const found = group.items.find((it) => it.value === value);
-        if (found) return found;
-    }
-    return undefined;
-}
+// 主题多，弹层按 Radix 算出的可用高度收，窗口矮时在里面滚而不是伸出窗外；28px 留给弹层内边距。
+const PICKER_SCROLL_STYLE = {
+    maxHeight: 'min(540px, calc(var(--radix-popover-content-available-height, 540px) - 28px))',
+};
 
 /**
  * 主题选择器弹窗组件。
- * FieldRow 中展示紧凑触发按钮（色块 + 当前主题名），点击弹出 Popover，
- * 弹窗内展示分组主题卡片网格（原始 h-9 预览比例，grid-cols-7）。
- * 未来扩展只需往 THEME_GROUPS 追加 ThemeGroup。
+ * FieldRow 中展示紧凑触发按钮（色块 + 当前主题全名），点击弹出 Popover，
+ * 弹窗内按族分组展示主题卡片。外层 4 列网格，每组占自己卡片数那么多列，
+ * 3 个的族和 1 个的族能拼在同一行；组内卡片宽度和外层列宽一致。
+ * 主题数据全在 core/design/themes，这里不列主题。
  */
 export function ThemePicker({
     value,
@@ -261,7 +193,7 @@ export function ThemePicker({
     onChange: (next: ThemeMode) => void;
 }) {
     const [open, setOpen] = useState(false);
-    const current = findThemeItem(value);
+    const current = findThemePreview(value);
     const m = useMotion();
 
     // 卡片按钮 ref 映射，给 bindHover/bindPress 挂事件监听
@@ -301,7 +233,7 @@ export function ThemePicker({
                             }}
                         />
                     )}
-                    <span>{current?.label ?? value}</span>
+                    <span>{current?.fullLabel ?? value}</span>
                     <ChevronDown className="h-3 w-3 text-text-tertiary" />
                 </button>
             </PopoverTrigger>
@@ -312,15 +244,26 @@ export function ThemePicker({
                 align="start"
                 sideOffset={6}
             >
-                <div className="flex flex-col gap-3">
+                <div
+                    className="-mr-1.5 grid grid-cols-[repeat(4,84px)] gap-x-1.5 gap-y-3 overflow-y-auto pr-1.5"
+                    style={PICKER_SCROLL_STYLE}
+                >
                     {THEME_GROUPS.map((group) => (
-                        <div key={group.label} className="space-y-1.5">
+                        <div
+                            key={group.label}
+                            className="min-w-0 space-y-1.5"
+                            style={{ gridColumn: `span ${Math.min(group.items.length, 4)}` }}
+                        >
                             {/* 分组标签 */}
-                            <span className="text-[11px] font-medium tracking-wide text-text-tertiary">
+                            <span className="block truncate text-[11px] font-medium tracking-wide text-text-tertiary">
                                 {group.label}
                             </span>
-                            {/* 卡片网格：4 列基准，最多 4 个主题一组 */}
-                            <div className="grid grid-cols-4 gap-1.5">
+                            <div
+                                className="grid gap-1.5"
+                                style={{
+                                    gridTemplateColumns: `repeat(${Math.min(group.items.length, 4)}, minmax(0, 1fr))`,
+                                }}
+                            >
                                 {group.items.map((item) => {
                                     const selected = value === item.value;
                                     return (
@@ -328,6 +271,7 @@ export function ThemePicker({
                                             key={item.value}
                                             ref={setCardRef(item.value)}
                                             type="button"
+                                            title={item.fullLabel}
                                             onClick={() => onChange(item.value)}
                                             className={
                                                 'relative flex flex-col items-stretch gap-1 rounded-md p-1 transition-colors ' +
@@ -370,7 +314,7 @@ export function ThemePicker({
                                             {/* 标签 — 字重固定避免选中时 font-semibold 撑宽 grid */}
                                             <span
                                                 className={
-                                                    'text-center text-[11px] font-semibold leading-tight ' +
+                                                    'truncate text-center text-[11px] font-semibold leading-tight ' +
                                                     (selected ? 'text-text' : 'text-text-tertiary')
                                                 }
                                             >

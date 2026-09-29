@@ -456,7 +456,7 @@ samp,
 
 /* 暗色角落柔光：降低渐变强度，深底上不刺眼 */
 @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .ndf-canvas-glow {
+    :root:not([data-theme]) .ndf-canvas-glow {
         background:
             radial-gradient(65% 45% at -8% -8%, color-mix(in srgb, var(--accent-500) 8%, transparent), transparent 62%),
             radial-gradient(55% 40% at 108% -5%, color-mix(in srgb, var(--brand-500) 6%, transparent), transparent 58%),
@@ -464,15 +464,15 @@ samp,
     }
 }
 
-:root[data-theme="dark"] .ndf-canvas-glow {
+:root[data-theme-scheme="dark"] .ndf-canvas-glow {
     background:
         radial-gradient(65% 45% at -8% -8%, color-mix(in srgb, var(--accent-500) 8%, transparent), transparent 62%),
         radial-gradient(55% 40% at 108% -5%, color-mix(in srgb, var(--brand-500) 6%, transparent), transparent 58%),
         radial-gradient(75% 55% at 50% 108%, color-mix(in srgb, var(--brand-500) 4%, transparent), transparent 65%);
 }
 
-/* Catppuccin 规范：纯色平面背景，禁用角落柔光渐变。 */
-:root:is([data-theme="latte"], [data-theme="frappe"], [data-theme="macchiato"], [data-theme="mocha"]) .ndf-canvas-glow {
+/* 第三方调色板（Catppuccin / 社区主题）：纯色平面背景，禁用角落柔光渐变。 */
+:root[data-theme-flat] .ndf-canvas-glow {
     background: none;
 }
 
@@ -749,7 +749,7 @@ samp,
 
 /* 深底上天色压一半，月亮星星换奶白。 */
 @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .ndf-hero-sky {
+    :root:not([data-theme]) .ndf-hero-sky {
         --sky-strength: 0.55;
         --sky-ink: #fff6df;
         --sky-ink-glow: rgba(255, 236, 190, 0.6);
@@ -757,15 +757,15 @@ samp,
     }
 }
 
-:root:is([data-theme="dark"], [data-theme="frappe"], [data-theme="macchiato"], [data-theme="mocha"]) .ndf-hero-sky {
+:root[data-theme-scheme="dark"] .ndf-hero-sky {
     --sky-strength: 0.55;
     --sky-ink: #fff6df;
     --sky-ink-glow: rgba(255, 236, 190, 0.6);
     --sky-cloud: rgba(255, 245, 230, 0.32);
 }
 
-/* Catppuccin 纯色平面：不铺渐变，只留日月星辰这类「画上去的东西」。 */
-:root:is([data-theme="latte"], [data-theme="frappe"], [data-theme="macchiato"], [data-theme="mocha"]) .ndf-hero-sky__gradient {
+/* 第三方调色板纯色平面：不铺渐变，只留日月星辰这类「画上去的东西」。 */
+:root[data-theme-flat] .ndf-hero-sky__gradient {
     display: none;
 }
 
@@ -1071,22 +1071,22 @@ samp,
     animation: splash-aurora-c 15s ease-in-out infinite;
 }
 
-:root[data-theme="dark"] .ndf-splash-aurora--a,
-:root[data-theme="dark"] .ndf-splash-aurora--b,
-:root[data-theme="dark"] .ndf-splash-aurora--c {
+:root[data-theme-scheme="dark"] .ndf-splash-aurora--a,
+:root[data-theme-scheme="dark"] .ndf-splash-aurora--b,
+:root[data-theme-scheme="dark"] .ndf-splash-aurora--c {
     opacity: 0.55;
 }
 
 @media (prefers-color-scheme: dark) {
 
-    :root:not([data-theme="light"]) .ndf-splash-aurora--a,
-    :root:not([data-theme="light"]) .ndf-splash-aurora--b,
-    :root:not([data-theme="light"]) .ndf-splash-aurora--c {
+    :root:not([data-theme]) .ndf-splash-aurora--a,
+    :root:not([data-theme]) .ndf-splash-aurora--b,
+    :root:not([data-theme]) .ndf-splash-aurora--c {
         opacity: 0.55;
     }
 }
 
-:root:is([data-theme="latte"], [data-theme="frappe"], [data-theme="macchiato"], [data-theme="mocha"]) .ndf-splash-aurora {
+:root[data-theme-flat] .ndf-splash-aurora {
     display: none;
 }
 

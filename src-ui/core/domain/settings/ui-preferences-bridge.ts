@@ -16,20 +16,11 @@ import {
     RADIUS_STYLE_DEFAULT,
     normalizeRadiusStyle,
 } from '../../design/radius';
-import type { AppPreferences, CloseAction, ThemeMode } from '../../../hooks/preferences/preferencesStore';
+import { normalizeTheme } from '../../design/themes/registry';
+import type { AppPreferences, CloseAction } from '../../../hooks/preferences/preferencesStore';
 import {
     normalizeCloseAction,
 } from '../../../hooks/preferences/preferencesStore';
-
-const VALID_THEMES: ReadonlySet<ThemeMode> = new Set<ThemeMode>([
-    'auto', 'light', 'dark', 'latte', 'frappe', 'macchiato', 'mocha',
-]);
-
-function normalizeTheme(raw: unknown): ThemeMode {
-    return typeof raw === 'string' && VALID_THEMES.has(raw as ThemeMode)
-        ? (raw as ThemeMode)
-        : 'auto';
-}
 
 function normalizeMotionLevel(raw: unknown): AppPreferences['motionLevel'] {
     return raw === 'elegant' || raw === 'rich' ? raw : 'standard';

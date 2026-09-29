@@ -206,7 +206,7 @@
    两份独立 token 块，不复用，避免选择器优先级耦合。 */
 
 @media (prefers-color-scheme: dark) {
-   :root:not([data-theme="light"]) {
+   :root:not([data-theme]) {
       /* surface: 中性暖灰阶梯，明亮深底保证可读性 */
       --surface-canvas: #211f1d;
       --surface-card: #2e2b28;

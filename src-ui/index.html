@@ -15,37 +15,15 @@
       background: #faf7f2;
     }
 
+    /* 只管跟随系统（没写 data-theme）的情况：选了具体主题时 syncRootChromeBackground
+       会把主题画布色写成 html/body/#root 的内联背景，这里带 !important 会把它盖掉。 */
     @media (prefers-color-scheme: dark) {
 
-      html:not([data-theme="light"]):not([data-theme="latte"]),
-      html:not([data-theme="light"]):not([data-theme="latte"]) body,
-      html:not([data-theme="light"]):not([data-theme="latte"]) #root {
+      html:not([data-theme]),
+      html:not([data-theme]) body,
+      html:not([data-theme]) #root {
         background: #211f1d !important;
       }
-    }
-
-    html[data-theme="dark"],
-    html[data-theme="frappe"],
-    html[data-theme="macchiato"] {
-      background: #211f1d;
-    }
-
-    html[data-theme="dark"] body,
-    html[data-theme="frappe"] body,
-    html[data-theme="macchiato"] body,
-    html[data-theme="dark"] #root,
-    html[data-theme="frappe"] #root,
-    html[data-theme="macchiato"] #root {
-      background: #211f1d !important;
-    }
-
-    html[data-theme="mocha"] {
-      background: #1e1e2e;
-    }
-
-    html[data-theme="mocha"] body,
-    html[data-theme="mocha"] #root {
-      background: #1e1e2e !important;
     }
   </style>
 </head>
