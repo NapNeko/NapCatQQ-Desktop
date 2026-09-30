@@ -5,6 +5,7 @@ import {
     Activity,
     Copy,
     FileText,
+    FlaskConical,
     Globe,
     LinkIcon,
     Monitor,
@@ -56,6 +57,8 @@ import { cn } from '../../../../shared/utils/cn';
 import { pushInfoBar } from '../../../../hooks/ui/globalInfoBarStore';
 import { openTerminal } from '../../../../hooks/terminal/terminalStore';
 import { useFeatureEnabled } from '../../../../hooks/preferences/featureTogglesStore';
+import { useDebugConsoleEnabled } from '../../../../hooks/debug/useDebugConsoleEnabled';
+import { openDebugConsole } from '../../../../hooks/debug/debugNav';
 import { QrCodeDialog } from './QrCodeDialog';
 import { BotManageCard } from './BotManageCard';
 import { buildBotListCardStatus } from './botCardPresentation';
@@ -144,6 +147,7 @@ export function BotCard({
 }: BotCardProps) {
     const [qrOpen, setQrOpen] = useState(false);
     const [retryingSnowlumaUi, setRetryingSnowlumaUi] = useState(false);
+    const debugEnabled = useDebugConsoleEnabled();
     const {
         enabled: metricsEnabled,
         metrics: runtimeMetrics,
@@ -520,6 +524,18 @@ export function BotCard({
                                         </IconButton>
                                     )}
                                     <IconButton
+                                        visible={debugEnabled && bot.state === 'running'}
+                                        tooltip="调试"
+                                        onClick={stopAction(() => openDebugConsole(bot.bot_id))}
+                                    >
+                                        <ToolbarMotionIcon
+                                            icon={FlaskConical}
+                                            size={14}
+                                            strokeWidth={2.2}
+                                            hoverAccent
+                                        />
+                                    </IconButton>
+                                    <IconButton
                                         visible={true}
                                         tooltip="查看监控"
                                         onClick={stopAction(() => onViewMetrics(bot.bot_id))}
@@ -655,6 +671,12 @@ export function BotCard({
                     <Monitor size={13} />
                     <span>运行监控</span>
                 </ContextMenuItem>
+                {debugEnabled && (
+                    <ContextMenuItem onClick={() => openDebugConsole(bot.bot_id)}>
+                        <FlaskConical size={13} />
+                        <span>在调试台打开</span>
+                    </ContextMenuItem>
+                )}
                 {terminalEnabled && (
                     <ContextMenuItem onClick={() => void openTerminal({ kind: 'bot', bot_id: bot.bot_id, host_dir: false })}>
                         <SquareTerminal size={13} />

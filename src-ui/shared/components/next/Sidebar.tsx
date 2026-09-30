@@ -12,6 +12,7 @@ import {
     ChevronsLeft,
     ChevronsRight,
     Container,
+    FlaskConical,
     LayoutDashboard,
     ListTodo,
     Loader2,
@@ -31,6 +32,7 @@ export type AppRoute =
     | 'overview'
     | 'bots'
     | 'apps'
+    | 'debug'
     | 'components'
     | 'docker'
     | 'remote'
@@ -59,6 +61,7 @@ const MAIN_NAV: NavItem[] = [
     { id: 'overview', label: '概览', icon: LayoutDashboard },
     { id: 'bots', label: '机器人', icon: Bot },
     { id: 'apps', label: '应用端', icon: Blocks },
+    { id: 'debug', label: '调试台', icon: FlaskConical },
     { id: 'components', label: '组件', icon: Package },
     { id: 'docker', label: '容器', icon: Container },
     { id: 'remote', label: '远端', icon: Server },

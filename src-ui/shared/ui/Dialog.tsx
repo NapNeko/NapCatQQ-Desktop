@@ -47,6 +47,14 @@ interface DialogAnchor {
 }
 const DialogAnchorContext = createContext<DialogAnchor | null>(null);
 
+// Radix 默认给内容元素带上指向「说明」的 aria-describedby；没有渲染 DialogDescription 的
+// 对话框找不到对应元素，Radix（1.1.x 不分 dev/prod）每次打开都 console.warn 一条
+// DescriptionWarning。这里让 DialogDescription 挂载时登记，DialogContent 按登记结果决定
+// 这个属性：有说明交给 Radix 的默认链接，没说明显式不传（Radix 文档认可的关闭方式），
+// 调用方透传时按透传。a11y 语义不丢：没有说明的对话框本来就不该有 describedby。
+const DialogDescriptionRegisterContext = createContext<(() => () => void) | null>(null);
+const DialogHasDescriptionContext = createContext<boolean>(false);
+
 const OVERLAY_ATTR = 'data-dialog-overlay';
 
 /// 给业务用:在按钮 onClick 里调用,捕获鼠标点位置后再 setOpen(true)。
@@ -85,16 +93,27 @@ export function Dialog({
         if (!isControlled) setInternal(next);
         onOpenChange?.(next);
     };
+    // DialogDescription 的登记数；register 保持稳定引用，Description 只在挂载/卸载时动
+    const [descriptionCount, setDescriptionCount] = useState(0);
+    const registerDescription = useCallback(() => {
+        setDescriptionCount((c) => c + 1);
+        return () => setDescriptionCount((c) => c - 1);
+    }, []);
+    const hasDescription = descriptionCount > 0;
     return (
         <DialogOpenContext.Provider value={actualOpen}>
             <DialogAnchorContext.Provider value={anchor ?? null}>
-                <RadixDialog.Root
-                    open={actualOpen}
-                    onOpenChange={handleChange}
-                    modal={modal}
-                >
-                    {children}
-                </RadixDialog.Root>
+                <DialogDescriptionRegisterContext.Provider value={registerDescription}>
+                    <DialogHasDescriptionContext.Provider value={hasDescription}>
+                        <RadixDialog.Root
+                            open={actualOpen}
+                            onOpenChange={handleChange}
+                            modal={modal}
+                        >
+                            {children}
+                        </RadixDialog.Root>
+                    </DialogHasDescriptionContext.Provider>
+                </DialogDescriptionRegisterContext.Provider>
             </DialogAnchorContext.Provider>
         </DialogOpenContext.Provider>
     );
@@ -212,12 +231,14 @@ export const DialogContent = forwardRef<
             onPointerDownOutside: onPointerDownOutsideProp,
             onFocusOutside: onFocusOutsideProp,
             onInteractOutside: onInteractOutsideProp,
+            'aria-describedby': ariaDescribedByProp,
             ...contentProps
         },
         _ref,
     ) => {
         const open = useContext(DialogOpenContext);
         const anchor = useContext(DialogAnchorContext);
+        const hasDescription = useContext(DialogHasDescriptionContext);
         const contentEnter = makeContentEnter(anchor);
 
         return (
@@ -241,6 +262,14 @@ export const DialogContent = forwardRef<
                             <RadixDialog.Content
                                 asChild
                                 forceMount
+                                // 没渲染 DialogDescription 时显式不传 aria-describedby
+                                //（Radix 默认会指向一个不存在的说明 id，每次打开都告警）；
+                                // 有说明时不带这个键，走 Radix 的默认链接
+                                {...(ariaDescribedByProp !== undefined
+                                    ? { 'aria-describedby': ariaDescribedByProp }
+                                    : hasDescription
+                                      ? {}
+                                      : { 'aria-describedby': undefined })}
                                 {...contentProps}
                                 onPointerDownOutside={(e) => {
                                     onPointerDownOutsideProp?.(e);
@@ -461,10 +490,16 @@ function useDialogContentHeight(
     return { setClipRef, setInnerRef };
 }
 
-const ContentBody = forwardRef<
-    HTMLDivElement,
-    { className?: string; size?: DialogSize; hideClose?: boolean; children?: ReactNode }
->(({ className, size = 'md', hideClose, children }, ref) => {
+// Radix Content 用 asChild 把自己的属性（role="dialog"、aria-labelledby / describedby、焦点圈住用的
+// onKeyDown、分层时的 pointer-events 等）经 Slot 合进这里，必须原样落到外层 div 上：
+// 读屏靠 role 认出对话框，调试台等页面的快捷键也靠 [role="dialog"] 在对话框里让路
+type ContentBodyProps = Omit<HTMLAttributes<HTMLDivElement>, 'children'> & {
+    size?: DialogSize;
+    hideClose?: boolean;
+    children?: ReactNode;
+};
+
+const ContentBody = forwardRef<HTMLDivElement, ContentBodyProps>(({ className, size = 'md', hideClose, children, style, ...radixProps }, ref) => {
     const open = useContext(DialogOpenContext);
     // GsapPresence 用 useState 控制渲染,内容可能在二次渲染后才出现。
     // contentReady 在 mount 后设为 true,触发 useDialogContentHeight 重新测量。
@@ -482,8 +517,10 @@ const ContentBody = forwardRef<
 
     return (
         <div
+            {...radixProps}
             ref={setOuterRef}
-            style={{ visibility: 'hidden', opacity: 0 }}
+            // 起始态交给 GSAP 接管；Radix 给的样式（多层对话框时的 pointer-events）照样带上
+            style={{ ...style, visibility: 'hidden', opacity: 0 }}
             className={cn(
                 'pointer-events-auto relative w-full',
                 'rounded-md bg-elevated p-6 shadow-popover',
@@ -556,13 +593,18 @@ DialogTitle.displayName = 'DialogTitle';
 export const DialogDescription = forwardRef<
     ElementRef<typeof RadixDialog.Description>,
     ComponentPropsWithoutRef<typeof RadixDialog.Description>
->(({ className, ...props }, ref) => (
-    <RadixDialog.Description
-        ref={ref}
-        className={cn('text-sm text-text-secondary', className)}
-        {...props}
-    />
-));
+>(({ className, ...props }, ref) => {
+    const register = useContext(DialogDescriptionRegisterContext);
+    // 登记给 DialogContent：内容元素的 aria-describedby 按有没有说明决定带不带
+    useEffect(() => register?.(), [register]);
+    return (
+        <RadixDialog.Description
+            ref={ref}
+            className={cn('text-sm text-text-secondary', className)}
+            {...props}
+        />
+    );
+});
 DialogDescription.displayName = 'DialogDescription';
 
 export const DialogFooter: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({

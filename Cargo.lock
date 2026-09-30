@@ -3191,6 +3191,7 @@ dependencies = [
  "ncd-deploy",
  "ncd-domain",
  "ncd-host",
+ "ncd-onebot",
  "ncd-test-support",
  "ncd-traits",
  "proptest",
@@ -3224,6 +3225,7 @@ dependencies = [
  "ncd-domain",
  "ncd-host",
  "ncd-network",
+ "ncd-onebot",
  "ncd-test-support",
  "ncd-traits",
  "netstat2",
@@ -3377,6 +3379,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ncd-onebot"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "ncd-domain",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
 name = "ncd-runtime"
 version = "0.1.0"
 dependencies = [
@@ -3400,6 +3419,7 @@ dependencies = [
  "ncd-host",
  "ncd-log",
  "ncd-network",
+ "ncd-onebot",
  "ncd-server",
  "ncd-test-support",
  "ncd-traits",
@@ -3416,6 +3436,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-tungstenite",
  "tokio-util",
  "tracing",
  "tracing-subscriber",

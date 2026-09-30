@@ -1849,3 +1849,68 @@ async fn process_exit_event_transitions_running_actor_to_crashed() {
     }
     assert!(got_crashed, "expected actor to transition to Crashed");
 }
+
+/// 调试台的窄接口：配置和运行态按 QQ 号拼在一起，本机 SnowLuma 的 WebUI 读数据目录里的文件
+#[tokio::test]
+async fn debug_port_joins_configs_with_snapshots_and_resolves_webui_endpoints() {
+    use ncd_runtime::onebot_debug::DebugBotPort;
+
+    let temp = ncd_test_support::TempWorkspace::new().unwrap();
+    let (_, _, _, manager) = make_manager(temp.path());
+    manager
+        .upsert_bot_config(bot_config(10001, "nc"))
+        .await
+        .unwrap();
+    let mut snowluma = bot_config(20002, "sl");
+    snowluma.bot.backend_type = BackendType::SnowLuma;
+    manager.upsert_bot_config(snowluma).await.unwrap();
+    manager.start_bot(&BotId::new("10001")).await.unwrap();
+
+    let views = DebugBotPort::list_bots(&manager).await;
+    assert_eq!(views.len(), 2);
+    let nc = views.iter().find(|v| v.config.bot.qq_id == 10001).unwrap();
+    assert_eq!(nc.snapshot.state, BotActorState::Running);
+    assert!(nc.running());
+    // 还没收到 WebUI 地址，登录态未知
+    assert_eq!(nc.online, None);
+    let sl = views.iter().find(|v| v.config.bot.qq_id == 20002).unwrap();
+    assert_eq!(sl.snapshot.state, BotActorState::Stopped);
+    assert_eq!(sl.online, None);
+
+    let one = DebugBotPort::bot(&manager, &BotId::new("10001"))
+        .await
+        .unwrap();
+    assert_eq!(one.config.bot.name, "nc");
+    assert!(
+        DebugBotPort::bot(&manager, &BotId::new("30003"))
+            .await
+            .is_none()
+    );
+    assert!(
+        DebugBotPort::napcat_webui(&manager, &BotId::new("10001"))
+            .await
+            .is_none(),
+        "端点表只在 NapCat 打印出 WebUI 地址后才有值"
+    );
+
+    let paths = ncd_runtime::DataPaths::new(temp.path());
+    std::fs::create_dir_all(paths.snowluma_data_dir()).unwrap();
+    std::fs::write(
+        paths.snowluma_data_dir().join("session.json"),
+        r#"{"password": "pw"}"#,
+    )
+    .unwrap();
+    let (port, password) = DebugBotPort::snowluma_webui(&manager, &BotId::new("20002"))
+        .await
+        .unwrap();
+    assert_eq!(password, "pw");
+    assert_eq!(port, 5099, "没有 runtime.json / app-config.json 时用默认口");
+    assert!(
+        DebugBotPort::snowluma_webui(&manager, &BotId::new("10001"))
+            .await
+            .is_err()
+    );
+
+    // 运行时装配时要能当成 trait 对象交给 DebugManager
+    let _port: Arc<dyn DebugBotPort> = Arc::new(manager);
+}

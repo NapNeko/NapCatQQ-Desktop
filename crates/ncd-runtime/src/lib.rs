@@ -5,7 +5,9 @@ pub mod events;
 pub mod napcat;
 pub mod native_deployment_adapter;
 pub mod notify;
+pub mod onebot_debug;
 pub mod release;
+mod snowluma_local_endpoint;
 
 // 域目录（命名收束）
 pub mod bootstrap;
@@ -214,6 +216,7 @@ pub use events::{
 pub use host_resolver::{HostResolveError, HostResolver, LocalOnlyHostResolver};
 pub use legacy_discovery::{LegacyDiscovery, LegacySelection};
 pub use migration::MigrationOrchestrator;
+pub use napcat::debug_client::{NapCatDebugClient, NapCatDebugError};
 pub use napcat::login_poller::{NapCatLoginPoller, PollerConfig, PollerDeps, RestartHandle};
 pub use napcat::offline_notifier::{NoopOfflineNotifier, OfflineNoticeKind, OfflineNotifier};
 pub use napcat::webui_client::{NapCatWebUiClient, NapCatWebUiError, ReqwestNapCatWebUiClient};
@@ -250,6 +253,7 @@ pub use notify::{
     SwappableOneBotEndpointResolver, resolve_local_onebot_messenger, send_offline_email,
     send_offline_webhook, send_test_email, send_test_webhook,
 };
+pub use onebot_debug::{DebugBotPort, DebugEventSink, DebugManager};
 pub use path_probe_impl::LocalPathProbe;
 pub use remote::importable_bots::collect_importable_remote_bots;
 pub use remote::inventory::{
@@ -274,11 +278,13 @@ pub use server_profile_migration::{
 pub use snowluma::{
     AgreementDoc, AgreementsPayload, AuthState, HookProcessInfo, HookProcessStatus,
     LinuxSinglePidProbe, MockProcessTreeProbe, OneBotInstanceInfo, ProcessTreeProbe,
-    ReqwestSnowLumaWebUiClient, ReqwestSnowLumaWebUiClientFactory, SnowLumaDaemon,
-    SnowLumaDaemonError, SnowLumaRuntimeBackend, SnowLumaSession, SnowLumaStatusPoller,
-    SnowLumaWebUiClient, SnowLumaWebUiClientFactory, SnowLumaWebUiError, SysinfoProcessTreeProbe,
-    load_or_create_session, load_snowluma_app_config, render_daemon_globals, sanitize_log_line,
+    ReqwestSnowLumaWebUiClient, ReqwestSnowLumaWebUiClientFactory, SlStreamFrame, SnowLumaDaemon,
+    SnowLumaDaemonError, SnowLumaDebugClient, SnowLumaDebugError, SnowLumaRuntimeBackend,
+    SnowLumaSession, SnowLumaStatusPoller, SnowLumaWebUiClient, SnowLumaWebUiClientFactory,
+    SnowLumaWebUiError, SysinfoProcessTreeProbe, load_or_create_session, load_snowluma_app_config,
+    parse_stream_frame, render_daemon_globals, sanitize_log_line,
 };
+pub use snowluma_local_endpoint::local_snowluma_webui_endpoint;
 pub use ssh_keygen::{GeneratedKeyPair, SshKeygenError, generate_ed25519};
 
 #[cfg(test)]

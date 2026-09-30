@@ -39,6 +39,7 @@ use ncd_traits::runtime_backend::{BotBackend, BotBackendError, BotRuntimeConfig,
 use ncd_traits::{BotConfigRepo, ConfigStore, JsonTransaction, SecretStore};
 
 pub mod auto_restart;
+mod debug_port;
 mod helpers;
 mod listeners;
 mod remote_network;

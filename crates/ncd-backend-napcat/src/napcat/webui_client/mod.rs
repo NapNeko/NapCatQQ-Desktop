@@ -6,6 +6,7 @@ mod payloads;
 mod trait_;
 
 pub use client::ReqwestNapCatWebUiClient;
+pub(crate) use client::login_hash;
 pub use error::NapCatWebUiError;
 pub use payloads::{
     AuthLoginData, AuthLoginRequest, AuthLoginResponse, CheckLoginStatusData,

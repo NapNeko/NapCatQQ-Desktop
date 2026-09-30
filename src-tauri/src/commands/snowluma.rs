@@ -220,7 +220,7 @@ pub async fn open_snowluma_webui(
     state: State<'_, AppState>,
     bot_id: String,
 ) -> Result<SnowLumaWebuiEndpoint, String> {
-    use ncd_domain::{BotId, SnowLumaAppConfig};
+    use ncd_domain::BotId;
     use ncd_domain::{DeploymentType, RuntimeTarget};
 
     let bid = BotId::new(bot_id.clone());
@@ -256,54 +256,8 @@ pub async fn open_snowluma_webui(
         }
     }
 
-    let data_root = state.data_root.clone();
-
-    // 端口:daemon 写入的 runtime.json 优先;否则读 app-config.json;再默认 5099
-    let paths = ncd_runtime::DataPaths::new(&data_root);
-    let runtime_json_path = paths.snowluma_config_dir().join("runtime.json");
-    let port: u16 = (|| -> Option<u16> {
-        let text = std::fs::read_to_string(&runtime_json_path).ok()?;
-        let val: serde_json::Value = serde_json::from_str(&text).ok()?;
-        val.get("webuiPort")
-            .and_then(|v| v.as_u64())
-            .map(|n| n as u16)
-    })()
-    .unwrap_or_else(|| {
-        ncd_runtime::load_snowluma_app_config(&paths.snowluma_data_dir()).webui_port
-    });
-
-    // 密码:先看 App-level override,否则读 session.json
-    let app_cfg_path = paths.snowluma_data_dir().join("app-config.json");
-    let override_pwd: Option<String> = (|| -> Option<String> {
-        let text = std::fs::read_to_string(&app_cfg_path).ok()?;
-        let cfg: SnowLumaAppConfig = serde_json::from_str(&text).ok()?;
-        let trimmed = cfg.webui_password_override.trim().to_string();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed)
-        }
-    })();
-
-    let password = match override_pwd {
-        Some(p) => p,
-        None => {
-            // session.json 由 daemon 启动时写入;如果文件还没生成(用户没启动过
-            // SL bot),返回明确错误让前端提示
-            let session_path = paths.snowluma_data_dir().join("session.json");
-            let text = std::fs::read_to_string(&session_path).map_err(|e| {
-                format!("SnowLuma session 未就绪（请先启动至少一个 SnowLuma Bot）：{e}")
-            })?;
-            let session: serde_json::Value =
-                serde_json::from_str(&text).map_err(|e| format!("解析 session.json 失败：{e}"))?;
-            session
-                .get("password")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "session.json 缺少 password 字段".to_string())?
-                .to_string()
-        }
-    };
-
+    // 本机 daemon:端口/密码的解析与调试台共用 ncd-runtime 的同一份实现
+    let (port, password) = ncd_runtime::local_snowluma_webui_endpoint(&state.data_root)?;
     Ok(SnowLumaWebuiEndpoint {
         url: format!("http://127.0.0.1:{port}/"),
         password,

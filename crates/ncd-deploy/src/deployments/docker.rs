@@ -108,9 +108,7 @@ impl DockerDeployment {
     /// compose 项目目录(host 侧 POSIX 路径),远端 HOME 探测失败时 hard fail
     async fn project_dir(host: &dyn Host, name: &str) -> Result<String, DeploymentError> {
         docker_project_dir(host, name).await.map_err(|reason| {
-            DeploymentError::ConfigInvalid(format!(
-                "{reason}，拒绝回退到临时目录部署 Docker bot"
-            ))
+            DeploymentError::ConfigInvalid(format!("{reason}，拒绝回退到临时目录部署 Docker bot"))
         })
     }
 

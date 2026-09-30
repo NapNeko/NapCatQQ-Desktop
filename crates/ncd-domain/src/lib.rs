@@ -27,6 +27,7 @@ pub mod migration;
 pub mod napcat_events;
 pub mod node_environment;
 pub mod offline_alert;
+pub mod onebot_debug;
 pub mod progress;
 pub mod qq_dependency;
 pub mod release_snapshot;

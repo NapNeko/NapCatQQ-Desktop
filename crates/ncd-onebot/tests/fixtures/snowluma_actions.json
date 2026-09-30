@@ -1,0 +1,284 @@
+{
+  "actions": [
+    {
+      "name": "get_login_info",
+      "aliases": [],
+      "returns": "当前登录账号的 QQ 号与昵称。",
+      "returnsSchema": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "description": "登录 QQ 号"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "登录昵称"
+          }
+        },
+        "required": [
+          "user_id",
+          "nickname"
+        ]
+      },
+      "readOnly": true,
+      "params": [],
+      "invariants": [],
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "category": "信息"
+    },
+    {
+      "name": "send_group_msg",
+      "aliases": [],
+      "summary": "发送群消息",
+      "returns": "{ message_id: number }",
+      "readOnly": false,
+      "params": [
+        {
+          "name": "group_id",
+          "type": "uint",
+          "required": true,
+          "role": "group_id",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "desc": "群号"
+        },
+        {
+          "name": "message",
+          "type": "message",
+          "required": true,
+          "schema": {
+            "description": "OneBot message: string | segment[] | object. In segment arrays, text segments whose text field is exactly \"\" are compatibility placeholders and do not count as sendable segments; missing, null, and whitespace-only text remain subject to normal validation."
+          }
+        },
+        {
+          "name": "auto_escape",
+          "type": "bool",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "default": false
+        }
+      ],
+      "invariants": [],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "群号",
+            "x-role": "group_id"
+          },
+          "message": {
+            "description": "OneBot message: string | segment[] | object. In segment arrays, text segments whose text field is exactly \"\" are compatibility placeholders and do not count as sendable segments; missing, null, and whitespace-only text remain subject to normal validation."
+          },
+          "auto_escape": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "group_id",
+          "message"
+        ],
+        "additionalProperties": true
+      },
+      "category": "消息"
+    },
+    {
+      "name": "set_group_ban",
+      "aliases": [],
+      "summary": "禁言群成员（duration=0 解除）",
+      "readOnly": false,
+      "params": [
+        {
+          "name": "group_id",
+          "type": "uint",
+          "required": true,
+          "role": "group_id",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "desc": "群号"
+        },
+        {
+          "name": "user_id",
+          "type": "uint",
+          "required": true,
+          "role": "member_id",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "desc": "QQ 号"
+        },
+        {
+          "name": "duration",
+          "type": "int",
+          "required": false,
+          "role": "duration",
+          "schema": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "default": 1800
+        }
+      ],
+      "invariants": [],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "群号",
+            "x-role": "group_id"
+          },
+          "user_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "QQ 号",
+            "x-role": "member_id"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 1800,
+            "x-role": "duration"
+          }
+        },
+        "required": [
+          "group_id",
+          "user_id"
+        ],
+        "additionalProperties": true
+      },
+      "category": "群管理"
+    },
+    {
+      "name": "fetch_custom_face",
+      "aliases": [],
+      "summary": "获取自定义表情",
+      "returns": "字符串数组：return_type=url 时为图片 URL，return_type=id 时为 emoji_id。",
+      "returnsSchema": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "description": "图片 URL 或 emoji_id（取决于 return_type）"
+        }
+      },
+      "readOnly": true,
+      "params": [
+        {
+          "name": "count",
+          "type": "int",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "default": 10
+        },
+        {
+          "name": "return_type",
+          "type": "string",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "default": "url"
+        }
+      ],
+      "invariants": [],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 10
+          },
+          "return_type": {
+            "type": "string",
+            "default": "url"
+          }
+        },
+        "additionalProperties": true
+      },
+      "category": "扩展"
+    },
+    {
+      "name": "download_file_stream",
+      "aliases": [],
+      "summary": "以流式方式下载文件(stream 目录本地文件 / URL / 缓存媒体)",
+      "returns": "流式帧:file_info → file_chunk* → file_complete",
+      "readOnly": false,
+      "params": [
+        {
+          "name": "file",
+          "type": "string",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "desc": "文件路径(限 stream 临时目录)/ http(s) URL",
+          "role": "file"
+        },
+        {
+          "name": "file_id",
+          "type": "string",
+          "required": false,
+          "schema": {
+            "type": "string"
+          },
+          "desc": "文件 ID(缓存的图片/语音 id)",
+          "role": "file_id"
+        },
+        {
+          "name": "chunk_size",
+          "type": "int",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "desc": "分块大小(字节,默认 64KB)"
+        }
+      ],
+      "invariants": [],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "文件路径(限 stream 临时目录)/ http(s) URL",
+            "x-role": "file"
+          },
+          "file_id": {
+            "type": "string",
+            "description": "文件 ID(缓存的图片/语音 id)",
+            "x-role": "file_id"
+          },
+          "chunk_size": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "分块大小(字节,默认 64KB)"
+          }
+        },
+        "additionalProperties": true
+      },
+      "stream": true,
+      "category": "流式接口"
+    }
+  ],
+  "categories": []
+}

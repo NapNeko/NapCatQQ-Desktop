@@ -19,6 +19,8 @@ ncd-log = { path = "../ncd-log" }
 ncd-watch = { path = "../ncd-watch", default-features = false }
 ncd-backend-snowluma = { path = "../ncd-backend-snowluma" }
 ncd-backend-napcat = { path = "../ncd-backend-napcat" }
+# OneBot 调试台的协议客户端与动作目录
+ncd-onebot = { path = "../ncd-onebot" }
 async-trait = "0.1"
 # 内嵌终端的输出块（和 ncd-host 的 PtySession 同一个类型）
 bytes = "1"
@@ -46,6 +48,8 @@ reqwest = { version = "0.12", default-features = false, features = [
     "json",
     "rustls-tls",
     "gzip",
+    # 调试台按流读 SnowLuma 的 SSE 事件（bytes_stream）
+    "stream",
 ] }
 sha2 = "0.10"
 hex = "0.4"
@@ -81,6 +85,8 @@ bytes = "1"
 ncd-host = { path = "../ncd-host" }
 ncd-test-support = { path = "../ncd-test-support" }
 wiremock = "0.6"
+# 调试台测试里起一个本机 OneBot WS 服务端
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "handshake"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = [
     "fmt",
     "std",

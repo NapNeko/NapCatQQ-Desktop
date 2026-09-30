@@ -40,6 +40,8 @@ import { useMotion } from '../hooks/preferences/useMotion';
 import { useTaskQueue, useTaskQueueActiveCount } from '../hooks/task-queue/useTaskQueue';
 import { terminalStore, useTerminalCoversPage } from '../hooks/terminal/terminalStore';
 import { useFeatures } from '../hooks/preferences/featureTogglesStore';
+import { useDebugConsoleEnabled } from '../hooks/debug/useDebugConsoleEnabled';
+import { registerDebugNavigator } from '../hooks/debug/debugNav';
 import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
@@ -65,6 +67,7 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
     'overview',
     'bots',
     'apps',
+    'debug',
     'components',
     'docker',
     'remote',
@@ -72,11 +75,16 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
     'settings',
 ];
 
+// 这些页面不受 1280px 的宽度上限：调试台是三栏工作台，宽屏上越宽越好用
+const WIDE_ROUTES: ReadonlySet<AppRoute> = new Set(['debug']);
+
 // 与 lazy 共用同一 import 工厂，侧栏预取与首点加载同一 chunk。
 const loadBotPage = () =>
     import('../modules/bot/BotPage.next').then((m) => ({ default: m.BotPageNext }));
 const loadAppsPage = () =>
     import('../modules/apps/AppsPage.next').then((m) => ({ default: m.AppsPageNext }));
+const loadDebugPage = () =>
+    import('../modules/debug/DebugConsolePage').then((m) => ({ default: m.DebugConsolePage }));
 const loadComponentsPage = () =>
     import('../modules/components/ComponentsPage.next').then((m) => ({
         default: m.ComponentsPageNext,
@@ -98,6 +106,7 @@ const loadTaskQueuePage = () =>
 
 const BotPageNext = lazy(loadBotPage);
 const AppsPageNext = lazy(loadAppsPage);
+const DebugConsolePage = lazy(loadDebugPage);
 const ComponentsPageNext = lazy(loadComponentsPage);
 const DockerPageNext = lazy(loadDockerPage);
 const RemoteHostPanelNext = lazy(loadRemotePage);
@@ -111,6 +120,7 @@ const TerminalDock = lazy(() =>
 const ROUTE_PRELOAD: Partial<Record<AppRoute, () => Promise<unknown>>> = {
     bots: loadBotPage,
     apps: loadAppsPage,
+    debug: loadDebugPage,
     components: loadComponentsPage,
     docker: loadDockerPage,
     remote: loadRemotePage,
@@ -137,6 +147,7 @@ function RouteFallback() {
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
     const [collapsed, setCollapsed] = useState(true);
+    const debugEnabled = useDebugConsoleEnabled();
 
     useEffect(() => {
         perfMark('app_mounted', { once: true });
@@ -173,8 +184,9 @@ export const AppNext: React.FC = () => {
         const hidden = new Set<AppRoute>();
         if (!showDocker) hidden.add('docker');
         if (!features.apps) hidden.add('apps');
+        if (!debugEnabled) hidden.add('debug');
         return hidden;
-    }, [showDocker, features.apps]);
+    }, [showDocker, features.apps, debugEnabled]);
     const hostLabels = useMemo(() => {
         const map: Record<string, string> = { local: '本机' };
         for (const p of servers) {
@@ -219,6 +231,9 @@ export const AppNext: React.FC = () => {
         if (hiddenRoutes.has(nextRoute)) return;
         preloadRoute(nextRoute);
     }, [hiddenRoutes]);
+
+    // Bot 卡片「调试」按钮 / 右键「在调试台打开」经 debugNav 跳过来
+    useEffect(() => registerDebugNavigator(() => navigate('debug')), [navigate]);
 
     const toggleCollapsed = useCallback(() => setCollapsed((v) => !v), []);
 
@@ -397,7 +412,12 @@ export const AppNext: React.FC = () => {
                                 (terminalCoversPage ? ' hidden' : '')
                             }
                         >
-                            <div className="flex min-w-0 w-full max-w-full flex-col px-4 pb-6 pt-2 sm:px-6 lg:px-8 xl:mx-auto xl:max-w-[1280px]">
+                            <div
+                                className={
+                                    'flex min-w-0 w-full max-w-full flex-col px-4 pb-6 pt-2 sm:px-6 lg:px-8 xl:mx-auto' +
+                                    (WIDE_ROUTES.has(displayedRoute) ? '' : ' xl:max-w-[1280px]')
+                                }
+                            >
                                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                     <PageTransition
                                         visible={pageVisible}
@@ -503,6 +523,9 @@ const RouteContent = memo(function RouteContent({
             break;
         case 'apps':
             body = <AppsPageNext onNavigate={onNavigate} />;
+            break;
+        case 'debug':
+            body = <DebugConsolePage onNavigate={onNavigate} />;
             break;
         case 'components':
             body = <ComponentsPageNext />;

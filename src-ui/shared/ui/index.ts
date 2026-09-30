@@ -94,3 +94,17 @@ export {
     type SyntaxMode,
 } from './SyntaxTextEditor';
 
+export {
+    JsonCodeEditor,
+    schemaKeyCompletion,
+    type JsonCodeEditorHandle,
+    type JsonCodeEditorProps,
+} from './JsonCodeEditor';
+export {
+    JsonTree,
+    type JsonTreeHandle,
+    type JsonTreeNodeContext,
+    type JsonTreePath,
+    type JsonTreeProps,
+} from './JsonTree';
+export { DataTable, type DataTableCellContext, type DataTableProps } from './DataTable';

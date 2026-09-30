@@ -10,6 +10,7 @@ ncd-traits = { path = "../ncd-traits" }
 ncd-host = { path = "../ncd-host" }
 ncd-component = { path = "../ncd-component" }
 ncd-deploy = { path = "../ncd-deploy" }
+ncd-onebot = { path = "../ncd-onebot" }
 async-trait = "0.1"
 serde = { workspace = true }
 serde_json = { workspace = true }

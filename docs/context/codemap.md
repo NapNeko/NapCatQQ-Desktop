@@ -21,6 +21,10 @@ flowchart TB
   RT --> SRV[ncd-server]
   RT --> BN[ncd-backend-napcat]
   RT --> BS[ncd-backend-snowluma]
+  RT --> OB[ncd-onebot]
+  BN --> OB
+  BS --> OB
+  OB --> DOM
   RT --> WATCH[ncd-watch 配置 schema]
   CFG --> SRV
   CFG --> DEP[ncd-deploy]
@@ -57,6 +61,7 @@ flowchart TB
 | `crates/ncd-server/` | 远端主机档案 / 凭据 / SSH 密钥 / HostResolver（runtime re-export 兼容） |
 | `crates/ncd-backend-napcat/` | NapCat 本机+远端实现（WebUI/login poller/remote native） |
 | `crates/ncd-backend-snowluma/` | SnowLuma daemon/poller + remote stack/tunnel |
+| `crates/ncd-onebot/` | OneBot 11 调试台协议层：动作目录（NapCat / SnowLuma 两种文档统一模型 + 内置快照）、HTTP / WS / SSE 客户端、重连退避、事件环形缓冲；只依赖 ncd-domain，不认识 Bot 和 Tauri |
 | `crates/ncd-host/` | 本机 Windows / 远端 Linux SSH 主机抽象；shell 引号 `shell_single_quote`、Linux 包管理器 `LinuxPackageManager`、远端读文件 `remote_file` 都在这层 |
 | `crates/ncd-watch/` | 远端主机侧监控 bin：探活 + Webhook（Desktop 退出后） |
 | `crates/ncd-component/` | 组件：Node/uv/QQ/NoVnc/NapCat/SnowLuma/DesktopSelf/NcdWatch；`ComponentId`（含按实例装的 Karin / NoneBot2 / AstrBot / MaiBot / Koishi）定义在 ncd-domain，这里转出 |
@@ -286,7 +291,7 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 单实例 | `single_instance.rs` |
 | hooks | `src-ui/hooks/desktop/` |
 
-产品口径：托盘隐藏 ≠ 退出；退出停本机 Bot 和本机应用端实例、关终端，远端脱管；再开走 bootstrap reconcile。新的退出或重启入口只调 `shutdown_and_exit`，不再自己拼收尾。
+产品口径：托盘隐藏 ≠ 退出；退出停本机 Bot 和本机应用端实例、关终端、关掉调试台的通道和 SSH 隧道（`DebugManager::close_all`），远端脱管；再开走 bootstrap reconcile。新的退出或重启入口只调 `shutdown_and_exit`，不再自己拼收尾。
 
 ---
 
@@ -377,6 +382,24 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 活 plan | `.claude/plan/terminal.md` |
 
 铁律：终端是给熟手的后门，主路径（装、配、启停、对接）照旧走界面；sudo 密码只在后端里从主机档案写进 PTY，不经前端；容器会话没有文件栏（文件在宿主机部署目录那个终端里传）。
+
+---
+
+### 16) OneBot 调试台（发 OneBot 动作、看事件流、存收藏和历史）
+
+| 关注点 | 主路径 |
+|--------|--------|
+| 领域模型 | `crates/ncd-domain/src/onebot_debug.rs`（`DebugTarget` / `DebugChannelId` / `DebugCatalog` / `DebugCallRequest` / `DebugError` / `DebugEventBatch` / 工作区、收藏、历史）；生成类型 `src-ui/core/ipc/generated/debug/` |
+| 协议层 | `crates/ncd-onebot/`：`catalog/`（两种文档 → 统一目录，`snapshot/*.json` 是内置快照，`overrides.rs` 补安全等级 / 分类 / 参数角色，`diff.rs` 两个后端的参数差异）、`client/`（`http.rs` / `ws.rs` / `sse.rs` / `envelope.rs` 回包归一）、`backoff.rs`、`ring.rs`（事件环，序号只增） |
+| 后端调试客户端 | `crates/ncd-backend-napcat/src/napcat/debug_client.rs`（WebUI 上的 schemas / 建适配器 / 调动作）、`crates/ncd-backend-snowluma/src/snowluma/debug_client.rs`（actions / invoke / SSE 流） |
+| 编排 | `crates/ncd-runtime/src/onebot_debug/`：`DebugManager`（会话表 + 「一轮」epoch，`close_all` 换轮）；`plan.rs` 通道规划与「自动」选路，`calls.rs` 可取消 / 有时限的调用，`catalog.rs` 目录合并，`receiver.rs` 每 Bot 一个事件接收器（50 ms 一批推送、seq 连续、自调用去重），`lifecycle.rs` 听 Bot 停止 / 登录事件、回收 30 分钟没人用的会话（连接和隧道随之关闭），`params.rs` 调用参数瘦身（事件流和历史共用），`storage.rs` + `persist.rs` 工作区 / 收藏 / 历史落盘；Bot 数据经窄接口 `DebugBotPort`（`bot_manager/debug_port.rs` 实现） |
+| Tauri | `src-tauri/src/commands/onebot_debug.rs`（`onebot_debug_*` 23 条；事件走 `Channel<DebugEventBatch>`）；AppState 的 `onebot_debug`，启动时 `lib.rs` 里 spawn `run_bot_event_listener` / `run_idle_sweeper`，退出收尾 `shutdown_and_exit` 里 `close_all` |
+| 前端页 | `src-ui/modules/debug/`：`DebugConsolePage`（三栏工作台、选 Bot、自动开始接收、栏宽与收起、标签快捷键）；顶栏 `TopBar` + `BotPicker` / `ChannelSelect` / `ReceivingIndicator`；`ColumnFrame`（栏外框、分隔条、左栏窄边、`useSlideAfterShift` 收起展开时内容滑动）；`CommandPalette`（Ctrl+K，回车只打开不发送）；跨栏共用的 `DangerConfirmDialog`（危险确认 + 「本次不再询问」）/ `SaveRequestDialog`（收藏起名）；`debugShortcuts.ts`（对话框、终端里不抢键）。`left/` 接口目录 / 收藏（拖动排序、导入导出）/ 历史（S 收藏、C 复制参数）；`center/` 请求标签、表单 ⇄ JSON、文档、发送条、响应（树 / 原文 / 表格，超大回包「另存完整内容」）；`right/` 聊天 / 列表视图、会话条、贴底与新消息胶囊、输入框（@ 成员、回复）。页面整页 lazy，不受 1280px 宽度上限（`AppNext` 的 `WIDE_ROUTES`）。入口是 Bot 卡片「调试」和右键「在调试台打开」 |
+| 前端服务 / hooks / domain | `src-ui/core/services/onebot-debug.service.ts`（`saveResponseFile` = 另存为对话框 + `onebot_debug_save_response`）；`src-ui/hooks/debug/`（`debugEventStore` / `debugWorkspaceStore` 模块级 store，`useDebugCall` 发调用并记每个标签的结果，`useDebug{Targets,Channels,Catalog,Contacts,Collections,History,Receivers,StorageNotices}` 查询，`useSaveResponse`，`debugScrollMemory` 各栏滚动位置，`debugNav` 跳转桥）；`src-ui/core/domain/debug/`（`catalogView` 分类与搜索排序、`palette` 命令面板的行、`chat` 事件 → 聊天条目、`chatFormat` / `chatFilter` 聊天文案与筛选、`composerModel` 输入框消息段、`schemaForm` / `paramsText` / `validate` 参数表单与 JSON、`collectionsOps` 收藏整理、`historyReplay` 历史重放、`safety` / `dangerCopy` / `errorCopy` / `channelCopy` / `receiverCopy` 文案、`channelPick` / `targetGroups` / `workbenchLayout` / `responseView` / `segments` / `ids`） |
+| mock | `src-ui/core/ipc/mock/onebot-debug*.mock.ts`（三个假 Bot，浏览器预览走通整条链路） |
+| 共用件 | `src-ui/shared/ui/{JsonCodeEditor,JsonTree,DataTable}.tsx` |
+
+铁律：调试台只读 Bot 配置，从不改 Bot 的 OneBot 配置；token 不明文展示，也不写进历史和收藏；内部通道（NapCat WebUI 适配器 / SnowLuma 调试接口）按上游能力探测，太老的版本报 `UpstreamTooOld` 并让「自动」避开；调用没拿到回包是数据（`DebugCallResponse.result` 里的 `DebugError`），不是命令失败；功能开关 `DebugManager::set_enabled` 还没接设置（一直开着），接缝见 `AppState.onebot_debug` 的注释。
 
 
 ---

@@ -8,8 +8,12 @@
 //! - [login_poller]:NapCat 登录状态机轮询器
 //! - [offline_notifier]:Bot 下线通知接口与默认实现
 //! - [endpoint_table]:per-Bot WebUI 端点 (port + token) 内存表
+//! - [debug_client]:调试台用的 /api/Debug/* 客户端(独立于 NapCatWebUiClient trait)
 
+pub mod debug_client;
 pub mod endpoint_table;
 pub mod login_poller;
 pub mod offline_notifier;
 pub mod webui_client;
+
+pub use debug_client::{NapCatDebugClient, NapCatDebugError};
