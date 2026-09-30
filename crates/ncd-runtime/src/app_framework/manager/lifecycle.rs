@@ -806,6 +806,9 @@ impl AppManager {
         let instance = self.store.require(id).await?;
         self.forget_webui_endpoint(id);
         let host = self.resolve_host(&instance.host_id).await?;
+        if instance.state == AppInstanceState::Running {
+            self.stop_gracefully(host.as_ref(), &instance).await;
+        }
         self.runtime.stop(host, &instance).await?;
         let updated = self
             .store
@@ -818,6 +821,50 @@ impl AppManager {
             .await?;
         self.publish(&updated, "stopped");
         Ok(updated)
+    }
+
+    /// 框架有自己的退出入口时先走它，等它收完再由 runtime 兜底收树。失败只记日志：
+    /// 请求没送到、等超时都还有收树这一步
+    async fn stop_gracefully(&self, host: &dyn Host, instance: &AppInstance) {
+        let Ok(adapter) = self.registry.get(&instance.framework_id) else {
+            return;
+        };
+        match adapter.request_graceful_stop(host, instance).await {
+            Ok(true) => {
+                let timeout = adapter.graceful_stop_timeout();
+                if !self.runtime.wait_exited(host, instance, timeout).await {
+                    tracing::info!(
+                        instance = instance.id.as_str(),
+                        "app did not exit in time after graceful stop; killing tree"
+                    );
+                }
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(instance = instance.id.as_str(), error = %e, "graceful stop request")
+            }
+        }
+    }
+
+    /// 桌面端退出：本机在跑的实例先各自请退（并发，整体受各框架超时约束），再统一收树；远端脱管
+    pub async fn shutdown_local(&self) {
+        let running: Vec<AppInstance> = self
+            .store
+            .list()
+            .await
+            .into_iter()
+            .filter(|i| i.host_id == LOCAL_HOST_ID && i.state == AppInstanceState::Running)
+            .collect();
+        if !running.is_empty() {
+            if let Ok(host) = self.resolve_host(LOCAL_HOST_ID).await {
+                let host = host.as_ref();
+                futures_util::future::join_all(
+                    running.iter().map(|i| self.stop_gracefully(host, i)),
+                )
+                .await;
+            }
+        }
+        self.runtime.shutdown_local().await;
     }
 
     /// 修改实例的开机自启设置

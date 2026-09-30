@@ -47,6 +47,12 @@ function koi(d: Date, level: 'I' | 'W' | 'S', scope: string, text: string): stri
     return `${d.getFullYear()}-${monthDay(d)} ${clock(d)} [${level}] ${scope} ${text}`;
 }
 
+/** TRSS 的 chalk 被上游强制开到 level 3，重定向到文件也带色 */
+function trss(d: Date, level: 'MARK' | 'INFO' | 'WARN', text: string): string {
+    const tone = { MARK: '90', INFO: '32', WARN: '33' }[level];
+    return `${E}34m[TRSSYz]${E}39m${E}${tone}m[${millis(d)}][${level}]${E}39m ${text}`;
+}
+
 function startup(inst: AppInstance, d: Date): string[] {
     const dir = inst.install_dir.replace(/\//g, '\\');
     switch (inst.framework_id) {
@@ -62,6 +68,18 @@ function startup(inst: AppInstance, d: Date): string[] {
                 koi(d, 'I', 'console', `webui is available at http://127.0.0.1:${inst.port}`),
                 koi(d, 'I', 'sqlite', 'auto creating table user'),
                 koi(d, 'S', 'telemetry', '欢迎使用 Koishi！在您点击「同意」前，telemetry 服务不会启动。'),
+            ];
+        case 'yunzai':
+            return [
+                trss(d, 'MARK', `${E}33mTRSS-Yunzai v3.1.3${E}39m 启动中`),
+                trss(d, 'MARK', `正在连接 ${E}36mredis://127.0.0.1:${inst.port + 1}${E}39m`),
+                trss(d, 'WARN', `Redis 连接失败，正在启动 ${dir}\\..\\..\\tools\\redis\\redis-server.exe`),
+                trss(d, 'MARK', 'Redis 连接成功'),
+                trss(d, 'INFO', `加载插件 ${E}36m[system]${E}39m ${E}36m[other]${E}39m ${E}36m[example]${E}39m 共 18 个`),
+                trss(d, 'WARN', `[genshin] 未安装，原神相关指令不可用`),
+                trss(d, 'MARK', `启动 HTTP 服务器：${E}36mhttp://localhost:${inst.port}${E}39m`),
+                trss(d, 'MARK', `${E}36m[OneBotv11]${E}39m 连接建立 ${E}36m/OneBotv11${E}39m`),
+                trss(d, 'MARK', `TRSS-Yunzai 启动完成，耗时 ${E}33m3.21${E}39m 秒`),
             ];
         case 'maibot':
             return [
@@ -120,6 +138,8 @@ function heartbeat(inst: AppInstance, d: Date, n: number): string {
     switch (inst.framework_id) {
         case 'koishi':
             return koi(d, 'I', 'onebot', `[receive] heartbeat #${n}`);
+        case 'yunzai':
+            return trss(d, 'INFO', `${E}36m[10001]${E}39m 群消息：[测试群(123456), 小明(10002)] #帮助 ${n}`);
         case 'maibot':
             return mai(d, 'info', '心流', '255;135;175', `第 ${n} 次观察：群里没有新消息`);
         case 'astrbot':

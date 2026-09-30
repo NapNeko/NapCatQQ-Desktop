@@ -373,17 +373,42 @@ impl AppManager {
         entry: &AppStoreMarketEntry,
         log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
+        // 同名的几条是同一个文件的几个源（云崽索引里常见「GitHub & Gitee」两条），依次试到成功为止
+        let mut groups: Vec<(String, Vec<&str>)> = Vec::new();
         for file in &entry.files {
             let basename = app_file_basename(&file.url)?;
+            match groups.iter_mut().find(|(name, _)| *name == basename) {
+                Some((_, urls)) => urls.push(file.url.as_str()),
+                None => groups.push((basename, vec![file.url.as_str()])),
+            }
+        }
+        for (basename, urls) in groups {
             let dest = adapter
                 .store_app_file_dest(instance, &basename)
                 .ok_or_else(|| {
                     AppFrameworkError::PluginUnsupported(instance.framework_id.as_str().to_string())
                 })?;
-            if let Some(sink) = log {
-                sink(format!("下载 {basename}"));
+            let mut last_err = None;
+            for url in urls {
+                if let Some(sink) = log {
+                    sink(format!("下载 {basename}（{url}）"));
+                }
+                match super::download::download_url_to_host(host, url, &dest).await {
+                    Ok(()) => {
+                        last_err = None;
+                        break;
+                    }
+                    Err(e) => {
+                        if let Some(sink) = log {
+                            sink(format!("这个源不行：{e}"));
+                        }
+                        last_err = Some(e);
+                    }
+                }
             }
-            super::download::download_url_to_host(host, &file.url, &dest).await?;
+            if let Some(e) = last_err {
+                return Err(e);
+            }
             if let Some(sink) = log {
                 sink(format!("已写入 {basename}"));
             }

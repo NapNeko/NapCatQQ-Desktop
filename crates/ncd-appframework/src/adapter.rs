@@ -20,7 +20,9 @@ use crate::config_doc::{
 };
 use crate::koishi::runtime::KoishiRuntimeApi;
 use crate::maibot::api::MaiBotRuntimeApi;
-use crate::store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
+use crate::store::{
+    AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry, StoreMarketPart, StoreMarketText,
+};
 
 /// 装更卸命令行输出；编排层转成任务 `ProgressKind::Log`。
 pub type PluginLogSink = Arc<dyn Fn(String) + Send + Sync>;
@@ -36,6 +38,10 @@ pub struct AppComponentSpec {
     pub node_bin: Option<HostPath>,
     /// 桌面端管理的 uv 二进制（Python 系框架用）；None 则只看实例标记 / PATH
     pub uv_bin: Option<HostPath>,
+    /// 桌面端管理的 git（只有 Windows 有托管落点，Linux 走系统包）；可能还没装，用前核对
+    pub git_bin: Option<HostPath>,
+    /// 桌面端管理的 redis-server（云崽写进 redis.yaml 的 path）；可能还没装，用前核对
+    pub redis_bin: Option<HostPath>,
     /// npm registry 镜像；None 用默认源
     pub npm_registry: Option<String>,
     /// Karin：provision 时一并 `pnpm add @karinjs/plugin-puppeteer`。NoneBot2 忽略。
@@ -162,6 +168,21 @@ pub trait AppFrameworkAdapter: Send + Sync {
         root: &HostPath,
     ) -> Result<Vec<String>, AppFrameworkError> {
         crate::adopt::list_dotenv_rels(host, root).await
+    }
+
+    /// 停实例前先请应用自己退（存盘、收它拉起的子进程）。Ok(true) = 请求已送达，编排层接着等
+    /// 进程退出，等不到再收整棵树；Ok(false) = 这个框架没有这种入口，直接收树
+    async fn request_graceful_stop(
+        &self,
+        _host: &dyn Host,
+        _instance: &AppInstance,
+    ) -> Result<bool, AppFrameworkError> {
+        Ok(false)
+    }
+
+    /// 送达后最多等多久
+    fn graceful_stop_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(15)
     }
 
     /// 启动命令（可做 IO 解析工具链，比 `Component::launch_command` 的同步版准确）
@@ -501,6 +522,22 @@ pub trait AppFrameworkAdapter: Send + Sync {
         &self,
         _resource: AppStoreResource,
         _text: &str,
+    ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
+        Err(AppFrameworkError::PluginUnsupported(
+            self.manifest().id.as_str().to_string(),
+        ))
+    }
+
+    /// 目录分几份文件发布时每份的镜像；非空时编排层不看 `store_market_urls`，按份拉
+    /// （单份拉不到跳过，全都拉不到才报错），再交给 `parse_store_market_parts`
+    fn store_market_parts(&self, _resource: AppStoreResource) -> Vec<StoreMarketPart> {
+        Vec::new()
+    }
+
+    fn parse_store_market_parts(
+        &self,
+        _resource: AppStoreResource,
+        _parts: &[StoreMarketText],
     ) -> Result<Vec<AppStoreMarketEntry>, AppFrameworkError> {
         Err(AppFrameworkError::PluginUnsupported(
             self.manifest().id.as_str().to_string(),

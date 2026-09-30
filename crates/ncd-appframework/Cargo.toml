@@ -35,9 +35,11 @@ toml_edit = "0.22"
 tracing = "0.1"
 ts-rs = { version = "12", features = ["serde-compat"] }
 fancy-regex = "0.14"
-# Koishi：koishi.yml 读写；控制台只有 WebSocket 通道（/status），运行中改配置、看 Bot 在线都走它
+# Koishi：koishi.yml 读写；云崽的配置也全是 YAML，写回走 yaml_patch 按行改，免得丢注释
 serde_yaml = "0.9"
+# 云崽装本体前几个 git 源并发 ls-remote，谁先应答用谁（select_ok）
 futures-util = "0.3"
+# Koishi 控制台只有 WebSocket 通道（/status），运行中改配置、看 Bot 在线都走它
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "handshake"] }
 # Koishi 整包只有 zip，远端很多机器没装 unzip：桌面端解开重打成 tar.gz 再传
 zip = { version = "2", default-features = false, features = ["deflate"] }

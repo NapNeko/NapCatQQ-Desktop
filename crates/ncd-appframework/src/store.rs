@@ -12,6 +12,21 @@ use crate::karin::plugin::{
     KarinPluginMarketEntry, KarinPluginRepo,
 };
 
+/// 分几份文件发布的商店目录里的一份（云崽的插件索引按分类拆成几张 Markdown 表）。
+/// `urls` 是同一份文件的几个镜像，编排层竞速取第一个成功的
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreMarketPart {
+    pub id: &'static str,
+    pub urls: Vec<String>,
+}
+
+/// 拉到的一份：哪一份 + 原文
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreMarketText {
+    pub id: &'static str,
+    pub text: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
@@ -78,6 +93,26 @@ pub struct AppStoreInstalled {
     /// 桌面端自己装、自己写配置的（MaiBot 的 NapCat 适配器）：商店里不能卸、不能停、不能更
     #[serde(default)]
     pub locked: bool,
+}
+
+/// `%E5%85%91.js` → `兑.js`；坏的转义原样留着，解出来不是 UTF-8 的按替换符处理
+pub fn percent_decode_lossy(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok();
+            if let Some(b) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 impl AppStoreFlavor {
@@ -172,6 +207,33 @@ impl AppStoreInstalled {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn percent_decode_handles_utf8_and_bad_escapes() {
+        assert_eq!(
+            percent_decode_lossy("%E5%85%91%E6%8D%A2%E7%A0%81.js"),
+            "兑换码.js"
+        );
+        assert_eq!(percent_decode_lossy("a%2Fb"), "a/b");
+        assert_eq!(percent_decode_lossy("100%"), "100%");
+        assert_eq!(percent_decode_lossy("%zz.js"), "%zz.js");
+        assert_eq!(percent_decode_lossy(""), "");
+    }
+
+    #[test]
+    fn app_file_basename_decodes_then_rejects_traversal() {
+        use crate::karin::plugin::app_file_basename;
+        assert_eq!(
+            app_file_basename(
+                "https://raw.githubusercontent.com/o/r/main/%E5%85%91%E6%8D%A2%E7%A0%81.js"
+            )
+            .unwrap(),
+            "兑换码.js"
+        );
+        assert!(app_file_basename("https://x/a%2F..%2Fevil.js").is_err());
+        assert!(app_file_basename("https://x/a%5Cevil.js").is_err());
+        assert!(app_file_basename("https://x/readme.md").is_err());
+    }
 
     #[test]
     fn karin_round_trip_keeps_install_flavor() {

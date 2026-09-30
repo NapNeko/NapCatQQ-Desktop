@@ -1,6 +1,6 @@
 // 配置原文分词：给 CodeMirror 着色用。拼回去必须等于原文。
 
-export type SyntaxMode = 'json' | 'dot_env' | 'toml' | 'plain' | 'prompt';
+export type SyntaxMode = 'json' | 'dot_env' | 'toml' | 'yaml' | 'plain' | 'prompt';
 
 export type TokKind =
     | 'key'
@@ -241,6 +241,100 @@ function tokenizeToml(source: string): Tok[] {
     return out;
 }
 
+const YAML_BOOL = new Set(['true', 'false', 'True', 'False', 'TRUE', 'FALSE']);
+const YAML_NULL = new Set(['null', 'Null', 'NULL', '~']);
+
+/** 值里的 ` #` 起是行尾注释；引号里的 # 不算 */
+function yamlCommentAt(line: string, from: number): number {
+    let quote: string | null = null;
+    for (let i = from; i < line.length; i += 1) {
+        const c = line[i]!;
+        if (quote) {
+            if (c === quote) quote = null;
+            continue;
+        }
+        if (c === '"' || c === "'") quote = c;
+        else if (c === '#' && (i === from || line[i - 1] === ' ' || line[i - 1] === '\t')) return i;
+    }
+    return -1;
+}
+
+/** 映射键的冒号：后面是空白或行尾才算（`http://x` 里的不算） */
+function yamlKeyColon(line: string, from: number): number {
+    if (line[from] === '"' || line[from] === "'") {
+        const close = line.indexOf(line[from]!, from + 1);
+        if (close > from && line[close + 1] === ':') return close + 1;
+        return -1;
+    }
+    for (let i = from; i < line.length; i += 1) {
+        const c = line[i]!;
+        if (c === '#' && i > from && line[i - 1] === ' ') return -1;
+        if (c === ':' && (i + 1 === line.length || line[i + 1] === ' ' || line[i + 1] === '\t')) return i;
+    }
+    return -1;
+}
+
+function yamlScalarKind(value: string): TokKind {
+    const t = value.trim();
+    if (t.startsWith('"') || t.startsWith("'")) return 'string';
+    if (YAML_BOOL.has(t)) return 'bool';
+    if (YAML_NULL.has(t)) return 'null';
+    if (/^[-+]?(\d[\d_]*)(\.\d+)?([eE][-+]?\d+)?$/.test(t) || /^0x[0-9a-fA-F]+$/.test(t)) return 'number';
+    return 'plain';
+}
+
+// 云崽 config 那几份的样子：按行切，缩进 / 列表的 `- ` / 键 / 值 / 行尾注释。块标量和流式集合不细分，照普通文本画
+function tokenizeYaml(source: string): Tok[] {
+    const out: Tok[] = [];
+    const push = (kind: TokKind, text: string) => {
+        if (!text) return;
+        const last = out[out.length - 1];
+        if (last && last.kind === kind) last.text += text;
+        else out.push({ kind, text });
+    };
+    const lines = source.split(/(\r?\n)/);
+    for (const line of lines) {
+        if (line === '\n' || line === '\r\n') {
+            push('space', line);
+            continue;
+        }
+        let i = 0;
+        while (i < line.length && (line[i] === ' ' || line[i] === '\t')) i += 1;
+        push('space', line.slice(0, i));
+        if (line[i] === '#') {
+            push('comment', line.slice(i));
+            continue;
+        }
+        if (line.startsWith('---', i) || line.startsWith('...', i)) {
+            push('punct', line.slice(i));
+            continue;
+        }
+        while (line[i] === '-' && (i + 1 === line.length || line[i + 1] === ' ')) {
+            push('punct', '-');
+            let j = i + 1;
+            while (j < line.length && line[j] === ' ') j += 1;
+            push('space', line.slice(i + 1, j));
+            i = j;
+        }
+        const colon = yamlKeyColon(line, i);
+        if (colon >= 0) {
+            push('key', line.slice(i, colon));
+            push('punct', ':');
+            i = colon + 1;
+        }
+        const hash = yamlCommentAt(line, i);
+        const valueEnd = hash >= 0 ? hash : line.length;
+        const value = line.slice(i, valueEnd);
+        const lead = value.length - value.trimStart().length;
+        const trail = value.length - value.trimEnd().length;
+        push('space', value.slice(0, lead));
+        push(yamlScalarKind(value), value.slice(lead, value.length - trail));
+        push('space', value.slice(value.length - trail));
+        if (hash >= 0) push('comment', line.slice(hash));
+    }
+    return out;
+}
+
 // 提示词模板（Python str.format）：{name} 是参数，{{ }} 是字面括号。没配对的括号照普通字符画，
 // 错在哪由调用方的校验去说，这里不跟着报
 function tokenizePrompt(source: string): Tok[] {
@@ -286,6 +380,8 @@ export function tokenize(source: string, mode: SyntaxMode): Tok[] {
             return tokenizeDotenv(source);
         case 'toml':
             return tokenizeToml(source);
+        case 'yaml':
+            return tokenizeYaml(source);
         case 'prompt':
             return tokenizePrompt(source);
         default:

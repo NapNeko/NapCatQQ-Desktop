@@ -271,8 +271,15 @@ export const CreateInstanceDialog: React.FC<{
                             )}
                             {showRenderer && (
                                 <Checkbox
-                                    label="一并安装插件版渲染器"
-                                    hint="会额外下载 Chromium，体积较大"
+                                    {...(manifest?.id === 'yunzai'
+                                        ? {
+                                              label: '一并下载渲染用的 Chrome',
+                                              hint: '喵喵面板这类图片要用，一百多 MB；不下的话 Windows 上用本机的 Chrome / Edge，也可以在「渲染」页换 shotium',
+                                          }
+                                        : {
+                                              label: '一并安装插件版渲染器',
+                                              hint: '会额外下载 Chromium，体积较大',
+                                          })}
                                     checked={draft.installRenderer}
                                     onCheckedChange={(c) =>
                                         setDraft({ ...draft, installRenderer: c })

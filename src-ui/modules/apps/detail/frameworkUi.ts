@@ -5,6 +5,7 @@ import { karinFrameworkUi } from './karin/karinFrameworkUi';
 import { koishiFrameworkUi } from './koishi/koishiFrameworkUi';
 import { maibotFrameworkUi } from './maibot/maibotFrameworkUi';
 import { nonebot2FrameworkUi } from './nonebot2/nonebot2FrameworkUi';
+import { yunzaiFrameworkUi } from './yunzai/yunzaiFrameworkUi';
 
 export type FrameworkTabDef = { value: string; label: string };
 
@@ -69,6 +70,7 @@ const MODULES: Record<string, FrameworkUiModule> = {
     astrbot: astrbotFrameworkUi,
     maibot: maibotFrameworkUi,
     koishi: koishiFrameworkUi,
+    yunzai: yunzaiFrameworkUi,
 };
 
 export function resolveFrameworkUi(frameworkId: string): FrameworkUiModule | undefined {

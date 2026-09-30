@@ -97,6 +97,15 @@ export type { AppPluginConfigField } from './generated/domain/AppPluginConfigFie
 export type { AppPluginConfigSchema } from './generated/domain/AppPluginConfigSchema';
 export type { AppTermsDoc } from './generated/domain/AppTermsDoc';
 export type { AppPendingTerms } from './generated/domain/AppPendingTerms';
+export type { YunzaiInstanceConfig } from './generated/domain/YunzaiInstanceConfig';
+export type { YunzaiBotConfig } from './generated/domain/YunzaiBotConfig';
+export type { YunzaiOtherConfig } from './generated/domain/YunzaiOtherConfig';
+export type { YunzaiGroupConfig } from './generated/domain/YunzaiGroupConfig';
+export type { YunzaiGroupDefaults } from './generated/domain/YunzaiGroupDefaults';
+export type { YunzaiGroupOverride } from './generated/domain/YunzaiGroupOverride';
+export type { YunzaiServerConfig } from './generated/domain/YunzaiServerConfig';
+export type { YunzaiRedisConfig } from './generated/domain/YunzaiRedisConfig';
+export type { YunzaiRendererConfig } from './generated/domain/YunzaiRendererConfig';
 export type { MaiBotInstanceConfig } from './generated/domain/MaiBotInstanceConfig';
 export type { KoishiInstanceConfig } from './generated/koishi/KoishiInstanceConfig';
 export type { KoishiPluginNode } from './generated/koishi/KoishiPluginNode';

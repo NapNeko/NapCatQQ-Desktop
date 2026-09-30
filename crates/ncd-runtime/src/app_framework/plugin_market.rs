@@ -7,7 +7,10 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use ncd_appframework::{AppFrameworkRegistry, AppStoreMarketEntry, KarinPluginMarketEntry};
+use ncd_appframework::{
+    AppFrameworkRegistry, AppStoreMarketEntry, KarinPluginMarketEntry, StoreMarketPart,
+    StoreMarketText,
+};
 use ncd_domain::AppFrameworkId;
 use ncd_domain::AppStoreResource;
 use ncd_network::shared_client;
@@ -80,14 +83,23 @@ pub(super) async fn fetch_store(
             return Ok(hit);
         }
     }
-    let urls = adapter.store_market_urls(resource);
-    if urls.is_empty() {
-        return Ok(Vec::new());
-    }
     let label = match resource {
         AppStoreResource::Adapter => "适配器目录",
         AppStoreResource::Plugin => "插件目录",
     };
+    let parts = adapter.store_market_parts(resource);
+    if !parts.is_empty() {
+        let texts = fetch_parts(parts, label).await?;
+        let list = adapter.parse_store_market_parts(resource, &texts)?;
+        if let Some(key) = adapter.store_market_cache_key(resource) {
+            cache.put(key, list.clone());
+        }
+        return Ok(list);
+    }
+    let urls = adapter.store_market_urls(resource);
+    if urls.is_empty() {
+        return Ok(Vec::new());
+    }
     let text = if urls.len() == 1 {
         fetch_text(&urls[0], label).await?
     } else {
@@ -101,6 +113,46 @@ pub(super) async fn fetch_store(
 }
 
 const MARKET_BODY_LIMIT: usize = 8 * 1024 * 1024;
+
+/// 各份并发拉，每份内部镜像竞速；拉不到的那份跳过（少一个分类好过整页空白），
+/// 一份都没拉到才报错。结果按声明顺序排，解析端据此决定条目先后
+async fn fetch_parts(
+    parts: Vec<StoreMarketPart>,
+    label: &str,
+) -> Result<Vec<StoreMarketText>, AppFrameworkError> {
+    let order: Vec<&'static str> = parts.iter().map(|p| p.id).collect();
+    let mut set = JoinSet::new();
+    for part in parts {
+        let label = label.to_string();
+        set.spawn(async move {
+            let got = fetch_text_first_ok(&part.urls, &label).await;
+            (part.id, got)
+        });
+    }
+    let mut texts = Vec::new();
+    let mut last_err = None;
+    while let Some(joined) = set.join_next().await {
+        match joined {
+            Ok((id, Ok(text))) => texts.push(StoreMarketText { id, text }),
+            Ok((id, Err(err))) => {
+                tracing::warn!(part = id, error = %err, "store market part unavailable");
+                last_err = Some(err);
+            }
+            Err(err) => {
+                last_err = Some(AppFrameworkError::Validation(format!(
+                    "拉取{label}失败: {err}"
+                )))
+            }
+        }
+    }
+    if texts.is_empty() {
+        return Err(last_err.unwrap_or_else(|| {
+            AppFrameworkError::Validation(format!("拉取{label}失败: 所有源都不可用"))
+        }));
+    }
+    texts.sort_by_key(|t| order.iter().position(|id| *id == t.id));
+    Ok(texts)
+}
 
 async fn fetch_text_first_ok(urls: &[String], label: &str) -> Result<String, AppFrameworkError> {
     if urls.is_empty() {
@@ -257,6 +309,52 @@ mod tests {
         .unwrap();
         assert_eq!(list[0].id, "nonebot_plugin_foo");
         assert_eq!(list[0].resource, AppStoreResource::Plugin);
+    }
+
+    #[tokio::test]
+    async fn fetch_parts_skips_dead_part_and_keeps_declared_order() {
+        let a = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("A"))
+            .mount(&a)
+            .await;
+        let dead = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(wiremock::ResponseTemplate::new(403))
+            .mount(&dead)
+            .await;
+        let c = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200)
+                    .set_body_string("C")
+                    .set_delay(std::time::Duration::from_millis(50)),
+            )
+            .mount(&c)
+            .await;
+        let parts = vec![
+            StoreMarketPart {
+                id: "c",
+                urls: vec![c.uri()],
+            },
+            StoreMarketPart {
+                id: "b",
+                urls: vec![dead.uri()],
+            },
+            StoreMarketPart {
+                id: "a",
+                urls: vec![dead.uri(), a.uri()],
+            },
+        ];
+        let texts = fetch_parts(parts, "插件目录").await.unwrap();
+        let got: Vec<(&str, &str)> = texts.iter().map(|t| (t.id, t.text.as_str())).collect();
+        assert_eq!(got, vec![("c", "C"), ("a", "A")]);
+
+        let all_dead = vec![StoreMarketPart {
+            id: "b",
+            urls: vec![dead.uri()],
+        }];
+        assert!(fetch_parts(all_dead, "插件目录").await.is_err());
     }
 
     #[tokio::test]

@@ -5,7 +5,7 @@ const navValues = (ui: FrameworkUiModule | undefined) => (ui?.nav ?? []).flatMap
 
 describe('resolveFrameworkUi', () => {
     it('unknown framework has no module (raw + log only)', () => {
-        expect(resolveFrameworkUi('yunzai')).toBeUndefined();
+        expect(resolveFrameworkUi('not-a-framework')).toBeUndefined();
     });
 
     it('koishi nav and issue routing', () => {

@@ -11,6 +11,7 @@ pub fn exec_looks_like_app(exec: &str, install_dir: &str) -> bool {
     if !e.contains(&install_dir.to_ascii_lowercase())
         && !e.contains("bot.py")
         && !e.contains("app.mjs")
+        && !e.contains("app.js")
         && !e.contains("astrbot")
     {
         return false;
@@ -20,6 +21,7 @@ pub fn exec_looks_like_app(exec: &str, install_dir: &str) -> bool {
     }
     e.contains("bot.py")
         || e.contains("app.mjs")
+        || e.contains("app.js")
         || e.contains("node-karin")
         || e.contains("uv run")
         || e.contains("astrbot")
@@ -161,15 +163,21 @@ pub fn pick_app_pid(lines: &str, kind: AppProcessKind) -> Option<(u32, String)> 
             AppProcessKind::Koishi => {
                 let slashed = lower.replace('\\', "/");
                 slashed.contains("koishi/lib/")
-                    || (slashed.contains(".yarn/releases/") && slashed.trim_end().ends_with(" start"))
+                    || (slashed.contains(".yarn/releases/")
+                        && slashed.trim_end().ends_with(" start"))
             }
+            // 守护进程 `node app.js daemon` 拉起的子进程是 `node app.js start`，cwd 都是实例目录
+            AppProcessKind::Yunzai => lower.contains("app.js") && lower.contains("node"),
         };
         if !hit {
             continue;
         }
+        // MaiBot 的 Runner / 云崽的守护进程先起、pid 更小，收树要从它开始；
         // Koishi 同理：yarn → koishi daemon → worker，最外层的 yarn 先起
-        if matches!(kind, AppProcessKind::MaiBot | AppProcessKind::Koishi)
-            && best.as_ref().is_some_and(|(p, _)| *p < pid)
+        if matches!(
+            kind,
+            AppProcessKind::MaiBot | AppProcessKind::Koishi | AppProcessKind::Yunzai
+        ) && best.as_ref().is_some_and(|(p, _)| *p < pid)
         {
             continue;
         }
@@ -192,6 +200,7 @@ pub enum AppProcessKind {
     AstrBot,
     MaiBot,
     Koishi,
+    Yunzai,
 }
 
 impl AppProcessKind {
@@ -201,6 +210,7 @@ impl AppProcessKind {
             "astrbot" => Self::AstrBot,
             "maibot" => Self::MaiBot,
             "koishi" => Self::Koishi,
+            "yunzai" => Self::Yunzai,
             _ => Self::NoneBot2,
         }
     }
@@ -301,6 +311,21 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
         assert!(matches!(
             AppProcessKind::from_framework("koishi"),
             AppProcessKind::Koishi
+        ));
+    }
+
+    #[test]
+    fn pick_yunzai_daemon_not_child_or_redis() {
+        let lines = "\
+4411 /home/u/ncd/tools/valkey/bin/valkey-server *:24101\n\
+4402 /home/u/node/bin/node /home/u/ncd/apps/yunzai/y1/app.js start\n\
+4401 /home/u/node/bin/node /home/u/ncd/apps/yunzai/y1/app.js daemon\n";
+        let (pid, prog) = pick_app_pid(lines, AppProcessKind::Yunzai).unwrap();
+        assert_eq!(pid, 4401, "守护进程先起");
+        assert_eq!(prog, "node");
+        assert!(matches!(
+            AppProcessKind::from_framework("yunzai"),
+            AppProcessKind::Yunzai
         ));
     }
 

@@ -10,7 +10,8 @@ import {
 } from './pluginCatalog';
 import type { AppStoreInstalled, AppStoreMarketEntry, AppStoreResource } from '../../ipc/types';
 
-export type StoreKindFilter = 'all' | 'official' | 'installed';
+/** `tag:<分类>` 按目录给的分类筛（云崽的索引按功能 / 游戏 / 文游 / 单 JS 分表） */
+export type StoreKindFilter = 'all' | 'official' | 'installed' | `tag:${string}`;
 
 export type VisibleStoreItem = {
     id: string;
@@ -29,7 +30,16 @@ export type VisibleStoreItem = {
     timeLabel: string | null;
     package: string;
     homepage: string;
+    tags: readonly string[];
+    /** 目录条目给了能装的东西（仓库 / 文件）；给不出来的只能去主页手动装 */
+    installable: boolean;
 };
+
+/** 后端解析目录时认不出能装的东西就标 valid=false（云崽索引里源码链接不是 .js、主页不是仓库的那些）；
+ *  别的框架的条目都是 true。AstrBot / 麦麦的 git 条目按主页装，repos 本来就是空的，不能拿它判 */
+export function storeEntryInstallable(entry: AppStoreMarketEntry): boolean {
+    return entry.valid;
+}
 
 const ONEBOT_V11 = 'nonebot.adapters.onebot.v11';
 
@@ -107,9 +117,11 @@ export function filterAppStore(args: {
     const rows: VisibleStoreItem[] = [];
     const covered = new Set<string>();
 
+    const tag = kindFilter.startsWith('tag:') ? kindFilter.slice(4) : null;
     if (kindFilter !== 'installed') {
         for (const entry of entries) {
             if (kindFilter === 'official' && !entry.is_official) continue;
+            if (tag !== null && !entry.tags.includes(tag)) continue;
             if (
                 resource === 'plugin'
                 && entry.supported_adapters.length > 0
@@ -132,6 +144,8 @@ export function filterAppStore(args: {
                 timeLabel: catalogTimeLabel(entry.time, !!hit, hit?.version, TIME_LABEL_MAX_DAYS),
                 package: entry.package,
                 homepage: entry.homepage,
+                tags: entry.tags,
+                installable: storeEntryInstallable(entry),
             };
             if (!matchesQuery(row, q)) continue;
             rows.push(row);
@@ -142,7 +156,7 @@ export function filterAppStore(args: {
 
     for (const item of installed) {
         if (covered.has(item.id) || covered.has(item.name)) continue;
-        if (kindFilter === 'official') continue;
+        if (kindFilter === 'official' || tag !== null) continue;
         const row: VisibleStoreItem = {
             id: item.id,
             name: item.name || item.id,
@@ -156,6 +170,8 @@ export function filterAppStore(args: {
             timeLabel: installedLabel(item.version),
             package: item.package,
             homepage: '',
+            tags: [],
+            installable: true,
         };
         if (!matchesQuery(row, q)) continue;
         rows.push(row);

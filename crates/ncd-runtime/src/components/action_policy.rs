@@ -7,9 +7,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use ncd_component::{
-    Component, ComponentId, ComponentInfo, DependencyTarget, DesktopSelfComponent,
+    Component, ComponentId, ComponentInfo, DependencyTarget, DesktopSelfComponent, GitComponent,
     HostPackageGroup, NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent,
-    QQComponent, SnowLumaComponent, UvComponent,
+    QQComponent, RedisComponent, SnowLumaComponent, UvComponent,
 };
 use ncd_deploy::StepKind;
 use ncd_domain::DeploymentTaskResource;
@@ -112,6 +112,8 @@ pub fn component_needs_download_slot(component_id: ComponentId, kind: StepKind) 
             | ComponentId::SnowLuma
             | ComponentId::NodeJs
             | ComponentId::Uv
+            | ComponentId::Git
+            | ComponentId::Redis
             | ComponentId::Qq
             | ComponentId::NcdWatch
     ) || component_id.is_app_framework())
@@ -132,6 +134,11 @@ pub fn component_needs_package_manager(
             StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Uninstall
         ),
         ComponentId::Qq => kind == StepKind::EnsureDependencies,
+        // Linux 上 git 只走包管理器；Redis 下不了 Valkey 构建时也退到包管理器
+        ComponentId::Git | ComponentId::Redis => matches!(
+            kind,
+            StepKind::EnsureInstalled | StepKind::ForceInstall | StepKind::Update
+        ),
         _ => false,
     }
 }
@@ -152,6 +159,8 @@ pub fn component_catalog() -> Vec<ComponentInfo> {
         SnowLumaComponent::info(),
         NodeJsComponent::info(),
         UvComponent::info(),
+        GitComponent::info(),
+        RedisComponent::info(),
         QQComponent::info(),
         NoVncComponent::info(),
         NcdWatchComponent::info(),
@@ -293,6 +302,14 @@ pub fn catalog_component_pairs_for_target_check() -> Vec<(ComponentInfo, Arc<dyn
             Arc::new(QQComponent::default_v3_2_25(HostPath::from_posix("/x"))),
         ),
         (NoVncComponent::info(), Arc::new(NoVncComponent::new())),
+        (
+            GitComponent::info(),
+            Arc::new(GitComponent::new("0.0.0", HostPath::from_posix("/x"))),
+        ),
+        (
+            RedisComponent::info(),
+            Arc::new(RedisComponent::new(HostPath::from_posix("/x"))),
+        ),
     ]
 }
 
@@ -319,6 +336,8 @@ mod tests {
                 ComponentId::SnowLuma,
                 ComponentId::NodeJs,
                 ComponentId::Uv,
+                ComponentId::Git,
+                ComponentId::Redis,
                 ComponentId::Qq,
                 ComponentId::NoVnc,
                 ComponentId::NcdWatch,
@@ -469,6 +488,9 @@ mod tests {
             ComponentId::AstrBot,
             ComponentId::MaiBot,
             ComponentId::Koishi,
+            ComponentId::Git,
+            ComponentId::Redis,
+            ComponentId::Yunzai,
         ] {
             if id.is_app_framework() {
                 assert!(
@@ -574,8 +596,8 @@ mod tests {
     }
 
     #[test]
-    fn list_components_returns_eight_items() {
-        assert_eq!(component_catalog().len(), 8);
+    fn list_components_returns_ten_items() {
+        assert_eq!(component_catalog().len(), 10);
     }
 
     #[test]

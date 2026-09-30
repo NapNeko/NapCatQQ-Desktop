@@ -68,8 +68,8 @@ pub(crate) async fn shutdown_and_exit(app: &AppHandle, state: &AppState, origin:
             "local bot(s) failed to stop cleanly on exit"
         );
     }
-    // 本机应用端实例随 Desktop 退出停止；远端实例脱管（与协议 Bot 同语义）
-    state.app_manager.runtime().shutdown_local().await;
+    // 本机应用端实例随 Desktop 退出停止（有退出入口的先请它自己退）；远端实例脱管（与协议 Bot 同语义）
+    state.app_manager.shutdown_local().await;
     state.terminals.close_all();
     // 删远端 desktop_present,ncd-watch 立刻可告警(不必干等 90s TTL)
     crate::commands::ncd_watch::clear_present_on_all_remote_servers(state).await;

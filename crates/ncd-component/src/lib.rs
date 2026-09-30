@@ -17,6 +17,7 @@ pub mod context;
 pub mod desktop_self;
 pub mod download;
 pub mod error;
+pub mod git;
 pub mod host_download;
 pub mod napcat;
 pub mod ncd_watch;
@@ -26,6 +27,7 @@ pub mod pkg_install_stream;
 pub mod qq;
 pub mod qq_deps;
 pub mod qq_linux_pid;
+pub mod redis;
 pub mod remote_qq_entry;
 pub mod requirement;
 pub mod snowluma;
@@ -37,6 +39,7 @@ pub use context::{ActionCtx, ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use desktop_self::DesktopSelfComponent;
 pub use download::DownloadHelper;
 pub use error::ActionError;
+pub use git::{GitComponent, MINGIT_DEFAULT_VERSION};
 pub use host_download::download_url_to_host_with_progress;
 pub use napcat::NapCatComponent;
 pub use ncd_watch::{
@@ -52,6 +55,7 @@ pub use qq::{
     probe_linux_qq_latest, probe_windows_qq_latest,
 };
 pub use qq_linux_pid::linux_qq_running_pid_script;
+pub use redis::{REDIS_WINDOWS_VERSION, RedisComponent, VALKEY_LINUX_VERSION};
 
 pub use remote_qq_entry::{
     QQ_MAIN_NAPCAT_INJECT, QQ_MAIN_NATIVE, load_napcat_js_path, napcat_mjs_path,

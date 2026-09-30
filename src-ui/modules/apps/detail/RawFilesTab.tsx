@@ -20,8 +20,7 @@ const FORMAT_LABEL: Record<AppConfigDocument['format'], string> = {
 };
 
 function editorMode(format: AppConfigDocument['format']): SyntaxMode {
-    if (format === 'json' || format === 'dot_env' || format === 'toml') return format;
-    return 'plain';
+    return format;
 }
 
 export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) => {

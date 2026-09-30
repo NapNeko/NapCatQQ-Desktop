@@ -16,6 +16,7 @@ use crate::karin::config::KarinInstanceConfig;
 use crate::koishi::yml::KoishiInstanceConfig;
 use crate::maibot::config::MaiBotInstanceConfig;
 use crate::nonebot2::config::NoneBot2InstanceConfig;
+use crate::yunzai::config::YunzaiInstanceConfig;
 
 pub const MISSING_REVISION: &str = "missing";
 
@@ -33,6 +34,8 @@ pub enum AppInstanceConfig {
     MaiBot(MaiBotInstanceConfig),
     #[serde(rename = "koishi")]
     Koishi(KoishiInstanceConfig),
+    #[serde(rename = "yunzai")]
+    Yunzai(YunzaiInstanceConfig),
 }
 
 impl AppInstanceConfig {
@@ -41,7 +44,7 @@ impl AppInstanceConfig {
         match self {
             Self::Karin(c) => c.env.http_auth_key.as_str(),
             Self::MaiBot(c) => c.webui_token.as_str(),
-            Self::NoneBot2(_) | Self::AstrBot(_) | Self::Koishi(_) => "",
+            Self::NoneBot2(_) | Self::AstrBot(_) | Self::Koishi(_) | Self::Yunzai(_) => "",
         }
     }
 
@@ -54,6 +57,7 @@ impl AppInstanceConfig {
             Self::AstrBot(c) => c.onebot.ws_reverse_port,
             Self::MaiBot(c) => c.webui_port(),
             Self::Koishi(c) => c.listen_port(),
+            Self::Yunzai(c) => c.listen_port(),
         }
     }
 
@@ -65,6 +69,7 @@ impl AppInstanceConfig {
             Self::AstrBot(c) => Some(c.dashboard_port).filter(|p| *p > 0),
             Self::MaiBot(c) => Some(c.webui_port()).filter(|p| *p > 0),
             Self::Koishi(c) => Some(c.listen_port()).filter(|p| *p > 0),
+            Self::Yunzai(_) => None,
         }
     }
 
@@ -86,6 +91,9 @@ impl AppInstanceConfig {
             (Self::Koishi(before), Self::Koishi(after)) => {
                 before.listen_port() != after.listen_port()
             }
+            (Self::Yunzai(before), Self::Yunzai(after)) => {
+                crate::yunzai::config::link_inputs_changed(before, after)
+            }
             _ => false,
         }
     }
@@ -96,6 +104,9 @@ impl AppInstanceConfig {
         match (self, after) {
             (Self::MaiBot(before), Self::MaiBot(after)) => {
                 crate::maibot::config::restart_inputs_changed(before, after)
+            }
+            (Self::Yunzai(before), Self::Yunzai(after)) => {
+                crate::yunzai::config::restart_inputs_changed(before, after)
             }
             _ => false,
         }

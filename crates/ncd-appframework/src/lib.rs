@@ -24,6 +24,8 @@ pub mod store;
 pub mod terminal;
 pub mod toml_patch;
 pub mod uv_tooling;
+pub mod yaml_patch;
+pub mod yunzai;
 
 pub use adapter::{
     AppComponentSpec, AppFrameworkAdapter, PluginLogSink, apply_with_backup, apply_with_backup_ex,
@@ -123,5 +125,11 @@ pub use nonebot2::{
 };
 pub use ports::{PortUsage, local_port_free, parse_proc_net_listen, remote_listening_ports};
 pub use registry::AppFrameworkRegistry;
-pub use store::{AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry};
+pub use store::{
+    AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry, StoreMarketPart, StoreMarketText,
+};
 pub use terminal::AppTerminalProfile;
+pub use yunzai::{
+    YUNZAI_FRAMEWORK_ID, YunzaiAdapter, YunzaiComponent, YunzaiInstanceConfig, YunzaiIntegration,
+    yunzai_manifest,
+};
