@@ -1,0 +1,335 @@
+{
+  "get_login_info": {
+    "description": "获取登录号信息",
+    "payload": {
+      "type": "object",
+      "properties": {}
+    },
+    "response": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "description": "QQ号",
+          "type": "number"
+        },
+        "nickname": {
+          "description": "昵称",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_id",
+        "nickname"
+      ],
+      "description": "OneBot 11 用户信息"
+    },
+    "payloadExample": {},
+    "tags": [
+      "系统接口"
+    ]
+  },
+  "send_group_msg": {
+    "description": "发送群消息",
+    "payload": {
+      "type": "object",
+      "properties": {
+        "message_type": {
+          "description": "消息类型 (private/group)",
+          "enum": [
+            "private",
+            "group"
+          ],
+          "type": "string"
+        },
+        "user_id": {
+          "description": "用户QQ",
+          "type": "string"
+        },
+        "group_id": {
+          "description": "群号",
+          "type": "string"
+        },
+        "message": {
+          "$id": "OB11MessageMixType",
+          "anyOf": [
+            {
+              "type": "array"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "auto_escape": {
+          "description": "是否作为纯文本发送",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "source": {
+          "description": "合并转发来源",
+          "type": "string"
+        },
+        "news": {
+          "description": "合并转发新闻",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ]
+          }
+        },
+        "summary": {
+          "description": "合并转发摘要",
+          "type": "string"
+        },
+        "prompt": {
+          "description": "合并转发提示",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ]
+    },
+    "response": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "description": "消息ID",
+          "type": "number"
+        },
+        "res_id": {
+          "description": "转发消息的 res_id",
+          "type": "string"
+        },
+        "forward_id": {
+          "description": "转发消息的 forward_id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id"
+      ],
+      "description": "业务数据"
+    },
+    "payloadExample": {
+      "group_id": "123456",
+      "message": "hello"
+    },
+    "tags": [
+      "群组接口"
+    ]
+  },
+  "delete_msg": {
+    "description": "撤回消息",
+    "payload": {
+      "type": "object",
+      "properties": {
+        "message_id": {
+          "description": "消息ID",
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "message_id"
+      ]
+    },
+    "response": {
+      "description": "业务数据",
+      "type": "null"
+    },
+    "payloadExample": {
+      "message_id": 12345
+    },
+    "tags": [
+      "消息接口"
+    ]
+  },
+  "get_group_member_info": {
+    "description": "获取群成员信息",
+    "payload": {
+      "type": "object",
+      "properties": {
+        "group_id": {
+          "description": "群号",
+          "type": "string"
+        },
+        "user_id": {
+          "description": "QQ号",
+          "type": "string"
+        },
+        "no_cache": {
+          "description": "是否不使用缓存",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "group_id",
+        "user_id"
+      ]
+    },
+    "response": {
+      "type": "object",
+      "properties": {
+        "group_id": {
+          "description": "群号",
+          "type": "number"
+        },
+        "user_id": {
+          "description": "QQ号",
+          "type": "number"
+        },
+        "nickname": {
+          "description": "昵称",
+          "type": "string"
+        },
+        "card": {
+          "description": "群名片",
+          "type": "string"
+        },
+        "role": {
+          "description": "角色",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group_id",
+        "user_id",
+        "nickname"
+      ]
+    },
+    "payloadExample": {
+      "group_id": "123456",
+      "user_id": "123456789"
+    },
+    "tags": [
+      "群组接口"
+    ]
+  },
+  "upload_file_stream": {
+    "description": "上传文件流",
+    "payload": {
+      "type": "object",
+      "properties": {
+        "stream_id": {
+          "description": "流 ID",
+          "type": "string"
+        },
+        "chunk_data": {
+          "description": "分块数据 (Base64)",
+          "type": "string"
+        },
+        "chunk_index": {
+          "description": "分块索引",
+          "type": "number"
+        },
+        "total_chunks": {
+          "description": "总分块数",
+          "type": "number"
+        },
+        "file_size": {
+          "description": "文件总大小",
+          "type": "number"
+        },
+        "expected_sha256": {
+          "description": "期望的 SHA256",
+          "type": "string"
+        },
+        "is_complete": {
+          "description": "是否完成",
+          "type": "boolean"
+        },
+        "filename": {
+          "description": "文件名",
+          "type": "string"
+        },
+        "reset": {
+          "description": "是否重置",
+          "type": "boolean"
+        },
+        "verify_only": {
+          "description": "是否仅验证",
+          "type": "boolean"
+        },
+        "file_retention": {
+          "default": 300000,
+          "description": "文件保留时间 (毫秒)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "stream_id",
+        "file_retention"
+      ]
+    },
+    "response": {
+      "description": "业务数据",
+      "type": "object"
+    },
+    "payloadExample": {
+      "stream_id": "uuid-1234-5678",
+      "chunk_data": "SGVsbG8gV29ybGQ=",
+      "chunk_index": 0,
+      "total_chunks": 1,
+      "file_size": 11
+    },
+    "tags": [
+      "流式传输扩展"
+    ]
+  },
+  "get_status": {
+    "description": "获取运行状态",
+    "response": {
+      "type": "object",
+      "properties": {
+        "online": {
+          "description": "是否在线",
+          "type": "boolean"
+        },
+        "good": {
+          "description": "状态是否良好",
+          "type": "boolean"
+        },
+        "stat": {
+          "description": "统计信息",
+          "type": "object"
+        }
+      },
+      "required": [
+        "online",
+        "good",
+        "stat"
+      ],
+      "description": "业务数据"
+    },
+    "tags": [
+      "系统接口"
+    ]
+  }
+}

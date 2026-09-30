@@ -11,9 +11,10 @@ pub use remote_snowluma::tunnel as remote_snowluma_tunnel;
 pub use snowluma::{
     AgreementDoc, AgreementsPayload, AuthState, DaemonState, HookProcessInfo, HookProcessStatus,
     LinuxSinglePidProbe, MockProcessTreeProbe, OneBotInstanceInfo, PollerDeps, ProcessTreeProbe,
-    ReqwestSnowLumaWebUiClient, ReqwestSnowLumaWebUiClientFactory, SnowLumaDaemon,
-    SnowLumaDaemonError, SnowLumaLogNoiseFilter, SnowLumaLoginState, SnowLumaRuntimeBackend,
-    SnowLumaSession, SnowLumaStatusPoller, SnowLumaWebUiClient, SnowLumaWebUiClientFactory,
-    SnowLumaWebUiError, SysinfoProcessTreeProbe, filter_snowluma_console_lines,
-    load_or_create_session, load_snowluma_app_config, render_daemon_globals, sanitize_log_line,
+    ReqwestSnowLumaWebUiClient, ReqwestSnowLumaWebUiClientFactory, SlStreamFrame, SnowLumaDaemon,
+    SnowLumaDaemonError, SnowLumaDebugClient, SnowLumaDebugError, SnowLumaLogNoiseFilter,
+    SnowLumaLoginState, SnowLumaRuntimeBackend, SnowLumaSession, SnowLumaStatusPoller,
+    SnowLumaWebUiClient, SnowLumaWebUiClientFactory, SnowLumaWebUiError, SysinfoProcessTreeProbe,
+    filter_snowluma_console_lines, load_or_create_session, load_snowluma_app_config,
+    parse_stream_frame, render_daemon_globals, sanitize_log_line,
 };

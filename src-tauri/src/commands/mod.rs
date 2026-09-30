@@ -14,6 +14,7 @@ pub mod docker;
 pub mod exit;
 pub mod host_resolve;
 pub mod ncd_watch;
+pub mod onebot_debug;
 pub mod release;
 pub mod servers;
 pub mod snowluma;
@@ -394,6 +395,10 @@ mod tests {
             &server_manager,
             &app_settings,
         );
+        let onebot_debug = crate::commands::onebot_debug::test_onebot_debug(
+            root,
+            Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
+        );
         let state = AppState {
             data_root: root.to_path_buf(),
             snapshot: BootstrapSnapshot::ready(),
@@ -420,6 +425,7 @@ mod tests {
             ),
             app_manager,
             terminals: crate::commands::terminal::test_terminals(),
+            onebot_debug,
         };
         (state, bus)
     }

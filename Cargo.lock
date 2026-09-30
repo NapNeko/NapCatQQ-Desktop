@@ -3186,6 +3186,7 @@ dependencies = [
  "ncd-deploy",
  "ncd-domain",
  "ncd-host",
+ "ncd-onebot",
  "ncd-test-support",
  "ncd-traits",
  "proptest",
@@ -3219,6 +3220,7 @@ dependencies = [
  "ncd-domain",
  "ncd-host",
  "ncd-network",
+ "ncd-onebot",
  "ncd-test-support",
  "ncd-traits",
  "netstat2",
@@ -3372,6 +3374,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ncd-onebot"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "ncd-domain",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
 name = "ncd-runtime"
 version = "0.1.0"
 dependencies = [
@@ -3395,6 +3414,7 @@ dependencies = [
  "ncd-host",
  "ncd-log",
  "ncd-network",
+ "ncd-onebot",
  "ncd-server",
  "ncd-test-support",
  "ncd-traits",
@@ -3411,6 +3431,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-tungstenite",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
@@ -6530,6 +6551,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6840,6 +6873,24 @@ dependencies = [
  "quote",
  "syn 2.0.117",
  "termcolor",
+]
+
+[[package]]
+name = "tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18e5b8366ee7a95b16d32197d0b2604b43a0be89dc5fac9f8e96ccafbaedda8a"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.8.6",
+ "sha1",
+ "thiserror 1.0.69",
+ "utf-8",
 ]
 
 [[package]]

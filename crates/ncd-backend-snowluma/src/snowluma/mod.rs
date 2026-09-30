@@ -3,6 +3,7 @@
 //! 模块声明 + 已落地类型 / trait / 函数的 re-export 清单
 
 pub mod daemon;
+pub mod debug_client;
 pub mod error;
 pub mod linux_proc_probe;
 pub mod log_noise;
@@ -26,6 +27,13 @@ pub use webui_client::{
     AgreementDoc, AgreementsPayload, AuthState, HookProcessInfo, HookProcessStatus,
     OneBotInstanceInfo, ReqwestSnowLumaWebUiClient, ReqwestSnowLumaWebUiClientFactory,
     SnowLumaWebUiClient,
+};
+
+// ---- debug_client.rs ----
+//
+// 调试台专用的 /api/debug/* 客户端,独立于 SnowLumaWebUiClient trait
+pub use debug_client::{
+    SlStreamFrame, SnowLumaDebugClient, SnowLumaDebugError, parse_stream_frame,
 };
 
 // ---- daemon.rs ----

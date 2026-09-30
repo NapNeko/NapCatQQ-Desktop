@@ -71,6 +71,8 @@ pub(crate) async fn shutdown_and_exit(app: &AppHandle, state: &AppState, origin:
     // 本机应用端实例随 Desktop 退出停止；远端实例脱管（与协议 Bot 同语义）
     state.app_manager.runtime().shutdown_local().await;
     state.terminals.close_all();
+    // 调试台的事件接收器、SSH 隧道和在途调用一并收掉，隧道才能干净关闭
+    state.onebot_debug.close_all().await;
     // 删远端 desktop_present,ncd-watch 立刻可告警(不必干等 90s TTL)
     crate::commands::ncd_watch::clear_present_on_all_remote_servers(state).await;
     state.runtime.shutdown().await;

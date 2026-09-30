@@ -70,6 +70,12 @@ pub struct AppState {
     pub(crate) app_manager: Arc<ncd_runtime::AppManager>,
     /// 内嵌终端会话；和网页无关，进轻量模式也不断
     pub(crate) terminals: Arc<ncd_runtime::terminal::TerminalManager>,
+    /// OneBot 调试台：Bot 的调用通道、事件接收器、工作区 / 收藏 / 历史落盘。
+    /// 功能开关接缝：`set_enabled` 目前没有调用方（一直开着）。FeatureToggles.apiDebug
+    /// （quiet-soaring-otter 分支）合入后要接两处：启动时按落盘的 `apiDebug` 调一次
+    /// `set_enabled`（关着就不该有接收器起来），设置保存时再按新值调；前端改
+    /// `hooks/debug/useDebugConsoleEnabled` 那一行
+    pub(crate) onebot_debug: Arc<ncd_runtime::onebot_debug::DebugManager>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -256,6 +262,7 @@ pub fn run() {
         ));
     let host_resolver_for_apps = Arc::clone(&host_resolver);
     let host_resolver_for_terminals = Arc::clone(&host_resolver);
+    let host_resolver_for_debug = Arc::clone(&host_resolver);
     // 应用端注册表只建这一份:组件执行器和 AppManager 用的是同一批适配器实例
     let app_registry = Arc::new(ncd_runtime::AppFrameworkRegistry::with_builtin());
     let deployment_tasks = ncd_runtime::DeploymentTaskManager::new(event_bus.clone());
@@ -325,6 +332,12 @@ pub fn run() {
             .expect("bot_manager Arc not yet shared")
             .with_snowluma(snowluma_backend, Arc::clone(&snowluma_daemon)),
     );
+    // 调试台要 BotManager 收尾后的那一份（with_snowluma 之后）
+    let onebot_debug = Arc::new(ncd_runtime::onebot_debug::DebugManager::new(
+        Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
+        host_resolver_for_debug,
+        data_root.clone(),
+    ));
     // BotManager 就绪后再挂 OneBot messenger 解析
     tauri::async_runtime::block_on(onebot_resolver.set(Arc::new(
         onebot_endpoint_resolver::BotManagerOneBotEndpointResolver::new(Arc::clone(&bot_manager)),
@@ -390,6 +403,8 @@ pub fn run() {
     let bot_manager_host_recovery_listener = Arc::clone(&bot_manager);
     let bot_manager_host_lost_listener = Arc::clone(&bot_manager);
     let bot_manager_auto_restart = Arc::clone(&bot_manager);
+    let onebot_debug_listener = Arc::clone(&onebot_debug);
+    let onebot_debug_sweeper = Arc::clone(&onebot_debug);
 
     let mut builder = tauri::Builder::default();
     #[cfg(desktop)]
@@ -424,6 +439,18 @@ pub fn run() {
             migrate_gate: Arc::new(commands::data_root_migrate::DataRootMigrateGate::default()),
             app_manager: app_manager.clone(),
             terminals,
+            onebot_debug,
+        })
+        // 页面开始（重新）加载时，旧页面的调试台事件订阅已经没人收了，但 Channel 还能 send 成功、探不出来，
+        // 在这里按窗口摘掉，否则接收器一直算「有人在看」，空闲停不下来
+        .on_page_load(|webview, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Started
+                && let Some(state) = webview.try_state::<AppState>()
+            {
+                state
+                    .onebot_debug
+                    .page_loading(webview.label(), std::time::Instant::now());
+            }
         })
         .setup(move |app| {
             if startup_tray_only {
@@ -519,6 +546,17 @@ pub fn run() {
                     .clone()
                     .run_host_connection_lost_listener()
                     .await;
+            });
+            // 调试台：Bot 停了就收掉它的事件接收器和会话；没人看的接收器 30 分钟后清掉。
+            // 两个任务只拿 Weak，管理器丢了就自己退出
+            let onebot_debug_bus: Arc<dyn EventBus> = Arc::new(event_bus.clone());
+            tauri::async_runtime::spawn(async move {
+                onebot_debug_listener
+                    .run_bot_event_listener(onebot_debug_bus)
+                    .await;
+            });
+            tauri::async_runtime::spawn(async move {
+                onebot_debug_sweeper.run_idle_sweeper().await;
             });
             // 定时自动重启（间隔 / cron）：须在 bootstrap 前订阅，reattach 的 Running 事件才能落锚点
             tauri::async_runtime::spawn(async move {
@@ -922,6 +960,29 @@ pub fn run() {
             commands::terminal::terminal_download,
             commands::terminal::terminal_export_text,
             commands::terminal::read_clipboard_text,
+            commands::onebot_debug::onebot_debug_targets,
+            commands::onebot_debug::onebot_debug_channels,
+            commands::onebot_debug::onebot_debug_test_channel,
+            commands::onebot_debug::onebot_debug_catalog,
+            commands::onebot_debug::onebot_debug_describe,
+            commands::onebot_debug::onebot_debug_call,
+            commands::onebot_debug::onebot_debug_cancel,
+            commands::onebot_debug::onebot_debug_save_response,
+            commands::onebot_debug::onebot_debug_subscribe,
+            commands::onebot_debug::onebot_debug_unsubscribe,
+            commands::onebot_debug::onebot_debug_receivers,
+            commands::onebot_debug::onebot_debug_stop_receiver,
+            commands::onebot_debug::onebot_debug_read_events,
+            commands::onebot_debug::onebot_debug_workspace,
+            commands::onebot_debug::onebot_debug_save_workspace,
+            commands::onebot_debug::onebot_debug_collections,
+            commands::onebot_debug::onebot_debug_save_collections,
+            commands::onebot_debug::onebot_debug_export_collections,
+            commands::onebot_debug::onebot_debug_import_collections,
+            commands::onebot_debug::onebot_debug_history,
+            commands::onebot_debug::onebot_debug_history_entry,
+            commands::onebot_debug::onebot_debug_clear_history,
+            commands::onebot_debug::onebot_debug_storage_notices,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

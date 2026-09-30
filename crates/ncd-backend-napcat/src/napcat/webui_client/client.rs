@@ -12,6 +12,15 @@ use super::payloads::{
 };
 use super::trait_::NapCatWebUiClient;
 
+/// NapCat WebUI 登录用的 hash：sha256_hex(token + ".napcat")。
+/// 调试客户端也要登录，共用这一份以免两处算法漂移。
+pub(crate) fn login_hash(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hasher.update(b".napcat");
+    hex::encode(hasher.finalize())
+}
+
 /// [NapCatWebUiClient] 的默认实现（reqwest + rustls，仅 loopback）
 pub struct ReqwestNapCatWebUiClient {
     // pub(crate): 单测可注入自定义 reqwest::Client（wiremock）
@@ -46,12 +55,7 @@ impl ReqwestNapCatWebUiClient {
 #[async_trait]
 impl NapCatWebUiClient for ReqwestNapCatWebUiClient {
     async fn fetch_credential(&self, port: u16, token: &str) -> Result<String, NapCatWebUiError> {
-        let hash = {
-            let mut hasher = Sha256::new();
-            hasher.update(token.as_bytes());
-            hasher.update(b".napcat");
-            hex::encode(hasher.finalize())
-        };
+        let hash = login_hash(token);
         let resp = self
             .client
             .post(Self::webui_url(port, "/api/auth/login"))

@@ -6,6 +6,7 @@ type NavRouteId =
     | 'overview'
     | 'bots'
     | 'apps'
+    | 'debug'
     | 'components'
     | 'docker'
     | 'remote'
@@ -17,6 +18,7 @@ export const NAV_ROUTE_MOTION: Record<NavRouteId, MotionIconPreset> = {
     overview: 'bob',
     bots: 'pulse',
     apps: 'nudge',
+    debug: 'wiggle',
     components: 'nudge',
     docker: 'breathe',
     remote: 'breathe',

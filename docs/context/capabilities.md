@@ -3,9 +3,9 @@
 > 规划新功能前先查这里：已经有的直接用或扩展，别再写一份。前端能力看 frontend.md，功能域落点看 codemap.md，踩坑看 lessons.md。
 > 这里只写各 crate 现在真有的导出。改名、删掉或新加一类能力时顺手改本文。拿不准就去 `lib.rs` 看 `pub use`。
 
-ls 入口：`crates/ncd-domain/src/`、`crates/ncd-traits/src/`、`crates/ncd-host/src/`、`crates/ncd-component/src/`、`crates/ncd-appframework/src/`、`crates/ncd-runtime/src/`
+ls 入口：`crates/ncd-domain/src/`、`crates/ncd-traits/src/`、`crates/ncd-host/src/`、`crates/ncd-component/src/`、`crates/ncd-appframework/src/`、`crates/ncd-onebot/src/`、`crates/ncd-runtime/src/`
 
-分层：L1 `ncd-domain` → L2 `ncd-traits` → L3 `ncd-runtime`（Manager / Service 持有全部可变状态）→ L4 `src-tauri`（命令只转参数和错误）。中间的 host / component / appframework / deploy / config / server / network 和两个后端 crate 给 runtime 用；两个 `ncd-backend-*` 互不依赖。
+分层：L1 `ncd-domain` → L2 `ncd-traits` → L3 `ncd-runtime`（Manager / Service 持有全部可变状态）→ L4 `src-tauri`（命令只转参数和错误）。中间的 host / component / appframework / onebot / deploy / config / server / network 和两个后端 crate 给 runtime 用；两个 `ncd-backend-*` 互不依赖。
 
 ---
 
@@ -27,7 +27,7 @@ ls 入口：`crates/ncd-domain/src/`、`crates/ncd-traits/src/`、`crates/ncd-ho
 | 读写 `app-settings.json` | `ncd_runtime::desktop::{load_app_settings, read_app_settings_file, update_app_settings, replace_app_settings_with}`，归一化只调 `AppSettings::normalize`，本机 SnowLuma 自定义 Node 用 `AppSettings::snowluma_node_override` | `ncd-runtime/src/desktop/settings.rs` |
 | 下载 | `ncd_network`（共享 client、续传、镜像竞速、16 MB 以上切片）；组件里用 `DownloadHelper`（加 SHA256 和取消）；让远端自己下 `Host::download_url` / `download_url_to_host_with_progress` | `ncd-network/src/`、`ncd-component/src/download.rs` |
 | 活跃任务登记 | `ActiveTasks::register` 返回 guard，任何返回路上都会摘掉 | `ncd-runtime/src/components/active_tasks.rs` |
-| 退出、更新后重启 | `commands/exit.rs::shutdown_and_exit`（停本机 Bot、停本机应用端实例、关终端、清远端在场标记）；闸门计数 `local_active_bots` | `src-tauri/src/commands/exit.rs` |
+| 退出、更新后重启 | `commands/exit.rs::shutdown_and_exit`（停本机 Bot、停本机应用端实例、关终端、关调试台通道和隧道、清远端在场标记）；闸门计数 `local_active_bots` | `src-tauri/src/commands/exit.rs` |
 | 日志快照 | `ncd_domain::LogSnapshot`（`ncd_traits` 原路径 re-export） | `ncd-domain/src/log_snapshot.rs` |
 
 ---
@@ -42,6 +42,7 @@ ls 入口：`crates/ncd-domain/src/`、`crates/ncd-traits/src/`、`crates/ncd-ho
 - 组件：`component`（`ComponentId`、依赖图 `DependencyPlan` / `DependencyNode` / `RuntimeReadiness` / `RequirementStatus` 等），`progress`、`qq_dependency`、`node_environment`
 - 应用端：`app_framework`（`AppInstance`、`AppFrameworkManifest`、`OneBotLinkPlan` / `OneBotLinkMode`、`AppLinkRecord`、配置文档和错误类型、`classify_app_link` 对接拓扑、`parse_ws_url` / `rewrite_ws_loopback_port`、`app_link_connection_name`）
 - 远端：`remote_inventory`、`remote_paths`、`docker`（`DockerDeploySpec::validate` 等）、`deployment_task`
+- 调试台：`onebot_debug`（调试台的全部 IPC 类型：`DebugTarget` / `DebugChannelId` / `DebugCatalog` / `DebugCallRequest` / `DebugCallResponse` / `DebugError` / `DebugEventBatch` / 工作区、收藏、历史；导出到 `generated/debug/`）
 - 其它：`terminal`（终端目标、会话、带 `v` 的事件）、`data_root_migrate`、`release_snapshot`、`offline_alert`、`bootstrap`、`migration`、`errors`、`ids`、`kinds`
 
 ## ncd-traits（L2，接口契约）
@@ -82,11 +83,21 @@ ls 入口：`crates/ncd-domain/src/`、`crates/ncd-traits/src/`、`crates/ncd-ho
 - 共用件：`config_doc`（`AppInstanceConfig`、修订号、读写文档）、`env_file`（保序 dotenv）、`toml_patch`（只动改了的键，保注释和不认识的键）、`adopt`（导入已有项目：记下原文件、还原、清掉桌面端留下的东西）、`node_tooling`（Node / pnpm 工具链和 PATH）、`uv_tooling`（`ensure_python`、glibc / musl 探测、剩余空间）、`terminal`（`AppTerminalProfile`、`uv_venv_profile` / `node_profile`）、`store`（框架无关的商店条目）、`ports`
 - 各框架：`karin/`（配置六份 JSON + `.env`、插件）；`nonebot2/`（`.env.prod`、`[tool.nonebot]` 代管、`uv add/remove`）；`astrbot/`（Dashboard 登录态归 `AstrBotAdapter` 持有，运行期接口 `AstrBotRuntimeApi`，AI 投影写回 `ai.rs`）；`maibot/`（生成的强类型配置 `schema/`、`config/validate.rs`、WebUI 客户端、`MaiBotRuntimeApi`、`resources/` 各数据页、`release.rs` 挑适配器与宿主版本、`terms.rs`）
 
+## ncd-onebot（OneBot 11 调试台的协议层）
+
+只依赖 ncd-domain，不认识 Bot、通道或 Tauri；谁来调、连到哪由 runtime 决定。
+
+- 动作目录 `catalog/`：`parse_napcat` / `parse_snowluma` 把两种文档格式统一成 `DebugActionSpec`，`snapshot(BackendType)` 是内置快照（`snapshot/*.json`，连不上上游时兜底），`inline_refs` 展开 `$ref`，`param_diff` 比两个后端的参数差异，`overrides.rs` 补文档没给的安全等级 / 分类 / 参数角色（`safety_for` / `category_from_name` / `annotate_roles`，危险动作清单 `DANGEROUS`）
+- 客户端 `client/`：`HttpActionClient`（调用）、`WsClient`（收事件 + 调用，队列满丢的事件计数）、`SseParser`（SnowLuma 事件流帧解析）、`envelope.rs`（`parse_ob11_reply` / `outcome_from` 回包归一，回包超 `RESPONSE_INLINE_LIMIT` 截断）；错误 `ClientError`
+- 其它：`Backoff`（重连退避）、`EventRing`（事件环形缓冲，容量 `DEFAULT_RING_CAP`，序号只增，`with_start_seq` 让重建后的环接着编号）
+- 上游调试接口的客户端不在这里，在 `ncd-backend-napcat` 的 `napcat/debug_client.rs`（`NapCatDebugClient`）和 `ncd-backend-snowluma` 的 `snowluma/debug_client.rs`（`SnowLumaDebugClient`）
+
 ## ncd-runtime（L3 编排，所有可变状态在这里）
 
 - `BotManager`（`bot_manager/`）：Bot 表、Actor、批量启停、自动重启（`auto_restart`，cron 预览）；启动预检经 `RuntimeReadinessGate`，实现是 `components/readiness_gate.rs` 的 `ComponentRuntimeGate`；构建时 `with_server_manager` / `with_remote_inventory` / `with_runtime_gate` / `with_host_resolver` / `with_snowluma` 接上协作方
 - `AppManager`（`app_framework/manager.rs` + `manager/`）：结构体和共用小工具在 `manager.rs`，职责按子模块分：`lifecycle`（新建、导入、安装、启停、删除、分配实例口）、`install_dir`、`config`（写盘后联动端口、对接、重启）、`link`、`tunnel`（`ensure_desktop_tunnel` 先看能不能复用、开完再核一遍再登记，`-L` / `-R` / 正向隧道共用；应用机常驻 ssh 的建立、对账、拆除）、`store`（任务提交 `submit_store_op`）、`webui`（`open_webui`，WebUI 口和密钥按实例缓存）、`astrbot`、`maibot`（`maibot_session` 一次给出接口和会话）、`terminal`。启动时 `with_component_executor` 接上组件执行器，安装走 `install_instance`，盯任务走同一条队列。另有 `NativeAppRuntime`（起停、pid 文件、停时连进程树收）、`AppInstanceStore`（`app-instances.json`，读不出先挪开原件）、`resident_link`、`plugin_market`（市场目录缓存归 AppManager）、`export_onebot_endpoint`
 - `ComponentExecutor`（`components/executor.rs`，启动时建一份）：`submit` 把依赖闭包排成任务（去重、依赖先后）、`cancel`（先交给任务队列，队列不认识的才找活跃表）、`resolve` / `readiness` / `runtime_readiness`（组件页和 Bot 启动预检共用）、`install_qq_dependencies`、本机 Node 探测 `probe_local_node_candidates` / `probe_node_binary`；持有活跃任务表和 `RemoteInventoryService`。同目录：`graph`（`render_dependency_graph` / `requirement_closure`）、`resolver`、`factory`（`build_component_for_host`，应用端按 `AppComponentHint` 实例化）、`action_policy`（组件目录、去重键、任务资源、SnowLuma 发行包名）、`system_package`（补主机命令和 QQ 依赖的任务）、`package_lock`
+- `DebugManager`（`onebot_debug/`）：OneBot 调试台的编排。每个 Bot 一份会话（客户端、隧道、通道状态、目录缓存），`close_all` 换「一轮」并取消旧一轮；`list_targets` / `list_channels` / `test_channel`（`plan.rs` 的通道规划与「自动」选路）、`call` / `cancel` / `save_response`（有时限、可取消，超大回包留全文供另存）、`catalog` / `describe`（快照 + 现取合并）、`subscribe` / `unsubscribe` / `receivers` / `stop_receiver` / `read_events`（每 Bot 一个事件接收器，50 ms 一批推送，序号连续，自调用去重，无人看 30 分钟后清掉）、工作区 / 收藏 / 历史落盘（`storage.rs`，读盘惰性，损坏的文件挪走并给提示）；Bot 数据经窄接口 `DebugBotPort`（`bot_manager/debug_port.rs` 给 BotManager 实现），事件出口 `DebugEventSink`；`run_bot_event_listener` / `run_idle_sweeper` 启动时各 spawn 一次；功能开关 `set_enabled` 还没接设置
 - `DeploymentTaskManager`（`deploy/tasks.rs`）：任务队列事实源，`submit` / `active_task_by_dedupe_key` / `cancel` / `push_progress` / `list`
 - `TerminalManager`（`terminal/`）：会话表、回放、流控、`restart`、`detach_all` / `close_all`、`fill_sudo`；文件栏 `files.rs`（列目录、读写文本、建目录、改名、删、上传、下载、`export_text`）、状态条 `stats.rs`、系统终端 `external.rs`；目标到启动方案 `TerminalPlanner`（`plan.rs`、`plan/bot.rs`）、shell 集成 `integration.rs`、本机 shell 探测 `shells.rs`
 - 远端：`remote/inventory.rs`、`docker_session.rs`（`DockerBotSessionRegistry`）、`runtime_sessions.rs`、`bot_log_follow.rs`、`importable_bots.rs`、`import_network.rs`
@@ -121,4 +132,4 @@ ls 入口：`crates/ncd-domain/src/`、`crates/ncd-traits/src/`、`crates/ncd-ho
 - 插件：`tauri-plugin-opener`、`tauri-plugin-dialog`、`tauri-plugin-notification`、`tauri-plugin-single-instance`
 - 权限：`capabilities/main.json` 给主窗；`capabilities/tray-panel.json` 给托盘面板，只有 `core:default` 和按 http / https 打开链接。面板要做的窗口操作放后端命令里
 - 主窗和托盘面板之间的窗口通知：名字和信封版本在 `src-tauri/src/window_events.rs`，前端只在 `desktop.service.ts` 的 `windowEventService` 订
-- 退出收尾：`commands/exit.rs`；AppState 挂的是 runtime 里各 Manager / 执行器的句柄，缓存和任务表由它们自己持有，别再往 AppState 上加；上面那份设置副本 `app_settings` 只经 `ncd_runtime::desktop` 的函数改
+- 退出收尾：`commands/exit.rs`（含 `DebugManager::close_all`）；AppState 挂的是 runtime 里各 Manager / 执行器的句柄，缓存和任务表由它们自己持有，别再往 AppState 上加；上面那份设置副本 `app_settings` 只经 `ncd_runtime::desktop` 的函数改

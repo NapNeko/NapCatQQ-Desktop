@@ -12,6 +12,7 @@ import {
     ChevronsLeft,
     ChevronsRight,
     Container,
+    FlaskConical,
     LayoutDashboard,
     ListTodo,
     Loader2,
@@ -31,6 +32,7 @@ export type AppRoute =
     | 'overview'
     | 'bots'
     | 'apps'
+    | 'debug'
     | 'components'
     | 'docker'
     | 'remote'
@@ -46,6 +48,8 @@ interface SidebarProps {
     onToggleCollapse: () => void;
     // 是否显示 Docker 项。
     showDocker?: boolean;
+    // 是否显示调试台（功能开关关掉时隐藏）。
+    showDebug?: boolean;
     taskQueueActiveCount?: number;
 }
 
@@ -59,6 +63,7 @@ const MAIN_NAV: NavItem[] = [
     { id: 'overview', label: '概览', icon: LayoutDashboard },
     { id: 'bots', label: '机器人', icon: Bot },
     { id: 'apps', label: '应用端', icon: Blocks },
+    { id: 'debug', label: '调试台', icon: FlaskConical },
     { id: 'components', label: '组件', icon: Package },
     { id: 'docker', label: '容器', icon: Container },
     { id: 'remote', label: '远端', icon: Server },
@@ -87,11 +92,12 @@ export const Sidebar = memo(function Sidebar({
     collapsed,
     onToggleCollapse,
     showDocker = true,
+    showDebug = true,
     taskQueueActiveCount = 0,
 }: SidebarProps) {
-    const mainNavItems = showDocker
-        ? MAIN_NAV
-        : MAIN_NAV.filter((item) => item.id !== 'docker');
+    const mainNavItems = MAIN_NAV.filter(
+        (item) => (showDocker || item.id !== 'docker') && (showDebug || item.id !== 'debug'),
+    );
 
     const m = useMotion();
     const navRef = useRef<HTMLElement | null>(null);
@@ -125,7 +131,7 @@ export const Sidebar = memo(function Sidebar({
             duration: m.duration('base'),
             ease: m.ease.hover,
         });
-    }, [active, collapsed, showDocker, m]);
+    }, [active, collapsed, showDocker, showDebug, m]);
 
     return (
         <aside

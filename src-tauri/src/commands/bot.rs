@@ -565,6 +565,10 @@ mod tests {
             &server_manager,
             &app_settings,
         );
+        let onebot_debug = crate::commands::onebot_debug::test_onebot_debug(
+            root,
+            Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
+        );
         let state = AppState {
             data_root: root.to_path_buf(),
             snapshot: BootstrapSnapshot::ready(),
@@ -591,6 +595,7 @@ mod tests {
             ),
             app_manager,
             terminals: crate::commands::terminal::test_terminals(),
+            onebot_debug,
         };
         (state, bus)
     }

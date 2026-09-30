@@ -1,18 +1,12 @@
 // 配置原文编辑。着色和光标都由 CodeMirror 画，避免 pre+textarea 叠层在 WebView2 里错位。
 
 import { useEffect, useImperativeHandle, useRef, type Ref } from 'react';
-import {
-    Decoration,
-    EditorView,
-    drawSelection,
-    keymap,
-    placeholder as cmPlaceholder,
-    type DecorationSet,
-} from '@codemirror/view';
-import { Compartment, EditorState, StateField } from '@codemirror/state';
+import { EditorView, drawSelection, keymap, placeholder as cmPlaceholder } from '@codemirror/view';
+import { Compartment, EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { cn } from '../utils/cn';
-import { joinTokens, tokenize, type SyntaxMode, type TokKind } from './syntaxTokens';
+import { editorTheme, syntaxColorField } from './codemirrorTheme';
+import type { SyntaxMode } from './syntaxTokens';
 
 export type { SyntaxMode };
 
@@ -23,87 +17,6 @@ const EMPTY: Record<SyntaxMode, string> = {
     plain: '',
     prompt: '',
 };
-
-const MARK: Partial<Record<TokKind, Decoration>> = {
-    param: Decoration.mark({ class: 'ncd-syn-param' }),
-    key: Decoration.mark({ class: 'ncd-syn-key' }),
-    string: Decoration.mark({ class: 'ncd-syn-string' }),
-    number: Decoration.mark({ class: 'ncd-syn-number' }),
-    bool: Decoration.mark({ class: 'ncd-syn-bool' }),
-    null: Decoration.mark({ class: 'ncd-syn-null' }),
-    punct: Decoration.mark({ class: 'ncd-syn-punct' }),
-    comment: Decoration.mark({ class: 'ncd-syn-comment' }),
-};
-
-function buildDecos(doc: string, mode: SyntaxMode): DecorationSet {
-    const tokens = tokenize(doc, mode);
-    if (joinTokens(tokens) !== doc) return Decoration.none;
-    const ranges = [];
-    let pos = 0;
-    for (const t of tokens) {
-        const from = pos;
-        const to = pos + t.text.length;
-        pos = to;
-        const mark = MARK[t.kind];
-        if (mark && from < to) ranges.push(mark.range(from, to));
-    }
-    return Decoration.set(ranges, true);
-}
-
-function tokenField(mode: SyntaxMode) {
-    return StateField.define<DecorationSet>({
-        create: (state) => buildDecos(state.doc.toString(), mode),
-        update: (deco, tr) => (tr.docChanged ? buildDecos(tr.state.doc.toString(), mode) : deco),
-        provide: (field) => EditorView.decorations.from(field),
-    });
-}
-
-const editorTheme = EditorView.theme({
-    '&': {
-        height: '100%',
-        overflow: 'hidden',
-        backgroundColor: 'transparent',
-        fontSize: '12px',
-    },
-    '&.cm-focused': { outline: 'none' },
-    '.cm-scroller': {
-        overflow: 'auto',
-        fontFamily: 'var(--font-mono)',
-        lineHeight: '1.6',
-        fontFeatureSettings: '"liga" 0, "calt" 0',
-    },
-    '.cm-content': {
-        color: 'var(--color-text)',
-        caretColor: 'var(--color-brand)',
-        padding: '10px 12px',
-        minHeight: '100%',
-    },
-    '.cm-line': { padding: '0' },
-    '.cm-cursor, .cm-cursor-primary': {
-        borderLeftColor: 'var(--color-brand)',
-    },
-    '.cm-selectionBackground': {
-        backgroundColor: 'color-mix(in srgb, var(--color-brand) 25%, transparent)',
-    },
-    '&.cm-focused .cm-selectionBackground': {
-        backgroundColor: 'color-mix(in srgb, var(--color-brand) 25%, transparent)',
-    },
-    '.cm-placeholder': { color: 'var(--color-text-tertiary)' },
-    '.ncd-syn-key': { color: 'var(--color-brand)' },
-    '.ncd-syn-string': { color: 'var(--color-success)' },
-    '.ncd-syn-number': { color: 'var(--color-info)' },
-    '.ncd-syn-bool': { color: 'var(--color-warning)' },
-    '.ncd-syn-null': { color: 'var(--color-warning)' },
-    '.ncd-syn-punct': { color: 'var(--color-text-tertiary)' },
-    '.ncd-syn-comment': { color: 'var(--color-text-tertiary)' },
-    // 提示词参数画成一枚小标签：一眼分得出哪些是麦麦要填进去的
-    '.ncd-syn-param': {
-        color: 'var(--color-brand)',
-        backgroundColor: 'color-mix(in srgb, var(--color-brand) 11%, transparent)',
-        borderRadius: '4px',
-        padding: '1px 2px',
-    },
-});
 
 // 大段中文用正文字体，读起来不像代码
 const proseTheme = EditorView.theme({
@@ -167,7 +80,7 @@ export function SyntaxTextEditor({
                     history(),
                     keymap.of([...defaultKeymap, ...historyKeymap]),
                     EditorState.tabSize.of(2),
-                    tokenField(mode),
+                    syntaxColorField(mode),
                     cmPlaceholder(EMPTY[mode]),
                     wrap ? EditorView.lineWrapping : [],
                     prose ? proseTheme : [],

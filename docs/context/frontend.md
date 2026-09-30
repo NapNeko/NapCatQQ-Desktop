@@ -40,12 +40,13 @@ flowchart TB
 - 启动与桌面：`bootstrap` / `desktop`（窗口、托盘）/ `desktop-consent` / `desktop-onboarding` / `desktop-update` / `exit` / `data-root-migrate` / `config-transfer` / `settings` / `system-metrics`
 - Bot：`bot`（配置 / 生命周期 / 日志快照 / QQ 进程枚举）/ `snowlumaApp`
 - 主机与部署：`remote` / `server` / `component` / `docker` / `deployment-task` / `release` / `ncd-watch` / `terminal`
+- 调试台：`onebot-debug`（目录、调用、事件订阅走 `Channel`、工作区 / 收藏 / 历史；失败抛后端给的中文字符串，调用没拿到回包的原因在 `DebugCallResponse.result` 里当数据返回）
 - 应用端：`app-framework`（实例、配置、商店、AstrBot / 麦麦运行期接口）/ `maibot-chat` / `maibot-memory` / `maibot-resources`
 - 事件：`event-stream.service.ts`（`DOMAIN_EVENT_NAMES` 是事件名单一来源）+ `domain-event-hub.ts`（全应用只 listen 一份再分发，业务侧一律 `subscribeDomainEvents`）
 
 跨 IPC 的类型由 Rust 侧 ts-rs 导出到 `core/ipc/generated/<short-name>/`，`core/ipc/types.ts` 只 re-export。service 里手写的载荷接口是待换成生成类型的旧账，别再加新的；有生成类型的直接从 `generated/**` 引（`SnowLumaAgreementsPayload` / `QQProcessInfo` 已换）。还剩 `settings.service.ts` 的 `BackendSettings` / `AfterCloseUiBehavior` / `UiModeOnStartup`：那是设置页拍平过的形状（全 number、snake_case 枚举），生成的 `AppSettings` 和 PascalCase 枚举对不上，要换得先动映射。
 
-`core/domain/*`：零运行时依赖，禁止 `import 'react'` / `'@tauri-apps/*'` / `'@tanstack/*'`。只放纯函数 + 类型 + reducer + 文案表，配单测。可以 import `core/ipc/types` 与 `core/ipc/generated/**`。按域分目录：`apps/`（实例状态、对接拓扑、商店与插件目录、各框架配置校验、麦麦的试聊 / 表情包 / 提示词…）/ `bot/` / `bootstrap/` / `components/` / `docker/` / `events/`（登录、SnowLuma 聚合，日志缓冲）/ `onboarding/` / `overview/` / `performance/` / `release/` / `remote-host/` / `settings/` / `task-queue/` / `terminal/` / `ui/`（错误条文案、相对时间）/ `webui/`，根上还有 `errors.ts`（`errorText`，把 invoke 抛出的裸字符串和 Error 统一成人话）/ `app-meta.ts` / `credits.ts` / `desktop-log.ts`。
+`core/domain/*`：零运行时依赖，禁止 `import 'react'` / `'@tauri-apps/*'` / `'@tanstack/*'`。只放纯函数 + 类型 + reducer + 文案表，配单测。可以 import `core/ipc/types` 与 `core/ipc/generated/**`。按域分目录：`apps/`（实例状态、对接拓扑、商店与插件目录、各框架配置校验、麦麦的试聊 / 表情包 / 提示词…）/ `bot/` / `bootstrap/` / `components/` / `docker/` / `events/`（登录、SnowLuma 聚合，日志缓冲）/ `onboarding/` / `overview/` / `performance/` / `release/` / `remote-host/` / `settings/` / `task-queue/` / `terminal/` / `debug/`（调试台的目录整理与命令面板排序、事件流 reduce 与聊天文案、参数表单与校验、收藏整理、历史重放、安全分级 / 错误 / 通道文案、三栏宽度规则）/ `ui/`（错误条文案、相对时间）/ `webui/`，根上还有 `errors.ts`（`errorText`，把 invoke 抛出的裸字符串和 Error 统一成人话）/ `app-meta.ts` / `credits.ts` / `desktop-log.ts`。
 
 `hooks/**`：唯一允许调 `core/services/*` 的层（除 transport 自己用）。组合 `useQuery` / `useMutation` + `subscribeDomainEvents`（订阅）+ domain reducer + 模块级 store。不允许 `import '@tauri-apps/*'`，也不反过来 import `modules/**`。
 
@@ -81,6 +82,7 @@ flowchart TB
   - 纯展示、几个模块都要的 → `shared/`（`shared/` 自己不许 import modules）。
   - 某模块的功能件给别的模块用 → 在该模块根上开 `index.ts` 当入口，别处只从入口拿。现有 `modules/apps/index.ts`（组件页按主机新建、导入实例用的两个对话框）。入口只挂别处真要静态引入的东西，不挂页面、详情 Tab，否则引入口的页面会把它们的依赖一起打进包。
   - 为分包用 `lazy(() => import(...))` 按需加载时，可以直接指向那一个文件，chunk 只带它：Bot 配置页的「对接应用端」就是 lazy 进 `modules/apps/AppLinkDialog`。
+  - 同一模块里几块之间共用：放模块根上的中立文件，不从兄弟目录里伸手。调试台三栏（`modules/debug/{left,center,right}/`）共用的危险确认框 `DangerConfirmDialog`（含「本次不再询问」那份记录）和收藏起名框 `SaveRequestDialog` 就在 `modules/debug/` 根上；三栏都要的纯逻辑（安全分级色点和文案 `safety.ts`、收藏整理 `collectionsOps.ts`、历史重放 `historyReplay.ts`、聊天文案 `chatFormat.ts`、输入框消息段 `composerModel.ts`）在 `core/domain/debug/`。
 - 导出：只导出文件外真在用的；单测经公开函数测，不为了测把内部小函数 export 出去。
 - 前端要镜像后端枚举的（`AppConfigErrorKind` 的 kind 表）写成 `{ ... } satisfies Record<生成的联合类型, true>`，Rust 加了一种前端没跟上，typecheck 直接红。
 - 注释写为什么，不写做了什么；中文，别带「R3」「Step 7」这类过程编号。
@@ -152,7 +154,7 @@ flowchart TB
 ## 8. 前端已落地能力（src-ui）
 
 - 技术栈：Tailwind v4 + Radix + lucide + GSAP，服务端数据走 `@tanstack/react-query`（`app/AppProvidersNext.tsx` 里默认不在窗口聚焦时重拉、不自动重试）
-- 原子件 `shared/ui/`（从 `shared/ui/index.ts` 统一引）：`Button` / `Card` / `Badge` / `Tabs` / `Tooltip` / `Dialog`（尺寸表 `dialogSizes.ts`）/ `Popover` / `ContextMenu` / `Select` / `Checkbox` / `Switch` / `RadioGroup` / `TextField` / `TextAreaField` / `NumberField` / `StringListField` / `KeyValueListEditor` / `SyntaxTextEditor` / `SimpleMarkdown` / `CopyCodeBlock` / `TimePicker` / `DayOfMonthPicker` / `MonthCalendar` / `FormSection` / `Spinner` / `Progress` / `InfoBar` / `InfoBarStack` / `PagePlaceholder` / `RouteErrorBoundary` / `GlobalTitleTooltip`
+- 原子件 `shared/ui/`（从 `shared/ui/index.ts` 统一引）：`Button` / `Card` / `Badge` / `Tabs` / `Tooltip` / `Dialog`（尺寸表 `dialogSizes.ts`）/ `Popover` / `ContextMenu` / `Select` / `Checkbox` / `Switch` / `RadioGroup` / `TextField` / `TextAreaField` / `NumberField` / `StringListField` / `KeyValueListEditor` / `SyntaxTextEditor` / `JsonCodeEditor`（CodeMirror JSON + lint + 按 schema 补全键名；`@codemirror/lang-json` / `lint` / `autocomplete` 在 `vite.config.ts` 里单独成块 `vendor-codemirror-json`，只随调试台页面加载，别让它们并回启动就加载的 `vendor`）/ `JsonTree`（虚拟化 JSON 树）/ `DataTable`（虚拟化可排序表格）/ `SimpleMarkdown` / `CopyCodeBlock` / `TimePicker` / `DayOfMonthPicker` / `MonthCalendar` / `FormSection` / `Spinner` / `Progress` / `InfoBar` / `InfoBarStack` / `PagePlaceholder` / `RouteErrorBoundary` / `GlobalTitleTooltip`
 - 组合件 `shared/components/`：`RemoteDirectoryPicker`（远端目录选择）、`progressView`（进度行）；`shared/log/LogConsole`；AppShell 在 `shared/components/next/`：`CustomTitleBar.tsx`（`data-tauri-drag-region`，窗口按钮走 `useWindowControls`）/ `Sidebar.tsx` / `TerminalToggleButton.tsx`，外加协议、新手引导、聚光灯导览几个对话框。早期的 StatusBar 已去掉
 - Overview：`modules/bootstrap/BootstrapPanel.next.tsx`（7:5 双列）+ `widgets/OccupancyChart.tsx`（自绘 SVG）+ `shared/components/next/Mascot.tsx`（运行时 `replaceAll` 衣服两色 `#6a95aa` / `#527388` 跟主题）
 - 组件页：`modules/components/ComponentsPage.next.tsx` + 单机视图（`HostSwitcher` / `HostComponentsView` / `MachineComponentRow` / `DockerRow` / `AppFrameworkRow` / `FrameworkDockerDeploy`）
@@ -182,9 +184,12 @@ flowchart TB
 | `BotListPage` | `useBotSnapshots` / `useSortedBots` / `useSyncRemoteRuntimes` / `useBotMutations` / `useBotBatchSelection` / `useBotFlavorMap` / `useBotConfigsMap` / `useBotDockerStartGate` / `useBotRuntimeStartGate` / `useNapcatLogin`★ / `useSnowlumaState`★ / `useOpenWebui` / `useOpenSnowlumaNovnc` / `useBotSnapshotAlerts` |
 | `BotConfigPage` | `useBotConfig` / `useBotSnapshots` / `useBotDockerStartGate` / `useBotRuntimeStartGate` |
 | `BotLogPage` | `useBotLogStream` |
+| 调试台 `DebugConsolePage` | `useDebugTargets` / `useDebugChannels` / `useDebugCatalog` / `debugWorkspaceStore`★ / `debugEventStore`★ / `useDebugCall` / `useDebugContacts`，另有 `useDebugReceivers` / `useDebugCollections` / `useDebugHistory` / `useSaveResponse`（超大回包另存）/ `useDebugStorageNotices`；入口显隐问 `useDebugConsoleEnabled`（功能开关接缝，目前恒为开）。命令面板（Ctrl+K）是页面里的 `CommandPalette`，行的排序在 `core/domain/debug/palette.ts`，回车只打开不发送 |
 | 应用端列表 / 详情 | `useAppInstances` / `useAppFrameworks` / `useServerManager`；详情各 Tab 按框架取 `useAppInstanceConfig` / `useAppConfigForm` / `useAppStore` / `useKarinPlugins` / `useAstrBot*` / `useMaiBot*`，日志 `useAppInstanceLog`，对接 `useAppLinkPlan` / `useApplyAppLink` |
 
-★ 标记的 hook 是模块级 store 视图（`napcatLoginStore` / `snowlumaStore`），跨路由保留 state，事件订阅一次永不卸载。其它"长期累积聚合"hook 也应这么写，参考第 7 节坑 6。
+调试台的入口不在页面内：Bot 卡片「调试」和右键「在调试台打开」调 `hooks/debug/debugNav.ts` 的 `openDebugConsole(botId)`，由 `app/AppNext.tsx` 启动时 `registerDebugNavigator` 注册跳转（hooks 层不能反向 import 路由壳）；目标 Bot 先记成「待选」，调试台挂载后 `consumePendingDebugBot` 取走。这就是「从别的页面带着参数跳进某页」的桥：hooks 里放一个注册点 + 待取的参数，路由壳注册跳转、目标页挂载时取走；页面还没加载（lazy）或正在显示空状态时参数都不会丢。以后别的功能要这么跳，照它写，不要让 modules 互相 import 页面。
+
+★ 标记的 hook 是模块级 store 视图（`napcatLoginStore` / `snowlumaStore` / 调试台的 `debugEventStore` / `debugWorkspaceStore`），跨路由保留 state，事件订阅一次永不卸载（调试台的事件走 `Channel` 按 Bot 订阅，离开页面、换 Bot 时 `releaseView` 退订，后端据此算「没人看」、30 分钟后停收）。其它"长期累积聚合"hook 也应这么写，参考第 7 节坑 6。
 
 `CustomTitleBar` 的窗口按钮已经包成 `useWindowControls`，不再是例外。
 
@@ -281,6 +286,7 @@ flowchart TB
 | `termsDialogStore` / `webuiAccountDialogStore` | `hooks/apps/` | 全应用只挂一个的上游条款框、WebUI 账号框 |
 | docker 三个 store | `hooks/docker/` | Docker 操作、安装进度、部署进度 |
 | terminal 三个 store | `hooks/terminal/` | 终端会话、偏好、最近命令 |
+| `debugEventStore` / `debugWorkspaceStore` | `hooks/debug/` | 调试台每个 Bot 的聊天时间线 + 接收器状态（补发和实时批次按 seq 去重合并，一帧最多 reduce 一次；后端空闲清扫发来的空批次什么都不做；本应用发出的调用失败时 `noteCallWording` 把上游的 wording 补到气泡的调用行上）、工作区草稿 / 选中的 Bot / 栏宽（防抖落盘；`setTabAction` 原地给标签换接口） |
 
 React 端用法统一：
 

@@ -76,6 +76,9 @@ export default defineConfig({
             if (id.includes('gsap')) return 'vendor-gsap';
             if (id.includes('@radix-ui')) return 'vendor-radix';
             if (id.includes('lucide-react')) return 'vendor-icons';
+            // 调试台 JSON 编辑器专用的语法包、诊断、补全单独成块，只随调试台页面按需加载；
+            // 否则会被并进启动就加载的 vendor。@codemirror/language 不能挪：commands 依赖它，挪了会成环
+            if (/[\\/]@(codemirror[\\/](lang-json|lint|autocomplete)|lezer[\\/]json)[\\/]/.test(id)) return 'vendor-codemirror-json';
             return 'vendor';
           }
           return undefined;

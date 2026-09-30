@@ -1,0 +1,25 @@
+[package]
+name = "ncd-onebot"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "OneBot 11 action catalog and debug protocol clients"
+
+[dependencies]
+ncd-domain = { path = "../ncd-domain" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["sync", "time", "rt", "macros", "net"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip", "stream"] }
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "handshake"] }
+futures-util = "0.3"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+
+[dev-dependencies]
+wiremock = "0.6"
+tokio = { version = "1", features = ["test-util", "rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true
