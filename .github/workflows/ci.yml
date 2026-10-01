@@ -1,4 +1,5 @@
-# 质量门禁：PR 默认 full；手动可选手动 suite 加速迭代。
+# 质量门禁：PR 按改动路径过滤（rust / frontend 互不相关则跳过）；
+# 手动 dispatch 可选手动 suite 加速迭代（忽略路径过滤）。
 # MSI 打包见 build-msi.yml / release.yml。
 # Rust 全量测试必须在 Windows（大量 #[cfg(windows)]）。
 #
@@ -6,6 +7,10 @@
 #   GitHub-hosted runner 每次 job 都是新 VM，不能整机复用。
 #   能复用的是 Cargo/pnpm 缓存（Swatinem/rust-cache、setup-node cache）。
 #   要真·常驻机只能 self-hosted runner。
+#
+# Job 拓扑：changes → frontend / rust-core / rust-shell（并行）→ gate。
+#   rust-core  --exclude ncd-tauri：ncd-* 纯 Rust  crate，
+#   rust-shell 只编 ncd-tauri：tauri/wry/tao/webview2 链是大头，拆开并行才省墙钟。
 #
 # 分支策略：
 #   main  ← Rust/Tauri 主线
@@ -43,12 +48,46 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
+  changes:
+    name: Path filters
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 版本检查在 frontend，版本文件必须进 frontend 过滤；
+      # tauri.conf.json 同时在两端过滤内。
+      - name: Detect changed areas
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'crates/**'
+              - 'src-tauri/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'clippy.toml'
+              - 'rust-toolchain.toml'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'src-ui/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'src-tauri/**'
+              - '.github/workflows/ci.yml'
+
   frontend:
     name: Frontend
+    needs: changes
     if: >-
-      github.event_name == 'pull_request' ||
-      github.event.inputs.suite == 'full' ||
-      github.event.inputs.suite == 'frontend'
+      (github.event_name == 'pull_request' && needs.changes.outputs.frontend == 'true') ||
+      (github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.suite == 'full' || github.event.inputs.suite == 'frontend'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -81,39 +120,67 @@ jobs:
       - name: Probe tests
         run: pnpm run test:probe
 
-  rust:
-    name: Rust (Windows)
+  rust-core:
+    name: Rust core (Windows)
+    needs: changes
     if: >-
-      github.event_name == 'pull_request' ||
-      github.event.inputs.suite == 'full' ||
-      github.event.inputs.suite == 'rust' ||
-      github.event.inputs.suite == 'rust-smoke'
+      (github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true') ||
+      (github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.suite == 'full' || github.event.inputs.suite == 'rust' || github.event.inputs.suite == 'rust-smoke'))
     runs-on: windows-latest
+    env:
+      # 全量符号的 PDB 在 Windows 大量测试二进制的链接上非常贵；line-table 足够定位
+      RUSTFLAGS: -C debuginfo=1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ncd-runtime 的 launch plan 测试要求 PATH 上有 node.exe；
+      # windows-2025 镜像 PATH 里的 Node 已不可靠管理，显式装
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       # 本 job 不跑 clippy/fmt，不装组件可少下几百 MB
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # 托管 Windows runner 是管理员；Defender 实时扫 target/registry 是编译大头之一
+      - name: Exclude build dirs from Defender scan
+        shell: pwsh
+        run: |
+          # 托管 runner 不一定有 RUSTUP_HOME，空值会让 Add-MpPreference 直接报错
+          $paths = @($env:CARGO_HOME, $env:RUSTUP_HOME, "$env:USERPROFILE\.rustup", "$env:GITHUB_WORKSPACE\target") | Where-Object { $_ }
+          foreach ($p in $paths) { Add-MpPreference -ExclusionPath $p }
+
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           # bump key 时会冷启动一次；之后跨 run 复用 registry/git/target
-          shared-key: ci-windows-v2
+          # v3: 排除 ncd-tauri 后的依赖图，与 rust-shell 分开缓存
+          shared-key: ci-windows-core-v3
           workspaces: ". -> target"
           cache-all-crates: true
 
       # ts-bindings 写出 src-ui/core/ipc/generated；需与提交一致（R1）。
-      # 一次 workspace --lib 过滤，避免 6 次 -p 重复解析依赖图。
+      # ncd-tauri 里没有 export_bindings_ 用例，排除可避免编译 tauri 链。
       - name: Export ts-rs bindings
         shell: pwsh
-        run: cargo test --workspace --lib export_bindings_ -- --quiet
+        run: cargo test --workspace --exclude ncd-tauri --lib export_bindings_ -- --quiet
 
       - name: Assert generated IPC types committed
         shell: pwsh
         run: git diff --exit-code -- src-ui/core/ipc/generated
+
+      # launch plan ColdStart 测试要读真实 QQ 注册表；runner 没装 QQ。
+      # 测试只读 Install 值、不校验路径内容，stub 一个假安装目录即可。
+      - name: Stub QQ install registry for launch plan tests
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\WOW6432Node\Tencent\QQNT'
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name Install -Value 'C:\Program Files\Tencent\QQNT' -PropertyType String -Force | Out-Null
 
       # 快速回归：只跑近期易碎的 integration / compose，不跑全 workspace
       - name: Smoke tests
@@ -130,50 +197,103 @@ jobs:
           github.event_name == 'pull_request' ||
           github.event.inputs.suite == 'full' ||
           github.event.inputs.suite == 'rust'
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude ncd-tauri
+
+  # tauri/wry/tao/webview2 链编译极慢；独立 job 与 rust-core 并行，
+  # 顺手跑 src-tauri 自带的 21 个 #[cfg(test)] 单测，覆盖面不回退。
+  rust-shell:
+    name: Rust shell / Tauri (Windows)
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true') ||
+      (github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.suite == 'full' || github.event.inputs.suite == 'rust'))
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: -C debuginfo=1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Exclude build dirs from Defender scan
+        shell: pwsh
+        run: |
+          # 托管 runner 不一定有 RUSTUP_HOME，空值会让 Add-MpPreference 直接报错
+          $paths = @($env:CARGO_HOME, $env:RUSTUP_HOME, "$env:USERPROFILE\.rustup", "$env:GITHUB_WORKSPACE\target") | Where-Object { $_ }
+          foreach ($p in $paths) { Add-MpPreference -ExclusionPath $p }
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-windows-shell-v3
+          workspaces: ". -> target"
+          cache-all-crates: true
+
+      - name: Shell tests (ncd-tauri)
+        run: cargo test -p ncd-tauri
 
   gate:
     name: Gate
     needs:
+      - changes
       - frontend
-      - rust
+      - rust-core
+      - rust-shell
     runs-on: ubuntu-latest
     if: always()
     steps:
+      # should=1：必须 success；should=0：允许 legitimately skipped。
+      # failure / cancelled / 应跑却 skipped 一律算挂。
       - name: Require green jobs
         shell: bash
         run: |
           set -euo pipefail
           fe="${{ needs.frontend.result }}"
-          rs="${{ needs.rust.result }}"
-          suite="${{ github.event.inputs.suite || 'full' }}"
+          rc="${{ needs['rust-core'].result }}"
+          rs="${{ needs['rust-shell'].result }}"
+          ch="${{ needs.changes.result }}"
+          flt_fe="${{ needs.changes.outputs.frontend }}"
+          flt_rs="${{ needs.changes.outputs.rust }}"
+          echo "changes=$ch frontend=$fe (filter=$flt_fe) rust-core=$rc rust-shell=$rs (filter=$flt_rs)"
+
+          fail=0
+          check() {
+            local name="$1" res="$2" should="$3"
+            if [[ "$should" == "1" && "$res" != "success" ]]; then
+              echo "CI gate failed: $name=$res (expected success)" >&2
+              fail=1
+            elif [[ "$should" == "0" && "$res" != "skipped" && "$res" != "success" ]]; then
+              echo "CI gate failed: unexpected $name=$res" >&2
+              fail=1
+            fi
+          }
+
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            suite="full"
+            # PR 必看 changes；dispatch 下 outputs 不参与判定，不因其失败而挂
+            check changes "$ch" 1
+            [[ "$flt_fe" == "true" ]] && check frontend "$fe" 1 || check frontend "$fe" 0
+            if [[ "$flt_rs" == "true" ]]; then
+              check rust-core "$rc" 1
+              check rust-shell "$rs" 1
+            else
+              check rust-core "$rc" 0
+              check rust-shell "$rs" 0
+            fi
+          else
+            suite="${{ github.event.inputs.suite || 'full' }}"
+            need_fe=0; need_rc=0; need_rs=0
+            case "$suite" in
+              full) need_fe=1; need_rc=1; need_rs=1 ;;
+              frontend) need_fe=1 ;;
+              rust) need_rc=1; need_rs=1 ;;
+              rust-smoke) need_rc=1 ;;
+              *) echo "unknown suite: $suite" >&2; exit 1 ;;
+            esac
+            check frontend "$fe" "$need_fe"
+            check rust-core "$rc" "$need_rc"
+            check rust-shell "$rs" "$need_rs"
           fi
-          echo "suite=$suite frontend=$fe rust=$rs"
-
-          need_fe=0
-          need_rs=0
-          case "$suite" in
-            full) need_fe=1; need_rs=1 ;;
-            frontend) need_fe=1 ;;
-            rust|rust-smoke) need_rs=1 ;;
-            *) echo "unknown suite: $suite" >&2; exit 1 ;;
-          esac
-
-          if [[ "$need_fe" -eq 1 && "$fe" != "success" ]]; then
-            echo "CI gate failed: frontend=$fe" >&2
-            exit 1
-          fi
-          if [[ "$need_rs" -eq 1 && "$rs" != "success" ]]; then
-            echo "CI gate failed: rust=$rs" >&2
-            exit 1
-          fi
-          if [[ "$need_fe" -eq 0 && "$fe" != "skipped" && "$fe" != "success" ]]; then
-            echo "CI gate failed: unexpected frontend=$fe" >&2
-            exit 1
-          fi
-          if [[ "$need_rs" -eq 0 && "$rs" != "skipped" && "$rs" != "success" ]]; then
-            echo "CI gate failed: unexpected rust=$rs" >&2
-            exit 1
-          fi
+          exit $fail
