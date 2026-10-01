@@ -278,6 +278,7 @@ impl NodeJsComponent {
                 crate::types::SupportedTarget::new(Os::MacOs, Locality::Local),
             ],
             category: crate::types::ComponentCategory::RuntimeDep,
+            uninstall: crate::types::UninstallSupport::Supported,
         }
     }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     hostComponentStatusBadge,
     shouldOfferManagedNodeInstall,
+    uninstallEntryAction,
 } from './componentStatusPresentation';
 
 describe('hostComponentStatusBadge', () => {
@@ -57,5 +58,34 @@ describe('Node.js component actions', () => {
                 detected: { version: '24.18.0', source: 'C:/ProgramData/NapCatQQ Desktop/NodeJs/node.exe' },
             }),
         ).toBe(true);
+    });
+});
+
+describe('uninstallEntryAction', () => {
+    const installed = (source: string) =>
+        ({ state: 'installed', detected: { version: '1.0', source } }) as const;
+
+    it('supported 组件对已安装的托管探测给组件任务', () => {
+        expect(uninstallEntryAction('supported', installed('napcat.mjs'))).toBe('task');
+    });
+
+    it('system_managed 组件对已安装状态指到系统卸载流', () => {
+        expect(uninstallEntryAction('system_managed', installed('HKLM/Runtimes/X64'))).toBe(
+            'system',
+        );
+    });
+
+    it('not_supported 组件已安装也不渲染卸载入口', () => {
+        expect(uninstallEntryAction('not_supported', installed('x'))).toBe('none');
+    });
+
+    it('未安装时任何能力都不渲染卸载入口', () => {
+        expect(uninstallEntryAction('supported', { state: 'not_installed' })).toBe('none');
+        expect(uninstallEntryAction('system_managed', { state: 'not_installed' })).toBe('none');
+    });
+
+    it('外部 $PATH 探测来源不归桌面端管,不渲染卸载入口', () => {
+        expect(uninstallEntryAction('supported', installed('$PATH/node'))).toBe('none');
+        expect(uninstallEntryAction('system_managed', installed('$PATH/node'))).toBe('none');
     });
 });

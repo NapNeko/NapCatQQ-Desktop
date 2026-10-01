@@ -120,6 +120,7 @@ impl NoVncComponent {
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
             ],
             category: crate::types::ComponentCategory::RuntimeDep,
+            uninstall: crate::types::UninstallSupport::Supported,
         }
     }
 }

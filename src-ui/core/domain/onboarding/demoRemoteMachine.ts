@@ -18,6 +18,7 @@ function info(
         repo_url: null,
         supported_targets: [],
         category,
+        uninstall: 'supported',
     };
 }
 

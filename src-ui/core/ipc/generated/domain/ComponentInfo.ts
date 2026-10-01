@@ -2,6 +2,7 @@
 import type { ComponentCategory } from "./ComponentCategory";
 import type { ComponentId } from "./ComponentId";
 import type { SupportedTarget } from "./SupportedTarget";
+import type { UninstallSupport } from "./UninstallSupport";
 
 /**
  * 组件元数据,Components 页直接消费的清单数据
@@ -29,4 +30,8 @@ supported_targets: Array<SupportedTarget>,
 /**
  * 分类
  */
-category: ComponentCategory, };
+category: ComponentCategory, 
+/**
+ * 卸载能力;各 info() 实装声明,与 Component::uninstall 的实际行为一致
+ */
+uninstall: UninstallSupport, };

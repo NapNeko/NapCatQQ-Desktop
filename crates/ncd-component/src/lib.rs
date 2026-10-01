@@ -70,6 +70,6 @@ pub use snowluma::SnowLumaComponent;
 pub use traits::{Action, Component};
 pub use types::{
     ComponentCategory, ComponentDetectResult, ComponentId, ComponentInfo, DetectOutcome,
-    DetectedVersion, LaunchArgs, SupportedTarget, UnusableInstall, VerifyReport,
+    DetectedVersion, LaunchArgs, SupportedTarget, UninstallSupport, UnusableInstall, VerifyReport,
 };
 pub use uv::{UV_DEFAULT_VERSION, UvComponent};

@@ -139,6 +139,21 @@ pub enum ComponentCategory {
     AppFramework,
 }
 
+/// 组件「卸载」入口的形态,UI 依此决定渲染什么;不再让点了卸载的用户拿到
+/// trait 默认的 "uninstall not implemented" 英文报错
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum UninstallSupport {
+    /// 组件自己实现了 Component::uninstall(走组件任务)
+    Supported,
+    /// 没有卸载动作也不归系统管理;UI 不渲染卸载入口
+    NotSupported,
+    /// 归系统管理(Windows「设置 → 应用 → 已安装的应用」,如 VC++ 运行库 /
+    /// MSI 装的 Desktop),UI 引导去系统卸载流,不跑组件任务
+    SystemManaged,
+}
+
 /// (Os, Locality) 组合的强类型表达
 ///
 /// Component::supported_targets 暴露的是 &'static [(Os, Locality)],跨边界
@@ -181,6 +196,8 @@ pub struct ComponentInfo {
     pub supported_targets: Vec<SupportedTarget>,
     /// 分类
     pub category: ComponentCategory,
+    /// 卸载能力;各 info() 实装声明,与 Component::uninstall 的实际行为一致
+    pub uninstall: UninstallSupport,
 }
 
 /// 1 个 component 在 1 台 host 上的探测结果
@@ -241,11 +258,30 @@ mod tests {
                 SupportedTarget::new(ncd_host::Os::Linux, ncd_host::Locality::Remote),
             ],
             category: ComponentCategory::Framework,
+            uninstall: UninstallSupport::Supported,
         };
         let json = serde_json::to_string(&info).expect("serialize ComponentInfo");
+        // 新字段的 wire 字面量随枚举 snake_case 锁定
+        assert!(json.contains("\"uninstall\":\"supported\""), "{json}");
         let decoded: ComponentInfo =
             serde_json::from_str(&json).expect("deserialize ComponentInfo");
         assert_eq!(decoded, info);
+    }
+
+    #[test]
+    fn uninstall_support_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&UninstallSupport::Supported).unwrap(),
+            "\"supported\""
+        );
+        assert_eq!(
+            serde_json::to_string(&UninstallSupport::NotSupported).unwrap(),
+            "\"not_supported\""
+        );
+        assert_eq!(
+            serde_json::to_string(&UninstallSupport::SystemManaged).unwrap(),
+            "\"system_managed\""
+        );
     }
 
     #[test]

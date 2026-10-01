@@ -1,7 +1,7 @@
 // 浏览器预览模式下的 Component 假数据库 + 假装安装动画。
 // 真 IPC 实装在 `core/services/component.service.ts`。
 //
-// 本 mock 模拟 6 个组件 × N 台主机的 detect 结果。"安装 / 取消"动作通过
+// 本 mock 模拟组件目录 × N 台主机的 detect 结果。"安装 / 取消"动作通过
 // 内置 setInterval 一帧一帧吐 ProgressEvent 给 mock 事件总线，让前端
 // UI 在浏览器预览时也能看到"装到 50%、暂停、继续"的完整动画。
 
@@ -32,6 +32,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
             { os: 'linux', locality: 'remote' },
         ],
         category: 'framework',
+        uninstall: 'supported',
     },
     {
         id: 'snowluma',
@@ -43,6 +44,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
             { os: 'linux', locality: 'remote' },
         ],
         category: 'framework',
+        uninstall: 'supported',
     },
     {
         id: 'qq',
@@ -55,6 +57,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
             { os: 'linux', locality: 'remote' },
         ],
         category: 'runtime_dep',
+        uninstall: 'supported',
     },
     {
         id: 'nodejs',
@@ -66,6 +69,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
             { os: 'linux', locality: 'remote' },
         ],
         category: 'runtime_dep',
+        uninstall: 'supported',
     },
     {
         id: 'uv',
@@ -78,6 +82,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
             { os: 'linux', locality: 'remote' },
         ],
         category: 'runtime_dep',
+        uninstall: 'supported',
     },
     {
         id: 'git',
@@ -90,6 +95,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
             { os: 'linux', locality: 'remote' },
         ],
         category: 'runtime_dep',
+        uninstall: 'supported',
     },
     {
         id: 'redis',
@@ -102,6 +108,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
             { os: 'linux', locality: 'remote' },
         ],
         category: 'runtime_dep',
+        uninstall: 'supported',
     },
     {
         id: 'novnc',
@@ -110,6 +117,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
         repo_url: 'https://github.com/novnc/noVNC',
         supported_targets: [{ os: 'linux', locality: 'remote' }],
         category: 'runtime_dep',
+        uninstall: 'supported',
     },
     {
         id: 'ncd_watch',
@@ -120,6 +128,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
         supported_targets: [{ os: 'linux', locality: 'remote' }],
         // 与 Desktop 同属产品侧 SelfApp，不是 QQ/Node 运行时依赖
         category: 'self_app',
+        uninstall: 'supported',
     },
     {
         id: 'desktop_self',
@@ -132,6 +141,7 @@ export const mockComponentCatalog: ComponentInfo[] = [
             { os: 'linux', locality: 'local' },
         ],
         category: 'self_app',
+        uninstall: 'system_managed',
     },
 ];
 

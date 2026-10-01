@@ -5,7 +5,7 @@
 // http/https scheme 白名单,被拒(非法 / 危险 scheme)时弹红条提示而不是静默失败。
 
 import { useCallback } from 'react';
-import { openExternalUrl } from '../core/ipc/transport';
+import { openExternalUrl, openWindowsAppsSettings } from '../core/ipc/transport';
 import { pushErrorBar } from './ui/pushErrorBar';
 import { errorText } from '../core/domain/errors';
 
@@ -15,6 +15,17 @@ export function openExternalOrReport(url: string): void {
         pushErrorBar({
             key: 'open-external-failed',
             title: '无法打开链接',
+            raw: errorText(err),
+        });
+    });
+}
+
+/// 打开系统「已安装的应用」页（系统管理组件的卸载入口），失败弹错与外链同口径
+export function openSystemUninstallOrReport(): void {
+    void openWindowsAppsSettings().catch((err) => {
+        pushErrorBar({
+            key: 'open-system-uninstall-failed',
+            title: '无法打开系统卸载页',
             raw: errorText(err),
         });
     });
