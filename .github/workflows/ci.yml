@@ -135,6 +135,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ncd-runtime 的 launch plan 测试要求 PATH 上有 node.exe；
+      # windows-2025 镜像 PATH 里的 Node 已不可靠管理，显式装
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       # 本 job 不跑 clippy/fmt，不装组件可少下几百 MB
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
