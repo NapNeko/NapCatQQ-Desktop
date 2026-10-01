@@ -84,7 +84,8 @@ fn stream_route(req: &DebugStreamCallRequest) -> Result<Route<'_>, DebugError> {
     let is_download = DOWNLOAD_ACTIONS.contains(&req.action.as_str());
     match (UPLOAD_ACTION == req.action.as_str(), is_download, req.local_files.len()) {
         (true, false, 1) => Ok(Route::StandaloneUpload(&req.local_files[0])),
-        (true, false, _) => Err(invalid("upload_file_stream 只能带一个本机文件")),
+        // 不带本机文件的 upload_file_stream 不拦：手填分块参数走普通单帧调用（落到下面的 Plain）
+        (true, false, n) if n > 1 => Err(invalid("upload_file_stream 只能带一个本机文件")),
         (_, true, n) if n > 0 => Err(invalid(
             "下载动作的参数是 Bot 一侧的地址（URL / 文件 ID / 路径），不带本机文件",
         )),
@@ -1126,7 +1127,8 @@ fn safe_name(raw: &str) -> String {
         })
         .collect();
     out.truncate(120);
-    let out = out.trim_start_matches('.').to_owned();
+    // 开头一段全是被替换出来的下划线（中文名前辍、「.」），不是名字的一部分
+    let out = out.trim_start_matches(['.', '_']).to_owned();
     if out.is_empty() {
         DOWNLOAD_FALLBACK_NAME.to_owned()
     } else {

@@ -203,9 +203,9 @@ async fn read_loop(
             next = source.next() => next,
         };
         match message {
-            Some(Ok(Message::Text(text))) => dispatch(&text, &events, &shared),
+            Some(Ok(Message::Text(text))) => dispatch(&text, &events, &shared).await,
             Some(Ok(Message::Binary(bytes))) => match std::str::from_utf8(&bytes) {
-                Ok(text) => dispatch(text, &events, &shared),
+                Ok(text) => dispatch(text, &events, &shared).await,
                 Err(_) => tracing::debug!("忽略无法解码的二进制帧（{} 字节）", bytes.len()),
             },
             // Ping 的 Pong 由 tungstenite 在下一次读写时自动带出，这里不用管
@@ -682,10 +682,7 @@ mod tests {
             .unwrap();
         server.await.unwrap();
         client.closed().await;
-        let err = client
-            .call_stream("download_file_stream", &serde_json::json!({}))
-            .await
-            .expect_err("已关闭的连接上发起应失败");
-        assert!(matches!(err, ClientError::NotSent), "got {err:?}");
+        let result = client.call_stream("download_file_stream", &serde_json::json!({})).await;
+        assert!(matches!(result, Err(ClientError::NotSent)), "已关闭的连接上发起应失败");
     }
 }

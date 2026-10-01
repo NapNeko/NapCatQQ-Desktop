@@ -83,7 +83,7 @@ impl DebugManager {
         let token = CancellationToken::new();
         let result = match InflightGuard::register(self, &req.request_id, token.clone()) {
             Err(error) => DebugCallResult::Err { error },
-            Ok(_inflight) => self.call_with_token(&req, token).await,
+            Ok(_inflight) => self.call_with_token(&req, token).await.result,
         };
         DebugCallResponse {
             request_id: req.request_id,
