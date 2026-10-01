@@ -566,6 +566,118 @@ describe('Composer（在右栏里）', () => {
         expect(textbox()).toHaveValue('ni');
     });
 
+    it('构建器拼装图片：手打文字并进段列表，发出去是 reply + text + image；发完构建内容清空', async () => {
+        const user = userEvent.setup();
+        await seed([GROUP_MSG]);
+        renderColumn();
+        await user.click(screen.getByText('这个接口怎么用？'));
+        await waitFor(() => expect(textbox()).toBeEnabled());
+        await user.type(textbox(), '看看这个');
+
+        // 打开构建器，加一个图片段，写回
+        await user.click(screen.getByRole('button', { name: '消息构建器' }));
+        const dialog = await screen.findByRole('dialog', { name: '消息构建器' });
+        expect(within(dialog).getByLabelText('文字内容')).toHaveValue('看看这个');
+        await user.click(within(dialog).getByRole('combobox'));
+        await user.click(within(await screen.findByRole('listbox')).getByText('图片'));
+        fireEvent.change(within(dialog).getByLabelText('图片地址'), { target: { value: 'http://a/1.png' } });
+        await user.click(within(dialog).getByRole('button', { name: '使用这些段' }));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument());
+
+        // 文字进了构建内容摘要，输入框清空；发出去顺序 = 回复 + 文字 + 图片
+        expect(screen.getByRole('button', { name: '编辑构建内容' })).toHaveTextContent('构建：看看这个[图片]');
+        expect(textbox()).toHaveValue('');
+        await user.click(textbox());
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(lastSend()).toBeDefined());
+        expect(lastSend()).toEqual(
+            expect.objectContaining({
+                action: 'send_group_msg',
+                params: {
+                    group_id: 100001,
+                    message: [
+                        { type: 'reply', data: { id: '555' } },
+                        { type: 'text', data: { text: '看看这个' } },
+                        { type: 'image', data: { file: 'http://a/1.png' } },
+                    ],
+                },
+            }),
+        );
+
+        // 发完构建内容清空，下一条只有手打的字
+        await waitFor(() => expect(screen.queryByRole('button', { name: '编辑构建内容' })).not.toBeInTheDocument());
+        await user.type(textbox(), '第二句');
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(textbox()).toHaveValue(''));
+        expect(lastSend()).toEqual(
+            expect.objectContaining({
+                params: { group_id: 100001, message: [{ type: 'text', data: { text: '第二句' } }] },
+            }),
+        );
+    });
+
+    it('构建器里只有文字和 @：写回折叠进输入框，发出去等价于手打', async () => {
+        const user = userEvent.setup();
+        await seed([GROUP_MSG]);
+        renderColumn();
+        act(() => debugEventStore.setActiveSession(BOT.bot_id, 'group:100001'));
+        await waitFor(() => expect(textbox()).toBeEnabled());
+        await user.type(textbox(), '你好');
+
+        await user.click(screen.getByRole('button', { name: '消息构建器' }));
+        const dialog = await screen.findByRole('dialog', { name: '消息构建器' });
+        await user.click(within(dialog).getByRole('combobox'));
+        await user.click(within(await screen.findByRole('listbox')).getByText('@ 成员'));
+        // @ 段挪到文本前面
+        await user.click(within(dialog).getAllByRole('button', { name: '上移' })[1] as HTMLElement);
+        fireEvent.change(within(dialog).getByLabelText('QQ 号'), { target: { value: '10003' } });
+        await user.click(within(dialog).getByRole('button', { name: '使用这些段' }));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument());
+
+        expect(textbox()).toHaveValue('@10003 你好');
+        expect(screen.queryByRole('button', { name: '编辑构建内容' })).not.toBeInTheDocument();
+        await user.keyboard('{Enter}');
+        await waitFor(() => expect(lastSend()).toBeDefined());
+        expect(lastSend()).toEqual(
+            expect.objectContaining({
+                params: {
+                    group_id: 100001,
+                    message: [
+                        { type: 'at', data: { qq: '10003' } },
+                        { type: 'text', data: { text: ' 你好' } },
+                    ],
+                },
+            }),
+        );
+    });
+
+    it('转回文字输入：有非文本段时先进构建器，删掉图片段后文字回到输入框', async () => {
+        const user = userEvent.setup();
+        await seed([GROUP_MSG]);
+        renderColumn();
+        act(() => debugEventStore.setActiveSession(BOT.bot_id, 'group:100001'));
+        await waitFor(() => expect(textbox()).toBeEnabled());
+        await user.type(textbox(), '看看这个');
+
+        await user.click(screen.getByRole('button', { name: '消息构建器' }));
+        let dialog = await screen.findByRole('dialog', { name: '消息构建器' });
+        await user.click(within(dialog).getByRole('combobox'));
+        await user.click(within(await screen.findByRole('listbox')).getByText('图片'));
+        fireEvent.change(within(dialog).getByLabelText('图片地址'), { target: { value: 'http://a/1.png' } });
+        await user.click(within(dialog).getByRole('button', { name: '使用这些段' }));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument());
+
+        // 有图片段，点「转回文字输入」直接打开构建器
+        await user.click(screen.getByRole('button', { name: '转回文字输入' }));
+        dialog = await screen.findByRole('dialog', { name: '消息构建器' });
+        // 删掉图片那一行，剩下的都是文字 → 写回折叠进输入框
+        await user.click(within(dialog).getAllByRole('button', { name: '删掉这段' })[1] as HTMLElement);
+        await user.click(within(dialog).getByRole('button', { name: '使用这些段' }));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: '消息构建器' })).not.toBeInTheDocument());
+        expect(textbox()).toHaveValue('看看这个');
+        expect(screen.queryByRole('button', { name: '编辑构建内容' })).not.toBeInTheDocument();
+    });
+
     it('接收状态胶囊写完整状态：重连中（第 n 次，x 秒后）/ 已停止：原因', async () => {
         await seed([GROUP_MSG]);
         renderColumn();

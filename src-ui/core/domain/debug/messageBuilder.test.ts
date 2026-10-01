@@ -6,7 +6,6 @@ import {
     builderKindLabel,
     hasMessageContent,
     joinDraftText,
-    moveSegment,
     normalizeReplies,
     parseEntryToSegments,
     segmentIssue,
@@ -111,14 +110,6 @@ describe('messageBuilder', () => {
         expect(joinDraftText('@阿强 ', '')).toBe('@阿强 ');
         expect(joinDraftText('@阿强 ', '好')).toBe('@阿强 好');
         expect(joinDraftText('@阿强', ' 好')).toBe('@阿强 好');
-    });
-
-    it('上移下移：到边原样返回', () => {
-        const list = [img('a'), img('b'), img('c')];
-        expect(moveSegment(list, 2, -1)).toEqual([img('a'), img('c'), img('b')]);
-        expect(moveSegment(list, 0, 1)).toEqual([img('b'), img('a'), img('c')]);
-        expect(moveSegment(list, 0, -1)).toBe(list);
-        expect(moveSegment(list, 2, 1)).toBe(list);
     });
 
     it('起步数据与类型名', () => {

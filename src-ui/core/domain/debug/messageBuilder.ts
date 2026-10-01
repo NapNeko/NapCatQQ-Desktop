@@ -108,16 +108,6 @@ export function joinDraftText(built: string, typed: string): string {
     return /\s$/.test(built) || /^\s/.test(typed) ? built + typed : `${built} ${typed}`;
 }
 
-/** 上移 / 下移一格；到边了原样返回（引用不变，memo 不吃亏） */
-export function moveSegment(segments: readonly Segment[], index: number, delta: -1 | 1): Segment[] {
-    const to = index + delta;
-    if (index < 0 || to < 0 || index >= segments.length || to >= segments.length) return segments as Segment[];
-    const next = [...segments];
-    const [seg] = next.splice(index, 1);
-    next.splice(to, 0, seg as Segment);
-    return next;
-}
-
 // ---------------------------------------------------------------------------
 // 段类型表与起步数据
 // ---------------------------------------------------------------------------
