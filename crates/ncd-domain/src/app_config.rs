@@ -11,6 +11,7 @@ use crate::snowluma_linux_package::SnowLumaLinuxPackage;
 
 use crate::app_framework::AppFrameworkId;
 use crate::macros::default_true;
+use crate::mcp::McpServerSettings;
 use crate::offline_alert::{
     OfflineEmailSettings, OfflineNotifyBehavior, OfflineOneBotSettings, OfflineWebhookSettings,
 };
@@ -308,6 +309,10 @@ pub struct FeatureToggles {
     /// 内嵌终端：标题栏开关、Ctrl+`、各卡片上的终端入口、设置 · 终端
     #[serde(rename = "terminal", default = "default_true")]
     pub terminal: bool,
+    /// OneBot 调试台：侧栏 / Bot 卡片的「调试」入口；关掉时连后端一起停
+    /// （接收器和在途调用收掉，`DebugManager::set_enabled` 按它走）
+    #[serde(rename = "apiDebug", default = "default_true")]
+    pub api_debug: bool,
 }
 
 impl Default for FeatureToggles {
@@ -320,6 +325,7 @@ impl Default for FeatureToggles {
             docker_page: true,
             ncd_watch: true,
             terminal: true,
+            api_debug: true,
         }
     }
 }
@@ -440,6 +446,9 @@ pub struct AppSettings {
     /// 可选功能模块开关
     #[serde(rename = "features", default)]
     pub features: FeatureToggles,
+    /// OneBot 调试台的 MCP 服务（本机 JSON-RPC 接口，给外部 agent 用）
+    #[serde(rename = "mcp", default)]
+    pub mcp: McpServerSettings,
     /// SnowLuma 本地 Node.js 运行环境指定路径（None 或空表示自动按优先级解析：自定义 > 内置 > 组件 > PATH）
     #[serde(rename = "snowlumaNodePath", default)]
     pub snowluma_node_path: Option<String>,
@@ -498,6 +507,7 @@ impl Default for AppSettings {
             notify_on_login_kicked: true,
             ui_preferences: AppUiPreferences::default(),
             features: FeatureToggles::default(),
+            mcp: McpServerSettings::default(),
             snowluma_node_path: None,
             snowluma_package: None,
         }
@@ -862,12 +872,32 @@ mod tests {
     fn features_default_all_on_and_partial_keeps_others_on() {
         let parsed: AppSettings = serde_json::from_str("{}").expect("缺字段应能反序列化");
         assert_eq!(parsed.features, FeatureToggles::default());
-        assert!(parsed.features.apps && parsed.features.docker_page && parsed.features.terminal);
+        assert!(
+            parsed.features.apps
+                && parsed.features.docker_page
+                && parsed.features.terminal
+                && parsed.features.api_debug
+        );
 
         let parsed: AppSettings =
-            serde_json::from_str(r#"{"features":{"terminal":false}}"#).expect("反序列化失败");
+            serde_json::from_str(r#"{"features":{"terminal":false,"apiDebug":false}}"#)
+                .expect("反序列化失败");
         assert!(!parsed.features.terminal);
+        assert!(!parsed.features.api_debug);
         assert!(parsed.features.apps && parsed.features.docker_page);
+    }
+
+    #[test]
+    fn mcp_settings_missing_defaults_to_off() {
+        let parsed: AppSettings = serde_json::from_str("{}").expect("缺字段应能反序列化");
+        assert_eq!(parsed.mcp, McpServerSettings::default());
+        assert!(!parsed.mcp.enabled);
+
+        let parsed: AppSettings =
+            serde_json::from_str(r#"{"mcp":{"enabled":true}}"#).expect("反序列化失败");
+        assert!(parsed.mcp.enabled);
+        assert_eq!(parsed.mcp.port, 0);
+        assert!(!parsed.mcp.allow_dangerous);
     }
 
     #[test]
