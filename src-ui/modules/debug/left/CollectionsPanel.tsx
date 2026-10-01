@@ -165,7 +165,6 @@ export const CollectionsPanel = memo(function CollectionsPanel({ target }: { tar
             if (!target.running) return 'Bot 没在运行';
             // 分级要靠目录判断，没读出来之前不让一键发（读失败时照样能发，但会先确认）
             if (!catalog && catalogQuery.isPending) return '接口目录还没读出来';
-            if (lookupSummary(catalog?.actions, req.action).summary?.stream) return '流式接口第二期支持';
             // 老收藏里可能夹着存盘时瘦身留下的占位（超长字符串 / 整份摘要）：发出去的只是占位文字，
             // 打开补全原文再来一键发
             const omitted = countOmittedInValue(req.params);

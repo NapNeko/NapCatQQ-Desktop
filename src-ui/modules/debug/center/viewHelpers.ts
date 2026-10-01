@@ -4,6 +4,7 @@
 import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugChannels } from '../../../core/ipc/generated/debug/DebugChannels';
 import { findChannel } from '../../../core/domain/debug/channelPick';
+import { streamChannelBlocker } from '../../../core/domain/debug/streamActions';
 
 // 变体名剥离和目录查询的唯一实现在 core/domain/debug/catalogView（收藏 ▶ 那边也要查分级）
 export { baseActionName, lookupSummary } from '../../../core/domain/debug/catalogView';
@@ -231,6 +232,8 @@ export interface SendState {
     running: boolean;
     action: string;
     stream: boolean;
+    /** 参数里带本机文件占位（分块上传或文件参数选了本机文件） */
+    localFileCount: number;
     parseOk: boolean;
     specLoading: boolean;
     channels: DebugChannels | undefined;
@@ -243,7 +246,11 @@ export function sendBlocker(s: SendState): string | null {
     if (!s.hasTarget) return '先在顶栏选一个 Bot';
     if (!s.action.trim()) return '先填接口名';
     if (!s.running) return 'Bot 没在运行';
-    if (s.stream) return '流式接口第二期才能调用，现在只能看文档';
+    if (s.stream) {
+        // 分块传输只走内部通道；点名的 HTTP / WS 通道在前端就能确定不行
+        const blocked = streamChannelBlocker(s.action, s.localFileCount, s.channel);
+        if (blocked) return blocked;
+    }
     if (!s.parseOk) return 'JSON 有错，改好再发';
     if (s.specLoading) return '正在读取接口说明…';
     if (s.channels) {

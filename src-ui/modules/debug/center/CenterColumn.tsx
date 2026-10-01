@@ -32,6 +32,7 @@ import { cssEase } from '../../../core/design/cssEase';
 import { initialParamsText, parseParamsText, setParam } from '../../../core/domain/debug/paramsText';
 import { countOmittedParams, omittedBlocker } from '../../../core/domain/debug/omittedParams';
 import { buildFormModel, coerceInput } from '../../../core/domain/debug/schemaForm';
+import { localFilesInParams } from '../../../core/domain/debug/streamActions';
 import { validateParams, type ParamIssue } from '../../../core/domain/debug/validate';
 import { targetDisplayName } from '../../../core/domain/debug/targetGroups';
 import { suggestedRequestName } from '../../../core/domain/debug/collectionsOps';
@@ -231,6 +232,7 @@ function TabWorkspace({ tab, target, callChannel, scopeRef, animateIn, onRevealC
         running: !!target?.running,
         action,
         stream: spec?.stream ?? summary?.stream ?? false,
+        localFileCount: parsed.ok ? localFilesInParams(parsed.value).length : 0,
         parseOk: parsed.ok,
         // 目录里有这一行时分级已知，不必等说明
         specLoading: specLoading && !summary,
@@ -398,6 +400,7 @@ function TabWorkspace({ tab, target, callChannel, scopeRef, animateIn, onRevealC
                         issues={issues}
                         safety={safety}
                         inflightSince={run?.inflight?.startedAt ?? null}
+                        progress={run?.inflight?.progress ?? null}
                         onSend={onSubmit}
                         onCancel={onCancel}
                         onJumpToIssue={jumpToIssue}

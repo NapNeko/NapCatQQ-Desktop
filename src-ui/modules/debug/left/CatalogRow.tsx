@@ -53,7 +53,7 @@ export const CatalogActionRow = memo(function CatalogActionRow({
     const only = onlyBackendLabel(action, backend);
     const tip = [action.summary || '（没有简介）', SAFETY_TEXT[action.safety]];
     if (!action.supported) tip.push('当前 Bot 不支持这个接口');
-    if (action.stream) tip.push('流式接口：文档可看，调用第二期支持');
+    if (action.stream) tip.push('流式接口：分块传输只走内部通道');
 
     return (
         <ContextMenu>
