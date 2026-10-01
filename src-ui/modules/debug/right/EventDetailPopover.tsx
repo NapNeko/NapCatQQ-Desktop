@@ -1,11 +1,15 @@
 // 一条事件的原始 JSON。整栏只有一个弹层，对着点的那个元素弹；
 // 元素被虚拟列表卸掉（用户滚走了）时停在最后一次的位置，不会飞到左上角。
+// 消息条目多一行快捷操作：回复 / 撤回 / 查发送者——在中栏开一个预填好的请求标签，发不发由中栏决定。
 
 import { useMemo, useRef } from 'react';
-import { Check, Copy, X } from 'lucide-react';
+import { Check, Copy, Reply, Undo2, UserRoundSearch, X } from 'lucide-react';
 import { JsonTree, Popover, PopoverAnchor, PopoverContent } from '../../../shared/ui';
+import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
 import type { ChatItem } from '../../../core/domain/debug/chat';
 import { callLine, clockTimeMs, dayLabel, listRowOf, safeJson } from '../../../core/domain/debug/chatFormat';
+import { messageLinkages, type EventLinkageId } from '../../../core/domain/debug/eventActions';
+import { formatParams } from '../../../core/domain/debug/paramsText';
 import { useCopy } from './rightParts';
 
 export interface DetailTarget {
@@ -24,6 +28,12 @@ const EMPTY_RECT = {
     bottom: 0,
     toJSON: () => ({}),
 } as DOMRect;
+
+const LINK_ICON: Record<EventLinkageId, typeof Reply> = {
+    reply: Reply,
+    recall: Undo2,
+    sender: UserRoundSearch,
+};
 
 /** 弹层里看的是什么：有原始载荷看载荷，缺口之类没有载荷的看条目本身 */
 function payloadOf(item: ChatItem): unknown {
@@ -48,6 +58,13 @@ export function EventDetailPopover({ target, onClose }: { target: DetailTarget |
     const head = item ? listRowOf(item) : null;
     // 自己发的气泡被 message_sent 合并后，载荷是事件；调用结果单独写一行
     const call = item && item.kind === 'message' && item.call ? callLine(item.call) : null;
+    const links = useMemo(() => (item && item.kind === 'message' ? messageLinkages(item) : []), [item]);
+
+    /** 在中栏开一个预填好的标签；安全分级照旧，点开不等于发出 */
+    const openLinkage = (action: string, params: Record<string, unknown>) => {
+        debugWorkspaceStore.openAction(action, { newTab: true, paramsText: formatParams(params) });
+        onClose();
+    };
 
     return (
         <Popover open={!!target} onOpenChange={(open) => !open && onClose()}>
@@ -89,6 +106,25 @@ export function EventDetailPopover({ target, onClose }: { target: DetailTarget |
                                 <X size={13} aria-hidden />
                             </button>
                         </div>
+                        {links.length > 0 && (
+                            <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border-subtle/70 px-2 py-1">
+                                {links.map((l) => {
+                                    const Icon = LINK_ICON[l.id];
+                                    return (
+                                        <button
+                                            key={l.id}
+                                            type="button"
+                                            onClick={() => openLinkage(l.action, l.params)}
+                                            title={`在中栏开一个预填好的 ${l.action} 标签`}
+                                            className="inline-flex h-7 items-center gap-1 rounded-xs px-2 text-2xs font-medium text-text-secondary transition-colors hover:bg-inset hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                                        >
+                                            <Icon size={12} aria-hidden />
+                                            {l.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                         <JsonTree key={item.key} value={value} defaultExpandDepth={2} className="min-h-0 flex-1 px-1 py-1" />
                     </>
                 )}
