@@ -68,12 +68,13 @@ struct Endpoint {
     path: String,
 }
 
-/// 一次调用的边界：属于哪一轮、自己的取消令牌、总的截止时间
-struct CallScope {
-    epoch: Epoch,
-    token: CancellationToken,
-    deadline: Instant,
-    timeout: Duration,
+/// 一次调用的边界：属于哪一轮、自己的取消令牌、总的截止时间、这次的 request_id
+pub(super) struct CallScope {
+    pub epoch: Epoch,
+    pub token: CancellationToken,
+    pub deadline: Instant,
+    pub timeout: Duration,
+    pub request_id: String,
 }
 
 impl DebugManager {
@@ -82,19 +83,32 @@ impl DebugManager {
         let token = CancellationToken::new();
         let result = match InflightGuard::register(self, &req.request_id, token.clone()) {
             Err(error) => DebugCallResult::Err { error },
-            Ok(_inflight) => {
-                let timeout = effective_timeout(req.timeout_ms);
-                let scope = CallScope {
-                    epoch: self.epoch(),
-                    token,
-                    deadline: Instant::now() + timeout,
-                    timeout,
-                };
-                self.call_in_scope(&req, &scope).await
-            }
+            Ok(_inflight) => self.call_with_token(&req, token).await,
         };
         DebugCallResponse {
             request_id: req.request_id,
+            result,
+        }
+    }
+
+    /// `call` 摘掉登记之后的主体：流式编排（stream.rs）自己登记 inflight，
+    /// 最后那个真正的动作用同一个取消令牌走这条路发出去
+    pub(super) async fn call_with_token(
+        &self,
+        req: &DebugCallRequest,
+        token: CancellationToken,
+    ) -> DebugCallResponse {
+        let timeout = effective_timeout(req.timeout_ms);
+        let scope = CallScope {
+            epoch: self.epoch(),
+            token,
+            deadline: Instant::now() + timeout,
+            timeout,
+            request_id: req.request_id.clone(),
+        };
+        let result = self.call_in_scope(req, &scope).await;
+        DebugCallResponse {
+            request_id: req.request_id.clone(),
             result,
         }
     }
@@ -150,7 +164,7 @@ impl DebugManager {
     }
 
     /// 让 `work` 跑到完成，或者先被关调试台 / 取消 / 超时打断
-    async fn guarded<T>(
+    pub(super) async fn guarded<T>(
         &self,
         scope: &CallScope,
         work: impl Future<Output = T>,
@@ -166,7 +180,7 @@ impl DebugManager {
         }
     }
 
-    async fn bot_for_call(&self, req: &DebugCallRequest) -> Result<DebugBotView, DebugError> {
+    pub(super) async fn bot_for_call(&self, req: &DebugCallRequest) -> Result<DebugBotView, DebugError> {
         if !self.is_enabled() {
             return Err(DebugError::FeatureDisabled);
         }
@@ -311,7 +325,7 @@ impl DebugManager {
         }
     }
 
-    async fn call_internal(
+    pub(super) async fn call_internal(
         &self,
         view: &DebugBotView,
         action: &str,
@@ -816,7 +830,7 @@ pub(super) fn url_host(host: &str) -> String {
 }
 
 /// OneBot 的参数必须是对象；`null` 当作没有参数
-fn normalize_params(params: &Value) -> Result<Value, DebugError> {
+pub(super) fn normalize_params(params: &Value) -> Result<Value, DebugError> {
     match params {
         Value::Null => Ok(json!({})),
         Value::Object(_) => Ok(params.clone()),
@@ -826,7 +840,7 @@ fn normalize_params(params: &Value) -> Result<Value, DebugError> {
     }
 }
 
-fn effective_timeout(timeout_ms: Option<u32>) -> Duration {
+pub(super) fn effective_timeout(timeout_ms: Option<u32>) -> Duration {
     let ms = timeout_ms
         .unwrap_or(DEFAULT_TIMEOUT_MS)
         .clamp(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS);
@@ -861,13 +875,13 @@ fn resolve_call_channel<'a>(
 }
 
 /// 在途调用的登记：离开 `call`（正常返回、取消、超时）时摘掉，免得表里留下死项
-struct InflightGuard<'a> {
+pub(super) struct InflightGuard<'a> {
     manager: &'a DebugManager,
     request_id: &'a str,
 }
 
 impl<'a> InflightGuard<'a> {
-    fn register(
+    pub(super) fn register(
         manager: &'a DebugManager,
         request_id: &'a str,
         token: CancellationToken,
