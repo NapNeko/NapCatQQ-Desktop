@@ -235,6 +235,7 @@ impl SnowLumaComponent {
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
             ],
             category: crate::types::ComponentCategory::Framework,
+            uninstall: crate::types::UninstallSupport::Supported,
         }
     }
 }

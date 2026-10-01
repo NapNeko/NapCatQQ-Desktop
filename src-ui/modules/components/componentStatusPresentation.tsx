@@ -2,6 +2,7 @@
 
 import type { HostComponentStatus } from '../../core/domain/components/types';
 import type { StatusBadgeSpec } from '../../core/domain/bot/bot-status-presentation';
+import type { UninstallSupport } from '../../core/ipc/types';
 
 export type { StatusBadgeSpec as StatusBadgeSpec };
 
@@ -11,6 +12,27 @@ export function isExternalNodeSource(source: string): boolean {
 
 export function shouldOfferManagedNodeInstall(status: HostComponentStatus): boolean {
     return !(status.state === 'installed' && isExternalNodeSource(status.detected.source));
+}
+
+/// 卸载入口的动作形态：跑组件任务 / 跳系统卸载流 / 不渲染
+export type UninstallEntryAction = 'task' | 'system' | 'none';
+
+/// 行上「卸载」应该长成什么样。未安装与 $PATH 外部探测来源（不归桌面端管）
+/// 一律没有卸载入口，与组件声明的能力无关
+export function uninstallEntryAction(
+    uninstall: UninstallSupport,
+    status: HostComponentStatus,
+): UninstallEntryAction {
+    if (status.state !== 'installed') return 'none';
+    if (isExternalNodeSource(status.detected.source)) return 'none';
+    switch (uninstall) {
+        case 'supported':
+            return 'task';
+        case 'system_managed':
+            return 'system';
+        case 'not_supported':
+            return 'none';
+    }
 }
 
 export function hostComponentStatusBadge(

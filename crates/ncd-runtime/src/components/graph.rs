@@ -9,7 +9,7 @@ use ncd_appframework::{AppComponentSpec, AppFrameworkRegistry};
 use ncd_component::{
     Component, ComponentId, DependencyTarget, DesktopSelfComponent, GitComponent, NapCatComponent,
     NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent, RedisComponent, Requirement,
-    RequirementPhase, SnowLumaComponent, UvComponent, VersionReq,
+    RequirementPhase, SnowLumaComponent, UvComponent, VcRedistComponent, VersionReq,
 };
 use ncd_domain::SnowLumaLinuxPackage;
 use ncd_host::{HostPath, Locality, Os};
@@ -32,7 +32,7 @@ fn graph_placeholder_spec() -> AppComponentSpec {
 }
 
 /// catalog 顺序（与 component_catalog 一致）。应用端不写在这里，由注册表追加。
-const HOST_GRAPH_COMPONENT_IDS: [ComponentId; 10] = [
+const HOST_GRAPH_COMPONENT_IDS: [ComponentId; 11] = [
     ComponentId::NapCat,
     ComponentId::SnowLuma,
     ComponentId::NodeJs,
@@ -40,6 +40,7 @@ const HOST_GRAPH_COMPONENT_IDS: [ComponentId; 10] = [
     ComponentId::Git,
     ComponentId::Redis,
     ComponentId::Qq,
+    ComponentId::VcRedist,
     ComponentId::NoVnc,
     ComponentId::NcdWatch,
     ComponentId::DesktopSelf,
@@ -82,6 +83,7 @@ pub fn graph_component(
         ComponentId::Git => Arc::new(GitComponent::new("0.0.0", x)),
         ComponentId::Redis => Arc::new(RedisComponent::new(x)),
         ComponentId::Qq => Arc::new(QQComponent::default_v3_2_25(x)),
+        ComponentId::VcRedist => Arc::new(VcRedistComponent::new(x)),
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
         ComponentId::NcdWatch => Arc::new(NcdWatchComponent::new(None)),
         ComponentId::DesktopSelf => Arc::new(DesktopSelfComponent::new("0.0.0", x)),
@@ -267,6 +269,7 @@ mod tests {
     const GOLDEN: &str = "\
 Windows/Local napcat
   component qq (Both)
+  component vcredist (Both)
 Windows/Local snowluma[full]
   component qq (Both)
 Windows/Local snowluma[lite]
@@ -277,6 +280,7 @@ Windows/Local uv
 Windows/Local git
 Windows/Local redis
 Windows/Local qq
+Windows/Local vcredist
 Windows/Local desktop_self
 Windows/Local astrbot
   component uv >=0.4 (Both)
@@ -472,6 +476,7 @@ Linux/Remote yunzai
                 ComponentId::Git,
                 ComponentId::Redis,
                 ComponentId::Qq,
+                ComponentId::VcRedist,
                 ComponentId::NoVnc,
                 ComponentId::NcdWatch,
                 ComponentId::DesktopSelf,

@@ -304,6 +304,7 @@ export type { ProgressEvent } from './generated/domain/ProgressEvent';
 export type { ComponentId } from './generated/domain/ComponentId';
 export type { ComponentCategory } from './generated/domain/ComponentCategory';
 export type { ComponentInfo } from './generated/domain/ComponentInfo';
+export type { UninstallSupport } from './generated/domain/UninstallSupport';
 export type { SupportedTarget } from './generated/domain/SupportedTarget';
 export type { DetectedVersion } from './generated/domain/DetectedVersion';
 export type { UnusableInstall } from './generated/domain/UnusableInstall';

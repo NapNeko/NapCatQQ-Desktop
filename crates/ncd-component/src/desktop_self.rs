@@ -69,6 +69,8 @@ impl DesktopSelfComponent {
                 crate::types::SupportedTarget::new(Os::MacOs, Locality::Local),
             ],
             category: crate::types::ComponentCategory::SelfApp,
+            // MSI 安装的 Desktop 归 Windows「已安装的应用」管理,卸载走 OS 流程
+            uninstall: crate::types::UninstallSupport::SystemManaged,
         }
     }
 }
@@ -147,6 +149,17 @@ mod tests {
     #[test]
     fn id_returns_desktop_self() {
         assert_eq!(comp().id(), ComponentId::DesktopSelf);
+    }
+
+    #[test]
+    fn info_declares_system_managed_uninstall() {
+        // MSI 装的 Desktop 只能走 Windows「已安装的应用」卸载;UI 据此把
+        // 卸载入口指到系统页,而不是跑组件任务拿到英文报错
+        let info = DesktopSelfComponent::info();
+        assert_eq!(
+            info.uninstall,
+            crate::types::UninstallSupport::SystemManaged
+        );
     }
 
     #[test]

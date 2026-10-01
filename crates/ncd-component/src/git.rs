@@ -148,6 +148,7 @@ impl GitComponent {
                 .map(|(os, loc)| crate::types::SupportedTarget::new(*os, *loc))
                 .collect(),
             category: crate::types::ComponentCategory::RuntimeDep,
+            uninstall: crate::types::UninstallSupport::Supported,
         }
     }
 

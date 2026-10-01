@@ -11,7 +11,7 @@ import {
     ContextMenuLabel,
     ContextMenuSeparator,
 } from '../../shared/ui';
-import { useOpenExternal } from '../../hooks/useOpenExternal';
+import { openSystemUninstallOrReport, useOpenExternal } from '../../hooks/useOpenExternal';
 import { pushInfoBar } from '../../hooks/ui/globalInfoBarStore';
 import type { MachineComponentRow } from '../../core/domain/components/types';
 import type { ActionProgressView } from '../../core/domain/components/progress';
@@ -25,9 +25,9 @@ import { ComponentManageCard } from './ComponentEntityCard';
 import {
     hostComponentStatusBadge,
     isExternalNodeSource,
-    shouldOfferManagedNodeInstall,
+    uninstallEntryAction,
 } from './componentStatusPresentation';
-import type { StepKind } from '../../core/ipc/types';
+import type { StepKind, UninstallSupport } from '../../core/ipc/types';
 
 export type RowAction =
     | { kind: 'install' }
@@ -139,6 +139,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
             {trailingActions}
             <ActionButtons
                 status={status}
+                uninstall={info.uninstall}
                 latestRemoteVersion={latestRemoteVersion}
                 disabled={disabled}
                 lifecycleBlockedReason={lifecycleBlockedReason}
@@ -164,7 +165,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
         !isExternalNodeSource(status.detected.source) &&
         compareSemver(status.detected.version, latestRemoteVersion) > 0;
 
-    const external = status.state === 'installed' && isExternalNodeSource(status.detected.source);
+    const uninstallAction = uninstallEntryAction(info.uninstall, status);
 
     const handleCopyVersion = async (v: string, label: string) => {
         try {
@@ -237,7 +238,7 @@ export const MachineComponentRowView: React.FC<Props> = ({
                     </ContextMenuItem>
                 )}
 
-                {!inFlight && status.state === 'installed' && !external && (
+                {!inFlight && uninstallAction === 'task' && (
                     <ContextMenuItem
                         tone="danger"
                         disabled={disabled || !!lifecycleBlockedReason}
@@ -245,6 +246,13 @@ export const MachineComponentRowView: React.FC<Props> = ({
                     >
                         <Trash2 size={13} className="text-danger" />
                         <span>卸载组件</span>
+                    </ContextMenuItem>
+                )}
+
+                {!inFlight && uninstallAction === 'system' && (
+                    <ContextMenuItem onClick={() => openSystemUninstallOrReport()}>
+                        <ExternalLink size={13} />
+                        <span>在系统中卸载…</span>
                     </ContextMenuItem>
                 )}
 
@@ -420,12 +428,14 @@ const StatusMeta: React.FC<{
 
 const ActionButtons: React.FC<{
     status: MachineComponentRow['status'];
+    uninstall: UninstallSupport;
     latestRemoteVersion: string | null;
     disabled?: boolean;
     lifecycleBlockedReason?: string | null;
     onAction: (a: RowAction) => void;
-}> = ({ status, latestRemoteVersion, disabled, lifecycleBlockedReason, onAction }) => {
+}> = ({ status, uninstall, latestRemoteVersion, disabled, lifecycleBlockedReason, onAction }) => {
     const lifecycleDisabled = disabled || !!lifecycleBlockedReason;
+    const uninstallAction = uninstallEntryAction(uninstall, status);
     switch (status.state) {
         case 'installed': {
             const updatable =
@@ -445,7 +455,7 @@ const ActionButtons: React.FC<{
                             更新
                         </Button>
                     )}
-                    {shouldOfferManagedNodeInstall(status) && (
+                    {uninstallAction === 'task' && (
                         <Button
                             size="sm"
                             variant="ghost"
@@ -454,6 +464,16 @@ const ActionButtons: React.FC<{
                             onClick={() => onAction({ kind: 'uninstall' })}
                         >
                             卸载
+                        </Button>
+                    )}
+                    {uninstallAction === 'system' && (
+                        // 系统页与 Bot 运行状态无关,不吃 lifecycleDisabled
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openSystemUninstallOrReport()}
+                        >
+                            在系统中卸载…
                         </Button>
                     )}
                 </>

@@ -9,8 +9,8 @@ use ncd_appframework::{AppComponentSpec, AppFrameworkRegistry};
 use ncd_component::{
     Component, ComponentId, DesktopSelfComponent, GitComponent, MINGIT_DEFAULT_VERSION,
     NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent, QQComponent,
-    RedisComponent, SnowLumaComponent, UV_DEFAULT_VERSION, UvComponent, ncd_watch_asset_name,
-    ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
+    RedisComponent, SnowLumaComponent, UV_DEFAULT_VERSION, UvComponent, VcRedistComponent,
+    ncd_watch_asset_name, ncd_watch_release_download_url, ncd_watch_release_download_url_for_tag,
 };
 use ncd_domain::RemoteSelectedPaths;
 use ncd_domain::SnowLumaLinuxPackage;
@@ -221,6 +221,15 @@ pub fn build_component_for_host(
             }
         }
         ComponentId::NoVnc => Arc::new(NoVncComponent::new()),
+        ComponentId::VcRedist => {
+            // 安装包缓存目录:稳定文件名 VC_redist.x64.exe(SHA256 匹配才复用),
+            // 失败保留可复用;只在 Windows 本机生效,组件自身 check_target 拦截
+            let cache = data_root_host
+                .join("runtime")
+                .join("cache")
+                .join("vcredist");
+            Arc::new(VcRedistComponent::new(cache))
+        }
         ComponentId::NcdWatch => {
             let mut comp = NcdWatchComponent::new(remote_home.map(|s| s.to_string()));
             if let Some(root) = ctx

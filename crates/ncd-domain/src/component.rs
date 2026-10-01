@@ -17,6 +17,7 @@ use ts_rs::TS;
 /// - Qq → qq
 /// - NodeJs → nodejs
 /// - NoVnc → novnc
+/// - VcRedist → vcredist（Visual C++ 2015-2022 x64 运行库；NapCat Windows 注入器的运行时依赖）
 /// - DesktopSelf → desktop_self
 /// - NcdWatch → ncd_watch
 /// - Karin → karin（应用端框架；按实例目录安装，不进组件页 catalog）
@@ -45,6 +46,8 @@ pub enum ComponentId {
     NodeJs,
     #[serde(rename = "novnc")]
     NoVnc,
+    #[serde(rename = "vcredist")]
+    VcRedist,
     #[serde(rename = "desktop_self")]
     DesktopSelf,
     #[serde(rename = "ncd_watch")]
@@ -77,6 +80,7 @@ impl ComponentId {
             Self::Qq => "qq",
             Self::NodeJs => "nodejs",
             Self::NoVnc => "novnc",
+            Self::VcRedist => "vcredist",
             Self::DesktopSelf => "desktop_self",
             Self::NcdWatch => "ncd_watch",
             Self::Karin => "karin",
@@ -429,6 +433,7 @@ mod tests {
             ComponentId::Qq,
             ComponentId::NodeJs,
             ComponentId::NoVnc,
+            ComponentId::VcRedist,
             ComponentId::DesktopSelf,
             ComponentId::NcdWatch,
             ComponentId::Karin,
@@ -468,6 +473,7 @@ mod tests {
             ComponentId::Qq,
             ComponentId::NodeJs,
             ComponentId::NoVnc,
+            ComponentId::VcRedist,
             ComponentId::DesktopSelf,
             ComponentId::NcdWatch,
             ComponentId::Karin,

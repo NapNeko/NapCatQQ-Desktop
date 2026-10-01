@@ -61,6 +61,15 @@ export async function openExternalUrl(url: string): Promise<void> {
     return openUrl(url);
 }
 
+/// 打开 Windows「设置 → 应用 → 已安装的应用」。归系统管理的组件（VC++ 运行库、
+/// MSI 装的 Desktop 本身）卸载入口走这里，不跑组件任务。
+/// ms-settings: 不是 http/https，故意不进 openExternalUrl 的 scheme 白名单;
+/// URI 字面量只留在这一个函数里，capabilities 配了 ms-settings:* scope。
+export async function openWindowsAppsSettings(): Promise<void> {
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+    return openUrl('ms-settings:appsfeatures');
+}
+
 /// 弹原生目录选择对话框，返回所选绝对路径；用户取消返回 null。
 /// 走 tauri-plugin-dialog 的 `open` 命令（directory 模式）。webview 无法用
 /// `<input type=file>` 拿真实文件系统路径，必须走插件。capabilities 已配

@@ -15,6 +15,7 @@ const nodeInfo: ComponentInfo = {
     description: '',
     supported_targets: [{ os: 'windows', locality: 'local' }],
     category: 'runtime_dep',
+    uninstall: 'supported',
 };
 
 function detect(partial: Partial<ComponentDetectResult>): ComponentDetectResult {

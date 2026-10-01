@@ -100,6 +100,7 @@ impl NcdWatchComponent {
             )],
             // 与 Desktop 同属产品侧配套：远端脱管后的告警进程，不是 QQ/Node 一类框架运行时依赖
             category: crate::types::ComponentCategory::SelfApp,
+            uninstall: crate::types::UninstallSupport::Supported,
         }
     }
 

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use ncd_component::{
     Component, ComponentId, ComponentInfo, DependencyTarget, DesktopSelfComponent, GitComponent,
     HostPackageGroup, NapCatComponent, NcdWatchComponent, NoVncComponent, NodeJsComponent,
-    QQComponent, RedisComponent, SnowLumaComponent, UvComponent,
+    QQComponent, RedisComponent, SnowLumaComponent, UvComponent, VcRedistComponent,
 };
 use ncd_deploy::StepKind;
 use ncd_domain::DeploymentTaskResource;
@@ -115,6 +115,7 @@ pub fn component_needs_download_slot(component_id: ComponentId, kind: StepKind) 
             | ComponentId::Git
             | ComponentId::Redis
             | ComponentId::Qq
+            | ComponentId::VcRedist
             | ComponentId::NcdWatch
     ) || component_id.is_app_framework())
 }
@@ -162,6 +163,7 @@ pub fn component_catalog() -> Vec<ComponentInfo> {
         GitComponent::info(),
         RedisComponent::info(),
         QQComponent::info(),
+        VcRedistComponent::info(),
         NoVncComponent::info(),
         NcdWatchComponent::info(),
         DesktopSelfComponent::info(),
@@ -301,6 +303,10 @@ pub fn catalog_component_pairs_for_target_check() -> Vec<(ComponentInfo, Arc<dyn
             QQComponent::info(),
             Arc::new(QQComponent::default_v3_2_25(HostPath::from_posix("/x"))),
         ),
+        (
+            VcRedistComponent::info(),
+            Arc::new(VcRedistComponent::new(HostPath::from_posix("/x"))),
+        ),
         (NoVncComponent::info(), Arc::new(NoVncComponent::new())),
         (
             GitComponent::info(),
@@ -339,6 +345,7 @@ mod tests {
                 ComponentId::Git,
                 ComponentId::Redis,
                 ComponentId::Qq,
+                ComponentId::VcRedist,
                 ComponentId::NoVnc,
                 ComponentId::NcdWatch,
                 ComponentId::DesktopSelf,
@@ -507,6 +514,10 @@ mod tests {
             ComponentId::NoVnc,
             StepKind::EnsureInstalled
         ));
+        assert!(component_needs_download_slot(
+            ComponentId::VcRedist,
+            StepKind::EnsureInstalled
+        ));
     }
 
     #[test]
@@ -596,8 +607,8 @@ mod tests {
     }
 
     #[test]
-    fn list_components_returns_ten_items() {
-        assert_eq!(component_catalog().len(), 10);
+    fn list_components_returns_eleven_items() {
+        assert_eq!(component_catalog().len(), 11);
     }
 
     #[test]
