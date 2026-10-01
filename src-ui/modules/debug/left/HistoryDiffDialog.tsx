@@ -64,7 +64,6 @@ function SideBody({ side }: { side: DiffSide }) {
     return <pre className="px-2 py-1 font-mono text-[11px] leading-[18px] text-text">{entryText(side.entry)}</pre>;
 }
 
-/** 一格：both 是 same 的普通格；changed 是这一侧有改动的格（红 / 绿） */
 function Cell({ text, tone }: { text: string | null; tone: 'same' | 'remove' | 'add' | 'empty' }) {
     return (
         <span

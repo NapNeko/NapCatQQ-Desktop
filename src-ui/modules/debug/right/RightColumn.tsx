@@ -293,7 +293,8 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
                 else expanded.current.delete(key);
             },
         };
-    }, [openExternal]);
+        // sendCall 由 useDebugCall 按 queryClient 记死，引用不变
+    }, [openExternal, sendCall]);
 
     // ---- 输入框发往哪、回复谁
     const composerSessionKey = activeSession !== 'all' ? activeSession : (sendSession ?? replyTo?.session ?? null);

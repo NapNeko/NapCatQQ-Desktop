@@ -58,6 +58,9 @@ export function exportChannelOf(resolved: DebugChannelId | null, info: DebugChan
     }
     const hint = info?.token_hint ?? null;
     switch (resolved.kind) {
+        case 'auto':
+            // 落定前被拦在 null 分支了；真走到这里说明数据前后不一致，同样按占位处理
+            return placeholder('自动', '现在没有可用的调用通道；地址是占位，换成你的 HTTP 服务地址后再用');
         case 'internal':
             return placeholder(
                 '内部通道',
