@@ -35,6 +35,7 @@ vi.mock('../../../hooks/ui/pushErrorBar', () => ({ pushErrorBar: vi.fn() }));
 import { TooltipProvider } from '../../../shared/ui';
 import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
 import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
+import { revealLeftSearch, setLeftSearchOpen } from '../leftPanels';
 import { LeftColumn } from './LeftColumn';
 
 const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
@@ -129,6 +130,8 @@ beforeEach(() => {
     for (const fn of Object.values(service)) fn.mockReset();
     preferencesStore.setMotionEnabled(false);
     debugWorkspaceStore._reset();
+    // 搜索条默认收着（开关状态记在模块里）：每个用例自己决定要不要展开
+    setLeftSearchOpen('history', false);
     service.history.mockImplementation(async (q: DebugHistoryQuery) => {
         const matched = ENTRIES.filter((e) => q.ok === null || e.ok === q.ok);
         return { entries: matched.slice(q.offset, q.offset + q.limit).map(summary), total: matched.length };
@@ -215,6 +218,8 @@ describe('调用历史', () => {
         const user = userEvent.setup();
         renderHistory();
         await screen.findByText('get_group_list');
+        // 搜索条默认收在标题行的图标按钮里，先展开
+        act(() => revealLeftSearch('history'));
         await user.type(screen.getByRole('textbox', { name: '搜索调用历史' }), 'group');
         await waitFor(() => expect(lastQuery().text).toBe('group'));
         await user.click(screen.getByRole('button', { name: '只看当前 Bot（小雪）' }));

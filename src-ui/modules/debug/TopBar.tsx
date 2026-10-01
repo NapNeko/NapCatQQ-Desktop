@@ -66,7 +66,7 @@ export const TopBar = memo(function TopBar({
     const running = selected?.running ?? false;
 
     return (
-        <header className="@container shrink-0 pt-2">
+        <header className="@container shrink-0 pt-3">
             <div className="flex min-w-0 items-center gap-3">
                 <div className="shrink-0">
                     <p className="text-2xs uppercase leading-none tracking-widest text-text-tertiary">debug</p>
@@ -75,7 +75,7 @@ export const TopBar = memo(function TopBar({
 
                 <span aria-hidden className="h-8 w-px shrink-0 bg-border-subtle" />
 
-                <div role="group" aria-label="调试目标" className="flex min-w-0 flex-1 items-center gap-1.5">
+                <div role="group" aria-label="调试目标" className="flex min-w-0 flex-1 items-center gap-2">
                     <BotPicker
                         targets={targets}
                         selected={selected}
@@ -109,11 +109,11 @@ export const TopBar = memo(function TopBar({
                         onChange={(events) => onChoiceChange({ ...choice, events })}
                         onNavigate={onNavigate}
                     />
-                    <span className="min-w-2 flex-1" />
-                    <ReceivingIndicator targets={targets} watchBotId={botId} />
                 </div>
 
-                <div className="flex shrink-0 items-center gap-1">
+                {/* 接收状态放在右侧操作组的最左：它出现 / 消失时搜索和右栏开关的位置不动 */}
+                <div className="flex shrink-0 items-center gap-1.5">
+                    <ReceivingIndicator targets={targets} watchBotId={botId} />
                     <button
                         type="button"
                         onClick={onOpenPalette}

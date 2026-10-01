@@ -7,10 +7,9 @@
 // 键盘：`/` 聚焦搜索框；搜索框里 ↑↓ 移动高亮、回车打开高亮的那个（Ctrl / ⌘+回车另开标签）；
 // 没搜索词时 ↓ 进入列表。列表里 ↑↓ Home End 移动，→ ← 展开 / 收起分类，回车打开，直接打字回到搜索框。
 
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Info, ListTree, RefreshCw, SearchX } from 'lucide-react';
-import { cn } from '../../../shared/utils/cn';
 import { Button, Spinner } from '../../../shared/ui';
 import { useDebugCatalog } from '../../../hooks/debug/useDebugCatalog';
 import { debugWorkspaceStore, useDebugWorkspaceSelector } from '../../../hooks/debug/debugWorkspaceStore';
@@ -21,9 +20,9 @@ import { errorText } from '../../../core/domain/errors';
 import { groupActions, searchActions } from '../../../core/domain/debug/catalogView';
 import type { DebugActionSummary } from '../../../core/ipc/generated/debug/DebugActionSummary';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
-import { COLUMN_HEADER_CLASS } from '../ColumnFrame';
+import { revealLeftSearch, setLeftSearchOpen, useLeftSearch } from '../leftPanels';
 import { CATALOG_HEADER_HEIGHT, CATALOG_ROW_HEIGHT, CatalogActionRow, CatalogHeaderRow } from './CatalogRow';
-import { PanelMessage, PanelSearch, SkeletonRows, useSlashFocus } from './panelParts';
+import { PanelMessage, PanelSearch, PanelSearchRow, SkeletonRows, useSlashFocus } from './panelParts';
 import { useFlip } from './useFlip';
 
 // 搜索词和哪些分类收起了：纯界面状态，不落盘；切到别的面板 / 路由再回来还在
@@ -126,13 +125,36 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
     });
 
     useScrollMemory('catalog', listRef);
-    useSlashFocus(inputRef, rootRef);
+    useSlashFocus(inputRef, rootRef, () => revealLeftSearch('catalog'));
     const flip = useFlip(listRef, items);
 
     const setQuery = useCallback((q: string) => {
         savedQuery = q;
         setQueryState(q);
     }, []);
+
+    // ---- 搜索条的收放：开关在标题行（分段切换旁）的图标按钮上，状态见 leftPanels
+    const { open: searchOpen, focusNonce } = useLeftSearch('catalog');
+    // 搜索词跟着会话走：带着词进来时搜索条也得是开的，不然列表筛着却找不到在哪改
+    useLayoutEffect(() => {
+        if (savedQuery.trim() !== '') setLeftSearchOpen('catalog', true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    // 条从外面关上了：词一起清掉，理由同上
+    const prevSearchOpen = useRef(searchOpen);
+    useLayoutEffect(() => {
+        const was = prevSearchOpen.current;
+        prevSearchOpen.current = searchOpen;
+        if (was && !searchOpen) setQuery('');
+    }, [searchOpen, setQuery]);
+    // 点图标 / 按 / 打开（nonce +1）时聚焦输入框；挂载时自己同步开条不算，不抢焦点
+    const seenFocusNonce = useRef(focusNonce);
+    useLayoutEffect(() => {
+        if (focusNonce === seenFocusNonce.current) return;
+        seenFocusNonce.current = focusNonce;
+        inputRef.current?.focus();
+    }, [focusNonce]);
+    const closeSearch = useCallback(() => setLeftSearchOpen('catalog', false), []);
 
     // 搜索词变了：回到顶上，高亮第一个结果（回车就开它）；清空后不留高亮
     const firstQueryRun = useRef(true);
@@ -254,11 +276,11 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
                 activate(item, e.ctrlKey || e.metaKey);
                 return;
             default:
-                // 在列表里直接打字：回到搜索框接着输入
+                // 在列表里直接打字：回到搜索框接着输入（条收着时先展开）
                 if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && e.key !== '/') {
                     e.preventDefault();
                     setQuery(query + e.key);
-                    inputRef.current?.focus();
+                    revealLeftSearch('catalog');
                 }
         }
     };
@@ -362,23 +384,32 @@ export const CatalogPanel = memo(function CatalogPanel({ target }: { target: Deb
     const resultCount = searching && catalog ? items.length : undefined;
 
     return (
-        <div ref={rootRef} className="flex min-h-0 flex-1 flex-col">
-            <div className={cn(COLUMN_HEADER_CLASS, 'gap-2')}>
-                <PanelSearch
-                    ref={inputRef}
-                    value={query}
-                    onChange={setQuery}
-                    placeholder="搜接口（按 / 聚焦）"
-                    ariaLabel="搜索接口"
-                    trailing={resultCount}
-                    onKeyDown={onSearchKeyDown}
-                    onFocus={() => setSearchFocused(true)}
-                    onBlur={() => setSearchFocused(false)}
-                    controls={showList ? `${baseId}-tree` : undefined}
-                    activeDescendant={searchFocused ? activeDescendant : undefined}
-                />
-                {catalog && catalogQuery.isFetching && <Spinner size="xs" label="正在刷新接口目录" />}
-            </div>
+        <div ref={rootRef} className="relative flex min-h-0 flex-1 flex-col">
+            {searchOpen && (
+                <PanelSearchRow className="gap-2">
+                    <PanelSearch
+                        ref={inputRef}
+                        value={query}
+                        onChange={setQuery}
+                        placeholder="搜接口（按 / 聚焦）"
+                        ariaLabel="搜索接口"
+                        trailing={resultCount}
+                        onKeyDown={onSearchKeyDown}
+                        onFocus={() => setSearchFocused(true)}
+                        onBlur={() => setSearchFocused(false)}
+                        onRequestClose={closeSearch}
+                        controls={showList ? `${baseId}-tree` : undefined}
+                        activeDescendant={searchFocused ? activeDescendant : undefined}
+                    />
+                    {catalog && catalogQuery.isFetching && <Spinner size="xs" label="正在刷新接口目录" />}
+                </PanelSearchRow>
+            )}
+            {/* 搜索条收着时的刷新指示：不占一行，浮在列表角上 */}
+            {!searchOpen && catalog && catalogQuery.isFetching && (
+                <span className="pointer-events-none absolute right-2.5 top-1.5 z-10">
+                    <Spinner size="xs" label="正在刷新接口目录" />
+                </span>
+            )}
             {target && catalog?.source === 'snapshot' && (
                 <div className="flex shrink-0 items-start gap-1.5 border-b border-border-subtle/70 bg-warning-soft/40 px-2.5 py-1.5 text-2xs leading-snug text-text-secondary">
                     <Info size={12} strokeWidth={2.2} aria-hidden className="mt-px shrink-0 text-warning" />

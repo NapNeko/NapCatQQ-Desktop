@@ -29,6 +29,7 @@ import { TooltipProvider } from '../../../shared/ui';
 import { preferencesStore } from '../../../hooks/preferences/preferencesStore';
 import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
 import { _resetDebugCatalogForTests } from '../../../hooks/debug/useDebugCatalog';
+import { revealLeftSearch, setLeftSearchOpen } from '../leftPanels';
 import { LeftColumn } from './LeftColumn';
 
 // jsdom 里元素没有尺寸，虚拟列表会当视口高 0 一行不画：滚动容器给 600px，其余 30px。
@@ -114,6 +115,8 @@ beforeEach(() => {
     preferencesStore.setMotionEnabled(false);
     debugWorkspaceStore._reset();
     _resetDebugCatalogForTests();
+    // 搜索条默认收着（开关状态记在模块里）：每个用例自己决定要不要展开
+    setLeftSearchOpen('catalog', false);
 });
 
 describe('接口目录', () => {
@@ -162,6 +165,8 @@ describe('接口目录', () => {
         renderLeft();
         await screen.findByText('get_group_list');
 
+        // 搜索条默认收在标题行的图标按钮里，先展开
+        act(() => revealLeftSearch('catalog'));
         const search = screen.getByRole('combobox', { name: '搜索接口' });
         await user.type(search, 'group_info');
         expect(rowNames()).toEqual(['get_group_info']);
@@ -184,6 +189,7 @@ describe('接口目录', () => {
         const user = userEvent.setup();
         renderLeft();
         await screen.findByText('get_group_list');
+        act(() => revealLeftSearch('catalog'));
         const search = screen.getByRole('combobox', { name: '搜索接口' });
 
         await user.type(search, 'get_group');
@@ -229,12 +235,26 @@ describe('接口目录', () => {
         expect(active).toHaveTextContent('消息');
     });
 
-    it('按 / 聚焦搜索框（在输入框里不抢）', async () => {
+    it('按 / 展开并聚焦搜索框（在输入框里不抢）；空着按 Esc 收回去', async () => {
+        const user = userEvent.setup();
         renderLeft();
         await screen.findByText('get_group_list');
-        const search = screen.getByRole('combobox', { name: '搜索接口' });
+        // 默认收着：没有输入框
+        expect(screen.queryByRole('combobox', { name: '搜索接口' })).not.toBeInTheDocument();
+
         fireEvent.keyDown(document.body, { key: '/' });
+        const search = await screen.findByRole('combobox', { name: '搜索接口' });
         expect(search).toHaveFocus();
+
+        // 输入框里的 / 照常输入，不被抢
+        await user.type(search, '/a');
+        expect(search).toHaveValue('/a');
+
+        // 有字 Esc 清字，空了 Esc 收起搜索条
+        fireEvent.keyDown(search, { key: 'Escape' });
+        expect(search).toHaveValue('');
+        fireEvent.keyDown(search, { key: 'Escape' });
+        expect(screen.queryByRole('combobox', { name: '搜索接口' })).not.toBeInTheDocument();
     });
 
     it('选了 Bot 且目录来自内置快照时显示提示条，可以点「重新获取」马上再问一次', async () => {

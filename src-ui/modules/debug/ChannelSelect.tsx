@@ -279,7 +279,7 @@ function OptionButton({
                 'flex min-w-0 flex-1 items-start gap-2.5 rounded-sm px-2 py-2 text-left transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand',
                 'disabled:cursor-not-allowed',
-                !disabled && 'hover:bg-inset',
+                // hover 背景在最外层的行容器上：一行（选项 + 测试连通）是一张卡，不各亮各的
             )}
         >
             <RadioMark on={selected} />
@@ -308,7 +308,7 @@ function AutoRow({
     const autoInfo = findChannel(channels, autoId);
     const status = autoInfo ? channelStatusCopy(autoInfo.status) : null;
     return (
-        <div className={cn('rounded-sm', selected && 'bg-brand-soft/50')}>
+        <div className={cn('rounded-sm transition-colors', selected ? 'bg-brand-soft/50 hover:bg-brand-soft/70' : 'hover:bg-inset')}>
             <OptionButton selected={selected} onChoose={onChoose}>
                 <span className="block text-[13px] font-medium text-text">自动</span>
                 <span className="mt-0.5 block text-2xs text-text-tertiary">{COPY[purpose].autoHint}</span>
@@ -387,7 +387,14 @@ function ChannelRow({
     const canTest = running && info.status.kind !== 'unsupported';
 
     return (
-        <div className={cn('rounded-sm', selected && 'bg-brand-soft/50', !selectable.ok && 'opacity-60')}>
+        // 整行一张卡：通道信息（左边整块可点）和「测试连通」在同一个 hover / 选中背景里，不画成两张卡
+        <div
+            className={cn(
+                'rounded-sm transition-colors',
+                selected ? 'bg-brand-soft/50 hover:bg-brand-soft/70' : 'hover:bg-inset',
+                !selectable.ok && 'opacity-60',
+            )}
+        >
             <div className="flex items-start gap-1">
                 <OptionButton
                     selected={selected}
@@ -429,7 +436,7 @@ function ChannelRow({
                     }
                     className={cn(
                         'mr-1 mt-1.5 inline-flex h-6 shrink-0 items-center gap-1 rounded-xs px-1.5 text-2xs font-medium text-text-secondary transition-colors',
-                        'hover:bg-inset hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                        'hover:bg-brand-soft hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
                         'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-secondary',
                     )}
                 >

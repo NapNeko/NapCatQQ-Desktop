@@ -3,7 +3,7 @@
 // 表单没有自己的数据：读的是 JSON 文本解析出来的对象，改一个字段就对文本做一次最小修改（setParam），
 // 所以表单和 JSON 视图永远是同一份。写回时从 store 里取最新文本再改，连着快速改两个字段也不会互相覆盖。
 
-import { memo, type ReactNode } from 'react';
+import { memo, useState, type ReactNode } from 'react';
 import { Braces } from 'lucide-react';
 import { debugWorkspaceStore } from '../../../hooks/debug/debugWorkspaceStore';
 import { setParam } from '../../../core/domain/debug/paramsText';
@@ -12,7 +12,7 @@ import type { ParamIssue } from '../../../core/domain/debug/validate';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import { cn } from '../../../shared/utils/cn';
 import { valueText } from './viewHelpers';
-import type { FieldProps } from './fields/fieldKit';
+import { FieldHintContext, type FieldHint, type FieldProps } from './fields/fieldKit';
 import { TextField } from './fields/TextField';
 import { NumberField } from './fields/NumberField';
 import { BooleanField } from './fields/BooleanField';
@@ -98,7 +98,7 @@ export const ParamsForm = memo(function ParamsForm({
     const extras = Object.keys(values).filter((k) => !known.has(k));
 
     return (
-        <div className="@container flex flex-col gap-3 px-3 py-3">
+        <div className="@container flex flex-col gap-4 px-3 py-4">
             {model.fields.length === 0 && (
                 <p className="rounded-sm bg-inset px-3 py-2.5 text-xs text-text-secondary">
                     这个接口不需要参数，直接发送就行。
@@ -166,6 +166,7 @@ const FieldRow = memo(
         const inputId = fieldInputId(tabId, field.name);
         const descId = `${inputId}-desc`;
         const invalid = !!issues && issues.length > 0;
+        const [hint, setHint] = useState<FieldHint | null>(null);
         const props: FieldProps = {
             field,
             value,
@@ -222,6 +223,20 @@ const FieldRow = memo(
         }
 
         const role = KIND_LABEL[field.kind];
+        const chip = typeChip(field);
+        // NapCat 的说明常常就是「群号」「消息 ID」，和旁边的类型标签一个字不差，再写一遍只是占地方
+        const description = field.description && field.description.trim() !== chip ? field.description : undefined;
+        // 报错、控件的临时提示、说明并成一行：一个字段底下不再叠两三行小字
+        const meta: ReactNode[] = [];
+        if (invalid) meta.push(<span key="issue" className="text-danger">{issues!.join('；')}</span>);
+        if (hint) {
+            meta.push(
+                <span key="hint" className={hint.tone === 'warning' ? 'text-warning' : 'text-text-tertiary'}>
+                    {hint.text}
+                </span>,
+            );
+        }
+        if (description) meta.push(<span key="desc" className="text-text-tertiary">{description}</span>);
         return (
             <div
                 data-param={field.name}
@@ -243,25 +258,25 @@ const FieldRow = memo(
                         )}
                         title={role ? `认作「${role}」，给了对应的输入方式` : undefined}
                     >
-                        {typeChip(field)}
+                        {chip}
                     </span>
                 </label>
                 <div className="min-w-0">
-                    {control}
-                    {(field.description || invalid) && (
-                        <div id={descId} className="mt-1 space-y-0.5">
-                            {invalid && (
-                                // 不用 role="alert"：敲字时问题一会儿出现一会儿消失，每次都打断朗读；它在 aria-describedby 里，聚焦字段时会读到
-                                <p className="text-2xs leading-snug text-danger">
-                                    {issues!.join('；')}
-                                </p>
-                            )}
-                            {field.description && (
-                                <p className="line-clamp-2 text-2xs leading-snug text-text-tertiary" title={field.description}>
-                                    {field.description}
-                                </p>
-                            )}
-                        </div>
+                    <FieldHintContext.Provider value={setHint}>{control}</FieldHintContext.Provider>
+                    {meta.length > 0 && (
+                        // 不用 role="alert"：敲字时问题一会儿出现一会儿消失，每次都打断朗读；它在 aria-describedby 里，聚焦字段时会读到
+                        <p id={descId} className="mt-1.5 line-clamp-2 text-2xs leading-snug" title={description}>
+                            {meta.map((part, i) => (
+                                <span key={i}>
+                                    {i > 0 && (
+                                        <span aria-hidden className="mx-1.5 text-text-disabled">
+                                            ·
+                                        </span>
+                                    )}
+                                    {part}
+                                </span>
+                            ))}
+                        </p>
                     )}
                 </div>
             </div>

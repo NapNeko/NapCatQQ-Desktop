@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { JsonCodeEditor } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 import { prettyJson, sameJson } from '../viewHelpers';
-import type { FieldProps } from './fieldKit';
+import { useFieldHint, type FieldProps } from './fieldKit';
 
 const toText = (v: unknown) => (v === undefined ? '' : prettyJson(v));
 
@@ -25,6 +25,8 @@ export function JsonField({
         setState(current);
     }
 
+    useFieldHint(current.broken ? { text: '这里的 JSON 还没写完整，参数里仍是上一次的合法值', tone: 'warning' } : null);
+
     const onText = (text: string) => {
         if (text.trim() === '') {
             setState({ text, value: undefined, broken: false });
@@ -41,7 +43,7 @@ export function JsonField({
     };
 
     return (
-        <div id={inputId} className="flex flex-col gap-1">
+        <div id={inputId} className="flex flex-col">
             <JsonCodeEditor
                 value={current.text}
                 onChange={onText}
@@ -49,7 +51,6 @@ export function JsonField({
                 ariaLabel={ariaLabel}
                 className={cn(heightClass, 'flex-none', (invalid || current.broken) && 'border-danger')}
             />
-            {current.broken && <p className="text-2xs text-warning">这里的 JSON 还没写完整，参数里仍是上一次的合法值</p>}
         </div>
     );
 }
