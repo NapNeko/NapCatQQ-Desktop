@@ -103,11 +103,15 @@ function renderLeft(target: DebugTarget | null = NC) {
     return render(<LeftColumn target={target} panel="catalog" />, { wrapper });
 }
 
+// 列表里中文字段名是主名、字段名不显示，按行的 data-flip（a:接口名）认行
 const rowNames = () =>
     screen
         .getAllByRole('treeitem')
         .filter((el) => el.getAttribute('aria-level') !== null && el.getAttribute('aria-expanded') === null)
-        .map((el) => el.querySelector('.font-mono')?.textContent);
+        .map((el) => el.getAttribute('data-flip')?.replace(/^a:/, ''));
+
+// 行上看见的主名是简介，mock 目录的简介就是这个格式（见 action()）
+const summaryOf = (name: string) => `${name} 的简介`;
 
 beforeEach(() => {
     service.catalog.mockReset();
@@ -122,7 +126,7 @@ beforeEach(() => {
 describe('接口目录', () => {
     it('按分类分组，不支持的收进底部默认折叠的一段；点开能看到', async () => {
         renderLeft();
-        await screen.findByText('get_group_list');
+        await screen.findByText('获取群列表');
         const tree = screen.getByRole('tree', { name: '接口目录' });
         expect(within(tree).getByText('消息')).toBeInTheDocument();
         expect(within(tree).getByText('群信息')).toBeInTheDocument();
@@ -131,31 +135,31 @@ describe('接口目录', () => {
 
         const unsupported = screen.getByText('当前 Bot 不支持（1）').closest('[role="treeitem"]') as HTMLElement;
         expect(unsupported).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.queryByText('mystery_action')).not.toBeInTheDocument();
+        expect(screen.queryByText(summaryOf('mystery_action'))).not.toBeInTheDocument();
         fireEvent.click(unsupported);
-        expect(await screen.findByText('mystery_action')).toBeInTheDocument();
+        expect(await screen.findByText(summaryOf('mystery_action'))).toBeInTheDocument();
         // 收回去，别影响后面的用例（折叠状态记在模块里）
         fireEvent.click(unsupported);
     });
 
     it('徽章：仅 NC、参数不同、流式', async () => {
         renderLeft();
-        const row = (await screen.findByText('nc_only_thing')).closest('[role="treeitem"]') as HTMLElement;
+        const row = (await screen.findByText(summaryOf('nc_only_thing'))).closest('[role="treeitem"]') as HTMLElement;
         expect(within(row).getByText('仅 NC')).toBeInTheDocument();
         expect(within(row).getByText('参数不同')).toBeInTheDocument();
-        const stream = screen.getByText('upload_file_stream').closest('[role="treeitem"]') as HTMLElement;
+        const stream = screen.getByText(summaryOf('upload_file_stream')).closest('[role="treeitem"]') as HTMLElement;
         expect(within(stream).getByText('流式')).toBeInTheDocument();
     });
 
     it('折叠分类后它的接口不再显示', async () => {
         renderLeft();
-        await screen.findByText('get_group_list');
+        await screen.findByText('获取群列表');
         const header = screen.getByText('群信息').closest('[role="treeitem"]') as HTMLElement;
         fireEvent.click(header);
         expect(header).toHaveAttribute('aria-expanded', 'false');
-        expect(screen.queryByText('get_group_list')).not.toBeInTheDocument();
+        expect(screen.queryByText('获取群列表')).not.toBeInTheDocument();
         fireEvent.click(header);
-        expect(screen.getByText('get_group_list')).toBeInTheDocument();
+        expect(screen.getByText('获取群列表')).toBeInTheDocument();
     });
 
     it('搜索过滤结果，回车打开第一个；Ctrl+回车另开标签', async () => {
@@ -163,7 +167,7 @@ describe('接口目录', () => {
         const recent = vi.spyOn(debugWorkspaceStore, 'pushRecent');
         const user = userEvent.setup();
         renderLeft();
-        await screen.findByText('get_group_list');
+        await screen.findByText('获取群列表');
 
         // 搜索条默认收在标题行的图标按钮里，先展开
         act(() => revealLeftSearch('catalog'));
@@ -188,7 +192,7 @@ describe('接口目录', () => {
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         const user = userEvent.setup();
         renderLeft();
-        await screen.findByText('get_group_list');
+        await screen.findByText('获取群列表');
         act(() => revealLeftSearch('catalog'));
         const search = screen.getByRole('combobox', { name: '搜索接口' });
 
@@ -207,7 +211,7 @@ describe('接口目录', () => {
     it('单击打开；Ctrl+单击、中键另开标签', async () => {
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         renderLeft();
-        const row = (await screen.findByText('send_group_msg')).closest('[role="treeitem"]') as HTMLElement;
+        const row = (await screen.findByText('发送群消息')).closest('[role="treeitem"]') as HTMLElement;
 
         fireEvent.click(row);
         expect(open).toHaveBeenLastCalledWith('send_group_msg', { newTab: false });
@@ -222,7 +226,7 @@ describe('接口目录', () => {
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         const user = userEvent.setup();
         renderLeft();
-        await screen.findByText('get_group_list');
+        await screen.findByText('获取群列表');
         const tree = screen.getByRole('tree', { name: '接口目录' });
         act(() => tree.focus());
 
@@ -238,7 +242,7 @@ describe('接口目录', () => {
     it('按 / 展开并聚焦搜索框（在输入框里不抢）；空着按 Esc 收回去', async () => {
         const user = userEvent.setup();
         renderLeft();
-        await screen.findByText('get_group_list');
+        await screen.findByText('获取群列表');
         // 默认收着：没有输入框
         expect(screen.queryByRole('combobox', { name: '搜索接口' })).not.toBeInTheDocument();
 
@@ -273,7 +277,7 @@ describe('接口目录', () => {
     it('在线目录不显示快照提示；当前标签打开的接口标出来', async () => {
         debugWorkspaceStore.openAction('get_group_info');
         renderLeft();
-        const row = (await screen.findByText('get_group_info')).closest('[role="treeitem"]') as HTMLElement;
+        const row = (await screen.findByText('获取群信息')).closest('[role="treeitem"]') as HTMLElement;
         expect(row).toHaveAttribute('aria-current', 'true');
         expect(screen.queryByText(/按内置目录显示/)).not.toBeInTheDocument();
     });
@@ -283,19 +287,19 @@ describe('接口目录', () => {
         renderLeft();
         expect(await screen.findByText('读不到接口目录')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /重试/ }));
-        await waitFor(() => expect(screen.getByText('get_group_list')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('获取群列表')).toBeInTheDocument());
     });
 
     it('行上右键菜单里的按键不会冒到列表上打开高亮的那一行', async () => {
         const open = vi.spyOn(debugWorkspaceStore, 'openAction');
         const user = userEvent.setup();
         renderLeft();
-        await screen.findByText('get_group_list');
+        await screen.findByText('获取群列表');
         const tree = screen.getByRole('tree', { name: '接口目录' });
         act(() => tree.focus());
         // 高亮落在 send_group_msg 上
         await user.keyboard('{ArrowDown}{ArrowDown}');
-        fireEvent.contextMenu(screen.getByText('get_group_list').closest('[role="treeitem"]') as HTMLElement);
+        fireEvent.contextMenu(screen.getByText('获取群列表').closest('[role="treeitem"]') as HTMLElement);
         const item = await screen.findByRole('menuitem', { name: '复制接口名' });
         fireEvent.keyDown(item, { key: 'Enter' });
         await new Promise((r) => setTimeout(r, 20));

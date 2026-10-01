@@ -92,9 +92,12 @@ export const CatalogActionRow = memo(function CatalogActionRow({
                                 )}
                             />
                             <span aria-hidden className={cn('h-[7px] w-[7px] shrink-0 rounded-full', SAFETY_DOT_CLASS[action.safety])} />
-                            {/* 简介按 0 起算只吃剩下的地方，窄了先没它；再窄名字才截断，徽章始终完整 */}
-                            <span className="min-w-0 truncate font-mono text-[12px] text-text">{action.name}</span>
-                            <span className="min-w-0 flex-1 truncate text-[11px] text-text-tertiary">{action.summary}</span>
+                            {/* 列表里中文简介就是主名，字段名不显示（悬停提示、右键菜单里有）；没有简介的退回字段名 */}
+                            {action.summary ? (
+                                <span className="min-w-0 flex-1 truncate text-[12px] text-text">{action.summary}</span>
+                            ) : (
+                                <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-text">{action.name}</span>
+                            )}
                             {only && <span className={cn(CHIP, 'bg-info-soft text-info')}>{only}</span>}
                             {action.param_diff && <span className={cn(CHIP, 'bg-warning-soft text-warning')}>参数不同</span>}
                             {action.stream && <span className={cn(CHIP, 'bg-brand-soft text-brand')}>流式</span>}
