@@ -356,6 +356,7 @@ function TabWorkspace({ tab, target, callChannel, scopeRef, animateIn, onRevealC
                 summaryFrom={summaryFrom}
                 catalog={catalog?.actions ?? NO_ACTIONS}
                 target={target}
+                callChannel={callChannel}
                 parsed={parsed}
                 untouched={!dirty}
                 onSave={() => setSaveOpen(true)}
