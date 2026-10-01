@@ -19,6 +19,7 @@ members = [
     "crates/ncd-backend-napcat",
     "crates/ncd-watch",
     "crates/ncd-onebot",
+    "crates/ncd-mcp",
 ]
 resolver = "3"
 

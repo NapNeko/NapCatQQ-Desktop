@@ -272,6 +272,8 @@ pub enum DebugCallOrigin {
     Editor,
     Composer,
     Picker,
+    /// MCP 服务（agent）发起的调用，和用户的一样进历史
+    Mcp,
     Other,
 }
 

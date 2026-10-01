@@ -143,6 +143,7 @@ const ORIGIN_LABEL: Record<string, string> = {
     editor: '',
     composer: '输入框',
     picker: '选择器',
+    mcp: 'MCP',
     other: '其它客户端',
 };
 

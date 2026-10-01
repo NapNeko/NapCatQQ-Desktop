@@ -18,6 +18,7 @@ export const DEFAULT_FEATURES: FeatureToggles = {
     dockerPage: true,
     ncdWatch: true,
     terminal: true,
+    apiDebug: true,
 };
 
 export interface FeatureDef {
@@ -90,13 +91,19 @@ export const FEATURE_GROUPS: ReadonlyArray<FeatureGroup> = [
                 description: '标题栏的终端按钮、Ctrl+` 快捷键、各卡片上的终端入口、「设置 · 终端」',
                 saves: '终端面板和 xterm（约 570 KB 脚本）不再加载',
             },
+            {
+                key: 'apiDebug',
+                label: 'OneBot 调试台',
+                description: '侧栏和 Bot 卡片的「调试」入口',
+                saves: '调试台的接收器、会话和在途调用全部停掉（连 MCP 服务也不能再调）',
+            },
         ],
     },
 ];
 
 export const FEATURE_DEFS: ReadonlyArray<FeatureDef> = FEATURE_GROUPS.flatMap((g) => g.items);
 
-const BOOL_KEYS: ReadonlyArray<FeatureKey> = ['napcat', 'snowluma', 'apps', 'dockerPage', 'ncdWatch', 'terminal'];
+const BOOL_KEYS: ReadonlyArray<FeatureKey> = ['napcat', 'snowluma', 'apps', 'dockerPage', 'ncdWatch', 'terminal', 'apiDebug'];
 
 /** 磁盘上缺字段或不是布尔值的一律当开着；两个协议端都关了就开回 NapCat（和 Rust 端一致）。 */
 export function normalizeFeatures(

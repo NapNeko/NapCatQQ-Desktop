@@ -23,6 +23,7 @@ pub mod errors;
 pub mod ids;
 pub mod kinds;
 pub mod log_snapshot;
+pub mod mcp;
 pub mod migration;
 pub mod napcat_events;
 pub mod node_environment;
@@ -116,6 +117,7 @@ pub use errors::{AppError, ConfigError, MigrationError, PathError, SecretError};
 pub use ids::{BackendId, BotId};
 pub use kinds::{BackendKind, BotFlavor, RuntimeTarget, SchemaVersion, StopMode};
 pub use log_snapshot::LogSnapshot;
+pub use mcp::{McpServerSettings, McpServerStatus};
 pub use migration::{
     BackupInfo, BotRuntimeSummary, MigrationOutcome, MigrationReport, MigrationSource,
     MigrationStage, MigrationWarning,
