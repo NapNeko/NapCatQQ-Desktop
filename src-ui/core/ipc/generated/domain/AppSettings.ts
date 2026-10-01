@@ -3,6 +3,7 @@ import type { AfterCloseUiBehavior } from "./AfterCloseUiBehavior";
 import type { AppUiPreferences } from "./AppUiPreferences";
 import type { CloseAction } from "./CloseAction";
 import type { FeatureToggles } from "./FeatureToggles";
+import type { McpServerSettings } from "./McpServerSettings";
 import type { OfflineEmailSettings } from "./OfflineEmailSettings";
 import type { OfflineOneBotSettings } from "./OfflineOneBotSettings";
 import type { OfflineWebhookSettings } from "./OfflineWebhookSettings";
@@ -102,6 +103,10 @@ uiPreferences: AppUiPreferences,
  * 可选功能模块开关
  */
 features: FeatureToggles, 
+/**
+ * OneBot 调试台的 MCP 服务（本机 JSON-RPC 接口，给外部 agent 用）
+ */
+mcp: McpServerSettings, 
 /**
  * SnowLuma 本地 Node.js 运行环境指定路径（None 或空表示自动按优先级解析：自定义 > 内置 > 组件 > PATH）
  */

@@ -35,4 +35,9 @@ ncdWatch: boolean,
 /**
  * 内嵌终端：标题栏开关、Ctrl+`、各卡片上的终端入口、设置 · 终端
  */
-terminal: boolean, };
+terminal: boolean, 
+/**
+ * OneBot 调试台：侧栏 / Bot 卡片的「调试」入口；关掉时连后端一起停
+ * （接收器和在途调用收掉，`DebugManager::set_enabled` 按它走）
+ */
+apiDebug: boolean, };

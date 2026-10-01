@@ -3,4 +3,4 @@
 /**
  * 这次调用是从界面哪里发起的，历史里据此过滤
  */
-export type DebugCallOrigin = "editor" | "composer" | "picker" | "other";
+export type DebugCallOrigin = "editor" | "composer" | "picker" | "mcp" | "other";
