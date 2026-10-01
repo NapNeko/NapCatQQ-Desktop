@@ -27,6 +27,7 @@ import { invoke, isTauri } from '../ipc/transport';
 import type { AppSettingsDto } from '../ipc/types';
 import type { SnowLumaLinuxPackage } from '../ipc/types';
 import type { AppUiPreferences } from '../ipc/generated/domain/AppUiPreferences';
+import type { McpServerSettings } from '../ipc/generated/domain/McpServerSettings';
 import type { OfflineDeliveryRecord } from '../ipc/generated/domain/OfflineDeliveryRecord';
 import type { EnsureOneBotMessengerHttpResult } from '../ipc/generated/domain/EnsureOneBotMessengerHttpResult';
 import type { OneBotMessengerCandidate } from '../ipc/generated/domain/OneBotMessengerCandidate';
@@ -75,6 +76,8 @@ export interface BackendSettings {
     uiPreferences: AppUiPreferences;
     /** 可选功能模块开关（设置 · 功能） */
     features: FeatureToggles;
+    /** OneBot 调试台的 MCP 服务（只整段透传，设置页暂无对应控件） */
+    mcp: McpServerSettings;
     /** 后台远端主机健康探测 */
     remoteHostHealthProbeEnabled: boolean;
     remoteHostHealthProbeIntervalMs: number;
@@ -222,6 +225,8 @@ function fromDto(dto: AppSettingsDto): BackendSettings {
         notifyOnLoginKicked: dto.settings.notifyOnLoginKicked ?? true,
         uiPreferences: ui,
         features: normalizeFeatures(dto.settings.features),
+        // 不落扁平字段：MCP 设置没有设置页控件，整段带回（丢一次保存服务就被关掉）
+        mcp: dto.settings.mcp,
         remoteHostHealthProbeEnabled: dto.settings.remoteHostHealthProbeEnabled ?? true,
         remoteHostHealthProbeIntervalMs: Number(dto.settings.remoteHostHealthProbeIntervalMs ?? 30_000),
         webHookChannels: channels,
@@ -288,6 +293,7 @@ type AppSettingsDtoInvoke = {
         notifyOnLoginKicked: boolean;
         uiPreferences: AppUiPreferences;
         features: FeatureToggles;
+        mcp: McpServerSettings;
         remoteHostHealthProbeEnabled: boolean;
         remoteHostHealthProbeIntervalMs: number;
         WebHook: {
@@ -392,6 +398,7 @@ function toDtoInvoke(s: BackendSettings): AppSettingsDtoInvoke {
             notifyOnLoginKicked: s.notifyOnLoginKicked,
             uiPreferences: uiPreferencesForInvoke(s.uiPreferences),
             features: normalizeFeatures(s.features),
+            mcp: s.mcp,
             remoteHostHealthProbeEnabled: s.remoteHostHealthProbeEnabled,
             remoteHostHealthProbeIntervalMs: Math.round(s.remoteHostHealthProbeIntervalMs),
             WebHook: {
