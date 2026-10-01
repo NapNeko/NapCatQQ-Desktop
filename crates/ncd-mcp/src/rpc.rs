@@ -179,7 +179,7 @@ mod tests {
         let ctx = test_server_ctx();
         handle_body(
             &ctx,
-            json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}),
+            &json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}),
         )
         .await
         .expect("带 id 的请求一定有应答")
@@ -219,14 +219,14 @@ mod tests {
         let ctx = test_server_ctx();
         let out = handle_body(
             &ctx,
-            json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+            &json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
         )
         .await;
         assert!(out.is_none());
         // 整批都是通知：整体也没应答（HTTP 202）
         let out = handle_body(
             &ctx,
-            json!([
+            &json!([
                 {"jsonrpc": "2.0", "method": "notifications/initialized"},
                 {"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {}},
             ]),
@@ -240,7 +240,7 @@ mod tests {
         let ctx = test_server_ctx();
         let out = handle_body(
             &ctx,
-            json!([
+            &json!([
                 {"jsonrpc": "2.0", "id": 7, "method": "ping"},
                 {"jsonrpc": "2.0", "method": "notifications/initialized"},
                 {"jsonrpc": "2.0", "id": 8, "method": "tools/list"},
@@ -259,7 +259,7 @@ mod tests {
         let ctx = test_server_ctx();
         let first = handle_body(
             &ctx,
-            json!({
+            &json!({
                 "jsonrpc": "2.0", "id": 1, "method": "tools/call",
                 "params": {"name": "set_enabled", "arguments": {"enabled": false}},
             }),
@@ -278,7 +278,7 @@ mod tests {
 
         let replay = handle_body(
             &ctx,
-            json!({
+            &json!({
                 "jsonrpc": "2.0", "id": 2, "method": "tools/call",
                 "params": {"name": "set_enabled", "arguments": {"enabled": false, "confirm_token": token}},
             }),
@@ -295,7 +295,7 @@ mod tests {
         let ctx = test_server_ctx();
         let out = handle_body(
             &ctx,
-            json!({
+            &json!({
                 "jsonrpc": "2.0", "id": 1, "method": "tools/call",
                 "params": {"name": "clear_history", "arguments": {}},
             }),

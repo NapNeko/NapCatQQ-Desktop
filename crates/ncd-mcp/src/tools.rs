@@ -53,6 +53,7 @@ pub(crate) fn tool_exists(name: &str) -> bool {
 }
 
 /// `服务端拒绝 / 参数不对 / 执行失败` 的统一出口：`message` 给人看，`structured` 随结果带走
+#[derive(Debug)]
 pub(crate) struct ToolError {
     pub message: String,
     pub structured: Option<Value>,

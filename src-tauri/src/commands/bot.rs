@@ -608,7 +608,11 @@ mod tests {
             ),
             app_manager,
             terminals: crate::commands::terminal::test_terminals(),
-            onebot_debug,
+            onebot_debug: Arc::clone(&onebot_debug),
+            mcp: Arc::new(ncd_mcp::McpServer::new(
+                onebot_debug,
+                Arc::new(ncd_test_support::MockSecretStore::new()),
+            )),
         };
         (state, bus)
     }
