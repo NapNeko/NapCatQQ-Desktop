@@ -987,6 +987,7 @@ pub fn run() {
             commands::onebot_debug::onebot_debug_catalog,
             commands::onebot_debug::onebot_debug_describe,
             commands::onebot_debug::onebot_debug_call,
+            commands::onebot_debug::onebot_debug_call_stream,
             commands::onebot_debug::onebot_debug_cancel,
             commands::onebot_debug::onebot_debug_save_response,
             commands::onebot_debug::onebot_debug_subscribe,
