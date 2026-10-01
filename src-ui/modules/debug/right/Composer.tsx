@@ -1,4 +1,5 @@
-// 轻量输入框：往当前会话发文字。输入 @ 弹出群成员（只有群聊），选中一条气泡就是回复它。
+// 聊天输入框：往当前会话发文字。输入 @ 弹出群成员（只有群聊），选中一条气泡就是回复它；
+// 旁边的「消息构建器」拼装图片、表情等段——和输入框是同一份草稿的两种视图（段排在手打文字前面发）。
 //
 // 发往哪儿由右栏定：看着某个会话就是那个会话；在「全部」里就是选中的气泡所在的会话，没选中时置灰。
 // 回车发送、Shift + 回车换行、输入法选字时的回车不算；Ctrl + 回车也发（并拦下，免得中栏的发送也跟着触发）。
@@ -16,7 +17,7 @@ import {
     type MouseEvent as ReactMouseEvent,
     type MutableRefObject,
 } from 'react';
-import { AtSign, CornerDownLeft, Reply, SendHorizontal, TriangleAlert, Users, X } from 'lucide-react';
+import { AtSign, Blocks, CornerDownLeft, Reply, SendHorizontal, TriangleAlert, Users, X } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import { Popover, PopoverAnchor, PopoverContent, Spinner, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
 import { IconAction } from './rightParts';
@@ -24,13 +25,11 @@ import { useDebugCall } from '../../../hooks/debug/useDebugCall';
 import { useDebugContacts, type DebugContactOption } from '../../../hooks/debug/useDebugContacts';
 import { debugErrorCopy, retcodeHint } from '../../../core/domain/debug/errorCopy';
 import type { SessionKey } from '../../../core/domain/debug/chat';
+import { messagePreview } from '../../../core/domain/debug/segments';
 import type { DebugCallResponse } from '../../../core/ipc/generated/debug/DebugCallResponse';
 import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import {
-    EMPTY_DRAFT,
-    buildMessageSegments,
-    hasContent,
     mentionLabel,
     mentionQueryAt,
     pruneMentions,
@@ -38,7 +37,16 @@ import {
     type ComposerDraft,
     type Mention,
 } from '../../../core/domain/debug/composerModel';
-import { draftKey, readDraft, writeDraft } from './composerDrafts';
+import {
+    EMPTY_ENTRY,
+    assembleMessage,
+    hasMessageContent,
+    joinDraftText,
+    segmentsToDraft,
+    type ComposerEntry,
+} from '../../../core/domain/debug/messageBuilder';
+import { draftKey, readEntry, writeEntry } from './composerDrafts';
+import { MessageBuilderDialog } from './MessageBuilder';
 
 export interface ComposerTarget {
     session: SessionKey;
@@ -116,7 +124,7 @@ export const Composer = memo(function Composer({
     const key = botId && to ? draftKey(botId, to.session) : null;
     const { send } = useDebugCall();
 
-    const [draft, setDraftState] = useState<ComposerDraft>(() => (key ? readDraft(key) : EMPTY_DRAFT));
+    const [draft, setDraftState] = useState<ComposerEntry>(() => (key ? readEntry(key) : EMPTY_ENTRY));
     const draftRef = useRef(draft);
     draftRef.current = draft;
     const keyRef = useRef(key);
@@ -124,18 +132,21 @@ export const Composer = memo(function Composer({
     // 换了会话：换成那个会话的草稿（渲染时对齐，不多闪一帧旧草稿）
     if (loadedKey !== key) {
         setLoadedKey(key);
-        setDraftState(key ? readDraft(key) : EMPTY_DRAFT);
+        setDraftState(key ? readEntry(key) : EMPTY_ENTRY);
     }
     keyRef.current = key;
 
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [picker, setPicker] = useState<PickerState | null>(null);
+    const [builderOpen, setBuilderOpen] = useState(false);
     const areaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
         setError(null);
         setPicker(null);
+        // 构建器是按当时那份草稿解析的，换了会话就关掉，免得写回到新会话里
+        setBuilderOpen(false);
     }, [key]);
 
     useEffect(() => {
@@ -146,10 +157,31 @@ export const Composer = memo(function Composer({
         };
     }, [focusRef]);
 
-    const setDraft = useCallback((next: ComposerDraft) => {
+    const setEntry = useCallback((next: ComposerEntry) => {
         setDraftState(next);
-        if (keyRef.current) writeDraft(keyRef.current, next);
+        if (keyRef.current) writeEntry(keyRef.current, next);
     }, []);
+
+    // 日常打字只动文字和 @ 名单；构建器段原样留着（文字排在构建器段后面发送）
+    const setDraft = useCallback(
+        (next: ComposerDraft) => {
+            setEntry({ ...next, rich: draftRef.current.rich });
+        },
+        [setEntry],
+    );
+
+    // 构建器段转回输入框：全是 text / at 才换得回来，文字排在手打内容前面；
+    // 有图片等输入框表达不了的段时打开构建器，在那里删掉它们再转
+    const absorbRich = () => {
+        const current = draftRef.current;
+        const back = segmentsToDraft(current.rich, current.mentions);
+        if (!back) {
+            setBuilderOpen(true);
+            return;
+        }
+        const text = joinDraftText(back.text, current.text);
+        setEntry({ text, mentions: dedupe([...back.mentions, ...current.mentions]), rich: [] });
+    };
 
     // ---- 高度跟着内容长，最多 6 行
     useLayoutEffect(() => {
@@ -217,11 +249,8 @@ export const Composer = memo(function Composer({
     };
 
     // ---- 发送
-    const segments = useMemo(
-        () => buildMessageSegments(draft.text, draft.mentions, reply?.messageId),
-        [draft.text, draft.mentions, reply?.messageId],
-    );
-    const sendable = canCompose && !sending && hasContent(segments);
+    const segments = useMemo(() => assembleMessage(draft, reply?.messageId), [draft, reply?.messageId]);
+    const sendable = canCompose && !sending && hasMessageContent(segments);
 
     const submit = async () => {
         if (!sendable || !botId || !to) return;
@@ -246,15 +275,16 @@ export const Composer = memo(function Composer({
         // 发送途中换了会话：只收拾原来那个会话的草稿
         if (keyRef.current !== sentKey) {
             if (sentKey) {
-                const old = readDraft(sentKey);
+                const old = readEntry(sentKey);
                 const text = remainderAfterSend(old.text, sentText);
-                writeDraft(sentKey, { text, mentions: pruneMentions(text, old.mentions) });
+                writeEntry(sentKey, { text, mentions: pruneMentions(text, old.mentions), rich: [] });
             }
             return;
         }
         const current = draftRef.current;
         const text = remainderAfterSend(current.text, sentText);
-        setDraft({ text, mentions: pruneMentions(text, current.mentions) });
+        // 构建器段跟着这次发送一起清空，免得下一条顺手又把图片带出去
+        setEntry({ text, mentions: pruneMentions(text, current.mentions), rich: [] });
         onSent();
     };
 
@@ -321,8 +351,8 @@ export const Composer = memo(function Composer({
 
     return (
         <div className="shrink-0 border-t border-border-subtle/70 px-2 pb-2 pt-1.5">
-            {(reply || (showTarget && to)) && (
-                <div className="mb-1 flex min-w-0 items-center gap-1.5 px-0.5">
+            {(reply || (showTarget && to) || draft.rich.length > 0) && (
+                <div className="mb-1 flex min-w-0 flex-wrap items-center gap-1.5 px-0.5">
                     {showTarget && to && (
                         <span className="inline-flex min-w-0 max-w-[45%] shrink-0 items-center gap-1 rounded-pill bg-inset py-0.5 pl-2 pr-0.5 text-2xs text-text-secondary">
                             {to.type === 'group' ? (
@@ -332,6 +362,20 @@ export const Composer = memo(function Composer({
                             )}
                             <span className="truncate">发到 {to.name}</span>
                             <ChipClose label="不发到这里" onClick={onDismissTarget} />
+                        </span>
+                    )}
+                    {draft.rich.length > 0 && (
+                        <span className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-pill bg-inset py-0.5 pl-2 pr-0.5 text-2xs text-text-secondary">
+                            <Blocks size={10} aria-hidden className="shrink-0" />
+                            <button
+                                type="button"
+                                aria-label="编辑构建内容"
+                                onClick={() => setBuilderOpen(true)}
+                                className="min-w-0 truncate text-left hover:text-text"
+                            >
+                                构建：{messagePreview(draft.rich) || '（空）'}
+                            </button>
+                            <ChipClose label="转回文字输入" onClick={absorbRich} />
                         </span>
                     )}
                     {reply && (
@@ -380,6 +424,17 @@ export const Composer = memo(function Composer({
                                 <AtSign size={14} aria-hidden />
                             </IconAction>
                         )}
+                        <IconAction
+                            label="消息构建器"
+                            tip="消息构建器：拼装图片、表情等段"
+                            disabled={!canCompose}
+                            active={draft.rich.length > 0}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setBuilderOpen(true)}
+                            className="mb-px"
+                        >
+                            <Blocks size={14} aria-hidden />
+                        </IconAction>
                         <textarea
                             ref={areaRef}
                             rows={1}
@@ -456,6 +511,16 @@ export const Composer = memo(function Composer({
                     <ChipClose label="关掉这条提示" onClick={() => setError(null)} className="hover:bg-danger-soft" />
                 </div>
             )}
+            <MessageBuilderDialog
+                open={builderOpen}
+                onOpenChange={setBuilderOpen}
+                entry={draft}
+                replyId={reply?.messageId ?? null}
+                onApply={(next) => {
+                    setEntry(next);
+                    requestAnimationFrame(() => areaRef.current?.focus());
+                }}
+            />
         </div>
     );
 });
