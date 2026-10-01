@@ -66,8 +66,10 @@ fn center_on_work_area(window: &tauri::WebviewWindow) -> Result<(), String> {
 
 /// 调试台顶栏「弹出为独立窗口」:已存在就只聚焦,不重复建窗。
 /// 新窗直接克隆主窗配置(无边框 + 透明 + Mica + 起步隐藏),换 label 和标题。
+/// 必须 async：sync 命令跑在主线程执行器上,建 WebView 的窗口过程要把消息泵回主事件循环,
+/// 从 IPC 里这么干会把整个泵卡死——前端 invoke 永不返回、主窗失去响应（连拖动都不行）
 #[tauri::command]
-pub fn open_debug_window(app: AppHandle) -> Result<(), String> {
+pub async fn open_debug_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(DEBUG_WINDOW_LABEL) {
         let _ = window.show();
         let _ = window.unminimize();
@@ -96,7 +98,7 @@ pub fn open_debug_window(app: AppHandle) -> Result<(), String> {
 /// 弹出窗前端画好首帧后调用:显示 + 聚焦。对齐主窗 show_main_window 的时序,
 /// 起步隐藏是防透明壳在内容就绪前闪白
 #[tauri::command]
-pub fn reveal_debug_window(app: AppHandle) -> Result<(), String> {
+pub async fn reveal_debug_window(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(DEBUG_WINDOW_LABEL)
         .ok_or_else(|| "调试台窗口未找到".to_string())?;
@@ -109,7 +111,7 @@ pub fn reveal_debug_window(app: AppHandle) -> Result<(), String> {
 /// 主窗的调试台入口让位用:弹出窗开着就聚焦它并回 true,主窗不再进调试页。
 /// 同一时间只留一个调试台页面(工作区 / 收藏落盘 JSON 是两窗同一份文件)
 #[tauri::command]
-pub fn focus_debug_window(app: AppHandle) -> bool {
+pub async fn focus_debug_window(app: AppHandle) -> bool {
     let Some(window) = app.get_webview_window(DEBUG_WINDOW_LABEL) else {
         return false;
     };
