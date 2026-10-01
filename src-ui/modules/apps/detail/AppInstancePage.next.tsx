@@ -132,7 +132,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                         running && instance.framework_id === 'astrbot'
                             ? () => void apps.openWebUi(instance.id, '/chat')
                             : running && instance.framework_id === 'koishi'
-                              ? () => void apps.openWebUi(instance.id, '/sandbox')
+                              ? () => goTab('sandbox')
                               : undefined
                     }
                     onLink={() => setLinkOpen(true)}

@@ -88,6 +88,168 @@ impl AppManager {
         Ok(())
     }
 
+    /// 控制台 WebSocket 这条路（沙盒 / 文件 / 数据库 / 指令）的公共前置：在跑 + 回环口 + 适配器
+    async fn koishi_console_ctx(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<(AppInstance, Arc<dyn AppFrameworkAdapter>, u16), AppFrameworkError> {
+        let instance = self.store.require(id).await?;
+        let adapter = self.registry.get(&instance.framework_id)?;
+        koishi_api(adapter.as_ref())?;
+        if instance.state != AppInstanceState::Running {
+            return Err(AppFrameworkError::NotRunning("Koishi 没在运行".into()));
+        }
+        let port = self.desktop_webui_loopback_port(&instance).await?;
+        Ok((instance, adapter, port))
+    }
+
+    pub async fn koishi_sandbox_send(
+        &self,
+        id: &AppInstanceId,
+        platform: &str,
+        user: &str,
+        channel: &str,
+        content: &str,
+    ) -> Result<(), AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .sandbox_send(&instance, port, platform, user, channel, content)
+            .await
+    }
+
+    pub async fn koishi_sandbox_messages(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Vec<KoishiSandboxMessage>, AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .sandbox_messages(&instance, port)
+            .await
+    }
+
+    pub async fn koishi_explorer_tree(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Vec<KoishiFileEntry>, AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .explorer_tree(&instance, port)
+            .await
+    }
+
+    pub async fn koishi_explorer_read(
+        &self,
+        id: &AppInstanceId,
+        path: &str,
+    ) -> Result<KoishiFileContent, AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .explorer_read(&instance, port, path)
+            .await
+    }
+
+    pub async fn koishi_explorer_write(
+        &self,
+        id: &AppInstanceId,
+        path: &str,
+        content: &str,
+        binary: bool,
+    ) -> Result<(), AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .explorer_write(&instance, port, path, content, binary)
+            .await
+    }
+
+    pub async fn koishi_explorer_mkdir(
+        &self,
+        id: &AppInstanceId,
+        path: &str,
+    ) -> Result<(), AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .explorer_mkdir(&instance, port, path)
+            .await
+    }
+
+    pub async fn koishi_explorer_remove(
+        &self,
+        id: &AppInstanceId,
+        path: &str,
+    ) -> Result<(), AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .explorer_remove(&instance, port, path)
+            .await
+    }
+
+    pub async fn koishi_explorer_rename(
+        &self,
+        id: &AppInstanceId,
+        from: &str,
+        to: &str,
+    ) -> Result<(), AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .explorer_rename(&instance, port, from, to)
+            .await
+    }
+
+    pub async fn koishi_database_tables(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Vec<KoishiDatabaseTable>, AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .database_tables(&instance, port)
+            .await
+    }
+
+    pub async fn koishi_database_rows(
+        &self,
+        id: &AppInstanceId,
+        table: &str,
+        offset: u64,
+        limit: u64,
+    ) -> Result<Vec<serde_json::Value>, AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .database_rows(&instance, port, table, offset, limit.min(500))
+            .await
+    }
+
+    pub async fn koishi_commands(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<Vec<KoishiCommandRow>, AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?.commands(&instance, port).await
+    }
+
+    pub async fn koishi_command_update(
+        &self,
+        id: &AppInstanceId,
+        name: &str,
+        config: serde_json::Value,
+    ) -> Result<(), AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .command_update(&instance, port, name, config)
+            .await
+    }
+
+    pub async fn koishi_command_aliases(
+        &self,
+        id: &AppInstanceId,
+        name: &str,
+        aliases: Vec<String>,
+    ) -> Result<(), AppFrameworkError> {
+        let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
+        koishi_api(adapter.as_ref())?
+            .command_aliases(&instance, port, name, aliases)
+            .await
+    }
+
     async fn koishi_context(
         &self,
         id: &AppInstanceId,

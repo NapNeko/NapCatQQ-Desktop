@@ -9,7 +9,6 @@ import {
     ChevronRight,
     Circle,
     Database,
-    ExternalLink,
     FileText,
     FolderTree,
     Hash,
@@ -47,13 +46,13 @@ const BOT_STATE: Record<KoishiBotState, { label: string; tone: 'success' | 'warn
     offline: { label: '离线', tone: 'neutral' },
 };
 
-/** 控制台里值得直达的页（路由是各插件在控制台里注册的） */
-const CONSOLE_LINKS: { path: string; label: string; sub: string; icon: ComponentType<LucideProps> }[] = [
-    { path: '/sandbox', label: '沙盒', sub: '不连 QQ 也能试指令', icon: MessageSquare },
-    { path: '/logs', label: '日志', sub: '按插件筛选', icon: ScrollText },
-    { path: '/database', label: '数据库', sub: '用户、频道和插件的表', icon: Database },
-    { path: '/files', label: '文件', sub: '实例目录里的文件', icon: FileText },
-    { path: '/commands', label: '指令', sub: '别名、权限、冷却', icon: TerminalSquare },
+/** 控制台功能的直达（都是应用内的原生页：试聊 / 日志 / 数据库 / 文件 / 指令） */
+const CONSOLE_LINKS: { tab: string; label: string; sub: string; icon: ComponentType<LucideProps> }[] = [
+    { tab: 'sandbox', label: '试聊', sub: '不连 QQ 也能试指令', icon: MessageSquare },
+    { tab: 'log', label: '日志', sub: '搜索、按级别筛', icon: ScrollText },
+    { tab: 'database', label: '数据库', sub: '用户、频道和插件的表', icon: Database },
+    { tab: 'files', label: '文件', sub: '实例目录里的文件', icon: FileText },
+    { tab: 'commands', label: '指令', sub: '别名、权限、冷却', icon: TerminalSquare },
 ];
 
 function SectionTitle({ children }: { children: ReactNode }) {
@@ -72,8 +71,7 @@ export const KoishiOverviewTab: React.FC<{
     onOpenLink: () => void;
     onStart: () => void;
     starting: boolean;
-    onOpenWebUi: (path?: string) => void;
-}> = ({ instance, config, onGoTab, onOpenLink, onStart, starting, onOpenWebUi }) => {
+}> = ({ instance, config, onGoTab, onOpenLink, onStart, starting }) => {
     const running = instance.state === 'running';
     const linked = !!instance.link;
     const entry = linkNode(config);
@@ -101,9 +99,9 @@ export const KoishiOverviewTab: React.FC<{
         title = '可以在 QQ 上用 Koishi 了';
         sub = '给机器人发一句 help 看看有哪些指令；想要新功能去插件市场挑';
         actions = (
-            <Button size="sm" variant="primary" onClick={() => onOpenWebUi()}>
-                <ExternalLink size={13} />
-                打开控制台
+            <Button size="sm" variant="primary" onClick={() => onGoTab('sandbox')}>
+                <MessageSquare size={13} />
+                去试聊
             </Button>
         );
     } else if (next === 'run' && missing.length === 1) {
@@ -174,13 +172,13 @@ export const KoishiOverviewTab: React.FC<{
             <SectionTitle>当前设置</SectionTitle>
             <SettingTiles instance={instance} config={config} onGoTab={onGoTab} />
 
-            <SectionTitle>控制台</SectionTitle>
+            <SectionTitle>工具</SectionTitle>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
                 {CONSOLE_LINKS.map((l) => (
-                    <ConsoleLink key={l.path} link={l} disabled={!running} onOpen={() => onOpenWebUi(l.path)} />
+                    <ConsoleLink key={l.tab} link={l} disabled={!running} onOpen={() => onGoTab(l.tab)} />
                 ))}
             </div>
-            {!running && <p className="mt-2.5 text-2xs text-text-tertiary">启动后才能打开</p>}
+            {!running && <p className="mt-2.5 text-2xs text-text-tertiary">启动后才能用</p>}
         </div>
     );
 };
@@ -409,7 +407,10 @@ function ConsoleLink({
                 <span className="flex h-8 w-8 items-center justify-center rounded-md bg-inset text-text-tertiary transition-colors group-enabled:group-hover:text-brand">
                     <Icon size={15} />
                 </span>
-                <ExternalLink size={12} className="text-text-disabled" />
+                <ChevronRight
+                    size={13}
+                    className="text-text-disabled transition-colors group-enabled:group-hover:text-text-secondary"
+                />
             </span>
             <span className="min-w-0">
                 <span className="block text-[13px] font-medium text-text">{link.label}</span>

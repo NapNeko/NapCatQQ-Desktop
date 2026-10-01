@@ -1,5 +1,7 @@
 // Koishi 详情页装配：服务器、全局设置、插件树、连接吃同一份类型化配置（整份 koishi.yml），
 // 改动走底部保存条；运行中保存由后端拆成控制台操作当场生效。插件市场自己装卸，不挂保存条。
+// 试聊 / 指令 / 数据库 / 文件是控制台功能的原生版（沙盒协议、指令管理器、dataview、explorer），
+// 改完即生效，也不挂保存条。
 
 import { useState, type ReactNode } from 'react';
 import { TabsContent } from '../../../../shared/ui';
@@ -16,6 +18,10 @@ import { KoishiServerTab } from './KoishiServerTab';
 import { KoishiGlobalTab } from './KoishiGlobalTab';
 import { KoishiPluginsTab } from './KoishiPluginsTab';
 import { KoishiConnectionTab } from './KoishiConnectionTab';
+import { KoishiSandboxTab } from './KoishiSandboxTab';
+import { KoishiCommandsTab } from './KoishiCommandsTab';
+import { KoishiDatabaseTab } from './KoishiDatabaseTab';
+import { KoishiFilesTab } from './KoishiFilesTab';
 
 const NAV: readonly FrameworkNavGroup[] = [
     { id: 'overview', items: [{ value: 'overview', label: '概览' }] },
@@ -35,11 +41,21 @@ const NAV: readonly FrameworkNavGroup[] = [
             { value: 'market', label: '插件市场' },
         ],
     },
+    {
+        id: 'tools',
+        label: '工具',
+        items: [
+            { value: 'sandbox', label: '试聊' },
+            { value: 'commands', label: '指令' },
+            { value: 'database', label: '数据库' },
+            { value: 'files', label: '文件' },
+        ],
+    },
     { id: 'instance', label: '实例', items: [{ value: 'connection', label: '连接' }] },
 ];
 
 const TYPED_TABS = new Set(['overview', 'server', 'global', 'plugins', 'connection']);
-const FILL_PANE = new Set(['plugins', 'market']);
+const FILL_PANE = new Set(['plugins', 'market', 'sandbox', 'database', 'files']);
 
 function tabForIssue(path: string): string {
     if (path.startsWith('server/')) return 'server';
@@ -92,6 +108,18 @@ function KoishiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     }}
                 />
             </TabsContent>
+            <TabsContent value="sandbox" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+                <KoishiSandboxTab instance={instance} />
+            </TabsContent>
+            <TabsContent value="commands" className="pb-8 pt-2">
+                <KoishiCommandsTab instance={instance} />
+            </TabsContent>
+            <TabsContent value="database" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+                <KoishiDatabaseTab instance={instance} />
+            </TabsContent>
+            <TabsContent value="files" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+                <KoishiFilesTab instance={instance} />
+            </TabsContent>
             {pane('overview', (cfg) => (
                 <KoishiOverviewTab
                     instance={instance}
@@ -100,7 +128,6 @@ function KoishiFrameworkDetail({ instance, onSaveHandle, onGoTab, onOpenLink, on
                     onOpenLink={onOpenLink}
                     onStart={() => apps.start(instance.id)}
                     starting={apps.pendingId === instance.id}
-                    onOpenWebUi={(path) => void apps.openWebUi(instance.id, path)}
                 />
             ))}
             {pane('server', (cfg) => (

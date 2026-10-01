@@ -11,11 +11,25 @@ describe('resolveFrameworkUi', () => {
     it('koishi nav and issue routing', () => {
         const ui = resolveFrameworkUi('koishi');
         expect(ui?.defaultTab).toBe('overview');
-        expect(navValues(ui)).toEqual(['overview', 'server', 'global', 'plugins', 'market', 'connection']);
-        // 插件树也是类型化配置的一部分，要挂保存条；市场自己装卸
+        expect(navValues(ui)).toEqual([
+            'overview',
+            'server',
+            'global',
+            'plugins',
+            'market',
+            'sandbox',
+            'commands',
+            'database',
+            'files',
+            'connection',
+        ]);
+        // 插件树也是类型化配置的一部分，要挂保存条；市场和控制台功能页自己干活
         expect(ui?.typedTabs.has('plugins')).toBe(true);
         expect(ui?.typedTabs.has('market')).toBe(false);
+        expect(ui?.typedTabs.has('sandbox')).toBe(false);
         expect(ui?.fillPaneTabs.has('plugins')).toBe(true);
+        expect(ui?.fillPaneTabs.has('sandbox')).toBe(true);
+        expect(ui?.fillPaneTabs.has('files')).toBe(true);
         expect(ui?.tabForIssue('server/port')).toBe('server');
         expect(ui?.tabForIssue('plugins/2/children/0/ident')).toBe('plugins');
         expect(ui?.tabForIssue('prefix')).toBe('global');

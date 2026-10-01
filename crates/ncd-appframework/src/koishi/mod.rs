@@ -27,14 +27,16 @@ use ncd_domain::{
 };
 use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 pub use component::KoishiComponent;
 pub use integration::KoishiIntegration;
 pub use manifest::{KOISHI_FRAMEWORK_ID, koishi_manifest};
 pub use probe::{KoishiPackageInfo, KoishiPluginSchema};
 pub use runtime::{
-    KoishiBotState, KoishiBotStatus, KoishiRuntimeApi, KoishiRuntimeGate, KoishiRuntimeStatus,
+    KoishiBotState, KoishiBotStatus, KoishiCommandRow, KoishiDatabaseTable, KoishiFileContent,
+    KoishiFileEntry, KoishiRuntimeApi, KoishiRuntimeGate, KoishiRuntimeStatus,
+    KoishiSandboxMessage,
 };
 pub use yml::{KoishiInstanceConfig, KoishiPluginNode};
 
@@ -803,6 +805,312 @@ impl KoishiRuntimeApi for KoishiAdapter {
             )
             .await
             .map(|_| ())
+    }
+
+    async fn sandbox_send(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+        platform: &str,
+        user: &str,
+        channel: &str,
+        content: &str,
+    ) -> Result<(), AppFrameworkError> {
+        self.console
+            .sandbox_send(instance.id.as_str(), port, platform, user, channel, content)
+            .await
+    }
+
+    async fn sandbox_messages(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+    ) -> Result<Vec<KoishiSandboxMessage>, AppFrameworkError> {
+        let raw = self
+            .console
+            .sandbox_messages(instance.id.as_str(), port)
+            .await?;
+        Ok(raw.iter().filter_map(KoishiSandboxMessage::from_value).collect())
+    }
+
+    async fn explorer_tree(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+    ) -> Result<Vec<KoishiFileEntry>, AppFrameworkError> {
+        let v = self
+            .snapshot_required(instance, port, "explorer", "explorer 插件（文件管理）被停用了")
+            .await?;
+        serde_json::from_value(v)
+            .map_err(|e| AppFrameworkError::Runtime(format!("文件树解析失败：{e}")))
+    }
+
+    async fn explorer_read(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+        path: &str,
+    ) -> Result<KoishiFileContent, AppFrameworkError> {
+        let v = self
+            .console
+            .request(
+                instance.id.as_str(),
+                port,
+                "explorer/read",
+                vec![json!(path)],
+            )
+            .await?;
+        Ok(KoishiFileContent {
+            base64: v.get("base64").and_then(Value::as_str).unwrap_or_default().into(),
+            mime: v.get("mime").and_then(Value::as_str).map(str::to_string),
+            encoding: v.get("encoding").and_then(Value::as_str).map(str::to_string),
+        })
+    }
+
+    async fn explorer_write(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+        path: &str,
+        content: &str,
+        binary: bool,
+    ) -> Result<(), AppFrameworkError> {
+        self.console
+            .request(
+                instance.id.as_str(),
+                port,
+                "explorer/write",
+                vec![json!(path), json!(content), json!(binary)],
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn explorer_mkdir(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+        path: &str,
+    ) -> Result<(), AppFrameworkError> {
+        self.console
+            .request(instance.id.as_str(), port, "explorer/mkdir", vec![json!(path)])
+            .await?;
+        Ok(())
+    }
+
+    async fn explorer_remove(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+        path: &str,
+    ) -> Result<(), AppFrameworkError> {
+        self.console
+            .request(instance.id.as_str(), port, "explorer/remove", vec![json!(path)])
+            .await?;
+        Ok(())
+    }
+
+    async fn explorer_rename(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+        from: &str,
+        to: &str,
+    ) -> Result<(), AppFrameworkError> {
+        self.console
+            .request(
+                instance.id.as_str(),
+                port,
+                "explorer/rename",
+                vec![json!(from), json!(to)],
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn database_tables(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+    ) -> Result<Vec<KoishiDatabaseTable>, AppFrameworkError> {
+        let v = self
+            .snapshot_required(instance, port, "database", "dataview 插件（数据库页）被停用了")
+            .await?;
+        let mut out = Vec::new();
+        if let Some(tables) = v.get("tables").and_then(Value::as_object) {
+            for (name, t) in tables {
+                out.push(KoishiDatabaseTable {
+                    name: name.clone(),
+                    primary: t
+                        .get("primary")
+                        .and_then(Value::as_array)
+                        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                        .unwrap_or_default(),
+                    fields: t.get("fields").cloned().unwrap_or(Value::Null),
+                    count: t.get("count").and_then(Value::as_u64),
+                });
+            }
+        }
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(out)
+    }
+
+    async fn database_rows(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+        table: &str,
+        offset: u64,
+        limit: u64,
+    ) -> Result<Vec<Value>, AppFrameworkError> {
+        // dataview 的监听器参数全是它自己序列化后的串（字符串前缀 s，日期前缀 d）
+        let v = self
+            .console
+            .request(
+                instance.id.as_str(),
+                port,
+                "database/get",
+                vec![
+                    json!(runtime::dataview_serialize(&json!(table))),
+                    json!(runtime::dataview_serialize(&json!({}))),
+                    json!(runtime::dataview_serialize(&json!({ "limit": limit, "offset": offset }))),
+                ],
+            )
+            .await?;
+        let text = v.as_str().ok_or_else(|| {
+            AppFrameworkError::Runtime("dataview 返回的不是串：database/get".into())
+        })?;
+        let parsed = runtime::dataview_deserialize(text)?;
+        parsed.as_array().cloned().ok_or_else(|| {
+            AppFrameworkError::Runtime("dataview 返回的不是数组：database/get".into())
+        })
+    }
+
+    async fn commands(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+    ) -> Result<Vec<KoishiCommandRow>, AppFrameworkError> {
+        let entry = self
+            .snapshot_required(instance, port, "entry", "控制台入口数据没推过来")
+            .await?;
+        // 指令管理器的那份入口数据：值是 Dict<CommandData>（每条带 paths / initial）
+        let mut rows = Vec::new();
+        if let Value::Object(entries) = &entry {
+            for one in entries.values() {
+                let Some(data) = one.get("data").and_then(Value::as_object) else {
+                    continue;
+                };
+                let looks_like_commands = data
+                    .values()
+                    .next()
+                    .map(|c| c.get("paths").is_some() && c.get("initial").is_some())
+                    .unwrap_or(false);
+                if !looks_like_commands {
+                    continue;
+                }
+                for (name, c) in data {
+                    rows.push(command_row(name, c));
+                }
+            }
+        }
+        rows.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(rows)
+    }
+
+    async fn command_update(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+        name: &str,
+        config: Value,
+    ) -> Result<(), AppFrameworkError> {
+        self.console
+            .request(
+                instance.id.as_str(),
+                port,
+                "command/update",
+                vec![json!(name), json!({ "config": config })],
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn command_aliases(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+        name: &str,
+        aliases: Vec<String>,
+    ) -> Result<(), AppFrameworkError> {
+        // 上游是 Dict<Alias>，新别名给空对象
+        let map: serde_json::Map<String, Value> =
+            aliases.into_iter().map(|a| (a, json!({}))).collect();
+        self.console
+            .request(
+                instance.id.as_str(),
+                port,
+                "command/aliases",
+                vec![json!(name), Value::Object(map)],
+            )
+            .await?;
+        Ok(())
+    }
+}
+
+impl KoishiAdapter {
+    /// 取一份推送，拿不到就说哪个插件可能没开
+    async fn snapshot_required(
+        &self,
+        instance: &AppInstance,
+        port: u16,
+        key: &str,
+        hint: &str,
+    ) -> Result<Value, AppFrameworkError> {
+        match self
+            .console
+            .snapshot(instance.id.as_str(), port, key, runtime::STATUS_WAIT)
+            .await?
+        {
+            Some(v) if !v.is_null() => Ok(v),
+            _ => Err(AppFrameworkError::Runtime(format!(
+                "控制台没推 {key}：{hint}"
+            ))),
+        }
+    }
+}
+
+/// 控制台 entry 里的一条 CommandData → 前端要的一行；initial 上叠 override 成生效值
+fn command_row(name: &str, c: &Value) -> KoishiCommandRow {
+    let pick = |k: &str| c.get(k).cloned().unwrap_or(Value::Null);
+    let initial = pick("initial");
+    let over = pick("override");
+    let mut config = initial.get("config").cloned().unwrap_or(json!({}));
+    if let (Some(base), Some(over)) = (config.as_object_mut(), over.get("config").and_then(Value::as_object)) {
+        for (k, v) in over {
+            base.insert(k.clone(), v.clone());
+        }
+    }
+    let aliases = over
+        .get("aliases")
+        .and_then(Value::as_object)
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default();
+    KoishiCommandRow {
+        name: name.to_string(),
+        children: c
+            .get("children")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .unwrap_or_default(),
+        created: c.get("create").and_then(Value::as_bool).unwrap_or(false),
+        paths: c
+            .get("paths")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .unwrap_or_default(),
+        aliases,
+        config,
     }
 }
 
