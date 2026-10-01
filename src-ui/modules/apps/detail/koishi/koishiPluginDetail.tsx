@@ -1,19 +1,19 @@
 // 插件页右侧：选中节点的详情。头部一张卡（是谁、开没开、能做什么），下面是按 schema 画的配置、
 // 插件自己写的使用说明、加载条件。所有改动都是在整棵树上换出新的一份交回去，走底部保存条。
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { BookOpen, Copy, Folder, FolderInput, Link2, Puzzle, Trash2 } from 'lucide-react';
 import {
     Badge,
     Button,
     FormSection,
+    JsonCodeEditor,
     Popover,
     PopoverClose,
     PopoverContent,
     PopoverTrigger,
     SimpleMarkdown,
     Switch,
-    TextAreaField,
     TextField,
 } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
@@ -31,7 +31,15 @@ import {
     walk,
     type NodePath,
 } from '../../../../core/domain/apps/koishiConfig';
-import { hydrateSchema, missingRequired, renderable } from '../../../../core/domain/apps/koishiSchema';
+import {
+    hydrateSchema,
+    materializeConfig,
+    missingRequired,
+    renderable,
+    simplifyConfig,
+    toJsonSchema,
+    type SNode,
+} from '../../../../core/domain/apps/koishiSchema';
 import { useKoishiPluginSchema } from '../../../../hooks/apps/useKoishiRuntime';
 import { PaneLoading } from '../PaneStatus';
 import { Notice } from './Notice';
@@ -312,22 +320,24 @@ function PluginDetail(props: DetailProps) {
 
             {schema.isLoading ? (
                 <PaneLoading text="正在读取插件的表单…" />
-            ) : formOk && !rawOpen ? (
-                <SchemasteryForm schema={hydrated} value={node.config} onChange={setConfig} disabled={disabled} />
+            ) : formOk ? (
+                <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-end">
+                        <ModeSwitch raw={rawOpen} onChange={setRawOpen} />
+                    </div>
+                    {rawOpen ? (
+                        <RawConfigEditor schema={hydrated} value={node.config} onChange={setConfig} disabled={disabled} />
+                    ) : (
+                        <SchemasteryForm schema={hydrated} value={node.config} onChange={setConfig} disabled={disabled} />
+                    )}
+                </div>
             ) : (
-                <FormSection title="配置" description={!hydrated && !schema.data?.error ? '这个插件没声明配置表单，按 JSON 改' : undefined}>
-                    <RawConfig value={node.config} onChange={setConfig} disabled={disabled} />
-                </FormSection>
-            )}
-
-            {formOk && (
-                <button
-                    type="button"
-                    className="-mt-3 self-start text-2xs text-text-tertiary transition-colors hover:text-text-secondary"
-                    onClick={() => setRawOpen((v) => !v)}
-                >
-                    {rawOpen ? '回到表单' : '按原文（JSON）改这一项'}
-                </button>
+                <FallbackConfig
+                    broken={!!schema.data?.error}
+                    value={node.config}
+                    onChange={setConfig}
+                    disabled={disabled}
+                />
             )}
 
             <MetaSection node={node} />
@@ -335,38 +345,135 @@ function PluginDetail(props: DetailProps) {
     );
 }
 
-function RawConfig({
+/** 表单 / 原文 JSON 切换，样式和日志级别筛选的段控件一致 */
+function ModeSwitch({ raw, onChange }: { raw: boolean; onChange: (raw: boolean) => void }) {
+    return (
+        <div
+            role="tablist"
+            aria-label="配置编辑方式"
+            className="flex h-7 items-center gap-0.5 rounded-md bg-inset/60 p-0.5"
+        >
+            {[
+                { v: false, label: '表单' },
+                { v: true, label: '原文 JSON' },
+            ].map((m) => (
+                <button
+                    key={m.label}
+                    type="button"
+                    role="tab"
+                    aria-selected={raw === m.v}
+                    onClick={() => onChange(m.v)}
+                    className={cn(
+                        'h-6 rounded-sm px-2.5 text-[11.5px] font-medium leading-6 transition-colors',
+                        raw === m.v
+                            ? 'bg-surface text-text shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
+                            : 'text-text-tertiary hover:text-text',
+                    )}
+                >
+                    {m.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+/** 插件没声明配置表单时：空配置不给一堆看不懂的空编辑框，确实要写再展开 */
+function FallbackConfig({
+    broken,
     value,
     onChange,
     disabled,
 }: {
+    /** 包读不到（可能没装上）：原文是唯一的改法，直接摊开 */
+    broken: boolean;
     value: Record<string, unknown>;
     onChange: (next: Record<string, unknown>) => void;
     disabled?: boolean;
 }) {
-    const [text, setText] = useState(() => JSON.stringify(value, null, 2));
+    const [forceOpen, setForceOpen] = useState(false);
+    const empty = Object.keys(value).length === 0;
+    if (empty && !broken && !forceOpen) {
+        return (
+            <FormSection title="配置">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-border-subtle px-4 py-3.5">
+                    <p className="text-xs leading-relaxed text-text-tertiary">
+                        这个插件没有声明配置项，保持空配置就行；少数插件仍接受自定义键
+                    </p>
+                    <Button size="sm" variant="ghost" onClick={() => setForceOpen(true)}>
+                        按原文 JSON 写
+                    </Button>
+                </div>
+            </FormSection>
+        );
+    }
+    return <RawConfigEditor schema={null} value={value} onChange={onChange} disabled={disabled} />;
+}
+
+/**
+ * 原文 JSON：CodeMirror（着色、括号配对、语法诊断，schema 在时给键名 / 枚举补全）。
+ * 空配置打开时按 schema 默认值预填，写回时把和默认值一样的键删掉，koishi.yml 保持干净。
+ */
+function RawConfigEditor({
+    schema,
+    value,
+    onChange,
+    disabled,
+}: {
+    schema: SNode | null;
+    value: Record<string, unknown>;
+    onChange: (next: Record<string, unknown>) => void;
+    disabled?: boolean;
+}) {
+    const [text, setText] = useState(() => {
+        const base = Object.keys(value).length > 0 ? value : schema ? materializeConfig(schema, value) : value;
+        return JSON.stringify(base, null, 2);
+    });
     const [error, setError] = useState<string | null>(null);
+    const jsonSchema = useMemo(
+        () => (schema ? toJsonSchema(schema, value) : null),
+        // 只在进原文模式时取一次；值本身边改边进不了补全，不影响
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [schema],
+    );
+    const commit = (raw: string) => {
+        try {
+            const parsed = raw.trim() ? JSON.parse(raw) : {};
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('要是一个对象');
+            onChange(schema ? simplifyConfig(schema, parsed as Record<string, unknown>) : (parsed as Record<string, unknown>));
+            setError(null);
+        } catch (e) {
+            setError(`不是合法的 JSON 对象：${(e as Error).message}`);
+        }
+    };
     return (
-        <TextAreaField
-            label="koishi.yml 里这一项的内容（JSON）"
-            hint={error ?? '失焦时写回'}
-            error={error ?? undefined}
-            value={text}
-            mono
-            minRows={8}
-            disabled={disabled}
-            onValueChange={setText}
-            onBlur={() => {
-                try {
-                    const parsed = text.trim() ? JSON.parse(text) : {};
-                    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('要是一个对象');
-                    onChange(parsed as Record<string, unknown>);
-                    setError(null);
-                } catch (e) {
-                    setError(`不是合法的 JSON 对象：${(e as Error).message}`);
-                }
-            }}
-        />
+        <FormSection
+            title="配置原文"
+            description="就是 koishi.yml 里这一项的内容；没写的键按默认值生效，写回时和默认值一样的键不落下"
+            actions={
+                <Button size="sm" variant="secondary" disabled={disabled} onClick={() => commit(text)}>
+                    写回配置
+                </Button>
+            }
+        >
+            <div
+                onBlur={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) commit(text);
+                }}
+            >
+                <JsonCodeEditor
+                    className="h-64 flex-none"
+                    value={text}
+                    onChange={setText}
+                    schema={jsonSchema}
+                    readOnly={disabled}
+                    onSubmit={() => commit(text)}
+                    ariaLabel="插件配置原文 JSON"
+                />
+            </div>
+            <p className={cn('mt-2 text-2xs', error ? 'text-danger' : 'text-text-tertiary')}>
+                {error ?? '失焦或 Ctrl+Enter 写回；语法错误会在行号旁边标出来'}
+            </p>
+        </FormSection>
     );
 }
 

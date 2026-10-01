@@ -35,6 +35,8 @@ export interface LogEntry {
     rawLine?: string;
     /** 正文里带颜色的段（text 的偏移），来自上游输出的终端颜色码 */
     spans?: AnsiSpan[];
+    /** Koishi 日志的来源名（loader / app / 插件名），从正文挖出来在界面上单独画 */
+    scope?: string;
     /** 没有自己的时间和等级，接着上一行（堆栈、多行输出）：等级跟上一行，界面不再重复时间和标签 */
     continuation?: boolean;
 }
@@ -141,8 +143,10 @@ export function parseLogLevel(line: string): LogLevel {
     return tagged === 'unknown' ? standaloneLevel(cleaned) : tagged;
 }
 
-/** 行里明写的等级：`[INFO]` 或 `| INFO |` */
+/** 行里明写的等级：`[INFO]`、`| INFO |` 或 Koishi 的 `时间 [I]` */
 function taggedLevel(cleaned: string): LogLevel {
+    const koishi = cleaned.match(KOISHI_TS_PREFIX);
+    if (koishi) return KOISHI_LEVEL_LETTER[koishi[2]] ?? 'unknown';
     const bracket = cleaned.match(BRACKET_LEVEL_PATTERN);
     if (bracket) {
         return normalizeLevel(bracket[1]);
@@ -213,6 +217,18 @@ const NAPCAT_TS_PREFIX =
     /^(\d{1,2}-\d{1,2})\s+(\d{1,2}:\d{2}:\d{2})\s+(.*)$/;
 const NAPCAT_STAMP = /^\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}:\d{2}/;
 
+// Koishi: `2026-09-29 21:22:14 [I] loader apply plugin …`，全年月日 + 单字母等级 + 来源名打头
+const KOISHI_TS_PREFIX =
+    /^\d{4}-\d{2}-\d{2}\s+(\d{1,2}:\d{2}:\d{2})\s+\[([DIWES])\]\s+(.*)$/;
+
+const KOISHI_LEVEL_LETTER: Record<string, LogLevel> = {
+    D: 'debug',
+    I: 'info',
+    W: 'warn',
+    E: 'error',
+    S: 'success',
+};
+
 // SnowLuma daemon: 22:21:24 INFO               [App] ...（无月日）
 const SNOWLUMA_TS_PREFIX =
     /^(\d{1,2}:\d{2}:\d{2})\s+(INFO|WARN|WARNING|ERROR|DEBUG|TRACE|OK|FATAL)?\s*(.*)$/i;
@@ -241,11 +257,15 @@ function normalizeClock(ts: string): string {
 interface LineSplit {
     timestamp: string;
     /** 行里自带时间的格式；none 是没带，时间用 fallback */
-    kind: 'framework' | 'bracket' | 'napcat' | 'snowluma' | 'none';
+    kind: 'framework' | 'bracket' | 'napcat' | 'snowluma' | 'koishi' | 'none';
     /** 时间戳在原文里结束的位置，看它的颜色判等级用 */
     stampEnd: number;
     /** 从正文挖掉的区间：时间前缀、等级标签 */
     cuts: Array<[number, number]>;
+    /** Koishi 行自带的单字母等级（D/I/W/E/S），已在别处识别出就不设 */
+    level?: LogLevel;
+    /** Koishi 行的来源名（loader / app / 插件名），从正文里挖出来单独画 */
+    scope?: string;
 }
 
 function splitLine(cleaned: string, fallbackTs: string): LineSplit {
@@ -258,6 +278,23 @@ function splitLine(cleaned: string, fallbackTs: string): LineSplit {
             stampEnd: bodyStart,
             cuts: [[0, bodyStart]],
         });
+    }
+    const ko = cleaned.match(KOISHI_TS_PREFIX);
+    if (ko) {
+        const bodyStart = cleaned.length - ko[3].length;
+        // 来源名跟着等级标签：`[I] loader apply …` → scope = loader，连着后面的空格一起挖掉
+        const scopeMatch = ko[3].match(/^(\S+)(?:\s+|$)/);
+        const scope = scopeMatch?.[1];
+        const cuts: Array<[number, number]> = [[0, bodyStart]];
+        if (scope) cuts.push([bodyStart, bodyStart + scopeMatch[0].length]);
+        return {
+            timestamp: normalizeClock(ko[1]),
+            kind: 'koishi',
+            stampEnd: bodyStart,
+            cuts,
+            level: KOISHI_LEVEL_LETTER[ko[2]],
+            scope,
+        };
     }
     const br = cleaned.match(BRACKET_TS_PREFIX);
     if (br) {
@@ -445,7 +482,7 @@ function buildEntry(
     if (!cleaned.trim()) return null;
     const split = splitLine(cleaned, fallbackTs);
     const body = cutAnsi(parsed, split.cuts);
-    let level = taggedLevel(cleaned);
+    let level = split.level ?? taggedLevel(cleaned);
     if (level === 'unknown' && split.kind === 'napcat') {
         level = stampColorLevel(parsed, split.stampEnd) ?? 'unknown';
     }
@@ -459,6 +496,7 @@ function buildEntry(
         timestamp: split.timestamp,
     };
     if (body.spans.length) entry.spans = body.spans;
+    if (split.scope) entry.scope = split.scope;
     if (continuation) entry.continuation = true;
     return entry;
 }
@@ -529,7 +567,7 @@ export function filterLogs(
 ): LogEntry[] {
     const q = query.toLowerCase();
     return logs.filter((log) => {
-        const haystack = [log.text, log.context, log.rawLine].filter(Boolean).join(' ').toLowerCase();
+        const haystack = [log.text, log.context, log.scope, log.rawLine].filter(Boolean).join(' ').toLowerCase();
         const matchesSearch = !q || haystack.includes(q);
         const matchesChannel = channelFilter === 'all' || log.channel === channelFilter;
         const matchesLevel = levelFilter === 'all' || log.level === levelFilter;

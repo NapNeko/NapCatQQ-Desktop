@@ -4,14 +4,18 @@ import {
     blankOf,
     describe as describeNode,
     hydrateSchema,
+    materializeConfig,
     missingRequired,
     objectFields,
     objectSections,
     renderable,
     schemaText,
+    simplifyConfig,
     taggedBranch,
+    toJsonSchema,
     unionShape,
     visibleBranches,
+    visibleFields,
 } from './koishiSchema';
 
 const table = schemas as Record<string, { schema: unknown; usage: string | null }>;
@@ -75,5 +79,40 @@ describe('koishiSchema', () => {
         expect(blankOf({ uid: 0, type: 'number', meta: { min: 5 } })).toBe(5);
         expect(blankOf({ uid: 0, type: 'boolean', meta: {} })).toBe(false);
         expect(blankOf({ uid: 0, type: 'string', meta: { default: 'a' } })).toBe('a');
+    });
+
+    it('materializeConfig 给没写的键补默认值，原文模式打开不是一张白纸', () => {
+        const help = hydrateSchema(table.help.schema)!;
+        expect(materializeConfig(help, {})).toEqual({ shortcut: true, options: true });
+        // 写了的不动
+        expect(materializeConfig(help, { shortcut: false })).toEqual({ shortcut: false, options: true });
+        // 标签联合段（adapter-onebot 的连接设置）按当前判别值展开分支字段
+        const onebot = hydrateSchema(table['adapter-onebot'].schema)!;
+        const m = materializeConfig(onebot, { selfId: '10001' });
+        expect(m.selfId).toBe('10001');
+        // 默认分支是 ws-reverse：path 等分支字段的默认值补得出来
+        expect(visibleFields(onebot, {}).map((f) => f.key)).toContain('path');
+        expect(m.path).toBeDefined();
+    });
+
+    it('simplifyConfig 把和默认值一样的键删掉，自加的键留着', () => {
+        const help = hydrateSchema(table.help.schema)!;
+        expect(simplifyConfig(help, { shortcut: true, options: false })).toEqual({ options: false });
+        expect(simplifyConfig(help, { shortcut: true, extra: 1 })).toEqual({ extra: 1 });
+    });
+
+    it('toJsonSchema 出顶层键、必填和枚举，给原文编辑器补全用', () => {
+        const node = hydrateSchema(table.server.schema)!;
+        const js = toJsonSchema(node, {})!;
+        expect(js.type).toBe('object');
+        const props = js.properties as Record<string, { type?: string }>;
+        expect(props.port).toMatchObject({ type: 'number' });
+        expect(props.host).toMatchObject({ type: 'string' });
+
+        const global = hydrateSchema(table[''].schema)!;
+        const gjs = toJsonSchema(global, {})!;
+        const gprops = gjs.properties as Record<string, { enum?: unknown[] }>;
+        const i18n = gprops.i18n;
+        expect(i18n).toBeTruthy();
     });
 });
