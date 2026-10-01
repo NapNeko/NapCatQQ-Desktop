@@ -18,7 +18,7 @@ pub use envelope::{
 };
 pub use http::HttpActionClient;
 pub use sse::{SseFrame, SseParser, SseTooLarge};
-pub use ws::{WsClient, connect_ws};
+pub use ws::{WsClient, WsStreamCall, connect_ws};
 
 /// 客户端层的失败。都是「没拿到回包」的情形；拿到了回包但 retcode 非 0 不算错误
 #[derive(Debug, thiserror::Error)]

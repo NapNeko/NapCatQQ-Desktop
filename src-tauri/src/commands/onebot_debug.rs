@@ -13,9 +13,10 @@ use ncd_domain::onebot_debug::{
     DebugActionSpec, DebugCallRequest, DebugCallResponse, DebugCatalog, DebugChannelId,
     DebugChannelInfo, DebugChannels, DebugCollections, DebugEvent, DebugEventBatch,
     DebugHistoryEntry, DebugHistoryPage, DebugHistoryQuery, DebugReceiverInfo, DebugStorageNotice,
-    DebugSubscribeResponse, DebugTarget, DebugWorkspace,
+    DebugStreamCallRequest, DebugStreamProgress, DebugSubscribeResponse, DebugTarget,
+    DebugWorkspace,
 };
-use ncd_runtime::DebugEventSink;
+use ncd_runtime::{DebugEventSink, DebugStreamSink};
 use ncd_runtime::onebot_debug::error_text;
 use tauri::ipc::Channel;
 use tauri::{State, Webview};
@@ -98,6 +99,28 @@ pub async fn onebot_debug_call(
     request: DebugCallRequest,
 ) -> Result<DebugCallResponse, String> {
     Ok(state.onebot_debug.call(request).await)
+}
+
+/// 流式调用：分块上传 / 下载的进度经 `Channel<DebugStreamProgress>` 推，结果照普通调用回来；
+/// 取消复用 `onebot_debug_cancel`——inflight 登记是共享的
+#[tauri::command]
+pub async fn onebot_debug_call_stream(
+    state: State<'_, AppState>,
+    request: DebugStreamCallRequest,
+    progress: Channel<DebugStreamProgress>,
+) -> Result<DebugCallResponse, String> {
+    struct ProgressSink {
+        channel: Channel<DebugStreamProgress>,
+    }
+    impl DebugStreamSink for ProgressSink {
+        fn send(&self, progress: &DebugStreamProgress) -> bool {
+            self.channel.send(progress.clone()).is_ok()
+        }
+    }
+    Ok(state
+        .onebot_debug
+        .call_stream(request, Arc::new(ProgressSink { channel: progress }))
+        .await)
 }
 
 #[tauri::command]

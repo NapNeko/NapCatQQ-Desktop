@@ -32,7 +32,7 @@ use uuid::Uuid;
 
 use super::params::{cap_record_params, serialized_len};
 
-const DIR_NAME: &str = "onebot-debug";
+pub(super) const DIR_NAME: &str = "onebot-debug";
 const WORKSPACE_FILE: &str = "workspace.json";
 const COLLECTIONS_FILE: &str = "collections.json";
 const HISTORY_FILE: &str = "history.jsonl";

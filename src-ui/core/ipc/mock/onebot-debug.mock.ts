@@ -27,6 +27,8 @@ import type { DebugHost } from '../generated/debug/DebugHost';
 import type { DebugReceiverInfo } from '../generated/debug/DebugReceiverInfo';
 import type { DebugStorageNotice } from '../generated/debug/DebugStorageNotice';
 import type { DebugSubscribeResponse } from '../generated/debug/DebugSubscribeResponse';
+import type { DebugStreamCallRequest } from '../generated/debug/DebugStreamCallRequest';
+import type { DebugStreamProgress } from '../generated/debug/DebugStreamProgress';
 import type { DebugTarget } from '../generated/debug/DebugTarget';
 import type { DebugWorkspace } from '../generated/debug/DebugWorkspace';
 import type { DebugActionSpec } from '../generated/debug/DebugActionSpec';
@@ -1449,6 +1451,43 @@ export const onebotDebugMock = {
         respond(buildMockSpec(backend, action, catalogFlavor(botId))),
 
     call,
+
+    /**
+     * 假流式调用：先把 4 拍进度推完，再按普通调用收尾；
+     * 取消在进入普通调用之后才生效（预览不急这两拍）
+     */
+    callStream: async (
+        request: DebugStreamCallRequest,
+        onProgress: (p: DebugStreamProgress) => void,
+    ): Promise<DebugCallResponse> => {
+        const total = 4 * 1024 * 1024;
+        const name = request.local_files[0]?.path.split(/[\\/]/).pop() ?? 'preview.bin';
+        for (const ratio of [0.1, 0.4, 0.7, 1]) {
+            await respond(undefined);
+            onProgress({
+                v: 1,
+                request_id: request.request_id,
+                stage: 'uploading',
+                file_name: name,
+                done_bytes: Math.round(total * ratio),
+                total_bytes: total,
+                done_chunks: 0,
+                total_chunks: null,
+            });
+        }
+        return call({
+            request_id: request.request_id,
+            bot_id: request.bot_id,
+            channel: request.channel,
+            action: request.action,
+            params: request.params,
+            timeout_ms: request.timeout_ms,
+            origin: request.origin,
+        });
+    },
+
+    pickLocalFile: (): Promise<{ path: string; name: string } | null> =>
+        respond({ path: 'C:\\预览\\本机文件.png', name: '本机文件.png' }),
 
     cancel: (requestId: string): Promise<void> => {
         pending.get(requestId)?.cancel();

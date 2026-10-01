@@ -16,12 +16,13 @@ import type { DebugChannelChoice } from '../../core/ipc/generated/debug/DebugCha
 import type { DebugChannelId } from '../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugLayout } from '../../core/ipc/generated/debug/DebugLayout';
 import type { DebugRequestDraft } from '../../core/ipc/generated/debug/DebugRequestDraft';
+import type { DebugStreamProgress } from '../../core/ipc/generated/debug/DebugStreamProgress';
 import type { DebugWorkspace } from '../../core/ipc/generated/debug/DebugWorkspace';
 import { channelIdKey } from './keys';
 
 export interface TabRun {
-    /** 正在等的那次调用；同一标签连发时只认最后一次 */
-    inflight?: { requestId: string; startedAt: number };
+    /** 正在等的那次调用；同一标签连发时只认最后一次。流式调用的最新一拍进度挂在 progress 上 */
+    inflight?: { requestId: string; startedAt: number; progress?: DebugStreamProgress };
     /** 最近一次拿到的结果；记下 Bot 和动作，视图据此丢掉切了 Bot / 换了动作之后才回来的旧结果 */
     last?: { response: DebugCallResponse; at: number; botId: string; action: string };
 }

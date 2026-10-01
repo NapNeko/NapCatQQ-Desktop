@@ -159,7 +159,7 @@ export const RequestHeader = memo(function RequestHeader({
                     </Badge>
                 )}
                 {stream && (
-                    <Badge tone="brand" title="流式接口第二期支持调用，现在只能看文档">
+                    <Badge tone="brand" title="一次请求多帧回答；分块传输只走内部通道">
                         流式
                     </Badge>
                 )}

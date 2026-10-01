@@ -367,6 +367,80 @@ pub struct DebugCallResponse {
 }
 
 // ---------------------------------------------------------------------------
+// 流式调用（分块上传 / 下载）
+// ---------------------------------------------------------------------------
+
+/// 流式调用的进度信封版本
+pub const DEBUG_STREAM_VERSION: u32 = 1;
+
+/// 参数里「这个字符串值要用本机文件替换」的标记前缀，后面直接跟本机绝对路径。
+/// 前后端各持一份同一字面量（前端在 `core/domain/debug/streamActions.ts`）
+pub const LOCAL_FILE_TOKEN_PREFIX: &str = "ncd-local-file://";
+
+/// 流式调用进行到哪一步了；界面按它决定进度的名目
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/debug/")]
+pub enum DebugStreamStage {
+    /// 读本机文件、算校验
+    Reading,
+    /// 分块往 Bot 一侧传
+    Uploading,
+    /// 从 Bot 一侧收分块
+    Downloading,
+    /// 传输完成，正在发起目标动作
+    Calling,
+}
+
+/// 流式调用推给前端的一拍进度，经 `Channel<DebugStreamProgress>` 逐拍推，`v` 为
+/// [`DEBUG_STREAM_VERSION`]。字节数测不出来时（上游先给信息帧才给总量）`total_*` 为空，
+/// 前端此时只显示已传量，不算百分比
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/debug/")]
+pub struct DebugStreamProgress {
+    pub v: u32,
+    pub request_id: String,
+    pub stage: DebugStreamStage,
+    /// 正在传的文件名（分块下载在收到信息帧之前是空串）
+    pub file_name: String,
+    #[ts(type = "number")]
+    pub done_bytes: u64,
+    #[ts(type = "number | null")]
+    pub total_bytes: Option<u64>,
+    pub done_chunks: u32,
+    pub total_chunks: Option<u32>,
+}
+
+/// 一处要用本机文件替换的参数：`params` 里所有值为 `token` 的字符串都换成文件传到
+/// Bot 一侧之后的路径。`path` 同时编进 `token`（[`LOCAL_FILE_TOKEN_PREFIX`] 前缀 + 路径原文），
+/// 后端按前缀拆出来，不另存映射
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/debug/")]
+pub struct DebugLocalFile {
+    pub path: String,
+    pub token: String,
+}
+
+/// 一次流式调用（`onebot_debug_call_stream`）。与 [`DebugCallRequest`] 拆开是因为
+/// 它多带一批本机文件占位、中途有进度要推
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/debug/")]
+pub struct DebugStreamCallRequest {
+    /// 前端生成，用来取消和对账
+    pub request_id: String,
+    pub bot_id: String,
+    pub channel: DebugChannelId,
+    pub action: String,
+    #[ts(type = "unknown")]
+    pub params: serde_json::Value,
+    /// 需要先用本机文件替换的参数标记；空就是纯传输 / 纯调用
+    #[serde(default)]
+    pub local_files: Vec<DebugLocalFile>,
+    pub timeout_ms: Option<u32>,
+    pub origin: DebugCallOrigin,
+}
+
+// ---------------------------------------------------------------------------
 // 事件流
 // ---------------------------------------------------------------------------
 
@@ -860,5 +934,44 @@ mod tests {
             }],
         };
         assert_eq!(round_trip(&batch), batch);
+    }
+
+    #[test]
+    fn stream_request_tolerates_missing_local_files() {
+        // 老的前端（或手写的调用）不带 local_files 字段也要能反序列化
+        let request: DebugStreamCallRequest = serde_json::from_str(
+            r#"{
+                "request_id": "r1", "bot_id": "1",
+                "channel": {"kind": "internal"}, "action": "upload_file_stream",
+                "params": {}, "timeout_ms": null, "origin": "editor"
+            }"#,
+        )
+        .unwrap();
+        assert!(request.local_files.is_empty());
+    }
+
+    #[test]
+    fn stream_progress_round_trips_with_optional_totals() {
+        let progress = DebugStreamProgress {
+            v: DEBUG_STREAM_VERSION,
+            request_id: "r1".into(),
+            stage: DebugStreamStage::Downloading,
+            file_name: "a.png".into(),
+            done_bytes: 4096,
+            total_bytes: None,
+            done_chunks: 4,
+            total_chunks: None,
+        };
+        let json = serde_json::to_string(&progress).unwrap();
+        assert!(json.contains(r#""stage":"downloading""#));
+        assert!(json.contains(r#""total_bytes":null"#));
+        assert_eq!(round_trip(&progress), progress);
+
+        let file = DebugLocalFile {
+            path: "C:\\tmp\\a.png".into(),
+            token: format!("{LOCAL_FILE_TOKEN_PREFIX}C:\\tmp\\a.png"),
+        };
+        assert!(file.token.starts_with(LOCAL_FILE_TOKEN_PREFIX));
+        assert_eq!(round_trip(&file), file);
     }
 }

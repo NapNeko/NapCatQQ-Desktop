@@ -255,7 +255,7 @@ pub use notify::{
     SwappableOneBotEndpointResolver, resolve_local_onebot_messenger, send_offline_email,
     send_offline_webhook, send_test_email, send_test_webhook,
 };
-pub use onebot_debug::{DebugBotPort, DebugEventSink, DebugManager};
+pub use onebot_debug::{DebugBotPort, DebugEventSink, DebugManager, DebugStreamSink};
 pub use path_probe_impl::LocalPathProbe;
 pub use remote::importable_bots::collect_importable_remote_bots;
 pub use remote::inventory::{

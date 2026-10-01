@@ -21,6 +21,7 @@ mod port;
 mod receiver;
 mod session;
 mod storage;
+mod stream;
 #[cfg(test)]
 mod tests;
 
@@ -48,6 +49,7 @@ use session::BotSession;
 pub use errors::error_text;
 pub use plan::{ChannelPlan, Reach, pick_auto, plan_channels};
 pub use port::{DebugBotPort, DebugBotView, DebugEventSink};
+pub use stream::DebugStreamSink;
 
 /// 只保留最近这么多次超大回包的全文，够「另存为」用，又不至于把内存吃满
 const LARGE_RESPONSES_KEPT: usize = 3;
@@ -407,7 +409,7 @@ fn lock_std<T>(mutex: &StdMutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn debug_host(config: &BotConfig) -> DebugHost {
+pub(super) fn debug_host(config: &BotConfig) -> DebugHost {
     match RuntimeScenario::from_config(config) {
         Ok(RuntimeScenario::LocalNative { .. }) => DebugHost::Local,
         Ok(RuntimeScenario::RemoteNative { server_id, .. }) => DebugHost::Remote { server_id },

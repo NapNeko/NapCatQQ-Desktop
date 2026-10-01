@@ -14,10 +14,12 @@ import { useNowMs } from '../../../hooks/ui/useNowMs';
 import { channelIdKey } from '../../../hooks/debug/keys';
 import { channelShortLabel, channelStatusCopy } from '../../../core/domain/debug/channelCopy';
 import { channelSelectable, channelTriggerLabel, effectiveChannelId, findChannel, sameChannel } from '../../../core/domain/debug/channelPick';
+import { progressText } from '../../../core/domain/debug/streamActions';
 import type { ParamIssue } from '../../../core/domain/debug/validate';
 import type { DebugActionSafety } from '../../../core/ipc/generated/debug/DebugActionSafety';
 import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugChannels } from '../../../core/ipc/generated/debug/DebugChannels';
+import type { DebugStreamProgress } from '../../../core/ipc/generated/debug/DebugStreamProgress';
 import { MOD_KEY_LABEL } from '../TopBar';
 import { issueRoot } from './ParamsForm';
 import { Kbd } from './centerParts';
@@ -45,6 +47,8 @@ export interface SendBarProps {
     safety: DebugActionSafety | null;
     /** 正在等回包的那次调用是什么时候发的；没在等是 null */
     inflightSince: number | null;
+    /** 流式调用（分块上传 / 下载）的最新一拍进度；普通调用是 null */
+    progress: DebugStreamProgress | null;
     onSend: () => void;
     onCancel: () => void;
     onJumpToIssue: (name: string) => void;
@@ -61,6 +65,7 @@ export const SendBar = memo(function SendBar({
     issues,
     safety,
     inflightSince,
+    progress,
     onSend,
     onCancel,
     onJumpToIssue,
@@ -137,10 +142,11 @@ export const SendBar = memo(function SendBar({
                 </span>
                 {inflight ? (
                     <div className="flex shrink-0 items-center gap-2">
-                        {/* 计时每 100ms 变一次，不能做成 live region；开始 / 结束由下面那段隐藏文字播报 */}
+                        {/* 计时每 100ms 变一次，不能做成 live region；开始 / 结束由下面那段隐藏文字播报。
+                            有进度时进度比计时更有用，收在右边：字数随节拍变但不刷屏 */}
                         <span className="inline-flex items-center gap-1.5 text-xs tabular-nums text-text-secondary">
                             <Spinner size="xs" tone="brand" label="正在等回包" />
-                            {elapsedText(now - inflightSince)}
+                            {progress ? <span className="max-w-[16rem] truncate">{progressText(progress)}</span> : elapsedText(now - inflightSince)}
                         </span>
                         <Button size="sm" variant="secondary" onClick={onCancel}>
                             <Square size={11} strokeWidth={2.6} aria-hidden />

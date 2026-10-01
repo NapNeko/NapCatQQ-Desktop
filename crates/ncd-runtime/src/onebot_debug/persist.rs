@@ -23,7 +23,7 @@ use tokio::sync::{OnceCell, mpsc, watch};
 use tracing::warn;
 
 use super::DebugManager;
-use super::storage::DebugStore;
+use super::storage::{DIR_NAME, DebugStore};
 
 /// 排队等写的历史条数上限。正常情况下写入远快于人点「发送」，满了说明磁盘卡住了
 const HISTORY_QUEUE_CAP: usize = 256;
@@ -48,6 +48,11 @@ impl LazyStore {
         self.cell
             .get_or_init(|| DebugStore::load(&self.data_root))
             .await
+    }
+
+    /// 分块下载收拢出来的文件放这；调试台的落盘数据继续走 DebugStore，下载物只是临时文件
+    pub(super) fn downloads_dir(&self) -> PathBuf {
+        self.data_root.join(DIR_NAME).join("downloads")
     }
 }
 
