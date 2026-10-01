@@ -87,6 +87,7 @@ export function draftFromBackendAndPrefs(
         notifyOnLoginKicked: backend.notifyOnLoginKicked,
         uiPreferences: backend.uiPreferences,
         features: { ...backend.features },
+        mcp: { ...backend.mcp },
         remoteHostHealthProbeEnabled: backend.remoteHostHealthProbeEnabled,
         remoteHostHealthProbeIntervalMs: backend.remoteHostHealthProbeIntervalMs,
         webHookChannels: backend.webHookChannels.map((c) => ({ ...c })),
@@ -171,6 +172,7 @@ export function backendSlice(draft: SettingsDraft): BackendSettings {
             dismiss,
         ),
         features: { ...draft.features },
+        mcp: draft.mcp,
         remoteHostHealthProbeEnabled: draft.remoteHostHealthProbeEnabled,
         remoteHostHealthProbeIntervalMs: draft.remoteHostHealthProbeIntervalMs,
         webHookChannels: draft.webHookChannels.map((c) => ({ ...c })),
@@ -232,6 +234,9 @@ export function isSettingsDirty(
         draft.motionSpeed !== baseline.motionSpeed ||
         draft.radiusStyle !== baseline.radiusStyle ||
         !featuresEqual(draft.features, baseline.features) ||
+        draft.mcp.enabled !== baseline.mcp.enabled ||
+        draft.mcp.port !== baseline.mcp.port ||
+        draft.mcp.allowDangerous !== baseline.mcp.allowDangerous ||
         draft.infoBarDismissInfoEnabled !== baseline.infoBarDismissInfoEnabled ||
         draft.infoBarDismissInfoMs !== baseline.infoBarDismissInfoMs ||
         draft.infoBarDismissSuccessEnabled !== baseline.infoBarDismissSuccessEnabled ||

@@ -10,6 +10,7 @@ import type { BackendType } from '../ipc/generated/domain/BackendType';
 import type { DebugActionSpec } from '../ipc/generated/debug/DebugActionSpec';
 import type { DebugCallRequest } from '../ipc/generated/debug/DebugCallRequest';
 import type { DebugCallResponse } from '../ipc/generated/debug/DebugCallResponse';
+import type { DebugCatalog } from '../ipc/generated/debug/DebugCatalog';
 import type { DebugStreamCallRequest } from '../ipc/generated/debug/DebugStreamCallRequest';
 import type { DebugStreamProgress } from '../ipc/generated/debug/DebugStreamProgress';
 import type { DebugChannelId } from '../ipc/generated/debug/DebugChannelId';
