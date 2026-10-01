@@ -173,6 +173,15 @@ jobs:
         shell: pwsh
         run: git diff --exit-code -- src-ui/core/ipc/generated
 
+      # launch plan ColdStart 测试要读真实 QQ 注册表；runner 没装 QQ。
+      # 测试只读 Install 值、不校验路径内容，stub 一个假安装目录即可。
+      - name: Stub QQ install registry for launch plan tests
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\WOW6432Node\Tencent\QQNT'
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name Install -Value 'C:\Program Files\Tencent\QQNT' -PropertyType String -Force | Out-Null
+
       # 快速回归：只跑近期易碎的 integration / compose，不跑全 workspace
       - name: Smoke tests
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'rust-smoke'
