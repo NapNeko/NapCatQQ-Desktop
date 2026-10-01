@@ -56,10 +56,6 @@ export function FeaturesTab({ draft, patchDraft }: Props) {
 
     return (
         <SettingsTabSections>
-            <p className="-mb-6 text-[12px] leading-relaxed text-text-tertiary">
-                用不上的可以关掉，侧栏和各页里对应的入口一起隐藏；已有的配置和数据不删，再打开就回来。
-                关掉会让东西没处看、没处管的（比如还有 Bot 在用），开关会先拦住。
-            </p>
             {FEATURE_GROUPS.map((group) => (
                 <SettingsSection key={group.title} title={group.title}>
                     {group.items.map(renderFeature)}
