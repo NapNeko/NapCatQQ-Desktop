@@ -10,6 +10,8 @@ pub const DESKTOP_REQUEST_CLOSE: &str = "desktop-request-close";
 pub const DESKTOP_EXIT_BLOCKED: &str = "desktop-exit-blocked";
 /// 托盘面板每次被右键展开前发给面板窗口，面板据此重新量高度
 pub const TRAY_PANEL_SHOW: &str = "tray_panel_show";
+/// 调试台弹出窗被销毁：主窗据此举作废调试台的内存状态（盘上的工作区 / 收藏可能已被改写）
+pub const DEBUG_POPOUT_CLOSED: &str = "debug-popout-closed";
 
 /// 这几条窗口通知的信封版本；前端自己发 desktop-request-close 时也填这个值
 pub const WINDOW_EVENT_VERSION: u32 = 1;
@@ -64,7 +66,12 @@ mod tests {
 
     #[test]
     fn frontend_uses_same_event_names_and_version() {
-        for name in [DESKTOP_REQUEST_CLOSE, DESKTOP_EXIT_BLOCKED, TRAY_PANEL_SHOW] {
+        for name in [
+            DESKTOP_REQUEST_CLOSE,
+            DESKTOP_EXIT_BLOCKED,
+            TRAY_PANEL_SHOW,
+            DEBUG_POPOUT_CLOSED,
+        ] {
             assert!(
                 FRONTEND_WINDOW_EVENTS_TS.contains(&format!("'{name}'")),
                 "window event {name:?} missing from desktop.service.ts"

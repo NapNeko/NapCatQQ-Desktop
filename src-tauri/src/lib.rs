@@ -697,6 +697,10 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // 调试台弹出窗只是工具窗:点了 X 就直接关,不走主窗的托盘 / 退出闸门
+                if window.label() == commands::window::DEBUG_WINDOW_LABEL {
+                    return;
+                }
                 api.prevent_close();
                 let app = window.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -715,6 +719,16 @@ pub fn run() {
                         window_events::WindowSignal::V1,
                     );
                 });
+            }
+            // 弹出窗销毁后,盘上的调试台工作区 / 收藏可能已被它改写:通知主窗作废旧内存状态
+            if let tauri::WindowEvent::Destroyed = event {
+                if window.label() == commands::window::DEBUG_WINDOW_LABEL {
+                    let _ = window.app_handle().emit_to(
+                        lightweight::MAIN_WINDOW_LABEL,
+                        window_events::DEBUG_POPOUT_CLOSED,
+                        window_events::WindowSignal::V1,
+                    );
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -958,6 +972,9 @@ pub fn run() {
             commands::exit::prepare_exit_desktop,
             commands::exit::request_exit_app,
             commands::window::show_main_window,
+            commands::window::open_debug_window,
+            commands::window::reveal_debug_window,
+            commands::window::focus_debug_window,
             commands::terminal::terminal_local_shells,
             commands::terminal::terminal_list,
             commands::terminal::terminal_open,

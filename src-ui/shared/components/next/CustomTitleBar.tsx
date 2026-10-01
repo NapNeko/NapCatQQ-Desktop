@@ -10,16 +10,24 @@ import React from 'react';
 import { Copy, Minus, Square, X } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useWindowControls } from '../../../hooks/desktop/useWindowControls';
+import { windowControlService } from '../../../core/services/desktop.service';
 import { useFeatureEnabled } from '../../../hooks/preferences/featureTogglesStore';
 import { TerminalToggleButton } from './TerminalToggleButton';
 
 interface CustomTitleBarProps {
   className?: string;
+  /**
+   * window = 独立工具窗（调试台弹出窗）：不挂终端开关（终端面板在主窗里），
+   * 关闭只关自己，不走主窗的托盘隐藏 / 退出闸门。
+   */
+  variant?: 'app' | 'window';
 }
 
-export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ className }) => {
+export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ className, variant = 'app' }) => {
   const { isMaximized, minimize, toggleMaximize, close } = useWindowControls();
   const terminalEnabled = useFeatureEnabled('terminal');
+  const isToolWindow = variant === 'window';
+  const onClose = isToolWindow ? () => void windowControlService.closeSelf() : close;
 
   return (
     <header
@@ -31,7 +39,7 @@ export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ className }) => 
     >
       <div className="h-full flex-1" data-tauri-drag-region />
 
-      {terminalEnabled && (
+      {terminalEnabled && !isToolWindow && (
         <div className="mr-2 flex items-center">
           <TerminalToggleButton />
         </div>
@@ -72,7 +80,7 @@ export const CustomTitleBar: React.FC<CustomTitleBarProps> = ({ className }) => 
 
         <button
           type="button"
-          onClick={close}
+          onClick={onClose}
           title="关闭"
           aria-label="关闭"
           className={cn(

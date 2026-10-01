@@ -15,6 +15,7 @@ import React, {
     useRef,
     useState,
 } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { CustomTitleBar } from '../shared/components/next/CustomTitleBar';
 import { Sidebar, type AppRoute } from '../shared/components/next/Sidebar';
@@ -42,6 +43,9 @@ import { terminalStore, useTerminalCoversPage } from '../hooks/terminal/terminal
 import { useFeatures } from '../hooks/preferences/featureTogglesStore';
 import { useDebugConsoleEnabled } from '../hooks/debug/useDebugConsoleEnabled';
 import { registerDebugNavigator } from '../hooks/debug/debugNav';
+import { markWorkspaceStale } from '../hooks/debug/debugWorkspaceStore';
+import { debugWindowService } from '../core/services/debug-window.service';
+import { windowEventService } from '../core/services/desktop.service';
 import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
 import { DesktopExitGate } from './DesktopExitGate';
@@ -223,6 +227,14 @@ export const AppNext: React.FC = () => {
 
     const navigate = useCallback((nextRoute: AppRoute) => {
         const target = hiddenRoutes.has(nextRoute) ? 'overview' : nextRoute;
+        // 调试台弹出窗开着时主窗不进调试页（工作区 / 收藏落盘 JSON 是两窗同一份文件，
+        // 两边同时写会互相盖），入口一律把弹出窗叫到前面；没开着才正常切路由
+        if (target === 'debug') {
+            void debugWindowService.focusIfOpen().then((focused) => {
+                if (!focused) setRoute('debug');
+            });
+            return;
+        }
         // 侧栏点击必须是紧急更新：详情页一旦有持续 setState，startTransition 会一直交不出去。
         setRoute(target);
     }, [hiddenRoutes]);
@@ -234,6 +246,30 @@ export const AppNext: React.FC = () => {
 
     // Bot 卡片「调试」按钮 / 右键「在调试台打开」经 debugNav 跳过来
     useEffect(() => registerDebugNavigator(() => navigate('debug')), [navigate]);
+
+    // 弹出窗关掉后，盘上的工作区 / 收藏可能已被它改写：把主窗里的内存副本作废，
+    // 下次进调试页从盘上重读（此刻主窗的调试页必然没挂着）
+    const queryClient = useQueryClient();
+    useEffect(() => {
+        let cancelled = false;
+        let unlisten: (() => void) | undefined;
+        void windowEventService
+            .onDebugPopoutClosed(() => {
+                markWorkspaceStale();
+                void queryClient.invalidateQueries();
+            })
+            .then((un) => {
+                if (cancelled) {
+                    un();
+                    return;
+                }
+                unlisten = un;
+            });
+        return () => {
+            cancelled = true;
+            unlisten?.();
+        };
+    }, [queryClient]);
 
     const toggleCollapsed = useCallback(() => setCollapsed((v) => !v), []);
 
