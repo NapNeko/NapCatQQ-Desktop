@@ -5,7 +5,7 @@
 // 当时的回包直接显示在响应面板里，不重新发。收藏、复制参数需要完整记录，先取回来再做；
 // 收藏弹的是和中栏 ☆ 同一个起名框。键盘上高亮一行后：回车打开、S 收藏、C 复制参数。
 
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { History, RefreshCw, SearchX, Trash2, UserRound } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
@@ -23,12 +23,12 @@ import type { DebugHistoryEntry } from '../../../core/ipc/generated/debug/DebugH
 import type { DebugHistoryQuery } from '../../../core/ipc/generated/debug/DebugHistoryQuery';
 import type { DebugHistorySummary } from '../../../core/ipc/generated/debug/DebugHistorySummary';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
-import { COLUMN_HEADER_CLASS } from '../ColumnFrame';
+import { revealLeftSearch, setLeftSearchOpen, useLeftSearch } from '../leftPanels';
 import { SaveRequestDialog } from '../SaveRequestDialog';
 import { suggestedRequestName } from '../../../core/domain/debug/collectionsOps';
 import { paramsTextOf, replayResponse } from '../../../core/domain/debug/historyReplay';
 import { HISTORY_ROW_HEIGHT, HistoryRow, type HistoryRowIntent } from './HistoryRow';
-import { ConfirmDialog, IconAction, PanelMessage, PanelSearch, Segmented, SkeletonRows, useSlashFocus, type ConfirmRequest } from './panelParts';
+import { ConfirmDialog, IconAction, PanelMessage, PanelSearch, PanelSearchRow, Segmented, SkeletonRows, useSlashFocus, type ConfirmRequest } from './panelParts';
 
 export const HISTORY_PAGE_SIZE = 100;
 /** 列表的名字里写上键盘用法：行上的悬停按钮不进 Tab 顺序，读屏用户靠这句知道还有 S / C */
@@ -206,7 +206,30 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
     });
 
     useScrollMemory('history', listRef);
-    useSlashFocus(inputRef, rootRef);
+    useSlashFocus(inputRef, rootRef, () => revealLeftSearch('history'));
+
+    // ---- 搜索条的收放：开关在标题行（分段切换旁）的图标按钮上，状态见 leftPanels
+    const { open: searchOpen, focusNonce } = useLeftSearch('history');
+    // 搜索词跟着会话走：带着词进来时搜索条也得是开的，不然列表筛着却找不到在哪改
+    useLayoutEffect(() => {
+        if (saved.text.trim() !== '') setLeftSearchOpen('history', true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    // 条从外面关上了：词一起清掉，理由同上
+    const prevSearchOpen = useRef(searchOpen);
+    useLayoutEffect(() => {
+        const was = prevSearchOpen.current;
+        prevSearchOpen.current = searchOpen;
+        if (was && !searchOpen) setText('');
+    }, [searchOpen, setText]);
+    // 点图标 / 按 / 打开（nonce +1）时聚焦输入框；挂载时自己同步开条不算，不抢焦点
+    const seenFocusNonce = useRef(focusNonce);
+    useLayoutEffect(() => {
+        if (focusNonce === seenFocusNonce.current) return;
+        seenFocusNonce.current = focusNonce;
+        inputRef.current?.focus();
+    }, [focusNonce]);
+    const closeSearch = useCallback(() => setLeftSearchOpen('history', false), []);
 
     // 换了筛选：回到顶上
     const firstFilterRun = useRef(true);
@@ -327,26 +350,19 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
 
     return (
         <div ref={rootRef} className="flex min-h-0 flex-1 flex-col">
-            <div className={cn(COLUMN_HEADER_CLASS, 'gap-1')}>
-                <PanelSearch
-                    ref={inputRef}
-                    value={text}
-                    onChange={setText}
-                    placeholder="搜接口名、参数"
-                    ariaLabel="搜索调用历史"
-                    onKeyDown={onSearchKeyDown}
-                />
-                <IconAction
-                    icon={Trash2}
-                    label="清空历史"
-                    tone="danger"
-                    size="md"
-                    tooltipSide="bottom"
-                    busy={clearHistory.isPending}
-                    disabledReason={total === 0 && !filtered ? '没有记录' : null}
-                    onClick={askClear}
-                />
-            </div>
+            {searchOpen && (
+                <PanelSearchRow>
+                    <PanelSearch
+                        ref={inputRef}
+                        value={text}
+                        onChange={setText}
+                        placeholder="搜接口名、参数"
+                        ariaLabel="搜索调用历史"
+                        onKeyDown={onSearchKeyDown}
+                        onRequestClose={closeSearch}
+                    />
+                </PanelSearchRow>
+            )}
             <div className="flex shrink-0 items-center gap-1.5 border-b border-border-subtle/70 px-2 py-1.5">
                 <Segmented value={ok} options={OK_FILTERS} onChange={setOk} ariaLabel="按成败筛选" />
                 {target && (
@@ -371,12 +387,21 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                         </TooltipContent>
                     </Tooltip>
                 )}
-                {/* 总条数写在列表底部（「已显示全部 N 条」/「加载更多（还有 N 条）」），这一行窄栏里放不下 */}
-                {historyQuery.isFetching && page && (
-                    <span className="ml-auto flex shrink-0 items-center">
-                        <Spinner size="xs" label="正在刷新调用历史" />
-                    </span>
-                )}
+                {/* 总条数写在列表底部（「已显示全部 N 条」/「加载更多（还有 N 条）」），这一行窄栏里放不下；
+                    清空挪到这行右端：搜索条收起来以后，它不用再独占一行 */}
+                <span className="ml-auto flex shrink-0 items-center gap-1">
+                    {historyQuery.isFetching && page && <Spinner size="xs" label="正在刷新调用历史" />}
+                    <IconAction
+                        icon={Trash2}
+                        label="清空历史"
+                        tone="danger"
+                        size="md"
+                        tooltipSide="bottom"
+                        busy={clearHistory.isPending}
+                        disabledReason={total === 0 && !filtered ? '没有记录' : null}
+                        onClick={askClear}
+                    />
+                </span>
             </div>
             {/* 滚动容器一直挂着：滚动记忆和虚拟列表认的是同一个元素 */}
             <div

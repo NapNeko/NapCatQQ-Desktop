@@ -1,8 +1,30 @@
-// 参数表单控件共用的约定：props 形状，和「输入框里的草稿」怎么跟参数值同步。
+// 参数表单控件共用的约定：props 形状，「输入框里的草稿」怎么跟参数值同步，控件的临时提示交给谁写。
 
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useState } from 'react';
 import type { FormField } from '../../../../core/domain/debug/schemaForm';
 import { sameJson } from '../viewHelpers';
+
+export interface FieldHint {
+    text: string;
+    tone: 'muted' | 'warning';
+}
+
+/** 表单行收控件提示的入口；不在表单行里时是 null */
+export const FieldHintContext = createContext<((hint: FieldHint | null) => void) | null>(null);
+
+/**
+ * 控件自己的临时提示（候选列表为什么拉不到、内嵌 JSON 还没写完）不在控件底下另起一行，
+ * 交给表单行和报错、说明并成同一行。用 layout effect：提示和控件在同一帧里出现，不闪
+ */
+export function useFieldHint(hint: FieldHint | null): void {
+    const set = useContext(FieldHintContext);
+    const text = hint?.text ?? null;
+    const tone = hint?.tone ?? 'muted';
+    useLayoutEffect(() => {
+        set?.(text === null ? null : { text, tone });
+    }, [set, text, tone]);
+    useLayoutEffect(() => () => set?.(null), [set]);
+}
 
 export interface FieldProps {
     field: FormField;

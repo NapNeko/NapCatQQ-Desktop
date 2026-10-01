@@ -17,10 +17,11 @@ import {
     type ReactNode,
     type RefObject,
 } from 'react';
-import { AlertTriangle, Bot, FlaskConical, PanelLeftClose, PowerOff, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, Bot, FlaskConical, PanelLeftClose, PowerOff, RefreshCw, Search, X } from 'lucide-react';
+import gsap from 'gsap';
 import { cn } from '../../shared/utils/cn';
 import { Button, PagePlaceholder, Spinner, Tooltip, TooltipContent, TooltipTrigger } from '../../shared/ui';
-import { ActionMotionIcon } from '../../shared/ui/motion';
+import { ActionMotionIcon, GsapPresence, type EnterFn, type ExitFn } from '../../shared/ui/motion';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
 import {
     debugWorkspaceStore,
@@ -52,7 +53,7 @@ import { COLUMN_HEADER_CLASS, ColumnFrame, ColumnRail, ColumnSplitter, useSlideA
 import { CommandPalette } from './CommandPalette';
 import { TopBar } from './TopBar';
 import { useDebugShortcuts } from './debugShortcuts';
-import { LEFT_PANELS, type DebugLeftPanel } from './leftPanels';
+import { LEFT_PANELS, revealLeftSearch, setLeftSearchOpen, useLeftSearch, type DebugLeftPanel } from './leftPanels';
 import { LeftColumn } from './left/LeftColumn';
 import { CenterColumn } from './center/CenterColumn';
 import { RightColumn } from './right/RightColumn';
@@ -443,9 +444,38 @@ const Workbench = memo(function Workbench({
         if (ref.current) ref.current.style.width = `${w}px`;
     };
 
+    const { open: searchOpen } = useLeftSearch(panel);
+    const searchLabel = LEFT_PANELS.find((p) => p.id === panel)?.searchLabel;
+
+    // 右栏退场动画期间 resolved 已经按收起算了（right=0）：宽度冻在收起前的值，播完真卸载后再让中栏吃满
+    const lastRightWidth = useRef(resolved.right);
+    useLayoutEffect(() => {
+        if (!rightCollapsed) lastRightWidth.current = resolved.right;
+    });
+
     const leftHeader = (
         <div className={COLUMN_HEADER_CLASS}>
             <LeftPanelTabs active={panel} onChange={setPanel} />
+            {searchLabel && (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            type="button"
+                            onClick={() => (searchOpen ? setLeftSearchOpen(panel, false) : revealLeftSearch(panel))}
+                            aria-label={searchLabel}
+                            aria-pressed={searchOpen}
+                            className={cn(
+                                'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm transition-colors',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                                searchOpen ? 'bg-brand-soft text-brand' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                            )}
+                        >
+                            <ActionMotionIcon icon={Search} size={15} strokeWidth={2} />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">{searchLabel}（/）</TooltipContent>
+                </Tooltip>
+            )}
             <Tooltip>
                 <TooltipTrigger asChild>
                     <button
@@ -523,8 +553,10 @@ const Workbench = memo(function Workbench({
                 />
             </ColumnFrame>
 
-            {!rightCollapsed && (
-                <>
+            {/* 右栏收起也播动画：GsapPresence 等退场播完再真卸载；展开只在用户刚点过（rightAppear）时播，
+                进页面的首帧不播——整页已经有路由切换动画 */}
+            <GsapPresence visible={!rightCollapsed} onEnter={rightAppear ? enterRightColumn : undefined} onExit={exitRightColumn}>
+                <div className="flex min-h-0 min-w-0 shrink-0" style={{ visibility: 'hidden', opacity: 0 }}>
                     <ColumnSplitter
                         side="right"
                         label="调整右栏宽度"
@@ -538,19 +570,24 @@ const Workbench = memo(function Workbench({
                         ref={rightRef}
                         title="事件与聊天"
                         errorTitle="聊天区出错了"
-                        width={resolved.right}
+                        width={rightCollapsed ? lastRightWidth.current : resolved.right}
                         notice={rightNotice}
-                        appearFrom={rightAppear ? 'right' : null}
                     >
                         <RightColumn target={target} callChannel={callChannel} />
                     </ColumnFrame>
-                </>
-            )}
+                </div>
+            </GsapPresence>
         </div>
     );
 });
 
 const LEFT_TABS_LABEL = '左栏面板';
+
+// 右栏的进退场：横向滑一段 + 淡入淡出（只动 transform / autoAlpha，宽度始终瞬间到位）
+const enterRightColumn: EnterFn = (el, env) =>
+    gsap.fromTo(el, { autoAlpha: 0, x: 24 }, { autoAlpha: 1, x: 0, duration: env.duration('base'), ease: env.ease.enter });
+const exitRightColumn: ExitFn = (el, env) =>
+    gsap.to(el, { autoAlpha: 0, x: 24, duration: env.duration('fast'), ease: env.ease.exit });
 
 function LeftPanelTabs({ active, onChange }: { active: DebugLeftPanel; onChange: (p: DebugLeftPanel) => void }) {
     const refs = useRef<Partial<Record<DebugLeftPanel, HTMLButtonElement | null>>>({});

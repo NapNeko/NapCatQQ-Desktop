@@ -1,10 +1,13 @@
 // 左栏三个面板共用的小件：带提示的图标按钮、紧凑搜索框、分段筛选、空 / 错状态、确认框、骨架行，
 // 以及「按 / 聚焦搜索框」。
 
-import { forwardRef, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Search, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
+import { useMotion } from '../../../hooks/preferences/useMotion';
+import { cssEase } from '../../../core/design/cssEase';
+import { COLUMN_HEADER_CLASS } from '../ColumnFrame';
 import {
     Button,
     Dialog,
@@ -106,13 +109,15 @@ export interface PanelSearchProps {
     onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
     onFocus?: () => void;
     onBlur?: () => void;
+    /** 空着的时候按 Esc：收起搜索条（有字时 Esc 先清字，不关） */
+    onRequestClose?: () => void;
     /** 组合框用：列表 id 和当前高亮行 id */
     controls?: string;
     activeDescendant?: string;
 }
 
 export const PanelSearch = forwardRef<HTMLInputElement, PanelSearchProps>(function PanelSearch(
-    { value, onChange, placeholder, ariaLabel, trailing, onKeyDown, onFocus, onBlur, controls, activeDescendant },
+    { value, onChange, placeholder, ariaLabel, trailing, onKeyDown, onFocus, onBlur, onRequestClose, controls, activeDescendant },
     ref,
 ) {
     return (
@@ -128,10 +133,14 @@ export const PanelSearch = forwardRef<HTMLInputElement, PanelSearchProps>(functi
                 onKeyDown={(e) => {
                     onKeyDown?.(e);
                     if (e.defaultPrevented) return;
-                    // 有字时 Esc 先清空；空了再按才交给别处（比如中栏的取消）
-                    if (e.key === 'Escape' && value !== '') {
+                    if (e.key !== 'Escape') return;
+                    // 有字时 Esc 先清空；空了再按：能收起的收起搜索条，收不了的照旧交给别处（比如中栏的取消）
+                    if (value !== '') {
                         e.preventDefault();
                         onChange('');
+                    } else if (onRequestClose) {
+                        e.preventDefault();
+                        onRequestClose();
                     }
                 }}
                 onFocus={onFocus}
@@ -171,9 +180,16 @@ export const PanelSearch = forwardRef<HTMLInputElement, PanelSearchProps>(functi
 
 /**
  * 页面上没在打字时按 `/` 聚焦搜索框。输入框、编辑器、对话框、终端里的 `/` 照常输入；
- * 页面被终端盖住（看不见）时不抢。
+ * 页面被终端盖住（看不见）时不抢。搜索条收着（输入框没挂上）时调 onReveal 展开，
+ * 展开后面板自己会聚焦。
  */
-export function useSlashFocus(inputRef: RefObject<HTMLInputElement | null>, scopeRef: RefObject<HTMLElement | null>): void {
+export function useSlashFocus(
+    inputRef: RefObject<HTMLInputElement | null>,
+    scopeRef: RefObject<HTMLElement | null>,
+    onReveal?: () => void,
+): void {
+    const revealRef = useRef(onReveal);
+    revealRef.current = onReveal;
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented || e.isComposing) return;
@@ -189,7 +205,13 @@ export function useSlashFocus(inputRef: RefObject<HTMLInputElement | null>, scop
             if (!scope || !scope.isConnected) return;
             if (typeof scope.checkVisibility === 'function' && !scope.checkVisibility()) return;
             const input = inputRef.current;
-            if (!input) return;
+            if (!input) {
+                if (revealRef.current) {
+                    e.preventDefault();
+                    revealRef.current();
+                }
+                return;
+            }
             e.preventDefault();
             input.focus();
             input.select();
@@ -197,6 +219,34 @@ export function useSlashFocus(inputRef: RefObject<HTMLInputElement | null>, scop
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [inputRef, scopeRef]);
+}
+
+/**
+ * 搜索条默认收成标题行（分段切换那行）里的图标按钮，展开才占这一行。
+ * 展开时内容轻轻落下来（只动 transform / opacity）；收起不播动画，直接没。
+ */
+export function PanelSearchRow({ className, children }: { className?: string; children: ReactNode }) {
+    const m = useMotion();
+    const ref = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el || !m.enabled || typeof el.animate !== 'function') return;
+        const anim = el.animate(
+            [
+                { opacity: 0, transform: 'translateY(-4px)' },
+                { opacity: 1, transform: 'none' },
+            ],
+            { duration: m.duration('fast') * 1000, easing: cssEase(m.ease.enter) },
+        );
+        return () => anim.cancel();
+        // 只在挂载（展开）时播一次
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return (
+        <div ref={ref} className={cn(COLUMN_HEADER_CLASS, className)}>
+            {children}
+        </div>
+    );
 }
 
 // ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@ import { cn } from '../../../../shared/utils/cn';
 import { Popover, PopoverAnchor, PopoverContent, Spinner } from '../../../../shared/ui';
 import { FIELD_INPUT_CLASS, IconTip, fieldBorder } from '../centerParts';
 import { valueText } from '../viewHelpers';
-import { useTextDraft, type FieldProps } from './fieldKit';
+import { useFieldHint, useTextDraft, type FieldProps } from './fieldKit';
 
 export interface PickerOption {
     id: number | string;
@@ -183,9 +183,10 @@ export function PickerCombo({
     }
 
     const hint = error ? `拉取列表失败：${error}，可以直接填号` : unavailable;
+    useFieldHint(hint ? { text: hint, tone: error ? 'warning' : 'muted' } : null);
 
     return (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col">
             <Popover open={listOpen} onOpenChange={(next) => !next && setOpen(false)}>
                 <PopoverAnchor asChild>
                     <div ref={anchorRef} className="relative flex items-center">
@@ -284,7 +285,6 @@ export function PickerCombo({
                     </div>
                 </PopoverContent>
             </Popover>
-            {hint && <p className="text-2xs leading-snug text-text-tertiary">{hint}</p>}
         </div>
     );
 }
