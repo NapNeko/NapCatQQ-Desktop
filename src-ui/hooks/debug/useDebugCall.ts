@@ -12,12 +12,25 @@ import { useQueryClient } from '@tanstack/react-query';
 import { onebotDebugService } from '../../core/services/onebot-debug.service';
 import { errorText } from '../../core/domain/errors';
 import { newRequestId } from '../../core/domain/debug/ids';
+import { localFilesInParams, needsStreamCall } from '../../core/domain/debug/streamActions';
 import { pushErrorBar } from '../ui/pushErrorBar';
 import type { DebugCallRequest } from '../../core/ipc/generated/debug/DebugCallRequest';
 import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCallResponse';
+import type { DebugStreamProgress } from '../../core/ipc/generated/debug/DebugStreamProgress';
 import { debugEventStore } from './debugEventStore';
 import { debugWorkspaceStore } from './debugWorkspaceStore';
 import { debugChannelsKey, debugHistoryPrefix } from './keys';
+
+/** 流式调用的进度写进对应标签的在途调用里；在途换人了（又发了一次）就直接丢 */
+function recordProgress(tabId: string, requestId: string, p: DebugStreamProgress): void {
+    const run = debugWorkspaceStore.getRun(tabId);
+    const cur = run?.inflight;
+    if (!run || !cur || cur.requestId !== requestId) return;
+    debugWorkspaceStore.setRun(tabId, {
+        ...run,
+        inflight: { ...cur, progress: p },
+    });
+}
 
 export function useDebugCall() {
     const client = useQueryClient();
@@ -25,6 +38,7 @@ export function useDebugCall() {
     /**
      * `tabId` 给编辑器标签；聊天输入框、选择器这类不挂在标签上的传 null，只拿返回值。
      * 调用方自己把 `origin` 填对（editor / composer / picker）。
+     * 下载动作、或参数里有本机文件占位时自动走流式命令（进度一路上报、可取消）。
      */
     const send = useCallback(
         async (tabId: string | null, req: Omit<DebugCallRequest, 'request_id'>): Promise<DebugCallResponse> => {
@@ -39,7 +53,16 @@ export function useDebugCall() {
 
             let response: DebugCallResponse;
             try {
-                response = await onebotDebugService.call({ ...req, request_id: requestId });
+                if (needsStreamCall(req.action, req.params)) {
+                    response = await onebotDebugService.callStream(
+                        { ...req, request_id: requestId, local_files: localFilesInParams(req.params) },
+                        (p) => {
+                            if (tabId !== null && p.request_id === requestId) recordProgress(tabId, requestId, p);
+                        },
+                    );
+                } else {
+                    response = await onebotDebugService.call({ ...req, request_id: requestId });
+                }
             } catch (err) {
                 response = {
                     request_id: requestId,

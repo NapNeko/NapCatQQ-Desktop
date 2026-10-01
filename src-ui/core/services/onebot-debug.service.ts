@@ -4,13 +4,14 @@
 // 调用失败分两种：没拿到回包的原因（超时、通道不可用……）放在 `DebugCallResponse.result` 里当数据返回，
 // 不会抛；其余命令失败时 invoke 抛出后端给的中文字符串，由调用方经 `errorText` 处理。
 
-import { Channel, invoke, isTauri, pickTextFiles, saveFileAs } from '../ipc/transport';
+import { Channel, invoke, isTauri, pickAnyFiles, pickTextFiles, saveFileAs } from '../ipc/transport';
 import { onebotDebugMock } from '../ipc/mock/onebot-debug.mock';
 import type { BackendType } from '../ipc/generated/domain/BackendType';
 import type { DebugActionSpec } from '../ipc/generated/debug/DebugActionSpec';
 import type { DebugCallRequest } from '../ipc/generated/debug/DebugCallRequest';
 import type { DebugCallResponse } from '../ipc/generated/debug/DebugCallResponse';
-import type { DebugCatalog } from '../ipc/generated/debug/DebugCatalog';
+import type { DebugStreamCallRequest } from '../ipc/generated/debug/DebugStreamCallRequest';
+import type { DebugStreamProgress } from '../ipc/generated/debug/DebugStreamProgress';
 import type { DebugChannelId } from '../ipc/generated/debug/DebugChannelId';
 import type { DebugChannelInfo } from '../ipc/generated/debug/DebugChannelInfo';
 import type { DebugChannels } from '../ipc/generated/debug/DebugChannels';
@@ -61,6 +62,33 @@ export const onebotDebugService = {
 
     call: (request: DebugCallRequest): Promise<DebugCallResponse> =>
         isTauri ? invoke('onebot_debug_call', { request }) : onebotDebugMock.call(request),
+
+    /**
+     * 流式调用（分块上传 / 下载、带本机文件的调用）。进度经 Channel 一拍拍回来，
+     * 最终结果和普通调用同一形状；取消共用 `onebot_debug_cancel`
+     */
+    callStream: (
+        request: DebugStreamCallRequest,
+        onProgress: (p: DebugStreamProgress) => void,
+    ): Promise<DebugCallResponse> => {
+        if (!isTauri) return onebotDebugMock.callStream(request, onProgress);
+        const progress = new Channel<DebugStreamProgress>();
+        progress.onmessage = (p) => onProgress(p);
+        return invoke('onebot_debug_call_stream', { request, progress });
+    },
+
+    /**
+     * 给文件参数选一个本机文件；取消返回 null。
+     * 文件不出参数本身，发送时由后端传到 Bot 一侧再替换进去
+     */
+    pickLocalFile: async (): Promise<{ path: string; name: string } | null> => {
+        if (!isTauri) return onebotDebugMock.pickLocalFile();
+        const paths = await pickAnyFiles('选择本机文件');
+        const path = paths[0];
+        if (!path) return null;
+        const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+        return { path, name };
+    },
 
     /** 只是不再等待，不保证上游没执行 */
     cancel: (requestId: string): Promise<void> =>
