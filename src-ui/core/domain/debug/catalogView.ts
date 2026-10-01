@@ -66,6 +66,16 @@ export function groupActions(list: DebugActionSummary[]): {
     return { groups, unsupported: unsupported.sort(compareByName) };
 }
 
+/**
+ * 目录列表里的主名：上游简介混着参数和实现注释（「（id 或 message_id）」「（未实现）」「；传 out_format…」），
+ * 单行列表装不下、看着乱。主名只取第一个括注 / 分号前的主干，完整简介在行的悬停提示和文档页里。
+ * 主干空了（整个简介就是一条注释）或没有简介时退回字段名。
+ */
+export function catalogRowLabel(action: Pick<DebugActionSummary, 'name' | 'summary'>): string {
+    const head = action.summary.split(/[（(；;]/, 1)[0].trim();
+    return head === '' ? action.name : head;
+}
+
 function scoreOf(action: DebugActionSummary, q: string): number {
     const name = action.name.toLowerCase();
     if (name === q) return 100;

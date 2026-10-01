@@ -19,6 +19,7 @@ import { ExpandChevron } from '../../../shared/ui/motion';
 import type { BackendType } from '../../../core/ipc/generated/domain/BackendType';
 import type { DebugActionSummary } from '../../../core/ipc/generated/debug/DebugActionSummary';
 import { SAFETY_DOT_CLASS, SAFETY_TEXT, onlyBackendLabel } from '../../../core/domain/debug/safety';
+import { catalogRowLabel } from '../../../core/domain/debug/catalogView';
 
 export const CATALOG_ROW_HEIGHT = 30;
 export const CATALOG_HEADER_HEIGHT = 28;
@@ -92,9 +93,9 @@ export const CatalogActionRow = memo(function CatalogActionRow({
                                 )}
                             />
                             <span aria-hidden className={cn('h-[7px] w-[7px] shrink-0 rounded-full', SAFETY_DOT_CLASS[action.safety])} />
-                            {/* 列表里中文简介就是主名，字段名不显示（悬停提示、右键菜单里有）；没有简介的退回字段名 */}
+                            {/* 列表只放主名（简介剥掉参数括注；没有简介退回字段名），字段名和完整简介在悬停提示、右键菜单里 */}
                             {action.summary ? (
-                                <span className="min-w-0 flex-1 truncate text-[12px] text-text">{action.summary}</span>
+                                <span className="min-w-0 flex-1 truncate text-[12px] text-text">{catalogRowLabel(action)}</span>
                             ) : (
                                 <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-text">{action.name}</span>
                             )}

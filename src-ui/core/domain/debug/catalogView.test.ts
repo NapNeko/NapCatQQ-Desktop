@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DebugActionCategory } from '../../ipc/generated/debug/DebugActionCategory';
 import type { DebugActionSummary } from '../../ipc/generated/debug/DebugActionSummary';
-import { CATEGORY_LABEL, CATEGORY_ORDER, groupActions, searchActions } from './catalogView';
+import { CATEGORY_LABEL, CATEGORY_ORDER, catalogRowLabel, groupActions, searchActions } from './catalogView';
 
 const action = (name: string, over: Partial<DebugActionSummary> = {}): DebugActionSummary => ({
     name,
@@ -176,5 +176,30 @@ describe('searchActions', () => {
         const cats: DebugActionCategory[] = ['message', 'friend'];
         const items = cats.map((c, i) => action(`act_${i}`, { category: c }));
         expect(searchActions(items, 'act', [])).toHaveLength(2);
+    });
+});
+
+describe('catalogRowLabel', () => {
+    it('剥掉中文括注', () => {
+        expect(catalogRowLabel(action('get_forward_msg', { summary: '获取合并转发消息（id 或 message_id）' }))).toBe('获取合并转发消息');
+        expect(catalogRowLabel(action('ocr_image', { summary: 'OCR 图片（服务端，需图片 URL 或已缓存的图片 file_id）' }))).toBe('OCR 图片');
+    });
+
+    it('剥掉半角括注', () => {
+        expect(catalogRowLabel(action('mark_msg_as_read', { summary: '标记消息已读 (Go-CQHTTP)' }))).toBe('标记消息已读');
+    });
+
+    it('剥掉分号后的补充', () => {
+        expect(catalogRowLabel(action('get_record', { summary: '获取语音信息；传 out_format 则服务端转码并附带 base64' }))).toBe('获取语音信息');
+    });
+
+    it('普通简介原样返回', () => {
+        expect(catalogRowLabel(action('get_group_list', { summary: '获取群列表' }))).toBe('获取群列表');
+        expect(catalogRowLabel(action('send_ark_share', { summary: '分享用户/群 Ark 卡片' }))).toBe('分享用户/群 Ark 卡片');
+    });
+
+    it('没有简介、或整个简介就是一条注释时退回字段名', () => {
+        expect(catalogRowLabel(action('get_msg'))).toBe('get_msg');
+        expect(catalogRowLabel(action('_get_model_show', { summary: '（占位）' }))).toBe('_get_model_show');
     });
 });
