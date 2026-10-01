@@ -1,8 +1,8 @@
 // 调用历史里的一行：成败图标、接口名、耗时；第二行 Bot 名和多久以前（失败时带 retcode 或原因）。
-// 悬停出现「收藏」「复制参数」，右键菜单里也有。
+// 悬停出现「收藏」「复制参数」，右键菜单里也有。对比模式下最左边多一个勾选框，单击切换勾选而不是打开。
 
 import { memo } from 'react';
-import { CheckCircle2, Copy, ExternalLink, Star, XCircle } from 'lucide-react';
+import { Check, CheckCircle2, Copy, ExternalLink, Star, XCircle } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import {
     ContextMenu,
@@ -30,6 +30,8 @@ export interface HistoryRowProps {
     active: boolean;
     /** 这一行正在取完整记录（打开 / 收藏 / 复制前） */
     busy: boolean;
+    /** 对比模式的勾选态；不在这个模式是 null（单击照常在新标签打开） */
+    compare: { selected: boolean; onToggle: () => void } | null;
     onIntent: (entry: DebugHistorySummary, intent: HistoryRowIntent) => void;
     onCopyAction: (name: string) => void;
 }
@@ -44,7 +46,7 @@ function formatElapsed(ms: number): string {
     return ms >= 10_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
 }
 
-export const HistoryRow = memo(function HistoryRow({ id, entry, nowMs, active, busy, onIntent, onCopyAction }: HistoryRowProps) {
+export const HistoryRow = memo(function HistoryRow({ id, entry, nowMs, active, busy, compare, onIntent, onCopyAction }: HistoryRowProps) {
     const when = relativeTimeFromMs(entry.at_ms, undefined, nowMs) ?? '';
     const failure = failureNote(entry);
     // 全局的 title 气泡是单行的，用「·」隔开
@@ -53,7 +55,7 @@ export const HistoryRow = memo(function HistoryRow({ id, entry, nowMs, active, b
         channelShortLabel(entry.channel),
         new Date(entry.at_ms).toLocaleString(),
         entry.ok ? `成功 ${formatElapsed(entry.elapsed_ms)}` : `失败：${failure}`,
-        '单击在新标签打开（带着当时的响应）',
+        compare ? '单击勾选 / 取消勾选' : '单击在新标签打开（带着当时的响应）',
     ].join(' · ');
 
     return (
@@ -62,22 +64,34 @@ export const HistoryRow = memo(function HistoryRow({ id, entry, nowMs, active, b
                 <div
                     id={id}
                     role="option"
-                    aria-selected={active}
+                    aria-selected={compare ? compare.selected : active}
                     aria-busy={busy || undefined}
                     title={title}
-                    onClick={() => onIntent(entry, 'open')}
+                    onClick={() => (compare ? compare.onToggle() : onIntent(entry, 'open'))}
                     onMouseDown={(e) => {
                         if (e.button === 1) e.preventDefault();
                     }}
                     onAuxClick={(e) => {
-                        if (e.button === 1) onIntent(entry, 'open');
+                        if (e.button === 1 && !compare) onIntent(entry, 'open');
                     }}
                     style={{ height: HISTORY_ROW_HEIGHT }}
                     className={cn(
                         'group relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 transition-colors hover:bg-elevated/35',
                         active && 'bg-inset ring-1 ring-inset ring-brand/50',
+                        compare?.selected && 'bg-brand-soft/50',
                     )}
                 >
+                    {compare && (
+                        <span
+                            aria-hidden
+                            className={cn(
+                                'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-xs border transition-colors',
+                                compare.selected ? 'border-brand bg-brand text-white' : 'border-border bg-field',
+                            )}
+                        >
+                            {compare.selected && <Check size={11} strokeWidth={3} />}
+                        </span>
+                    )}
                     <span className="flex h-4 w-4 shrink-0 items-center justify-center">
                         {busy ? (
                             <Spinner size="xs" label="正在读取这条记录" />

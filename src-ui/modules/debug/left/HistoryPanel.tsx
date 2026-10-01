@@ -7,7 +7,7 @@
 
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { History, RefreshCw, SearchX, Trash2, UserRound } from 'lucide-react';
+import { GitCompareArrows, History, RefreshCw, SearchX, Trash2, UserRound } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import { Button, Spinner, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
 import { useClearHistory, useDebugHistory, useHistoryEntry } from '../../../hooks/debug/useDebugHistory';
@@ -27,6 +27,7 @@ import { revealLeftSearch, setLeftSearchOpen, useLeftSearch } from '../leftPanel
 import { SaveRequestDialog } from '../SaveRequestDialog';
 import { suggestedRequestName } from '../../../core/domain/debug/collectionsOps';
 import { paramsTextOf, replayResponse } from '../../../core/domain/debug/historyReplay';
+import { HistoryDiffDialog } from './HistoryDiffDialog';
 import { HISTORY_ROW_HEIGHT, HistoryRow, type HistoryRowIntent } from './HistoryRow';
 import { ConfirmDialog, IconAction, PanelMessage, PanelSearch, PanelSearchRow, Segmented, SkeletonRows, useSlashFocus, type ConfirmRequest } from './panelParts';
 
@@ -100,12 +101,20 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
 
     const botId = onlyBot && target ? target.bot_id : null;
     const trimmed = debouncedText.trim();
+
+    // ---- 对比响应：勾两条同接口的记录，对话框并排两份回包
+    // 勾上的是当时的快照（不是现在列表里的那一行）：筛选 / 刷新换数据，勾着的两条照样能对比
+    const [comparing, setComparing] = useState(false);
+    const [picked, setPicked] = useState<DebugHistorySummary[]>([]);
+
     // 筛选一变就回到第一页
     const filterKey = `${ok}|${trimmed}|${botId ?? ''}`;
     const lastFilterKey = useRef(filterKey);
     if (lastFilterKey.current !== filterKey) {
         lastFilterKey.current = filterKey;
         if (pages !== 1) setPages(1);
+        // 列表换了一茬，对比模式的勾选跟着清（勾着的可能已经不在列表里）
+        if (picked.length > 0) setPicked([]);
     }
 
     const query: DebugHistoryQuery = useMemo(
@@ -133,6 +142,40 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
     const activeIndex = activeKey === null ? -1 : entries.findIndex((e) => e.id === activeKey);
     const [listFocused, setListFocused] = useState(false);
     const [keyboardNav, setKeyboardNav] = useState(false);
+
+    // 对话框比的两条：开框那一刻按时间定好左右（左旧右新）；null 是关着
+    const [pair, setPair] = useState<{ left: DebugHistorySummary; right: DebugHistorySummary } | null>(null);
+
+    const toggleCompare = useCallback(() => {
+        setComparing((c) => !c);
+        setPicked([]);
+    }, []);
+
+    const togglePick = useCallback((entry: DebugHistorySummary) => {
+        setPicked((cur) => {
+            if (cur.some((e) => e.id === entry.id)) return cur.filter((e) => e.id !== entry.id);
+            if (cur.length >= 2) return cur;
+            const first = cur[0];
+            if (first && first.action !== entry.action) {
+                pushInfoBar({
+                    key: 'debug-compare-same-action',
+                    tone: 'warning',
+                    title: '对比要选同一个接口的两条记录',
+                    autoDismissMs: 2500,
+                });
+                return cur;
+            }
+            return [...cur, entry];
+        });
+    }, []);
+
+    const openDiff = useCallback(() => {
+        setPair((cur) => {
+            if (cur) return cur;
+            const [a, b] = [...picked].sort((x, y) => x.at_ms - y.at_ms);
+            return a && b ? { left: a, right: b } : null;
+        });
+    }, [picked]);
 
     // ---- 需要完整记录的操作：先取回来（取过的有缓存），到了再做
     const [intent, setIntent] = useState<{ id: string; kind: HistoryRowIntent } | null>(null);
@@ -275,7 +318,9 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                 const entry = entries[activeIndex];
                 if (!entry) return;
                 e.preventDefault();
-                onIntent(entry, 'open');
+                // 对比模式下回车是勾选，不是打开
+                if (comparing) togglePick(entry);
+                else onIntent(entry, 'open');
                 return;
             }
         }
@@ -365,6 +410,24 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
             )}
             <div className="flex shrink-0 items-center gap-1.5 border-b border-border-subtle/70 px-2 py-1.5">
                 <Segmented value={ok} options={OK_FILTERS} onChange={setOk} ariaLabel="按成败筛选" />
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            type="button"
+                            aria-pressed={comparing}
+                            aria-label="对比响应（勾选同一个接口的两条记录）"
+                            onClick={toggleCompare}
+                            className={cn(
+                                'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm transition-colors',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                                comparing ? 'bg-brand-soft text-brand' : 'text-text-tertiary hover:bg-inset hover:text-text',
+                            )}
+                        >
+                            <GitCompareArrows size={13} strokeWidth={2.2} aria-hidden />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">{comparing ? '退出对比' : '勾选同一个接口的两条记录，对比它们的回包'}</TooltipContent>
+                </Tooltip>
                 {target && (
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -408,6 +471,7 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                 ref={listRef}
                 role={showList ? 'listbox' : undefined}
                 aria-label={showList ? HISTORY_LIST_LABEL : undefined}
+                aria-multiselectable={showList && comparing ? true : undefined}
                 tabIndex={showList ? 0 : -1}
                 aria-activedescendant={showList && showActive && activeIndex >= 0 ? rowId(entries[activeIndex].id) : undefined}
                 onKeyDown={showList ? onListKeyDown : undefined}
@@ -436,6 +500,11 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                                             nowMs={nowMs}
                                             active={showActive && v.index === activeIndex}
                                             busy={intent?.id === entry.id}
+                                            compare={
+                                                comparing
+                                                    ? { selected: picked.some((e) => e.id === entry.id), onToggle: () => togglePick(entry) }
+                                                    : null
+                                            }
                                             onIntent={onIntent}
                                             onCopyAction={onCopyAction}
                                         />
@@ -465,6 +534,30 @@ export const HistoryPanel = memo(function HistoryPanel({ target }: { target: Deb
                 )}
             </div>
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+            {comparing && (
+                <div className="flex shrink-0 items-center gap-2 border-t border-border-subtle/70 px-2.5 py-1.5">
+                    <span role="status" className="min-w-0 flex-1 truncate text-2xs text-text-tertiary">
+                        {picked.length === 0 ? '勾选同一个接口的两条记录' : picked.length === 1 ? '再勾一条同接口的' : '已选 2 条，可以对比了'}
+                    </span>
+                    <Button size="sm" variant="secondary" disabled={picked.length !== 2} onClick={openDiff}>
+                        对比响应
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={toggleCompare}>
+                        退出对比
+                    </Button>
+                </div>
+            )}
+            {pair && (
+                <HistoryDiffDialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setPair(null);
+                    }}
+                    action={pair.left.action}
+                    left={pair.left}
+                    right={pair.right}
+                />
+            )}
             {saving && (
                 <SaveRequestDialog
                     open={saveOpen}
