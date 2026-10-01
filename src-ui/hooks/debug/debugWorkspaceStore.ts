@@ -261,6 +261,17 @@ function load(): Promise<void> {
     return loadPromise;
 }
 
+/**
+ * 弹出窗（独立窗口）改写过盘上的工作区后关掉：摘掉「只读一次」的记号牌、回到未载入，
+ * 主窗下次进调试页从盘上重读。由弹出窗销毁事件驱动（lib.rs 的 DEBUG_POPOUT_CLOSED），
+ * 此刻主窗的调试页必然没挂着（弹出时已导航走）
+ */
+export function markWorkspaceStale(): void {
+    loadPromise = null;
+    const s = store.getSnapshot();
+    if (s.loaded) store.setState({ ...s, loaded: false });
+}
+
 // ---------------------------------------------------------------------------
 // 标签
 // ---------------------------------------------------------------------------

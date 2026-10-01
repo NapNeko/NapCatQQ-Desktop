@@ -3,11 +3,15 @@
 // 标签页决定「发什么」，不在这里。窄窗口时靠容器查询把次要的字收掉（QQ 号、「正在接收」的长文案、
 // 命令面板按钮上的字），按钮本身都在。
 
-import { memo } from 'react';
-import { PanelRightClose, PanelRightOpen, Search } from 'lucide-react';
+import { memo, useCallback } from 'react';
+import { PanelRightClose, PanelRightOpen, PictureInPicture2, Search } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../shared/ui';
 import { ActionMotionIcon } from '../../shared/ui/motion';
+import { flushWorkspace } from '../../hooks/debug/debugWorkspaceStore';
+import { pushErrorBar } from '../../hooks/ui/pushErrorBar';
+import { errorText } from '../../core/domain/errors';
+import { debugWindowService, isDebugPopoutWindow } from '../../core/services/debug-window.service';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
 import type { DebugChannelChoice } from '../../core/ipc/generated/debug/DebugChannelChoice';
 import type { DebugChannels } from '../../core/ipc/generated/debug/DebugChannels';
@@ -64,6 +68,18 @@ export const TopBar = memo(function TopBar({
 }: TopBarProps) {
     const botId = selected?.bot_id ?? null;
     const running = selected?.running ?? false;
+
+    // 弹出前先把主窗这份写盘，弹出窗再从盘上读同一份；随后主窗导航走，
+    // 同一时间只留一个调试台页面（工作区 / 收藏落盘 JSON 是两窗同一份文件）
+    const popOut = useCallback(() => {
+        void (async () => {
+            await flushWorkspace();
+            await debugWindowService.open();
+            onNavigate?.('overview');
+        })().catch((err) => {
+            pushErrorBar({ key: 'debug-popout', title: '弹出调试台失败', raw: errorText(err) });
+        });
+    }, [onNavigate]);
 
     return (
         <header className="@container shrink-0 pt-3">
@@ -130,6 +146,26 @@ export const TopBar = memo(function TopBar({
                             {MOD_KEY_LABEL} K
                         </kbd>
                     </button>
+                    {/* 已经身在弹出窗里就不画了（两窗不共享 JS，标识由 main.tsx 启动时写好） */}
+                    {!isDebugPopoutWindow() && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    type="button"
+                                    onClick={popOut}
+                                    aria-label="弹出为独立窗口"
+                                    className={cn(
+                                        'inline-flex h-8 w-8 items-center justify-center rounded-sm transition-colors',
+                                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-canvas',
+                                        'text-text-tertiary hover:bg-inset hover:text-text',
+                                    )}
+                                >
+                                    <ActionMotionIcon icon={PictureInPicture2} size={16} strokeWidth={2} />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">弹出为独立窗口</TooltipContent>
+                        </Tooltip>
+                    )}
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <button
