@@ -1,5 +1,6 @@
 // 调用没拿到回包时怎么跟用户说，以及 OneBot 回包里 retcode 的人话提示。
 
+import type { DebugCallResponse } from '../../ipc/generated/debug/DebugCallResponse';
 import type { DebugError } from '../../ipc/generated/debug/DebugError';
 import { NO_CHANNEL_EXITS, UPGRADE_RUNTIME_EXIT, type ChannelExit } from './channelCopy';
 
@@ -108,4 +109,19 @@ export function retcodeHint(retcode: number): string | null {
         default:
             return null;
     }
+}
+
+/**
+ * 一次调用失败的一句话原因；成功（拿到回包且 retcode 为 0）返回 null。
+ * 没拿到回包用上面的错误文案；拿到了但 OB11 说失败，报 retcode，带上上游的说明。
+ */
+export function callProblem(res: DebugCallResponse): string | null {
+    if (res.result.kind === 'err') {
+        const copy = debugErrorCopy(res.result.error);
+        return copy.detail ? `${copy.title}：${copy.detail}` : copy.title;
+    }
+    const o = res.result.outcome;
+    if (o.ok) return null;
+    const why = o.wording || o.message || retcodeHint(o.retcode) || '';
+    return `retcode ${o.retcode}${why ? ` · ${why}` : ''}`;
 }

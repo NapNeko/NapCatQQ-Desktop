@@ -5,7 +5,7 @@
 // 两种都不丢东西，但用户心里想的不一样，不替他猜。
 
 import { memo, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Copy, Star, Timer, X } from 'lucide-react';
+import { Copy, FileCode2, Star, Timer, X } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import { Badge, Button, Popover, PopoverAnchor, PopoverContent, PopoverTrigger, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
 import { debugWorkspaceStore, useDebugWorkspaceSelector } from '../../../hooks/debug/debugWorkspaceStore';
@@ -13,10 +13,12 @@ import { searchActions } from '../../../core/domain/debug/catalogView';
 import type { ParamsParse } from '../../../core/domain/debug/paramsText';
 import type { DebugActionSpec } from '../../../core/ipc/generated/debug/DebugActionSpec';
 import type { DebugActionSummary } from '../../../core/ipc/generated/debug/DebugActionSummary';
+import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugRequestDraft } from '../../../core/ipc/generated/debug/DebugRequestDraft';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import { SAFETY_DOT_CLASS, SAFETY_LABEL, SAFETY_TEXT, SAFETY_TONE } from '../../../core/domain/debug/safety';
 import { IconTip, copyWithToast } from './centerParts';
+import { ExportSnippetDialog } from './ExportSnippetDialog';
 import { markSeeded } from './seedState';
 import { prettyJson } from './viewHelpers';
 
@@ -34,6 +36,8 @@ export interface RequestHeaderProps {
     summaryFrom: string | null;
     catalog: readonly DebugActionSummary[];
     target: DebugTarget | null;
+    /** 顶栏为这个 Bot 选的调用通道（导出代码按「标签通道 ?? 它」落到的通道生成） */
+    callChannel: DebugChannelId;
     parsed: ParamsParse;
     /** 参数没被用户改过（改动作名时据此决定原地换还是另开） */
     untouched: boolean;
@@ -48,6 +52,7 @@ export const RequestHeader = memo(function RequestHeader({
     summaryFrom,
     catalog,
     target,
+    callChannel,
     parsed,
     untouched,
     onSave,
@@ -66,6 +71,8 @@ export const RequestHeader = memo(function RequestHeader({
     const [renameTo, setRenameTo] = useState<string | null>(null);
     // 外面换了动作（从目录点了别的、撤销……）：待定的这一问作废
     useEffect(() => setRenameTo(null), [tab.action]);
+
+    const [exportOpen, setExportOpen] = useState(false);
 
     const commitAction = (name: string) => {
         const next = name.trim();
@@ -122,6 +129,13 @@ export const RequestHeader = memo(function RequestHeader({
                 <ActionInput key={tab.id} value={tab.action} catalog={catalog} onCommit={commitAction} />
                 <IconTip icon={Star} label="收藏这个请求" disabled={!action} onClick={onSave} />
                 <IconTip icon={Copy} label="复制请求 JSON" hint="action + params" disabled={!action} onClick={copyRequest} />
+                <IconTip
+                    icon={FileCode2}
+                    label="导出调用代码"
+                    hint={parsed.ok ? '按当前动作、参数和通道生成 curl / JavaScript / Python' : '参数 JSON 有错，改好才能导出'}
+                    disabled={!action || !parsed.ok}
+                    onClick={() => setExportOpen(true)}
+                />
                 <TimeoutButton tab={tab} />
             </div>
             <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 pl-1">
@@ -181,6 +195,16 @@ export const RequestHeader = memo(function RequestHeader({
                     onReplace={() => replaceInPlace(renameTo)}
                     onNewTab={() => openAside(renameTo)}
                     onCancel={cancelRename}
+                />
+            )}
+            {parsed.ok && (
+                <ExportSnippetDialog
+                    open={exportOpen}
+                    onOpenChange={setExportOpen}
+                    tab={tab}
+                    params={parsed.value}
+                    botId={target?.bot_id ?? null}
+                    callChannel={callChannel}
                 />
             )}
         </div>
