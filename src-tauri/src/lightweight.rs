@@ -42,6 +42,12 @@ pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     if let Some(tray_window) = app.get_webview_window(crate::tray_panel::TRAY_PANEL_LABEL) {
         let _ = tray_window.destroy();
     }
+    // 调试台弹出窗也吃一个 WebView2,进轻量模式一并收掉
+    if let Some(debug_window) =
+        app.get_webview_window(crate::commands::window::DEBUG_WINDOW_LABEL)
+    {
+        let _ = debug_window.destroy();
+    }
     LIGHTWEIGHT_MODE.store(true, Ordering::SeqCst);
     let app2 = app.clone();
     tauri::async_runtime::spawn(async move {

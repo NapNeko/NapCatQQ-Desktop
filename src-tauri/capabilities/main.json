@@ -3,7 +3,8 @@
   "identifier": "main",
   "description": "Main window capabilities",
   "windows": [
-    "main"
+    "main",
+    "debug-console"
   ],
   "permissions": [
     "core:default",
