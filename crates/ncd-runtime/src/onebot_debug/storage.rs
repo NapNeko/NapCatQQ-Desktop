@@ -455,7 +455,7 @@ pub(crate) fn history_entry_from_call(
 ) -> Option<DebugHistoryEntry> {
     if !matches!(
         req.origin,
-        DebugCallOrigin::Editor | DebugCallOrigin::Composer
+        DebugCallOrigin::Editor | DebugCallOrigin::Composer | DebugCallOrigin::Mcp
     ) {
         return None;
     }
