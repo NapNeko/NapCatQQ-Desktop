@@ -294,8 +294,10 @@ function commitDetails({ prev, head, repo }) {
         .filter((p) => p.length === 3 && !/^chore\(release\)/i.test(p[2]));
     if (!rows.length) return [];
     const shown = rows.slice(0, 300);
-    // 提交标题里的 <xxx> 会被当成 HTML 标签吞掉
-    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    // 提交标题里的 <xxx> 会被当成 HTML 标签吞掉；@word 会被 GitHub 当用户提及
+    // 发给无关的人（技术上碰到真实用户名时），转义成 &#64; 就不会拉起 autolink
+    const esc = (s) =>
+        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/@(?=\w)/g, '&#64;');
     return [
         '<details>',
         `<summary>全部提交（${rows.length} 条）</summary>`,
