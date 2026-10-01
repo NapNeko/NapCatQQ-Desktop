@@ -9,6 +9,7 @@
  * - Qq → qq
  * - NodeJs → nodejs
  * - NoVnc → novnc
+ * - VcRedist → vcredist（Visual C++ 2015-2022 x64 运行库；NapCat Windows 注入器的运行时依赖）
  * - DesktopSelf → desktop_self
  * - NcdWatch → ncd_watch
  * - Karin → karin（应用端框架；按实例目录安装，不进组件页 catalog）
@@ -25,4 +26,4 @@
  * 的 rename_all = "snake_case",因为它会把 NapCat 切成 nap_cat,
  * Qq 切成 qq 也算巧合,但 NapCat 不行,所以统一都用显式 rename
  */
-export type ComponentId = "napcat" | "snowluma" | "qq" | "nodejs" | "novnc" | "desktop_self" | "ncd_watch" | "karin" | "uv" | "nonebot2" | "astrbot" | "maibot" | "koishi" | "git" | "redis" | "yunzai";
+export type ComponentId = "napcat" | "snowluma" | "qq" | "nodejs" | "novnc" | "vcredist" | "desktop_self" | "ncd_watch" | "karin" | "uv" | "nonebot2" | "astrbot" | "maibot" | "koishi" | "git" | "redis" | "yunzai";

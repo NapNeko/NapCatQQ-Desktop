@@ -60,6 +60,15 @@ export const mockComponentCatalog: ComponentInfo[] = [
         uninstall: 'supported',
     },
     {
+        id: 'vcredist',
+        display_name: 'VC++ 运行库',
+        description: 'NapCat 注入器运行所需的 Visual C++ x64 运行库',
+        repo_url: 'https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist',
+        supported_targets: [{ os: 'windows', locality: 'local' }],
+        category: 'runtime_dep',
+        uninstall: 'system_managed',
+    },
+    {
         id: 'nodejs',
         display_name: 'Node.js',
         description: 'JavaScript 运行环境',
@@ -189,6 +198,11 @@ const installedMatrix: Record<ComponentId, Record<string, InstalledEntry | null>
         'remote:production': { version: '3.2.25-45758', source: 'qq --version' },
         'remote:dev': null,
     },
+    vcredist: {
+        local: null,
+        'remote:production': null,
+        'remote:dev': null,
+    },
     nodejs: {
         local: { version: 'v20.10.0', source: 'node -v' },
         'remote:production': { version: 'v20.10.0', source: 'node -v' },
@@ -297,7 +311,8 @@ export function mockDetect(
 // 真依赖图在 Rust Component::requirements()；这里只给浏览器预览一张够用的假边表。
 
 const mockEdges: Partial<Record<ComponentId, ComponentId[]>> = {
-    napcat: ['qq'],
+    // vcredist 与真图一致只在 Windows 本机 NapCat 声明；mockDependencyPlan 按主机过滤
+    napcat: ['qq', 'vcredist'],
     snowluma: ['qq', 'novnc'],
 };
 
@@ -324,6 +339,9 @@ export function mockDependencyPlan(
     const host = mockHosts.find((h) => h.host_id === hostId);
     const nodes = (mockEdges[root] ?? [])
         .filter((id) => id !== 'novnc' || host?.locality === 'remote')
+        .filter(
+            (id) => id !== 'vcredist' || (host?.os === 'windows' && host?.locality === 'local'),
+        )
         .map((id) => mockNode(id, hostId, [root]));
     return { root, host_id: hostId, phase, nodes };
 }

@@ -34,6 +34,7 @@ pub mod snowluma;
 pub mod traits;
 pub mod types;
 pub mod uv;
+pub mod vcredist;
 
 pub use context::{ActionCtx, ProgressEvent, ProgressKind, ProgressLogLevel};
 pub use desktop_self::DesktopSelfComponent;
@@ -73,3 +74,4 @@ pub use types::{
     DetectedVersion, LaunchArgs, SupportedTarget, UninstallSupport, UnusableInstall, VerifyReport,
 };
 pub use uv::{UV_DEFAULT_VERSION, UvComponent};
+pub use vcredist::{VCREDIST_VERSION, VCREDIST_X64_SHA256, VCREDIST_X64_URL, VcRedistComponent};

@@ -488,6 +488,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn windows_only_dependency_resolves_unsupported_on_linux() {
+        // 钉住「if 真把 Windows-only 组件声明成 Linux 目标的依赖」的解析结果:
+        // Unsupported。它不是满足态(ready() 为 false),启动门禁又把它当缺装
+        // 拦截,所以 NapCat 的 vcredist 边只能在声明期按 OS 收窄,不能指望
+        // 探测期自动豁免;needs_action 为 false,装前闭包也不会试图补装它
+        let root = FakeComponent {
+            id: ComponentId::NapCat,
+            reqs: vec![Requirement::component(ComponentId::VcRedist)],
+            outcome: installed("1"),
+        };
+        let host = ScriptedHost {
+            commands: vec![],
+            shell: BashShell,
+        };
+        let build = |id: ComponentId| {
+            if id == ComponentId::VcRedist {
+                Ok(Arc::new(ncd_component::VcRedistComponent::new(
+                    HostPath::from_posix("/x"),
+                )) as Arc<dyn Component>)
+            } else {
+                Err(format!("no fake for {id:?}"))
+            }
+        };
+        let plan = resolve_dependencies(
+            &root,
+            &ResolveCtx {
+                host: &host,
+                phase: RequirementPhase::Run,
+                build: &build,
+                registry: &AppFrameworkRegistry::with_builtin(),
+            },
+        )
+        .await;
+        assert_eq!(plan.nodes.len(), 1);
+        assert_eq!(plan.nodes[0].status, RequirementStatus::Unsupported);
+        assert!(!plan.nodes[0].status.needs_action());
+        assert!(!plan.ready());
+    }
+
+    #[tokio::test]
     async fn builder_failure_and_probe_error_become_unknown_not_panic() {
         let root = FakeComponent {
             id: ComponentId::NapCat,

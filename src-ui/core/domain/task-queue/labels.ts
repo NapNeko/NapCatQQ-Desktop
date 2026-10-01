@@ -6,6 +6,7 @@ const COMPONENT_DISPLAY_NAME: Record<ComponentId, string> = {
     napcat: 'NapCat',
     snowluma: 'SnowLuma',
     qq: 'QQ',
+    vcredist: 'VC++ 运行库',
     nodejs: 'Node.js',
     novnc: 'noVNC',
     ncd_watch: 'NCD Watch',

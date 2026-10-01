@@ -195,6 +195,7 @@ impl NapCatComponent {
                 crate::types::SupportedTarget::new(Os::Linux, Locality::Remote),
             ],
             category: crate::types::ComponentCategory::Framework,
+            uninstall: crate::types::UninstallSupport::Supported,
         }
     }
 }
@@ -319,6 +320,12 @@ impl Component for NapCatComponent {
 
     fn requirements(&self, os: Os, _locality: Locality) -> Vec<Requirement> {
         let mut reqs = vec![Requirement::component(ComponentId::Qq)];
+        if os == Os::Windows {
+            // 官方注入器动态链接 MSVCP140 / VCRUNTIME140*,缺 VC++ 运行库时秒退。
+            // 只在 Windows 声明:Linux 目标上 vcredist 组件本身是 Unsupported,
+            // 而启动门禁把 Unsupported 当缺装拦截,这里根本不出这条边
+            reqs.push(Requirement::component(ComponentId::VcRedist));
+        }
         if os == Os::Linux {
             // NapCat.Shell.zip 在远端用 unzip 解
             reqs.push(Requirement::host_command("unzip", "unzip"));
@@ -956,6 +963,28 @@ mod tests {
 
     fn comp() -> NapCatComponent {
         NapCatComponent::new(HostPath::from_posix("/home/test/Napcat"))
+    }
+
+    #[test]
+    fn vcredist_requirement_is_windows_only() {
+        let c = comp();
+        let win: Vec<_> = c
+            .requirements(Os::Windows, Locality::Local)
+            .iter()
+            .filter_map(|r| r.component_id())
+            .collect();
+        assert_eq!(win, vec![ComponentId::Qq, ComponentId::VcRedist]);
+        // Linux 远端 / 本地不出 vcredist 边:它是 Windows 系统运行库,该目标上
+        // 探测必然是 Unsupported,而 resolver / 启动门禁都不会因此放行
+        for locality in [Locality::Local, Locality::Remote] {
+            let linux_reqs = c.requirements(Os::Linux, locality);
+            assert!(
+                !linux_reqs
+                    .iter()
+                    .any(|r| r.component_id() == Some(ComponentId::VcRedist)),
+                "Linux/{locality:?} 不应声明 vcredist 依赖"
+            );
+        }
     }
 
     #[test]
