@@ -4,6 +4,7 @@ import { AppBootGate } from './app/AppBootGate';
 import { AppProvidersNext } from './app/AppProvidersNext';
 import { TrayPanel } from './modules/tray/TrayPanel';
 import { isTauri } from './core/ipc/transport';
+import { DEBUG_WINDOW_LABEL } from './core/services/debug-window.service';
 
 // 屏蔽 WebView/浏览器默认右键菜单（后退/刷新/审查），输入框除外（保留系统复制粘贴）
 document.addEventListener('contextmenu', (e) => {
@@ -17,13 +18,13 @@ document.addEventListener('contextmenu', (e) => {
     }
 });
 
-async function isTrayPanelWindow(): Promise<boolean> {
-    if (!isTauri) return false;
+async function currentWindowLabel(): Promise<string | null> {
+    if (!isTauri) return null;
     try {
         const { getCurrentWindow } = await import('@tauri-apps/api/window');
-        return getCurrentWindow().label === 'tray-panel';
+        return getCurrentWindow().label;
     } catch {
-        return false;
+        return null;
     }
 }
 
@@ -58,9 +59,37 @@ async function renderTrayPanel(): Promise<void> {
     );
 }
 
+async function renderDebugPopout(): Promise<void> {
+    // 弹出窗是独立 WebView：跳过主应用的 Splash/启动闸门，但仍走 provider + 磁盘偏好水合，
+    // 主题 / 动画 / 圆角才能跟主窗一致（偏好权威在 app-settings.json，不指望 localStorage 跨窗共享）
+    const { hydrateAppUiPreferencesFromDisk } = await import(
+        './hooks/preferences/useAppUiPreferencesBootstrap'
+    );
+    const { applySideEffects } = await import('./hooks/preferences/preferencesStore');
+    const { syncRootChromeBackground } = await import('./core/design/surfaceCanvas');
+    const { markDebugPopoutWindow } = await import('./core/services/debug-window.service');
+    const { DebugPopoutApp } = await import('./app/DebugPopoutApp');
+    markDebugPopoutWindow();
+    applySideEffects();
+    syncRootChromeBackground();
+    await hydrateAppUiPreferencesFromDisk().finally(() => {
+        syncRootChromeBackground();
+    });
+    render(
+        <AppProvidersNext>
+            <DebugPopoutApp />
+        </AppProvidersNext>,
+    );
+}
+
 void (async () => {
-    if (await isTrayPanelWindow()) {
+    const label = await currentWindowLabel();
+    if (label === 'tray-panel') {
         await renderTrayPanel();
+        return;
+    }
+    if (label === DEBUG_WINDOW_LABEL) {
+        await renderDebugPopout();
         return;
     }
     render(

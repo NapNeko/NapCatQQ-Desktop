@@ -13,6 +13,7 @@ const WINDOW_EVENT = {
     requestClose: 'desktop-request-close',
     exitBlocked: 'desktop-exit-blocked',
     trayPanelShow: 'tray_panel_show',
+    debugPopoutClosed: 'debug-popout-closed',
 } as const;
 
 const WINDOW_SIGNAL: WindowSignal = { v: 1 };
@@ -81,6 +82,17 @@ export const windowControlService = {
         }
     },
 
+    /** 独立工具窗（调试台弹出窗）标题栏的关闭：只关自己，不走主窗的托盘隐藏 / 退出闸门 */
+    closeSelf: async (): Promise<void> => {
+        const w = await getWindow();
+        if (!w) return;
+        try {
+            await w.close();
+        } catch (err) {
+            console.error('关闭窗口失败:', err);
+        }
+    },
+
     isMaximized: async (): Promise<boolean> => {
         const w = await getWindow();
         if (!w) return false;
@@ -134,6 +146,19 @@ export const windowEventService = {
             const { getCurrentWindow } = await import('@tauri-apps/api/window');
             const win = getCurrentWindow();
             return await win.listen<WindowSignal>(WINDOW_EVENT.trayPanelShow, (e) => cb(e.payload));
+        } catch {
+            return () => {};
+        }
+    },
+
+    /** 调试台弹出窗被销毁后端发给主窗：据此作废调试台的内存状态。弹不出窗口的环境返回空退订。 */
+    onDebugPopoutClosed: async (cb: (signal: WindowSignal) => void): Promise<() => void> => {
+        try {
+            const { getCurrentWindow } = await import('@tauri-apps/api/window');
+            const win = getCurrentWindow();
+            return await win.listen<WindowSignal>(WINDOW_EVENT.debugPopoutClosed, (e) =>
+                cb(e.payload),
+            );
         } catch {
             return () => {};
         }
