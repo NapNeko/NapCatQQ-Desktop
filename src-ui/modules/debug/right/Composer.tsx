@@ -28,9 +28,6 @@ import type { DebugCallResponse } from '../../../core/ipc/generated/debug/DebugC
 import type { DebugChannelId } from '../../../core/ipc/generated/debug/DebugChannelId';
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import {
-    EMPTY_DRAFT,
-    buildMessageSegments,
-    hasContent,
     mentionLabel,
     mentionQueryAt,
     pruneMentions,
@@ -38,7 +35,8 @@ import {
     type ComposerDraft,
     type Mention,
 } from '../../../core/domain/debug/composerModel';
-import { draftKey, readDraft, writeDraft } from './composerDrafts';
+import { EMPTY_ENTRY, assembleMessage, hasMessageContent, type ComposerEntry } from '../../../core/domain/debug/messageBuilder';
+import { draftKey, readEntry, writeEntry } from './composerDrafts';
 
 export interface ComposerTarget {
     session: SessionKey;
@@ -116,7 +114,7 @@ export const Composer = memo(function Composer({
     const key = botId && to ? draftKey(botId, to.session) : null;
     const { send } = useDebugCall();
 
-    const [draft, setDraftState] = useState<ComposerDraft>(() => (key ? readDraft(key) : EMPTY_DRAFT));
+    const [draft, setDraftState] = useState<ComposerEntry>(() => (key ? readEntry(key) : EMPTY_ENTRY));
     const draftRef = useRef(draft);
     draftRef.current = draft;
     const keyRef = useRef(key);
@@ -124,7 +122,7 @@ export const Composer = memo(function Composer({
     // 换了会话：换成那个会话的草稿（渲染时对齐，不多闪一帧旧草稿）
     if (loadedKey !== key) {
         setLoadedKey(key);
-        setDraftState(key ? readDraft(key) : EMPTY_DRAFT);
+        setDraftState(key ? readEntry(key) : EMPTY_ENTRY);
     }
     keyRef.current = key;
 
@@ -146,10 +144,18 @@ export const Composer = memo(function Composer({
         };
     }, [focusRef]);
 
-    const setDraft = useCallback((next: ComposerDraft) => {
+    const setEntry = useCallback((next: ComposerEntry) => {
         setDraftState(next);
-        if (keyRef.current) writeDraft(keyRef.current, next);
+        if (keyRef.current) writeEntry(keyRef.current, next);
     }, []);
+
+    // 日常打字只动文字和 @ 名单；构建器段原样留着（文字排在构建器段后面发送）
+    const setDraft = useCallback(
+        (next: ComposerDraft) => {
+            setEntry({ ...next, rich: draftRef.current.rich });
+        },
+        [setEntry],
+    );
 
     // ---- 高度跟着内容长，最多 6 行
     useLayoutEffect(() => {
@@ -217,11 +223,8 @@ export const Composer = memo(function Composer({
     };
 
     // ---- 发送
-    const segments = useMemo(
-        () => buildMessageSegments(draft.text, draft.mentions, reply?.messageId),
-        [draft.text, draft.mentions, reply?.messageId],
-    );
-    const sendable = canCompose && !sending && hasContent(segments);
+    const segments = useMemo(() => assembleMessage(draft, reply?.messageId), [draft, reply?.messageId]);
+    const sendable = canCompose && !sending && hasMessageContent(segments);
 
     const submit = async () => {
         if (!sendable || !botId || !to) return;
@@ -246,15 +249,16 @@ export const Composer = memo(function Composer({
         // 发送途中换了会话：只收拾原来那个会话的草稿
         if (keyRef.current !== sentKey) {
             if (sentKey) {
-                const old = readDraft(sentKey);
+                const old = readEntry(sentKey);
                 const text = remainderAfterSend(old.text, sentText);
-                writeDraft(sentKey, { text, mentions: pruneMentions(text, old.mentions) });
+                writeEntry(sentKey, { text, mentions: pruneMentions(text, old.mentions), rich: [] });
             }
             return;
         }
         const current = draftRef.current;
         const text = remainderAfterSend(current.text, sentText);
-        setDraft({ text, mentions: pruneMentions(text, current.mentions) });
+        // 构建器段跟着这次发送一起清空，免得下一条顺手又把图片带出去
+        setEntry({ text, mentions: pruneMentions(text, current.mentions), rich: [] });
         onSent();
     };
 
