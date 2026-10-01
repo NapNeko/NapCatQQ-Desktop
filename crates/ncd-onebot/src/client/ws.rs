@@ -32,7 +32,18 @@ const CLOSE_FRAME_TIMEOUT: Duration = Duration::from_millis(500);
 const WS_SCHEME_HINT: &str = "地址必须以 ws:// 或 wss:// 开头";
 
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
-type PendingMap = HashMap<String, oneshot::Sender<RawCall>>;
+
+/// 等回包的两种形态：普通调用拿第一帧就走，流式调用把同一 echo 的每一帧都收下
+enum Pending {
+    Once(oneshot::Sender<RawCall>),
+    Stream(mpsc::Sender<RawCall>),
+}
+
+type PendingMap = HashMap<String, Pending>;
+
+/// 流式调用的帧缓冲：消费方（往盘上写分块）最慢也慢不过几十帧，再大就是真卡住了，
+/// 这时背压直接顶回读任务 —— 丢一帧就是坏文件，宁堵不丢
+const STREAM_QUEUE_CAP: usize = 64;
 
 /// 读任务、写任务与句柄共享的状态
 struct Shared {
@@ -205,8 +216,9 @@ async fn read_loop(
     shared.shut();
 }
 
-/// 分拣一帧文本：回包交给等待者，事件转发，其余忽略
-fn dispatch(text: &str, events: &mpsc::Sender<Value>, shared: &Shared) {
+/// 分拣一帧文本：回包交给等待者（普通调用第一帧就完，流式调用一帧一帧接着给），
+/// 事件转发，其余忽略
+async fn dispatch(text: &str, events: &mpsc::Sender<Value>, shared: &Shared) {
     // 只为调用建的连接（事件接收端早已丢掉）在没有等回包的调用时，这一帧不管是什么都用不上：
     // 连解析都省了。上游照推所有事件，一个带大块 `raw` 的消息也要解析一遍太浪费
     if events.is_closed() && shared.pending().is_empty() {
@@ -218,14 +230,33 @@ fn dispatch(text: &str, events: &mpsc::Sender<Value>, shared: &Shared) {
     };
 
     if let Some(echo) = value.get("echo").and_then(Value::as_str) {
-        // 先取出再发送：不在持锁期间做别的事
-        let waiter = shared.pending().remove(echo);
-        if let Some(waiter) = waiter {
-            // 等待方已经超时走人时 send 会失败，属正常，丢掉即可
-            let _ = waiter.send(RawCall {
-                text: text.to_owned(),
-                value,
-            });
+        // 先取出投递方式再发送：不在持锁期间做别的事
+        let stream_tx = {
+            let mut pending = shared.pending();
+            match pending.get_mut(echo) {
+                Some(Pending::Once(_)) => {
+                    if let Some(Pending::Once(waiter)) = pending.remove(echo) {
+                        // 等待方已经超时走人时 send 会失败，属正常，丢掉即可
+                        let _ = waiter.send(RawCall {
+                            text: text.to_owned(),
+                            value,
+                        });
+                    }
+                    return;
+                }
+                Some(Pending::Stream(tx)) => Some(tx.clone()),
+                None => None,
+            }
+        };
+        if let Some(tx) = stream_tx {
+            // 消费方慢了就在这里等它跟上；连接关闭时沟道断开，send 失败即收手。
+            // 流式帧一旦晚到、登记被摘，和普通回包一样掉到下面的忽略分支
+            let _ = tx
+                .send(RawCall {
+                    text: text.to_owned(),
+                    value,
+                })
+                .await;
             return;
         }
     }
@@ -312,7 +343,10 @@ impl WsClient {
         let frame = json!({"action": action, "params": params, "echo": echo}).to_string();
 
         let (reply_tx, reply_rx) = oneshot::channel();
-        self.inner.shared.pending().insert(echo.clone(), reply_tx);
+        self.inner
+            .shared
+            .pending()
+            .insert(echo.clone(), Pending::Once(reply_tx));
         let _guard = PendingGuard {
             shared: &self.inner.shared,
             echo: &echo,
@@ -346,6 +380,50 @@ impl WsClient {
         *self.inner.closed_rx.borrow()
     }
 
+    /// 发一个流式动作（分块下载这种「一次请求、多帧回答」）：同一 echo 的每一帧依次由
+    /// 返回的 [`WsStreamCall`] 取；哪一帧是终点由动作的协议决定，这里不判断。
+    ///
+    /// 消费方不及时取帧时读任务会被背压顶住（一帧都不能丢），所以别在收事件的共用
+    /// 连接上用它 —— 单独连一条
+    pub async fn call_stream(&self, action: &str, params: &Value) -> Result<WsStreamCall, ClientError> {
+        if self.is_closed() {
+            return Err(ClientError::NotSent);
+        }
+        let echo = Uuid::new_v4().to_string();
+        let frame = json!({"action": action, "params": params, "echo": echo}).to_string();
+
+        let (tx, rx) = mpsc::channel(STREAM_QUEUE_CAP);
+        self.inner
+            .shared
+            .pending()
+            .insert(echo.clone(), Pending::Stream(tx));
+        // 登记之后再查一次：连接恰好在两步之间结束时，`shut` 可能已经清过表了
+        if self.is_closed() {
+            self.inner.shared.pending().remove(&echo);
+            return Err(ClientError::NotSent);
+        }
+        let written = Arc::new(AtomicBool::new(false));
+        if self
+            .inner
+            .cmd_tx
+            .send(Outgoing {
+                echo: echo.clone(),
+                frame,
+                written: Arc::clone(&written),
+            })
+            .is_err()
+        {
+            self.inner.shared.pending().remove(&echo);
+            return Err(ClientError::NotSent);
+        }
+        Ok(WsStreamCall {
+            shared: Arc::clone(&self.inner.shared),
+            echo,
+            rx,
+            written,
+        })
+    }
+
     /// 等到连接结束才返回；已经结束则立即返回
     pub async fn closed(&self) {
         wait_closed(&mut self.inner.closed_rx.clone()).await;
@@ -364,6 +442,34 @@ impl WsClient {
     /// 因为事件通道满了而丢掉的事件累计条数
     pub fn dropped(&self) -> u64 {
         self.inner.shared.dropped.load(Ordering::Relaxed)
+    }
+}
+
+/// [`WsClient::call_stream`] 拿到的流式帧序列。丢掉时摘掉等待登记，晚到的同 echo 帧照常忽略
+pub struct WsStreamCall {
+    shared: Arc<Shared>,
+    echo: String,
+    rx: mpsc::Receiver<RawCall>,
+    written: Arc<AtomicBool>,
+}
+
+impl WsStreamCall {
+    /// 取下一帧。`timeout` 是等这一帧的上限：上游先把文件搬到本地再开始吐帧，
+    /// 中途可能一阵没帧，别拿整体时限去卡大文件
+    pub async fn next(&mut self, timeout: Duration) -> Result<RawCall, ClientError> {
+        match tokio::time::timeout(timeout, self.rx.recv()).await {
+            Ok(Some(frame)) => Ok(frame),
+            // 发送端被丢弃 = 连接结束时等待表被清空。还没写出去的，上游根本没收到
+            Ok(None) if !self.written.load(Ordering::SeqCst) => Err(ClientError::NotSent),
+            Ok(None) => Err(ClientError::Closed),
+            Err(_) => Err(ClientError::Timeout),
+        }
+    }
+}
+
+impl Drop for WsStreamCall {
+    fn drop(&mut self) {
+        self.shared.pending().remove(&self.echo);
     }
 }
 
@@ -489,5 +595,97 @@ mod tests {
         assert_eq!(client.in_flight(), 0);
         client.close();
         server.await.unwrap();
+    }
+
+    /// 流式调用把同一 echo 的每一帧都按序收到（中间的帧不会提前结束等待）；
+    /// 同一条连接上并发的普通调用只拿自己那帧
+    #[tokio::test]
+    async fn stream_call_collects_every_frame_with_its_echo() {
+        use futures_util::{SinkExt, StreamExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+            let mut stream_echo = None;
+            let mut once_echo = None;
+            while stream_echo.is_none() || once_echo.is_none() {
+                let Some(Ok(Message::Text(req))) = ws.next().await else {
+                    panic!("应收到两次调用");
+                };
+                let request: Value = serde_json::from_str(&req).unwrap();
+                if request["action"] == "download_file_stream" {
+                    stream_echo = Some(request["echo"].clone());
+                } else {
+                    once_echo = Some(request["echo"].clone());
+                }
+            }
+            let frame = |echo: &Value, data: Value| {
+                Message::Text(
+                    json!({"status": "ok", "retcode": 0, "data": data, "stream": "stream-action", "echo": echo})
+                        .to_string(),
+                )
+            };
+            let stream_echo = stream_echo.unwrap();
+            ws.send(frame(&stream_echo, json!({"type": "stream", "index": 0}))).await.unwrap();
+            // 普通调用的回包夹在流式帧中间
+            let once_echo = once_echo.unwrap();
+            ws.send(Message::Text(
+                json!({"status": "ok", "retcode": 0, "data": {"online": true}, "echo": once_echo}).to_string(),
+            ))
+            .await
+            .unwrap();
+            ws.send(frame(&stream_echo, json!({"type": "stream", "index": 1}))).await.unwrap();
+            ws.send(frame(&stream_echo, json!({"type": "response", "total_chunks": 2}))).await.unwrap();
+            while ws.next().await.is_some() {}
+        });
+
+        let (events_tx, _events_rx) = mpsc::channel(8);
+        let client = connect_ws(&format!("ws://{addr}/"), None, events_tx)
+            .await
+            .unwrap();
+        let mut stream = client
+            .call_stream("download_file_stream", &serde_json::json!({}))
+            .await
+            .unwrap();
+        let once = client
+            .call("get_status", &serde_json::json!({}), Duration::from_secs(5))
+            .await
+            .expect("普通调用应拿到自己的回包");
+        assert_eq!(once.value["data"]["online"], true);
+
+        let mut kinds = Vec::new();
+        for _ in 0..3 {
+            let frame = stream.next(Duration::from_secs(5)).await.unwrap();
+            kinds.push(frame.value["data"]["type"].as_str().unwrap().to_owned());
+            assert_eq!(frame.value["stream"], "stream-action");
+        }
+        assert_eq!(kinds, ["stream", "stream", "response"]);
+        client.close();
+        server.await.unwrap();
+    }
+
+    /// 连接已经结束时发起流式调用：请求不可能发出，报 NotSent 而不是干等
+    #[tokio::test]
+    async fn stream_call_on_a_closed_connection_is_not_sent() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+            drop(ws);
+        });
+        let (events_tx, _events_rx) = mpsc::channel(1);
+        let client = connect_ws(&format!("ws://{addr}/"), None, events_tx)
+            .await
+            .unwrap();
+        server.await.unwrap();
+        client.closed().await;
+        let err = client
+            .call_stream("download_file_stream", &serde_json::json!({}))
+            .await
+            .expect_err("已关闭的连接上发起应失败");
+        assert!(matches!(err, ClientError::NotSent), "got {err:?}");
     }
 }
