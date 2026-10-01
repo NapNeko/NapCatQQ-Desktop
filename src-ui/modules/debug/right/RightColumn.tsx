@@ -33,6 +33,9 @@ import type { DebugChatView } from '../../../core/ipc/generated/debug/DebugChatV
 import type { DebugTarget } from '../../../core/ipc/generated/debug/DebugTarget';
 import { ChatViewContext, type ChatViewApi } from './chatContext';
 import { idsOfItem, parseSessionKey, planFill, type FillPlan, type MessageItem } from '../../../core/domain/debug/chatFormat';
+import { callProblem } from '../../../core/domain/debug/errorCopy';
+import { handleRequestCall } from '../../../core/domain/debug/requestHandling';
+import { useDebugCall } from '../../../hooks/debug/useDebugCall';
 import { ChatTimeline } from './ChatTimeline';
 import { ChatToolbar, type KindFilter } from './ChatToolbar';
 import { Composer, type ComposerReply, type ComposerTarget } from './Composer';
@@ -201,6 +204,12 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     const selfName = targetDisplayName(target);
     const selfRef = useRef({ id: target.qq_id > 0 ? target.qq_id : undefined, name: selfName });
     selfRef.current = { id: chat.selfId ?? (target.qq_id > 0 ? target.qq_id : undefined), name: selfName };
+    // 请求卡片的「同意 / 拒绝」：发调用要看当下的 Bot 和通道，记 ref 不记在 memo 依赖里
+    const botRef = useRef({ id: target.bot_id, name: selfName });
+    botRef.current = { id: target.bot_id, name: selfName };
+    const callChannelRef = useRef(callChannel);
+    callChannelRef.current = callChannel;
+    const { send: sendCall } = useDebugCall();
 
     const activeTab = useActiveDebugTab();
     const spec = useDebugActionSpec(target, activeTab?.action ? activeTab.action : null);
@@ -242,6 +251,7 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
             },
             sessionName: (key) => chatRef.current.sessions[key]?.name,
             selfId: () => selfRef.current.id,
+            bot: () => botRef.current,
             toggleSelect: (item) => {
                 // 再点一次只是不回复它了；发往的会话留着
                 setReplyTo((r) => (r?.key === item.key ? null : selectionOf(item)));
@@ -259,6 +269,20 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
                 const tab = tabRef.current;
                 if (plan.ok && tab) debugWorkspaceStore.setParamsText(tab.id, plan.text);
                 return plan;
+            },
+            handleRequest: async (item, approve) => {
+                const call = handleRequestCall(item, approve);
+                if (!call) return { ok: false, reason: '这条请求没有 flag，处理不了' };
+                const res = await sendCall(null, {
+                    bot_id: botRef.current.id,
+                    channel: callChannelRef.current,
+                    action: call.action,
+                    params: call.params,
+                    timeout_ms: null,
+                    origin: 'editor',
+                });
+                const problem = callProblem(res);
+                return problem ? { ok: false, reason: problem } : { ok: true };
             },
             openImage: (url) => setLightbox(url),
             openLink: (url) => openExternal(url),

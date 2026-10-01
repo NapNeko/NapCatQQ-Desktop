@@ -1,21 +1,20 @@
 // 时间线里不是聊天消息的那些行：通知（居中灰条）、请求（卡片）、和消息无关的调用（虚线小标签）、
 // 元事件、接收器状态、断线缺口、上游丢弃、缓冲裁掉的提示、时间分隔线。
-//
-// 加好友 / 加群请求的「同意 / 拒绝」按钮留到下一期，这里只展示和复制 flag。
 
 import { memo, useRef, useState } from 'react';
-import { Braces, Check, Copy, FileInput, TriangleAlert, UserPlus, Users } from 'lucide-react';
+import { Braces, Check, Copy, FileInput, TriangleAlert, UserPlus, Users, X } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
+import { Button, Spinner } from '../../../shared/ui';
 import { receiverStateCopy } from '../../../core/domain/debug/receiverCopy';
 import type { ChatItem } from '../../../core/domain/debug/chat';
+import { rejectLine, handleRequestCall, requestLine } from '../../../core/domain/debug/requestHandling';
+import { DangerConfirmDialog, dangerConfirmSkipped } from '../DangerConfirmDialog';
 import { useChatView } from './chatContext';
 import { callLine, clockTime, countFormat, dayLabel, gapRange, originLabel } from '../../../core/domain/debug/chatFormat';
 import { HoverActions, useRowHover } from './MessageBubble';
 import { useCopy } from './rightParts';
 
 type Of<K extends ChatItem['kind']> = Extract<ChatItem, { kind: K }>;
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 export function TimeSeparator({ at }: { at: number }) {
     return (
@@ -46,6 +45,12 @@ export const NoticeRow = memo(function NoticeRow({ item, showSessionName }: { it
     );
 });
 
+type HandleState =
+    | { state: 'idle' }
+    | { state: 'sending'; approve: boolean }
+    | { state: 'done'; approve: boolean }
+    | { state: 'failed'; reason: string };
+
 export const RequestCard = memo(function RequestCard({ item }: { item: Of<'request'> }) {
     const api = useChatView();
     const { copied, copy } = useCopy();
@@ -54,12 +59,31 @@ export const RequestCard = memo(function RequestCard({ item }: { item: Of<'reque
     const [plan, setPlan] = useState(() => api.previewFill(item));
     const refreshPlan = () => setPlan(api.previewFill(item));
     const user = api.nameOf(item.userId) ?? String(item.userId);
-    const raw = isRecord(item.raw) ? item.raw : {};
-    const invite = raw.sub_type === 'invite';
     const group = item.groupId !== undefined ? (api.sessionName(`group:${item.groupId}`) ?? String(item.groupId)) : '';
-    const title =
-        item.requestType === 'friend' ? `${user} 请求加好友` : invite ? `${user} 邀请 Bot 加入群 ${group}` : `${user} 申请加群 ${group}`;
+    const title = requestLine(item, user, group);
     const Icon = item.requestType === 'friend' ? UserPlus : Users;
+
+    // 「同意 / 拒绝」：卡片被虚拟列表卸掉再挂上会回到未处理，重复处理上游会挡，看见了重发一次就知道
+    const [outcome, setOutcome] = useState<HandleState>({ state: 'idle' });
+    const [confirmReject, setConfirmReject] = useState(false);
+    // 没有 flag 的请求上游不收，不给按钮
+    const handle = handleRequestCall(item, false);
+    const sending = outcome.state === 'sending';
+
+    const act = async (approve: boolean) => {
+        setOutcome({ state: 'sending', approve });
+        const res = await api.handleRequest(item, approve);
+        setOutcome(res.ok ? { state: 'done', approve } : { state: 'failed', reason: res.reason });
+    };
+    const bot = api.bot();
+    const onReject = () => {
+        if (bot && handle && !dangerConfirmSkipped(bot.id, handle.action)) {
+            setConfirmReject(true);
+            return;
+        }
+        void act(false);
+    };
+
     return (
         <div ref={ref} className="px-6 py-1.5">
             <div className="rounded-md border border-border-subtle bg-surface px-3 py-2 shadow-sm">
@@ -70,6 +94,45 @@ export const RequestCard = memo(function RequestCard({ item }: { item: Of<'reque
                 </div>
                 {item.comment && (
                     <p className="mt-1 break-words text-xs leading-relaxed text-text-secondary">验证消息：{item.comment}</p>
+                )}
+                {handle && (
+                    <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+                        {outcome.state === 'done' ? (
+                            <span
+                                className={cn(
+                                    'inline-flex items-center gap-1 text-2xs font-medium',
+                                    outcome.approve ? 'text-success' : 'text-text-tertiary',
+                                )}
+                            >
+                                <Check size={12} strokeWidth={2.4} aria-hidden />
+                                已{outcome.approve ? '同意' : '拒绝'}
+                            </span>
+                        ) : (
+                            <>
+                                <Button size="sm" variant="secondary" disabled={sending} onClick={() => void act(true)}>
+                                    {sending && outcome.approve ? (
+                                        <Spinner size="xs" label="正在同意" />
+                                    ) : (
+                                        <Check size={12} strokeWidth={2.4} aria-hidden />
+                                    )}
+                                    同意
+                                </Button>
+                                <Button size="sm" variant="ghost" disabled={sending} onClick={onReject}>
+                                    {sending && !outcome.approve ? (
+                                        <Spinner size="xs" label="正在拒绝" />
+                                    ) : (
+                                        <X size={12} strokeWidth={2.4} aria-hidden />
+                                    )}
+                                    拒绝
+                                </Button>
+                            </>
+                        )}
+                        {outcome.state === 'failed' && (
+                            <span className="min-w-0 truncate text-2xs text-danger" title={outcome.reason}>
+                                {outcome.reason}
+                            </span>
+                        )}
+                    </div>
                 )}
                 <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-2xs text-text-tertiary">
                     <span className="min-w-0 max-w-full truncate font-mono text-[10.5px]">flag: {item.flag || '（无）'}</span>
@@ -112,6 +175,18 @@ export const RequestCard = memo(function RequestCard({ item }: { item: Of<'reque
                     </button>
                 </div>
             </div>
+            {bot && handle && (
+                <DangerConfirmDialog
+                    open={confirmReject}
+                    onOpenChange={setConfirmReject}
+                    botId={bot.id}
+                    botName={bot.name}
+                    action={handle.action}
+                    reason={rejectLine(item, user, group)}
+                    params={handle.params}
+                    onConfirm={() => void act(false)}
+                />
+            )}
         </div>
     );
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DebugError } from '../../ipc/generated/debug/DebugError';
 import { NO_CHANNEL_EXITS, UPGRADE_RUNTIME_EXIT } from './channelCopy';
-import { debugErrorCopy, retcodeHint } from './errorCopy';
+import { callProblem, debugErrorCopy, retcodeHint } from './errorCopy';
 
 describe('debugErrorCopy', () => {
     // 每种 kind 列一遍；源码里的文案表用 satisfies 卡住了 kind 的完整性，这里卡具体文案
@@ -58,5 +58,48 @@ describe('retcodeHint', () => {
         expect(retcodeHint(0)).toBeNull();
         expect(retcodeHint(-1)).toBeNull();
         expect(retcodeHint(9999)).toBeNull();
+    });
+});
+
+describe('callProblem', () => {
+    const outcome = (patch: Record<string, unknown>) => ({
+        request_id: 'r1',
+        result: {
+            kind: 'ok' as const,
+            outcome: {
+                ok: false,
+                status: 'failed',
+                retcode: 1200,
+                data: null,
+                message: '',
+                wording: '',
+                raw: null,
+                elapsed_ms: 3,
+                channel: { kind: 'internal' as const },
+                size_bytes: 0,
+                truncated: false,
+                ...patch,
+            },
+        },
+    });
+
+    it('成功返回 null', () => {
+        expect(callProblem(outcome({ ok: true, status: 'ok', retcode: 0 }))).toBeNull();
+    });
+
+    it('OB11 说失败：retcode 带上游说明（wording 优先，其次 message、retcode 人话）', () => {
+        expect(callProblem(outcome({ wording: '该请求已被处理' }))).toBe('retcode 1200 · 该请求已被处理');
+        expect(callProblem(outcome({ message: 'msg 兜底' }))).toBe('retcode 1200 · msg 兜底');
+        expect(callProblem(outcome({}))).toBe('retcode 1200 · 上游执行出错：具体原因看返回里的 message / wording');
+        expect(callProblem(outcome({ retcode: 1400 }))).toBe('retcode 1400 · 参数不对：缺了必填项，或者类型 / 取值不符合要求');
+    });
+
+    it('没拿到回包：用错误文案（标题加细节）', () => {
+        expect(
+            callProblem({ request_id: 'r1', result: { kind: 'err', error: { kind: 'timeout', ms: 60_000 } } }),
+        ).toBe('等太久了，调用超时：已等待 60 秒。上游可能还在执行，可以调大超时后重试');
+        expect(callProblem({ request_id: 'r1', result: { kind: 'err', error: { kind: 'cancelled' } } })).toBe(
+            '已取消：取消只是不再等待回包，上游可能已经执行了',
+        );
     });
 });
