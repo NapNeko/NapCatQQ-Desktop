@@ -173,6 +173,97 @@ impl SnowLumaDebugClient {
         Err(classify_failure(status.as_u16(), &text))
     }
 
+    /// `POST /api/debug/invoke-stream`：调用一个流式动作，帧按 SSE 一路推回（不丢帧）。
+    /// 成功时把响应交给调用方按流读，最后一帧之前都是中间帧
+    pub async fn invoke_stream(
+        &self,
+        uin: &str,
+        action: &str,
+        params: &Value,
+    ) -> Result<Response, SnowLumaDebugError> {
+        let body = json!({ "uin": uin, "action": action, "params": params });
+        let resp = self
+            .authed(
+                Method::POST,
+                "/api/debug/invoke-stream",
+                Some(&body),
+                RequestKind::EventStream,
+            )
+            .await?;
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(resp);
+        }
+        if status.as_u16() == 404 {
+            // 与 invoke 同一套区分：账号没上线和路由根本不存在（老版本，没有这个路由）都是 404
+            let text = read_text(resp).await.unwrap_or_default();
+            return Err(if is_account_offline_body(&text) {
+                SnowLumaDebugError::NotOnline
+            } else {
+                SnowLumaDebugError::TooOld
+            });
+        }
+        let text = read_text(resp).await.unwrap_or_default();
+        Err(classify_failure(status.as_u16(), &text))
+    }
+
+    /// `POST /api/debug/upload?filename=<name>`：把本机文件按原始字节流放到 SnowLuma 所在
+    /// 机器上，返回那边的路径和大小；body 由调用方按自己的节奏拆块（进度顺带在流里记）。
+    ///
+    /// 401 不重试：请求体是一次性消耗品，已经发出去的拿不回来重新发。没设请求级超时，
+    /// 整体时限由调用方用别的方式兜
+    pub async fn upload_file(
+        &self,
+        file_name: &str,
+        body: reqwest::Body,
+    ) -> Result<SnowLumaUpload, SnowLumaDebugError> {
+        // login 成功后主机已经探定；上传只发一次，拿起已经记住的那台，不再做主机回退
+        let token = self.ensure_token().await?;
+        let host = self
+            .host
+            .read()
+            .await
+            .clone()
+            .unwrap_or_else(|| HOST_CANDIDATES[0].to_owned());
+        let resp = self
+            .http
+            .post(format!("{}/api/debug/upload", Self::base_url(&host, self.port)))
+            .bearer_auth(&token)
+            .query(&[("filename", file_name)])
+            .body(body)
+            .send()
+            .await
+            .map_err(SnowLumaDebugError::from_transport)?;
+        let status = resp.status();
+        if status.as_u16() == 401 {
+            self.invalidate(&token).await;
+            return Err(SnowLumaDebugError::Unauthorized);
+        }
+        if status.as_u16() == 404 {
+            return Err(SnowLumaDebugError::TooOld);
+        }
+        let text = read_text(resp).await?;
+        if !status.is_success() {
+            return Err(classify_failure(status.as_u16(), &text));
+        }
+        let value: Value =
+            serde_json::from_str(&text).map_err(|e| SnowLumaDebugError::Decode(e.to_string()))?;
+        let ok = value.get("status").and_then(Value::as_str) == Some("ok");
+        match (
+            ok,
+            value.get("path").and_then(Value::as_str),
+            value.get("size").and_then(Value::as_u64),
+        ) {
+            (true, Some(path), Some(size)) => Ok(SnowLumaUpload {
+                path: path.to_owned(),
+                size,
+            }),
+            _ => Err(SnowLumaDebugError::Decode(
+                "上传响应缺少 status/path/size 字段".into(),
+            )),
+        }
+    }
+
     fn base_url(host: &str, port: u16) -> String {
         format!("http://{host}:{port}")
     }
@@ -356,6 +447,14 @@ impl SnowLumaDebugClient {
 enum RequestKind {
     Timed(Duration),
     EventStream,
+}
+
+/// `/api/debug/upload` 放好的一份文件
+#[derive(Debug, Clone, PartialEq)]
+pub struct SnowLumaUpload {
+    /// 文件在 SnowLuma 所在机器上的路径，可直接作为发送动作的 file 参数
+    pub path: String,
+    pub size: u64,
 }
 
 /// 从 `{"message": "..."}` 里取文案
@@ -977,6 +1076,138 @@ mod tests {
         let client = SnowLumaDebugClient::new(port, "pwd".into()).expect("build client");
         client.actions().await.expect("falls back to localhost");
         assert_eq!(client.host.read().await.as_deref(), Some("localhost"));
+    }
+
+    #[tokio::test]
+    async fn invoke_stream_returns_the_sse_body_after_login() {
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        Mock::given(method("POST"))
+            .and(path("/api/debug/invoke-stream"))
+            .and(header("authorization", "Bearer t1"))
+            .and(body_partial_json(json!({
+                "uin": "10001",
+                "action": "download_file_stream",
+                "params": {},
+            })))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_string(
+                        "data: {\"status\":\"ok\",\"retcode\":0,\"data\":{\"type\":\"stream\"}}\n\n\
+                         data: {\"status\":\"ok\",\"retcode\":0,\"data\":{\"type\":\"response\"}}\n\n",
+                    ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let resp = client_for(&server)
+            .invoke_stream("10001", "download_file_stream", &json!({}))
+            .await
+            .expect("invoke_stream");
+        assert!(resp.status().is_success());
+        let text = resp.text().await.expect("body");
+        assert_eq!(text.matches("data: ").count(), 2);
+    }
+
+    #[tokio::test]
+    async fn invoke_stream_404_distinguishes_offline_account_from_missing_route() {
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        Mock::given(method("POST"))
+            .and(path("/api/debug/invoke-stream"))
+            .respond_with(ResponseTemplate::new(404).set_body_string("Cannot POST /api/debug/invoke-stream"))
+            .mount(&server)
+            .await;
+        let err = client_for(&server)
+            .invoke_stream("10001", "download_file_stream", &json!({}))
+            .await
+            .expect_err("route missing");
+        assert!(matches!(err, SnowLumaDebugError::TooOld), "got {err:?}");
+
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        Mock::given(method("POST"))
+            .and(path("/api/debug/invoke-stream"))
+            .respond_with(
+                ResponseTemplate::new(404).set_body_json(json!({ "status": "failed", "message": "账号不在线" })),
+            )
+            .mount(&server)
+            .await;
+        let err = client_for(&server)
+            .invoke_stream("10001", "download_file_stream", &json!({}))
+            .await
+            .expect_err("offline");
+        assert!(matches!(err, SnowLumaDebugError::NotOnline), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn upload_file_posts_raw_body_and_returns_remote_path() {
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        Mock::given(method("POST"))
+            .and(path("/api/debug/upload"))
+            .and(header("authorization", "Bearer t1"))
+            .and(wiremock::matchers::query_param("filename", "a.png"))
+            .and(wiremock::matchers::body_string("hello world"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "ok",
+                "path": "/tmp/webui-upload/ab__a.png",
+                "size": 11,
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let upload = client_for(&server)
+            .upload_file("a.png", reqwest::Body::from("hello world".as_bytes().to_vec()))
+            .await
+            .expect("upload");
+        assert_eq!(
+            upload,
+            SnowLumaUpload {
+                path: "/tmp/webui-upload/ab__a.png".into(),
+                size: 11,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn upload_file_maps_404_to_too_old_and_400_to_status() {
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        Mock::given(method("POST"))
+            .and(path("/api/debug/upload"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        let err = client_for(&server)
+            .upload_file("a.png", reqwest::Body::from("x".as_bytes().to_vec()))
+            .await
+            .expect_err("404");
+        assert!(matches!(err, SnowLumaDebugError::TooOld), "got {err:?}");
+
+        let server = MockServer::start().await;
+        mount_login(&server, "t1").await;
+        Mock::given(method("POST"))
+            .and(path("/api/debug/upload"))
+            .respond_with(
+                ResponseTemplate::new(400).set_body_json(json!({ "status": "failed", "message": "上传超出大小上限" })),
+            )
+            .mount(&server)
+            .await;
+        let err = client_for(&server)
+            .upload_file("a.png", reqwest::Body::from("x".as_bytes().to_vec()))
+            .await
+            .expect_err("400");
+        match err {
+            SnowLumaDebugError::Status { status, message } => {
+                assert_eq!(status, 400);
+                assert_eq!(message, "上传超出大小上限");
+            }
+            other => panic!("expected Status, got {other:?}"),
+        }
     }
 
     #[test]

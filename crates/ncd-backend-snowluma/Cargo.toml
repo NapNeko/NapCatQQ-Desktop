@@ -33,6 +33,8 @@ reqwest = { version = "0.12", default-features = false, features = [
     "json",
     "rustls-tls",
     "gzip",
+    # 调试台流式接口：按流读 invoke-stream 的 SSE、按流写 /api/debug/upload 的原始字节
+    "stream",
 ] }
 tracing = "0.1"
 rand = "0.8"

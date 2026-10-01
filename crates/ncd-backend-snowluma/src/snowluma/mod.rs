@@ -33,7 +33,7 @@ pub use webui_client::{
 //
 // 调试台专用的 /api/debug/* 客户端,独立于 SnowLumaWebUiClient trait
 pub use debug_client::{
-    SlStreamFrame, SnowLumaDebugClient, SnowLumaDebugError, parse_stream_frame,
+    SlStreamFrame, SnowLumaDebugClient, SnowLumaDebugError, SnowLumaUpload, parse_stream_frame,
 };
 
 // ---- daemon.rs ----
