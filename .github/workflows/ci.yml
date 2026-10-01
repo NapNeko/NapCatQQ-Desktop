@@ -143,9 +143,9 @@ jobs:
       - name: Exclude build dirs from Defender scan
         shell: pwsh
         run: |
-          Add-MpPreference -ExclusionPath $env:CARGO_HOME
-          Add-MpPreference -ExclusionPath $env:RUSTUP_HOME
-          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\target"
+          # 托管 runner 不一定有 RUSTUP_HOME，空值会让 Add-MpPreference 直接报错
+          $paths = @($env:CARGO_HOME, $env:RUSTUP_HOME, "$env:USERPROFILE\.rustup", "$env:GITHUB_WORKSPACE\target") | Where-Object { $_ }
+          foreach ($p in $paths) { Add-MpPreference -ExclusionPath $p }
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
@@ -205,9 +205,9 @@ jobs:
       - name: Exclude build dirs from Defender scan
         shell: pwsh
         run: |
-          Add-MpPreference -ExclusionPath $env:CARGO_HOME
-          Add-MpPreference -ExclusionPath $env:RUSTUP_HOME
-          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\target"
+          # 托管 runner 不一定有 RUSTUP_HOME，空值会让 Add-MpPreference 直接报错
+          $paths = @($env:CARGO_HOME, $env:RUSTUP_HOME, "$env:USERPROFILE\.rustup", "$env:GITHUB_WORKSPACE\target") | Where-Object { $_ }
+          foreach ($p in $paths) { Add-MpPreference -ExclusionPath $p }
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
