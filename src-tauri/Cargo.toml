@@ -14,6 +14,7 @@ ncd-deploy = { path = "../crates/ncd-deploy" }
 ncd-host = { path = "../crates/ncd-host" }
 ncd-domain = { path = "../crates/ncd-domain" }
 ncd-network = { path = "../crates/ncd-network" }
+ncd-mcp = { path = "../crates/ncd-mcp" }
 ncd-update = { path = "../crates/ncd-update" }
 dirs = "5"
 serde = { workspace = true }

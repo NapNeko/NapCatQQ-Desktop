@@ -108,6 +108,19 @@ pub async fn set_app_settings(
         *state.metrics_collector.prefs().write().await = prefs;
     }
 
+    // 调试台功能开关与 MCP 服务随设置保存热生效（关掉即停接收器和在途调用）
+    state
+        .onebot_debug
+        .set_enabled(settings.features.api_debug)
+        .await;
+    crate::commands::mcp::apply_mcp_settings(
+        &state.mcp,
+        &state.data_root,
+        &state.app_settings,
+        &settings.mcp,
+    )
+    .await;
+
     state
         .offline_notifier
         .update_from_app_settings(

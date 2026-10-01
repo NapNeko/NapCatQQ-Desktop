@@ -71,11 +71,11 @@ pub struct AppState {
     /// 内嵌终端会话；和网页无关，进轻量模式也不断
     pub(crate) terminals: Arc<ncd_runtime::terminal::TerminalManager>,
     /// OneBot 调试台：Bot 的调用通道、事件接收器、工作区 / 收藏 / 历史落盘。
-    /// 功能开关接缝：`set_enabled` 目前没有调用方（一直开着）。FeatureToggles.apiDebug
-    /// （quiet-soaring-otter 分支）合入后要接两处：启动时按落盘的 `apiDebug` 调一次
-    /// `set_enabled`（关着就不该有接收器起来），设置保存时再按新值调；前端改
-    /// `hooks/debug/useDebugConsoleEnabled` 那一行
+    /// 功能开关 = app-settings 的 `features.apiDebug`：启动时按落盘值调一次
+    /// `set_enabled`（关着就不起接收器），设置保存时按新值热生效
     pub(crate) onebot_debug: Arc<ncd_runtime::onebot_debug::DebugManager>,
+    /// 调试台对外（本机 agent）的 MCP 服务；默认关，随设置的 `mcp.enabled` 起停
+    pub(crate) mcp: Arc<ncd_mcp::McpServer>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -338,6 +338,20 @@ pub fn run() {
         host_resolver_for_debug,
         data_root.clone(),
     ));
+    // 功能开关按落盘值起停（M7）：关着就不该有接收器起来；设置保存时 set_app_settings 按新值热生效
+    tauri::async_runtime::block_on(onebot_debug.set_enabled(app_settings.features.api_debug));
+    // 调试台的 MCP 服务也一样：默认关，按 `mcp.enabled` 起；随机端口首次回填进设置
+    let mcp = Arc::new(ncd_mcp::McpServer::new(
+        Arc::clone(&onebot_debug),
+        Arc::clone(&secrets),
+    ));
+    let mcp_settings = app_settings.mcp.clone();
+    tauri::async_runtime::block_on(commands::mcp::apply_mcp_settings(
+        &mcp,
+        &data_root,
+        &app_settings_shared,
+        &mcp_settings,
+    ));
     // BotManager 就绪后再挂 OneBot messenger 解析
     tauri::async_runtime::block_on(onebot_resolver.set(Arc::new(
         onebot_endpoint_resolver::BotManagerOneBotEndpointResolver::new(Arc::clone(&bot_manager)),
@@ -440,6 +454,7 @@ pub fn run() {
             app_manager: app_manager.clone(),
             terminals,
             onebot_debug,
+            mcp,
         })
         // 页面开始（重新）加载时，旧页面的调试台事件订阅已经没人收了，但 Channel 还能 send 成功、探不出来，
         // 在这里按窗口摘掉，否则接收器一直算「有人在看」，空闲停不下来
@@ -752,6 +767,7 @@ pub fn run() {
             commands::app_settings::clear_offline_delivery_history,
             commands::app_settings::list_onebot_messenger_candidates,
             commands::app_settings::ensure_onebot_messenger_http,
+            commands::mcp::mcp_status,
             commands::system_metrics::get_system_resource_snapshot,
             commands::config_transfer::export_config,
             commands::config_transfer::import_config,

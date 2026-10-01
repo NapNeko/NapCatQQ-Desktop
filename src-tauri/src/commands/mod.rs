@@ -14,6 +14,7 @@ pub mod docker;
 pub mod exit;
 pub mod host_resolve;
 pub mod koishi;
+pub mod mcp;
 pub mod ncd_watch;
 pub mod onebot_debug;
 pub mod release;
@@ -323,7 +324,10 @@ mod tests {
         let store = Arc::new(LocalConfigStore::new(root));
         let secrets: Arc<dyn SecretStore + Send + Sync> =
             Arc::new(SecretStoreImpl::new(root.join("secrets")));
-        let repo = Arc::new(LocalBotConfigRepo::new(Arc::clone(&store), secrets));
+        let repo = Arc::new(LocalBotConfigRepo::new(
+            Arc::clone(&store),
+            Arc::clone(&secrets),
+        ));
         let renderer = Arc::new(DispatchRenderer::new(
             store.config_dir(),
             store.config_dir(),
@@ -400,6 +404,10 @@ mod tests {
             root,
             Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
         );
+        let mcp = Arc::new(ncd_mcp::McpServer::new(
+            Arc::clone(&onebot_debug),
+            secrets,
+        ));
         let state = AppState {
             data_root: root.to_path_buf(),
             snapshot: BootstrapSnapshot::ready(),
@@ -427,6 +435,7 @@ mod tests {
             app_manager,
             terminals: crate::commands::terminal::test_terminals(),
             onebot_debug,
+            mcp,
         };
         (state, bus)
     }
