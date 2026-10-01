@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { cn } from '../utils/cn';
-import { Button } from './Button';
 
 interface CopyCodeBlockProps {
     /** 单行或多行 shell 命令，展示在等宽块内。 */
@@ -26,23 +25,25 @@ export function CopyCodeBlock({ command, className }: CopyCodeBlockProps) {
     return (
         <div
             className={cn(
-                'flex items-start gap-2 rounded-sm border border-border-subtle bg-inset/80 p-2',
+                'flex items-center gap-2 rounded-sm border border-border-subtle bg-inset/80 py-1 pl-2.5 pr-1',
                 className,
             )}
         >
-            <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs leading-relaxed text-text">
+            <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs leading-6 text-text">
                 {command}
             </pre>
-            <Button
+            <button
                 type="button"
-                size="sm"
-                variant="ghost"
-                className="shrink-0"
                 onClick={() => void onCopy()}
-                aria-label={copied ? '已复制' : '复制命令'}
+                aria-label={copied ? '已复制' : '复制'}
+                title={copied ? '已复制' : '复制'}
+                className={cn(
+                    'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm transition-colors',
+                    copied ? 'text-success' : 'text-text-tertiary hover:bg-surface hover:text-text',
+                )}
             >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-            </Button>
+                {copied ? <Check size={13} /> : <Copy size={13} />}
+            </button>
         </div>
     );
 }

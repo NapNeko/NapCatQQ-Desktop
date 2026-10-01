@@ -53,7 +53,24 @@ import { yunzaiDefaultConfig } from '../../domain/apps/yunzaiConfig';
 import { emitMockEvent } from './events.mock';
 import { withMockDelay } from './bootstrap.mock';
 import { mockAppLogTail, playMockAppRun } from './app-log.mock';
-import { koishiMockPackages, koishiMockSchemas, koishiMockStatus } from './koishi.mock';
+import {
+    koishiMockCommandAliases,
+    koishiMockCommandUpdate,
+    koishiMockCommands,
+    koishiMockDatabaseRows,
+    koishiMockDatabaseTables,
+    koishiMockExplorerMkdir,
+    koishiMockExplorerRead,
+    koishiMockExplorerRemove,
+    koishiMockExplorerRename,
+    koishiMockExplorerTree,
+    koishiMockExplorerWrite,
+    koishiMockPackages,
+    koishiMockSandboxMessages,
+    koishiMockSandboxSend,
+    koishiMockSchemas,
+    koishiMockStatus,
+} from './koishi.mock';
 import { appendTo, isLinkNode, koishiShortName, linkNode, newPlugin, replaceAt, walk } from '../../domain/apps/koishiConfig';
 import type { KoishiInstanceConfig } from '../types';
 import {
@@ -1165,6 +1182,25 @@ export const mockAppFrameworkApi = {
         await withMockDelay(undefined);
         playMockAppRun(inst, () => require(instanceId).state === 'running');
     },
+    koishiSandboxSend: (instanceId: string, msg: { platform: string; user: string; channel: string; content: string }) =>
+        koishiMockSandboxSend(instanceId, msg),
+    koishiSandboxMessages: (instanceId: string) => koishiMockSandboxMessages(instanceId),
+    koishiExplorerTree: (instanceId: string) => koishiMockExplorerTree(instanceId),
+    koishiExplorerRead: (instanceId: string, path: string) => koishiMockExplorerRead(instanceId, path),
+    koishiExplorerWrite: (instanceId: string, path: string, content: string, binary?: boolean) =>
+        koishiMockExplorerWrite(instanceId, path, content, binary),
+    koishiExplorerMkdir: (instanceId: string, path: string) => koishiMockExplorerMkdir(instanceId, path),
+    koishiExplorerRemove: (instanceId: string, path: string) => koishiMockExplorerRemove(instanceId, path),
+    koishiExplorerRename: (instanceId: string, from: string, to: string) =>
+        koishiMockExplorerRename(instanceId, from, to),
+    koishiDatabaseTables: (_instanceId: string) => koishiMockDatabaseTables(),
+    koishiDatabaseRows: (_instanceId: string, table: string, offset: number, limit: number) =>
+        koishiMockDatabaseRows(table, offset, limit),
+    koishiCommands: (instanceId: string) => koishiMockCommands(instanceId),
+    koishiCommandUpdate: (instanceId: string, name: string, config: Record<string, unknown>) =>
+        koishiMockCommandUpdate(instanceId, name, config),
+    koishiCommandAliases: (instanceId: string, name: string, aliases: string[]) =>
+        koishiMockCommandAliases(instanceId, name, aliases),
 
     maibotStatus: (instanceId: string): Promise<MaiBotRuntimeStatus> => mockMaiBotRuntime.status(require(instanceId)),
     maibotRestart: async (instanceId: string): Promise<void> => {

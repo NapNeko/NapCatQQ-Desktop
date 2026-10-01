@@ -115,6 +115,11 @@ export type { KoishiRuntimeStatus } from './generated/koishi/KoishiRuntimeStatus
 export type { KoishiRuntimeGate } from './generated/koishi/KoishiRuntimeGate';
 export type { KoishiBotStatus } from './generated/koishi/KoishiBotStatus';
 export type { KoishiBotState } from './generated/koishi/KoishiBotState';
+export type { KoishiSandboxMessage } from './generated/koishi/KoishiSandboxMessage';
+export type { KoishiFileEntry } from './generated/koishi/KoishiFileEntry';
+export type { KoishiFileContent } from './generated/koishi/KoishiFileContent';
+export type { KoishiDatabaseTable } from './generated/koishi/KoishiDatabaseTable';
+export type { KoishiCommandRow } from './generated/koishi/KoishiCommandRow';
 export type { MaiBotAdapterConfig } from './generated/domain/MaiBotAdapterConfig';
 export type { MaiBotChatFilter } from './generated/domain/MaiBotChatFilter';
 export type { MaiBotListMode } from './generated/domain/MaiBotListMode';

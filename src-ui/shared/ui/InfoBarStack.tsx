@@ -127,7 +127,8 @@ export function InfoBarStack({
             )}
         >
             {displayed.map((item) => {
-                const { onUserDismiss: _omit, ...barProps } = item;
+                // visible 是退场动画的内部状态，不是 InfoBar 的 prop，别透传到 div 上
+                const { onUserDismiss: _omit, visible: _visible, ...barProps } = item;
                 return (
                 <GsapPresence
                     key={item.id}

@@ -1,7 +1,7 @@
 // 服务器：server 插件的端口 / 监听地址 / 对外地址。端口同时是控制台口和 Bot 反向连过来的口，
 // 改了桌面端会跟着改实例端口、重写 Bot 侧的对接地址。
 
-import { AlertTriangle, ExternalLink } from 'lucide-react';
+import { AlertTriangle, SquareArrowOutUpRight } from 'lucide-react';
 import { Button, FormSection, NumberField, Select, TextField } from '../../../../shared/ui';
 import { CopyCodeBlock } from '../../../../shared/ui/CopyCodeBlock';
 import { CONFIG_PAIR, ConfigForm } from '../karin/configLayout';
@@ -19,6 +19,7 @@ export const KoishiServerTab: React.FC<{
     errors: Record<string, string>;
     disabled?: boolean;
     running: boolean;
+    /** 在外部浏览器打开上游控制台（沙盒 / 数据库这些在应用内的「工具」组有原生页） */
     onOpenWebUi: () => void;
 }> = ({ config, onChange, errors, disabled, running, onOpenWebUi }) => {
     const server = koishiServer(config);
@@ -69,10 +70,11 @@ export const KoishiServerTab: React.FC<{
 
             <FormSection
                 title="控制台"
+                description="上游网页控制台；沙盒、指令、数据库、文件在应用内的「工具」组里有原生页"
                 actions={
                     <Button size="sm" variant="secondary" disabled={!running} onClick={onOpenWebUi}>
-                        <ExternalLink size={13} />
-                        {running ? '打开控制台' : '启动后可打开'}
+                        <SquareArrowOutUpRight size={13} />
+                        {running ? '在浏览器打开' : '启动后可打开'}
                     </Button>
                 }
             >

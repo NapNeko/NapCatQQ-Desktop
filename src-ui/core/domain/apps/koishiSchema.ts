@@ -280,6 +280,130 @@ export function blankOf(node: SNode | undefined): unknown {
     }
 }
 
+type Obj = Record<string, unknown>;
+
+/** 顶层字段 + 按当前判别值展开的标签联合段里的字段（和表单看到的是同一批） */
+export function visibleFields(node: SNode, value: Obj): { key: string; node: SNode }[] {
+    if (!isObjectLike(node)) return [];
+    const out: { key: string; node: SNode }[] = [];
+    for (const s of objectSections(node)) {
+        for (const f of s.fields) {
+            if (f.key === '') {
+                const shape = unionShape(f.node);
+                const branchNode =
+                    shape.kind === 'tagged'
+                        ? shape.branches[taggedBranch(shape, value)]?.node
+                        : shape.kind === 'mixed'
+                          ? shape.branches.find(isObjectLike)
+                          : undefined;
+                if (branchNode) out.push(...visibleFields(branchNode, value));
+                continue;
+            }
+            if (!isHidden(f.node)) out.push(f);
+        }
+    }
+    return out;
+}
+
+/** 没写的键按 schema 默认值补上（深拷贝）：「原文 JSON」模式的起点，打开不是一张白纸 */
+export function materializeConfig(node: SNode, value: Obj): Obj {
+    const fields = visibleFields(node, value);
+    const out: Obj = { ...value };
+    for (const f of fields) {
+        if (out[f.key] === undefined && f.node.meta.default !== undefined) {
+            out[f.key] = structuredClone(f.node.meta.default);
+        }
+    }
+    return out;
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (Array.isArray(a) && Array.isArray(b)) {
+        return a.length === b.length && a.every((v, i) => deepEqual(v, b[i]));
+    }
+    if (a && b && typeof a === 'object' && typeof b === 'object') {
+        const ka = Object.keys(a as Obj);
+        const kb = Object.keys(b as Obj);
+        return (
+            ka.length === kb.length && ka.every((k) => deepEqual((a as Obj)[k], (b as Obj)[k]))
+        );
+    }
+    return false;
+}
+
+/** 写回前把和默认值深度相等的键删掉（上游 simplify 的语义：和默认一样的不落盘） */
+export function simplifyConfig(node: SNode, value: Obj): Obj {
+    const out: Obj = { ...value };
+    for (const f of visibleFields(node, value)) {
+        if (f.key in out && f.node.meta.default !== undefined && deepEqual(out[f.key], f.node.meta.default)) {
+            delete out[f.key];
+        }
+    }
+    return out;
+}
+
+/** 给原文 JSON 编辑器的补全用：Schemastery → 浅层 JSON Schema（顶层键、枚举、描述、默认值） */
+export function toJsonSchema(node: SNode, value: Obj, depth = 0): Record<string, unknown> | null {
+    if (depth > 2) return null;
+    if (!isObjectLike(node)) return null;
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    for (const f of visibleFields(node, value)) {
+        const sub = fieldJsonSchema(f.node, depth + 1);
+        if (sub) properties[f.key] = sub;
+        if (f.node.meta.required) required.push(f.key);
+    }
+    return { type: 'object', properties, ...(required.length ? { required } : {}) };
+}
+
+function fieldJsonSchema(node: SNode, depth: number): Record<string, unknown> | null {
+    if (depth > 2) return null;
+    const base: Record<string, unknown> = {};
+    const desc = describe(node);
+    if (desc) base.description = desc;
+    if (node.meta.default !== undefined) base.default = node.meta.default;
+    switch (node.type) {
+        case 'string':
+            base.type = 'string';
+            break;
+        case 'number':
+        case 'natural':
+        case 'percent':
+            base.type = 'number';
+            break;
+        case 'boolean':
+            base.type = 'boolean';
+            break;
+        case 'date':
+            base.type = 'string';
+            break;
+        case 'const':
+            base.const = node.value;
+            break;
+        case 'object':
+        case 'intersect':
+        case 'dict':
+            base.type = 'object';
+            break;
+        case 'array':
+        case 'tuple':
+            base.type = 'array';
+            break;
+        case 'union': {
+            const shape = unionShape(node);
+            if (shape.kind === 'enum') base.enum = shape.options.map((o) => o.value);
+            else base.type = 'object';
+            break;
+        }
+        case 'any':
+            break;
+        default:
+            return Object.keys(base).length > 0 ? base : null;
+    }
+    return base;
+}
+
 /** 必填但没值的字段（上游 `required` 没默认值时启用会直接报错）；返回点分路径 */
 export function missingRequired(node: SNode, value: unknown, path: string[] = [], depth = 0): string[] {
     if (depth > 12 || isHidden(node)) return [];

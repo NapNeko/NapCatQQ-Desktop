@@ -502,22 +502,41 @@ function LogLine({
 }
 
 function HighlightedLogBody({ entry }: { entry: LogEntry }) {
-    const { text, spans, level } = entry;
-    if (!text) return '\u00A0';
-    if (spans?.length) return <>{ansiSegments(text, spans)}</>;
+    const { text, spans, level, scope } = entry;
+    // Koishi 的来源名（loader / 插件名）弱化显示，和时间、等级列一个层次
+    const scopeNode = scope ? (
+        <>
+            <span className="text-text-tertiary">{scope}</span>
+            <span className="text-text-disabled"> </span>
+        </>
+    ) : null;
+    if (!text) return scope ? <>{scopeNode}</> : '\u00A0';
+    if (spans?.length)
+        return (
+            <>
+                {scopeNode}
+                {ansiSegments(text, spans)}
+            </>
+        );
     const pipeIdx = text.indexOf(' | ');
     if (pipeIdx >= 0) {
         const nick = text.slice(0, pipeIdx);
         const msg = text.slice(pipeIdx + 3);
         return (
             <>
+                {scopeNode}
                 <span className="text-text-tertiary">{nick}</span>
                 <span className="text-text-tertiary"> | </span>
                 <span style={{ color: lineTextColor(level) }}>{msg}</span>
             </>
         );
     }
-    return <>{text}</>;
+    return (
+        <>
+            {scopeNode}
+            {text}
+        </>
+    );
 }
 
 /** 上游带了颜色的行照它的颜色画，没标到的字用这一行的等级色 */

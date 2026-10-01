@@ -61,9 +61,10 @@ pub use karin::{
     KARIN_FRAMEWORK_ID, KarinAdapter, KarinComponent, KarinIntegration, karin_manifest,
 };
 pub use koishi::{
-    KOISHI_FRAMEWORK_ID, KoishiAdapter, KoishiBotState, KoishiBotStatus, KoishiComponent,
-    KoishiInstanceConfig, KoishiIntegration, KoishiPackageInfo, KoishiPluginNode,
-    KoishiPluginSchema, KoishiRuntimeApi, KoishiRuntimeGate, KoishiRuntimeStatus, koishi_manifest,
+    KOISHI_FRAMEWORK_ID, KoishiAdapter, KoishiBotState, KoishiBotStatus, KoishiCommandRow,
+    KoishiComponent, KoishiDatabaseTable, KoishiFileContent, KoishiFileEntry, KoishiInstanceConfig,
+    KoishiIntegration, KoishiPackageInfo, KoishiPluginNode, KoishiPluginSchema, KoishiRuntimeApi,
+    KoishiRuntimeGate, KoishiRuntimeStatus, KoishiSandboxMessage, koishi_manifest,
 };
 pub use maibot::api::{MaiBotProviderSource, MaiBotRuntimeApi, MaiBotSession};
 pub use maibot::resources::behavior::{

@@ -47,6 +47,33 @@ describe('appendLine · NapCat', () => {
     });
 });
 
+describe('appendLine · Koishi', () => {
+    it('全年月日 + 单字母等级 + 来源名：时间进列、等级入色、来源名挖出来', () => {
+        const entry = one('2026-09-29 21:22:14 [I] loader apply plugin help:j48bsq');
+        expect(entry.level).toBe('info');
+        expect(entry.timestamp).toBe('21:22:14');
+        expect(entry.scope).toBe('loader');
+        expect(entry.text).toBe('apply plugin help:j48bsq');
+    });
+
+    it('W/E/S/D 各字母对到 warn/error/success/debug', () => {
+        expect(one('2026-09-29 21:22:15 [W] config something').level).toBe('warn');
+        expect(one('2026-09-29 21:22:15 [E] adapter-onebot Error: boom').level).toBe('error');
+        expect(one('2026-09-29 21:22:15 [S] telemetry ').level).toBe('success');
+        expect(one('2026-09-29 21:22:15 [D] sqlite query').level).toBe('debug');
+    });
+
+    it('消息为空的行只剩来源名；堆栈行算续行跟着上一条的等级', () => {
+        const first = one('2026-09-29 21:22:15 [S] telemetry ');
+        expect(first.scope).toBe('telemetry');
+        expect(first.text).toBe('');
+        let logs = appendLine([], '2026-09-29 21:22:15 [E] app Error: boom', 'stdout', '00:00:00');
+        logs = appendLine(logs, '    at Object.<anonymous> (/app/index.js:1:1)', 'stdout', '00:00:00');
+        expect(logs[1].level).toBe('error');
+        expect(logs[1].continuation).toBe(true);
+    });
+});
+
 describe('appendLine · 麦麦', () => {
     const mai = (color: string, body: string) =>
         `\x1b[${color}m09-26 16:29:02\x1b[0m \x1b[38;2;162;255;0m[配置]\x1b[0m \x1b[38;2;162;255;0m${body}\x1b[0m`;
