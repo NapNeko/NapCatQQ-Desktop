@@ -255,8 +255,9 @@ jobs:
             fi
           }
 
-          check changes "$ch" 1
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # PR 必看 changes；dispatch 下 outputs 不参与判定，不因其失败而挂
+            check changes "$ch" 1
             [[ "$flt_fe" == "true" ]] && check frontend "$fe" 1 || check frontend "$fe" 0
             if [[ "$flt_rs" == "true" ]]; then
               check rust-core "$rc" 1
