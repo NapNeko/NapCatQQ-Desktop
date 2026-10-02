@@ -19,6 +19,7 @@ import {
     forwardRef,
     useContext,
     useCallback,
+    useEffect,
     useRef,
     useState,
     type ComponentPropsWithoutRef,
@@ -132,6 +133,7 @@ export const PopoverContent = forwardRef<
         const open = useContext(PopoverOpenContext);
         const m = useMotion();
         const elRef = useRef<HTMLDivElement | null>(null);
+        const [element, setElement] = useState<HTMLDivElement | null>(null);
         const openRef = useRef(open);
         openRef.current = open;
         const [lastOpen, setLastOpen] = useState(open);
@@ -141,14 +143,15 @@ export const PopoverContent = forwardRef<
             if (open) setFocusCycle(value => value + 1);
         }
         const attachRef = useCallback((node: HTMLDivElement | null) => {
-            if (elRef.current && elRef.current !== node) {
-                gsap.killTweensOf(elRef.current);
-                gsap.killTweensOf(elRef.current.children);
-            }
             elRef.current = node;
+            setElement(node);
             if (typeof _ref === 'function') _ref(node);
             else if (_ref) _ref.current = node;
         }, [_ref]);
+        // Radix 会重新组合 ref；短暂解绑同一个节点不能中止仍在播放的动画。
+        useEffect(() => () => {
+            if (element) { gsap.killTweensOf(element); gsap.killTweensOf(element.children); }
+        }, [element]);
 
         // 保留到退出动画结束；重新挂载才能重启 Radix 的焦点生命周期。
         const [present, setPresent] = useState(false);
@@ -232,13 +235,14 @@ export const PopoverContent = forwardRef<
                         duration: m.duration('fast') * 0.6,
                         ease: m.ease.exit,
                         onComplete: () => {
+                                if (openRef.current || elRef.current !== el) return;
                                 gsap.set(el, { display: 'none' });
                                 setPresent(false);
                         },
                     });
                 }
             },
-            { dependencies: [open, m.enabled, side, present, focusCycle] },
+            { dependencies: [open, m.enabled, side, present, focusCycle, element] },
         );
 
         // Portal 保持稳定，Content 只在打开与退场期间挂载。
