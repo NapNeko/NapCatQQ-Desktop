@@ -70,6 +70,7 @@ import { perfMark } from '../core/domain/performance/perfMarks';
 const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
     'overview',
     'bots',
+    'chat',
     'apps',
     'debug',
     'components',
@@ -80,13 +81,14 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
 ];
 
 // 这些页面不受 1280px 的宽度上限：调试台是三栏工作台，宽屏上越宽越好用
-const WIDE_ROUTES: ReadonlySet<AppRoute> = new Set(['debug']);
+const WIDE_ROUTES: ReadonlySet<AppRoute> = new Set(['debug', 'chat']);
 
 // 与 lazy 共用同一 import 工厂，侧栏预取与首点加载同一 chunk。
 const loadBotPage = () =>
     import('../modules/bot/BotPage.next').then((m) => ({ default: m.BotPageNext }));
 const loadAppsPage = () =>
     import('../modules/apps/AppsPage.next').then((m) => ({ default: m.AppsPageNext }));
+const loadChatPage = () => import('../modules/chat/ChatPage').then(m => ({ default: m.ChatPage }));
 const loadDebugPage = () =>
     import('../modules/debug/DebugConsolePage').then((m) => ({ default: m.DebugConsolePage }));
 const loadComponentsPage = () =>
@@ -110,6 +112,7 @@ const loadTaskQueuePage = () =>
 
 const BotPageNext = lazy(loadBotPage);
 const AppsPageNext = lazy(loadAppsPage);
+const ChatPage = lazy(loadChatPage);
 const DebugConsolePage = lazy(loadDebugPage);
 const ComponentsPageNext = lazy(loadComponentsPage);
 const DockerPageNext = lazy(loadDockerPage);
@@ -124,6 +127,7 @@ const TerminalDock = lazy(() =>
 const ROUTE_PRELOAD: Partial<Record<AppRoute, () => Promise<unknown>>> = {
     bots: loadBotPage,
     apps: loadAppsPage,
+    chat: loadChatPage,
     debug: loadDebugPage,
     components: loadComponentsPage,
     docker: loadDockerPage,
@@ -562,6 +566,9 @@ const RouteContent = memo(function RouteContent({
             break;
         case 'debug':
             body = <DebugConsolePage onNavigate={onNavigate} />;
+            break;
+        case 'chat':
+            body = <ChatPage onNavigate={onNavigate} />;
             break;
         case 'components':
             body = <ComponentsPageNext />;
