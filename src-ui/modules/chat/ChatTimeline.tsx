@@ -12,13 +12,15 @@ import { messagePreview } from '../../core/domain/debug/segments';
 import { chatService } from '../../core/services/chat.service';
 import { recoverDraft } from '../../core/domain/chat/recoverDraft';
 import { Dialog, DialogContent, DialogTitle } from '../../shared/ui/Dialog';
-import { Avatar } from './ChatPage';
+import { ChatAvatar as Avatar } from './ChatAvatar';
+import { dayLabel } from '../../core/domain/debug/chatFormat';
 import { cn } from '../../shared/utils/cn';
 
 export function NativeTimeline({ store, contact, messages, revealRef, visible }: { store: ChatAccountStore; contact: Contact; messages: Message[]; revealRef: MutableRefObject<(key: string) => void>; visible: boolean }) {
     const scroll = useRef<HTMLDivElement>(null); const latest = useRef(messages); latest.current = messages;
     const [image, showImage] = useState(''); const [error, setError] = useState(''); const [highlight, setHighlight] = useState('');
     const snapshot = useChatSnapshot(store); const history = snapshot.history[contact.key];
+    useEffect(() => { void store.ensureHistory(contact.key); }, [store, contact.key, snapshot.connection.state, history]);
     const motion = useMotion();
     const virtual = useVirtualizer({ count: messages.length, getScrollElement: () => scroll.current, estimateSize: () => 108, getItemKey: i => latest.current[i]?.key ?? i, overscan: 7, paddingStart: 12, paddingEnd: 24, anchorTo: 'end' });
     const key = `${accountKey(store.target.bot_id, String(store.target.qq_id))}/${contact.key}`;
@@ -48,7 +50,7 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
     }), [fallback, snapshot.account.messages, revealRef]);
     const reply = (message: Message) => { if (message.id) store.draft(contact.key, { ...(store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT), reply: { id: message.id, name: message.mine ? '我' : message.senderName, preview: messagePreview(message.segments) } }); };
     return <ChatViewContext.Provider value={view}>
-        <div className="native-chat-history"><button disabled={history?.loading || history?.done || snapshot.connection.state !== 'connected'} onClick={() => void store.history(contact.key)}>{history?.loading ? '正在加载…' : history?.done ? '暂无更早记录' : '加载更早消息'}</button>{snapshot.account.gap && <span>部分消息未接收，可尝试加载历史</span>}{history?.error && <span role="status" className="text-danger">{history.error}</span>}</div>
+        <div className="native-chat-history"><button disabled={history?.loading || history?.done || snapshot.connection.state !== 'connected'} onClick={() => void store.history(contact.key)}>{history?.loading ? '正在加载…' : history?.error ? '重试读取历史' : history?.done ? '已到最早消息' : '加载更早消息'}</button>{snapshot.account.gap && <span>部分消息未接收，可尝试加载历史</span>}{history?.error && <span role="status" className="text-danger">{history.error}</span>}</div>
         <div className="native-chat-timeline-wrap"><div ref={scroll} className="native-chat-timeline" tabIndex={0} aria-label="消息记录" {...stick.handlers}>
             {!messages.length && <div className="native-chat-message-empty">{history?.loading ? '正在读取消息' : '还没有消息，从一句问候开始'}</div>}
             <div style={{ height: virtual.getTotalSize(), position: 'relative', width: '100%' }}>{virtual.getVirtualItems().map(row => {
@@ -56,9 +58,9 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
                 const showTime = !previous || message.at - previous.at > 5 * 60_000 || new Date(message.at).toDateString() !== new Date(previous.at).toDateString();
                 const continuation = !showTime && previous?.senderId === message.senderId && previous?.mine === message.mine && message.at - previous.at < 3 * 60_000;
                 return <div key={row.key} data-index={row.index} ref={virtual.measureElement} style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${row.start}px)` }}>
-                    {showTime && <div className="native-chat-time">{new Date(message.at).toLocaleString('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>}
+                    {showTime && <div className="native-chat-time">{dayLabel(message.at)}</div>}
                     <article className={cn('native-chat-message', message.mine && 'is-mine', continuation && 'is-continuation')} data-highlight={highlight === message.key}>
-                        <div className={continuation ? 'invisible' : ''}><Avatar contact={{ type: 'private', name: message.mine ? store.target.name : message.senderName }} small /></div>
+                        <div className={continuation ? 'invisible' : ''}><Avatar contact={{ type: 'private', id: message.senderId, name: message.mine ? store.target.name : message.senderName }} small /></div>
                         <div className="native-chat-message-body">{!message.mine && !continuation && <div className="native-chat-sender">{message.senderName}</div>}
                             <div className="native-chat-bubble">{message.recalled ? <span className="text-text-tertiary">消息已撤回</span> : <SegmentList segments={message.segments} mine={message.mine} />}</div>
                             {message.mine && message.status !== 'sent' && <div className={cn('native-chat-send-status', message.status !== 'sending' && 'text-danger')} title={message.error}>{message.status === 'sending' ? '发送中…' : message.status === 'unknown' ? '发送结果未确认，请核实后再发送' : '发送失败'}{message.error && <span className="block">{message.error}</span>}</div>}

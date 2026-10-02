@@ -11,7 +11,7 @@ import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { DebugReceiverState } from '../../core/ipc/generated/debug/DebugReceiverState';
 import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCallResponse';
 
-export interface ChatSnapshot { account: Account; contacts: Contact[]; connection: DebugReceiverState; error: string; contactsLoading: boolean; history: Record<string, { loading: boolean; done: boolean; error: string }> }
+export interface ChatSnapshot { account: Account; contacts: Contact[]; connection: DebugReceiverState; error: string; contactsLoading: boolean; history: Record<string, { loading: boolean; loaded: boolean; done: boolean; error: string }> }
 type Transport = Pick<typeof chatService, 'call' | 'subscribe' | 'unsubscribe'>;
 function dataOf(response: DebugCallResponse): unknown {
     if (response.result.kind === 'err') { const copy = debugErrorCopy(response.result.error); throw new Error([copy.title, copy.detail].filter(Boolean).join('：')); }
@@ -134,10 +134,15 @@ export class ChatAccountStore {
         if (this.target.backend === 'snowluma') { const numeric = Number(value); if (!Number.isSafeInteger(numeric)) throw new Error('账号标识超出可支持范围'); return numeric; }
         return value;
     }
+    ensureHistory(key: SessionKey): Promise<void> | undefined {
+        const history = this.snapshot.history[key];
+        if (history?.loaded || history?.loading || history?.error) return;
+        return this.history(key);
+    }
     async history(key: SessionKey) {
-        if (this.snapshot.history[key]?.loading || this.snapshot.history[key]?.done) return;
+        if (this.snapshot.connection.state !== 'connected' || this.snapshot.history[key]?.loading || this.snapshot.history[key]?.done) return;
         const epoch = this.epoch;
-        const set = (loading: boolean, done = false, error = '') => this.update({ history: { ...this.snapshot.history, [key]: { loading, done, error } } });
+        const set = (loading: boolean, done = false, error = '', loaded = this.snapshot.history[key]?.loaded ?? false) => this.update({ history: { ...this.snapshot.history, [key]: { loading, loaded, done, error } } });
         set(true);
         try {
             const group = key.startsWith('group:'); const cursor = this.historyCursor.get(key);
@@ -151,7 +156,7 @@ export class ChatAccountStore {
             for (const row of rows) account = ingestMessage(account, { ...row, message_type: group ? 'group' : 'private', ...(group ? { group_id: this.peer(key) } : { target_id: this.peer(key) }) }, true);
             const next = id(rows[0]?.message_id);
             if (next) this.historyCursor.set(key, next);
-            this.account(account); set(false, !next || next === cursor || rows.length < 50);
+            this.account(account); set(false, !next || next === cursor || rows.length < 50, '', true);
         } catch (error) { if (epoch === this.epoch) set(false, false, errorText(error)); }
     }
     async send(key: SessionKey) {

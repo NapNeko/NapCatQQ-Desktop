@@ -12,6 +12,42 @@ function setup() {
     return { transport, store: new ChatAccountStore(target, transport) };
 }
 describe('chat lifecycle', () => {
+    it('loads recent history once after connection, including an empty conversation', async () => {
+        const { store, transport } = setup();
+        transport.call.mockResolvedValue(ok({ messages: [] }));
+        await store.ensureHistory('private:12');
+        expect(transport.call).not.toHaveBeenCalled();
+        await store.connect();
+        await Promise.all([store.ensureHistory('private:12'), store.ensureHistory('private:12')]);
+        await store.ensureHistory('private:12');
+        expect(transport.call).toHaveBeenCalledTimes(1);
+        expect(store.getSnapshot().history['private:12']).toMatchObject({ loaded: true, done: true });
+    });
+    it('waits for an explicit history retry after failure', async () => {
+        const { store, transport } = setup(); await store.connect();
+        transport.call.mockRejectedValueOnce(new Error('历史不可用'));
+        await store.ensureHistory('group:12');
+        await store.ensureHistory('group:12');
+        expect(transport.call).toHaveBeenCalledTimes(1);
+        expect(store.getSnapshot().history['group:12'].error).toBe('历史不可用');
+        transport.call.mockResolvedValue(ok({ messages: [] }));
+        await store.history('group:12');
+        expect(store.getSnapshot().history['group:12']).toMatchObject({ loaded: true, error: '' });
+    });
+    it('can initialize history again after a connection interrupts the first read', async () => {
+        const { store, transport } = setup(); await store.connect();
+        let resolve!: (result: DebugCallResponse) => void;
+        transport.call.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+        const first = store.ensureHistory('private:12');
+        await store.disconnect(); await store.connect();
+        transport.call.mockResolvedValue(ok({ messages: [] }));
+        await store.ensureHistory('private:12');
+        resolve(ok({ messages: [{ message_id: 77, time: 1, user_id: 12, message: '过期响应' }] }));
+        await first;
+        expect(transport.call).toHaveBeenCalledTimes(2);
+        expect(store.getSnapshot().account.messages).toHaveLength(0);
+        expect(store.getSnapshot().history['private:12'].loaded).toBe(true);
+    });
     it('releases a subscription that finishes after disconnect', async () => {
         const { store, transport } = setup();
         let resolve!: (result: DebugSubscribeResponse) => void;

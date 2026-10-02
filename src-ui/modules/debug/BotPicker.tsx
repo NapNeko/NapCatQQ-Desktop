@@ -24,6 +24,7 @@ export interface BotPickerProps {
     targets: readonly DebugTarget[];
     selected: DebugTarget | null;
     loading?: boolean;
+    ariaLabel?: string;
     onSelect: (botId: string) => void;
     /** 列表底部「去机器人页」；不给就不显示 */
     onManageBots?: () => void;
@@ -56,7 +57,7 @@ export function BackendTag({ backend, className }: { backend: BackendType; class
     );
 }
 
-export const BotPicker = memo(function BotPicker({ targets, selected, loading = false, onSelect, onManageBots }: BotPickerProps) {
+export const BotPicker = memo(function BotPicker({ targets, selected, loading = false, ariaLabel, onSelect, onManageBots }: BotPickerProps) {
     const m = useMotion();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -121,7 +122,7 @@ export const BotPicker = memo(function BotPicker({ targets, selected, loading = 
             <PopoverTrigger asChild>
                 <button
                     type="button"
-                    aria-label={selected ? `当前 Bot：${targetDisplayName(selected)}，点击切换` : '选择 Bot'}
+                    aria-label={ariaLabel ?? (selected ? `当前 Bot：${targetDisplayName(selected)}，点击切换` : '选择 Bot')}
                     className={cn(
                         'group inline-flex h-8 min-w-0 max-w-[300px] shrink items-center gap-2 rounded-sm border border-border-subtle bg-surface pl-2.5 pr-2 text-left',
                         'transition-colors hover:border-border hover:bg-inset data-[state=open]:border-brand/50 data-[state=open]:bg-inset',
