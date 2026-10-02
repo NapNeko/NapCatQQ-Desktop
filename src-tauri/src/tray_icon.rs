@@ -40,9 +40,7 @@ pub fn idle_tray_icon(_app: &AppHandle) -> Result<Image<'static>, String> {
         .or_else(|| load_png("tray-24.png"))
         .or_else(|| load_png("tray-20.png"))
         .or_else(|| load_png("tray-48.png"))
-        .ok_or_else(|| {
-            "托盘图标缺失：请在项目根执行 python script/generate_app_icons.py".to_string()
-        })
+        .ok_or_else(|| "托盘图标缺失：请在项目根执行 pnpm icons:gen".to_string())
 }
 
 /// 有 Bot 运行中:带暖色状态点,与主题 brand 色一致
