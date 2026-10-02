@@ -405,6 +405,20 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 
 ---
 
+### 17) 聊天（主窗口原生双栏）
+
+| 关注点 | 主路径 |
+|--------|--------|
+| 页面与入口 | `src-ui/modules/chat/ChatPage.tsx` / `ChatTimeline.tsx` / `ChatComposer.tsx` / `chat.css`；主侧栏「聊天」，`AppNext` lazy 全宽路由；宽屏双栏、窄宽会话返回 |
+| 状态与协议边界 | `src-ui/core/domain/chat/`：字符串消息标识、账号/会话分区、收发去重、草稿恢复；`hooks/chat/chatStore.ts`：独立订阅、联系人、历史分页、发送状态。消息与草稿只在本次应用内存中保留，每账号最多 5,000 条；不写 localStorage 或调试历史 |
+| 传输与生命周期 | `crates/ncd-runtime/src/chat.rs`：动作白名单与独立协议会话，复用 `DebugManager::new_ephemeral`；`apiDebug` 关闭、调试停止接收不影响聊天。当前独立传输实例可能增加连接，尚未合并共享传输租约 |
+| IPC / 预览 | `src-tauri/src/commands/chat.rs`：`chat_targets/call/call_stream/subscribe/unsubscribe`；前端 `core/services/chat.service.ts`，复用 ts-rs 生成的协议类型；`core/ipc/mock/chat.mock.ts` 为独立模拟事件流。`lib.rs` 接 Bot 生命周期、页面重载清理；`commands/exit.rs` 统一释放聊天连接 |
+| 复用边界 | 复用 debug 的消息段解析、@ 组装、SegmentList 与虚拟列表贴底；不导入 DebugConsolePage 或调试工作区 store |
+
+未覆盖：永久消息仓储、群管理/转发详情等完整 QQ 客户端能力；本机/远端 NapCat/SnowLuma 的真实账号收发需要单独实机验收。
+
+---
+
 ## 旧 Python 对照（`.references/NapCatQQ-Desktop-main`）
 
 | 旧路径（参考树） | 新落点 |
