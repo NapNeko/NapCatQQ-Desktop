@@ -24,7 +24,7 @@ pub fn main_window_icon(_app: &AppHandle) -> Result<Image<'static>, String> {
         .or_else(|| embed("64x64.png"))
         .or_else(|| embed("48x48.png"))
         .or_else(|| embed("32x32.png"))
-        .ok_or_else(|| "窗口图标缺失：请执行 python script/generate_app_icons.py".to_string())
+        .ok_or_else(|| "窗口图标缺失：请执行 pnpm icons:gen".to_string())
 }
 
 pub fn apply_main_window_icon(app: &AppHandle) -> Result<(), String> {
