@@ -6,6 +6,7 @@ pub mod napcat;
 pub mod native_deployment_adapter;
 pub mod notify;
 pub mod onebot_debug;
+pub mod chat;
 pub mod release;
 mod snowluma_local_endpoint;
 
