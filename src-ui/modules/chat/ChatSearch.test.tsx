@@ -29,4 +29,16 @@ describe('native message search', () => {
         fireEvent.keyDown(input, { key: 'Escape' });
         expect(close).toHaveBeenCalledOnce();
     });
+    it('separates clearing the query from closing the search by pointer', () => {
+        const close = vi.fn();
+        render(<ChatSearch messages={messages()} onReveal={() => {}} onClose={close} />);
+        const input = screen.getByRole('textbox');
+        fireEvent.change(input, { target: { value: 'hello' } });
+        fireEvent.click(screen.getByRole('button', { name: '清除消息搜索' }));
+        expect(input).toHaveValue('');
+        expect(input).toHaveFocus();
+        expect(close).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: '关闭消息搜索' }));
+        expect(close).toHaveBeenCalledOnce();
+    });
 });

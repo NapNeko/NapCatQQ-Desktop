@@ -3,9 +3,29 @@ import { accountKey, emptyAccount, ingestMessage, openConversation, settleSend, 
 
 const payload = (extra = {}) => ({ post_type: 'message', message_type: 'group', group_id: 12, user_id: 22, message_id: 7, time: 100, sender: { nickname: '小林' }, message: [{ type: 'text', data: { text: '你好' } }], ...extra });
 describe('native chat projection', () => {
+    it('keeps the older page being read when the recent-message buffer is full', () => {
+        let state = ingestMessage(emptyAccount('99'), payload());
+        const message = state.messages[0];
+        state.messages = Array.from({ length: 5000 }, (_, i) => ({ ...message, key: `group:12/${i + 100}`, id: String(i + 100), at: i + 1000 }));
+        state = ingestMessage(state, payload({ message_id: 1, message_seq: '1', time: 0.5 }), true);
+        expect(state.messages[0].id).toBe('1');
+        expect(state.messages).toHaveLength(5001);
+    });
     it('scopes accounts by bot and signed-in identity', () => {
         expect(accountKey('a', '1')).not.toBe(accountKey('b', '1'));
         expect(accountKey('a', '1')).not.toBe(accountKey('a', '2'));
+    });
+    it('keeps recent messages from other conversations alongside the active older pages', () => {
+        let state = ingestMessage(emptyAccount('99'), payload());
+        const message = state.messages[0];
+        state.active = 'group:12';
+        state.messages = Array.from({ length: 5000 }, (_, i) => ({ ...message, key: `group:12/${i + 100}`, id: String(i + 100), at: i + 1000 }));
+        state = ingestMessage(state, payload({ group_id: 13, message_id: 9, time: 10 }));
+        expect(state.messages).toHaveLength(5001);
+        expect(state.messages.some(row => row.session === 'group:13')).toBe(true);
+        state = ingestMessage(state, payload({ group_id: 13, message_id: 1, time: 0.5 }), true);
+        expect(state.messages.filter(row => row.session === 'group:12')).toHaveLength(5000);
+        expect(state.messages.some(row => row.session === 'group:13' && row.id === '1')).toBe(true);
     });
     it('deduplicates replay without increasing unread', () => {
         const first = ingestMessage(emptyAccount('99'), payload());

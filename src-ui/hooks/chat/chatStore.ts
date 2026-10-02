@@ -1,6 +1,8 @@
 // 按 Bot 和登录身份分区；页面离开后保留内存消息与订阅。
 import { useSyncExternalStore } from 'react';
 import { chatService } from '../../core/services/chat.service';
+import { chatArchiveService } from '../../core/services/chat-archive.service';
+import { archiveOf, restoreArchive, mergeRecentConversations } from '../../core/domain/chat/archive';
 import { accountKey, emptyAccount, ingestMessage, openConversation, setDraft, addPending, settleSend, parseContact, record, id, text, EMPTY_DRAFT, type Account, type Contact, type Draft, type SessionKey } from '../../core/domain/chat/model';
 import { buildMessageSegments } from '../../core/domain/debug/composerModel';
 import { localFileTokenFor } from '../../core/domain/debug/streamActions';
@@ -11,8 +13,9 @@ import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { DebugReceiverState } from '../../core/ipc/generated/debug/DebugReceiverState';
 import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCallResponse';
 
-export interface ChatSnapshot { account: Account; contacts: Contact[]; connection: DebugReceiverState; error: string; contactsLoading: boolean; history: Record<string, { loading: boolean; loaded: boolean; done: boolean; error: string }> }
+export interface ChatSnapshot { account: Account; contacts: Contact[]; connection: DebugReceiverState; error: string; contactsLoading: boolean; hydrated: boolean; archiveError: string; recentLoading: boolean; recentError: string; history: Record<string, { loading: boolean; loaded: boolean; done: boolean; error: string }> }
 type Transport = Pick<typeof chatService, 'call' | 'subscribe' | 'unsubscribe'>;
+type ArchivePort = Pick<typeof chatArchiveService, 'load' | 'save'>;
 function dataOf(response: DebugCallResponse): unknown {
     if (response.result.kind === 'err') { const copy = debugErrorCopy(response.result.error); throw new Error([copy.title, copy.detail].filter(Boolean).join('：')); }
     const result = response.result.outcome;
@@ -31,25 +34,110 @@ export class ChatAccountStore {
     private sends = new Map<SessionKey, number>();
     private historyCursor = new Map<SessionKey, string>();
     private contactsRequest: Promise<void> | null = null;
+    private restoreRequest: Promise<void> | null = null;
+    private saveRequest: Promise<void> | null = null;
+    private archiveDirty = false;
+    private recentRequest: Promise<void> | null = null;
+    private recentEpoch = -1;
     target: DebugTarget;
 
-    constructor(target: DebugTarget, private transport: Transport = chatService) {
+    constructor(target: DebugTarget, private transport: Transport = chatService, private archive: ArchivePort | undefined = transport === chatService ? chatArchiveService : undefined) {
         this.target = target;
-        this.snapshot = { account: emptyAccount(String(target.qq_id)), contacts: [], connection: { state: 'stopped', reason: '尚未连接' }, error: '', contactsLoading: false, history: {} };
+        this.snapshot = { account: emptyAccount(String(target.qq_id)), contacts: [], connection: { state: 'stopped', reason: '尚未连接' }, error: '', contactsLoading: false, hydrated: !archive, archiveError: '', recentLoading: false, recentError: '', history: {} };
     }
     getSnapshot = () => this.snapshot;
     subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
-    private update(patch: Partial<ChatSnapshot>) { this.snapshot = { ...this.snapshot, ...patch }; for (const listener of this.listeners) listener(); }
+    private update(patch: Partial<ChatSnapshot>) {
+        const previous = this.snapshot.account;
+        if (patch.account && patch.account.messages !== previous.messages) {
+            const retained = new Set(patch.account.messages.map(message => message.key));
+            const retainedIds = new Set(patch.account.messages.filter(message => message.id).map(message => `${message.session}/${message.id}`));
+            const evicted = new Set(previous.messages.filter(message => !retained.has(message.key) && (!message.id || !retainedIds.has(`${message.session}/${message.id}`))).map(message => message.session));
+            if (evicted.size) {
+                const history = { ...(patch.history ?? this.snapshot.history) };
+                for (const key of evicted) {
+                    this.historyCursor.delete(key);
+                    if (history[key]) history[key] = { loading: history[key].loading, loaded: false, done: false, error: '' };
+                }
+                patch = { ...patch, history };
+            }
+        }
+        this.snapshot = { ...this.snapshot, ...patch };
+        for (const listener of this.listeners) listener();
+        if (patch.account && (patch.account.messages !== previous.messages || patch.account.conversations !== previous.conversations)) {
+            this.archiveDirty = true;
+            if (this.snapshot.hydrated && !this.snapshot.archiveError) void this.flushArchive();
+        }
+    }
+    restore(): Promise<void> {
+        if (this.restoreRequest) return this.restoreRequest;
+        if (this.snapshot.hydrated || !this.archive) return Promise.resolve();
+        this.update({ archiveError: '' });
+        this.restoreRequest = this.archive.load(this.target.bot_id, this.snapshot.account.selfId).then(saved => {
+            const account = saved ? restoreArchive(this.snapshot.account, saved) : this.snapshot.account;
+            this.update({ account, hydrated: true });
+            void this.flushArchive();
+        }).catch(error => this.update({ archiveError: `聊天记录读取失败：${errorText(error)}` })).finally(() => { this.restoreRequest = null; });
+        return this.restoreRequest;
+    }
+    flushArchive(): Promise<void> {
+        if (this.saveRequest) return this.saveRequest;
+        if (!this.archive || !this.snapshot.hydrated || !this.archiveDirty) return Promise.resolve();
+        const archive = this.archive;
+        this.saveRequest = Promise.resolve().then(async () => {
+            while (this.archiveDirty) {
+                this.archiveDirty = false;
+                try {
+                    await archive.save(this.target.bot_id, this.snapshot.account.selfId, archiveOf(this.snapshot.account));
+                    this.update({ archiveError: '' });
+                } catch (error) {
+                    this.archiveDirty = true;
+                    this.update({ archiveError: `聊天记录保存失败：${errorText(error)}` });
+                    break;
+                }
+            }
+        }).finally(() => {
+            this.saveRequest = null;
+            if (this.archiveDirty && !this.snapshot.archiveError) return this.flushArchive();
+            return undefined;
+        });
+        return this.saveRequest;
+    }
+    async initialize() {
+        await this.restore();
+        if (!this.target.running || this.target.online === false) { await this.disconnect(); return; }
+        await this.connect();
+        if (this.snapshot.connection.state === 'connected') await Promise.all([this.loadContacts(), this.loadRecent()]);
+    }
+    loadRecent(retry = false): Promise<void> {
+        if (this.recentRequest) return this.recentRequest;
+        if (this.snapshot.connection.state !== 'connected' || (!retry && this.recentEpoch === this.epoch)) return Promise.resolve();
+        const epoch = this.epoch;
+        this.update({ recentLoading: true, recentError: '' });
+        const request = this.transport.call(this.target.bot_id, 'get_recent_contact', { count: 100 }).then(dataOf).then(data => {
+            if (epoch !== this.epoch) return;
+            if (!Array.isArray(data)) throw new Error('此协议未返回最近会话列表');
+            const merged = mergeRecentConversations(this.snapshot.account, data);
+            const account = { ...merged, conversations: { ...merged.conversations } };
+            for (const contact of this.snapshot.contacts) if (account.conversations[contact.key]) account.conversations[contact.key] = { ...account.conversations[contact.key], ...contact };
+            this.account(account); this.recentEpoch = epoch;
+        }).catch(error => { if (epoch === this.epoch) this.update({ recentError: `最近会话同步失败：${errorText(error)}` }); }).finally(() => {
+            if (this.recentRequest === request) { this.recentRequest = null; this.update({ recentLoading: false }); }
+        });
+        this.recentRequest = request; return request;
+    }
     private account(account: Account) { this.update({ account }); }
     setReading(key: SessionKey | null) { this.reading = key; if (key && this.snapshot.account.conversations[key]?.unread) this.open(this.snapshot.account.conversations[key]); }
     open(contact: Contact) { this.account(openConversation(this.snapshot.account, contact)); }
     draft(key: SessionKey, draft: Draft) { this.account(setDraft(this.snapshot.account, key, draft)); }
     pin(key: SessionKey) { const state = this.snapshot.account; const c = state.conversations[key]; if (c) this.account({ ...state, conversations: { ...state.conversations, [key]: { ...c, pinned: !c.pinned } } }); }
+    box(key: SessionKey) { const state = this.snapshot.account; const c = state.conversations[key]; if (c?.type === 'group') this.account({ ...state, conversations: { ...state.conversations, [key]: { ...c, boxed: !c.boxed } } }); }
     private interruptPending() {
         this.contactsRequest = null;
+        this.recentRequest = null;
         const account = this.snapshot.account;
         this.update({
-            contactsLoading: false,
+            contactsLoading: false, recentLoading: false,
             history: Object.fromEntries(Object.entries(this.snapshot.history).map(([key, value]) => [key, { ...value, loading: false }])),
             account: { ...account, messages: account.messages.map(message => message.status === 'sending' ? { ...message, status: 'unknown', error: '连接已断开，发送结果待确认' } : message) },
         });
@@ -88,7 +176,9 @@ export class ChatAccountStore {
                     else if (body.kind === 'gap' || body.kind === 'dropped') account = { ...account, gap: true };
                     account = { ...account, lastSeq: event.seq };
                 }
+                const becameConnected = connection.state === 'connected' && this.snapshot.connection.state !== 'connected';
                 this.update({ account, connection });
+                if (becameConnected) { void this.loadContacts(); void this.loadRecent(); }
             });
             if (epoch !== this.epoch) { await this.transport.unsubscribe(result.subscription_id); return; }
             this.subscription = result.subscription_id;
@@ -139,7 +229,7 @@ export class ChatAccountStore {
         if (history?.loaded || history?.loading || history?.error) return;
         return this.history(key);
     }
-    async history(key: SessionKey) {
+    async history(key: SessionKey): Promise<void> {
         if (this.snapshot.connection.state !== 'connected' || this.snapshot.history[key]?.loading || this.snapshot.history[key]?.done) return;
         const epoch = this.epoch;
         const set = (loading: boolean, done = false, error = '', loaded = this.snapshot.history[key]?.loaded ?? false) => this.update({ history: { ...this.snapshot.history, [key]: { loading, loaded, done, error } } });
@@ -147,13 +237,19 @@ export class ChatAccountStore {
         try {
             const group = key.startsWith('group:'); const cursor = this.historyCursor.get(key);
             const params: Record<string, unknown> = { [group ? 'group_id' : 'user_id']: this.peer(key), count: 50, reverse_order: this.target.backend === 'snowluma', disable_get_url: false, parse_mult_msg: true, quick_reply: false, reverseOrder: false };
-            if (cursor) params[this.target.backend === 'snowluma' ? 'message_id' : 'message_seq'] = this.target.backend === 'snowluma' ? Number(cursor) : cursor;
+            if (cursor) {
+                if (this.target.backend === 'snowluma' && !Number.isSafeInteger(Number(cursor))) throw new Error('此协议的历史游标超出可支持范围');
+                params[this.target.backend === 'snowluma' ? 'message_id' : 'message_seq'] = this.target.backend === 'snowluma' ? Number(cursor) : cursor;
+            }
             const data = record(dataOf(await this.transport.call(this.target.bot_id, group ? 'get_group_msg_history' : 'get_friend_msg_history', params)));
             if (epoch !== this.epoch) return;
+            // 请求期间缓存若被裁剪，旧游标已不连续，须重新取得最近一页。
+            if (cursor && cursor !== this.historyCursor.get(key)) { set(false, false, '', false); return this.history(key); }
             if (!Array.isArray(data.messages)) throw new Error('此通道未返回可识别的消息历史');
             const rows = data.messages.map(record).sort((a, b) => Number(a.time || 0) - Number(b.time || 0));
             let account = this.snapshot.account;
             for (const row of rows) account = ingestMessage(account, { ...row, message_type: group ? 'group' : 'private', ...(group ? { group_id: this.peer(key) } : { target_id: this.peer(key) }) }, true);
+            // NapCat 的参数虽名为 message_seq，实际按短 message_id 查内部 MsgId。
             const next = id(rows[0]?.message_id);
             if (next) this.historyCursor.set(key, next);
             this.account(account); set(false, !next || next === cursor || rows.length < 50, '', true);

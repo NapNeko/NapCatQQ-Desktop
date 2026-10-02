@@ -1033,6 +1033,8 @@ pub fn run() {
             commands::chat::chat_call_stream,
             commands::chat::chat_subscribe,
             commands::chat::chat_unsubscribe,
+            commands::chat::chat_archive_load,
+            commands::chat::chat_archive_save,
             commands::onebot_debug::onebot_debug_channels,
             commands::onebot_debug::onebot_debug_test_channel,
             commands::onebot_debug::onebot_debug_catalog,

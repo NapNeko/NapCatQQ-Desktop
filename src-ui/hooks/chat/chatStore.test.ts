@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ChatAccountStore } from './chatStore';
+import { archiveOf } from '../../core/domain/chat/archive';
+import { emptyAccount, ingestMessage } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCallResponse';
 import type { DebugSubscribeResponse } from '../../core/ipc/generated/debug/DebugSubscribeResponse';
@@ -12,6 +14,49 @@ function setup() {
     return { transport, store: new ChatAccountStore(target, transport) };
 }
 describe('chat lifecycle', () => {
+    it('reloads an exhausted conversation after its cached messages are evicted', async () => {
+        const { transport } = setup();
+        const seed = ingestMessage(emptyAccount('99'), { message_type: 'group', group_id: 12, message_id: 100, user_id: 22, time: 100, message: 'A' });
+        seed.messages = Array.from({ length: 4999 }, (_, index) => ({ ...seed.messages[0], id: String(index + 100), key: `group:12/${index + 100}`, at: index + 100000 }));
+        const archive = { load: vi.fn(async () => archiveOf(seed)), save: vi.fn(async () => {}) };
+        const store = new ChatAccountStore(target, transport, archive);
+        await store.restore(); await store.connect();
+        transport.call.mockResolvedValue(ok({ messages: [{ message_id: 1, time: 1, user_id: 22, message: 'B' }] }));
+        store.open({ key: 'group:13', type: 'group', id: '13', name: 'B' });
+        await store.ensureHistory('group:13');
+        expect(store.getSnapshot().history['group:13'].done).toBe(true);
+        store.open({ key: 'group:12', type: 'group', id: '12', name: 'A' });
+        transport.subscribe.mock.calls[0][1]({ v: 1, bot_id: 'bot', events: [{ seq: 1, at_ms: 1, body: { kind: 'ob11', payload: { message_type: 'group', group_id: 12, message_id: 6000, user_id: 22, time: 1000, message: 'new A' } } }] });
+        expect(store.getSnapshot().account.messages.filter(message => message.session === 'group:13')).toHaveLength(0);
+        expect(store.getSnapshot().history['group:13']).toMatchObject({ loaded: false, done: false });
+        store.open({ key: 'group:13', type: 'group', id: '13', name: 'B' });
+        await store.ensureHistory('group:13');
+        expect(transport.call).toHaveBeenCalledTimes(2);
+        expect(store.getSnapshot().account.messages.filter(message => message.session === 'group:13')).toHaveLength(1);
+    });
+    it('syncs contacts and recent conversations when an initially connecting receiver becomes ready', async () => {
+        const { store, transport } = setup();
+        transport.subscribe.mockResolvedValue({ ...subscription, receiver: { ...subscription.receiver, state: { state: 'connecting' } } });
+        transport.call.mockResolvedValue(ok([]));
+        await store.initialize();
+        expect(transport.call).not.toHaveBeenCalled();
+        const batch: DebugEventBatch = { v: 1, bot_id: 'bot', events: [{ seq: 1, at_ms: 1, body: { kind: 'receiver', state: { state: 'connected' } } }] };
+        transport.subscribe.mock.calls[0][1](batch);
+        await vi.waitFor(() => expect(transport.call).toHaveBeenCalledTimes(3));
+        expect(transport.call.mock.calls.map(call => (call as unknown[])[1]).sort()).toEqual(['get_friend_list', 'get_group_list', 'get_recent_contact']);
+        transport.subscribe.mock.calls[0][1]({ ...batch, events: [{ ...batch.events[0], seq: 2 }] });
+        expect(transport.call).toHaveBeenCalledTimes(3);
+    });
+    it('uses the oldest message ID for NapCat message_seq, not the NT sequence, and deduplicates overlapping rows', async () => {
+        const { store, transport } = setup(); await store.connect();
+        const page = (start: number) => Array.from({ length: 50 }, (_, i) => ({ message_id: start + i + 100000, message_seq: String(start + i), time: start + i, user_id: 22, message: `消息${start + i}` }));
+        transport.call.mockResolvedValueOnce(ok({ messages: page(51) })).mockResolvedValueOnce(ok({ messages: page(2) }));
+        await store.history('group:12'); await store.history('group:12');
+        expect(transport.call.mock.calls[1]).toMatchObject(['bot', 'get_group_msg_history', { message_seq: '100051' }]);
+        expect(store.getSnapshot().account.messages).toHaveLength(99);
+        expect(store.getSnapshot().account.messages[0].id).toBe('100002');
+        expect(store.getSnapshot().account.conversations['group:12'].unread).toBe(0);
+    });
     it('loads recent history once after connection, including an empty conversation', async () => {
         const { store, transport } = setup();
         transport.call.mockResolvedValue(ok({ messages: [] }));

@@ -67,11 +67,7 @@ function SegmentView({ seg, mine }: { seg: Segment; mine: boolean }) {
         case 'at':
             return <AtSeg qq={str(d.qq)} name={str(d.name)} mine={mine} />;
         case 'face':
-            return (
-                <Chip icon={<Smile size={11} aria-hidden />} title={`QQ 表情 ${str(d.id)}`}>
-                    表情 {str(d.id)}
-                </Chip>
-            );
+            return <FaceSeg id={str(d.id)} />;
         case 'image':
             return <ImageSeg url={imageUrlOf(d)} summary={str(d.summary)} />;
         case 'mface':
@@ -154,6 +150,27 @@ function AtSeg({ qq, name, mine }: { qq: string; name: string; mine: boolean }) 
             @{shown}{' '}
         </span>
     );
+}
+
+function FaceSeg({ id }: { id: string }) {
+    const valid = /^\d{1,6}$/.test(id);
+    const [failedId, setFailedId] = useState<string | null>(null);
+    const label = valid ? `QQ 表情 ${id}` : 'QQ 表情';
+    if (!valid || failedId === id) return <Chip icon={<Smile size={11} aria-hidden />} title={label}>{valid ? `表情 ${id}` : '表情'}</Chip>;
+    // QFace 按 QQNT emojiId 发布腾讯表情资源；固定尺寸避免资源加载后挤动虚拟列表。
+    return <img
+        src={`https://koishi.js.org/QFace/assets/qq_emoji/${id}/png/${id}.png`}
+        alt={label}
+        title={label}
+        width={24}
+        height={24}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        draggable={false}
+        className="mx-0.5 inline-block h-6 w-6 align-middle object-contain"
+        onError={() => setFailedId(id)}
+    />;
 }
 
 // ---------------------------------------------------------------------------

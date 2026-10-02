@@ -1,17 +1,48 @@
 //! 聊天独占协议会话，调试开关和停止操作不影响这里的接收器。
 use std::{path::PathBuf, sync::Arc, time::Instant};
 use ncd_domain::onebot_debug::{DebugCallRequest, DebugCallResponse, DebugCallResult, DebugChannelId, DebugError, DebugEventBatch, DebugStreamCallRequest, DebugSubscribeResponse, DebugTarget};
+use ncd_domain::chat_archive::ChatArchive;
 use crate::{DebugBotPort, DebugEventSink, DebugManager, DebugStreamSink, EventBus};
 use crate::host_resolver::HostResolver;
+use crate::chat_archive::ChatArchiveStore;
 
-pub struct ChatManager { transport: Arc<DebugManager> }
+pub struct ChatManager {
+    transport: Arc<DebugManager>,
+    archive: ChatArchiveStore,
+    archive_gate: tokio::sync::Mutex<()>,
+}
 
 impl ChatManager {
     pub fn new(bots: Arc<dyn DebugBotPort>, hosts: Arc<dyn HostResolver>, data_root: PathBuf) -> Self {
-        Self { transport: Arc::new(DebugManager::new_ephemeral(bots, hosts, data_root)) }
+        Self {
+            archive: ChatArchiveStore::new(&data_root),
+            archive_gate: tokio::sync::Mutex::new(()),
+            transport: Arc::new(DebugManager::new_ephemeral(bots, hosts, data_root)),
+        }
     }
 
     pub async fn targets(&self) -> Vec<DebugTarget> { self.transport.list_targets().await }
+
+    async fn archive_identity(&self, bot_id: &str, self_id: &str) -> Result<(), String> {
+        let targets = self.targets().await;
+        archive_identity(&targets, bot_id, self_id)
+    }
+
+    pub async fn load_archive(&self, bot_id: String, self_id: String) -> Result<Option<ChatArchive>, String> {
+        self.archive_identity(&bot_id, &self_id).await?;
+        let _guard = self.archive_gate.lock().await;
+        let archive = self.archive.clone();
+        tokio::task::spawn_blocking(move || archive.load(&bot_id, &self_id)).await
+            .map_err(|e| format!("读取聊天档案任务失败: {e}"))?
+    }
+
+    pub async fn save_archive(&self, bot_id: String, self_id: String, value: ChatArchive) -> Result<(), String> {
+        self.archive_identity(&bot_id, &self_id).await?;
+        let _guard = self.archive_gate.lock().await;
+        let archive = self.archive.clone();
+        tokio::task::spawn_blocking(move || archive.save(&bot_id, &self_id, value)).await
+            .map_err(|e| format!("保存聊天档案任务失败: {e}"))?
+    }
 
     pub async fn call(&self, request: DebugCallRequest) -> DebugCallResponse {
         if !chat_action(&request.action) { return rejected(request.request_id); }
@@ -50,7 +81,15 @@ impl DebugEventSink for ChatSink {
 }
 
 fn chat_action(action: &str) -> bool {
-    matches!(action, "get_login_info" | "get_friend_list" | "get_group_list" | "get_group_member_list" | "get_group_info" | "get_msg" | "get_group_msg_history" | "get_friend_msg_history" | "send_group_msg" | "send_private_msg" | "upload_group_file" | "upload_private_file")
+    matches!(action, "get_login_info" | "get_friend_list" | "get_recent_contact" | "get_stranger_info" | "get_group_list" | "get_group_member_list" | "get_group_info" | "get_msg" | "get_group_msg_history" | "get_friend_msg_history" | "send_group_msg" | "send_private_msg" | "upload_group_file" | "upload_private_file")
+}
+
+fn archive_identity(targets: &[DebugTarget], bot_id: &str, self_id: &str) -> Result<(), String> {
+    if targets.iter().any(|target| target.bot_id == bot_id && target.qq_id.to_string() == self_id) {
+        Ok(())
+    } else {
+        Err("聊天档案账号与 Bot 不匹配".into())
+    }
 }
 fn rejected(request_id: String) -> DebugCallResponse {
     DebugCallResponse { request_id, result: DebugCallResult::Err { error: DebugError::InvalidParams { message: "聊天不支持此操作".into() } } }
@@ -64,5 +103,20 @@ mod tests {
         assert!(chat_action("send_group_msg"));
         assert!(!chat_action("set_restart"));
         assert!(!chat_action("get_credentials"));
+    }
+
+    #[test]
+    fn chat_supports_recent_contacts_and_private_profiles() {
+        assert!(chat_action("get_recent_contact"));
+        assert!(chat_action("get_stranger_info"));
+    }
+
+    #[test]
+    fn archive_access_requires_the_matching_configured_identity() {
+        use ncd_domain::{bot_config::BackendType, onebot_debug::DebugHost};
+        let target = DebugTarget { bot_id: "bot-1".into(), name: "Bot".into(), qq_id: 10001, backend: BackendType::NapCat, host: DebugHost::Local, running: false, online: None };
+        assert!(archive_identity(std::slice::from_ref(&target), "bot-1", "10001").is_ok());
+        assert!(archive_identity(std::slice::from_ref(&target), "bot-1", "10002").is_err());
+        assert!(archive_identity(std::slice::from_ref(&target), "missing", "10001").is_err());
     }
 }

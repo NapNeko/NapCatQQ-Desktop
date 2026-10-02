@@ -4,15 +4,20 @@ import type { Mention } from '../debug/composerModel';
 
 export type SessionKey = `group:${string}` | `private:${string}`;
 export interface Contact { key: SessionKey; type: 'group' | 'private'; id: string; name: string; members?: number }
-export interface Conversation extends Contact { unread: number; pinned: boolean; lastAt: number; preview: string }
+export interface Conversation extends Contact { unread: number; pinned: boolean; lastAt: number; preview: string; boxed?: boolean }
 export type SendStatus = 'sending' | 'sent' | 'failed' | 'unknown';
-export interface Message { key: string; session: SessionKey; id?: string; fileId?: string; requestId?: string; senderId: string; senderName: string; at: number; mine: boolean; segments: Segment[]; status: SendStatus; error?: string; recalled?: boolean }
+export interface Message { key: string; session: SessionKey; id?: string; sequence?: string; fileId?: string; requestId?: string; senderId: string; senderName: string; at: number; mine: boolean; segments: Segment[]; status: SendStatus; error?: string; recalled?: boolean }
 export interface Attachment { key: string; path: string; name: string; type: 'image' | 'file' }
 export interface Reply { id: string; name: string; preview: string }
 export interface Draft { text: string; attachments: Attachment[]; reply: Reply | null; mentions?: Mention[] }
 export interface Account { selfId: string; active: SessionKey | null; conversations: Record<string, Conversation>; messages: Message[]; drafts: Record<string, Draft>; lastSeq: number; gap: boolean }
 export const EMPTY_DRAFT: Draft = { text: '', attachments: [], reply: null };
 export const MESSAGE_LIMIT = 5000;
+// 上翻中的会话不裁掉刚读到的旧消息，其余会话仍只留近期缓冲。
+export function retainMessages(messages: Message[], reading?: SessionKey | null, loading?: SessionKey | null): Message[] {
+    const recentStart = Math.max(0, messages.length - MESSAGE_LIMIT);
+    return messages.filter((message, index) => index >= recentStart || message.session === reading || message.session === loading);
+}
 export const accountKey = (botId: string, selfId: string) => JSON.stringify([botId, selfId]);
 export const record = (v: unknown): Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Record<string, unknown> : {};
 export const id = (v: unknown): string => typeof v === 'string' ? v : typeof v === 'number' && Number.isSafeInteger(v) ? String(v) : '';
@@ -51,20 +56,23 @@ export function ingestMessage(state: Account, raw: unknown, historical = false, 
     const key = messageId ? `${session}/${messageId}` : `${session}/event/${id(row.message_seq) || at}/${senderId}/${messagePreview(segments)}`;
     const existing = state.messages.find(m => m.session === session && ((messageId ? m.id === messageId : m.key === key) || (mine && fileId && m.requestId && !m.id && m.fileId === fileId)));
     if (existing) {
-        if (!existing.requestId) return state;
+        if (!existing.requestId) {
+            const sequence = id(row.message_seq);
+            return sequence && existing.sequence !== sequence ? { ...state, messages: state.messages.map(m => m === existing ? { ...m, sequence } : m) } : state;
+        }
         return { ...state, messages: state.messages.map(message => message === existing ? { ...message, id: messageId || message.id, fileId: fileId || message.fileId, segments, status: 'sent', error: undefined } : message) };
     }
     const name = text(sender.card) || text(sender.nickname) || senderId;
     const contact = state.conversations[session] ?? { ...contactFromKey(session), name: text(row.group_name) || (row.message_type === 'private' && !mine ? name : peer) };
     const current = conversation(state, contact);
-    const message: Message = { key, session, id: messageId || undefined, fileId: fileId || undefined, senderId, senderName: name, mine, segments, at, status: 'sent' };
+    const message: Message = { key, session, id: messageId || undefined, sequence: id(row.message_seq) || undefined, fileId: fileId || undefined, senderId, senderName: name, mine, segments, at, status: 'sent' };
     const messages = [...state.messages, message].sort((a, b) => a.at - b.at);
-    return { ...state, gap: state.gap || messages.length > MESSAGE_LIMIT, messages: messages.slice(-MESSAGE_LIMIT), conversations: { ...state.conversations, [session]: { ...current, unread: current.unread + (!historical && !mine && reading !== session ? 1 : 0), lastAt: Math.max(at, current.lastAt), preview: at >= current.lastAt ? messagePreview(segments) : current.preview } } };
+    return { ...state, gap: state.gap || messages.length > MESSAGE_LIMIT, messages: retainMessages(messages, state.active, historical ? session : null), conversations: { ...state.conversations, [session]: { ...current, unread: current.unread + (!historical && !mine && reading !== session ? 1 : 0), lastAt: Math.max(at, current.lastAt), preview: at >= current.lastAt ? messagePreview(segments) : current.preview } } };
 }
 export function addPending(state: Account, session: SessionKey, requestId: string, segments: Segment[], at: number): Account {
     const current = conversation(state, state.conversations[session] ?? contactFromKey(session));
     const message: Message = { key: `pending/${requestId}`, requestId, session, senderId: state.selfId, senderName: '我', mine: true, segments, at, status: 'sending' };
-    return { ...state, messages: [...state.messages, message].slice(-MESSAGE_LIMIT), conversations: { ...state.conversations, [session]: { ...current, lastAt: at, preview: messagePreview(segments) } } };
+    return { ...state, messages: retainMessages([...state.messages, message], state.active), conversations: { ...state.conversations, [session]: { ...current, lastAt: at, preview: messagePreview(segments) } } };
 }
 export function settleSend(state: Account, requestId: string, result: { state: SendStatus; id?: string; fileId?: string; error?: string }): Account {
     const pending = state.messages.find(m => m.requestId === requestId);

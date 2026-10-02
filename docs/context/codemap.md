@@ -410,13 +410,15 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 | 关注点 | 主路径 |
 |--------|--------|
 | 页面与入口 | `src-ui/modules/chat/ChatPage.tsx` / `ChatTimeline.tsx` / `ChatComposer.tsx` / `chat.css`；主侧栏「聊天」，`AppNext` lazy 全宽路由；宽屏双栏、窄宽会话返回；`ChatDivider` 支持拖动与键盘调宽，`ChatSearch` 搜索已加载消息并定位，`ChatDetails` 为资料弹层，`ChatAvatar` 共用头像 |
-| 状态与协议边界 | `src-ui/core/domain/chat/`：字符串消息标识、账号/会话分区、收发去重、草稿恢复；`hooks/chat/chatStore.ts`：独立订阅、联系人、首次会话历史自动读取与失败重试、历史分页、发送状态。消息与草稿只在本次应用内存中保留，每账号最多 5,000 条；不写 localStorage 或调试历史 |
+| 状态与协议边界 | `src-ui/core/domain/chat/`：字符串消息标识、账号/会话分区、收发去重、档案合并；`hooks/chat/chatStore.ts`：先离线恢复档案，连接建立后同步联系人与最近会话，串行保存；草稿仅留内存。内存保留全局最近 5,000 条与正在阅读/加载的会话旧页，裁剪同步失效历史游标 |
+| 聊天档案 | `ncd-domain/src/chat_archive.rs` 定义 ts-rs 契约；`ncd-runtime/src/chat_archive.rs` 在注入的 `data_root/state/chat/archives/<Bot SHA256>/<QQ>.json` 原子保存，每账号最多 5,000 条消息、1,000 个会话、16 MiB。校验身份与关系，损坏文件拒绝覆盖；剔除消息段凭据、本机附件 URI 与内嵌图片，不存草稿附件 |
+| 群盒子 / 历史 / 表情 | `groupBox.ts` 汇总群未读，主列表搜索穿透盒子，`ChatDetails` 移入移出并持久化；头像/标题和资料按钮共用弹层。`useHistoryPaging.ts` 上翻自动加载，虚拟列表保留阅读锚点；NapCat 的 `message_seq` 参数实际传短 `message_id`，SnowLuma 传数字 `message_id`。`debug/right/SegmentView.tsx` 将 QQ face 显示为图片，未知 ID/加载失败回退文本 |
 | 输入与界面偏好 | `ChatComposer`：@ 键盘选择、表情、附件读取反馈、自适应输入高度；`chatPreferences.ts` 仅将列表宽度与发送快捷键存入 localStorage `ncd.chat.ui.v1`，不存消息、账号或草稿 |
 | 传输与生命周期 | `crates/ncd-runtime/src/chat.rs`：动作白名单与独立协议会话，复用 `DebugManager::new_ephemeral`；`apiDebug` 关闭、调试停止接收不影响聊天。当前独立传输实例可能增加连接，尚未合并共享传输租约 |
-| IPC / 预览 | `src-tauri/src/commands/chat.rs`：`chat_targets/call/call_stream/subscribe/unsubscribe`；前端 `core/services/chat.service.ts`，复用 ts-rs 生成的协议类型；`core/ipc/mock/chat.mock.ts` 为独立模拟事件流。`lib.rs` 接 Bot 生命周期、页面重载清理；`commands/exit.rs` 统一释放聊天连接 |
+| IPC / 预览 | `src-tauri/src/commands/chat.rs`：`chat_targets/call/call_stream/subscribe/unsubscribe` 与 `chat_archive_load/save`；前端 `core/services/chat.service.ts` / `chat-archive.service.ts`，档案类型来自 `generated/chat/`。`core/ipc/mock/chat.mock.ts` 提供多页历史，`chat-archive.mock.ts` 仅在浏览器预览用 localStorage 模拟存储。`lib.rs` 接 Bot 生命周期、页面重载清理；`commands/exit.rs` 统一释放聊天连接 |
 | 复用边界 | 复用 debug 的 BotPicker、消息段解析、@ 组装、SegmentList 与虚拟列表贴底；弹层使用 shared/ui/Popover；不导入 DebugConsolePage 或调试工作区 store |
 
-未覆盖：永久消息仓储、群管理/转发详情等完整 QQ 客户端能力；本机/远端 NapCat/SnowLuma 的真实账号收发需要单独实机验收。
+未覆盖：无限量消息仓储、群管理/转发详情等完整 QQ 客户端能力。SnowLuma 当前上游 `get_recent_contact` 返回空列表，首次使用无法据此发现未曾归档的旧会话；已有档案正常恢复。本机/远端 NapCat/SnowLuma 的真实账号收发需要单独实机验收。
 
 ---
 

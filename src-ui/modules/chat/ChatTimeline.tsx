@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogTitle } from '../../shared/ui/Dialog';
 import { ChatAvatar as Avatar } from './ChatAvatar';
 import { dayLabel } from '../../core/domain/debug/chatFormat';
 import { cn } from '../../shared/utils/cn';
+import { useHistoryPaging } from './useHistoryPaging';
 
 export function NativeTimeline({ store, contact, messages, revealRef, visible }: { store: ChatAccountStore; contact: Contact; messages: Message[]; revealRef: MutableRefObject<(key: string) => void>; visible: boolean }) {
     const scroll = useRef<HTMLDivElement>(null); const latest = useRef(messages); latest.current = messages;
@@ -25,6 +26,7 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
     const virtual = useVirtualizer({ count: messages.length, getScrollElement: () => scroll.current, estimateSize: () => 108, getItemKey: i => latest.current[i]?.key ?? i, overscan: 7, paddingStart: 12, paddingEnd: 24, anchorTo: 'end' });
     const key = `${accountKey(store.target.bot_id, String(store.target.qq_id))}/${contact.key}`;
     const stick = useStickToBottom({ scrollRef: scroll, virtualizer: virtual, items: messages, memoryKey: `native-chat:${key}`, resetToken: key, filterToken: '', animate: false });
+    const paging = useHistoryPaging({ scroll, enabled: snapshot.connection.state === 'connected' && !!history?.loaded && !history.loading && !history.done && !history.error, load: () => store.history(contact.key), detach: stick.detach });
     useEffect(() => {
         const update = () => store.setReading(!stick.away && document.visibilityState === 'visible' && (scroll.current?.clientWidth ?? 0) > 0 ? contact.key : null);
         update(); document.addEventListener('visibilitychange', update);
@@ -51,7 +53,13 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
     const reply = (message: Message) => { if (message.id) store.draft(contact.key, { ...(store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT), reply: { id: message.id, name: message.mine ? '我' : message.senderName, preview: messagePreview(message.segments) } }); };
     return <ChatViewContext.Provider value={view}>
         <div className="native-chat-history"><button disabled={history?.loading || history?.done || snapshot.connection.state !== 'connected'} onClick={() => void store.history(contact.key)}>{history?.loading ? '正在加载…' : history?.error ? '重试读取历史' : history?.done ? '已到最早消息' : '加载更早消息'}</button>{snapshot.account.gap && <span>部分消息未接收，可尝试加载历史</span>}{history?.error && <span role="status" className="text-danger">{history.error}</span>}</div>
-        <div className="native-chat-timeline-wrap"><div ref={scroll} className="native-chat-timeline" tabIndex={0} aria-label="消息记录" {...stick.handlers}>
+        <div className="native-chat-timeline-wrap"><div ref={scroll} className="native-chat-timeline" tabIndex={0} aria-label="消息记录"
+            onScroll={() => { stick.handlers.onScroll(); paging.onScroll(); }}
+            onWheel={e => { stick.handlers.onWheel(e); paging.onWheel(e); }}
+            onKeyDown={e => { stick.handlers.onKeyDown(e); paging.onKeyDown(e); }}
+            onPointerDown={e => { stick.handlers.onPointerDown(e); if (e.target === e.currentTarget) paging.onPointerDown(); }}
+            onTouchStart={e => { stick.handlers.onTouchStart(e); paging.onTouchStart(e); }}
+            onTouchMove={e => { stick.handlers.onTouchMove(e); paging.onTouchMove(e); }}>
             {!messages.length && <div className="native-chat-message-empty">{history?.loading ? '正在读取消息' : '还没有消息，从一句问候开始'}</div>}
             <div style={{ height: virtual.getTotalSize(), position: 'relative', width: '100%' }}>{virtual.getVirtualItems().map(row => {
                 const message = messages[row.index]; const previous = messages[row.index - 1];

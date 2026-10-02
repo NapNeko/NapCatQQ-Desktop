@@ -1,5 +1,6 @@
 //! 聊天 IPC，连接状态及动作边界由 runtime 管理。
 use std::{sync::Arc, time::Instant};
+use ncd_domain::chat_archive::ChatArchive;
 use ncd_domain::onebot_debug::{DebugCallRequest, DebugCallResponse, DebugEventBatch, DebugStreamCallRequest, DebugStreamProgress, DebugSubscribeResponse, DebugTarget};
 use ncd_runtime::{DebugEventSink, DebugStreamSink};
 use tauri::{ipc::Channel, State, Webview};
@@ -32,6 +33,17 @@ pub async fn chat_subscribe(webview: Webview, state: State<'_, AppState>, bot_id
 pub async fn chat_unsubscribe(state: State<'_, AppState>, subscription_id: String) -> Result<(), String> {
     state.chat.unsubscribe(&subscription_id).await;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn chat_archive_load(state: State<'_, AppState>, bot_id: String, self_id: String) -> Result<Option<ChatArchive>, String> {
+    state.chat.load_archive(bot_id, self_id).await
+}
+
+#[tauri::command]
+pub async fn chat_archive_save(state: State<'_, AppState>, bot_id: String, self_id: String, archive: ChatArchive) -> Result<(), String> {
+    state.migrate_gate.ensure_idle()?;
+    state.chat.save_archive(bot_id, self_id, archive).await
 }
 
 #[cfg(test)]
