@@ -1,0 +1,19 @@
+.native-chat-image-dialog { width: min(1200px, calc(100vw - 48px)); max-width: 1200px; padding: 0; }
+.native-chat-image-viewer { display: flex; flex-direction: column; height: min(86dvh, 900px); min-height: 0; color: var(--text-primary); }
+.native-chat-image-viewer > header { display: flex; align-items: center; gap: 14px; padding: 14px 18px; flex-shrink: 0; }
+.native-chat-image-viewer > header h2 { font-size: 14px; margin: 0; }
+.native-chat-image-viewer > header > span { flex: 1; color: var(--text-tertiary); font-size: 11px; }
+.native-chat-image-canvas { position: relative; flex: 1; min-height: 0; overflow: auto; background: var(--surface-inset); cursor: grab; overscroll-behavior: contain; outline-offset: -3px; }
+.native-chat-image-canvas[data-dragging=true] { cursor: grabbing; user-select: none; }
+.native-chat-image-stage { position: relative; }
+.native-chat-image-stage img { position: absolute; max-width: none; max-height: none; user-select: none; }
+.native-chat-image-state { position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; gap: 12px; font-size: 12px; color: var(--text-tertiary); cursor: default; }
+.native-chat-image-state button { color: var(--action-primary); padding: 6px; }
+.native-chat-image-viewer > footer { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 10px 12px; flex-shrink: 0; }
+.native-chat-image-viewer > footer button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 32px; height: 30px; padding: 0 7px; border-radius: var(--radius-xs); color: var(--text-secondary); font-size: 11px; }
+.native-chat-image-viewer > footer button:hover:not(:disabled) { background: var(--surface-inset); color: var(--text-primary); }
+.native-chat-image-viewer > footer button:disabled { opacity: 0.4; }
+.native-chat-image-viewer button:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 1px; }
+.native-chat-image-percent { min-width: 56px !important; font-variant-numeric: tabular-nums; }
+.native-chat-image-toolbar-divider { width: 1px; height: 16px; background: var(--border-subtle); margin: 0 7px; }
+@media (max-width: 500px) { .native-chat-image-viewer > footer button span { display: none; } }

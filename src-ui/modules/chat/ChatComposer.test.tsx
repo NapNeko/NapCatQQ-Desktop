@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ChatComposer } from './ChatComposer';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
+import { chatMediaService } from '../../core/services/chat-media.service';
 
 function setup(disabledReason = '', sendShortcut: 'enter' | 'ctrl-enter' = 'enter') {
     const store = new ChatAccountStore({ bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true });
@@ -11,6 +12,22 @@ function setup(disabledReason = '', sendShortcut: 'enter' | 'ctrl-enter' = 'ente
     return { send, input: screen.getByRole('textbox', { name: '发送消息给好友' }) };
 }
 describe('native composer keyboard', () => {
+    it('selects QQ and favorite faces into the draft without sending', async () => {
+        const store = new ChatAccountStore({ bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true });
+        const send = vi.spyOn(store, 'send').mockResolvedValue();
+        const favorites = vi.spyOn(chatMediaService, 'favorites').mockResolvedValue(['https://cdn.example/fav.gif']);
+        render(<ChatComposer store={store} contact={{ key: 'private:12', id: '12', name: '好友', type: 'private' }} disabledReason="" />);
+        fireEvent.click(screen.getByRole('button', { name: '表情' }));
+        expect(favorites).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: '插入QQ 表情 14' }));
+        expect(store.getSnapshot().account.drafts['private:12'].attachments[0]).toMatchObject({ type: 'face', id: '14' });
+        fireEvent.click(screen.getByRole('button', { name: '表情' }));
+        fireEvent.click(screen.getByRole('tab', { name: '收藏表情' }));
+        fireEvent.click(await screen.findByRole('button', { name: '插入收藏表情 1' }));
+        expect(store.getSnapshot().account.drafts['private:12'].attachments[1]).toMatchObject({ type: 'image', path: 'https://cdn.example/fav.gif', subType: 1 });
+        expect(send).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: '发送消息' })).toBeEnabled();
+    });
     it('sends only with the selected Ctrl+Enter shortcut', () => {
         const { send, input } = setup('', 'ctrl-enter');
         fireEvent.keyDown(input, { key: 'Enter' });

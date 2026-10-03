@@ -43,6 +43,7 @@ import { EventDetailPopover, type DetailTarget } from './EventDetailPopover';
 import { EventListView } from './EventListView';
 import { PausedPill } from './NewMessagesPill';
 import { SessionStrip } from './SessionStrip';
+import { createChatMediaService } from '../../../core/services/chat-media.service';
 
 export interface RightColumnProps {
     /** 当前选中的 Bot；没在运行时输入框禁用 */
@@ -209,6 +210,7 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     botRef.current = { id: target.bot_id, name: selfName };
     const callChannelRef = useRef(callChannel);
     callChannelRef.current = callChannel;
+    const targetRef = useRef(target); targetRef.current = target;
     const { send: sendCall } = useDebugCall();
 
     const activeTab = useActiveDebugTab();
@@ -236,6 +238,10 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
     const expanded = useRef(new Set<string>());
 
     const api = useMemo<ChatViewApi>(() => {
+        const media = createChatMediaService((_botId, action, params) => sendCall(null, {
+            bot_id: botRef.current.id, channel: callChannelRef.current,
+            action, params, timeout_ms: 30_000, origin: 'picker',
+        }));
         const previewFill = (item: ChatItem): FillPlan => {
             const tab = tabRef.current;
             if (!tab) return { ok: false, reason: '中间还没有打开请求标签' };
@@ -285,6 +291,11 @@ function BotChat({ target, callChannel }: { target: DebugTarget; callChannel: De
                 return problem ? { ok: false, reason: problem } : { ok: true };
             },
             openImage: (url) => setLightbox(url),
+            readImage: (data, refresh) => media.image(targetRef.current, data, refresh),
+            readForward: (data) => media.forward(targetRef.current, data),
+            readRecord: (data) => media.record(targetRef.current, data),
+            readVideo: (data, refresh) => media.video(targetRef.current, data, refresh),
+            readRecordText: (messageId) => media.transcript(targetRef.current, messageId),
             openLink: (url) => openExternal(url),
             revealMessage: (id) => revealRef.current?.(id) ?? false,
             isExpanded: (key) => expanded.current.has(key),

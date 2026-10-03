@@ -1,8 +1,8 @@
 // 虚拟时间线复用消息段渲染和贴底逻辑，样式与阅读状态独立。
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDown, Copy, Reply as ReplyIcon, RotateCcw } from 'lucide-react';
-import { SegmentList } from '../debug/right/SegmentView';
+import { SegmentList, isMediaOnly, isPictureOnly } from '../debug/right/SegmentView';
 import { ChatViewContext, useChatView } from '../debug/right/chatContext';
 import { useStickToBottom } from '../debug/right/useStickToBottom';
 import { useMotion } from '../../hooks/preferences/useMotion';
@@ -11,7 +11,8 @@ import { EMPTY_DRAFT, accountKey, type Contact, type Message } from '../../core/
 import { messagePreview } from '../../core/domain/debug/segments';
 import { chatService } from '../../core/services/chat.service';
 import { recoverDraft } from '../../core/domain/chat/recoverDraft';
-import { Dialog, DialogContent, DialogTitle } from '../../shared/ui/Dialog';
+import { ChatImageViewer } from './ChatImageViewer';
+import { chatMediaService } from '../../core/services/chat-media.service';
 import { ChatAvatar as Avatar } from './ChatAvatar';
 import { dayLabel } from '../../core/domain/debug/chatFormat';
 import { cn } from '../../shared/utils/cn';
@@ -19,6 +20,7 @@ import { useHistoryPaging } from './useHistoryPaging';
 
 export function NativeTimeline({ store, contact, messages, revealRef, visible }: { store: ChatAccountStore; contact: Contact; messages: Message[]; revealRef: MutableRefObject<(key: string) => void>; visible: boolean }) {
     const scroll = useRef<HTMLDivElement>(null); const latest = useRef(messages); latest.current = messages;
+    const historyAnchor = useRef<{ height: number; top: number } | null>(null);
     const [image, showImage] = useState(''); const [error, setError] = useState(''); const [highlight, setHighlight] = useState('');
     const snapshot = useChatSnapshot(store); const history = snapshot.history[contact.key];
     useEffect(() => { void store.ensureHistory(contact.key); }, [store, contact.key, snapshot.connection.state, history]);
@@ -27,6 +29,19 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
     const key = `${accountKey(store.target.bot_id, String(store.target.qq_id))}/${contact.key}`;
     const stick = useStickToBottom({ scrollRef: scroll, virtualizer: virtual, items: messages, memoryKey: `native-chat:${key}`, resetToken: key, filterToken: '', animate: false });
     const paging = useHistoryPaging({ scroll, enabled: snapshot.connection.state === 'connected' && !!history?.loaded && !history.loading && !history.done && !history.error, load: () => store.history(contact.key), detach: stick.detach });
+    useEffect(() => {
+        if (history?.loading && history.loaded && !historyAnchor.current && scroll.current) {
+            historyAnchor.current = { height: scroll.current.scrollHeight, top: scroll.current.scrollTop };
+        }
+        if (!history?.loaded) historyAnchor.current = null;
+    }, [history?.loading, history?.loaded]);
+    useLayoutEffect(() => {
+        const anchor = historyAnchor.current;
+        if (!anchor || history?.loading || !history.loaded || !scroll.current) return;
+        const element = scroll.current;
+        element.scrollTop = anchor.top + (element.scrollHeight - anchor.height);
+        historyAnchor.current = null;
+    }, [history?.loading, history?.loaded, messages.length]);
     useEffect(() => {
         const update = () => store.setReading(!stick.away && document.visibilityState === 'visible' && (scroll.current?.clientWidth ?? 0) > 0 ? contact.key : null);
         update(); document.addEventListener('visibilitychange', update);
@@ -42,6 +57,11 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
     const view = useMemo(() => ({
         ...fallback,
         openImage: showImage,
+        readImage: (data: Record<string, unknown>, refresh?: boolean) => chatMediaService.image(store.target, data, refresh),
+        readForward: (data: Record<string, unknown>) => chatMediaService.forward(store.target, data),
+        readRecord: (data: Record<string, unknown>) => chatMediaService.record(store.target, data),
+        readVideo: (data: Record<string, unknown>, refresh?: boolean) => chatMediaService.video(store.target, data, refresh),
+        readRecordText: (messageId: string) => chatMediaService.transcript(store.target, messageId),
         openLink: (url: string) => { void chatService.openLink(url).catch(e => setError(String(e))); },
         nameOf: (userId: number) => snapshot.account.messages.find(m => m.senderId === String(userId))?.senderName,
         findMessage: (messageId: number) => {
@@ -49,11 +69,14 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
             return m ? { kind: 'message' as const, key: m.key, seq: 0, at: m.at, session: m.session, direction: m.mine ? 'out' as const : 'in' as const, senderId: Number(m.senderId), senderName: m.senderName, messageId, segments: m.segments, raw: {} } : undefined;
         },
         revealMessage: (messageId: number) => { const m = latest.current.find(m => m.id === String(messageId)); if (!m) return false; revealRef.current(m.key); return true; },
-    }), [fallback, snapshot.account.messages, revealRef]);
+    }), [fallback, snapshot.account.messages, revealRef, store]);
     const reply = (message: Message) => { if (message.id) store.draft(contact.key, { ...(store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT), reply: { id: message.id, name: message.mine ? '我' : message.senderName, preview: messagePreview(message.segments) } }); };
     return <ChatViewContext.Provider value={view}>
-        <div className="native-chat-history"><button disabled={history?.loading || history?.done || snapshot.connection.state !== 'connected'} onClick={() => void store.history(contact.key)}>{history?.loading ? '正在加载…' : history?.error ? '重试读取历史' : history?.done ? '已到最早消息' : '加载更早消息'}</button>{snapshot.account.gap && <span>部分消息未接收，可尝试加载历史</span>}{history?.error && <span role="status" className="text-danger">{history.error}</span>}</div>
-        <div className="native-chat-timeline-wrap"><div ref={scroll} className="native-chat-timeline" tabIndex={0} aria-label="消息记录"
+        <div className="native-chat-timeline-wrap">
+            <div className="native-chat-history-hotzone">
+                <div className="native-chat-history" data-active={!!history?.loading || !!history?.error}><button disabled={history?.loading || history?.done || snapshot.connection.state !== 'connected'} onClick={() => void store.history(contact.key)}>{history?.loading ? '正在加载…' : history?.error ? '重试读取历史' : history?.done ? '已到最早消息' : '加载更早消息'}</button>{snapshot.account.gap && <span>部分消息未接收，可尝试加载历史</span>}{history?.error && <span role="status" className="text-danger">{history.error}</span>}</div>
+            </div>
+            <div ref={scroll} className="native-chat-timeline" tabIndex={0} aria-label="消息记录"
             onScroll={() => { stick.handlers.onScroll(); paging.onScroll(); }}
             onWheel={e => { stick.handlers.onWheel(e); paging.onWheel(e); }}
             onKeyDown={e => { stick.handlers.onKeyDown(e); paging.onKeyDown(e); }}
@@ -70,7 +93,7 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
                     <article className={cn('native-chat-message', message.mine && 'is-mine', continuation && 'is-continuation')} data-highlight={highlight === message.key}>
                         <div className={continuation ? 'invisible' : ''}><Avatar contact={{ type: 'private', id: message.senderId, name: message.mine ? store.target.name : message.senderName }} small /></div>
                         <div className="native-chat-message-body">{!message.mine && !continuation && <div className="native-chat-sender">{message.senderName}</div>}
-                            <div className="native-chat-bubble">{message.recalled ? <span className="text-text-tertiary">消息已撤回</span> : <SegmentList segments={message.segments} mine={message.mine} />}</div>
+                            <div className={cn('native-chat-bubble', isMediaOnly(message.segments) && 'is-media-only', isPictureOnly(message.segments) && 'is-picture-only')}>{message.recalled ? <span className="text-text-tertiary">消息已撤回</span> : <SegmentList segments={message.segments} mine={message.mine} messageId={message.id} />}</div>
                             {message.mine && message.status !== 'sent' && <div className={cn('native-chat-send-status', message.status !== 'sending' && 'text-danger')} title={message.error}>{message.status === 'sending' ? '发送中…' : message.status === 'unknown' ? '发送结果未确认，请核实后再发送' : '发送失败'}{message.error && <span className="block">{message.error}</span>}</div>}
                         </div>
                         {!message.recalled && <div className="native-chat-message-actions">
@@ -86,6 +109,6 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
             })}</div>
         </div>{(stick.away || stick.unseen > 0) && <button className="native-chat-latest" onClick={() => stick.jumpToLatest(motion.enabled)}><ArrowDown size={14} />{stick.unseen > 0 ? `${stick.unseen} 条新消息` : '回到最新'}</button>}</div>
         {error && <button role="status" className="native-chat-error" onClick={() => setError('')}>{error}</button>}
-        <Dialog open={!!image} onOpenChange={open => { if (!open) showImage(''); }}><DialogContent><DialogTitle>图片</DialogTitle>{image && <img src={image} alt="消息图片" className="max-h-[70vh] w-full object-contain" />}</DialogContent></Dialog>
+        <ChatImageViewer src={image} onClose={() => showImage('')} />
     </ChatViewContext.Provider>;
 }

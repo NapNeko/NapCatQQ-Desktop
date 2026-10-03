@@ -7,7 +7,7 @@ export interface Contact { key: SessionKey; type: 'group' | 'private'; id: strin
 export interface Conversation extends Contact { unread: number; pinned: boolean; lastAt: number; preview: string; boxed?: boolean }
 export type SendStatus = 'sending' | 'sent' | 'failed' | 'unknown';
 export interface Message { key: string; session: SessionKey; id?: string; sequence?: string; fileId?: string; requestId?: string; senderId: string; senderName: string; at: number; mine: boolean; segments: Segment[]; status: SendStatus; error?: string; recalled?: boolean }
-export interface Attachment { key: string; path: string; name: string; type: 'image' | 'file' }
+export type Attachment = { key: string; name: string } & ({ type: 'image' | 'file'; path: string; subType?: 1 } | { type: 'face'; id: string });
 export interface Reply { id: string; name: string; preview: string }
 export interface Draft { text: string; attachments: Attachment[]; reply: Reply | null; mentions?: Mention[] }
 export interface Account { selfId: string; active: SessionKey | null; conversations: Record<string, Conversation>; messages: Message[]; drafts: Record<string, Draft>; lastSeq: number; gap: boolean }

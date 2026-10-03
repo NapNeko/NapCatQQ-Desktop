@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Conversation } from '../../core/domain/chat/model';
 import { ChatDetails } from './ChatDetails';
+import { chatProfileService } from '../../core/services/chat-profile.service';
+import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 
 const friend: Conversation = { key: 'private:10022', id: '10022', type: 'private', name: '阿澄', unread: 0, pinned: false, lastAt: 0, preview: '' };
 
@@ -33,15 +35,32 @@ describe('native conversation details', () => {
         await waitFor(() => expect(trigger).toHaveFocus());
     });
 
-    it('lets group details move in and out of the message box', async () => {
-        const box = vi.fn();
+    it('loads group information, filters members and opens a private conversation', async () => {
+        const target: DebugTarget = { bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true };
+        vi.spyOn(chatProfileService, 'info').mockResolvedValue({ name: '开发交流', fields: [{ label: '成员', value: '18 / 500 人' }] });
+        vi.spyOn(chatProfileService, 'members').mockResolvedValue([{ key: 'private:10022', type: 'private', id: '10022', name: '群内名片', nickname: '阿澄', role: 'admin', title: '' }]);
+        const message = vi.fn();
         const group: Conversation = { ...friend, key: 'group:20001', type: 'group', id: '20001', name: '开发交流' };
-        const { rerender } = render(<ChatDetails contact={group} onPin={() => {}} onBox={box} boxed={false} />);
+        render(<ChatDetails contact={group} target={target} onPin={() => {}} onMessage={message} />);
         fireEvent.click(screen.getByRole('button', { name: '会话资料' }));
-        fireEvent.click(await screen.findByRole('button', { name: '移入群消息盒子' }));
-        expect(box).toHaveBeenCalledOnce();
-        rerender(<ChatDetails contact={group} onPin={() => {}} onBox={box} boxed />);
-        fireEvent.click(screen.getByRole('button', { name: '移出群消息盒子' }));
-        expect(box).toHaveBeenCalledTimes(2);
+        expect(await screen.findByText('18 / 500 人')).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('textbox', { name: '搜索群成员' }), { target: { value: '不存在' } });
+        expect(screen.getByText('没有找到成员')).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('textbox', { name: '搜索群成员' }), { target: { value: '阿澄' } });
+        fireEvent.click(screen.getByRole('button', { name: '查看群内名片的群资料' }));
+        fireEvent.click(screen.getByRole('button', { name: '发消息' }));
+        expect(message).toHaveBeenCalledWith(expect.objectContaining({ key: 'private:10022' }));
+        expect(screen.queryByRole('button', { name: /移入|移出/ })).not.toBeInTheDocument();
+    });
+    it('keeps profile information visible when the member request fails and permits retry', async () => {
+        const target: DebugTarget = { bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true };
+        vi.spyOn(chatProfileService, 'info').mockResolvedValue({ name: '开发交流', fields: [{ label: '备注', value: '群备注' }] });
+        const members = vi.spyOn(chatProfileService, 'members').mockRejectedValueOnce(new Error('成员加载失败')).mockResolvedValueOnce([]);
+        render(<ChatDetails contact={{ ...friend, key: 'group:20001', type: 'group', id: '20001' }} target={target} onPin={() => {}} />);
+        fireEvent.click(screen.getByRole('button', { name: '会话资料' }));
+        expect(await screen.findByText('群备注')).toBeInTheDocument();
+        fireEvent.click(await screen.findByRole('button', { name: '重新读取成员' }));
+        await waitFor(() => expect(members).toHaveBeenCalledTimes(2));
+        expect(screen.getByText('群备注')).toBeInTheDocument();
     });
 });

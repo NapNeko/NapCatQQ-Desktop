@@ -263,10 +263,13 @@ export class ChatAccountStore {
         const group = key.startsWith('group:'); const peer = { [group ? 'group_id' : 'user_id']: this.peer(key) };
         const segments = buildMessageSegments(draft.text, draft.mentions ?? []);
         if (draft.reply) segments.unshift({ type: 'reply', data: { id: draft.reply.id } });
-        for (const file of draft.attachments.filter(f => f.type === 'image')) segments.push({ type: 'image', data: { file: file.path.startsWith('base64://') ? file.path : localFileTokenFor(file.path) } });
+        for (const attachment of draft.attachments) {
+            if (attachment.type === 'face') segments.push({ type: 'face', data: { id: attachment.id } });
+            if (attachment.type === 'image') segments.push({ type: 'image', data: { file: /^(base64:\/\/|https?:\/\/)/i.test(attachment.path) ? attachment.path : localFileTokenFor(attachment.path), ...(attachment.subType ? { sub_type: attachment.subType } : {}) } });
+        }
         const operations: { action: string; params: unknown; segments: Segment[] }[] = [];
         if (segments.some(s => s.type !== 'reply')) operations.push({ action: group ? 'send_group_msg' : 'send_private_msg', params: { ...peer, message: segments }, segments });
-        for (const file of draft.attachments.filter(f => f.type === 'file')) operations.push({ action: group ? 'upload_group_file' : 'upload_private_file', params: { ...peer, file: localFileTokenFor(file.path), name: file.name, upload_file: true }, segments: [{ type: 'file', data: { name: file.name, file: localFileTokenFor(file.path) } }] });
+        for (const file of draft.attachments) if (file.type === 'file') operations.push({ action: group ? 'upload_group_file' : 'upload_private_file', params: { ...peer, file: localFileTokenFor(file.path), name: file.name, upload_file: true }, segments: [{ type: 'file', data: { name: file.name, file: localFileTokenFor(file.path) } }] });
         this.sends.set(key, epoch);
         this.draft(key, EMPTY_DRAFT);
         try {

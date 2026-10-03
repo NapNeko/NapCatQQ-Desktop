@@ -1,15 +1,17 @@
 // 会话草稿即时写回账号分区，异步选文件不改变发送目标。
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react';
 import { ArrowUp, AtSign, Check, ChevronDown, File, ImagePlus, Paperclip, Smile, X } from 'lucide-react';
-import { EMPTY_DRAFT, type Contact, type Draft } from '../../core/domain/chat/model';
+import { EMPTY_DRAFT, type Attachment, type Contact, type Draft } from '../../core/domain/chat/model';
 import { mentionLabel, mentionQueryAt, pruneMentions } from '../../core/domain/debug/composerModel';
 import { errorText } from '../../core/domain/errors';
 import { chatService } from '../../core/services/chat.service';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
 import type { SendShortcut } from './chatPreferences';
+import { ChatEmojiPicker } from './media/ChatEmojiPicker';
+import { QQFace } from './media/QQFace';
+import { ChatAvatar } from './ChatAvatar';
 
-const EMOJI = ['😀', '😊', '🥰', '🤔', '😂', '😭', '👍', '👏', '🎉', '❤️', '🙏', '👀'];
 export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'enter', onSendShortcutChange }: { store: ChatAccountStore; contact: Contact; disabledReason: string; sendShortcut?: SendShortcut; onSendShortcutChange?: (shortcut: SendShortcut) => void }) {
     const snapshot = useChatSnapshot(store); const draft = snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT;
     const input = useRef<HTMLTextAreaElement>(null); const composing = useRef(false);
@@ -46,6 +48,11 @@ export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'e
     }, [draft.text]);
     const current = () => store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT;
     const patch = (value: Partial<Draft>) => store.draft(contact.key, { ...current(), ...value });
+    const chooseEmoji = (attachment: Attachment) => {
+        if (current().attachments.length >= 8) { setError('一次最多添加 8 个附件'); return; }
+        patch({ attachments: [...current().attachments, attachment] });
+        restoreAfterEmoji.current = true; setEmoji(false); setError('');
+    };
     const insert = (value: string) => {
         const currentDraft = current(); const start = input.current?.selectionStart ?? currentDraft.text.length; const end = input.current?.selectionEnd ?? start;
         const text = currentDraft.text.slice(0, start) + value + currentDraft.text.slice(end);
@@ -108,11 +115,11 @@ export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'e
         onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); }}>
         <div className="native-chat-editor" data-dragging={dragging}>
         {draft.reply && <div className="native-chat-reply"><span className="min-w-0 flex-1 truncate">回复 {draft.reply.name}：{draft.reply.preview}</span><button className="native-chat-icon" aria-label="取消引用" onClick={() => patch({ reply: null })}><X size={13} /></button></div>}
-        {draft.attachments.length > 0 && <div className="native-chat-attachments">{draft.attachments.map(file => <div key={file.key}>{file.path.startsWith('base64://') ? <img src={`data:image/png;base64,${file.path.slice(9)}`} alt={file.name} /> : file.type === 'image' ? <ImagePlus size={16} /> : <File size={16} />}<span className="max-w-36 truncate">{file.name}</span><button aria-label={`移除${file.name}`} onClick={() => patch({ attachments: current().attachments.filter(f => f.key !== file.key) })}><X size={12} /></button></div>)}</div>}
+        {draft.attachments.length > 0 && <div className="native-chat-attachments">{draft.attachments.map(file => <div key={file.key}><AttachmentPreview attachment={file} /><span className="max-w-36 truncate">{file.name}</span><button aria-label={`移除${file.name}`} onClick={() => patch({ attachments: current().attachments.filter(f => f.key !== file.key) })}><X size={12} /></button></div>)}</div>}
         <div className="native-chat-composer-tools">
             <Popover open={emoji} onOpenChange={open => { if (open) restoreAfterEmoji.current = false; setEmoji(open); }}>
                 <PopoverTrigger asChild><button className="native-chat-icon" aria-label="表情" title="表情"><Smile size={18} /></button></PopoverTrigger>
-                <PopoverContent side="top" align="start" className="native-chat-popover native-chat-emoji" aria-label="选择表情" onCloseAutoFocus={e => { if (restoreAfterEmoji.current) { e.preventDefault(); input.current?.focus(); } }}>{EMOJI.map(value => <button key={value} aria-label={`插入${value}`} onClick={() => { restoreAfterEmoji.current = true; insert(value); setEmoji(false); }}>{value}</button>)}</PopoverContent>
+                <PopoverContent side="top" align="start" className="native-chat-popover w-auto p-2" aria-label="选择表情" onCloseAutoFocus={e => { if (restoreAfterEmoji.current) { e.preventDefault(); input.current?.focus(); } }}><ChatEmojiPicker target={store.target} onSelect={chooseEmoji} disabledReason={disabledReason} /></PopoverContent>
             </Popover>
             <button className="native-chat-icon" aria-label="添加图片" title="添加图片" disabled={!!pendingFiles} onClick={() => void pick('image')}><ImagePlus size={18} /></button>
             <button className="native-chat-icon" aria-label="添加文件" title="添加文件" disabled={!!pendingFiles} onClick={() => void pick('file')}><Paperclip size={18} /></button>
@@ -133,7 +140,7 @@ export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'e
                 onInteractOutside={e => { if (e.detail.originalEvent.target === input.current) e.preventDefault(); }}
                 onEscapeKeyDown={() => dismissMention(true)}>
                 <div ref={memberList} id={memberListId} role="listbox" aria-label="群成员建议">
-                    {memberLoading ? <p role="status">正在读取群成员…</p> : memberError ? <><p role="status">{memberError}</p><button onClick={() => retryMembers(n => n + 1)}>重试读取成员</button></> : !filteredMembers.length ? <p role="status">没有匹配的成员</p> : filteredMembers.map((member, index) => <button key={member.id} id={`${memberListId}-${member.id}`} role="option" aria-selected={index === selectedMember} tabIndex={-1} onMouseDown={e => e.preventDefault()} onClick={() => chooseMember(member)}><span>{member.name}</span><span>{member.id}</span></button>)}
+                    {memberLoading ? <p role="status">正在读取群成员…</p> : memberError ? <><p role="status">{memberError}</p><button onClick={() => retryMembers(n => n + 1)}>重试读取成员</button></> : !filteredMembers.length ? <p role="status">没有匹配的成员</p> : filteredMembers.map((member, index) => <button key={member.id} id={`${memberListId}-${member.id}`} role="option" aria-selected={index === selectedMember} tabIndex={-1} onMouseDown={e => e.preventDefault()} onClick={() => chooseMember(member)}><ChatAvatar contact={{ type: 'private', id: member.id, name: member.name || member.id }} small /><span className="min-w-0 flex-1 truncate">{member.name || member.id}</span><span>{member.id}</span></button>)}
                 </div>
             </PopoverContent>
         </Popover>
@@ -151,4 +158,11 @@ export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'e
         </footer>
         </div>
     </div>;
+}
+
+function AttachmentPreview({ attachment }: { attachment: Attachment }) {
+    if (attachment.type === 'face') return <QQFace id={attachment.id} />;
+    if (attachment.type === 'file') return <File size={16} />;
+    const source = attachment.path.startsWith('base64://') ? 'data:image/png;base64,' + attachment.path.slice(9) : /^https?:\/\//i.test(attachment.path) ? attachment.path : '';
+    return source ? <img src={source} alt={attachment.name} referrerPolicy="no-referrer" /> : <ImagePlus size={16} />;
 }

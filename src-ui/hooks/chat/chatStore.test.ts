@@ -14,6 +14,16 @@ function setup() {
     return { transport, store: new ChatAccountStore(target, transport) };
 }
 describe('chat lifecycle', () => {
+    it('sends QQ faces and remote favorite images as native segments', async () => {
+        const { store, transport } = setup(); await store.connect();
+        store.draft('private:12', { text: '', reply: null, attachments: [
+            { key: 'face', type: 'face', id: '14', name: '微笑' },
+            { key: 'favorite', type: 'image', path: 'https://cdn.example/favorite.gif', name: '收藏表情', subType: 1 },
+        ] });
+        await store.send('private:12');
+        expect(transport.call.mock.calls[0].slice(0, 3)).toMatchObject(['bot', 'send_private_msg', { user_id: '12', message: [{ type: 'face', data: { id: '14' } }, { type: 'image', data: { file: 'https://cdn.example/favorite.gif', sub_type: 1 } }] }]);
+        expect(store.getSnapshot().account.drafts['private:12'].attachments).toEqual([]);
+    });
     it('reloads an exhausted conversation after its cached messages are evicted', async () => {
         const { transport } = setup();
         const seed = ingestMessage(emptyAccount('99'), { message_type: 'group', group_id: 12, message_id: 100, user_id: 22, time: 100, message: 'A' });

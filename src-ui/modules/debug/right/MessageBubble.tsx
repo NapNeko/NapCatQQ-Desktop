@@ -296,7 +296,7 @@ export const MessageBubble = memo(function MessageBubble({ item, continued, sele
                         className={cn('relative min-w-0', clamped && 'overflow-hidden')}
                         style={clamped ? { maxHeight: CLAMP_PX } : undefined}
                     >
-                        <SegmentList segments={item.segments} mine={out} />
+                        <SegmentList segments={item.segments} mine={out} messageId={item.messageId !== undefined ? String(item.messageId) : undefined} />
                         {clamped && overflowing && (
                             <span
                                 aria-hidden

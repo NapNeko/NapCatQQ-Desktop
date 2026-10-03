@@ -6,7 +6,8 @@ import { avatarUrl, initialOf } from '../../core/domain/debug/chatFormat';
 import { cn } from '../../shared/utils/cn';
 
 export function ChatAvatar({ contact, small = false }: { contact: Pick<Contact, 'name' | 'type'> & { id?: string }; small?: boolean }) {
-    const url = contact.type === 'private' ? avatarUrl(Number(contact.id)) : null;
+    const validId = /^[1-9]\d*$/.test(contact.id ?? '');
+    const url = !validId ? null : contact.type === 'private' ? avatarUrl(Number(contact.id)) : `https://p.qlogo.cn/gh/${contact.id}/${contact.id}/640`;
     const [failed, setFailed] = useState<string | null>(null);
     return <span aria-hidden className={cn('native-chat-avatar', small && 'is-small', contact.type === 'group' && 'is-group')}>
         {contact.type === 'group' ? <Users size={small ? 16 : 19} strokeWidth={1.65} /> : initialOf(contact.name)}

@@ -10,5 +10,18 @@ it('recovers attachments and mentions without losing newer draft text', () => {
     const result = recoverDraft(message, { ...EMPTY_DRAFT, text: '新草稿' });
     expect(result.text).toBe('新草稿\n@12 看看这个');
     expect(result.mentions).toEqual([{ qq: '12', label: '@12' }]);
-    expect(result.attachments[0].path).toBe('D:/说明.txt');
+    expect(result.attachments[0]).toMatchObject({ path: 'D:/说明.txt' });
+});
+
+it('recovers QQ faces and favorite image URLs while rejecting unsafe protocols', () => {
+    const message: Message = { key: 'failed', session: 'group:1', at: 0, senderId: '99', senderName: '我', mine: true, status: 'failed', segments: [
+        { type: 'face', data: { id: 14 } },
+        { type: 'face', data: { id: '../invalid' } },
+        { type: 'image', data: { file: 'https://cdn.example/favorite.gif', sub_type: 1 } },
+        { type: 'image', data: { file: 'javascript:alert(1)' } },
+        { type: 'image', data: { file: 'file:///etc/passwd' } },
+    ] };
+    expect(recoverDraft(message, EMPTY_DRAFT).attachments).toMatchObject([
+        { type: 'face', id: '14' }, { type: 'image', path: 'https://cdn.example/favorite.gif', subType: 1 },
+    ]);
 });
