@@ -44,6 +44,7 @@ __pycache__/
 
 ### Node / 前端 ###
 node_modules/
+.pnpm-store/
 dist/
 build/
 .vite/
