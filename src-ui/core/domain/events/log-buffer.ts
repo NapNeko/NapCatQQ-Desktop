@@ -238,10 +238,22 @@ const SNOWLUMA_TS_PREFIX =
 const BRACKET_TS_PREFIX =
     /^\[(?:\d{4}-\d{2}-\d{2}[ T])?(\d{1,2}:\d{2}:\d{2})(?:[.,]\d+)?(?:\s*[+-]\d{2}:?\d{2})?\]\s*/;
 
+// 裸 ISO 时间打头：`2026-10-04 03:41:22.123 | INFO | 模块 | 正文`。
+// loguru 的 `{time:YYYY-MM-DD HH:mm:ss.SSS}` 就是这个形状；NeoBot 用它，
+// 而且**不算时间戳**的话整行都会挤进正文列，时间和模块名全糊在消息里。
+const ISO_TS_PREFIX =
+    /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}:\d{2}:\d{2})(?:[.,]\d+)?(?:\s*[+-]\d{2}:?\d{2})?\s*/;
+
 // 时间后面几组方括号里的等级：`[info] nick |`、`[Core] [INFO] [模块:行]:`、`[20504] [INFO]`、`[    INFO]`。
 // UI 已有 INF/ERR 列，正文里再留一份是重复
 const LEADING_GROUP_LEVEL =
     /^((?:\[[^\]\n]*\]\s*){0,4}?)\[\s*(?:trace|debug|info|warn|warning|error|fatal|critical|success|mark)\s*\]\s*/i;
+
+// 竖线分隔的等级标签：`| INFO |`、`| SUCCESS |`。loguru 的
+// `{time} | {level} | {name} | {message}` 走这条——UI 已有级别列，正文里再留一份是重复。
+// 和方括号版一样，只吃补位空格，保留标签后真正的正文分隔空格。
+const LEADING_PIPE_LEVEL =
+    /^\|\s*(?:trace|debug|info|warn|warning|error|fatal|critical|success|mark)\s*\|/i;
 
 // `[Karin][20:16:22.716][INFO] body` — 时分秒给时间列，LEVEL 给色条，信封不进正文
 const FRAMEWORK_TS_LEVEL =
@@ -257,7 +269,7 @@ function normalizeClock(ts: string): string {
 interface LineSplit {
     timestamp: string;
     /** 行里自带时间的格式；none 是没带，时间用 fallback */
-    kind: 'framework' | 'bracket' | 'napcat' | 'snowluma' | 'koishi' | 'none';
+    kind: 'framework' | 'bracket' | 'iso' | 'napcat' | 'snowluma' | 'koishi' | 'none';
     /** 时间戳在原文里结束的位置，看它的颜色判等级用 */
     stampEnd: number;
     /** 从正文挖掉的区间：时间前缀、等级标签 */
@@ -305,6 +317,15 @@ function splitLine(cleaned: string, fallbackTs: string): LineSplit {
             cuts: [[0, br[0].length]],
         });
     }
+    const iso = cleaned.match(ISO_TS_PREFIX);
+    if (iso) {
+        return withLevelCut(cleaned, iso[0].length, {
+            timestamp: normalizeClock(iso[2]),
+            kind: 'iso',
+            stampEnd: iso[0].trimEnd().length,
+            cuts: [[0, iso[0].length]],
+        });
+    }
     const m = cleaned.match(NAPCAT_TS_PREFIX);
     if (m) {
         const bodyStart = cleaned.length - m[3].length;
@@ -336,6 +357,19 @@ function splitLine(cleaned: string, fallbackTs: string): LineSplit {
 }
 
 function withLevelCut(cleaned: string, bodyStart: number, split: LineSplit): LineSplit {
+    // 竖线版：整段 `| INFO |` 都是信封，连它自己的空格一起挖掉。
+    // 再多吃掉后的前导空白：loguru 的 `{level: <8}` 会在等级右边补空格，
+    // 不补位（WARNING）和补位（INFO    ）两种宽度不同，留着正文就对不齐了。
+    // 等级已有独立列，这点对齐空格属于信封。
+    const pipe = cleaned.slice(bodyStart).match(LEADING_PIPE_LEVEL);
+    if (pipe) {
+        const after = bodyStart + pipe[0].length;
+        const indent = cleaned.slice(after).match(/^[ \t]*/)?.[0].length ?? 0;
+        return {
+            ...split,
+            cuts: [...split.cuts, [bodyStart, after + indent]],
+        };
+    }
     const m = cleaned.slice(bodyStart).match(LEADING_GROUP_LEVEL);
     if (!m) return split;
     const lead = m[1];
