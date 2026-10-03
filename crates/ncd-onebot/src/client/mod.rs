@@ -14,7 +14,8 @@ use serde_json::Value;
 
 pub use body::{BodyError, MAX_BODY_BYTES, read_body_limited, read_text_limited};
 pub use envelope::{
-    Ob11Reply, RAW_PREVIEW_LIMIT, RESPONSE_INLINE_LIMIT, outcome_from, parse_ob11_reply,
+    Ob11Reply, RAW_PREVIEW_LIMIT, RESPONSE_INLINE_LIMIT, outcome_from, outcome_from_with_limit,
+    parse_ob11_reply,
 };
 pub use http::HttpActionClient;
 pub use sse::{SseFrame, SseParser, SseTooLarge};

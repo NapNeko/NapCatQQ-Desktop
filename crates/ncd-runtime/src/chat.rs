@@ -81,7 +81,7 @@ impl DebugEventSink for ChatSink {
 }
 
 fn chat_action(action: &str) -> bool {
-    matches!(action, "get_login_info" | "get_friend_list" | "get_recent_contact" | "get_stranger_info" | "get_group_list" | "get_group_member_list" | "get_group_info" | "get_msg" | "get_group_msg_history" | "get_friend_msg_history" | "send_group_msg" | "send_private_msg" | "upload_group_file" | "upload_private_file")
+    matches!(action, "get_login_info" | "get_friend_list" | "get_recent_contact" | "get_stranger_info" | "get_group_list" | "get_group_member_list" | "get_group_info" | "get_msg" | "get_group_msg_history" | "get_friend_msg_history" | "get_image" | "get_forward_msg" | "get_record" | "get_file" | "fetch_ptt_text" | "fetch_custom_face" | "send_group_msg" | "send_private_msg" | "upload_group_file" | "upload_private_file")
 }
 
 fn archive_identity(targets: &[DebugTarget], bot_id: &str, self_id: &str) -> Result<(), String> {
@@ -109,6 +109,16 @@ mod tests {
     fn chat_supports_recent_contacts_and_private_profiles() {
         assert!(chat_action("get_recent_contact"));
         assert!(chat_action("get_stranger_info"));
+    }
+
+    #[test]
+    fn chat_allows_read_only_media_without_arbitrary_files_or_emoji_mutation() {
+        for action in ["get_image", "get_forward_msg", "get_record", "get_file", "fetch_ptt_text", "fetch_custom_face", "get_group_info", "get_group_member_list", "get_friend_list"] {
+            assert!(chat_action(action), "{action}");
+        }
+        for action in ["download_file", "add_custom_face", "delete_custom_face"] {
+            assert!(!chat_action(action), "{action}");
+        }
     }
 
     #[test]

@@ -19,7 +19,7 @@ use ncd_domain::onebot_debug::{
 };
 use ncd_host::remote::TunnelSpec;
 use ncd_onebot::client::{
-    ClientError, HttpActionClient, RawCall, WsClient, connect_ws, outcome_from,
+    ClientError, HttpActionClient, RawCall, WsClient, connect_ws, outcome_from_with_limit,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -75,6 +75,31 @@ pub(super) struct CallScope {
     pub deadline: Instant,
     pub timeout: Duration,
     pub request_id: String,
+}
+
+#[cfg(test)]
+mod media_budget_tests {
+    use super::*;
+    #[test]
+    fn larger_explicit_budget_preserves_media_reply() {
+        let value = json!({"status":"ok", "retcode":0, "data":{"base64":"A".repeat(300 * 1024)}});
+        let raw = RawCall { text: value.to_string(), value };
+        let out = outcome_from_with_limit(&raw.text, raw.value, Duration::ZERO, DebugChannelId::Internal, 512 * 1024);
+        assert!(!out.truncated);
+        assert_eq!(out.data["base64"].as_str().unwrap().len(), 300 * 1024);
+        assert_eq!(out.raw["data"]["base64"].as_str().unwrap().len(), 300 * 1024);
+    }
+
+    #[test]
+    fn default_and_over_budget_responses_stay_truncated() {
+        for budget in [256 * 1024, 280 * 1024] {
+            let value = json!({"status":"ok", "retcode":0, "data":{"base64":"A".repeat(300 * 1024)}});
+            let raw = RawCall { text: value.to_string(), value };
+            let out = outcome_from_with_limit(&raw.text, raw.value, Duration::ZERO, DebugChannelId::Internal, budget);
+            assert!(out.truncated);
+            assert!(out.data.is_null());
+        }
+    }
 }
 
 impl DebugManager {
@@ -309,7 +334,19 @@ impl DebugManager {
             Ok((raw, elapsed)) => {
                 self.apply_status(view, &key, ChannelResult::Worked, epoch)
                     .await;
-                let outcome = outcome_from(&raw.text, raw.value, elapsed, plan.id.clone());
+                let inline_limit = match req.action.as_str() {
+                    "get_record" => 8 * 1024 * 1024,
+                    "get_file" | "get_image" => 16 * 1024 * 1024,
+                    "get_forward_msg" => 2 * 1024 * 1024,
+                    _ => ncd_onebot::client::RESPONSE_INLINE_LIMIT,
+                };
+                let outcome = outcome_from_with_limit(
+                    &raw.text,
+                    raw.value,
+                    elapsed,
+                    plan.id.clone(),
+                    inline_limit,
+                );
                 if outcome.truncated {
                     self.keep_large_response(&req.request_id, raw.text, epoch);
                 }
