@@ -183,6 +183,24 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
 ];
 
 mockAppFrameworks.push({
+    id: 'neobot',
+    display_name: 'NeoBot',
+    description: '更有活人感的 QQ 聊天机器人（交流群 983752344）',
+    repo_url: 'https://github.com/SuperQuail/NeoBot',
+    docs_url: 'https://github.com/SuperQuail/NeoBot/tree/main/docs',
+    supported_placements: ['local_native', 'remote_native'],
+    default_port: 8080,
+    has_webui: true,
+    link_modes: ['reverse_ws'],
+    component_id: 'neobot',
+    runtime_component_ids: ['uv'],
+    store_resources: [],
+    has_install_renderer: false,
+    webui_auth: 'none',
+    terms: [],
+});
+
+mockAppFrameworks.push({
     id: 'koishi',
     display_name: 'Koishi',
     description: '跨平台聊天机器人框架，插件市场有几千个插件，自带控制台',
@@ -328,6 +346,27 @@ let instances: AppInstance[] = [
         state: 'running',
         installed_version: '4.18.11',
         created_at_ms: Date.now() - 600_000,
+        install_renderer: false,
+        origin: 'created',
+        auto_start: true,
+    },
+    {
+        id: 'nb7c1d20',
+        framework_id: 'neobot',
+        display_name: 'NeoBot · 本机',
+        placement: 'local_native',
+        host_id: 'local',
+        install_dir: 'D:/NapCatQQ/apps/neobot/nb7c1d20',
+        port: 8080,
+        state: 'running',
+        link: {
+            bot_id: '10001',
+            mode: 'reverse_ws',
+            connection_name: 'ncd-app:nb7c1d20',
+            linked_at_ms: Date.now() - 1_200_000,
+        },
+        installed_version: '1.2.0',
+        created_at_ms: Date.now() - 3_600_000,
         install_renderer: false,
         origin: 'created',
         auto_start: true,

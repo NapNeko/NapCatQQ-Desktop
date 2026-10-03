@@ -37,6 +37,23 @@ function nb(d: Date, level: 'SUCCESS' | 'INFO' | 'WARNING', logger: string, text
     return `${E}32m${monthDay(d)} ${clock(d)}${E}0m [${tone}${level}${E}0m] ${E}36m${E}4m${logger}${E}0m${E}36m${E}0m | ${text}`;
 }
 
+/** NeoBot（loguru + colorize）：`时间 | 级别 | 模块 | 正文`，等级名对齐 `{level: <8}` 的补位 */
+function logu(
+    d: Date,
+    level: 'TRACE' | 'DEBUG' | 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR' | 'CRITICAL',
+    module: string,
+    text: string,
+): string {
+    const stamp = { TRACE: '90', DEBUG: '36', INFO: '32', SUCCESS: '32;1', WARNING: '33;1', ERROR: '31;1', CRITICAL: '35;1' }[level];
+    // loguru 的 <green>{time}</green> 与 <level>{level: <8}</level>
+    return `${E}${stamp}m${iso(d)}${E}0m | ${E}${stamp}m${level.padEnd(8)}${E}0m | ${E}36m${module.padEnd(24)}${E}0m | ${text}`;
+}
+
+function iso(d: Date): string {
+    const y = d.getFullYear();
+    return `${y}-${monthDay(d)} ${clock(d)}.${pad(d.getMilliseconds(), 3)}`;
+}
+
 function karin(d: Date, level: 'MARK' | 'INFO' | 'WARN', text: string): string {
     const tone = { MARK: '90', INFO: '32', WARN: '33' }[level];
     return `${E}${tone}m[Karin][${millis(d)}][${level}]${E}39m ${text}`;
@@ -117,6 +134,18 @@ function startup(inst: AppInstance, d: Date): string[] {
                 `[${d.getFullYear()}-${monthDay(d)} ${clock(d)} +0800] [20504] [INFO] Running on http://0.0.0.0:${inst.port} (CTRL + C to quit)`,
                 astr(d, 'WARN', 'astrbot_plugin_vikunja', 'astrbot-plugin-vikunja.main:228', 'Vikunja 插件未配置 URL 或 API Token，提醒调度未启动'),
             ];
+        case 'neobot':
+            // loguru 控制台格式（colorize=True）：{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name: <24} | {message}
+            // 时间戳颜色即级别（沿用麦麦 lite 的配色约定），这里照上游真样式拼
+            return [
+                logu(d, 'INFO', 'neobot_app.cli', 'NeoBot 启动中…'),
+                logu(d, 'INFO', 'neobot_app.config', '配置已加载：data/config.toml'),
+                logu(d, 'INFO', 'neobot_app.adapter', `反向 WebSocket 监听 ${E}36mws://127.0.0.1:${inst.port}${E}0m（access token 校验：已启用）`),
+                logu(d, 'INFO', 'neobot_app.plugin', `面板已挂载：${E}36mhttp://127.0.0.1:9981${E}0m`),
+                logu(d, 'SUCCESS', 'neobot_app.core', 'OneBot 11 连接已建立'),
+                logu(d, 'DEBUG', 'neobot_app.memory', '记忆库已就绪：3 个会话'),
+                logu(d, 'WARNING', 'neobot_app.llm', '未配置备用模型，请求失败时不降级'),
+            ];
         case 'nonebot2':
             return [
                 nb(d, 'SUCCESS', 'nonebot', 'NoneBot is initializing...'),
@@ -144,6 +173,8 @@ function heartbeat(inst: AppInstance, d: Date, n: number): string {
             return mai(d, 'info', '心流', '255;135;175', `第 ${n} 次观察：群里没有新消息`);
         case 'astrbot':
             return astr(d, 'INFO', 'Core', 'core.event_bus:61', `heartbeat #${n}`);
+        case 'neobot':
+            return logu(d, 'DEBUG', 'neobot_app.memory', `第 ${n} 次记忆整理`);
         case 'nonebot2':
             return nb(d, 'INFO', 'nonebot', `heartbeat #${n}`);
         default:
