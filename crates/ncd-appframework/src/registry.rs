@@ -35,7 +35,6 @@ impl AppFrameworkRegistry {
         reg.register(Arc::new(KoishiAdapter::new()));
         reg.register(Arc::new(YunzaiAdapter::new()));
         reg.register(Arc::new(NeoBotAdapter::new()));
-        reg.register(Arc::new(NeoBotAdapter::new()));
         reg
     }
 

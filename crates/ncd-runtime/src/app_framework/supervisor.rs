@@ -168,6 +168,15 @@ pub fn pick_app_pid(lines: &str, kind: AppProcessKind) -> Option<(u32, String)> 
             }
             // 守护进程 `node app.js daemon` 拉起的子进程是 `node app.js start`，cwd 都是实例目录
             AppProcessKind::Yunzai => lower.contains("app.js") && lower.contains("node"),
+            // NeoBot 的控制台入口在实例 .venv 里：Windows `.venv/Scripts/neobot.exe`、
+            // 其它 `.venv/bin/neobot`（由 python 解释器执行，命令行走脚本路径）。
+            // 调用方已按 cwd == 实例目录过滤，这里再把 .venv 里的入口认出来，
+            // 免得把「用户在实例目录里跑的其它命令」也算进来
+            AppProcessKind::NeoBot => {
+                let slashed = lower.replace('\\', "/");
+                slashed.contains(".venv/bin/neobot")
+                    || slashed.contains(".venv/scripts/neobot")
+            }
         };
         if !hit {
             continue;
@@ -201,6 +210,7 @@ pub enum AppProcessKind {
     MaiBot,
     Koishi,
     Yunzai,
+    NeoBot,
 }
 
 impl AppProcessKind {
@@ -211,6 +221,7 @@ impl AppProcessKind {
             "maibot" => Self::MaiBot,
             "koishi" => Self::Koishi,
             "yunzai" => Self::Yunzai,
+            "neobot" => Self::NeoBot,
             _ => Self::NoneBot2,
         }
     }
@@ -342,5 +353,37 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
             AppProcessKind::from_framework("maibot"),
             AppProcessKind::MaiBot
         ));
+    }
+
+    /// 不显式加分支会落到 `_ => Self::NoneBot2`，于是拿 `bot.py` 去匹配 NeoBot 的进程
+    #[test]
+    fn neobot_kind_and_process_match() {
+        assert!(matches!(
+            AppProcessKind::from_framework("neobot"),
+            AppProcessKind::NeoBot
+        ));
+
+        // Linux：解释器执行 .venv/bin/neobot
+        let lines = "\
+4200 /home/u/apps/n1/.venv/bin/python /home/u/apps/n1/.venv/bin/neobot
+\
+4201 grep neobot
+";
+        let (pid, prog) = pick_app_pid(lines, AppProcessKind::NeoBot).unwrap();
+        assert_eq!(pid, 4200);
+        assert_eq!(prog, "python");
+
+        // Windows：直接跑 .venv/Scripts/neobot.exe；安装目录是 POSIX 写法，命令里是反斜杠
+        let win = "\
+5200 C:\\apps\\n1\\.venv\\Scripts\\neobot.exe
+";
+        let (pid, _) = pick_app_pid(win, AppProcessKind::NeoBot).unwrap();
+        assert_eq!(pid, 5200);
+
+        // 认不出来的一律不误伤：运行目录里跟 NeoBot 无关的进程
+        assert!(
+            pick_app_pid("6000 /usr/bin/python other_script.py\n", AppProcessKind::NeoBot)
+                .is_none()
+        );
     }
 }

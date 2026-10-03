@@ -290,6 +290,8 @@ Windows/Local koishi
   component nodejs >=18 (Both)
 Windows/Local maibot
   component uv >=0.4 (Both)
+Windows/Local neobot
+  component uv >=0.4 (Both)
 Windows/Local nonebot2
   component uv >=0.4 (Both)
 Windows/Local yunzai
@@ -324,6 +326,8 @@ Linux/Local karin
 Linux/Local koishi
   component nodejs >=18 (Both)
 Linux/Local maibot
+  component uv >=0.4 (Both)
+Linux/Local neobot
   component uv >=0.4 (Both)
 Linux/Local nonebot2
   component uv >=0.4 (Both)
@@ -361,6 +365,8 @@ Linux/Remote karin
 Linux/Remote koishi
   component nodejs >=18 (Both)
 Linux/Remote maibot
+  component uv >=0.4 (Both)
+Linux/Remote neobot
   component uv >=0.4 (Both)
 Linux/Remote nonebot2
   component uv >=0.4 (Both)
