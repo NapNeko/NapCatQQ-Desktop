@@ -15,6 +15,7 @@ import {
     FlaskConical,
     LayoutDashboard,
     ListTodo,
+    MessagesSquare,
     Loader2,
     type LucideIcon,
     Package,
@@ -31,6 +32,7 @@ import logoSidebarCollapsed from '../../../assets/logo-48.png?inline';
 export type AppRoute =
     | 'overview'
     | 'bots'
+    | 'chat'
     | 'apps'
     | 'debug'
     | 'components'
@@ -60,6 +62,7 @@ interface NavItem {
 const MAIN_NAV: NavItem[] = [
     { id: 'overview', label: '概览', icon: LayoutDashboard },
     { id: 'bots', label: '机器人', icon: Bot },
+    { id: 'chat', label: '聊天', icon: MessagesSquare },
     { id: 'apps', label: '应用端', icon: Blocks },
     { id: 'debug', label: '调试台', icon: FlaskConical },
     { id: 'components', label: '组件', icon: Package },

@@ -5,6 +5,24 @@
 mod events;
 mod sessions;
 
+#[tokio::test]
+async fn chat_transport_survives_debug_disable_without_writing_history() {
+    let h = harness();
+    let bot = h.bots.add(local_bot(10_001, BackendType::NapCat), true);
+    let webui = napcat_webui().await;
+    h.bots.set_napcat(&bot, port_of(&webui));
+    mount_napcat_call(&webui, "get_login_info", ob11_ok(json!({"user_id": 10001}))).await;
+    let chat = DebugManager::new_ephemeral(
+        Arc::clone(&h.bots) as Arc<dyn DebugBotPort>,
+        Arc::new(LocalOnlyHostResolver::new(Arc::clone(&h.host) as Arc<dyn Host>)),
+        h.data.path().to_path_buf(),
+    );
+    h.manager.set_enabled(false).await;
+    let result = call_ok(&chat, request("chat", &bot, DebugChannelId::Internal, "get_login_info")).await;
+    assert!(result.ok);
+    assert!(!h.data.path().join("onebot-debug").exists());
+}
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};

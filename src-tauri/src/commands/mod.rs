@@ -17,6 +17,7 @@ pub mod koishi;
 pub mod mcp;
 pub mod ncd_watch;
 pub mod onebot_debug;
+pub mod chat;
 pub mod release;
 pub mod servers;
 pub mod snowluma;
@@ -408,6 +409,11 @@ mod tests {
             Arc::clone(&onebot_debug),
             secrets,
         ));
+        let chat = Arc::new(ncd_runtime::chat::ChatManager::new(
+            Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
+            Arc::new(ncd_runtime::LocalOnlyHostResolver::new(Arc::new(ncd_host::local::LocalWindowsHost::new()))),
+            root.to_path_buf(),
+        ));
         let state = AppState {
             data_root: root.to_path_buf(),
             snapshot: BootstrapSnapshot::ready(),
@@ -435,6 +441,7 @@ mod tests {
             app_manager,
             terminals: crate::commands::terminal::test_terminals(),
             onebot_debug,
+            chat,
             mcp,
         };
         (state, bus)

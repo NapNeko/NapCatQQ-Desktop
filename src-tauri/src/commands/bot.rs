@@ -583,6 +583,7 @@ mod tests {
             Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
         );
         let state = AppState {
+            chat: crate::commands::chat::test_chat(root, Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>),
             data_root: root.to_path_buf(),
             snapshot: BootstrapSnapshot::ready(),
             event_bus: bus.clone(),

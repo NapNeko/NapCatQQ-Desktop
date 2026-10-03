@@ -172,6 +172,9 @@ impl DebugManager {
 
     /// 把一条历史排进写入队列，立即返回
     pub(super) fn queue_history(&self, entry: DebugHistoryEntry) {
+        if !self.persist_history {
+            return;
+        }
         if !self.history_queue.push(&self.store, entry) {
             warn!("调试台调用历史写入排队已满，丢掉这一条");
         }

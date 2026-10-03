@@ -4,20 +4,18 @@
 // 每个段单独包一层错误边界：上游给了奇怪的形状，只坏这一个段。
 // 图片的框高度是固定的（宽度等图到了再按比例定），行高不会因为图加载完而跳，虚拟列表不用返工。
 
-import { memo, useMemo, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     Check,
     Copy,
     ExternalLink,
     FileText,
-    Film,
     Forward,
     Hand,
     Image as ImageIcon,
     ImageOff,
     LayoutTemplate,
     Mic,
-    Smile,
 } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
 import { SimpleMarkdown, Tooltip, TooltipContent, TooltipTrigger } from '../../../shared/ui';
@@ -26,6 +24,11 @@ import { useChatView } from './chatContext';
 import { fileSizeLabel, safeJson } from '../../../core/domain/debug/chatFormat';
 import { SafeBoundary, useCopy } from './rightParts';
 import { CACHE_MAX, ExpiringSet, FAILURE_TTL_MS, LruCache, imageCacheKey } from './boundedCache';
+import { QQFace } from '../../chat/media/QQFace';
+import { ChatForward } from '../../chat/media/ChatForward';
+import { ChatRecord } from '../../chat/media/ChatRecord';
+import { ChatVideo } from '../../chat/media/ChatVideo';
+import { ChatAvatar } from '../../chat/ChatAvatar';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -35,10 +38,15 @@ export function isPictureOnly(segments: readonly Segment[]): boolean {
     return segments.length > 0 && segments.every((s) => s.type === 'image' || s.type === 'mface');
 }
 
+/** 图片、表情、语音和视频单独成消息时，让内容直接贴在时间线上。 */
+export function isMediaOnly(segments: readonly Segment[]): boolean {
+    return segments.length > 0 && segments.every((s) => ['image', 'mface', 'record', 'video'].includes(s.type));
+}
+
 /** 一段文字最多画这么多字；再长的去详情里看，免得一条消息卡住整栏 */
 const TEXT_RENDER_CAP = 20_000;
 
-export const SegmentList = memo(function SegmentList({ segments, mine }: { segments: Segment[]; mine: boolean }) {
+export const SegmentList = memo(function SegmentList({ segments, mine, messageId }: { segments: Segment[]; mine: boolean; messageId?: string }) {
     if (segments.length === 0) return <span className="text-text-tertiary">（空消息）</span>;
     // 回复段不管排在哪都画在最上面
     const reply = segments.find((s) => s.type === 'reply');
@@ -52,14 +60,14 @@ export const SegmentList = memo(function SegmentList({ segments, mine }: { segme
             )}
             {rest.map((seg, i) => (
                 <SafeBoundary key={i} fallback={<UnknownChip seg={seg} note="这个段显示不了" />}>
-                    <SegmentView seg={seg} mine={mine} />
+                    <SegmentView seg={seg} mine={mine} messageId={messageId} />
                 </SafeBoundary>
             ))}
         </>
     );
 });
 
-function SegmentView({ seg, mine }: { seg: Segment; mine: boolean }) {
+function SegmentView({ seg, mine, messageId }: { seg: Segment; mine: boolean; messageId?: string }) {
     const d = seg.data;
     switch (seg.type) {
         case 'text':
@@ -67,19 +75,15 @@ function SegmentView({ seg, mine }: { seg: Segment; mine: boolean }) {
         case 'at':
             return <AtSeg qq={str(d.qq)} name={str(d.name)} mine={mine} />;
         case 'face':
-            return (
-                <Chip icon={<Smile size={11} aria-hidden />} title={`QQ 表情 ${str(d.id)}`}>
-                    表情 {str(d.id)}
-                </Chip>
-            );
+            return <QQFace id={str(d.id)} />;
         case 'image':
-            return <ImageSeg url={imageUrlOf(d)} summary={str(d.summary)} />;
+            return <ImageSeg data={d} summary={str(d.summary)} />;
         case 'mface':
-            return <ImageSeg url={imageUrlOf(d)} summary={str(d.summary) || '[表情包]'} sticker />;
+            return <ImageSeg data={d} summary={str(d.summary) || '[表情包]'} sticker />;
         case 'record':
-            return <MediaChip icon={<Mic size={11} aria-hidden />} label="语音" url={mediaUrlOf(d)} />;
+            return <ChatRecord data={d} messageId={messageId} fallback={<MediaChip icon={<Mic size={11} aria-hidden />} label="语音" url={mediaUrlOf(d)} />} />;
         case 'video':
-            return <MediaChip icon={<Film size={11} aria-hidden />} label="视频" url={mediaUrlOf(d)} />;
+            return <ChatVideo data={d} />;
         case 'file':
             return <FileCard data={d} />;
         case 'forward':
@@ -150,8 +154,9 @@ function AtSeg({ qq, name, mine }: { qq: string; name: string; mine: boolean }) 
     if (qq === 'all') return <span className={cn('font-medium', mine ? 'text-brand' : 'text-info')}>@全体成员 </span>;
     const shown = name || nameOf(Number(qq)) || qq;
     return (
-        <span title={qq} className={cn('font-medium', mine ? 'text-brand' : 'text-info')}>
-            @{shown}{' '}
+        <span title={qq} className={cn('inline-flex items-center gap-0.5 align-middle font-medium', mine ? 'text-brand' : 'text-info')}>
+            <ChatAvatar contact={{ type: 'private', id: qq, name: shown }} small />
+            <span>@{shown}{' '}</span>
         </span>
     );
 }
@@ -167,7 +172,7 @@ function imageUrlOf(d: Record<string, unknown>): string {
         if (/^(https?:|data:image\/)/i.test(s)) return s;
         if (s.startsWith('base64://')) return `data:image/png;base64,${s.slice('base64://'.length)}`;
     }
-    return str(d.url) || str(d.file);
+    return '';
 }
 
 function mediaUrlOf(d: Record<string, unknown>): string {
@@ -195,15 +200,55 @@ function fitWidth(w: number, h: number): number {
     return Math.round(Math.min(IMAGE_MAX_W, Math.max(IMAGE_MIN_W, scaled)));
 }
 
-function ImageSeg({ url, summary, sticker }: { url: string; summary: string; sticker?: boolean }) {
-    const { openImage } = useChatView();
-    const viewable = /^(https?:|data:image\/)/i.test(url);
+function ImageSeg({ data, summary, sticker }: { data: Record<string, unknown>; summary: string; sticker?: boolean }) {
+    const { openImage, readImage } = useChatView();
+    const reader = useRef(readImage); reader.current = readImage;
+    const request = useRef(0); const canRead = !!readImage;
+    const initialUrl = imageUrlOf(data);
+    const viewable = /^(https?:|data:image\/|blob:)/i.test(initialUrl);
+    const [url, setUrl] = useState(initialUrl);
+    const [refreshing, setRefreshing] = useState(false);
+    const [refreshAttempted, setRefreshAttempted] = useState(false);
     const cacheKey = useMemo(() => imageCacheKey(url), [url]);
-    const [failed, setFailed] = useState(() => !viewable || failedImages.has(cacheKey));
+    const [failed, setFailed] = useState(() => !viewable && !readImage || failedImages.has(cacheKey));
     const [width, setWidth] = useState(() => imageWidths.get(cacheKey));
     const loaded = width !== undefined;
 
-    if (failed) return <BrokenImage url={url} sticker={sticker} />;
+    useEffect(() => {
+        request.current++;
+        setUrl(initialUrl);
+        setRefreshAttempted(false);
+        setRefreshing(false);
+        setFailed(!/^(https?:|data:image\/|blob:)/i.test(initialUrl) && !canRead || failedImages.has(imageCacheKey(initialUrl)));
+        setWidth(imageWidths.get(imageCacheKey(initialUrl)));
+        return () => { request.current++; };
+    }, [data, initialUrl, canRead]);
+
+    useEffect(() => {
+        if (url || !reader.current || failed || refreshing) return;
+        const current = ++request.current;
+        setRefreshing(true);
+        void reader.current(data).then(value => {
+            if (current === request.current) { setUrl(value); setFailed(false); }
+        }).catch(() => { if (current === request.current) setFailed(true); }).finally(() => { if (current === request.current) setRefreshing(false); });
+    }, [data, failed, canRead, refreshing, url]);
+
+    const refresh = () => {
+        if (!readImage || refreshing || refreshAttempted) {
+            setFailed(true);
+            return;
+        }
+        setRefreshAttempted(true);
+        setRefreshing(true);
+        const current = ++request.current;
+        void readImage(data, true).then(value => {
+            if (current === request.current) { setUrl(value); setFailed(false); }
+        }).catch(() => {
+            if (current === request.current) { failedImages.add(cacheKey); setFailed(true); }
+        }).finally(() => { if (current === request.current) setRefreshing(false); });
+    };
+
+    if (failed || refreshing) return refreshing ? <span className="my-0.5 inline-flex items-center justify-center rounded-md bg-inset text-text-tertiary" style={{ width: sticker ? STICKER_BOX : IMAGE_PLACEHOLDER_W, height: sticker ? STICKER_BOX : IMAGE_BOX_H }}><ImageIcon size={18} className="animate-pulse" aria-label="正在读取图片" /></span> : <BrokenImage url={url} sticker={sticker} />;
 
     const boxW = sticker ? STICKER_BOX : (width ?? IMAGE_PLACEHOLDER_W);
     const boxH = sticker ? STICKER_BOX : IMAGE_BOX_H;
@@ -240,10 +285,7 @@ function ImageSeg({ url, summary, sticker }: { url: string; summary: string; sti
                     imageWidths.set(cacheKey, w);
                     setWidth(w);
                 }}
-                onError={() => {
-                    failedImages.add(cacheKey);
-                    setFailed(true);
-                }}
+                onError={refresh}
                 className={cn(
                     'relative h-full w-full',
                     sticker ? 'object-contain' : 'object-cover',
@@ -370,9 +412,11 @@ function FileCard({ data }: { data: Record<string, unknown> }) {
 }
 
 function ForwardCard({ data }: { data: Record<string, unknown> }) {
+    const { readForward } = useChatView();
     const { copied, copy } = useCopy();
     const id = str(data.id);
     const count = Array.isArray(data.messages) ? data.messages.length : Array.isArray(data.content) ? data.content.length : 0;
+    if (readForward) return <ChatForward data={data} read={readForward} renderSegments={segments => <SegmentList mine={false} segments={segments} />} />;
     return (
         <Card
             icon={<Forward size={16} aria-hidden />}

@@ -13,6 +13,7 @@ pub mod bot_actor;
 pub mod bot_config;
 pub mod bot_runtime_metrics;
 pub mod bot_status;
+pub mod chat_archive;
 pub mod component;
 pub mod daemon_state;
 pub mod data_root_migrate;
@@ -93,6 +94,11 @@ pub use bot_runtime_metrics::{
     history_min_interval_ms,
 };
 pub use bot_status::{BotStatus, ProcessHandle};
+pub use chat_archive::{
+    ChatArchive, ChatArchiveConversation, ChatArchiveConversationKind, ChatArchiveMessage,
+    ChatArchiveSendStatus, CHAT_ARCHIVE_MAX_CONVERSATIONS, CHAT_ARCHIVE_MAX_MESSAGES,
+    CHAT_ARCHIVE_VERSION,
+};
 pub use component::{
     ComponentId, DependencyNode, DependencyPlan, DependencyTarget, HostPackageGroup, Requirement,
     RequirementPhase, RequirementStatus, RuntimeReadiness, VersionReq,

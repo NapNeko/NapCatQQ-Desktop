@@ -75,11 +75,24 @@ pub fn outcome_from(
     elapsed: Duration,
     channel: DebugChannelId,
 ) -> DebugCallOutcome {
+    outcome_from_with_limit(raw_text, raw, elapsed, channel, RESPONSE_INLINE_LIMIT)
+}
+
+/// 按调用方指定的体积上限折算回包。
+///
+/// 媒体动作允许更大的 inline data，但仍由调用方明确选择，普通调试回包继续使用默认上限。
+pub fn outcome_from_with_limit(
+    raw_text: &str,
+    raw: Value,
+    elapsed: Duration,
+    channel: DebugChannelId,
+    inline_limit: usize,
+) -> DebugCallOutcome {
     let reply = parse_ob11_reply(&raw);
     let ok =
         reply.status.eq_ignore_ascii_case("ok") || (reply.status.is_empty() && reply.retcode == 0);
     let size = raw_text.len();
-    let truncated = size > RESPONSE_INLINE_LIMIT;
+    let truncated = size > inline_limit;
     let (data, raw) = if truncated {
         (
             Value::Null,

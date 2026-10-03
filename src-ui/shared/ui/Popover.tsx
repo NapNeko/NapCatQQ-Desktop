@@ -18,6 +18,8 @@ import {
     createContext,
     forwardRef,
     useContext,
+    useCallback,
+    useEffect,
     useRef,
     useState,
     type ComponentPropsWithoutRef,
@@ -123,6 +125,7 @@ export const PopoverContent = forwardRef<
             side = 'bottom',
             sideOffset = 6,
             align = 'center',
+            onCloseAutoFocus,
             ...contentProps
         },
         _ref,
@@ -130,10 +133,29 @@ export const PopoverContent = forwardRef<
         const open = useContext(PopoverOpenContext);
         const m = useMotion();
         const elRef = useRef<HTMLDivElement | null>(null);
+        const [element, setElement] = useState<HTMLDivElement | null>(null);
+        const openRef = useRef(open);
+        openRef.current = open;
+        const [lastOpen, setLastOpen] = useState(open);
+        const [focusCycle, setFocusCycle] = useState(0);
+        if (open !== lastOpen) {
+            setLastOpen(open);
+            if (open) setFocusCycle(value => value + 1);
+        }
+        const attachRef = useCallback((node: HTMLDivElement | null) => {
+            elRef.current = node;
+            setElement(node);
+            if (typeof _ref === 'function') _ref(node);
+            else if (_ref) _ref.current = node;
+        }, [_ref]);
+        // Radix 会重新组合 ref；短暂解绑同一个节点不能中止仍在播放的动画。
+        useEffect(() => () => {
+            if (element) { gsap.killTweensOf(element); gsap.killTweensOf(element.children); }
+        }, [element]);
 
-        // 首次打开后才挂载 Portal，彻底避免冷启动 forceMount DOM 遮挡下层点击
-        const [hasBeenOpened, setHasBeenOpened] = useState(false);
-        if (open && !hasBeenOpened) setHasBeenOpened(true);
+        // 保留到退出动画结束；重新挂载才能重启 Radix 的焦点生命周期。
+        const [present, setPresent] = useState(false);
+        if (open && !present) setPresent(true);
 
         useGSAP(
             () => {
@@ -144,6 +166,8 @@ export const PopoverContent = forwardRef<
                 gsap.set(el, { display: '' });
 
                 if (open) {
+                    // 淡入只改变透明度，Radix 挂载时需要可见元素来接收焦点。
+                    gsap.set(el, { visibility: 'visible' });
                     // ENTER — 容器 scale+fade 从 trigger 侧弹入
                     gsap.killTweensOf(el);
                     gsap.killTweensOf(el.children);
@@ -164,9 +188,9 @@ export const PopoverContent = forwardRef<
                     const tl = gsap.timeline();
                     tl.fromTo(
                         el,
-                        { autoAlpha: 0, scale: 0.92, x: off.x, y: off.y },
+                        { opacity: 0, scale: 0.92, x: off.x, y: off.y },
                         {
-                            autoAlpha: 1,
+                            opacity: 1,
                             scale: 1,
                             x: 0,
                             y: 0,
@@ -180,12 +204,12 @@ export const PopoverContent = forwardRef<
 
                     // standard/rich 档:子元素 stagger 分批滑入
                     if (staggerVal > 0 && el.children.length > 1) {
-                        gsap.set(el.children, { autoAlpha: 0, y: 4 });
+                        gsap.set(el.children, { opacity: 0, y: 4 });
                         tl.fromTo(
                             el.children,
-                            { autoAlpha: 0, y: 4 },
+                            { opacity: 0, y: 4 },
                             {
-                                autoAlpha: 1,
+                                opacity: 1,
                                 y: 0,
                                 duration: dur * 0.8,
                                 ease: m.ease.enterMicro,
@@ -195,11 +219,14 @@ export const PopoverContent = forwardRef<
                         );
                     }
                 } else {
+                    gsap.killTweensOf(el);
+                    gsap.killTweensOf(el.children);
                     // EXIT — 收敛更快,scale 0.95 + fade，完成后设 display:none 解除 pointer 遮挡
                     gsap.killTweensOf(el);
                     gsap.killTweensOf(el.children);
                     if (!m.enabled) {
                         gsap.set(el, { autoAlpha: 0, display: 'none' });
+                        setPresent(false);
                         return;
                     }
                     gsap.to(el, {
@@ -208,32 +235,30 @@ export const PopoverContent = forwardRef<
                         duration: m.duration('fast') * 0.6,
                         ease: m.ease.exit,
                         onComplete: () => {
-                            gsap.set(el, { display: 'none' });
+                                if (openRef.current || elRef.current !== el) return;
+                                gsap.set(el, { display: 'none' });
+                                setPresent(false);
                         },
                     });
                 }
             },
-            { dependencies: [open, m.enabled, side, hasBeenOpened] },
+            { dependencies: [open, m.enabled, side, present, focusCycle, element] },
         );
 
-        // 冷启动：Portal 始终渲染（让 Radix 正常工作），但 Content 延迟到首次打开后才挂载
+        // Portal 保持稳定，Content 只在打开与退场期间挂载。
         return (
             <RadixPopover.Portal forceMount>
-                {(open || hasBeenOpened) && (
+                {(open || present) && (
                     <RadixPopover.Content
-                        ref={(node) => {
-                            elRef.current = node;
-                            if (typeof _ref === 'function') _ref(node);
-                            else if (_ref)
-                                (_ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
-                        }}
+                        key={focusCycle}
+                        ref={attachRef}
                         side={side}
                         sideOffset={sideOffset}
                         align={align}
                         collisionPadding={12}
                         forceMount
                         style={{
-                            visibility: 'hidden',
+                            visibility: open ? 'visible' : undefined,
                             opacity: 0,
                             // 关闭时禁用指针（安全兜底），打开时由 GSAP autoAlpha 管理
                             ...(!open && { pointerEvents: 'none' as const }),
@@ -243,6 +268,11 @@ export const PopoverContent = forwardRef<
                             className,
                         )}
                         {...contentProps}
+                        onCloseAutoFocus={event => {
+                            // 快速重开时旧 FocusScope 的卸载不能把焦点拉回触发器。
+                            if (openRef.current) event.preventDefault();
+                            else onCloseAutoFocus?.(event);
+                        }}
                     >
                         {children}
                         <RadixPopover.Arrow

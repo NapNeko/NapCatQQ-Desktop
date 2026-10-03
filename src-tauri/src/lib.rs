@@ -74,6 +74,7 @@ pub struct AppState {
     /// 功能开关 = app-settings 的 `features.apiDebug`：启动时按落盘值调一次
     /// `set_enabled`（关着就不起接收器），设置保存时按新值热生效
     pub(crate) onebot_debug: Arc<ncd_runtime::onebot_debug::DebugManager>,
+    pub(crate) chat: Arc<ncd_runtime::chat::ChatManager>,
     /// 调试台对外（本机 agent）的 MCP 服务；默认关，随设置的 `mcp.enabled` 起停
     pub(crate) mcp: Arc<ncd_mcp::McpServer>,
 }
@@ -333,6 +334,11 @@ pub fn run() {
             .with_snowluma(snowluma_backend, Arc::clone(&snowluma_daemon)),
     );
     // 调试台要 BotManager 收尾后的那一份（with_snowluma 之后）
+    let chat = Arc::new(ncd_runtime::chat::ChatManager::new(
+        Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
+        Arc::clone(&host_resolver_for_debug),
+        data_root.clone(),
+    ));
     let onebot_debug = Arc::new(ncd_runtime::onebot_debug::DebugManager::new(
         Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
         host_resolver_for_debug,
@@ -419,6 +425,8 @@ pub fn run() {
     let bot_manager_auto_restart = Arc::clone(&bot_manager);
     let onebot_debug_listener = Arc::clone(&onebot_debug);
     let onebot_debug_sweeper = Arc::clone(&onebot_debug);
+    let chat_listener = Arc::clone(&chat);
+    let chat_sweeper = Arc::clone(&chat);
 
     let mut builder = tauri::Builder::default();
     #[cfg(desktop)]
@@ -454,6 +462,7 @@ pub fn run() {
             app_manager: app_manager.clone(),
             terminals,
             onebot_debug,
+            chat,
             mcp,
         })
         // 页面开始（重新）加载时，旧页面的调试台事件订阅已经没人收了，但 Channel 还能 send 成功、探不出来，
@@ -465,6 +474,7 @@ pub fn run() {
                 state
                     .onebot_debug
                     .page_loading(webview.label(), std::time::Instant::now());
+                state.chat.page_loading(webview.label(), std::time::Instant::now());
             }
         })
         .setup(move |app| {
@@ -565,6 +575,9 @@ pub fn run() {
             // 调试台：Bot 停了就收掉它的事件接收器和会话；没人看的接收器 30 分钟后清掉。
             // 两个任务只拿 Weak，管理器丢了就自己退出
             let onebot_debug_bus: Arc<dyn EventBus> = Arc::new(event_bus.clone());
+            let chat_bus: Arc<dyn EventBus> = Arc::new(event_bus.clone());
+            tauri::async_runtime::spawn(async move { chat_listener.listen(chat_bus).await; });
+            tauri::async_runtime::spawn(async move { chat_sweeper.sweep().await; });
             tauri::async_runtime::spawn(async move {
                 onebot_debug_listener
                     .run_bot_event_listener(onebot_debug_bus)
@@ -1015,6 +1028,13 @@ pub fn run() {
             commands::terminal::terminal_export_text,
             commands::terminal::read_clipboard_text,
             commands::onebot_debug::onebot_debug_targets,
+            commands::chat::chat_targets,
+            commands::chat::chat_call,
+            commands::chat::chat_call_stream,
+            commands::chat::chat_subscribe,
+            commands::chat::chat_unsubscribe,
+            commands::chat::chat_archive_load,
+            commands::chat::chat_archive_save,
             commands::onebot_debug::onebot_debug_channels,
             commands::onebot_debug::onebot_debug_test_channel,
             commands::onebot_debug::onebot_debug_catalog,

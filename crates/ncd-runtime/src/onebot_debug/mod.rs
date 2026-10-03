@@ -105,6 +105,7 @@ pub struct DebugManager {
     /// 工作区 / 收藏夹 / 历史，第一次用到时读盘
     store: Arc<LazyStore>,
     history_queue: HistoryQueue,
+    persist_history: bool,
     /// 管理器被丢弃时取消：常驻的监听和清扫任务据此退出
     shutdown: CancellationToken,
     /// Bot 停止（停机、崩溃、删除）的累计次数，每次停止加一
@@ -136,11 +137,23 @@ impl DebugManager {
             own_calls: Arc::new(OwnCalls::default()),
             store: Arc::new(LazyStore::new(data_root)),
             history_queue: HistoryQueue::default(),
+            persist_history: true,
             shutdown: CancellationToken::new(),
             bot_stops: AtomicU64::new(0),
             stopped_at: StdMutex::new(HashMap::new()),
             open_tunnels: Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    /// 独立聊天传输复用协议实现，但聊天正文不得进入调试调用历史。
+    pub fn new_ephemeral(
+        bots: Arc<dyn DebugBotPort>,
+        host_resolver: Arc<dyn HostResolver>,
+        data_root: PathBuf,
+    ) -> Self {
+        let mut manager = Self::new(bots, host_resolver, data_root);
+        manager.persist_history = false;
+        manager
     }
 
     pub fn is_enabled(&self) -> bool {
