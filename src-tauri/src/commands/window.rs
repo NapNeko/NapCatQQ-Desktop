@@ -89,9 +89,7 @@ pub async fn open_debug_window(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .build()
         .map_err(|e| e.to_string())?;
-    if let Ok(icon) = crate::window_icon::main_window_icon(&app) {
-        let _ = window.set_icon(icon);
-    }
+    let _ = crate::window_icon::apply_window_icon(&app, &window);
     Ok(())
 }
 
