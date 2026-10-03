@@ -484,13 +484,34 @@ impl NeoBotComponent {
         super::manifest::NEOBOT_DEFAULT_DASHBOARD_PORT
     }
 
+    /// 查发行元数据版本的 python 片段。提成纯函数便于钉住：
+    /// 查的是**发行名** `neobot-app`（不是导入名 `neobot_app`）。
+    pub fn version_probe_script() -> String {
+        format!("from importlib.metadata import version; print(version({PYPI_NEOBOT:?}))")
+    }
+
+    /// 读已装版本。
+    ///
+    /// 上游没有 `--version`，但发行元数据里有（`neobot-app` 的 `project.version`），
+    /// 从实例 venv 的解释器里查一次即可——比解析 pip 输出稳，也不依赖 uv 在 PATH。
+    /// 查不到就返回 `None`：让调用方说「装了但读不到版本」，而不是编一个字符串
+    /// 让界面显示成「v installed」那种东西。
     async fn read_installed_version(&self, host: &dyn Host) -> Result<Option<String>, ActionError> {
-        let bin = self.neobot_bin(host.os());
-        if !host.exists(&bin).await? {
+        let python = self.venv_python(host.os());
+        if !host.exists(&python).await? {
             return Ok(None);
         }
-        // 上游没有 --version；能跑起来就算装了，版本留给 pip 记录
-        Ok(Some("installed".to_string()))
+        let cmd = HostCommand::new(python.as_posix())
+            .arg("-c")
+            .arg(Self::version_probe_script())
+            .timeout(Duration::from_secs(30));
+        let out = match host.run_to_string(cmd).await {
+            Ok(out) if out.success() => out,
+            // 包没装进 venv / 解释器跑不起来：都算「读不到版本」，不是安装失败
+            _ => return Ok(None),
+        };
+        let version = out.stdout.trim();
+        Ok((!version.is_empty()).then(|| version.to_string()))
     }
 }
 
@@ -554,8 +575,10 @@ impl Component for NeoBotComponent {
                 reason: "项目已创建但依赖未同步（缺 neobot），重新安装可修复".to_string(),
             }));
         }
+        // 读不到版本时给一个说明性字面量，而不是伪装成版本号：UI 会渲染成 "v<version>"，
+        // 所以这里必须是人能看懂的东西
         Ok(DetectOutcome::Installed(DetectedVersion {
-            version: version.unwrap_or_else(|| "installed".into()),
+            version: version.unwrap_or_else(|| "未知".into()),
             source: cfg.as_posix().to_string(),
         }))
     }
@@ -732,6 +755,25 @@ mod tests {
         assert_eq!(
             adapter.get(KEY_REVERSE_WS_PORT).and_then(|v| v.as_integer()),
             Some(8080)
+        );
+    }
+
+    /// 界面会把版本渲染成 `v<version>`，所以这里绝不能编一个非版本号的字符串：
+    /// 之前返回字面量 "installed"，列表卡片就显示成「v installed」。
+    #[test]
+    fn version_probe_reads_distribution_metadata_by_release_name() {
+        let script = NeoBotComponent::version_probe_script();
+        assert!(
+            script.contains("importlib.metadata"),
+            "走发行元数据，不解析 pip 输出：{script}"
+        );
+        assert!(
+            script.contains(PYPI_NEOBOT),
+            "必须用发行名 {PYPI_NEOBOT}（导入名是 neobot_app，查错了会拿不到）：{script}"
+        );
+        assert!(
+            !script.contains("neobot_app"),
+            "不能用导入名去查版本：{script}"
         );
     }
 
