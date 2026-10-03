@@ -6,6 +6,7 @@ import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import type { Contact } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import { ChatPage } from './ChatPage';
+import { setChatPreferences } from './chatPreferences';
 
 let store: ChatAccountStore;
 const target: DebugTarget = { bot_id: 'page-test', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: false, online: false };
@@ -26,10 +27,48 @@ vi.mock('@tanstack/react-virtual', async importOriginal => ({
 }));
 
 beforeEach(() => {
+    setChatPreferences({ hiddenConversations: {} });
     store = new ChatAccountStore(target, { call: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn() });
     store.open(group); store.open(friend);
     store.draft(friend.key, { text: '正在编辑', attachments: [], reply: null });
     vi.spyOn(store, 'initialize').mockResolvedValue(undefined);
+});
+
+describe('hidden conversations', () => {
+    it('hides a group only from messages and reopens it from contacts with its draft intact', async () => {
+        const user = userEvent.setup();
+        store.draft(group.key, { text: '群草稿', attachments: [], reply: null });
+        store.getSnapshot().contacts = [group, friend];
+        render(<ChatPage onNavigate={vi.fn()} />);
+        await user.click(screen.getByRole('button', { name: /群消息盒子/ }));
+        const option = screen.getByRole('option', { name: /讨论群/ });
+        await user.click(option);
+        fireEvent.keyDown(option, { key: 'F10', shiftKey: true });
+        await user.click(await screen.findByRole('menuitem', { name: '隐藏会话' }));
+        expect(screen.queryByRole('option', { name: /讨论群/ })).not.toBeInTheDocument();
+        expect(store.getSnapshot().account.active).toBeNull();
+        expect(store.getSnapshot().account.drafts[group.key].text).toBe('群草稿');
+        expect(screen.queryByRole('button', { name: /已隐藏/ })).not.toBeInTheDocument();
+        await user.click(screen.getByRole('tab', { name: '联系人' }));
+        await user.click(screen.getByRole('option', { name: /讨论群/ }));
+        expect(store.getSnapshot().account.active).toBe(group.key);
+        expect(screen.queryByRole('button', { name: '已隐藏 (1)' })).not.toBeInTheDocument();
+    });
+    it('keeps a hidden private conversation in contacts and restores it on click', async () => {
+        const user = userEvent.setup();
+        store.getSnapshot().contacts = [friend];
+        render(<ChatPage onNavigate={vi.fn()} />);
+        await user.click(screen.getByRole('tab', { name: '联系人' }));
+        fireEvent.keyDown(screen.getByRole('option', { name: /小明/ }), { key: 'F10', shiftKey: true });
+        await user.click(await screen.findByRole('menuitem', { name: '隐藏会话' }));
+        expect(screen.getByRole('option', { name: /小明/ })).toBeInTheDocument();
+        await user.click(screen.getByRole('tab', { name: '消息' }));
+        expect(screen.queryByRole('option', { name: /小明/ })).not.toBeInTheDocument();
+        await user.click(screen.getByRole('tab', { name: '联系人' }));
+        await user.click(screen.getByRole('option', { name: /小明/ }));
+        expect(store.getSnapshot().account.active).toBe(friend.key);
+        expect(screen.getByRole('option', { name: /小明/ })).toBeInTheDocument();
+    });
 });
 
 describe('chat conversation shortcuts', () => {

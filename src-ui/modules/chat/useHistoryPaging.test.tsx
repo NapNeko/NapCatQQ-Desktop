@@ -46,4 +46,16 @@ describe('upward history paging', () => {
         act(() => { result.current.onWheel({ deltaY: -20 }); result.current.onScroll(); });
         expect(load).not.toHaveBeenCalled();
     });
+    it('prefetches before the top and can load from a wheel while already at the boundary', async () => {
+        const el = document.createElement('div'); el.scrollTop = 200;
+        const load = vi.fn(async () => {});
+        const { result } = renderHook(() => useHistoryPaging({ scroll: { current: el }, enabled: true, load, detach: vi.fn() }));
+        act(() => result.current.onWheel({ deltaY: -100 }));
+        await settlePaging();
+        expect(load).toHaveBeenCalledTimes(1);
+        el.scrollTop = 0;
+        act(() => result.current.onWheel({ deltaY: -100 }));
+        await settlePaging();
+        expect(load).toHaveBeenCalledTimes(2);
+    });
 });

@@ -1,5 +1,5 @@
 // 虚拟时间线复用消息段渲染和贴底逻辑，样式与阅读状态独立。
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDown } from 'lucide-react';
 import { SegmentList, isMediaOnly, isPictureOnly } from '../debug/right/SegmentView';
@@ -16,31 +16,23 @@ import { dayLabel } from '../../core/domain/debug/chatFormat';
 import { cn } from '../../shared/utils/cn';
 import { useHistoryPaging } from './useHistoryPaging';
 import { ChatMessageActions } from './ChatMessageActions';
+import { useSmoothWheel } from './useSmoothWheel';
+import { preserveTimelineReading } from './timelineReadingAnchor';
 
 export function NativeTimeline({ store, contact, messages, revealRef, visible, onFocusComposer }: { store: ChatAccountStore; contact: Contact; messages: Message[]; revealRef: MutableRefObject<(key: string) => void>; visible: boolean; onFocusComposer?: () => void }) {
     const scroll = useRef<HTMLDivElement>(null); const latest = useRef(messages); latest.current = messages;
-    const historyAnchor = useRef<{ height: number; top: number } | null>(null);
     const [image, showImage] = useState(''); const [error, setError] = useState(''); const [highlight, setHighlight] = useState('');
     const snapshot = useChatSnapshot(store); const history = snapshot.history[contact.key];
     useEffect(() => { void store.ensureHistory(contact.key); }, [store, contact.key, snapshot.connection.state, history]);
     const motion = useMotion();
-    const virtual = useVirtualizer({ count: messages.length, getScrollElement: () => scroll.current, estimateSize: () => 108, getItemKey: i => latest.current[i]?.key ?? i, overscan: 7, paddingStart: 12, paddingEnd: 24, anchorTo: 'end' });
+    const getMessageKey = useCallback((index: number) => messages[index]?.key ?? index, [messages]);
+    // 按消息 key 锚定 prepend 和异步行高变化，避免额外 scrollHeight 补偿重复移动视口。
+    const virtual = useVirtualizer({ count: messages.length, getScrollElement: () => scroll.current, estimateSize: () => 108, getItemKey: getMessageKey, overscan: 12, paddingStart: 12, paddingEnd: 24, anchorTo: 'end', useAnimationFrameWithResizeObserver: true });
+    preserveTimelineReading(virtual, scroll);
     const key = `${accountKey(store.target.bot_id, String(store.target.qq_id))}/${contact.key}`;
     const stick = useStickToBottom({ scrollRef: scroll, virtualizer: virtual, items: messages, memoryKey: `native-chat:${key}`, resetToken: key, filterToken: '', animate: false });
     const paging = useHistoryPaging({ scroll, enabled: snapshot.connection.state === 'connected' && !!history?.loaded && !history.loading && !history.done && !history.error, load: () => store.history(contact.key), detach: stick.detach });
-    useEffect(() => {
-        if (history?.loading && history.loaded && !historyAnchor.current && scroll.current) {
-            historyAnchor.current = { height: scroll.current.scrollHeight, top: scroll.current.scrollTop };
-        }
-        if (!history?.loaded) historyAnchor.current = null;
-    }, [history?.loading, history?.loaded]);
-    useLayoutEffect(() => {
-        const anchor = historyAnchor.current;
-        if (!anchor || history?.loading || !history.loaded || !scroll.current) return;
-        const element = scroll.current;
-        element.scrollTop = anchor.top + (element.scrollHeight - anchor.height);
-        historyAnchor.current = null;
-    }, [history?.loading, history?.loaded, messages.length]);
+    useSmoothWheel(scroll, motion.enabled);
     useEffect(() => {
         const update = () => store.setReading(!stick.away && document.visibilityState === 'visible' && (scroll.current?.clientWidth ?? 0) > 0 ? contact.key : null);
         update(); document.addEventListener('visibilitychange', update);
@@ -86,7 +78,7 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible, o
                 const message = messages[row.index]; const previous = messages[row.index - 1];
                 const showTime = !previous || message.at - previous.at > 5 * 60_000 || new Date(message.at).toDateString() !== new Date(previous.at).toDateString();
                 const continuation = !showTime && previous?.senderId === message.senderId && previous?.mine === message.mine && message.at - previous.at < 3 * 60_000;
-                return <div key={row.key} data-index={row.index} ref={virtual.measureElement} style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${row.start}px)` }}>
+                return <div key={row.key} data-index={row.index} data-message-key={message.key} ref={virtual.measureElement} style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${row.start}px)` }}>
                     {showTime && <div className="native-chat-time">{dayLabel(message.at)}</div>}
                     <ChatMessageActions store={store} contact={contact} message={message} onFocusComposer={onFocusComposer} onError={setError}>{controls => <article className={cn('native-chat-message', message.mine && 'is-mine', continuation && 'is-continuation')} data-highlight={highlight === message.key}>
                         <div className={continuation ? 'invisible' : ''}><Avatar contact={{ type: 'private', id: message.senderId, name: message.mine ? store.target.name : message.senderName }} small /></div>
