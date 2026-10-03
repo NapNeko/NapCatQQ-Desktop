@@ -20,8 +20,10 @@ use ncd_domain::{
 pub const NEOBOT_FRAMEWORK_ID: &str = "neobot";
 /// 与 `ComponentId::NeoBot` 的 serde 字面量一致
 pub const NEOBOT_COMPONENT_ID: &str = "neobot";
-pub const NEOBOT_REPO_URL: &str = "https://github.com/NeoBot-Project/NeoBot";
-pub const NEOBOT_DOCS_URL: &str = "https://github.com/NeoBot-Project/NeoBot/tree/main/docs";
+pub const NEOBOT_REPO_URL: &str = "https://github.com/SuperQuail/NeoBot";
+pub const NEOBOT_DOCS_URL: &str = "https://github.com/SuperQuail/NeoBot/tree/main/docs";
+/// 官方交流群（QQ）；放在简介里，用户从应用端卡片就能看到
+pub const NEOBOT_QQ_GROUP: &str = "983752344";
 
 /// PyPI 发行名（不是导入名 `neobot_app`）
 pub const PYPI_NEOBOT: &str = "neobot-app";
@@ -60,7 +62,7 @@ pub fn neobot_manifest() -> AppFrameworkManifest {
     AppFrameworkManifest {
         id: AppFrameworkId::new(NEOBOT_FRAMEWORK_ID),
         display_name: "NeoBot".to_string(),
-        description: "Python 应用端，PyPI 发行，内置网页面板；Desktop 只对接 OneBot v11".to_string(),
+        description: "更有活人感的 QQ 聊天机器人（交流群 983752344）".to_string(),
         repo_url: Some(NEOBOT_REPO_URL.to_string()),
         docs_url: Some(NEOBOT_DOCS_URL.to_string()),
         supported_placements: vec![AppPlacement::LocalNative, AppPlacement::RemoteNative],
@@ -106,6 +108,31 @@ mod tests {
             "NeoBot 面板自带插件市场，但不走桌面端商店"
         );
         assert!(back.terms.is_empty());
+    }
+
+    /// 交流群是用户找上来的入口，掉了没人会发现——和仓库地址一起钉住
+    #[test]
+    fn manifest_keeps_repo_and_community_group() {
+        let m = neobot_manifest();
+        assert!(
+            m.description.contains(NEOBOT_QQ_GROUP),
+            "简介里要带交流群：{}",
+            m.description
+        );
+    }
+
+    /// 仓库与文档地址是给人点开的，写错了没人会发现——钉在这里
+    #[test]
+    fn manifest_points_at_the_real_repository() {
+        let m = neobot_manifest();
+        assert_eq!(
+            m.repo_url.as_deref(),
+            Some("https://github.com/SuperQuail/NeoBot")
+        );
+        assert_eq!(
+            m.docs_url.as_deref(),
+            Some("https://github.com/SuperQuail/NeoBot/tree/main/docs")
+        );
     }
 
     /// 面板口与 OneBot 口是两个口；设计上依赖这一条（webui_port() 与 listen_port() 不同）
