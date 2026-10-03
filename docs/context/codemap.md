@@ -409,7 +409,8 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 
 | 关注点 | 主路径 |
 |--------|--------|
-| 页面与入口 | `src-ui/modules/chat/ChatPage.tsx` / `ChatTimeline.tsx` / `ChatComposer.tsx` / `chat.css`；主侧栏「聊天」，`AppNext` lazy 全宽路由；宽屏双栏、窄宽会话返回；`ChatDivider` 支持拖动与键盘调宽，`ChatSearch` 搜索已加载消息并定位，`ChatDetails` 为资料弹层，`ChatAvatar` 共用头像 |
+| 页面与入口 | `src-ui/modules/chat/ChatPage.tsx` / `ChatTimeline.tsx` / `ChatComposer.tsx` / `chat.css`；主侧栏「聊天」，`AppNext` lazy 全宽路由；宽屏双栏、窄宽会话返回；`ChatDivider` 支持拖动与键盘调宽，`ChatDetails` 为资料弹层，`ChatAvatar` 共用头像。`ConversationList` 提供 Ctrl/Cmd+K、方向键/Enter 与右键置顶/本地已读；`conversationDate.ts` 区分今天、昨天与旧日期 |
+| 搜索与消息操作 | `ChatSearch` + `chat-search.css`：当前已加载范围、字面命中高亮、方向键/Enter 定位、显式读取更早历史与增量展开结果；`ChatMessageActions` 复用共享 ContextMenu 提供回复/复制/提及/失败恢复，`messageActions.ts` 保留草稿并消解同名 @；保留原侧边按钮密度。菜单与键盘切会话后聚焦输入框，点击发送/取消引用后可继续输入 |
 | 状态与协议边界 | `src-ui/core/domain/chat/`：字符串消息标识、账号/会话分区、收发去重、档案合并；`hooks/chat/chatStore.ts`：先离线恢复档案，连接建立后同步联系人与最近会话，串行保存；草稿仅留内存。内存保留全局最近 5,000 条与正在阅读/加载的会话旧页，裁剪同步失效历史游标 |
 | 聊天档案 | `ncd-domain/src/chat_archive.rs` 定义 ts-rs 契约；`ncd-runtime/src/chat_archive.rs` 在注入的 `data_root/state/chat/archives/<Bot SHA256>/<QQ>.json` 原子保存，每账号最多 5,000 条消息、1,000 个会话、16 MiB。校验身份与关系，损坏文件拒绝覆盖；剔除消息段凭据、本机附件 URI 与内嵌图片，不存草稿附件 |
 | 群盒子 / 历史 | `groupBox.ts` 默认聚合所有群聊并汇总未读，主列表搜索穿透盒子；兼容旧档案的 boxed 字段，不再手动移入移出。`useHistoryPaging.ts` 上翻自动加载并保留阅读锚点，入口在 hover/focus 时显示，加载或出错时常显；NapCat 的 `message_seq` 实际传短 `message_id`，SnowLuma 传数字 `message_id` |
