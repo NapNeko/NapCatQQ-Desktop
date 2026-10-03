@@ -11,6 +11,7 @@ use crate::astrbot::AstrBotAdapter;
 use crate::karin::KarinAdapter;
 use crate::koishi::KoishiAdapter;
 use crate::maibot::MaiBotAdapter;
+use crate::neobot::NeoBotAdapter;
 use crate::nonebot2::NoneBot2Adapter;
 use crate::yunzai::YunzaiAdapter;
 
@@ -33,6 +34,8 @@ impl AppFrameworkRegistry {
         reg.register(Arc::new(MaiBotAdapter::new()));
         reg.register(Arc::new(KoishiAdapter::new()));
         reg.register(Arc::new(YunzaiAdapter::new()));
+        reg.register(Arc::new(NeoBotAdapter::new()));
+        reg.register(Arc::new(NeoBotAdapter::new()));
         reg
     }
 
@@ -101,6 +104,7 @@ mod tests {
                 "karin".to_string(),
                 "koishi".to_string(),
                 "maibot".to_string(),
+                "neobot".to_string(),
                 "nonebot2".to_string(),
                 "yunzai".to_string()
             ]
@@ -113,6 +117,8 @@ mod tests {
         assert!(reg.by_component_id("maibot").is_some());
         assert!(reg.by_component_id("koishi").is_some());
         assert!(reg.get(&AppFrameworkId::new("yunzai")).is_ok());
+        assert!(reg.by_component_id("neobot").is_some());
+        assert!(reg.get(&AppFrameworkId::new("neobot")).is_ok());
         assert!(matches!(
             reg.get(&AppFrameworkId::new("not-a-framework")),
             Err(AppFrameworkError::NotRegistered(_))

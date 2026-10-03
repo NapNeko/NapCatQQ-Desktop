@@ -71,7 +71,10 @@ pub fn neobot_manifest() -> AppFrameworkManifest {
         runtime_component_ids: vec!["uv".to_string()],
         store_resources: Vec::new(),
         has_install_renderer: false,
-        webui_auth: AppWebUiAuthKind::UserPassword,
+        // 面板密码由用户在面板上首次设置；桌面端读不到 NeoBot 的密码存储格式
+        // （plugins_data/dashboard/auth.json 由面板自己管理），所以不接管账号，
+        // 只负责把面板口告诉前端好开隧道。
+        webui_auth: AppWebUiAuthKind::None,
         terms: Vec::new(),
     }
 }
@@ -96,7 +99,7 @@ mod tests {
             vec![AppPlacement::LocalNative, AppPlacement::RemoteNative]
         );
         assert_eq!(back.runtime_component_ids, vec!["uv".to_string()]);
-        assert_eq!(back.webui_auth, AppWebUiAuthKind::UserPassword);
+        assert_eq!(back.webui_auth, AppWebUiAuthKind::None);
         assert!(!back.has_install_renderer);
         assert!(
             back.store_resources.is_empty(),
