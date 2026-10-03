@@ -25,6 +25,7 @@ export interface BotPickerProps {
     selected: DebugTarget | null;
     loading?: boolean;
     ariaLabel?: string;
+    compact?: boolean;
     onSelect: (botId: string) => void;
     /** 列表底部「去机器人页」；不给就不显示 */
     onManageBots?: () => void;
@@ -57,7 +58,7 @@ export function BackendTag({ backend, className }: { backend: BackendType; class
     );
 }
 
-export const BotPicker = memo(function BotPicker({ targets, selected, loading = false, ariaLabel, onSelect, onManageBots }: BotPickerProps) {
+export const BotPicker = memo(function BotPicker({ targets, selected, loading = false, ariaLabel, compact = false, onSelect, onManageBots }: BotPickerProps) {
     const m = useMotion();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -131,10 +132,10 @@ export const BotPicker = memo(function BotPicker({ targets, selected, loading = 
                 >
                     {selected ? (
                         <>
-                            <StatusDot tone={targetTone(selected)} size={7} className="shrink-0" />
+                            {!compact && <StatusDot tone={targetTone(selected)} size={7} className="shrink-0" />}
                             <span className="min-w-0 truncate text-[13px] font-medium text-text">{targetDisplayName(selected)}</span>
                             <BackendTag backend={selected.backend} />
-                            <span className="hidden shrink-0 font-mono text-2xs tabular-nums text-text-tertiary @min-[880px]:inline">
+                            <span className={cn('hidden shrink-0 font-mono text-2xs tabular-nums text-text-tertiary', !compact && '@min-[880px]:inline')}>
                                 {selected.qq_id || selected.bot_id}
                             </span>
                         </>

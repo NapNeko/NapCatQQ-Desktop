@@ -9,6 +9,48 @@ function messages(count = 3, text = (id: number) => `Hello ${id}`) {
     return account.messages.map((m, i) => ({ ...m, recalled: i === 0 }));
 }
 describe('native message search', () => {
+    it('browses loaded records with date groups before entering a keyword', () => {
+        render(<ChatSearch messages={messages()} onReveal={vi.fn()} onClose={vi.fn()} />);
+        expect(screen.getAllByRole('option')).toHaveLength(2);
+        expect(screen.getByRole('status')).toHaveTextContent('2 条记录');
+        expect(screen.getByText('1970/01/01')).toBeInTheDocument();
+    });
+    it('separates photos and videos, stickers, files and links', () => {
+        const segments = [
+            { type: 'text', data: { text: '普通消息' } },
+            { type: 'image', data: { url: 'https://cdn.example/photo.png' } },
+            { type: 'video', data: { file: 'video' } },
+            { type: 'image', data: { url: 'https://cdn.example/sticker.gif', sub_type: 1 } },
+            { type: 'face', data: { id: 14 } },
+            { type: 'file', data: { name: '资料.pdf' } },
+            { type: 'text', data: { text: 'https://example.com' } },
+        ];
+        const items = messages(7).map((message, index) => ({ ...message, recalled: false, segments: [segments[index]] }));
+        render(<ChatSearch messages={items} onReveal={vi.fn()} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('tab', { name: '图片/视频' }));
+        expect(screen.getAllByRole('option')).toHaveLength(2);
+        expect(screen.getByAltText('图片预览')).toHaveAttribute('src', 'https://cdn.example/photo.png');
+        fireEvent.click(screen.getByRole('tab', { name: '表情' }));
+        expect(screen.getAllByRole('option')).toHaveLength(2);
+        expect(screen.getByAltText('图片预览')).toHaveAttribute('src', 'https://cdn.example/sticker.gif');
+        fireEvent.click(screen.getByRole('tab', { name: '文件' }));
+        expect(screen.getAllByRole('option')).toHaveLength(1);
+        expect(screen.getByRole('option')).toHaveTextContent('资料.pdf');
+        fireEvent.click(screen.getByRole('tab', { name: '链接' }));
+        expect(screen.getAllByRole('option')).toHaveLength(1);
+        expect(screen.getByRole('option')).toHaveTextContent('https://example.com');
+    });
+    it('filters by sender and local date and restores records after clearing filters', () => {
+        const items = messages().map((message, index) => ({ ...message, senderId: String(index), senderName: `成员${index}`, at: new Date(`2026-10-0${index + 1}T12:00:00`).getTime() }));
+        render(<ChatSearch messages={items} onReveal={vi.fn()} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: '筛选' }));
+        fireEvent.change(screen.getByRole('combobox', { name: '筛选发送者' }), { target: { value: '1' } });
+        expect(screen.getAllByRole('option').filter(option => option.getAttribute('id'))).toHaveLength(1);
+        fireEvent.change(screen.getByLabelText('起始日期'), { target: { value: '2026-10-03' } });
+        expect(screen.queryAllByRole('option').filter(option => option.getAttribute('id'))).toHaveLength(0);
+        fireEvent.click(screen.getByRole('button', { name: '清除筛选' }));
+        expect(screen.getAllByRole('option').filter(option => option.getAttribute('id'))).toHaveLength(2);
+    });
     it('finds loaded messages case-insensitively and excludes recalled content', () => {
         const items = messages(); const reveal = vi.fn();
         render(<ChatSearch messages={items} onReveal={reveal} onClose={() => {}} />);
@@ -92,10 +134,10 @@ describe('native message search', () => {
         expect(screen.getAllByRole('option')).toHaveLength(2);
         const marks = container.querySelectorAll('mark');
         expect(Array.from(marks, node => node.textContent)).toEqual(['A.*[B]', 'a.*[b]', 'A.*[B]', 'a.*[b]']);
-        expect(container.querySelector('img')).toBeNull();
+        expect(container.querySelector('.native-chat-search-result-text img')).toBeNull();
         fireEvent.change(input, { target: { value: '<img src=x onerror=alert(1)>' } });
         expect(container.querySelectorAll('mark')).toHaveLength(2);
-        expect(container.querySelector('img')).toBeNull();
+        expect(container.querySelector('.native-chat-search-result-text img')).toBeNull();
         fireEvent.change(input, { target: { value: 'a.+[b]' } });
         expect(screen.queryAllByRole('option')).toHaveLength(0);
     });

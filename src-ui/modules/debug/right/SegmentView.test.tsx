@@ -6,6 +6,44 @@ function NativeSegments({ api, segments, messageId }: { api: Partial<ChatViewApi
     return <ChatViewContext.Provider value={{ ...useChatView(), ...api }}><SegmentList mine={false} messageId={messageId} segments={segments} /></ChatViewContext.Provider>;
 }
 describe('native media segments', () => {
+    it('reserves protocol dimensions before a delayed image loads', () => {
+        render(<SegmentList mine={false} segments={[{ type: 'image', data: { url: 'https://cdn.example/known-delayed.png', width: 1600, height: 800 } }]} />);
+        const image = screen.getByAltText('图片');
+        const before = image.parentElement!.getAttribute('style');
+        expect(image.parentElement).toHaveStyle({ width: '320px', aspectRatio: '320 / 160' });
+        Object.defineProperties(image, { naturalWidth: { value: 1600 }, naturalHeight: { value: 800 } });
+        fireEvent.load(image);
+        expect(image.parentElement!.getAttribute('style')).toBe(before);
+        expect(image).toHaveAttribute('loading', 'eager');
+    });
+    it('reuses image dimensions when a signed URL changes for the same file', () => {
+        const view = render(<SegmentList mine={false} segments={[{ type: 'image', data: { url: 'https://cdn.example/signed.png?old', file_id: 'signed-file-test' } }]} />);
+        const image = screen.getByAltText('图片');
+        Object.defineProperties(image, { naturalWidth: { value: 1200 }, naturalHeight: { value: 600 } });
+        fireEvent.load(image);
+        view.rerender(<SegmentList mine={false} segments={[{ type: 'image', data: { url: 'https://cdn.example/signed.png?new', file_id: 'signed-file-test' } }]} />);
+        expect(screen.getByAltText('图片').parentElement).toHaveStyle({ width: '320px', aspectRatio: '320 / 160' });
+    });
+    it('recognizes animated stickers sent as an image segment', () => {
+        render(<SegmentList mine={false} segments={[{ type: 'image', data: { url: 'https://cdn.example/sticker.gif', sub_type: 1 } }]} />);
+        const img = screen.getByAltText('图片');
+        Object.defineProperties(img, { naturalWidth: { value: 400 }, naturalHeight: { value: 200 } });
+        fireEvent.load(img);
+        expect(img.parentElement).toHaveStyle({ width: '128px', aspectRatio: '128 / 64' });
+    });
+    it.each([
+        ['wide', 'image', 1000, 300, 320, 96],
+        ['tall', 'image', 300, 1000, 84, 280],
+        ['small', 'image', 40, 20, 40, 20],
+        ['animated', 'mface', 400, 200, 128, 64],
+    ])('preserves the complete %s image aspect ratio', (name, type, width, height, expectedWidth, expectedHeight) => {
+        render(<SegmentList mine={false} segments={[{ type: String(type), data: { url: `https://cdn.example/${name}.gif` } }]} />);
+        const img = screen.getByAltText(type === 'mface' ? '[表情包]' : '图片');
+        Object.defineProperties(img, { naturalWidth: { value: width }, naturalHeight: { value: height } });
+        fireEvent.load(img);
+        expect(img).toHaveClass('object-contain');
+        expect(img.parentElement).toHaveStyle({ width: `${expectedWidth}px`, aspectRatio: `${expectedWidth} / ${expectedHeight}`, maxWidth: '100%' });
+    });
     it('opens fetched forwarded nodes and lets nested forwards be read safely', async () => {
         const readForward = vi.fn().mockResolvedValueOnce([{ senderId: '123', name: '小明', segments: [{ type: 'text', data: { text: '<script>unsafe</script>' } }, { type: 'forward', data: { id: 'nested' } }] }]).mockResolvedValueOnce([{ senderId: '124', name: '小李', segments: [{ type: 'text', data: { text: '内层内容' } }] }]);
         render(<NativeSegments api={{ readForward }} segments={[{ type: 'forward', data: { id: 'outer' } }]} />);

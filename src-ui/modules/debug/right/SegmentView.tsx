@@ -2,7 +2,7 @@
 // json / xml 卡片、markdown、戳一戳；不认识的段显示成 [类型] 小标签，悬停看原始 JSON。
 //
 // 每个段单独包一层错误边界：上游给了奇怪的形状，只坏这一个段。
-// 图片的框高度是固定的（宽度等图到了再按比例定），行高不会因为图加载完而跳，虚拟列表不用返工。
+// 图片完整等比缩放并缓存尺寸，虚拟列表重新挂载时复用已知宽高。
 
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
@@ -77,7 +77,7 @@ function SegmentView({ seg, mine, messageId }: { seg: Segment; mine: boolean; me
         case 'face':
             return <QQFace id={str(d.id)} />;
         case 'image':
-            return <ImageSeg data={d} summary={str(d.summary)} />;
+            return <ImageSeg data={d} summary={str(d.summary)} sticker={Number(d.sub_type ?? d.subType) === 1} />;
         case 'mface':
             return <ImageSeg data={d} summary={str(d.summary) || '[表情包]'} sticker />;
         case 'record':
@@ -154,8 +154,8 @@ function AtSeg({ qq, name, mine }: { qq: string; name: string; mine: boolean }) 
     if (qq === 'all') return <span className={cn('font-medium', mine ? 'text-brand' : 'text-info')}>@全体成员 </span>;
     const shown = name || nameOf(Number(qq)) || qq;
     return (
-        <span title={qq} className={cn('inline-flex items-center gap-0.5 align-middle font-medium', mine ? 'text-brand' : 'text-info')}>
-            <ChatAvatar contact={{ type: 'private', id: qq, name: shown }} small />
+        <span title={qq} className={cn('inline-flex items-center gap-1 align-middle font-medium', mine ? 'text-brand' : 'text-info')}>
+            <ChatAvatar contact={{ type: 'private', id: qq, name: shown }} inline />
             <span>@{shown}{' '}</span>
         </span>
     );
@@ -183,21 +183,29 @@ function mediaUrlOf(d: Record<string, unknown>): string {
     return '';
 }
 
-const IMAGE_BOX_H = 128;
-const IMAGE_MAX_W = 200;
-const IMAGE_MIN_W = 56;
-const IMAGE_PLACEHOLDER_W = 160;
-const STICKER_BOX = 96;
+const IMAGE_BOX_H = 280;
+const IMAGE_MAX_W = 320;
+const IMAGE_PLACEHOLDER_W = IMAGE_MAX_W;
+const STICKER_BOX = 128;
 
-// 图的显示宽度按地址记住：行被虚拟列表卸了再挂，直接按上次的宽度画，不闪占位。
+// 图的显示尺寸按地址记住：行被虚拟列表卸了再挂，直接按上次的尺寸画，不闪占位。
 // 有上限（最近 500 张）；失败记录 5 分钟后过期，网络抖一下不至于这次运行里一直显示「加载失败」
-const imageWidths = new LruCache<number>(CACHE_MAX);
+const imageSizes = new LruCache<{ width: number; height: number }>(CACHE_MAX);
 const failedImages = new ExpiringSet(CACHE_MAX, FAILURE_TTL_MS);
 
-function fitWidth(w: number, h: number): number {
-    if (!(w > 0) || !(h > 0)) return IMAGE_PLACEHOLDER_W;
-    const scaled = h > IMAGE_BOX_H ? (w * IMAGE_BOX_H) / h : w;
-    return Math.round(Math.min(IMAGE_MAX_W, Math.max(IMAGE_MIN_W, scaled)));
+function fitImage(w: number, h: number, sticker = false) {
+    const scale = Math.min(1, (sticker ? STICKER_BOX : IMAGE_MAX_W) / w, (sticker ? STICKER_BOX : IMAGE_BOX_H) / h);
+    return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
+}
+
+function sizeOf(data: Record<string, unknown>, url: string, sticker = false) {
+    const key = `${sticker ? 'sticker:' : ''}${imageCacheKey(url)}`;
+    const file = str(data.file_id) || str(data.file);
+    const cached = (file && imageSizes.get(`${sticker ? 'sticker:' : ''}file:${imageCacheKey(file)}`)) || imageSizes.get(key);
+    if (cached) return cached;
+    const width = Number(data.width ?? data.image_width ?? data.pic_width);
+    const height = Number(data.height ?? data.image_height ?? data.pic_height);
+    return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0 ? fitImage(width, height, sticker) : undefined;
 }
 
 function ImageSeg({ data, summary, sticker }: { data: Record<string, unknown>; summary: string; sticker?: boolean }) {
@@ -211,8 +219,8 @@ function ImageSeg({ data, summary, sticker }: { data: Record<string, unknown>; s
     const [refreshAttempted, setRefreshAttempted] = useState(false);
     const cacheKey = useMemo(() => imageCacheKey(url), [url]);
     const [failed, setFailed] = useState(() => !viewable && !readImage || failedImages.has(cacheKey));
-    const [width, setWidth] = useState(() => imageWidths.get(cacheKey));
-    const loaded = width !== undefined;
+    const [size, setSize] = useState(() => sizeOf(data, initialUrl, sticker));
+    const loaded = size !== undefined;
 
     useEffect(() => {
         request.current++;
@@ -220,9 +228,9 @@ function ImageSeg({ data, summary, sticker }: { data: Record<string, unknown>; s
         setRefreshAttempted(false);
         setRefreshing(false);
         setFailed(!/^(https?:|data:image\/|blob:)/i.test(initialUrl) && !canRead || failedImages.has(imageCacheKey(initialUrl)));
-        setWidth(imageWidths.get(imageCacheKey(initialUrl)));
+        setSize(sizeOf(data, initialUrl, sticker));
         return () => { request.current++; };
-    }, [data, initialUrl, canRead]);
+    }, [data, initialUrl, canRead, sticker]);
 
     useEffect(() => {
         if (url || !reader.current || failed || refreshing) return;
@@ -248,10 +256,10 @@ function ImageSeg({ data, summary, sticker }: { data: Record<string, unknown>; s
         }).finally(() => { if (current === request.current) setRefreshing(false); });
     };
 
-    if (failed || refreshing) return refreshing ? <span className="my-0.5 inline-flex items-center justify-center rounded-md bg-inset text-text-tertiary" style={{ width: sticker ? STICKER_BOX : IMAGE_PLACEHOLDER_W, height: sticker ? STICKER_BOX : IMAGE_BOX_H }}><ImageIcon size={18} className="animate-pulse" aria-label="正在读取图片" /></span> : <BrokenImage url={url} sticker={sticker} />;
+    if (failed || refreshing) return refreshing ? <span className="my-0.5 inline-flex items-center justify-center rounded-md bg-inset text-text-tertiary" style={{ width: size?.width ?? (sticker ? STICKER_BOX : IMAGE_PLACEHOLDER_W), maxWidth: '100%', height: size?.height ?? (sticker ? STICKER_BOX : IMAGE_BOX_H) }}><ImageIcon size={18} className="animate-pulse" aria-label="正在读取图片" /></span> : <BrokenImage url={url} sticker={sticker} size={size} />;
 
-    const boxW = sticker ? STICKER_BOX : (width ?? IMAGE_PLACEHOLDER_W);
-    const boxH = sticker ? STICKER_BOX : IMAGE_BOX_H;
+    const boxW = size?.width ?? (sticker ? STICKER_BOX : IMAGE_PLACEHOLDER_W);
+    const boxH = size?.height ?? (sticker ? STICKER_BOX : IMAGE_BOX_H);
     return (
         <button
             type="button"
@@ -265,7 +273,7 @@ function ImageSeg({ data, summary, sticker }: { data: Record<string, unknown>; s
                 !loaded && 'bg-inset',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
             )}
-            style={{ width: boxW, height: boxH }}
+            style={{ width: boxW, maxWidth: '100%', height: size ? undefined : boxH, aspectRatio: size ? `${boxW} / ${boxH}` : undefined }}
         >
             {!loaded && (
                 <span className="absolute inset-0 flex items-center justify-center text-text-disabled">
@@ -275,20 +283,23 @@ function ImageSeg({ data, summary, sticker }: { data: Record<string, unknown>; s
             <img
                 src={url}
                 alt={summary || '图片'}
-                loading="lazy"
+                loading="eager"
                 decoding="async"
                 referrerPolicy="no-referrer"
                 draggable={false}
                 onLoad={(e) => {
                     const img = e.currentTarget;
-                    const w = fitWidth(img.naturalWidth, img.naturalHeight);
-                    imageWidths.set(cacheKey, w);
-                    setWidth(w);
+                    if (!img.naturalWidth || !img.naturalHeight) return;
+                    const fitted = fitImage(img.naturalWidth, img.naturalHeight, sticker);
+                    imageSizes.set(`${sticker ? 'sticker:' : ''}${cacheKey}`, fitted);
+                    const file = str(data.file_id) || str(data.file);
+                    if (file) imageSizes.set(`${sticker ? 'sticker:' : ''}file:${imageCacheKey(file)}`, fitted);
+                    setSize(fitted);
                 }}
                 onError={refresh}
                 className={cn(
                     'relative h-full w-full',
-                    sticker ? 'object-contain' : 'object-cover',
+                    'object-contain',
                     // 图到了才显出来，淡入只动透明度
                     loaded ? 'opacity-100' : 'opacity-0',
                     'transition-opacity duration-200 motion-reduce:transition-none',
@@ -298,12 +309,12 @@ function ImageSeg({ data, summary, sticker }: { data: Record<string, unknown>; s
     );
 }
 
-function BrokenImage({ url, sticker }: { url: string; sticker?: boolean }) {
+function BrokenImage({ url, sticker, size }: { url: string; sticker?: boolean; size?: { width: number; height: number } }) {
     const { copied, copy } = useCopy();
     return (
         <span
             className="my-0.5 flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border bg-inset/60 px-2 text-center text-2xs text-text-tertiary"
-            style={{ width: sticker ? STICKER_BOX : IMAGE_PLACEHOLDER_W, height: sticker ? STICKER_BOX : IMAGE_BOX_H }}
+            style={{ width: size?.width ?? (sticker ? STICKER_BOX : IMAGE_PLACEHOLDER_W), maxWidth: '100%', height: size?.height ?? (sticker ? STICKER_BOX : IMAGE_BOX_H) }}
         >
             <ImageOff size={16} aria-hidden />
             <span>[图片加载失败]</span>

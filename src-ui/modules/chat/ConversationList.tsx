@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
-import { CheckCheck, Pin, PinOff } from 'lucide-react';
+import { CheckCheck, EyeOff, Pin, PinOff } from 'lucide-react';
 import { EMPTY_DRAFT, type Contact, type SessionKey } from '../../core/domain/chat/model';
 import { conversationDate } from '../../core/domain/chat/conversationDate';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
@@ -40,9 +40,10 @@ interface ConversationListProps {
     contacts: boolean;
     listId: string;
     highlighted: SessionKey | null;
+    onHide?: (contact: Contact) => void;
 }
 
-export function ConversationList({ rows, active, store, onOpen, contacts, listId, highlighted }: ConversationListProps) {
+export function ConversationList({ rows, active, store, onOpen, contacts, listId, highlighted, onHide }: ConversationListProps) {
     const scroll = useRef<HTMLDivElement>(null);
     const account = useChatSnapshot(store).account;
     const highlightedIndex = rows.findIndex(row => row.key === highlighted);
@@ -57,7 +58,7 @@ export function ConversationList({ rows, active, store, onOpen, contacts, listId
         const conversation = account.conversations[contact.key];
         const draft = account.drafts[contact.key] ?? EMPTY_DRAFT;
         const date = !contacts && conversation ? conversationDate(conversation.lastAt) : null;
-        const hasMenu = !contacts && !!conversation;
+        const hasMenu = !!onHide || !contacts && !!conversation;
         return <ContextMenu key={row.key}>
             <div role="presentation" className="native-chat-conversation-row" style={{ transform: `translateY(${row.start}px)` }} data-active={active === contact.key} data-highlighted={highlighted === contact.key}>
                 <ContextMenuTrigger asChild disabled={!hasMenu}>
@@ -74,8 +75,9 @@ export function ConversationList({ rows, active, store, onOpen, contacts, listId
                 </ContextMenuTrigger>
             </div>
             {hasMenu && <ContextMenuContent aria-label={`${contact.name}的会话操作`}>
-                <ContextMenuItem onSelect={() => store.pin(contact.key)}>{conversation.pinned ? <PinOff size={14} /> : <Pin size={14} />}{conversation.pinned ? '取消置顶' : '置顶会话'}</ContextMenuItem>
-                <ContextMenuItem disabled={!conversation.unread} onSelect={() => store.markRead(contact.key)}><CheckCheck size={14} />标为已读</ContextMenuItem>
+                {conversation && <ContextMenuItem onSelect={() => store.pin(contact.key)}>{conversation.pinned ? <PinOff size={14} /> : <Pin size={14} />}{conversation.pinned ? '取消置顶' : '置顶会话'}</ContextMenuItem>}
+                {conversation && <ContextMenuItem disabled={!conversation.unread} onSelect={() => store.markRead(contact.key)}><CheckCheck size={14} />标为已读</ContextMenuItem>}
+                {onHide && <ContextMenuItem onSelect={() => onHide(contact)}><EyeOff size={14} />隐藏会话</ContextMenuItem>}
             </ContextMenuContent>}
         </ContextMenu>;
     })}</div></div>;
