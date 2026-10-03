@@ -1,5 +1,5 @@
 // 会话草稿即时写回账号分区，异步选文件不改变发送目标。
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from 'react';
 import { ArrowUp, AtSign, Check, ChevronDown, File, ImagePlus, Paperclip, Smile, X } from 'lucide-react';
 import { EMPTY_DRAFT, type Attachment, type Contact, type Draft } from '../../core/domain/chat/model';
 import { mentionLabel, mentionQueryAt, pruneMentions } from '../../core/domain/debug/composerModel';
@@ -12,9 +12,9 @@ import { ChatEmojiPicker } from './media/ChatEmojiPicker';
 import { QQFace } from './media/QQFace';
 import { ChatAvatar } from './ChatAvatar';
 
-export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'enter', onSendShortcutChange }: { store: ChatAccountStore; contact: Contact; disabledReason: string; sendShortcut?: SendShortcut; onSendShortcutChange?: (shortcut: SendShortcut) => void }) {
+export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'enter', onSendShortcutChange, inputRef }: { store: ChatAccountStore; contact: Contact; disabledReason: string; sendShortcut?: SendShortcut; onSendShortcutChange?: (shortcut: SendShortcut) => void; inputRef?: RefObject<HTMLTextAreaElement> }) {
     const snapshot = useChatSnapshot(store); const draft = snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT;
-    const input = useRef<HTMLTextAreaElement>(null); const composing = useRef(false);
+    const localInput = useRef<HTMLTextAreaElement>(null); const input = inputRef ?? localInput; const composing = useRef(false);
     const [emoji, setEmoji] = useState(false); const [error, setError] = useState('');
     const restoreAfterEmoji = useRef(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -83,7 +83,13 @@ export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'e
     const drop = (event: DragEvent) => { event.preventDefault(); dragDepth.current = 0; setDragging(false); setError(''); const files = Array.from(event.dataTransfer.files); const images = files.filter(f => f.type.startsWith('image/')); for (const file of images) void addImage(file); if (images.length !== files.length) setError('其他文件请用附件按钮选择'); };
     const sending = snapshot.account.messages.some(m => m.session === contact.key && m.status === 'sending');
     const canSend = !disabledReason && !sending && !pendingFiles && (!!draft.text.trim() || draft.attachments.length > 0);
-    const send = () => { if (!canSend) return; setEmoji(false); setError(''); void store.send(contact.key).catch(e => setError(errorText(e))); };
+    const send = () => {
+        if (!canSend) return;
+        setEmoji(false); setError('');
+        void store.send(contact.key).catch(e => setError(errorText(e)));
+        // 点击发送也回到编辑框，下一句话可以接着输入。
+        input.current?.focus();
+    };
     const chooseMember = (member: { id: string; name: string }) => {
         if (!query) return;
         const value = current();
@@ -114,7 +120,7 @@ export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'e
         onDragEnter={e => { if (Array.from(e.dataTransfer.types).includes('Files')) { dragDepth.current++; setDragging(true); } }}
         onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); }}>
         <div className="native-chat-editor" data-dragging={dragging}>
-        {draft.reply && <div className="native-chat-reply"><span className="min-w-0 flex-1 truncate">回复 {draft.reply.name}：{draft.reply.preview}</span><button className="native-chat-icon" aria-label="取消引用" onClick={() => patch({ reply: null })}><X size={13} /></button></div>}
+        {draft.reply && <div className="native-chat-reply"><span className="min-w-0 flex-1 truncate">回复 {draft.reply.name}：{draft.reply.preview}</span><button className="native-chat-icon" aria-label="取消引用" onClick={() => { patch({ reply: null }); input.current?.focus(); }}><X size={13} /></button></div>}
         {draft.attachments.length > 0 && <div className="native-chat-attachments">{draft.attachments.map(file => <div key={file.key}><AttachmentPreview attachment={file} /><span className="max-w-36 truncate">{file.name}</span><button aria-label={`移除${file.name}`} onClick={() => patch({ attachments: current().attachments.filter(f => f.key !== file.key) })}><X size={12} /></button></div>)}</div>}
         <div className="native-chat-composer-tools">
             <Popover open={emoji} onOpenChange={open => { if (open) restoreAfterEmoji.current = false; setEmoji(open); }}>

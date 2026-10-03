@@ -14,6 +14,33 @@ function setup() {
     return { transport, store: new ChatAccountStore(target, transport) };
 }
 describe('chat lifecycle', () => {
+    it('marks a conversation read locally without opening it, changing drafts, or stopping unread tracking', async () => {
+        const { store, transport } = setup(); await store.connect();
+        store.open({ key: 'private:1', type: 'private', id: '1', name: '正在编辑' });
+        store.draft('private:1', { text: '保留草稿', reply: { id: '7', name: '好友', preview: '回复' }, attachments: [{ key: 'file', name: '说明.txt', type: 'file', path: 'D:/说明.txt' }] });
+        const receive = (seq: number) => transport.subscribe.mock.calls[0][1]({ v: 1, bot_id: 'bot', events: [{ seq, at_ms: seq, body: { kind: 'ob11', payload: { self_id: 99, message_type: 'private', user_id: 12, message_id: seq, time: seq, message: '未读消息' } } }] });
+        receive(1);
+        const before = store.getSnapshot().account;
+        expect(before.conversations['private:12'].unread).toBe(1);
+        store.markRead('private:12');
+        const after = store.getSnapshot().account;
+        expect(after.conversations['private:12'].unread).toBe(0);
+        expect(after.active).toBe('private:1');
+        expect(after.drafts).toBe(before.drafts);
+        expect(after.messages).toBe(before.messages);
+        expect(after.conversations['private:1']).toBe(before.conversations['private:1']);
+        expect(transport.call).not.toHaveBeenCalled();
+        receive(2);
+        expect(store.getSnapshot().account.conversations['private:12'].unread).toBe(1);
+    });
+    it('does not publish changes for unknown or already read conversations', () => {
+        const { store } = setup();
+        store.open({ key: 'private:1', type: 'private', id: '1', name: '已读' });
+        const before = store.getSnapshot(); const listener = vi.fn(); store.subscribe(listener);
+        store.markRead('private:missing'); store.markRead('private:1');
+        expect(store.getSnapshot()).toBe(before);
+        expect(listener).not.toHaveBeenCalled();
+    });
     it('sends QQ faces and remote favorite images as native segments', async () => {
         const { store, transport } = setup(); await store.connect();
         store.draft('private:12', { text: '', reply: null, attachments: [

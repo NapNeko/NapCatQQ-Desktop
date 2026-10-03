@@ -131,6 +131,11 @@ export class ChatAccountStore {
     open(contact: Contact) { this.account(openConversation(this.snapshot.account, contact)); }
     draft(key: SessionKey, draft: Draft) { this.account(setDraft(this.snapshot.account, key, draft)); }
     pin(key: SessionKey) { const state = this.snapshot.account; const c = state.conversations[key]; if (c) this.account({ ...state, conversations: { ...state.conversations, [key]: { ...c, pinned: !c.pinned } } }); }
+    markRead(key: SessionKey) {
+        const state = this.snapshot.account; const conversation = state.conversations[key];
+        if (!conversation?.unread) return;
+        this.account({ ...state, conversations: { ...state.conversations, [key]: { ...conversation, unread: 0 } } });
+    }
     box(key: SessionKey) { const state = this.snapshot.account; const c = state.conversations[key]; if (c?.type === 'group') this.account({ ...state, conversations: { ...state.conversations, [key]: { ...c, boxed: !c.boxed } } }); }
     private interruptPending() {
         this.contactsRequest = null;

@@ -1,0 +1,8 @@
+.native-chat-search-summary { flex-shrink: 0; padding: 8px 4px 0; font-size: 10px; color: var(--text-tertiary); }
+.native-chat-search-summary p + p { margin-top: 3px; }
+.native-chat-search-results[hidden] { display: none; }
+.native-chat-search-results button[aria-selected=true] { background: var(--surface-inset); box-shadow: inset 2px 0 var(--action-primary); }
+.native-chat-search-highlight { color: inherit; background: var(--brand-soft); border-radius: 2px; font-weight: 600; }
+.native-chat-search-footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px 14px; flex-shrink: 0; padding: 6px 4px 0; }
+.native-chat-search-footer button:disabled { cursor: default; opacity: .5; }
+@container native-chat (max-width: 590px) { .native-chat-search-key-hint { display: none; } }

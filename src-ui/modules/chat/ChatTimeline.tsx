@@ -1,24 +1,23 @@
 // 虚拟时间线复用消息段渲染和贴底逻辑，样式与阅读状态独立。
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowDown, Copy, Reply as ReplyIcon, RotateCcw } from 'lucide-react';
+import { ArrowDown } from 'lucide-react';
 import { SegmentList, isMediaOnly, isPictureOnly } from '../debug/right/SegmentView';
 import { ChatViewContext, useChatView } from '../debug/right/chatContext';
 import { useStickToBottom } from '../debug/right/useStickToBottom';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
-import { EMPTY_DRAFT, accountKey, type Contact, type Message } from '../../core/domain/chat/model';
-import { messagePreview } from '../../core/domain/debug/segments';
+import { accountKey, type Contact, type Message } from '../../core/domain/chat/model';
 import { chatService } from '../../core/services/chat.service';
-import { recoverDraft } from '../../core/domain/chat/recoverDraft';
 import { ChatImageViewer } from './ChatImageViewer';
 import { chatMediaService } from '../../core/services/chat-media.service';
 import { ChatAvatar as Avatar } from './ChatAvatar';
 import { dayLabel } from '../../core/domain/debug/chatFormat';
 import { cn } from '../../shared/utils/cn';
 import { useHistoryPaging } from './useHistoryPaging';
+import { ChatMessageActions } from './ChatMessageActions';
 
-export function NativeTimeline({ store, contact, messages, revealRef, visible }: { store: ChatAccountStore; contact: Contact; messages: Message[]; revealRef: MutableRefObject<(key: string) => void>; visible: boolean }) {
+export function NativeTimeline({ store, contact, messages, revealRef, visible, onFocusComposer }: { store: ChatAccountStore; contact: Contact; messages: Message[]; revealRef: MutableRefObject<(key: string) => void>; visible: boolean; onFocusComposer?: () => void }) {
     const scroll = useRef<HTMLDivElement>(null); const latest = useRef(messages); latest.current = messages;
     const historyAnchor = useRef<{ height: number; top: number } | null>(null);
     const [image, showImage] = useState(''); const [error, setError] = useState(''); const [highlight, setHighlight] = useState('');
@@ -70,7 +69,6 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
         },
         revealMessage: (messageId: number) => { const m = latest.current.find(m => m.id === String(messageId)); if (!m) return false; revealRef.current(m.key); return true; },
     }), [fallback, snapshot.account.messages, revealRef, store]);
-    const reply = (message: Message) => { if (message.id) store.draft(contact.key, { ...(store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT), reply: { id: message.id, name: message.mine ? '我' : message.senderName, preview: messagePreview(message.segments) } }); };
     return <ChatViewContext.Provider value={view}>
         <div className="native-chat-timeline-wrap">
             <div className="native-chat-history-hotzone">
@@ -90,21 +88,14 @@ export function NativeTimeline({ store, contact, messages, revealRef, visible }:
                 const continuation = !showTime && previous?.senderId === message.senderId && previous?.mine === message.mine && message.at - previous.at < 3 * 60_000;
                 return <div key={row.key} data-index={row.index} ref={virtual.measureElement} style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${row.start}px)` }}>
                     {showTime && <div className="native-chat-time">{dayLabel(message.at)}</div>}
-                    <article className={cn('native-chat-message', message.mine && 'is-mine', continuation && 'is-continuation')} data-highlight={highlight === message.key}>
+                    <ChatMessageActions store={store} contact={contact} message={message} onFocusComposer={onFocusComposer} onError={setError}>{controls => <article className={cn('native-chat-message', message.mine && 'is-mine', continuation && 'is-continuation')} data-highlight={highlight === message.key}>
                         <div className={continuation ? 'invisible' : ''}><Avatar contact={{ type: 'private', id: message.senderId, name: message.mine ? store.target.name : message.senderName }} small /></div>
                         <div className="native-chat-message-body">{!message.mine && !continuation && <div className="native-chat-sender">{message.senderName}</div>}
                             <div className={cn('native-chat-bubble', isMediaOnly(message.segments) && 'is-media-only', isPictureOnly(message.segments) && 'is-picture-only')}>{message.recalled ? <span className="text-text-tertiary">消息已撤回</span> : <SegmentList segments={message.segments} mine={message.mine} messageId={message.id} />}</div>
                             {message.mine && message.status !== 'sent' && <div className={cn('native-chat-send-status', message.status !== 'sending' && 'text-danger')} title={message.error}>{message.status === 'sending' ? '发送中…' : message.status === 'unknown' ? '发送结果未确认，请核实后再发送' : '发送失败'}{message.error && <span className="block">{message.error}</span>}</div>}
                         </div>
-                        {!message.recalled && <div className="native-chat-message-actions">
-                            {message.id && <button className="native-chat-icon" aria-label={`回复${message.senderName}的消息`} title="回复" onClick={() => reply(message)}><ReplyIcon size={14} /></button>}
-                            <button className="native-chat-icon" aria-label="复制消息" title="复制" onClick={() => void navigator.clipboard.writeText(messagePreview(message.segments)).catch(() => setError('复制失败'))}><Copy size={13} /></button>
-                            {message.status === 'failed' && <button className="native-chat-icon" aria-label="将失败消息放回输入框" title="放回输入框" onClick={() => {
-                                const draft = store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT;
-                                store.draft(contact.key, recoverDraft(message, draft));
-                            }}><RotateCcw size={13} /></button>}
-                        </div>}
-                    </article>
+                        {controls}
+                    </article>}</ChatMessageActions>
                 </div>;
             })}</div>
         </div>{(stick.away || stick.unseen > 0) && <button className="native-chat-latest" onClick={() => stick.jumpToLatest(motion.enabled)}><ArrowDown size={14} />{stick.unseen > 0 ? `${stick.unseen} 条新消息` : '回到最新'}</button>}</div>

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ChatComposer } from './ChatComposer';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import { chatMediaService } from '../../core/services/chat-media.service';
+import { createRef } from 'react';
 
 function setup(disabledReason = '', sendShortcut: 'enter' | 'ctrl-enter' = 'enter') {
     const store = new ChatAccountStore({ bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true });
@@ -12,6 +13,26 @@ function setup(disabledReason = '', sendShortcut: 'enter' | 'ctrl-enter' = 'ente
     return { send, input: screen.getByRole('textbox', { name: '发送消息给好友' }) };
 }
 describe('native composer keyboard', () => {
+    it('returns focus to the editor after clicking send for consecutive messages', () => {
+        const { send, input } = setup();
+        const button = screen.getByRole('button', { name: '发送消息' });
+        button.focus();
+        fireEvent.click(button);
+        expect(send).toHaveBeenCalledWith('private:12');
+        expect(input).toHaveFocus();
+    });
+    it('shares the editor ref and keeps the draft when cancelling a reply', () => {
+        const store = new ChatAccountStore({ bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true });
+        const attachment = { key: 'face', type: 'face' as const, id: '14', name: '微笑' };
+        store.draft('private:12', { text: '继续写', attachments: [attachment], reply: { id: '1', name: '好友', preview: '原消息' } });
+        const inputRef = createRef<HTMLTextAreaElement>();
+        render(<ChatComposer store={store} contact={{ key: 'private:12', id: '12', name: '好友', type: 'private' }} disabledReason="" inputRef={inputRef} />);
+        const button = screen.getByRole('button', { name: '取消引用' });
+        button.focus(); fireEvent.click(button);
+        expect(inputRef.current).toBe(screen.getByRole('textbox', { name: '发送消息给好友' }));
+        expect(inputRef.current).toHaveFocus();
+        expect(store.getSnapshot().account.drafts['private:12']).toEqual({ text: '继续写', attachments: [attachment], reply: null });
+    });
     it('selects QQ and favorite faces into the draft without sending', async () => {
         const store = new ChatAccountStore({ bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true });
         const send = vi.spyOn(store, 'send').mockResolvedValue();
