@@ -518,6 +518,22 @@ export const mockAppFrameworkApi = {
         _body?: unknown,
     ): Promise<AppPanelResult | null> => {
         const ok = (data: unknown) => withMockDelay({ kind: 'ok' as const, data });
+        if (method === 'POST') {
+            // 插件的几个动作：预览里只要「面板收下了」就够，列表不变也没关系
+            const pluginAction =
+                path === '/api/plugins/install' ||
+                /^\/api\/plugins\/[^/]+\/(toggle|reload|uninstall)$/.test(path);
+            if (pluginAction) {
+                return withMockDelay({
+                    kind: 'ok' as const,
+                    data: { ok: true, message: '预览：已提交' },
+                });
+            }
+            return withMockDelay({
+                kind: 'failed' as const,
+                message: '预览未模拟 ' + method + ' ' + path,
+            });
+        }
         if (method !== 'GET') {
             return withMockDelay({
                 kind: 'failed' as const,
