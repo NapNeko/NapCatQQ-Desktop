@@ -47,6 +47,7 @@ import type {
 } from '../types';
 import { mockAstrBotDashboard } from './astrbot-dashboard.mock';
 import { mockMaiBotRuntime } from './maibot-runtime.mock';
+import { latestStable } from '../../domain/apps/appVersions';
 import { karinDefaultConfig } from '../../domain/apps/karinConfig';
 import { astrbotDefaultConfig } from '../../domain/apps/astrbotConfig';
 import { nonebot2DefaultConfig } from '../../domain/apps/nonebot2Config';
@@ -437,6 +438,9 @@ export function peekMockAppInstance(id: string): AppInstance {
 
 const MOCK_INSTALL_STEPS = ['解析 uv', '下载源码', '放置源码', '同步 Python 依赖', '预置端口与协议确认'];
 
+// NeoBot 的发行清单，最新在前；listVersions 与「装到最新正式版」的回填共用同一份
+const MOCK_NEOBOT_VERSIONS = ['1.2.1', '1.2.0', '1.1.0', '1.0.0', '1.0.0a25'];
+
 /**
  * 按真机的事件顺序假装跑一次安装：任务快照、步骤进度、最后实例变成已安装。
  * 走查卡片 / 详情页的「安装中」进度用。
@@ -474,13 +478,18 @@ function simulateInstallTask(inst: AppInstance, version: string | null = null): 
     plan.push(() => push({ kind: 'finished', ok: true }));
     plan.push(() => {
         emitMockEvent({ kind: 'deployment_task_changed', task: snapshot('success') } as DomainEvent);
-        // 指定了版本就回填它——真实链路由 detect 从发行元数据回读，预览里照同样的口径表现
+        // 指定了版本就回填它——真实链路由 detect 从发行元数据回读，预览里照同样的口径表现。
+        // NeoBot 不指定版本 = 装到最新正式版再回读，回填清单里的 latest 正式版，不留旧号
         const settled = require(inst.id);
         publish(
             {
                 ...settled,
                 state: 'installed',
-                installed_version: version ?? settled.installed_version ?? '1.2.5',
+                installed_version:
+                    version ??
+                    (inst.framework_id === 'neobot' ? latestStable(MOCK_NEOBOT_VERSIONS) : null) ??
+                    settled.installed_version ??
+                    '1.2.5',
             },
             'installed',
         );
@@ -616,22 +625,14 @@ export const mockAppFrameworkApi = {
         return withMockDelay(simulateInstallTask(inst, version ?? null));
     },
 
-    /** 只给 Python 系框架返回值；Node 系 / 整包发行的返回 null（UI 据此隐藏选择器） */
+    /** 真实链路只有 NeoBot 实现 available_versions，trait 默认 None；UI 拿到 null 就隐藏选择器 */
     listVersions: async (frameworkId: string): Promise<PackageVersions | null> => {
-        if (frameworkId !== 'neobot' && frameworkId !== 'nonebot2' && frameworkId !== 'astrbot') {
-            return withMockDelay(null);
-        }
-        const versions =
-            frameworkId === 'neobot'
-                ? ['1.2.1', '1.2.0', '1.1.0', '1.0.0', '1.0.0a25']
-                : frameworkId === 'nonebot2'
-                  ? ['2.5.1', '2.4.2', '2.3.3']
-                  : ['4.28.0', '4.27.1'];
+        if (frameworkId !== 'neobot') return withMockDelay(null);
         return withMockDelay({
-            name: frameworkId === 'neobot' ? 'neobot-app' : frameworkId,
-            versions,
-            latest: versions[0] ?? null,
-            has_prerelease: versions.some((v) => /[a-zA-Z]/.test(v.slice(1))),
+            name: 'neobot-app',
+            versions: [...MOCK_NEOBOT_VERSIONS],
+            latest: MOCK_NEOBOT_VERSIONS[0] ?? null,
+            has_prerelease: MOCK_NEOBOT_VERSIONS.some((v) => /[a-zA-Z]/.test(v.slice(1))),
         });
     },
 
