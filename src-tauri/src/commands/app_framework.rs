@@ -26,6 +26,7 @@ use ncd_runtime::{
     MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
     MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotProviderCheck,
     MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus, MaiBotStatsSummary,
+    PackageVersions,
 };
 use ncd_traits::AppFrameworkError;
 use tauri::State;
@@ -50,6 +51,19 @@ pub async fn create_app_instance(
     state
         .app_manager
         .create_instance(request)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 某框架支持的可安装版本；None = 该框架不支持按版本安装（UI 隐藏选择器）
+#[tauri::command]
+pub async fn list_app_framework_versions(
+    framework_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<PackageVersions>, String> {
+    state
+        .app_manager
+        .available_versions(&AppFrameworkId::new(framework_id))
         .await
         .map_err(|e| e.to_string())
 }
@@ -99,11 +113,13 @@ pub async fn preview_app_install_dir(
 pub async fn install_app_instance(
     instance_id: String,
     task_id: Option<String>,
+    // 指定安装的版本；不传 = 最新正式版
+    version: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     state
         .app_manager
-        .install_instance(&AppInstanceId::new(instance_id), task_id)
+        .install_instance(&AppInstanceId::new(instance_id), task_id, version)
         .await
         .map_err(|e| e.to_string())
 }

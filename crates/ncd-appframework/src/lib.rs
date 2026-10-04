@@ -1,6 +1,6 @@
 //! ncd-appframework：应用端框架适配器集合。
 //!
-//! 每个框架一个子目录（`karin/`、`nonebot2/`、`astrbot/`、`maibot/`、`koishi/`），各自提供：
+//! 每个框架一个子目录（`karin/`、`nonebot2/`、`astrbot/`、`maibot/`、`koishi/`、`yunzai/`、`neobot/`），各自提供：
 //! - `manifest`：静态清单（UI 直接消费）
 //! - `component`：实现 `ncd_component::Component`，安装 / 探测 / 启动命令走 Component × Host × Action
 //! - `integration`：实现 `ncd_traits::AppIntegration`（纯计划）+ 写应用端配置（备份 → 写 → 失败还原）
@@ -17,6 +17,7 @@ pub mod env_file;
 pub mod karin;
 pub mod koishi;
 pub mod maibot;
+pub mod neobot;
 pub mod node_tooling;
 pub mod nonebot2;
 pub mod ports;
@@ -118,6 +119,10 @@ pub use maibot::schema::{MaiBotAPIProvider, MaiBotMCPServerItemConfig};
 pub use maibot::{
     MAIBOT_FRAMEWORK_ID, MaiBotAdapter, MaiBotAdapterConfig, MaiBotChatFilter, MaiBotComponent,
     MaiBotInstanceConfig, MaiBotIntegration, MaiBotListMode, maibot_manifest,
+};
+pub use neobot::{
+    NEOBOT_DEFAULT_DASHBOARD_PORT, NEOBOT_DEFAULT_ONEBOT_PORT, NEOBOT_FRAMEWORK_ID,
+    NeoBotComponent, PackageVersions, neobot_manifest,
 };
 pub use nonebot2::{
     NONEBOT_ADAPTERS_URL, NONEBOT_PLUGINS_URL, NONEBOT2_FRAMEWORK_ID, NoneBot2Adapter,

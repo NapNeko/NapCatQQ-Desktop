@@ -72,6 +72,7 @@ export type { AppProjectProbe } from './generated/domain/AppProjectProbe';
 export type { ImportAppInstanceRequest } from './generated/domain/ImportAppInstanceRequest';
 export type { AppPlacement } from './generated/domain/AppPlacement';
 export type { AppFrameworkManifest } from './generated/domain/AppFrameworkManifest';
+export type { PackageVersions } from './generated/domain/PackageVersions';
 export type { AppLinkRecord } from './generated/domain/AppLinkRecord';
 export type { AppConfigWrite } from './generated/domain/AppConfigWrite';
 export type { CreateAppInstanceRequest } from './generated/domain/CreateAppInstanceRequest';

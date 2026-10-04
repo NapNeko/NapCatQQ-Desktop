@@ -115,7 +115,7 @@ pub fn backup_file_format(framework: &str, path: &str) -> Result<Option<AppConfi
     }
     if !matches!(
         framework,
-        "karin" | "nonebot2" | "astrbot" | "maibot" | "koishi" | "yunzai"
+        "karin" | "nonebot2" | "astrbot" | "maibot" | "koishi" | "yunzai" | "neobot"
     ) {
         return Err(format!("不支持的框架配置备份: {framework}"));
     }
@@ -131,6 +131,10 @@ pub fn backup_file_format(framework: &str, path: &str) -> Result<Option<AppConfi
                     && (parts[1] == "config" || parts.len() == 3 || parts[2] == "config"))
         }
         "nonebot2" => path == "pyproject.toml",
+        "neobot" => {
+            path == "data/config.toml"
+                || (parts.len() == 3 && parts[0] == "plugins_data" && parts[2] == "config.toml")
+        }
         // 多配置 abconf_*.json 和插件 *_config.json 都在 data/config，映射保存在 shared_preferences。
         "astrbot" => {
             matches!(
@@ -179,7 +183,7 @@ impl FrameworkConfigBackup {
         // 即使是空快照也验证框架 ID。
         if !matches!(
             self.framework_id.as_str(),
-            "karin" | "nonebot2" | "astrbot" | "maibot" | "koishi" | "yunzai"
+            "karin" | "nonebot2" | "astrbot" | "maibot" | "koishi" | "yunzai" | "neobot"
         ) {
             return Err(format!("不支持的框架配置备份: {}", self.framework_id));
         }
@@ -221,6 +225,10 @@ fn descend(framework: &str, rel: &str) -> bool {
                         || parts.get(2) == Some(&"config")))
         }
         "astrbot" => matches!(rel, "data" | "data/config"),
+        "neobot" => {
+            matches!(rel, "data" | "plugins_data")
+                || (parts[0] == "plugins_data" && parts.len() == 2)
+        }
         "maibot" => {
             matches!(rel, "config" | "data" | "plugins")
                 || (parts[0] == "plugins" && parts.len() == 2)

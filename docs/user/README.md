@@ -64,7 +64,7 @@ sudo apt-get install -y \
 | 应用设置与 Bot 配置 | 外观、功能开关、运行与通知设置、Bot 连接配置 |
 | 远端服务器 | 服务器档案与连接参数 |
 | 应用实例 | 实例档案、Bot 关联、领养时保存的回滚快照 |
-| 框架配置 | Karin、NoneBot2、AstrBot、MaiBot、Koishi、云崽的核心设置、模型与插件配置；麦麦自定义提示词及版本 |
+| 框架配置 | Karin、NoneBot2、AstrBot、MaiBot、Koishi、云崽、NeoBot 的核心设置、模型与插件配置；麦麦自定义提示词及版本 |
 | 聊天 | 账号用途、后台接收、托盘通知、忽略与隐藏群、界面布局 |
 | API 调试台 | 工作区、标签页草稿、布局、收藏与文件夹 |
 | SnowLuma | 全局 WebUI 端口与密码覆盖设置 |

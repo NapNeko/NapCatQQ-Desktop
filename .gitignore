@@ -15,6 +15,10 @@ docs/superpowers/
 docs/dev/
 CLAUDE.md
 
+# 已确认的历史临时报告 / 工作计划（保留本地，不再跟踪）
+/docs/2026-10-03_chat-usability-report.md
+/src-ui/docs/BATCH_FIX_PLAN.md
+
 # Copilot / agent 个性化（本机自管，不入库）
 .github/copilot-instructions.md
 .github/instructions/

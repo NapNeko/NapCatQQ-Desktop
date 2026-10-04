@@ -15,6 +15,7 @@ use crate::astrbot::config::AstrBotInstanceConfig;
 use crate::karin::config::KarinInstanceConfig;
 use crate::koishi::yml::KoishiInstanceConfig;
 use crate::maibot::config::MaiBotInstanceConfig;
+use crate::neobot::config::NeoBotInstanceConfig;
 use crate::nonebot2::config::NoneBot2InstanceConfig;
 use crate::yunzai::config::YunzaiInstanceConfig;
 
@@ -36,6 +37,8 @@ pub enum AppInstanceConfig {
     Koishi(KoishiInstanceConfig),
     #[serde(rename = "yunzai")]
     Yunzai(YunzaiInstanceConfig),
+    #[serde(rename = "neobot")]
+    NeoBot(NeoBotInstanceConfig),
 }
 
 impl AppInstanceConfig {
@@ -45,6 +48,8 @@ impl AppInstanceConfig {
             Self::Karin(c) => c.env.http_auth_key.as_str(),
             Self::MaiBot(c) => c.webui_token.as_str(),
             Self::NoneBot2(_) | Self::AstrBot(_) | Self::Koishi(_) | Self::Yunzai(_) => "",
+            // NeoBot 面板用账号密码登录，没有「复制密钥」这一步
+            Self::NeoBot(_) => "",
         }
     }
 
@@ -58,6 +63,8 @@ impl AppInstanceConfig {
             Self::MaiBot(c) => c.webui_port(),
             Self::Koishi(c) => c.listen_port(),
             Self::Yunzai(c) => c.listen_port(),
+            // NeoBot 的实例口就是 OneBot 反向 WS 监听口
+            Self::NeoBot(c) => c.adapter.reverse_ws_port,
         }
     }
 
@@ -70,6 +77,9 @@ impl AppInstanceConfig {
             Self::MaiBot(c) => Some(c.webui_port()).filter(|p| *p > 0),
             Self::Koishi(c) => Some(c.listen_port()).filter(|p| *p > 0),
             Self::Yunzai(_) => None,
+            // 面板口与 OneBot 口是两个口：桌面端靠这个值开隧道，
+            // 读不到就会拿实例口去连面板（必然失败）
+            Self::NeoBot(c) => Some(c.dashboard.port).filter(|p| *p > 0),
         }
     }
 
@@ -94,6 +104,7 @@ impl AppInstanceConfig {
             (Self::Yunzai(before), Self::Yunzai(after)) => {
                 crate::yunzai::config::link_inputs_changed(before, after)
             }
+            (Self::NeoBot(before), Self::NeoBot(after)) => before.link_inputs_changed(after),
             _ => false,
         }
     }
@@ -108,6 +119,7 @@ impl AppInstanceConfig {
             (Self::Yunzai(before), Self::Yunzai(after)) => {
                 crate::yunzai::config::restart_inputs_changed(before, after)
             }
+            (Self::NeoBot(before), Self::NeoBot(after)) => before.restart_inputs_changed(after),
             _ => false,
         }
     }

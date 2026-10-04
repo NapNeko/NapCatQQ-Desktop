@@ -839,6 +839,7 @@ pub fn run() {
             commands::app_framework::list_app_instances,
             commands::app_framework::create_app_instance,
             commands::app_framework::probe_app_project,
+            commands::app_framework::list_app_framework_versions,
             commands::app_framework::import_app_instance,
             commands::app_framework::preview_app_install_dir,
             commands::app_framework::install_app_instance,

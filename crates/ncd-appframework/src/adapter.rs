@@ -44,6 +44,13 @@ pub struct AppComponentSpec {
     pub redis_bin: Option<HostPath>,
     /// npm registry 镜像；None 用默认源
     pub npm_registry: Option<String>,
+    /// PyPI 索引镜像（`uv pip install --default-index`）；None 用默认源。
+    /// 各框架按自己的包管理器解释：Python 系走 pip index，Node 系忽略。
+    pub pypi_index: Option<String>,
+    /// 指定安装的版本；None = 装该包的最新正式版。
+    /// 各框架按自己的生态解释（Python 系 `pkg==ver`、Node 系 `pkg@ver`）；
+    /// 不支持指定版本的框架忽略它。装完的真实版本由 `detect` 回读，不在这里记账。
+    pub install_version: Option<String>,
     /// Karin：provision 时一并 `pnpm add @karinjs/plugin-puppeteer`。NoneBot2 忽略。
     pub install_renderer: bool,
     /// 领养已有项目：同步依赖，不写脚手架、不改端口。
@@ -74,6 +81,16 @@ pub trait AppFrameworkAdapter: Send + Sync {
 
     /// 安装 / 探测 / 启动命令（走既有 Component × Host × Action，不另起一套安装流程）
     fn component(&self, spec: &AppComponentSpec) -> Arc<dyn Component>;
+
+    /// 该框架支持的**可安装版本清单**（供「装任意版本」的选择器）。
+    ///
+    /// 默认 `Ok(None)`：不支持按版本安装的框架（Node 系、整包发行）不必实现，
+    /// UI 拿到 None 就不显示版本选择器。Python 系框架实现它去查 PyPI。
+    async fn available_versions(
+        &self,
+    ) -> Result<Option<crate::neobot::versions::PackageVersions>, AppFrameworkError> {
+        Ok(None)
+    }
 
     /// 探测已有目录能不能当这个框架的实例领养
     async fn probe_project(

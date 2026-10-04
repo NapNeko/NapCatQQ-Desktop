@@ -23,6 +23,8 @@ fn graph_placeholder_spec() -> AppComponentSpec {
         git_bin: None,
         redis_bin: None,
         npm_registry: None,
+        pypi_index: None,
+        install_version: None,
         install_renderer: false,
         adopt_existing: false,
         instance_id: "x".into(),
@@ -290,6 +292,8 @@ Windows/Local koishi
   component nodejs >=18 (Both)
 Windows/Local maibot
   component uv >=0.4 (Both)
+Windows/Local neobot
+  component uv >=0.4 (Both)
 Windows/Local nonebot2
   component uv >=0.4 (Both)
 Windows/Local yunzai
@@ -324,6 +328,8 @@ Linux/Local karin
 Linux/Local koishi
   component nodejs >=18 (Both)
 Linux/Local maibot
+  component uv >=0.4 (Both)
+Linux/Local neobot
   component uv >=0.4 (Both)
 Linux/Local nonebot2
   component uv >=0.4 (Both)
@@ -361,6 +367,8 @@ Linux/Remote karin
 Linux/Remote koishi
   component nodejs >=18 (Both)
 Linux/Remote maibot
+  component uv >=0.4 (Both)
+Linux/Remote neobot
   component uv >=0.4 (Both)
 Linux/Remote nonebot2
   component uv >=0.4 (Both)
