@@ -592,7 +592,7 @@ export const mockAppFrameworkApi = {
                         url_lan: 'ws://192.168.1.10:8080/onebot/v11/ws',
                         token: '',
                         token_enabled: false,
-                        path_hint: '/onebot/v11/ws',
+                        path_hint: '/onebot',
                         warning: '监听 0.0.0.0 但没有 access token：局域网内任何人都能连上来',
                     },
                     defaults: {

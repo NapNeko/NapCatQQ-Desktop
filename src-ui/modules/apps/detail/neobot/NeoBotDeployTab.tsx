@@ -1,7 +1,7 @@
 // NeoBot 详情「部署」页：把「还差什么」列出来，并把最容易卡住的一步——把 NeoBot 和 QQ 连起来——做成一次点击。
 //
 // 与面板「快捷部署」的分工：那边的表单在面板里，这边不做重复的表单（改人设、密钥去面板更顺手），
-// 但**建立 OneBot 链接**必须在这边做，因为 Bot 配置归桌面端管（面板看不到桌面端有哪些 Bot）。
+// 但建立 OneBot 对接必须在这边做，因为 Bot 配置归桌面端管（面板看不到桌面端有哪些 Bot）。
 //
 // QQ 从哪儿来：面板的快捷部署里填过，deploy_status 的 values.bot_account 就是它。桌面端的
 // Bot id 就是 QQ，所以能直接对上——对上了就能一键链接（端口与 token 由链接流程一并写进两边）。
@@ -182,19 +182,23 @@ export const NeoBotDeployTab: React.FC<{
                                     disabled={generateToken.isPending}
                                     onClick={() => generateToken.mutate()}
                                 >
-                                    {generateToken.isPending ? '生成中…' : '生成 access token'}
+                                    {generateToken.isPending
+                                        ? '生成中…'
+                                        : onebot.tokenEnabled
+                                          ? '重新生成 access token'
+                                          : '生成 access token'}
                                 </Button>
                             </div>
                             <p className="text-xs leading-relaxed text-text-secondary">
                                 NeoBot 是反向 WS 服务端，由 NapCat 连过来。路径由 NapCat 侧自己配，
-                                服务端不限制（常用 {onebot.pathHint || '/onebot/v11/ws'}）。
-                                下面这三样就是要在 NapCat 里填的。
+                                服务端不限制（面板给的惯例是 {onebot.pathHint || '/onebot'}）。
+                                下面三行里，两个地址按 NapCat 在哪台机器<span className="text-text-secondary">二选一</span>，
+                                再加一个 access token——NapCat 的「反向 WS」就这两个字段。
                             </p>
                             <p className="text-2xs leading-snug text-text-tertiary">
-                                注意：下面「一键连上 QQ」会用链接自己的端口与 token
-                                <span className="text-text-secondary"> 覆盖 </span>
-                                这里的值（链接必须带 token，空的会被拒）。所以要么直接点那个按钮让链接一次写好，
-                                要么照这三样在 NapCat 里手填；别两边都改，以最后改的那次为准。
+                                下面「一键连上 QQ」会把这些写进 NeoBot 的 [adapter]：面板里 token
+                                为空时它会生成一个并写回，已有则<span className="text-text-secondary">沿用</span>
+                                （所以先生成过 token 的话不会被换掉）；端口按实例口写回，通常与上面一致。
                             </p>
                             {onebot.warning && (
                                 <p className="text-2xs text-warning">{onebot.warning}</p>
@@ -208,9 +212,15 @@ export const NeoBotDeployTab: React.FC<{
                             />
                             {generateToken.isError && (
                                 <p className="text-2xs text-danger">
-                                    生成失败：{generateToken.error.message}
+                                    生成失败：
+                                    {generateToken.error instanceof Error
+                                        ? generateToken.error.message
+                                        : String(generateToken.error)}
                                 </p>
                             )}
+                            <p className="text-2xs text-text-tertiary">
+                                重新生成后，已经对接过的 NapCat 侧还是旧 token——要在下面重新建立一次对接才会同步。
+                            </p>
                         </section>
 
                         <section className="flex flex-col gap-2 rounded-md border border-border-subtle bg-surface px-4 py-3">
@@ -220,7 +230,7 @@ export const NeoBotDeployTab: React.FC<{
                                     <p className="text-xs leading-relaxed text-text-secondary">
                                         面板的快捷部署里填的机器人 QQ 是{' '}
                                         <span className="font-mono text-text">{deployQq}</span>
-                                        ，桌面端正好有这个 Bot。点下面的按钮会把连接建到两边：
+                                        ，桌面端已加载的 Bot 里有它。点下面的按钮会把连接建到两边：
                                         桌面端这边建一条 OneBot 连接，NeoBot 那边写进 [adapter] 的
                                         端口与 token。
                                     </p>
@@ -232,12 +242,12 @@ export const NeoBotDeployTab: React.FC<{
                                     )}
                                     {plan && !previewing && (
                                         <p className="break-all font-mono text-2xs text-text-tertiary">
-                                            {plan.connection.kind === 'ws_server'
-                                                ? 'Bot 监听 ' +
-                                                  plan.connection.host +
+                                            将写入协议 Bot 的连接地址：
+                                            {plan.connection.kind === 'ws_client'
+                                                ? plan.connection.url
+                                                : plan.connection.host +
                                                   ':' +
-                                                  plan.connection.port
-                                                : plan.connection.url}
+                                                  plan.connection.port}
                                         </p>
                                     )}
                                     <div className="flex items-center gap-2">
@@ -247,7 +257,7 @@ export const NeoBotDeployTab: React.FC<{
                                             disabled={!plan || previewing || applyLink.isPending}
                                             onClick={link}
                                         >
-                                            {applyLink.isPending ? '建立中…' : '建立链接（QQ ' + deployQq + '）'}
+                                            {applyLink.isPending ? '建立中…' : '建立对接（QQ ' + deployQq + '）'}
                                         </Button>
                                         <Button
                                             size="sm"
@@ -265,14 +275,14 @@ export const NeoBotDeployTab: React.FC<{
                                             ? '面板的快捷部署还没填机器人 QQ，所以桌面端不知道该连哪个 Bot。'
                                             : '面板里填的 QQ 是 ' +
                                               deployQq +
-                                              '，但桌面端还没有这个 Bot，所以没法一键链接。'}
+                                              '，但桌面端还没有这个 Bot，所以没法一键建立对接。'}
                                     </p>
                                     <p className="text-xs leading-relaxed text-text-secondary">
-                                        两种做法：到桌面端「机器人」页新建一个 QQ 为 {' '}
-                                        <span className="font-mono text-text">
-                                            {qqUnset ? '（面板里填的那个）' : deployQq}
-                                        </span>{' '}
-                                        的协议端 Bot，回来就能一键连；或者直接手动选一个已有的 Bot。
+                                        {qqUnset
+                                            ? '先在面板的快捷部署里填上机器人 QQ，回来就能一键连；也可以现在就新建或选一个已有的 Bot。'
+                                            : '两种做法：到桌面端「机器人」页新建一个 QQ 为 ' +
+                                              deployQq +
+                                              ' 的协议 Bot，回来就能一键连；或者直接手动选一个已有的 Bot。'}
                                     </p>
                                     <div className="flex items-center gap-2">
                                         {onNavigate && (

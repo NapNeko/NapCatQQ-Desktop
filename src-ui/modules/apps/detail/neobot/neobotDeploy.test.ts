@@ -19,7 +19,7 @@ const REAL = {
         url_lan: 'ws://192.168.1.10:8080/onebot/v11/ws',
         token: '',
         token_enabled: false,
-        path_hint: '/onebot/v11/ws',
+        path_hint: '/onebot',
         warning: '没有 access token',
     },
     values: {
@@ -46,7 +46,9 @@ describe('parseNeoBotDeployStatus', () => {
         expect(s.envRevision).toBe('env-1');
     });
 
-    it('管理员列表只留非空字符串（面板可能混进空白与非字符串）', () => {
+    // 面板那份已经 str().strip() 洗过一遍（api.py 的 deploy_status），这里再洗一次是**防御**：
+    // 上游换了实现、或中间层改了序列化时，不至于把空白 QQ 带进界面
+    it('管理员列表只留非空字符串（面板已洗过，这里是防御）', () => {
         const s = parseNeoBotDeployStatus(REAL)!;
         expect(s.values.adminAccounts).toEqual(['10002']);
     });
@@ -57,11 +59,11 @@ describe('parseNeoBotDeployStatus', () => {
     });
 
     it('steps 缺 required 时按必填算（宁可多提示，别把必填漏掉）', () => {
-        const s = parseNeoBotDeployStatus({ steps: [{ key: 'x', label: 'X' }] })!;
+        const s = parseNeoBotDeployStatus({ steps: [{ key: 'x' }] })!;
         expect(s.steps[0].required).toBe(true);
         expect(s.steps[0].done).toBe(false);
-        // label 缺失时回落到 key，不至于在界面上留空
-        expect(s.steps[0].label).toBe('X');
+        // label 缺失时回落到 key，不至于在界面上留空（夹具故意不给 label，才真走到这支）
+        expect(s.steps[0].label).toBe('x');
     });
 
     it('onebot 缺失时给全空默认值，不抛也不返回 undefined', () => {

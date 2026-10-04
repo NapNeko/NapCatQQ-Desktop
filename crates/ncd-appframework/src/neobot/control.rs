@@ -101,8 +101,8 @@ async fn login(
 
 /// 请 NeoBot 优雅关闭。
 ///
-/// `password` 是面板密码。当前生产调用方恒传 None（桌面端不接管面板密码，
-/// 本机来源不够用时直接收树）；传 Some 的登录重试目前仅测试触达，为后续接管预留。
+/// `password` 是用户在桌面端填过的面板密码（密钥库里的那个）。面板设了密码就必须带它——
+/// 回环来源不能绕过鉴权（见文件头）；没填就只能报未授权，由编排层收树。
 /// 返回 `Accepted` 只代表端点接受了；真正退出由调用方轮询确认。
 pub async fn request_graceful_shutdown(
     dashboard_port: u16,
@@ -126,7 +126,9 @@ async fn request_graceful_shutdown_at(
         Err(e) => return ShutdownRequest::Unreachable(e),
     };
 
-    // 先不带凭据试一次：面板没设密码时本机来源就直接放行
+    // 先不带凭据试一次，只为省掉「面板没设密码时的一次无谓登录」：
+    // 面板设了密码时这一发必然 401/403（回环不放行），下面会走登录重试。
+    // 注意别把它当成「本机就能过」——未设密码时 /api/* 也一律 403。
     let first = match client.post(shutdown_url_at(host, dashboard_port)).send().await {
         Ok(r) => r,
         Err(e) => return ShutdownRequest::Unreachable(e.to_string()),

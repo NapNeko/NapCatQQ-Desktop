@@ -1,4 +1,4 @@
-// 面板页的共用外壳：四态（加载 / 不支持 / 没凭据 / 打不通 / 失败 / 形状不认识）统一成一块提示，
+// 面板页的共用外壳：把六种状态（加载中 / 不支持 / 没凭据 / 打不通 / 面板报错 / 形状不认识）统一成一块提示，
 // 只把成功状态交给各页渲染。
 //
 // 为什么值得共用：每一态都对应一句**能照做的话**，而凭据卡片在「Web 控制台」页——
@@ -63,7 +63,7 @@ interface PanelStateViewProps<T> {
     children: (data: T) => ReactNode;
 }
 
-/** 把四态渲染掉；成功时把数据交给 children */
+/** 把上面那六种状态渲染掉；成功时把数据交给 children */
 export function PanelStateView<T>({
     state,
     isError,

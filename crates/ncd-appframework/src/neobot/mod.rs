@@ -303,9 +303,8 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         let root = Self::install_dir(instance);
         let port =
             control::dashboard_port(host, &root, manifest::NEOBOT_DEFAULT_DASHBOARD_PORT).await;
-        // 密码恒传 None：桌面端不接管面板密码，被拒（401/403）就收树；
-        // control 里的登录重试已接线并有测试覆盖，但生产上没有调用方会传密码，
-        // 为后续接管面板密码预留
+        // 面板密码由编排层从密钥库取来传进来（见 AppManager::stop_gracefully）：
+        // 面板设过密码的实例不带它一律 401/403，优雅关闭就走不通了
         match control::request_graceful_shutdown(port, panel_password).await {
             control::ShutdownRequest::Accepted => Ok(true),
             control::ShutdownRequest::EndpointMissing => {

@@ -26,7 +26,7 @@ export interface NeoBotOneBotConn {
     token: string;
     /** token 是否已启用校验；为空说明不校验握手 */
     tokenEnabled: boolean;
-    /** 面板建议的路径（服务端不限制路径，这只是 NapCat 常用的那个） */
+    /** 面板给的惯例路径（上游恒为 /onebot）。服务端**不校验路径**，NapCat 侧填别的也能连 */
     pathHint: string;
     /** 面板给出的提醒（例如监听在 0.0.0.0 但没设 token） */
     warning: string;
