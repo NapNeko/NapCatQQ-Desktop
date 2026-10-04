@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     parseNeoBotArchives,
+    parseNeoBotAuthStatus,
     parseNeoBotModels,
     parseNeoBotPlugins,
     parseNeoBotPrompts,
@@ -118,5 +119,43 @@ describe('parseNeoBotArchives', () => {
 
     it('没有 items 就 null', () => {
         expect(parseNeoBotArchives({ ok: true })).toBeNull();
+    });
+});
+
+describe('parseNeoBotAuthStatus', () => {
+    it('未设密码且本机可设：能据此提示用户去面板设置', () => {
+        const s = parseNeoBotAuthStatus({
+            ok: true,
+            configured: false,
+            setup_required: true,
+            setup_allowed: true,
+            loopback: true,
+            version: '1.2.3',
+        })!;
+        expect(s.configured).toBe(false);
+        expect(s.setupAllowed).toBe(true);
+        expect(s.version).toBe('1.2.3');
+    });
+
+    it('未设密码但本机不可设（远端实例）：setup_allowed 为 false', () => {
+        const s = parseNeoBotAuthStatus({
+            configured: false,
+            setup_allowed: false,
+            loopback: false,
+        })!;
+        expect(s.configured).toBe(false);
+        expect(s.setupAllowed).toBe(false);
+        expect(s.loopback).toBe(false);
+    });
+
+    it('已设密码', () => {
+        const s = parseNeoBotAuthStatus({ configured: true, setup_allowed: false })!;
+        expect(s.configured).toBe(true);
+    });
+
+    it('configured 缺失或不是布尔就 null——那不是 auth/status 的回包，别瞎猜', () => {
+        expect(parseNeoBotAuthStatus({ ok: true })).toBeNull();
+        expect(parseNeoBotAuthStatus({ configured: 'yes' })).toBeNull();
+        expect(parseNeoBotAuthStatus(null)).toBeNull();
     });
 });

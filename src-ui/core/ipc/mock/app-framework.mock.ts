@@ -541,6 +541,16 @@ export const mockAppFrameworkApi = {
             });
         }
         switch (path) {
+            case '/api/auth/status':
+                // 预览里当作「还没有面板密码」：正好能看凭据卡片给的引导文案
+                return ok({
+                    ok: true,
+                    configured: false,
+                    setup_required: true,
+                    setup_allowed: true,
+                    loopback: true,
+                    version: '1.2.3',
+                });
             case '/api/overview':
                 return ok({
                     ok: true,

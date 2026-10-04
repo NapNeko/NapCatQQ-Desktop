@@ -27,7 +27,7 @@ export function blockedHint(state: PanelState<unknown>): BlockedHint | null {
             return {
                 title: '先填面板密码',
                 // 凭据卡片在「Web 控制台」页，不在本页——指路，别说「上面」
-                body: '面板接口需要登录。请到「Web 控制台」页的「面板凭据」里填入你在 NeoBot 面板登录时用的密码——桌面端只把它存进本机密钥库，不会写回 NeoBot。',
+                body: '面板接口要登录才能读。到「Web 控制台」页看「面板凭据」那一栏——它会先探面板的登录状态，告诉你是「还没设密码」还是「把密码填进来」。',
                 action: { label: '去填面板密码', tab: 'console' },
             };
         case 'unreachable':

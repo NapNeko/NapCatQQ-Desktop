@@ -212,3 +212,29 @@ export function parseNeoBotArchives(raw: unknown): NeoBotArchives | null {
         summarizeAvailable: asBool(r.summarize_available),
     };
 }
+
+// ---------------------------------------------------------------- 面板登录状态
+
+/** 面板 /api/auth/status 的登录状态。未设密码时它也是公开可访问的，所以能用来判断「该不该提示去设密码」。 */
+export interface NeoBotAuthStatus {
+    /** 面板是否已经设过登录密码 */
+    configured: boolean;
+    /** 未设密码，且当前来源可以完成设置（= 面板所在机器的回环） */
+    setupAllowed: boolean;
+    /** 本次探测是否来自回环 */
+    loopback: boolean;
+    /** 面板版本，仅用于展示 */
+    version: string;
+}
+
+export function parseNeoBotAuthStatus(raw: unknown): NeoBotAuthStatus | null {
+    const r = asRecord(raw);
+    // configured 这个键必须在：缺了说明这不是 auth/status 的回包，当 malformed 好过瞎猜
+    if (!r || typeof r.configured !== 'boolean') return null;
+    return {
+        configured: r.configured,
+        setupAllowed: asBool(r.setup_allowed),
+        loopback: asBool(r.loopback),
+        version: asString(r.version),
+    };
+}

@@ -55,7 +55,7 @@ export const NeoBotConsoleTab: React.FC<{
                 </p>
             </section>
 
-            <PanelCredentialCard instanceId={instance.id} />
+            <PanelCredentialCard instanceId={instance.id} onOpenWebUi={onOpenWebUi} />
 
             <p className="text-xs text-text-tertiary">
                 面板共 <span className="font-medium text-text-secondary">{stats.total}</span> 项能力：
