@@ -5,7 +5,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use ncd_domain::{AppConfigFormat, AppInstance};
-use ncd_host::{DirEntry, Host, HostPath, Os};
+use ncd_host::{DirEntry, Host, HostPath, Locality, Os};
 use serde::{Deserialize, Serialize};
 
 use crate::AppFrameworkAdapter;
@@ -254,6 +254,36 @@ fn matching_entry<'a>(entries: &'a [DirEntry], name: &str, os: Os) -> Option<&'a
     })
 }
 
+async fn lookup_entry(
+    host: &dyn Host,
+    parent: &HostPath,
+    name: &str,
+    entries: &[DirEntry],
+) -> Result<Option<DirEntry>, String> {
+    if let Some(entry) = matching_entry(entries, name, host.os()) {
+        return Ok(Some(entry.clone()));
+    }
+    if host.os() != Os::Windows || host.locality() != Locality::Local {
+        return Ok(None);
+    }
+    // Windows 的 TEMP 等路径可能使用 RUNNER~1 一类短名称，readdir 只列长名称。
+    // lstat 原始路径段，既接受同一目录的别名，也保留逐段拒绝链接的检查。
+    let path = parent.join(name);
+    let metadata = match tokio::fs::symlink_metadata(path.render_for(Os::Windows)).await {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("检查框架路径失败 {path}: {error}")),
+    };
+    Ok(Some(DirEntry {
+        name: name.into(),
+        is_dir: metadata.is_dir(),
+        size: metadata.len(),
+        modified: None,
+        is_symlink: metadata.file_type().is_symlink(),
+        mode: None,
+    }))
+}
+
 /// 包中的安装路径只有已存在且没有符号链接的目录才能作为目标。
 pub async fn checked_install_root(host: &dyn Host, root: &HostPath) -> Result<bool, String> {
     let raw = root.as_posix().trim_end_matches('/');
@@ -277,7 +307,7 @@ pub async fn checked_install_root(host: &dyn Host, root: &HostPath) -> Result<bo
             .list_dir(&cursor)
             .await
             .map_err(|e| format!("检查框架安装目录失败: {e}"))?;
-        let Some(entry) = matching_entry(&entries, part, host.os()) else {
+        let Some(entry) = lookup_entry(host, &cursor, part, &entries).await? else {
             return Ok(false);
         };
         if entry.is_symlink || !entry.is_dir {
@@ -300,7 +330,7 @@ async fn checked_file(
             .list_dir(&cursor)
             .await
             .map_err(|e| format!("检查 {rel} 失败: {e}"))?;
-        let Some(entry) = matching_entry(&entries, part, host.os()) else {
+        let Some(entry) = lookup_entry(host, &cursor, part, &entries).await? else {
             return Ok(None);
         };
         if entry.is_symlink

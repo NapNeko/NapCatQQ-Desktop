@@ -482,6 +482,33 @@ fn configuration_budget_is_checked_before_restore() {
     );
 }
 
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_existing_alias_is_checked_even_when_not_listed_by_long_name() {
+    let temporary = tempfile::tempdir().unwrap();
+    let directory = temporary.path().join("existing-project");
+    std::fs::create_dir(&directory).unwrap();
+    let host = ncd_host::local::LocalWindowsHost::new();
+    let parent = HostPath::from_windows(temporary.path().to_str().unwrap());
+    let entry = lookup_entry(&host, &parent, "existing-project", &[])
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(entry.is_dir);
+    assert!(!entry.is_symlink);
+    assert!(
+        checked_install_root(&host, &parent.join("existing-project"))
+            .await
+            .unwrap()
+    );
+    assert!(
+        lookup_entry(&host, &parent, "missing-project", &[])
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
 #[tokio::test]
 async fn failed_write_rolls_back_earlier_hosts_partial_write_and_new_files() {
     let first = TestHost::new("first");
