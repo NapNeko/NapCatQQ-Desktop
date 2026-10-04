@@ -303,21 +303,35 @@ async fn write_config_docs(
     if !issues.is_empty() {
         return Err(AppFrameworkError::ConfigInvalid(issues));
     }
-    write_one(
-        host,
-        &install_dir.join(NEOBOT_CONFIG_TOML),
-        &adapter_patch(config),
-        write_sidecar,
-    )
-    .await?;
     let dashboard_path = install_dir.join(NEOBOT_DASHBOARD_CONFIG);
     let dashboard_writable = create_dashboard
         || host
             .exists(&dashboard_path)
             .await
             .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    let mut pending: Vec<(HostPath, String)> = Vec::with_capacity(2);
+    let adapter_path = install_dir.join(NEOBOT_CONFIG_TOML);
+    if let Some(out) = plan_write(host, &adapter_path, &adapter_patch(config)).await? {
+        pending.push((adapter_path, out));
+    }
     if dashboard_writable {
-        write_one(host, &dashboard_path, &dashboard_patch(config), write_sidecar).await?;
+        if let Some(out) = plan_write(host, &dashboard_path, &dashboard_patch(config)).await? {
+            pending.push((dashboard_path, out));
+        }
+    }
+    if !pending.is_empty() {
+        // 两份收进同一次备份写：任一失败全部还原。分开写会在第一份生效、
+        // 第二份失败时留下半更新——rollback 只还原本体配置，盖不住面板文件
+        let paths: Vec<HostPath> = pending.iter().map(|(p, _)| p.clone()).collect();
+        apply_with_backup_ex(host, &paths, write_sidecar, || async {
+            for (path, out) in &pending {
+                host.write_file(path, out.as_bytes())
+                    .await
+                    .map_err(|e| AppFrameworkError::Integration(e.to_string()))?;
+            }
+            Ok(())
+        })
+        .await?;
     }
     read_neobot_config(host, install_dir).await
 }
@@ -390,27 +404,39 @@ fn dashboard_patch(config: &NeoBotInstanceConfig) -> toml::Table {
     root
 }
 
-/// 备份 → 差量写 → 失败还原。内容没变就不写（少一次 mtime 变动）
-async fn write_one(
+/// 单文件差量写出的计划：读原文 → 合并期望值 → 渲染新文本。
+/// 没有改动返回 None：不落盘、不动 mtime，也不进备份名单
+async fn plan_write(
     host: &dyn Host,
     path: &HostPath,
     patch: &toml::Table,
-    write_sidecar: bool,
-) -> Result<(), AppFrameworkError> {
+) -> Result<Option<String>, AppFrameworkError> {
     let original = read_optional_text(host, path).await?.unwrap_or_default();
     let before = parse_table(Some(&original))?;
     let mut after = before.clone();
     merge_tables(&mut after, patch);
     // 没有改动就不落盘：免得白动一次 mtime，也免得把纯注释差异写成内容变更
     if toml_patch::changes(&before, &after).is_empty() {
-        return Ok(());
+        return Ok(None);
     }
     let mut doc = original
         .parse::<toml_edit::DocumentMut>()
         .map_err(|e| AppFrameworkError::Integration(format!("{} 解析失败：{e}", path.as_posix())))?;
     // 差量写：只动变了的地方，保住注释、键序和 Desktop 不认识的键
     toml_patch::apply(&mut doc, &before, &after, &toml_patch::no_identity);
-    let out = doc.to_string();
+    Ok(Some(doc.to_string()))
+}
+
+/// 备份 → 差量写 → 失败还原（单文件；ensure_token_key 用）
+async fn write_one(
+    host: &dyn Host,
+    path: &HostPath,
+    patch: &toml::Table,
+    write_sidecar: bool,
+) -> Result<(), AppFrameworkError> {
+    let Some(out) = plan_write(host, path, patch).await? else {
+        return Ok(());
+    };
     apply_with_backup_ex(host, std::slice::from_ref(path), write_sidecar, || async {
         host.write_file(path, out.as_bytes())
             .await
