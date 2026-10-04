@@ -106,7 +106,12 @@ async fn available_project_restores_without_creating_pid_sidecars() {
         .prepare_framework_config_restore(&[backup()], &[inst.clone()], None)
         .await
         .unwrap();
-    assert!(prepared.pending.is_empty());
+    assert!(
+        prepared.pending.is_empty(),
+        "{}: {:?}",
+        inst.install_dir,
+        prepared.pending
+    );
     assert_eq!(prepared.restored_ids, ["instance-a"]);
     manager
         .replace_instances_with(
