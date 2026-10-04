@@ -77,8 +77,10 @@ impl Pep440Version {
         };
         let pre_num = self.pre.map(|(_, n)| n).unwrap_or(0);
         let post = self.post.map(|n| n as i64).unwrap_or(-1);
+        // dev 直接比：没有 dev 记 MAX，于是「有 dev」低于同形态的「无 dev」，
+        // dev 序号本身也自然升序；取负会把两个方向都排反
         let dev = self.dev.map(|n| n as i64).unwrap_or(i64::MAX);
-        (self.epoch, self.release.clone(), pre_rank, pre_num, post, -dev)
+        (self.epoch, self.release.clone(), pre_rank, pre_num, post, dev)
     }
 }
 
@@ -183,6 +185,9 @@ pub fn parse_pep440(raw: &str) -> Option<Pep440Version> {
     ] {
         if let Some(pos) = tail.find(needle) {
             let after = &tail[pos + needle.len()..];
+            // 标签与序号之间允许一个分隔点（`1.0.0-alpha.23` 归一化后是 `.alpha.23`），
+            // 不剥掉的话序号取到空串，会被当成 0
+            let after = after.strip_prefix('.').unwrap_or(after);
             let digits: String = after.chars().take_while(char::is_ascii_digit).collect();
             pre = Some((kind, digits.parse::<u64>().ok().unwrap_or(0)));
             break;
@@ -385,6 +390,33 @@ mod tests {
         assert_eq!(order("1.10.0", "1.9.0"), Ordering::Greater, "按数字比不是按字符串");
         assert_eq!(order("1.2.1a1", "1.2.0"), Ordering::Greater, "1.2.1a1 高于 1.2.0");
         assert_eq!(order("1!1.0.0", "2.0.0"), Ordering::Greater, "epoch 优先");
+    }
+
+    /// dev 的方向：同形态下「有 dev」低于「无 dev」（PEP 440：1.0.0a1.dev1 < 1.0.0a1），
+    /// dev 序号之间按数字升序。之前 sort key 取负把两个方向都排反了
+    #[test]
+    fn pep440_dev_orders_below_and_ascending() {
+        let order = |a: &str, b: &str| {
+            parse_pep440(a)
+                .unwrap()
+                .cmp(&parse_pep440(b).unwrap())
+        };
+        assert_eq!(order("1.0.0a1.dev1", "1.0.0a1"), Ordering::Less);
+        assert_eq!(order("1.0.0.dev1", "1.0.0.dev2"), Ordering::Less);
+        assert_eq!(order("1.0.0.dev2", "1.0.0.dev10"), Ordering::Less);
+    }
+
+    /// pre 标签后可以带一个分隔点：`1.0.0-alpha.23` 的序号是 23 不是 0
+    #[test]
+    fn pep440_pre_separator_keeps_the_number() {
+        let v = parse_pep440("1.0.0-alpha.23").unwrap();
+        assert_eq!(v.pre, Some((PreKind::A, 23)));
+        let order = |a: &str, b: &str| {
+            parse_pep440(a)
+                .unwrap()
+                .cmp(&parse_pep440(b).unwrap())
+        };
+        assert_eq!(order("1.0.0-alpha.2", "1.0.0-alpha.10"), Ordering::Less);
     }
 
     #[test]
