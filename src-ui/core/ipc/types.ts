@@ -73,6 +73,8 @@ export type { ImportAppInstanceRequest } from './generated/domain/ImportAppInsta
 export type { AppPlacement } from './generated/domain/AppPlacement';
 export type { AppFrameworkManifest } from './generated/domain/AppFrameworkManifest';
 export type { PackageVersions } from './generated/domain/PackageVersions';
+export type { AppPanelResult } from './generated/domain/AppPanelResult';
+export type { AppPanelOutcomeKind } from './generated/domain/AppPanelOutcomeKind';
 export type { AppLinkRecord } from './generated/domain/AppLinkRecord';
 export type { AppConfigWrite } from './generated/domain/AppConfigWrite';
 export type { CreateAppInstanceRequest } from './generated/domain/CreateAppInstanceRequest';

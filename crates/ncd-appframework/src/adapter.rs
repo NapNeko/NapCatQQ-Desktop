@@ -72,6 +72,47 @@ pub struct WebUiAccountProbe {
     pub stored_is_hash: bool,
 }
 
+/// 面板转发结果的分类。
+///
+/// 分态而不是干脆 Err：前端要能区分「没填面板密码」和「面板没起来」——
+/// 前者引导去填凭据，后者引导去检查实例状态，混成一个错误就只能给一句无用的话。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AppPanelOutcomeKind {
+    Ok,
+    /// 凭据缺失或不正确：让用户去填面板密码
+    Unauthorized,
+    /// 面板打不通（没在跑 / 口不对 / 端口被占）
+    Unreachable,
+    /// 其它失败（含状态码与非法路径）
+    Failed,
+}
+
+/// 一次面板转发的完整结果
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppPanelResult {
+    pub kind: AppPanelOutcomeKind,
+    /// 成功时的面板回包。面板是**扁平信封**：{"ok":true, ...键平铺...}，这里原样透出。
+    /// ts-rs 不认 serde_json::Value，所以对前端声明成 unknown，由各页自己收窄。
+    #[ts(optional, type = "unknown")]
+    pub data: Option<serde_json::Value>,
+    /// 失败时给人看的一句话
+    #[ts(optional)]
+    pub message: Option<String>,
+}
+
+impl AppPanelResult {
+    pub fn ok(data: serde_json::Value) -> Self {
+        Self { kind: AppPanelOutcomeKind::Ok, data: Some(data), message: None }
+    }
+
+    pub fn err(kind: AppPanelOutcomeKind, message: impl Into<String>) -> Self {
+        Self { kind, data: None, message: Some(message.into()) }
+    }
+}
+
 #[async_trait]
 pub trait AppFrameworkAdapter: Send + Sync {
     fn manifest(&self) -> &AppFrameworkManifest;
@@ -89,6 +130,25 @@ pub trait AppFrameworkAdapter: Send + Sync {
     async fn available_versions(
         &self,
     ) -> Result<Option<crate::neobot::versions::PackageVersions>, AppFrameworkError> {
+        Ok(None)
+    }
+
+    /// 代桌面端调一次该框架**自带控制台**的接口。
+    ///
+    /// 返回 Ok(None) = 这个框架不提供这种转发（默认），UI 就别显示相关页签；
+    /// 返回 Ok(Some(_)) = 框架支持，里面是调用结果（含凭据不对 / 面板打不通这些分态）。
+    ///
+    /// 为什么由适配器实现而不是桌面端自己连：面板口要从**框架自己的配置**里读
+    /// （NeoBot 的面板口与 OneBot 口是两个口），只有适配器知道该读哪。
+    async fn panel_request(
+        &self,
+        _host: &dyn Host,
+        _instance: &AppInstance,
+        _password: Option<&str>,
+        _method: &str,
+        _path: &str,
+        _body: Option<serde_json::Value>,
+    ) -> Result<Option<AppPanelResult>, AppFrameworkError> {
         Ok(None)
     }
 

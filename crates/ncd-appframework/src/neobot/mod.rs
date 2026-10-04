@@ -33,7 +33,9 @@ pub use manifest::{
 pub use probe::probe_neobot;
 pub use versions::{PackageVersions, fetch_versions, parse_versions};
 
-use crate::adapter::{AppComponentSpec, AppFrameworkAdapter, restore_from_backup};
+use crate::adapter::{
+    AppComponentSpec, AppFrameworkAdapter, AppPanelOutcomeKind, AppPanelResult, restore_from_backup,
+};
 use crate::adopt::write_project_sidecar;
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
@@ -53,6 +55,9 @@ fn envelope(
 
 pub struct NeoBotAdapter {
     integration: NeoBotIntegration,
+    /// 面板会话（token + CSRF）。适配器在注册表里活一个进程周期，所以这里缓存得住：
+    /// 登录要过 bcrypt，每个请求都重登一遍太浪费。
+    sessions: std::sync::Arc<control::PanelSessions>,
 }
 
 impl Default for NeoBotAdapter {
@@ -65,6 +70,7 @@ impl NeoBotAdapter {
     pub fn new() -> Self {
         Self {
             integration: NeoBotIntegration::new(),
+            sessions: std::sync::Arc::new(control::PanelSessions::new()),
         }
     }
 
@@ -124,6 +130,43 @@ impl AppFrameworkAdapter for NeoBotAdapter {
             .await
             .map(Some)
             .map_err(|e| AppFrameworkError::Integration(format!("查 PyPI 版本失败：{e}")))
+    }
+
+    /// NeoBot 面板转发：面板口从实例配置读（与 OneBot 口是两个口），
+    /// 密码是用户在桌面端填过一次的那个（密钥库里的「面板密码」）。
+    async fn panel_request(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        password: Option<&str>,
+        method: &str,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> Result<Option<AppPanelResult>, AppFrameworkError> {
+        let root = Self::install_dir(instance);
+        let port =
+            control::dashboard_port(host, &root, manifest::NEOBOT_DEFAULT_DASHBOARD_PORT).await;
+        let outcome = control::panel_call(
+            &self.sessions,
+            instance.id.as_str(),
+            port,
+            password,
+            method,
+            path,
+            body,
+        )
+        .await;
+        Ok(Some(match outcome {
+            control::PanelOutcome::Ok(v) => AppPanelResult::ok(v),
+            control::PanelOutcome::Unauthorized => AppPanelResult::err(
+                AppPanelOutcomeKind::Unauthorized,
+                "面板凭据不可用：请先在本页填写面板密码",
+            ),
+            control::PanelOutcome::Unreachable(e) => {
+                AppPanelResult::err(AppPanelOutcomeKind::Unreachable, format!("面板打不通：{e}"))
+            }
+            control::PanelOutcome::Failed(e) => AppPanelResult::err(AppPanelOutcomeKind::Failed, e),
+        }))
     }
 
     async fn probe_project(

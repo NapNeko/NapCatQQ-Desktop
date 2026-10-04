@@ -30,8 +30,8 @@ pub mod yaml_patch;
 pub mod yunzai;
 
 pub use adapter::{
-    AppComponentSpec, AppFrameworkAdapter, PluginLogSink, apply_with_backup, apply_with_backup_ex,
-    restore_from_backup,
+    AppComponentSpec, AppFrameworkAdapter, AppPanelOutcomeKind, AppPanelResult, PluginLogSink,
+    apply_with_backup, apply_with_backup_ex, restore_from_backup,
 };
 pub use adopt::{
     AdoptRestoreScope, AdoptedFile, capture_adopted_files, list_dotenv_rels, merge_rels,

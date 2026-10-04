@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use ncd_appframework::{
     AdoptRestoreScope, AppComponentSpec, AppConfigWriteResult, AppFrameworkAdapter,
     AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor,
-    PackageVersions,
+    AppPanelResult, PackageVersions,
     AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
     AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession,
     AstrBotSessionRule, KarinPluginInstalled, KarinPluginMarketEntry, KoishiCommandRow,
@@ -495,6 +495,34 @@ impl AppManager {
     ) -> Result<Option<PackageVersions>, AppFrameworkError> {
         let adapter = self.registry.get(framework_id)?;
         adapter.available_versions().await
+    }
+
+    /// 代前端调一次实例自带控制台的面板接口。
+    ///
+    /// 面板口与凭据都在这一层解决：口由适配器从**框架自己的配置**读（NeoBot 的面板口
+    /// 与 OneBot 口是两个口），密码从密钥库取（用户填过一次的那个）。调用方只给
+    /// 「调哪个实例的哪个路径」。返回 Ok(None) = 该框架不提供面板转发。
+    pub async fn panel_call(
+        &self,
+        instance_id: &AppInstanceId,
+        method: &str,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> Result<Option<AppPanelResult>, AppFrameworkError> {
+        let instance = self.get_instance(instance_id).await?;
+        let adapter = self.registry.get(&instance.framework_id)?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        let password = self.remembered_panel_password(&instance);
+        adapter
+            .panel_request(
+                host.as_ref(),
+                &instance,
+                password.as_deref(),
+                method,
+                path,
+                body,
+            )
+            .await
     }
 
     /// 桌面端注入的解析器遇到还没连上的远端会现连一次（和组件页共用单飞连接），调用前不用另外预热

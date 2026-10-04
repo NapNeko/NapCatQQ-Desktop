@@ -228,7 +228,8 @@ pub use native_deployment_adapter::{
 };
 pub use ncd_appframework::{
     AppConfigWriteResult, AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope,
-    AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
+    AppPanelOutcomeKind, AppPanelResult, AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo,
+    AstrBotDashboardStatus,
     AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
     KarinPluginInstalled, KarinPluginMarketEntry, KoishiBotState, KoishiBotStatus,
     KoishiCommandRow, KoishiDatabaseTable, KoishiFileContent, KoishiFileEntry,

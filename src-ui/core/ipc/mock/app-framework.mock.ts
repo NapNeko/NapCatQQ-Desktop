@@ -38,6 +38,7 @@ import type {
     KoishiPackageInfo,
     KoishiPluginSchema,
     KoishiRuntimeStatus,
+    AppPanelResult,
     KarinPluginMarketEntry,
     LogSnapshot,
     OneBotLinkPlan,
@@ -502,6 +503,53 @@ function simulateInstallTask(inst: AppInstance, version: string | null = null): 
 const panelPasswords = new Set<string>();
 
 export const mockAppFrameworkApi = {
+    /**
+     * 预览里只认概览页要的那一个端点，够把页面跑起来；其余路径如实报「未模拟」，
+     * 免得预览里看着像通了、真机却是空的。
+     */
+    panelCall: async (
+        _id: string,
+        method: string,
+        path: string,
+        _body?: unknown,
+    ): Promise<AppPanelResult | null> => {
+        if (method !== 'GET' || path !== '/api/overview') {
+            return withMockDelay({
+                kind: 'failed' as const,
+                message: '预览未模拟 ' + method + ' ' + path,
+            });
+        }
+        return withMockDelay({
+            kind: 'ok' as const,
+            data: {
+                ok: true,
+                online: true,
+                app_name: 'NeoBot',
+                app_version: '1.2.3',
+                bot_nickname: 'Luna',
+                bot_user_id: 10001,
+                avatar_url: '',
+                uptime_seconds: 8130,
+                today_messages: 128,
+                total_messages: 20461,
+                plugins_loaded: 6,
+                plugins_total: 7,
+                plugins_error: 1,
+                latency_ms: 42,
+                python_version: '3.13.5',
+                hostname: 'DESKTOP-LUNA',
+                standby: false,
+                notices: [
+                    {
+                        level: 'warning',
+                        text: '尚未配置超级管理员账号，可能影响部分命令使用',
+                        hint: '在「配置管理 → 本体配置 → chat」里填 admin_accounts（QQ 号列表）',
+                    },
+                ],
+            },
+        });
+    },
+
     setPanelPassword: async (id: string, password: string): Promise<void> => {
         if (password.trim()) panelPasswords.add(id);
         else panelPasswords.delete(id);

@@ -25,8 +25,8 @@ use ncd_runtime::{
     MaiBotMemoryStatus, MaiBotMemoryTask, MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail,
     MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
     MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotProviderCheck,
-    MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus, MaiBotStatsSummary,
-    PackageVersions,
+    AppPanelResult, MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus,
+    MaiBotStatsSummary, PackageVersions,
 };
 use ncd_traits::AppFrameworkError;
 use tauri::State;
@@ -1188,6 +1188,26 @@ pub async fn reset_app_instance_webui_password(
         .reset_webui_password(&AppInstanceId::new(instance_id), password)
         .await
         .map_err(AppFrameworkError::into_config_error)
+}
+
+/// 代前端调一次实例自带控制台的面板接口。
+///
+/// 路径受白名单约束：只放行面板自己的 /api/，不许出现主机名 / 穿越 / 反斜杠 / 空白
+/// （见 control::path_is_allowed），方法只认 GET/POST。面板口与凭据在管理器一层解决。
+/// 返回 None = 该框架不提供面板转发，前端据此不显示相关页签。
+#[tauri::command]
+pub async fn app_panel_call(
+    instance_id: String,
+    method: String,
+    path: String,
+    body: Option<serde_json::Value>,
+    state: State<'_, AppState>,
+) -> Result<Option<AppPanelResult>, String> {
+    state
+        .app_manager
+        .panel_call(&AppInstanceId::new(instance_id), &method, &path, body)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 记住某实例的面板密码（明文只进密钥库；空串 = 忘掉）。

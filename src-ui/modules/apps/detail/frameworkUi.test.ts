@@ -140,9 +140,9 @@ describe('resolveFrameworkUi', () => {
     it('neobot has the Web console page only', () => {
         const ui = resolveFrameworkUi('neobot');
         expect(ui).toBeDefined();
-        expect(ui?.defaultTab).toBe('console');
-        expect(ui?.nav.map((g) => g.id)).toEqual(['console']);
-        expect(navValues(ui)).toEqual(['console']);
+        expect(ui?.defaultTab).toBe('overview');
+        expect(ui?.nav.map((g) => g.id)).toEqual(['home', 'console']);
+        expect(navValues(ui)).toEqual(['overview', 'console']);
         // 这页只读 + 一个跳转按钮，不该挂保存条
         expect(ui?.typedTabs.size).toBe(0);
         expect(ui?.fillPaneTabs.has('console')).toBe(true);

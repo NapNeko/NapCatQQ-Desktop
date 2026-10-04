@@ -38,6 +38,7 @@ import type {
     ImportAppInstanceRequest,
     KarinPluginInstalled,
     KarinPluginMarketEntry,
+    AppPanelResult,
     LogSnapshot,
     OneBotLinkPlan,
     PackageVersions,
@@ -86,6 +87,27 @@ export const appFrameworkService = {
     install: async (instanceId: string, version?: string | null): Promise<string> => {
         if (!isTauri) return mockAppFrameworkApi.install(instanceId, version);
         return invoke<string>('install_app_instance', { instanceId, version: version ?? null });
+    },
+
+    /**
+     * 代调一次实例自带控制台的面板接口。
+     *
+     * 面板口与凭据都在 Rust 那侧解决；路径受白名单约束（只放行面板自己的 /api/）。
+     * 返回 null = 该框架不提供面板转发，调用方据此不显示相关页签。
+     */
+    panelCall: async (
+        instanceId: string,
+        method: 'GET' | 'POST',
+        path: string,
+        body?: unknown,
+    ): Promise<AppPanelResult | null> => {
+        if (!isTauri) return mockAppFrameworkApi.panelCall(instanceId, method, path, body);
+        return invoke<AppPanelResult | null>('app_panel_call', {
+            instanceId,
+            method,
+            path,
+            body: body ?? null,
+        });
     },
 
     /**
