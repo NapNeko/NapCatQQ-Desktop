@@ -749,7 +749,7 @@ export const ComponentsPageNext: React.FC = () => {
                             ? draft.acceptTerms
                             : undefined,
                     });
-                    if (draft.installNow) apps.install(created.id);
+                    if (draft.installNow) apps.install(created.id, draft.version);
                     setCreateAppRequest(null);
                     globalInfoBarStore.push({
                         key: `app-instance-created:${created.id}`,

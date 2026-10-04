@@ -7,6 +7,9 @@ import { Button, PagePlaceholder, Tabs, TabsContent, TooltipProvider } from '../
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../../shared/ui/motion';
 import { useServerManager } from '../../../hooks/remote/useServerManager';
 import { useAppFrameworks, useAppInstances } from '../../../hooks/apps/useAppInstances';
+import { useAppFrameworkVersions } from '../../../hooks/apps/useAppFrameworkVersions';
+import { hasAppUpdate } from '../../../core/domain/apps/appVersions';
+import { ReinstallDialog } from './ReinstallDialog';
 import { AppLinkDialog } from '../AppLinkDialog';
 import { DetailInstallProgress } from '../InstallProgress';
 import { DeleteInstanceDialog } from '../DeleteInstanceDialog';
@@ -49,6 +52,10 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
         [frameworks.data, instance?.framework_id],
     );
 
+    // 上游最新正式版：只给「支持按版本安装」的框架查；null 时头部不显示更新提示
+    const versions = useAppFrameworkVersions(instance?.framework_id);
+    const latestVersion = versions.data?.latest ?? null;
+
     const ui = instance ? resolveFrameworkUi(instance.framework_id) : undefined;
     const nav = useMemo(() => buildDetailNav(ui), [ui]);
     const installed = !!instance && isInstalled(instance);
@@ -71,6 +78,12 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
 
     const [linkOpen, setLinkOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    /** 重装并指定版本；未安装时是「立即安装」的带版本入口 */
+    const [reinstallOpen, setReinstallOpen] = useState(false);
+    /** 用户为这次安装挑的版本；null = 最新正式版 */
+    const [installVersion, setInstallVersion] = useState<string | null>(null);
+    // 已装的版本比上游最新正式版旧：头部与「更多」菜单都要提示
+    const hasUpdate = hasAppUpdate(instance?.installed_version, latestVersion);
 
     const goTab = (tab: string) => {
         setUserSwitched(true);
@@ -141,13 +154,19 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                     onRefresh={() => apps.refresh(instance.id)}
                     onDelete={() => setDeleteOpen(true)}
                     onAutoStartChange={(autoStart) => apps.setAutoStart({ id: instance.id, autoStart })}
+                    latestVersion={latestVersion}
+                    hasUpdate={hasUpdate}
+                    onReinstall={() => setReinstallOpen(true)}
                 />
 
                 {!installed ? (
                     <NotInstalledBody
                         instance={instance}
                         busy={busy}
-                        onInstall={() => apps.install(instance.id)}
+                        onInstall={() => apps.install(instance.id, installVersion)}
+                        onPickVersion={() => setReinstallOpen(true)}
+                        installVersion={installVersion}
+                        latestVersion={latestVersion}
                         onViewTasks={onViewTasks}
                     />
                 ) : (
@@ -206,6 +225,20 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                     instanceId={linkOpen ? instance.id : null}
                 />
 
+                <ReinstallDialog
+                    open={reinstallOpen}
+                    instance={instance}
+                    version={installVersion}
+                    onVersionChange={setInstallVersion}
+                    latestVersion={latestVersion}
+                    busy={busy}
+                    onClose={() => setReinstallOpen(false)}
+                    onConfirm={async () => {
+                        setReinstallOpen(false);
+                        apps.install(instance.id, installVersion);
+                    }}
+                />
+
                 <DeleteInstanceDialog
                     instance={deleteOpen ? instance : null}
                     isRemoving={apps.isRemoving}
@@ -233,8 +266,20 @@ const NotInstalledBody: React.FC<{
     instance: AppInstance;
     busy: boolean;
     onInstall: () => void;
+    /** 打开「选择版本」对话框；框架不支持按版本安装时按钮不出现 */
+    onPickVersion: () => void;
+    installVersion: string | null;
+    latestVersion: string | null;
     onViewTasks?: () => void;
-}> = ({ instance, busy, onInstall, onViewTasks }) =>
+}> = ({
+    instance,
+    busy,
+    onInstall,
+    onPickVersion,
+    installVersion,
+    latestVersion,
+    onViewTasks,
+}) =>
     instance.state === 'installing' ? (
         <PagePlaceholder className="gap-3 py-16">
             <p className="text-sm text-text-secondary">正在安装，完成后即可配置</p>
@@ -249,10 +294,22 @@ const NotInstalledBody: React.FC<{
     ) : (
         <PagePlaceholder className="gap-3 py-16">
             <p className="text-sm text-text-secondary">实例尚未安装，安装后才能配置与查看日志</p>
-            <Button size="sm" variant="primary" disabled={busy} onClick={onInstall}>
-                <ActionMotionIcon icon={Download} size={13} motion={EMPHASIS_MOTION} />
-                立即安装
-            </Button>
+            <p className="text-xs text-text-tertiary">
+                {installVersion
+                    ? `将安装 ${installVersion}`
+                    : latestVersion
+                      ? `将安装最新正式版 ${latestVersion}`
+                      : '将安装最新正式版'}
+            </p>
+            <div className="flex items-center gap-2">
+                <Button size="sm" variant="primary" disabled={busy} onClick={onInstall}>
+                    <ActionMotionIcon icon={Download} size={13} motion={EMPHASIS_MOTION} />
+                    立即安装
+                </Button>
+                <Button size="sm" variant="secondary" disabled={busy} onClick={onPickVersion}>
+                    选择版本
+                </Button>
+            </div>
         </PagePlaceholder>
     );
 
