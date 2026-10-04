@@ -520,10 +520,11 @@ export const mockAppFrameworkApi = {
         const ok = (data: unknown) => withMockDelay({ kind: 'ok' as const, data });
         if (method === 'POST') {
             // 插件的几个动作：预览里只要「面板收下了」就够，列表不变也没关系
-            const pluginAction =
+            const panelAction =
+                path === '/api/deploy/onebot-token' ||
                 path === '/api/plugins/install' ||
                 /^\/api\/plugins\/[^/]+\/(toggle|reload|uninstall)$/.test(path);
-            if (pluginAction) {
+            if (panelAction) {
                 return withMockDelay({
                     kind: 'ok' as const,
                     data: { ok: true, message: '预览：已提交' },
@@ -541,6 +542,68 @@ export const mockAppFrameworkApi = {
             });
         }
         switch (path) {
+            case '/api/deploy/status':
+                return ok({
+                    ok: true,
+                    ready: false,
+                    revision: 'rev-1',
+                    env_revision: 'env-1',
+                    steps: [
+                        {
+                            key: 'bot_identity',
+                            label: '机器人身份',
+                            required: true,
+                            done: true,
+                            hint: '机器人 QQ 号与昵称都是必填',
+                        },
+                        {
+                            key: 'persona',
+                            label: '人设',
+                            required: true,
+                            done: false,
+                            hint: '写清你是谁、怎么说话',
+                        },
+                        {
+                            key: 'platform_key',
+                            label: '平台密钥',
+                            required: true,
+                            done: false,
+                            hint: '至少填 DeepSeek_APIKey',
+                        },
+                        {
+                            key: 'onebot',
+                            label: 'OneBot 连接',
+                            required: true,
+                            done: false,
+                            hint: '配好监听端口与 access token',
+                        },
+                        {
+                            key: 'admin',
+                            label: '超级管理员（选填）',
+                            required: false,
+                            done: false,
+                            hint: '接收余额不足等通知',
+                        },
+                    ],
+                    onebot: {
+                        host: '0.0.0.0',
+                        port: 8080,
+                        url_local: 'ws://127.0.0.1:8080/onebot/v11/ws',
+                        url_lan: 'ws://192.168.1.10:8080/onebot/v11/ws',
+                        token: '',
+                        token_enabled: false,
+                        path_hint: '/onebot/v11/ws',
+                        warning: '监听 0.0.0.0 但没有 access token：局域网内任何人都能连上来',
+                    },
+                    values: {
+                        bot_account: '10001',
+                        bot_nick_name: 'Luna',
+                        bot_data: '',
+                        alias_name: [],
+                        admin_accounts: [],
+                        group_chat_chance: 0.3,
+                    },
+                });
             case '/api/auth/status':
                 // 预览里当作「还没有面板密码」：正好能看凭据卡片给的引导文案
                 return ok({

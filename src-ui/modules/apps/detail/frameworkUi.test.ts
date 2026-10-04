@@ -137,12 +137,14 @@ describe('resolveFrameworkUi', () => {
         expect(ui?.tabForIssue('config/master')).toBe('permissions');
     });
 
-    it('neobot has the Web console page only', () => {
+    it('neobot 默认落在部署页，其余是面板数据页', () => {
         const ui = resolveFrameworkUi('neobot');
         expect(ui).toBeDefined();
-        expect(ui?.defaultTab).toBe('overview');
+        // 新实例第一件该做的事是跑起来并连上 QQ，不是看统计
+        expect(ui?.defaultTab).toBe('deploy');
         expect(ui?.nav.map((g) => g.id)).toEqual(['home', 'ai', 'extend', 'console']);
         expect(navValues(ui)).toEqual([
+            'deploy',
             'overview',
             'models',
             'prompts',
@@ -150,9 +152,9 @@ describe('resolveFrameworkUi', () => {
             'plugins',
             'console',
         ]);
-        // 这页只读 + 一个跳转按钮，不该挂保存条
+        // 没有类型化配置页：各页只读，或自己把动作 POST 给面板，不该挂保存条
         expect(ui?.typedTabs.size).toBe(0);
-        expect(ui?.fillPaneTabs.has('console')).toBe(true);
+        for (const t of navValues(ui)) expect(ui?.fillPaneTabs.has(t)).toBe(true);
         // 原始文件、日志由外壳追加
         expect(buildDetailNav(ui).at(-1)?.items.map((t) => t.value)).toEqual(['raw', 'log']);
     });
