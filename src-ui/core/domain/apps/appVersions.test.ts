@@ -44,6 +44,10 @@ describe('parsePep440', () => {
         expect(parsePep440('1.0.0preview1')?.pre).toEqual({ kind: 'rc', num: 1 });
         expect(parsePep440('1.0.0beta')?.pre).toEqual({ kind: 'b', num: 0 });
     });
+
+    it('pre 关键字与数字之间允许一个点：alpha.23 取到 23', () => {
+        expect(parsePep440('1.0.0-alpha.23')?.pre).toEqual({ kind: 'a', num: 23 });
+    });
 });
 
 describe('compareAppVersion 极性（> 0 = remote 更新）', () => {
@@ -71,6 +75,18 @@ describe('compareAppVersion 极性（> 0 = remote 更新）', () => {
         expect(compareAppVersion('1.0.0', '1.0.0.post1')).toBeGreaterThan(0);
     });
 
+    it('dev 段同向：dev1 < dev2；同档下 dev 低于非 dev（a1.dev1 < a1）', () => {
+        expect(compareAppVersion('1.0.0.dev1', '1.0.0.dev2')).toBeGreaterThan(0);
+        expect(compareAppVersion('1.0.0.dev2', '1.0.0.dev1')).toBeLessThan(0);
+        expect(compareAppVersion('1.0.0a1.dev1', '1.0.0a1')).toBeGreaterThan(0);
+        expect(compareAppVersion('1.0.0a1', '1.0.0a1.dev1')).toBeLessThan(0);
+    });
+
+    it('pre 关键字后的点分隔符不吞数字：alpha.2 < alpha.10 按数字排', () => {
+        expect(compareAppVersion('1.0.0-alpha.2', '1.0.0-alpha.10')).toBeGreaterThan(0);
+        expect(compareAppVersion('1.0.0-alpha.10', '1.0.0-alpha.2')).toBeLessThan(0);
+    });
+
     it('短的补 0、按数字比不按字符串', () => {
         expect(compareAppVersion('1.2', '1.2.0')).toBe(0);
         expect(compareAppVersion('1.9.0', '1.10.0')).toBeGreaterThan(0);
@@ -92,6 +108,10 @@ describe('hasAppUpdate', () => {
         expect(hasAppUpdate('1.2.1', '1.2.2')).toBe(true);
         expect(hasAppUpdate('1.2.2', '1.2.2')).toBe(false);
         expect(hasAppUpdate('1.2.3', '1.2.2')).toBe(false);
+    });
+
+    it('上游是带 dev 的预发布时，已装的同档预发布不算被超越（a1.dev1 < a1）', () => {
+        expect(hasAppUpdate('1.0.0a1', '1.0.0a1.dev1')).toBe(false);
     });
 
     it('没有已装版本或没有上游版本都不提示', () => {

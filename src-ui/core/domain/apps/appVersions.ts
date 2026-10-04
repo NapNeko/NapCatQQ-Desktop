@@ -57,9 +57,10 @@ export function parsePep440(raw: string): Pep440 | null {
     let post: number | null = null;
     let pre: { kind: PreKind; num: number } | null = null;
 
+    // 关键字和数字之间允许一个点：`1.0.0-alpha.23` 归一化后是 `.alpha.23`
     const takeNumber = (from: number): number => {
-        const m = tail.slice(from).match(/^\d+/);
-        return m ? Number.parseInt(m[0], 10) : 0;
+        const m = tail.slice(from).match(/^\.?(\d+)/);
+        return m ? Number.parseInt(m[1], 10) : 0;
     };
 
     const devAt = tail.indexOf('dev');
@@ -136,7 +137,7 @@ export function compareAppVersion(local: string, remote: string): number {
     // dev 越大越新，但都低于非 dev；两个都非 dev 时上面已判等
     const da = a.dev ?? Number.MAX_SAFE_INTEGER;
     const db = b.dev ?? Number.MAX_SAFE_INTEGER;
-    if (da !== db) return da - db;
+    if (da !== db) return db - da;
     return 0;
 }
 
