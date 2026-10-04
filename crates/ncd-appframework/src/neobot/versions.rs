@@ -396,6 +396,26 @@ mod tests {
         assert!(parse_pep440("weird-version").is_none());
     }
 
+    /// 真机联网冒烟：默认 #[ignore]，避免 CI 依赖网络。
+    /// 手动跑：cargo test -p ncd-appframework --lib fetch_neobot_app -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn fetch_neobot_app_from_pypi() {
+        let v = fetch_versions("neobot-app", None).await.expect("查 PyPI");
+        println!(
+            "neobot-app: latest={:?} count={} has_prerelease={}",
+            v.latest,
+            v.versions.len(),
+            v.has_prerelease
+        );
+        assert!(!v.versions.is_empty(), "至少有历史版本");
+        assert!(v.latest.is_some(), "应该有一个正式版");
+        // 版本号必须是我们自己的 PEP 440 解析器认得的东西
+        for raw in &v.versions {
+            assert!(parse_pep440(raw).is_some(), "{raw} 解析不了");
+        }
+    }
+
     #[test]
     fn non_pep440_spelling_still_listed_but_last() {
         let body = r#"{ "info": {}, "releases": { "1.0.0": [{}], "weird-version": [{}] } }"#;
