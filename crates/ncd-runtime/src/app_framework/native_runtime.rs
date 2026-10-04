@@ -606,7 +606,7 @@ async fn read_pid_file(
     Ok(parse_pid_file(&String::from_utf8_lossy(&bytes)))
 }
 
-fn program_file_name(program: &str) -> String {
+pub(super) fn program_file_name(program: &str) -> String {
     program
         .rsplit(['/', '\\'])
         .next()
