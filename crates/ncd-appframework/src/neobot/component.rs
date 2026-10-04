@@ -58,6 +58,8 @@ pub struct NeoBotComponent {
     pub pypi_index: Option<String>,
     /// 领养已有项目：只同步依赖，不写配置、不改端口
     pub adopt_existing: bool,
+    /// 指定安装的版本；None = 装最新正式版。用户可在界面上选任意版本
+    pub install_version: Option<String>,
 }
 
 impl NeoBotComponent {
@@ -69,7 +71,13 @@ impl NeoBotComponent {
             uv_bin: None,
             pypi_index: None,
             adopt_existing: false,
+            install_version: None,
         }
+    }
+
+    pub fn with_install_version(mut self, version: Option<String>) -> Self {
+        self.install_version = version.filter(|v| !v.trim().is_empty());
+        self
     }
 
     pub fn with_uv_bin(mut self, uv_bin: Option<HostPath>) -> Self {
@@ -271,13 +279,17 @@ impl NeoBotComponent {
             .arg("--upgrade")
             .arg("--python")
             .arg(".venv")
-            .arg(PYPI_NEOBOT)
+            .arg(Self::package_spec(self.install_version.as_deref()))
             .working_dir(self.install_dir.clone());
         // uv pip install 不读 pyproject 的 [tool.uv.index]，镜像必须从命令行给
         if let Some(index) = &self.pypi_index {
             pip = pip.arg("--default-index").arg(index);
         }
-        self.run_step(host, ctx, 4, "安装 neobot-app", pip).await?;
+        let step_name = match self.install_version.as_deref().map(str::trim) {
+            Some(v) if !v.is_empty() => format!("安装 neobot-app {v}"),
+            _ => "安装 neobot-app".to_string(),
+        };
+        self.run_step(host, ctx, 4, &step_name, pip).await?;
 
         // 5. 种配置
         ctx.emit(ProgressKind::StepBegin {
@@ -348,7 +360,7 @@ impl NeoBotComponent {
             .arg("install")
             .arg("--python")
             .arg(".venv")
-            .arg(PYPI_NEOBOT)
+            .arg(Self::package_spec(self.install_version.as_deref()))
             .working_dir(self.install_dir.clone());
         if let Some(index) = &self.pypi_index {
             pip = pip.arg("--default-index").arg(index);
@@ -482,6 +494,15 @@ impl NeoBotComponent {
             }
         }
         super::manifest::NEOBOT_DEFAULT_DASHBOARD_PORT
+    }
+
+    /// 传给 `uv pip install` 的包规格。指定版本时钉成 `neobot-app==X`；
+    /// 否则只要包名，由 uv 按自己的策略挑（当前策略下会挑最新正式版）。
+    pub fn package_spec(version: Option<&str>) -> String {
+        match version.map(str::trim).filter(|v| !v.is_empty()) {
+            Some(v) => format!("{PYPI_NEOBOT}=={v}"),
+            None => PYPI_NEOBOT.to_string(),
+        }
     }
 
     /// 查发行元数据版本的 python 片段。提成纯函数便于钉住：
@@ -756,6 +777,33 @@ mod tests {
             adapter.get(KEY_REVERSE_WS_PORT).and_then(|v| v.as_integer()),
             Some(8080)
         );
+    }
+
+    /// 指定版本时钉成 `包名==版本`；不指定就只给包名，让 uv 按自己的策略挑
+    #[test]
+    fn package_spec_pins_only_when_version_given() {
+        assert_eq!(NeoBotComponent::package_spec(None), PYPI_NEOBOT);
+        assert_eq!(NeoBotComponent::package_spec(Some("")), PYPI_NEOBOT);
+        assert_eq!(NeoBotComponent::package_spec(Some("   ")), PYPI_NEOBOT);
+        assert_eq!(
+            NeoBotComponent::package_spec(Some("1.2.1")),
+            "neobot-app==1.2.1"
+        );
+        assert_eq!(
+            NeoBotComponent::package_spec(Some("  1.2.0  ")),
+            "neobot-app==1.2.0",
+            "两侧空白要吃掉，否则 uv 认不出来"
+        );
+    }
+
+    #[test]
+    fn install_version_is_normalized_away_when_blank() {
+        let comp = NeoBotComponent::new(HostPath::from_posix("/x"), 8080, 9981)
+            .with_install_version(Some("  ".to_string()));
+        assert!(comp.install_version.is_none(), "空白当没指定");
+        let comp = NeoBotComponent::new(HostPath::from_posix("/x"), 8080, 9981)
+            .with_install_version(Some("1.2.0".to_string()));
+        assert_eq!(comp.install_version.as_deref(), Some("1.2.0"));
     }
 
     /// 界面会把版本渲染成 `v<version>`，所以这里绝不能编一个非版本号的字符串：

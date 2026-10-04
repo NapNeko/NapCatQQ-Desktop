@@ -99,11 +99,13 @@ pub async fn preview_app_install_dir(
 pub async fn install_app_instance(
     instance_id: String,
     task_id: Option<String>,
+    // 指定安装的版本；不传 = 最新正式版
+    version: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     state
         .app_manager
-        .install_instance(&AppInstanceId::new(instance_id), task_id)
+        .install_instance(&AppInstanceId::new(instance_id), task_id, version)
         .await
         .map_err(|e| e.to_string())
 }

@@ -68,7 +68,9 @@ impl NeoBotAdapter {
         let dashboard_port = dashboard_port_for(spec);
         NeoBotComponent::new(spec.install_dir.clone(), spec.port, dashboard_port)
             .with_uv_bin(spec.uv_bin.clone())
+            .with_pypi_index(spec.pypi_index.clone())
             .with_adopt_existing(spec.adopt_existing)
+            .with_install_version(spec.install_version.clone())
     }
 
     fn install_dir(instance: &AppInstance) -> HostPath {

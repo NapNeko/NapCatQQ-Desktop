@@ -23,6 +23,8 @@ fn graph_placeholder_spec() -> AppComponentSpec {
         git_bin: None,
         redis_bin: None,
         npm_registry: None,
+        pypi_index: None,
+        install_version: None,
         install_renderer: false,
         adopt_existing: false,
         instance_id: "x".into(),

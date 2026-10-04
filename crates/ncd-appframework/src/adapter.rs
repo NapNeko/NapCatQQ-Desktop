@@ -44,6 +44,13 @@ pub struct AppComponentSpec {
     pub redis_bin: Option<HostPath>,
     /// npm registry 镜像；None 用默认源
     pub npm_registry: Option<String>,
+    /// PyPI 索引镜像（`uv pip install --default-index`）；None 用默认源。
+    /// 各框架按自己的包管理器解释：Python 系走 pip index，Node 系忽略。
+    pub pypi_index: Option<String>,
+    /// 指定安装的版本；None = 装该包的最新正式版。
+    /// 各框架按自己的生态解释（Python 系 `pkg==ver`、Node 系 `pkg@ver`）；
+    /// 不支持指定版本的框架忽略它。装完的真实版本由 `detect` 回读，不在这里记账。
+    pub install_version: Option<String>,
     /// Karin：provision 时一并 `pnpm add @karinjs/plugin-puppeteer`。NoneBot2 忽略。
     pub install_renderer: bool,
     /// 领养已有项目：同步依赖，不写脚手架、不改端口。

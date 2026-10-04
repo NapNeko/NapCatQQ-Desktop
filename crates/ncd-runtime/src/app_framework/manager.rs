@@ -247,6 +247,8 @@ pub struct AppManager {
     data_root: PathBuf,
     adopt_store: AdoptStore,
     npm_registry: Option<String>,
+    /// PyPI 索引镜像；None 用默认源（由 L4 按设置注入，与 npm_registry 同构）
+    pypi_index: Option<String>,
     /// 用户名密码类 WebUI 的明文密码落点；None（测试）时创建实例不种密码，交给框架首启自生成
     secrets: Option<Arc<dyn SecretStore + Send + Sync>>,
     /// 安装交给它排任务，插件装卸更也排进它那条队列，盯任务也盯同一条;启动时接上一次
@@ -281,6 +283,7 @@ impl AppManager {
             data_root: data_root.to_path_buf(),
             adopt_store: AdoptStore::new(data_root),
             npm_registry: None,
+            pypi_index: None,
             secrets: None,
             components: None,
             tunnels: tokio::sync::Mutex::new(HashMap::new()),
@@ -293,6 +296,12 @@ impl AppManager {
 
     pub fn with_npm_registry(mut self, registry: Option<String>) -> Self {
         self.npm_registry = registry.filter(|s| !s.trim().is_empty());
+        self
+    }
+
+    /// PyPI 索引镜像（Python 系框架的 `uv pip install --default-index`）；空白当没设
+    pub fn with_pypi_index(mut self, index: Option<String>) -> Self {
+        self.pypi_index = index.filter(|s| !s.trim().is_empty());
         self
     }
 
@@ -366,13 +375,23 @@ impl AppManager {
         self.store.require(id).await
     }
 
-    /// 安装时喂给组件执行器的实例级输入
-    fn component_hint(&self, instance: &AppInstance) -> AppComponentHint {
+    /// 安装时喂给组件执行器的实例级输入。
+    ///
+    /// `install_version` 只在**这次安装**生效：用户可以在安装 / 重装时指定任意版本，
+    /// 不落进实例快照——装完的真实版本由 `detect` 回读成 `installed_version`，
+    /// 这样领域模型不用新增字段、落盘格式也不变。
+    fn component_hint(
+        &self,
+        instance: &AppInstance,
+        install_version: Option<String>,
+    ) -> AppComponentHint {
         AppComponentHint {
             instance_id: instance.id.as_str().to_string(),
             install_dir: HostPath::from_posix(&instance.install_dir),
             port: instance.port,
             npm_registry: self.npm_registry.clone(),
+            pypi_index: self.pypi_index.clone(),
+            install_version: install_version.filter(|v| !v.trim().is_empty()),
             install_renderer: instance.install_renderer,
             adopt_existing: instance.origin.is_imported(),
             webui_username: self.remembered_secret(instance, SECRET_WEBUI_USERNAME),

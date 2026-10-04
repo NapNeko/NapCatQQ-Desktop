@@ -235,11 +235,15 @@ impl AppManager {
         self.adopt_existing_link(&current.id).await
     }
 
-    /// 安装 / 重装：按实例目录把应用端组件交给组件执行器（缺的依赖一起排），再盯任务结束；返回 task id
+    /// 安装 / 重装：按实例目录把应用端组件交给组件执行器（缺的依赖一起排），再盯任务结束；返回 task id。
+    ///
+    /// `install_version` 是用户这次指定的版本（None = 最新正式版）；不落实例快照，
+    /// 装完由 detect 回读成 `installed_version`。
     pub async fn install_instance(
         self: &Arc<Self>,
         id: &AppInstanceId,
         task_id: Option<String>,
+        install_version: Option<String>,
     ) -> Result<String, AppFrameworkError> {
         let components = Arc::clone(self.component_executor()?);
         let instance = self.store.require(id).await?;
@@ -258,7 +262,7 @@ impl AppManager {
         let mut inputs = components
             .inputs_for(&instance.host_id, host.as_ref(), None)
             .await;
-        inputs.app_component = Some(self.component_hint(&instance));
+        inputs.app_component = Some(self.component_hint(&instance, install_version.to_owned()));
         let submitted = components
             .submit(ComponentActionRequest {
                 component_id,
