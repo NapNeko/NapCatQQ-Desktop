@@ -17,6 +17,7 @@ import { useAppLinkPlan, useApplyAppLink } from '../../../../hooks/apps/useAppLi
 import { isDockerBot } from '../../../../core/domain/apps/appLinkTopology';
 import { AppLinkDialog } from '../../AppLinkDialog';
 import type { AppInstance } from '../../../../core/ipc/types';
+import type { AppRoute } from '../../../../shared/components/next/Sidebar';
 import { isBotAccountUnset, missingRequiredSteps, parseNeoBotDeployStatus } from './neobotDeploy';
 import { PanelStateView } from './PanelStateView';
 import { neobotPanelKey, usePanelJson } from './useNeoBotPanel';
@@ -54,7 +55,9 @@ const CopyRow: React.FC<{ label: string; value: string; hint?: string }> = ({
 export const NeoBotDeployTab: React.FC<{
     instance: AppInstance;
     onGoTab: (tab: string) => void;
-}> = ({ instance, onGoTab }) => {
+    /** 跳到机器人页去新建 Bot；外壳没给就不显示那个按钮 */
+    onNavigate?: (route: AppRoute) => void;
+}> = ({ instance, onGoTab, onNavigate }) => {
     const instanceId = instance.id;
     const queryClient = useQueryClient();
     const query = usePanelJson(instanceId, 'deploy', '/api/deploy/status', parseNeoBotDeployStatus);
@@ -271,7 +274,16 @@ export const NeoBotDeployTab: React.FC<{
                                         </span>{' '}
                                         的协议端 Bot，回来就能一键连；或者直接手动选一个已有的 Bot。
                                     </p>
-                                    <div>
+                                    <div className="flex items-center gap-2">
+                                        {onNavigate && (
+                                            <Button
+                                                size="sm"
+                                                variant="primary"
+                                                onClick={() => onNavigate('bots')}
+                                            >
+                                                去新建机器人
+                                            </Button>
+                                        )}
                                         <Button
                                             size="sm"
                                             variant="secondary"

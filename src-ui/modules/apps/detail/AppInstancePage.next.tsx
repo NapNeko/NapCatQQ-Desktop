@@ -27,6 +27,7 @@ import { STORE_TOOLBAR_SLOT_ID } from './storeToolbar';
 import { buildDetailNav, resolveFrameworkUi, type FrameworkSaveHandle, type NavBadges } from './frameworkUi';
 import type { DetailTabHint } from '../list/AppInstanceListPage';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
+import type { AppRoute } from '../../../shared/components/next/Sidebar';
 
 export interface AppInstancePageNextProps {
     instanceId: string;
@@ -34,6 +35,8 @@ export interface AppInstancePageNextProps {
     onBack: () => void;
     /** 安装中「在任务队列查看」要跳走；没给就不显示这个按钮 */
     onViewTasks?: () => void;
+    /** 跳到别的页（框架页签里「去机器人页新建」这类指路用）；没给就不显示那些按钮 */
+    onNavigate?: (route: AppRoute) => void;
 }
 
 export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
@@ -41,6 +44,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
     initialTab,
     onBack,
     onViewTasks,
+    onNavigate,
 }) => {
     const apps = useAppInstances();
     const frameworks = useAppFrameworks();
@@ -191,6 +195,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                                         onGoTab={goTab}
                                         onOpenLink={() => setLinkOpen(true)}
                                         onOpenWebUi={() => void apps.openWebUi(instance.id)}
+                                        onNavigate={onNavigate}
                                         onNavBadges={setNavBadges}
                                     />
                                 )}

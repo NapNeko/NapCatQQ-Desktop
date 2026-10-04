@@ -36,12 +36,12 @@ const FILL_PANE = new Set([
     'console',
 ]);
 
-function NeoBotFrameworkDetail({ instance, onOpenWebUi, onGoTab }: FrameworkDetailProps) {
+function NeoBotFrameworkDetail({ instance, onOpenWebUi, onGoTab, onNavigate }: FrameworkDetailProps) {
     const instanceId = instance.id;
     return (
         <>
             <TabsContent value="deploy" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
-                <NeoBotDeployTab instance={instance} onGoTab={onGoTab} />
+                <NeoBotDeployTab instance={instance} onGoTab={onGoTab} onNavigate={onNavigate} />
             </TabsContent>
             <TabsContent value="overview" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
                 <NeoBotOverviewTab instanceId={instanceId} onGoTab={onGoTab} />

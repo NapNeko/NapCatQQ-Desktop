@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
+import type { AppRoute } from '../../../shared/components/next/Sidebar';
 import { astrbotFrameworkUi } from './astrbot/astrbotFrameworkUi';
 import { karinFrameworkUi } from './karin/karinFrameworkUi';
 import { koishiFrameworkUi } from './koishi/koishiFrameworkUi';
@@ -39,6 +40,8 @@ export type FrameworkDetailProps = {
     onOpenLink: () => void;
     /** 打开框架自带的 Web 控制台（外壳负责开隧道 / 复制凭据） */
     onOpenWebUi: () => void;
+    /** 跳到别的页（例如「去机器人页新建」）；外壳没给就不显示这类按钮 */
+    onNavigate?: (route: AppRoute) => void;
     /** 上报侧栏小圆点；不关心的框架不调 */
     onNavBadges: (badges: NavBadges) => void;
 };
