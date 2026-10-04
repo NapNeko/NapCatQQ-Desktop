@@ -25,7 +25,7 @@ export function useBackendSettings(cb: Callbacks = {}) {
 
     const query = useQuery({
         queryKey: backendSettingsKey,
-        queryFn: settingsService.get,
+        queryFn: () => settingsService.get(),
     });
 
     const saveMutation = useMutation({

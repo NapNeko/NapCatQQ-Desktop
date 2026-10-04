@@ -83,6 +83,7 @@ use crate::metrics::now_ms;
 
 mod astrbot;
 mod config;
+mod config_backup;
 mod install_dir;
 mod koishi;
 mod lifecycle;
@@ -102,6 +103,8 @@ use webui::WebUiEndpoint;
 /// SecretStore 里 WebUI 账号的键后缀（`app:<instance_id>:<suffix>`）；明文只存这里，实例记录不带
 const SECRET_WEBUI_USERNAME: &str = "webui_username";
 const SECRET_WEBUI_PASSWORD: &str = "webui_password";
+/// 桌面托管会话密钥（上游 desktop-session）：启动实例时注入 env，代登录免密码
+const SECRET_DESKTOP_SESSION: &str = "desktop_session";
 
 fn secret_key(instance_id: &str, suffix: &str) -> String {
     format!("app:{instance_id}:{suffix}")
@@ -260,6 +263,8 @@ pub struct AppManager {
     install_watches: std::sync::Mutex<HashMap<AppInstanceId, String>>,
     /// 运行中写配置的下一个可用时刻（应用要求两次写之间留间隔时才记）
     config_write_slots: std::sync::Mutex<HashMap<AppInstanceId, Instant>>,
+    /// 配置备份、恢复、起停和写盘共用，恢复期间不能启动框架或插入一次编辑。
+    framework_config_gate: tokio::sync::Mutex<()>,
     webui_endpoints: std::sync::Mutex<HashMap<AppInstanceId, WebUiEndpoint>>,
     market_cache: plugin_market::MarketCache,
 }
@@ -290,6 +295,7 @@ impl AppManager {
             tunnels: tokio::sync::Mutex::new(HashMap::new()),
             install_watches: std::sync::Mutex::new(HashMap::new()),
             config_write_slots: std::sync::Mutex::new(HashMap::new()),
+            framework_config_gate: tokio::sync::Mutex::new(()),
             webui_endpoints: std::sync::Mutex::new(HashMap::new()),
             market_cache: plugin_market::MarketCache::default(),
         }
@@ -347,11 +353,51 @@ impl AppManager {
         }
     }
 
+    /// 启动时注入过的桌面托管会话密钥；框架不支持或还没由桌面端拉起过为 None
+    pub(super) fn desktop_session_secret(&self, instance: &AppInstance) -> Option<String> {
+        self.remembered_secret(instance, SECRET_DESKTOP_SESSION)
+    }
+
+    /// 支持桌面托管会话的框架（env 键名是上游事实，由适配器给）：取或建每实例密钥，随启动注入
+    pub(super) fn desktop_session_launch_args(
+        &self,
+        instance: &AppInstance,
+        adapter: &dyn AppFrameworkAdapter,
+    ) -> LaunchArgs {
+        let Some((managed_key, secret_key)) = adapter.desktop_session_env_keys() else {
+            return LaunchArgs::default();
+        };
+        let secret = self
+            .desktop_session_secret(instance)
+            .filter(|s| s.len() >= 32)
+            .unwrap_or_else(|| {
+                // 上游 DESKTOP_SESSION_SECRET_MIN_LENGTH 是 32
+                let s: String = rand::thread_rng()
+                    .sample_iter(Alphanumeric)
+                    .take(48)
+                    .map(char::from)
+                    .collect();
+                self.remember_secret(&instance.id, SECRET_DESKTOP_SESSION, &s);
+                s
+            });
+        LaunchArgs {
+            extra_env: vec![
+                (managed_key.to_string(), "1".to_string()),
+                (secret_key.to_string(), secret),
+            ],
+            ..LaunchArgs::default()
+        }
+    }
+
     fn forget_secrets(&self, instance_id: &AppInstanceId) {
         let Some(store) = self.secrets.as_ref() else {
             return;
         };
-        for suffix in [SECRET_WEBUI_USERNAME, SECRET_WEBUI_PASSWORD] {
+        for suffix in [
+            SECRET_WEBUI_USERNAME,
+            SECRET_WEBUI_PASSWORD,
+            SECRET_DESKTOP_SESSION,
+        ] {
             if let Err(e) = store.delete(&secret_key(instance_id.as_str(), suffix)) {
                 tracing::debug!(instance = instance_id.as_str(), suffix, error = %e, "drop app secret");
             }
@@ -370,6 +416,15 @@ impl AppManager {
 
     pub async fn list_instances(&self) -> Vec<AppInstance> {
         self.store.list().await
+    }
+
+    /// Commit imported instance records and refresh their cache under the existing write gates.
+    pub async fn replace_instances_with<R>(
+        &self,
+        instances: Option<Vec<AppInstance>>,
+        write: impl std::future::Future<Output = Result<R, String>>,
+    ) -> Result<R, String> {
+        self.store.replace_with(instances, write).await
     }
 
     pub async fn get_instance(&self, id: &AppInstanceId) -> Result<AppInstance, AppFrameworkError> {

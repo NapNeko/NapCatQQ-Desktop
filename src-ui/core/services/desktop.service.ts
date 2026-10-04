@@ -14,6 +14,9 @@ const WINDOW_EVENT = {
     exitBlocked: 'desktop-exit-blocked',
     trayPanelShow: 'tray_panel_show',
     debugPopoutClosed: 'debug-popout-closed',
+    chatWindowRequest: 'chat-window-request',
+    chatAccountSelected: 'chat-account-selected',
+    chatEmbedRequested: 'chat-embed-requested',
 } as const;
 
 const WINDOW_SIGNAL: WindowSignal = { v: 1 };

@@ -10,9 +10,10 @@ const contact: Contact = { key: 'group:12', id: '12', name: '群', type: 'group'
 const baseMessage: Message = { key: 'group:12/2', session: 'group:12', id: '2', senderId: '20', senderName: '小明', at: 0, mine: false, segments: [{ type: 'text', data: { text: '  第一行\n第二行  ' } }], status: 'sent' };
 const draft: Draft = { text: '正在写的文字', mentions: [], attachments: [{ key: 'a', type: 'file', name: '备注.txt', path: 'C:/备注.txt' }], reply: { id: '9', name: '小李', preview: '上一条' } };
 
-function setup(message = baseMessage, session = contact) {
+function setup(message = baseMessage, session = contact, connected = false) {
     const store = new ChatAccountStore({ bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true });
     store.draft(session.key, draft);
+    if (connected) store.getSnapshot().connection = { state: 'connected' };
     const input = createRef<HTMLTextAreaElement>();
     const onFocusComposer = vi.fn(() => input.current?.focus());
     const onError = vi.fn();
@@ -93,6 +94,15 @@ describe('ChatMessageActions', () => {
         expect(store.getSnapshot().account.drafts[contact.key]).toEqual({ ...draft, text: '正在写的文字\n失败的内容' });
         expect(send).not.toHaveBeenCalled();
         await waitFor(() => expect(screen.getByRole('textbox')).toHaveFocus());
+    });
+    it('offers a direct retry from the failed message menu without replacing the composer draft', async () => {
+        const user = userEvent.setup();
+        const { store } = setup({ ...baseMessage, id: undefined, mine: true, status: 'failed' }, contact, true);
+        const retry = vi.spyOn(store, 'retry').mockResolvedValue();
+        await user.pointer({ keys: '[MouseRight]', target: screen.getByText('消息内容') });
+        await user.click(screen.getByRole('menuitem', { name: '重新发送' }));
+        expect(retry).toHaveBeenCalledWith(baseMessage.key);
+        expect(store.getSnapshot().account.drafts[contact.key]).toEqual(draft);
     });
     it.each([
         ['own message', { ...baseMessage, mine: true }, contact],

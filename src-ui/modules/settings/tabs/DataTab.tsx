@@ -34,6 +34,12 @@ export function DataTab({
         setImportOpen,
         onImported,
         isExporting: isExportingCfg,
+        canRetryPreferences,
+        retryPreferences,
+        pendingFrameworks,
+        frameworkPendingError,
+        retryFrameworks,
+        isRestoringFrameworks,
     } = useConfigTransfer();
 
     const handleOpen = async () => {
@@ -80,11 +86,11 @@ export function DataTab({
 
             <SettingsSection
                 title="配置备份"
-                description="仅配置 JSON 子集；不含 secrets / 组件安装树。换盘请用「数据根目录」旁的迁移。"
+                description="备份桌面端与框架配置、界面偏好。框架与插件程序、系统密钥库、SSH 私钥和聊天记录保持独立；换盘请使用数据根目录迁移。"
             >
                 <FieldRow
                     label="导出当前配置"
-                    description="ZIP 内含 config.json、bot.json、servers.json"
+                    description="包含应用设置、Bot、远端档案、实例与关联、框架核心与模型设置、插件配置、麦麦自定义提示词、聊天设置、API 调试工作区与收藏、SnowLuma 设置和界面偏好。"
                 >
                     <Button
                         variant="secondary"
@@ -96,11 +102,26 @@ export function DataTab({
                     </Button>
                 </FieldRow>
 
-                <FieldRow label="导入配置" isLast>
+                <FieldRow label="导入配置" isLast={!canRetryPreferences && !pendingFrameworks.length && !frameworkPendingError}>
                     <Button variant="secondary" size="sm" onClick={openImportWizard}>
                         打开导入向导
                     </Button>
                 </FieldRow>
+                {canRetryPreferences && (
+                    <FieldRow label="界面偏好待恢复" description="配置文件已经导入，修复浏览器存储问题后可单独重试界面与终端偏好。" isLast={!pendingFrameworks.length && !frameworkPendingError}>
+                        <Button variant="secondary" size="sm" onClick={retryPreferences}>
+                            重试恢复界面偏好
+                        </Button>
+                    </FieldRow>
+                )}
+                {pendingFrameworks.length > 0 && (
+                    <FieldRow label="框架配置待恢复" description={`已保留恢复副本：${pendingFrameworks.join('；')}。完成框架安装、停止实例并连接远端后，可单独重试。`} isLast>
+                        <Button variant="secondary" size="sm" onClick={retryFrameworks} disabled={isRestoringFrameworks}>
+                            {isRestoringFrameworks ? '恢复中…' : '重试恢复框架配置'}
+                        </Button>
+                    </FieldRow>
+                )}
+                {frameworkPendingError && <p className="text-[12px] text-warning">待恢复框架配置读取失败：{frameworkPendingError.message}</p>}
             </SettingsSection>
 
             <ConfigImportDialog

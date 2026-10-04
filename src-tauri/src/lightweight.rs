@@ -27,9 +27,9 @@ fn main_window_config(app: &AppHandle) -> Result<tauri::utils::config::WindowCon
     Ok(conf)
 }
 
-/// 释放全部界面 WebView2;调用前若窗口可见可先 hide
+/// 释放控制台 WebView2，保留正在使用的独立聊天窗。
 pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
-    if is_lightweight_mode() {
+    if is_lightweight_mode() && app.get_webview_window(MAIN_WINDOW_LABEL).is_none() {
         return Ok(());
     }
     // 终端输出通道挂在要销毁的网页上：先摘掉，输出照常收进回放，网页重建后重新接上
@@ -42,7 +42,7 @@ pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     if let Some(tray_window) = app.get_webview_window(crate::tray_panel::TRAY_PANEL_LABEL) {
         let _ = tray_window.destroy();
     }
-    // 调试台弹出窗也吃一个 WebView2,进轻量模式一并收掉
+    // 控制台回收不能连带销毁仍在使用的聊天窗口。
     if let Some(debug_window) =
         app.get_webview_window(crate::commands::window::DEBUG_WINDOW_LABEL)
     {
@@ -56,7 +56,7 @@ pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     crate::desktop_log::write_session_line(
         "INFO",
         "ncd::lightweight",
-        "已进入轻量模式（全部 WebView 已销毁）",
+        "控制台界面已回收",
     );
     Ok(())
 }

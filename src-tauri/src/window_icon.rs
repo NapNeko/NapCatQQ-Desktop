@@ -49,9 +49,9 @@ pub fn apply_window_icon(app: &AppHandle, window: &tauri::WebviewWindow) -> Resu
     Ok(())
 }
 
-#[cfg(all(windows, debug_assertions))]
+#[cfg(windows)]
 #[allow(unsafe_code)] // Shell 窗口属性 API；字符串使用 COM 分配器，由 PropVariantClear 释放。
-fn set_taskbar_identity(
+pub(crate) fn set_taskbar_identity(
     hwnd: windows::Win32::Foundation::HWND,
     identity: &str,
 ) -> windows::core::Result<()> {

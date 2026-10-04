@@ -30,6 +30,8 @@ export class LruCache<V> {
     get size(): number {
         return this.map.size;
     }
+
+    delete(key: string): void { this.map.delete(key); }
 }
 
 /** 记下「这个坏过」，过了 ttl 就当没坏过再试一次；同样有上限 */

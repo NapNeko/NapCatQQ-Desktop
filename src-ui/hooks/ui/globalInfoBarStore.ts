@@ -12,6 +12,7 @@
 // 行为对齐 Fluent InfoBarManager：
 //   - 默认右上角堆叠（见 InfoBarStack），margin / spacing 在容器上配置
 //   - 同 key 顶替时保持原队列下标，避免反复重试时整条 banner 上下跳动
+//   - 不同来源的同一句正文（非空字符串 + 同 tone）只留一条，新条目顶替原位
 //   - dismiss / clear 幂等；id 为 key:${key} 或 bar-${n}
 //
 // 渲染入口：AppNext.tsx 顶层挂一次 <InfoBarStack items={bars} onDismiss={...} />
@@ -44,6 +45,16 @@ let nextId = 1;
 
 function genId(prefix: string): string {
     return `${prefix}-${nextId++}`;
+}
+
+// removeSoon 的定时表：push / dismiss / remove 同名 id 时取消挂起的延迟移除。
+const pendingRemovals = new Map<string, ReturnType<typeof setTimeout>>();
+
+function cancelPendingRemoval(id: string): void {
+    const timer = pendingRemovals.get(id);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    pendingRemovals.delete(id);
 }
 
 // 同 key 顶替时判断"内容有没有实质变化"。只比展示字段；title/content 是
@@ -87,6 +98,7 @@ export const globalInfoBarStore = {
             id: key ? `key:${key}` : genId('bar'),
         };
         const current = store.getSnapshot();
+        cancelPendingRemoval(item.id);
 
         if (key) {
             const idx = current.bars.findIndex((b) => b.id === item.id);
@@ -106,12 +118,28 @@ export const globalInfoBarStore = {
             }
         }
 
+        // 不同来源报同一句正文（典型：连接挂了，历史/设置/收件箱一起弹）。
+        // 同 tone 且正文是非空相同字符串时只留一条：新条目顶替原位；
+        // 旧 id 不在队列里，来源方的后续清理幂等空转。
+        if (typeof item.content === 'string' && item.content) {
+            const dupIdx = current.bars.findIndex(
+                (b) => b.id !== item.id && b.tone === item.tone && b.content === item.content,
+            );
+            if (dupIdx >= 0) {
+                const next = current.bars.slice();
+                next[dupIdx] = item;
+                store.setState({ bars: next });
+                return item.id;
+            }
+        }
+
         store.setState({ bars: [...current.bars, item] });
         return item.id;
     },
 
     /** 用户关闭一条 banner。多次调用幂等，并触发用户关闭抑制回调。 */
     dismiss(id: string): void {
+        cancelPendingRemoval(id);
         const current = store.getSnapshot();
         const bar = current.bars.find((b) => b.id === id);
         const next = current.bars.filter((b) => b.id !== id);
@@ -122,10 +150,25 @@ export const globalInfoBarStore = {
 
     /** 状态恢复或自动超时时移除 banner，不写入“用户已关闭”抑制。 */
     remove(id: string): void {
+        cancelPendingRemoval(id);
         const current = store.getSnapshot();
         const next = current.bars.filter((b) => b.id !== id);
         if (next.length === current.bars.length) return;
         store.setState({ bars: next });
+    },
+
+    /**
+     * 延迟移除：错误状态短暂抖动（refetch 间隙 error 先空后回）时，
+     * banner 不会跳出又立刻跳回。延迟窗口内同 id 再 push / dismiss / remove
+     * 会取消这次定时。恢复即是真的恢复，晚 delayMs 消失可以接受。
+     */
+    removeSoon(id: string, delayMs = 2000): void {
+        cancelPendingRemoval(id);
+        const timer = setTimeout(() => {
+            pendingRemovals.delete(id);
+            globalInfoBarStore.remove(id);
+        }, delayMs);
+        pendingRemovals.set(id, timer);
     },
 
     /** 清空（极少用，主要给测试 / 极端 reset 场景）。 */
@@ -138,6 +181,8 @@ export const globalInfoBarStore = {
     /** 测试 / dev 重置用，生产代码不要碰。 */
     _reset(): void {
         nextId = 1;
+        for (const timer of pendingRemovals.values()) clearTimeout(timer);
+        pendingRemovals.clear();
         store._reset();
     },
 };
@@ -146,3 +191,4 @@ export const globalInfoBarStore = {
 // React 组件 / hook 通常用 useGlobalInfoBars()，多一层 useCallback 稳定引用。
 export const pushInfoBar = globalInfoBarStore.push;
 export const dismissInfoBar = globalInfoBarStore.remove;
+export const removeSoonInfoBar = globalInfoBarStore.removeSoon;

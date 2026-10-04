@@ -194,6 +194,12 @@ impl DebugManager {
         lock_std(&self.large_responses).clear();
     }
 
+    /// 最后一个普通聊天消费者离开后立即释放该 Bot 的连接和隧道。
+    pub async fn release_session(&self, bot_id: &str) {
+        self.drop_session(&BotId::new(bot_id)).await;
+        self.stop_receiver(bot_id).await;
+    }
+
     pub async fn list_targets(&self) -> Vec<DebugTarget> {
         self.bots
             .list_bots()
@@ -371,6 +377,17 @@ impl DebugManager {
 
     /// 内部通道当前的 WebUI 端点（端口, 口令）；还没就绪时给出给人看的原因
     async fn internal_endpoint(&self, view: &DebugBotView) -> Result<(u16, String), String> {
+        let bot_id = view.bot_id();
+        let endpoint = self.cached_internal_endpoint(view).await;
+        if endpoint.is_err() && !view.config.bot.runtime_target.is_local() && view.running() {
+            // SSH 恢复不能依赖某个页面轮询；缺少端点时复用 BotManager 的隧道接管流程。
+            self.bots.recover_webui(&bot_id).await?;
+            return self.cached_internal_endpoint(view).await;
+        }
+        endpoint
+    }
+
+    async fn cached_internal_endpoint(&self, view: &DebugBotView) -> Result<(u16, String), String> {
         let bot_id = view.bot_id();
         match view.config.bot.backend_type {
             BackendType::NapCat => self.bots.napcat_webui(&bot_id).await.ok_or_else(|| {

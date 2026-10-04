@@ -40,6 +40,20 @@ function SearchHarness({ rows, store, onOpen }: { rows: Contact[]; store: ChatAc
 }
 
 describe('conversation list actions and navigation', () => {
+    it('distinguishes QQ mute from the local ignore setting while retaining unread messages', async () => {
+        const user = userEvent.setup(); const { store } = await setup();
+        const group: Contact = { key: 'group:123', type: 'group', id: '123', name: '测试群' };
+        store.open(group); store.getSnapshot().account.conversations[group.key].unread = 5;
+        const ignore = vi.fn();
+        render(<ConversationList rows={[group]} active={null} store={store} onOpen={vi.fn()} contacts={false} listId="groups" highlighted={null} qqMuted={new Map([['123', true]])} ignoredGroups={new Set()} onIgnoreGroup={ignore} />);
+        const option = screen.getByRole('option', { name: /测试群/ });
+        expect(screen.getByLabelText('消息免打扰')).toBeInTheDocument();
+        await user.pointer({ keys: '[MouseRight]', target: option });
+        expect(screen.queryByText(/QQ 免打扰：/)).not.toBeInTheDocument();
+        await user.click(screen.getByRole('menuitemcheckbox', { name: '本地免打扰' }));
+        expect(ignore).toHaveBeenCalledWith(group, true);
+        expect(store.getSnapshot().account.conversations[group.key].unread).toBe(5);
+    });
     it('opens the shared context menu without switching conversations and updates pin/read state', async () => {
         const user = userEvent.setup(); const { store, rows, onOpen } = await setup();
         render(<ConversationList rows={rows} active="private:1" store={store} onOpen={onOpen} contacts={false} listId="conversations" highlighted={null} />);
@@ -55,13 +69,13 @@ describe('conversation list actions and navigation', () => {
         expect(store.getSnapshot().account.drafts['private:1'].text).toBe('未发送的草稿');
         expect(onOpen).not.toHaveBeenCalled();
     });
-    it('supports Shift+F10 and disables mark read when there is no unread count', async () => {
+    it('supports Shift+F10 and omits actions that do not apply to a read conversation', async () => {
         const user = userEvent.setup(); const { store, rows, onOpen } = await setup();
         render(<ConversationList rows={rows} active="private:1" store={store} onOpen={onOpen} contacts={false} listId="conversations" highlighted={null} />);
         act(() => screen.getByRole('option', { name: /小明/ }).focus());
         await user.keyboard('{Shift>}{F10}{/Shift}');
         expect(await screen.findByRole('menu')).toHaveClass('ndf-context-menu-content');
-        expect(screen.getByRole('menuitem', { name: '标为已读' })).toHaveAttribute('aria-disabled', 'true');
+        expect(screen.queryByRole('menuitem', { name: '标为已读' })).not.toBeInTheDocument();
         await user.keyboard('{ArrowDown}{Enter}');
         expect(store.getSnapshot().account.conversations['private:1'].pinned).toBe(true);
     });

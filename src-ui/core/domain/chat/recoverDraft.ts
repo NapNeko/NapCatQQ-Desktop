@@ -20,7 +20,7 @@ export function recoverDraft(message: Message, current: Draft): Draft {
         } else if (segment.type === 'image' && /^https?:\/\//i.test(text(data.file))) {
             attachments.push({ key: message.key + '/' + index + '/' + attachments.length, type: 'image', path: text(data.file), name: data.sub_type === 1 ? '收藏表情' : '图片', ...(data.sub_type === 1 ? { subType: 1 } : {}) });
         } else if (segment.type === 'image' || segment.type === 'file') {
-            const file = text(data.file);
+            const file = text(data.local_file) || text(data.file);
             if (file.startsWith(LOCAL_FILE_PREFIX) || file.startsWith('base64://')) {
                 const path = file.startsWith(LOCAL_FILE_PREFIX) ? file.slice(LOCAL_FILE_PREFIX.length) : file;
                 attachments.push({ key: `${message.key}/${index}/${attachments.length}`, type: segment.type, path, name: text(data.name) || (path.startsWith('base64://') ? '粘贴的图片.png' : path.split(/[\\/]/).pop() || '附件') });

@@ -210,6 +210,7 @@ pub struct BotManager<R: BotConfigRepo + 'static, S: ConfigStore + 'static> {
     /// See RemoteQqEntryCoordinator for rationale and batch-start safety.
     remote_qq_entry_coordinator: Arc<RemoteQqEntryCoordinator>,
     server_manager: Option<Arc<crate::ServerManager>>,
+    debug_recovery: Arc<Mutex<HashMap<String, tokio::time::Instant>>>,
     /// 和组件执行器共用的远端库存副本;启动路由按它取选中路径,装卸后的重探对这边也生效
     remote_inventory: Option<Arc<crate::remote::inventory::RemoteInventoryService>>,
     /// 启动前的框架 / 依赖预检;None 不检查(测试与纯本机 wiring)
@@ -246,9 +247,20 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
             remote_snowluma_tunnels: Arc::clone(&self.remote_snowluma_tunnels),
             remote_qq_entry_coordinator: Arc::clone(&self.remote_qq_entry_coordinator),
             server_manager: self.server_manager.clone(),
+            debug_recovery: Arc::clone(&self.debug_recovery),
             remote_inventory: self.remote_inventory.clone(),
             runtime_gate: self.runtime_gate.clone(),
         }
+    }
+}
+
+impl<S: ConfigStore + 'static> BotManager<crate::LocalBotConfigRepo<S>, S> {
+    pub async fn replace_bot_configs_with<T>(
+        &self,
+        bots: Option<Vec<BotConfig>>,
+        write: impl std::future::Future<Output = Result<T, String>>,
+    ) -> Result<T, String> {
+        self.repo.replace_with(bots, write).await
     }
 }
 
@@ -294,6 +306,7 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
             remote_snowluma_tunnels: Arc::new(RemoteSnowLumaTunnelRegistry::new()),
             remote_qq_entry_coordinator: Arc::new(RemoteQqEntryCoordinator::default()),
             server_manager: None,
+            debug_recovery: Arc::new(Mutex::new(HashMap::new())),
             remote_inventory: None,
             runtime_gate: None,
         }

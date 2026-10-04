@@ -12,10 +12,11 @@ let store: ChatAccountStore;
 const target: DebugTarget = { bot_id: 'page-test', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: false, online: false };
 const friend: Contact = { key: 'private:1', type: 'private', id: '1', name: '小明' };
 const group: Contact = { key: 'group:3', type: 'group', id: '3', name: '讨论群' };
-vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: [target], isLoading: false }) }));
+vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }), useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey[1] === 'desktop' ? { accounts: [] } : [target], isLoading: false }) }));
 vi.mock('../../hooks/chat/chatStore', async importOriginal => ({ ...await importOriginal<typeof import('../../hooks/chat/chatStore')>(), chatAccount: () => store, reconcileChatAccounts: vi.fn() }));
 vi.mock('../debug/BotPicker', () => ({ BotPicker: () => <span>账号</span> }));
 vi.mock('./ChatDetails', () => ({ ChatDetails: () => null }));
+vi.mock('./ChatAccountControls', () => ({ ChatAccountControls: () => null }));
 vi.mock('./ChatDivider', () => ({ ChatDivider: () => null }));
 vi.mock('./ChatAvatar', () => ({ ChatAvatar: () => <span /> }));
 vi.mock('./ChatSearch', () => ({ ChatSearch: () => null }));
@@ -40,6 +41,7 @@ describe('hidden conversations', () => {
         store.draft(group.key, { text: '群草稿', attachments: [], reply: null });
         store.getSnapshot().contacts = [group, friend];
         render(<ChatPage onNavigate={vi.fn()} />);
+        await screen.findByRole('combobox', { name: '搜索会话或联系人' });
         await user.click(screen.getByRole('button', { name: /群消息盒子/ }));
         const option = screen.getByRole('option', { name: /讨论群/ });
         await user.click(option);
@@ -58,6 +60,7 @@ describe('hidden conversations', () => {
         const user = userEvent.setup();
         store.getSnapshot().contacts = [friend];
         render(<ChatPage onNavigate={vi.fn()} />);
+        await screen.findByRole('combobox', { name: '搜索会话或联系人' });
         await user.click(screen.getByRole('tab', { name: '联系人' }));
         fireEvent.keyDown(screen.getByRole('option', { name: /小明/ }), { key: 'F10', shiftKey: true });
         await user.click(await screen.findByRole('menuitem', { name: '隐藏会话' }));
@@ -72,9 +75,17 @@ describe('hidden conversations', () => {
 });
 
 describe('chat conversation shortcuts', () => {
+    it('reveals the handed-off group and its draft immediately in a narrow window', async () => {
+        store.open(group); store.draft(group.key, { text: '交接群草稿', reply: null, attachments: [] });
+        render(<ChatPage onNavigate={vi.fn()} />);
+        const composer = await screen.findByRole('textbox', { name: '消息输入框' });
+        expect(composer).toHaveValue('交接群草稿');
+        expect(composer.closest('.native-chat-workspace')).toHaveAttribute('data-conversation', 'true');
+        expect(screen.getByRole('option', { name: /讨论群/ })).toHaveAttribute('aria-current', 'true');
+    });
     it.each(['Control', 'Meta'])('focuses and selects search with %s+K after revealing the list', async modifier => {
         const user = userEvent.setup(); render(<ChatPage onNavigate={vi.fn()} />);
-        const input = screen.getByRole('combobox', { name: '搜索会话或联系人' });
+        const input = await screen.findByRole('combobox', { name: '搜索会话或联系人' });
         await user.type(input, '小明');
         await user.keyboard('{Enter}');
         await waitFor(() => expect(screen.getByRole('textbox', { name: '消息输入框' })).toHaveFocus());
@@ -86,7 +97,7 @@ describe('chat conversation shortcuts', () => {
     });
     it('leaves ordinary typing and composing shortcuts in the current input', async () => {
         const user = userEvent.setup(); render(<ChatPage onNavigate={vi.fn()} />);
-        const composer = screen.getByRole('textbox', { name: '消息输入框' });
+        const composer = await screen.findByRole('textbox', { name: '消息输入框' });
         await user.click(composer); await user.keyboard('k');
         expect(composer).toHaveFocus(); expect(composer).toHaveValue('正在编辑k');
         fireEvent.keyDown(composer, { key: 'k', ctrlKey: true, isComposing: true });
@@ -95,6 +106,7 @@ describe('chat conversation shortcuts', () => {
     });
     it('searches private conversations from the group box and focuses the chosen draft after Enter', async () => {
         const user = userEvent.setup(); render(<ChatPage onNavigate={vi.fn()} />);
+        await screen.findByRole('combobox', { name: '搜索会话或联系人' });
         await user.click(screen.getByRole('button', { name: /群消息盒子/ }));
         await user.click(screen.getByRole('option', { name: /讨论群/ }));
         const composer = screen.getByRole('textbox', { name: '消息输入框' });

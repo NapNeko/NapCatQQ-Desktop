@@ -98,6 +98,10 @@ pub struct ChatArchiveMessage {
     #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recalled: Option<bool>,
+    // 拍一拍等系统提示行：无消息段，展示文案直接存这里。
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notice: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

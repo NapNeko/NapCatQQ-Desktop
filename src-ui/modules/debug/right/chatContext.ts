@@ -36,6 +36,7 @@ export interface ChatViewApi {
     openImage: (url: string) => void;
     openLink: (url: string) => void;
     readImage?: (data: Record<string, unknown>, refresh?: boolean) => Promise<string>;
+    mediaScope?: string;
     readForward?: (data: Record<string, unknown>) => Promise<ForwardNode[]>;
     readRecord?: (data: Record<string, unknown>) => Promise<string>;
     readVideo?: (data: Record<string, unknown>, refresh?: boolean) => Promise<string>;

@@ -250,6 +250,7 @@ impl AppManager {
         id: &AppInstanceId,
         action: MaiBotPromptAction,
     ) -> Result<MaiBotPromptFile, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
         let (api, place) = self.maibot_prompt_place(id).await?;
         api.prompt_action(place.target(), &action).await
     }

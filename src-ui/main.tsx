@@ -5,6 +5,7 @@ import { AppProvidersNext } from './app/AppProvidersNext';
 import { TrayPanel } from './modules/tray/TrayPanel';
 import { isTauri } from './core/ipc/transport';
 import { DEBUG_WINDOW_LABEL } from './core/services/debug-window.service';
+import { CHAT_WINDOW_LABEL, isChatPopoutWindow, markChatPopoutWindow } from './core/services/chat-desktop.service';
 
 // 屏蔽 WebView/浏览器默认右键菜单（后退/刷新/审查），输入框除外（保留系统复制粘贴）
 document.addEventListener('contextmenu', (e) => {
@@ -82,8 +83,22 @@ async function renderDebugPopout(): Promise<void> {
     );
 }
 
+async function renderChatPopout(): Promise<void> {
+    markChatPopoutWindow();
+    const { hydrateAppUiPreferencesFromDisk } = await import('./hooks/preferences/useAppUiPreferencesBootstrap');
+    const { applySideEffects } = await import('./hooks/preferences/preferencesStore');
+    const { syncRootChromeBackground } = await import('./core/design/surfaceCanvas');
+    const { ChatPopoutApp } = await import('./app/ChatPopoutApp');
+    applySideEffects(); syncRootChromeBackground();
+    await hydrateAppUiPreferencesFromDisk(); syncRootChromeBackground();
+    render(<AppProvidersNext><ChatPopoutApp /></AppProvidersNext>);
+}
+
 void (async () => {
     const label = await currentWindowLabel();
+    if (label === CHAT_WINDOW_LABEL || isChatPopoutWindow()) {
+        await renderChatPopout(); return;
+    }
     if (label === 'tray-panel') {
         await renderTrayPanel();
         return;

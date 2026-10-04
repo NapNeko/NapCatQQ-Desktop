@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 import shutil
 import subprocess
@@ -24,6 +25,8 @@ TAURI_CLI = ROOT / "node_modules" / "@tauri-apps" / "cli" / "tauri.js"
 SIZES = (16, 24, 32, 48, 64, 128, 256)
 TRAY_SIZES = (16, 20, 24, 32, 48)
 UI_LOGO_SIZES = (32, 48, 72)
+# 框架卡片继续用原 NapCat 标识，不跟着 Desktop 主图更新。
+NAPCAT_SYMBOL_BLOB = "a87d363e3ad17376551ea647db8eb1680abd0992"
 BRAND_500 = (255, 107, 61, 255)
 BRAND_50 = (255, 245, 236, 255)
 
@@ -146,11 +149,39 @@ def print_plan(source: Path) -> None:
             print(TRAY_DIR / f"{variant}-{size}.png")
 
 
+def restore_napcat_symbol(dry_run: bool) -> None:
+    try:
+        original = subprocess.check_output(["git", "cat-file", "blob", NAPCAT_SYMBOL_BLOB], cwd=ROOT, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as error:
+        raise SystemExit("找不到原 NapCat 图标，请使用包含图标更新前历史的仓库") from error
+    with Image.open(BytesIO(original)) as image:
+        if image.format != "PNG" or image.size != (1024, 1024):
+            raise SystemExit("原 NapCat 图标格式不符合预期")
+        rgba = image.convert("RGBA")
+    for size in UI_LOGO_SIZES:
+        print(UI_ASSETS / f"napcat-symbol-{size}.png")
+    if dry_run:
+        return
+    cache = ROOT / ".cache"
+    cache.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="napcat-symbol-", dir=cache) as directory:
+        staging = Path(directory)
+        output = staging / "src-ui" / "assets"
+        output.mkdir(parents=True)
+        for size in UI_LOGO_SIZES:
+            _oversample_resize(rgba, size).save(output / f"napcat-symbol-{size}.png", optimize=True)
+        publish_assets(staging)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=SOURCE, help="导入已定稿的 1024px RGBA PNG")
     parser.add_argument("--dry-run", action="store_true", help="只检查源图并列出输出范围")
+    parser.add_argument("--napcat-symbol-only", action="store_true", help="从 Git 原图重建 NapCat 框架卡片标识")
     args = parser.parse_args()
+    if args.napcat_symbol_only:
+        restore_napcat_symbol(args.dry_run)
+        return
     source = args.source.resolve()
     with Image.open(source) as image:
         if image.format != "PNG" or image.mode != "RGBA" or image.size != (1024, 1024):

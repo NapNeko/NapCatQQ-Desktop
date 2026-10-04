@@ -1,5 +1,14 @@
-import type { Draft, Message } from '../../core/domain/chat/model';
+import { EMPTY_DRAFT, type Draft, type Message } from '../../core/domain/chat/model';
 import { mentionLabel, pruneMentions } from '../../core/domain/debug/composerModel';
+
+/** 读取会话当前草稿并追加一条 @，同名成员按人数区分；消息菜单和头像菜单共用。 */
+export function draftWithMention(messages: readonly Message[], drafts: Record<string, Draft>, sessionKey: string, message: Message): Draft {
+    const sameName = new Set(messages
+        .filter(item => item.session === sessionKey && item.senderName === message.senderName)
+        .map(item => item.senderId));
+    sameName.add(message.senderId);
+    return mentionMessageSender(drafts[sessionKey] ?? EMPTY_DRAFT, message, sameName.size);
+}
 
 /** Append an explicit mention without changing existing text or converting a typed @name. */
 export function mentionMessageSender(draft: Draft, message: Message, sameNameCount = 1): Draft {

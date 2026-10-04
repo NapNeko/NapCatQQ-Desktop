@@ -137,9 +137,10 @@ pub async fn login_client(
     port: u16,
     username: &str,
     password: &str,
+    desktop_secret: Option<&str>,
 ) -> Result<DashboardClient, AppFrameworkError> {
     let client = DashboardClient::connect(sessions, instance_id, "127.0.0.1", port)?;
-    client.login(username, password).await?;
+    client.login(username, password, desktop_secret).await?;
     Ok(client)
 }
 
@@ -149,25 +150,28 @@ pub async fn probe_status(
     port: u16,
     username: &str,
     password: Option<&str>,
+    desktop_secret: Option<&str>,
 ) -> AstrBotDashboardStatus {
-    let Some(password) = password.filter(|s| !s.is_empty()) else {
+    let has_password = password.is_some_and(|s| !s.is_empty());
+    if !has_password && !desktop_secret.is_some_and(|s| !s.is_empty()) {
         return AstrBotDashboardStatus::auth(false, "没有可用的 WebUI 密码。到连接页写下密码");
-    };
+    }
+    let password = password.unwrap_or("");
     let client = match DashboardClient::connect(sessions, instance_id, "127.0.0.1", port) {
         Ok(c) => c,
-        Err(e) => return AstrBotDashboardStatus::unreachable(true, e.to_string()),
+        Err(e) => return AstrBotDashboardStatus::unreachable(has_password, e.to_string()),
     };
-    if let Err(e) = client.login(username, password).await {
+    if let Err(e) = client.login(username, password, desktop_secret).await {
         return match e {
-            AppFrameworkError::DashboardAuth(m) => AstrBotDashboardStatus::auth(true, m),
-            other => AstrBotDashboardStatus::unreachable(true, other.to_string()),
+            AppFrameworkError::DashboardAuth(m) => AstrBotDashboardStatus::auth(has_password, m),
+            other => AstrBotDashboardStatus::unreachable(has_password, other.to_string()),
         };
     }
     // login 可能只命中了进程内缓存；门控必须靠一次真请求确认对面还在
-    match client.verify(username, password).await {
+    match client.verify(username, password, desktop_secret).await {
         Ok(()) => AstrBotDashboardStatus::ok(),
-        Err(AppFrameworkError::DashboardAuth(m)) => AstrBotDashboardStatus::auth(true, m),
-        Err(e) => AstrBotDashboardStatus::unreachable(true, e.to_string()),
+        Err(AppFrameworkError::DashboardAuth(m)) => AstrBotDashboardStatus::auth(has_password, m),
+        Err(e) => AstrBotDashboardStatus::unreachable(has_password, e.to_string()),
     }
 }
 
@@ -500,7 +504,7 @@ mod tests {
             .await;
         let port: u16 = server.uri().rsplit(':').next().unwrap().parse().unwrap();
         let sessions = Arc::new(DashboardSessions::default());
-        login_client(&sessions, instance_id, port, "astrbot", "Abcdefg1")
+        login_client(&sessions, instance_id, port, "astrbot", "Abcdefg1", None)
             .await
             .unwrap()
     }
@@ -614,8 +618,35 @@ mod tests {
             .await;
 
         let sessions = Arc::new(DashboardSessions::default());
-        let status = probe_status(&sessions, "rt-gate", port, "astrbot", Some("Abcdefg1")).await;
+        let status = probe_status(&sessions, "rt-gate", port, "astrbot", Some("Abcdefg1"), None).await;
         assert_eq!(status.gate, AstrBotDashboardGate::Auth);
         assert!(!status.authenticated);
+    }
+
+    #[tokio::test]
+    async fn probe_status_uses_desktop_session_when_no_password() {
+        let server = MockServer::start().await;
+        let port: u16 = server.uri().rsplit(':').next().unwrap().parse().unwrap();
+        Mock::given(method("POST"))
+            .and(path("/api/v1/auth/desktop-session"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "ok",
+                "data": { "token": "jwt", "username": "astrbot" }
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/config/abconfs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "ok",
+                "data": { "info_list": [] }
+            })))
+            .mount(&server)
+            .await;
+
+        let sessions = Arc::new(DashboardSessions::default());
+        let status = probe_status(&sessions, "rt-ds", port, "astrbot", None, Some("s3cret")).await;
+        assert_eq!(status.gate, AstrBotDashboardGate::Ok);
+        assert!(status.authenticated);
     }
 }

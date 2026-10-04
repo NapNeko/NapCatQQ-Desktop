@@ -122,7 +122,7 @@ export function InfoBarStack({
     const node = (
         <div
             className={cn(
-                'pointer-events-none fixed right-6 top-[calc(var(--titlebar-height)+1.5rem)] z-50 flex w-[min(420px,calc(100vw-3rem))] flex-col gap-4',
+                'pointer-events-none fixed right-6 top-[calc(var(--titlebar-height)+1rem)] z-50 flex w-[min(360px,calc(100vw-3rem))] flex-col gap-2.5',
                 className,
             )}
         >

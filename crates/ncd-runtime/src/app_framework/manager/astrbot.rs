@@ -44,6 +44,7 @@ impl AppManager {
             port,
             username: self.webui_login_username(&instance).await,
             password,
+            desktop_secret: self.desktop_session_secret(&instance),
         };
         Ok(runtime.dashboard_status(&session).await)
     }
@@ -78,6 +79,7 @@ impl AppManager {
             port,
             username: self.webui_login_username(&instance).await,
             password: self.remembered_secret(&instance, SECRET_WEBUI_PASSWORD),
+            desktop_secret: self.desktop_session_secret(&instance),
         };
         Ok((adapter, session))
     }

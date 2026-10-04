@@ -4,6 +4,7 @@
 
 import { useSyncExternalStore, useMemo, useCallback } from 'react';
 import type { BotActorSnapshot } from '../../core/ipc/types';
+import { onFrontendPreferenceRestored } from '../../core/domain/settings/config-transfer-preferences';
 
 const STORAGE_KEY = 'ncd:bot_custom_order:v1';
 const CHANNEL_NAME = 'ncd:bot_sort_channel:v1';
@@ -41,11 +42,10 @@ if (broadcastChannel) {
 }
 
 if (typeof window !== 'undefined') {
-    window.addEventListener('storage', (e) => {
-        if (e.key === STORAGE_KEY) {
-            customOrder = loadCustomOrderFromStorage();
-            listeners.forEach((l) => l());
-        }
+    onFrontendPreferenceRestored(STORAGE_KEY, () => {
+        customOrder = loadCustomOrderFromStorage();
+        listeners.forEach((l) => l());
+        broadcastChannel?.postMessage({ type: 'ORDER_CHANGED', order: customOrder });
     });
 }
 

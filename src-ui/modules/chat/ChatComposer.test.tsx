@@ -1,18 +1,49 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatComposer } from './ChatComposer';
 import { ChatAccountStore } from '../../hooks/chat/chatStore';
 import { chatMediaService } from '../../core/services/chat-media.service';
 import { createRef } from 'react';
+import { qqFaceService } from '../../core/services/qq-face.service';
+import { QQ_FACE_FALLBACK } from '../../core/domain/chat/qqFaces';
+import { setChatPreferences } from './chatPreferences';
 
-function setup(disabledReason = '', sendShortcut: 'enter' | 'ctrl-enter' = 'enter') {
+beforeEach(() => { setChatPreferences({ composerHeight: null }); vi.spyOn(qqFaceService, 'catalog').mockResolvedValue(QQ_FACE_FALLBACK); });
+
+function setup(disabledReason = '') {
     const store = new ChatAccountStore({ bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true });
     store.draft('private:12', { text: '你好', attachments: [], reply: null });
     const send = vi.spyOn(store, 'send').mockResolvedValue();
-    render(<ChatComposer store={store} contact={{ key: 'private:12', id: '12', name: '好友', type: 'private' }} disabledReason={disabledReason} sendShortcut={sendShortcut} onSendShortcutChange={() => {}} />);
+    render(<ChatComposer store={store} contact={{ key: 'private:12', id: '12', name: '好友', type: 'private' }} disabledReason={disabledReason} />);
     return { send, input: screen.getByRole('textbox', { name: '发送消息给好友' }) };
 }
 describe('native composer keyboard', () => {
+    it('keeps manual height through editing and restores automatic sizing on double click', () => {
+        const { input, send } = setup();
+        const handle = screen.getByRole('separator', { name: '调整输入框高度' });
+        fireEvent.keyDown(handle, { key: 'ArrowUp' });
+        expect(input).toHaveStyle({ height: '68px' });
+        fireEvent.change(input, { target: { value: '调整高度后继续输入' } });
+        expect(input).toHaveStyle({ height: '68px' });
+        expect(JSON.parse(localStorage.getItem('ncd.chat.ui.v1')!).composerHeight).toBe(68);
+        fireEvent.doubleClick(handle);
+        expect(input).toHaveStyle({ height: '52px' });
+        expect(JSON.parse(localStorage.getItem('ncd.chat.ui.v1')!).composerHeight).toBeNull();
+        expect(input).toHaveValue('调整高度后继续输入');
+        expect(send).not.toHaveBeenCalled();
+    });
+    it('clamps keyboard resizing to the viewport and never intercepts sending keys', () => {
+        const { input, send } = setup();
+        const handle = screen.getByRole('separator', { name: '调整输入框高度' });
+        fireEvent.keyDown(handle, { key: 'End' });
+        expect(Number.parseFloat((input as HTMLElement).style.height)).toBe(Number(handle.getAttribute('aria-valuemax')));
+        fireEvent.keyDown(handle, { key: 'ArrowUp' });
+        expect(Number.parseFloat((input as HTMLElement).style.height)).toBe(Number(handle.getAttribute('aria-valuemax')));
+        fireEvent.keyDown(handle, { key: 'Home' });
+        expect(input).toHaveStyle({ height: '52px' });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(send).toHaveBeenCalledOnce();
+    });
     it('returns focus to the editor after clicking send for consecutive messages', () => {
         const { send, input } = setup();
         const button = screen.getByRole('button', { name: '发送消息' });
@@ -34,6 +65,8 @@ describe('native composer keyboard', () => {
         expect(store.getSnapshot().account.drafts['private:12']).toEqual({ text: '继续写', attachments: [attachment], reply: null });
     });
     it('selects QQ and favorite faces into the draft without sending', async () => {
+        vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(240);
+        vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(340);
         const store = new ChatAccountStore({ bot_id: 'bot', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: true, online: true });
         const send = vi.spyOn(store, 'send').mockResolvedValue();
         const favorites = vi.spyOn(chatMediaService, 'favorites').mockResolvedValue(['https://cdn.example/fav.gif']);
@@ -49,12 +82,12 @@ describe('native composer keyboard', () => {
         expect(send).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: '发送消息' })).toBeEnabled();
     });
-    it('sends only with the selected Ctrl+Enter shortcut', () => {
-        const { send, input } = setup('', 'ctrl-enter');
-        fireEvent.keyDown(input, { key: 'Enter' });
+    it('sends with Enter and leaves modified Enter alone', () => {
+        const { send, input } = setup();
+        fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true });
         fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
         expect(send).not.toHaveBeenCalled();
-        fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true });
+        fireEvent.keyDown(input, { key: 'Enter' });
         expect(send).toHaveBeenCalledOnce();
     });
     it('uses arrows and Enter to choose a member without sending', async () => {

@@ -27,6 +27,11 @@ pub const ASTRBOT_PLUGINS_DIR: &str = "data/plugins";
 pub const ASTRBOT_STDOUT_LOG: &str = ".ncd-astrbot.log";
 pub const ASTRBOT_REVERSE_WS_PATH: &str = "/ws";
 
+/// 上游 `astrbot/core/desktop_runtime.py`（v4.28.x 起）：桌面托管开关 + 会话密钥的 env 名，
+/// 密钥至少 32 位。注入后 WebUI 自己的重启 / 更新入口会对用户关闭（归桌面端管）
+pub const ENV_DESKTOP_MANAGED: &str = "ASTRBOT_DESKTOP_MANAGED";
+pub const ENV_DESKTOP_SESSION_SECRET: &str = "ASTRBOT_DESKTOP_SESSION_SECRET";
+
 pub const PLATFORM_TYPE_AIOCQHTTP: &str = "aiocqhttp";
 pub const KEY_WS_REVERSE_HOST: &str = "ws_reverse_host";
 pub const KEY_WS_REVERSE_PORT: &str = "ws_reverse_port";

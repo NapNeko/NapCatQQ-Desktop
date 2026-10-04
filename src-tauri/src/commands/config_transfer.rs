@@ -1,32 +1,42 @@
 //! 配置导入导出命令
 //!
-//! 导出:将应用配置 / Bot 配置 / 远端档案(不含密钥)打成 ZIP,含 export_meta.json
-//! 导入:从 ZIP 或扁平目录读取 config.json / bot.json / servers.json,校验后原子写回
-//! 预览:preview_config_import 只扫描来源,不写盘,供导入向导展示
+//! Registered Desktop configuration is validated before ZIP export or one atomic import transaction.
+//! Browser preferences are explicitly allowlisted; secrets and runtime/history data stay separate.
 
+use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use ncd_runtime::app_framework::{FrameworkConfigBackup, FrameworkConfigRecovery};
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use ts_rs::TS;
 use zip::ZipWriter;
-use zip::read::ZipArchive;
 use zip::write::SimpleFileOptions;
 
 use crate::AppState;
 
-const EXPORT_FORMAT_VERSION: &str = "v1";
+mod registry;
+mod source;
+mod validation;
 
-/// 参与导入导出的配置文件,相对 data_root 的路径 + 用途描述
-const TRANSFER_FILES: &[(&str, &str, &str)] = &[
-    ("config/config.json", "config.json", "应用配置"),
-    ("config/bot.json", "bot.json", "Bot 配置"),
-    ("config/app-settings.json", "app-settings.json", "应用设置"),
-    ("config/servers.json", "servers.json", "远端服务器档案"),
-];
+use registry::TransferKind;
+use source::{collect_export, discover_source, merge_framework_backups, resolve_import_staging};
+use validation::{MemorySecretStore, normalize_entry, validate_framework_links};
+
+#[cfg(test)]
+use source::extract_zip_to_dir;
+
+const EXPORT_FORMAT_VERSION: &str = "v2";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
+pub struct ConfigFrontendPreferences {
+    pub version: u32,
+    pub storage: BTreeMap<String, String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
@@ -53,6 +63,12 @@ pub struct ConfigImportPreview {
 pub struct ConfigImportResult {
     pub files: Vec<String>,
     pub skipped: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub frontend_preferences: Option<ConfigFrontendPreferences>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub framework_pending: Option<Vec<String>>,
 }
 
 fn unix_ts() -> u64 {
@@ -62,24 +78,24 @@ fn unix_ts() -> u64 {
         .as_secs()
 }
 
-fn build_export_meta(files: &[String]) -> serde_json::Value {
+fn build_export_meta(files: &[String], entries: &[String]) -> serde_json::Value {
     serde_json::json!({
         "exportFormatVersion": EXPORT_FORMAT_VERSION,
         "exportedAtUnix": unix_ts(),
         "files": files,
+        "entries": entries,
     })
 }
 
-fn add_json_to_zip<W: Write + std::io::Seek>(
+fn add_bytes_to_zip<W: Write + std::io::Seek>(
     zip: &mut ZipWriter<W>,
     name: &str,
-    value: &serde_json::Value,
+    bytes: &[u8],
 ) -> Result<(), String> {
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     zip.start_file(name, options)
         .map_err(|e| format!("ZIP 写入 {name} 失败: {e}"))?;
-    let bytes = serde_json::to_vec_pretty(value).map_err(|e| format!("序列化 {name} 失败: {e}"))?;
-    zip.write_all(&bytes)
+    zip.write_all(bytes)
         .map_err(|e| format!("ZIP 写出 {name} 失败: {e}"))?;
     Ok(())
 }
@@ -89,41 +105,155 @@ fn add_json_to_zip<W: Write + std::io::Seek>(
 pub async fn export_config(
     state: State<'_, AppState>,
     dest_path: String,
+    frontend_preferences: Option<ConfigFrontendPreferences>,
 ) -> Result<ConfigExportResult, String> {
     state.migrate_gate.ensure_idle()?;
+    let _framework_guard = state.app_manager.framework_config_transfer_guard().await;
+    let instances = state.app_manager.list_instances().await;
+    let servers = state.server_manager.list_servers().await;
+    let frameworks = state
+        .app_manager
+        .export_framework_config_backups(&instances, Some(&servers))
+        .await?;
     let dest = PathBuf::from(&dest_path);
-    if dest.extension().and_then(|s| s.to_str()) != Some("zip") {
+    export_config_with_frameworks(
+        &state.data_root,
+        &dest,
+        frontend_preferences,
+        frameworks,
+        Some(&instances),
+        Some(&servers),
+    )
+}
+
+#[cfg(test)]
+fn export_config_to_path(
+    data_root: &Path,
+    dest: &Path,
+    frontend_preferences: Option<ConfigFrontendPreferences>,
+) -> Result<ConfigExportResult, String> {
+    export_config_with_frameworks(
+        data_root,
+        dest,
+        frontend_preferences,
+        Vec::new(),
+        None,
+        None,
+    )
+}
+
+fn export_config_with_frameworks(
+    data_root: &Path,
+    dest: &Path,
+    frontend_preferences: Option<ConfigFrontendPreferences>,
+    frameworks: Vec<FrameworkConfigBackup>,
+    instances: Option<&[ncd_domain::AppInstance]>,
+    servers: Option<&[ncd_runtime::ServerProfile]>,
+) -> Result<ConfigExportResult, String> {
+    if !dest
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+    {
         return Err("导出目标必须是 .zip 文件路径".to_string());
     }
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
+    let mut entries = collect_export(data_root, frontend_preferences.as_ref())?;
+    if let Some(instances) = instances {
+        entries.retain(|entry| {
+            entry.descriptor.kind != TransferKind::Instances
+                && (entry.descriptor.kind != TransferKind::Framework
+                    || instances
+                        .iter()
+                        .any(|i| entry.value["instance_id"] == i.id.as_str()))
+        });
+        let spec = registry::TRANSFER_FILES
+            .iter()
+            .find(|spec| spec.kind == TransferKind::Instances)
+            .ok_or("缺少实例备份注册项")?;
+        entries.push(source::RawEntry {
+            descriptor: spec.into(),
+            value: serde_json::json!({"version": 1, "instances": instances}),
+        });
     }
-
-    let data_root = &state.data_root;
-    let mut labels = Vec::new();
-    let file = File::create(&dest).map_err(|e| format!("创建 ZIP 失败: {e}"))?;
-    let mut zip = ZipWriter::new(file);
-
-    for (rel, zip_name, label) in TRANSFER_FILES {
-        let src = data_root.join(rel);
-        if !src.is_file() {
-            continue;
-        }
-        let text = fs::read_to_string(&src).map_err(|e| format!("读取 {label} 失败: {e}"))?;
-        let value: serde_json::Value =
-            serde_json::from_str(&text).map_err(|e| format!("{label} 不是合法 JSON: {e}"))?;
-        add_json_to_zip(&mut zip, zip_name, &value)?;
-        labels.push((*label).to_string());
+    if let Some(servers) = servers {
+        entries.retain(|entry| entry.descriptor.kind != TransferKind::Servers);
+        let spec = registry::TRANSFER_FILES
+            .iter()
+            .find(|spec| spec.kind == TransferKind::Servers)
+            .ok_or("缺少远端备份注册项")?;
+        entries.push(source::RawEntry {
+            descriptor: spec.into(),
+            value: serde_json::to_value(servers).map_err(|e| e.to_string())?,
+        });
     }
-
-    if labels.is_empty() {
+    merge_framework_backups(&mut entries, frameworks)?;
+    if entries.is_empty() {
         return Err("当前没有可导出的配置文件".to_string());
     }
+    let simulation = MemorySecretStore::default();
+    validate_framework_links(&entries)?;
+    let mut labels = Vec::new();
+    let mut paths = Vec::new();
+    let mut serialized = Vec::new();
+    let mut total = 0_u64;
 
-    let meta = build_export_meta(&labels);
-    add_json_to_zip(&mut zip, "export_meta.json", &meta)?;
+    for entry in entries {
+        normalize_entry(&entry.descriptor, entry.value.clone(), &simulation)?;
+        let bytes = serde_json::to_vec_pretty(&entry.value)
+            .map_err(|error| format!("序列化 {} 失败: {error}", entry.descriptor.archive_name))?;
+        if bytes.len() as u64 > source::MAX_FILE_BYTES {
+            return Err(format!(
+                "配置文件 {} 超出 16 MiB 大小限制",
+                entry.descriptor.archive_name
+            ));
+        }
+        total += bytes.len() as u64;
+        serialized.push((entry.descriptor.archive_name.clone(), bytes));
+        labels.push(entry.descriptor.label);
+        paths.push(entry.descriptor.archive_name);
+    }
+    let meta = build_export_meta(&labels, &paths);
+    let metadata = serde_json::to_vec_pretty(&meta)
+        .map_err(|error| format!("序列化导出元数据失败: {error}"))?;
+    total += metadata.len() as u64;
+    if total > source::MAX_TOTAL_BYTES {
+        return Err("配置包超出 64 MiB 总大小限制".into());
+    }
+    serialized.push(("export_meta.json".into(), metadata));
 
-    zip.finish().map_err(|e| format!("完成 ZIP 失败: {e}"))?;
+    // Build a sibling archive, then rename only after all JSON and ZIP writes have succeeded.
+    let parent = dest
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent).map_err(|error| format!("创建导出目录失败: {error}"))?;
+    let name = dest
+        .file_name()
+        .ok_or_else(|| "导出目标必须包含文件名".to_string())?;
+    let temporary = ExportTempFile {
+        path: parent.join(format!(
+            ".{}.ncd-export-{}.tmp",
+            name.to_string_lossy(),
+            uuid::Uuid::new_v4()
+        )),
+    };
+    let file = File::options()
+        .write(true)
+        .create_new(true)
+        .open(&temporary.path)
+        .map_err(|error| format!("创建临时 ZIP 失败: {error}"))?;
+    let mut zip = ZipWriter::new(file);
+    for (name, bytes) in serialized {
+        add_bytes_to_zip(&mut zip, &name, &bytes)?;
+    }
+    let file = zip
+        .finish()
+        .map_err(|error| format!("完成 ZIP 失败: {error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("同步 ZIP 失败: {error}"))?;
+    drop(file);
+    fs::rename(&temporary.path, dest)
+        .map_err(|error| format!("替换导出 ZIP 失败，原文件已保留: {error}"))?;
 
     Ok(ConfigExportResult {
         export_path: dest.to_string_lossy().to_string(),
@@ -131,75 +261,17 @@ pub async fn export_config(
     })
 }
 
-struct StagingDir {
+struct ExportTempFile {
     path: PathBuf,
 }
 
-impl StagingDir {
-    fn new() -> Result<Self, String> {
-        let base = std::env::temp_dir().join(format!("ncd-config-import-{}", unix_ts()));
-        fs::create_dir_all(&base).map_err(|e| format!("创建临时目录失败: {e}"))?;
-        Ok(Self { path: base })
-    }
-}
-
-impl Drop for StagingDir {
+impl Drop for ExportTempFile {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
+        let _ = fs::remove_file(&self.path);
     }
 }
 
-fn extract_zip_to_dir(zip_path: &Path, dest: &Path) -> Result<(), String> {
-    let file = File::open(zip_path).map_err(|e| format!("打开 ZIP 失败: {e}"))?;
-    let mut archive = ZipArchive::new(file).map_err(|e| format!("读取 ZIP 失败: {e}"))?;
-    for i in 0..archive.len() {
-        let mut entry = archive
-            .by_index(i)
-            .map_err(|e| format!("读取 ZIP 条目失败: {e}"))?;
-        let name = entry.name().to_string();
-        if entry.is_dir() || name.contains("..") {
-            continue;
-        }
-        let file_name = Path::new(&name)
-            .file_name()
-            .ok_or_else(|| format!("非法 ZIP 路径: {name}"))?;
-        let out_path = dest.join(file_name);
-        let mut out = File::create(&out_path).map_err(|e| format!("写出 {name} 失败: {e}"))?;
-        std::io::copy(&mut entry, &mut out).map_err(|e| format!("解压 {name} 失败: {e}"))?;
-    }
-    Ok(())
-}
-
-fn resolve_import_staging(source: &Path) -> Result<(PathBuf, String, Option<StagingDir>), String> {
-    if source.is_dir() {
-        return Ok((source.to_path_buf(), "directory".to_string(), None));
-    }
-    if source.is_file() {
-        let ext = source.extension().and_then(|s| s.to_str()).unwrap_or("");
-        if ext.eq_ignore_ascii_case("zip") {
-            let staging = StagingDir::new()?;
-            extract_zip_to_dir(source, &staging.path)?;
-            return Ok((staging.path.clone(), "zip".to_string(), Some(staging)));
-        }
-    }
-    Err("请选择配置 ZIP 包或包含 config.json / bot.json / servers.json 的文件夹".to_string())
-}
-
-fn scan_staging(staging: &Path) -> (Vec<String>, Vec<String>) {
-    let mut found = Vec::new();
-    let mut skipped = Vec::new();
-    for (_, zip_name, label) in TRANSFER_FILES {
-        let p = staging.join(zip_name);
-        if p.is_file() {
-            found.push((*label).to_string());
-        } else {
-            skipped.push((*label).to_string());
-        }
-    }
-    (found, skipped)
-}
-
-/// 扫描导入来源(ZIP 或目录),不写盘
+/// Validate an import source without changing production files, caches, or credentials.
 #[tauri::command]
 pub async fn preview_config_import(source_path: String) -> Result<ConfigImportPreview, String> {
     let source = PathBuf::from(&source_path);
@@ -208,10 +280,38 @@ pub async fn preview_config_import(source_path: String) -> Result<ConfigImportPr
     }
 
     let (staging, kind, _guard) = resolve_import_staging(&source)?;
-    let (found, _skipped) = scan_staging(&staging);
-    let mut warnings = Vec::new();
+    let snapshot = match discover_source(&staging) {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            return Ok(ConfigImportPreview {
+                source_path: source.to_string_lossy().into(),
+                source_kind: kind,
+                files_found: Vec::new(),
+                warnings: vec![error],
+                can_import: false,
+            });
+        }
+    };
+    let found: Vec<_> = snapshot
+        .entries
+        .iter()
+        .map(|entry| entry.descriptor.label.clone())
+        .collect();
+    let mut warnings = snapshot.warnings;
+    let simulation = MemorySecretStore::default();
+    let mut can_import = !found.is_empty();
     if found.is_empty() {
-        warnings.push("未找到 config.json、bot.json 或 servers.json".to_string());
+        warnings.push("未找到可识别的 Desktop 配置文件".into());
+    }
+    if let Err(error) = validate_framework_links(&snapshot.entries) {
+        warnings.push(error);
+        can_import = false;
+    }
+    for entry in snapshot.entries {
+        if let Err(error) = normalize_entry(&entry.descriptor, entry.value, &simulation) {
+            warnings.push(error);
+            can_import = false;
+        }
     }
 
     Ok(ConfigImportPreview {
@@ -219,7 +319,7 @@ pub async fn preview_config_import(source_path: String) -> Result<ConfigImportPr
         source_kind: kind,
         files_found: found.clone(),
         warnings,
-        can_import: !found.is_empty(),
+        can_import,
     })
 }
 
@@ -292,47 +392,63 @@ fn normalize_app_settings_import(value: serde_json::Value) -> Result<serde_json:
     serde_json::to_value(&settings).map_err(|e| format!("序列化 app-settings 失败: {e}"))
 }
 
-/// 读 staging 里的配置文件,全量强类型反序列化 + 迁移 + validate,通过后构造一个
-/// 一次性 JsonTransaction任一文件语义非法即整体中止(返回 Err),绝不半导入;调用方
-/// 对返回的 transaction 走 ConfigStore::apply_transaction 原子提交(失败自动回滚)
-fn build_import_transaction(
+#[derive(Debug)]
+struct PreparedImport {
+    txn: ncd_traits::JsonTransaction,
+    files: Vec<String>,
+    skipped: Vec<String>,
+    frontend_preferences: Option<ConfigFrontendPreferences>,
+    framework_backups: Vec<FrameworkConfigBackup>,
+}
+
+/// Collect and validate every source before running real legacy credential migration.
+fn prepare_import_transaction(
     staging: &Path,
     data_root: &Path,
     secrets: &dyn ncd_traits::SecretStore,
-) -> Result<(ncd_traits::JsonTransaction, Vec<String>, Vec<String>), String> {
+) -> Result<PreparedImport, String> {
+    let snapshot = discover_source(staging)?;
+    if snapshot.entries.is_empty() {
+        return Err("来源里没有可识别的 Desktop 配置文件".into());
+    }
+    validate_framework_links(&snapshot.entries)?;
+    let simulation = MemorySecretStore::default();
+    let explicit_settings = snapshot
+        .entries
+        .iter()
+        .any(|entry| entry.descriptor.kind == TransferKind::AppSettings);
     let mut txn = ncd_traits::JsonTransaction::new();
     let mut files = Vec::new();
-    let mut skipped = Vec::new();
     let mut pending_app_settings: Option<serde_json::Value> = None;
-
-    for (rel, zip_name, label) in TRANSFER_FILES {
-        let src = staging.join(zip_name);
-        if !src.is_file() {
-            skipped.push((*label).to_string());
-            continue;
+    let mut frontend_preferences = None;
+    let mut bot_source = None;
+    let mut framework_backups = Vec::new();
+    for entry in snapshot.entries {
+        if entry.descriptor.kind == TransferKind::BotConfig {
+            bot_source = Some(entry.value.clone());
         }
-        let text = fs::read_to_string(&src).map_err(|e| format!("读取 {label} 失败: {e}"))?;
-        let value: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| format!("{label} 不是合法 JSON,已中止导入: {e}"))?;
-
-        let normalized = match *zip_name {
-            "config.json" => {
-                let (payload, seed) = normalize_app_config_import(value)?;
-                pending_app_settings = seed;
-                payload
-            }
-            "bot.json" => normalize_bot_config_import(value, secrets)?,
-            "app-settings.json" => normalize_app_settings_import(value)?,
-            "servers.json" => normalize_servers_import(value)?,
-            other => return Err(format!("未知导入文件: {other}")),
-        };
-        txn = txn.write(data_root.join(rel), normalized);
-        files.push((*label).to_string());
+        let (normalized, seed) = normalize_entry(&entry.descriptor, entry.value, &simulation)?;
+        if entry.descriptor.kind == TransferKind::AppConfig {
+            pending_app_settings = seed;
+        }
+        if entry.descriptor.kind == TransferKind::Frontend {
+            frontend_preferences = Some(
+                serde_json::from_value(normalized.clone())
+                    .map_err(|error| format!("读取已校验浏览器偏好失败: {error}"))?,
+            );
+        }
+        if entry.descriptor.kind == TransferKind::Framework {
+            framework_backups.push(
+                serde_json::from_value(normalized.clone())
+                    .map_err(|e| format!("框架备份无法读取: {e}"))?,
+            );
+        }
+        txn = txn.write(data_root.join(&entry.descriptor.data_relative), normalized);
+        files.push(entry.descriptor.label);
     }
 
-    // 旧版 config.json 含 WebHook/Email 时,仅在目标 app-settings.json 不存在时种子写入
-    // 路径与 DataPaths::app_settings_path / TRANSFER_FILES 一致:config/app-settings.json
-    if let Some(settings_payload) = pending_app_settings {
+    // A source settings file is authoritative even when the target file does not exist yet.
+    if let Some(settings_payload) = pending_app_settings.filter(|_| !explicit_settings) {
         let app_settings_path = data_root
             .join("config")
             .join(ncd_runtime::app_config_migration::APP_SETTINGS_FILE);
@@ -342,12 +458,34 @@ fn build_import_transaction(
         }
     }
 
-    if files.is_empty() {
-        return Err(
-            "来源里没有可识别的配置文件(config.json / bot.json / servers.json)".to_string(),
-        );
+    // Reuse the already collected source, so validation cannot be bypassed by a subsequent file change.
+    if let Some(value) = bot_source {
+        let payload = normalize_bot_config_import(value, secrets)?;
+        if let Some(write) = txn
+            .writes
+            .iter_mut()
+            .find(|write| write.path == data_root.join("config/bot.json"))
+        {
+            write.payload = payload;
+        }
     }
-    Ok((txn, files, skipped))
+    Ok(PreparedImport {
+        txn,
+        files,
+        skipped: snapshot.skipped,
+        frontend_preferences,
+        framework_backups,
+    })
+}
+
+#[cfg(test)]
+fn build_import_transaction(
+    staging: &Path,
+    data_root: &Path,
+    secrets: &dyn ncd_traits::SecretStore,
+) -> Result<(ncd_traits::JsonTransaction, Vec<String>, Vec<String>), String> {
+    let prepared = prepare_import_transaction(staging, data_root, secrets)?;
+    Ok((prepared.txn, prepared.files, prepared.skipped))
 }
 
 /// 从 ZIP 或目录导入配置:全量强类型校验通过后,一次性事务原子写回当前数据根
@@ -355,31 +493,284 @@ fn build_import_transaction(
 /// write_json_atomic 会半成功);apply_transaction 自带备份,写失败整体回滚
 #[tauri::command]
 pub async fn import_config(
+    app: AppHandle,
     state: State<'_, AppState>,
     source_path: String,
 ) -> Result<ConfigImportResult, String> {
-    use ncd_runtime::{LocalConfigStore, SecretStoreImpl};
+    use ncd_runtime::LocalConfigStore;
     use ncd_traits::ConfigStore;
 
     state.migrate_gate.ensure_idle()?;
+    let _framework_guard = state.app_manager.framework_config_transfer_guard().await;
     let source = PathBuf::from(&source_path);
     let (staging, _kind, _guard) = resolve_import_staging(&source)?;
 
-    let secrets = SecretStoreImpl::new(state.data_root.join("secrets"));
-    let (txn, files, skipped) = build_import_transaction(&staging, &state.data_root, &secrets)?;
+    // Legacy password fields are normalized without importing credentials into this machine's keyring.
+    let secrets = MemorySecretStore::default();
+    let PreparedImport {
+        mut txn,
+        files,
+        skipped,
+        frontend_preferences,
+        framework_backups,
+    } = prepare_import_transaction(&staging, &state.data_root, &secrets)?;
 
-    // 事务里可能整份换掉 app-settings.json:放在设置写锁里提交并把内存副本换成新值,
-    // 否则重启前任何一次单项回写都会拿旧副本把导入盖回去
+    let mut instances: Option<Vec<ncd_domain::AppInstance>> = imported_cache_payload(
+        &txn,
+        &state.data_root,
+        "config/app-instances.json",
+        Some("instances"),
+    )?;
+    let current_instances = state.app_manager.list_instances().await;
+    if let Some(imported) = instances.as_mut() {
+        normalize_imported_instance_states(imported, &current_instances)?;
+        if let Some(write) = txn
+            .writes
+            .iter_mut()
+            .find(|w| w.path == state.data_root.join("config/app-instances.json"))
+        {
+            write.payload = serde_json::json!({"version": 1, "instances": imported});
+        }
+    }
+    let targets = instances.as_deref().unwrap_or(&current_instances);
+    let imported_servers: Option<Vec<ncd_runtime::ServerProfile>> =
+        imported_cache_payload(&txn, &state.data_root, "config/servers.json", None)?;
+    let servers = match imported_servers {
+        Some(servers) => servers,
+        None => state.server_manager.list_servers().await,
+    };
+    let framework_restore = state
+        .app_manager
+        .prepare_framework_config_restore(&framework_backups, targets, Some(&servers))
+        .await?;
+    stage_framework_recoveries(
+        &mut txn,
+        &state.data_root,
+        &framework_backups,
+        &framework_restore.restored_ids,
+    )?;
+    let chat_preferences = imported_cache_payload(
+        &txn,
+        &state.data_root,
+        "config/chat-desktop.json",
+        Some("accounts"),
+    )?;
+    let workspace =
+        imported_cache_payload(&txn, &state.data_root, "onebot-debug/workspace.json", None)?;
+    let collections = imported_cache_payload(
+        &txn,
+        &state.data_root,
+        "onebot-debug/collections.json",
+        None,
+    )?;
+    let bots = imported_cache_payload(&txn, &state.data_root, "config/bot.json", Some("bots"))?;
+
+    // Commit while each file owner's write gate is held; failed transactions keep every cache unchanged.
     let store = LocalConfigStore::new(&state.data_root);
-    ncd_runtime::desktop::replace_app_settings_with(&state.data_root, &state.app_settings, || {
-        store
-            .apply_transaction(txn)
-            .map_err(|e| format!("写入配置失败(已回滚): {e}"))
-    })
-    .await?;
+    let json_commit = ncd_runtime::desktop::replace_app_settings_with(
+        &state.data_root,
+        &state.app_settings,
+        || {
+            store
+                .apply_transaction(txn)
+                .map_err(|e| format!("写入配置失败(已回滚): {e}"))
+        },
+    );
+    let commit = framework_restore.plan.commit_with(json_commit);
+    state
+        .app_manager
+        .replace_instances_with(
+            instances,
+            state.chat.replace_preferences_with(
+                chat_preferences,
+                state.onebot_debug.replace_config_with(
+                    workspace,
+                    collections,
+                    state.bot_manager.replace_bot_configs_with(bots, commit),
+                ),
+            ),
+        )
+        .await?;
+    state
+        .app_manager
+        .framework_configs_restored(&framework_restore.restored_ids);
 
-    Ok(ConfigImportResult { files, skipped })
+    if let Err(error) = app.emit("config-imported", &files) {
+        tracing::warn!(%error, "failed to notify windows after configuration import");
+    }
+
+    Ok(ConfigImportResult {
+        files,
+        skipped,
+        frontend_preferences,
+        framework_pending: Some(framework_restore.pending),
+    })
 }
+
+fn normalize_imported_instance_states(
+    imported: &mut [ncd_domain::AppInstance],
+    current: &[ncd_domain::AppInstance],
+) -> Result<(), String> {
+    use ncd_domain::AppInstanceState;
+    for active in current.iter().filter(|i| {
+        matches!(
+            i.state,
+            AppInstanceState::Running | AppInstanceState::Installing
+        )
+    }) {
+        if !imported.iter().any(|i| {
+            i.id == active.id
+                && i.framework_id == active.framework_id
+                && i.host_id == active.host_id
+                && i.install_dir == active.install_dir
+        }) {
+            return Err(format!(
+                "{} 正在运行或安装，导入会移除或改变其目录，请先停止实例或等待安装完成",
+                active.display_name
+            ));
+        }
+    }
+    for instance in imported {
+        if let Some(active) = current.iter().find(|i| {
+            i.id == instance.id
+                && i.host_id == instance.host_id
+                && i.install_dir == instance.install_dir
+                && matches!(
+                    i.state,
+                    AppInstanceState::Running | AppInstanceState::Installing
+                )
+        }) {
+            instance.state = active.state;
+        } else {
+            instance.state = match instance.state {
+                AppInstanceState::Running => AppInstanceState::Stopped,
+                AppInstanceState::Installing => AppInstanceState::NotInstalled,
+                state => state,
+            };
+        }
+    }
+    Ok(())
+}
+
+fn stage_framework_recoveries(
+    txn: &mut ncd_traits::JsonTransaction,
+    root: &Path,
+    backups: &[FrameworkConfigBackup],
+    restored: &[String],
+) -> Result<(), String> {
+    for backup in backups {
+        let path = root.join(format!(
+            "config/framework-configs/{}.json",
+            backup.instance_id
+        ));
+        if restored.contains(&backup.instance_id) {
+            txn.writes.retain(|w| w.path != path);
+            txn.deletes.push(path);
+            continue;
+        }
+        let recovery = FrameworkConfigRecovery {
+            backup: backup.clone(),
+            pending: true,
+        };
+        let value = serde_json::to_value(recovery).map_err(|e| e.to_string())?;
+        if let Some(write) = txn.writes.iter_mut().find(|w| w.path == path) {
+            write.payload = value;
+        } else {
+            txn.writes.push(ncd_traits::JsonWrite {
+                path,
+                payload: value,
+            });
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn list_pending_framework_config_restores(
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    state.app_manager.pending_framework_config_restores().await
+}
+
+#[tauri::command]
+pub async fn retry_framework_config_restore(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ConfigImportResult, String> {
+    use ncd_traits::ConfigStore;
+    state.migrate_gate.ensure_idle()?;
+    let _framework_guard = state.app_manager.framework_config_transfer_guard().await;
+    let backups: Vec<_> = state
+        .app_manager
+        .framework_config_recoveries()
+        .await?
+        .into_iter()
+        .filter(|r| r.pending)
+        .map(|r| r.backup)
+        .collect();
+    let targets = state.app_manager.list_instances().await;
+    let servers = state.server_manager.list_servers().await;
+    let restore = state
+        .app_manager
+        .prepare_framework_config_restore(&backups, &targets, Some(&servers))
+        .await?;
+    let mut txn = ncd_traits::JsonTransaction::new();
+    stage_framework_recoveries(&mut txn, &state.data_root, &backups, &restore.restored_ids)?;
+    let store = ncd_runtime::LocalConfigStore::new(&state.data_root);
+    restore
+        .plan
+        .commit_with(async {
+            store
+                .apply_transaction(txn)
+                .map_err(|e| format!("写入框架恢复状态失败: {e}"))
+        })
+        .await?;
+    state
+        .app_manager
+        .framework_configs_restored(&restore.restored_ids);
+    let files: Vec<_> = restore
+        .restored_ids
+        .iter()
+        .map(|id| format!("框架配置 ({id})"))
+        .collect();
+    if !files.is_empty()
+        && let Err(error) = app.emit("config-imported", &files)
+    {
+        tracing::warn!(%error, "failed to notify windows after framework configuration restore");
+    }
+    Ok(ConfigImportResult {
+        files,
+        skipped: Vec::new(),
+        frontend_preferences: None,
+        framework_pending: Some(restore.pending),
+    })
+}
+
+fn imported_cache_payload<T: serde::de::DeserializeOwned>(
+    txn: &ncd_traits::JsonTransaction,
+    data_root: &Path,
+    relative: &str,
+    field: Option<&str>,
+) -> Result<Option<T>, String> {
+    let path = data_root.join(relative);
+    let Some(write) = txn.writes.iter().find(|write| write.path == path) else {
+        return Ok(None);
+    };
+    let payload = match field {
+        Some(field) => write
+            .payload
+            .get(field)
+            .ok_or_else(|| format!("已校验配置 {relative} 缺少 {field}"))?,
+        None => &write.payload,
+    };
+    serde_json::from_value(payload.clone())
+        .map(Some)
+        .map_err(|error| format!("构建导入缓存 {relative} 失败: {error}"))
+}
+
+#[cfg(test)]
+#[path = "config_transfer/regression_tests.rs"]
+mod regression_tests;
 
 #[cfg(test)]
 mod tests {
@@ -423,7 +814,7 @@ mod tests {
         // 四个文件一次性进同一个 transaction,而非逐文件落盘
         assert_eq!(txn.writes.len(), 4, "files={files:?} skipped={skipped:?}");
         assert_eq!(files.len(), 4);
-        assert!(skipped.is_empty(), "unexpected skipped: {skipped:?}");
+        assert_eq!(skipped.len(), registry::TRANSFER_FILES.len() - 4);
     }
 
     #[test]
@@ -471,7 +862,11 @@ mod tests {
         assert_eq!(txn.writes.len(), 1);
         assert_eq!(files, vec!["远端服务器档案".to_string()]);
         // config / bot / app-settings 缺失
-        assert_eq!(skipped.len(), 3, "skipped={skipped:?}");
+        assert_eq!(
+            skipped.len(),
+            registry::TRANSFER_FILES.len() - 1,
+            "skipped={skipped:?}"
+        );
         let payload = &txn.writes[0].payload;
         assert!(payload.is_array());
         assert_eq!(payload[0]["id"], "legacy-s1");
@@ -501,6 +896,10 @@ mod tests {
         assert_eq!(txn.writes.len(), 1);
         assert_eq!(files, vec!["应用配置".to_string()]);
         // bot / app-settings / servers 缺失
-        assert_eq!(skipped.len(), 3, "skipped={skipped:?}");
+        assert_eq!(
+            skipped.len(),
+            registry::TRANSFER_FILES.len() - 1,
+            "skipped={skipped:?}"
+        );
     }
 }

@@ -45,4 +45,17 @@ describe('smooth mouse wheel', () => {
         const top = element.scrollTop; frame(32);
         expect(element.scrollTop).toBe(top);
     });
+    it('preserves wheel travel across multiple frames and reverses without residual drift', () => {
+        const { element, wheel, frame } = setup();
+        wheel(-120); frame(16); wheel(120);
+        const reversedAt = element.scrollTop;
+        for (let time = 32; time <= 640; time += 16) frame(time);
+        expect(element.scrollTop).toBeCloseTo(reversedAt + 120, 1);
+    });
+    it('lets a fractional touchpad gesture take over an unfinished wheel animation', () => {
+        const { element, wheel, frame } = setup();
+        wheel(-120); frame(16); const top = element.scrollTop;
+        expect(wheel(-12.5).defaultPrevented).toBe(false); frame(32);
+        expect(element.scrollTop).toBe(top);
+    });
 });

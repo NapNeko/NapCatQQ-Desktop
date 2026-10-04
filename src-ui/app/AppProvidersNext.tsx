@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useConfigImportBridge } from '../hooks/preferences/useConfigImportBridge';
 
 function createQueryClient() {
     return new QueryClient({
@@ -33,8 +34,16 @@ function getQueryClient(): QueryClient {
 
 const queryClient = getQueryClient();
 
+function ConfigImportBridge() {
+    useConfigImportBridge();
+    return null;
+}
+
 export const AppProvidersNext: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+        <ConfigImportBridge />
+        {children}
+    </QueryClientProvider>
 );
 
 export default AppProvidersNext;

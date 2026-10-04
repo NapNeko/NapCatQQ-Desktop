@@ -34,6 +34,7 @@ export const chatService = {
         const [path] = await pickAnyFiles('选择附件');
         return path ? { path, name: path.split(/[\\/]/).pop() || path } : null;
     },
+    readLocalImage: (path: string): Promise<string> => isTauri ? invoke('chat_read_local_image', { path }) : Promise.reject(new Error('预览模式不支持读取本机文件')),
     async openLink(url: string): Promise<void> {
         if (!/^https?:\/\//i.test(url)) throw new Error('仅支持打开网页链接');
         if (isTauri) await openExternalUrl(url);

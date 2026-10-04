@@ -51,6 +51,27 @@ describe('chat lifecycle', () => {
         expect(transport.call.mock.calls[0].slice(0, 3)).toMatchObject(['bot', 'send_private_msg', { user_id: '12', message: [{ type: 'face', data: { id: '14' } }, { type: 'image', data: { file: 'https://cdn.example/favorite.gif', sub_type: 1 } }] }]);
         expect(store.getSnapshot().account.drafts['private:12'].attachments).toEqual([]);
     });
+    it('rejects unsupported faces before submitting and restores the draft with a clear error', async () => {
+        const { transport } = setup();
+        const call = vi.fn(async (_bot: string, action: string) => ok(action === 'fetch_sys_faces' ? { packs: [{ emojis: [{ q_sid: '14', q_des: '微笑' }] }] } : { message_id: 8 }));
+        const store = new ChatAccountStore({ ...target, bot_id: 'unsupported-face', backend: 'snowluma' }, { ...transport, call });
+        await store.connect();
+        store.draft('private:12', { text: '保留文本', reply: null, attachments: [{ key: 'face', type: 'face', id: '486', name: '开学啦2' }] });
+        await store.send('private:12');
+        expect(call).toHaveBeenCalledTimes(1); expect(call.mock.calls[0][1]).toBe('fetch_sys_faces');
+        expect(store.getSnapshot().account.messages.at(-1)).toMatchObject({ status: 'failed', error: expect.stringContaining('不支持 QQ 表情 486') });
+        expect(store.getSnapshot().account.drafts['private:12']).toMatchObject({ text: '保留文本', attachments: [expect.objectContaining({ id: '486' })] });
+    });
+    it('refreshes face metadata and submits a supported new face exactly once', async () => {
+        const { transport } = setup();
+        const call = vi.fn(async (_bot: string, action: string, _params: unknown) => ok(action === 'fetch_sys_faces' ? { packs: [{ emojis: [{ q_sid: '486', q_des: '开学啦2', is_super: true, ani_sticker_pack_id: 1, ani_sticker_id: 2, ani_sticker_type: 3 }] }] } : { message_id: 8 }));
+        const store = new ChatAccountStore({ ...target, bot_id: 'supported-face', backend: 'snowluma' }, { ...transport, call });
+        await store.connect(); store.draft('private:12', { text: '', reply: null, attachments: [{ key: 'face', type: 'face', id: '486', name: '开学啦2' }] });
+        await store.send('private:12');
+        expect(call.mock.calls.map(args => args[1])).toEqual(['fetch_sys_faces', 'send_private_msg']);
+        expect(call.mock.calls[1][2]).toMatchObject({ message: [{ type: 'face', data: { id: '486' } }] });
+        expect(store.getSnapshot().account.messages.at(-1)).toMatchObject({ status: 'sent', id: '8' });
+    });
     it('reloads an exhausted conversation after its cached messages are evicted', async () => {
         const { transport } = setup();
         const seed = ingestMessage(emptyAccount('99'), { message_type: 'group', group_id: 12, message_id: 100, user_id: 22, time: 100, message: 'A' });
@@ -168,6 +189,62 @@ describe('chat lifecycle', () => {
         store.draft('group:12', { text: '', reply: null, attachments: [{ key: 'image', name: '截图.png', path: 'base64://abc', type: 'image' }] });
         await store.send('group:12');
         expect(calls[0][2]).toMatchObject({ message: [{ type: 'image', data: { file: 'base64://abc' } }] });
+    });
+    it('retries the complete failed image and text together without touching a newer draft or duplicating the message', async () => {
+        const { store, transport } = setup(); await store.connect();
+        const failed = ok(null);
+        if (failed.result.kind === 'ok') Object.assign(failed.result.outcome, { ok: false, retcode: 1200, message: 'An unknown error occurred.' });
+        transport.call.mockResolvedValueOnce(failed);
+        store.draft('private:12', { text: '我的项目有点雏形了', reply: { id: '7', name: '朋友', preview: '前文' }, attachments: [{ key: 'image', name: '截图.png', path: 'base64://abc', type: 'image' }] });
+        await store.send('private:12');
+        const message = store.getSnapshot().account.messages[0];
+        expect(message).toMatchObject({ status: 'failed', error: 'An unknown error occurred.（错误码 1200）' });
+        expect(transport.call.mock.calls[0][2]).toMatchObject({ user_id: '12', message: [{ type: 'reply', data: { id: '7' } }, { type: 'text', data: { text: '我的项目有点雏形了' } }, { type: 'image', data: { file: 'base64://abc', name: '截图.png', sub_type: 0 } }] });
+        const nextDraft = { text: '新草稿', reply: null, attachments: [{ key: 'next', name: '下一张.png', path: 'D:/下一张.png', type: 'image' as const }] };
+        store.draft('private:12', nextDraft);
+        let resolve!: (response: DebugCallResponse) => void;
+        transport.call.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+        const retry = store.retry(message.key);
+        await store.retry(message.key);
+        expect(transport.call).toHaveBeenCalledTimes(2);
+        expect(transport.call.mock.calls[1].slice(0, 3)).toEqual(transport.call.mock.calls[0].slice(0, 3));
+        expect(transport.call.mock.calls[1][3]).not.toBe(transport.call.mock.calls[0][3]);
+        expect(store.getSnapshot().account.messages).toHaveLength(1);
+        expect(store.getSnapshot().account.messages[0].status).toBe('sending');
+        expect(store.getSnapshot().account.drafts['private:12']).toEqual(nextDraft);
+        resolve(ok({ message_id: 9 })); await retry;
+        expect(store.getSnapshot().account.messages).toHaveLength(1);
+        expect(store.getSnapshot().account.messages[0]).toMatchObject({ key: message.key, status: 'sent', id: '9' });
+    });
+    it('retries only the failed upload when the accompanying text already succeeded', async () => {
+        const { store, transport } = setup(); await store.connect();
+        const failed = ok(null);
+        if (failed.result.kind === 'ok') Object.assign(failed.result.outcome, { ok: false, retcode: 100, message: '上传失败' });
+        transport.call.mockResolvedValueOnce(ok({ message_id: 8 })).mockResolvedValueOnce(failed);
+        store.draft('group:12', { text: '文件在这里', reply: null, attachments: [{ key: 'file', name: '说明.txt', path: 'D:/说明.txt', type: 'file' }] });
+        await store.send('group:12');
+        const file = store.getSnapshot().account.messages.find(message => message.status === 'failed')!;
+        transport.call.mockResolvedValueOnce(ok({ file_id: 'uploaded-file' }));
+        await store.retry(file.key);
+        expect(transport.call).toHaveBeenCalledTimes(3);
+        expect(transport.call.mock.calls[2].slice(0, 3)).toEqual(['bot', 'upload_group_file', { group_id: '12', file: 'ncd-local-file://D:/说明.txt', name: '说明.txt', upload_file: true }]);
+        expect(store.getSnapshot().account.messages).toHaveLength(2);
+    });
+    it('does not retry unknown results or a failed attachment whose bytes were removed from the saved archive', async () => {
+        const { store, transport } = setup(); await store.connect();
+        transport.call.mockResolvedValueOnce({ request_id: 'req', result: { kind: 'err', error: { kind: 'timeout', ms: 30000 } } });
+        store.draft('group:12', { text: '可能已经送达', reply: null, attachments: [] }); await store.send('group:12');
+        await store.retry(store.getSnapshot().account.messages[0].key);
+        expect(transport.call).toHaveBeenCalledTimes(1);
+        const failed = ok(null);
+        if (failed.result.kind === 'ok') Object.assign(failed.result.outcome, { ok: false, retcode: 100 });
+        transport.call.mockResolvedValueOnce(failed);
+        store.draft('group:12', { text: '', reply: null, attachments: [{ key: 'image', name: '截图.png', path: 'base64://abc', type: 'image' }] }); await store.send('group:12');
+        const message = store.getSnapshot().account.messages[1];
+        message.segments = [{ type: 'image', data: { name: '截图.png' } }];
+        await expect(store.retry(message.key)).rejects.toThrow('原附件已不可用');
+        expect(transport.call).toHaveBeenCalledTimes(2);
+        expect(message.status).toBe('failed');
     });
     it('releases interrupted sends on reconnect without releasing a newer send lock', async () => {
         const { store, transport } = setup(); await store.connect();

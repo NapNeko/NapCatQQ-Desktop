@@ -177,6 +177,17 @@ impl NativeAppRuntime {
         host: &dyn Host,
         instance: &AppInstance,
     ) -> Result<Option<u32>, AppFrameworkError> {
+        let Some((pid, program)) = Self::discover_project_pid(host, instance).await? else {
+            return Ok(None);
+        };
+        self.claim_pid(host, instance, pid, &program).await?;
+        Ok(Some(pid))
+    }
+
+    async fn discover_project_pid(
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<Option<(u32, String)>, AppFrameworkError> {
         let kind =
             super::supervisor::AppProcessKind::from_framework(instance.framework_id.as_str());
         let found = match host.locality() {
@@ -187,11 +198,28 @@ impl NativeAppRuntime {
             }
             Locality::Local => discover_local_pid(&instance.install_dir, kind),
         };
-        let Some((pid, program)) = found else {
-            return Ok(None);
-        };
-        self.claim_pid(host, instance, pid, &program).await?;
-        Ok(Some(pid))
+        Ok(found)
+    }
+
+    /// 恢复预检只读进程信息，不能调用会写 PID sidecar 的 reconcile/discover_and_claim。
+    pub async fn is_running_readonly(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<bool, AppFrameworkError> {
+        if self.local.lock().await.contains_key(&instance.id) {
+            return Ok(true);
+        }
+        if let Some((pid, program)) = read_pid_file(host, &Self::pid_file(instance)).await? {
+            let alive = match host.locality() {
+                Locality::Local => local_pid_matches(pid, &program),
+                Locality::Remote => remote_pid_matches(host, pid, &instance.install_dir).await,
+            };
+            if alive {
+                return Ok(true);
+            }
+        }
+        Ok(Self::discover_project_pid(host, instance).await?.is_some())
     }
 
     /// 本会话已经在跟这条实例的日志 / 存活了（本机 spawn 或 attach 的 follower）

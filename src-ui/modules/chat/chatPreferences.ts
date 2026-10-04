@@ -1,10 +1,10 @@
-// 只保存列表和发送偏好，不持久化消息或草稿。
+// 只保存窗口布局偏好，不持久化消息或草稿。
 import { useSyncExternalStore } from 'react';
+import { onFrontendPreferenceRestored } from '../../core/domain/settings/config-transfer-preferences';
 
-export type SendShortcut = 'enter' | 'ctrl-enter';
-interface ChatPreferences { listWidth: number; sendShortcut: SendShortcut; hiddenConversations: Record<string, string[]> }
+interface ChatPreferences { listWidth: number; composerHeight: number | null; hiddenConversations: Record<string, string[]> }
 const STORAGE_KEY = 'ncd.chat.ui.v1';
-const defaults: ChatPreferences = { listWidth: 260, sendShortcut: 'enter', hiddenConversations: {} };
+const defaults: ChatPreferences = { listWidth: 260, composerHeight: null, hiddenConversations: {} };
 function read(): ChatPreferences {
     try {
         const value: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
@@ -12,7 +12,7 @@ function read(): ChatPreferences {
         const data = value as Record<string, unknown>;
         return {
             listWidth: typeof data.listWidth === 'number' && Number.isFinite(data.listWidth) ? Math.min(380, Math.max(220, data.listWidth)) : 260,
-            sendShortcut: data.sendShortcut === 'ctrl-enter' ? 'ctrl-enter' : 'enter',
+            composerHeight: typeof data.composerHeight === 'number' && Number.isFinite(data.composerHeight) ? Math.min(420, Math.max(52, data.composerHeight)) : null,
             hiddenConversations: data.hiddenConversations && typeof data.hiddenConversations === 'object' && !Array.isArray(data.hiddenConversations)
                 ? Object.fromEntries(Object.entries(data.hiddenConversations).filter(([, keys]) => Array.isArray(keys)).map(([account, keys]) => [account, (keys as unknown[]).filter((key): key is string => typeof key === 'string')])) : {},
         };
@@ -22,6 +22,12 @@ let preferences = read();
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const snapshot = () => preferences;
+if (typeof window !== 'undefined') {
+    onFrontendPreferenceRestored(STORAGE_KEY, () => {
+        preferences = read();
+        for (const listener of listeners) listener();
+    });
+}
 export function useChatPreferences() { return useSyncExternalStore(subscribe, snapshot, snapshot); }
 export function setChatPreferences(patch: Partial<ChatPreferences>) {
     preferences = { ...preferences, ...patch };
