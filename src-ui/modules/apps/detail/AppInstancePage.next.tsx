@@ -138,7 +138,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                     busy={busy}
                     canWebUi={!!manifest?.has_webui && running}
                     onBack={onBack}
-                    onInstall={() => apps.install(instance.id)}
+                    onInstall={() => apps.install(instance.id, installVersion)}
                     onStart={() => apps.start(instance.id)}
                     onStop={() => apps.stop(instance.id)}
                     onTryChat={
