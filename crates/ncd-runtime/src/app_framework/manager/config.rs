@@ -73,18 +73,26 @@ impl AppManager {
                 ));
             }
             // 用户名密码类（AstrBot）要桌面端记着的密码；密钥类（MaiBot）的 token 在实例目录里，适配器自己读
-            let (username, password) =
+            let (username, password, desktop_secret) =
                 if adapter.manifest().webui_auth == AppWebUiAuthKind::UserPassword {
-                    let password = self
-                        .remembered_secret(&instance, SECRET_WEBUI_PASSWORD)
-                        .ok_or_else(|| {
-                            AppFrameworkError::DashboardAuth(
-                                "没有可用的 WebUI 密码。到连接页写下密码后再保存".into(),
-                            )
-                        })?;
-                    (self.webui_login_username(&instance).await, password)
+                    let desktop_secret = if adapter.desktop_session_env_keys().is_some() {
+                        self.desktop_session_secret(&instance)
+                    } else {
+                        None
+                    };
+                    let password = self.remembered_secret(&instance, SECRET_WEBUI_PASSWORD);
+                    if password.is_none() && desktop_secret.is_none() {
+                        return Err(AppFrameworkError::DashboardAuth(
+                            "没有可用的 WebUI 密码。到连接页写下密码后再保存".into(),
+                        ));
+                    }
+                    (
+                        self.webui_login_username(&instance).await,
+                        password.unwrap_or_default(),
+                        desktop_secret,
+                    )
                 } else {
-                    (String::new(), String::new())
+                    (String::new(), String::new(), None)
                 };
             let profile = conf_id
                 .as_deref()
@@ -98,6 +106,7 @@ impl AppManager {
                     port,
                     &username,
                     &password,
+                    desktop_secret.as_deref(),
                     &config,
                     profile,
                 )
