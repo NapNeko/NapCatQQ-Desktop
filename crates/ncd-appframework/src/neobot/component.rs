@@ -5,7 +5,7 @@
 //! 2. 预置 Python 3.13（主机自己下不动时由桌面端镜像下载后传上去）
 //! 3. `uv venv --python 3.13 .venv`
 //! 4. `uv pip install --python .venv neobot-app`
-//! 5. 种最小配置：面板口 / 面板监听地址、OneBot 反向 WS 口与 token
+//! 5. 挑一个未被占用的面板口，种最小配置：面板口 / 面板监听地址、OneBot 反向 WS 口与 token
 //!
 //! 与 AstrBot 的差别：NeoBot 没有 `init` 子命令，配置由桌面端直接写；
 //! 面板配置在 `plugins_data/dashboard/config.toml`（不在 `data/config.toml`）。
@@ -24,8 +24,8 @@ use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
 
 use super::manifest::{
     ADAPTER_MODE_ONEBOT, KEY_ADAPTER, KEY_ADAPTER_MODE, KEY_DASHBOARD_HOST, KEY_DASHBOARD_PORT,
-    KEY_REVERSE_WS_ACCESS_TOKEN, KEY_REVERSE_WS_HOST, KEY_REVERSE_WS_PORT, NEOBOT_CONFIG_TOML,
-    NEOBOT_DASHBOARD_CONFIG, NEOBOT_PYTHON_REQUIRES, NEOBOT_UV_VERSION_RANGE, PYPI_NEOBOT,
+    KEY_REVERSE_WS_HOST, KEY_REVERSE_WS_PORT, NEOBOT_CONFIG_TOML, NEOBOT_DASHBOARD_CONFIG,
+    NEOBOT_PYTHON_REQUIRES, NEOBOT_UV_VERSION_RANGE, PYPI_NEOBOT,
 };
 use crate::ports::PortUsage;
 use crate::uv_tooling::{
@@ -256,21 +256,31 @@ impl NeoBotComponent {
         .await?;
         ctx.emit(ProgressKind::StepEnd { step: 2, ok: true }).await;
 
-        // 3. 建 venv
-        let venv = HostCommand::new(uv.uv_bin.as_posix())
-            .arg("venv")
-            .arg("--python")
-            .arg(NEOBOT_PYTHON_REQUIRES)
-            .arg(".venv")
-            .working_dir(self.install_dir.clone());
-        self.run_step(
-            host,
-            ctx,
-            3,
-            &format!("创建 Python {NEOBOT_PYTHON_REQUIRES} 虚拟环境"),
-            venv,
-        )
-        .await?;
+        // 3. 建 venv。.venv 已存在时 uv venv 直接报错退出，首装失败后的重试与
+        // 重装路径都会走到这里——所以同 adopt 分支一样先探存在
+        if !host.exists(&self.venv_python(host.os())).await? {
+            let venv = HostCommand::new(uv.uv_bin.as_posix())
+                .arg("venv")
+                .arg("--python")
+                .arg(NEOBOT_PYTHON_REQUIRES)
+                .arg(".venv")
+                .working_dir(self.install_dir.clone());
+            self.run_step(
+                host,
+                ctx,
+                3,
+                &format!("创建 Python {NEOBOT_PYTHON_REQUIRES} 虚拟环境"),
+                venv,
+            )
+            .await?;
+        } else {
+            ctx.emit(ProgressKind::StepBegin {
+                step: 3,
+                message: "已有虚拟环境".to_string(),
+            })
+            .await;
+            ctx.emit(ProgressKind::StepEnd { step: 3, ok: true }).await;
+        }
 
         // 4. 装 neobot-app
         let mut pip = HostCommand::new(uv.uv_bin.as_posix())
@@ -297,7 +307,10 @@ impl NeoBotComponent {
             message: "写入 OneBot 与面板配置".to_string(),
         })
         .await;
-        self.seed_config(host).await?;
+        // 面板口先探占用再落盘：WebUI 隧道与优雅关闭都必须打在真实口上，
+        // 多实例同机时都写 9981 会撞车打到别的实例
+        let dashboard_port = Self::pick_dashboard_port(host, self.onebot_port).await;
+        self.seed_config(host, dashboard_port).await?;
         ctx.emit(ProgressKind::StepEnd { step: 5, ok: true }).await;
 
         ctx.emit(ProgressKind::Finished { ok: true }).await;
@@ -375,9 +388,9 @@ impl NeoBotComponent {
     /// 写 OneBot 反向 WS 与面板配置。
     /// 面板配置在 `plugins_data/dashboard/config.toml`（与本体 config.toml 解耦）；
     /// 已有文件只补缺失的键，不覆盖用户改过的值。
-    async fn seed_config(&self, host: &dyn Host) -> Result<(), ActionError> {
+    async fn seed_config(&self, host: &dyn Host, dashboard_port: u16) -> Result<(), ActionError> {
         self.seed_data_config(host).await?;
-        self.seed_dashboard_config(host).await?;
+        self.seed_dashboard_config(host, dashboard_port).await?;
         Ok(())
     }
 
@@ -427,8 +440,9 @@ impl NeoBotComponent {
         .await
     }
 
-    /// 面板配置：平铺的 `host` / `port`（`DashboardConfig`），只补缺失键
-    async fn seed_dashboard_config(&self, host: &dyn Host) -> Result<(), ActionError> {
+    /// 面板配置：平铺的 `host` / `port`（`DashboardConfig`），只补缺失键。
+    /// `dashboard_port` 是安装时探测过占用的选口；文件里已有值时不覆盖
+    async fn seed_dashboard_config(&self, host: &dyn Host, dashboard_port: u16) -> Result<(), ActionError> {
         let path = self.dashboard_config();
         let existing = read_text(host, &path).await?;
         let mut table = match existing.as_deref() {
@@ -443,37 +457,11 @@ impl NeoBotComponent {
             .or_insert_with(|| toml::Value::String("127.0.0.1".to_string()));
         table
             .entry(KEY_DASHBOARD_PORT.to_string())
-            .or_insert_with(|| toml::Value::Integer(i64::from(self.dashboard_port)));
+            .or_insert_with(|| toml::Value::Integer(i64::from(dashboard_port)));
         write_text(host, &path, &toml::to_string_pretty(&table).map_err(|e| {
             ActionError::install_step("seed-config", format!("面板配置渲染失败：{e}"))
         })?)
         .await
-    }
-
-    /// token 由对接（apply_link）写；这里只在首装给个占位空串，让键存在便于用户手改
-    async fn ensure_token_key(&self, host: &dyn Host) -> Result<(), ActionError> {
-        let path = self.config_toml();
-        let Some(text) = read_text(host, &path).await? else {
-            return Ok(());
-        };
-        let mut table = parse_toml(&text)
-            .map_err(|e| ActionError::install_step("seed-config", format!("{e}")))?;
-        if let Some(adapter) = table.get_mut(KEY_ADAPTER).and_then(|v| v.as_table_mut())
-            && !adapter.contains_key(KEY_REVERSE_WS_ACCESS_TOKEN)
-        {
-            adapter.insert(
-                KEY_REVERSE_WS_ACCESS_TOKEN.to_string(),
-                toml::Value::String(String::new()),
-            );
-            write_text(
-                host,
-                &path,
-                &toml::to_string_pretty(&table)
-                    .map_err(|e| ActionError::install_step("seed-config", e.to_string()))?,
-            )
-            .await?;
-        }
-        Ok(())
     }
 
     /// 面板口被占用时从 9981 起向后挑一个（NeoBot 自己也会向后试 10 个，
@@ -607,8 +595,15 @@ impl Component for NeoBotComponent {
     async fn install(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {
         self.check_target(host)?;
         self.provision(host, ctx).await?;
-        // token 键在首装后补齐（seed_config 里不写，避免覆盖对接写入的值）
-        self.ensure_token_key(host).await
+        // 领养项目的配置是用户的文件，一个键都不补（token 由对接时按差量写）
+        if self.adopt_existing {
+            return Ok(());
+        }
+        // token 键在首装后补齐（seed_config 里不写，避免覆盖对接写入的值）；
+        // 走差量补键，不整文件重写（保注释与键序）
+        super::config::ensure_token_key(host, &self.install_dir, true)
+            .await
+            .map_err(|e| ActionError::install_step("seed-config", e.to_string()))
     }
 
     async fn update(&self, host: &dyn Host, ctx: &mut ActionCtx) -> Result<(), ActionError> {

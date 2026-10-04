@@ -16,7 +16,7 @@ use ncd_domain::{
     AppConfigDocument, AppFrameworkManifest, AppInstance, AppProjectProbe, OneBotLinkPlan,
     TerminalSnippet,
 };
-use ncd_host::{Host, HostCommand, HostPath};
+use ncd_host::{Host, HostCommand, HostPath, Locality};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 pub use component::NeoBotComponent;
@@ -203,8 +203,9 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         if !issues.is_empty() {
             return Err(AppFrameworkError::ConfigInvalid(issues));
         }
-        // write_neobot_config 内部走 apply_with_backup_ex：备份 -> 差量写 -> 失败还原
-        config::write_neobot_config(host, &root, &cfg, write_project_sidecar(instance))
+        // write_link_config 内部走 apply_with_backup_ex：备份 -> 差量写 -> 失败还原；
+        // 面板文件只在已存在时写，不给没装面板插件的领养项目新建（rollback 只还原本体配置）
+        config::write_link_config(host, &root, &cfg, write_project_sidecar(instance))
             .await
             .map_err(|e| AppFrameworkError::Integration(e.to_string()))?;
         Ok(())
@@ -235,6 +236,16 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         host: &dyn Host,
         instance: &AppInstance,
     ) -> Result<bool, AppFrameworkError> {
+        // 优雅关闭打的是面板回环地址，只对同机实例有意义：远端实例不是打不通，
+        // 就是误打到本机同口的另一个实例。远端支持得走编排层隧道，暂不提供；
+        // 这里返回 false 让编排层直接收树
+        if host.locality() != Locality::Local {
+            tracing::info!(
+                instance = instance.id.as_str(),
+                "neobot graceful stop is loopback-only; skipping for remote instance"
+            );
+            return Ok(false);
+        }
         if !version_supports_graceful_stop(instance.installed_version.as_deref()) {
             tracing::info!(
                 instance = instance.id.as_str(),
@@ -248,8 +259,9 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         let root = Self::install_dir(instance);
         let port =
             control::dashboard_port(host, &root, manifest::NEOBOT_DEFAULT_DASHBOARD_PORT).await;
-        // 面板密码由用户在面板上设置，桌面端只在打开 WebUI 时见过一次；
-        // 拿不到就靠本机来源放行（面板本机默认可管）
+        // 密码恒传 None：桌面端不接管面板密码，被拒（401/403）就收树；
+        // control 里的登录重试已接线并有测试覆盖，但生产上没有调用方会传密码，
+        // 为后续接管面板密码预留
         match control::request_graceful_shutdown(port, None).await {
             control::ShutdownRequest::Accepted => Ok(true),
             control::ShutdownRequest::EndpointMissing => {

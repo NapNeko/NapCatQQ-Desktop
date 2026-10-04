@@ -277,6 +277,28 @@ pub async fn write_neobot_config(
     config: &NeoBotInstanceConfig,
     write_sidecar: bool,
 ) -> Result<(NeoBotInstanceConfig, Vec<DocumentSnapshot>), AppFrameworkError> {
+    write_config_docs(host, install_dir, config, write_sidecar, true).await
+}
+
+/// 对接（apply_link）路径的写入：面板配置只在文件已存在时写。受管实例首装已
+/// seed 面板文件，照常差量更新；领养项目没装面板插件时不替它新建
+/// `plugins_data/dashboard/config.toml`——新建的文件 rollback 还原不掉，属污染用户目录。
+pub async fn write_link_config(
+    host: &dyn Host,
+    install_dir: &HostPath,
+    config: &NeoBotInstanceConfig,
+    write_sidecar: bool,
+) -> Result<(NeoBotInstanceConfig, Vec<DocumentSnapshot>), AppFrameworkError> {
+    write_config_docs(host, install_dir, config, write_sidecar, false).await
+}
+
+async fn write_config_docs(
+    host: &dyn Host,
+    install_dir: &HostPath,
+    config: &NeoBotInstanceConfig,
+    write_sidecar: bool,
+    create_dashboard: bool,
+) -> Result<(NeoBotInstanceConfig, Vec<DocumentSnapshot>), AppFrameworkError> {
     let issues = config.validate();
     if !issues.is_empty() {
         return Err(AppFrameworkError::ConfigInvalid(issues));
@@ -288,14 +310,46 @@ pub async fn write_neobot_config(
         write_sidecar,
     )
     .await?;
-    write_one(
-        host,
-        &install_dir.join(NEOBOT_DASHBOARD_CONFIG),
-        &dashboard_patch(config),
-        write_sidecar,
-    )
-    .await?;
+    let dashboard_path = install_dir.join(NEOBOT_DASHBOARD_CONFIG);
+    let dashboard_writable = create_dashboard
+        || host
+            .exists(&dashboard_path)
+            .await
+            .map_err(|e| AppFrameworkError::Host(e.to_string()))?;
+    if dashboard_writable {
+        write_one(host, &dashboard_path, &dashboard_patch(config), write_sidecar).await?;
+    }
     read_neobot_config(host, install_dir).await
+}
+
+/// 首装后补 `[adapter].reverse_ws_access_token` 键（空串占位，正式 token 由对接写）。
+/// 只补缺失键：键已存在就什么都不做；写入走差量，保住注释与键序。
+/// 文件不存在或没有 `[adapter]` 表时不新建——那不是首装该有的形状。
+pub async fn ensure_token_key(
+    host: &dyn Host,
+    install_dir: &HostPath,
+    write_sidecar: bool,
+) -> Result<(), AppFrameworkError> {
+    let path = install_dir.join(NEOBOT_CONFIG_TOML);
+    let Some(text) = read_optional_text(host, &path).await? else {
+        return Ok(());
+    };
+    let table = parse_table(Some(&text))?;
+    let needs_token = table
+        .get(KEY_ADAPTER)
+        .and_then(|v| v.as_table())
+        .is_some_and(|t| !t.contains_key(KEY_REVERSE_WS_ACCESS_TOKEN));
+    if !needs_token {
+        return Ok(());
+    }
+    let mut token = toml::Table::new();
+    token.insert(
+        KEY_REVERSE_WS_ACCESS_TOKEN.to_string(),
+        toml::Value::String(String::new()),
+    );
+    let mut patch = toml::Table::new();
+    patch.insert(KEY_ADAPTER.to_string(), toml::Value::Table(token));
+    write_one(host, &path, &patch, write_sidecar).await
 }
 
 /// `[adapter]` 的期望值（差量写只动这几个键）
