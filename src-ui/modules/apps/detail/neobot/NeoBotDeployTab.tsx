@@ -185,6 +185,12 @@ export const NeoBotDeployTab: React.FC<{
                                 服务端不限制（常用 {onebot.pathHint || '/onebot/v11/ws'}）。
                                 下面这三样就是要在 NapCat 里填的。
                             </p>
+                            <p className="text-2xs leading-snug text-text-tertiary">
+                                注意：下面「一键连上 QQ」会用链接自己的端口与 token
+                                <span className="text-text-secondary"> 覆盖 </span>
+                                这里的值（链接必须带 token，空的会被拒）。所以要么直接点那个按钮让链接一次写好，
+                                要么照这三样在 NapCat 里手填；别两边都改，以最后改的那次为准。
+                            </p>
                             {onebot.warning && (
                                 <p className="text-2xs text-warning">{onebot.warning}</p>
                             )}
