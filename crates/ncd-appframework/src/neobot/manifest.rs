@@ -38,7 +38,6 @@ pub const NEOBOT_DEFAULT_ONEBOT_PORT: u16 = 8080;
 
 /// 实例目录内相对路径
 pub const NEOBOT_DATA_DIR: &str = "data";
-pub const NEOBOT_PLUGINS_DATA_DIR: &str = "plugins_data";
 pub const NEOBOT_CONFIG_TOML: &str = "data/config.toml";
 pub const NEOBOT_DASHBOARD_CONFIG: &str = "plugins_data/dashboard/config.toml";
 pub const NEOBOT_DASHBOARD_AUTH: &str = "plugins_data/dashboard/auth.json";

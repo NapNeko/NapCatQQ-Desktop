@@ -25,7 +25,7 @@ pub use config::{
     DOC_ADAPTER, DOC_DASHBOARD, NeoBotAdapterConfig, NeoBotDashboardConfig, NeoBotInstanceConfig,
     neobot_config_documents,
 };
-pub use integration::{NeoBotIntegration, join_webui_url};
+pub use integration::NeoBotIntegration;
 pub use manifest::{
     NEOBOT_DEFAULT_DASHBOARD_PORT, NEOBOT_DEFAULT_ONEBOT_PORT, NEOBOT_FRAMEWORK_ID,
     neobot_manifest,

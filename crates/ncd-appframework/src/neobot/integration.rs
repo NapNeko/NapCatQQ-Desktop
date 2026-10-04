@@ -17,11 +17,7 @@ use ncd_domain::{
 };
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
-use super::manifest::{
-    KEY_REVERSE_WS_ACCESS_TOKEN, KEY_REVERSE_WS_PORT, NEOBOT_CONFIG_TOML, NEOBOT_FRAMEWORK_ID,
-    neobot_manifest,
-};
-use crate::env_file::EnvWrite;
+use super::manifest::{NEOBOT_CONFIG_TOML, NEOBOT_FRAMEWORK_ID, neobot_manifest};
 
 const HEART_INTERVAL_MS: u32 = 30000;
 const RECONNECT_INTERVAL_MS: u32 = 30000;
@@ -49,15 +45,6 @@ impl NeoBotIntegration {
     /// 同机走回环；跨机由编排层开隧道。
     pub fn reverse_ws_url(instance: &AppInstance) -> String {
         format!("ws://127.0.0.1:{}/", instance.port)
-    }
-
-    /// `[adapter]` 要写的键（apply_link 与预览共用）。
-    /// 用 `EnvWrite` 只是复用它的 key/value 形状；落到 TOML 时由 `apply_link` 兑成表。
-    pub fn adapter_writes(instance: &AppInstance, access_token: &str) -> Vec<EnvWrite> {
-        vec![
-            EnvWrite::new(KEY_REVERSE_WS_PORT, instance.port.to_string()),
-            EnvWrite::new(KEY_REVERSE_WS_ACCESS_TOKEN, access_token),
-        ]
     }
 }
 
@@ -120,62 +107,6 @@ impl AppIntegration for NeoBotIntegration {
         // 约定：调用方已经把「桌面端侧回环口（远端是 -L 隧道口）」写进 instance.port，
         // 这里只管拼 URL，不要去读配置里的真实面板口。
         Some(format!("http://{public_host}:{}", instance.port))
-    }
-}
-
-/// 在 WebUI 根地址后拼 SPA path（面板自带若干页）。
-pub fn join_webui_url(base: &str, path: Option<&str>) -> String {
-    let Some(p) = path.map(str::trim).filter(|s| !s.is_empty()) else {
-        return base.to_string();
-    };
-    let path = if p.starts_with('/') {
-        p.to_string()
-    } else {
-        format!("/{p}")
-    };
-    format!("{}{path}", base.trim_end_matches('/'))
-}
-
-/// 从 `[adapter]` 表里读 access token（供适配器 read_access_token 用）
-pub fn read_access_token_from_table(table: &toml::Table) -> Option<String> {
-    let value = table
-        .get(super::manifest::KEY_ADAPTER)?
-        .as_table()?
-        .get(KEY_REVERSE_WS_ACCESS_TOKEN)?
-        .as_str()?
-        .trim();
-    (!value.is_empty()).then(|| value.to_string())
-}
-
-/// 从 `[adapter]` 表里读反向 WS 口
-pub fn read_reverse_ws_port_from_table(table: &toml::Table) -> Option<u16> {
-    let raw = table
-        .get(super::manifest::KEY_ADAPTER)?
-        .as_table()?
-        .get(KEY_REVERSE_WS_PORT)?
-        .as_integer()?;
-    u16::try_from(raw).ok().filter(|p| *p > 0)
-}
-
-/// 按 `EnvFile` 的语义把键值写进 `[adapter]`（不存在则建表）
-pub fn apply_adapter_writes(table: &mut toml::Table, writes: &[EnvWrite]) {
-    let adapter = table
-        .entry(super::manifest::KEY_ADAPTER.to_string())
-        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
-    let Some(adapter) = adapter.as_table_mut() else {
-        return;
-    };
-    for write in writes {
-        // 端口写整数，其余写字符串：NeoBot 的 Adapter.reverse_ws_port 是 int
-        let value = if write.key == KEY_REVERSE_WS_PORT {
-            match write.value.trim().parse::<i64>() {
-                Ok(p) => toml::Value::Integer(p),
-                Err(_) => toml::Value::String(write.value.clone()),
-            }
-        } else {
-            toml::Value::String(write.value.clone())
-        };
-        adapter.insert(write.key.clone(), value);
     }
 }
 
@@ -274,87 +205,6 @@ mod tests {
         assert_eq!(
             NeoBotIntegration::new().webui_url(&inst, "127.0.0.1"),
             Some("http://127.0.0.1:45678".to_string())
-        );
-    }
-
-    #[test]
-    fn adapter_writes_land_as_toml_types() {
-        let mut table = toml::Table::new();
-        apply_adapter_writes(
-            &mut table,
-            &NeoBotIntegration::adapter_writes(&instance(), "tok-abc"),
-        );
-        let adapter = table.get("adapter").and_then(|v| v.as_table()).unwrap();
-        assert_eq!(
-            adapter.get(KEY_REVERSE_WS_PORT).and_then(|v| v.as_integer()),
-            Some(8080),
-            "端口必须是整数，NeoBot 的 Adapter.reverse_ws_port 是 int"
-        );
-        assert_eq!(
-            adapter
-                .get(KEY_REVERSE_WS_ACCESS_TOKEN)
-                .and_then(|v| v.as_str()),
-            Some("tok-abc")
-        );
-    }
-
-    #[test]
-    fn reads_back_token_and_port() {
-        let mut table = toml::Table::new();
-        apply_adapter_writes(
-            &mut table,
-            &NeoBotIntegration::adapter_writes(&instance(), "tok-abc"),
-        );
-        assert_eq!(
-            read_access_token_from_table(&table),
-            Some("tok-abc".to_string())
-        );
-        assert_eq!(read_reverse_ws_port_from_table(&table), Some(8080));
-        // 空 token 视为没有
-        let mut blank = toml::Table::new();
-        apply_adapter_writes(&mut blank, &[EnvWrite::new(KEY_REVERSE_WS_ACCESS_TOKEN, "")]);
-        assert_eq!(read_access_token_from_table(&blank), None);
-        assert_eq!(read_reverse_ws_port_from_table(&blank), None);
-    }
-
-    #[test]
-    fn join_webui_url_appends_panel_path() {
-        assert_eq!(
-            join_webui_url("http://127.0.0.1:9981", Some("/plugins")),
-            "http://127.0.0.1:9981/plugins"
-        );
-        assert_eq!(
-            join_webui_url("http://127.0.0.1:9981/", Some("plugins")),
-            "http://127.0.0.1:9981/plugins"
-        );
-        assert_eq!(
-            join_webui_url("http://127.0.0.1:9981", None),
-            "http://127.0.0.1:9981"
-        );
-    }
-
-    #[test]
-    fn adapter_writes_preserve_other_keys() {
-        let mut table: toml::Table =
-            "\n[adapter]\nlocal_port = 8090\nmode = \"onebot\"\n\n[bot]\nqq = 1\n"
-                .parse()
-                .unwrap();
-        apply_adapter_writes(
-            &mut table,
-            &NeoBotIntegration::adapter_writes(&instance(), "tok"),
-        );
-        let adapter = table.get("adapter").and_then(|v| v.as_table()).unwrap();
-        assert_eq!(
-            adapter.get("local_port").and_then(|v| v.as_integer()),
-            Some(8090),
-            "别的键不能被抹掉"
-        );
-        assert_eq!(
-            table
-                .get("bot")
-                .and_then(|v| v.get("qq"))
-                .and_then(|v| v.as_integer()),
-            Some(1)
         );
     }
 }

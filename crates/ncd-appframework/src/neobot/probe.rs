@@ -9,8 +9,7 @@ use ncd_traits::AppFrameworkError;
 use super::component::NeoBotComponent;
 use super::config::read_neobot_config;
 use super::manifest::{
-    KEY_ADAPTER, NEOBOT_CONFIG_TOML, NEOBOT_DATA_DIR, NEOBOT_DASHBOARD_CONFIG,
-    NEOBOT_FRAMEWORK_ID, NEOBOT_PLUGINS_DATA_DIR,
+    KEY_ADAPTER, NEOBOT_CONFIG_TOML, NEOBOT_DATA_DIR, NEOBOT_DASHBOARD_CONFIG, NEOBOT_FRAMEWORK_ID,
 };
 
 /// `data/config.toml` 的样子够不够像 NeoBot。
@@ -116,11 +115,6 @@ pub async fn probe_neobot(
     })
 }
 
-/// 目录里是否已经有 `plugins_data`（用于区分「跑过的实例」与「刚 clone 的空项目」）
-pub fn has_plugin_data(entries: &[String]) -> bool {
-    entries.iter().any(|e| e == NEOBOT_PLUGINS_DATA_DIR)
-}
-
 async fn read_text(host: &dyn Host, path: &HostPath) -> Result<Option<String>, AppFrameworkError> {
     if !host
         .exists(path)
@@ -160,11 +154,5 @@ mod tests {
         ));
         // 真正的 [adapter] 表头是 NeoBot 的特征；别的框架的 config.toml 不会长这样
         assert!(!config_looks_like_neobot("[bot]\nqq = 1\n"));
-    }
-
-    #[test]
-    fn plugin_data_detection() {
-        assert!(has_plugin_data(&["data".to_string(), "plugins_data".to_string()]));
-        assert!(!has_plugin_data(&["data".to_string()]));
     }
 }
