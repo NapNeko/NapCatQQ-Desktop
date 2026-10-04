@@ -2,6 +2,7 @@
 
 pub mod component;
 pub mod config;
+pub mod control;
 pub mod integration;
 pub mod manifest;
 pub mod probe;
@@ -19,6 +20,7 @@ use ncd_host::{Host, HostCommand, HostPath};
 use ncd_traits::{AppFrameworkError, AppIntegration};
 
 pub use component::NeoBotComponent;
+pub use control::{MIN_VERSION_WITH_SHUTDOWN_ENDPOINT, ShutdownRequest};
 pub use config::{
     DOC_ADAPTER, DOC_DASHBOARD, NeoBotAdapterConfig, NeoBotDashboardConfig, NeoBotInstanceConfig,
     neobot_config_documents,
@@ -77,6 +79,20 @@ impl NeoBotAdapter {
 
     fn install_dir(instance: &AppInstance) -> HostPath {
         HostPath::from_posix(&instance.install_dir)
+    }
+}
+
+/// 实例版本是否支持优雅关闭（`/api/admin/shutdown` 自 NeoBot 1.2.3 起提供）。
+///
+/// 版本读不出来（未知 / 装了但读不到）时**按不支持处理**：宁可退回原来的「请求没送达、
+/// 直接收树」，也不要对着一个不存在的端点干等 15 分钟。
+pub fn version_supports_graceful_stop(installed_version: Option<&str>) -> bool {
+    let Some(raw) = installed_version.map(str::trim).filter(|v| !v.is_empty()) else {
+        return false;
+    };
+    match crate::neobot::versions::parse_pep440(raw) {
+        Some(v) => v >= crate::neobot::versions::parse_pep440(control::MIN_VERSION_WITH_SHUTDOWN_ENDPOINT).expect("常量可解析"),
+        None => false,
     }
 }
 
@@ -206,6 +222,68 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         .await
     }
 
+    /// 请 NeoBot 自己开始收尾。
+    ///
+    /// 返回 `Ok(true)` = 请求已送达，编排层据此把等待窗口拉满
+    /// （`graceful_stop_timeout`）；`Ok(false)` = 没法请它退，直接收树。
+    ///
+    /// **版本闸门**：`/api/admin/shutdown` 是 NeoBot 1.2.3 才有的。更老的实例
+    /// 调用只会拿到 404，与其白等不如直接返回 false 让编排层收树——
+    /// 这也是"只应该写需要 xx 版本以上"的落点。
+    async fn request_graceful_stop(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+    ) -> Result<bool, AppFrameworkError> {
+        if !version_supports_graceful_stop(instance.installed_version.as_deref()) {
+            tracing::info!(
+                instance = instance.id.as_str(),
+                version = instance.installed_version.as_deref().unwrap_or("未知"),
+                "neobot older than {}: no graceful stop endpoint, will kill the tree",
+                control::MIN_VERSION_WITH_SHUTDOWN_ENDPOINT
+            );
+            return Ok(false);
+        }
+        // 面板口与实例口不同：必须读配置里的真实面板口，否则请求打到 OneBot 口上
+        let root = Self::install_dir(instance);
+        let port =
+            control::dashboard_port(host, &root, manifest::NEOBOT_DEFAULT_DASHBOARD_PORT).await;
+        // 面板密码由用户在面板上设置，桌面端只在打开 WebUI 时见过一次；
+        // 拿不到就靠本机来源放行（面板本机默认可管）
+        match control::request_graceful_shutdown(port, None).await {
+            control::ShutdownRequest::Accepted => Ok(true),
+            control::ShutdownRequest::EndpointMissing => {
+                tracing::info!(
+                    instance = instance.id.as_str(),
+                    "neobot has no shutdown endpoint yet, will kill the tree"
+                );
+                Ok(false)
+            }
+            control::ShutdownRequest::Unauthorized => {
+                tracing::warn!(
+                    instance = instance.id.as_str(),
+                    "neobot panel rejected the shutdown request (password unknown), will kill the tree"
+                );
+                Ok(false)
+            }
+            control::ShutdownRequest::Unreachable(e) => {
+                tracing::warn!(instance = instance.id.as_str(), error = %e, "neobot panel unreachable");
+                Ok(false)
+            }
+            control::ShutdownRequest::Failed(e) => {
+                tracing::warn!(instance = instance.id.as_str(), error = %e, "neobot shutdown request failed");
+                Ok(false)
+            }
+        }
+    }
+
+    /// 优雅关闭的等待窗口。NeoBot 关闭要跑记忆总结（上游 `[standby]`
+    /// `shutdown_timeout_seconds` 默认 300 秒），15 秒的默认值会在收尾中途收树，
+    /// 所以这里给 15 分钟——比上游窗口宽裕，留出进程退出与文件落盘的时间。
+    fn graceful_stop_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(15 * 60)
+    }
+
     fn log_file(&self, instance: &AppInstance) -> Option<HostPath> {
         Some(Self::install_dir(instance).join(manifest::NEOBOT_STDOUT_LOG))
     }
@@ -249,5 +327,32 @@ impl AppFrameworkAdapter for NeoBotAdapter {
             return Err("面板密码至少 8 位".to_string());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 版本闸门：只有 1.2.3 及以上才走优雅关闭，其余返回 false 让编排层直接收树。
+    /// 这是「只应该写需要 xx 版本以上」的落点。
+    #[test]
+    fn graceful_stop_requires_min_version() {
+        let gate = version_supports_graceful_stop;
+        assert!(gate(Some("1.2.3")));
+        assert!(gate(Some("1.2.4")));
+        assert!(gate(Some("1.3.0")));
+        assert!(gate(Some("2.0.0")));
+        assert!(gate(Some(" 1.2.3 ")), "两侧空白要吃掉");
+        // 同一 release 段的预发布仍低于正式版：1.2.3a1 < 1.2.3
+        assert!(!gate(Some("1.2.3a1")));
+        assert!(!gate(Some("1.2.2")));
+        assert!(!gate(Some("1.2.0")));
+        assert!(!gate(Some("1.0.0")));
+        // 读不出实例版本时按不支持处理，避免对着不存在的端点干等整个窗口
+        assert!(!gate(None));
+        assert!(!gate(Some("")));
+        assert!(!gate(Some("   ")));
+        assert!(!gate(Some("installed")), "旧适配器留下的字面量不能被当成版本号");
     }
 }
