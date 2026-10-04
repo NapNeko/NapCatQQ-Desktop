@@ -55,13 +55,14 @@ const BRACKET_LEVEL_PATTERN =
     /\[\s*(trace|debug|info|warn|warning|error|fatal|critical|success|mark)\s*\]/i;
 
 // 匹配 NCD `2026-03-20 22:02:45 | INFO |` 这种竖线分隔级别。
+// 等级集与 LEADING_PIPE_LEVEL 同一份，loguru 的 CRITICAL 才会被判定链认到
 const PIPE_LEVEL_PATTERN =
-    /\|\s*(SUCCESS|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|TRACE)\s*\|/i;
+    /\|\s*(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL|SUCCESS|MARK)\s*\|/i;
 
 // 匹配单词级别 ERROR / WARN 等独立出现在行首/词边界，作为 fallback。
 // 严格要求两侧是非字母数字下划线，避免匹配到 `werror` / `traceback` 之类。
 const STANDALONE_LEVEL_PATTERN =
-    /(?:^|\W)(SUCCESS|FATAL|ERROR|WARNING|WARN|TRACE|DEBUG|INFO)(?:\W|$)/;
+    /(?:^|\W)(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL|SUCCESS|MARK)(?:\W|$)/;
 
 /// 剥 CSI / OSC / 残余 ESC。Karin chalk、NC 颜色码都走这里再解析等级。
 export function stripAnsiEscapes(input: string): string {

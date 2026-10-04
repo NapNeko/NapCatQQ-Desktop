@@ -165,6 +165,15 @@ describe('appendLine · NeoBot', () => {
         expect(entry.timestamp).toBe('03:41:24');
         expect(entry.text).toBe('neobot.llm | 上游超时');
     });
+
+    it('CRITICAL 归到 fatal、SUCCESS 归到 success，等级标签同样从正文挖掉', () => {
+        const critical = one('2026-10-04 03:41:25.000 | CRITICAL | neobot.core | 启动失败');
+        expect(critical.level).toBe('fatal');
+        expect(critical.text).toBe('neobot.core | 启动失败');
+        const success = one('2026-10-04 03:41:26.000 | SUCCESS  | neobot.core | 初始化完成');
+        expect(success.level).toBe('success');
+        expect(success.text).toBe('neobot.core | 初始化完成');
+    });
 });
 
 describe('续行', () => {
