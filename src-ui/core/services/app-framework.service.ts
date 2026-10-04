@@ -89,6 +89,23 @@ export const appFrameworkService = {
     },
 
     /**
+     * 记住某实例的面板密码（明文只进本机密钥库；传空串 = 忘掉）。
+     *
+     * 与 resetWebUiPassword 的区别：那个是「桌面端替框架设口令」，这个是
+     * 「框架自己管口令、桌面端只记住」——NeoBot 的面板属于后者。
+     */
+    setPanelPassword: async (instanceId: string, password: string): Promise<void> => {
+        if (!isTauri) return mockAppFrameworkApi.setPanelPassword(instanceId, password);
+        return invoke<void>('set_app_instance_panel_password', { instanceId, password });
+    },
+
+    /** 该实例是否已记住面板密码 */
+    panelPasswordSet: async (instanceId: string): Promise<boolean> => {
+        if (!isTauri) return mockAppFrameworkApi.panelPasswordSet(instanceId);
+        return invoke<boolean>('app_instance_panel_password_set', { instanceId });
+    },
+
+    /**
      * 该框架支持的可安装版本；null = 不支持按版本安装（UI 隐藏版本选择器）。
      */
     listVersions: async (frameworkId: string): Promise<PackageVersions | null> => {

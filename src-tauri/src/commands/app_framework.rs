@@ -1190,6 +1190,41 @@ pub async fn reset_app_instance_webui_password(
         .map_err(AppFrameworkError::into_config_error)
 }
 
+/// 记住某实例的面板密码（明文只进密钥库；空串 = 忘掉）。
+///
+/// 为什么单开一个入口：NeoBot 这类框架的面板口令由框架自己管（auth.json 存的是哈希），
+/// 桌面端既读不出也写不了，只能请用户填一次，之后用它登录面板 API。
+/// 与 `reset_app_instance_webui_password` 的区别正在这里——那个是「桌面端替框架设口令」，
+/// 这个是「桌面端只记住框架已有的口令」。
+#[tauri::command]
+pub async fn set_app_instance_panel_password(
+    instance_id: String,
+    password: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let instance = state
+        .app_manager
+        .get_instance(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(|e| e.to_string())?;
+    state.app_manager.remember_panel_password(&instance, &password);
+    Ok(())
+}
+
+/// 该实例是否已记住面板密码：前端据此决定「提示填密码」还是直接取面板数据
+#[tauri::command]
+pub async fn app_instance_panel_password_set(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let instance = state
+        .app_manager
+        .get_instance(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(state.app_manager.has_panel_password(&instance))
+}
+
 /// 修改实例的开机自启设置
 #[tauri::command]
 pub async fn set_app_instance_auto_start(

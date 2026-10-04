@@ -498,7 +498,17 @@ function simulateInstallTask(inst: AppInstance, version: string | null = null): 
     return taskId;
 }
 
+/** 预览里「记住的面板密码」：只记有没有，不存明文 */
+const panelPasswords = new Set<string>();
+
 export const mockAppFrameworkApi = {
+    setPanelPassword: async (id: string, password: string): Promise<void> => {
+        if (password.trim()) panelPasswords.add(id);
+        else panelPasswords.delete(id);
+    },
+
+    panelPasswordSet: async (id: string): Promise<boolean> => withMockDelay(panelPasswords.has(id)),
+
     listFrameworks: () => withMockDelay(mockAppFrameworks),
     listInstances: () => withMockDelay(instances.slice()),
 

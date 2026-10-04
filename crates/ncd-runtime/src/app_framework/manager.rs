@@ -105,6 +105,10 @@ const SECRET_WEBUI_USERNAME: &str = "webui_username";
 const SECRET_WEBUI_PASSWORD: &str = "webui_password";
 /// 桌面托管会话密钥（上游 desktop-session）：启动实例时注入 env，代登录免密码
 const SECRET_DESKTOP_SESSION: &str = "desktop_session";
+/// 面板密码。与 webui_* 的区别：那两个是「桌面端能替框架设置」的口令（会自动生成 / 重置），
+/// 这个只用于「框架自己说了算、桌面端只记住」的面板——NeoBot 就是这样：auth.json 存的是哈希，
+/// 桌面端既读不出也写不了，只能请用户填一次，再拿它登录面板 API。
+const SECRET_PANEL_PASSWORD: &str = "panel_password";
 
 fn secret_key(instance_id: &str, suffix: &str) -> String {
     format!("app:{instance_id}:{suffix}")
@@ -344,6 +348,34 @@ impl AppManager {
         }
     }
 
+    /// 记住某实例的面板密码（明文只进密钥库，实例记录里不带）。
+    /// 空串视为「忘掉」，免得库里留一个空值又被当成已配置。
+    pub fn remember_panel_password(&self, instance: &AppInstance, password: &str) {
+        let trimmed = password.trim();
+        let Some(store) = self.secrets.as_ref() else {
+            return;
+        };
+        let key = secret_key(instance.id.as_str(), SECRET_PANEL_PASSWORD);
+        let result = if trimmed.is_empty() {
+            store.delete(&key)
+        } else {
+            store.put(&key, trimmed)
+        };
+        if let Err(e) = result {
+            tracing::warn!(instance = instance.id.as_str(), error = %e, "store panel password");
+        }
+    }
+
+    /// 有没有记住面板密码。前端据此决定「提示填密码」还是直接取数据。
+    pub fn has_panel_password(&self, instance: &AppInstance) -> bool {
+        self.remembered_panel_password(instance).is_some()
+    }
+
+    /// 面板密码；没记住返回 None（不要把 None 当空密码去登录）
+    pub fn remembered_panel_password(&self, instance: &AppInstance) -> Option<String> {
+        self.remembered_secret(instance, SECRET_PANEL_PASSWORD)
+    }
+
     fn remember_secret(&self, instance_id: &AppInstanceId, suffix: &str, value: &str) {
         let Some(store) = self.secrets.as_ref() else {
             return;
@@ -397,6 +429,7 @@ impl AppManager {
             SECRET_WEBUI_USERNAME,
             SECRET_WEBUI_PASSWORD,
             SECRET_DESKTOP_SESSION,
+            SECRET_PANEL_PASSWORD,
         ] {
             if let Err(e) = store.delete(&secret_key(instance_id.as_str(), suffix)) {
                 tracing::debug!(instance = instance_id.as_str(), suffix, error = %e, "drop app secret");

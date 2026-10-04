@@ -856,6 +856,8 @@ pub fn run() {
             commands::app_framework::get_app_instance_webui,
             commands::app_framework::get_app_instance_webui_account,
             commands::app_framework::reset_app_instance_webui_password,
+            commands::app_framework::set_app_instance_panel_password,
+            commands::app_framework::app_instance_panel_password_set,
             commands::app_framework::set_app_instance_auto_start,
             commands::app_framework::read_app_instance_config,
             commands::app_framework::write_app_instance_config,

@@ -4,6 +4,7 @@
 import { Button } from '../../../../shared/ui';
 import { cn } from '../../../../shared/utils/cn';
 import type { AppInstance } from '../../../../core/ipc/types';
+import { PanelCredentialCard } from './PanelCredentialCard';
 import {
     CONSOLE_STATE_LABEL,
     NEOBOT_CONSOLE_FEATURES,
@@ -53,6 +54,8 @@ export const NeoBotConsoleTab: React.FC<{
                     打开的地址是隧道口而不是远端的 127.0.0.1。
                 </p>
             </section>
+
+            <PanelCredentialCard instanceId={instance.id} />
 
             <p className="text-xs text-text-tertiary">
                 面板共 <span className="font-medium text-text-secondary">{stats.total}</span> 项能力：
