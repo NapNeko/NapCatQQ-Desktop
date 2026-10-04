@@ -137,6 +137,19 @@ describe('resolveFrameworkUi', () => {
         expect(ui?.tabForIssue('config/master')).toBe('permissions');
     });
 
+    it('neobot has the Web console page only', () => {
+        const ui = resolveFrameworkUi('neobot');
+        expect(ui).toBeDefined();
+        expect(ui?.defaultTab).toBe('console');
+        expect(ui?.nav.map((g) => g.id)).toEqual(['console']);
+        expect(navValues(ui)).toEqual(['console']);
+        // 这页只读 + 一个跳转按钮，不该挂保存条
+        expect(ui?.typedTabs.size).toBe(0);
+        expect(ui?.fillPaneTabs.has('console')).toBe(true);
+        // 原始文件、日志由外壳追加
+        expect(buildDetailNav(ui).at(-1)?.items.map((t) => t.value)).toEqual(['raw', 'log']);
+    });
+
     it('nonebot2 nav groups and issue routing', () => {
         const ui = resolveFrameworkUi('nonebot2');
         expect(ui).toBeDefined();

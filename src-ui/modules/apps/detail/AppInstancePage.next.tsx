@@ -190,6 +190,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                                         onSaveHandle={setSaveHandle}
                                         onGoTab={goTab}
                                         onOpenLink={() => setLinkOpen(true)}
+                                        onOpenWebUi={() => void apps.openWebUi(instance.id)}
                                         onNavBadges={setNavBadges}
                                     />
                                 )}

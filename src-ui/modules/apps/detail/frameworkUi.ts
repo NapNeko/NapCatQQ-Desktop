@@ -4,6 +4,7 @@ import { astrbotFrameworkUi } from './astrbot/astrbotFrameworkUi';
 import { karinFrameworkUi } from './karin/karinFrameworkUi';
 import { koishiFrameworkUi } from './koishi/koishiFrameworkUi';
 import { maibotFrameworkUi } from './maibot/maibotFrameworkUi';
+import { neobotFrameworkUi } from './neobot/neobotFrameworkUi';
 import { nonebot2FrameworkUi } from './nonebot2/nonebot2FrameworkUi';
 import { yunzaiFrameworkUi } from './yunzai/yunzaiFrameworkUi';
 
@@ -36,6 +37,8 @@ export type FrameworkDetailProps = {
     onGoTab: (tab: string) => void;
     /** 打开外壳的对接对话框（概览清单「连上 QQ」用） */
     onOpenLink: () => void;
+    /** 打开框架自带的 Web 控制台（外壳负责开隧道 / 复制凭据） */
+    onOpenWebUi: () => void;
     /** 上报侧栏小圆点；不关心的框架不调 */
     onNavBadges: (badges: NavBadges) => void;
 };
@@ -71,6 +74,7 @@ const MODULES: Record<string, FrameworkUiModule> = {
     maibot: maibotFrameworkUi,
     koishi: koishiFrameworkUi,
     yunzai: yunzaiFrameworkUi,
+    neobot: neobotFrameworkUi,
 };
 
 export function resolveFrameworkUi(frameworkId: string): FrameworkUiModule | undefined {
