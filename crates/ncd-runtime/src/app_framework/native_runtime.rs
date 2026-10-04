@@ -31,6 +31,11 @@ use crate::events::{BroadcastEventBus, DomainEvent};
 pub const APP_PID_FILE: &str = ".ncd-app.pid";
 const REMOTE_POLL: Duration = Duration::from_secs(2);
 const LOCAL_TAIL_POLL: Duration = Duration::from_secs(1);
+/// 应用自重启的宽限窗口。Windows 下 `os.execv` 是「起新进程 + 退旧进程」（POSIX 的
+/// exec 保留 PID，Windows 不保留），所以重启后实例目录里很快会出现接替进程。
+/// 老 PID 消失后给这一小段时间去找它，找不到才算真的退出。
+const SELF_RESTART_GRACE: Duration = Duration::from_secs(3);
+const SELF_RESTART_POLL: Duration = Duration::from_millis(200);
 
 /// 一次启动所需：命令 + 日志文件（框架适配器给）
 pub struct AppLaunchSpec {
@@ -245,7 +250,14 @@ impl NativeAppRuntime {
                 else {
                     return Ok(());
                 };
-                self.spawn_local_tail(instance.id.clone(), log_file, pid, program, true)
+                self.spawn_local_tail(
+                    Arc::clone(&host),
+                    instance.clone(),
+                    log_file,
+                    pid,
+                    program,
+                    true,
+                )
             }
             Locality::Remote => self.spawn_remote_follow(host, instance.clone(), log_file, true),
         };
@@ -354,7 +366,13 @@ impl NativeAppRuntime {
             tasks.push(self.spawn_pump(instance.id.clone(), err, log_path));
         }
         let process = Arc::new(Mutex::new(process));
-        tasks.push(self.spawn_local_waiter(instance.id.clone(), Arc::clone(&process)));
+        tasks.push(self.spawn_local_waiter(
+            Arc::clone(&host),
+            instance.clone(),
+            pid,
+            program_name.clone(),
+            Arc::clone(&process),
+        ));
 
         self.local.lock().await.insert(
             instance.id.clone(),
@@ -392,43 +410,83 @@ impl NativeAppRuntime {
         })
     }
 
+    /// 守着本会话 spawn 出来的子进程，直到它**真的**退出。
+    ///
+    /// 自重启要特殊对待：Windows 下 `os.execv` 会换 PID，老进程句柄失效，但新进程
+    /// 立刻在同一个实例目录里起来了。此时不能报「已退出」——那会让实例状态卡在已停止、
+    /// 后续停止也管不到新进程。所以老 PID 消失时先认领接替进程，再继续守着它
+    /// （换成 pid 轮询，因为新进程不是我们 spawn 的，没有句柄）。
     fn spawn_local_waiter(
         &self,
-        id: AppInstanceId,
+        host: Arc<dyn Host>,
+        instance: AppInstance,
+        pid: u32,
+        program: String,
         process: Arc<Mutex<Box<dyn HostProcess>>>,
     ) -> JoinHandle<()> {
         let store = Arc::clone(&self.store);
         let bus = Arc::clone(&self.event_bus);
         let local = Arc::clone(&self.local);
         tokio::spawn(async move {
+            let mut pid = pid;
+            let mut program = program;
+            let mut owned = Some(process);
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
-                let status = process.lock().await.try_wait().await;
-                let exit = match status {
-                    Ok(ExitStatus::Running) => continue,
-                    Ok(other) => other,
-                    Err(e) => {
-                        tracing::warn!(error = %e, "try_wait failed; treating app as exited");
-                        ExitStatus::Killed
-                    }
+                let exit = match owned.as_ref() {
+                    Some(proc) => match proc.lock().await.try_wait().await {
+                        Ok(ExitStatus::Running) => continue,
+                        Ok(other) => other,
+                        Err(e) => {
+                            tracing::warn!(error = %e, "try_wait failed; treating app as exited");
+                            ExitStatus::Killed
+                        }
+                    },
+                    // 接手自重启之后没有句柄，只能按 pid 判活；不在了就是退出。
+                    // 这里没有退出码可报，按正常退出表述（下面 match 的 Exited(0) 分支）
+                    None => match local_pid_matches(pid, &program) {
+                        true => continue,
+                        false => ExitStatus::Exited(0),
+                    },
                 };
+
+                // 进程没了，但可能只是自重启：先找接替者
+                if let Some((new_pid, new_program)) =
+                    adopt_successor(host.as_ref(), &instance, pid).await
+                {
+                    pid = new_pid;
+                    program = new_program;
+                    owned = None;
+                    // 条目留着（不是摘掉）：`reconcile_pid` / `is_following` 都靠它，
+                    // 而日志泵还挂在原来那根继承下来的管道上，另挂 tail 会让日志重复
+                    if let Some(m) = local.lock().await.get_mut(&instance.id) {
+                        m.pid = pid;
+                    }
+                    continue;
+                }
+
                 // 谁把条目从表里摘掉，谁负责写状态：stop() 摘了就不重复
-                if local.lock().await.remove(&id).is_some() {
+                if local.lock().await.remove(&instance.id).is_some() {
                     let reason = match exit {
                         ExitStatus::Exited(0) => "进程已退出".to_string(),
                         ExitStatus::Exited(code) => format!("进程异常退出（code {code}）"),
                         _ => "进程被终止".to_string(),
                     };
-                    mark_stopped(&store, &bus, &id, reason, !exit.success()).await;
+                    mark_stopped(&store, &bus, &instance.id, reason, !exit.success()).await;
                 }
                 return;
             }
         })
     }
 
+    /// 跟本机日志 + 存活轮询（冷启动接管、或外部起的实例）。
+    ///
+    /// 与 [Self::spawn_local_waiter] 同样的理由：老 PID 消失时要先找接替进程，
+    /// 不能直接判「已退出」——否则应用自重启一次就丢掉跟踪。
     fn spawn_local_tail(
         &self,
-        id: AppInstanceId,
+        host: Arc<dyn Host>,
+        instance: AppInstance,
         log_file: HostPath,
         pid: u32,
         program: String,
@@ -438,6 +496,8 @@ impl NativeAppRuntime {
         let bus = Arc::clone(&self.event_bus);
         let path = log_file.render(PathStyle::Windows);
         tokio::spawn(async move {
+            let mut pid = pid;
+            let mut program = program;
             let mut offset = if backfill {
                 0
             } else {
@@ -459,7 +519,7 @@ impl NativeAppRuntime {
                     if let Some(read_from) = log_follow_read_from(offset, size) {
                         if let Some(chunk) = local_read_from(&path, read_from, size).await {
                             for line in String::from_utf8_lossy(&chunk).lines() {
-                                publish_app_log(&bus, &id, line);
+                                publish_app_log(&bus, &instance.id, line);
                             }
                         }
                         offset = size;
@@ -467,8 +527,18 @@ impl NativeAppRuntime {
                 }
                 ticks = ticks.wrapping_add(1);
                 if ticks % 5 == 0 && !local_pid_matches(pid, &program) {
-                    mark_stopped(&store, &bus, &id, "进程已退出".to_string(), false).await;
-                    return;
+                    match adopt_successor(host.as_ref(), &instance, pid).await {
+                        Some((new_pid, new_program)) => {
+                            pid = new_pid;
+                            program = new_program;
+                            continue;
+                        }
+                        None => {
+                            mark_stopped(&store, &bus, &instance.id, "进程已退出".to_string(), false)
+                                .await;
+                            return;
+                        }
+                    }
                 }
             }
         })
@@ -609,6 +679,48 @@ fn host_err(e: ncd_host::HostError) -> AppFrameworkError {
     AppFrameworkError::Host(e.to_string())
 }
 
+/// 原进程消失后，在实例目录里找接替它的进程并认领（改写 pid 文件）。
+///
+/// 为什么需要：Windows 下 `os.execv` 会换 PID，NeoBot 这类「重启进程以加载代码改动」
+/// 的应用自重启后，pid 文件里的老 PID 立刻失效。只看老 PID 会把**自重启误判成已退出**，
+/// 桌面端从此丢掉对实例的跟踪（状态停在已停止、停止按钮也管不到那个新进程）。
+///
+/// 认替身是安全的：`discover_local_pid` 已经按「cwd == 实例目录」过滤，`pick_app_pid`
+/// 再按框架入口（NeoBot 是 `.venv` 里的 neobot 启动器）认人，不会认到无关进程。
+async fn adopt_successor(
+    host: &dyn Host,
+    instance: &AppInstance,
+    dead_pid: u32,
+) -> Option<(u32, String)> {
+    let kind = super::supervisor::AppProcessKind::from_framework(instance.framework_id.as_str());
+    let deadline = tokio::time::Instant::now() + SELF_RESTART_GRACE;
+    loop {
+        if let Some((pid, program)) = discover_local_pid(&instance.install_dir, kind) {
+            if pid != dead_pid {
+                let body = render_pid_file(pid, &program);
+                if let Err(e) = host
+                    .write_file(&NativeAppRuntime::pid_file(instance), body.as_bytes())
+                    .await
+                {
+                    tracing::warn!(instance = instance.id.as_str(), error = %e, "claim restarted app pid failed");
+                    return None;
+                }
+                tracing::info!(
+                    instance = instance.id.as_str(),
+                    dead_pid,
+                    pid,
+                    "app self-restarted; adopted the successor process"
+                );
+                return Some((pid, program));
+            }
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return None;
+        }
+        tokio::time::sleep(SELF_RESTART_POLL).await;
+    }
+}
+
 // ---- pid 文件 ----
 
 /// 第一行 pid，第二行进程文件名（本机身份校验用）
@@ -677,7 +789,13 @@ pub(crate) fn discover_local_pid(
             continue;
         };
         let got = HostPath::from_windows(&cwd.to_string_lossy());
-        if got.as_posix() != want.as_posix() {
+        // 必须去掉尾部斜杠再比：Windows 进程的 cwd 来自 PEB 的 CurrentDirectory，
+        // 天生带尾部反斜杠（变成 as_posix 就是 "/c/apps/x/"），而实例目录存的是
+        // as_posix 形式且没有尾斜杠（"/c/apps/x"）。直接字符串相等永远不成立——
+        // 那会让本机接管彻底失效（认不到任何进程）。
+        let got = got.as_posix().trim_end_matches('/');
+        let want = want.as_posix().trim_end_matches('/');
+        if got != want {
             continue;
         }
         let cmd = proc
@@ -1138,5 +1256,62 @@ mod tests {
         assert_eq!(log_follow_read_from(40, 80), Some(40));
         assert_eq!(log_follow_read_from(80, 80), None);
         assert_eq!(log_follow_read_from(90, 80), None);
+    }
+
+    /// 自重启修复的前提，用**真实进程**验证：应用换了 PID 之后，桌面端还能按
+    /// 「cwd == 实例目录 + 入口在 .venv 里」把新进程认回来。
+    ///
+    /// 造一个假实例：把 cmd.exe 复制成 .venv/Scripts/neobot.exe 再跑起来，
+    /// 这样它的 cwd 与命令行都和真实 NeoBot 同形。这条同时钉住一个真实缺陷：
+    /// Windows 进程 cwd 带尾部反斜杠，而实例目录存的是 as_posix 形式（无尾斜杠），
+    /// 比较时不去尾斜杠就永远认不到——本机接管会彻底失效。
+    #[cfg(windows)]
+    #[test]
+    fn discover_local_pid_finds_the_restarted_process() {
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+
+        let dir = std::env::temp_dir().join(format!("ncd-restart-{}", std::process::id()));
+        let scripts = dir.join(".venv").join("Scripts");
+        std::fs::create_dir_all(&scripts).unwrap();
+        let launcher = scripts.join("neobot.exe");
+        let comspec = std::env::var("COMSPEC")
+            .unwrap_or_else(|_| "C:\\Windows\\System32\\cmd.exe".to_string());
+        std::fs::copy(comspec, &launcher).unwrap();
+
+        // cmd.exe 认参数不认镜像名；/c ping -n 20 让它活约 19 秒
+        let mut child = std::process::Command::new(&launcher)
+            .args(["/c", "ping", "-n", "20", "127.0.0.1", ">nul"])
+            .current_dir(&dir)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let child_pid = child.id();
+
+        // 实例目录按生产口径取 as_posix 形式（instance.install_dir 就是它）
+        let install_dir = {
+            let mut sys = System::new();
+            let spid = Pid::from_u32(child_pid);
+            sys.refresh_processes_specifics(
+                ProcessesToUpdate::Some(&[spid]),
+                ProcessRefreshKind::new().with_cwd(UpdateKind::Always),
+            );
+            let cwd = sys
+                .process(spid)
+                .and_then(|p| p.cwd().map(|c| c.to_string_lossy().to_string()))
+                .expect("进程表里应能读到子进程 cwd");
+            HostPath::from_windows(&cwd).as_posix().to_string()
+        };
+
+        let found =
+            discover_local_pid(&install_dir, super::super::supervisor::AppProcessKind::NeoBot);
+
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let (pid, program) = found.expect("重启后的进程应能按 cwd + 入口认出来");
+        assert_eq!(pid, child_pid, "认出来的必须是那个进程");
+        assert!(!program.is_empty());
     }
 }

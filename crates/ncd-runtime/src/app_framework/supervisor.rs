@@ -354,6 +354,33 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
         ));
     }
 
+    /// 自重启之后必须还能认出 NeoBot 的进程。
+    ///
+    /// Windows 上 `os.execv` 是「起新进程 + 退旧进程」（POSIX 的 exec 保留 PID，Windows
+    /// 不保留），命令行随之变成「python.exe + 原启动器路径 + 原参数」。桌面端就靠这条
+    /// 把换了 PID 的实例认回来——认不出就会把自重启当成「进程已退出」，从此丢掉跟踪。
+    /// 同时钉住 `Scripts\`（反斜杠）不会被「跳过 scripts/ 脚本」那条判断误伤。
+    #[test]
+    fn neobot_process_match_survives_self_restart() {
+        let restarted = "\
+7300 C:\\apps\\n1\\.venv\\Scripts\\python.exe C:\\apps\\n1\\.venv\\Scripts\\neobot.exe run --config data\\config.toml
+";
+        let (pid, prog) = pick_app_pid(restarted, AppProcessKind::NeoBot).unwrap();
+        assert_eq!(pid, 7300);
+        // 重启后 argv0 是解释器，身份校验要按 python.exe 记（Windows 带扩展名），
+        // 与 local_pid_matches 拿进程名精确比对同口径
+        assert_eq!(prog, "python.exe");
+
+        // 路径含空格时 cli.py 会用 list2cmdline 加引号，仍要认得出
+        let quoted = "\
+7301 C:\\Users\\a b\\n1\\.venv\\Scripts\\python.exe \"C:\\Users\\a b\\n1\\.venv\\Scripts\\neobot.exe\" run
+";
+        assert_eq!(
+            pick_app_pid(quoted, AppProcessKind::NeoBot).unwrap().0,
+            7301
+        );
+    }
+
     /// 不显式加分支会落到 `_ => Self::NoneBot2`，于是拿 `bot.py` 去匹配 NeoBot 的进程
     #[test]
     fn neobot_kind_and_process_match() {
