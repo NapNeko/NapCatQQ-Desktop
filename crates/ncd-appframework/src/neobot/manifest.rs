@@ -102,7 +102,7 @@ mod tests {
         assert!(!back.has_install_renderer);
         assert!(
             back.store_resources.is_empty(),
-            "NeoBot 面板自带插件市场，但不走桌面端商店"
+            "NeoBot 的插件由面板自己管：它没有市场索引，装第三方插件是「贴一个 GitHub              仓库地址」（dashboard/api.py 的 plugins_install 取 repo 参数），而桌面端商店              要的是「市场 URL + 解析器」（store_market_urls / parse_store_market），形状对不上，             所以这里声明为空。要在桌面端展示插件得另开专属页签代理它的 /api/plugins*"
         );
         assert!(back.terms.is_empty());
     }
