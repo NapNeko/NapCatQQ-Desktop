@@ -249,10 +249,14 @@ pub trait AppFrameworkAdapter: Send + Sync {
 
     /// 停实例前先请应用自己退（存盘、收它拉起的子进程）。Ok(true) = 请求已送达，编排层接着等
     /// 进程退出，等不到再收整棵树；Ok(false) = 这个框架没有这种入口，直接收树
+    ///
+    /// `panel_password` 是用户在桌面端填过的**面板密码**（密钥库里的那个，可能为 None）。
+    /// 走 HTTP 退出入口的框架（NeoBot）需要它：面板接口要登录，回环来源并不能绕过鉴权。
     async fn request_graceful_stop(
         &self,
         _host: &dyn Host,
         _instance: &AppInstance,
+        _panel_password: Option<&str>,
     ) -> Result<bool, AppFrameworkError> {
         Ok(false)
     }

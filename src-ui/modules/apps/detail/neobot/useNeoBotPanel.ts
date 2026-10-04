@@ -7,8 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import { appFrameworkService } from '../../../../core/services/app-framework.service';
 import { parseNeoBotOverview, type NeoBotOverview } from './neobotPanel';
 
-export type PanelState =
-    | { kind: 'ok'; overview: NeoBotOverview }
+export type PanelState<T> =
+    | { kind: 'ok'; data: T }
     /** 该框架不提供面板转发（panelCall 返回 null） */
     | { kind: 'unsupported' }
     /** 没填面板密码，或密码不对 */
@@ -21,18 +21,33 @@ export type PanelState =
 export const neobotPanelKey = (instanceId: string, what: string) =>
     ['neobotPanel', instanceId, what] as const;
 
-export function useNeoBotOverview(instanceId: string) {
-    return useQuery<PanelState, Error>({
-        queryKey: neobotPanelKey(instanceId, 'overview'),
-        queryFn: async (): Promise<PanelState> => {
-            const res = await appFrameworkService.panelCall(instanceId, 'GET', '/api/overview');
+/**
+ * 取一个面板端点并收窄成 T。
+ *
+ * path 必须是面板自己的 /api/ 路径（Rust 侧有白名单，写错会被拒）。
+ * parse 返回 null 就归为 malformed —— 那是「面板答了但不是我们要的形状」，
+ * 与「面板打不通」是不同的故障，提示也该不同。
+ */
+export function usePanelJson<T>(
+    instanceId: string,
+    what: string,
+    path: string,
+    parse: (raw: unknown) => T | null,
+) {
+    return useQuery<PanelState<T>, Error>({
+        queryKey: neobotPanelKey(instanceId, what),
+        queryFn: async (): Promise<PanelState<T>> => {
+            const res = await appFrameworkService.panelCall(instanceId, 'GET', path);
             if (res === null) return { kind: 'unsupported' };
             if (res.kind === 'ok') {
-                const overview = parseNeoBotOverview(res.data);
-                return overview ? { kind: 'ok', overview } : { kind: 'malformed' };
+                const data = parse(res.data);
+                return data !== null ? { kind: 'ok', data } : { kind: 'malformed' };
             }
             return { kind: res.kind, message: res.message ?? '' };
         },
         retry: false,
     });
 }
+
+export const useNeoBotOverview = (instanceId: string) =>
+    usePanelJson<NeoBotOverview>(instanceId, 'overview', '/api/overview', parseNeoBotOverview);

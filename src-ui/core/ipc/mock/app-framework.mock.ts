@@ -507,47 +507,179 @@ export const mockAppFrameworkApi = {
      * 预览里只认概览页要的那一个端点，够把页面跑起来；其余路径如实报「未模拟」，
      * 免得预览里看着像通了、真机却是空的。
      */
+    /**
+     * 预览里为每个页签各备一份与真机同形的回包；没备的路径如实报「未模拟」，
+     * 免得预览里看着像通了、真机却是空的。
+     */
     panelCall: async (
         _id: string,
         method: string,
         path: string,
         _body?: unknown,
     ): Promise<AppPanelResult | null> => {
-        if (method !== 'GET' || path !== '/api/overview') {
+        const ok = (data: unknown) => withMockDelay({ kind: 'ok' as const, data });
+        if (method !== 'GET') {
             return withMockDelay({
                 kind: 'failed' as const,
                 message: '预览未模拟 ' + method + ' ' + path,
             });
         }
-        return withMockDelay({
-            kind: 'ok' as const,
-            data: {
-                ok: true,
-                online: true,
-                app_name: 'NeoBot',
-                app_version: '1.2.3',
-                bot_nickname: 'Luna',
-                bot_user_id: 10001,
-                avatar_url: '',
-                uptime_seconds: 8130,
-                today_messages: 128,
-                total_messages: 20461,
-                plugins_loaded: 6,
-                plugins_total: 7,
-                plugins_error: 1,
-                latency_ms: 42,
-                python_version: '3.13.5',
-                hostname: 'DESKTOP-LUNA',
-                standby: false,
-                notices: [
-                    {
-                        level: 'warning',
-                        text: '尚未配置超级管理员账号，可能影响部分命令使用',
-                        hint: '在「配置管理 → 本体配置 → chat」里填 admin_accounts（QQ 号列表）',
-                    },
-                ],
-            },
-        });
+        switch (path) {
+            case '/api/overview':
+                return ok({
+                    ok: true,
+                    online: true,
+                    app_name: 'NeoBot',
+                    app_version: '1.2.3',
+                    bot_nickname: 'Luna',
+                    bot_user_id: 10001,
+                    avatar_url: '',
+                    uptime_seconds: 8130,
+                    today_messages: 128,
+                    total_messages: 20461,
+                    plugins_loaded: 6,
+                    plugins_total: 7,
+                    plugins_error: 1,
+                    latency_ms: 42,
+                    python_version: '3.13.5',
+                    hostname: 'DESKTOP-LUNA',
+                    standby: false,
+                    notices: [
+                        {
+                            level: 'warning',
+                            text: '尚未配置超级管理员账号，可能影响部分命令使用',
+                            hint: '在「配置管理 → 本体配置 → chat」里填 admin_accounts（QQ 号列表）',
+                        },
+                    ],
+                });
+            case '/api/plugins':
+                return ok({
+                    ok: true,
+                    manage_enabled: true,
+                    console_plugin: 'dashboard',
+                    items: [
+                        {
+                            id: 'dashboard',
+                            name: 'dashboard',
+                            version: '1.2.3',
+                            status: '运行中',
+                            state: 'running',
+                            enabled: true,
+                            description: '网页面板本体',
+                            official: true,
+                            manageable: false,
+                            tags: ['official', 'web'],
+                            python_dependencies: [],
+                            missing_python_dependencies: [],
+                            config_path: '',
+                        },
+                        {
+                            id: 'demo-plugin',
+                            name: 'demo-plugin',
+                            version: '0.3.1',
+                            status: '已加载',
+                            state: 'loaded',
+                            enabled: true,
+                            description: '示例第三方插件',
+                            author: 'someone',
+                            official: false,
+                            manageable: true,
+                            repo: 'https://github.com/someone/demo-plugin',
+                            tags: ['demo'],
+                            python_dependencies: ['httpx'],
+                            missing_python_dependencies: ['httpx'],
+                            config_path: 'D:/ncd/apps/neobot/plugins_data/demo-plugin/config.toml',
+                        },
+                    ],
+                });
+            case '/api/config/models':
+                return ok({
+                    ok: true,
+                    can_manage: true,
+                    platforms: { DeepSeek: { name: 'DeepSeek', url: 'https://api.deepseek.com', has_key: true } },
+                    assignments: { chat: 'deepseek-chat', vision: 'deepseek-vl' },
+                    library: [
+                        {
+                            model_ref: 'deepseek-chat',
+                            display_name: 'DeepSeek 对话',
+                            provider: 'DeepSeek',
+                            model_name: 'deepseek-chat',
+                            model_type: 'chat',
+                            type_label: '对话',
+                        },
+                        {
+                            model_ref: 'deepseek-vl',
+                            display_name: 'DeepSeek 视觉',
+                            provider: 'DeepSeek',
+                            model_name: 'deepseek-vl',
+                            model_type: 'vision',
+                            type_label: '视觉',
+                        },
+                        {
+                            model_ref: 'silicon-chat',
+                            display_name: 'SiliconFlow 对话',
+                            provider: 'SiliconFlow',
+                            model_name: 'Qwen/Qwen2.5-7B-Instruct',
+                            model_type: 'chat',
+                            type_label: '对话',
+                        },
+                    ],
+                });
+            case '/api/prompts':
+                return ok({
+                    ok: true,
+                    editable: true,
+                    sections: [
+                        {
+                            name: 'reply',
+                            keys: [
+                                {
+                                    path: 'system',
+                                    label: '系统提示词',
+                                    kind: 'template',
+                                    value: '你是 {nickname}，一个群里的普通成员。',
+                                    default: '你是 {nickname}。',
+                                    custom: '你是 {nickname}，一个群里的普通成员。',
+                                    overridden: true,
+                                    placeholders: ['nickname'],
+                                },
+                            ],
+                        },
+                        {
+                            name: 'memory',
+                            keys: [
+                                {
+                                    path: 'summary_hint',
+                                    label: '摘要提示词',
+                                    kind: 'scalar',
+                                    value: '把要点压到 200 字以内。',
+                                    default: '',
+                                    custom: null,
+                                    overridden: false,
+                                    placeholders: [],
+                                },
+                            ],
+                        },
+                    ],
+                });
+            case '/api/archives':
+                return ok({
+                    ok: true,
+                    can_manage: true,
+                    summarize_available: true,
+                    min_target_chars: 200,
+                    max_target_chars: 2000,
+                    items: [
+                        { table_name: 'group_10001', count: 412, over_limit: 0, max_chars: 2000 },
+                        { table_name: 'private_20002', count: 88, over_limit: 3, max_chars: 2000 },
+                    ],
+                });
+            default:
+                return withMockDelay({
+                    kind: 'failed' as const,
+                    message: '预览未模拟 ' + method + ' ' + path,
+                });
+        }
     },
 
     setPanelPassword: async (id: string, password: string): Promise<void> => {

@@ -849,7 +849,12 @@ impl AppManager {
         let Ok(adapter) = self.registry.get(&instance.framework_id) else {
             return;
         };
-        match adapter.request_graceful_stop(host, instance).await {
+        // 面板密码从密钥库取：设过密码的实例，不带它一律 401/403，优雅关闭就永远走不通
+        let panel_password = self.remembered_panel_password(instance);
+        match adapter
+            .request_graceful_stop(host, instance, panel_password.as_deref())
+            .await
+        {
             Ok(true) => {
                 let timeout = adapter.graceful_stop_timeout();
                 if !self.runtime.wait_exited(host, instance, timeout).await {

@@ -48,7 +48,7 @@ export const NEOBOT_CONSOLE_FEATURES: readonly ConsoleFeatureGroup[] = [
             },
             {
                 name: '日志',
-                desc: '面板内的实时日志缓冲，可按级别过滤。',
+                desc: '面板里的实时日志，可按调试 / 信息 / 警告 / 错误过滤；桌面端「日志」页看的是同一份输出。',
                 state: 'desktop',
                 endpoints: ['/api/logs'],
             },

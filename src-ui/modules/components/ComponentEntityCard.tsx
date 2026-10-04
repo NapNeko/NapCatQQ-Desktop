@@ -56,7 +56,7 @@ export function ComponentManageCard({
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 px-3.5 pb-2 pt-3">
                 <div className="flex min-w-0 items-start justify-between gap-2">
-                    {/* 头图与标题同排：24px，和标题行高接近，不会把整行卡片撑高 */}
+                    {/* 无图标时不渲染；有图标时 24px，与标题行高接近，基本不改变卡片高度 */}
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                         {icon ? <span className="shrink-0">{icon}</span> : null}
                         <h3 className="min-w-0 truncate font-display text-base font-semibold leading-snug text-text">

@@ -50,8 +50,8 @@ export const NeoBotConsoleTab: React.FC<{
                     <p className="mt-2 text-2xs text-text-tertiary">安装完成后才能打开面板。</p>
                 )}
                 <p className="mt-2 text-2xs leading-snug text-text-tertiary">
-                    面板口与 OneBot 口是两个口，别拿实例口去连面板。跨机部署时桌面端会先开隧道，
-                    打开的地址是隧道口而不是远端的 127.0.0.1。
+                    面板和 QQ 连接用的是两个不同的端口，桌面端会自己开隧道并打开正确的地址——
+                    直接点上面的按钮即可，不用手填。
                 </p>
             </section>
 

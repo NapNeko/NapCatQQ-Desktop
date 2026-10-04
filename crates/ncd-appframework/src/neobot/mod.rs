@@ -56,7 +56,7 @@ fn envelope(
 pub struct NeoBotAdapter {
     integration: NeoBotIntegration,
     /// 面板会话（token + CSRF）。适配器在注册表里活一个进程周期，所以这里缓存得住：
-    /// 登录要过 bcrypt，每个请求都重登一遍太浪费。
+    /// 登录要过 PBKDF2-HMAC-SHA256（24 万次迭代），每个请求都重登一遍太浪费。
     sessions: std::sync::Arc<control::PanelSessions>,
 }
 
@@ -103,7 +103,7 @@ pub fn version_supports_graceful_stop(installed_version: Option<&str>) -> bool {
 }
 
 /// 面板口：目前没有从 spec 传进来的通道（`AppComponentSpec` 里没有这个字段），
-/// 一律用出厂值；组件装完会把真实口写进面板配置，之后读类型化配置就能拿到。
+/// 一律用出厂值；桌面端安装时已把真实面板口写进面板配置，之后读类型化配置就能拿到。
 fn dashboard_port_for(_spec: &AppComponentSpec) -> u16 {
     manifest::NEOBOT_DEFAULT_DASHBOARD_PORT
 }
@@ -278,6 +278,7 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         &self,
         host: &dyn Host,
         instance: &AppInstance,
+        panel_password: Option<&str>,
     ) -> Result<bool, AppFrameworkError> {
         // 优雅关闭打的是面板回环地址，只对同机实例有意义：远端实例不是打不通，
         // 就是误打到本机同口的另一个实例。远端支持得走编排层隧道，暂不提供；
@@ -305,7 +306,7 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         // 密码恒传 None：桌面端不接管面板密码，被拒（401/403）就收树；
         // control 里的登录重试已接线并有测试覆盖，但生产上没有调用方会传密码，
         // 为后续接管面板密码预留
-        match control::request_graceful_shutdown(port, None).await {
+        match control::request_graceful_shutdown(port, panel_password).await {
             control::ShutdownRequest::Accepted => Ok(true),
             control::ShutdownRequest::EndpointMissing => {
                 tracing::info!(

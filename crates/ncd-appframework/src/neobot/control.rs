@@ -5,10 +5,16 @@
 //! `GenerateConsoleCtrlEvent` 也打不到。桌面端唯一能用的「请它退」手段就是它自己的
 //! 面板接口（NeoBot 1.2.3 起提供 `POST /api/admin/shutdown`）。
 //!
-//! 鉴权：本机来源 + 面板密码。先直接请求（面板未设密码时本机即可）；
-//! 被拒且拿到密码时登录换 token 再试一次。注意边界：这条重试路径已接线、
-//! 有测试覆盖，但当前生产调用方恒传 None——桌面端不接管面板密码，拿不到密码，
-//! 留着是为后续接管面板密码预留。所以现在「设过密码」的实例实际只靠本机来源放行。
+//! 鉴权只有一条路：拿面板密码登录换 token，再带着 token 请求。
+//!
+//! 两个容易想当然的地方（都对着上游 server.py 的 _auth_middleware 核过）：
+//! - 面板**设了密码**时，/api/* 一律要 X-Token（POST 还要 X-CSRF-Token），
+//!   **回环来源不能绕过**——「本机就是可信的」在这里不成立；
+//! - 面板**没设密码**时，/api/* 一律 403（引导去本机完成 setup），回环也只放行
+//!   /api/auth/setup。也就是说没密码并不等于「本机随便调」。
+//!
+//! 密码来自桌面端密钥库（用户在「Web 控制台」页的「面板凭据」里填过）。没填就只能报未授权，
+//! 由前端引导用户去填。
 
 use std::time::Duration;
 
@@ -183,7 +189,7 @@ pub async fn dashboard_port(
 
 /// 面板会话（登录换来的 token + CSRF）。
 ///
-/// 面板每个请求都要 X-Token + X-CSRF-Token，而登录有代价（要过 bcrypt），
+/// 面板每个请求都要 X-Token + X-CSRF-Token，而登录有代价（要过 PBKDF2-HMAC-SHA256），
 /// 所以登录一次就存下来复用；401/403 时丢掉重登一次。
 #[derive(Debug, Clone)]
 pub struct PanelSession {

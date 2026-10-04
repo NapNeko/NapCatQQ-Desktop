@@ -33,17 +33,17 @@ export interface NeoBotOverview {
     notices: NeoBotOverviewNotice[];
 }
 
-function asRecord(raw: unknown): Record<string, unknown> | null {
+export function asRecord(raw: unknown): Record<string, unknown> | null {
     return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
         ? (raw as Record<string, unknown>)
         : null;
 }
 
-function asString(v: unknown, fallback = ''): string {
+export function asString(v: unknown, fallback = ''): string {
     return typeof v === 'string' ? v : fallback;
 }
 
-function asNumber(v: unknown, fallback = 0): number {
+export function asNumber(v: unknown, fallback = 0): number {
     return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
@@ -51,7 +51,7 @@ function asNullableNumber(v: unknown): number | null {
     return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
-function asBool(v: unknown): boolean {
+export function asBool(v: unknown): boolean {
     return v === true;
 }
 
