@@ -53,6 +53,9 @@ impl AppManager {
                 ncd_component::RedisComponent::managed_binary_path_for_os(&dir, host.os())
             }),
             npm_registry: self.npm_registry.clone(),
+            // 版本 / PyPI 镜像由安装请求给（AppComponentHint），这里只用于探测与起停
+            pypi_index: None,
+            install_version: None,
             install_renderer: instance.install_renderer,
             adopt_existing: instance.origin.is_imported(),
             instance_id: instance.id.as_str().to_string(),

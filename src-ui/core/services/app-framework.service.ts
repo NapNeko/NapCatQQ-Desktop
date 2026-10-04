@@ -40,6 +40,7 @@ import type {
     KarinPluginMarketEntry,
     LogSnapshot,
     OneBotLinkPlan,
+    PackageVersions,
 } from '../ipc/types';
 import { mockAppFrameworkApi } from '../ipc/mock/app-framework.mock';
 
@@ -78,10 +79,21 @@ export const appFrameworkService = {
         return invoke<string>('preview_app_install_dir', { hostId, frameworkId });
     },
 
-    /** 提交安装任务到部署队列，返回 task_id；完成后后端自动刷实例状态。 */
-    install: async (instanceId: string): Promise<string> => {
-        if (!isTauri) return mockAppFrameworkApi.install(instanceId);
-        return invoke<string>('install_app_instance', { instanceId });
+    /**
+     * 提交安装任务到部署队列，返回 task_id；完成后后端自动刷实例状态。
+     * `version` 指定安装的版本（不传 = 最新正式版）；框架不支持按版本安装时忽略。
+     */
+    install: async (instanceId: string, version?: string | null): Promise<string> => {
+        if (!isTauri) return mockAppFrameworkApi.install(instanceId, version);
+        return invoke<string>('install_app_instance', { instanceId, version: version ?? null });
+    },
+
+    /**
+     * 该框架支持的可安装版本；null = 不支持按版本安装（UI 隐藏版本选择器）。
+     */
+    listVersions: async (frameworkId: string): Promise<PackageVersions | null> => {
+        if (!isTauri) return mockAppFrameworkApi.listVersions(frameworkId);
+        return invoke<PackageVersions | null>('list_app_framework_versions', { frameworkId });
     },
 
     refresh: async (instanceId: string): Promise<AppInstance> => {

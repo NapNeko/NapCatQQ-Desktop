@@ -3,10 +3,11 @@ import type { KoishiInstanceConfig } from "../koishi/KoishiInstanceConfig";
 import type { AstrBotInstanceConfig } from "./AstrBotInstanceConfig";
 import type { KarinInstanceConfig } from "./KarinInstanceConfig";
 import type { MaiBotInstanceConfig } from "./MaiBotInstanceConfig";
+import type { NeoBotInstanceConfig } from "./NeoBotInstanceConfig";
 import type { NoneBot2InstanceConfig } from "./NoneBot2InstanceConfig";
 import type { YunzaiInstanceConfig } from "./YunzaiInstanceConfig";
 
 /**
  * 类型化配置：按框架分流（`framework` 标签与 `AppFrameworkId` 字面量一致）
  */
-export type AppInstanceConfig = { "framework": "karin", "data": KarinInstanceConfig } | { "framework": "nonebot2", "data": NoneBot2InstanceConfig } | { "framework": "astrbot", "data": AstrBotInstanceConfig } | { "framework": "maibot", "data": MaiBotInstanceConfig } | { "framework": "koishi", "data": KoishiInstanceConfig } | { "framework": "yunzai", "data": YunzaiInstanceConfig };
+export type AppInstanceConfig = { "framework": "karin", "data": KarinInstanceConfig } | { "framework": "nonebot2", "data": NoneBot2InstanceConfig } | { "framework": "astrbot", "data": AstrBotInstanceConfig } | { "framework": "maibot", "data": MaiBotInstanceConfig } | { "framework": "koishi", "data": KoishiInstanceConfig } | { "framework": "yunzai", "data": YunzaiInstanceConfig } | { "framework": "neobot", "data": NeoBotInstanceConfig };

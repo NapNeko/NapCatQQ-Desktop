@@ -5,6 +5,8 @@ use std::time::Duration;
 use ncd_host::{Host, HostCommand, Locality, shell_single_quote};
 use ncd_traits::AppFrameworkError;
 
+use super::native_runtime::program_file_name;
+
 /// ExecStart 像在跑框架入口，而不是项目里的 sidecar 脚本。
 pub fn exec_looks_like_app(exec: &str, install_dir: &str) -> bool {
     let e = exec.to_ascii_lowercase();
@@ -168,6 +170,15 @@ pub fn pick_app_pid(lines: &str, kind: AppProcessKind) -> Option<(u32, String)> 
             }
             // 守护进程 `node app.js daemon` 拉起的子进程是 `node app.js start`，cwd 都是实例目录
             AppProcessKind::Yunzai => lower.contains("app.js") && lower.contains("node"),
+            // NeoBot 的控制台入口在实例 .venv 里：Windows `.venv/Scripts/neobot.exe`、
+            // 其它 `.venv/bin/neobot`（由 python 解释器执行，命令行走脚本路径）。
+            // 调用方已按 cwd == 实例目录过滤，这里再把 .venv 里的入口认出来，
+            // 免得把「用户在实例目录里跑的其它命令」也算进来
+            AppProcessKind::NeoBot => {
+                let slashed = lower.replace('\\', "/");
+                slashed.contains(".venv/bin/neobot")
+                    || slashed.contains(".venv/scripts/neobot")
+            }
         };
         if !hit {
             continue;
@@ -181,14 +192,11 @@ pub fn pick_app_pid(lines: &str, kind: AppProcessKind) -> Option<(u32, String)> 
         {
             continue;
         }
-        let program = if lower.contains("python") {
-            "python"
-        } else if lower.contains("node") {
-            "node"
-        } else {
-            "python"
-        };
-        best = Some((pid, program.to_string()));
+        // program 与 start_local 写 pid 文件同口径：命中行 argv0 经 program_file_name 归一。
+        // 本机判活拿它跟进程名精确比对；按整行猜解释器会把裸启动器（neobot.exe 这类）记成
+        // python，随后被判活当成已退出
+        let argv0 = cmd.split_whitespace().next().unwrap_or("");
+        best = Some((pid, program_file_name(argv0)));
     }
     best
 }
@@ -201,6 +209,7 @@ pub enum AppProcessKind {
     MaiBot,
     Koishi,
     Yunzai,
+    NeoBot,
 }
 
 impl AppProcessKind {
@@ -211,6 +220,7 @@ impl AppProcessKind {
             "maibot" => Self::MaiBot,
             "koishi" => Self::Koishi,
             "yunzai" => Self::Yunzai,
+            "neobot" => Self::NeoBot,
             _ => Self::NoneBot2,
         }
     }
@@ -285,7 +295,7 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
 659110 /root/game-qqbot/bot-xiuxian/.venv/bin/python3 scripts/run_admin.py\n";
         let (pid, prog) = pick_app_pid(lines, AppProcessKind::NoneBot2).unwrap();
         assert_eq!(pid, 659109);
-        assert_eq!(prog, "python");
+        assert_eq!(prog, "python3", "argv0 文件名原样记录，不再归一成 python");
     }
 
     #[test]
@@ -295,7 +305,7 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
 2202 /home/u/apps/a1/.venv/bin/astrbot run\n";
         let (pid, prog) = pick_app_pid(lines, AppProcessKind::AstrBot).unwrap();
         assert_eq!(pid, 2202);
-        assert_eq!(prog, "python");
+        assert_eq!(prog, "astrbot", "console script 入口按 argv0 记，不再是兜底 python");
     }
 
     #[test]
@@ -307,7 +317,7 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
 ";
         let (pid, prog) = pick_app_pid(lines, AppProcessKind::Koishi).unwrap();
         assert_eq!(pid, 4400, "装插件的 yarn 不算，最外层的 yarn start 先起");
-        assert_eq!(prog, "node");
+        assert_eq!(prog, "node.exe", "argv0 是 node.exe，保留 .exe 才与本机进程名对齐");
         assert!(matches!(
             AppProcessKind::from_framework("koishi"),
             AppProcessKind::Koishi
@@ -342,5 +352,57 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
             AppProcessKind::from_framework("maibot"),
             AppProcessKind::MaiBot
         ));
+    }
+
+    /// 不显式加分支会落到 `_ => Self::NoneBot2`，于是拿 `bot.py` 去匹配 NeoBot 的进程
+    #[test]
+    fn neobot_kind_and_process_match() {
+        assert!(matches!(
+            AppProcessKind::from_framework("neobot"),
+            AppProcessKind::NeoBot
+        ));
+
+        // Linux：解释器执行 .venv/bin/neobot
+        let lines = "\
+4200 /home/u/apps/n1/.venv/bin/python /home/u/apps/n1/.venv/bin/neobot
+\
+4201 grep neobot
+";
+        let (pid, prog) = pick_app_pid(lines, AppProcessKind::NeoBot).unwrap();
+        assert_eq!(pid, 4200);
+        assert_eq!(prog, "python");
+
+        // Windows：直接跑 .venv/Scripts/neobot.exe；安装目录是 POSIX 写法，命令里是反斜杠
+        let win = "\
+5200 C:\\apps\\n1\\.venv\\Scripts\\neobot.exe
+";
+        let (pid, prog) = pick_app_pid(win, AppProcessKind::NeoBot).unwrap();
+        assert_eq!(pid, 5200);
+        assert_eq!(prog, "neobot.exe", "与本机启动写盘同口径，判活才打得中");
+
+        // 认不出来的一律不误伤：运行目录里跟 NeoBot 无关的进程
+        assert!(
+            pick_app_pid("6000 /usr/bin/python other_script.py\n", AppProcessKind::NeoBot)
+                .is_none()
+        );
+        assert!(
+            pick_app_pid("6001 C:\\Windows\\System32\\notepad.exe\n", AppProcessKind::NeoBot)
+                .is_none()
+        );
+    }
+
+    /// program 与 start_local 写 pid 文件同口径：命中行 argv0 的可执行文件名（小写、保留
+    /// .exe）。本机判活拿它跟进程名精确比对，不能再看整行里有没有 python / node 字样
+    #[test]
+    fn program_is_argv0_file_name() {
+        // python 解释器子进程行：argv0 文件名本来就是 python(.exe)，大小写也要归一
+        let lines = "8100 C:\\apps\\m1\\.venv\\Scripts\\PYTHON.EXE C:\\apps\\m1\\bot.py\n";
+        let (_, prog) = pick_app_pid(lines, AppProcessKind::NoneBot2).unwrap();
+        assert_eq!(prog, "python.exe");
+
+        // 整行带着 python 字样也只看 argv0：uv 拉起的进程，可执行文件是 uv
+        let lines = "1234 /root/.local/bin/uv run python bot.py\n";
+        let (_, prog) = pick_app_pid(lines, AppProcessKind::NoneBot2).unwrap();
+        assert_eq!(prog, "uv");
     }
 }

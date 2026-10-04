@@ -20,6 +20,7 @@ import { openTerminal } from '../../../hooks/terminal/terminalStore';
 import { useFeatureEnabled } from '../../../hooks/preferences/featureTogglesStore';
 import { ActionMotionIcon, EMPHASIS_MOTION } from '../../../shared/ui/motion';
 import { cn } from '../../../shared/utils/cn';
+import { hasAppUpdate } from '../../../core/domain/apps/appVersions';
 import type { AppInstance, AppInstanceState } from '../../../core/ipc/types';
 
 const STATE_LOOK: Record<AppInstanceState, { label: string; tone: 'success' | 'warning' | 'neutral' }> = {
@@ -49,6 +50,12 @@ export const DetailHeader: React.FC<{
     onRefresh: () => void;
     onDelete: () => void;
     onAutoStartChange: (autoStart: boolean) => void;
+    /** 上游最新正式版；null = 该框架不支持按版本安装，或还没查到 */
+    latestVersion?: string | null;
+    /** 已装版本比上游最新正式版旧 */
+    hasUpdate?: boolean;
+    /** 打开「重装 / 换版本」对话框；只给已安装的实例传 */
+    onReinstall?: () => void;
 }> = ({
     instance,
     frameworkName,
@@ -67,6 +74,9 @@ export const DetailHeader: React.FC<{
     onRefresh,
     onDelete,
     onAutoStartChange,
+    latestVersion = null,
+    hasUpdate = false,
+    onReinstall,
 }) => {
     const running = instance.state === 'running';
     const terminalEnabled = useFeatureEnabled('terminal');
@@ -74,9 +84,15 @@ export const DetailHeader: React.FC<{
     const look = STATE_LOOK[instance.state];
     // 默认名就是「AstrBot · 本机」这种，身份行再写一遍框架名是重复
     const showFramework = !!frameworkName && !instance.display_name.includes(frameworkName);
+    // 已装版本直接进身份行；可更新时另起一段带色提示（和组件页「最新 x.y.z」同口径）。
+    // 比较走 PEP 440（core/domain/apps/appVersions），不能用组件页那套 SemVer——
+    // Python 系框架的版本是 1.2.1a1 这种拼写，SemVer 口径会判反。
+    const installedVersion = instance.installed_version?.trim() || null;
+    const updatable = hasAppUpdate(installedVersion, latestVersion);
     const identity = [
         showFramework ? frameworkName : null,
         `${hostLabel} :${instance.port}`,
+        installedVersion ? `v${installedVersion}` : null,
         instance.link ? `已对接 ${instance.link.bot_id}` : null,
     ]
         .filter(Boolean)
@@ -97,6 +113,11 @@ export const DetailHeader: React.FC<{
                     </div>
                     <p className="truncate text-xs text-text-tertiary" title={instance.install_dir}>
                         {identity}
+                        {updatable && (
+                            <span className="ml-1.5 text-warning" title={`上游最新正式版 ${latestVersion}`}>
+                                最新 {latestVersion}
+                            </span>
+                        )}
                     </p>
                 </div>
             </div>
@@ -161,6 +182,13 @@ export const DetailHeader: React.FC<{
                         {instance.link && <MoreItem icon={Unlink} label="解除对接" onClick={onUnlink} />}
                         {canWebUi && <MoreItem icon={ExternalLink} label="打开 WebUI" onClick={onWebUi} />}
                         <MoreItem icon={RefreshCw} label="重新探测" onClick={onRefresh} />
+                        {onReinstall && (
+                            <MoreItem
+                                icon={Download}
+                                label={hasUpdate ? `重装 / 换版本（可更新到 ${latestVersion}）` : '重装 / 换版本'}
+                                onClick={onReinstall}
+                            />
+                        )}
                         <div className="my-1 h-px bg-border-subtle" />
                         <MoreItem
                             icon={Trash2}

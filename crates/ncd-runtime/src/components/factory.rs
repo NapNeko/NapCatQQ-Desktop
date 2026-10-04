@@ -55,6 +55,9 @@ pub struct AppComponentHint {
     pub install_dir: HostPath,
     pub port: u16,
     pub npm_registry: Option<String>,
+    pub pypi_index: Option<String>,
+    /// 指定安装的版本；None = 最新正式版。装完的真实版本由 detect 回读
+    pub install_version: Option<String>,
     pub install_renderer: bool,
     pub adopt_existing: bool,
     /// 用户名密码类 WebUI 首启前种入的账号；编排层从 SecretStore 取，只在内存里过
@@ -368,6 +371,8 @@ fn build_app_framework_component(
         git_bin,
         redis_bin,
         npm_registry: hint.npm_registry.clone(),
+        pypi_index: hint.pypi_index.clone(),
+        install_version: hint.install_version.clone(),
         install_renderer: hint.install_renderer,
         adopt_existing: hint.adopt_existing,
         instance_id: hint.instance_id.clone(),

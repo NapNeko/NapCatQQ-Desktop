@@ -27,6 +27,7 @@ import { validateWebUiPassword, validateWebUiUsername } from '../../core/domain/
 import { RemoteDirectoryPicker } from '../../shared/components/RemoteDirectoryPicker';
 import { hostIdDisplayLabel } from './hostLabel';
 import type { AppFrameworkManifest } from '../../core/ipc/types';
+import { VersionSelect } from './VersionSelect';
 
 export interface CreateInstanceDraft {
     frameworkId: string;
@@ -41,6 +42,8 @@ export interface CreateInstanceDraft {
     webuiPassword: string;
     /** manifest 声明了上游条款时必须勾选（MaiBot 的 EULA / 隐私条款） */
     acceptTerms: boolean;
+    /** 指定安装版本；null = 最新正式版。框架不支持按版本安装时忽略 */
+    version: string | null;
 }
 
 export interface CreateInstanceRequest {
@@ -80,6 +83,7 @@ export const CreateInstanceDialog: React.FC<{
             webuiUsername: '',
             webuiPassword: '',
             acceptTerms: false,
+            version: null,
         });
         setPickerOpen(false);
     }, [request]);
@@ -308,6 +312,14 @@ export const CreateInstanceDialog: React.FC<{
                                     </div>
                                 </div>
                             )}
+                            {/* 不支持按版本安装的框架里，VersionSelect 自己返回 null */}
+                            <VersionSelect
+                                frameworkId={draft.frameworkId}
+                                value={draft.version}
+                                onChange={(v) => setDraft({ ...draft, version: v })}
+                                disabled={isCreating}
+                                hint="不指定就装最新正式版"
+                            />
                             <Checkbox
                                 label="创建后立即安装"
                                 hint={
