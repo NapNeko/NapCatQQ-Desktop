@@ -45,6 +45,7 @@ import { useDebugConsoleEnabled } from '../hooks/debug/useDebugConsoleEnabled';
 import { registerDebugNavigator } from '../hooks/debug/debugNav';
 import { markWorkspaceStale } from '../hooks/debug/debugWorkspaceStore';
 import { debugWindowService } from '../core/services/debug-window.service';
+import { chatDesktopService } from '../core/services/chat-desktop.service';
 import { windowEventService } from '../core/services/desktop.service';
 import { dockerStatusSummary } from '../core/domain/docker/status';
 import { PageTransition } from '../shared/ui/motion';
@@ -154,6 +155,37 @@ function RouteFallback() {
 
 export const AppNext: React.FC = () => {
     const [route, setRoute] = useState<AppRoute>('overview');
+    const chatRouteRef = useRef(route);
+    useEffect(() => { chatRouteRef.current = route; }, [route]);
+    useEffect(() => {
+        let disposed = false;
+        let resumeChat = false;
+        const handoff = chatDesktopService.onRequest(request => {
+            if (disposed || request.v !== 1) return;
+            if (request.action === 'resume') { if (resumeChat) { setRoute('chat'); setDisplayedRoute('chat'); setPageVisible(true); } return; }
+            void (async () => {
+                try {
+                    const { prepareChatHandoff, getChatSelectedBot } = await import('../hooks/chat/chatStore');
+                    const { flushSync } = await import('react-dom');
+                    const wasChat = chatRouteRef.current === 'chat';
+                    resumeChat = wasChat;
+                    try {
+                        await prepareChatHandoff(getChatSelectedBot(), () => { if (wasChat) flushSync(() => { setRoute('overview'); setDisplayedRoute('overview'); setPageVisible(true); }); }, request.action === 'popout');
+                        await chatDesktopService.reply(request.requestId, null);
+                    } catch (error) {
+                        if (wasChat) flushSync(() => { setRoute('chat'); setDisplayedRoute('chat'); setPageVisible(true); });
+                        throw error;
+                    }
+                } catch (error) { await chatDesktopService.reply(request.requestId, String(error)).catch(() => {}); }
+            })();
+        });
+        const embedded = chatDesktopService.onEmbedRequested(() => {
+            void queryClient.invalidateQueries({ queryKey: ['chat'] });
+            setRoute('chat'); setDisplayedRoute('chat'); setPageVisible(true);
+        });
+        void chatDesktopService.windowState().then(state => { if (!disposed && state.embedRequested) { setRoute('chat'); setDisplayedRoute('chat'); } });
+        return () => { disposed = true; void handoff.then(un => un()); void embedded.then(un => un()); };
+    }, []);
     const [collapsed, setCollapsed] = useState(true);
     const debugEnabled = useDebugConsoleEnabled();
 
@@ -231,6 +263,10 @@ export const AppNext: React.FC = () => {
 
     const navigate = useCallback((nextRoute: AppRoute) => {
         const target = hiddenRoutes.has(nextRoute) ? 'overview' : nextRoute;
+        if (target === 'chat') {
+            void chatDesktopService.focusIfOpen().then(focused => { if (!focused) setRoute('chat'); });
+            return;
+        }
         // 调试台弹出窗开着时主窗不进调试页（工作区 / 收藏落盘 JSON 是两窗同一份文件，
         // 两边同时写会互相盖），入口一律把弹出窗叫到前面；没开着才正常切路由
         if (target === 'debug') {

@@ -46,7 +46,7 @@ impl LightweightScheduler {
                 if has_active_component_tasks(&app).await {
                     return;
                 }
-                let _ = lightweight::enter_lightweight_mode(&app);
+                let _ = crate::chat_window::release_control_panel(&app).await;
             }
             ncd_domain::AfterCloseUiBehavior::DelayedLightweight => {
                 let mut delay = cfg.enter_lightweight_delay_secs;
@@ -54,7 +54,7 @@ impl LightweightScheduler {
                     if has_active_component_tasks(&app).await {
                         return;
                     }
-                    let _ = lightweight::enter_lightweight_mode(&app);
+                    let _ = crate::chat_window::release_control_panel(&app).await;
                     return;
                 }
                 delay = ncd_domain::clamp_lightweight_delay_secs(delay);
@@ -80,7 +80,7 @@ impl LightweightScheduler {
                                     return;
                                 }
                             }
-                            let _ = lightweight::enter_lightweight_mode(&app2);
+                            let _ = crate::chat_window::release_control_panel(&app2).await;
                         }
                         () = child.cancelled() => {}
                     }

@@ -87,3 +87,111 @@ describe('native chat projection', () => {
         expect(state.conversations['group:12'].unread).toBe(1);
     });
 });
+
+const poke = (extra = {}) => ({ post_type: 'notice', notice_type: 'notify', sub_type: 'poke', group_id: 12, user_id: 22, target_id: 99, time: 200, ...extra });
+describe('poke notices', () => {
+    it('renders an incoming poke as a system line with the sender name and bumps unread', () => {
+        let state = ingestMessage(emptyAccount('99'), payload());
+        state = ingestMessage(state, poke());
+        const notice = state.messages[1];
+        expect(notice.notice).toBe('小林拍了拍你');
+        expect(notice.mine).toBe(false);
+        expect(state.conversations['group:12'].unread).toBe(2);
+        expect(state.conversations['group:12'].preview).toBe('小林拍了拍你');
+    });
+    it('describes an outgoing poke as 你拍了拍… without adding unread', () => {
+        let state = ingestMessage(emptyAccount('99'), payload());
+        state = ingestMessage(state, poke({ user_id: 99, target_id: 22 }));
+        const notice = state.messages[1];
+        expect(notice.notice).toBe('你拍了拍小林');
+        expect(notice.mine).toBe(true);
+        expect(state.conversations['group:12'].unread).toBe(1);
+    });
+    it('skips the backend echo of a locally sent poke inside the time window', () => {
+        let state = ingestMessage(emptyAccount('99'), payload());
+        state = ingestMessage(state, poke({ user_id: 99, target_id: 22, time: 200 }));
+        state = ingestMessage(state, poke({ user_id: 99, target_id: 22, time: 202 }));
+        expect(state.messages.filter(m => m.notice)).toHaveLength(1);
+        state = ingestMessage(state, poke({ user_id: 99, target_id: 22, time: 300 }));
+        expect(state.messages.filter(m => m.notice)).toHaveLength(2);
+    });
+    it('routes private pokes to the peer session and falls back to raw ids', () => {
+        const state = ingestMessage(emptyAccount('99'), { post_type: 'notice', notice_type: 'notify', sub_type: 'poke', user_id: 88, target_id: 99, time: 200 });
+        expect(state.messages[0].session).toBe('private:88');
+        expect(state.messages[0].notice).toBe('88拍了拍你');
+    });
+    it('ignores poke notices without both ends', () => {
+        const state = ingestMessage(emptyAccount('99'), { post_type: 'notice', notice_type: 'notify', sub_type: 'poke', group_id: 12, user_id: 22 });
+        expect(state.messages).toHaveLength(0);
+    });
+});
+
+describe('poke echo attribution', () => {
+    it('trusts sender_id over user_id and dedupes the echo of a local poke', () => {
+        let state = ingestMessage(emptyAccount('99'), payload());
+        // poke() 成功后的乐观上墙
+        state = ingestMessage(state, { post_type: 'notice', notice_type: 'notify', sub_type: 'poke', group_id: 12, user_id: 99, target_id: 22, time: 200 });
+        // 后端回显：user_id 是被拍的人，sender_id 才是发起者
+        state = ingestMessage(state, { post_type: 'notice', notice_type: 'notify', sub_type: 'poke', group_id: 12, user_id: 22, sender_id: 99, target_id: 22, time: 201 });
+        const notices = state.messages.filter(m => m.notice);
+        expect(notices).toHaveLength(1);
+        expect(notices[0].notice).toBe('你拍了拍小林');
+    });
+});
+
+const join = (extra = {}) => ({ post_type: 'notice', notice_type: 'group_increase', sub_type: 'approve', group_id: 12, user_id: 33, operator_id: 0, time: 200, ...extra });
+describe('group join notices', () => {
+    it('renders a join as a system line and bumps unread', () => {
+        let state = ingestMessage(emptyAccount('99'), payload());
+        state = ingestMessage(state, join());
+        const notice = state.messages[1];
+        expect(notice.notice).toBe('33加入了本群');
+        expect(notice.session).toBe('group:12');
+        expect(state.conversations['group:12'].unread).toBe(2);
+        expect(state.conversations['group:12'].preview).toBe('33加入了本群');
+    });
+    it('uses a known sender name and credits the inviter on invite joins', () => {
+        let state = ingestMessage(emptyAccount('99'), payload());
+        state = ingestMessage(state, join({ sub_type: 'invite', user_id: 22, operator_id: 44 }));
+        expect(state.messages[1].notice).toBe('44邀请小林加入了本群');
+    });
+    it('does not count the bot itself joining as unread', () => {
+        let state = ingestMessage(emptyAccount('99'), payload());
+        state = ingestMessage(state, join({ user_id: 99 }));
+        const notice = state.messages[1];
+        expect(notice.notice).toBe('你加入了本群');
+        expect(notice.mine).toBe(true);
+        expect(state.conversations['group:12'].unread).toBe(1);
+    });
+    it('deduplicates the same join replayed from history', () => {
+        let state = ingestMessage(emptyAccount('99'), join());
+        state = ingestMessage(state, join(), true);
+        expect(state.messages).toHaveLength(1);
+        expect(state.conversations['group:12'].unread).toBe(1);
+    });
+    it('ignores join notices without a group or user', () => {
+        expect(ingestMessage(emptyAccount('99'), { post_type: 'notice', notice_type: 'group_increase', user_id: 33, time: 200 }).messages).toHaveLength(0);
+    });
+});
+
+describe('local image source carry', () => {
+    it('keeps the local file on image segments when the echo replaces a pending send', () => {
+        let state = addPending(emptyAccount('99'), 'group:12', 'req', [{ type: 'image', data: { file: 'ncd-local-file://C:/tmp/sent.png', name: 'sent.png' } }], 1);
+        state = settleSend(state, 'req', { state: 'sent', id: '7' });
+        state = ingestMessage(state, payload({ user_id: 99, message: [{ type: 'image', data: { file: 'nt-name.jpg', url: 'https://cdn.example/echo.png' } }] }));
+        expect(state.messages).toHaveLength(1);
+        expect(state.messages[0].segments[0].data.local_file).toBe('ncd-local-file://C:/tmp/sent.png');
+        expect(state.messages[0].segments[0].data.url).toBe('https://cdn.example/echo.png');
+    });
+    it('carries the local file when the send result merges an early echo', () => {
+        let state = addPending(emptyAccount('99'), 'group:12', 'req', [{ type: 'image', data: { file: 'ncd-local-file://C:/tmp/sent.png', name: 'sent.png' } }], 1);
+        state = ingestMessage(state, payload({ user_id: 99, message: [{ type: 'image', data: { file: 'nt-name.jpg', url: 'https://cdn.example/echo.png' } }] }));
+        state = settleSend(state, 'req', { state: 'sent', id: '7' });
+        expect(state.messages).toHaveLength(1);
+        expect(state.messages[0].segments[0].data.local_file).toBe('ncd-local-file://C:/tmp/sent.png');
+    });
+    it('leaves received images untouched', () => {
+        const state = ingestMessage(emptyAccount('99'), payload({ message: [{ type: 'image', data: { file: 'nt-name.jpg', url: 'https://cdn.example/their.png' } }] }));
+        expect(state.messages[0].segments[0].data.local_file).toBeUndefined();
+    });
+});

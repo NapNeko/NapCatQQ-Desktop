@@ -95,7 +95,7 @@ pub async fn tray_panel_quit(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn tray_panel_enter_lightweight(app: AppHandle) -> Result<(), String> {
     crate::tray_panel::hide_tray_panel(&app);
-    crate::lightweight::enter_lightweight_mode(&app)
+    crate::chat_window::release_control_panel(&app).await
 }
 
 async fn quit_from_tray(app: AppHandle) -> Result<(), String> {

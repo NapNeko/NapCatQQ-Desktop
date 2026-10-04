@@ -18,7 +18,7 @@ import { Counter, MotionIcon } from '../../shared/ui/motion';
 import { usePreferences } from '../../hooks/preferences/preferencesStore';
 import { useMotion, type MotionEnv } from '../../hooks/preferences/useMotion';
 import { animateListChildrenEnterAfterPaint } from '../../shared/ui/motion/listEnter';
-import logoPng from '../../assets/logo.png?inline';
+import napcatPng from '../../assets/napcat-symbol-48.png?inline';
 import { useBootstrap } from '../../hooks/bootstrap/useBootstrap';
 import { useBackendSettings } from '../../hooks/preferences/useBackendSettings';
 import { useBotSnapshots } from '../../hooks/bot/useBotSnapshots';
@@ -821,7 +821,7 @@ const CoreCard: React.FC<CoreCardProps> = ({ kind, label, version, update, onNav
             >
                 <div ref={iconRef} className="grid place-items-center" style={{ transformOrigin: '50% 60%' }}>
                     {kind === 'napcat' ? (
-                        <img src={logoPng} alt="" className="h-6 w-6 select-none" draggable={false} />
+                        <img src={napcatPng} alt="" className="h-6 w-6 select-none" draggable={false} />
                     ) : (
                         <button
                             type="button"

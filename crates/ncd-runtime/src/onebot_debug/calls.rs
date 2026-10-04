@@ -337,7 +337,7 @@ impl DebugManager {
                 let inline_limit = match req.action.as_str() {
                     "get_record" => 8 * 1024 * 1024,
                     "get_file" | "get_image" => 16 * 1024 * 1024,
-                    "get_forward_msg" => 2 * 1024 * 1024,
+                    "get_forward_msg" | "fetch_sys_faces" => 2 * 1024 * 1024,
                     _ => ncd_onebot::client::RESPONSE_INLINE_LIMIT,
                 };
                 let outcome = outcome_from_with_limit(

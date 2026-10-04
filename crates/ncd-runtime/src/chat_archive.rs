@@ -2,7 +2,7 @@
 
 use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
-use ncd_domain::chat_archive::{ChatArchive, CHAT_ARCHIVE_MAX_BYTES};
+use ncd_domain::chat_archive::{ChatArchive, ChatArchiveConversation, CHAT_ARCHIVE_MAX_BYTES};
 use ncd_config::store::LocalConfigStore;
 use ncd_traits::ConfigStore;
 use serde_json::Value;
@@ -30,6 +30,26 @@ impl ChatArchiveStore {
     }
 
     pub(crate) fn load(&self, bot_id: &str, self_id: &str) -> Result<Option<ChatArchive>, String> {
+        let Some(bytes) = self.read_bytes(bot_id, self_id)? else { return Ok(None); };
+        let archive: ChatArchive = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("聊天档案损坏，原文件已保留: {e}"))?;
+        archive.validate_for(self_id).map_err(|e| e.to_string())?;
+        Ok(Some(archive))
+    }
+
+    pub(crate) fn load_summary(&self, bot_id: &str, self_id: &str) -> Result<Vec<ChatArchiveConversation>, String> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Summary { v: u32, self_id: String, conversations: Vec<ChatArchiveConversation> }
+        let Some(bytes) = self.read_bytes(bot_id, self_id)? else { return Ok(vec![]); };
+        // serde 跳过消息体，托盘无需恢复整个消息缓存。
+        let summary: Summary = serde_json::from_slice(&bytes).map_err(|e| format!("聊天档案损坏，原文件已保留: {e}"))?;
+        let archive = ChatArchive { v: summary.v, self_id: summary.self_id, conversations: summary.conversations, messages: vec![] };
+        archive.validate_for(self_id).map_err(|e| e.to_string())?;
+        Ok(archive.conversations)
+    }
+
+    fn read_bytes(&self, bot_id: &str, self_id: &str) -> Result<Option<Vec<u8>>, String> {
         let path = self.path(bot_id, self_id)?;
         let file = match std::fs::File::open(&path) {
             Ok(file) => file,
@@ -40,14 +60,23 @@ impl ChatArchiveStore {
         file.take(CHAT_ARCHIVE_MAX_BYTES as u64 + 1).read_to_end(&mut bytes)
             .map_err(|e| format!("读取聊天档案失败: {e}"))?;
         if bytes.len() > CHAT_ARCHIVE_MAX_BYTES { return Err("聊天档案过大".into()); }
-        let archive: ChatArchive = serde_json::from_slice(&bytes)
-            .map_err(|e| format!("聊天档案损坏，原文件已保留: {e}"))?;
-        archive.validate_for(self_id).map_err(|e| e.to_string())?;
-        Ok(Some(archive))
+        Ok(Some(bytes))
     }
 
     pub(crate) fn save(&self, bot_id: &str, self_id: &str, mut archive: ChatArchive) -> Result<(), String> {
         let path = self.path(bot_id, self_id)?;
+        sanitize_archive(&mut archive);
+        archive.validate_for(self_id).map_err(|e| e.to_string())?;
+        let payload = serde_json::to_value(&archive).map_err(|e| format!("序列化聊天档案失败: {e}"))?;
+        if serde_json::to_vec_pretty(&payload).map_err(|e| e.to_string())?.len() > CHAT_ARCHIVE_MAX_BYTES {
+            return Err("聊天档案过大".into());
+        }
+        self.load(bot_id, self_id)?;
+        self.writer.write_json_atomic(&path, &payload).map_err(|e| format!("保存聊天档案失败: {e}"))
+    }
+}
+
+pub(crate) fn sanitize_archive(archive: &mut ChatArchive) {
         for message in &mut archive.messages {
             for segment in &mut message.segments {
                 segment.data.retain(|key, value| {
@@ -58,15 +87,6 @@ impl ChatArchiveStore {
                 });
             }
         }
-        archive.validate_for(self_id).map_err(|e| e.to_string())?;
-        let payload = serde_json::to_value(&archive).map_err(|e| format!("序列化聊天档案失败: {e}"))?;
-        if serde_json::to_vec_pretty(&payload).map_err(|e| e.to_string())?.len() > CHAT_ARCHIVE_MAX_BYTES {
-            return Err("聊天档案过大".into());
-        }
-        // 损坏档案由用户明确处理后再重建，不能让新会话静默覆盖旧文件。
-        self.load(bot_id, self_id)?;
-        self.writer.write_json_atomic(&path, &payload).map_err(|e| format!("保存聊天档案失败: {e}"))
-    }
 }
 
 fn sensitive_field(key: &str) -> bool {

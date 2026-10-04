@@ -7,7 +7,7 @@ import './chat-image-viewer.css';
 
 export function ChatImageViewer({ src, onClose }: { src: string; onClose: () => void }) {
     return <Dialog open={!!src} onOpenChange={open => { if (!open) onClose(); }}>
-        <DialogContent size="sheetWide" hideClose className="native-chat-image-dialog">
+        <DialogContent size="sheetWide" layer={1} hideClose className="native-chat-image-dialog">
             {src && <ImageCanvas key={src} src={src} onClose={onClose} />}
         </DialogContent>
     </Dialog>;

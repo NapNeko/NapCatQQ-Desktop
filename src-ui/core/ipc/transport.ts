@@ -7,7 +7,7 @@
 // `core/ipc/mock/*` 提供的纯前端假数据。
 
 import { Channel, invoke as tauriInvoke } from '@tauri-apps/api/core';
-import { listen as tauriListen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen as tauriListen, type UnlistenFn, type Options as ListenOptions } from '@tauri-apps/api/event';
 
 /// 流式数据通道（终端输出）：比事件快、保序，原始字节不转 JSON。只由 services 层 new
 export { Channel };
@@ -27,6 +27,7 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
 export async function listen<T = unknown>(
     event: string,
     handler: (payload: T) => void,
+    options?: ListenOptions,
 ): Promise<UnlistenFn> {
     return tauriListen<string>(event, (raw) => {
         // Tauri v2 + serde_json::to_string 序列化的 payload 是字符串，需要手动 parse。
@@ -38,7 +39,7 @@ export async function listen<T = unknown>(
             // eslint-disable-next-line no-console
             console.error(`[ipc/transport] failed to parse payload of event ${event}:`, err, raw);
         }
-    });
+    }, options);
 }
 
 /// 打开外部 URL（系统默认浏览器）。Tauri webview 不支持 `<a target="_blank">`，

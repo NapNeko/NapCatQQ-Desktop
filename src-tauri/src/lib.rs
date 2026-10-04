@@ -25,6 +25,8 @@ pub mod desktop_onboarding;
 pub mod desktop_update;
 pub mod legacy_install_cleanup;
 pub mod lightweight;
+pub mod chat_window;
+pub mod chat_tray;
 pub mod lightweight_scheduler;
 pub mod onebot_endpoint_resolver;
 pub mod product_registry;
@@ -467,6 +469,8 @@ pub fn run() {
         })
         // 页面开始（重新）加载时，旧页面的调试台事件订阅已经没人收了，但 Channel 还能 send 成功、探不出来，
         // 在这里按窗口摘掉，否则接收器一直算「有人在看」，空闲停不下来
+        .manage(chat_window::ChatWindowCoordinator::default())
+        .manage(chat_tray::ChatTrayState::default())
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started
                 && let Some(state) = webview.try_state::<AppState>()
@@ -475,6 +479,8 @@ pub fn run() {
                     .onebot_debug
                     .page_loading(webview.label(), std::time::Instant::now());
                 state.chat.page_loading(webview.label(), std::time::Instant::now());
+                let chat = Arc::clone(&state.chat); let page = webview.label().to_owned(); let before = std::time::Instant::now();
+                tauri::async_runtime::spawn(async move { chat.release_page_before(&page, before).await; });
             }
         })
         .setup(move |app| {
@@ -667,6 +673,7 @@ pub fn run() {
                 );
             }
 
+            chat_tray::spawn(app.handle().clone());
             if let Err(err) = commands::tray::attach_tray(app.handle()) {
                 desktop_log::write_session_line(
                     "WARN",
@@ -724,7 +731,18 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Focused(false)) {
+                window.state::<AppState>().chat.clear_reading(window.label());
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == chat_window::CHAT_WINDOW_LABEL {
+                    api.prevent_close();
+                    let app = window.app_handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) = chat_window::close_chat_window(app, false).await { tracing::warn!("close chat: {e}"); }
+                    });
+                    return;
+                }
                 // 调试台弹出窗只是工具窗:点了 X 就直接关,不走主窗的托盘 / 退出闸门
                 if window.label() == commands::window::DEBUG_WINDOW_LABEL {
                     return;
@@ -750,6 +768,11 @@ pub fn run() {
             }
             // 弹出窗销毁后,盘上的调试台工作区 / 收藏可能已被它改写:通知主窗作废旧内存状态
             if let tauri::WindowEvent::Destroyed = event {
+                let chat = Arc::clone(&window.state::<AppState>().chat);
+                let page = window.label().to_owned();
+                let before = std::time::Instant::now();
+                chat.clear_reading(&page);
+                tauri::async_runtime::spawn(async move { chat.release_page_before(&page, before).await; });
                 if window.label() == commands::window::DEBUG_WINDOW_LABEL {
                     let _ = window.app_handle().emit_to(
                         lightweight::MAIN_WINDOW_LABEL,
@@ -1035,6 +1058,24 @@ pub fn run() {
             commands::chat::chat_unsubscribe,
             commands::chat::chat_archive_load,
             commands::chat::chat_archive_save,
+            commands::chat::chat_desktop_status,
+            commands::chat::chat_set_preference,
+            commands::chat::chat_set_group_ignored,
+            commands::chat::chat_merge_hidden_groups,
+            commands::chat::chat_select_account,
+            commands::chat::chat_view_load,
+            commands::chat::chat_view_save,
+            commands::chat::chat_set_reading,
+            commands::chat::chat_mark_read,
+            commands::chat::chat_flush,
+            commands::chat::chat_release_account,
+            commands::chat::chat_read_local_image,
+            chat_window::open_chat_window,
+            chat_window::reveal_chat_window,
+            chat_window::focus_chat_window,
+            chat_window::close_chat_window,
+            chat_window::chat_window_state,
+            chat_window::chat_window_handoff_ready,
             commands::onebot_debug::onebot_debug_channels,
             commands::onebot_debug::onebot_debug_test_channel,
             commands::onebot_debug::onebot_debug_catalog,

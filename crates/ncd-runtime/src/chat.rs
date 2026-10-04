@@ -5,18 +5,19 @@ use ncd_domain::chat_archive::ChatArchive;
 use crate::{DebugBotPort, DebugEventSink, DebugManager, DebugStreamSink, EventBus};
 use crate::host_resolver::HostResolver;
 use crate::chat_archive::ChatArchiveStore;
+mod desktop;
+mod inbox;
+mod notifications;
 
 pub struct ChatManager {
     transport: Arc<DebugManager>,
-    archive: ChatArchiveStore,
-    archive_gate: tokio::sync::Mutex<()>,
+    desktop: desktop::DesktopState,
 }
 
 impl ChatManager {
     pub fn new(bots: Arc<dyn DebugBotPort>, hosts: Arc<dyn HostResolver>, data_root: PathBuf) -> Self {
         Self {
-            archive: ChatArchiveStore::new(&data_root),
-            archive_gate: tokio::sync::Mutex::new(()),
+            desktop: desktop::DesktopState::new(data_root.clone(), Arc::new(inbox::Inbox::new(ChatArchiveStore::new(&data_root)))),
             transport: Arc::new(DebugManager::new_ephemeral(bots, hosts, data_root)),
         }
     }
@@ -29,19 +30,15 @@ impl ChatManager {
     }
 
     pub async fn load_archive(&self, bot_id: String, self_id: String) -> Result<Option<ChatArchive>, String> {
+        let _lease = self.desktop.lease_gate.lock().await;
         self.archive_identity(&bot_id, &self_id).await?;
-        let _guard = self.archive_gate.lock().await;
-        let archive = self.archive.clone();
-        tokio::task::spawn_blocking(move || archive.load(&bot_id, &self_id)).await
-            .map_err(|e| format!("读取聊天档案任务失败: {e}"))?
+        self.desktop.inbox.load(&(bot_id, self_id)).await.map(Some)
     }
 
     pub async fn save_archive(&self, bot_id: String, self_id: String, value: ChatArchive) -> Result<(), String> {
+        let _lease = self.desktop.lease_gate.lock().await;
         self.archive_identity(&bot_id, &self_id).await?;
-        let _guard = self.archive_gate.lock().await;
-        let archive = self.archive.clone();
-        tokio::task::spawn_blocking(move || archive.save(&bot_id, &self_id, value)).await
-            .map_err(|e| format!("保存聊天档案任务失败: {e}"))?
+        self.desktop.inbox.merge(&(bot_id, self_id), value).await
     }
 
     pub async fn call(&self, request: DebugCallRequest) -> DebugCallResponse {
@@ -55,13 +52,26 @@ impl ChatManager {
     }
 
     pub async fn subscribe(&self, bot_id: &str, sink: Arc<dyn DebugEventSink>) -> Result<DebugSubscribeResponse, DebugError> {
-        self.transport.subscribe(bot_id, DebugChannelId::Auto, Arc::new(ChatSink(sink))).await
+        let _lease = self.desktop.lease_gate.lock().await;
+        let target = self.targets().await.into_iter().find(|t| t.bot_id == bot_id).ok_or(DebugError::BotNotRunning)?;
+        let key = (bot_id.to_owned(), target.qq_id.to_string());
+        self.desktop.inbox.load(&key).await.map_err(|message| DebugError::Internal { message })?;
+        let (page, opened_at) = sink.opened_by().map(|(page, at)| (page.to_owned(), at)).unwrap_or_else(|| (String::new(), Instant::now()));
+        let response = self.transport.subscribe(bot_id, DebugChannelId::Auto, Arc::new(ChatSink(Arc::new(inbox::InboxSink { inbox: Arc::clone(&self.desktop.inbox), key: key.clone(), viewer: Some(sink) })))).await?;
+        self.desktop.viewers.lock().await.insert(response.subscription_id.clone(), (key, page, opened_at));
+        Ok(response)
     }
 
-    pub async fn unsubscribe(&self, id: &str) { self.transport.unsubscribe(id).await; }
-    pub async fn shutdown(&self) { self.transport.close_all().await; }
-    pub fn page_loading(&self, page: &str, at: Instant) { self.transport.page_loading(page, at); }
-    pub async fn listen(&self, bus: Arc<dyn EventBus>) { Arc::clone(&self.transport).run_bot_event_listener(bus).await; }
+    pub async fn unsubscribe(&self, id: &str) {
+        let _lease = self.desktop.lease_gate.lock().await;
+        self.transport.unsubscribe(id).await;
+        self.remove_viewer(id).await;
+    }
+    pub async fn shutdown(&self) { self.stop_desktop().await; self.transport.close_all().await; }
+    pub fn page_loading(&self, page: &str, at: Instant) { self.clear_reading(page); self.transport.page_loading(page, at); }
+    pub async fn listen(self: &Arc<Self>, bus: Arc<dyn EventBus>) {
+        tokio::join!(Arc::clone(&self.transport).run_bot_event_listener(Arc::clone(&bus)), Arc::clone(self).run_desktop(bus), Arc::clone(self).run_notification_sync());
+    }
     pub async fn sweep(&self) { Arc::clone(&self.transport).run_idle_sweeper().await; }
 }
 
@@ -81,7 +91,7 @@ impl DebugEventSink for ChatSink {
 }
 
 fn chat_action(action: &str) -> bool {
-    matches!(action, "get_login_info" | "get_friend_list" | "get_recent_contact" | "get_stranger_info" | "get_group_list" | "get_group_member_list" | "get_group_info" | "get_msg" | "get_group_msg_history" | "get_friend_msg_history" | "get_image" | "get_forward_msg" | "get_record" | "get_file" | "fetch_ptt_text" | "fetch_custom_face" | "send_group_msg" | "send_private_msg" | "upload_group_file" | "upload_private_file")
+    matches!(action, "get_login_info" | "get_friend_list" | "get_recent_contact" | "get_stranger_info" | "get_group_list" | "get_group_member_list" | "get_group_info" | "get_group_detail_info" | "get_msg" | "get_group_msg_history" | "get_friend_msg_history" | "get_image" | "get_forward_msg" | "get_record" | "get_file" | "fetch_ptt_text" | "fetch_custom_face" | "fetch_sys_faces" | "send_group_msg" | "send_private_msg" | "upload_group_file" | "upload_private_file" | "group_poke" | "friend_poke")
 }
 
 fn archive_identity(targets: &[DebugTarget], bot_id: &str, self_id: &str) -> Result<(), String> {
@@ -106,6 +116,12 @@ mod tests {
     }
 
     #[test]
+    fn chat_allows_member_poke() {
+        assert!(chat_action("group_poke"));
+        assert!(chat_action("friend_poke"));
+    }
+
+    #[test]
     fn chat_supports_recent_contacts_and_private_profiles() {
         assert!(chat_action("get_recent_contact"));
         assert!(chat_action("get_stranger_info"));
@@ -113,7 +129,7 @@ mod tests {
 
     #[test]
     fn chat_allows_read_only_media_without_arbitrary_files_or_emoji_mutation() {
-        for action in ["get_image", "get_forward_msg", "get_record", "get_file", "fetch_ptt_text", "fetch_custom_face", "get_group_info", "get_group_member_list", "get_friend_list"] {
+        for action in ["get_image", "get_forward_msg", "get_record", "get_file", "fetch_ptt_text", "fetch_custom_face", "fetch_sys_faces", "get_group_info", "get_group_member_list", "get_friend_list"] {
             assert!(chat_action(action), "{action}");
         }
         for action in ["download_file", "add_custom_face", "delete_custom_face"] {

@@ -1,8 +1,9 @@
 import type { Virtualizer } from '@tanstack/react-virtual';
 import type { RefObject } from 'react';
 
-// 默认虚拟列表在上滚时跳过行高补偿。聊天媒体会异步加载，因此即使仍在
-// 上滚，也要抵消视口上方的高度变化；读取实际 scrollTop 避免多张图同帧加载时滞后。
 export function preserveTimelineReading(virtual: Virtualizer<HTMLDivElement, Element>, scroll: RefObject<HTMLDivElement>) {
-    virtual.shouldAdjustScrollPositionOnItemSizeChange = item => item.start < (scroll.current?.scrollTop ?? virtual.scrollOffset ?? 0);
+    // 首测也会移动后续正文，跳过它只稳定 scrollTop，反而让阅读中的消息跳动。
+    // 收缩后移出顶部的图片也要补偿，否则它下面的正文会在缓动途中突然反跳。
+    virtual.shouldAdjustScrollPositionOnItemSizeChange = (item, delta) =>
+        Math.min(item.end, item.end + delta) <= (scroll.current?.scrollTop ?? virtual.scrollOffset ?? 0);
 }

@@ -2,6 +2,7 @@
 import type { ChatArchive } from '../../ipc/generated/chat/ChatArchive';
 import { messagePreview, normalizeMessage } from '../debug/segments';
 import { id, record, text, ingestMessage, MESSAGE_LIMIT, type Account, type Conversation, type Message, type SessionKey } from './model';
+import { deduplicateMessages } from './messageIdentity';
 
 const sessionKey = (value: string): value is SessionKey => /^(group|private):[0-9]+$/.test(value);
 
@@ -29,7 +30,7 @@ export function restoreArchive(state: Account, archive: ChatArchive): Account {
         const saved = conversations[key];
         conversations[key] = saved ? { ...saved, ...live, pinned: saved.pinned || live.pinned, boxed: live.boxed ?? saved.boxed, unread: state.active === key ? 0 : Math.max(saved.unread, live.unread), lastAt: Math.max(saved.lastAt, live.lastAt), preview: live.lastAt >= saved.lastAt ? live.preview : saved.preview } : live;
     }
-    return { ...state, conversations, messages: [...byKey.values()].sort((a, b) => a.at - b.at) };
+    return { ...state, conversations, messages: deduplicateMessages([...byKey.values()]) };
 }
 
 export function mergeRecentConversations(state: Account, rows: unknown[]): Account {

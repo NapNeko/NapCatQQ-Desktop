@@ -2,7 +2,7 @@
 //
 // 列表是一组按钮，↑ ↓ 在按钮间移动焦点，搜索框里 ↓ 进列表、回车选第一个匹配的。
 
-import { memo, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { memo, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '../../shared/utils/cn';
 import { Popover, PopoverContent, PopoverTrigger, Spinner } from '../../shared/ui';
@@ -26,6 +26,7 @@ export interface BotPickerProps {
     loading?: boolean;
     ariaLabel?: string;
     compact?: boolean;
+    statusIndicator?: ReactNode;
     onSelect: (botId: string) => void;
     /** 列表底部「去机器人页」；不给就不显示 */
     onManageBots?: () => void;
@@ -58,7 +59,7 @@ export function BackendTag({ backend, className }: { backend: BackendType; class
     );
 }
 
-export const BotPicker = memo(function BotPicker({ targets, selected, loading = false, ariaLabel, compact = false, onSelect, onManageBots }: BotPickerProps) {
+export const BotPicker = memo(function BotPicker({ targets, selected, loading = false, ariaLabel, compact = false, statusIndicator, onSelect, onManageBots }: BotPickerProps) {
     const m = useMotion();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -132,7 +133,7 @@ export const BotPicker = memo(function BotPicker({ targets, selected, loading = 
                 >
                     {selected ? (
                         <>
-                            {!compact && <StatusDot tone={targetTone(selected)} size={7} className="shrink-0" />}
+                            {statusIndicator ?? (!compact && <StatusDot tone={targetTone(selected)} size={7} className="shrink-0" />)}
                             <span className="min-w-0 truncate text-[13px] font-medium text-text">{targetDisplayName(selected)}</span>
                             <BackendTag backend={selected.backend} />
                             <span className={cn('hidden shrink-0 font-mono text-2xs tabular-nums text-text-tertiary', !compact && '@min-[880px]:inline')}>

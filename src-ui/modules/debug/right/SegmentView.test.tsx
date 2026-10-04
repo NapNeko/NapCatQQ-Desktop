@@ -6,6 +6,62 @@ function NativeSegments({ api, segments, messageId }: { api: Partial<ChatViewApi
     return <ChatViewContext.Provider value={{ ...useChatView(), ...api }}><SegmentList mine={false} messageId={messageId} segments={segments} /></ChatViewContext.Provider>;
 }
 describe('native media segments', () => {
+    it('does not reset a decoded image when history supplies an equivalent segment object', () => {
+        const data = { file: '0', url: 'https://cdn.example/stable-layout.gif', sub_type: 1 };
+        const view = render(<NativeSegments api={{ mediaScope: 'stable-layout' }} segments={[{ type: 'image', data }]} />);
+        const image = screen.getByAltText('图片');
+        Object.defineProperties(image, { naturalWidth: { value: 400 }, naturalHeight: { value: 100 } });
+        fireEvent.load(image);
+        const style = image.parentElement!.getAttribute('style');
+        view.rerender(<NativeSegments api={{ mediaScope: 'stable-layout' }} segments={[{ type: 'image', data: { ...data } }]} />);
+        expect(screen.getByAltText('图片')).toBe(image);
+        expect(image).toHaveClass('opacity-100', 'absolute');
+        expect(image.parentElement!.getAttribute('style')).toBe(style);
+    });
+    it('retains decoded geometry after a refreshed URL expires and the row remounts', async () => {
+        const now = Date.now(); const time = vi.spyOn(Date, 'now').mockReturnValue(now);
+        const data = { file: '0', url: 'https://cdn.example/layout-expired.gif', sub_type: 1 };
+        const api = { mediaScope: 'layout-expiry', readImage: vi.fn().mockResolvedValue('https://cdn.example/layout-refreshed.gif') };
+        const first = render(<NativeSegments api={api} segments={[{ type: 'image', data }]} />);
+        fireEvent.error(screen.getByAltText('图片'));
+        await waitFor(() => expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/layout-refreshed.gif'));
+        Object.defineProperties(screen.getByAltText('图片'), { naturalWidth: { value: 400 }, naturalHeight: { value: 100 } });
+        fireEvent.load(screen.getByAltText('图片'));
+        const style = screen.getByAltText('图片').parentElement!.getAttribute('style');
+        first.unmount(); time.mockReturnValue(now + 61_000);
+        render(<NativeSegments api={api} segments={[{ type: 'image', data: { ...data } }]} />);
+        expect(screen.getByAltText('图片')).toHaveAttribute('src', data.url);
+        expect(screen.getByAltText('图片').parentElement!.getAttribute('style')).toBe(style);
+    });
+    it('keeps an in-flight read alive across equivalent history updates', async () => {
+        let finish!: (value: string) => void;
+        const readImage = vi.fn(() => new Promise<string>(resolve => { finish = resolve; }));
+        const data = { file: 'opaque-equivalent-image' };
+        const view = render(<NativeSegments api={{ readImage }} segments={[{ type: 'image', data }]} />);
+        view.rerender(<NativeSegments api={{ readImage }} segments={[{ type: 'image', data: { ...data } }]} />);
+        await act(async () => finish('https://cdn.example/equivalent-image.png'));
+        expect(readImage).toHaveBeenCalledOnce();
+        expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/equivalent-image.png');
+    });
+    it('never substitutes a cached sticker from another URL sharing the same file name', () => {
+        const first = { type: 'image', data: { file: '0', url: 'https://cdn.example/sticker-a.gif', sub_type: 1 } };
+        const view = render(<NativeSegments api={{ mediaScope: 'sticker-selection' }} segments={[first]} />);
+        const old = screen.getByAltText('图片');
+        Object.defineProperties(old, { naturalWidth: { value: 128 }, naturalHeight: { value: 128 } });
+        fireEvent.load(old);
+        view.rerender(<NativeSegments api={{ mediaScope: 'sticker-selection' }} segments={[{ ...first, data: { ...first.data, url: 'https://cdn.example/sticker-b.gif' } }]} />);
+        expect(screen.getByAltText('图片')).not.toBe(old);
+        expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/sticker-b.gif');
+        fireEvent.load(old);
+        expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/sticker-b.gif');
+    });
+    it('does not inherit dimensions from a different favorite with the placeholder file name 0', () => {
+        const view = render(<SegmentList mine={false} segments={[{ type: 'image', data: { file: '0', url: 'https://cdn.example/wide-favorite.gif', sub_type: 1 } }]} />);
+        const first = screen.getByAltText('图片');
+        Object.defineProperties(first, { naturalWidth: { value: 128 }, naturalHeight: { value: 32 } }); fireEvent.load(first);
+        view.rerender(<SegmentList mine={false} segments={[{ type: 'image', data: { file: '0', url: 'https://cdn.example/tall-favorite.gif', sub_type: 1, width: 32, height: 128 } }]} />);
+        expect(screen.getByAltText('图片').parentElement).toHaveStyle({ width: '32px', aspectRatio: '32 / 128' });
+    });
     it('reserves protocol dimensions before a delayed image loads', () => {
         render(<SegmentList mine={false} segments={[{ type: 'image', data: { url: 'https://cdn.example/known-delayed.png', width: 1600, height: 800 } }]} />);
         const image = screen.getByAltText('图片');
@@ -115,6 +171,44 @@ describe('native media segments', () => {
         await waitFor(() => expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/fresh.png'));
         view.rerender(<NativeSegments api={{ readImage: vi.fn() }} segments={segments} />);
         expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/fresh.png');
+    });
+    it('keeps the same responsive dimensions while an image refresh is pending', async () => {
+        let finish!: (url: string) => void;
+        const readImage = vi.fn(() => new Promise<string>(resolve => { finish = resolve; }));
+        render(<NativeSegments api={{ readImage }} segments={[{ type: 'image', data: { file: 'responsive-image', url: 'https://cdn.example/responsive.png', width: 800, height: 400 } }]} />);
+        const style = screen.getByAltText('图片').parentElement!.getAttribute('style');
+        fireEvent.error(screen.getByAltText('图片'));
+        expect(screen.getByLabelText('正在读取图片').parentElement!.getAttribute('style')).toBe(style);
+        await act(async () => finish('https://cdn.example/responsive-fresh.png'));
+        expect(screen.getByAltText('图片').parentElement!.getAttribute('style')).toBe(style);
+    });
+    it('bounds automatic refreshes and allows a new manual attempt', async () => {
+        const data = { file: 'retryable-image', url: 'https://cdn.example/retryable.png' };
+        const readImage = vi.fn().mockResolvedValueOnce('https://cdn.example/retry1.png').mockResolvedValueOnce('https://cdn.example/retry2.png').mockResolvedValueOnce('https://cdn.example/retry3.png');
+        render(<NativeSegments api={{ readImage }} segments={[{ type: 'image', data }]} />);
+        fireEvent.error(screen.getByAltText('图片'));
+        await waitFor(() => expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/retry1.png'));
+        fireEvent.error(screen.getByAltText('图片'));
+        await waitFor(() => expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/retry2.png'));
+        fireEvent.error(screen.getByAltText('图片'));
+        expect(await screen.findByRole('button', { name: '重试图片' })).toBeInTheDocument();
+        expect(readImage).toHaveBeenCalledTimes(2);
+        fireEvent.click(screen.getByRole('button', { name: '重试图片' }));
+        await waitFor(() => expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/retry3.png'));
+    });
+    it('reuses a successfully refreshed URL when virtualization remounts the image', async () => {
+        const data = { file: 'remounted-image', url: 'https://cdn.example/remount-expired.png' };
+        const readImage = vi.fn().mockResolvedValue('https://cdn.example/remount-fresh.png');
+        const first = render(<NativeSegments api={{ readImage, mediaScope: 'account:1' }} segments={[{ type: 'image', data }]} />);
+        fireEvent.error(screen.getByAltText('图片'));
+        await waitFor(() => expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/remount-fresh.png'));
+        Object.defineProperties(screen.getByAltText('图片'), { naturalWidth: { value: 800 }, naturalHeight: { value: 400 } });
+        fireEvent.load(screen.getByAltText('图片')); first.unmount();
+        const second = render(<NativeSegments api={{ readImage, mediaScope: 'account:1' }} segments={[{ type: 'image', data }]} />);
+        expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/remount-fresh.png');
+        expect(readImage).toHaveBeenCalledOnce(); second.unmount();
+        render(<NativeSegments api={{ readImage, mediaScope: 'account:2' }} segments={[{ type: 'image', data }]} />);
+        expect(screen.getByAltText('图片')).toHaveAttribute('src', 'https://cdn.example/remount-expired.png');
     });
     it('ignores a transcription returned after the displayed message changes', async () => {
         let finish!: (text: string) => void;

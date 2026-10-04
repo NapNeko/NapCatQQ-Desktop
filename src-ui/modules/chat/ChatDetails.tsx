@@ -1,5 +1,6 @@
 // 资料使用主窗口的轻量弹层，不占用第三栏。
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowLeft, Check, ChevronRight, Copy, Info, MessageCircle, Pin, RefreshCw, Search, X } from 'lucide-react';
 import type { Contact, Conversation } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
@@ -21,11 +22,11 @@ export function ChatDetails({ contact, target, onPin, onMessage, onSearch, open,
     const [memberError, setMemberError] = useState('');
     const [attempt, setAttempt] = useState(0);
     const [query, setQuery] = useState('');
-    const [limit, setLimit] = useState(60);
     const leaving = useRef(false);
     const visible = open ?? internalOpen;
-    const change = (next: boolean) => { setCopyState(''); setInternalOpen(next); onOpenChange?.(next); if (!next) { setSelectedMember(undefined); setQuery(''); setLimit(60); } };
+    const change = (next: boolean) => { setCopyState(''); setInternalOpen(next); onOpenChange?.(next); if (!next) { setSelectedMember(undefined); setQuery(''); } };
     const leave = (action: () => void) => { leaving.current = true; change(false); action(); };
+    useEffect(() => { setProfile(undefined); setMembers([]); setSelectedMember(undefined); setQuery(''); }, [target?.bot_id, target?.qq_id, contact.key]);
     useEffect(() => {
         if (!visible || !target) return;
         let cancelled = false;
@@ -36,9 +37,9 @@ export function ChatDetails({ contact, target, onPin, onMessage, onSearch, open,
             void chatProfileService.members(target, contact.id).then(value => { if (!cancelled) setMembers(value); }, reason => { if (!cancelled) setMemberError(reason instanceof Error ? reason.message : '成员读取失败'); }).finally(() => { if (!cancelled) setMembersLoading(false); });
         }
         return () => { cancelled = true; };
-    }, [visible, target?.bot_id, target?.backend, contact.id, contact.type, attempt]);
+    }, [visible, target?.bot_id, target?.qq_id, target?.backend, contact.id, contact.type, attempt]);
     const term = query.trim().toLocaleLowerCase();
-    const filtered = members.filter(member => !term || `${member.name} ${member.nickname} ${member.id}`.toLocaleLowerCase().includes(term));
+    const filtered = useMemo(() => members.filter(member => !term || `${member.name} ${member.nickname} ${member.id}`.toLocaleLowerCase().includes(term)), [members, term]);
     const displayed = selectedMember ?? { ...contact, name: profile?.name || contact.name };
     const copy = async () => {
         try { await navigator.clipboard.writeText(displayed.id); setCopyState('已复制'); } catch { setCopyState('复制失败'); }
@@ -64,20 +65,42 @@ export function ChatDetails({ contact, target, onPin, onMessage, onSearch, open,
                     {onSearch && <button type="button" className="native-chat-detail-action" onClick={() => leave(onSearch)}><Search size={14} />查找聊天记录<ChevronRight size={13} className="ml-auto" /></button>}
                     {contact.type === 'group' && target && <section className="native-chat-detail-members" aria-label="群成员">
                         <div className="native-chat-members-heading"><h4>群成员</h4><span>{members.length || contact.members || ''}</span></div>
-                        <label className="native-chat-search"><Search size={14} aria-hidden /><input aria-label="搜索群成员" placeholder="搜索成员" value={query} onChange={event => { setQuery(event.target.value); setLimit(60); }} />{query && <button type="button" aria-label="清除成员搜索" onClick={() => { setQuery(''); setLimit(60); }}><X size={13} /></button>}</label>
-                        <div className="native-chat-member-list" role="region" aria-label="群成员列表" tabIndex={0}>
+                        <label className="native-chat-search"><Search size={14} aria-hidden /><input aria-label="搜索群成员" placeholder="搜索成员" value={query} onChange={event => setQuery(event.target.value)} />{query && <button type="button" aria-label="清除成员搜索" onClick={() => setQuery('')}><X size={13} /></button>}</label>
+                        <MemberList key={`${contact.key}/${term}`} members={filtered} onSelect={member => { setSelectedMember(member); setCopyState(''); }}>
                         {membersLoading && <p className="native-chat-profile-status" role="status">正在读取成员…</p>}
                         {memberError && <p className="native-chat-profile-status" role="status">{memberError}<button type="button" aria-label="重新读取成员" onClick={() => setAttempt(value => value + 1)}>重试</button></p>}
                         {!membersLoading && !memberError && !filtered.length && <p className="native-chat-profile-status">{query ? '没有找到成员' : '暂无成员'}</p>}
-                        {filtered.slice(0, limit).map(member => <button type="button" key={member.id} className="native-chat-detail-member" aria-label={`查看${member.name}的群资料`} onClick={() => { setSelectedMember(member); setCopyState(''); }}><ChatAvatar contact={member} small /><span className="min-w-0 flex-1"><span className="block truncate">{member.name}</span><span className="native-chat-member-id">{member.id}</span></span>{member.role !== 'member' && ['owner', 'admin'].includes(member.role) && <span className="native-chat-member-role">{role(member)}</span>}<ChevronRight size={12} /></button>)}
-                        {filtered.length > limit && <button type="button" className="native-chat-text-button" onClick={() => setLimit(value => value + 60)}>更多成员</button>}
-                        </div>
+                        </MemberList>
                     </section>}
                 </>}
             </ProfileBody>
             {copyState && <p role="status" className="pt-2 text-[11px] text-text-tertiary">{copyState}</p>}
         </PopoverContent>
     </Popover>;
+}
+
+function MemberList({ members, onSelect, children }: { members: ProfileMember[]; onSelect: (member: ProfileMember) => void; children: ReactNode }) {
+    const scroll = useRef<HTMLDivElement>(null);
+    const [limit, setLimit] = useState(60);
+    const count = Math.min(limit, members.length);
+    const virtual = useVirtualizer({ count, getScrollElement: () => scroll.current, getItemKey: index => members[index].id, estimateSize: () => 48, overscan: 4, initialRect: { width: 300, height: 240 } });
+    const rows = virtual.getVirtualItems();
+    const lastIndex = rows.at(-1)?.index ?? 0;
+    useEffect(() => {
+        if (count < members.length && lastIndex >= count - 5) setLimit(Math.min(count + 60, members.length));
+    }, [lastIndex, count, members.length]);
+    return <div ref={scroll} className="native-chat-member-list" role="region" aria-label="群成员列表" tabIndex={0}>
+        {children}
+        <div style={{ height: virtual.getTotalSize(), position: 'relative' }}>
+            {rows.map(row => {
+                const member = members[row.index];
+                return <button type="button" key={row.key} className="native-chat-detail-member" style={{ position: 'absolute', top: row.start, height: row.size }} aria-label={`查看${member.name}的群资料`} onClick={() => onSelect(member)}>
+                    <ChatAvatar contact={member} small /><span className="min-w-0 flex-1"><span className="block truncate">{member.name}</span><span className="native-chat-member-id">{member.id}</span></span>
+                    {['owner', 'admin'].includes(member.role) && <span className="native-chat-member-role">{member.role === 'owner' ? '群主' : '管理员'}</span>}<ChevronRight size={12} />
+                </button>;
+            })}
+        </div>
+    </div>;
 }
 
 function ProfileBody({ step, children }: { step: string; children: ReactNode }) {

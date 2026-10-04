@@ -91,63 +91,38 @@
     }
 }
 
-/* InfoBar：不透明分色调面板（Fluent 式可读性，无 backdrop-blur） */
+/* InfoBar：中性卡片 + 左侧 3px 强调条；tone 只承担条与图标色，不整版铺色 */
 .ndf-infobar {
     border-radius: var(--radius-sm);
-    border-width: 1px;
-    border-style: solid;
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-card);
     box-shadow: var(--shadow-md);
 }
 
-.ndf-infobar--info {
-    background: var(--infobar-info-bg);
-    border-color: var(--infobar-info-border);
+.ndf-infobar::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
 }
 
-.ndf-infobar--success {
-    background: var(--infobar-success-bg);
-    border-color: var(--infobar-success-border);
+.ndf-infobar--info::before {
+    background: var(--state-info);
 }
 
-.ndf-infobar--warning {
-    background: var(--infobar-warning-bg);
-    border-color: var(--infobar-warning-border);
+.ndf-infobar--success::before {
+    background: var(--state-success);
 }
 
-.ndf-infobar--danger {
-    background: var(--infobar-danger-bg);
-    border-color: var(--infobar-danger-border);
+.ndf-infobar--warning::before {
+    background: var(--state-warning);
 }
 
-.ndf-infobar-icon-well {
-    display: flex;
-    height: 2.25rem;
-    width: 2.25rem;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-sm);
+.ndf-infobar--danger::before {
+    background: var(--state-danger);
 }
-
-.ndf-infobar-icon-well--info {
-    background: var(--infobar-icon-well-info);
-}
-
-.ndf-infobar-icon-well--success {
-    background: var(--infobar-icon-well-success);
-}
-
-.ndf-infobar-icon-well--warning {
-    background: var(--infobar-icon-well-warning);
-}
-
-.ndf-infobar-icon-well--danger {
-    background: var(--infobar-icon-well-danger);
-}
-
-/* InfoBar 进场动画已迁移到 framer-motion + useMotion(),原 @keyframes infobar-in
-   不再使用,删除避免误用。
-   TabsContent 切换也已迁移到 framer + AnimatePresence,原 tabcontent-fade 也已移除。 */
 
 /* Shimmer 扫光:rich 档骨架卡片用。背景已经被业务侧以 200% 100% 拉宽,
    这里只负责把 background-position 从 -100% 推到 100%。 */

@@ -2,4 +2,4 @@
 import type { ChatArchiveSegment } from "./ChatArchiveSegment";
 import type { ChatArchiveSendStatus } from "./ChatArchiveSendStatus";
 
-export type ChatArchiveMessage = { key: string, session: string, id?: string, fileId?: string, sequence?: string, requestId?: string, senderId: string, senderName: string, at: number, mine: boolean, segments: Array<ChatArchiveSegment>, status: ChatArchiveSendStatus, error?: string, recalled?: boolean, };
+export type ChatArchiveMessage = { key: string, session: string, id?: string, fileId?: string, sequence?: string, requestId?: string, senderId: string, senderName: string, at: number, mine: boolean, segments: Array<ChatArchiveSegment>, status: ChatArchiveSendStatus, error?: string, recalled?: boolean, notice?: string, };

@@ -1,23 +1,27 @@
 // 会话草稿即时写回账号分区，异步选文件不改变发送目标。
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from 'react';
-import { ArrowUp, AtSign, Check, ChevronDown, File, ImagePlus, Paperclip, Smile, X } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from 'react';
+import { ArrowUp, AtSign, File, ImagePlus, Loader2, Paperclip, Smile, X } from 'lucide-react';
 import { EMPTY_DRAFT, type Attachment, type Contact, type Draft } from '../../core/domain/chat/model';
 import { mentionLabel, mentionQueryAt, pruneMentions } from '../../core/domain/debug/composerModel';
 import { errorText } from '../../core/domain/errors';
 import { chatService } from '../../core/services/chat.service';
 import { useChatSnapshot, type ChatAccountStore } from '../../hooks/chat/chatStore';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '../../shared/ui/Popover';
-import type { SendShortcut } from './chatPreferences';
 import { ChatEmojiPicker } from './media/ChatEmojiPicker';
 import { QQFace } from './media/QQFace';
 import { ChatAvatar } from './ChatAvatar';
+import { useComposerResize } from './useComposerResize';
+import { Button } from '../../shared/ui/Button';
+import { ActionMotionIcon } from '../../shared/ui/motion/ActionMotionIcon';
+import { ChatPresence, useChatComposerMotion } from './chatMotion';
 
-export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'enter', onSendShortcutChange, inputRef }: { store: ChatAccountStore; contact: Contact; disabledReason: string; sendShortcut?: SendShortcut; onSendShortcutChange?: (shortcut: SendShortcut) => void; inputRef?: RefObject<HTMLTextAreaElement> }) {
+export function ChatComposer({ store, contact, disabledReason, inputRef }: { store: ChatAccountStore; contact: Contact; disabledReason: string; inputRef?: RefObject<HTMLTextAreaElement> }) {
     const snapshot = useChatSnapshot(store); const draft = snapshot.account.drafts[contact.key] ?? EMPTY_DRAFT;
     const localInput = useRef<HTMLTextAreaElement>(null); const input = inputRef ?? localInput; const composing = useRef(false);
+    const composer = useRef<HTMLDivElement>(null);
+    const resize = useComposerResize(input, composer, draft.text);
     const [emoji, setEmoji] = useState(false); const [error, setError] = useState('');
     const restoreAfterEmoji = useRef(false);
-    const [settingsOpen, setSettingsOpen] = useState(false);
     const [pendingFiles, setPendingFiles] = useState(0);
     const [dragging, setDragging] = useState(false); const dragDepth = useRef(0);
     const [caret, setCaret] = useState(0); const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
@@ -39,13 +43,6 @@ export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'e
     useEffect(() => { setMemberIndex(0); }, [query?.query]);
     useEffect(() => { memberList.current?.querySelector('[aria-selected=true]')?.scrollIntoView?.({ block: 'nearest' }); }, [selectedMember]);
     useEffect(() => { if (draft.reply) input.current?.focus(); }, [draft.reply]);
-    useLayoutEffect(() => {
-        const element = input.current; if (!element) return;
-        const resize = () => { element.style.height = 'auto'; element.style.height = `${Math.min(140, Math.max(52, element.scrollHeight))}px`; };
-        resize(); let width = element.clientWidth;
-        const observer = new ResizeObserver(() => { if (element.clientWidth !== width) { width = element.clientWidth; resize(); } });
-        observer.observe(element); return () => observer.disconnect();
-    }, [draft.text]);
     const current = () => store.getSnapshot().account.drafts[contact.key] ?? EMPTY_DRAFT;
     const patch = (value: Partial<Draft>) => store.draft(contact.key, { ...current(), ...value });
     const chooseEmoji = (attachment: Attachment) => {
@@ -83,6 +80,7 @@ export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'e
     const drop = (event: DragEvent) => { event.preventDefault(); dragDepth.current = 0; setDragging(false); setError(''); const files = Array.from(event.dataTransfer.files); const images = files.filter(f => f.type.startsWith('image/')); for (const file of images) void addImage(file); if (images.length !== files.length) setError('其他文件请用附件按钮选择'); };
     const sending = snapshot.account.messages.some(m => m.session === contact.key && m.status === 'sending');
     const canSend = !disabledReason && !sending && !pendingFiles && (!!draft.text.trim() || draft.attachments.length > 0);
+    useChatComposerMotion(composer, canSend, error);
     const send = () => {
         if (!canSend) return;
         setEmoji(false); setError('');
@@ -114,22 +112,23 @@ export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'e
                 return;
             }
         }
-        if (event.key === 'Enter' && !event.shiftKey && !event.altKey && (sendShortcut === 'ctrl-enter' ? event.ctrlKey || event.metaKey : !event.ctrlKey && !event.metaKey)) { event.preventDefault(); send(); }
+        if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) { event.preventDefault(); send(); }
     };
-    return <div className="native-chat-composer" onPaste={paste} onDragOver={e => e.preventDefault()} onDrop={drop}
+    return <div ref={composer} className="native-chat-composer" onPaste={paste} onDragOver={e => e.preventDefault()} onDrop={drop}
         onDragEnter={e => { if (Array.from(e.dataTransfer.types).includes('Files')) { dragDepth.current++; setDragging(true); } }}
         onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); }}>
+        <button {...resize} />
         <div className="native-chat-editor" data-dragging={dragging}>
-        {draft.reply && <div className="native-chat-reply"><span className="min-w-0 flex-1 truncate">回复 {draft.reply.name}：{draft.reply.preview}</span><button className="native-chat-icon" aria-label="取消引用" onClick={() => { patch({ reply: null }); input.current?.focus(); }}><X size={13} /></button></div>}
-        {draft.attachments.length > 0 && <div className="native-chat-attachments">{draft.attachments.map(file => <div key={file.key}><AttachmentPreview attachment={file} /><span className="max-w-36 truncate">{file.name}</span><button aria-label={`移除${file.name}`} onClick={() => patch({ attachments: current().attachments.filter(f => f.key !== file.key) })}><X size={12} /></button></div>)}</div>}
+        <ChatPresence visible={!!draft.reply}><div className="native-chat-reply"><span className="min-w-0 flex-1 truncate">回复 {draft.reply?.name}：{draft.reply?.preview}</span><Button variant="ghost" size="icon" className="native-chat-icon" aria-label="取消引用" onClick={() => { patch({ reply: null }); input.current?.focus(); }}><X size={13} /></Button></div></ChatPresence>
+        <ChatAttachmentStrip attachments={draft.attachments} onRemove={key => patch({ attachments: current().attachments.filter(file => file.key !== key) })} />
         <div className="native-chat-composer-tools">
             <Popover open={emoji} onOpenChange={open => { if (open) restoreAfterEmoji.current = false; setEmoji(open); }}>
-                <PopoverTrigger asChild><button className="native-chat-icon" aria-label="表情" title="表情"><Smile size={18} /></button></PopoverTrigger>
+                <PopoverTrigger asChild><Button variant="ghost" size="icon" className="native-chat-icon" aria-label="表情" title="表情"><Smile size={18} /></Button></PopoverTrigger>
                 <PopoverContent side="top" align="start" className="native-chat-popover w-auto p-2" aria-label="选择表情" onCloseAutoFocus={e => { if (restoreAfterEmoji.current) { e.preventDefault(); input.current?.focus(); } }}><ChatEmojiPicker target={store.target} onSelect={chooseEmoji} disabledReason={disabledReason} /></PopoverContent>
             </Popover>
-            <button className="native-chat-icon" aria-label="添加图片" title="添加图片" disabled={!!pendingFiles} onClick={() => void pick('image')}><ImagePlus size={18} /></button>
-            <button className="native-chat-icon" aria-label="添加文件" title="添加文件" disabled={!!pendingFiles} onClick={() => void pick('file')}><Paperclip size={18} /></button>
-            {contact.type === 'group' && <button className="native-chat-icon" aria-label="提及成员" title="提及成员" onClick={() => { dismissMention(false); insert('@'); }}><AtSign size={18} /></button>}
+            <Button variant="ghost" size="icon" className="native-chat-icon" aria-label="添加图片" title="添加图片" disabled={!!pendingFiles} onClick={() => void pick('image')}><ActionMotionIcon icon={pendingFiles ? Loader2 : ImagePlus} motion={pendingFiles ? 'spin' : 'none'} size={18} /></Button>
+            <Button variant="ghost" size="icon" className="native-chat-icon" aria-label="添加文件" title="添加文件" disabled={!!pendingFiles} onClick={() => void pick('file')}><Paperclip size={18} /></Button>
+            {contact.type === 'group' && <Button variant="ghost" size="icon" className="native-chat-icon" aria-label="提及成员" title="提及成员" onClick={() => { dismissMention(false); insert('@'); }}><AtSign size={18} /></Button>}
         </div>
         <Popover open={memberVisible} onOpenChange={open => { if (!open) dismissMention(true); }}>
             <PopoverAnchor asChild><div>
@@ -150,20 +149,35 @@ export function ChatComposer({ store, contact, disabledReason, sendShortcut = 'e
                 </div>
             </PopoverContent>
         </Popover>
-        {dragging && <div className="native-chat-drop-hint">松开添加图片</div>}
+        <ChatPresence visible={dragging}><div className="native-chat-drop-hint">松开添加图片</div></ChatPresence>
         <footer>
-            <span role="status" className={error ? 'text-danger' : 'text-text-tertiary'}>{error || (pendingFiles ? '正在读取附件…' : disabledReason) || (sendShortcut === 'enter' ? 'Enter 发送 · Shift + Enter 换行' : 'Ctrl + Enter 发送 · Enter 换行')}</span>
-            <div className="native-chat-send-group"><button className="native-chat-send" aria-label="发送消息" title={disabledReason || '发送消息'} disabled={!canSend} onClick={send}><ArrowUp size={16} /><span>{sending ? '发送中' : '发送'}</span></button>
-                {onSendShortcutChange && <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
-                    <PopoverTrigger asChild><button className="native-chat-send-options" aria-label="发送设置" title="发送快捷键"><ChevronDown size={13} /></button></PopoverTrigger>
-                    <PopoverContent side="top" align="end" className="native-chat-popover w-48 p-1.5" aria-label="发送快捷键">
-                        {(['enter', 'ctrl-enter'] as const).map(value => <button key={value} aria-pressed={sendShortcut === value} className="native-chat-shortcut-option" onClick={() => { onSendShortcutChange(value); setSettingsOpen(false); }}><span>{value === 'enter' ? 'Enter 发送' : 'Ctrl + Enter 发送'}</span>{sendShortcut === value && <Check size={13} />}</button>)}
-                    </PopoverContent>
-                </Popover>}
-            </div>
+            <span role="status" className={error ? 'text-danger' : 'text-text-tertiary'}>{error || (pendingFiles ? '正在读取附件…' : disabledReason)}</span>
+            <Button variant="ghost" size="icon" className="native-chat-send" aria-label="发送消息" title={disabledReason || '发送消息'} disabled={!canSend} onClick={send}><ActionMotionIcon icon={sending ? Loader2 : ArrowUp} motion={sending ? 'spin' : 'none'} size={16} /></Button>
         </footer>
         </div>
     </div>;
+}
+
+function ChatAttachmentStrip({ attachments, onRemove }: { attachments: Attachment[]; onRemove: (key: string) => void }) {
+    const [retained, setRetained] = useState(attachments);
+    const currentKeys = useMemo(() => new Set(attachments.map(file => file.key)), [attachments]);
+    const latestKeys = useRef(currentKeys);
+    latestKeys.current = currentKeys;
+    const displayed = useMemo(() => [...attachments, ...retained.filter(file => !currentKeys.has(file.key))], [attachments, retained, currentKeys]);
+    useEffect(() => {
+        if (!attachments.length) return;
+        setRetained(previous => {
+            const files = new Map(previous.map(file => [file.key, file]));
+            for (const file of attachments) files.set(file.key, file);
+            return [...files.values()];
+        });
+    }, [attachments]);
+    if (!displayed.length) return null;
+    return <div className="native-chat-attachments">{displayed.map(file =>
+        <ChatPresence key={file.key} visible={currentKeys.has(file.key)} onExited={() => {
+            if (!latestKeys.current.has(file.key)) setRetained(previous => previous.filter(item => item.key !== file.key));
+        }}><div className="native-chat-attachment"><AttachmentPreview attachment={file} /><span className="max-w-36 truncate">{file.name}</span><Button variant="ghost" size="icon" className="native-chat-icon" aria-label={`移除${file.name}`} onClick={() => onRemove(file.key)}><X size={12} /></Button></div></ChatPresence>
+    )}</div>;
 }
 
 function AttachmentPreview({ attachment }: { attachment: Attachment }) {

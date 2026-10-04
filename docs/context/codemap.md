@@ -405,19 +405,26 @@ Host 层命令/流：`ncd-host` 的 `command.rs` `process.rs` `stream_chunk.rs`�
 
 ---
 
-### 17) 聊天（主窗口原生双栏）
+### 17) 聊天（内嵌与独立窗口）
 
 | 关注点 | 主路径 |
 |--------|--------|
 | 页面与入口 | `src-ui/modules/chat/ChatPage.tsx` / `ChatTimeline.tsx` / `ChatComposer.tsx` / `chat.css`；主侧栏「聊天」，`AppNext` lazy 全宽路由；宽屏双栏、窄宽会话返回；`ChatDivider` 支持拖动与键盘调宽，`ChatDetails` 为资料弹层，`ChatAvatar` 共用头像。`ConversationList` 提供 Ctrl/Cmd+K、方向键/Enter 与右键置顶/本地已读；`conversationDate.ts` 区分今天、昨天与旧日期 |
 | 搜索与消息操作 | `ChatSearch` + `chat-search.css`：当前已加载范围、字面命中高亮、方向键/Enter 定位、显式读取更早历史与增量展开结果；`ChatMessageActions` 复用共享 ContextMenu 提供回复/复制/提及/失败恢复，`messageActions.ts` 保留草稿并消解同名 @；保留原侧边按钮密度。菜单与键盘切会话后聚焦输入框，点击发送/取消引用后可继续输入 |
-| 状态与协议边界 | `src-ui/core/domain/chat/`：字符串消息标识、账号/会话分区、收发去重、档案合并；`hooks/chat/chatStore.ts`：先离线恢复档案，连接建立后同步联系人与最近会话，串行保存；草稿仅留内存。内存保留全局最近 5,000 条与正在阅读/加载的会话旧页，裁剪同步失效历史游标 |
+| 状态与协议边界 | `src-ui/core/domain/chat/`：字符串消息标识、账号/会话分区、收发去重、档案合并；`messageIdentity.ts` 合并唯一对应的旧私聊 ID/序号表示，保留同秒重复发送，档案恢复与历史读取一并去重。`hooks/chat/chatStore.ts`：先离线恢复档案，连接建立后同步联系人与最近会话，串行保存；草稿仅留内存。内存保留全局最近 5,000 条与正在阅读/加载的会话旧页，裁剪同步失效历史游标 |
 | 聊天档案 | `ncd-domain/src/chat_archive.rs` 定义 ts-rs 契约；`ncd-runtime/src/chat_archive.rs` 在注入的 `data_root/state/chat/archives/<Bot SHA256>/<QQ>.json` 原子保存，每账号最多 5,000 条消息、1,000 个会话、16 MiB。校验身份与关系，损坏文件拒绝覆盖；剔除消息段凭据、本机附件 URI 与内嵌图片，不存草稿附件 |
-| 群盒子 / 历史 | `groupBox.ts` 默认聚合所有群聊并汇总未读，主列表搜索穿透盒子；兼容旧档案的 boxed 字段，不再手动移入移出。`useHistoryPaging.ts` 上翻自动加载并保留阅读锚点，入口在 hover/focus 时显示，加载或出错时常显；NapCat 的 `message_seq` 实际传短 `message_id`，SnowLuma 传数字 `message_id` |
-| 资料 / 头像 / 图片查看 | `chat-profile.service.ts` 投影上游群/个人资料与成员；`ChatDetails` 支持成员搜索、名片和发起私聊，头像/标题与图标共用弹层；`ChatAvatar` 使用群与个人头像。`ChatImageViewer` + `imageView.ts` 提供长图可读宽度、原尺寸/适应、滚轮缩放、拖动和键盘操作 |
-| 媒体与表情 | `chat-media.service.ts` + `modules/chat/media/`：合并转发按需读取（最多 5 层/每层 500 节点）、语音转码与转文字、视频/图片刷新；仅消费 URL/base64，不将上游主机路径映射成本机资产。QQ face 与收藏表情组成 face/image 段，选择只进入草稿。媒体回包按图片/文件 16 MiB、语音 8 MiB、转发 2 MiB 设 inline 上限；旧回包失效保护避免串媒体，新消息不重置已加载资源。调试页注入原 sendCall，沿用所选通道和历史 |
-| 输入与界面偏好 | `ChatComposer`：带头像的 @ 键盘选择、QQ/收藏表情、附件读取反馈、自适应输入高度；`chatPreferences.ts` 仅将列表宽度与发送快捷键存入 localStorage `ncd.chat.ui.v1`，不存消息、账号或草稿 |
-| 传输与生命周期 | `crates/ncd-runtime/src/chat.rs`：动作白名单与独立协议会话，复用 `DebugManager::new_ephemeral`；`apiDebug` 关闭、调试停止接收不影响聊天。当前独立传输实例可能增加连接，尚未合并共享传输租约 |
+| 群盒子 / 历史 | `groupBox.ts` 默认聚合所有群聊并汇总未读，主列表搜索穿透盒子；兼容旧档案的 boxed 字段，不再手动移入移出。`useHistoryPaging.ts` 上翻自动加载，加载旧页前解除贴底；时间线不再提供顶部加载按钮，读取失败由全局 InfoBar 重试。`useTimelinePosition.ts` 只恢复一次显式窗口交接锚点，正常打开/切换会话贴底。`timelineReadingAnchor.ts` 对视口上方的首测与媒体变高统一补偿；`NativeTimeline` 同帧更新行位置，按消息复用正文渲染。连续发送者压缩间距，私聊隐藏昵称，右下角图标返回最新。NapCat 的 `message_seq` 实际传短 `message_id`，SnowLuma 传数字 `message_id` |
+| 资料 / 头像 / 图片查看 | `chat-profile.service.ts` 投影上游群/个人资料与成员；`ChatDetails` 支持成员搜索、名片和发起私聊，成员列表按 60 人自动续展并虚拟渲染，滚动条仅悬停/聚焦时显示；头像/标题与图标共用弹层。`ChatAvatar` 使用群与个人头像。`ChatImageViewer` + `imageView.ts` 提供长图可读宽度、原尺寸/适应、滚轮缩放、拖动和键盘操作 |
+| 媒体与表情 | `chat-media.service.ts` + `modules/chat/media/`：合并转发按需读取（最多 5 层/每层 500 节点）、语音转码与转文字、视频/图片刷新；仅消费 URL/base64，不将上游主机路径映射成本机资产。`SegmentView` 图片按账号和完整资源缓存成功地址，不把收藏表情共用的文件名 `0` 当资源或尺寸标识；刷新优先完整 URL，排除 `0` 回退。刷新请求去重、两次自动尝试、读取/解码超时与手动重试，刷新和失败保留相同比例占位。QQ face 与收藏表情组成 face/image 段，选择只进入草稿；收藏接口逐次扩大读取数量直至完整，选择网格按行虚拟化。媒体回包按图片/文件 16 MiB、语音 8 MiB、转发 2 MiB 设 inline 上限；旧回包失效保护避免串媒体，新消息不重置已加载资源。调试页注入原 sendCall，沿用所选通道和历史。自己刚发的图在回显/回包合并时把本机来源挂到 `local_file`，预览经 `chat_read_local_image` 直读本机字节（16 MiB 上限）、读不到回退协议链路，重发与草稿恢复同样认 `local_file` |
+| 转发记录导航 | `ChatForward.tsx` 在单个弹窗内维护最多 5 层路径，返回复用内容与滚动位置，阻止资源循环引用并拒绝迟到回包；图片查看器在记录弹窗内接管图片操作，`DialogContent.layer` 为图片提供更高遮罩与内容层级，关闭后返回原记录 |
+| 图片尺寸 / 表情目录 | `SegmentView` 按资源身份保留已解码尺寸，地址过期仍可复用；等价消息对象不重置加载，图片绝对定位避免固有尺寸反向撑高容器。`qq-face.service.ts` 区分 QFace 图片目录与账号可发送目录：SnowLuma 通过 `fetch_sys_faces(refresh=true)` 刷新服务端映射，按 Bot+QQ 缓存 10 分钟；去掉 Unicode/残缺超级表情并在发送前核对编号，旧端失败只提供经典表情，失败更新保留上次有效目录。完整目录 inline 上限 2 MiB。面板支持名称/别名/编号搜索与虚拟网格。SnowLuma 收藏读取完整后统一反转为面板顺序，NapCat 保留返回顺序 |
+| 输入与界面偏好 | `ChatComposer`：带头像的 @ 键盘选择、QQ/收藏表情、附件读取反馈；`useComposerResize.ts` 支持拖动/键盘调高、双击恢复自动高度，窗口缩小时保留消息阅读空间。`chatPreferences.ts` 将列表宽度、手动输入高度与隐藏会话存入 localStorage `ncd.chat.ui.v1`，不存消息正文或草稿 |
+| 滚动缓动 | `useSmoothWheel.ts` 对离散滚轮按剩余增量分帧，保留虚拟行高补偿和原生触控板输入；`useLatestScroll.ts` 从当前位置快速滑向实时底部，逐帧修正剩余路程，输入/隐藏/卸载立即取消，遵循动画开关与减少动画。右下角箭头在返回途中提供下滑反馈 |
+| 聊天动效 | `modules/chat/chatMotion.tsx` 适配共享 `useMotion` / `GsapPresence` / `Button`：优雅淡入、标准轻位移、丰富增加小控件弹性，正文不缩放。固定 `.native-chat-message-pane` 视口，只移动内部 `.native-chat-conversation-surface`；纵向滚动容器不提供横向滚动。覆盖列表标签与会话选择指示、未读计数、消息操作/复制确认、搜索/引用、附件单项退场、拖放、新消息胶囊、编辑器与发送就绪反馈；`ChatSendStatus` 只暴露失败/未确认：红色感叹号悬停看原因、点击重发，发送中与已成功不留痕。消息复用 `useStickToBottom` 一次性入场，小批次短错峰，历史/上翻/隐藏会话/>8 条批次静态；总开关、挡位、速度及系统减少动画统一约束，偏好变化和禁用控件清除中间态 |
+| 传输与生命周期 | `crates/ncd-runtime/src/chat.rs`：动作白名单与独立协议会话，复用 `DebugManager::new_ephemeral`；`chat/desktop.rs` 持有界面/后台租约，最后一个消费者离开时释放连接、隧道与缓存，并失效迟到的调用。聊天窗与后台共用每 Bot 接收器；保留 Chat/Debug 原有物理会话隔离 |
+| 窗口 / 账号托盘 | `ncd-domain/src/chat_desktop.rs` → `ncd-runtime/src/chat/{desktop,inbox}.rs`：按 Bot+QQ 默认关闭后台/托盘，最多 8 个后台账号、9 个完整收件箱（每个消息体缓存 2 MiB），暂停后只保留有界未读摘要。`src-tauri/src/{chat_window,chat_tray}.rs` 管单实例 `chat-panel`、带确认/取消的草稿交接、独立 QQ 头像托盘与控制台回收；头像异步下载、最多 4 并发，不创建后台 WebView。`ChatPopoutApp` / `ChatAccountControls` / `chat-desktop.service` 为前端入口；视图保存校验窗口所有者和挂载代次，关闭后销毁聊天 WebView |
+| 新消息提示 / 群忽略 | `chat/notifications.rs` 把 QQ `GroupMsgMask` 与账号本地 `ignoredGroups` / `hiddenGroups` 合并，消息与普通未读继续保留，`notificationUnread` 单独控制托盘。NapCat 的 `get_group_detail_info` 按需读取，最多 4 并发、成功缓存 5 分钟；SnowLuma 当前不返回 QQ 档位，未知群默认不提示，账号设置可显式开启。`useChatNotifications` + 会话右键保存本地免打扰、迁移既有隐藏群。右键只展示可执行操作，聊天设置按账号/消息提醒/窗口单栏分区，托盘提醒方式带实时预览，并提供免打扰群恢复入口。托盘默认静态蓝点，也可选 1.8 秒蓝点呼吸或关闭，头像常亮；12 帧预计算、150ms 切帧只在需要提醒时运行，不轮询账号或创建 WebView；128px 头像复用于聊天窗标题、任务栏和 Alt+Tab，账号切换同步更新独立 Windows 任务栏身份 |
+| 远端聊天恢复 | `onebot_debug/port.rs` 的 `recover_webui` 由 `bot_manager/debug_port.rs` 实装：缺少远端 WebUI 端点时单飞取得活 SSH 并复用运行态接管，独立任务不被接收器连接超时半途取消；保留 ServerManager 冷却限制，不启动新 Bot。SSH 恢复事件唤醒接收器，后台租约每 15 秒重新核对停止状态 |
 | IPC / 预览 | `src-tauri/src/commands/chat.rs`：`chat_targets/call/call_stream/subscribe/unsubscribe` 与 `chat_archive_load/save`；前端 `core/services/chat.service.ts` / `chat-archive.service.ts`，档案类型来自 `generated/chat/`。`core/ipc/mock/chat.mock.ts` 提供多页历史，`chat-archive.mock.ts` 仅在浏览器预览用 localStorage 模拟存储。`lib.rs` 接 Bot 生命周期、页面重载清理；`commands/exit.rs` 统一释放聊天连接 |
 | 复用边界 | 复用 debug 的 BotPicker、消息段解析、@ 组装、SegmentList 与虚拟列表贴底；弹层使用 shared/ui/Popover；不导入 DebugConsolePage 或调试工作区 store |
 

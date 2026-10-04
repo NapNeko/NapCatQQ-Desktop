@@ -1,8 +1,15 @@
-// 按 Bot 和登录身份分区；页面离开后保留内存消息与订阅。
+// 按 Bot 和登录身份分区，界面离开后释放接收租约。
 import { useSyncExternalStore } from 'react';
 import { chatService } from '../../core/services/chat.service';
 import { chatArchiveService } from '../../core/services/chat-archive.service';
+import { chatDesktopService } from '../../core/services/chat-desktop.service';
+import { qqFaceService } from '../../core/services/qq-face.service';
+import type { ChatAccountView } from '../../core/ipc/generated/chat/ChatAccountView';
+import type { ChatViewState } from '../../core/ipc/generated/chat/ChatViewState';
+import type { ChatReadingPosition } from '../../core/ipc/generated/chat/ChatReadingPosition';
 import { archiveOf, restoreArchive, mergeRecentConversations } from '../../core/domain/chat/archive';
+import { deduplicateMessages } from '../../core/domain/chat/messageIdentity';
+import { recoverDraft } from '../../core/domain/chat/recoverDraft';
 import { accountKey, emptyAccount, ingestMessage, openConversation, setDraft, addPending, settleSend, parseContact, record, id, text, EMPTY_DRAFT, type Account, type Contact, type Draft, type SessionKey } from '../../core/domain/chat/model';
 import { buildMessageSegments } from '../../core/domain/debug/composerModel';
 import { localFileTokenFor } from '../../core/domain/debug/streamActions';
@@ -16,6 +23,7 @@ import type { DebugCallResponse } from '../../core/ipc/generated/debug/DebugCall
 export interface ChatSnapshot { account: Account; contacts: Contact[]; connection: DebugReceiverState; error: string; contactsLoading: boolean; hydrated: boolean; archiveError: string; recentLoading: boolean; recentError: string; history: Record<string, { loading: boolean; loaded: boolean; done: boolean; error: string }> }
 type Transport = Pick<typeof chatService, 'call' | 'subscribe' | 'unsubscribe'>;
 type ArchivePort = Pick<typeof chatArchiveService, 'load' | 'save'>;
+type SendOperation = { action: string; params: unknown; segments: Segment[] };
 function dataOf(response: DebugCallResponse): unknown {
     if (response.result.kind === 'err') { const copy = debugErrorCopy(response.result.error); throw new Error([copy.title, copy.detail].filter(Boolean).join('：')); }
     const result = response.result.outcome;
@@ -39,6 +47,14 @@ export class ChatAccountStore {
     private archiveDirty = false;
     private recentRequest: Promise<void> | null = null;
     private recentEpoch = -1;
+    private saveTimer: ReturnType<typeof setTimeout> | undefined;
+    private positions: Record<string, number> = {};
+    private readingPositions: Record<string, ChatReadingPosition> = {};
+    private initialReadingPositions: Record<string, ChatReadingPosition> = {};
+    private timelineReaders = new Map<string, () => ChatReadingPosition | undefined>();
+    releaseRequest: Promise<void> | null = null;
+    releaseWhenIdle = false;
+    viewRevision = 0;
     target: DebugTarget;
 
     constructor(target: DebugTarget, private transport: Transport = chatService, private archive: ArchivePort | undefined = transport === chatService ? chatArchiveService : undefined) {
@@ -66,7 +82,9 @@ export class ChatAccountStore {
         for (const listener of this.listeners) listener();
         if (patch.account && (patch.account.messages !== previous.messages || patch.account.conversations !== previous.conversations)) {
             this.archiveDirty = true;
-            if (this.snapshot.hydrated && !this.snapshot.archiveError) void this.flushArchive();
+            if (this.snapshot.hydrated && !this.snapshot.archiveError && !this.saveTimer) {
+                this.saveTimer = setTimeout(() => { this.saveTimer = undefined; void this.flushArchive(); }, 300);
+            }
         }
     }
     restore(): Promise<void> {
@@ -81,6 +99,7 @@ export class ChatAccountStore {
         return this.restoreRequest;
     }
     flushArchive(): Promise<void> {
+        clearTimeout(this.saveTimer); this.saveTimer = undefined;
         if (this.saveRequest) return this.saveRequest;
         if (!this.archive || !this.snapshot.hydrated || !this.archiveDirty) return Promise.resolve();
         const archive = this.archive;
@@ -104,7 +123,10 @@ export class ChatAccountStore {
         return this.saveRequest;
     }
     async initialize() {
+        if (this.releaseRequest) await this.releaseRequest;
+        this.releaseWhenIdle = false;
         await this.restore();
+        if (this.releaseWhenIdle && !this.hasViewers()) return;
         if (!this.target.running || this.target.online === false) { await this.disconnect(); return; }
         await this.connect();
         if (this.snapshot.connection.state === 'connected') await Promise.all([this.loadContacts(), this.loadRecent()]);
@@ -127,8 +149,16 @@ export class ChatAccountStore {
         this.recentRequest = request; return request;
     }
     private account(account: Account) { this.update({ account }); }
-    setReading(key: SessionKey | null) { this.reading = key; if (key && this.snapshot.account.conversations[key]?.unread) this.open(this.snapshot.account.conversations[key]); }
-    open(contact: Contact) { this.account(openConversation(this.snapshot.account, contact)); }
+    setReading(key: SessionKey | null) {
+        this.reading = key;
+        if (this.transport === chatService) void chatDesktopService.setReading(this.target.bot_id, this.snapshot.account.selfId, key).catch(error => this.update({ error: errorText(error) }));
+        if (key && this.snapshot.account.conversations[key]?.unread) this.markRead(key);
+    }
+    open(contact: Contact) {
+        delete this.initialReadingPositions[contact.key];
+        this.account(openConversation(this.snapshot.account, contact));
+        if (this.transport === chatService) void chatDesktopService.markRead(this.target.bot_id, this.snapshot.account.selfId, contact.key).catch(error => this.update({ error: errorText(error) }));
+    }
     close(key: SessionKey) { if (this.snapshot.account.active === key) { this.reading = null; this.account({ ...this.snapshot.account, active: null }); } }
     draft(key: SessionKey, draft: Draft) { this.account(setDraft(this.snapshot.account, key, draft)); }
     pin(key: SessionKey) { const state = this.snapshot.account; const c = state.conversations[key]; if (c) this.account({ ...state, conversations: { ...state.conversations, [key]: { ...c, pinned: !c.pinned } } }); }
@@ -136,6 +166,7 @@ export class ChatAccountStore {
         const state = this.snapshot.account; const conversation = state.conversations[key];
         if (!conversation?.unread) return;
         this.account({ ...state, conversations: { ...state.conversations, [key]: { ...conversation, unread: 0 } } });
+        if (this.transport === chatService) void chatDesktopService.markRead(this.target.bot_id, this.snapshot.account.selfId, key).catch(error => this.update({ error: errorText(error) }));
     }
     box(key: SessionKey) { const state = this.snapshot.account; const c = state.conversations[key]; if (c?.type === 'group') this.account({ ...state, conversations: { ...state.conversations, [key]: { ...c, boxed: !c.boxed } } }); }
     private interruptPending() {
@@ -149,6 +180,7 @@ export class ChatAccountStore {
         });
     }
     async disconnect() {
+        this.setReading(null);
         this.epoch++; this.connecting = false; this.reading = null;
         const subscription = this.subscription; this.subscription = null;
         this.interruptPending();
@@ -177,7 +209,7 @@ export class ChatAccountStore {
                     if (body.kind === 'ob11') {
                         const self = id(body.payload.self_id);
                         if (self && self !== account.selfId) continue;
-                        account = ingestMessage(account, body.payload, false, typeof document !== 'undefined' && document.visibilityState === 'visible' ? this.reading : null);
+                        account = ingestMessage(account, body.payload, false, typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus() ? this.reading : null);
                     } else if (body.kind === 'receiver') connection = body.state;
                     else if (body.kind === 'gap' || body.kind === 'dropped') account = { ...account, gap: true };
                     account = { ...account, lastSeq: event.seq };
@@ -255,6 +287,7 @@ export class ChatAccountStore {
             const rows = data.messages.map(record).sort((a, b) => Number(a.time || 0) - Number(b.time || 0));
             let account = this.snapshot.account;
             for (const row of rows) account = ingestMessage(account, { ...row, message_type: group ? 'group' : 'private', ...(group ? { group_id: this.peer(key) } : { target_id: this.peer(key) }) }, true);
+            account = { ...account, messages: deduplicateMessages(account.messages) };
             // NapCat 的参数虽名为 message_seq，实际按短 message_id 查内部 MsgId。
             const next = id(rows[0]?.message_id);
             if (next) this.historyCursor.set(key, next);
@@ -265,26 +298,73 @@ export class ChatAccountStore {
         if (this.sends.get(key) === this.epoch || !this.target.running || this.target.online === false || this.snapshot.connection.state !== 'connected') return;
         const draft = this.snapshot.account.drafts[key] ?? EMPTY_DRAFT;
         if (!draft.text.trim() && !draft.attachments.length) return;
-        const epoch = this.epoch;
         const group = key.startsWith('group:'); const peer = { [group ? 'group_id' : 'user_id']: this.peer(key) };
         const segments = buildMessageSegments(draft.text, draft.mentions ?? []);
         if (draft.reply) segments.unshift({ type: 'reply', data: { id: draft.reply.id } });
         for (const attachment of draft.attachments) {
             if (attachment.type === 'face') segments.push({ type: 'face', data: { id: attachment.id } });
-            if (attachment.type === 'image') segments.push({ type: 'image', data: { file: /^(base64:\/\/|https?:\/\/)/i.test(attachment.path) ? attachment.path : localFileTokenFor(attachment.path), ...(attachment.subType ? { sub_type: attachment.subType } : {}) } });
+            if (attachment.type === 'image') segments.push({ type: 'image', data: { file: /^(base64:\/\/|https?:\/\/)/i.test(attachment.path) ? attachment.path : localFileTokenFor(attachment.path), name: attachment.name, sub_type: attachment.subType ?? 0 } });
         }
-        const operations: { action: string; params: unknown; segments: Segment[] }[] = [];
+        const operations: SendOperation[] = [];
         if (segments.some(s => s.type !== 'reply')) operations.push({ action: group ? 'send_group_msg' : 'send_private_msg', params: { ...peer, message: segments }, segments });
         for (const file of draft.attachments) if (file.type === 'file') operations.push({ action: group ? 'upload_group_file' : 'upload_private_file', params: { ...peer, file: localFileTokenFor(file.path), name: file.name, upload_file: true }, segments: [{ type: 'file', data: { name: file.name, file: localFileTokenFor(file.path) } }] });
+        await this.runSends(key, operations);
+    }
+    async poke(key: SessionKey, userId: string) {
+        if (!this.target.running || this.target.online === false || this.snapshot.connection.state !== 'connected') return;
+        const group = key.startsWith('group:');
+        dataOf(await this.transport.call(this.target.bot_id, group ? 'group_poke' : 'friend_poke', group ? { group_id: this.peer(key), user_id: userId } : { user_id: userId }));
+        // 成功后乐观上墙；后端回显的 poke 通知在 ingestMessage 里按时间窗去重
+        const echo: Record<string, unknown> = { notice_type: 'notify', sub_type: 'poke', user_id: this.snapshot.account.selfId, target_id: userId, time: Math.floor(Date.now() / 1000) };
+        if (group) echo.group_id = this.peer(key);
+        this.account(ingestMessage(this.snapshot.account, echo));
+    }
+    async retry(messageKey: string) {
+        const message = this.snapshot.account.messages.find(m => m.key === messageKey);
+        if (!message?.mine || message.status !== 'failed' || message.recalled) return;
+        const key = message.session;
+        if (!this.target.running || this.target.online === false || this.snapshot.connection.state !== 'connected') throw new Error('聊天未连接，请连接后重发');
+        if (this.sends.get(key) === this.epoch) return;
+        const group = key.startsWith('group:'); const peer = { [group ? 'group_id' : 'user_id']: this.peer(key) };
+        const segments = message.segments.map(segment => {
+            if (segment.type !== 'image' && segment.type !== 'file') return segment;
+            const file = text(segment.data.local_file) || text(segment.data.file) || text(segment.data.url);
+            if (!/^(ncd-local-file:\/\/|base64:\/\/|https?:\/\/).+/i.test(file)) throw new Error('原附件已不可用，请重新添加后发送');
+            // local_file 只服务本地预览与选源，不下发给协议。
+            const data: Record<string, unknown> = { ...segment.data, file };
+            delete data.local_file;
+            return { ...segment, data };
+        });
+        if (!segments.length || segments.every(s => s.type === 'reply')) throw new Error('原消息内容已不可用');
+        const file = segments.length === 1 && segments[0].type === 'file' ? segments[0].data : undefined;
+        const operation: SendOperation = file
+            ? { action: group ? 'upload_group_file' : 'upload_private_file', params: { ...peer, file: file.file, name: file.name, upload_file: true }, segments }
+            : { action: group ? 'send_group_msg' : 'send_private_msg', params: { ...peer, message: segments }, segments };
+        await this.runSends(key, [operation], message.key);
+    }
+    private async runSends(key: SessionKey, operations: SendOperation[], retryKey?: string) {
+        const epoch = this.epoch;
         this.sends.set(key, epoch);
-        this.draft(key, EMPTY_DRAFT);
+        if (!retryKey) this.draft(key, EMPTY_DRAFT);
         try {
             for (const operation of operations) {
                 const requestId = crypto.randomUUID();
-                this.account(addPending(this.snapshot.account, key, requestId, operation.segments, Date.now()));
+                this.account(retryKey ? { ...this.snapshot.account, messages: this.snapshot.account.messages.map(message => message.key === retryKey ? { ...message, requestId, id: undefined, fileId: undefined, segments: operation.segments, status: 'sending' as const, error: undefined } : message) } : addPending(this.snapshot.account, key, requestId, operation.segments, Date.now()));
                 if (epoch !== this.epoch) {
                     this.account(settleSend(this.snapshot.account, requestId, { state: 'failed', error: '发送已中止，此条尚未提交' }));
                     continue;
+                }
+                if (this.target.backend === 'snowluma' && operation.segments.some(segment => segment.type === 'face')) {
+                    try { await qqFaceService.validate(this.target, operation.segments.filter(segment => segment.type === 'face').map(segment => text(segment.data.id)), (...args) => this.transport.call(...args)); }
+                    catch (error) {
+                        if (epoch === this.epoch) {
+                            const failed = settleSend(this.snapshot.account, requestId, { state: 'failed', error: errorText(error) });
+                            const message = failed.messages.find(row => row.requestId === requestId);
+                            this.account(!retryKey && message ? setDraft(failed, key, recoverDraft(message, failed.drafts[key] ?? EMPTY_DRAFT)) : failed);
+                        }
+                        continue;
+                    }
+                    if (epoch !== this.epoch) continue;
                 }
                 try {
                     const response = await this.transport.call(this.target.bot_id, operation.action, operation.params, requestId);
@@ -295,26 +375,134 @@ export class ChatAccountStore {
                         this.account(settleSend(this.snapshot.account, requestId, { state: unknown ? 'unknown' : 'failed', error: [copy.title, copy.detail].filter(Boolean).join('：') }));
                     } else {
                         const result = response.result.outcome;
-                        this.account(settleSend(this.snapshot.account, requestId, { state: result.ok ? 'sent' : 'failed', id: id(record(result.data).message_id) || undefined, fileId: operation.action.startsWith('upload_') ? id(record(result.data).file_id) || undefined : undefined, error: result.ok ? undefined : result.wording || result.message || `发送失败（${result.retcode}）` }));
+                        if (!result.ok && /system face.*(?:absent|incomplete)/i.test(result.wording || result.message || '')) qqFaceService.invalidate(this.target);
+                        this.account(settleSend(this.snapshot.account, requestId, { state: result.ok ? 'sent' : 'failed', id: id(record(result.data).message_id) || undefined, fileId: operation.action.startsWith('upload_') ? id(record(result.data).file_id) || undefined : undefined, error: result.ok ? undefined : `${result.wording || result.message || '发送失败'}（错误码 ${result.retcode}）` }));
                     }
                 } catch (error) { if (epoch === this.epoch) this.account(settleSend(this.snapshot.account, requestId, { state: 'unknown', error: errorText(error) })); }
             }
-        } finally { if (this.sends.get(key) === epoch) this.sends.delete(key); }
+        } finally {
+            if (this.sends.get(key) === epoch) this.sends.delete(key);
+            if (this.releaseWhenIdle && !this.isSending() && !this.hasViewers()) void releaseChatAccount(this).catch(() => {});
+        }
+    }
+    isSending() { return this.sends.size > 0; }
+    hasViewers() { return this.listeners.size > 0; }
+    async flushForRelease() {
+        if (this.restoreRequest) await this.restoreRequest;
+        await this.flushArchive();
+        if (this.snapshot.archiveError) throw new Error(this.snapshot.archiveError);
+    }
+    scroll(key: string, value?: number) { if (value !== undefined) this.positions[key] = Math.max(0, value); return this.positions[key]; }
+    readingPosition(key: string, value?: ChatReadingPosition): ChatReadingPosition | undefined { if (value) this.readingPositions[key] = value; return this.readingPositions[key]; }
+    initialReadingPosition(key: string): ChatReadingPosition | undefined { return this.initialReadingPositions[key]; }
+    finishInitialReading(key: string, position: ChatReadingPosition) { if (this.initialReadingPositions[key] === position) delete this.initialReadingPositions[key]; }
+    captureTimeline(key: string, read: () => ChatReadingPosition | undefined) {
+        this.timelineReaders.set(key, read);
+        return () => { if (this.timelineReaders.get(key) !== read) return; const value = read(); if (value) this.readingPosition(key, value); this.timelineReaders.delete(key); };
+    }
+    view(): ChatAccountView {
+        for (const [key, read] of this.timelineReaders) { const value = read(); if (value) this.readingPosition(key, value); }
+        const account = this.snapshot.account;
+        return { botId: this.target.bot_id, selfId: account.selfId, active: account.active, scroll: { ...this.positions }, reading: { ...this.readingPositions }, drafts: Object.fromEntries(Object.entries(account.drafts).map(([key, draft]) => [key, { ...draft, mentions: draft.mentions ?? [], attachments: draft.attachments.map(a => a.type === 'face' ? a : a.type === 'image' ? { ...a, type: 'image' as const, subType: a.subType ?? null } : { ...a, type: 'file' as const }) }])) };
+    }
+    restoreView(view: ChatAccountView) {
+        if (view.botId !== this.target.bot_id || view.selfId !== this.snapshot.account.selfId) return;
+        const drafts = Object.fromEntries(Object.entries(view.drafts).map(([key, draft]) => [key, { ...draft, attachments: draft.attachments.map(a => a.type === 'image' ? { ...a, subType: a.subType === 1 ? 1 as const : undefined } : a) }]));
+        this.positions = { ...view.scroll };
+        this.readingPositions = { ...view.reading };
+        const initial = view.active && view.reading?.[view.active];
+        this.initialReadingPositions = initial && view.active ? { [view.active]: initial } : {};
+        this.account({ ...this.snapshot.account, active: view.active as SessionKey | null, drafts });
     }
 }
 
 const accounts = new Map<string, ChatAccountStore>();
+const views = new Map<string, ChatAccountView>();
+let selectedChatBot: string | null = null;
+let viewRevision = 0;
+let handoffInProgress = false;
+let viewSaveQueue: Promise<void> = Promise.resolve();
+let viewLoadRequest: Promise<ChatViewState> | null = null;
+export const selectChatBot = (bot: string) => { selectedChatBot = bot; };
+export const getChatSelectedBot = () => selectedChatBot;
 export function chatAccount(target: DebugTarget): ChatAccountStore {
     const key = accountKey(target.bot_id, String(target.qq_id));
     let store = accounts.get(key);
-    if (!store) { store = new ChatAccountStore(target); accounts.set(key, store); }
+    if (!store) { store = new ChatAccountStore(target); store.viewRevision = viewRevision; const view = views.get(key); if (view) store.restoreView(view); accounts.set(key, store); }
     store.target = target; return store;
 }
 export function reconcileChatAccounts(targets: DebugTarget[]) {
     const live = new Set(targets.map(t => accountKey(t.bot_id, String(t.qq_id))));
+    for (const key of views.keys()) if (!live.has(key)) views.delete(key);
     for (const [key, store] of accounts) {
-        if (!live.has(key)) { void store.disconnect(); accounts.delete(key); }
+        if (!live.has(key)) { void store.disconnect().then(() => chatDesktopService.releaseAccount(store.target.bot_id, store.getSnapshot().account.selfId)).catch(() => {}); accounts.delete(key); }
         else { const target = targets.find(t => t.bot_id === store.target.bot_id); if (target) store.target = target; }
     }
 }
 export function useChatSnapshot(store: ChatAccountStore) { return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot); }
+
+export function restoreChatView(view: ChatViewState) {
+    viewRevision = view.revision;
+    views.clear();
+    for (const account of view.accounts) views.set(accountKey(account.botId, account.selfId), account);
+    selectedChatBot = view.selectedBot;
+    for (const [key, store] of accounts) {
+        store.viewRevision = viewRevision;
+        const saved = views.get(key);
+        if (saved) store.restoreView(saved);
+    }
+}
+export function loadChatView() {
+    if (viewLoadRequest) return viewLoadRequest;
+    const request = viewSaveQueue.catch(() => {}).then(() => chatDesktopService.loadView(true));
+    viewLoadRequest = request;
+    void request.finally(() => { if (viewLoadRequest === request) viewLoadRequest = null; }).catch(() => {});
+    return request;
+}
+const withoutReading = (view: ChatAccountView): ChatAccountView => ({ ...view, reading: {}, scroll: {} });
+function savedView(selectedBot: string | null, keepReading = false): ChatViewState {
+    const saved = [...views.values()].filter(view => view.active || Object.values(view.drafts).some(d => d.text || d.attachments.length));
+    if (saved.length > 8) throw new Error('草稿账号超过 8 个，请先清理不再使用的草稿');
+    return structuredClone({ v: 1, revision: viewRevision, selectedBot, accounts: saved.map(view => keepReading && view.botId === selectedBot ? view : withoutReading(view)) });
+}
+function persistView(view: ChatViewState) {
+    const saved = viewSaveQueue.catch(() => {}).then(() => chatDesktopService.saveView(view));
+    viewSaveQueue = saved;
+    return saved;
+}
+export function releaseChatAccount(store: ChatAccountStore): Promise<void> {
+    const key = accountKey(store.target.bot_id, store.getSnapshot().account.selfId);
+    store.releaseWhenIdle = true;
+    if (store.viewRevision === viewRevision) views.set(key, handoffInProgress ? store.view() : withoutReading(store.view()));
+    if (store.releaseRequest) return store.releaseRequest;
+    let saving = Promise.resolve();
+    if (!handoffInProgress && store.viewRevision === viewRevision) {
+        try { saving = persistView(savedView(selectedChatBot)); } catch (error) { return Promise.reject(error); }
+    }
+    const release = Promise.resolve().then(async () => {
+        await saving;
+        if (store.isSending() || store.hasViewers()) return;
+        await store.flushForRelease();
+        if (store.hasViewers()) return;
+        await store.disconnect();
+        await store.flushForRelease();
+        if (!store.hasViewers() && accounts.get(key) === store) accounts.delete(key);
+        await chatDesktopService.releaseAccount(store.target.bot_id, store.getSnapshot().account.selfId);
+    }).finally(() => { if (store.releaseRequest === release) store.releaseRequest = null; });
+    store.releaseRequest = release;
+    return release;
+}
+export async function prepareChatHandoff(selectedBot: string | null, unmount?: () => void, keepReading = true) {
+    // 控制台未挂聊天页时，runtime 中可能是上次独立窗留下的新草稿。
+    if (!accounts.size) { unmount?.(); await chatDesktopService.flush(); return; }
+    if ([...accounts.values()].some(store => store.isSending())) throw new Error('消息仍在发送，请稍后切换窗口');
+    for (const [key, store] of accounts) views.set(key, store.view());
+    const view = savedView(selectedBot, keepReading);
+    handoffInProgress = true;
+    try {
+        unmount?.();
+        await persistView(view);
+        await Promise.all([...accounts.values()].map(releaseChatAccount));
+        await chatDesktopService.flush();
+    } finally { handoffInProgress = false; }
+}

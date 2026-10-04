@@ -72,6 +72,13 @@ impl DebugManager {
                 // 接收器可能正因为 WebUI 还没就绪在等重连，不必等满退避
                 self.hurry_internal_receiver(bot_id);
             }
+            DomainEvent::HostConnectionRecovered { server_id, .. } => {
+                for view in self.bots.list_bots().await {
+                    if matches!(&view.config.bot.runtime_target, ncd_domain::RuntimeTarget::Server(id) if id == server_id) {
+                        self.hurry_internal_receiver(&view.bot_id());
+                    }
+                }
+            }
             _ => {}
         }
     }

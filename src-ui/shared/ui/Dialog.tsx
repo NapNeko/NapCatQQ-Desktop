@@ -208,6 +208,7 @@ function applyOutsideDismissGuard(
 interface DialogContentProps
     extends Omit<ComponentPropsWithoutRef<typeof RadixDialog.Content>, 'forceMount'> {
     hideClose?: boolean;
+    layer?: number;
     /// 预设宽度；高度在打开期间随内容变化由 GSAP 过渡。
     size?: DialogSize;
     /// false = 点遮罩也不关，只能点关闭按钮 / Esc（表单弹窗推荐）。
@@ -225,6 +226,7 @@ export const DialogContent = forwardRef<
             className,
             children,
             hideClose,
+            layer = 0,
             size = 'md',
             dismissOnOutsideClick = true,
             onExited,
@@ -245,11 +247,11 @@ export const DialogContent = forwardRef<
             <RadixDialog.Portal forceMount>
                 <GsapPresence visible={open} onEnter={overlayEnter} onExit={overlayExit}>
                     <RadixDialog.Overlay asChild forceMount>
-                        <OverlayBody />
+                        <OverlayBody layer={layer} />
                     </RadixDialog.Overlay>
                 </GsapPresence>
                 <div
-                    style={{ isolation: 'isolate' }}
+                    style={{ isolation: 'isolate', zIndex: 50 + layer * 20 }}
                     className="pointer-events-none fixed inset-0 z-50 overflow-y-auto"
                 >
                     <div className="flex min-h-full items-center justify-center p-6">
@@ -301,12 +303,12 @@ export const DialogContent = forwardRef<
 );
 DialogContent.displayName = 'DialogContent';
 
-const OverlayBody = forwardRef<HTMLDivElement, { className?: string }>(
-    ({ className }, ref) => (
+const OverlayBody = forwardRef<HTMLDivElement, { className?: string; layer?: number }>(
+    ({ className, layer = 0 }, ref) => (
         <div
             ref={ref}
             {...{ [OVERLAY_ATTR]: '' }}
-            style={{ visibility: 'hidden', opacity: 0 }}
+            style={{ visibility: 'hidden', opacity: 0, zIndex: 40 + layer * 20 }}
             className={cn(
                 'fixed inset-0 z-40 bg-black/40',
                 className,

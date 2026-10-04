@@ -1,5 +1,6 @@
 // 浏览器聊天预览；独立事件流不受调试台 mock 的停止操作影响。
 import { onebotDebugMock } from './onebot-debug.mock';
+import { QQ_FACE_FALLBACK } from '../../domain/chat/qqFaces';
 import type { DebugCallRequest } from '../generated/debug/DebugCallRequest';
 import type { DebugCallResponse } from '../generated/debug/DebugCallResponse';
 import type { DebugEventBatch } from '../generated/debug/DebugEventBatch';
@@ -61,6 +62,7 @@ export const chatMock = {
         else if (request.action === 'get_group_info') data = { ...(groups.find(group => String(group.group_id) === String(params.group_id)) ?? { group_id: params.group_id, group_name: '预览群', member_count: 2 }), max_member_count: 500, group_create_time: baseTime - 86400 * 900, group_remark: '一起讨论与记录', group_level: 3 };
         else if (request.action === 'get_stranger_info') data = { ...(friends.find(friend => String(friend.user_id) === String(params.user_id)) ?? { user_id: params.user_id, nickname: '预览好友' }), sex: 'female', age: 25, qqLevel: 36, long_nick: '认真生活，也认真记录。', country: '中国', province: '浙江', city: '杭州' };
         else if (request.action === 'fetch_custom_face') data = ['https://koishi.js.org/QFace/assets/qq_emoji/14/png/14.png', 'https://koishi.js.org/QFace/assets/qq_emoji/277/png/277.png'];
+        else if (request.action === 'fetch_sys_faces') data = { packs: [{ pack_name: 'QQ 表情', emojis: QQ_FACE_FALLBACK.map(face => ({ q_sid: face.id, q_des: face.name, is_super: false })) }] };
         else if (request.action === 'get_forward_msg') data = { messages: String(params.id ?? params.message_id) === 'preview-nested' ? [{ sender: { user_id: 10022, nickname: '阿澄' }, time: baseTime, message: [{ type: 'text', data: { text: '这是一条嵌套转发中的消息。' } }, { type: 'face', data: { id: '14' } }] }] : [
             { sender: { user_id: 10021, nickname: '小林' }, time: baseTime - 120, message: [{ type: 'text', data: { text: '这几条消息放在一起，回看更方便。' } }] },
             { sender: { user_id: 10022, nickname: '阿澄' }, time: baseTime - 60, message: [{ type: 'forward', data: { id: 'preview-nested' } }] },

@@ -2,6 +2,7 @@
 import { chatService } from './chat.service';
 import { id, record, text } from '../domain/chat/model';
 import { normalizeMessage, type Segment } from '../domain/debug/segments';
+import { isLocalFileToken, LOCAL_FILE_PREFIX } from '../domain/debug/streamActions';
 import { debugErrorCopy } from '../domain/debug/errorCopy';
 import type { DebugCallResponse } from '../ipc/generated/debug/DebugCallResponse';
 import type { DebugTarget } from '../ipc/generated/debug/DebugTarget';
@@ -27,6 +28,13 @@ function base64Payload(result: Record<string, unknown>): string {
     }
     return '';
 }
+function imageBytes(result: Record<string, unknown>): string {
+    const value = base64Payload(result);
+    if (!value) return '';
+    if (value.length > 16 * 1024 * 1024 || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) throw new Error('图片内容不完整或过大');
+    const mime = value.startsWith('/9j/') ? 'image/jpeg' : value.startsWith('R0lGOD') ? 'image/gif' : value.startsWith('UklGR') ? 'image/webp' : 'image/png';
+    return `data:${mime};base64,${value}`;
+}
 function videoMime(name: string): string {
     const extension = name.toLowerCase().match(/\.([a-z0-9]+)(?:$|[?#])/i)?.[1];
     return extension === 'webm' ? 'video/webm' : extension === 'mov' ? 'video/quicktime' : extension === 'ogg' || extension === 'ogv' ? 'video/ogg' : extension === 'm3u8' ? 'application/vnd.apple.mpegurl' : 'video/mp4';
@@ -43,26 +51,45 @@ function forwardNodes(value: unknown): ForwardNode[] {
         return { senderId, name: text(sender.card) || text(sender.nickname) || text(data.nickname) || text(data.name) || senderId || '未知发送者', time: typeof data.time === 'number' ? data.time * 1000 : undefined, segments };
     });
 }
-export function createChatMediaService(call: typeof chatService.call = (...args) => chatService.call(...args)) {
+export function createChatMediaService(call: typeof chatService.call = (...args) => chatService.call(...args), readLocal: (path: string) => Promise<string> = path => chatService.readLocalImage(path)) {
+    const pendingImages = new Map<string, Promise<string>>();
+    // 自己刚发的图以本机字节为准；同步判源，无本地来源时不改变原有的调用时序。
+    const localToken = (data: Record<string, unknown>): string => [text(data.local_file), text(data.file)].find(value => value.startsWith('base64://') || isLocalFileToken(value)) ?? '';
+    const resolveImage = async (target: DebugTarget, data: Record<string, unknown>, refresh: boolean): Promise<string> => {
+        // 文件名可能在不同消息中复用；完整资源地址能避免 get_image 命中另一张同名图。
+        const identifiers = [...new Set([text(data.url), text(data.file_id), text(data.file)].filter(value => value && value !== '0'))];
+        if (!identifiers.length) throw new Error('这张图片缺少文件标识');
+        let failure: unknown = new Error('协议未返回可播放图片地址');
+        for (const file of identifiers) {
+            try {
+                const result = record(dataOf(await call(target.bot_id, 'get_image', { file })));
+                const bytes = imageBytes(result);
+                if (bytes) return bytes;
+                const url = playableUrl(result.url) || playableUrl(result.file);
+                if (url) return url;
+            } catch (error) { failure = error; }
+        }
+        // 刷新不能回退到已知失效的签名地址。
+        if (!refresh) { const direct = playableUrl(data.url) || playableUrl(data.file); if (direct) return direct; }
+        throw failure;
+    };
     return {
     async image(target: DebugTarget, data: Record<string, unknown>, refresh = false): Promise<string> {
-        const direct = playableUrl(data.url) || playableUrl(data.file);
+        const token = localToken(data);
+        if (token) {
+            try {
+                const raw = token.startsWith('base64://') ? token : await readLocal(token.slice(LOCAL_FILE_PREFIX.length));
+                const bytes = imageBytes({ base64: raw });
+                if (bytes) return bytes;
+            } catch { /* 本机文件可能已被移动，回退协议链路 */ }
+        }
+        const direct = playableUrl(data.url) || playableUrl(data.file) || imageBytes({ file: data.file });
         if (direct && !refresh) return direct;
-        const file = text(data.file_id) || text(data.file) || text(data.url);
-        if (!file) {
-            if (direct) return direct;
-            throw new Error('这张图片缺少文件标识');
-        }
-        const result = record(dataOf(await call(target.bot_id, 'get_image', { file })));
-        const url = playableUrl(result.url) || playableUrl(result.file);
-        if (url) return url;
-        const base64 = base64Payload(result);
-        if (base64 && /^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
-            if (base64.length > 16 * 1024 * 1024) throw new Error('媒体内容过大，无法播放');
-            return `data:image/png;base64,${base64}`;
-        }
-        if (direct) return direct;
-        throw new Error('协议未返回可播放图片地址');
+        const key = JSON.stringify([target.bot_id, target.qq_id, refresh, data.file_id, data.file, data.url]);
+        const existing = pendingImages.get(key); if (existing) return existing;
+        const request = resolveImage(target, data, refresh);
+        if (pendingImages.size < 256) pendingImages.set(key, request);
+        try { return await request; } finally { if (pendingImages.get(key) === request) pendingImages.delete(key); }
     },
     async forward(target: DebugTarget, data: Record<string, unknown>): Promise<ForwardNode[]> {
         const inline = data.content ?? data.messages;
@@ -112,9 +139,17 @@ export function createChatMediaService(call: typeof chatService.call = (...args)
         return value;
     },
     async favorites(target: DebugTarget): Promise<string[]> {
-        const result = dataOf(await call(target.bot_id, 'fetch_custom_face', { count: 200 }));
-        if (!Array.isArray(result)) throw new Error('此协议未返回收藏表情列表');
-        return [...new Set(result.filter((url): url is string => typeof url === 'string' && /^https?:\/\//i.test(url)))];
+        // 两端接口均为前 N 项而非游标分页；扩大窗口直到返回不足一页。
+        for (let count = 256; count <= 65_536; count *= 2) {
+            const result = dataOf(await call(target.bot_id, 'fetch_custom_face', { count }));
+            if (!Array.isArray(result)) throw new Error('此协议未返回收藏表情列表');
+            if (result.length < count) {
+                const urls = [...new Set(result.filter((url): url is string => typeof url === 'string' && /^https?:\/\//i.test(url)))];
+                // Faceroam 的存储顺序与 QQ 面板相反；NapCat 已返回面板顺序。
+                return target.backend === 'snowluma' ? urls.reverse() : urls;
+            }
+        }
+        throw new Error('收藏表情过多，无法完整读取');
     },
     };
 }

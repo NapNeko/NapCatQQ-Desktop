@@ -87,6 +87,8 @@ export interface StickToBottom {
     jumpToLatest: (smooth: boolean) => void;
     /** 程序要滚到中间某条（跳到被回复的消息）：先放开贴底，别被随后来的新条目拽回去 */
     detach: () => void;
+    isFollowing: () => boolean;
+    canPinToEnd: () => boolean;
 }
 
 export function useStickToBottom<T extends Keyed>(opts: {
@@ -101,11 +103,15 @@ export function useStickToBottom<T extends Keyed>(opts: {
     filterToken: string;
     /** 允许进场动画（动画设置打开且不是减少动画） */
     animate: boolean;
+    initialDetached?: boolean;
+    reattachOnIntent?: boolean;
+    followUntilUserScroll?: boolean;
 }): StickToBottom {
     const { scrollRef, virtualizer, items, memoryKey, resetToken, filterToken, animate } = opts;
 
     // 记着位置（之前翻上去过）就从那里开始，否则从底部开始
-    const stickRef = useRef<boolean>(memoryKey === null || recallScroll(memoryKey) === undefined);
+    const stickRef = useRef<boolean>(!opts.initialDetached && (memoryKey === null || recallScroll(memoryKey) === undefined));
+    const downwardIntent = useRef(false);
     /** 用户明确往上翻了：几何上还在 120px 以内也不贴底 */
     const detachedRef = useRef(!stickRef.current);
     const autoRef = useRef(false);
@@ -136,12 +142,12 @@ export function useStickToBottom<T extends Keyed>(opts: {
             autoRef.current = false;
         }
         // 放开之后：滚到最底，或者自己往下滚回 120px 以内，才重新贴底
-        if (detachedRef.current && (d <= REATTACH_PX || (movedDown && d < STICK_PX))) detachedRef.current = false;
-        const stuck = !detachedRef.current && d < STICK_PX;
+        if (detachedRef.current && (!opts.reattachOnIntent || downwardIntent.current) && (d <= REATTACH_PX || (movedDown && d < STICK_PX))) detachedRef.current = false;
+        const stuck = !detachedRef.current && (opts.followUntilUserScroll && stickRef.current || d < STICK_PX);
         stickRef.current = stuck;
         if (stuck) setUnseen(0);
         setAway(!stuck && d > el.clientHeight);
-    }, [scrollRef]);
+    }, [scrollRef, opts.reattachOnIntent, opts.followUntilUserScroll]);
 
     // 平滑滚到底：不用 virtualizer 自带的 smooth——它在平滑滚动途中不量路过的行，
     // 滚得远时中途的行会叠在一起，没滚到头就停下的话一直叠着。这里远的先瞬移到离底一屏，
@@ -154,9 +160,14 @@ export function useStickToBottom<T extends Keyed>(opts: {
     useEffect(() => clearAutoTimer, [clearAutoTimer]);
 
     const snapToEnd = useCallback(() => {
+        if (opts.followUntilUserScroll) {
+            const element = scrollRef.current;
+            if (element) element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+            return;
+        }
         const n = virtualizer.options.count;
         if (n > 0) virtualizer.scrollToIndex(n - 1, { align: 'end' });
-    }, [virtualizer]);
+    }, [virtualizer, scrollRef, opts.followUntilUserScroll]);
 
     const finishAuto = useCallback(() => {
         clearAutoTimer();
@@ -257,6 +268,11 @@ export function useStickToBottom<T extends Keyed>(opts: {
         if (appended > 0) setUnseen((n) => n + appended);
     }, [items, resetToken, filterToken, memoryKey, animate, scrollToEnd]);
 
+    // 原生会话等这一帧行高提交后贴底；虚拟器的滚动重试不能继续接管用户上翻。
+    useLayoutEffect(() => {
+        if (opts.followUntilUserScroll && stickRef.current && !autoRef.current) snapToEnd();
+    });
+
     // 从记住的位置开始时：内容可能已经不够长、恢复后其实就在底部，下一帧按实际位置再判一次
     useLayoutEffect(() => {
         if (stickRef.current) return;
@@ -269,6 +285,7 @@ export function useStickToBottom<T extends Keyed>(opts: {
     /** 用户自己动了滚动：打断正在进行的自动滚动；往上、而且真能往上滚的话，连贴底一起放开 */
     const userIntent = useCallback(
         (up: boolean) => {
+            downwardIntent.current = !up;
             autoRef.current = false;
             clearAutoTimer();
             if (!up) return;
@@ -322,6 +339,7 @@ export function useStickToBottom<T extends Keyed>(opts: {
     );
 
     const detach = useCallback(() => {
+        downwardIntent.current = false;
         stickRef.current = false;
         detachedRef.current = true;
         autoRef.current = false;
@@ -334,5 +352,7 @@ export function useStickToBottom<T extends Keyed>(opts: {
         return pendingEnter.current.delete(key);
     }, []);
 
-    return { unseen, away, enterFrom, takeEnter, handlers, jumpToLatest, detach };
+    const isFollowing = useCallback(() => stickRef.current, []);
+    const canPinToEnd = useCallback(() => stickRef.current && !autoRef.current, []);
+    return { unseen, away, enterFrom, takeEnter, handlers, jumpToLatest, detach, isFollowing, canPinToEnd };
 }

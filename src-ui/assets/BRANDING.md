@@ -15,4 +15,6 @@ pnpm icons:gen
 
 侧栏、启动页、初始化面板、关于页和托盘面板共用 `logo*.png`。`cat_girl.svg` 是独立动画插画，`napcat.png` 是框架标识，不属于这套应用图标。
 
+首页 NapCat 卡片使用原猫娘图形的 `napcat-symbol-{32,48,72}.png`，与 Desktop 主图分开。通过 `pnpm icons:gen --napcat-symbol-only --dry-run` 预览，再去掉 `--dry-run` 重建；来源为本仓库图标更新前的 Git 原图。
+
 资源先在忽略入库的 `.cache/app-icons-*` 临时目录中生成，全部成功后才逐文件替换；内容一致的文件不重写，避免 Windows 构建器或预览器占用图标时原位覆盖失败。

@@ -42,6 +42,7 @@ async-trait = "0.1"
 semver = { version = "1", features = ["serde"] }
 sha2 = "0.10"
 hex = "0.4"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
