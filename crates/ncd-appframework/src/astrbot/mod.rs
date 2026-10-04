@@ -365,6 +365,13 @@ impl AppFrameworkAdapter for AstrBotAdapter {
         true
     }
 
+    fn desktop_session_env_keys(&self) -> Option<(&'static str, &'static str)> {
+        Some((
+            manifest::ENV_DESKTOP_MANAGED,
+            manifest::ENV_DESKTOP_SESSION_SECRET,
+        ))
+    }
+
     async fn write_live_config(
         &self,
         host: &dyn Host,
@@ -372,6 +379,7 @@ impl AppFrameworkAdapter for AstrBotAdapter {
         loopback_port: u16,
         username: &str,
         password: &str,
+        desktop_secret: Option<&str>,
         config: &AppInstanceConfig,
         conf_id: &str,
     ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
@@ -393,6 +401,7 @@ impl AppFrameworkAdapter for AstrBotAdapter {
                 port: loopback_port,
                 username: username.to_string(),
                 password: password.to_string(),
+                desktop_secret: desktop_secret.map(str::to_string),
                 conf_id: if conf_id.trim().is_empty() {
                     "default".into()
                 } else {

@@ -17,20 +17,27 @@ pub struct AstrBotSession {
     pub instance_id: String,
     pub port: u16,
     pub username: String,
-    /// None = 桌面端没记住密码；除了状态探测以外都会被拒
+    /// None = 桌面端没记住密码；有托管会话密钥时也能登
     pub password: Option<String>,
+    /// 上游 v4.28+ 的桌面托管会话密钥；只有实例由桌面端带 env 拉起过才有
+    pub desktop_secret: Option<String>,
 }
 
 impl AstrBotSession {
     fn password(&self) -> Result<&str, AppFrameworkError> {
-        self.password
+        if let Some(p) = self.password.as_deref().filter(|s| !s.is_empty()) {
+            return Ok(p);
+        }
+        if self
+            .desktop_secret
             .as_deref()
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| {
-                AppFrameworkError::DashboardAuth(
-                    "没有可用的 WebUI 密码。到连接页写下密码后再试".into(),
-                )
-            })
+            .is_some_and(|s| !s.is_empty())
+        {
+            return Ok("");
+        }
+        Err(AppFrameworkError::DashboardAuth(
+            "没有可用的 WebUI 密码。到连接页写下密码后再试".into(),
+        ))
     }
 }
 
@@ -138,6 +145,7 @@ impl DashboardRuntime {
             session.port,
             &session.username,
             session.password()?,
+            session.desktop_secret.as_deref(),
         )
         .await
     }
@@ -152,6 +160,7 @@ impl AstrBotRuntimeApi for DashboardRuntime {
             session.port,
             &session.username,
             session.password.as_deref(),
+            session.desktop_secret.as_deref(),
         )
         .await
     }

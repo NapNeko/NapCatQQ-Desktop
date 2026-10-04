@@ -20,6 +20,8 @@ pub struct LiveTarget {
     pub port: u16,
     pub username: String,
     pub password: String,
+    /// 上游 v4.28+ 的桌面托管会话密钥；有它时 password 可以为空
+    pub desktop_secret: Option<String>,
     pub conf_id: String,
 }
 
@@ -37,7 +39,13 @@ pub async fn write_live(
         return Err(AppFrameworkError::ConfigInvalid(issues));
     }
     let client = DashboardClient::connect(sessions, &target.instance_id, "127.0.0.1", target.port)?;
-    client.login(&target.username, &target.password).await?;
+    client
+        .login(
+            &target.username,
+            &target.password,
+            target.desktop_secret.as_deref(),
+        )
+        .await?;
 
     let conf_id = if target.conf_id.trim().is_empty() {
         "default"
@@ -178,7 +186,7 @@ mod tests {
         let port: u16 = server.uri().rsplit(':').next().unwrap().parse().unwrap();
         let sessions = Arc::new(DashboardSessions::default());
         let client = DashboardClient::connect(&sessions, instance_id, "127.0.0.1", port).unwrap();
-        client.login("astrbot", "Abcdefg1").await.unwrap();
+        client.login("astrbot", "Abcdefg1", None).await.unwrap();
         client
     }
 

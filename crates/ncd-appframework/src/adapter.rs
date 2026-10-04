@@ -193,6 +193,13 @@ pub trait AppFrameworkAdapter: Send + Sync {
         args: &LaunchArgs,
     ) -> Result<HostCommand, AppFrameworkError>;
 
+    /// 上游支持「桌面托管会话」免密登录（AstrBot v4.28+ 的 desktop-session）：返回
+    /// （托管开关 env 键, 会话密钥 env 键），编排层启动实例时注入，代登录优先走它。
+    /// None = 没这套机制，代登录只能用密码
+    fn desktop_session_env_keys(&self) -> Option<(&'static str, &'static str)> {
+        None
+    }
+
     /// 终端开在实例目录时接上的环境（PATH 前缀、变量、提示、常用命令）。默认只进目录
     async fn terminal_profile(
         &self,
@@ -302,6 +309,7 @@ pub trait AppFrameworkAdapter: Send + Sync {
         _loopback_port: u16,
         _username: &str,
         _password: &str,
+        _desktop_secret: Option<&str>,
         _config: &AppInstanceConfig,
         _conf_id: &str,
     ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
