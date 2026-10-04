@@ -101,6 +101,8 @@ use webui::WebUiEndpoint;
 /// SecretStore 里 WebUI 账号的键后缀（`app:<instance_id>:<suffix>`）；明文只存这里，实例记录不带
 const SECRET_WEBUI_USERNAME: &str = "webui_username";
 const SECRET_WEBUI_PASSWORD: &str = "webui_password";
+/// 桌面托管会话密钥（上游 desktop-session）：启动实例时注入 env，代登录免密码
+const SECRET_DESKTOP_SESSION: &str = "desktop_session";
 
 fn secret_key(instance_id: &str, suffix: &str) -> String {
     format!("app:{instance_id}:{suffix}")
@@ -337,11 +339,51 @@ impl AppManager {
         }
     }
 
+    /// 启动时注入过的桌面托管会话密钥；框架不支持或还没由桌面端拉起过为 None
+    pub(super) fn desktop_session_secret(&self, instance: &AppInstance) -> Option<String> {
+        self.remembered_secret(instance, SECRET_DESKTOP_SESSION)
+    }
+
+    /// 支持桌面托管会话的框架（env 键名是上游事实，由适配器给）：取或建每实例密钥，随启动注入
+    pub(super) fn desktop_session_launch_args(
+        &self,
+        instance: &AppInstance,
+        adapter: &dyn AppFrameworkAdapter,
+    ) -> LaunchArgs {
+        let Some((managed_key, secret_key)) = adapter.desktop_session_env_keys() else {
+            return LaunchArgs::default();
+        };
+        let secret = self
+            .desktop_session_secret(instance)
+            .filter(|s| s.len() >= 32)
+            .unwrap_or_else(|| {
+                // 上游 DESKTOP_SESSION_SECRET_MIN_LENGTH 是 32
+                let s: String = rand::thread_rng()
+                    .sample_iter(Alphanumeric)
+                    .take(48)
+                    .map(char::from)
+                    .collect();
+                self.remember_secret(&instance.id, SECRET_DESKTOP_SESSION, &s);
+                s
+            });
+        LaunchArgs {
+            extra_env: vec![
+                (managed_key.to_string(), "1".to_string()),
+                (secret_key.to_string(), secret),
+            ],
+            ..LaunchArgs::default()
+        }
+    }
+
     fn forget_secrets(&self, instance_id: &AppInstanceId) {
         let Some(store) = self.secrets.as_ref() else {
             return;
         };
-        for suffix in [SECRET_WEBUI_USERNAME, SECRET_WEBUI_PASSWORD] {
+        for suffix in [
+            SECRET_WEBUI_USERNAME,
+            SECRET_WEBUI_PASSWORD,
+            SECRET_DESKTOP_SESSION,
+        ] {
             if let Err(e) = store.delete(&secret_key(instance_id.as_str(), suffix)) {
                 tracing::debug!(instance = instance_id.as_str(), suffix, error = %e, "drop app secret");
             }

@@ -737,9 +737,10 @@ impl AppManager {
         let host = self.resolve_host(&instance.host_id).await?;
         let spec = self.component_spec(host.as_ref(), &instance);
         let log_file = launch_log_file(adapter.as_ref(), &instance);
+        let launch_args = self.desktop_session_launch_args(&instance, adapter.as_ref());
         // 起不来的原因（缺 venv、条款没同意）也要落到 last_error：开机自启没人盯着看报错条
         let started = match adapter
-            .launch_command(host.as_ref(), &spec, &LaunchArgs::default())
+            .launch_command(host.as_ref(), &spec, &launch_args)
             .await
         {
             Ok(command) => {
