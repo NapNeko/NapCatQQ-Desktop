@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -17,8 +18,8 @@ use crate::data_paths::{DataPaths, MAX_JSON_BAK_FILES, MAX_MIGRATION_BACKUPS};
 pub struct LocalConfigStore {
     paths: DataPaths,
     /// 同时来的几笔写会碰同一个文件（批量启动 NapCat Bot 时每个都写共享的 napcat.json），
-    /// 同一秒内还共用一个备份目录：这边刚看到文件在，那边已经把它挪去当备份，挪或拷时找不到文件；
-    /// 两边往备份目录拷同名快照也会撞上占用。写一律排队，克隆出来的共用这一把
+    /// 这边刚看到文件在，那边已经把它挪去当备份，挪或拷时找不到文件。
+    /// 写一律排队，克隆出来的共用这一把；每笔事务另建独立的备份目录
     write_lock: Arc<Mutex<()>>,
 }
 
@@ -115,14 +116,23 @@ impl LocalConfigStore {
     }
 
     fn create_backup_root(&self) -> Result<PathBuf, ConfigError> {
-        let id = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let backup = self.backup_dir().join(format!("migration-{}", id));
-        fs::create_dir_all(&backup).map_err(to_io_error)?;
-        prune_migration_backups(&self.backup_dir(), MAX_MIGRATION_BACKUPS);
-        Ok(backup)
+        let backup_dir = self.backup_dir();
+        fs::create_dir_all(&backup_dir).map_err(to_io_error)?;
+        loop {
+            let id = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let backup = backup_dir.join(format!("migration-{id}"));
+            match fs::create_dir(&backup) {
+                Ok(()) => {
+                    prune_migration_backups(&backup_dir, MAX_MIGRATION_BACKUPS);
+                    return Ok(backup);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(to_io_error(error)),
+            }
+        }
     }
 
     fn snapshot_existing(
@@ -134,10 +144,13 @@ impl LocalConfigStore {
             return Ok(None);
         }
 
-        let file_name = path.file_name().ok_or_else(|| {
-            ConfigError::InvalidPayloadDetail(format!("missing file name: {}", path.display()))
-        })?;
-        let target = backup_root.join(file_name);
+        let relative = path
+            .strip_prefix(self.root())
+            .map_err(|_| ConfigError::OutsideAllowedRoots(path.display().to_string()))?;
+        let target = backup_root.join(relative);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(to_io_error)?;
+        }
         fs::copy(path, &target).map_err(to_io_error)?;
         Ok(Some(target))
     }
@@ -236,6 +249,34 @@ impl ConfigStore for LocalConfigStore {
         }
         let _writes = self.lock_writes();
 
+        let mut write_paths = HashSet::new();
+        for write in &transaction.writes {
+            self.ensure_within_root(&write.path)?;
+            if !write.path.starts_with(self.root()) {
+                return Err(ConfigError::OutsideAllowedRoots(
+                    write.path.display().to_string(),
+                ));
+            }
+            let target = write
+                .path
+                .canonicalize()
+                .unwrap_or_else(|_| write.path.clone());
+            if !write_paths.insert(target) {
+                return Err(ConfigError::InvalidPayloadDetail(format!(
+                    "duplicate transaction write: {}",
+                    write.path.display()
+                )));
+            }
+        }
+        for delete in &transaction.deletes {
+            self.ensure_within_root(delete)?;
+            if !delete.starts_with(self.root()) {
+                return Err(ConfigError::OutsideAllowedRoots(
+                    delete.display().to_string(),
+                ));
+            }
+        }
+
         let backup_root = self.create_backup_root()?;
         let mut backup_files = Vec::new();
         for write in &transaction.writes {
@@ -254,7 +295,7 @@ impl ConfigStore for LocalConfigStore {
         let mut written = Vec::new();
         for write in transaction.writes {
             if let Err(error) = self.write_json_atomic_locked(&write.path, &write.payload) {
-                restore_transaction_state(&backup_root, &written, &[]);
+                restore_transaction_state(self.root(), &backup_root, &written, &[]);
                 return Err(error);
             }
             written.push(write.path);
@@ -264,7 +305,7 @@ impl ConfigStore for LocalConfigStore {
         for delete in transaction.deletes {
             if delete.exists() {
                 if let Err(error) = fs::remove_file(&delete).map_err(to_io_error) {
-                    restore_transaction_state(&backup_root, &written, &deleted);
+                    restore_transaction_state(self.root(), &backup_root, &written, &deleted);
                     return Err(error);
                 }
                 deleted.push(delete);
@@ -305,10 +346,15 @@ impl ConfigStore for LocalConfigStore {
     }
 }
 
-fn restore_transaction_state(backup_root: &Path, written: &[PathBuf], deleted: &[PathBuf]) {
+fn restore_transaction_state(
+    data_root: &Path,
+    backup_root: &Path,
+    written: &[PathBuf],
+    deleted: &[PathBuf],
+) {
     for path in deleted.iter().rev() {
-        if let Some(file_name) = path.file_name() {
-            let backup = backup_root.join(file_name);
+        if let Ok(relative) = path.strip_prefix(data_root) {
+            let backup = backup_root.join(relative);
             if backup.exists() {
                 if let Some(parent) = path.parent() {
                     let _ = fs::create_dir_all(parent);
@@ -319,8 +365,8 @@ fn restore_transaction_state(backup_root: &Path, written: &[PathBuf], deleted: &
     }
 
     for path in written.iter().rev() {
-        if let Some(file_name) = path.file_name() {
-            let backup = backup_root.join(file_name);
+        if let Ok(relative) = path.strip_prefix(data_root) {
+            let backup = backup_root.join(relative);
             if backup.exists() {
                 if let Some(parent) = path.parent() {
                     let _ = fs::create_dir_all(parent);
@@ -399,7 +445,7 @@ pub fn prune_migration_backups(backup_dir: &Path, keep: usize) {
     if dirs.len() <= keep {
         return;
     }
-    dirs.sort_by_key(|b| std::cmp::Reverse(b.0));
+    dirs.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
     for (_, path) in dirs.into_iter().skip(keep) {
         let _ = fs::remove_dir_all(path);
     }
@@ -408,6 +454,116 @@ pub fn prune_migration_backups(backup_dir: &Path, keep: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_transaction_restores_nested_same_named_files_and_removes_new_files() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = LocalConfigStore::new(temp.path());
+        let a = temp.path().join("a/settings.json");
+        let b = temp.path().join("b/settings.json");
+        let added = temp.path().join("added.json");
+        store
+            .write_json_atomic(&a, &serde_json::json!({"old": "a"}))
+            .unwrap();
+        store
+            .write_json_atomic(&b, &serde_json::json!({"old": "b"}))
+            .unwrap();
+        fs::write(temp.path().join("blocked"), "not a directory").unwrap();
+
+        let transaction = JsonTransaction::new()
+            .write(a.clone(), serde_json::json!({"new": "a"}))
+            .write(b.clone(), serde_json::json!({"new": "b"}))
+            .write(added.clone(), serde_json::json!({"new": true}))
+            .write(temp.path().join("blocked/next.json"), serde_json::json!({}));
+        assert!(store.apply_transaction(transaction).is_err());
+        assert_eq!(
+            store.read_json(&a).unwrap(),
+            serde_json::json!({"old": "a"})
+        );
+        assert_eq!(
+            store.read_json(&b).unwrap(),
+            serde_json::json!({"old": "b"})
+        );
+        assert!(!added.exists());
+    }
+
+    #[test]
+    fn transaction_rejects_duplicate_write_paths_before_changing_files() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = LocalConfigStore::new(temp.path());
+        let path = temp.path().join("settings.json");
+        store
+            .write_json_atomic(&path, &serde_json::json!({"old": true}))
+            .unwrap();
+        let transaction = JsonTransaction::new()
+            .write(path.clone(), serde_json::json!({"new": 1}))
+            .write(path.clone(), serde_json::json!({"new": 2}));
+        assert!(store.apply_transaction(transaction).is_err());
+        assert_eq!(
+            store.read_json(&path).unwrap(),
+            serde_json::json!({"old": true})
+        );
+    }
+
+    #[test]
+    fn rapid_transactions_keep_independent_original_snapshots() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = LocalConfigStore::new(temp.path());
+        let path = temp.path().join("settings.json");
+        store
+            .write_json_atomic(&path, &serde_json::json!({"value": 0}))
+            .unwrap();
+        let first = store
+            .apply_transaction(
+                JsonTransaction::new().write(path.clone(), serde_json::json!({"value": 1})),
+            )
+            .unwrap()
+            .backup
+            .unwrap();
+        let second = store
+            .apply_transaction(JsonTransaction::new().write(path, serde_json::json!({"value": 2})))
+            .unwrap()
+            .backup
+            .unwrap();
+        assert_ne!(first.root, second.root);
+        assert_eq!(
+            store.read_json(&first.files[0]).unwrap(),
+            serde_json::json!({"value": 0})
+        );
+        assert_eq!(
+            store.read_json(&second.files[0]).unwrap(),
+            serde_json::json!({"value": 1})
+        );
+    }
+
+    #[test]
+    fn rapid_transaction_backups_obey_retention_and_keep_latest_snapshot() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = LocalConfigStore::new(temp.path());
+        let path = temp.path().join("settings.json");
+        store
+            .write_json_atomic(&path, &serde_json::json!({"value": 0}))
+            .unwrap();
+        let mut latest = None;
+        for value in 1..=MAX_MIGRATION_BACKUPS + 3 {
+            latest = store
+                .apply_transaction(
+                    JsonTransaction::new().write(path.clone(), serde_json::json!({"value": value})),
+                )
+                .unwrap()
+                .backup;
+        }
+        let backups = fs::read_dir(store.backup_dir())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().is_dir())
+            .count();
+        assert_eq!(backups, MAX_MIGRATION_BACKUPS);
+        assert_eq!(
+            store.read_json(&latest.unwrap().files[0]).unwrap(),
+            serde_json::json!({"value": MAX_MIGRATION_BACKUPS + 2})
+        );
+    }
 
     #[test]
     fn writes_json_atomically() {

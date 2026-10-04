@@ -40,6 +40,32 @@ impl DesktopState {
 }
 
 impl ChatManager {
+    /// Commit imported preferences before updating the cache and background subscriptions.
+    pub async fn replace_preferences_with<R>(
+        &self,
+        preferences: Option<Vec<ChatAccountPreference>>,
+        write: impl std::future::Future<Output = Result<R, String>>,
+    ) -> Result<R, String> {
+        let Some(preferences) = preferences else {
+            return write.await;
+        };
+        let result = {
+            let _gate = self.desktop.preference_gate.lock().await;
+            let mut cache = self.desktop.preferences.write().await;
+            let result = write.await?;
+            cache.accounts = preferences;
+            *self
+                .desktop
+                .preference_error
+                .lock()
+                .unwrap_or_else(|p| p.into_inner()) = None;
+            result
+        };
+        self.reconcile_background().await;
+        self.desktop.inbox.changed.notify_one();
+        Ok(result)
+    }
+
     pub async fn desktop_status(&self) -> ChatDesktopStatus {
         let targets = self.targets().await;
         let preferences = self.desktop.preferences.read().await;
@@ -155,6 +181,16 @@ impl ChatManager {
     pub fn notify_changed(&self) { self.desktop.inbox.changed.notify_one(); }
 
     async fn load_preferences(&self) -> Result<(), String> {
+        let _gate = self.desktop.preference_gate.lock().await;
+        let result = self.load_preferences_locked().await;
+        *self
+            .desktop
+            .preference_error
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = result.as_ref().err().cloned();
+        result
+    }
+    async fn load_preferences_locked(&self) -> Result<(), String> {
         let path = self.desktop.root.join("config/chat-desktop.json");
         let preferences = tokio::task::spawn_blocking(move || -> Result<Preferences, String> {
             match std::fs::read(&path) {
@@ -211,7 +247,6 @@ impl ChatManager {
         let mut events = bus.subscribe(EventFilter::all());
         if let Err(e) = self.load_preferences().await {
             tracing::warn!("{e}");
-            *self.desktop.preference_error.lock().unwrap_or_else(|p| p.into_inner()) = Some(e);
         }
         self.reconcile_background().await;
         let mut flush_tick = tokio::time::interval(std::time::Duration::from_secs(2));
@@ -244,6 +279,160 @@ impl ChatManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct TestBots(crate::onebot_debug::DebugBotView);
+
+    #[async_trait::async_trait]
+    impl crate::DebugBotPort for TestBots {
+        async fn list_bots(&self) -> Vec<crate::onebot_debug::DebugBotView> {
+            vec![self.0.clone()]
+        }
+        async fn bot(&self, id: &ncd_domain::BotId) -> Option<crate::onebot_debug::DebugBotView> {
+            (id == &self.0.bot_id()).then(|| self.0.clone())
+        }
+        async fn napcat_webui(&self, _: &ncd_domain::BotId) -> Option<(u16, String)> {
+            None
+        }
+        async fn snowluma_webui(&self, _: &ncd_domain::BotId) -> Result<(u16, String), String> {
+            Err("not running".into())
+        }
+    }
+
+    struct NoHosts;
+
+    #[async_trait::async_trait]
+    impl crate::host_resolver::HostResolver for NoHosts {
+        async fn resolve(
+            &self,
+            _: &ncd_domain::RuntimeTarget,
+        ) -> Result<Arc<dyn ncd_host::Host>, crate::host_resolver::HostResolveError> {
+            Err("test has no running hosts".into())
+        }
+    }
+
+    fn manager(root: &std::path::Path) -> ChatManager {
+        let bot = crate::onebot_debug::DebugBotView {
+            config: ncd_test_support::BotConfigBuilder::new()
+                .qq_id(10001)
+                .build(),
+            snapshot: ncd_domain::bot_actor::BotActorSnapshot::new(ncd_domain::BotId::new("10001")),
+            online: None,
+        };
+        ChatManager::new(
+            Arc::new(TestBots(bot)),
+            Arc::new(NoHosts),
+            root.to_path_buf(),
+        )
+    }
+
+    fn preference(group: &str) -> ChatAccountPreference {
+        ChatAccountPreference {
+            bot_id: "10001".into(),
+            self_id: "10001".into(),
+            ignored_groups: vec![group.into()],
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn imported_preferences_survive_the_next_change_and_disk_reload() {
+        let root = tempfile::tempdir().unwrap();
+        let chat = manager(root.path());
+        chat.set_preference(preference("111")).await.unwrap();
+        let imported = vec![preference("222")];
+        let transaction = ncd_traits::JsonTransaction::new().write(
+            root.path().join("config/chat-desktop.json"),
+            serde_json::json!({"accounts": imported}),
+        );
+        *chat.desktop.preference_error.lock().unwrap() = Some("old corrupt preferences".into());
+        chat.replace_preferences_with(Some(imported), async {
+            ncd_config::store::LocalConfigStore::new(root.path())
+                .apply_transaction(transaction)
+                .map_err(|e| e.to_string())
+        })
+        .await
+        .unwrap();
+        chat.set_group_ignored("10001".into(), "10001".into(), "333".into(), true, true)
+            .await
+            .unwrap();
+        let reloaded = manager(root.path());
+        reloaded.load_preferences().await.unwrap();
+        let status = reloaded.desktop_status().await;
+        assert_eq!(status.accounts[0].preference.ignored_groups, vec!["222"]);
+        assert_eq!(status.accounts[0].preference.hidden_groups, vec!["333"]);
+        assert_eq!(chat.desktop_status().await.accounts[0].error, None);
+    }
+
+    #[tokio::test]
+    async fn failed_preferences_import_keeps_cached_preferences_and_error() {
+        let root = tempfile::tempdir().unwrap();
+        let chat = manager(root.path());
+        chat.set_preference(preference("111")).await.unwrap();
+        *chat.desktop.preference_error.lock().unwrap() = Some("existing error".into());
+        let result = chat
+            .replace_preferences_with(Some(vec![preference("222")]), async {
+                Err::<(), _>("transaction failed".to_owned())
+            })
+            .await;
+        assert_eq!(result.unwrap_err(), "transaction failed");
+        let status = chat.desktop_status().await;
+        assert_eq!(status.accounts[0].preference.ignored_groups, vec!["111"]);
+        assert_eq!(status.accounts[0].error.as_deref(), Some("existing error"));
+        let reloaded = manager(root.path());
+        reloaded.load_preferences().await.unwrap();
+        assert_eq!(
+            reloaded.desktop_status().await.accounts[0]
+                .preference
+                .ignored_groups,
+            vec!["111"]
+        );
+    }
+
+    #[tokio::test]
+    async fn absent_preferences_import_does_not_wait_for_preference_locks() {
+        let root = tempfile::tempdir().unwrap();
+        let chat = manager(root.path());
+        let _gate = chat.desktop.preference_gate.lock().await;
+        let _cache = chat.desktop.preferences.write().await;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            chat.replace_preferences_with(None, async { Ok::<_, String>(42) }),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(result, 42);
+    }
+
+    #[tokio::test]
+    async fn initial_preferences_load_waits_for_an_import_before_reading_files() {
+        let root = tempfile::tempdir().unwrap();
+        let chat = manager(root.path());
+        let config = ncd_config::store::LocalConfigStore::new(root.path());
+        let path = root.path().join("config/chat-desktop.json");
+        config
+            .write_json_atomic(&path, &serde_json::json!({"accounts": [preference("111")]}))
+            .unwrap();
+        let gate = chat.desktop.preference_gate.lock().await;
+        let load = chat.load_preferences();
+        tokio::pin!(load);
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(30), &mut load)
+                .await
+                .is_err()
+        );
+        config
+            .write_json_atomic(&path, &serde_json::json!({"accounts": [preference("222")]}))
+            .unwrap();
+        drop(gate);
+        load.await.unwrap();
+        assert_eq!(
+            chat.desktop_status().await.accounts[0]
+                .preference
+                .ignored_groups,
+            vec!["222"]
+        );
+    }
     #[test]
     fn a_new_workspace_rejects_saves_from_the_previous_owner_and_mount() {
         let mut state = ViewState { snapshot: ChatViewState { v: 1, ..Default::default() }, ..Default::default() };

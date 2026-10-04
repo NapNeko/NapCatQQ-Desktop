@@ -180,6 +180,7 @@ impl AppManager {
         resource: AppStoreResource,
         log: Option<&PluginLogSink>,
     ) -> Result<(), AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
         let instance = self.store.require(id).await?;
         if !instance.state.is_installed() {
             return Err(AppFrameworkError::Validation(
@@ -285,6 +286,8 @@ impl AppManager {
             return self.write_config(id, cfg, base).await;
         }
 
+        let _config_guard = self.framework_config_gate.lock().await;
+        let instance = self.store.require(id).await?;
         let host = self.resolve_host(&instance.host_id).await?;
         self.prime_live_port(adapter.as_ref(), &instance).await?;
         adapter

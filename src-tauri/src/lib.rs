@@ -822,6 +822,8 @@ pub fn run() {
             commands::config_transfer::export_config,
             commands::config_transfer::import_config,
             commands::config_transfer::preview_config_import,
+            commands::config_transfer::list_pending_framework_config_restores,
+            commands::config_transfer::retry_framework_config_restore,
             commands::components::list_components,
             commands::components::detect_component,
             commands::components::probe_local_node_candidates,

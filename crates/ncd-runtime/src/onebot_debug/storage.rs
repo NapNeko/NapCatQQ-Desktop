@@ -254,6 +254,37 @@ impl DebugStore {
         Ok(())
     }
 
+    /// Commit imported configuration under the write gate; history stays in its existing cache.
+    pub async fn replace_config_with<R>(
+        &self,
+        workspace: Option<DebugWorkspace>,
+        collections: Option<DebugCollections>,
+        write: impl std::future::Future<Output = Result<R, String>>,
+    ) -> Result<R, String> {
+        if workspace.is_none() && collections.is_none() {
+            return write.await;
+        }
+        let _gate = self.write_gate.lock().await;
+        let mut workspace_cache = if workspace.is_some() {
+            Some(self.workspace.lock().await)
+        } else {
+            None
+        };
+        let mut collections_cache = if collections.is_some() {
+            Some(self.collections.lock().await)
+        } else {
+            None
+        };
+        let result = write.await?;
+        if let (Some(cache), Some(workspace)) = (workspace_cache.as_mut(), workspace) {
+            **cache = normalize_workspace(workspace);
+        }
+        if let (Some(cache), Some(collections)) = (collections_cache.as_mut(), collections) {
+            **cache = collections;
+        }
+        Ok(result)
+    }
+
     /// 把当前收藏夹导出成 JSON 文件。目标是用户选的路径，同样先写临时文件再改名，
     /// 覆盖已有文件时不会留下半截
     pub async fn export_collections(&self, path: &Path) -> Result<(), String> {
@@ -1215,6 +1246,126 @@ mod tests {
     }
 
     // --- 往返 ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn imported_debug_config_survives_the_next_save_without_changing_history() {
+        use ncd_traits::{ConfigStore, JsonTransaction};
+        let root = tempfile::tempdir().unwrap();
+        let store = DebugStore::load(root.path()).await;
+        store
+            .save_workspace(DebugWorkspace {
+                selected_bot: Some("old".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        store
+            .save_collections(DebugCollections {
+                folders: vec![folder("old", "old", 0)],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        store
+            .append_history(entry("existing-history", "send_msg", "1", true))
+            .await
+            .unwrap();
+        let history_before = std::fs::read(store.path(HISTORY_FILE)).unwrap();
+        let workspace = DebugWorkspace {
+            version: 2,
+            tabs: vec![draft("imported")],
+            active_tab: Some("imported".into()),
+            selected_bot: Some("new".into()),
+            layout: ncd_domain::onebot_debug::DebugLayout {
+                left_width: 0,
+                right_width: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let collections = DebugCollections {
+            folders: vec![folder("imported", "new", 0)],
+            requests: vec![saved("imported-request", Some("imported"), 0)],
+            ..Default::default()
+        };
+        let transaction = JsonTransaction::new()
+            .write(
+                store.path(WORKSPACE_FILE),
+                serde_json::to_value(&workspace).unwrap(),
+            )
+            .write(
+                store.path(COLLECTIONS_FILE),
+                serde_json::to_value(&collections).unwrap(),
+            );
+        let report = store
+            .replace_config_with(Some(workspace), Some(collections), async {
+                ncd_config::store::LocalConfigStore::new(root.path())
+                    .apply_transaction(transaction)
+                    .map_err(|e| e.to_string())
+            })
+            .await
+            .unwrap();
+        assert_eq!(report.written.len(), 2);
+        let mut next_workspace = store.workspace().await;
+        next_workspace.recent_actions.push("get_login_info".into());
+        store.save_workspace(next_workspace).await.unwrap();
+        let mut next_collections = store.collections().await;
+        next_collections.folders[0].name = "renamed".into();
+        store.save_collections(next_collections).await.unwrap();
+        let reloaded = DebugStore::load(root.path()).await;
+        assert_eq!(reloaded.workspace().await.tabs[0].id, "imported");
+        assert_eq!(
+            reloaded.workspace().await.selected_bot.as_deref(),
+            Some("new")
+        );
+        assert_eq!(reloaded.workspace().await.version, 2);
+        assert_eq!(reloaded.workspace().await.layout.left_width, 0);
+        assert_eq!(reloaded.workspace().await.layout.right_width, 0);
+        assert_eq!(reloaded.collections().await.folders[0].id, "imported");
+        assert_eq!(
+            reloaded.collections().await.requests[0].id,
+            "imported-request"
+        );
+        assert_eq!(
+            std::fs::read(store.path(HISTORY_FILE)).unwrap(),
+            history_before
+        );
+        assert!(store.history_entry("existing-history").await.is_some());
+    }
+
+    #[tokio::test]
+    async fn failed_debug_import_keeps_both_loaded_caches_and_saved_values() {
+        let root = tempfile::tempdir().unwrap();
+        let store = DebugStore::load(root.path()).await;
+        let workspace = DebugWorkspace {
+            selected_bot: Some("old".into()),
+            ..Default::default()
+        };
+        let collections = DebugCollections {
+            folders: vec![folder("old", "old", 0)],
+            ..Default::default()
+        };
+        store.save_workspace(workspace.clone()).await.unwrap();
+        store.save_collections(collections.clone()).await.unwrap();
+        let result = store
+            .replace_config_with(
+                Some(DebugWorkspace::default()),
+                Some(DebugCollections::default()),
+                async { Err::<(), _>("transaction failed".to_owned()) },
+            )
+            .await;
+        assert_eq!(result.unwrap_err(), "transaction failed");
+        assert_eq!(store.workspace().await, workspace);
+        assert_eq!(store.collections().await, collections);
+        store.save_workspace(store.workspace().await).await.unwrap();
+        store
+            .save_collections(store.collections().await)
+            .await
+            .unwrap();
+        let reloaded = DebugStore::load(root.path()).await;
+        assert_eq!(reloaded.workspace().await, workspace);
+        assert_eq!(reloaded.collections().await, collections);
+    }
 
     #[tokio::test]
     async fn workspace_round_trips_across_reload() {

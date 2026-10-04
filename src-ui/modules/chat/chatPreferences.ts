@@ -1,5 +1,6 @@
 // 只保存窗口布局偏好，不持久化消息或草稿。
 import { useSyncExternalStore } from 'react';
+import { onFrontendPreferenceRestored } from '../../core/domain/settings/config-transfer-preferences';
 
 interface ChatPreferences { listWidth: number; composerHeight: number | null; hiddenConversations: Record<string, string[]> }
 const STORAGE_KEY = 'ncd.chat.ui.v1';
@@ -21,6 +22,12 @@ let preferences = read();
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const snapshot = () => preferences;
+if (typeof window !== 'undefined') {
+    onFrontendPreferenceRestored(STORAGE_KEY, () => {
+        preferences = read();
+        for (const listener of listeners) listener();
+    });
+}
 export function useChatPreferences() { return useSyncExternalStore(subscribe, snapshot, snapshot); }
 export function setChatPreferences(patch: Partial<ChatPreferences>) {
     preferences = { ...preferences, ...patch };

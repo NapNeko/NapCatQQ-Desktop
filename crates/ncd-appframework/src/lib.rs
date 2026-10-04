@@ -12,6 +12,7 @@ pub mod adapter;
 pub mod adopt;
 pub mod astrbot;
 pub mod config_doc;
+pub mod config_backup;
 pub mod env_file;
 pub mod karin;
 pub mod koishi;

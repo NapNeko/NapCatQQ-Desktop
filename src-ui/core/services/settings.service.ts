@@ -166,10 +166,10 @@ function mirrorWebhookFlat(channels: WebhookChannelDraft[]): {
     };
 }
 
-function fromDto(dto: AppSettingsDto): BackendSettings {
+function fromDto(dto: AppSettingsDto, preferDiskUi = false): BackendSettings {
     const closeAction = closeActionFromDto(dto.settings.closeAction);
     let ui = dto.settings.uiPreferences;
-    if (isDefaultUiPreferencesOnDisk(ui)) {
+    if (!preferDiskUi && isDefaultUiPreferencesOnDisk(ui)) {
         const local = preferencesStore.get();
         const localUi = appPreferencesToAppUiPreferences(local);
         if (!isDefaultUiPreferencesOnDisk(localUi)) {
@@ -514,10 +514,10 @@ function dedupeNumbers(values: number[]): number[] {
 }
 
 export const settingsService = {
-    get: async (): Promise<BackendSettings> => {
+    get: async (preferDiskUi = false): Promise<BackendSettings> => {
         if (isTauri) {
             const dto = await invoke<AppSettingsDto>('get_app_settings');
-            return fromDto(dto);
+            return fromDto(dto, preferDiskUi);
         }
         return {
             ...mockBackendSettings,

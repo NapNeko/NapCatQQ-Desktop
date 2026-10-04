@@ -11,15 +11,15 @@
 //! 清空之后也不该有排着队的旧记录再冒出来。等待只看两个计数，队列是空的时候不付任何代价。
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use ncd_domain::onebot_debug::{
-    DebugCollections, DebugHistoryEntry, DebugHistoryPage, DebugHistoryQuery, DebugStorageNotice,
-    DebugWorkspace,
+    DebugCollections, DebugCollectionsSnapshot, DebugHistoryEntry, DebugHistoryPage,
+    DebugHistoryQuery, DebugStorageNotice, DebugWorkspace, DebugWorkspaceSnapshot,
 };
-use tokio::sync::{OnceCell, mpsc, watch};
+use tokio::sync::{Mutex, OnceCell, mpsc, watch};
 use tracing::warn;
 
 use super::DebugManager;
@@ -34,6 +34,8 @@ const DRAIN_WAIT: Duration = Duration::from_secs(2);
 pub(super) struct LazyStore {
     data_root: PathBuf,
     cell: OnceCell<DebugStore>,
+    initialization_gate: Mutex<()>,
+    revision: AtomicU32,
 }
 
 impl LazyStore {
@@ -41,13 +43,101 @@ impl LazyStore {
         Self {
             data_root,
             cell: OnceCell::new(),
+            initialization_gate: Mutex::new(()),
+            revision: AtomicU32::new(0),
         }
     }
 
     async fn get(&self) -> &DebugStore {
+        if let Some(store) = self.cell.get() {
+            return store;
+        }
+        let _gate = self.initialization_gate.lock().await;
         self.cell
             .get_or_init(|| DebugStore::load(&self.data_root))
             .await
+    }
+
+    async fn replace_config_with<R>(
+        &self,
+        workspace: Option<DebugWorkspace>,
+        collections: Option<DebugCollections>,
+        write: impl std::future::Future<Output = Result<R, String>>,
+    ) -> Result<R, String> {
+        if workspace.is_none() && collections.is_none() {
+            return write.await;
+        }
+        let _gate = self.initialization_gate.lock().await;
+        let result = match self.cell.get() {
+            Some(store) => {
+                store
+                    .replace_config_with(workspace, collections, write)
+                    .await
+            }
+            // Import must not load or quarantine existing files. The first access reads the commit.
+            None => write.await,
+        }?;
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        Ok(result)
+    }
+
+    async fn workspace_snapshot(&self) -> DebugWorkspaceSnapshot {
+        let _gate = self.initialization_gate.lock().await;
+        let store = self
+            .cell
+            .get_or_init(|| DebugStore::load(&self.data_root))
+            .await;
+        DebugWorkspaceSnapshot {
+            workspace: store.workspace().await,
+            revision: self.revision.load(Ordering::SeqCst),
+        }
+    }
+
+    async fn collections_snapshot(&self) -> DebugCollectionsSnapshot {
+        let _gate = self.initialization_gate.lock().await;
+        let store = self
+            .cell
+            .get_or_init(|| DebugStore::load(&self.data_root))
+            .await;
+        DebugCollectionsSnapshot {
+            collections: store.collections().await,
+            revision: self.revision.load(Ordering::SeqCst),
+        }
+    }
+
+    async fn save_workspace_checked(
+        &self,
+        workspace: DebugWorkspace,
+        revision: u32,
+    ) -> Result<(), String> {
+        let _gate = self.initialization_gate.lock().await;
+        self.check_revision(revision)?;
+        self.cell
+            .get_or_init(|| DebugStore::load(&self.data_root))
+            .await
+            .save_workspace(workspace)
+            .await
+    }
+
+    async fn save_collections_checked(
+        &self,
+        collections: DebugCollections,
+        revision: u32,
+    ) -> Result<(), String> {
+        let _gate = self.initialization_gate.lock().await;
+        self.check_revision(revision)?;
+        self.cell
+            .get_or_init(|| DebugStore::load(&self.data_root))
+            .await
+            .save_collections(collections)
+            .await
+    }
+
+    fn check_revision(&self, revision: u32) -> Result<(), String> {
+        if revision != self.revision.load(Ordering::SeqCst) {
+            return Err("调试配置已从备份恢复，旧保存请求已取消，请刷新后重试".into());
+        }
+        Ok(())
     }
 
     /// 分块下载收拢出来的文件放这；调试台的落盘数据继续走 DebugStore，下载物只是临时文件
@@ -123,6 +213,43 @@ async fn write_history(
 }
 
 impl DebugManager {
+    pub async fn workspace_snapshot(&self) -> DebugWorkspaceSnapshot {
+        self.store.workspace_snapshot().await
+    }
+
+    pub async fn collections_snapshot(&self) -> DebugCollectionsSnapshot {
+        self.store.collections_snapshot().await
+    }
+
+    pub async fn save_workspace_checked(
+        &self,
+        workspace: DebugWorkspace,
+        revision: u32,
+    ) -> Result<(), String> {
+        self.store.save_workspace_checked(workspace, revision).await
+    }
+
+    pub async fn save_collections_checked(
+        &self,
+        collections: DebugCollections,
+        revision: u32,
+    ) -> Result<(), String> {
+        self.store
+            .save_collections_checked(collections, revision)
+            .await
+    }
+    /// Commit imported workspace/collections without initializing storage or changing history.
+    pub async fn replace_config_with<R>(
+        &self,
+        workspace: Option<DebugWorkspace>,
+        collections: Option<DebugCollections>,
+        write: impl std::future::Future<Output = Result<R, String>>,
+    ) -> Result<R, String> {
+        self.store
+            .replace_config_with(workspace, collections, write)
+            .await
+    }
+
     pub async fn workspace(&self) -> DebugWorkspace {
         self.store.get().await.workspace().await
     }
@@ -178,5 +305,199 @@ impl DebugManager {
         if !self.history_queue.push(&self.store, entry) {
             warn!("调试台调用历史写入排队已满，丢掉这一条");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ncd_traits::{ConfigStore, JsonTransaction};
+
+    #[tokio::test]
+    async fn old_workspace_save_queued_behind_import_is_rejected() {
+        let root = tempfile::tempdir().unwrap();
+        let store = Arc::new(LazyStore::new(root.path().to_path_buf()));
+        let original = store.workspace_snapshot().await;
+        let imported = DebugWorkspace {
+            selected_bot: Some("imported".into()),
+            ..Default::default()
+        };
+        let importing = Arc::clone(&store);
+        let config = ncd_config::store::LocalConfigStore::new(root.path());
+        let txn = JsonTransaction::new().write(
+            root.path().join(DIR_NAME).join("workspace.json"),
+            serde_json::to_value(&imported).unwrap(),
+        );
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        let import = tokio::spawn(async move {
+            importing
+                .replace_config_with(Some(imported), None, async {
+                    entered_tx.send(()).unwrap();
+                    release_rx.await.unwrap();
+                    config.apply_transaction(txn).map_err(|e| e.to_string())
+                })
+                .await
+        });
+        entered_rx.await.unwrap();
+        let saving = Arc::clone(&store);
+        let mut save = tokio::spawn(async move {
+            saving
+                .save_workspace_checked(original.workspace, original.revision)
+                .await
+        });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), &mut save)
+                .await
+                .is_err()
+        );
+        release_tx.send(()).unwrap();
+        import.await.unwrap().unwrap();
+        assert!(save.await.unwrap().is_err());
+        assert_eq!(
+            store
+                .workspace_snapshot()
+                .await
+                .workspace
+                .selected_bot
+                .as_deref(),
+            Some("imported")
+        );
+    }
+
+    #[tokio::test]
+    async fn old_collections_snapshot_cannot_overwrite_an_imported_collection() {
+        let root = tempfile::tempdir().unwrap();
+        let store = LazyStore::new(root.path().to_path_buf());
+        let original = store.collections_snapshot().await;
+        let imported: DebugCollections = serde_json::from_value(serde_json::json!({
+            "version": 1, "folders": [{ "id": "restored", "name": "恢复的收藏", "order": 0 }], "requests": []
+        })).unwrap();
+        let txn = JsonTransaction::new().write(
+            root.path().join(DIR_NAME).join("collections.json"),
+            serde_json::to_value(&imported).unwrap(),
+        );
+        store
+            .replace_config_with(None, Some(imported.clone()), async {
+                ncd_config::store::LocalConfigStore::new(root.path())
+                    .apply_transaction(txn)
+                    .map_err(|e| e.to_string())
+            })
+            .await
+            .unwrap();
+        assert!(
+            store
+                .save_collections_checked(original.collections, original.revision)
+                .await
+                .is_err()
+        );
+        assert_eq!(store.collections_snapshot().await.collections, imported);
+    }
+
+    #[tokio::test]
+    async fn importing_unloaded_debug_config_does_not_initialize_or_quarantine_files() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join(DIR_NAME);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("workspace.json"), b"corrupt workspace").unwrap();
+        let store = LazyStore::new(root.path().to_path_buf());
+        let workspace = DebugWorkspace {
+            selected_bot: Some("imported".into()),
+            ..Default::default()
+        };
+        let transaction = JsonTransaction::new().write(
+            dir.join("workspace.json"),
+            serde_json::to_value(&workspace).unwrap(),
+        );
+        store
+            .replace_config_with(Some(workspace.clone()), None, async {
+                ncd_config::store::LocalConfigStore::new(root.path())
+                    .apply_transaction(transaction)
+                    .map_err(|e| e.to_string())
+            })
+            .await
+            .unwrap();
+        assert!(store.cell.get().is_none());
+        assert!(std::fs::read_dir(&dir).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("broken-")
+        }));
+        assert_eq!(store.get().await.workspace().await, workspace);
+        assert!(store.get().await.take_storage_notices().is_empty());
+    }
+
+    #[tokio::test]
+    async fn failed_import_leaves_unloaded_corrupt_debug_files_in_place() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join(DIR_NAME);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("workspace.json");
+        std::fs::write(&path, b"corrupt workspace").unwrap();
+        let store = LazyStore::new(root.path().to_path_buf());
+        assert!(
+            store
+                .replace_config_with(Some(DebugWorkspace::default()), None, async {
+                    Err::<(), _>("transaction failed".to_owned())
+                })
+                .await
+                .is_err()
+        );
+        assert!(store.cell.get().is_none());
+        assert_eq!(std::fs::read(&path).unwrap(), b"corrupt workspace");
+    }
+
+    #[tokio::test]
+    async fn debug_initialization_waits_for_the_import_commit() {
+        let root = tempfile::tempdir().unwrap();
+        let config = ncd_config::store::LocalConfigStore::new(root.path());
+        let path = root.path().join(DIR_NAME).join("workspace.json");
+        config
+            .write_json_atomic(
+                &path,
+                &serde_json::to_value(DebugWorkspace {
+                    selected_bot: Some("old".into()),
+                    ..Default::default()
+                })
+                .unwrap(),
+            )
+            .unwrap();
+        let store = Arc::new(LazyStore::new(root.path().to_path_buf()));
+        let workspace = DebugWorkspace {
+            selected_bot: Some("imported".into()),
+            ..Default::default()
+        };
+        let transaction =
+            JsonTransaction::new().write(path, serde_json::to_value(&workspace).unwrap());
+        let importing = Arc::clone(&store);
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        let import = tokio::spawn(async move {
+            importing
+                .replace_config_with(Some(workspace), None, async {
+                    entered_tx.send(()).unwrap();
+                    release_rx.await.unwrap();
+                    config
+                        .apply_transaction(transaction)
+                        .map_err(|e| e.to_string())
+                })
+                .await
+        });
+        entered_rx.await.unwrap();
+        let reading = Arc::clone(&store);
+        let mut reader = tokio::spawn(async move { reading.get().await.workspace().await });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), &mut reader)
+                .await
+                .is_err()
+        );
+        release_tx.send(()).unwrap();
+        import.await.unwrap().unwrap();
+        assert_eq!(
+            reader.await.unwrap().selected_bot.as_deref(),
+            Some("imported")
+        );
     }
 }

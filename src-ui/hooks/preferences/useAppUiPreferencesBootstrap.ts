@@ -10,10 +10,10 @@ import { featureTogglesStore } from './featureTogglesStore';
 let hydratedFromDisk = false;
 
 /** 幂等：Splash 前拉磁盘设置并 applySnapshot（含 data-theme / 圆角 / localStorage）。 */
-export async function hydrateAppUiPreferencesFromDisk(): Promise<void> {
-    if (hydratedFromDisk) return;
+export async function hydrateAppUiPreferencesFromDisk(force = false): Promise<void> {
+    if (hydratedFromDisk && !force) return;
     try {
-        const backend = await settingsService.get();
+        const backend = await settingsService.get(force);
         preferencesStore.applySnapshot(clientPrefsFromBackend(backend));
         infoBarDismissPrefsStore.applyFromUiPreferences(backend.uiPreferences);
         taskQueueCleanupPrefsStore.applyPrefs(backend.taskQueueCleanup);

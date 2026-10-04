@@ -82,6 +82,7 @@ use crate::metrics::now_ms;
 
 mod astrbot;
 mod config;
+mod config_backup;
 mod install_dir;
 mod koishi;
 mod lifecycle;
@@ -259,6 +260,8 @@ pub struct AppManager {
     install_watches: std::sync::Mutex<HashMap<AppInstanceId, String>>,
     /// 运行中写配置的下一个可用时刻（应用要求两次写之间留间隔时才记）
     config_write_slots: std::sync::Mutex<HashMap<AppInstanceId, Instant>>,
+    /// 配置备份、恢复、起停和写盘共用，恢复期间不能启动框架或插入一次编辑。
+    framework_config_gate: tokio::sync::Mutex<()>,
     webui_endpoints: std::sync::Mutex<HashMap<AppInstanceId, WebUiEndpoint>>,
     market_cache: plugin_market::MarketCache,
 }
@@ -288,6 +291,7 @@ impl AppManager {
             tunnels: tokio::sync::Mutex::new(HashMap::new()),
             install_watches: std::sync::Mutex::new(HashMap::new()),
             config_write_slots: std::sync::Mutex::new(HashMap::new()),
+            framework_config_gate: tokio::sync::Mutex::new(()),
             webui_endpoints: std::sync::Mutex::new(HashMap::new()),
             market_cache: plugin_market::MarketCache::default(),
         }
@@ -402,6 +406,15 @@ impl AppManager {
 
     pub async fn list_instances(&self) -> Vec<AppInstance> {
         self.store.list().await
+    }
+
+    /// Commit imported instance records and refresh their cache under the existing write gates.
+    pub async fn replace_instances_with<R>(
+        &self,
+        instances: Option<Vec<AppInstance>>,
+        write: impl std::future::Future<Output = Result<R, String>>,
+    ) -> Result<R, String> {
+        self.store.replace_with(instances, write).await
     }
 
     pub async fn get_instance(&self, id: &AppInstanceId) -> Result<AppInstance, AppFrameworkError> {

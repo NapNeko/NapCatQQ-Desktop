@@ -683,6 +683,21 @@ impl Default for DebugCollections {
     }
 }
 
+/// 配置恢复代际只用于 IPC，不写入工作区或配置备份。
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/debug/")]
+pub struct DebugWorkspaceSnapshot {
+    pub workspace: DebugWorkspace,
+    pub revision: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/debug/")]
+pub struct DebugCollectionsSnapshot {
+    pub collections: DebugCollections,
+    pub revision: u32,
+}
+
 /// 历史里的一条完整记录，令牌不会出现在里面
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/debug/")]

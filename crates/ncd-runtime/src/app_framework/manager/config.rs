@@ -8,6 +8,14 @@ impl AppManager {
         &self,
         id: &AppInstanceId,
     ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
+        self.read_config_inner(id).await
+    }
+
+    pub(super) async fn read_config_inner(
+        &self,
+        id: &AppInstanceId,
+    ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {
         let (instance, adapter, host) = self.config_context(id).await?;
         adapter.read_config(host.as_ref(), &instance).await
     }
@@ -47,6 +55,7 @@ impl AppManager {
         base_revision: Option<String>,
         conf_id: Option<String>,
     ) -> Result<AppConfigWriteResult, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
         let (instance, adapter, host) = self.config_context(id).await?;
         let before = adapter.read_config(host.as_ref(), &instance).await?;
         if let Some(base) = base_revision.as_deref()
@@ -154,6 +163,7 @@ impl AppManager {
         &self,
         id: &AppInstanceId,
     ) -> Result<Vec<AppConfigDocument>, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
         let instance = self.store.require(id).await?;
         let adapter = self.registry.get(&instance.framework_id)?;
         match self.resolve_host(&instance.host_id).await {
@@ -171,6 +181,7 @@ impl AppManager {
         id: &AppInstanceId,
         doc_id: &str,
     ) -> Result<AppConfigText, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
         let (instance, adapter, host) = self.config_context(id).await?;
         adapter
             .read_config_text(host.as_ref(), &instance, doc_id)
@@ -185,6 +196,7 @@ impl AppManager {
         text: &str,
         base_revision: Option<String>,
     ) -> Result<AppConfigText, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
         let (instance, adapter, host) = self.config_context(id).await?;
         let before = self
             .typed_snapshot(adapter.as_ref(), host.as_ref(), &instance)
@@ -279,7 +291,7 @@ impl AppManager {
         if let Some(link) = instance.link.as_ref()
             && before.config.link_inputs_changed(&after.config)
         {
-            self.apply_link(&instance.id, &link.bot_id)
+            self.apply_link_inner(&instance.id, &link.bot_id)
                 .await
                 .map_err(|e| {
                     AppFrameworkError::Integration(format!(

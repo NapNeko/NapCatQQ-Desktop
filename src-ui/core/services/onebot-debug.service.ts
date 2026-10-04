@@ -27,6 +27,16 @@ import type { DebugStorageNotice } from '../ipc/generated/debug/DebugStorageNoti
 import type { DebugSubscribeResponse } from '../ipc/generated/debug/DebugSubscribeResponse';
 import type { DebugTarget } from '../ipc/generated/debug/DebugTarget';
 import type { DebugWorkspace } from '../ipc/generated/debug/DebugWorkspace';
+import type { DebugWorkspaceSnapshot } from '../ipc/generated/debug/DebugWorkspaceSnapshot';
+import type { DebugCollectionsSnapshot } from '../ipc/generated/debug/DebugCollectionsSnapshot';
+
+// 可枚举字段跟随不可变编辑和 React Query 结构共享；发送 IPC 前摘掉，不写进配置。
+type RevisionStamped<T> = T & { _configurationRevision: number };
+function revisionOf<T>(value: T): { payload: T; revision: number } {
+    const { _configurationRevision: revision, ...payload } = value as RevisionStamped<T>;
+    if (!Number.isInteger(revision) || revision < 0) throw new Error('请先重新读取调试配置再保存');
+    return { payload: payload as T, revision };
+}
 
 // 浏览器预览里导出 / 导入共用的假路径（mock 把导出的内容存在内存里，按路径取回）
 const PREVIEW_COLLECTIONS_PATH = 'preview://onebot-debug-collections.json';
@@ -147,31 +157,40 @@ export const onebotDebugService = {
             ? invoke('onebot_debug_read_events', { botId, sinceSeq, limit })
             : onebotDebugMock.readEvents(botId, sinceSeq, limit),
 
-    workspace: (): Promise<DebugWorkspace> =>
-        isTauri ? invoke('onebot_debug_workspace') : onebotDebugMock.workspace(),
+    workspace: async (): Promise<DebugWorkspace> => {
+        if (!isTauri) return onebotDebugMock.workspace();
+        const snapshot = await invoke<DebugWorkspaceSnapshot>('onebot_debug_workspace');
+        return { ...snapshot.workspace, _configurationRevision: snapshot.revision } as RevisionStamped<DebugWorkspace>;
+    },
 
-    saveWorkspace: (workspace: DebugWorkspace): Promise<void> =>
-        isTauri
-            ? invoke('onebot_debug_save_workspace', { workspace })
-            : onebotDebugMock.saveWorkspace(workspace),
+    saveWorkspace: async (workspace: DebugWorkspace): Promise<void> => {
+        if (!isTauri) return onebotDebugMock.saveWorkspace(workspace);
+        const { payload, revision } = revisionOf(workspace);
+        return invoke('onebot_debug_save_workspace', { workspace: payload, revision });
+    },
 
-    collections: (): Promise<DebugCollections> =>
-        isTauri ? invoke('onebot_debug_collections') : onebotDebugMock.collections(),
+    collections: async (): Promise<DebugCollections> => {
+        if (!isTauri) return onebotDebugMock.collections();
+        const snapshot = await invoke<DebugCollectionsSnapshot>('onebot_debug_collections');
+        return { ...snapshot.collections, _configurationRevision: snapshot.revision } as RevisionStamped<DebugCollections>;
+    },
 
-    saveCollections: (collections: DebugCollections): Promise<void> =>
-        isTauri
-            ? invoke('onebot_debug_save_collections', { collections })
-            : onebotDebugMock.saveCollections(collections),
+    saveCollections: async (collections: DebugCollections): Promise<void> => {
+        if (!isTauri) return onebotDebugMock.saveCollections(collections);
+        const { payload, revision } = revisionOf(collections);
+        return invoke('onebot_debug_save_collections', { collections: payload, revision });
+    },
 
     exportCollections: (path: string): Promise<void> =>
         isTauri
             ? invoke('onebot_debug_export_collections', { path })
             : onebotDebugMock.exportCollections(path),
 
-    importCollections: (path: string): Promise<DebugCollections> =>
-        isTauri
-            ? invoke('onebot_debug_import_collections', { path })
-            : onebotDebugMock.importCollections(path),
+    importCollections: async (path: string): Promise<DebugCollections> => {
+        if (!isTauri) return onebotDebugMock.importCollections(path);
+        const snapshot = await invoke<DebugCollectionsSnapshot>('onebot_debug_import_collections', { path });
+        return { ...snapshot.collections, _configurationRevision: snapshot.revision } as RevisionStamped<DebugCollections>;
+    },
 
     /**
      * 「导出收藏」的另存为对话框；取消返回 null。
