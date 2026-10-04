@@ -605,6 +605,7 @@ impl AppFrameworkAdapter for MaiBotAdapter {
         loopback_port: u16,
         _username: &str,
         _password: &str,
+        _desktop_secret: Option<&str>,
         config: &AppInstanceConfig,
         _conf_id: &str,
     ) -> Result<AppInstanceConfigEnvelope, AppFrameworkError> {

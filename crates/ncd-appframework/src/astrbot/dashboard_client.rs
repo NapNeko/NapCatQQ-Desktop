@@ -1,5 +1,8 @@
 //! AstrBot Dashboard HTTP：只打本机 loopback，JWT 只活在进程里。
-//! 登录体是 md5(明文)，对齐上游 v4.19 `/api/auth/login`。
+//! 代登录两条路：上游新版（`desktop_runtime.py`，v4.28.x 起）的 `/api/v1/auth/desktop-session`
+//! 免密码（进程由桌面端带会话密钥 env 拉起才可用，404/401 自动落回密码）；密码登录按核心
+//! 版本两套契约——v4.26 起服务端把请求体当明文再哈希比对，更早的核心要求请求体是 md5(明文)，
+//! 所以明文先试、被当以凭据拒绝再试 md5。
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -85,7 +88,11 @@ struct Envelope<T> {
 #[derive(Debug, Deserialize)]
 struct LoginData {
     token: Option<String>,
+    username: Option<String>,
 }
+
+/// 上游 `astrbot/dashboard/api/auth.py::DESKTOP_SESSION_HEADER`
+const DESKTOP_SESSION_HEADER: &str = "X-AstrBot-Desktop-Session";
 
 #[derive(Debug)]
 pub struct DashboardClient {
@@ -142,29 +149,105 @@ impl DashboardClient {
     }
 
     /// 缓存命中就不发包。要确认对面还活着请用 [`Self::verify`]。
-    pub async fn login(&self, username: &str, password: &str) -> Result<(), AppFrameworkError> {
+    pub async fn login(
+        &self,
+        username: &str,
+        password: &str,
+        desktop_secret: Option<&str>,
+    ) -> Result<(), AppFrameworkError> {
+        if let Some(token) = self.sessions.cached(&self.instance_id, username) {
+            self.set_token(Some(token));
+            return Ok(());
+        }
+        self.relogin(username, password, desktop_secret).await
+    }
+
+    /// 桌面托管会话优先（免密码）；对面没这接口或密钥对不上再落回密码登录
+    async fn relogin(
+        &self,
+        username: &str,
+        password: &str,
+        desktop_secret: Option<&str>,
+    ) -> Result<(), AppFrameworkError> {
+        let mut held = None;
+        if let Some(secret) = desktop_secret.filter(|s| !s.is_empty()) {
+            match self.desktop_session_login(secret, username).await {
+                Ok(true) => return Ok(()),
+                Ok(false) => {}
+                Err(e) => held = Some(e),
+            }
+        }
+        match self.login_fresh(username, password).await {
+            Ok(()) => Ok(()),
+            // 没记住密码时，托管会话的传输层错误比「没有密码」更接近真相
+            Err(e) if password.is_empty() => Err(held.unwrap_or(e)),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Ok(false) = 老核心没这个接口（404）或进程不是桌面端这轮带密钥拉起的（401）
+    async fn desktop_session_login(
+        &self,
+        secret: &str,
+        username_hint: &str,
+    ) -> Result<bool, AppFrameworkError> {
+        let url = format!("{}/api/v1/auth/desktop-session", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .header(DESKTOP_SESSION_HEADER, secret)
+            .send()
+            .await
+            .map_err(map_transport)?;
+        if matches!(resp.status(), StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED) {
+            return Ok(false);
+        }
+        let env: Envelope<LoginData> = parse_envelope(resp).await?;
+        let Some(token) = env
+            .data
+            .as_ref()
+            .and_then(|d| d.token.as_deref())
+            .filter(|s| !s.is_empty())
+        else {
+            return Ok(false);
+        };
+        let username = env
+            .data
+            .as_ref()
+            .and_then(|d| d.username.as_deref())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(username_hint);
+        self.sessions.store(&self.instance_id, username, token);
+        self.set_token(Some(token.to_string()));
+        Ok(true)
+    }
+
+    async fn login_fresh(&self, username: &str, password: &str) -> Result<(), AppFrameworkError> {
         if username.trim().is_empty() || password.is_empty() {
             return Err(AppFrameworkError::DashboardAuth(
                 "没有可用的 WebUI 密码。到连接页写下密码，或打开 WebUI 登录".into(),
             ));
         }
-        if let Some(token) = self.sessions.cached(&self.instance_id, username) {
-            self.set_token(Some(token));
-            return Ok(());
-        }
-        self.login_fresh(username, password).await
-    }
-
-    async fn login_fresh(&self, username: &str, password: &str) -> Result<(), AppFrameworkError> {
-        // 禁止把哈希当明文提交：AstrBot 登录接口期望明文，服务端再哈希比对
+        // 手上只有落盘哈希时两套装约都登不上：新核心要明文，给旧核心发 md5(哈希) 也是错
         if is_hash_format(password) {
             return Err(AppFrameworkError::DashboardAuth(
                 "检测到配置中存储的是密码哈希（非明文），无法代为登录。请在浏览器打开 WebUI 手动登录，或在桌面端重置密码后再试。".into(),
             ));
         }
+        match self.login_once(username, password).await {
+            Ok(()) => Ok(()),
+            // v4.26 起服务端把请求体当明文再哈希比对；更早的核心要求请求体就是 md5(明文)
+            Err(e) if is_credential_rejection(&e) => {
+                self.login_once(username, &md5_hex(password)).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn login_once(&self, username: &str, password: &str) -> Result<(), AppFrameworkError> {
         let body = json!({
             "username": username,
-            "password": md5_hex(password),
+            "password": password,
         });
         let env: Envelope<LoginData> = self
             .send_json(Method::POST, "/api/auth/login", Some(&body), false, None)
@@ -186,14 +269,19 @@ impl DashboardClient {
     }
 
     /// 真发一个鉴权请求。缓存里的 token 可能对应已经停掉的实例或改过的密码。
-    pub async fn verify(&self, username: &str, password: &str) -> Result<(), AppFrameworkError> {
+    pub async fn verify(
+        &self,
+        username: &str,
+        password: &str,
+        desktop_secret: Option<&str>,
+    ) -> Result<(), AppFrameworkError> {
         let _: Envelope<Value> = self
             .send_json(
                 Method::GET,
                 "/api/config/abconfs",
                 None::<&Value>,
                 true,
-                Some((username, password)),
+                Some((username, password, desktop_secret)),
             )
             .await?;
         Ok(())
@@ -403,7 +491,7 @@ impl DashboardClient {
         path: &str,
         body: Option<&B>,
         authed: bool,
-        retry_login: Option<(&str, &str)>,
+        retry_login: Option<(&str, &str, Option<&str>)>,
     ) -> Result<Envelope<T>, AppFrameworkError> {
         let url = format!("{}{path}", self.base);
         let mut req = self.http.request(method.clone(), &url);
@@ -420,9 +508,9 @@ impl DashboardClient {
         if resp.status() == StatusCode::UNAUTHORIZED && authed {
             self.sessions.clear(&self.instance_id);
             self.set_token(None);
-            if let Some((user, pass)) = retry_login {
+            if let Some((user, pass, secret)) = retry_login {
                 // 重登写回自己的 token，否则同一个 client 的后续请求会每次都 401 再重登
-                Box::pin(self.login_fresh(user, pass)).await?;
+                Box::pin(self.relogin(user, pass, secret)).await?;
                 return Box::pin(self.send_json(method, path, body, true, None)).await;
             }
             return Err(AppFrameworkError::DashboardAuth(
@@ -444,6 +532,16 @@ fn authority_host(host: &str) -> String {
         bare.to_string()
     } else {
         format!("[{bare}]")
+    }
+}
+
+/// 密码不对才值得换 md5 再试；TOTP / 没发 token 这类重试也是白搭
+fn is_credential_rejection(e: &AppFrameworkError) -> bool {
+    match e {
+        AppFrameworkError::DashboardAuth(m) => {
+            m.contains("用户名或密码") || m.contains("Incorrect username")
+        }
+        _ => false,
     }
 }
 
@@ -529,7 +627,7 @@ fn urlencoding_lite(s: &str) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
-    use wiremock::matchers::{header, method, path};
+    use wiremock::matchers::{body_json, header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn sessions() -> Arc<DashboardSessions> {
@@ -607,14 +705,14 @@ mod tests {
             .await;
 
         let client = DashboardClient::connect(&sessions(), "retry-1", "127.0.0.1", port).unwrap();
-        client.login("astrbot", "Abcdefg1").await.unwrap();
+        client.login("astrbot", "Abcdefg1", None).await.unwrap();
         let env: Envelope<Value> = client
             .send_json(
                 Method::GET,
                 "/api/config/get",
                 None::<&Value>,
                 true,
-                Some(("astrbot", "Abcdefg1")),
+                Some(("astrbot", "Abcdefg1", None)),
             )
             .await
             .unwrap();
@@ -641,8 +739,8 @@ mod tests {
         let cache = sessions();
         cache.store("stale-1", "astrbot", "jwt-stale");
         let client = DashboardClient::connect(&cache, "stale-1", "127.0.0.1", port).unwrap();
-        client.login("astrbot", "Abcdefg1").await.unwrap();
-        let err = client.verify("astrbot", "Abcdefg1").await.unwrap_err();
+        client.login("astrbot", "Abcdefg1", None).await.unwrap();
+        let err = client.verify("astrbot", "Abcdefg1", None).await.unwrap_err();
         assert!(matches!(err, AppFrameworkError::DashboardAuth(_)));
         // 401 之后缓存里那份过期的 token 也要作废，下次才会真去登录
         assert_eq!(cache.cached("stale-1", "astrbot"), None);
@@ -669,7 +767,7 @@ mod tests {
             .mount(&server)
             .await;
         let client = DashboardClient::connect(&sessions(), "err-1", "127.0.0.1", port).unwrap();
-        client.login("astrbot", "Abcdefg1").await.unwrap();
+        client.login("astrbot", "Abcdefg1", None).await.unwrap();
         let err = client
             .update_astrbot_config("default", &json!({}))
             .await
@@ -681,9 +779,85 @@ mod tests {
     async fn login_without_password_is_auth() {
         let err = DashboardClient::connect(&sessions(), "x", "127.0.0.1", 6185)
             .unwrap()
-            .login("astrbot", "")
+            .login("astrbot", "", None)
             .await
             .unwrap_err();
         assert!(matches!(err, AppFrameworkError::DashboardAuth(_)));
+    }
+
+    #[tokio::test]
+    async fn desktop_session_logs_in_without_password() {
+        let server = MockServer::start().await;
+        let port: u16 = server.uri().rsplit(':').next().unwrap().parse().unwrap();
+        Mock::given(method("POST"))
+            .and(path("/api/v1/auth/desktop-session"))
+            .and(header("x-astrbot-desktop-session", "s3cret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "ok",
+                "data": { "token": "jwt-desktop", "username": "astrbot" }
+            })))
+            .mount(&server)
+            .await;
+
+        let client = DashboardClient::connect(&sessions(), "ds-1", "127.0.0.1", port).unwrap();
+        client.login("astrbot", "", Some("s3cret")).await.unwrap();
+        assert_eq!(client.token().as_deref(), Some("jwt-desktop"));
+    }
+
+    #[tokio::test]
+    async fn desktop_session_404_falls_back_to_password_login() {
+        let server = MockServer::start().await;
+        let port: u16 = server.uri().rsplit(':').next().unwrap().parse().unwrap();
+        Mock::given(method("POST"))
+            .and(path("/api/v1/auth/desktop-session"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        // 新核心契约：请求体就是明文
+        Mock::given(method("POST"))
+            .and(path("/api/auth/login"))
+            .and(body_json(json!({ "username": "astrbot", "password": "Abcdefg1" })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "ok",
+                "data": { "token": "jwt-plain" }
+            })))
+            .mount(&server)
+            .await;
+
+        let client = DashboardClient::connect(&sessions(), "ds-2", "127.0.0.1", port).unwrap();
+        client
+            .login("astrbot", "Abcdefg1", Some("s3cret"))
+            .await
+            .unwrap();
+        assert_eq!(client.token().as_deref(), Some("jwt-plain"));
+    }
+
+    #[tokio::test]
+    async fn old_core_that_rejects_plaintext_gets_md5() {
+        let server = MockServer::start().await;
+        let port: u16 = server.uri().rsplit(':').next().unwrap().parse().unwrap();
+        // 旧核心（≤ v4.25）拿请求体直接和落盘的 md5 比：明文先来必然被拒，再试 md5
+        Mock::given(method("POST"))
+            .and(path("/api/auth/login"))
+            .and(body_json(json!({ "username": "astrbot", "password": "Abcdefg1" })))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/auth/login"))
+            .and(body_json(json!({
+                "username": "astrbot",
+                "password": md5_hex("Abcdefg1")
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "status": "ok",
+                "data": { "token": "jwt-md5" }
+            })))
+            .mount(&server)
+            .await;
+
+        let client = DashboardClient::connect(&sessions(), "md5-1", "127.0.0.1", port).unwrap();
+        client.login("astrbot", "Abcdefg1", None).await.unwrap();
+        assert_eq!(client.token().as_deref(), Some("jwt-md5"));
     }
 }
