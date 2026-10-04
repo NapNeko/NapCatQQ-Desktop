@@ -181,6 +181,205 @@ pub async fn dashboard_port(
     }
 }
 
+/// 面板会话（登录换来的 token + CSRF）。
+///
+/// 面板每个请求都要 X-Token + X-CSRF-Token，而登录有代价（要过 bcrypt），
+/// 所以登录一次就存下来复用；401/403 时丢掉重登一次。
+#[derive(Debug, Clone)]
+pub struct PanelSession {
+    pub token: String,
+    pub csrf: String,
+}
+
+/// 按实例缓存面板会话。仿 AstrBot 的 DashboardSessions：适配器与 IPC 层共享同一个 Arc，
+/// 换一个入口不会各自登录一遍。
+#[derive(Default)]
+pub struct PanelSessions {
+    inner: std::sync::Mutex<std::collections::HashMap<String, PanelSession>>,
+}
+
+impl PanelSessions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn get(&self, instance_id: &str) -> Option<PanelSession> {
+        self.inner.lock().ok()?.get(instance_id).cloned()
+    }
+
+    fn store(&self, instance_id: &str, session: PanelSession) {
+        if let Ok(mut map) = self.inner.lock() {
+            map.insert(instance_id.to_string(), session);
+        }
+    }
+
+    /// 会话失效时清掉，下次调用会重新登录
+    pub fn clear(&self, instance_id: &str) {
+        if let Ok(mut map) = self.inner.lock() {
+            map.remove(instance_id);
+        }
+    }
+
+    /// 带缓存的登录：已有会话直接用；没有或已失效就用密码换一个。
+    /// 密码拿不到（用户没填）且没有缓存会话时返回 None。
+    async fn ensure(
+        &self,
+        client: &reqwest::Client,
+        instance_id: &str,
+        port: u16,
+        password: Option<&str>,
+    ) -> Option<PanelSession> {
+        if let Some(s) = self.get(instance_id) {
+            return Some(s);
+        }
+        let password = password.filter(|p| !p.is_empty())?;
+        let session = login(client, LOOPBACK_HOST, port, password).await?;
+        let session = PanelSession {
+            token: session.token,
+            csrf: session.csrf_token,
+        };
+        self.store(instance_id, session.clone());
+        Some(session)
+    }
+}
+
+/// 面板调用的结果。IPC 只透出这几态，前端按态决定重试还是提示。
+#[derive(Debug, Clone)]
+pub enum PanelOutcome {
+    Ok(serde_json::Value),
+    /// 拿不到凭据 / 凭据不对：需要用户填面板密码
+    Unauthorized,
+    /// 面板打不通
+    Unreachable(String),
+    /// 其它失败（含状态码）
+    Failed(String),
+}
+
+/// 允许经桌面端转发的路径前缀。
+///
+/// 这是一道**白名单**：面板端点里既有读也有写（装插件、改配置、关进程），
+/// 转发层不该变成「能打任意 URL 的代理」。只放行面板自己的 /api/，
+/// 且客户端固定连回环，路径里不许出现主机名、穿越或空白。
+const ALLOWED_PREFIX: &str = "/api/";
+
+pub fn path_is_allowed(path: &str) -> bool {
+    path.starts_with(ALLOWED_PREFIX)
+        && !path.contains("://")
+        && !path.contains("..")
+        && !path.contains('\\')
+        && !path.contains(char::is_whitespace)
+}
+
+/// 代前端调一次面板接口（自动登录；401/403 时清会话重登一次再试）。
+///
+/// method 只认 GET / POST —— 面板其余方法桌面端用不到，不放行能少一类口子。
+#[allow(clippy::too_many_arguments)]
+pub async fn panel_call(
+    sessions: &PanelSessions,
+    instance_id: &str,
+    port: u16,
+    password: Option<&str>,
+    method: &str,
+    path: &str,
+    body: Option<serde_json::Value>,
+) -> PanelOutcome {
+    if port == 0 {
+        return PanelOutcome::Unreachable("实例没有可用面板端口".to_string());
+    }
+    if !path_is_allowed(path) {
+        return PanelOutcome::Failed(format!("不允许的面板路径：{path}"));
+    }
+    let method = method.to_ascii_uppercase();
+    if method != "GET" && method != "POST" {
+        return PanelOutcome::Failed(format!("不支持的方法：{method}"));
+    }
+    let client = match client() {
+        Ok(c) => c,
+        Err(e) => return PanelOutcome::Unreachable(e),
+    };
+    let url = format!("http://{LOOPBACK_HOST}:{port}{path}");
+
+    for attempt in 0..2 {
+        if attempt == 1 {
+            // 上一次的会话可能过期了：清掉再登录一次
+            sessions.clear(instance_id);
+        }
+        let Some(session) = sessions.ensure(&client, instance_id, port, password).await else {
+            return PanelOutcome::Unauthorized;
+        };
+        let mut req = if method == "GET" {
+            client.get(&url)
+        } else {
+            client.post(&url)
+        };
+        req = req
+            .header("X-Token", &session.token)
+            .header("X-CSRF-Token", &session.csrf);
+        if let Some(b) = &body {
+            req = req.json(b);
+        }
+        let resp = match req.send().await {
+            Ok(r) => r,
+            Err(e) => return PanelOutcome::Unreachable(e.to_string()),
+        };
+        let status = resp.status();
+        if status.as_u16() == 401 || status.as_u16() == 403 {
+            if attempt == 0 {
+                continue;
+            }
+            return PanelOutcome::Unauthorized;
+        }
+        if !status.is_success() {
+            return PanelOutcome::Failed(format!("面板返回 {status}"));
+        }
+        return match resp.json::<serde_json::Value>().await {
+            Ok(v) => PanelOutcome::Ok(v),
+            Err(e) => PanelOutcome::Failed(format!("面板回包不是 JSON：{e}")),
+        };
+    }
+    PanelOutcome::Unauthorized
+}
+
+#[cfg(test)]
+mod panel_call_tests {
+    use super::*;
+
+    #[test]
+    fn whitelist_only_allows_plain_api_paths() {
+        assert!(path_is_allowed("/api/overview"));
+        assert!(path_is_allowed("/api/plugins"));
+        assert!(path_is_allowed("/api/plugins/demo/toggle"));
+        // 不能借转发层打别处：绝对 URL、穿越、反斜杠、空白、非 /api 前缀
+        assert!(!path_is_allowed("http://evil.test/api/x"));
+        assert!(!path_is_allowed("/api/../../etc/passwd"));
+        assert!(!path_is_allowed("/api/x\\..\\y"));
+        assert!(!path_is_allowed("/api/a b"));
+        assert!(!path_is_allowed("/healthz"));
+        assert!(!path_is_allowed(""));
+    }
+
+    #[tokio::test]
+    async fn panel_call_refuses_disallowed_path_without_network() {
+        let sessions = PanelSessions::new();
+        let out = panel_call(&sessions, "i1", 1, None, "GET", "/healthz", None).await;
+        assert!(matches!(out, PanelOutcome::Failed(_)), "{out:?}");
+    }
+
+    #[tokio::test]
+    async fn panel_call_reports_unauthorized_without_password() {
+        let sessions = PanelSessions::new();
+        let out = panel_call(&sessions, "i1", 1, None, "GET", "/api/overview", None).await;
+        assert!(matches!(out, PanelOutcome::Unauthorized), "{out:?}");
+    }
+
+    #[tokio::test]
+    async fn panel_call_refuses_unsupported_method() {
+        let sessions = PanelSessions::new();
+        let out = panel_call(&sessions, "i1", 1, None, "DELETE", "/api/plugins", None).await;
+        assert!(matches!(out, PanelOutcome::Failed(_)), "{out:?}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
