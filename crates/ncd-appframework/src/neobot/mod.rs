@@ -5,6 +5,7 @@ pub mod config;
 pub mod integration;
 pub mod manifest;
 pub mod probe;
+pub mod versions;
 
 use std::sync::Arc;
 
@@ -28,6 +29,7 @@ pub use manifest::{
     neobot_manifest,
 };
 pub use probe::probe_neobot;
+pub use versions::{PackageVersions, fetch_versions, parse_versions};
 
 use crate::adapter::{AppComponentSpec, AppFrameworkAdapter, restore_from_backup};
 use crate::adopt::write_project_sidecar;
