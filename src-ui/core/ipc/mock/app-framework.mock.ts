@@ -186,7 +186,7 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
 mockAppFrameworks.push({
     id: 'neobot',
     display_name: 'NeoBot',
-    description: '更有活人感的 QQ 聊天机器人（交流群 983752344）',
+    description: 'Python 应用端，主打有活人感的聊天，自带 WebUI',
     repo_url: 'https://github.com/SuperQuail/NeoBot',
     docs_url: 'https://github.com/SuperQuail/NeoBot/tree/main/docs',
     supported_placements: ['local_native', 'remote_native'],
