@@ -1,4 +1,4 @@
-// 「重装 / 换版本」对话框：给已安装的实例换一个版本重装。
+// 「重装 / 换版本」对话框：已安装实例在这里换版本重装；未安装时它也是「选择版本」的安装入口。
 //
 // 为什么单独一个对话框而不是就地一个下拉：重装会走完整安装流程（重新拉依赖、
 // 覆盖脚手架），是个有副作用的动作，值得一次明确确认。文案里把「当前版本 →
@@ -16,6 +16,7 @@ import {
     Spinner,
 } from '../../../shared/ui';
 import { VersionSelect } from '../VersionSelect';
+import { isInstalled } from '../../../core/domain/apps/instanceState';
 import type { AppInstance } from '../../../core/ipc/types';
 
 export const ReinstallDialog: React.FC<{
@@ -32,12 +33,13 @@ export const ReinstallDialog: React.FC<{
     const target = version ?? latestVersion;
     const targetText = target ? target : '最新正式版';
     const same = !!current && !!target && current === target;
+    const reinstall = isInstalled(instance);
 
     return (
         <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
             <DialogContent className="max-w-md">
                 <DialogHeader>
-                    <DialogTitle>重装 {instance.display_name}</DialogTitle>
+                    <DialogTitle>{reinstall ? '重装' : '安装'} {instance.display_name}</DialogTitle>
                     <DialogDescription>
                         {busy
                             ? '实例正在忙，等当前操作结束后再试。'
@@ -54,7 +56,7 @@ export const ReinstallDialog: React.FC<{
                             </span>
                         </span>
                         <span className="text-text-secondary">
-                            将重装：
+                            {reinstall ? '将重装：' : '将安装：'}
                             <span className="ml-1 font-mono text-text">{targetText}</span>
                         </span>
                         {same && (
@@ -80,7 +82,7 @@ export const ReinstallDialog: React.FC<{
                     </Button>
                     <Button variant="primary" size="sm" disabled={busy} onClick={() => void onConfirm()}>
                         {busy && <Spinner size="xs" className="text-white" />}
-                        重装
+                        {reinstall ? '重装' : '安装'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

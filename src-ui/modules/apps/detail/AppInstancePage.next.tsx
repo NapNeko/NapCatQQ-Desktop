@@ -156,7 +156,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                     onAutoStartChange={(autoStart) => apps.setAutoStart({ id: instance.id, autoStart })}
                     latestVersion={latestVersion}
                     hasUpdate={hasUpdate}
-                    onReinstall={() => setReinstallOpen(true)}
+                    onReinstall={installed ? () => setReinstallOpen(true) : undefined}
                 />
 
                 {!installed ? (
@@ -164,7 +164,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                         instance={instance}
                         busy={busy}
                         onInstall={() => apps.install(instance.id, installVersion)}
-                        onPickVersion={() => setReinstallOpen(true)}
+                        onPickVersion={versions.data === null ? undefined : () => setReinstallOpen(true)}
                         installVersion={installVersion}
                         latestVersion={latestVersion}
                         onViewTasks={onViewTasks}
@@ -266,8 +266,8 @@ const NotInstalledBody: React.FC<{
     instance: AppInstance;
     busy: boolean;
     onInstall: () => void;
-    /** 打开「选择版本」对话框；框架不支持按版本安装时按钮不出现 */
-    onPickVersion: () => void;
+    /** 打开「选择版本」对话框；框架不支持按版本安装时不传，按钮不出现 */
+    onPickVersion?: () => void;
     installVersion: string | null;
     latestVersion: string | null;
     onViewTasks?: () => void;
@@ -306,9 +306,11 @@ const NotInstalledBody: React.FC<{
                     <ActionMotionIcon icon={Download} size={13} motion={EMPHASIS_MOTION} />
                     立即安装
                 </Button>
-                <Button size="sm" variant="secondary" disabled={busy} onClick={onPickVersion}>
-                    选择版本
-                </Button>
+                {onPickVersion && (
+                    <Button size="sm" variant="secondary" disabled={busy} onClick={onPickVersion}>
+                        选择版本
+                    </Button>
+                )}
             </div>
         </PagePlaceholder>
     );

@@ -54,7 +54,7 @@ export const DetailHeader: React.FC<{
     latestVersion?: string | null;
     /** 已装版本比上游最新正式版旧 */
     hasUpdate?: boolean;
-    /** 打开「重装 / 换版本」对话框 */
+    /** 打开「重装 / 换版本」对话框；只给已安装的实例传 */
     onReinstall?: () => void;
 }> = ({
     instance,
