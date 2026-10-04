@@ -155,6 +155,12 @@ function SelectInner<V extends string>(
                             'z-50 overflow-hidden rounded-sm border border-border-subtle',
                             'bg-elevated shadow-popover',
                             'min-w-[var(--radix-select-trigger-width)]',
+                            // 限高交给 Radix 算出的可用空间（它知道触发器在视口哪一侧、
+                            // 上下还剩多少）。不设的话：选项一多面板就撑到视口外，
+                            // 配合下面的 overflow-hidden 表现为「后半截选不到也滚不动」。
+                            // 三个孩子（上按钮 / Viewport / 下按钮）纵向排列，让 Viewport 拿到剩余高度。
+                            // 不加 flex-col 的话 Viewport 高度不受约束，overflow-y-auto 也就永远不触发。
+                            'flex max-h-[var(--radix-select-content-available-height)] flex-col',
                         )}
                         // 关动效 / reduced-motion：不写 hidden，不依赖 GSAP。
                         // 开动效：先 hidden，由上面 ref 回调 fromTo 露出。
@@ -164,10 +170,18 @@ function SelectInner<V extends string>(
                                 : undefined
                         }
                     >
-                        <RadixSelect.ScrollUpButton className="flex h-6 cursor-default items-center justify-center bg-elevated text-text-tertiary">
+                        <RadixSelect.ScrollUpButton className="flex h-6 shrink-0 cursor-default items-center justify-center bg-elevated text-text-tertiary">
                             <ChevronUp size={14} />
                         </RadixSelect.ScrollUpButton>
-                        <RadixSelect.Viewport className="p-1">
+                        <RadixSelect.Viewport
+                            className={cn(
+                                // min-h-0 是 flex 子项能收缩、从而让 overflow 生效的前提
+                                'min-h-0 flex-1 p-1',
+                                // 超高时滚动条出现在这里。Radix 的滚动按钮靠 Viewport 的
+                                // scrollTop 工作，所以滚动必须在 Viewport 上而不是 Content。
+                                'overflow-y-auto overscroll-contain',
+                            )}
+                        >
                             {items.map((item) => (
                                 <RadixSelect.Item
                                     key={item.value}
@@ -188,7 +202,7 @@ function SelectInner<V extends string>(
                                 </RadixSelect.Item>
                             ))}
                         </RadixSelect.Viewport>
-                        <RadixSelect.ScrollDownButton className="flex h-6 cursor-default items-center justify-center bg-elevated text-text-tertiary">
+                        <RadixSelect.ScrollDownButton className="flex h-6 shrink-0 cursor-default items-center justify-center bg-elevated text-text-tertiary">
                             <ChevronDown size={14} />
                         </RadixSelect.ScrollDownButton>
                     </RadixSelect.Content>
