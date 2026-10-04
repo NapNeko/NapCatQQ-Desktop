@@ -595,6 +595,11 @@ export const mockAppFrameworkApi = {
                         path_hint: '/onebot/v11/ws',
                         warning: '监听 0.0.0.0 但没有 access token：局域网内任何人都能连上来',
                     },
+                    defaults: {
+                        bot_account: '0',
+                        bot_nick_name: 'NeoBot',
+                        bot_data: '',
+                    },
                     values: {
                         bot_account: '10001',
                         bot_nick_name: 'Luna',

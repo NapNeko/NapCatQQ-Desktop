@@ -40,10 +40,18 @@ export interface NeoBotDeployValues {
     adminAccounts: string[];
 }
 
+/** 面板给的出厂默认值。判断「用户填了没有」要对着它比，不能写死字面量——默认值改了这里自动跟上。 */
+export interface NeoBotDeployDefaults {
+    botAccount: string;
+    botNickName: string;
+    botData: string;
+}
+
 export interface NeoBotDeployStatus {
     steps: NeoBotDeployStep[];
     onebot: NeoBotOneBotConn;
     values: NeoBotDeployValues;
+    defaults: NeoBotDeployDefaults;
     /** 本体配置版本号，改配置时要带回去 */
     revision: string;
     /** .env 的版本号，改密钥时要带回去 */
@@ -103,10 +111,31 @@ export function parseNeoBotDeployStatus(raw: unknown): NeoBotDeployStatus | null
         steps: parseSteps(r.steps),
         onebot: parseOneBot(r.onebot),
         values: parseValues(r.values),
+        defaults: (() => {
+            const d = asRecord(r.defaults) ?? {};
+            return {
+                botAccount: asString(d.bot_account),
+                botNickName: asString(d.bot_nick_name),
+                botData: asString(d.bot_data),
+            };
+        })(),
         revision: asString(r.revision),
         envRevision: typeof r.env_revision === 'string' ? r.env_revision : null,
         ready: asBool(r.ready),
     };
+}
+
+/**
+ * 面板里的机器人 QQ 是不是「还没填」。
+ *
+ * 不能拿 '0' 之类的字面量判：出厂占位由面板的 schema 默认值决定（现在恰好是 '0'，
+ * 以后可能改）。所以对着 defaults.bot_account 比——上游改了这里自动跟上。
+ */
+export function isBotAccountUnset(status: NeoBotDeployStatus): boolean {
+    const account = status.values.botAccount.trim();
+    if (!account) return true;
+    const fallback = status.defaults.botAccount.trim();
+    return fallback !== '' && account === fallback;
 }
 
 /** 必填但还没做的项——页面顶部据此说「还差 N 项」 */

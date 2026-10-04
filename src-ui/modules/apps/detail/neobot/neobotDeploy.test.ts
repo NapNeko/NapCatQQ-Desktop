@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { missingRequiredSteps, parseNeoBotDeployStatus } from './neobotDeploy';
+import { isBotAccountUnset, missingRequiredSteps, parseNeoBotDeployStatus } from './neobotDeploy';
 
 // 回包结构与面板 deploy_status 一致（键取自 dashboard/api.py 的 _json_ok）
 const REAL = {
@@ -69,6 +69,33 @@ describe('parseNeoBotDeployStatus', () => {
         expect(s.onebot.port).toBe(0);
         expect(s.onebot.urlLocal).toBe('');
         expect(s.envRevision).toBeNull();
+    });
+});
+
+describe('isBotAccountUnset', () => {
+    const withAccount = (account: string, fallback = '0') =>
+        parseNeoBotDeployStatus({
+            steps: [],
+            values: { bot_account: account },
+            defaults: { bot_account: fallback },
+        })!;
+
+    it('空字符串算没填', () => {
+        expect(isBotAccountUnset(withAccount(''))).toBe(true);
+    });
+
+    it('等于出厂占位也算没填——不能拿字面量判，要对着面板给的 defaults 比', () => {
+        expect(isBotAccountUnset(withAccount('0'))).toBe(true);
+        // 出厂占位换成别的值时，判断跟着走
+        expect(isBotAccountUnset(withAccount('default-qq', 'default-qq'))).toBe(true);
+    });
+
+    it('填了真 QQ 就是填了', () => {
+        expect(isBotAccountUnset(withAccount('10001'))).toBe(false);
+    });
+
+    it('面板没给 defaults 时，只要非空就算填了', () => {
+        expect(isBotAccountUnset(withAccount('10001', ''))).toBe(false);
     });
 });
 

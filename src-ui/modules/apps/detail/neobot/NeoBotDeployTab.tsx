@@ -17,7 +17,7 @@ import { useAppLinkPlan, useApplyAppLink } from '../../../../hooks/apps/useAppLi
 import { isDockerBot } from '../../../../core/domain/apps/appLinkTopology';
 import { AppLinkDialog } from '../../AppLinkDialog';
 import type { AppInstance } from '../../../../core/ipc/types';
-import { missingRequiredSteps, parseNeoBotDeployStatus } from './neobotDeploy';
+import { isBotAccountUnset, missingRequiredSteps, parseNeoBotDeployStatus } from './neobotDeploy';
 import { PanelStateView } from './PanelStateView';
 import { neobotPanelKey, usePanelJson } from './useNeoBotPanel';
 
@@ -62,17 +62,19 @@ export const NeoBotDeployTab: React.FC<{
 
     const status = query.data?.kind === 'ok' ? query.data.data : null;
     const deployQq = status?.values.botAccount.trim() ?? '';
+    // 「有没有填」对着面板的出厂默认值判，不写死 '0'（见 isBotAccountUnset）
+    const qqUnset = status === null || isBotAccountUnset(status);
 
     // 桌面端有哪些 Bot（id 就是 QQ），用来把部署里填的 QQ 直接对上一个 Bot
     const { data: snapshots = [] } = useBotSnapshots({ disablePolling: true });
     const configs = useBotConfigsMap(snapshots);
     const matchedBotId = useMemo(() => {
-        if (!deployQq || deployQq === '0') return null;
+        if (qqUnset) return null;
         const hit = snapshots.find((s) => s.bot_id === deployQq);
         if (!hit) return null;
         // Docker 部署的 Bot 连不上宿主机的回环地址，链接流程本身也会拒绝，这里先排除
         return isDockerBot(configs[hit.bot_id]?.bot.deploymentType) ? null : hit.bot_id;
-    }, [deployQq, snapshots, configs]);
+    }, [deployQq, qqUnset, snapshots, configs]);
 
     const { plan, previewing } = useAppLinkPlan(instanceId, matchedBotId ?? '', !!matchedBotId);
     const applyLink = useApplyAppLink();
@@ -256,16 +258,16 @@ export const NeoBotDeployTab: React.FC<{
                             ) : (
                                 <>
                                     <p className="text-xs leading-relaxed text-text-secondary">
-                                        {deployQq && deployQq !== '0'
-                                            ? '面板里填的 QQ 是 ' +
+                                        {qqUnset
+                                            ? '面板的快捷部署还没填机器人 QQ，所以桌面端不知道该连哪个 Bot。'
+                                            : '面板里填的 QQ 是 ' +
                                               deployQq +
-                                              '，但桌面端还没有这个 Bot，所以没法一键链接。'
-                                            : '面板的快捷部署还没填机器人 QQ，所以桌面端不知道该连哪个 Bot。'}
+                                              '，但桌面端还没有这个 Bot，所以没法一键链接。'}
                                     </p>
                                     <p className="text-xs leading-relaxed text-text-secondary">
                                         两种做法：到桌面端「机器人」页新建一个 QQ 为 {' '}
                                         <span className="font-mono text-text">
-                                            {deployQq && deployQq !== '0' ? deployQq : '（面板里填的那个）'}
+                                            {qqUnset ? '（面板里填的那个）' : deployQq}
                                         </span>{' '}
                                         的协议端 Bot，回来就能一键连；或者直接手动选一个已有的 Bot。
                                     </p>
