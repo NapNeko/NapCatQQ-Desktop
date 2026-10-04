@@ -90,8 +90,10 @@ export function useAppInstances() {
     });
 
     const installMutation = useMutation({
-        mutationFn: (id: string) => appFrameworkService.install(id),
-        onSuccess: (_taskId, id) => {
+        // 版本可选：不传 = 最新正式版；框架不支持按版本安装时后端忽略它
+        mutationFn: ({ id, version }: { id: string; version?: string | null }) =>
+            appFrameworkService.install(id, version),
+        onSuccess: (_taskId, { id }) => {
             pushInfoBar({
                 key: `app-install:${id}`,
                 tone: 'info',
@@ -100,7 +102,7 @@ export function useAppInstances() {
                 autoDismissMs: 4000,
             });
         },
-        onError: (err, id) => fail('提交安装失败', `app-install:${id}`)(err),
+        onError: (err, { id }) => fail('提交安装失败', `app-install:${id}`)(err),
     });
 
     const startMutation = useMutation({
@@ -230,7 +232,8 @@ export function useAppInstances() {
         isCreating: createMutation.isPending,
         importInstance: importMutation.mutateAsync,
         isImporting: importMutation.isPending,
-        install: installMutation.mutate,
+        /** 安装 / 重装；`version` 指定装哪个版本，不传 = 最新正式版 */
+        install: (id: string, version?: string | null) => installMutation.mutate({ id, version }),
         start: startMutation.mutate,
         stop: stopMutation.mutate,
         refresh: refreshMutation.mutate,
@@ -250,7 +253,7 @@ export function useAppInstances() {
                   : refreshMutation.isPending
                     ? refreshMutation.variables
                     : installMutation.isPending
-                      ? installMutation.variables
+                      ? installMutation.variables.id
                       : unlinkMutation.isPending
                         ? unlinkMutation.variables
                         : null,

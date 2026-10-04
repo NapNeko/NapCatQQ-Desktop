@@ -40,6 +40,8 @@ import {
 import { useMotion } from '../../../hooks/preferences/useMotion';
 import { useServerManager } from '../../../hooks/remote/useServerManager';
 import { useAppFrameworks, useAppInstances } from '../../../hooks/apps/useAppInstances';
+import { useAppFrameworkLatestVersions } from '../../../hooks/apps/useAppFrameworkVersions';
+import { hasAppUpdate } from '../../../core/domain/apps/appVersions';
 import { cn } from '../../../shared/utils/cn';
 import { AppLinkDialog } from '../AppLinkDialog';
 import { DeleteInstanceDialog } from '../DeleteInstanceDialog';
@@ -76,6 +78,9 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
         () => new Map(manifests.map((m) => [m.id, m] as const)),
         [manifests],
     );
+
+    // 每张卡片上的「可更新」提示：按框架查上游最新正式版，同一框架只查一次
+    const latestVersions = useAppFrameworkLatestVersions(apps.instances);
 
     const refreshing = frameworks.isFetching || apps.isLoading;
 
@@ -131,6 +136,7 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
                         <InstanceList
                             instances={apps.instances}
                             manifestById={manifestById}
+                            latestByFramework={latestVersions}
                             servers={servers}
                             pendingId={apps.pendingId}
                             refreshingId={apps.refreshingId}
@@ -224,11 +230,14 @@ const Loading: React.FC<{ text: string }> = ({ text }) => (
 interface InstanceListProps {
     instances: AppInstance[];
     manifestById: Map<string, AppFrameworkManifest>;
+    /** framework_id -> 上游最新正式版；没有表示不支持按版本安装或还没查到 */
+    latestByFramework: Map<string, string>;
     servers: ReturnType<typeof useServerManager>['servers'];
     pendingId: string | null | undefined;
     refreshingId: string | null | undefined;
     onViewTasks?: () => void;
-    onInstall: (id: string) => void;
+    /** 列表上不给版本选择，一律装最新正式版 */
+    onInstall: (id: string, version?: string | null) => void;
     onStart: (id: string) => void;
     onStop: (id: string) => void;
     onRefresh: (id: string) => void;
@@ -263,6 +272,7 @@ const InstanceList: React.FC<InstanceListProps> = (props) => {
 };
 
 const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
+    latestByFramework,
     instance: i,
     manifestById,
     servers,
@@ -288,6 +298,10 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
     const running = i.state === 'running';
     const terminalEnabled = useFeatureEnabled('terminal');
     const accent = i.last_error ? 'danger' : running || installing ? 'brand' : 'none';
+
+    // 比较走 PEP 440（appVersions），不能用组件页那套 SemVer
+    const latest = latestByFramework.get(i.framework_id) ?? null;
+    const updatable = hasAppUpdate(i.installed_version, latest);
 
     const meta = [
         manifest?.display_name ?? i.framework_id,
@@ -335,6 +349,11 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                     </h3>
                     <p className="mt-0.5 truncate text-2xs text-text-tertiary" title={i.install_dir}>
                         {meta}
+                        {updatable && (
+                            <span className="ml-1.5 text-warning" title={`上游最新正式版 ${latest}`}>
+                                最新 {latest}
+                            </span>
+                        )}
                     </p>
                 </div>
                 <div className="min-h-[1.25rem] min-w-0 text-xs leading-snug text-text-secondary">

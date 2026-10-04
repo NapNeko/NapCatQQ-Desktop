@@ -140,6 +140,42 @@ describe('appendLine · NoneBot2', () => {
     });
 });
 
+describe('appendLine · NeoBot', () => {
+    // loguru 控制台格式：{time} | {level: <8} | {name: <24} | {message}，colorize=True
+    it('裸 ISO 时间与竖线等级：时间进列、等级入色、正文只剩模块与消息', () => {
+        const entry = one(
+            '\x1b[32m2026-10-04 03:41:22.123\x1b[0m | \x1b[1m\x1b[34mINFO    \x1b[0m | ' +
+                '\x1b[36mneobot.chat             \x1b[0m | \x1b[1m\x1b[34m收到群消息\x1b[0m',
+        );
+        expect(entry.level).toBe('info');
+        expect(entry.timestamp).toBe('03:41:22');
+        expect(entry.text).toBe('neobot.chat              | 收到群消息');
+    });
+
+    it('WARNING 的 loguru 名也要归到 warn，不是 unknown', () => {
+        const entry = one('2026-10-04 03:41:23.000 | WARNING  | neobot.config | 缺 API key');
+        expect(entry.level).toBe('warn');
+        expect(entry.timestamp).toBe('03:41:23');
+        expect(entry.text).toBe('neobot.config | 缺 API key');
+    });
+
+    it('无颜色的裸行同样能拆（重定向到文件后 ANSI 会被剥掉）', () => {
+        const entry = one('2026-10-04 03:41:24.500 | ERROR    | neobot.llm | 上游超时');
+        expect(entry.level).toBe('error');
+        expect(entry.timestamp).toBe('03:41:24');
+        expect(entry.text).toBe('neobot.llm | 上游超时');
+    });
+
+    it('CRITICAL 归到 fatal、SUCCESS 归到 success，等级标签同样从正文挖掉', () => {
+        const critical = one('2026-10-04 03:41:25.000 | CRITICAL | neobot.core | 启动失败');
+        expect(critical.level).toBe('fatal');
+        expect(critical.text).toBe('neobot.core | 启动失败');
+        const success = one('2026-10-04 03:41:26.000 | SUCCESS  | neobot.core | 初始化完成');
+        expect(success.level).toBe('success');
+        expect(success.text).toBe('neobot.core | 初始化完成');
+    });
+});
+
 describe('续行', () => {
     it('没时间没等级的行接着上一条：等级跟着走，缩进留着', () => {
         const logs = buildHistoryEntries(

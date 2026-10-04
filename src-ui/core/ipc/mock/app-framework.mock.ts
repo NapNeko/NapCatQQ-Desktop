@@ -41,11 +41,13 @@ import type {
     KarinPluginMarketEntry,
     LogSnapshot,
     OneBotLinkPlan,
+    PackageVersions,
     ProgressEvent,
     ProgressKind,
 } from '../types';
 import { mockAstrBotDashboard } from './astrbot-dashboard.mock';
 import { mockMaiBotRuntime } from './maibot-runtime.mock';
+import { latestStable } from '../../domain/apps/appVersions';
 import { karinDefaultConfig } from '../../domain/apps/karinConfig';
 import { astrbotDefaultConfig } from '../../domain/apps/astrbotConfig';
 import { nonebot2DefaultConfig } from '../../domain/apps/nonebot2Config';
@@ -181,6 +183,24 @@ export const mockAppFrameworks: AppFrameworkManifest[] = [
         terms: [],
     },
 ];
+
+mockAppFrameworks.push({
+    id: 'neobot',
+    display_name: 'NeoBot',
+    description: 'Python 应用端，主打有活人感的聊天，自带 WebUI',
+    repo_url: 'https://github.com/SuperQuail/NeoBot',
+    docs_url: 'https://github.com/SuperQuail/NeoBot/tree/main/docs',
+    supported_placements: ['local_native', 'remote_native'],
+    default_port: 8080,
+    has_webui: true,
+    link_modes: ['reverse_ws'],
+    component_id: 'neobot',
+    runtime_component_ids: ['uv'],
+    store_resources: [],
+    has_install_renderer: false,
+    webui_auth: 'none',
+    terms: [],
+});
 
 mockAppFrameworks.push({
     id: 'koishi',
@@ -333,6 +353,27 @@ let instances: AppInstance[] = [
         auto_start: true,
     },
     {
+        id: 'nb7c1d20',
+        framework_id: 'neobot',
+        display_name: 'NeoBot · 本机',
+        placement: 'local_native',
+        host_id: 'local',
+        install_dir: 'D:/NapCatQQ/apps/neobot/nb7c1d20',
+        port: 8080,
+        state: 'running',
+        link: {
+            bot_id: '10001',
+            mode: 'reverse_ws',
+            connection_name: 'ncd-app:nb7c1d20',
+            linked_at_ms: Date.now() - 1_200_000,
+        },
+        installed_version: '1.2.0',
+        created_at_ms: Date.now() - 3_600_000,
+        install_renderer: false,
+        origin: 'created',
+        auto_start: true,
+    },
+    {
         id: 'yz90ab12',
         framework_id: 'yunzai',
         display_name: '云崽 · 本机',
@@ -397,11 +438,14 @@ export function peekMockAppInstance(id: string): AppInstance {
 
 const MOCK_INSTALL_STEPS = ['解析 uv', '下载源码', '放置源码', '同步 Python 依赖', '预置端口与协议确认'];
 
+// NeoBot 的发行清单，最新在前；listVersions 与「装到最新正式版」的回填共用同一份
+const MOCK_NEOBOT_VERSIONS = ['1.2.1', '1.2.0', '1.1.0', '1.0.0', '1.0.0a25'];
+
 /**
  * 按真机的事件顺序假装跑一次安装：任务快照、步骤进度、最后实例变成已安装。
  * 走查卡片 / 详情页的「安装中」进度用。
  */
-function simulateInstallTask(inst: AppInstance): string {
+function simulateInstallTask(inst: AppInstance, version: string | null = null): string {
     const taskId = `mock-install-${inst.id}-${Date.now()}`;
     const target = `${inst.framework_id}@${inst.id}`;
     const submittedAtMs = BigInt(Date.now());
@@ -434,7 +478,21 @@ function simulateInstallTask(inst: AppInstance): string {
     plan.push(() => push({ kind: 'finished', ok: true }));
     plan.push(() => {
         emitMockEvent({ kind: 'deployment_task_changed', task: snapshot('success') } as DomainEvent);
-        publish({ ...require(inst.id), state: 'installed', installed_version: '1.2.5' }, 'installed');
+        // 指定了版本就回填它——真实链路由 detect 从发行元数据回读，预览里照同样的口径表现。
+        // NeoBot 不指定版本 = 装到最新正式版再回读，回填清单里的 latest 正式版，不留旧号
+        const settled = require(inst.id);
+        publish(
+            {
+                ...settled,
+                state: 'installed',
+                installed_version:
+                    version ??
+                    (inst.framework_id === 'neobot' ? latestStable(MOCK_NEOBOT_VERSIONS) : null) ??
+                    settled.installed_version ??
+                    '1.2.5',
+            },
+            'installed',
+        );
     });
     plan.forEach((run, i) => setTimeout(run, 400 + i * 600));
     return taskId;
@@ -561,10 +619,21 @@ export const mockAppFrameworkApi = {
         return withMockDelay(imported);
     },
 
-    install: async (id: string): Promise<string> => {
+    install: async (id: string, version?: string | null): Promise<string> => {
         const inst = require(id);
         publish({ ...inst, state: 'installing' }, 'installing');
-        return withMockDelay(simulateInstallTask(inst));
+        return withMockDelay(simulateInstallTask(inst, version ?? null));
+    },
+
+    /** 真实链路只有 NeoBot 实现 available_versions，trait 默认 None；UI 拿到 null 就隐藏选择器 */
+    listVersions: async (frameworkId: string): Promise<PackageVersions | null> => {
+        if (frameworkId !== 'neobot') return withMockDelay(null);
+        return withMockDelay({
+            name: 'neobot-app',
+            versions: [...MOCK_NEOBOT_VERSIONS],
+            latest: MOCK_NEOBOT_VERSIONS[0] ?? null,
+            has_prerelease: MOCK_NEOBOT_VERSIONS.some((v) => /[a-zA-Z]/.test(v.slice(1))),
+        });
     },
 
     refresh: async (id: string): Promise<AppInstance> => withMockDelay(require(id)),

@@ -20,6 +20,7 @@ const COMPONENT_DISPLAY_NAME: Record<ComponentId, string> = {
     git: 'Git',
     redis: 'Redis',
     yunzai: 'TRSS-Yunzai',
+    neobot: 'NeoBot',
 };
 
 const STEP_KIND_LABEL: Record<string, string> = {

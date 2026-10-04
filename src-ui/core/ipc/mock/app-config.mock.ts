@@ -65,6 +65,24 @@ const ASTRBOT_DOCS: AppConfigDocument[] = [
     { id: 'cmd_config', label: 'cmd_config.json', rel_path: 'data/cmd_config.json', format: 'json', hot_reload: false },
 ];
 
+/** NeoBot 两份 TOML（对齐后端 neobot_config_documents 的 id / rel_path / hot_reload） */
+const NEOBOT_DOCS: AppConfigDocument[] = [
+    {
+        id: 'adapter',
+        label: 'OneBot 对接（data/config.toml）',
+        rel_path: 'data/config.toml',
+        format: 'toml',
+        hot_reload: true,
+    },
+    {
+        id: 'dashboard',
+        label: '网页面板（plugins_data/dashboard/config.toml）',
+        rel_path: 'plugins_data/dashboard/config.toml',
+        format: 'toml',
+        hot_reload: true,
+    },
+];
+
 const MAIBOT_DOCS: AppConfigDocument[] = [
     { id: 'bot_config', label: '主配置 bot_config.toml', rel_path: 'config/bot_config.toml', format: 'toml', hot_reload: true },
     { id: 'model_config', label: '模型配置 model_config.toml', rel_path: 'config/model_config.toml', format: 'toml', hot_reload: true },
@@ -130,6 +148,8 @@ function docsOf(frameworkId: string): AppConfigDocument[] {
             return KOISHI_DOCS;
         case 'yunzai':
             return YUNZAI_DOCS;
+        case 'neobot':
+            return NEOBOT_DOCS;
         default:
             return NONEBOT2_DOCS;
     }
@@ -155,6 +175,21 @@ const ASTRBOT_TEXT: Record<string, string> = {
     )}\n`,
 };
 
+const NEOBOT_TEXT: Record<string, string> = {
+    adapter: `[bot]
+qq = 10001
+
+[adapter]
+mode = "onebot"
+reverse_ws_host = "127.0.0.1"
+reverse_ws_port = 8080
+reverse_ws_access_token = "ncd-mock-token"
+`,
+    dashboard: `host = "127.0.0.1"
+port = 9981
+`,
+};
+
 const NONEBOT2_TEXT: Record<string, string> = {
     env: 'ENVIRONMENT=prod\n',
     env_prod: 'DRIVER=~fastapi+~websockets\nHOST=127.0.0.1\nPORT=8080\nONEBOT_ACCESS_TOKEN=mock\n',
@@ -177,6 +212,14 @@ const mbStates = new Map<string, { config: MaiBotInstanceConfig; docRev: Record<
 const koStates = new Map<string, { config: KoishiInstanceConfig; docRev: Record<string, number> }>();
 const yzStates = new Map<string, { config: YunzaiInstanceConfig; docRev: Record<string, number> }>();
 const rawStates = new Map<string, { text: Record<string, string>; rev: Record<string, number> }>();
+function neobotState(inst: AppInstance): { text: Record<string, string>; rev: Record<string, number> } {
+    let s = rawStates.get(inst.id);
+    if (!s) {
+        s = { text: { ...NEOBOT_TEXT }, rev: { adapter: 1, dashboard: 1 } };
+        rawStates.set(inst.id, s);
+    }
+    return s;
+}
 let conflictOnce = false;
 
 function mbState(instance: AppInstance) {
@@ -824,6 +867,14 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                     revision: rev(raw.rev[docId] ?? 0),
                 });
             }
+            if (inst.framework_id === 'neobot') {
+                const s = neobotState(inst);
+                return withMockDelay({
+                    doc_id: docId,
+                    text: s.text[docId] ?? '',
+                    revision: rev(s.rev[docId] ?? 0),
+                });
+            }
             let raw = rawStates.get(inst.id);
             if (!raw) {
                 raw =
@@ -921,7 +972,9 @@ export function createMockAppConfigApi(deps: MockAppConfigDeps) {
                           ? { text: { ...MAIBOT_TEXT }, rev: { bot_config: 1, model_config: 1, adapter_config: 1 } }
                           : inst.framework_id === 'koishi'
                             ? { text: { ...KOISHI_TEXT }, rev: { koishi: 1, env: 1, package: 1 } }
-                            : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
+                            : inst.framework_id === 'neobot'
+                              ? { text: { ...NEOBOT_TEXT }, rev: { adapter: 1, dashboard: 1 } }
+                              : { text: { ...NONEBOT2_TEXT }, rev: { env: 1, env_prod: 1, pyproject: 1 } };
                 rawStates.set(inst.id, raw);
             }
             const current = rev(raw.rev[docId] ?? 0);

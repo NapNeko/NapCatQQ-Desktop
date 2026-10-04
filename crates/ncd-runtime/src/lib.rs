@@ -232,6 +232,7 @@ pub use ncd_appframework::{
     KoishiCommandRow, KoishiDatabaseTable, KoishiFileContent, KoishiFileEntry,
     KoishiInstanceConfig, KoishiPackageInfo, KoishiPluginNode, KoishiPluginSchema,
     KoishiRuntimeGate, KoishiRuntimeStatus, KoishiSandboxMessage, MaiBotAPIProvider,
+    PackageVersions,
     MaiBotBehaviorDetail,
     MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession,
     MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
