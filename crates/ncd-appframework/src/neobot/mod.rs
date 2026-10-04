@@ -100,6 +100,16 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         Arc::new(Self::component_for(spec))
     }
 
+    /// NeoBot 发在 PyPI，可安装版本查 PyPI 的 JSON API
+    async fn available_versions(
+        &self,
+    ) -> Result<Option<versions::PackageVersions>, AppFrameworkError> {
+        versions::fetch_versions(manifest::PYPI_NEOBOT, None)
+            .await
+            .map(Some)
+            .map_err(|e| AppFrameworkError::Integration(format!("查 PyPI 版本失败：{e}")))
+    }
+
     async fn probe_project(
         &self,
         host: &dyn Host,

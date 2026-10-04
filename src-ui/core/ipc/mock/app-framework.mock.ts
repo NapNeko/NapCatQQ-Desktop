@@ -41,6 +41,7 @@ import type {
     KarinPluginMarketEntry,
     LogSnapshot,
     OneBotLinkPlan,
+    PackageVersions,
     ProgressEvent,
     ProgressKind,
 } from '../types';
@@ -440,7 +441,7 @@ const MOCK_INSTALL_STEPS = ['解析 uv', '下载源码', '放置源码', '同步
  * 按真机的事件顺序假装跑一次安装：任务快照、步骤进度、最后实例变成已安装。
  * 走查卡片 / 详情页的「安装中」进度用。
  */
-function simulateInstallTask(inst: AppInstance): string {
+function simulateInstallTask(inst: AppInstance, version: string | null = null): string {
     const taskId = `mock-install-${inst.id}-${Date.now()}`;
     const target = `${inst.framework_id}@${inst.id}`;
     const submittedAtMs = BigInt(Date.now());
@@ -473,7 +474,16 @@ function simulateInstallTask(inst: AppInstance): string {
     plan.push(() => push({ kind: 'finished', ok: true }));
     plan.push(() => {
         emitMockEvent({ kind: 'deployment_task_changed', task: snapshot('success') } as DomainEvent);
-        publish({ ...require(inst.id), state: 'installed', installed_version: '1.2.5' }, 'installed');
+        // 指定了版本就回填它——真实链路由 detect 从发行元数据回读，预览里照同样的口径表现
+        const settled = require(inst.id);
+        publish(
+            {
+                ...settled,
+                state: 'installed',
+                installed_version: version ?? settled.installed_version ?? '1.2.5',
+            },
+            'installed',
+        );
     });
     plan.forEach((run, i) => setTimeout(run, 400 + i * 600));
     return taskId;
@@ -600,10 +610,29 @@ export const mockAppFrameworkApi = {
         return withMockDelay(imported);
     },
 
-    install: async (id: string): Promise<string> => {
+    install: async (id: string, version?: string | null): Promise<string> => {
         const inst = require(id);
         publish({ ...inst, state: 'installing' }, 'installing');
-        return withMockDelay(simulateInstallTask(inst));
+        return withMockDelay(simulateInstallTask(inst, version ?? null));
+    },
+
+    /** 只给 Python 系框架返回值；Node 系 / 整包发行的返回 null（UI 据此隐藏选择器） */
+    listVersions: async (frameworkId: string): Promise<PackageVersions | null> => {
+        if (frameworkId !== 'neobot' && frameworkId !== 'nonebot2' && frameworkId !== 'astrbot') {
+            return withMockDelay(null);
+        }
+        const versions =
+            frameworkId === 'neobot'
+                ? ['1.2.1', '1.2.0', '1.1.0', '1.0.0', '1.0.0a25']
+                : frameworkId === 'nonebot2'
+                  ? ['2.5.1', '2.4.2', '2.3.3']
+                  : ['4.28.0', '4.27.1'];
+        return withMockDelay({
+            name: frameworkId === 'neobot' ? 'neobot-app' : frameworkId,
+            versions,
+            latest: versions[0] ?? null,
+            has_prerelease: versions.some((v) => /[a-zA-Z]/.test(v.slice(1))),
+        });
     },
 
     refresh: async (id: string): Promise<AppInstance> => withMockDelay(require(id)),

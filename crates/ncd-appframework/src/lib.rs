@@ -121,7 +121,7 @@ pub use maibot::{
 };
 pub use neobot::{
     NEOBOT_DEFAULT_DASHBOARD_PORT, NEOBOT_DEFAULT_ONEBOT_PORT, NEOBOT_FRAMEWORK_ID,
-    NeoBotComponent, neobot_manifest,
+    NeoBotComponent, PackageVersions, neobot_manifest,
 };
 pub use nonebot2::{
     NONEBOT_ADAPTERS_URL, NONEBOT_PLUGINS_URL, NONEBOT2_FRAMEWORK_ID, NoneBot2Adapter,

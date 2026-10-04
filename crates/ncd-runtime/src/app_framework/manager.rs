@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 use ncd_appframework::{
     AdoptRestoreScope, AppComponentSpec, AppConfigWriteResult, AppFrameworkAdapter,
     AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor,
+    PackageVersions,
     AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
     AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession,
     AstrBotSessionRule, KarinPluginInstalled, KarinPluginMarketEntry, KoishiCommandRow,
@@ -397,6 +398,15 @@ impl AppManager {
             webui_username: self.remembered_secret(instance, SECRET_WEBUI_USERNAME),
             webui_password: self.remembered_secret(instance, SECRET_WEBUI_PASSWORD),
         }
+    }
+
+    /// 某框架支持的可安装版本；不支持（或查不到）返回 None，UI 据此隐藏版本选择器
+    pub async fn available_versions(
+        &self,
+        framework_id: &ncd_domain::AppFrameworkId,
+    ) -> Result<Option<PackageVersions>, AppFrameworkError> {
+        let adapter = self.registry.get(framework_id)?;
+        adapter.available_versions().await
     }
 
     /// 桌面端注入的解析器遇到还没连上的远端会现连一次（和组件页共用单飞连接），调用前不用另外预热

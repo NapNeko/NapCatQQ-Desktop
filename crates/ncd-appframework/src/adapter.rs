@@ -82,6 +82,16 @@ pub trait AppFrameworkAdapter: Send + Sync {
     /// 安装 / 探测 / 启动命令（走既有 Component × Host × Action，不另起一套安装流程）
     fn component(&self, spec: &AppComponentSpec) -> Arc<dyn Component>;
 
+    /// 该框架支持的**可安装版本清单**（供「装任意版本」的选择器）。
+    ///
+    /// 默认 `Ok(None)`：不支持按版本安装的框架（Node 系、整包发行）不必实现，
+    /// UI 拿到 None 就不显示版本选择器。Python 系框架实现它去查 PyPI。
+    async fn available_versions(
+        &self,
+    ) -> Result<Option<crate::neobot::versions::PackageVersions>, AppFrameworkError> {
+        Ok(None)
+    }
+
     /// 探测已有目录能不能当这个框架的实例领养
     async fn probe_project(
         &self,
