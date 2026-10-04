@@ -252,6 +252,16 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> Clone for BotManager<
     }
 }
 
+impl<S: ConfigStore + 'static> BotManager<crate::LocalBotConfigRepo<S>, S> {
+    pub async fn replace_bot_configs_with<T>(
+        &self,
+        bots: Option<Vec<BotConfig>>,
+        write: impl std::future::Future<Output = Result<T, String>>,
+    ) -> Result<T, String> {
+        self.repo.replace_with(bots, write).await
+    }
+}
+
 impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> BotManager<R, S> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(

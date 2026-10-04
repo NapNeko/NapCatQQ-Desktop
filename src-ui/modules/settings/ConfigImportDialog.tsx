@@ -4,7 +4,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { PackageCheck, Sparkles, Upload, AlertCircle, Check } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
-import { useConfigImportOps } from '../../hooks/preferences/useConfigTransfer';
+import { useConfigImportOps, type ConfigImportOutcome } from '../../hooks/preferences/useConfigTransfer';
 import type { ConfigImportPreview } from '../../core/ipc/types';
 import { useMotion } from '../../hooks/preferences/useMotion';
 import {
@@ -25,7 +25,7 @@ type Phase = 'pick' | 'scan' | 'review' | 'import' | 'done' | 'error';
 export interface ConfigImportDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onImported: (result: { files: string[]; skipped: string[] }) => void;
+    onImported: (result: ConfigImportOutcome) => void;
 }
 
 export function ConfigImportDialog({
@@ -165,7 +165,7 @@ export function ConfigImportDialog({
                         导入配置
                     </DialogTitle>
                     <DialogDescription>
-                        从 ZIP 或文件夹恢复配置、Bot 与远端档案；不含密钥。
+                        从 ZIP 或文件夹恢复桌面端与框架配置；系统密钥库保持独立。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -260,7 +260,7 @@ export function ConfigImportDialog({
                             </p>
                         )}
                         <p data-review-row className="text-[12px] leading-relaxed text-text-tertiary">
-                            写回前会自动备份现有配置。导入后请重启应用；SSH 密码与 GitHub Token 需重新配置。
+                            导入会先校验所有配置，写入失败会回滚。SSH 密码、私钥与 GitHub Token 需另外配置；框架与插件程序需独立安装。无法立即恢复的框架配置会保留副本，可在数据页单独重试。
                         </p>
                     </div>
                 )}

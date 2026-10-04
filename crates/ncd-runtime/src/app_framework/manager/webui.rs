@@ -60,7 +60,7 @@ impl AppManager {
         {
             return hit;
         }
-        match self.read_config(&instance.id).await {
+        match self.read_config_inner(&instance.id).await {
             Ok(env) => {
                 let utc_offset_secs = match server_id_of_host(&instance.host_id) {
                     Some(_) => match self.resolve_host(&instance.host_id).await {

@@ -732,7 +732,17 @@ impl AppManager {
         &self,
         id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
         let instance = self.store.require(id).await?;
+        if self
+            .data_root
+            .join(format!("config/framework-configs/{}.json", id.as_str()))
+            .exists()
+        {
+            return Err(AppFrameworkError::Validation(
+                "该实例有待恢复的框架配置，请先在设置 → 数据中重试恢复框架配置".into(),
+            ));
+        }
         if !instance.state.is_installed() {
             return Err(AppFrameworkError::Validation("实例尚未安装".to_string()));
         }
@@ -812,6 +822,7 @@ impl AppManager {
         &self,
         id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
         let instance = self.store.require(id).await?;
         self.forget_webui_endpoint(id);
         let host = self.resolve_host(&instance.host_id).await?;
@@ -893,6 +904,7 @@ impl AppManager {
         id: &AppInstanceId,
         remove_files: bool,
     ) -> Result<(), AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
         let instance = self.store.require(id).await?;
         self.forget_webui_endpoint(id);
         let host = self.resolve_host(&instance.host_id).await;
@@ -902,7 +914,7 @@ impl AppManager {
             }
         }
         if instance.link.is_some() {
-            if let Err(e) = self.unlink(id).await {
+            if let Err(e) = self.unlink_inner(id).await {
                 tracing::warn!(instance = id.as_str(), error = %e, "unlink before delete");
             }
         }

@@ -5,6 +5,7 @@ import { useSyncExternalStore } from 'react';
 import { createStore } from '../utils/createStore';
 import type { LocalShellKind } from '../../core/ipc/generated/domain/LocalShellKind';
 import type { TerminalSnippet } from '../../core/ipc/generated/domain/TerminalSnippet';
+import { onFrontendPreferenceRestored } from '../../core/domain/settings/config-transfer-preferences';
 
 export type TerminalCursorStyle = 'block' | 'bar' | 'underline';
 export type TerminalRightClick = 'menu' | 'paste';
@@ -94,6 +95,15 @@ function clampPrefs(p: TerminalPrefs): TerminalPrefs {
 
 const prefsStore = createStore<TerminalPrefs>(clampPrefs(load(PREFS_KEY, DEFAULT_TERMINAL_PREFS)));
 const layoutStore = createStore<TerminalLayoutPrefs>(load(LAYOUT_KEY, DEFAULT_TERMINAL_LAYOUT));
+
+if (typeof window !== 'undefined') {
+    onFrontendPreferenceRestored(PREFS_KEY, () => {
+        prefsStore.setState(clampPrefs(load(PREFS_KEY, DEFAULT_TERMINAL_PREFS)));
+    });
+    onFrontendPreferenceRestored(LAYOUT_KEY, () => {
+        layoutStore.setState(load(LAYOUT_KEY, DEFAULT_TERMINAL_LAYOUT));
+    });
+}
 
 export const terminalPrefs = {
     get: prefsStore.getSnapshot,

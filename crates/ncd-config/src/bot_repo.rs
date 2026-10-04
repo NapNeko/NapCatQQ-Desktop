@@ -38,6 +38,22 @@ impl<S: ConfigStore + 'static> LocalBotConfigRepo<S> {
         *self.cache.lock().await = None;
     }
 
+    /// Replace an externally committed Bot file without letting a cached read-modify-write overwrite it.
+    pub async fn replace_with<T>(
+        &self,
+        bots: Option<Vec<BotConfig>>,
+        write: impl std::future::Future<Output = Result<T, String>>,
+    ) -> Result<T, String> {
+        let Some(bots) = bots else {
+            return write.await;
+        };
+        let _gate = self.write_lock.lock().await;
+        let mut cache = self.cache.lock().await;
+        let result = write.await?;
+        *cache = Some(bots);
+        Ok(result)
+    }
+
     fn bot_path(&self) -> PathBuf {
         Self::bot_path_for(&*self.store)
     }
@@ -120,6 +136,52 @@ impl<S: ConfigStore + 'static> LocalBotConfigRepo<S> {
         let bots = self.load_from_disk().await?;
         *self.cache.lock().await = Some(bots);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod import_tests {
+    use super::*;
+
+    fn bot(id: u64, name: &str) -> BotConfig {
+        serde_json::from_value(
+            json!({ "bot": { "QQID": id, "name": name }, "connect": {}, "advanced": {} }),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn imported_bots_survive_the_next_repo_update() {
+        let root = tempfile::tempdir().unwrap();
+        let store = Arc::new(crate::store::LocalConfigStore::new(root.path()));
+        let secrets = Arc::new(
+            crate::secret_store::SecretStoreImpl::new_with_force_fallback(
+                root.path().join("secrets"),
+                true,
+            ),
+        );
+        let repo = LocalBotConfigRepo::new(Arc::clone(&store), secrets);
+        repo.upsert(bot(10001, "old")).await.unwrap();
+        let imported = bot(10002, "imported");
+        let txn = JsonTransaction::new().write(
+            store.bot_config_path(),
+            LocalBotConfigRepo::<crate::store::LocalConfigStore>::build_root_payload(&[
+                imported.clone()
+            ])
+            .unwrap(),
+        );
+        repo.replace_with(Some(vec![imported]), async {
+            store.apply_transaction(txn).map_err(|e| e.to_string())
+        })
+        .await
+        .unwrap();
+        repo.upsert(bot(10003, "added")).await.unwrap();
+        let bots = repo.list().await.unwrap();
+        assert_eq!(
+            bots.iter().map(|bot| bot.bot.qq_id).collect::<Vec<_>>(),
+            vec![10002, 10003]
+        );
+        assert_eq!(bots[0].bot.name, "imported");
     }
 }
 

@@ -284,6 +284,7 @@ export type { KarinRedisConfig } from './generated/domain/KarinRedisConfig';
 export type { OneBotEndpointExport } from './generated/domain/OneBotEndpointExport';
 export type { WebUiPollerSettings } from './generated/domain/WebUiPollerSettings';
 export type { ConfigExportResult } from './generated/ConfigExportResult';
+export type { ConfigFrontendPreferences } from './generated/ConfigFrontendPreferences';
 export type { ConfigImportResult } from './generated/ConfigImportResult';
 export type { ConfigImportPreview } from './generated/ConfigImportPreview';
 export type { PrepareExitDesktopResponse } from './generated/PrepareExitDesktopResponse';

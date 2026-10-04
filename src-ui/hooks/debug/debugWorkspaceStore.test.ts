@@ -18,7 +18,7 @@ vi.mock('../ui/pushErrorBar', () => ({
     pushErrorBar: (...args: unknown[]) => pushErrorBar(...args),
 }));
 
-import { debugWorkspaceStore as store, defaultWorkspace, flushWorkspace } from './debugWorkspaceStore';
+import { debugWorkspaceStore as store, defaultWorkspace, flushWorkspace, markWorkspaceStale } from './debugWorkspaceStore';
 
 const tab = (id: string, action = 'get_login_info', text = '{}'): DebugRequestDraft => ({
     id,
@@ -38,6 +38,35 @@ async function loadWith(ws: DebugWorkspace = defaultWorkspace()): Promise<void> 
 }
 
 const ws = () => store.getSnapshot().ws;
+
+describe('workspace replacement by configuration import', () => {
+    it('drops pending writes to the replaced workspace before reloading the imported tabs', async () => {
+        await loadWith(stored({ tabs: [tab('old')], active_tab: 'old' }));
+        store.selectBot('unsaved-old-bot');
+        markWorkspaceStale();
+        await flushWorkspace();
+        expect(saveWorkspaceMock).not.toHaveBeenCalled();
+
+        await loadWith(stored({ tabs: [tab('imported')], active_tab: 'imported', selected_bot: '10001' }));
+        store.selectBot('10002');
+        await flushWorkspace();
+        expect(saveWorkspaceMock).toHaveBeenCalledWith(expect.objectContaining({
+            tabs: [tab('imported')], selected_bot: '10002',
+        }));
+    });
+
+    it('ignores a late response from the workspace that was replaced during loading', async () => {
+        let finishOld!: (value: DebugWorkspace) => void;
+        workspaceMock.mockReturnValueOnce(new Promise<DebugWorkspace>(resolve => { finishOld = resolve; }));
+        const oldLoad = store.load();
+        markWorkspaceStale();
+        workspaceMock.mockResolvedValueOnce(stored({ tabs: [tab('imported')], active_tab: 'imported' }));
+        await store.load();
+        finishOld(stored({ tabs: [tab('old')], active_tab: 'old' }));
+        await oldLoad;
+        expect(ws().tabs.map(item => item.id)).toEqual(['imported']);
+    });
+});
 
 beforeEach(() => {
     workspaceMock.mockReset();

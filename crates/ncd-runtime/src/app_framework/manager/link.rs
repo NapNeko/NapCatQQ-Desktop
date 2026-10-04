@@ -92,6 +92,15 @@ impl AppManager {
         instance_id: &AppInstanceId,
         bot_id: &BotId,
     ) -> Result<AppInstance, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
+        self.apply_link_inner(instance_id, bot_id).await
+    }
+
+    pub(super) async fn apply_link_inner(
+        &self,
+        instance_id: &AppInstanceId,
+        bot_id: &BotId,
+    ) -> Result<AppInstance, AppFrameworkError> {
         let (instance, mut bot, adapter, host) = self.link_context(instance_id, bot_id).await?;
         let topology = classify_app_link(&bot.bot.runtime_target, &instance.host_id)
             .ok_or_else(|| unsupported_link_topology(&bot.bot.runtime_target, &instance.host_id))?;
@@ -234,6 +243,14 @@ impl AppManager {
 
     /// 解绑：按名从 Bot 对应那张连接表删并热推；应用端怎么收尾交给适配器（多数不动监听口）
     pub async fn unlink(
+        &self,
+        instance_id: &AppInstanceId,
+    ) -> Result<AppInstance, AppFrameworkError> {
+        let _config_guard = self.framework_config_gate.lock().await;
+        self.unlink_inner(instance_id).await
+    }
+
+    pub(super) async fn unlink_inner(
         &self,
         instance_id: &AppInstanceId,
     ) -> Result<AppInstance, AppFrameworkError> {

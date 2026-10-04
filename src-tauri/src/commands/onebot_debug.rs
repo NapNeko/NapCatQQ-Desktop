@@ -11,13 +11,13 @@ use std::time::Instant;
 use ncd_domain::BackendType;
 use ncd_domain::onebot_debug::{
     DebugActionSpec, DebugCallRequest, DebugCallResponse, DebugCatalog, DebugChannelId,
-    DebugChannelInfo, DebugChannels, DebugCollections, DebugEvent, DebugEventBatch,
-    DebugHistoryEntry, DebugHistoryPage, DebugHistoryQuery, DebugReceiverInfo, DebugStorageNotice,
-    DebugStreamCallRequest, DebugStreamProgress, DebugSubscribeResponse, DebugTarget,
-    DebugWorkspace,
+    DebugChannelInfo, DebugChannels, DebugCollections, DebugCollectionsSnapshot, DebugEvent,
+    DebugEventBatch, DebugHistoryEntry, DebugHistoryPage, DebugHistoryQuery, DebugReceiverInfo,
+    DebugStorageNotice, DebugStreamCallRequest, DebugStreamProgress, DebugSubscribeResponse,
+    DebugTarget, DebugWorkspace, DebugWorkspaceSnapshot,
 };
-use ncd_runtime::{DebugEventSink, DebugStreamSink};
 use ncd_runtime::onebot_debug::error_text;
+use ncd_runtime::{DebugEventSink, DebugStreamSink};
 use tauri::ipc::Channel;
 use tauri::{State, Webview};
 
@@ -203,31 +203,41 @@ pub async fn onebot_debug_read_events(
 }
 
 #[tauri::command]
-pub async fn onebot_debug_workspace(state: State<'_, AppState>) -> Result<DebugWorkspace, String> {
-    Ok(state.onebot_debug.workspace().await)
+pub async fn onebot_debug_workspace(
+    state: State<'_, AppState>,
+) -> Result<DebugWorkspaceSnapshot, String> {
+    Ok(state.onebot_debug.workspace_snapshot().await)
 }
 
 #[tauri::command]
 pub async fn onebot_debug_save_workspace(
     state: State<'_, AppState>,
     workspace: DebugWorkspace,
+    revision: u32,
 ) -> Result<(), String> {
-    state.onebot_debug.save_workspace(workspace).await
+    state
+        .onebot_debug
+        .save_workspace_checked(workspace, revision)
+        .await
 }
 
 #[tauri::command]
 pub async fn onebot_debug_collections(
     state: State<'_, AppState>,
-) -> Result<DebugCollections, String> {
-    Ok(state.onebot_debug.collections().await)
+) -> Result<DebugCollectionsSnapshot, String> {
+    Ok(state.onebot_debug.collections_snapshot().await)
 }
 
 #[tauri::command]
 pub async fn onebot_debug_save_collections(
     state: State<'_, AppState>,
     collections: DebugCollections,
+    revision: u32,
 ) -> Result<(), String> {
-    state.onebot_debug.save_collections(collections).await
+    state
+        .onebot_debug
+        .save_collections_checked(collections, revision)
+        .await
 }
 
 #[tauri::command]
@@ -245,11 +255,12 @@ pub async fn onebot_debug_export_collections(
 pub async fn onebot_debug_import_collections(
     state: State<'_, AppState>,
     path: String,
-) -> Result<DebugCollections, String> {
+) -> Result<DebugCollectionsSnapshot, String> {
     state
         .onebot_debug
         .import_collections(Path::new(&path))
-        .await
+        .await?;
+    Ok(state.onebot_debug.collections_snapshot().await)
 }
 
 #[tauri::command]

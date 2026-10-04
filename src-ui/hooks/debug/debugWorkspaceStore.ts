@@ -210,6 +210,7 @@ function normalize(ws: DebugWorkspace): DebugWorkspace {
 // ---------------------------------------------------------------------------
 
 let loadPromise: Promise<void> | null = null;
+let loadEpoch = 0;
 /** 读盘失败的错误条只在第一次失败时弹；后面每次保存前的补读失败不再重复打扰 */
 let loadFailureShown = false;
 
@@ -225,6 +226,7 @@ function adoptDisk(loaded: DebugWorkspace): number {
 }
 
 async function retryRead(): Promise<boolean> {
+    const epoch = loadEpoch;
     let disk: DebugWorkspace;
     try {
         disk = await onebotDebugService.workspace();
@@ -232,6 +234,7 @@ async function retryRead(): Promise<boolean> {
         // 第一次失败时已经弹过条，这里静默；改动还在内存里，下次保存再试
         return false;
     }
+    if (epoch !== loadEpoch) return false;
     adoptDisk(disk);
     return true;
 }
@@ -240,12 +243,15 @@ async function retryRead(): Promise<boolean> {
 function load(): Promise<void> {
     if (!loadPromise) {
         bindVisibility();
+        const epoch = loadEpoch;
         loadPromise = onebotDebugService.workspace().then(
             (ws) => {
+                if (epoch !== loadEpoch) return;
                 // 载入前做过的改动现在才落在真正的工作区上，要存一次
                 if (adoptDisk(ws) > 0) markDirty();
             },
             (err) => {
+                if (epoch !== loadEpoch) return;
                 if (!loadFailureShown) {
                     loadFailureShown = true;
                     pushErrorBar({
@@ -268,6 +274,12 @@ function load(): Promise<void> {
  * 此刻主窗的调试页必然没挂着（弹出时已导航走）
  */
 export function markWorkspaceStale(): void {
+    loadEpoch += 1;
+    clearSaveTimer();
+    dirty = false;
+    pendingOps = [];
+    diskReadable = false;
+    pristineText.clear();
     loadPromise = null;
     const s = store.getSnapshot();
     if (s.loaded) store.setState({ ...s, loaded: false });
@@ -470,6 +482,7 @@ export const debugWorkspaceStore = {
         saving = null;
         saveFailureShown = false;
         loadPromise = null;
+        loadEpoch += 1;
         pendingOps = [];
         diskReadable = false;
         loadFailureShown = false;

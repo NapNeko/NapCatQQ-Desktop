@@ -12,6 +12,7 @@ import {
 import { pushInfoBar } from '../ui/globalInfoBarStore';
 import { pushErrorBar } from '../ui/pushErrorBar';
 import { localFilesOrNothing } from './maibotResourceAction';
+import { onFrontendPreferenceRestored } from '../../core/domain/settings/config-transfer-preferences';
 
 export type MaiBotChatItem =
     | { kind: 'message'; key: string; message: MaiBotChatMessage }
@@ -100,6 +101,12 @@ export function useMaiBotChat(instanceId: string, live: boolean) {
     const conn = useRef<MaiBotChatConnection | null>(null);
     const nameRef = useRef(userName);
     nameRef.current = userName;
+
+    useEffect(() => onFrontendPreferenceRestored(nameKey(instanceId), () => {
+        const name = readName(instanceId);
+        setUserName(name);
+        void conn.current?.rename(name).catch(() => undefined);
+    }), [instanceId]);
 
     useEffect(() => {
         if (!live) return;

@@ -87,6 +87,22 @@ impl AppInstanceStore {
         self.cache.read().await.clone()
     }
 
+    /// Commit an imported file while excluding instance updates, then replace the loaded cache.
+    pub async fn replace_with<R>(
+        &self,
+        instances: Option<Vec<AppInstance>>,
+        write: impl std::future::Future<Output = Result<R, String>>,
+    ) -> Result<R, String> {
+        let Some(instances) = instances else {
+            return write.await;
+        };
+        let mut cache = self.cache.write().await;
+        let _gate = self.write_gate.lock().await;
+        let result = write.await?;
+        *cache = instances;
+        Ok(result)
+    }
+
     pub async fn get(&self, id: &AppInstanceId) -> Option<AppInstance> {
         self.cache
             .read()
@@ -189,6 +205,74 @@ mod tests {
             origin: ncd_domain::AppInstanceOrigin::Created,
             auto_start: true,
         }
+    }
+
+    #[tokio::test]
+    async fn imported_instances_survive_the_next_update_and_reload() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = AppInstanceStore::load(temp.path()).unwrap();
+        store.upsert(sample("old")).await.unwrap();
+        let imported = vec![sample("imported")];
+        let payload = serde_json::json!({"version": 1, "instances": imported});
+        let result = store
+            .replace_with(Some(imported), async {
+                store
+                    .store
+                    .apply_transaction(
+                        ncd_traits::JsonTransaction::new().write(store.path.clone(), payload),
+                    )
+                    .map_err(|e| e.to_string())
+            })
+            .await
+            .unwrap();
+        assert_eq!(result.written, vec![store.path.clone()]);
+        store
+            .update(&AppInstanceId::new("imported"), |instance| {
+                instance.port = 8888
+            })
+            .await
+            .unwrap();
+        let reloaded = AppInstanceStore::load(temp.path()).unwrap().list().await;
+        assert_eq!(reloaded.len(), 1);
+        assert_eq!(reloaded[0].id.as_str(), "imported");
+        assert_eq!(reloaded[0].port, 8888);
+    }
+
+    #[tokio::test]
+    async fn failed_import_keeps_instances_for_the_next_save() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = AppInstanceStore::load(temp.path()).unwrap();
+        store.upsert(sample("old")).await.unwrap();
+        let result = store
+            .replace_with(Some(vec![sample("imported")]), async {
+                Err::<(), _>("transaction failed".to_owned())
+            })
+            .await;
+        assert_eq!(result.unwrap_err(), "transaction failed");
+        store
+            .update(&AppInstanceId::new("old"), |instance| instance.port = 8888)
+            .await
+            .unwrap();
+        let reloaded = AppInstanceStore::load(temp.path()).unwrap().list().await;
+        assert_eq!(reloaded.len(), 1);
+        assert_eq!(reloaded[0].id.as_str(), "old");
+        assert_eq!(reloaded[0].port, 8888);
+    }
+
+    #[tokio::test]
+    async fn absent_instance_import_does_not_wait_for_cache_or_write_locks() {
+        let temp = ncd_test_support::TempWorkspace::new().unwrap();
+        let store = AppInstanceStore::load(temp.path()).unwrap();
+        let _cache = store.cache.write().await;
+        let _write = store.write_gate.lock().await;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            store.replace_with(None, async { Ok::<_, String>(42) }),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(result, 42);
     }
 
     #[tokio::test]
