@@ -111,9 +111,20 @@ export function restoreFrontendPreferences(
     storage: Storage = window.localStorage,
 ): void {
     validateFrontendPreferences(snapshot);
-    const before = new Map(Object.keys(snapshot.storage).map(key => [key, storage.getItem(key)]));
+    // 快照缺省的白名单键一并清掉：报告「偏好已恢复」时目标机不该残留旧值。先收集再动手，避免遍历中删键错位
+    const omitted: string[] = [];
+    for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index);
+        if (key !== null && allowedKey(key) && !(key in snapshot.storage)) omitted.push(key);
+    }
+    const touched = [...omitted, ...Object.keys(snapshot.storage)];
+    const before = new Map(touched.map(key => [key, storage.getItem(key)]));
     const attempted: string[] = [];
     try {
+        for (const key of omitted) {
+            attempted.push(key);
+            storage.removeItem(key);
+        }
         for (const [key, value] of Object.entries(snapshot.storage)) {
             attempted.push(key);
             storage.setItem(key, value);
