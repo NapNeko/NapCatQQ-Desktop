@@ -1,4 +1,5 @@
-// 面板页的共用外壳：把六种状态（加载中 / 不支持 / 没凭据 / 打不通 / 面板报错 / 形状不认识）统一成一块提示，
+// 面板页的共用外壳：把七种状态（加载中 / 不支持 / 没凭据 / 打不通 / 接口不存在 / 面板报错 / 形状不认识）
+// 统一成一块提示，
 // 只把成功状态交给各页渲染。
 //
 // 为什么值得共用：每一态都对应一句**能照做的话**，而凭据卡片在「Web 控制台」页——
@@ -15,8 +16,16 @@ interface BlockedHint {
     action?: { label: string; tab: string };
 }
 
-/** 面板没给可用数据时，按状态给一句能照做的话 */
-export function blockedHint(state: PanelState<unknown>): BlockedHint | null {
+/**
+ * 面板没给可用数据时，按状态给一句能照做的话。
+ *
+ * `notFoundHint` 由调用方给：它最清楚这个接口是哪个能力、要求哪版，
+ * 说出来比「面板返回 404」有用得多。
+ */
+export function blockedHint(
+    state: PanelState<unknown>,
+    notFoundHint?: string,
+): BlockedHint | null {
     switch (state.kind) {
         case 'unsupported':
             return {
@@ -34,6 +43,14 @@ export function blockedHint(state: PanelState<unknown>): BlockedHint | null {
             return {
                 title: '面板打不通',
                 body: '实例可能没在运行，或面板端口与桌面端读到的不一致。先确认实例是运行中，再点刷新。',
+            };
+        case 'notFound':
+            return {
+                title: '这个版本的面板没有这个接口',
+                body:
+                    notFoundHint ||
+                    state.message ||
+                    '桌面端读的这个接口在当前 NeoBot 版本里还不存在——升级 NeoBot 之后再来。',
             };
         case 'failed':
             return { title: '面板返回了错误', body: state.message || '面板拒绝了这次请求。' };
@@ -60,6 +77,8 @@ interface PanelStateViewProps<T> {
     errorMessage?: string;
     onRetry: () => void;
     onGoTab: (tab: string) => void;
+    /** 「面板没有这个接口」时说的话（通常是「需要 NeoBot x.y.z 及以上」） */
+    notFoundHint?: string;
     children: (data: T) => ReactNode;
 }
 
@@ -70,6 +89,7 @@ export function PanelStateView<T>({
     errorMessage,
     onRetry,
     onGoTab,
+    notFoundHint,
     children,
 }: PanelStateViewProps<T>) {
     if (isError) {
@@ -85,7 +105,7 @@ export function PanelStateView<T>({
     if (!state) return <p className="text-xs text-text-tertiary">正在读取面板…</p>;
     if (state.kind === 'ok') return <>{children(state.data)}</>;
 
-    const hint = blockedHint(state as PanelState<unknown>);
+    const hint = blockedHint(state as PanelState<unknown>, notFoundHint);
     if (!hint) return null;
     return (
         <Hint title={hint.title}>

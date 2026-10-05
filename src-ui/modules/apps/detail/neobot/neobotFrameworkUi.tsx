@@ -26,39 +26,36 @@ const NAV: readonly FrameworkNavGroup[] = [
     { id: 'console', items: [{ value: 'console', label: 'Web 控制台' }] },
 ];
 
-const FILL_PANE = new Set([
-    'deploy',
-    'overview',
-    'models',
-    'prompts',
-    'memory',
-    'plugins',
-    'console',
-]);
+// 这些页都是**普通堆叠内容**（不是靠内层自己滚的网格/文件树），所以交给外壳滚：
+// 声明成 fillPane 会拿到 overflow-hidden，而页面自己不滚，长内容就被裁掉——实测「提示词」页
+// 滑不动就是这个原因。对照 astrbot：它只把 plugins（自己有滚动区的网格）标成 fillPane。
+const FILL_PANE = new Set<string>();
+
+const PANE = 'flex min-h-0 flex-1 flex-col pt-2';
 
 function NeoBotFrameworkDetail({ instance, onOpenWebUi, onGoTab, onNavigate }: FrameworkDetailProps) {
     const instanceId = instance.id;
     return (
         <>
-            <TabsContent value="deploy" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent value="deploy" className={PANE}>
                 <NeoBotDeployTab instance={instance} onGoTab={onGoTab} onNavigate={onNavigate} />
             </TabsContent>
-            <TabsContent value="overview" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent value="overview" className={PANE}>
                 <NeoBotOverviewTab instanceId={instanceId} onGoTab={onGoTab} />
             </TabsContent>
-            <TabsContent value="models" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent value="models" className={PANE}>
                 <NeoBotModelsTab instanceId={instanceId} onGoTab={onGoTab} />
             </TabsContent>
-            <TabsContent value="prompts" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent value="prompts" className={PANE}>
                 <NeoBotPromptsTab instanceId={instanceId} onGoTab={onGoTab} />
             </TabsContent>
-            <TabsContent value="memory" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent value="memory" className={PANE}>
                 <NeoBotMemoryTab instanceId={instanceId} onGoTab={onGoTab} />
             </TabsContent>
-            <TabsContent value="plugins" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent value="plugins" className={PANE}>
                 <NeoBotPluginsTab instanceId={instanceId} onGoTab={onGoTab} />
             </TabsContent>
-            <TabsContent value="console" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
+            <TabsContent value="console" className={PANE}>
                 <NeoBotConsoleTab instance={instance} onOpenWebUi={onOpenWebUi} />
             </TabsContent>
         </>

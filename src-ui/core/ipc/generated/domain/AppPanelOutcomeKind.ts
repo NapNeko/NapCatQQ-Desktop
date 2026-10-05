@@ -6,4 +6,4 @@
  * 分态而不是干脆 Err：前端要能区分「没填面板密码」和「面板没起来」——
  * 前者引导去填凭据，后者引导去检查实例状态，混成一个错误就只能给一句无用的话。
  */
-export type AppPanelOutcomeKind = "ok" | "unauthorized" | "unreachable" | "failed";
+export type AppPanelOutcomeKind = "ok" | "unauthorized" | "unreachable" | "not_found" | "failed";

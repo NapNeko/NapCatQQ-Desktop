@@ -18,6 +18,7 @@ import { isDockerBot } from '../../../../core/domain/apps/appLinkTopology';
 import { AppLinkDialog } from '../../AppLinkDialog';
 import type { AppInstance } from '../../../../core/ipc/types';
 import type { AppRoute } from '../../../../shared/components/next/Sidebar';
+import { meetsNeoBotVersion, versionRequirementText } from './neobotCapabilities';
 import { isBotAccountUnset, missingRequiredSteps, parseNeoBotDeployStatus } from './neobotDeploy';
 import { PanelStateView } from './PanelStateView';
 import { neobotPanelKey, usePanelJson } from './useNeoBotPanel';
@@ -60,7 +61,16 @@ export const NeoBotDeployTab: React.FC<{
 }> = ({ instance, onGoTab, onNavigate }) => {
     const instanceId = instance.id;
     const queryClient = useQueryClient();
-    const query = usePanelJson(instanceId, 'deploy', '/api/deploy/status', parseNeoBotDeployStatus);
+    // 快捷部署是 1.2.4a1 才有的菜单。更老的版本（例如 1.2.3）上这个接口直接 404——
+    // 与其把「面板返回 404」拿给用户，不如提前说清楚，并给一条现在就能走的路。
+    const deploySupported = meetsNeoBotVersion(instance.installed_version, 'deployApi');
+    const query = usePanelJson(
+        instanceId,
+        'deploy',
+        '/api/deploy/status',
+        parseNeoBotDeployStatus,
+        deploySupported,
+    );
     const [dialogOpen, setDialogOpen] = useState(false);
 
     const status = query.data?.kind === 'ok' ? query.data.data : null;
@@ -107,6 +117,36 @@ export const NeoBotDeployTab: React.FC<{
             connectionName: plan.connection.name,
         });
     };
+
+    // 版本不够就整页换成说明：不去打那个不存在的接口
+    if (!deploySupported) {
+        return (
+            <section className="rounded-md border border-border-subtle bg-surface px-4 py-3">
+                <h3 className="text-sm font-semibold text-text">这个 NeoBot 版本没有快捷部署</h3>
+                <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                    {versionRequirementText(instance.installed_version, 'deployApi')}
+                    。旧版面板没有这个菜单，桌面端也就读不到「还差哪几项」与 OneBot 的监听信息。
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+                    现在能做的：升级 NeoBot 之后回到本页；或先在「Web 控制台」打开面板、按面板自己的
+                    说明配好，再点下面的「直接建立对接」——对接本身不依赖这个菜单。
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                    <Button size="sm" variant="primary" onClick={() => setDialogOpen(true)}>
+                        直接建立对接
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => onGoTab('console')}>
+                        打开面板
+                    </Button>
+                </div>
+                <AppLinkDialog
+                    open={dialogOpen}
+                    onOpenChange={setDialogOpen}
+                    instanceId={instanceId}
+                />
+            </section>
+        );
+    }
 
     return (
         <>

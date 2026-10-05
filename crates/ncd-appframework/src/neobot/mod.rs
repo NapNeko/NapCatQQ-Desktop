@@ -165,6 +165,10 @@ impl AppFrameworkAdapter for NeoBotAdapter {
             control::PanelOutcome::Unreachable(e) => {
                 AppPanelResult::err(AppPanelOutcomeKind::Unreachable, format!("面板打不通：{e}"))
             }
+            control::PanelOutcome::NotFound => AppPanelResult::err(
+                AppPanelOutcomeKind::NotFound,
+                "面板没有这个接口：当前 NeoBot 版本还不提供它，需要更新的版本",
+            ),
             control::PanelOutcome::Failed(e) => AppPanelResult::err(AppPanelOutcomeKind::Failed, e),
         }))
     }

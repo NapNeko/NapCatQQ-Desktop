@@ -14,6 +14,8 @@ export type PanelState<T> =
     /** 没填面板密码，或密码不对 */
     | { kind: 'unauthorized'; message: string }
     | { kind: 'unreachable'; message: string }
+    /** 面板没有这个接口（404）：实例的 NeoBot 版本低于该接口要求的版本 */
+    | { kind: 'notFound'; message: string }
     | { kind: 'failed'; message: string }
     /** 面板答了但形状不认识（多半是面板改版） */
     | { kind: 'malformed' };
@@ -28,14 +30,21 @@ export const neobotPanelKey = (instanceId: string, what: string) =>
  * parse 返回 null 就归为 malformed —— 那是「面板答了但不是我们要的形状」，
  * 与「面板打不通」是不同的故障，提示也该不同。
  */
+/**
+ * 与上面同一个查询，但可以整条关掉（`enabled=false`）。
+ * 用在「这个 NeoBot 版本根本没有这个接口」时：不去打，页面提前给一句人话，
+ * 而不是拿一个 404 回来再翻译。
+ */
 export function usePanelJson<T>(
     instanceId: string,
     what: string,
     path: string,
     parse: (raw: unknown) => T | null,
+    enabled = true,
 ) {
     return useQuery<PanelState<T>, Error>({
         queryKey: neobotPanelKey(instanceId, what),
+        enabled,
         queryFn: async (): Promise<PanelState<T>> => {
             const res = await appFrameworkService.panelCall(instanceId, 'GET', path);
             if (res === null) return { kind: 'unsupported' };
@@ -43,6 +52,8 @@ export function usePanelJson<T>(
                 const data = parse(res.data);
                 return data !== null ? { kind: 'ok', data } : { kind: 'malformed' };
             }
+            // Rust 那边的 not_found 在这里变成 notFound，好让页面区分「去填密码」与「去升级 NeoBot」
+            if (res.kind === 'not_found') return { kind: 'notFound', message: res.message ?? '' };
             return { kind: res.kind, message: res.message ?? '' };
         },
         retry: false,

@@ -85,6 +85,9 @@ pub enum AppPanelOutcomeKind {
     Unauthorized,
     /// 面板打不通（没在跑 / 口不对 / 端口被占）
     Unreachable,
+    /// 面板没有这个接口（404）：实例的 NeoBot 版本低于该接口要求的版本。
+    /// 与 Unauthorized 分开，是因为解决方式不同——填密码没用，得升级 NeoBot。
+    NotFound,
     /// 其它失败（含状态码与非法路径）
     Failed,
 }

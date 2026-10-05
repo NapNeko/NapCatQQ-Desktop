@@ -259,6 +259,8 @@ pub enum PanelOutcome {
     Unauthorized,
     /// 面板打不通
     Unreachable(String),
+    /// 面板没有这个接口（404）：实例版本低于该接口要求的版本
+    NotFound,
     /// 其它失败（含状态码）
     Failed(String),
 }
@@ -282,6 +284,19 @@ pub fn path_is_allowed(path: &str) -> bool {
 ///
 /// method 只认 GET / POST —— 面板其余方法桌面端用不到，不放行能少一类口子。
 #[allow(clippy::too_many_arguments)]
+/// 面板的错误回包是 {"ok":false,"error":"人话"}；把它带出来，别只报状态码
+async fn panel_error_text(resp: reqwest::Response, status: reqwest::StatusCode) -> String {
+    let Ok(body) = resp.text().await else {
+        return format!("面板返回 {status}");
+    };
+    serde_json::from_str::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| format!("{s}（HTTP {status}）"))
+        .unwrap_or_else(|| format!("面板返回 {status}"))
+}
+
 pub async fn panel_call(
     sessions: &PanelSessions,
     instance_id: &str,
@@ -337,8 +352,13 @@ pub async fn panel_call(
             }
             return PanelOutcome::Unauthorized;
         }
+        // 404 = 面板根本没有这个接口。这与「密码不对」是两回事：去填密码解决不了，
+        // 只能提示用户升级 NeoBot（或换个能用的入口），所以单独成一类
+        if status.as_u16() == 404 {
+            return PanelOutcome::NotFound;
+        }
         if !status.is_success() {
-            return PanelOutcome::Failed(format!("面板返回 {status}"));
+            return PanelOutcome::Failed(panel_error_text(resp, status).await);
         }
         return match resp.json::<serde_json::Value>().await {
             Ok(v) => PanelOutcome::Ok(v),

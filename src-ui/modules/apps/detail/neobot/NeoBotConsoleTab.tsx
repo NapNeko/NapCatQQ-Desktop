@@ -27,7 +27,8 @@ export const NeoBotConsoleTab: React.FC<{
     const installing = instance.state === 'installing';
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
+        // 滚动交给外壳（本页不声明 fillPane）：这里只管堆叠，别再套一层滚动区
+        <div className="flex flex-col gap-4">
             <section className="rounded-md border border-border-subtle bg-surface px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -55,7 +56,7 @@ export const NeoBotConsoleTab: React.FC<{
                 </p>
             </section>
 
-            <PanelCredentialCard instanceId={instance.id} onOpenWebUi={onOpenWebUi} />
+            <PanelCredentialCard instance={instance} onOpenWebUi={onOpenWebUi} />
 
             <p className="text-xs text-text-tertiary">
                 面板共 <span className="font-medium text-text-secondary">{stats.total}</span> 项能力：

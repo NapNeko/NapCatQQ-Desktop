@@ -154,7 +154,9 @@ describe('resolveFrameworkUi', () => {
         ]);
         // 没有类型化配置页：各页只读，或自己把动作 POST 给面板，不该挂保存条
         expect(ui?.typedTabs.size).toBe(0);
-        for (const t of navValues(ui)) expect(ui?.fillPaneTabs.has(t)).toBe(true);
+        // 反过来：这些页都是普通堆叠内容，**不能**声明成 fillPane。声明了外壳会给
+        // overflow-hidden 并指望页面自己滚，而它们不滚——长内容直接被裁掉（实测「提示词」页滑不动）。
+        for (const t of navValues(ui)) expect(ui?.fillPaneTabs.has(t)).toBe(false);
         // 原始文件、日志由外壳追加
         expect(buildDetailNav(ui).at(-1)?.items.map((t) => t.value)).toEqual(['raw', 'log']);
     });
