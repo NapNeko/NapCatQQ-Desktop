@@ -5,16 +5,6 @@
 //! 产品版本，不能读 CARGO_PKG_VERSION。
 
 fn main() {
-    // 主线程栈：Windows 下由 PE 头的 /STACK 决定，默认 1 MB。启动路径（Tauri 装配 +
-    // 命令分发链，generate_handler! 现在 322 条）嵌套很深——1 MB 会在启动约 3.7 秒时
-    // 栈溢出，报 0xc00000fd / "thread 'main' has overflowed its stack"，窗口都来不及出现。
-    // 给到 16 MB 后实测稳定（同一构建方式：之前 4/4 必崩，之后 4/4 正常）。
-    //
-    // 这是**绕开上游深递归**的兜底，不是根治：真因（嵌套深度）在上游，那边修掉后可以删。
-    // 只对 MSVC 工具链有效；GNU 目标对应的是 -Wl,--stack。
-    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
-        println!("cargo:rustc-link-arg=/STACK:16777216");
-    }
     println!("cargo:rerun-if-changed=tauri.conf.json");
     println!("cargo:rerun-if-changed=icons/icon.ico");
     inject_product_version();
