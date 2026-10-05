@@ -32,7 +32,7 @@ export function ChatPopoutApp() {
     }, []);
     return <TooltipProvider><div className="native-chat-popout flex h-screen flex-col overflow-hidden bg-canvas">
         <div className="relative shrink-0"><CustomTitleBar variant="window" /><span className="native-chat-popout-title" aria-hidden>聊天</span></div>
-        <main className="flex min-h-0 flex-1 flex-col px-4 pb-4"><RouteErrorBoundary title="聊天界面加载失败"><Suspense fallback={<div className="native-chat-welcome">正在加载聊天…</div>}>{mounted && <ChatPage onNavigate={() => void trayService.showMainWindow()} />}</Suspense></RouteErrorBoundary></main>
+        <main className="flex min-h-0 flex-1 flex-col"><RouteErrorBoundary title="聊天界面加载失败"><Suspense fallback={<div className="native-chat-welcome">正在加载聊天…</div>}>{mounted && <ChatPage onNavigate={() => void trayService.showMainWindow()} />}</Suspense></RouteErrorBoundary></main>
         <InfoBarStack items={bars} onDismiss={dismiss} onAutoDismiss={remove} />
     </div></TooltipProvider>;
 }

@@ -83,6 +83,8 @@ const ROUTE_ORDER: ReadonlyArray<AppRoute> = [
 
 // 这些页面不受 1280px 的宽度上限：调试台是三栏工作台，宽屏上越宽越好用
 const WIDE_ROUTES: ReadonlySet<AppRoute> = new Set(['debug', 'chat']);
+// 聊天自己贴着窗口边排版，不吃页面内边距。
+const FLUSH_ROUTES: ReadonlySet<AppRoute> = new Set(['chat']);
 
 // 与 lazy 共用同一 import 工厂，侧栏预取与首点加载同一 chunk。
 const loadBotPage = () =>
@@ -490,7 +492,8 @@ export const AppNext: React.FC = () => {
                         >
                             <div
                                 className={
-                                    'flex min-w-0 w-full max-w-full flex-col px-4 pb-6 pt-2 sm:px-6 lg:px-8 xl:mx-auto' +
+                                    'flex min-w-0 w-full max-w-full flex-col xl:mx-auto' +
+                                    (FLUSH_ROUTES.has(displayedRoute) ? '' : ' px-4 pb-6 pt-2 sm:px-6 lg:px-8') +
                                     (WIDE_ROUTES.has(displayedRoute) ? '' : ' xl:max-w-[1280px]')
                                 }
                             >

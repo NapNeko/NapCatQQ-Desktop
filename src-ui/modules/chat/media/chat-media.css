@@ -15,19 +15,23 @@
 .native-chat-favorite-grid img { width: 100%; height: 100%; object-fit: contain; }
 .native-chat-face-grid button:hover, .native-chat-favorite-grid button:hover { background: var(--surface-inset); }
 .native-chat-media-retry { font-size: 12px; color: var(--action-primary); padding: 6px 12px; }
-.native-chat-voice { display: flex; max-width: 360px; flex-direction: column; gap: 5px; font-size: 12px; }
+/* 语音条和「转文字」横排，转写结果和报错另起一行。 */
+.native-chat-voice { display: flex; max-width: 360px; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 4px 0 2px; font-size: 12px; }
+.native-chat-voice > :is(.native-chat-voice-transcript, [role=status]) { flex-basis: 100%; }
 .native-chat-voice-audio { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.native-chat-voice > button { display: inline-flex; width: fit-content; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 9px; background: var(--surface-inset); color: var(--text-secondary); }
-.native-chat-voice > button:hover { color: var(--action-primary); background: color-mix(in srgb, var(--surface-inset) 70%, var(--brand-soft)); }
-.native-chat-voice-player { display: flex; min-width: 230px; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; border: 0; border-radius: 10px; background: var(--surface-inset); }
+.native-chat-voice > button:not(.native-chat-voice-transcribe) { display: inline-flex; width: fit-content; align-items: center; gap: 8px; padding: 3px 14px 3px 3px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--action-primary) 10%, transparent); color: var(--text-primary); }
+.native-chat-voice > button:not(.native-chat-voice-transcribe) > svg { box-sizing: content-box; padding: 6px; border-radius: 50%; background: var(--action-primary); color: var(--text-on-brand); }
+.native-chat-voice > button:not(.native-chat-voice-transcribe):hover { background: color-mix(in srgb, var(--action-primary) 16%, transparent); }
+.native-chat-voice-player { display: flex; min-width: 230px; align-items: center; gap: 8px; padding: 3px 10px 3px 3px; border: 0; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--action-primary) 10%, transparent); }
 .native-chat-voice-player button { display: inline-flex; align-items: center; justify-content: center; color: var(--action-primary); }
-.native-chat-voice-play { width: 24px; height: 24px; border-radius: 50%; background: var(--brand-soft); }
-.native-chat-voice-play:hover { background: var(--action-primary); color: var(--text-on-brand); }
+.native-chat-voice-player .native-chat-voice-play { width: 26px; height: 26px; border-radius: 50%; background: var(--action-primary); color: var(--text-on-brand); }
+.native-chat-voice-player .native-chat-voice-play:hover { background: var(--action-primary-hover); }
 .native-chat-voice-player input[type=range] { min-width: 55px; width: 100%; accent-color: var(--action-primary); }
 .native-chat-voice-time { min-width: 70px; color: var(--text-tertiary); font-size: 10px; font-variant-numeric: tabular-nums; }
 .native-chat-voice-mute { color: var(--text-tertiary) !important; }
 .native-chat-voice-transcript { display: inline-flex; align-items: flex-start; gap: 4px; color: var(--text-secondary); line-height: 1.45; }
-.native-chat-voice-transcribe { display: inline-flex; width: fit-content; align-items: center; gap: 4px; padding: 2px 5px; color: var(--action-primary); font-size: 11px; }
+.native-chat-voice-transcribe { display: inline-flex; width: fit-content; align-items: center; gap: 4px; padding: 2px 4px; border-radius: var(--radius-xs); color: var(--text-tertiary); font-size: 11px; }
+.native-chat-voice-transcribe:hover:not(:disabled) { color: var(--action-primary); }
 .native-chat-video { position: relative; display: block; width: min(420px, 100%); overflow: hidden; border-radius: 12px; background: #111; box-shadow: 0 5px 18px color-mix(in srgb, #000 14%, transparent); }
 .native-chat-video video { display: block; width: 100%; aspect-ratio: 16 / 9; max-height: 300px; background: #111; object-fit: contain; }
 .native-chat-video-meta { position: absolute; inset: auto 0 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 24px 10px 8px; background: linear-gradient(transparent, color-mix(in srgb, #000 70%, transparent)); color: #fff; font-size: 10px; pointer-events: none; }
@@ -36,7 +40,7 @@
 .native-chat-video-meta button:hover { opacity: 1; }
 .native-chat-video-fallback { display: inline-flex; max-width: 320px; align-items: center; gap: 7px; padding: 9px 11px; border: 0; border-radius: 9px; background: var(--surface-inset); color: var(--text-tertiary); font-size: 11px; }
 .native-chat-video-fallback button { display: inline-flex; align-items: center; color: var(--text-tertiary); }
-.native-chat-forward-card { display: block; width: min(260px, 100%); margin: 4px 0; padding: 9px 12px 7px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-card); text-align: left; box-shadow: 0 1px 4px color-mix(in srgb, var(--text-primary) 7%, transparent); }
+.native-chat-forward-card { display: block; width: min(260px, 100%); margin: 4px 0; padding: 9px 12px 7px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-card); text-align: left; }
 .native-chat-forward-card-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .native-chat-forward-line { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; font-size: 11px; line-height: 1.5; color: var(--text-tertiary); }
 .native-chat-forward-card:hover:not(:disabled) { border-color: var(--border-focus); }

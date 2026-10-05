@@ -159,14 +159,15 @@ export function useChatSelectionMotion(scope: RefObject<HTMLDivElement>, index: 
         previous.current = { index, active };
         const indicator = scope.current?.querySelector('.native-chat-selection-indicator');
         if (!indicator) return;
-        const y = Math.max(0, index) * 68 + 19;
+        // 行高 68，指示条高 22，居中偏移 23。
+        const y = Math.max(0, index) * 68 + 23;
         if (index < 0 || !motion.enabled || last.index === index && last.active === active) {
             gsap.set(indicator, { autoAlpha: index < 0 ? 0 : 1, y, scaleY: 1 });
             return;
         }
         const near = last.index >= 0 && Math.abs(last.index - index) <= 3;
         gsap.fromTo(indicator, {
-            autoAlpha: 0.4, y: motion.level !== 'elegant' && near ? last.index * 68 + 19 : y,
+            autoAlpha: 0.4, y: motion.level !== 'elegant' && near ? last.index * 68 + 23 : y,
             scaleY: motion.preset.feel.tapScale,
         }, { autoAlpha: 1, y, scaleY: 1, duration: motion.duration('fast'), ease: motion.ease.damped });
         const avatar = scope.current?.querySelector('[data-active=true] .native-chat-avatar');
