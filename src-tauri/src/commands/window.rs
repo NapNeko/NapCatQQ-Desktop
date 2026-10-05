@@ -107,6 +107,14 @@ pub async fn reveal_debug_window(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 每个 WebView 窗口各占多少内存（渲染进程按窗口对上 label），连同共用的浏览器 / GPU 进程和本体
+#[tauri::command]
+pub async fn webview_memory_report(
+    app: AppHandle,
+) -> Result<crate::webview_scheduler::WebviewMemoryReport, String> {
+    crate::webview_scheduler::memory_report(&app).await
+}
+
 /// 主窗的调试台入口让位用:弹出窗开着就聚焦它并回 true,主窗不再进调试页。
 /// 同一时间只留一个调试台页面(工作区 / 收藏落盘 JSON 是两窗同一份文件)
 #[tauri::command]

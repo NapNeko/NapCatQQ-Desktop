@@ -50,6 +50,9 @@ windows = { version = "0.61", features = [
     # 终端右键粘贴读剪贴板
     "Win32_System_DataExchange",
     "Win32_System_Memory",
+    # WebView 调度按进程取私有内存 / 工作集
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
     "Win32_UI_Shell",
     "Win32_UI_Shell_PropertiesSystem",
     "Win32_System_Com_StructuredStorage",
@@ -57,6 +60,8 @@ windows = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 tauri-winrt-notification = "0.7"
+# WebView 调度直接调 WebView2（进程归属、可见性、内存级别）；跟 wry 用的版本走，别单独升
+webview2-com = "0.38"
 winreg = "0.52"
 
 

@@ -36,6 +36,7 @@ pub mod snowluma_offline_listener;
 pub mod tray_icon;
 pub mod tray_panel;
 pub mod tray_summary;
+pub mod webview_scheduler;
 pub mod window_events;
 pub mod window_icon;
 pub mod windows_toast;
@@ -1041,6 +1042,7 @@ pub fn run() {
             commands::window::open_debug_window,
             commands::window::reveal_debug_window,
             commands::window::focus_debug_window,
+            commands::window::webview_memory_report,
             commands::terminal::terminal_local_shells,
             commands::terminal::terminal_list,
             commands::terminal::terminal_open,
