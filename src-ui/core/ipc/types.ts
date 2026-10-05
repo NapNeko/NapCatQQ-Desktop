@@ -75,6 +75,7 @@ export type { AppFrameworkManifest } from './generated/domain/AppFrameworkManife
 export type { PackageVersions } from './generated/domain/PackageVersions';
 export type { AppPanelResult } from './generated/domain/AppPanelResult';
 export type { AppPanelOutcomeKind } from './generated/domain/AppPanelOutcomeKind';
+export type { AppLinkBotDocument } from './generated/domain/AppLinkBotDocument';
 export type { AppLinkRecord } from './generated/domain/AppLinkRecord';
 export type { AppConfigWrite } from './generated/domain/AppConfigWrite';
 export type { CreateAppInstanceRequest } from './generated/domain/CreateAppInstanceRequest';

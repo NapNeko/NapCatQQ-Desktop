@@ -3,6 +3,7 @@
 
 import { invoke, isTauri } from '../ipc/transport';
 import type {
+    AppLinkBotDocument,
     AppConfigDocument,
     AppConfigText,
     AppConfigWriteResult,
@@ -95,6 +96,16 @@ export const appFrameworkService = {
      * 面板口与凭据都在 Rust 那侧解决；路径受白名单约束（只放行面板自己的 /api/）。
      * 返回 null = 该框架不提供面板转发，调用方据此不显示相关页签。
      */
+    /**
+     * 「原始文件」页里的 **Bot 侧** 配置文件（只读）。
+     *
+     * 对接时桌面端会往协议 Bot 的配置里写一条 WS 客户端连接；那些文件在 Bot 的配置目录里，
+     * 不在应用端实例目录，所以单开这个只读入口。未对接 / 远端 Bot / 文件还没生成时是空表。
+     */
+    linkBotDocuments: async (instanceId: string): Promise<AppLinkBotDocument[]> => {
+        if (!isTauri) return mockAppFrameworkApi.linkBotDocuments(instanceId);
+        return invoke<AppLinkBotDocument[]>('app_link_bot_documents', { instanceId });
+    },
     panelCall: async (
         instanceId: string,
         method: 'GET' | 'POST',

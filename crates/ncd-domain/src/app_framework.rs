@@ -592,6 +592,22 @@ pub struct CreateAppInstanceRequest {
     pub accept_terms: Option<bool>,
 }
 
+/// 「原始文件」里展示的 **Bot 侧** 配置文件（只读）。
+///
+/// 与应用端自己的 AppConfigDocument 分开：那些相对实例目录读写、可编辑；
+/// 这些在**协议 Bot 的配置目录**里（对接时 Desktop 写进去的 WS 客户端连接），
+/// 所属主机与路径根都不一样，混进同一套「相对路径」语义只会出错，所以单独一类。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppLinkBotDocument {
+    /// 文件名，例如 onebot11_10001.json
+    pub name: String,
+    /// 绝对路径（给人看，显示在标题旁）
+    pub path: String,
+    /// 文件内容；文件还没生成时为 None
+    pub text: Option<String>,
+}
+
 /// 探测已有项目目录（导入前）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]

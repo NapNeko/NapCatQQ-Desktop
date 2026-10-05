@@ -503,6 +503,32 @@ function simulateInstallTask(inst: AppInstance, version: string | null = null): 
 const panelPasswords = new Set<string>();
 
 export const mockAppFrameworkApi = {
+    /** 预览里给一份与真机同形的 Bot 侧配置，好让「原始文件」页的两段都能看到 */
+    linkBotDocuments: async (_id: string) =>
+        withMockDelay([
+            {
+                name: 'onebot11_10001.json',
+                path: 'C:/ProgramData/NapCatQQ Desktop/components/NapCatQQ/config/onebot11_10001.json',
+                text: JSON.stringify(
+                    {
+                        network: {
+                            websocketClients: [
+                                {
+                                    name: 'ncd-app:dc59a8f1',
+                                    enable: true,
+                                    url: 'ws://127.0.0.1:36909/',
+                                    token: 'preview-token',
+                                    messagePostFormat: 'array',
+                                },
+                            ],
+                        },
+                    },
+                    null,
+                    4,
+                ),
+            },
+        ]),
+
     /**
      * 预览里只认概览页要的那一个端点，够把页面跑起来；其余路径如实报「未模拟」，
      * 免得预览里看着像通了、真机却是空的。

@@ -106,7 +106,7 @@ export const DetailHeader: React.FC<{
                     size="icon"
                     onClick={onBack}
                     aria-label="返回列表"
-                    data-tooltip="返回列表"
+                    title="返回列表"
                 >
                     <ActionMotionIcon icon={ArrowLeft} size={16} />
                 </Button>
@@ -174,7 +174,7 @@ export const DetailHeader: React.FC<{
                             className="h-8 w-8"
                             disabled={busy}
                             aria-label="更多"
-                            data-tooltip="更多：重装 / 换版本 / 显示设置"
+                            title="更多：重装 / 换版本 / 显示设置"
                         >
                             <ActionMotionIcon icon={MoreHorizontal} size={16} />
                         </Button>

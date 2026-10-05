@@ -218,7 +218,9 @@ export const GlobalTitleTooltip: React.FC = () => {
                 willChange: 'transform, opacity',
             }}
             className={cn(
-                'select-none whitespace-nowrap rounded-sm bg-text/95 px-2.5 py-1 text-2xs font-medium text-canvas shadow-popover backdrop-blur-xs transition-opacity duration-150 ease-out',
+                // 与 Popover / ContextMenu 同一套浮层底色（bg-elevated + 细边框 + 投影）。
+                // 原先用 bg-text/text-canvas 的反色药丸：夜间模式下会亮成一块白，非常扎眼。
+                'select-none whitespace-nowrap rounded-sm border border-border-subtle bg-elevated/95 px-2.5 py-1 text-2xs font-medium text-text shadow-popover backdrop-blur-xs transition-opacity duration-150 ease-out',
                 state.visible ? 'opacity-100' : 'opacity-0',
             )}
         >

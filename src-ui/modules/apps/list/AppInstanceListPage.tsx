@@ -449,12 +449,13 @@ const FooterIcon: React.FC<{
     tone?: 'neutral' | 'brand' | 'danger';
     children: React.ReactNode;
 }> = ({ label, onClick, disabled, tone = 'neutral', children }) => (
-    // 提示走产品的全局机制（data-tooltip）：外壳的 GlobalTitleTooltip 认得它。
-    // 与「终端」按钮同一套——Radix 那套本页只有这里用，而实测用户看不到气泡。
+    // 提示走产品**现成**的机制：title 属性 + 外壳的 GlobalTitleTooltip
+    // （与「终端」按钮、终端文件面板的 IconButton 同一套）。
+    // Radix 那套本页只有这里用，且实测用户看不到气泡。
     <button
         type="button"
         aria-label={label}
-        data-tooltip={label}
+        title={label}
         disabled={disabled}
         onClick={(e) => {
             e.stopPropagation();

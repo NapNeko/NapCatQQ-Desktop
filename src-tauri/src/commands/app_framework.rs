@@ -4,7 +4,8 @@
 
 use ncd_domain::{
     AppConfigDocument, AppConfigError, AppConfigText, AppFrameworkId, AppFrameworkManifest,
-    AppInstance, AppInstanceId, AppInstanceWebUi, AppPendingTerms, AppPluginAction,
+    AppInstance, AppInstanceId, AppInstanceWebUi, AppLinkBotDocument, AppPendingTerms,
+    AppPluginAction,
     AppPluginConfigSchema, AppProjectProbe, AppStoreResource, AppWebUiAccount, BotId,
     CreateAppInstanceRequest, ImportAppInstanceRequest, OneBotLinkPlan,
 };
@@ -1206,6 +1207,23 @@ pub async fn app_panel_call(
     state
         .app_manager
         .panel_call(&AppInstanceId::new(instance_id), &method, &path, body)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 「原始文件」页里的 **Bot 侧** 配置文件（只读）。
+///
+/// 对接时桌面端会往协议 Bot 的配置里写一条 WS 客户端连接。那些文件不在应用端实例目录里，
+/// 走不了 AppConfigDocument 那套相对路径读写，所以单开一个只读入口，让用户能在同一页
+/// 看到「桌面端到底往 Bot 里写了什么」。未对接 / 远端 Bot / 文件还没生成时返回空表。
+#[tauri::command]
+pub async fn app_link_bot_documents(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AppLinkBotDocument>, String> {
+    state
+        .app_manager
+        .linked_bot_documents(&AppInstanceId::new(instance_id))
         .await
         .map_err(|e| e.to_string())
 }

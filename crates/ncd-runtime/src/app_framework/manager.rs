@@ -47,7 +47,8 @@ use ncd_component::{ComponentId, DetectOutcome, LaunchArgs};
 use ncd_deploy::StepKind;
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkId, AppFrameworkManifest, AppInstance,
-    AppInstanceId, AppInstanceOrigin, AppInstanceState, AppInstanceWebUi, AppLinkRecord,
+    AppInstanceId, AppInstanceOrigin, AppInstanceState, AppInstanceWebUi, AppLinkBotDocument,
+    AppLinkRecord,
     AppLinkTopology, AppPendingTerms, AppPlacement, AppPluginAction, AppPluginConfigSchema,
     AppProjectProbe, AppStoreResource, AppWebUiAccount, AppWebUiAuthKind, BotConfig, BotId,
     CreateAppInstanceRequest, DeploymentTaskKind, DeploymentTaskResource, DeploymentType,
@@ -523,6 +524,46 @@ impl AppManager {
                 body,
             )
             .await
+    }
+
+    /// 「原始文件」页要展示的 **Bot 侧** 配置文件（只读）。
+    ///
+    /// 对接时桌面端会往协议 Bot 的配置里写一条 WS 客户端连接。那些文件不在应用端实例
+    /// 目录里，所以走不了 AppConfigDocument 那套「相对实例目录」的读写。这里按 NapCat 的
+    /// 约定，去 Bot 的配置目录找与这个 QQ 相关的文件读出来，交给前端只读展示。
+    ///
+    /// 返回空表不是错误：远端 Bot、换了别的后端、或文件还没渲染出来，都属于「没有可看的」。
+    pub async fn linked_bot_documents(
+        &self,
+        instance_id: &AppInstanceId,
+    ) -> Result<Vec<AppLinkBotDocument>, AppFrameworkError> {
+        let instance = self.get_instance(instance_id).await?;
+        let Some(link) = instance.link.as_ref() else {
+            return Ok(Vec::new());
+        };
+        let bot = link.bot_id.as_str();
+        // 与本机 NapCat 组件的约定一致（DataPaths::napcat_config_dir）
+        let dir = self
+            .data_root
+            .join("components")
+            .join("NapCatQQ")
+            .join("config");
+        let mut out = Vec::new();
+        for name in [
+            format!("onebot11_{bot}.json"),
+            format!("napcat_{bot}.json"),
+        ] {
+            let path = dir.join(&name);
+            // 只列**存在**的：不存在的路径摆出来只会让人以为读失败
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                out.push(AppLinkBotDocument {
+                    name,
+                    path: path.to_string_lossy().to_string(),
+                    text: Some(text),
+                });
+            }
+        }
+        Ok(out)
     }
 
     /// 桌面端注入的解析器遇到还没连上的远端会现连一次（和组件页共用单飞连接），调用前不用另外预热
