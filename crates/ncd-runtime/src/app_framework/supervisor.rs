@@ -224,6 +224,12 @@ impl AppProcessKind {
             _ => Self::NoneBot2,
         }
     }
+
+    /// 会不会换一个新进程把自己重启起来（Windows 下 os.execv 换 PID）。
+    /// NeoBot 装插件、改代码后会这样重启；其它框架真机上没见过，先不认替身
+    pub fn restarts_in_place(self) -> bool {
+        matches!(self, Self::NeoBot)
+    }
 }
 
 pub async fn list_cwd_processes(

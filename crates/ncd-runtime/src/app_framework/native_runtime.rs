@@ -433,20 +433,20 @@ impl NativeAppRuntime {
             let mut owned = Some(process);
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
+                // None = 进程没了但不知道退出码
                 let exit = match owned.as_ref() {
                     Some(proc) => match proc.lock().await.try_wait().await {
                         Ok(ExitStatus::Running) => continue,
-                        Ok(other) => other,
+                        Ok(other) => Some(other),
                         Err(e) => {
                             tracing::warn!(error = %e, "try_wait failed; treating app as exited");
-                            ExitStatus::Killed
+                            Some(ExitStatus::Killed)
                         }
                     },
-                    // 接手自重启之后没有句柄，只能按 pid 判活；不在了就是退出。
-                    // 这里没有退出码可报，按正常退出表述（下面 match 的 Exited(0) 分支）
+                    // 接手自重启之后没有句柄，只能按 pid 判活
                     None => match local_pid_matches(pid, &program) {
                         true => continue,
-                        false => ExitStatus::Exited(0),
+                        false => None,
                     },
                 };
 
@@ -467,12 +467,22 @@ impl NativeAppRuntime {
 
                 // 谁把条目从表里摘掉，谁负责写状态：stop() 摘了就不重复
                 if local.lock().await.remove(&instance.id).is_some() {
-                    let reason = match exit {
-                        ExitStatus::Exited(0) => "进程已退出".to_string(),
-                        ExitStatus::Exited(code) => format!("进程异常退出（code {code}）"),
-                        _ => "进程被终止".to_string(),
+                    // 退出码未知时按意外退出报：不是桌面端停的（那条路 stop() 先摘了条目，
+                    // 走不到这里；优雅关闭的 stop_instance 收尾时也会清掉 last_error），
+                    // 那就可能是崩了，报成正常退出会把崩溃藏起来
+                    let (reason, is_error) = match exit {
+                        Some(ExitStatus::Exited(0)) => ("进程已退出".to_string(), false),
+                        Some(ExitStatus::Exited(code)) => {
+                            (format!("进程异常退出（code {code}）"), true)
+                        }
+                        Some(_) => ("进程被终止".to_string(), true),
+                        None => (
+                            "进程意外退出（自重启后接手的进程，拿不到退出码，详情看日志）"
+                                .to_string(),
+                            true,
+                        ),
                     };
-                    mark_stopped(&store, &bus, &instance.id, reason, !exit.success()).await;
+                    mark_stopped(&store, &bus, &instance.id, reason, is_error).await;
                 }
                 return;
             }
@@ -693,9 +703,21 @@ async fn adopt_successor(
     dead_pid: u32,
 ) -> Option<(u32, String)> {
     let kind = super::supervisor::AppProcessKind::from_framework(instance.framework_id.as_str());
+    // 只给确实会原地自重启的框架找替身。其它框架主进程一死，同目录里还活着的
+    // 子进程（MaiBot 的 Worker、插件进程）可能也对得上入口，认过来就把崩溃藏成了「还在跑」；
+    // 也省得每次正常退出都白白多等几秒、扫十几遍进程表
+    if !kind.restarts_in_place() {
+        return None;
+    }
     let deadline = tokio::time::Instant::now() + SELF_RESTART_GRACE;
     loop {
-        if let Some((pid, program)) = discover_local_pid(&instance.install_dir, kind) {
+        // 全表扫 cwd + 命令行是同步重活，别占着运行时的工作线程
+        let install_dir = instance.install_dir.clone();
+        let found = tokio::task::spawn_blocking(move || discover_local_pid(&install_dir, kind))
+            .await
+            .ok()
+            .flatten();
+        if let Some((pid, program)) = found {
             if pid != dead_pid {
                 let body = render_pid_file(pid, &program);
                 if let Err(e) = host
