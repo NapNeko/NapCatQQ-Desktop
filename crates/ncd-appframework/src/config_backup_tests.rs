@@ -210,10 +210,26 @@ fn backup(framework: &str, id: &str, files: &[(&str, &str)]) -> FrameworkConfigB
 }
 
 #[tokio::test]
-async fn captures_all_six_frameworks_core_plugins_and_prompt_versions_without_programs_or_databases()
- {
+async fn captures_all_builtin_framework_configs_without_programs_or_databases() {
     let registry = crate::AppFrameworkRegistry::with_builtin();
     let cases: &[(&str, &[(&str, &str)], &[&str])] = &[
+        (
+            "neobot",
+            &[
+                (
+                    "data/config.toml",
+                    "# keep\r\n[adapter]\nreverse_ws_port = 8080\n",
+                ),
+                ("plugins_data/dashboard/config.toml", "port = 9981\n"),
+                ("plugins_data/my-plugin/config.toml", "enabled = true\n"),
+            ],
+            &[
+                "plugins_data/dashboard/auth.json",
+                "plugins_data/my-plugin/history.json",
+                "data/chat.db",
+                "plugins/my-plugin/main.py",
+            ],
+        ),
         (
             "karin",
             &[
@@ -314,6 +330,16 @@ async fn captures_all_six_frameworks_core_plugins_and_prompt_versions_without_pr
             ],
         ),
     ];
+    let covered: HashSet<_> = cases
+        .iter()
+        .map(|(framework, _, _)| (*framework).to_string())
+        .collect();
+    let registered: HashSet<_> = registry
+        .manifests()
+        .iter()
+        .map(|manifest| manifest.id.as_str().to_string())
+        .collect();
+    assert_eq!(covered, registered, "新增内置框架时也需要补齐配置备份覆盖");
     for (framework, included, excluded) in cases {
         let host = TestHost::new(framework);
         let inst = instance(framework, "instance-a");
