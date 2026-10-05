@@ -309,12 +309,13 @@ async fn captures_all_builtin_framework_configs_without_programs_or_databases() 
             &[
                 ("koishi.yml", "# preserve\nplugins:\n  group: {}\n"),
                 (".env", "A=1"),
-                (
-                    "package.json",
-                    "{\"dependencies\":{\"koishi-plugin-test\":\"1.0\"}}",
-                ),
             ],
-            &["node_modules/plugin/config.json", "data/koishi.db"],
+            &[
+                // 可执行清单只导出 koishi.yml / .env，package.json 不随备份写回（yarn start 会跑 scripts.start）
+                "package.json",
+                "node_modules/plugin/config.json",
+                "data/koishi.db",
+            ],
         ),
         (
             "yunzai",
