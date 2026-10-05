@@ -982,3 +982,45 @@ fn export_registry_excludes_secrets_installs_and_history() {
         .collect();
     assert_eq!(names, vec!["config.json", "export_meta.json"]);
 }
+
+#[test]
+fn export_replaces_an_existing_archive_instead_of_failing() {
+    let temp = tempfile::tempdir().unwrap();
+    let dest = temp.path().join("backup.zip");
+    fs::write(&dest, b"old").unwrap();
+    let staged = temp.path().join(".backup.zip.ncd-export-test.tmp");
+    fs::write(&staged, b"new").unwrap();
+    replace_export_archive(&staged, &dest).unwrap();
+    assert_eq!(fs::read(&dest).unwrap(), b"new");
+    assert!(!staged.exists());
+    assert!(
+        temp.path()
+            .read_dir()
+            .unwrap()
+            .all(|entry| !entry.unwrap().file_name().to_string_lossy().contains("ncd-replaced")),
+        "替换完成的旧档临时名必须清走"
+    );
+}
+
+#[test]
+fn imported_instances_sharing_one_install_dir_are_rejected() {
+    let staging = tempfile::tempdir().unwrap();
+    let target = tempfile::tempdir().unwrap();
+    write_json(
+        staging.path(),
+        "config.json",
+        serde_json::from_str(VALID_CONFIG).unwrap(),
+    );
+    let mut twin = sample_instance("instance-b");
+    twin["install_dir"] = serde_json::json!("/apps/karin");
+    write_json(
+        staging.path(),
+        "app-instances.json",
+        serde_json::json!({"version":1,"instances":[sample_instance("instance-a"), twin]}),
+    );
+    assert!(
+        build_import_transaction(staging.path(), target.path(), &RecordingSecrets::default())
+            .is_err(),
+        "两个实例共用同一安装目录必须中止导入"
+    );
+}
