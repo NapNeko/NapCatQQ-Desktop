@@ -283,6 +283,38 @@
     }
 }
 
+/* 状态点呼吸：原先 GSAP 每帧写 inline opacity，只要有一个「运行中」的点，主线程就按
+   屏幕刷新率一直跑样式重算。换成关键帧后只动 opacity / transform，整段交给合成器。
+   时长由组件按动效档和速度写进 --ndf-status-dur（单程，alternate 往返一轮）。 */
+@keyframes ndf-status-breathe {
+    to {
+        opacity: 0.55;
+    }
+}
+
+@keyframes ndf-status-breathe-rich {
+    to {
+        opacity: 0.45;
+        transform: scale(0.92);
+    }
+}
+
+.ndf-status-breathe,
+.ndf-status-breathe-rich {
+    animation: ndf-status-breathe var(--ndf-status-dur, 0.9s) cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+}
+
+.ndf-status-breathe-rich {
+    animation-name: ndf-status-breathe-rich;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ndf-status-breathe,
+    .ndf-status-breathe-rich {
+        animation: none;
+    }
+}
+
 /* 吉祥物待机呼吸：页面上唯一一直在动的东西，脚底为轴缓慢起伏 0.8%。
    动的是包着 SVG 的那层 div，不是 SVG 里的 <g>——SVG 元素的 transform 每帧都要重新
    布局并把整张矢量图重新栅格化（实测首页所有强制布局都出自这里，加 will-change 也救不了）。
@@ -306,6 +338,46 @@
 @media (prefers-reduced-motion: reduce) {
     .ndf-mascot-breathe {
         animation: none;
+    }
+}
+
+/* 打瞌睡头顶的 zz：同上，每个 Z 包一层 HTML 容器动容器，SVG 只栅格化一次。原先 GSAP
+   改 SVG path 的 transform，外面还套着 drop-shadow，人一走开就每帧重排重绘，越闲越费。
+   节奏照搬原时间线：先 sine.out 飘起淡入，过峰后 power1.in 继续上飘淡出，余下时间藏着；
+   两个 Z 错开 --ndf-z-gap，一轮 --ndf-z-dur。 */
+@keyframes ndf-mascot-z {
+    0% {
+        opacity: 0;
+        transform: translateY(6px) scale(0.7);
+        animation-timing-function: cubic-bezier(0.61, 1, 0.88, 1);
+    }
+
+    39% {
+        opacity: 1;
+        transform: translateY(-9.5px) scale(1);
+        animation-timing-function: cubic-bezier(0.11, 0, 0.5, 0);
+    }
+
+    68%,
+    100% {
+        opacity: 0;
+        transform: translateY(-18px) scale(1);
+    }
+}
+
+.ndf-mascot-z {
+    opacity: 0;
+    animation: ndf-mascot-z var(--ndf-z-dur, 2.8s) linear infinite both;
+}
+
+.ndf-mascot-z + .ndf-mascot-z {
+    animation-delay: var(--ndf-z-gap, 0.9s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ndf-mascot-z {
+        animation: none;
+        opacity: 1;
     }
 }
 

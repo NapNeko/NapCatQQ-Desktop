@@ -1,5 +1,6 @@
 // 吉祥物头顶的表情贴纸：五个手绘小 SVG，各有各的出场方式。
 // 一次只显示一个；zz 会循环到被换掉为止，其余播完自己消失。
+// zz 一挂就是很久，走 CSS 动画；其余几种一两秒就完，留在 GSAP 里。
 
 import React, { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
@@ -72,28 +73,31 @@ const Sweat: React.FC = () => (
     </svg>
 );
 
+// 两个 Z 各占一层 HTML 容器，飘动交给 index.css 的 ndf-mascot-z 在合成器上跑；
+// transformOrigin 是各自字形在 32x24 画布里的中心。
+const Z_GLYPHS = [
+    { d: 'M4 14.5h6.5L4 21h7', width: 2.4, origin: '7.5px 17.75px' },
+    { d: 'M15 6h6l-6 6.5h6.5', width: 2.2, origin: '18.25px 9.25px' },
+] as const;
+
 // 灰字压在浅色天幕上会糊，套一圈卡片底色描边把它抬出来。
 const Zz: React.FC = () => (
-    <svg viewBox="0 0 32 24" width="32" height="24" aria-hidden style={{ filter: 'drop-shadow(0 0 1.5px var(--surface-hero))' }}>
-        <path
-            data-z
-            d="M4 14.5h6.5L4 21h7"
-            fill="none"
-            stroke="var(--text-secondary)"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        />
-        <path
-            data-z
-            d="M15 6h6l-6 6.5h6.5"
-            fill="none"
-            stroke="var(--text-secondary)"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        />
-    </svg>
+    <span className="relative block h-6 w-8">
+        {Z_GLYPHS.map((z) => (
+            <span key={z.d} data-z className="ndf-mascot-z absolute inset-0" style={{ transformOrigin: z.origin }}>
+                <svg viewBox="0 0 32 24" width="32" height="24" aria-hidden style={{ filter: 'drop-shadow(0 0 1.5px var(--surface-hero))' }}>
+                    <path
+                        d={z.d}
+                        fill="none"
+                        stroke="var(--text-secondary)"
+                        strokeWidth={z.width}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    />
+                </svg>
+            </span>
+        ))}
+    </span>
 );
 
 const GLYPH: Record<EmoteKind, React.FC> = {
@@ -126,8 +130,13 @@ export const MascotEmote: React.FC<MascotEmoteProps> = ({ emote, className }) =>
             return () => window.clearTimeout(id);
         }
 
-        const tl = gsap.timeline({ onComplete: shown.kind === 'zz' ? undefined : done });
         gsap.set(el, { clearProps: 'transform' });
+        if (shown.kind === 'zz') {
+            // 循环本身是 CSS 动画，这里只负责把容器亮出来；换掉表情时整块卸载即停。
+            gsap.set(el, { autoAlpha: 1 });
+            return;
+        }
+        const tl = gsap.timeline({ onComplete: done });
 
         switch (shown.kind) {
             case 'heart':
@@ -156,17 +165,6 @@ export const MascotEmote: React.FC<MascotEmoteProps> = ({ emote, className }) =>
                     .to(el, { y: 16, duration: s(0.9), ease: 'power1.in' })
                     .to(el, { autoAlpha: 0, scaleY: 0.6, duration: s(0.25), ease: 'power2.in' }, '-=0.2');
                 break;
-            case 'zz': {
-                const zs = el.querySelectorAll('[data-z]');
-                gsap.set(el, { autoAlpha: 1 });
-                tl.repeat(-1);
-                tl.fromTo(
-                    zs,
-                    { y: 6, autoAlpha: 0, scale: 0.7 },
-                    { y: -10, autoAlpha: 1, scale: 1, duration: s(1.4), ease: 'sine.out', stagger: s(0.9), transformOrigin: '50% 50%' },
-                ).to(zs, { y: -18, autoAlpha: 0, duration: s(0.8), ease: 'power1.in', stagger: s(0.9) }, '-=1.2');
-                break;
-            }
         }
         return () => {
             tl.kill();
@@ -175,8 +173,10 @@ export const MascotEmote: React.FC<MascotEmoteProps> = ({ emote, className }) =>
 
     if (!shown) return null;
     const Glyph = GLYPH[shown.kind];
+    const speed = Math.max(0.5, m.speed);
+    const zzTiming = { '--ndf-z-dur': `${2.8 / speed}s`, '--ndf-z-gap': `${0.9 / speed}s` } as React.CSSProperties;
     return (
-        <div ref={ref} className={className} style={{ transformOrigin: '50% 100%' }} aria-hidden>
+        <div ref={ref} className={className} style={{ transformOrigin: '50% 100%', ...(shown.kind === 'zz' ? zzTiming : null) }} aria-hidden>
             <Glyph />
         </div>
     );
