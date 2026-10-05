@@ -544,8 +544,14 @@ impl NativeAppRuntime {
                             continue;
                         }
                         None => {
-                            mark_stopped(&store, &bus, &instance.id, "进程已退出".to_string(), false)
-                                .await;
+                            mark_stopped(
+                                &store,
+                                &bus,
+                                &instance.id,
+                                "进程已退出".to_string(),
+                                false,
+                            )
+                            .await;
                             return;
                         }
                     }
@@ -1325,8 +1331,10 @@ mod tests {
             HostPath::from_windows(&cwd).as_posix().to_string()
         };
 
-        let found =
-            discover_local_pid(&install_dir, super::super::supervisor::AppProcessKind::NeoBot);
+        let found = discover_local_pid(
+            &install_dir,
+            super::super::supervisor::AppProcessKind::NeoBot,
+        );
 
         let _ = child.kill();
         let _ = child.wait();

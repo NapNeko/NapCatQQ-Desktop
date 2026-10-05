@@ -108,11 +108,19 @@ pub struct AppPanelResult {
 
 impl AppPanelResult {
     pub fn ok(data: serde_json::Value) -> Self {
-        Self { kind: AppPanelOutcomeKind::Ok, data: Some(data), message: None }
+        Self {
+            kind: AppPanelOutcomeKind::Ok,
+            data: Some(data),
+            message: None,
+        }
     }
 
     pub fn err(kind: AppPanelOutcomeKind, message: impl Into<String>) -> Self {
-        Self { kind, data: None, message: Some(message.into()) }
+        Self {
+            kind,
+            data: None,
+            message: Some(message.into()),
+        }
     }
 }
 

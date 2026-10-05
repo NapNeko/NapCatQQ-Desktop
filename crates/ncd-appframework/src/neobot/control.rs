@@ -155,7 +155,11 @@ async fn request_graceful_shutdown_at(
     // 先不带凭据试一次，只为省掉「面板没设密码时的一次无谓登录」：
     // 面板设了密码时这一发必然 401/403（回环不放行），下面会走登录重试。
     // 注意别把它当成「本机就能过」——未设密码时 /api/* 也一律 403。
-    let first = match client.post(shutdown_url_at(host, dashboard_port)).send().await {
+    let first = match client
+        .post(shutdown_url_at(host, dashboard_port))
+        .send()
+        .await
+    {
         Ok(r) => r,
         Err(e) => return ShutdownRequest::Unreachable(e.to_string()),
     };
@@ -207,11 +211,7 @@ async fn request_graceful_shutdown_at(
 }
 
 /// 面板配置里的端口；读不到就用调用方给的回落口。
-pub async fn dashboard_port(
-    host: &dyn Host,
-    install_dir: &HostPath,
-    fallback: u16,
-) -> u16 {
+pub async fn dashboard_port(host: &dyn Host, install_dir: &HostPath, fallback: u16) -> u16 {
     match crate::neobot::config::read_neobot_config(host, install_dir).await {
         Ok((cfg, _)) => {
             let port = cfg.dashboard.port;
@@ -484,9 +484,8 @@ mod tests {
     }
 
     fn login_ok() -> ResponseTemplate {
-        ResponseTemplate::new(200).set_body_json(
-            serde_json::json!({ "token": "tok-abc", "csrf_token": "csrf-xyz" }),
-        )
+        ResponseTemplate::new(200)
+            .set_body_json(serde_json::json!({ "token": "tok-abc", "csrf_token": "csrf-xyz" }))
     }
 
     #[test]
@@ -509,7 +508,10 @@ mod tests {
     #[tokio::test]
     async fn zero_port_never_sends_a_request() {
         let outcome = request_graceful_shutdown(0, None).await;
-        assert!(matches!(outcome, ShutdownRequest::Unreachable(_)), "{outcome:?}");
+        assert!(
+            matches!(outcome, ShutdownRequest::Unreachable(_)),
+            "{outcome:?}"
+        );
     }
 
     #[tokio::test]
@@ -577,7 +579,9 @@ mod tests {
             .await;
         Mock::given(method("POST"))
             .and(path(LOGIN_PATH))
-            .and(body_json(serde_json::json!({ "password": "hunter2-neobot" })))
+            .and(body_json(
+                serde_json::json!({ "password": "hunter2-neobot" }),
+            ))
             .respond_with(login_ok())
             .expect(1)
             .mount(&server)
@@ -741,7 +745,10 @@ mod tests {
         assert!(hdr(shutdowns[0], "X-Token").is_none());
         // 第二次带上登录换来的 token 与 CSRF
         assert_eq!(hdr(shutdowns[1], "X-Token").as_deref(), Some("tok-abc"));
-        assert_eq!(hdr(shutdowns[1], "X-CSRF-Token").as_deref(), Some("csrf-xyz"));
+        assert_eq!(
+            hdr(shutdowns[1], "X-CSRF-Token").as_deref(),
+            Some("csrf-xyz")
+        );
     }
 
     /// 面板没起来时，有密码也要报打不通。报成未授权会把用户引去重填一个对的密码
@@ -752,7 +759,16 @@ mod tests {
             listener.local_addr().expect("addr").port()
         };
         let sessions = PanelSessions::new();
-        let out = panel_call(&sessions, "i1", port, Some("pw"), "GET", "/api/overview", None).await;
+        let out = panel_call(
+            &sessions,
+            "i1",
+            port,
+            Some("pw"),
+            "GET",
+            "/api/overview",
+            None,
+        )
+        .await;
         assert!(matches!(out, PanelOutcome::Unreachable(_)), "{out:?}");
     }
 
@@ -788,9 +804,16 @@ mod tests {
             .mount(&server)
             .await;
         let sessions = PanelSessions::new();
-        let out =
-            panel_call(&sessions, "i1", port_of(&server), Some("pw"), "GET", "/api/overview", None)
-                .await;
+        let out = panel_call(
+            &sessions,
+            "i1",
+            port_of(&server),
+            Some("pw"),
+            "GET",
+            "/api/overview",
+            None,
+        )
+        .await;
         assert!(matches!(out, PanelOutcome::NotFound), "{out:?}");
     }
 
@@ -814,9 +837,16 @@ mod tests {
             .mount(&server)
             .await;
         let sessions = PanelSessions::new();
-        let out =
-            panel_call(&sessions, "i1", port_of(&server), None, "GET", "/api/auth/status", None)
-                .await;
+        let out = panel_call(
+            &sessions,
+            "i1",
+            port_of(&server),
+            None,
+            "GET",
+            "/api/auth/status",
+            None,
+        )
+        .await;
         match out {
             PanelOutcome::Ok(v) => assert_eq!(v["configured"], false),
             other => panic!("期望 Ok，得到 {other:?}"),
@@ -840,7 +870,17 @@ mod tests {
             .await;
         let sessions = PanelSessions::new();
         let port = port_of(&server);
-        let call = || panel_call(&sessions, "i1", port, Some("pw"), "GET", "/api/overview", None);
+        let call = || {
+            panel_call(
+                &sessions,
+                "i1",
+                port,
+                Some("pw"),
+                "GET",
+                "/api/overview",
+                None,
+            )
+        };
         assert!(matches!(call().await, PanelOutcome::Ok(_)));
         // 有缓存：不再登录
         assert!(matches!(call().await, PanelOutcome::Ok(_)));
@@ -864,12 +904,8 @@ mod tests {
             .mount(&server)
             .await;
 
-        let _ = request_graceful_shutdown_at(
-            "127.0.0.1",
-            port_of(&server),
-            Some("hunter2-neobot"),
-        )
-        .await;
+        let _ = request_graceful_shutdown_at("127.0.0.1", port_of(&server), Some("hunter2-neobot"))
+            .await;
 
         let received: Vec<Request> = server.received_requests().await.unwrap_or_default();
         let login = received

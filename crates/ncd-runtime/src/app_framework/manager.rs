@@ -18,45 +18,43 @@ use std::time::{Duration, Instant};
 
 use ncd_appframework::{
     AdoptRestoreScope, AppComponentSpec, AppConfigWriteResult, AppFrameworkAdapter,
-    AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor,
-    AppPanelResult, PackageVersions,
-    AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
-    AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession,
-    AstrBotSessionRule, KarinPluginInstalled, KarinPluginMarketEntry, KoishiCommandRow,
-    KoishiDatabaseTable, KoishiFileContent, KoishiFileEntry, KoishiPackageInfo,
-    KoishiPluginSchema, KoishiRuntimeApi, KoishiRuntimeGate, KoishiRuntimeStatus, MaiBotAPIProvider,
-    KoishiSandboxMessage,
-    MaiBotBehaviorDetail, MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery,
-    MaiBotChatSession, MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview,
-    MaiBotEmojiPage, MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone,
-    MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
-    MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery,
-    MaiBotLocalImage, MaiBotLocalTextFile, MaiBotMCPServerItemConfig, MaiBotMcpStatus,
-    MaiBotMcpTest, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult,
-    MaiBotMemoryGraph, MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup,
-    MaiBotMemoryNodeDetail, MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind,
-    MaiBotMemoryRecordPage, MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask,
-    MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail, MaiBotPersonAction, MaiBotPersonOverview,
-    MaiBotPersonPage, MaiBotPersonQuery, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
+    AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope, AppPanelResult,
+    AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo,
+    AstrBotDashboardStatus, AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona,
+    AstrBotRuntimeApi, AstrBotSession, AstrBotSessionRule, KarinPluginInstalled,
+    KarinPluginMarketEntry, KoishiCommandRow, KoishiDatabaseTable, KoishiFileContent,
+    KoishiFileEntry, KoishiPackageInfo, KoishiPluginSchema, KoishiRuntimeApi, KoishiRuntimeGate,
+    KoishiRuntimeStatus, KoishiSandboxMessage, MaiBotAPIProvider, MaiBotBehaviorDetail,
+    MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession,
+    MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
+    MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotExpressionAction,
+    MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery, MaiBotJargonAction,
+    MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotLocalImage,
+    MaiBotLocalTextFile, MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest,
+    MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult, MaiBotMemoryGraph,
+    MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup, MaiBotMemoryNodeDetail,
+    MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage,
+    MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask, MaiBotMemoryTaskAction,
+    MaiBotMemoryTaskDetail, MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage,
+    MaiBotPersonQuery, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
     MaiBotPromptTarget, MaiBotProviderCheck, MaiBotProviderModel, MaiBotProviderSource,
     MaiBotResourceDone, MaiBotRuntimeApi, MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotSession,
-    MaiBotStatsSummary, PluginLogSink, app_file_basename, join_webui_url, remove_ncd_debris,
-    restore_adopted_files,
+    MaiBotStatsSummary, PackageVersions, PluginLogSink, app_file_basename, join_webui_url,
+    remove_ncd_debris, restore_adopted_files,
 };
 use ncd_component::{ComponentId, DetectOutcome, LaunchArgs};
 use ncd_deploy::StepKind;
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkId, AppFrameworkManifest, AppInstance,
     AppInstanceId, AppInstanceOrigin, AppInstanceState, AppInstanceWebUi, AppLinkBotDocument,
-    AppLinkRecord,
-    AppLinkTopology, AppPendingTerms, AppPlacement, AppPluginAction, AppPluginConfigSchema,
-    AppProjectProbe, AppStoreResource, AppWebUiAccount, AppWebUiAuthKind, BackendType, BotConfig,
-    BotId,
-    CreateAppInstanceRequest, DeploymentTaskKind, DeploymentTaskResource, DeploymentType,
-    DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID, OneBotLinkEndpoint, OneBotLinkMode,
-    OneBotLinkPlan, REMOTE_HOST_ID_PREFIX, RuntimeTarget, app_link_connection_name,
-    classify_app_link, host_id_of_runtime_target, is_app_link_connection_name, parse_ws_url,
-    rewrite_ws_loopback_port, runtime_target_matches_host, server_id_of_host,
+    AppLinkRecord, AppLinkTopology, AppPendingTerms, AppPlacement, AppPluginAction,
+    AppPluginConfigSchema, AppProjectProbe, AppStoreResource, AppWebUiAccount, AppWebUiAuthKind,
+    BackendType, BotConfig, BotId, CreateAppInstanceRequest, DeploymentTaskKind,
+    DeploymentTaskResource, DeploymentType, DomainEventKind, ImportAppInstanceRequest,
+    LOCAL_HOST_ID, OneBotLinkEndpoint, OneBotLinkMode, OneBotLinkPlan, REMOTE_HOST_ID_PREFIX,
+    RuntimeTarget, app_link_connection_name, classify_app_link, host_id_of_runtime_target,
+    is_app_link_connection_name, parse_ws_url, rewrite_ws_loopback_port,
+    runtime_target_matches_host, server_id_of_host,
 };
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
@@ -572,10 +570,7 @@ impl AppManager {
         let bot = link.bot_id.as_str();
         let dir = crate::DataPaths::new(self.data_root.clone()).napcat_config_dir();
         let mut out = Vec::new();
-        for name in [
-            format!("onebot11_{bot}.json"),
-            format!("napcat_{bot}.json"),
-        ] {
+        for name in [format!("onebot11_{bot}.json"), format!("napcat_{bot}.json")] {
             let path = dir.join(&name);
             // 只列**存在**的：不存在的路径摆出来只会让人以为读失败
             if let Ok(text) = tokio::fs::read_to_string(&path).await {
