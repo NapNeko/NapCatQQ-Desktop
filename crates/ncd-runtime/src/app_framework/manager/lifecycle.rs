@@ -191,7 +191,8 @@ impl AppManager {
             created_at_ms: now_ms(),
             install_renderer: false,
             origin: AppInstanceOrigin::Imported,
-            auto_start: true,
+            // 领养进来的目录同样不随桌面端启动：那是用户的既有部署，桌面端不该替它决定
+            auto_start: false,
         };
         let rels = adapter
             .adopt_watch_rels(host.as_ref(), &install_dir)

@@ -20,6 +20,7 @@ import { ConfigConflictDialog } from './ConfigConflictDialog';
 import { DetailHeader } from './DetailHeader';
 import { DetailSideNav } from './DetailSideNav';
 import { InstanceLogTab } from './InstanceLogTab';
+import { InstanceVersionTab } from './InstanceVersionTab';
 import { PaneLoading } from './PaneStatus';
 import { RawFilesTab } from './RawFilesTab';
 import { SaveBar } from './SaveBar';
@@ -61,7 +62,11 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
     const latestVersion = versions.data?.latest ?? null;
 
     const ui = instance ? resolveFrameworkUi(instance.framework_id) : undefined;
-    const nav = useMemo(() => buildDetailNav(ui), [ui]);
+    // 支持按版本安装的框架才给「版本」页：不支持就没有可选项
+    const nav = useMemo(
+        () => buildDetailNav(ui, { withVersionTab: !!versions.data }),
+        [ui, versions.data],
+    );
     const installed = !!instance && isInstalled(instance);
     const running = instance?.state === 'running';
     const FrameworkDetail = ui?.Detail;
@@ -199,6 +204,20 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                                         onNavBadges={setNavBadges}
                                     />
                                 )}
+                                <TabsContent value="version" className="flex min-h-0 flex-1 flex-col pt-2">
+                                    <InstanceVersionTab
+                                        instance={instance}
+                                        latestVersion={latestVersion}
+                                        versions={versions.data?.versions ?? null}
+                                        loading={versions.isLoading}
+                                        error={versions.error?.message}
+                                        busy={busy}
+                                        onSwitch={(v) => {
+                                            setInstallVersion(v);
+                                            setReinstallOpen(true);
+                                        }}
+                                    />
+                                </TabsContent>
                                 <TabsContent value="raw" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
                                     <RawFilesTab instance={instance} />
                                 </TabsContent>

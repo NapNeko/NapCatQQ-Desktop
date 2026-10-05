@@ -26,7 +26,11 @@ webui_username?: string,
  */
 webui_password?: string, 
 /**
- * 开机/桌面端启动时自动启动该实例。默认 true。
+ * 开机/桌面端启动时自动启动该实例。**默认 false**：新建的实例不随桌面端启动。
+ *
+ * 与 `AppInstance::auto_start` 的 default_true 不冲突：那个是为了旧快照的兼容
+ * （字段出现之前建的实例按「已安装即启用」处理），这里说的是**新建时**取什么值。
+ * 想让它跟着桌面端起，在详情页把那个开关打开即可。
  */
 auto_start: boolean, 
 /**

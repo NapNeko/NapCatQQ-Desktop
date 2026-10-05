@@ -62,11 +62,24 @@ const SHELL_TABS: readonly FrameworkTabDef[] = [
     { value: 'log', label: '日志' },
 ];
 
-export function buildDetailNav(ui: FrameworkUiModule | undefined): FrameworkNavGroup[] {
+/** 「版本」页也由外壳渲染（支持按版本安装的框架共用），排在实例组最前 */
+const VERSION_TAB: FrameworkTabDef = { value: 'version', label: '版本' };
+
+/**
+ * 框架给的分组 + 外壳追加的页。
+ *
+ * withVersionTab 由详情页按「这个框架支不支持按版本安装」传进来：不支持就没有可选项，
+ * 摆一个空页只会让人以为坏了。
+ */
+export function buildDetailNav(
+    ui: FrameworkUiModule | undefined,
+    options?: { withVersionTab?: boolean },
+): FrameworkNavGroup[] {
+    const shellTabs = options?.withVersionTab ? [VERSION_TAB, ...SHELL_TABS] : [...SHELL_TABS];
     const groups = (ui?.nav ?? []).map((g) => ({ ...g, items: [...g.items] }));
     const instance = groups.find((g) => g.id === INSTANCE_GROUP_ID);
-    if (instance) instance.items.push(...SHELL_TABS);
-    else groups.push({ id: INSTANCE_GROUP_ID, label: '实例', items: [...SHELL_TABS] });
+    if (instance) instance.items.push(...shellTabs);
+    else groups.push({ id: INSTANCE_GROUP_ID, label: '实例', items: shellTabs });
     return groups;
 }
 
