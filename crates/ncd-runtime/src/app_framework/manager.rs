@@ -50,7 +50,8 @@ use ncd_domain::{
     AppInstanceId, AppInstanceOrigin, AppInstanceState, AppInstanceWebUi, AppLinkBotDocument,
     AppLinkRecord,
     AppLinkTopology, AppPendingTerms, AppPlacement, AppPluginAction, AppPluginConfigSchema,
-    AppProjectProbe, AppStoreResource, AppWebUiAccount, AppWebUiAuthKind, BotConfig, BotId,
+    AppProjectProbe, AppStoreResource, AppWebUiAccount, AppWebUiAuthKind, BackendType, BotConfig,
+    BotId,
     CreateAppInstanceRequest, DeploymentTaskKind, DeploymentTaskResource, DeploymentType,
     DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID, OneBotLinkEndpoint, OneBotLinkMode,
     OneBotLinkPlan, REMOTE_HOST_ID_PREFIX, RuntimeTarget, app_link_connection_name,
@@ -551,13 +552,25 @@ impl AppManager {
         let Some(link) = instance.link.as_ref() else {
             return Ok(Vec::new());
         };
+        // 只有本机原生 NapCat 的配置落在桌面端数据根下。远端、Docker、SnowLuma 的 Bot
+        // 即便这台机器上留着同一个 QQ 的旧文件，那也不是这次对接写进去的
+        let local_napcat = match self.bot_manager.bot_config(&link.bot_id).await {
+            Ok(Some(cfg)) => {
+                cfg.bot.runtime_target.is_local()
+                    && cfg.bot.backend_type == BackendType::NapCat
+                    && cfg.bot.deployment_type == DeploymentType::Native
+            }
+            Ok(None) => false,
+            Err(e) => {
+                tracing::debug!(bot = link.bot_id.as_str(), error = %e, "read linked bot config");
+                false
+            }
+        };
+        if !local_napcat {
+            return Ok(Vec::new());
+        }
         let bot = link.bot_id.as_str();
-        // 与本机 NapCat 组件的约定一致（DataPaths::napcat_config_dir）
-        let dir = self
-            .data_root
-            .join("components")
-            .join("NapCatQQ")
-            .join("config");
+        let dir = crate::DataPaths::new(self.data_root.clone()).napcat_config_dir();
         let mut out = Vec::new();
         for name in [
             format!("onebot11_{bot}.json"),
@@ -565,7 +578,7 @@ impl AppManager {
         ] {
             let path = dir.join(&name);
             // 只列**存在**的：不存在的路径摆出来只会让人以为读失败
-            if let Ok(text) = std::fs::read_to_string(&path) {
+            if let Ok(text) = tokio::fs::read_to_string(&path).await {
                 out.push(AppLinkBotDocument {
                     name,
                     path: path.to_string_lossy().to_string(),
