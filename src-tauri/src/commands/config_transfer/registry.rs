@@ -7,7 +7,6 @@ pub(super) enum TransferKind {
     AppSettings,
     Servers,
     Instances,
-    Chat,
     DebugWorkspace,
     DebugCollections,
     SnowLuma,
@@ -53,12 +52,6 @@ pub(super) const TRANSFER_FILES: &[TransferFile] = &[
         archive_name: "app-instances.json",
         label: "应用实例与关联",
         kind: TransferKind::Instances,
-    },
-    TransferFile {
-        data_relative: "config/chat-desktop.json",
-        archive_name: "chat-desktop.json",
-        label: "聊天账号与通知偏好",
-        kind: TransferKind::Chat,
     },
     TransferFile {
         data_relative: "onebot-debug/workspace.json",

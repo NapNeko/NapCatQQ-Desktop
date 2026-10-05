@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::Mutex;
 
 use ncd_domain::app_framework::{LOCAL_HOST_ID, REMOTE_HOST_ID_PREFIX};
-use ncd_domain::chat_desktop::ChatAccountPreference;
 use ncd_domain::errors::SecretError;
 use ncd_domain::onebot_debug::{DebugCollections, DebugWorkspace};
 use ncd_domain::{AppInstance, AppPlacement, SnowLumaAppConfig};
@@ -55,11 +54,6 @@ impl SecretStore for MemorySecretStore {
 struct AppInstancesFile {
     version: u32,
     instances: Vec<AppInstance>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct ChatPreferencesFile {
-    accounts: Vec<ChatAccountPreference>,
 }
 
 fn decode<T: serde::de::DeserializeOwned>(value: Value, name: &str) -> Result<T, String> {
@@ -141,41 +135,6 @@ fn validate_instances(value: Value, name: &str) -> Result<Value, String> {
         }
     }
     encode(&file, name)
-}
-
-fn validate_chat(value: Value, name: &str) -> Result<Value, String> {
-    let file: ChatPreferencesFile = decode(value, name)?;
-    if file.accounts.len() > 64
-        || file
-            .accounts
-            .iter()
-            .filter(|account| account.enabled && account.background)
-            .count()
-            > 8
-    {
-        return Err(format!(
-            "{name} 聊天账号数量超出限制（最多 64 个账号、8 个后台账号）"
-        ));
-    }
-    let mut identities = HashSet::new();
-    for account in &file.accounts {
-        account
-            .validate()
-            .map_err(|error| format!("{name}: {error}"))?;
-        if !identities.insert((&account.bot_id, &account.self_id)) {
-            return Err(format!("{name} 含重复聊天账号，已中止导入"));
-        }
-    }
-    let payload = encode(&file, name)?;
-    // The runtime loader enforces the same disk budget.
-    if serde_json::to_vec_pretty(&payload)
-        .map_err(|error| error.to_string())?
-        .len()
-        > 128 * 1024
-    {
-        return Err(format!("{name} 聊天偏好文件过大"));
-    }
-    Ok(payload)
 }
 
 fn validate_workspace(value: Value, name: &str) -> Result<Value, String> {
@@ -490,7 +449,6 @@ pub(super) fn normalize_entry(
         TransferKind::AppSettings => super::normalize_app_settings_import(value)?,
         TransferKind::Servers => super::normalize_servers_import(value)?,
         TransferKind::Instances => validate_instances(value, name)?,
-        TransferKind::Chat => validate_chat(value, name)?,
         TransferKind::DebugWorkspace => validate_workspace(value, name)?,
         TransferKind::DebugCollections => validate_collections(value, name)?,
         TransferKind::SnowLuma => validate_snowluma(value, name)?,

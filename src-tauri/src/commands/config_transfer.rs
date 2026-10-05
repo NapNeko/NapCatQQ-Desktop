@@ -572,12 +572,6 @@ pub async fn import_config(
         &framework_backups,
         &framework_restore.restored_ids,
     )?;
-    let chat_preferences = imported_cache_payload(
-        &txn,
-        &state.data_root,
-        "config/chat-desktop.json",
-        Some("accounts"),
-    )?;
     let workspace =
         imported_cache_payload(&txn, &state.data_root, "onebot-debug/workspace.json", None)?;
     let collections = imported_cache_payload(
@@ -604,13 +598,10 @@ pub async fn import_config(
         .app_manager
         .replace_instances_with(
             instances,
-            state.chat.replace_preferences_with(
-                chat_preferences,
-                state.onebot_debug.replace_config_with(
-                    workspace,
-                    collections,
-                    state.bot_manager.replace_bot_configs_with(bots, commit),
-                ),
+            state.onebot_debug.replace_config_with(
+                workspace,
+                collections,
+                state.bot_manager.replace_bot_configs_with(bots, commit),
             ),
         )
         .await?;

@@ -41,23 +41,6 @@ fn make_zip(path: &Path, entries: &[(&str, &str)]) {
 }
 
 #[test]
-fn new_chat_preferences_alone_are_recognized() {
-    let staging = tempfile::tempdir().unwrap();
-    let target = tempfile::tempdir().unwrap();
-    write_json(
-        staging.path(),
-        "chat-desktop.json",
-        serde_json::json!({"accounts": []}),
-    );
-    let prepared =
-        build_import_transaction(staging.path(), target.path(), &RecordingSecrets::default());
-    assert!(
-        prepared.is_ok(),
-        "new configuration must be recognized: {prepared:?}"
-    );
-}
-
-#[test]
 fn zip_extraction_preserves_registered_nested_paths() {
     let temp = tempfile::tempdir().unwrap();
     let staging = tempfile::tempdir().unwrap();
@@ -189,7 +172,6 @@ async fn invalid_configuration_preview_disables_import() {
 fn recognized_new_files_cannot_use_empty_defaulted_objects() {
     for name in [
         "app-instances.json",
-        "chat-desktop.json",
         "onebot-debug/workspace.json",
         "onebot-debug/collections.json",
         "state/snowluma/app-config.json",
@@ -275,27 +257,6 @@ fn frontend_preferences_reject_unknown_keys_and_wrong_json_shapes() {
             "invalid browser preferences must reject import"
         );
     }
-}
-
-#[test]
-fn chat_background_account_limit_is_enforced() {
-    let staging = tempfile::tempdir().unwrap();
-    let target = tempfile::tempdir().unwrap();
-    write_json(
-        staging.path(),
-        "config.json",
-        serde_json::from_str(VALID_CONFIG).unwrap(),
-    );
-    let accounts: Vec<_> = (1..=9).map(|id| serde_json::json!({"botId":format!("bot-{id}"),"selfId":format!("{id}"),"enabled":true,"background":true,"tray":false})).collect();
-    write_json(
-        staging.path(),
-        "chat-desktop.json",
-        serde_json::json!({"accounts":accounts}),
-    );
-    assert!(
-        build_import_transaction(staging.path(), target.path(), &RecordingSecrets::default())
-            .is_err()
-    );
 }
 
 #[test]
@@ -607,11 +568,6 @@ fn new_configuration_fixture(dir: &Path) {
     );
     write_json(
         dir,
-        "chat-desktop.json",
-        serde_json::json!({"accounts":[{"botId":"10001","selfId":"10001","enabled":true,"background":true,"tray":true,"ignoredGroups":["123"],"hiddenGroups":["456"]}]}),
-    );
-    write_json(
-        dir,
         "onebot-debug/workspace.json",
         serde_json::json!({"version":1,"tabs":[{"id":"draft-a","action":"send_msg","params_text":"{unfinished","timeout_ms":3000,"channel":null}],"active_tab":"draft-a"}),
     );
@@ -660,7 +616,6 @@ fn all_new_configuration_types_join_one_transaction() {
         paths,
         [
             "config/app-instances.json",
-            "config/chat-desktop.json",
             "onebot-debug/workspace.json",
             "onebot-debug/collections.json",
             "state/snowluma/app-config.json",
@@ -878,11 +833,11 @@ fn all_configuration_types_roundtrip_through_v2_zip_and_transaction() {
     let meta: serde_json::Value =
         serde_json::from_slice(&fs::read(zip_staging.join("export_meta.json")).unwrap()).unwrap();
     assert_eq!(meta["exportFormatVersion"], "v2");
-    assert_eq!(meta["entries"].as_array().unwrap().len(), 11);
+    assert_eq!(meta["entries"].as_array().unwrap().len(), 10);
     let imported =
         prepare_import_transaction(&zip_staging, restored.path(), &RecordingSecrets::default())
             .unwrap();
-    assert_eq!(imported.txn.writes.len(), 11);
+    assert_eq!(imported.txn.writes.len(), 10);
     ncd_runtime::LocalConfigStore::new(restored.path())
         .apply_transaction(imported.txn)
         .unwrap();

@@ -90,7 +90,7 @@ export function DataTab({
             >
                 <FieldRow
                     label="导出当前配置"
-                    description="包含应用设置、Bot、远端档案、实例与关联、框架核心与模型设置、插件配置、麦麦自定义提示词、聊天设置、API 调试工作区与收藏、SnowLuma 设置和界面偏好。"
+                    description="包含应用设置、Bot、远端档案、实例与关联、框架核心与模型设置、插件配置、麦麦自定义提示词、API 调试工作区与收藏、SnowLuma 设置和界面偏好。"
                 >
                     <Button
                         variant="secondary"

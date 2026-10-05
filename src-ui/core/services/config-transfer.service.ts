@@ -37,7 +37,7 @@ export const configTransferService = {
             return {
                 source_path: sourcePath,
                 source_kind: 'directory',
-                files_found: ['应用设置', '应用实例与关联', '聊天账号偏好', 'API 调试工作区', 'API 调试收藏', '界面与终端偏好'],
+                files_found: ['应用设置', '应用实例与关联', 'API 调试工作区', 'API 调试收藏', '界面与终端偏好'],
                 warnings: [],
                 can_import: true,
             };
