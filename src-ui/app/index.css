@@ -1241,16 +1241,20 @@ samp,
     }
 }
 
+/* 只往前填（backwards）：终点就是元素的自然样式，播完不用留着。用 both 的话播完动画仍挂在
+   元素上，侧栏、标题栏和整块 main 一直各占一个合成层（实测占首页图块面积的四成，约 10 MB
+   显存，渲染进程再记一份）；main 还一直带着 transform，里面 fixed 定位的东西（Bot 列表的
+   拖拽跟随框）会以 main 而不是窗口为参照。 */
 .ndf-shell-enter-sidebar {
-    animation: shell-slide-in-left 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: shell-slide-in-left 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 .ndf-shell-enter-titlebar {
-    animation: shell-slide-in-top 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.04s both;
+    animation: shell-slide-in-top 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.04s backwards;
 }
 
 .ndf-shell-enter-main {
-    animation: shell-pop-in-main 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+    animation: shell-pop-in-main 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.08s backwards;
 }
 
 [data-boot-reveal="off"] .ndf-shell-enter-sidebar,
