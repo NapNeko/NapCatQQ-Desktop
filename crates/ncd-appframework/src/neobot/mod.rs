@@ -143,6 +143,14 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         path: &str,
         body: Option<serde_json::Value>,
     ) -> Result<Option<AppPanelResult>, AppFrameworkError> {
+        // 转发只连本机回环。远端实例的面板口读出来以后连的也是 127.0.0.1，
+        // 打到的会是本机同口的另一个服务，还会把这台实例的面板密码交给它
+        if host.locality() != Locality::Local {
+            return Ok(Some(AppPanelResult::err(
+                AppPanelOutcomeKind::Failed,
+                "远端实例的面板还不能经桌面端读取，请用「打开控制台」在浏览器里使用面板",
+            )));
+        }
         let root = Self::install_dir(instance);
         let port =
             control::dashboard_port(host, &root, manifest::NEOBOT_DEFAULT_DASHBOARD_PORT).await;
@@ -171,6 +179,10 @@ impl AppFrameworkAdapter for NeoBotAdapter {
             ),
             control::PanelOutcome::Failed(e) => AppPanelResult::err(AppPanelOutcomeKind::Failed, e),
         }))
+    }
+
+    fn forget_panel_session(&self, instance_id: &str) {
+        self.sessions.clear(instance_id);
     }
 
     async fn probe_project(

@@ -1245,8 +1245,10 @@ pub async fn set_app_instance_panel_password(
         .get_instance(&AppInstanceId::new(instance_id))
         .await
         .map_err(|e| e.to_string())?;
-    state.app_manager.remember_panel_password(&instance, &password);
-    Ok(())
+    state
+        .app_manager
+        .remember_panel_password(&instance, &password)
+        .map_err(|e| e.to_string())
 }
 
 /// 该实例是否已记住面板密码：前端据此决定「提示填密码」还是直接取面板数据

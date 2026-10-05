@@ -350,21 +350,31 @@ impl AppManager {
     }
 
     /// 记住某实例的面板密码（明文只进密钥库，实例记录里不带）。
-    /// 空串视为「忘掉」，免得库里留一个空值又被当成已配置。
-    pub fn remember_panel_password(&self, instance: &AppInstance, password: &str) {
-        let trimmed = password.trim();
-        let Some(store) = self.secrets.as_ref() else {
-            return;
-        };
+    /// 全空白视为「忘掉」，免得库里留一个空值又被当成已配置；其余原样存，
+    /// 首尾空格也是密码的一部分，裁掉了就再也登录不上。
+    ///
+    /// 存失败要报出来：调用方紧接着会用它验证登录，没存上却报成功，
+    /// 验证失败就会被说成「密码不对」。
+    pub fn remember_panel_password(
+        &self,
+        instance: &AppInstance,
+        password: &str,
+    ) -> Result<(), AppFrameworkError> {
+        let store = self
+            .secrets
+            .as_ref()
+            .ok_or_else(|| AppFrameworkError::Runtime("密钥库没有接上，面板密码存不了".into()))?;
         let key = secret_key(instance.id.as_str(), SECRET_PANEL_PASSWORD);
-        let result = if trimmed.is_empty() {
+        let result = if password.trim().is_empty() {
             store.delete(&key)
         } else {
-            store.put(&key, trimmed)
+            store.put(&key, password)
         };
-        if let Err(e) = result {
-            tracing::warn!(instance = instance.id.as_str(), error = %e, "store panel password");
+        // 不管存成没成，旧会话都不能再用：它是用旧密码换的
+        if let Ok(adapter) = self.registry.get(&instance.framework_id) {
+            adapter.forget_panel_session(instance.id.as_str());
         }
+        result.map_err(|e| AppFrameworkError::Runtime(format!("面板密码没存上：{e}")))
     }
 
     /// 有没有记住面板密码。前端据此决定「提示填密码」还是直接取数据。

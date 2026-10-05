@@ -155,6 +155,10 @@ pub trait AppFrameworkAdapter: Send + Sync {
         Ok(None)
     }
 
+    /// 丢掉为这个实例缓存的面板会话。面板密码换了或清了之后调用：
+    /// 不丢的话旧 token 还能用，「保存并验证」会对一个错密码报成功
+    fn forget_panel_session(&self, _instance_id: &str) {}
+
     /// 探测已有目录能不能当这个框架的实例领养
     async fn probe_project(
         &self,

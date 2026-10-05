@@ -79,24 +79,50 @@ fn client() -> Result<reqwest::Client, String> {
         .map_err(|e| format!("HTTP 客户端创建失败：{e}"))
 }
 
-/// 用面板密码换 token + CSRF。密码不可用（未设 / 记错）时返回 None。
+/// 登录没成的原因。连不上和密码不对要分开报：混在一起时，实例没在跑也会把用户
+/// 引去重填一个本来就对的密码。
+#[derive(Debug)]
+enum LoginFailure {
+    /// 面板拒绝了这个密码（401/403，或回包里没有 token）
+    Rejected,
+    /// 面板打不通
+    Unreachable(String),
+    /// 没有登录接口（1.2.4a1 之前的版本）
+    NotFound,
+    /// 其它非成功响应（限流、5xx、回包坏了）
+    Failed(String),
+}
+
+/// 用面板密码换 token + CSRF。
 async fn login(
     client: &reqwest::Client,
     host: &str,
     dashboard_port: u16,
     password: &str,
-) -> Option<LoginResponse> {
+) -> Result<LoginResponse, LoginFailure> {
     let resp = client
         .post(login_url_at(host, dashboard_port))
         .json(&json!({ "password": password }))
         .send()
         .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
+        .map_err(|e| LoginFailure::Unreachable(e.to_string()))?;
+    let status = resp.status();
+    match status.as_u16() {
+        401 | 403 => return Err(LoginFailure::Rejected),
+        404 => return Err(LoginFailure::NotFound),
+        _ => {}
     }
-    let parsed: LoginResponse = resp.json().await.ok()?;
-    (!parsed.token.is_empty()).then_some(parsed)
+    if !status.is_success() {
+        return Err(LoginFailure::Failed(panel_error_text(resp, status).await));
+    }
+    let parsed: LoginResponse = resp
+        .json()
+        .await
+        .map_err(|e| LoginFailure::Failed(format!("登录回包不是 JSON：{e}")))?;
+    if parsed.token.is_empty() {
+        return Err(LoginFailure::Rejected);
+    }
+    Ok(parsed)
 }
 
 /// 请 NeoBot 优雅关闭。
@@ -149,8 +175,14 @@ async fn request_graceful_shutdown_at(
     let Some(password) = password.filter(|p| !p.is_empty()) else {
         return ShutdownRequest::Unauthorized;
     };
-    let Some(session) = login(&client, host, dashboard_port, password).await else {
-        return ShutdownRequest::Unauthorized;
+    // 登录接口比关停接口晚一版（1.2.4a1），1.2.3 上登录 404 也只能按未授权收树
+    let session = match login(&client, host, dashboard_port, password).await {
+        Ok(s) => s,
+        Err(LoginFailure::Rejected | LoginFailure::NotFound) => {
+            return ShutdownRequest::Unauthorized;
+        }
+        Err(LoginFailure::Unreachable(e)) => return ShutdownRequest::Unreachable(e),
+        Err(LoginFailure::Failed(e)) => return ShutdownRequest::Failed(e),
     };
     let second = match client
         .post(shutdown_url_at(host, dashboard_port))
@@ -229,25 +261,33 @@ impl PanelSessions {
     }
 
     /// 带缓存的登录：已有会话直接用；没有或已失效就用密码换一个。
-    /// 密码拿不到（用户没填）且没有缓存会话时返回 None。
+    /// 拿不到会话时把原因原样交回，调用方直接当这次调用的结果。
     async fn ensure(
         &self,
         client: &reqwest::Client,
         instance_id: &str,
         port: u16,
         password: Option<&str>,
-    ) -> Option<PanelSession> {
+    ) -> Result<PanelSession, PanelOutcome> {
         if let Some(s) = self.get(instance_id) {
-            return Some(s);
+            return Ok(s);
         }
-        let password = password.filter(|p| !p.is_empty())?;
-        let session = login(client, LOOPBACK_HOST, port, password).await?;
+        let Some(password) = password.filter(|p| !p.is_empty()) else {
+            return Err(PanelOutcome::Unauthorized);
+        };
+        let session = match login(client, LOOPBACK_HOST, port, password).await {
+            Ok(s) => s,
+            Err(LoginFailure::Rejected) => return Err(PanelOutcome::Unauthorized),
+            Err(LoginFailure::Unreachable(e)) => return Err(PanelOutcome::Unreachable(e)),
+            Err(LoginFailure::NotFound) => return Err(PanelOutcome::NotFound),
+            Err(LoginFailure::Failed(e)) => return Err(PanelOutcome::Failed(e)),
+        };
         let session = PanelSession {
             token: session.token,
             csrf: session.csrf_token,
         };
         self.store(instance_id, session.clone());
-        Some(session)
+        Ok(session)
     }
 }
 
@@ -280,10 +320,12 @@ pub fn path_is_allowed(path: &str) -> bool {
         && !path.contains(char::is_whitespace)
 }
 
-/// 代前端调一次面板接口（自动登录；401/403 时清会话重登一次再试）。
+/// 面板不要求登录的接口（上游 _auth_middleware 的 public 集合里桌面端会用到的那部分）。
 ///
-/// method 只认 GET / POST —— 面板其余方法桌面端用不到，不放行能少一类口子。
-#[allow(clippy::too_many_arguments)]
+/// 这些必须不带会话直接发：/api/auth/status 正是用来判断「面板还没设密码」的，
+/// 而那时根本登录不了，先登录再问就永远问不到。
+const PUBLIC_PATHS: &[&str] = &["/api/auth/status"];
+
 /// 面板的错误回包是 {"ok":false,"error":"人话"}；把它带出来，别只报状态码
 async fn panel_error_text(resp: reqwest::Response, status: reqwest::StatusCode) -> String {
     let Ok(body) = resp.text().await else {
@@ -297,6 +339,9 @@ async fn panel_error_text(resp: reqwest::Response, status: reqwest::StatusCode) 
         .unwrap_or_else(|| format!("面板返回 {status}"))
 }
 
+/// 代前端调一次面板接口（自动登录；401/403 时清会话重登一次再试）。
+///
+/// method 只认 GET / POST —— 面板其余方法桌面端用不到，不放行能少一类口子。
 pub async fn panel_call(
     sessions: &PanelSessions,
     instance_id: &str,
@@ -321,23 +366,31 @@ pub async fn panel_call(
         Err(e) => return PanelOutcome::Unreachable(e),
     };
     let url = format!("http://{LOOPBACK_HOST}:{port}{path}");
+    let public = PUBLIC_PATHS.contains(&path);
 
     for attempt in 0..2 {
         if attempt == 1 {
             // 上一次的会话可能过期了：清掉再登录一次
             sessions.clear(instance_id);
         }
-        let Some(session) = sessions.ensure(&client, instance_id, port, password).await else {
-            return PanelOutcome::Unauthorized;
+        let session = if public {
+            None
+        } else {
+            match sessions.ensure(&client, instance_id, port, password).await {
+                Ok(s) => Some(s),
+                Err(outcome) => return outcome,
+            }
         };
         let mut req = if method == "GET" {
             client.get(&url)
         } else {
             client.post(&url)
         };
-        req = req
-            .header("X-Token", &session.token)
-            .header("X-CSRF-Token", &session.csrf);
+        if let Some(session) = &session {
+            req = req
+                .header("X-Token", &session.token)
+                .header("X-CSRF-Token", &session.csrf);
+        }
         if let Some(b) = &body {
             req = req.json(b);
         }
@@ -347,7 +400,8 @@ pub async fn panel_call(
         };
         let status = resp.status();
         if status.as_u16() == 401 || status.as_u16() == 403 {
-            if attempt == 0 {
+            // 公开接口没带会话，重登也不会变
+            if attempt == 0 && !public {
                 continue;
             }
             return PanelOutcome::Unauthorized;
@@ -688,6 +742,110 @@ mod tests {
         // 第二次带上登录换来的 token 与 CSRF
         assert_eq!(hdr(shutdowns[1], "X-Token").as_deref(), Some("tok-abc"));
         assert_eq!(hdr(shutdowns[1], "X-CSRF-Token").as_deref(), Some("csrf-xyz"));
+    }
+
+    /// 面板没起来时，有密码也要报打不通。报成未授权会把用户引去重填一个对的密码
+    #[tokio::test]
+    async fn panel_call_reports_unreachable_when_login_cannot_connect() {
+        let port = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+            listener.local_addr().expect("addr").port()
+        };
+        let sessions = PanelSessions::new();
+        let out = panel_call(&sessions, "i1", port, Some("pw"), "GET", "/api/overview", None).await;
+        assert!(matches!(out, PanelOutcome::Unreachable(_)), "{out:?}");
+    }
+
+    #[tokio::test]
+    async fn panel_call_reports_unauthorized_when_login_rejected() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(LOGIN_PATH))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        let sessions = PanelSessions::new();
+        let out = panel_call(
+            &sessions,
+            "i1",
+            port_of(&server),
+            Some("wrong"),
+            "GET",
+            "/api/overview",
+            None,
+        )
+        .await;
+        assert!(matches!(out, PanelOutcome::Unauthorized), "{out:?}");
+    }
+
+    /// 1.2.4a1 之前没有登录接口：说「版本不够」而不是「密码不对」
+    #[tokio::test]
+    async fn panel_call_reports_not_found_when_login_endpoint_missing() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(LOGIN_PATH))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        let sessions = PanelSessions::new();
+        let out =
+            panel_call(&sessions, "i1", port_of(&server), Some("pw"), "GET", "/api/overview", None)
+                .await;
+        assert!(matches!(out, PanelOutcome::NotFound), "{out:?}");
+    }
+
+    /// 没设密码的面板登录不了，/api/auth/status 必须不登录直接问
+    #[tokio::test]
+    async fn auth_status_is_fetched_without_logging_in() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/auth/status"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({ "ok": true, "configured": false })),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(LOGIN_PATH))
+            .respond_with(login_ok())
+            .expect(0)
+            .mount(&server)
+            .await;
+        let sessions = PanelSessions::new();
+        let out =
+            panel_call(&sessions, "i1", port_of(&server), None, "GET", "/api/auth/status", None)
+                .await;
+        match out {
+            PanelOutcome::Ok(v) => assert_eq!(v["configured"], false),
+            other => panic!("期望 Ok，得到 {other:?}"),
+        }
+    }
+
+    /// 清掉会话后必须重新登录，不能沿用旧 token（换密码后的「保存并验证」靠它）
+    #[tokio::test]
+    async fn cleared_session_forces_a_fresh_login() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(LOGIN_PATH))
+            .respond_with(login_ok())
+            .expect(2)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/overview"))
+            .respond_with(accepted())
+            .mount(&server)
+            .await;
+        let sessions = PanelSessions::new();
+        let port = port_of(&server);
+        let call = || panel_call(&sessions, "i1", port, Some("pw"), "GET", "/api/overview", None);
+        assert!(matches!(call().await, PanelOutcome::Ok(_)));
+        // 有缓存：不再登录
+        assert!(matches!(call().await, PanelOutcome::Ok(_)));
+        sessions.clear("i1");
+        assert!(matches!(call().await, PanelOutcome::Ok(_)));
     }
 
     /// 请求体必须用 `password` 字段（NeoBot 侧读的就是这个名字）
