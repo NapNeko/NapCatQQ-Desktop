@@ -15,8 +15,11 @@ export const chatService = {
         botId: string,
         action: string,
         params: unknown,
-        requestId = crypto.randomUUID(),
+        requestId: string = crypto.randomUUID(),
+        onProgress?: (progress: DebugStreamProgress) => void,
     ): Promise<DebugCallResponse> {
+        const local_files = localFilesInParams(params);
+        // 带本机文件的调用要先把文件传到 Bot 主机，超时按整段传输算，30 秒不够远端传大文件
         const request: DebugCallRequest = {
             bot_id: botId,
             request_id: requestId,
@@ -24,17 +27,18 @@ export const chatService = {
             params,
             channel: { kind: 'auto' },
             origin: 'picker',
-            timeout_ms: 30_000,
+            timeout_ms: local_files.length ? 600_000 : 30_000,
         };
-        if (!isTauri) return chatMock.call(request);
-        const local_files = localFilesInParams(params);
+        if (!isTauri) return chatMock.call(request, onProgress);
         if (local_files.length) {
             const progress = new Channel<DebugStreamProgress>();
-            progress.onmessage = () => {};
+            progress.onmessage = (value) => onProgress?.(value);
             return invoke('chat_call_stream', { request: { ...request, local_files }, progress });
         }
         return invoke('chat_call', { request });
     },
+    cancel: (requestId: string): Promise<void> =>
+        isTauri ? invoke('chat_cancel', { requestId }) : chatMock.cancel(requestId),
     subscribe(
         botId: string,
         onBatch: (batch: DebugEventBatch) => void,

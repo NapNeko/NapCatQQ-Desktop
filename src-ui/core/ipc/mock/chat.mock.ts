@@ -5,6 +5,8 @@ import type { DebugCallRequest } from '../generated/debug/DebugCallRequest';
 import type { DebugCallResponse } from '../generated/debug/DebugCallResponse';
 import type { DebugEventBatch } from '../generated/debug/DebugEventBatch';
 import type { DebugSubscribeResponse } from '../generated/debug/DebugSubscribeResponse';
+import type { DebugStreamProgress } from '../generated/debug/DebugStreamProgress';
+import { chatGroupFilesMock } from './chat-group-files.mock';
 
 let seq = 0;
 const subscriptions = new Map<string, { bot: string; send: (batch: DebugEventBatch) => void }>();
@@ -128,28 +130,64 @@ function previewLongImage() {
     return canvas.toDataURL('image/png');
 }
 if (mediaPreview) {
-    mediaPreview[mediaPreview.length - 3].message = [
-        { type: 'text', data: { text: '媒体预览：图片、视频与合并转发' } },
-        { type: 'image', data: { file: 'preview-long-image', url: previewLongImage() } },
-        { type: 'video', data: { file: 'preview-video' } },
-        { type: 'forward', data: { id: 'preview-forward' } },
-    ];
-    mediaPreview[mediaPreview.length - 2].message = [
-        { type: 'text', data: { text: '媒体预览：合成提示音' } },
-        { type: 'record', data: { file: 'preview-tone' } },
-    ];
     mediaPreview[mediaPreview.length - 1].message = [
         { type: 'text', data: { text: '媒体预览：语音失败与重试' } },
         { type: 'record', data: { file: 'preview-error' } },
     ];
+    mediaPreview[mediaPreview.length - 4].message = [
+        {
+            type: 'file',
+            data: {
+                file: 'NapCat 部署说明.pdf',
+                file_id: 'mock-file-1',
+                file_size: '2480312',
+                busid: 102,
+            },
+        },
+    ];
 }
 export const chatMock = {
     targets: () => onebotDebugMock.targets(),
-    async call(request: DebugCallRequest): Promise<DebugCallResponse> {
+    async call(
+        request: DebugCallRequest,
+        onProgress?: (progress: DebugStreamProgress) => void,
+    ): Promise<DebugCallResponse> {
         const params = request.params as Record<string, unknown>;
         let data: unknown = null;
         const messageId = ++seq;
-        if (request.action === 'get_group_list') data = groups;
+        if (request.action === 'upload_group_file' || request.action === 'upload_private_file') {
+            const name = String(params.name || '文件');
+            const size = 3_200_000;
+            try {
+                await chatGroupFilesMock.transfer(
+                    request.request_id,
+                    name,
+                    size,
+                    'uploading',
+                    onProgress,
+                );
+            } catch {
+                return {
+                    request_id: request.request_id,
+                    result: { kind: 'err', error: { kind: 'cancelled' } },
+                } satisfies DebugCallResponse;
+            }
+            if (params.group_id)
+                chatGroupFilesMock.addUpload(
+                    String(params.group_id),
+                    String(params.folder_id ?? '/'),
+                    name,
+                    size,
+                );
+            data = { file_id: `mock-upload-${messageId}` };
+        } else if (request.action === 'get_group_member_info')
+            data = {
+                group_id: params.group_id,
+                user_id: params.user_id,
+                role: 'owner',
+                nickname: '预览账号',
+            };
+        else if (request.action === 'get_group_list') data = groups;
         else if (request.action === 'get_friend_list') data = friends;
         else if (request.action === 'get_group_member_list')
             data = friends.map((friend, index) => ({
@@ -380,5 +418,8 @@ export const chatMock = {
     },
     async unsubscribe(id: string): Promise<void> {
         subscriptions.delete(id);
+    },
+    async cancel(requestId: string): Promise<void> {
+        chatGroupFilesMock.cancel(requestId);
     },
 };

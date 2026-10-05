@@ -674,7 +674,12 @@ function Card({
 function FileCard({ data }: { data: Record<string, unknown> }) {
     const name = str(data.name) || str(data.file_name) || str(data.file) || '文件';
     const size = fileSizeLabel(data.file_size ?? data.size);
-    return <Card icon={<FileText size={16} aria-hidden />} title={name} sub={size || '文件'} />;
+    const { fileAction } = useChatView();
+    return (
+        <Card icon={<FileText size={16} aria-hidden />} title={name} sub={size || '文件'}>
+            {fileAction?.(data)}
+        </Card>
+    );
 }
 
 function ForwardCard({ data }: { data: Record<string, unknown> }) {

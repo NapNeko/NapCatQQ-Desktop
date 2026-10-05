@@ -34,6 +34,7 @@ import { useChatNotice } from '../../hooks/chat/useChatNotice';
 import { errorText } from '../../core/domain/errors';
 import { useSmoothWheel } from './useSmoothWheel';
 import { useLatestScroll } from './useLatestScroll';
+import { ChatFileAction } from './files/ChatFileAction';
 
 export function NativeTimeline({
     store,
@@ -234,6 +235,9 @@ export function NativeTimeline({
                 chatMediaService.video(store.target, data, refresh),
             readRecordText: (messageId: string) =>
                 chatMediaService.transcript(store.target, messageId),
+            fileAction: (data: Record<string, unknown>) => (
+                <ChatFileAction data={data} target={store.target} contact={contact} />
+            ),
             openLink: (url: string) => {
                 void chatService.openLink(url).catch((e) => setError(String(e)));
             },
@@ -263,7 +267,7 @@ export function NativeTimeline({
                 return true;
             },
         }),
-        [fallback, senderNames, messageById, revealRef, store],
+        [fallback, senderNames, messageById, revealRef, store, contact],
     );
     const latestLabel = stick.unseen > 0 ? `回到最新，${stick.unseen} 条新消息` : '回到最新';
     return (

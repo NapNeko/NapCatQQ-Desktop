@@ -1,0 +1,495 @@
+.native-group-files-dialog {
+    color: var(--text-primary);
+    padding: 0;
+    max-width: 860px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-subtle);
+}
+.native-group-files-dialog button {
+    cursor: pointer;
+}
+.native-group-files-dialog button:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+.native-group-files-dialog button:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: -2px;
+}
+.native-group-files-dialog .native-chat-icon {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-xs);
+    color: var(--text-tertiary);
+}
+.native-group-files-dialog .native-chat-search-close {
+    position: absolute;
+    top: 13px;
+    right: 17px;
+    z-index: 2;
+}
+.native-group-files-body {
+    display: flex;
+    flex-direction: column;
+    height: min(620px, calc(100dvh - 132px));
+    min-height: 0;
+    padding: 14px 22px 0;
+}
+
+.native-group-files-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.native-group-files-path {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+    color: var(--text-tertiary);
+    font-size: 13px;
+}
+.native-group-files-path button {
+    flex-shrink: 0;
+    padding: 4px 6px;
+    margin-left: -6px;
+    border-radius: var(--radius-xs);
+    color: var(--action-primary);
+}
+.native-group-files-path button:disabled {
+    color: var(--text-primary);
+    font-weight: 600;
+    opacity: 1;
+}
+.native-group-files-path button:not(:disabled):hover {
+    background: var(--surface-inset);
+}
+.native-group-files-path span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+.native-group-files-search {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 220px;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: var(--surface-inset);
+    color: var(--text-tertiary);
+}
+.native-group-files-search:focus-within {
+    border-color: var(--border-focus);
+}
+.native-group-files-search input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 12px;
+}
+.native-group-files-search input::placeholder {
+    color: var(--text-tertiary);
+}
+.native-group-files-sort {
+    width: 96px;
+    flex-shrink: 0;
+}
+.native-group-files-upload {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 30px;
+    padding: 0 12px;
+    border-radius: var(--radius-md);
+    background: var(--action-primary);
+    color: var(--text-on-brand);
+    font-size: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+.native-group-files-upload:not(:disabled):hover {
+    filter: brightness(1.05);
+}
+.native-group-file-icon-button {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: var(--radius-xs);
+    color: var(--text-tertiary);
+}
+.native-group-file-icon-button:not(:disabled):hover {
+    background: var(--surface-inset);
+    color: var(--text-primary);
+}
+
+.native-group-files-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--state-danger) 10%, transparent);
+    color: var(--state-danger);
+    font-size: 12px;
+    flex-shrink: 0;
+}
+.native-group-files-uploads {
+    margin: 10px 0 0;
+    padding: 6px 10px;
+    border-radius: var(--radius-md);
+    background: var(--surface-inset);
+    flex-shrink: 0;
+    max-height: 132px;
+    overflow: auto;
+    list-style: none;
+}
+.native-group-files-uploads li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+}
+.native-group-files-uploads .native-group-file-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+}
+
+.native-group-files-list {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    margin: 10px -22px 0;
+    padding: 0 14px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    border-top: 1px solid var(--border-subtle);
+}
+.native-group-files-list.is-dragging {
+    background: color-mix(in srgb, var(--brand-soft) 24%, transparent);
+}
+.native-group-files-drop {
+    position: sticky;
+    bottom: 12px;
+    margin: 12px auto;
+    width: fit-content;
+    padding: 8px 16px;
+    border-radius: var(--radius-pill);
+    background: var(--action-primary);
+    color: var(--text-on-brand);
+    font-size: 12px;
+    pointer-events: none;
+}
+.native-group-files-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 240px;
+    color: var(--text-tertiary);
+    font-size: 13px;
+}
+.native-group-files-more {
+    display: block;
+    margin: 10px auto 14px;
+    padding: 6px 14px;
+    border-radius: var(--radius-md);
+    color: var(--action-primary);
+    font-size: 12px;
+}
+.native-group-files-more:not(:disabled):hover {
+    background: var(--surface-inset);
+}
+.native-group-files-note {
+    margin: 10px 0 14px;
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 12px;
+}
+
+.native-group-file-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 58px;
+    padding: 0 8px;
+    border-radius: var(--radius-md);
+}
+.native-group-file-row + .native-group-file-row {
+    box-shadow: 0 -1px 0 var(--border-subtle);
+}
+.native-group-file-row:hover,
+.native-group-file-row:focus-within,
+.native-group-file-row[data-state="open"] {
+    background: color-mix(in srgb, var(--brand-soft) 30%, transparent);
+    box-shadow: none;
+}
+.native-group-file-row:hover + .native-group-file-row,
+.native-group-file-row:focus-within + .native-group-file-row {
+    box-shadow: none;
+}
+.native-group-file-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+    padding: 9px 0;
+    text-align: left;
+}
+.native-group-file-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.native-group-file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+.native-group-file-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--text-tertiary);
+}
+.native-group-file-meta em {
+    margin-left: 8px;
+    padding: 0 5px;
+    border-radius: var(--radius-xs);
+    background: var(--surface-inset);
+    font-style: normal;
+    color: var(--text-secondary);
+}
+.native-group-file-meta em.is-urgent {
+    color: var(--state-warning);
+}
+.native-group-file-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    opacity: 0;
+}
+.native-group-file-row:hover .native-group-file-actions,
+.native-group-file-row:focus-within .native-group-file-actions,
+.native-group-file-row[data-state="open"] .native-group-file-actions,
+.native-group-file-row.is-folder .native-group-file-actions {
+    opacity: 1;
+}
+.native-group-file-row.is-folder:not(:hover):not(:focus-within)
+    .native-group-file-actions
+    .native-group-file-icon-button {
+    opacity: 0;
+}
+
+.native-group-file-glyph {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    background: var(--surface-inset);
+    color: var(--text-secondary);
+}
+.native-group-file-glyph.is-folder {
+    background: color-mix(in srgb, var(--state-warning) 16%, transparent);
+    color: color-mix(in srgb, var(--state-warning) 80%, var(--text-primary));
+}
+.native-group-file-glyph.is-image,
+.native-group-file-glyph.is-video {
+    color: var(--action-primary);
+}
+.native-group-file-glyph.is-archive,
+.native-group-file-glyph.is-app {
+    color: color-mix(in srgb, var(--state-warning) 75%, var(--text-primary));
+}
+.native-group-file-glyph.is-sheet {
+    color: var(--state-success);
+}
+.native-group-file-glyph.is-doc,
+.native-group-file-glyph.is-slide {
+    color: color-mix(in srgb, var(--action-primary) 60%, var(--text-secondary));
+}
+
+.native-group-file-transfer {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 210px;
+    flex-shrink: 0;
+}
+.native-group-file-transfer.is-compact {
+    width: 260px;
+}
+.native-group-file-transfer-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--text-tertiary);
+}
+.native-group-file-transfer-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.native-group-file-transfer.is-failed .native-group-file-transfer-text {
+    color: var(--state-danger);
+}
+.native-group-file-transfer.is-done .native-group-file-transfer-text {
+    color: var(--state-success);
+}
+.native-group-file-transfer-row button {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+    color: var(--action-primary);
+}
+.native-group-file-transfer-row button:hover {
+    text-decoration: underline;
+}
+
+.native-group-files-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 44px;
+    margin: 0 -22px;
+    padding: 0 22px;
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text-tertiary);
+    font-size: 11px;
+    flex-shrink: 0;
+}
+.native-group-files-footer .native-group-files-space {
+    width: 140px;
+}
+
+.native-group-file-menu {
+    display: flex;
+    flex-direction: column;
+    min-width: 168px;
+    padding: 4px;
+}
+.native-group-file-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 12px;
+    text-align: left;
+}
+.native-group-file-menu button:not(:disabled):hover {
+    background: var(--surface-inset);
+}
+.native-group-file-menu button.is-danger {
+    color: var(--state-danger);
+}
+.native-group-file-menu button:disabled {
+    opacity: 0.4;
+}
+
+.native-group-file-move {
+    display: flex;
+    flex-direction: column;
+    max-height: 280px;
+    overflow: auto;
+    margin: 4px -4px;
+}
+.native-group-file-move button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    text-align: left;
+    color: var(--text-primary);
+}
+.native-group-file-move button span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.native-group-file-move button:hover {
+    background: var(--surface-inset);
+}
+.native-group-file-move button[aria-selected="true"] {
+    background: color-mix(in srgb, var(--brand-soft) 40%, transparent);
+    color: var(--action-primary);
+}
+.native-group-file-move p {
+    padding: 16px;
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 12px;
+}
+
+.native-chat-file-action {
+    display: flex;
+    margin-top: 4px;
+}
+.native-chat-file-action > button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--action-primary);
+    font-size: 11px;
+}
+.native-chat-file-action > button:hover {
+    text-decoration: underline;
+}
+.native-chat-file-action .native-group-file-transfer {
+    width: 100%;
+}
+
+@media (max-width: 640px) {
+    .native-group-files-toolbar {
+        flex-wrap: wrap;
+    }
+    .native-group-files-path {
+        flex-basis: 100%;
+    }
+    .native-group-files-search {
+        flex: 1;
+        width: auto;
+    }
+    .native-group-file-transfer {
+        width: 140px;
+    }
+    .native-group-files-footer .native-group-files-space {
+        display: none;
+    }
+}

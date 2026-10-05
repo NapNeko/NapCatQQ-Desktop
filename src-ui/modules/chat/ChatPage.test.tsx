@@ -39,6 +39,7 @@ vi.mock('./ChatAccountControls', () => ({ ChatAccountControls: () => null }));
 vi.mock('./ChatDivider', () => ({ ChatDivider: () => null }));
 vi.mock('./ChatAvatar', () => ({ ChatAvatar: () => <span /> }));
 vi.mock('./ChatSearch', () => ({ ChatSearch: () => null }));
+vi.mock('./files/GroupFilesDialog', () => ({ GroupFilesDialog: () => null }));
 vi.mock('./ChatTimeline', () => ({ NativeTimeline: () => null }));
 vi.mock('./ChatComposer', () => ({
     ChatComposer: ({

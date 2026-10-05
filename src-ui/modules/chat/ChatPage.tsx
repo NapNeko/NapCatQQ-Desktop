@@ -1,7 +1,16 @@
 // 主窗口内的原生双栏聊天。
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ChevronRight, Inbox, MessagesSquare, RefreshCw, Search, X } from 'lucide-react';
+import {
+    ArrowLeft,
+    ChevronRight,
+    FolderOpen,
+    Inbox,
+    MessagesSquare,
+    RefreshCw,
+    Search,
+    X,
+} from 'lucide-react';
 import { chatService } from '../../core/services/chat.service';
 import {
     chatAccount,
@@ -29,6 +38,7 @@ import { BotPicker } from '../debug/BotPicker';
 import { ChatAvatar as Avatar } from './ChatAvatar';
 import { ChatDetails } from './ChatDetails';
 import { ChatSearch } from './ChatSearch';
+import { GroupFilesDialog } from './files/GroupFilesDialog';
 import { ChatDivider } from './ChatDivider';
 import { ConversationList, useConversationNavigation } from './ConversationList';
 import { setChatPreferences, setConversationHidden, useChatPreferences } from './chatPreferences';
@@ -243,6 +253,7 @@ function ChatWorkspace({
     const [searchOpen, setSearchOpen] = useState(false);
     const [narrowFocus, setNarrowFocus] = useState(() => !!account.active);
     const [detailsOpen, setDetailsOpen] = useState(false);
+    const [filesOpen, setFilesOpen] = useState(false);
     const [timelineEntry, setTimelineEntry] = useState(0);
     const searchTrigger = useRef<HTMLButtonElement>(null);
     const searchInput = useRef<HTMLInputElement>(null);
@@ -277,7 +288,18 @@ function ChatWorkspace({
     useEffect(() => {
         setSearchOpen(false);
         setDetailsOpen(false);
+        setFilesOpen(false);
     }, [account.active]);
+    // 群里新到一条文件消息，开着的群文件列表就该重读；SnowLuma 不发 group_upload 通知，只能看消息
+    const fileSignal = useMemo(() => {
+        for (let i = messages.length - 1; i >= 0; i--)
+            if (
+                messages[i].status === 'sent' &&
+                messages[i].segments.some((s) => s.type === 'file')
+            )
+                return messages[i].key;
+        return '';
+    }, [messages]);
     useEffect(() => {
         if (searchOpen) searchInput.current?.focus();
     }, [searchOpen]);
@@ -642,6 +664,19 @@ function ChatWorkspace({
                                 >
                                     <Search size={17} />
                                 </Button>
+                                {active.type === 'group' && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="native-chat-icon"
+                                        aria-label="群文件"
+                                        title="群文件"
+                                        aria-expanded={filesOpen}
+                                        onClick={() => setFilesOpen(true)}
+                                    >
+                                        <FolderOpen size={17} />
+                                    </Button>
+                                )}
                                 <ChatDetails
                                     key={active.key}
                                     contact={active}
@@ -653,6 +688,17 @@ function ChatWorkspace({
                                     onSearch={openSearch}
                                 />
                             </header>
+                            {active.type === 'group' && (
+                                <GroupFilesDialog
+                                    open={filesOpen}
+                                    onOpenChange={setFilesOpen}
+                                    target={target}
+                                    groupId={active.id}
+                                    groupName={active.name}
+                                    connected={connected}
+                                    refreshSignal={fileSignal}
+                                />
+                            )}
                             <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
                                 <DialogContent
                                     size="lg"
