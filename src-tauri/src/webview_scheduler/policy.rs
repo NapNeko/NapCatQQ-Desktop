@@ -31,11 +31,14 @@ impl WebviewRole {
     }
 
     /// 窗口开着但失焦多久后降到休眠；None 表示失焦不降。
-    /// 聊天窗常开在一边当消息框用，用户确认这种常驻降 Low 可以接受。主窗和调试台失焦
-    /// 通常是切去别的窗口一会儿就回来，降了回来要重新解码图片，先不降。
+    /// 失焦就是用户去用别的程序了，正是 Low 的本意。渲染进程的 GC 堆平时空着一大半
+    /// （实测首页 30 MB 里活对象只有 3.5 MB），Low 会把这些和脚本缓存一起还回去；页面几乎
+    /// 没有大图，回来时重建的代价很小。聊天窗常开在一边当消息框，降得早一些；主窗和调试台
+    /// 失焦常是切出去看一眼就回来，多等一会儿。托盘面板一失焦就藏起来了，走 Hide。
     pub(crate) fn idle_dormant_after(self) -> Option<Duration> {
         match self {
             Self::ChatPopout => Some(Duration::from_secs(60)),
+            Self::Main | Self::DebugPopout => Some(Duration::from_secs(120)),
             _ => None,
         }
     }
@@ -188,9 +191,12 @@ mod tests {
     }
 
     #[test]
-    fn main_window_does_not_go_dormant_just_for_losing_focus() {
+    fn main_window_waits_longer_than_chat_before_going_dormant() {
         let mut e = Entry::default();
-        assert!(run(WebviewRole::Main, &mut e, Event::Focus(false)).is_empty());
+        let actions = run(WebviewRole::Main, &mut e, Event::Focus(false));
+        assert!(matches!(actions.as_slice(), [Action::ScheduleTick { after, .. }] if *after == Duration::from_secs(120)));
+        // 托盘面板失焦即藏，不另外计时
+        assert!(run(WebviewRole::TrayPanel, &mut Entry::default(), Event::Focus(false)).is_empty());
     }
 
     #[test]
