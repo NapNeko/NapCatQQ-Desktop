@@ -252,13 +252,36 @@ fn export_config_with_frameworks(
     file.sync_all()
         .map_err(|error| format!("同步 ZIP 失败: {error}"))?;
     drop(file);
-    fs::rename(&temporary.path, dest)
-        .map_err(|error| format!("替换导出 ZIP 失败，原文件已保留: {error}"))?;
+    replace_export_archive(&temporary.path, dest)?;
 
     Ok(ConfigExportResult {
         export_path: dest.to_string_lossy().to_string(),
         files: labels,
     })
+}
+
+// Windows 的 rename 不能覆盖既有文件：先把旧文件挪作兄弟临时名，新 ZIP 落位后再删；
+// 中途失败把旧文件挪回去，目标始终是完整的一份。
+fn replace_export_archive(temporary: &Path, dest: &Path) -> Result<(), String> {
+    if !dest.exists() {
+        return fs::rename(temporary, dest).map_err(|error| format!("导出 ZIP 落盘失败: {error}"));
+    }
+    let name = dest
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let swapped = dest.with_file_name(format!(".{name}.ncd-replaced-{}.tmp", uuid::Uuid::new_v4()));
+    fs::rename(dest, &swapped).map_err(|error| format!("替换导出 ZIP 失败，原文件已保留: {error}"))?;
+    match fs::rename(temporary, dest) {
+        Ok(()) => {
+            let _ = fs::remove_file(&swapped);
+            Ok(())
+        }
+        Err(error) => {
+            let _ = fs::rename(&swapped, dest);
+            Err(format!("替换导出 ZIP 失败，原文件已保留: {error}"))
+        }
+    }
 }
 
 struct ExportTempFile {

@@ -100,6 +100,7 @@ fn validate_instances(value: Value, name: &str) -> Result<Value, String> {
     require_version(&value, name, &[1])?;
     let file: AppInstancesFile = decode(value, name)?;
     let mut ids = HashSet::new();
+    let mut homes = HashSet::new();
     for instance in &file.instances {
         let install_path = instance.install_dir.trim_end_matches('/');
         let valid_placement = match instance.placement {
@@ -110,6 +111,8 @@ fn validate_instances(value: Value, name: &str) -> Result<Value, String> {
         if !is_safe_instance_id(instance.id.as_str())
             || !is_safe_instance_id(instance.framework_id.as_str())
             || !ids.insert(instance.id.as_str())
+            // 同主机同目录只能有一个实例，否则起停、恢复、删除会互相打到对方的文件
+            || !homes.insert((instance.host_id.as_str(), install_path))
             || !valid_host(&instance.host_id)
             || !valid_placement
             || instance.display_name.trim().is_empty()

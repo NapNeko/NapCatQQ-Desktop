@@ -149,7 +149,8 @@ pub fn backup_file_format(framework: &str, path: &str) -> Result<Option<AppConfi
             ) || (parts.len() == 3 && parts[0] == "plugins" && parts[2] == "config.toml")
                 || path.starts_with("data/custom_prompts/")
         }
-        "koishi" => matches!(path, "koishi.yml" | "package.json"),
+        // package.json 不进备份：恢复是原样写回，而 koishi 靠 yarn start 执行 scripts.start
+        "koishi" => path == "koishi.yml",
         "yunzai" => {
             path == "package.json"
                 || path.starts_with("config/config/")
@@ -413,9 +414,12 @@ pub async fn capture_config_backup(
             }
         }
     }
-    // 新框架的主文档必须显式加入上面的可恢复白名单，不能只导出却无法安全导入。
+    // 主文档大多已在上面的白名单里；被白名单明确拒绝的（如 koishi 的 package.json：
+    // 恢复会原样写回，yarn start 会执行 scripts.start）不属于可恢复配置，不进备份。
     for doc in adapter.config_documents(instance) {
-        backup_file_format(framework, &doc.rel_path)?;
+        if backup_file_format(framework, &doc.rel_path).is_err() {
+            continue;
+        }
         if !rels.contains_key(&doc.rel_path)
             && let Some(entry) = checked_file(host, &root, &doc.rel_path).await?
         {

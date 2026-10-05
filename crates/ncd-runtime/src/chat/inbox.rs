@@ -141,6 +141,8 @@ impl Inbox {
         let mut state = self.state();
         let mut groups: Vec<_> = state.accounts.iter().filter(|(_, a)| matches!(a.connection, DebugReceiverState::Connected)).flat_map(|(key, a)| a.archive.conversations.iter().filter(|c| c.kind == ChatArchiveConversationKind::Group && c.unread > 0).map(|c| (key.clone(), c.id.clone()))).collect();
         groups.extend(state.reading.values().filter_map(|(key, session)| session.strip_prefix("group:").map(|id| (key.clone(), id.into()))));
+        // 冷账号只剩未读汇总：未读群同样要解析 QQ 免打扰，否则角标一直把持久化未读压掉
+        groups.extend(state.summaries.iter().filter(|entry| !state.accounts.contains_key(entry.0)).flat_map(|(key, summary)| summary.groups.iter().map(|(group, _)| (key.clone(), group.clone()))));
         groups.sort(); groups.dedup();
         // 先查尚未同步的群，再刷新最旧的设置，避免固定群号顺序饿死后面的群。
         groups.sort_by_key(|(key, group)| state.policies.get(key).and_then(|policy| policy.checked_at(group)));
@@ -453,5 +455,24 @@ mod tests {
         tokio::time::advance(std::time::Duration::from_secs(301)).await;
         let next = inbox.notification_queries(); assert_eq!(next.len(), 4);
         assert_eq!(next[0].1, "5");
+    }
+    #[tokio::test(start_paused = true)]
+    async fn cold_unread_groups_join_mute_resolution_queries() {
+        let root = tempfile::tempdir().unwrap();
+        let inbox = Inbox::new(ChatArchiveStore::new(root.path()));
+        let key = ("bot".into(), "99".into());
+        let mut archive = empty();
+        ingest(&mut archive, &json!({"post_type":"message","message_type":"group","group_id":7,"user_id":22,"message_id":1,"time":1,"message":"群消息"}), None);
+        inbox.merge(&key, archive).await.unwrap();
+        inbox.release(&key).await.unwrap();
+        assert!(inbox.keys().is_empty());
+        inbox.configure_notifications(key.clone(), &ChatAccountPreference::default(), true);
+        assert_eq!(inbox.notification_summary(&key).0, 0);
+        let queries = inbox.notification_queries();
+        assert_eq!(queries, vec![(key.clone(), "7".into())]);
+        inbox.notification_result(&key, "7".into(), Some(false));
+        assert_eq!(inbox.notification_summary(&key).0, 1);
+        inbox.notification_result(&key, "7".into(), Some(true));
+        assert_eq!(inbox.notification_summary(&key).0, 0);
     }
 }
