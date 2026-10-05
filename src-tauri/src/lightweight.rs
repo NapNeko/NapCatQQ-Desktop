@@ -65,6 +65,7 @@ pub fn enter_lightweight_mode(app: &AppHandle) -> Result<(), String> {
 pub fn exit_lightweight_mode(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         LIGHTWEIGHT_MODE.store(false, Ordering::SeqCst);
+        crate::commands::tray::set_main_webview_visible(&window, true);
         window.show().map_err(|e| e.to_string())?;
         let _ = window.unminimize();
         let _ = window.set_focus();

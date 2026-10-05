@@ -734,6 +734,13 @@ pub fn run() {
             if matches!(event, tauri::WindowEvent::Focused(false)) {
                 window.state::<AppState>().chat.clear_reading(window.label());
             }
+            // 兜底：藏窗时 WebView 设了不可见，哪条显示路径漏了放出来，窗口一拿到焦点就补上
+            if matches!(event, tauri::WindowEvent::Focused(true))
+                && window.label() == lightweight::MAIN_WINDOW_LABEL
+                && let Some(main) = window.app_handle().get_webview_window(lightweight::MAIN_WINDOW_LABEL)
+            {
+                commands::tray::set_main_webview_visible(&main, true);
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == chat_window::CHAT_WINDOW_LABEL {
                     api.prevent_close();

@@ -106,7 +106,7 @@ pub async fn reveal_chat_window(app: AppHandle) -> Result<(), String> {
     let coordinator = app.state::<ChatWindowCoordinator>();
     coordinator.ready.store(true, Ordering::SeqCst);
     if coordinator.release_main.swap(false, Ordering::SeqCst) && app.state::<crate::AppState>().components.active_tasks().is_empty() {
-        if let Some(main) = app.get_webview_window("main") { let _ = main.hide(); }
+        if let Some(main) = app.get_webview_window("main") { let _ = main.hide(); crate::commands::tray::set_main_webview_visible(&main, false); }
         release_control_panel(&app).await?;
     }
     Ok(())

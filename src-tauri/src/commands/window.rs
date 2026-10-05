@@ -31,6 +31,7 @@ pub fn show_main_window(app: AppHandle) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or_else(|| "主窗口未找到".to_string())?;
 
+    crate::commands::tray::set_main_webview_visible(&window, true);
     window.show().map_err(|e| e.to_string())?;
     let _ = window.set_focus();
     Ok(())
