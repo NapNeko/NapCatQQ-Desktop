@@ -53,6 +53,17 @@ describe('parseNeoBotDeployStatus', () => {
         expect(s.values.adminAccounts).toEqual(['10002']);
     });
 
+    it('机器人 QQ 给成数字也认，不当成没填', () => {
+        const s = parseNeoBotDeployStatus({
+            ...REAL,
+            values: { ...REAL.values, bot_account: 123456789 },
+            defaults: { bot_account: 0 },
+        })!;
+        expect(s.values.botAccount).toBe('123456789');
+        expect(s.defaults.botAccount).toBe('0');
+        expect(isBotAccountUnset(s)).toBe(false);
+    });
+
     it('没有 steps 就 null——这一页的骨架就是它，缺了没法说「还差什么」', () => {
         expect(parseNeoBotDeployStatus({ ok: true })).toBeNull();
         expect(parseNeoBotDeployStatus(null)).toBeNull();

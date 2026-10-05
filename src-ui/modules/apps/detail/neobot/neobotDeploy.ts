@@ -4,7 +4,7 @@
 // 监听信息——地址与 access token 就是 NapCat 侧要填的两样。键名取自后端 handler，
 // 不是猜的。
 
-import { asBool, asNumber, asRecord, asString } from './neobotPanel';
+import { asBool, asIdString, asNumber, asRecord, asString } from './neobotPanel';
 
 export interface NeoBotDeployStep {
     key: string;
@@ -94,7 +94,8 @@ function parseValues(v: unknown): NeoBotDeployValues {
     const r = asRecord(v) ?? {};
     const admins = Array.isArray(r.admin_accounts) ? r.admin_accounts : [];
     return {
-        botAccount: asString(r.bot_account),
+        // QQ 号面板可能给数字，和概览页一样统一成字符串
+        botAccount: asIdString(r.bot_account) ?? '',
         botNickName: asString(r.bot_nick_name),
         botData: asString(r.bot_data),
         adminAccounts: admins
@@ -114,7 +115,7 @@ export function parseNeoBotDeployStatus(raw: unknown): NeoBotDeployStatus | null
         defaults: (() => {
             const d = asRecord(r.defaults) ?? {};
             return {
-                botAccount: asString(d.bot_account),
+                botAccount: asIdString(d.bot_account) ?? '',
                 botNickName: asString(d.bot_nick_name),
                 botData: asString(d.bot_data),
             };

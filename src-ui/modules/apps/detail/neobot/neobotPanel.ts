@@ -56,7 +56,7 @@ export function asBool(v: unknown): boolean {
 }
 
 /** 机器人 QQ 号：面板可能给数字也可能给字符串，统一成字符串（超长数字别被 JS 精度吃掉） */
-function asIdString(v: unknown): string | null {
+export function asIdString(v: unknown): string | null {
     if (typeof v === 'string' && v.trim()) return v.trim();
     if (typeof v === 'number' && Number.isFinite(v)) return String(v);
     return null;
