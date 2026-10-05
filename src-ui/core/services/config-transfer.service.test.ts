@@ -92,6 +92,44 @@ describe('complete configuration transfer', () => {
         expect(localStorage.getItem('unrelated-key')).toBe('keep');
     });
 
+    it('clears allowlisted preferences omitted from the imported snapshot but keeps unrelated storage', async () => {
+        const { configTransferService } = await import('./config-transfer.service');
+        const { terminalPrefs } = await import('../../hooks/terminal/terminalPrefs');
+        terminalPrefs.patch({ fontSize: 13 });
+        localStorage.setItem('ncd.terminal.layout.v1', '{"height":300}');
+        localStorage.setItem('ncd.maibot.chat.name.instance-1', '旧昵称');
+        localStorage.setItem('unrelated-key', 'keep');
+        ipc.invoke.mockResolvedValue({ files: ['界面与终端偏好'], skipped: [], frontend_preferences: {
+            version: 1, storage: { 'ncd.terminal.prefs.v1': '{"fontSize":21}' },
+        } });
+
+        await configTransferService.import('config.zip');
+
+        expect(terminalPrefs.get().fontSize).toBe(21);
+        expect(localStorage.getItem('ncd.terminal.layout.v1')).toBeNull();
+        expect(localStorage.getItem('ncd.maibot.chat.name.instance-1')).toBeNull();
+        expect(localStorage.getItem('unrelated-key')).toBe('keep');
+    });
+
+    it('restores removed preferences when a later write fails and rollback runs', async () => {
+        const { configTransferService } = await import('./config-transfer.service');
+        localStorage.setItem('ncd.terminal.layout.v1', '{"height":300}');
+        const set = Storage.prototype.setItem;
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+            if (key === 'ncd.terminal.prefs.v1') throw new DOMException('Storage full', 'QuotaExceededError');
+            set.call(this, key, value);
+        });
+        ipc.invoke.mockResolvedValue({ files: ['界面与终端偏好'], skipped: [], frontend_preferences: {
+            version: 1, storage: { 'ncd.terminal.prefs.v1': '{"fontSize":19}' },
+        } });
+
+        const result = await configTransferService.import('config.zip');
+
+        expect(result).toMatchObject({ frontendPreferencesError: expect.stringContaining('Storage full') });
+        expect(localStorage.getItem('ncd.terminal.layout.v1')).toBe('{"height":300}');
+        expect(localStorage.getItem('ncd.terminal.prefs.v1')).toBeNull();
+    });
+
     it('leaves local preferences untouched when backend validation fails', async () => {
         const { configTransferService } = await import('./config-transfer.service');
         localStorage.setItem('ncd.chat.ui.v1', '{"listWidth":280}');
