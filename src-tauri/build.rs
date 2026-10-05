@@ -16,6 +16,11 @@ fn main() {
         println!("cargo:rustc-link-arg-examples=/MANIFEST:EMBED");
         println!("cargo:rustc-link-arg-examples=/MANIFESTINPUT:{}", manifest.display());
     }
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        // 事件循环、setup 和同步命令都跑在主线程，Windows 默认只给 1 MB 栈。
+        // release 的 fat LTO 会把一串 async 状态机内联成一个巨型栈帧，启动即 0xc00000fd。
+        println!("cargo:rustc-link-arg-bins=/STACK:8388608");
+    }
 }
 
 fn inject_product_version() {
