@@ -43,7 +43,29 @@ export const GlobalTitleTooltip: React.FC = () => {
             }
 
             const el = start.closest('[title], [data-tooltip], [data-native-title]') as HTMLElement | null;
-            if (!el || el === document.body || el === document.documentElement) return null;
+            if (!el || el === document.body || el === document.documentElement) {
+                // 兜底：**图标按钮**用 aria-label 当提示。
+                //
+                // 产品里这类小按钮基本都写了 aria-label（给读屏用），但只有 aria-label 是
+                // 没有视觉气泡的——逐个补 title 又容易漏。所以在这里统一兜住，所有小按钮
+                // 都能出气泡（见下方取文案处同样回落到 aria-label）。
+                //
+                // 只认**没有任何可见文字**的交互元素：容器（<nav aria-label="分页">）与
+                // 输入框（<input aria-label="安装目录">）不算，免得处处冒气泡。
+                const icon = start.closest(
+                    'button, [role="button"], [role="switch"], a[href]',
+                ) as HTMLElement | null;
+                if (
+                    icon &&
+                    icon !== document.body &&
+                    icon !== document.documentElement &&
+                    (icon.textContent ?? '').trim() === '' &&
+                    (icon.getAttribute('aria-label') ?? '').trim() !== ''
+                ) {
+                    return icon;
+                }
+                return null;
+            }
             if (el.hasAttribute('data-no-tooltip') || el.closest('[role="log"], [data-no-tooltip]')) {
                 return null;
             }
@@ -114,7 +136,12 @@ export const GlobalTitleTooltip: React.FC = () => {
                 }
             }
 
-            const text = target.dataset.nativeTitle || target.dataset.tooltip;
+            // 顺序：title 挪过来的 > data-tooltip > 图标按钮的 aria-label（见 findTarget 的兜底）
+            const text =
+                target.dataset.nativeTitle ||
+                target.dataset.tooltip ||
+                target.getAttribute('aria-label') ||
+                '';
             if (!text || text.trim().length === 0) {
                 hideTooltip();
                 return;
