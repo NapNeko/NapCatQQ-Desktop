@@ -13,7 +13,8 @@ use tokio::sync::oneshot;
 use webview2_com::GetProcessExtendedInfosCompletedHandler;
 use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_PROCESS_KIND, COREWEBVIEW2_PROCESS_KIND_BROWSER, COREWEBVIEW2_PROCESS_KIND_GPU,
-    COREWEBVIEW2_PROCESS_KIND_RENDERER, COREWEBVIEW2_PROCESS_KIND_UTILITY, ICoreWebView2_20,
+    COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+    COREWEBVIEW2_PROCESS_KIND_RENDERER, COREWEBVIEW2_PROCESS_KIND_UTILITY, ICoreWebView2_19, ICoreWebView2_20,
     ICoreWebView2Environment13, ICoreWebView2FrameInfo2, ICoreWebView2ProcessExtendedInfoCollection,
 };
 use windows::Win32::Foundation::{CloseHandle, E_POINTER, HANDLE};
@@ -82,6 +83,33 @@ async fn wait<T>(rx: oneshot::Receiver<Result<T, String>>) -> Result<T, String> 
         Ok(Ok(result)) => result,
         Ok(Err(_)) => Err("WebView 已关闭".into()),
         Err(_) => Err("WebView 响应超时".into()),
+    }
+}
+
+/// 休眠 = `MemoryUsageTargetLevel` 设 Low：WebView2 会丢掉能重建的缓存、压低渲染进程的内存，
+/// 页面照常可用，只是回来时图片之类要重新解码。设 Normal 即恢复。
+pub(super) fn set_dormant(window: &WebviewWindow, dormant: bool) {
+    let label = window.label().to_owned();
+    let dispatched = window.with_webview(move |pw| {
+        let level = if dormant {
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+        } else {
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+        };
+        // SAFETY: 在 with_webview 派到的 UI 线程上调用，controller 由仍存活的窗口持有
+        let result = unsafe {
+            pw.controller()
+                .CoreWebView2()
+                .and_then(|core| core.cast::<ICoreWebView2_19>())
+                .and_then(|core| core.SetMemoryUsageTargetLevel(level))
+        };
+        match result {
+            Ok(()) => tracing::debug!(target: "ncd_tauri::webview_scheduler", %label, dormant, "WebView 内存级别已切换"),
+            Err(err) => tracing::warn!(target: "ncd_tauri::webview_scheduler", %label, dormant, "切换 WebView 内存级别失败: {err}"),
+        }
+    });
+    if let Err(err) = dispatched {
+        tracing::debug!(target: "ncd_tauri::webview_scheduler", "WebView 已不在，跳过内存级别切换: {err}");
     }
 }
 

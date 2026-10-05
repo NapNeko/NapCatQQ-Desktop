@@ -1,17 +1,25 @@
-//! WebView 调度：所有 WebView 窗口的资源账，以及之后的分级休眠，都收在这里。
+//! WebView 调度：所有 WebView 窗口的资源账和分级休眠都收在这里。
 //!
 //! 各窗口共用一个浏览器进程和一个 GPU 进程，每个窗口各自一个渲染进程。按窗口算账要把
 //! 渲染进程对回窗口：WebView2 能列出每个渲染进程上跑着哪些帧，窗口这边拿得到自己主帧的
 //! id，两边一对就知道哪个渲染进程是谁的。
+//!
+//! 显隐必须走 [`show_window`] / [`hide_window`]，焦点变化由 [`handle_window_event`] 喂进来；
+//! 策略在 `policy.rs`。只藏原生窗口的话 WebView2 仍当页面可见，动画照跑、缓存不放。
 
 use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::Instant;
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager, WebviewWindow, WindowEvent};
 use ts_rs::TS;
 
+mod policy;
 #[cfg(windows)]
 mod win;
+
+use policy::{Action, Entry, Event, WebviewRole};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -40,6 +48,18 @@ pub struct WebviewProcessUsage {
     pub working_set_bytes: u64,
 }
 
+/// 调度器眼里各窗口当前处在哪一级。
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
+pub struct WebviewWindowLevel {
+    pub label: String,
+    /// WebView 设了不可见（页面 hidden）
+    pub hidden: bool,
+    /// 内存级别降到 Low
+    pub dormant: bool,
+}
+
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../src-ui/core/ipc/generated/")]
@@ -48,6 +68,8 @@ pub struct WebviewMemoryReport {
     pub processes: Vec<WebviewProcessUsage>,
     #[ts(type = "number")]
     pub total_private_bytes: u64,
+    /// 调度器登记过的窗口；还没收到过任何显隐 / 焦点事件的窗口不在里面
+    pub levels: Vec<WebviewWindowLevel>,
 }
 
 /// 平台层查回来的一条进程记录，内存读不到时为 0（进程刚好退出）。
@@ -79,18 +101,118 @@ pub(crate) fn assemble(mut raw: Vec<RawProcess>, frames: &HashMap<u32, String>) 
         })
         .collect();
     let total_private_bytes = processes.iter().map(|p| p.private_bytes).sum();
-    WebviewMemoryReport { v: 1, processes, total_private_bytes }
+    WebviewMemoryReport { v: 1, processes, total_private_bytes, levels: Vec::new() }
 }
 
 pub async fn memory_report(app: &AppHandle) -> Result<WebviewMemoryReport, String> {
     #[cfg(windows)]
-    {
-        win::memory_report(app).await
-    }
+    let mut report = win::memory_report(app).await?;
     #[cfg(not(windows))]
-    {
-        let _ = app;
-        Err("按窗口统计内存只支持 Windows".into())
+    let mut report = assemble(Vec::new(), &HashMap::new());
+    if let Some(scheduler) = app.try_state::<WebviewScheduler>() {
+        report.levels = scheduler.levels();
+    }
+    Ok(report)
+}
+
+/// 每个窗口的调度状态，按 label 存。窗口第一次有事件时登记，销毁时摘掉。
+#[derive(Default)]
+pub struct WebviewScheduler {
+    entries: Mutex<HashMap<String, Entry>>,
+}
+
+impl WebviewScheduler {
+    fn step(&self, label: &str, event: Event) -> Vec<Action> {
+        let Ok(mut entries) = self.entries.lock() else {
+            return Vec::new();
+        };
+        let entry = entries.entry(label.to_owned()).or_default();
+        policy::step(WebviewRole::from_label(label), entry, event, Instant::now())
+    }
+
+    fn levels(&self) -> Vec<WebviewWindowLevel> {
+        let Ok(entries) = self.entries.lock() else {
+            return Vec::new();
+        };
+        let mut levels: Vec<WebviewWindowLevel> = entries
+            .iter()
+            .map(|(label, e)| WebviewWindowLevel { label: label.clone(), hidden: e.is_hidden(), dormant: e.is_dormant() })
+            .collect();
+        levels.sort_by(|a, b| a.label.cmp(&b.label));
+        levels
+    }
+
+    fn forget(&self, label: &str) {
+        if let Ok(mut entries) = self.entries.lock() {
+            entries.remove(label);
+        }
+    }
+}
+
+/// 显示窗口：先放出 WebView、恢复内存级别，再显示原生窗口，免得闪一帧空白。
+pub fn show_window(window: &WebviewWindow) -> Result<(), String> {
+    notify(window, Event::Show);
+    window.show().map_err(|e| e.to_string())
+}
+
+/// 藏起窗口：先藏原生窗口，再让 WebView 不可见并降到休眠。
+pub fn hide_window(window: &WebviewWindow) -> Result<(), String> {
+    window.hide().map_err(|e| e.to_string())?;
+    notify(window, Event::Hide);
+    Ok(())
+}
+
+/// 挂在 `on_window_event` 上：焦点变化喂给策略，窗口销毁时摘掉登记。
+pub fn handle_window_event(window: &tauri::Window, event: &WindowEvent) {
+    match event {
+        WindowEvent::Focused(focused) => {
+            if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
+                notify(&webview, Event::Focus(*focused));
+            }
+        }
+        WindowEvent::Destroyed => {
+            if let Some(scheduler) = window.app_handle().try_state::<WebviewScheduler>() {
+                scheduler.forget(window.label());
+            }
+        }
+        _ => {}
+    }
+}
+
+fn notify(window: &WebviewWindow, event: Event) {
+    let Some(scheduler) = window.app_handle().try_state::<WebviewScheduler>() else {
+        return;
+    };
+    for action in scheduler.step(window.label(), event) {
+        apply(window, action);
+    }
+}
+
+fn apply(window: &WebviewWindow, action: Action) {
+    match action {
+        Action::SetVisible(visible) => {
+            let webview: &tauri::Webview = window.as_ref();
+            let result = if visible { webview.show() } else { webview.hide() };
+            if let Err(err) = result {
+                tracing::warn!(target: "ncd_tauri::webview_scheduler", label = window.label(), visible, "切换 WebView 可见性失败: {err}");
+            }
+        }
+        Action::SetDormant(dormant) => {
+            #[cfg(windows)]
+            win::set_dormant(window, dormant);
+            #[cfg(not(windows))]
+            let _ = dormant;
+        }
+        Action::ScheduleTick { after, generation } => {
+            let window = window.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(after).await;
+                // 等的这段时间里窗口可能已经销毁，别给它重新登记
+                if window.app_handle().get_webview_window(window.label()).is_some() {
+                    notify(&window, Event::Tick(generation));
+                }
+            });
+        }
     }
 }
 

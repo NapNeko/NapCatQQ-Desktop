@@ -31,8 +31,7 @@ pub fn show_main_window(app: AppHandle) -> Result<(), String> {
         .get_webview_window("main")
         .ok_or_else(|| "主窗口未找到".to_string())?;
 
-    crate::commands::tray::set_main_webview_visible(&window, true);
-    window.show().map_err(|e| e.to_string())?;
+    crate::webview_scheduler::show_window(&window)?;
     let _ = window.set_focus();
     Ok(())
 }
@@ -72,7 +71,7 @@ fn center_on_work_area(window: &tauri::WebviewWindow) -> Result<(), String> {
 #[tauri::command]
 pub async fn open_debug_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(DEBUG_WINDOW_LABEL) {
-        let _ = window.show();
+        let _ = crate::webview_scheduler::show_window(&window);
         let _ = window.unminimize();
         let _ = window.set_focus();
         return Ok(());
@@ -101,7 +100,7 @@ pub async fn reveal_debug_window(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(DEBUG_WINDOW_LABEL)
         .ok_or_else(|| "调试台窗口未找到".to_string())?;
-    window.show().map_err(|e| e.to_string())?;
+    crate::webview_scheduler::show_window(&window)?;
     let _ = window.unminimize();
     let _ = window.set_focus();
     Ok(())
@@ -122,7 +121,7 @@ pub async fn focus_debug_window(app: AppHandle) -> bool {
     let Some(window) = app.get_webview_window(DEBUG_WINDOW_LABEL) else {
         return false;
     };
-    let _ = window.show();
+    let _ = crate::webview_scheduler::show_window(&window);
     let _ = window.unminimize();
     let _ = window.set_focus();
     true

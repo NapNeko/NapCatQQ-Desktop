@@ -472,6 +472,7 @@ pub fn run() {
         // 在这里按窗口摘掉，否则接收器一直算「有人在看」，空闲停不下来
         .manage(chat_window::ChatWindowCoordinator::default())
         .manage(chat_tray::ChatTrayState::default())
+        .manage(webview_scheduler::WebviewScheduler::default())
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started
                 && let Some(state) = webview.try_state::<AppState>()
@@ -735,13 +736,8 @@ pub fn run() {
             if matches!(event, tauri::WindowEvent::Focused(false)) {
                 window.state::<AppState>().chat.clear_reading(window.label());
             }
-            // 兜底：藏窗时 WebView 设了不可见，哪条显示路径漏了放出来，窗口一拿到焦点就补上
-            if matches!(event, tauri::WindowEvent::Focused(true))
-                && window.label() == lightweight::MAIN_WINDOW_LABEL
-                && let Some(main) = window.app_handle().get_webview_window(lightweight::MAIN_WINDOW_LABEL)
-            {
-                commands::tray::set_main_webview_visible(&main, true);
-            }
+            // 焦点进出决定 WebView 休眠；拿焦点时也兜底放出漏了恢复的 WebView
+            webview_scheduler::handle_window_event(window, event);
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == chat_window::CHAT_WINDOW_LABEL {
                     api.prevent_close();

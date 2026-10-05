@@ -65,7 +65,7 @@ pub fn ensure_tray_panel_window(app: &AppHandle) -> Result<WebviewWindow, String
             if crate::lightweight::is_lightweight_mode() {
                 let _ = window_for_event.destroy();
             } else {
-                let _ = window_for_event.hide();
+                let _ = crate::webview_scheduler::hide_window(&window_for_event);
             }
         }
     });
@@ -131,7 +131,7 @@ pub fn show_tray_panel_at(app: &AppHandle, position: PhysicalPosition<f64>) -> R
         crate::window_events::TRAY_PANEL_SHOW,
         crate::window_events::WindowSignal::V1,
     );
-    window.show().map_err(|e| e.to_string())?;
+    crate::webview_scheduler::show_window(&window)?;
     let _ = window.set_focus();
     Ok(())
 }
@@ -164,7 +164,7 @@ pub fn hide_tray_panel(app: &AppHandle) {
         if crate::lightweight::is_lightweight_mode() {
             let _ = w.destroy();
         } else {
-            let _ = w.hide();
+            let _ = crate::webview_scheduler::hide_window(&w);
         }
     }
 }

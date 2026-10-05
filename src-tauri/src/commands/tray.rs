@@ -19,17 +19,6 @@ fn main_window(app: &AppHandle) -> Result<WebviewWindow, String> {
         .ok_or_else(|| "主窗口未找到".to_string())
 }
 
-/// 只藏原生窗口时 WebView2 仍当自己可见：rAF、无限循环的 CSS 动画和合成照常按屏幕刷新率跑，
-/// 托盘里空转能吃掉小半个核。藏窗时连 WebView 一起设不可见，页面进 hidden，前端的
-/// visibilitychange 暂停逻辑也跟着生效。显示时先放出 WebView 再显示窗口，免得闪一帧空白。
-pub(crate) fn set_main_webview_visible(window: &WebviewWindow, visible: bool) {
-    let webview: &tauri::Webview = window.as_ref();
-    let result = if visible { webview.show() } else { webview.hide() };
-    if let Err(err) = result {
-        tracing::warn!(target: "ncd_tauri::tray", visible, "切换主窗口 WebView 可见性失败: {err}");
-    }
-}
-
 /// 显示并前置主窗口(从托盘或隐藏状态恢复;轻量模式下重建 WebView)
 #[tauri::command]
 pub async fn window_show(app: AppHandle) -> Result<(), String> {
@@ -41,8 +30,7 @@ pub async fn window_show(app: AppHandle) -> Result<(), String> {
         return crate::lightweight::exit_lightweight_mode(&app);
     }
     let window = main_window(&app)?;
-    set_main_webview_visible(&window, true);
-    window.show().map_err(|e| e.to_string())?;
+    crate::webview_scheduler::show_window(&window)?;
     let _ = window.unminimize();
     let _ = window.set_focus();
     Ok(())
@@ -51,8 +39,8 @@ pub async fn window_show(app: AppHandle) -> Result<(), String> {
 /// 隐藏主窗口到托盘,并在 close_action=tray 时按设置启动延迟/立即轻量计时
 pub async fn hide_main_window_to_tray(app: AppHandle) -> Result<(), String> {
     let window = main_window(&app)?;
-    window.hide().map_err(|e| e.to_string())?;
-    set_main_webview_visible(&window, false);
+    // 连 WebView 一起藏、降到休眠：只藏原生窗口时页面仍当自己可见，动画照跑、缓存不放
+    crate::webview_scheduler::hide_window(&window)?;
     let state = app.state::<AppState>();
     state
         .lightweight_scheduler

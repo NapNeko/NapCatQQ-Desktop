@@ -67,7 +67,7 @@ pub async fn open_chat_window(app: AppHandle, bot_id: Option<String>, release_ma
         if let Some(bot_id) = bot_id { state.chat.select_view_bot(bot_id); }
         let _ = app.emit_to(CHAT_WINDOW_LABEL, crate::window_events::CHAT_ACCOUNT_SELECTED, crate::window_events::WindowSignal::V1);
         if !coordinator.ready.load(Ordering::SeqCst) { return Ok(()); }
-        window.show().map_err(|e| e.to_string())?;
+        crate::webview_scheduler::show_window(&window)?;
         let _ = window.unminimize(); let _ = window.set_focus();
         return Ok(());
     }
@@ -101,12 +101,12 @@ pub fn create_chat_window(app: &AppHandle) -> Result<tauri::WebviewWindow, Strin
 #[tauri::command]
 pub async fn reveal_chat_window(app: AppHandle) -> Result<(), String> {
     let window = app.get_webview_window(CHAT_WINDOW_LABEL).ok_or("聊天窗口不存在")?;
-    window.show().map_err(|e| e.to_string())?;
+    crate::webview_scheduler::show_window(&window)?;
     let _ = window.set_focus();
     let coordinator = app.state::<ChatWindowCoordinator>();
     coordinator.ready.store(true, Ordering::SeqCst);
     if coordinator.release_main.swap(false, Ordering::SeqCst) && app.state::<crate::AppState>().components.active_tasks().is_empty() {
-        if let Some(main) = app.get_webview_window("main") { let _ = main.hide(); crate::commands::tray::set_main_webview_visible(&main, false); }
+        if let Some(main) = app.get_webview_window("main") { let _ = crate::webview_scheduler::hide_window(&main); }
         release_control_panel(&app).await?;
     }
     Ok(())
@@ -114,7 +114,7 @@ pub async fn reveal_chat_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn focus_chat_window(app: AppHandle) -> bool {
     let Some(window) = app.get_webview_window(CHAT_WINDOW_LABEL) else { return false; };
-    let _ = window.show(); let _ = window.unminimize(); let _ = window.set_focus(); true
+    let _ = crate::webview_scheduler::show_window(&window); let _ = window.unminimize(); let _ = window.set_focus(); true
 }
 #[tauri::command]
 pub async fn chat_window_state(app: AppHandle) -> ChatWindowState {
