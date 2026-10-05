@@ -118,6 +118,54 @@ fn string_list(obj: &Map<String, Value>, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+// 插件作者常在字段后带行内注释（name: foo # 唯一识别名）。按 YAML 规则取标量：
+// 引号里的 # 是内容；裸标量里前面带空白的 # 起才是注释。
+fn yaml_scalar_value(raw: &str) -> String {
+    let s = raw.trim();
+    if let Some(rest) = s.strip_prefix('"') {
+        let mut out = String::new();
+        let mut chars = rest.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '\\' => {
+                    if let Some(n) = chars.next() {
+                        out.push(n);
+                    }
+                }
+                '"' => break,
+                _ => out.push(c),
+            }
+        }
+        return out;
+    }
+    if let Some(rest) = s.strip_prefix('\'') {
+        // 单引号标量里 '' 表示一个字面单引号
+        let mut out = String::new();
+        let mut chars = rest.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\'' {
+                if chars.peek() == Some(&'\'') {
+                    chars.next();
+                    out.push('\'');
+                } else {
+                    break;
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        return out;
+    }
+    let mut end = s.len();
+    for (i, c) in s.char_indices() {
+        if c == '#' && (i == 0 || s.as_bytes()[i - 1].is_ascii_whitespace()) {
+            end = i;
+            break;
+        }
+    }
+    s[..end].trim_end().to_string()
+}
+
 pub fn parse_metadata_yaml(text: &str) -> PluginMetadata {
     let mut meta = PluginMetadata::default();
     for raw in text.lines() {
@@ -129,7 +177,7 @@ pub fn parse_metadata_yaml(text: &str) -> PluginMetadata {
             continue;
         };
         let key = k.trim();
-        let val = v.trim().trim_matches('"').trim_matches('\'').to_string();
+        let val = yaml_scalar_value(v);
         match key {
             "name" => meta.name = val,
             "author" => meta.author = val,
@@ -810,6 +858,28 @@ mod tests {
     fn metadata_yaml_reads_author_name() {
         let m = parse_metadata_yaml("name: helloworld\nauthor: soulter\nversion: 1.0.0\n");
         assert_eq!(m.plugin_id(), "soulter/helloworld");
+    }
+
+    // astrbot_plugin_group_chat_plus 的 metadata.yaml 每个字段都带行内注释，身份校验曾因此误判不符
+    #[test]
+    fn metadata_yaml_strips_inline_comments() {
+        let text = "name: astrbot_plugin_group_chat_plus # 插件唯一识别名\n\
+                    author: Him666233 # 作者\n\
+                    repo: https://github.com/Him666233/astrbot_plugin_group_chat_plus # 插件的仓库地址\n";
+        let m = parse_metadata_yaml(text);
+        assert_eq!(m.plugin_id(), "Him666233/astrbot_plugin_group_chat_plus");
+        assert_eq!(
+            m.repo,
+            "https://github.com/Him666233/astrbot_plugin_group_chat_plus"
+        );
+    }
+
+    #[test]
+    fn metadata_yaml_keeps_hash_in_quotes_and_plain_scalars() {
+        let m = parse_metadata_yaml("name: \"a # b\"\ndesc: sharp#tag\nversion: '1.0' # v\n");
+        assert_eq!(m.name, "a # b");
+        assert_eq!(m.desc, "sharp#tag");
+        assert_eq!(m.version, "1.0");
     }
 
     #[test]
