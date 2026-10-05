@@ -57,6 +57,7 @@ export const AppsPageNext: React.FC<{ onNavigate?: (route: AppRoute) => void }> 
                             initialTab={initialTab}
                             onBack={() => setView('list')}
                             onViewTasks={onNavigate ? () => onNavigate('tasks') : undefined}
+                            onNavigate={onNavigate}
                         />
                     </RouteErrorBoundary>
                 ) : (

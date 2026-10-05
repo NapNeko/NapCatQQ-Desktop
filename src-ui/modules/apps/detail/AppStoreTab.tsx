@@ -165,6 +165,7 @@ export const AppStoreTab: React.FC<{
                         <button
                             type="button"
                             aria-label="上一页"
+                            title="上一页"
                             disabled={safePage <= 0}
                             onClick={() => setPage((n) => Math.max(0, n - 1))}
                             className={pagerBtn}
@@ -191,6 +192,7 @@ export const AppStoreTab: React.FC<{
                         <button
                             type="button"
                             aria-label="下一页"
+                            title="下一页"
                             disabled={safePage >= totalPages - 1}
                             onClick={() => setPage((n) => Math.min(totalPages - 1, n + 1))}
                             className={pagerBtn}

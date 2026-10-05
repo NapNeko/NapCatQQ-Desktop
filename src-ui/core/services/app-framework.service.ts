@@ -3,6 +3,7 @@
 
 import { invoke, isTauri } from '../ipc/transport';
 import type {
+    AppLinkBotDocument,
     AppConfigDocument,
     AppConfigText,
     AppConfigWriteResult,
@@ -38,6 +39,7 @@ import type {
     ImportAppInstanceRequest,
     KarinPluginInstalled,
     KarinPluginMarketEntry,
+    AppPanelResult,
     LogSnapshot,
     OneBotLinkPlan,
     PackageVersions,
@@ -86,6 +88,54 @@ export const appFrameworkService = {
     install: async (instanceId: string, version?: string | null): Promise<string> => {
         if (!isTauri) return mockAppFrameworkApi.install(instanceId, version);
         return invoke<string>('install_app_instance', { instanceId, version: version ?? null });
+    },
+
+    /**
+     * 代调一次实例自带控制台的面板接口。
+     *
+     * 面板口与凭据都在 Rust 那侧解决；路径受白名单约束（只放行面板自己的 /api/）。
+     * 返回 null = 该框架不提供面板转发，调用方据此不显示相关页签。
+     */
+    /**
+     * 「原始文件」页里的 **Bot 侧** 配置文件（只读）。
+     *
+     * 对接时桌面端会往协议 Bot 的配置里写一条 WS 客户端连接；那些文件在 Bot 的配置目录里，
+     * 不在应用端实例目录，所以单开这个只读入口。未对接 / 远端 Bot / 文件还没生成时是空表。
+     */
+    linkBotDocuments: async (instanceId: string): Promise<AppLinkBotDocument[]> => {
+        if (!isTauri) return mockAppFrameworkApi.linkBotDocuments(instanceId);
+        return invoke<AppLinkBotDocument[]>('app_link_bot_documents', { instanceId });
+    },
+    panelCall: async (
+        instanceId: string,
+        method: 'GET' | 'POST',
+        path: string,
+        body?: unknown,
+    ): Promise<AppPanelResult | null> => {
+        if (!isTauri) return mockAppFrameworkApi.panelCall(instanceId, method, path, body);
+        return invoke<AppPanelResult | null>('app_panel_call', {
+            instanceId,
+            method,
+            path,
+            body: body ?? null,
+        });
+    },
+
+    /**
+     * 记住某实例的面板密码（明文只进本机密钥库；传空串 = 忘掉）。
+     *
+     * 与 resetWebUiPassword 的区别：那个是「桌面端替框架设口令」，这个是
+     * 「框架自己管口令、桌面端只记住」——NeoBot 的面板属于后者。
+     */
+    setPanelPassword: async (instanceId: string, password: string): Promise<void> => {
+        if (!isTauri) return mockAppFrameworkApi.setPanelPassword(instanceId, password);
+        return invoke<void>('set_app_instance_panel_password', { instanceId, password });
+    },
+
+    /** 该实例是否已记住面板密码 */
+    panelPasswordSet: async (instanceId: string): Promise<boolean> => {
+        if (!isTauri) return mockAppFrameworkApi.panelPasswordSet(instanceId);
+        return invoke<boolean>('app_instance_panel_password_set', { instanceId });
     },
 
     /**

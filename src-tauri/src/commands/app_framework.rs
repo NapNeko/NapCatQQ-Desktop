@@ -4,29 +4,29 @@
 
 use ncd_domain::{
     AppConfigDocument, AppConfigError, AppConfigText, AppFrameworkId, AppFrameworkManifest,
-    AppInstance, AppInstanceId, AppInstanceWebUi, AppPendingTerms, AppPluginAction,
-    AppPluginConfigSchema, AppProjectProbe, AppStoreResource, AppWebUiAccount, BotId,
-    CreateAppInstanceRequest, ImportAppInstanceRequest, OneBotLinkPlan,
+    AppInstance, AppInstanceId, AppInstanceWebUi, AppLinkBotDocument, AppPendingTerms,
+    AppPluginAction, AppPluginConfigSchema, AppProjectProbe, AppStoreResource, AppWebUiAccount,
+    BotId, CreateAppInstanceRequest, ImportAppInstanceRequest, OneBotLinkPlan,
 };
 use ncd_runtime::{
-    AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreInstalled,
-    AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus, AstrBotKbCreate,
-    AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule, KarinPluginInstalled,
-    KarinPluginMarketEntry, MaiBotAPIProvider, MaiBotBehaviorDetail, MaiBotBehaviorOverview,
-    MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession, MaiBotChatTicket,
-    MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage, MaiBotEmojiQuery,
-    MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotExpressionAction, MaiBotExpressionOverview,
-    MaiBotExpressionPage, MaiBotExpressionQuery, MaiBotJargonAction, MaiBotJargonOverview,
-    MaiBotJargonPage, MaiBotJargonQuery, MaiBotLocalImage, MaiBotLocalTextFile,
-    MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest, MaiBotMemoryDeleteAction,
-    MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult, MaiBotMemoryGraph, MaiBotMemoryGraphHit,
-    MaiBotMemoryImport, MaiBotMemoryImportSetup, MaiBotMemoryNodeDetail, MaiBotMemoryQuery,
-    MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage, MaiBotMemorySource,
-    MaiBotMemoryStatus, MaiBotMemoryTask, MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail,
-    MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage, MaiBotPersonQuery,
-    MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile, MaiBotProviderCheck,
-    MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus, MaiBotStatsSummary,
-    PackageVersions,
+    AppConfigWriteResult, AppInstanceConfig, AppInstanceConfigEnvelope, AppPanelResult,
+    AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
+    AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
+    KarinPluginInstalled, KarinPluginMarketEntry, MaiBotAPIProvider, MaiBotBehaviorDetail,
+    MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession,
+    MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
+    MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotExpressionAction,
+    MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery, MaiBotJargonAction,
+    MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotLocalImage,
+    MaiBotLocalTextFile, MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest,
+    MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult, MaiBotMemoryGraph,
+    MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup, MaiBotMemoryNodeDetail,
+    MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage,
+    MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask, MaiBotMemoryTaskAction,
+    MaiBotMemoryTaskDetail, MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage,
+    MaiBotPersonQuery, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
+    MaiBotProviderCheck, MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus,
+    MaiBotStatsSummary, PackageVersions,
 };
 use ncd_traits::AppFrameworkError;
 use tauri::State;
@@ -1188,6 +1188,80 @@ pub async fn reset_app_instance_webui_password(
         .reset_webui_password(&AppInstanceId::new(instance_id), password)
         .await
         .map_err(AppFrameworkError::into_config_error)
+}
+
+/// 代前端调一次实例自带控制台的面板接口。
+///
+/// 路径受白名单约束：只放行面板自己的 /api/，不许出现主机名 / 穿越 / 反斜杠 / 空白
+/// （见 control::path_is_allowed），方法只认 GET/POST。面板口与凭据在管理器一层解决。
+/// 返回 None = 该框架不提供面板转发，前端据此不显示相关页签。
+#[tauri::command]
+pub async fn app_panel_call(
+    instance_id: String,
+    method: String,
+    path: String,
+    body: Option<serde_json::Value>,
+    state: State<'_, AppState>,
+) -> Result<Option<AppPanelResult>, String> {
+    state
+        .app_manager
+        .panel_call(&AppInstanceId::new(instance_id), &method, &path, body)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 「原始文件」页里的 **Bot 侧** 配置文件（只读）。
+///
+/// 对接时桌面端会往协议 Bot 的配置里写一条 WS 客户端连接。那些文件不在应用端实例目录里，
+/// 走不了 AppConfigDocument 那套相对路径读写，所以单开一个只读入口，让用户能在同一页
+/// 看到「桌面端到底往 Bot 里写了什么」。未对接 / 远端 Bot / 文件还没生成时返回空表。
+#[tauri::command]
+pub async fn app_link_bot_documents(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<AppLinkBotDocument>, String> {
+    state
+        .app_manager
+        .linked_bot_documents(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 记住某实例的面板密码（明文只进密钥库；空串 = 忘掉）。
+///
+/// 为什么单开一个入口：NeoBot 这类框架的面板口令由框架自己管（auth.json 存的是哈希），
+/// 桌面端既读不出也写不了，只能请用户填一次，之后用它登录面板 API。
+/// 与 `reset_app_instance_webui_password` 的区别正在这里——那个是「桌面端替框架设口令」，
+/// 这个是「桌面端只记住框架已有的口令」。
+#[tauri::command]
+pub async fn set_app_instance_panel_password(
+    instance_id: String,
+    password: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let instance = state
+        .app_manager
+        .get_instance(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(|e| e.to_string())?;
+    state
+        .app_manager
+        .remember_panel_password(&instance, &password)
+        .map_err(|e| e.to_string())
+}
+
+/// 该实例是否已记住面板密码：前端据此决定「提示填密码」还是直接取面板数据
+#[tauri::command]
+pub async fn app_instance_panel_password_set(
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let instance = state
+        .app_manager
+        .get_instance(&AppInstanceId::new(instance_id))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(state.app_manager.has_panel_password(&instance))
 }
 
 /// 修改实例的开机自启设置

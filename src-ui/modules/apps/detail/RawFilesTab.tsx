@@ -1,10 +1,12 @@
 // 「原始文件」Tab：左侧文件条 + 右侧语法高亮编辑（与设置页 JSON 编辑器同一套）。
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Save } from 'lucide-react';
 import { Button, Spinner, SyntaxTextEditor, type SyntaxMode } from '../../../shared/ui';
 import { ActionMotionIcon } from '../../../shared/ui/motion';
 import { useAppConfigDocuments, useAppConfigText } from '../../../hooks/apps/useAppInstanceConfig';
+import { appFrameworkService } from '../../../core/services/app-framework.service';
 import { pushInfoBar } from '../../../hooks/ui/globalInfoBarStore';
 import { pushErrorBar } from '../../../hooks/ui/pushErrorBar';
 import { cn } from '../../../shared/utils/cn';
@@ -26,11 +28,26 @@ function editorMode(format: AppConfigDocument['format']): SyntaxMode {
 export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) => {
     const docsQuery = useAppConfigDocuments(instance.id);
     const docs = useMemo(() => docsQuery.data ?? [], [docsQuery.data]);
+
+    // Bot 侧（对接时桌面端写进协议 Bot 的连接配置）。与应用端那几份分开取：
+    // 它们在 Bot 的配置目录里，所属主机与路径根都不一样，只读展示。
+    const botQuery = useQuery({
+        queryKey: ['appLinkBotDocs', instance.id] as const,
+        queryFn: () => appFrameworkService.linkBotDocuments(instance.id),
+        retry: false,
+    });
+    const botDocs = useMemo(() => botQuery.data ?? [], [botQuery.data]);
+
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const activeId = selectedId ?? docs[0]?.id ?? null;
     const activeDoc = docs.find((d) => d.id === activeId) ?? null;
+    // 选中的是 Bot 侧文件时：应用端那份读文本的查询要停掉（它的 id 不认 bot: 前缀）
+    const botActive =
+        activeId && activeId.startsWith('bot:')
+            ? (botDocs.find((b) => 'bot:' + b.name === activeId) ?? null)
+            : null;
 
-    const text = useAppConfigText(instance.id, activeId);
+    const text = useAppConfigText(instance.id, botActive ? null : activeId);
     const [draft, setDraft] = useState('');
     const [loaded, setLoaded] = useState<{ docId: string; revision: string } | null>(null);
     const [syntaxError, setSyntaxError] = useState<string | null>(null);
@@ -159,9 +176,62 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
                         </li>
                     ))}
                 </ul>
+                {botDocs.length > 0 && (
+                    <div className="mt-3 border-t border-border-subtle pt-2">
+                        <p className="px-2 pb-1 text-2xs uppercase tracking-wide text-text-tertiary">
+                            Bot 侧（只读）
+                        </p>
+                        <ul className="flex flex-col">
+                            {botDocs.map((b) => {
+                                const id = 'bot:' + b.name;
+                                return (
+                                    <li key={id}>
+                                        <button
+                                            type="button"
+                                            title={b.path}
+                                            onClick={() => setSelectedId(id)}
+                                            className={cn(
+                                                'flex w-full items-baseline justify-between gap-2 rounded-sm px-2 py-1.5 text-left transition-colors',
+                                                id === activeId
+                                                    ? 'bg-brand-soft/70 text-text'
+                                                    : 'text-text-secondary hover:bg-inset hover:text-text',
+                                            )}
+                                        >
+                                            <span className="min-w-0 truncate font-mono text-[12px]">
+                                                {b.name}
+                                            </span>
+                                            <span className="shrink-0 text-2xs text-text-tertiary">
+                                                {b.text === null ? '未生成' : 'JSON'}
+                                            </span>
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                )}
             </aside>
 
             <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+                {botActive ? (
+                    <>
+                        <div className="flex shrink-0 items-center justify-between gap-3">
+                            <p
+                                className="min-w-0 truncate font-mono text-[11px] text-text-tertiary"
+                                title={botActive.path}
+                            >
+                                {botActive.path}
+                            </p>
+                            <span className="shrink-0 text-2xs text-text-tertiary">
+                                Bot 侧 · 只读（对接时桌面端写入）
+                            </span>
+                        </div>
+                        <pre className="min-h-0 flex-1 overflow-auto rounded-sm border border-border-subtle bg-inset/40 p-3 font-mono text-[12px] leading-relaxed text-text">
+                            {botActive.text ?? '（文件还没生成，等 Bot 启动后重载）'}
+                        </pre>
+                    </>
+                ) : (
+                <>
                 <div className="flex shrink-0 items-center justify-between gap-3">
                     <p
                         className="min-w-0 truncate font-mono text-[11px] text-text-tertiary"
@@ -196,6 +266,8 @@ export const RawFilesTab: React.FC<{ instance: AppInstance }> = ({ instance }) =
                         if (syntaxError) setSyntaxError(null);
                     }}
                 />
+                </>
+                )}
             </section>
 
             <ConfigConflictDialog

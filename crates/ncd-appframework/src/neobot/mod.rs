@@ -33,7 +33,9 @@ pub use manifest::{
 pub use probe::probe_neobot;
 pub use versions::{PackageVersions, fetch_versions, parse_versions};
 
-use crate::adapter::{AppComponentSpec, AppFrameworkAdapter, restore_from_backup};
+use crate::adapter::{
+    AppComponentSpec, AppFrameworkAdapter, AppPanelOutcomeKind, AppPanelResult, restore_from_backup,
+};
 use crate::adopt::write_project_sidecar;
 use crate::config_doc::{
     AppInstanceConfig, AppInstanceConfigEnvelope, DocumentSnapshot, combined_revision_of,
@@ -53,6 +55,9 @@ fn envelope(
 
 pub struct NeoBotAdapter {
     integration: NeoBotIntegration,
+    /// 面板会话（token + CSRF）。适配器在注册表里活一个进程周期，所以这里缓存得住：
+    /// 登录要过 PBKDF2-HMAC-SHA256（24 万次迭代），每个请求都重登一遍太浪费。
+    sessions: std::sync::Arc<control::PanelSessions>,
 }
 
 impl Default for NeoBotAdapter {
@@ -65,6 +70,7 @@ impl NeoBotAdapter {
     pub fn new() -> Self {
         Self {
             integration: NeoBotIntegration::new(),
+            sessions: std::sync::Arc::new(control::PanelSessions::new()),
         }
     }
 
@@ -97,7 +103,7 @@ pub fn version_supports_graceful_stop(installed_version: Option<&str>) -> bool {
 }
 
 /// 面板口：目前没有从 spec 传进来的通道（`AppComponentSpec` 里没有这个字段），
-/// 一律用出厂值；组件装完会把真实口写进面板配置，之后读类型化配置就能拿到。
+/// 一律用出厂值；桌面端安装时已把真实面板口写进面板配置，之后读类型化配置就能拿到。
 fn dashboard_port_for(_spec: &AppComponentSpec) -> u16 {
     manifest::NEOBOT_DEFAULT_DASHBOARD_PORT
 }
@@ -124,6 +130,59 @@ impl AppFrameworkAdapter for NeoBotAdapter {
             .await
             .map(Some)
             .map_err(|e| AppFrameworkError::Integration(format!("查 PyPI 版本失败：{e}")))
+    }
+
+    /// NeoBot 面板转发：面板口从实例配置读（与 OneBot 口是两个口），
+    /// 密码是用户在桌面端填过一次的那个（密钥库里的「面板密码」）。
+    async fn panel_request(
+        &self,
+        host: &dyn Host,
+        instance: &AppInstance,
+        password: Option<&str>,
+        method: &str,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> Result<Option<AppPanelResult>, AppFrameworkError> {
+        // 转发只连本机回环。远端实例的面板口读出来以后连的也是 127.0.0.1，
+        // 打到的会是本机同口的另一个服务，还会把这台实例的面板密码交给它
+        if host.locality() != Locality::Local {
+            return Ok(Some(AppPanelResult::err(
+                AppPanelOutcomeKind::Failed,
+                "远端实例的面板还不能经桌面端读取，请用「打开控制台」在浏览器里使用面板",
+            )));
+        }
+        let root = Self::install_dir(instance);
+        let port =
+            control::dashboard_port(host, &root, manifest::NEOBOT_DEFAULT_DASHBOARD_PORT).await;
+        let outcome = control::panel_call(
+            &self.sessions,
+            instance.id.as_str(),
+            port,
+            password,
+            method,
+            path,
+            body,
+        )
+        .await;
+        Ok(Some(match outcome {
+            control::PanelOutcome::Ok(v) => AppPanelResult::ok(v),
+            control::PanelOutcome::Unauthorized => AppPanelResult::err(
+                AppPanelOutcomeKind::Unauthorized,
+                "面板凭据不可用：请先在本页填写面板密码",
+            ),
+            control::PanelOutcome::Unreachable(e) => {
+                AppPanelResult::err(AppPanelOutcomeKind::Unreachable, format!("面板打不通：{e}"))
+            }
+            control::PanelOutcome::NotFound => AppPanelResult::err(
+                AppPanelOutcomeKind::NotFound,
+                "面板没有这个接口：当前 NeoBot 版本还不提供它，需要更新的版本",
+            ),
+            control::PanelOutcome::Failed(e) => AppPanelResult::err(AppPanelOutcomeKind::Failed, e),
+        }))
+    }
+
+    fn forget_panel_session(&self, instance_id: &str) {
+        self.sessions.clear(instance_id);
     }
 
     async fn probe_project(
@@ -235,6 +294,7 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         &self,
         host: &dyn Host,
         instance: &AppInstance,
+        panel_password: Option<&str>,
     ) -> Result<bool, AppFrameworkError> {
         // 优雅关闭打的是面板回环地址，只对同机实例有意义：远端实例不是打不通，
         // 就是误打到本机同口的另一个实例。远端支持得走编排层隧道，暂不提供；
@@ -259,10 +319,9 @@ impl AppFrameworkAdapter for NeoBotAdapter {
         let root = Self::install_dir(instance);
         let port =
             control::dashboard_port(host, &root, manifest::NEOBOT_DEFAULT_DASHBOARD_PORT).await;
-        // 密码恒传 None：桌面端不接管面板密码，被拒（401/403）就收树；
-        // control 里的登录重试已接线并有测试覆盖，但生产上没有调用方会传密码，
-        // 为后续接管面板密码预留
-        match control::request_graceful_shutdown(port, None).await {
+        // 面板密码由编排层从密钥库取来传进来（见 AppManager::stop_gracefully）：
+        // 面板设过密码的实例不带它一律 401/403，优雅关闭就走不通了
+        match control::request_graceful_shutdown(port, panel_password).await {
             control::ShutdownRequest::Accepted => Ok(true),
             control::ShutdownRequest::EndpointMissing => {
                 tracing::info!(

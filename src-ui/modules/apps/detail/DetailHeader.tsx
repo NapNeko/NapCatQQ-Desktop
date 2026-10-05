@@ -101,7 +101,13 @@ export const DetailHeader: React.FC<{
     return (
         <header className="flex items-start justify-between gap-3 border-b border-border-subtle py-3">
             <div className="flex min-w-0 items-start gap-3">
-                <Button variant="ghost" size="icon" onClick={onBack} aria-label="返回列表">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onBack}
+                    aria-label="返回列表"
+                    title="返回列表"
+                >
                     <ActionMotionIcon icon={ArrowLeft} size={16} />
                 </Button>
                 <div className="flex min-w-0 flex-col gap-0.5">
@@ -162,7 +168,14 @@ export const DetailHeader: React.FC<{
                 )}
                 <Popover>
                     <PopoverTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy} aria-label="更多">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={busy}
+                            aria-label="更多"
+                            title="更多：重装 / 换版本 / 显示设置"
+                        >
                             <ActionMotionIcon icon={MoreHorizontal} size={16} />
                         </Button>
                     </PopoverTrigger>

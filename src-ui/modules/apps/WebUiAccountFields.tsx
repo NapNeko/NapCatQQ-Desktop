@@ -30,6 +30,7 @@ const CopyButton: React.FC<{ text: string; label: string }> = ({ text, label }) 
             variant="ghost"
             className="h-7 w-7 shrink-0"
             aria-label={copied ? '已复制' : label}
+            title={copied ? '已复制' : label}
             onClick={() => void onCopy()}
         >
             {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -64,6 +65,7 @@ const ValueRow: React.FC<{
                     variant="ghost"
                     className="h-7 w-7 shrink-0"
                     aria-label={shown ? '隐藏密码' : '显示密码'}
+                    title={shown ? '隐藏密码' : '显示密码'}
                     onClick={() => setShown((s) => !s)}
                 >
                     {shown ? <EyeOff size={13} /> : <Eye size={13} />}

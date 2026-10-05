@@ -72,6 +72,58 @@ pub struct WebUiAccountProbe {
     pub stored_is_hash: bool,
 }
 
+/// 面板转发结果的分类。
+///
+/// 分态而不是干脆 Err：前端要能区分「没填面板密码」和「面板没起来」——
+/// 前者引导去填凭据，后者引导去检查实例状态，混成一个错误就只能给一句无用的话。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub enum AppPanelOutcomeKind {
+    Ok,
+    /// 凭据缺失或不正确：让用户去填面板密码
+    Unauthorized,
+    /// 面板打不通（没在跑 / 口不对 / 端口被占）
+    Unreachable,
+    /// 面板没有这个接口（404）：实例的 NeoBot 版本低于该接口要求的版本。
+    /// 与 Unauthorized 分开，是因为解决方式不同——填密码没用，得升级 NeoBot。
+    NotFound,
+    /// 其它失败（含状态码与非法路径）
+    Failed,
+}
+
+/// 一次面板转发的完整结果
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppPanelResult {
+    pub kind: AppPanelOutcomeKind,
+    /// 成功时的面板回包。面板是**扁平信封**：{"ok":true, ...键平铺...}，这里原样透出。
+    /// ts-rs 不认 serde_json::Value，所以对前端声明成 unknown，由各页自己收窄。
+    #[ts(optional, type = "unknown")]
+    pub data: Option<serde_json::Value>,
+    /// 失败时给人看的一句话
+    #[ts(optional)]
+    pub message: Option<String>,
+}
+
+impl AppPanelResult {
+    pub fn ok(data: serde_json::Value) -> Self {
+        Self {
+            kind: AppPanelOutcomeKind::Ok,
+            data: Some(data),
+            message: None,
+        }
+    }
+
+    pub fn err(kind: AppPanelOutcomeKind, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            data: None,
+            message: Some(message.into()),
+        }
+    }
+}
+
 #[async_trait]
 pub trait AppFrameworkAdapter: Send + Sync {
     fn manifest(&self) -> &AppFrameworkManifest;
@@ -91,6 +143,29 @@ pub trait AppFrameworkAdapter: Send + Sync {
     ) -> Result<Option<crate::neobot::versions::PackageVersions>, AppFrameworkError> {
         Ok(None)
     }
+
+    /// 代桌面端调一次该框架**自带控制台**的接口。
+    ///
+    /// 返回 Ok(None) = 这个框架不提供这种转发（默认），UI 就别显示相关页签；
+    /// 返回 Ok(Some(_)) = 框架支持，里面是调用结果（含凭据不对 / 面板打不通这些分态）。
+    ///
+    /// 为什么由适配器实现而不是桌面端自己连：面板口要从**框架自己的配置**里读
+    /// （NeoBot 的面板口与 OneBot 口是两个口），只有适配器知道该读哪。
+    async fn panel_request(
+        &self,
+        _host: &dyn Host,
+        _instance: &AppInstance,
+        _password: Option<&str>,
+        _method: &str,
+        _path: &str,
+        _body: Option<serde_json::Value>,
+    ) -> Result<Option<AppPanelResult>, AppFrameworkError> {
+        Ok(None)
+    }
+
+    /// 丢掉为这个实例缓存的面板会话。面板密码换了或清了之后调用：
+    /// 不丢的话旧 token 还能用，「保存并验证」会对一个错密码报成功
+    fn forget_panel_session(&self, _instance_id: &str) {}
 
     /// 探测已有目录能不能当这个框架的实例领养
     async fn probe_project(
@@ -189,10 +264,14 @@ pub trait AppFrameworkAdapter: Send + Sync {
 
     /// 停实例前先请应用自己退（存盘、收它拉起的子进程）。Ok(true) = 请求已送达，编排层接着等
     /// 进程退出，等不到再收整棵树；Ok(false) = 这个框架没有这种入口，直接收树
+    ///
+    /// `panel_password` 是用户在桌面端填过的**面板密码**（密钥库里的那个，可能为 None）。
+    /// 走 HTTP 退出入口的框架（NeoBot）需要它：面板接口要登录，回环来源并不能绕过鉴权。
     async fn request_graceful_stop(
         &self,
         _host: &dyn Host,
         _instance: &AppInstance,
+        _panel_password: Option<&str>,
     ) -> Result<bool, AppFrameworkError> {
         Ok(false)
     }

@@ -2,10 +2,12 @@
 //!
 //! 首装（5 步）：
 //! 1. 解析 uv（调用方指定 → 上次安装记录 `.ncd-uv` → PATH），建实例目录并记下标记
-//! 2. 预置 Python 3.13（主机自己下不动时由桌面端镜像下载后传上去）
+//! 2. 预置 Python 3.13（uv 在本机 / 远端取不到托管解释器时，由桌面端本地下载后上传）
 //! 3. `uv venv --python 3.13 .venv`
 //! 4. `uv pip install --python .venv neobot-app`
-//! 5. 挑一个未被占用的面板口，种最小配置：面板口 / 面板监听地址、OneBot 反向 WS 口与 token
+//! 5. 挑一个未被占用的面板口并种最小配置：data/config.toml 的 [adapter]（mode / host / port）
+//!    与 plugins_data/dashboard/config.toml（host / port）。**这里不写 token**——反向 WS 的 token
+//!    是安装后由桌面端补的空串占位，真 token 到「对接 QQ」那一步才写
 //!
 //! 与 AstrBot 的差别：NeoBot 没有 `init` 子命令，配置由桌面端直接写；
 //! 面板配置在 `plugins_data/dashboard/config.toml`（不在 `data/config.toml`）。

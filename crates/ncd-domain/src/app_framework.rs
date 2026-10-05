@@ -579,13 +579,33 @@ pub struct CreateAppInstanceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub webui_password: Option<String>,
-    /// 开机/桌面端启动时自动启动该实例。默认 true。
-    #[serde(default = "default_true")]
+    /// 开机/桌面端启动时自动启动该实例。**默认 false**：新建的实例不随桌面端启动。
+    ///
+    /// 与 `AppInstance::auto_start` 的 default_true 不冲突：那个是为了旧快照的兼容
+    /// （字段出现之前建的实例按「已安装即启用」处理），这里说的是**新建时**取什么值。
+    /// 想让它跟着桌面端起，在详情页把那个开关打开即可。
+    #[serde(default)]
     pub auto_start: bool,
     /// 用户已勾选同意 manifest 里的上游条款；框架没有条款时忽略
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub accept_terms: Option<bool>,
+}
+
+/// 「原始文件」里展示的 **Bot 侧** 配置文件（只读）。
+///
+/// 与应用端自己的 AppConfigDocument 分开：那些相对实例目录读写、可编辑；
+/// 这些在**协议 Bot 的配置目录**里（对接时 Desktop 写进去的 WS 客户端连接），
+/// 所属主机与路径根都不一样，混进同一套「相对路径」语义只会出错，所以单独一类。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/domain/")]
+pub struct AppLinkBotDocument {
+    /// 文件名，例如 onebot11_10001.json
+    pub name: String,
+    /// 绝对路径（给人看，显示在标题旁）
+    pub path: String,
+    /// 文件内容；文件还没生成时为 None
+    pub text: Option<String>,
 }
 
 /// 探测已有项目目录（导入前）
@@ -1066,6 +1086,18 @@ mod tests {
         assert!(inst.install_renderer);
         assert_eq!(inst.origin, AppInstanceOrigin::Created);
         assert!(inst.auto_start); // 旧 JSON 缺字段回落到 default_true
+    }
+
+    /// 新建实例默认**不**随桌面端启动。与上面那条不冲突：那条说的是旧快照缺字段
+    /// 时的兼容回落（视为 true），这条说的是新建时取什么值。
+    #[test]
+    fn create_request_missing_auto_start_defaults_false() {
+        let json = r#"{
+            "framework_id":"neobot","display_name":"Luna","host_id":"local",
+            "install_dir":"/c/apps/luna"
+        }"#;
+        let req: CreateAppInstanceRequest = serde_json::from_str(json).unwrap();
+        assert!(!req.auto_start, "新建时不该默认跟着桌面端启动");
     }
 
     #[test]

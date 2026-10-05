@@ -236,6 +236,8 @@ impl AppFrameworkAdapter for YunzaiAdapter {
         &self,
         host: &dyn Host,
         instance: &AppInstance,
+        // Yunzai 走自己的 HTTP 退出入口，凭据来自实例配置里的 server_auth，不用面板密码
+        _panel_password: Option<&str>,
     ) -> Result<bool, AppFrameworkError> {
         let (port, headers) = Self::server_auth(host, instance).await?;
         Ok(match host.locality() {

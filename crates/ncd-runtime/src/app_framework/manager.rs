@@ -18,43 +18,43 @@ use std::time::{Duration, Instant};
 
 use ncd_appframework::{
     AdoptRestoreScope, AppComponentSpec, AppConfigWriteResult, AppFrameworkAdapter,
-    AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope, AppStoreFlavor,
-    PackageVersions,
-    AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo, AstrBotDashboardStatus,
-    AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotRuntimeApi, AstrBotSession,
-    AstrBotSessionRule, KarinPluginInstalled, KarinPluginMarketEntry, KoishiCommandRow,
-    KoishiDatabaseTable, KoishiFileContent, KoishiFileEntry, KoishiPackageInfo,
-    KoishiPluginSchema, KoishiRuntimeApi, KoishiRuntimeGate, KoishiRuntimeStatus, MaiBotAPIProvider,
-    KoishiSandboxMessage,
-    MaiBotBehaviorDetail, MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery,
-    MaiBotChatSession, MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview,
-    MaiBotEmojiPage, MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone,
-    MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
-    MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery,
-    MaiBotLocalImage, MaiBotLocalTextFile, MaiBotMCPServerItemConfig, MaiBotMcpStatus,
-    MaiBotMcpTest, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult,
-    MaiBotMemoryGraph, MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup,
-    MaiBotMemoryNodeDetail, MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind,
-    MaiBotMemoryRecordPage, MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask,
-    MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail, MaiBotPersonAction, MaiBotPersonOverview,
-    MaiBotPersonPage, MaiBotPersonQuery, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
+    AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope, AppPanelResult,
+    AppStoreFlavor, AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo,
+    AstrBotDashboardStatus, AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona,
+    AstrBotRuntimeApi, AstrBotSession, AstrBotSessionRule, KarinPluginInstalled,
+    KarinPluginMarketEntry, KoishiCommandRow, KoishiDatabaseTable, KoishiFileContent,
+    KoishiFileEntry, KoishiPackageInfo, KoishiPluginSchema, KoishiRuntimeApi, KoishiRuntimeGate,
+    KoishiRuntimeStatus, KoishiSandboxMessage, MaiBotAPIProvider, MaiBotBehaviorDetail,
+    MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession,
+    MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
+    MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotExpressionAction,
+    MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery, MaiBotJargonAction,
+    MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotLocalImage,
+    MaiBotLocalTextFile, MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest,
+    MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult, MaiBotMemoryGraph,
+    MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup, MaiBotMemoryNodeDetail,
+    MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage,
+    MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask, MaiBotMemoryTaskAction,
+    MaiBotMemoryTaskDetail, MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage,
+    MaiBotPersonQuery, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
     MaiBotPromptTarget, MaiBotProviderCheck, MaiBotProviderModel, MaiBotProviderSource,
     MaiBotResourceDone, MaiBotRuntimeApi, MaiBotRuntimeGate, MaiBotRuntimeStatus, MaiBotSession,
-    MaiBotStatsSummary, PluginLogSink, app_file_basename, join_webui_url, remove_ncd_debris,
-    restore_adopted_files,
+    MaiBotStatsSummary, PackageVersions, PluginLogSink, app_file_basename, join_webui_url,
+    remove_ncd_debris, restore_adopted_files,
 };
 use ncd_component::{ComponentId, DetectOutcome, LaunchArgs};
 use ncd_deploy::StepKind;
 use ncd_domain::{
     AppConfigDocument, AppConfigText, AppFrameworkId, AppFrameworkManifest, AppInstance,
-    AppInstanceId, AppInstanceOrigin, AppInstanceState, AppInstanceWebUi, AppLinkRecord,
-    AppLinkTopology, AppPendingTerms, AppPlacement, AppPluginAction, AppPluginConfigSchema,
-    AppProjectProbe, AppStoreResource, AppWebUiAccount, AppWebUiAuthKind, BotConfig, BotId,
-    CreateAppInstanceRequest, DeploymentTaskKind, DeploymentTaskResource, DeploymentType,
-    DomainEventKind, ImportAppInstanceRequest, LOCAL_HOST_ID, OneBotLinkEndpoint, OneBotLinkMode,
-    OneBotLinkPlan, REMOTE_HOST_ID_PREFIX, RuntimeTarget, app_link_connection_name,
-    classify_app_link, host_id_of_runtime_target, is_app_link_connection_name, parse_ws_url,
-    rewrite_ws_loopback_port, runtime_target_matches_host, server_id_of_host,
+    AppInstanceId, AppInstanceOrigin, AppInstanceState, AppInstanceWebUi, AppLinkBotDocument,
+    AppLinkRecord, AppLinkTopology, AppPendingTerms, AppPlacement, AppPluginAction,
+    AppPluginConfigSchema, AppProjectProbe, AppStoreResource, AppWebUiAccount, AppWebUiAuthKind,
+    BackendType, BotConfig, BotId, CreateAppInstanceRequest, DeploymentTaskKind,
+    DeploymentTaskResource, DeploymentType, DomainEventKind, ImportAppInstanceRequest,
+    LOCAL_HOST_ID, OneBotLinkEndpoint, OneBotLinkMode, OneBotLinkPlan, REMOTE_HOST_ID_PREFIX,
+    RuntimeTarget, app_link_connection_name, classify_app_link, host_id_of_runtime_target,
+    is_app_link_connection_name, parse_ws_url, rewrite_ws_loopback_port,
+    runtime_target_matches_host, server_id_of_host,
 };
 use ncd_host::remote::{TunnelHandle, TunnelSpec};
 use ncd_host::{Host, HostCommand, HostPath, Locality, Os};
@@ -105,6 +105,10 @@ const SECRET_WEBUI_USERNAME: &str = "webui_username";
 const SECRET_WEBUI_PASSWORD: &str = "webui_password";
 /// 桌面托管会话密钥（上游 desktop-session）：启动实例时注入 env，代登录免密码
 const SECRET_DESKTOP_SESSION: &str = "desktop_session";
+/// 面板密码。与 webui_* 的区别：那两个是「桌面端能替框架设置」的口令（会自动生成 / 重置），
+/// 这个只用于「框架自己说了算、桌面端只记住」的面板——NeoBot 就是这样：auth.json 存的是哈希，
+/// 桌面端既读不出也写不了，只能请用户填一次，再拿它登录面板 API。
+const SECRET_PANEL_PASSWORD: &str = "panel_password";
 
 fn secret_key(instance_id: &str, suffix: &str) -> String {
     format!("app:{instance_id}:{suffix}")
@@ -344,6 +348,44 @@ impl AppManager {
         }
     }
 
+    /// 记住某实例的面板密码（明文只进密钥库，实例记录里不带）。
+    /// 全空白视为「忘掉」，免得库里留一个空值又被当成已配置；其余原样存，
+    /// 首尾空格也是密码的一部分，裁掉了就再也登录不上。
+    ///
+    /// 存失败要报出来：调用方紧接着会用它验证登录，没存上却报成功，
+    /// 验证失败就会被说成「密码不对」。
+    pub fn remember_panel_password(
+        &self,
+        instance: &AppInstance,
+        password: &str,
+    ) -> Result<(), AppFrameworkError> {
+        let store = self
+            .secrets
+            .as_ref()
+            .ok_or_else(|| AppFrameworkError::Runtime("密钥库没有接上，面板密码存不了".into()))?;
+        let key = secret_key(instance.id.as_str(), SECRET_PANEL_PASSWORD);
+        let result = if password.trim().is_empty() {
+            store.delete(&key)
+        } else {
+            store.put(&key, password)
+        };
+        // 不管存成没成，旧会话都不能再用：它是用旧密码换的
+        if let Ok(adapter) = self.registry.get(&instance.framework_id) {
+            adapter.forget_panel_session(instance.id.as_str());
+        }
+        result.map_err(|e| AppFrameworkError::Runtime(format!("面板密码没存上：{e}")))
+    }
+
+    /// 有没有记住面板密码。前端据此决定「提示填密码」还是直接取数据。
+    pub fn has_panel_password(&self, instance: &AppInstance) -> bool {
+        self.remembered_panel_password(instance).is_some()
+    }
+
+    /// 面板密码；没记住返回 None（不要把 None 当空密码去登录）
+    pub fn remembered_panel_password(&self, instance: &AppInstance) -> Option<String> {
+        self.remembered_secret(instance, SECRET_PANEL_PASSWORD)
+    }
+
     fn remember_secret(&self, instance_id: &AppInstanceId, suffix: &str, value: &str) {
         let Some(store) = self.secrets.as_ref() else {
             return;
@@ -397,6 +439,7 @@ impl AppManager {
             SECRET_WEBUI_USERNAME,
             SECRET_WEBUI_PASSWORD,
             SECRET_DESKTOP_SESSION,
+            SECRET_PANEL_PASSWORD,
         ] {
             if let Err(e) = store.delete(&secret_key(instance_id.as_str(), suffix)) {
                 tracing::debug!(instance = instance_id.as_str(), suffix, error = %e, "drop app secret");
@@ -462,6 +505,83 @@ impl AppManager {
     ) -> Result<Option<PackageVersions>, AppFrameworkError> {
         let adapter = self.registry.get(framework_id)?;
         adapter.available_versions().await
+    }
+
+    /// 代前端调一次实例自带控制台的面板接口。
+    ///
+    /// 面板口与凭据都在这一层解决：口由适配器从**框架自己的配置**读（NeoBot 的面板口
+    /// 与 OneBot 口是两个口），密码从密钥库取（用户填过一次的那个）。调用方只给
+    /// 「调哪个实例的哪个路径」。返回 Ok(None) = 该框架不提供面板转发。
+    pub async fn panel_call(
+        &self,
+        instance_id: &AppInstanceId,
+        method: &str,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> Result<Option<AppPanelResult>, AppFrameworkError> {
+        let instance = self.get_instance(instance_id).await?;
+        let adapter = self.registry.get(&instance.framework_id)?;
+        let host = self.resolve_host(&instance.host_id).await?;
+        let password = self.remembered_panel_password(&instance);
+        adapter
+            .panel_request(
+                host.as_ref(),
+                &instance,
+                password.as_deref(),
+                method,
+                path,
+                body,
+            )
+            .await
+    }
+
+    /// 「原始文件」页要展示的 **Bot 侧** 配置文件（只读）。
+    ///
+    /// 对接时桌面端会往协议 Bot 的配置里写一条 WS 客户端连接。那些文件不在应用端实例
+    /// 目录里，所以走不了 AppConfigDocument 那套「相对实例目录」的读写。这里按 NapCat 的
+    /// 约定，去 Bot 的配置目录找与这个 QQ 相关的文件读出来，交给前端只读展示。
+    ///
+    /// 返回空表不是错误：远端 Bot、换了别的后端、或文件还没渲染出来，都属于「没有可看的」。
+    pub async fn linked_bot_documents(
+        &self,
+        instance_id: &AppInstanceId,
+    ) -> Result<Vec<AppLinkBotDocument>, AppFrameworkError> {
+        let instance = self.get_instance(instance_id).await?;
+        let Some(link) = instance.link.as_ref() else {
+            return Ok(Vec::new());
+        };
+        // 只有本机原生 NapCat 的配置落在桌面端数据根下。远端、Docker、SnowLuma 的 Bot
+        // 即便这台机器上留着同一个 QQ 的旧文件，那也不是这次对接写进去的
+        let local_napcat = match self.bot_manager.bot_config(&link.bot_id).await {
+            Ok(Some(cfg)) => {
+                cfg.bot.runtime_target.is_local()
+                    && cfg.bot.backend_type == BackendType::NapCat
+                    && cfg.bot.deployment_type == DeploymentType::Native
+            }
+            Ok(None) => false,
+            Err(e) => {
+                tracing::debug!(bot = link.bot_id.as_str(), error = %e, "read linked bot config");
+                false
+            }
+        };
+        if !local_napcat {
+            return Ok(Vec::new());
+        }
+        let bot = link.bot_id.as_str();
+        let dir = crate::DataPaths::new(self.data_root.clone()).napcat_config_dir();
+        let mut out = Vec::new();
+        for name in [format!("onebot11_{bot}.json"), format!("napcat_{bot}.json")] {
+            let path = dir.join(&name);
+            // 只列**存在**的：不存在的路径摆出来只会让人以为读失败
+            if let Ok(text) = tokio::fs::read_to_string(&path).await {
+                out.push(AppLinkBotDocument {
+                    name,
+                    path: path.to_string_lossy().to_string(),
+                    text: Some(text),
+                });
+            }
+        }
+        Ok(out)
     }
 
     /// 桌面端注入的解析器遇到还没连上的远端会现连一次（和组件页共用单飞连接），调用前不用另外预热

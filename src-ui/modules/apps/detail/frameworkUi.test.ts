@@ -137,6 +137,30 @@ describe('resolveFrameworkUi', () => {
         expect(ui?.tabForIssue('config/master')).toBe('permissions');
     });
 
+    it('neobot 默认落在部署页，其余是面板数据页', () => {
+        const ui = resolveFrameworkUi('neobot');
+        expect(ui).toBeDefined();
+        // 新实例第一件该做的事是跑起来并连上 QQ，不是看统计
+        expect(ui?.defaultTab).toBe('deploy');
+        expect(ui?.nav.map((g) => g.id)).toEqual(['home', 'ai', 'extend', 'console']);
+        expect(navValues(ui)).toEqual([
+            'deploy',
+            'overview',
+            'models',
+            'prompts',
+            'memory',
+            'plugins',
+            'console',
+        ]);
+        // 没有类型化配置页：各页只读，或自己把动作 POST 给面板，不该挂保存条
+        expect(ui?.typedTabs.size).toBe(0);
+        // 反过来：这些页都是普通堆叠内容，**不能**声明成 fillPane。声明了外壳会给
+        // overflow-hidden 并指望页面自己滚，而它们不滚——长内容直接被裁掉（实测「提示词」页滑不动）。
+        for (const t of navValues(ui)) expect(ui?.fillPaneTabs.has(t)).toBe(false);
+        // 原始文件、日志由外壳追加
+        expect(buildDetailNav(ui).at(-1)?.items.map((t) => t.value)).toEqual(['raw', 'log']);
+    });
+
     it('nonebot2 nav groups and issue routing', () => {
         const ui = resolveFrameworkUi('nonebot2');
         expect(ui).toBeDefined();

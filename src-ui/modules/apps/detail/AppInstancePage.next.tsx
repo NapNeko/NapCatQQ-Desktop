@@ -20,6 +20,7 @@ import { ConfigConflictDialog } from './ConfigConflictDialog';
 import { DetailHeader } from './DetailHeader';
 import { DetailSideNav } from './DetailSideNav';
 import { InstanceLogTab } from './InstanceLogTab';
+import { InstanceVersionTab } from './InstanceVersionTab';
 import { PaneLoading } from './PaneStatus';
 import { RawFilesTab } from './RawFilesTab';
 import { SaveBar } from './SaveBar';
@@ -27,6 +28,7 @@ import { STORE_TOOLBAR_SLOT_ID } from './storeToolbar';
 import { buildDetailNav, resolveFrameworkUi, type FrameworkSaveHandle, type NavBadges } from './frameworkUi';
 import type { DetailTabHint } from '../list/AppInstanceListPage';
 import type { AppConfigIssue, AppInstance } from '../../../core/ipc/types';
+import type { AppRoute } from '../../../shared/components/next/Sidebar';
 
 export interface AppInstancePageNextProps {
     instanceId: string;
@@ -34,6 +36,8 @@ export interface AppInstancePageNextProps {
     onBack: () => void;
     /** 安装中「在任务队列查看」要跳走；没给就不显示这个按钮 */
     onViewTasks?: () => void;
+    /** 跳到别的页（框架页签里「去机器人页新建」这类指路用）；没给就不显示那些按钮 */
+    onNavigate?: (route: AppRoute) => void;
 }
 
 export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
@@ -41,6 +45,7 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
     initialTab,
     onBack,
     onViewTasks,
+    onNavigate,
 }) => {
     const apps = useAppInstances();
     const frameworks = useAppFrameworks();
@@ -57,7 +62,11 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
     const latestVersion = versions.data?.latest ?? null;
 
     const ui = instance ? resolveFrameworkUi(instance.framework_id) : undefined;
-    const nav = useMemo(() => buildDetailNav(ui), [ui]);
+    // 支持按版本安装的框架才给「版本」页：不支持就没有可选项
+    const nav = useMemo(
+        () => buildDetailNav(ui, { withVersionTab: !!versions.data }),
+        [ui, versions.data],
+    );
     const installed = !!instance && isInstalled(instance);
     const running = instance?.state === 'running';
     const FrameworkDetail = ui?.Detail;
@@ -190,9 +199,25 @@ export const AppInstancePageNext: React.FC<AppInstancePageNextProps> = ({
                                         onSaveHandle={setSaveHandle}
                                         onGoTab={goTab}
                                         onOpenLink={() => setLinkOpen(true)}
+                                        onOpenWebUi={() => void apps.openWebUi(instance.id)}
+                                        onNavigate={onNavigate}
                                         onNavBadges={setNavBadges}
                                     />
                                 )}
+                                <TabsContent value="version" className="flex min-h-0 flex-1 flex-col pt-2">
+                                    <InstanceVersionTab
+                                        instance={instance}
+                                        latestVersion={latestVersion}
+                                        versions={versions.data?.versions ?? null}
+                                        loading={versions.isLoading}
+                                        error={versions.error?.message}
+                                        busy={busy}
+                                        onSwitch={(v) => {
+                                            setInstallVersion(v);
+                                            setReinstallOpen(true);
+                                        }}
+                                    />
+                                </TabsContent>
                                 <TabsContent value="raw" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-2">
                                     <RawFilesTab instance={instance} />
                                 </TabsContent>

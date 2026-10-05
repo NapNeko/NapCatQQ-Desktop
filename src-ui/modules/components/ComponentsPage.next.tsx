@@ -744,7 +744,8 @@ export const ComponentsPageNext: React.FC = () => {
                             : undefined,
                         webui_username: userPassword ? draft.webuiUsername.trim() || undefined : undefined,
                         webui_password: userPassword ? draft.webuiPassword || undefined : undefined,
-                        auto_start: true,
+                        // 新建实例默认不随桌面端启动，要的话到详情页打开
+                        auto_start: false,
                         accept_terms: createAppRequest?.manifest.terms.length
                             ? draft.acceptTerms
                             : undefined,

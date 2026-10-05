@@ -19,16 +19,7 @@ import {
 } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
 import { animateListChildrenEnter } from '../../../shared/ui/motion/listEnter';
-import {
-    Badge,
-    Button,
-    PagePlaceholder,
-    Spinner,
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '../../../shared/ui';
+import { Badge, Button, PagePlaceholder, Spinner } from '../../../shared/ui';
 import {
     ActionMotionIcon,
     Counter,
@@ -85,8 +76,7 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
     const refreshing = frameworks.isFetching || apps.isLoading;
 
     return (
-        <TooltipProvider delayDuration={200}>
-            <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
                 <header className="flex shrink-0 items-end justify-between pb-4 pt-2">
                     <div>
                         <p className="text-2xs uppercase tracking-widest text-text-tertiary">apps</p>
@@ -215,8 +205,7 @@ export const AppInstanceListPage: React.FC<AppInstanceListPageProps> = ({ onNavi
                         });
                     }}
                 />
-            </div>
-        </TooltipProvider>
+        </div>
     );
 };
 
@@ -389,38 +378,38 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                         </Button>
                     )}
                     {installed && !running && (
-                        <FooterIcon label="启动" disabled={busy} tone="brand" onClick={() => onStart(i.id)}>
+                        <FooterIcon label="启动实例" disabled={busy} tone="brand" onClick={() => onStart(i.id)}>
                             <ActionMotionIcon icon={Play} size={15} strokeWidth={2.2} motion={EMPHASIS_MOTION} />
                         </FooterIcon>
                     )}
                     {running && (
-                        <FooterIcon label="停止" disabled={busy} tone="danger" onClick={() => onStop(i.id)}>
+                        <FooterIcon label="停止实例" disabled={busy} tone="danger" onClick={() => onStop(i.id)}>
                             <ActionMotionIcon icon={Square} size={15} strokeWidth={2.2} />
                         </FooterIcon>
                     )}
                     {installed && (
-                        <FooterIcon label={i.link ? '改绑' : '对接'} disabled={busy} onClick={() => onLink(i)}>
+                        <FooterIcon label={i.link ? '改绑到别的 Bot' : '对接 QQ：挑一个协议 Bot 建连接'} disabled={busy} onClick={() => onLink(i)}>
                             <ActionMotionIcon icon={Link2} size={15} strokeWidth={2.2} />
                         </FooterIcon>
                     )}
                     {i.link && (
-                        <FooterIcon label="解除对接" disabled={busy} onClick={() => onUnlink(i)}>
+                        <FooterIcon label="解除对接：两边配置都回退" disabled={busy} onClick={() => onUnlink(i)}>
                             <ActionMotionIcon icon={Unlink} size={15} strokeWidth={2.2} />
                         </FooterIcon>
                     )}
                     {manifest?.has_webui && running && (
-                        <FooterIcon label="打开 WebUI" onClick={() => onOpenWebUi(i)}>
+                        <FooterIcon label="打开 WebUI：在浏览器里打开框架面板" onClick={() => onOpenWebUi(i)}>
                             <ActionMotionIcon icon={ExternalLink} size={15} strokeWidth={2.2} />
                         </FooterIcon>
                     )}
                     {installed && (
-                        <FooterIcon label="日志" onClick={() => onOpen(i, 'log')}>
+                        <FooterIcon label="查看日志" onClick={() => onOpen(i, 'log')}>
                             <ActionMotionIcon icon={ScrollText} size={15} strokeWidth={2.2} />
                         </FooterIcon>
                     )}
                     {installed && terminalEnabled && (
                         <FooterIcon
-                            label="终端"
+                            label="打开终端：在实例目录里，node / uv 已接好"
                             onClick={() => void openTerminal({ kind: 'app_instance', instance_id: i.id })}
                         >
                             <ActionMotionIcon icon={SquareTerminal} size={15} strokeWidth={2.2} />
@@ -429,7 +418,7 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                     {/* 装的过程中探测和删除都没意义，装完或失败后再出现 */}
                     {!installing && (
                         <>
-                            <FooterIcon label="重新探测" disabled={busy} onClick={() => onRefresh(i.id)}>
+                            <FooterIcon label="重新探测：重新读一遍安装状态" disabled={busy} onClick={() => onRefresh(i.id)}>
                                 <ActionMotionIcon
                                     icon={RefreshCw}
                                     size={15}
@@ -438,7 +427,7 @@ const InstanceCard: React.FC<InstanceListProps & { instance: AppInstance }> = ({
                                 />
                             </FooterIcon>
                             <FooterIcon
-                                label={i.origin === 'imported' ? '释放接管' : '删除实例'}
+                                label={i.origin === 'imported' ? '释放接管：只解除跟踪，不动目录' : '删除实例：连同实例目录一起删'}
                                 disabled={busy}
                                 tone="danger"
                                 onClick={() => onDelete(i)}
@@ -460,31 +449,30 @@ const FooterIcon: React.FC<{
     tone?: 'neutral' | 'brand' | 'danger';
     children: React.ReactNode;
 }> = ({ label, onClick, disabled, tone = 'neutral', children }) => (
-    <Tooltip>
-        <TooltipTrigger asChild>
-            <button
-                type="button"
-                aria-label={label}
-                disabled={disabled}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onClick();
-                }}
-                className={cn(
-                    'inline-flex h-8 w-8 items-center justify-center rounded-xs',
-                    'transition-[color,background-color] duration-150',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-                    'disabled:cursor-not-allowed disabled:opacity-40',
-                    tone === 'neutral' && 'text-text-secondary hover:bg-inset hover:text-text',
-                    tone === 'brand' && 'text-brand hover:bg-brand-soft',
-                    tone === 'danger' && 'text-danger hover:bg-danger-soft',
-                )}
-            >
-                {children}
-            </button>
-        </TooltipTrigger>
-        <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    // 提示走产品**现成**的机制：title 属性 + 外壳的 GlobalTitleTooltip
+    // （与「终端」按钮、终端文件面板的 IconButton 同一套）。
+    // Radix 那套本页只有这里用，且实测用户看不到气泡。
+    <button
+        type="button"
+        aria-label={label}
+        title={label}
+        disabled={disabled}
+        onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+        }}
+        className={cn(
+            'inline-flex h-8 w-8 items-center justify-center rounded-xs',
+            'transition-[color,background-color] duration-150',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+            'disabled:cursor-not-allowed disabled:opacity-40',
+            tone === 'neutral' && 'text-text-secondary hover:bg-inset hover:text-text',
+            tone === 'brand' && 'text-brand hover:bg-brand-soft',
+            tone === 'danger' && 'text-danger hover:bg-danger-soft',
+        )}
+    >
+        {children}
+    </button>
 );
 
 export default AppInstanceListPage;

@@ -96,7 +96,8 @@ export const TooltipContent = forwardRef<
                 side={side}
                 sideOffset={sideOffset}
                 className={cn(
-                    'z-50 whitespace-nowrap rounded-sm bg-text px-2.5 py-1 text-2xs font-medium text-canvas shadow-popover',
+                    // 与全局 title 提示、Popover 保持一致：浮层底色随主题走，夜间不再是一块白
+                    'z-50 whitespace-nowrap rounded-sm border border-border-subtle bg-elevated px-2.5 py-1 text-2xs font-medium text-text shadow-popover',
                     className,
                 )}
                 style={style}
