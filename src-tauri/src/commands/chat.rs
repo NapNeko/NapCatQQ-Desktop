@@ -94,9 +94,42 @@ pub async fn chat_release_account(state: State<'_, AppState>, bot_id: String, se
 #[tauri::command]
 pub async fn chat_read_local_image(path: String) -> Result<String, String> {
     use base64::Engine as _;
-    let bytes = tauri::async_runtime::spawn_blocking(move || std::fs::read(path)).await.map_err(|e| e.to_string())?.map_err(|e: std::io::Error| format!("读取本地图片失败：{e}"))?;
-    if bytes.len() > 16 * 1024 * 1024 { return Err("图片超过 16 MiB，无法预览".into()); }
+    let bytes = tauri::async_runtime::spawn_blocking(move || read_local_image_bounded(&path))
+        .await
+        .map_err(|e| e.to_string())??;
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+// 先查体积、再按上限 +1 截断读：巨大或伪装图片不会整体先进内存才被判超。
+fn read_local_image_bounded(path: &str) -> Result<Vec<u8>, String> {
+    use std::io::Read as _;
+    const LIMIT: u64 = 16 * 1024 * 1024;
+    let fail = |e: std::io::Error| format!("读取本地图片失败：{e}");
+    if std::fs::metadata(path).map_err(fail)?.len() > LIMIT {
+        return Err("图片超过 16 MiB，无法预览".into());
+    }
+    let file = std::fs::File::open(path).map_err(fail)?;
+    let mut bytes = Vec::new();
+    file.take(LIMIT + 1).read_to_end(&mut bytes).map_err(fail)?;
+    if bytes.len() as u64 > LIMIT {
+        return Err("图片超过 16 MiB，无法预览".into());
+    }
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn local_image_preview_refuses_oversize_files_without_reading_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let small = dir.path().join("small.png");
+        std::fs::write(&small, b"png").unwrap();
+        assert_eq!(super::read_local_image_bounded(small.to_str().unwrap()).unwrap(), b"png");
+        let huge = dir.path().join("huge.png");
+        std::fs::write(&huge, vec![0u8; 16 * 1024 * 1024 + 1]).unwrap();
+        let err = super::read_local_image_bounded(huge.to_str().unwrap()).unwrap_err();
+        assert!(err.contains("16 MiB"), "{err}");
+    }
 }
 
 #[cfg(test)]
