@@ -9,12 +9,14 @@ use ncd_domain::onebot_debug::{
 };
 use std::{path::PathBuf, sync::Arc, time::Instant};
 mod desktop;
+pub mod group_files;
 mod inbox;
 mod notifications;
 
 pub struct ChatManager {
     transport: Arc<DebugManager>,
     desktop: desktop::DesktopState,
+    files: group_files::FileState,
 }
 
 impl ChatManager {
@@ -29,6 +31,7 @@ impl ChatManager {
                 Arc::new(inbox::Inbox::new(ChatArchiveStore::new(&data_root))),
             ),
             transport: Arc::new(DebugManager::new_ephemeral(bots, hosts, data_root)),
+            files: group_files::FileState::default(),
         }
     }
 
@@ -187,6 +190,7 @@ fn chat_action(action: &str) -> bool {
             | "get_group_member_list"
             | "get_group_info"
             | "get_group_detail_info"
+            | "get_group_member_info"
             | "get_msg"
             | "get_group_msg_history"
             | "get_friend_msg_history"
@@ -265,7 +269,15 @@ mod tests {
         ] {
             assert!(chat_action(action), "{action}");
         }
-        for action in ["download_file", "add_custom_face", "delete_custom_face"] {
+        // 群文件的改动只经 group_files 拼好的调用，不让页面直接点名
+        for action in [
+            "download_file",
+            "add_custom_face",
+            "delete_custom_face",
+            "delete_group_file",
+            "delete_group_folder",
+            "move_group_file",
+        ] {
             assert!(!chat_action(action), "{action}");
         }
     }
