@@ -53,6 +53,41 @@ pub struct ChatDesktopStatus {
     pub accounts: Vec<ChatAccountStatus>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/chat/")]
+pub struct ChatTraySnapshot {
+    pub v: u32,
+    pub account: ChatAccountStatus,
+    pub conversations: Vec<crate::chat_archive::ChatArchiveConversation>,
+    pub conversation_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/chat/")]
+pub struct ChatTrayPanelData {
+    pub v: u32,
+    pub generation: u32,
+    pub menu: bool,
+    pub snapshot: ChatTraySnapshot,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/chat/")]
+pub enum ChatTrayPanelAction { Open, Console, Background, Hide }
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../src-ui/core/ipc/generated/chat/")]
+pub struct ChatTrayNavigation {
+    pub v: u32,
+    pub bot_id: String,
+    pub self_id: String,
+    pub conversation: crate::chat_archive::ChatArchiveConversation,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../../src-ui/core/ipc/generated/chat/")]

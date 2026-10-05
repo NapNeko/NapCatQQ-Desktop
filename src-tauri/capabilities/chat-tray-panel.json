@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "chat-tray-panel",
+  "description": "Chat account tray menu and unread preview",
+  "windows": ["chat-tray-panel"],
+  "permissions": ["core:default"]
+}

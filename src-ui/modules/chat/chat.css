@@ -1,10 +1,12 @@
 /* 聊天贴着窗口边排：会话栏直接落在窗口底色上，当作侧栏的延续；会话区是一整块贴右、贴底的面板，只在左上角收圆。 */
 .native-chat-account-controls { display: flex; align-items: center; }
 .native-chat-tray-live { position: relative; display: inline-flex; padding: 3px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-inset); }
-.native-chat-tray-dot { position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border: 2px solid var(--surface-inset); border-radius: 50%; background: var(--state-info); }
-.native-chat-settings-dialog[data-motion=on] .native-chat-tray-dot[data-pulse=true] { animation: native-chat-tray-pulse 1.8s ease-in-out infinite; }
-@keyframes native-chat-tray-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-@media (prefers-reduced-motion: reduce) { .native-chat-settings-dialog .native-chat-tray-dot[data-pulse=true] { animation: none; } }
+.native-chat-tray-dot { position: absolute; right: 0; bottom: 0; width: 9px; height: 9px; border: 2px solid var(--surface-inset); border-radius: 50%; background: var(--state-danger); }
+.native-chat-settings-dialog[data-motion=on] .native-chat-tray-live[data-flash=true] .native-chat-avatar { animation: native-chat-tray-flash 1.2s steps(1, end) infinite; }
+.native-chat-settings-dialog[data-motion=on] .native-chat-tray-live[data-flash=true] .native-chat-tray-dot { animation: native-chat-tray-marker 1.2s steps(1, end) infinite; }
+@keyframes native-chat-tray-flash { 0%, 100% { opacity: 1; } 50% { opacity: .22; } }
+@keyframes native-chat-tray-marker { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .native-chat-settings-dialog .native-chat-tray-live[data-flash=true] * { animation: none !important; } }
 .native-chat-muted summary { display: flex; align-items: center; gap: 8px; padding: 12px 0; cursor: pointer; list-style: none; font-size: 13px; font-weight: 500; color: var(--text-primary); }
 .native-chat-muted summary::-webkit-details-marker { display: none; }
 .native-chat-muted-count { padding: 1px 7px; border-radius: var(--radius-pill); background: var(--surface-inset); color: var(--text-tertiary); font-size: 11px; font-weight: 400; }

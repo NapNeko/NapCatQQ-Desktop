@@ -5,6 +5,7 @@ import type { ChatDesktopStatus } from '../ipc/generated/chat/ChatDesktopStatus'
 import type { ChatViewState } from '../ipc/generated/chat/ChatViewState';
 import type { ChatWindowRequest } from '../ipc/generated/chat/ChatWindowRequest';
 import type { ChatWindowState } from '../ipc/generated/chat/ChatWindowState';
+import type { ChatTrayNavigation } from '../ipc/generated/chat/ChatTrayNavigation';
 
 export const CHAT_WINDOW_LABEL = 'chat-panel';
 let popout = !isTauri && new URLSearchParams(location.search).has('chatPanel');
@@ -16,6 +17,7 @@ export const markChatPopoutWindow = () => { popout = true; restoreReading = true
 export const isChatPopoutWindow = () => popout;
 
 export const chatDesktopService = {
+    takeTrayNavigation: (): Promise<ChatTrayNavigation | null> => isTauri && popout ? invoke('chat_take_tray_navigation') : Promise.resolve(null),
     async status(): Promise<ChatDesktopStatus> {
         if (isTauri) return invoke('chat_desktop_status');
         const { chatService } = await import('./chat.service');

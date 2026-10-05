@@ -10,7 +10,7 @@ use tauri::{
 use crate::commands::tray::window_show;
 
 pub const TRAY_PANEL_LABEL: &str = "tray-panel";
-const PANEL_WIDTH: f64 = 260.0;
+pub(crate) const PANEL_WIDTH: f64 = 260.0;
 // 高度随内容自适应:右键先按最近一次的测量高摆位,前端展开前再量一次真实高度精调。
 // 初次还没量过时用这个兜底（180 包含 Bot 卡片列表与全局操作项）。
 const PANEL_FALLBACK_HEIGHT: f64 = 180.0;

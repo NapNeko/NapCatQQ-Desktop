@@ -29,8 +29,8 @@ function SettingsRow({ id, label, hint, children }: { id?: string; label: string
 }
 
 const TRAY_MODES: ReadonlyArray<{ value: ChatAccountPreference['trayNotification']; label: string }> = [
-    { value: 'badge', label: '蓝点' },
-    { value: 'flash', label: '呼吸蓝点' },
+    { value: 'badge', label: '红点' },
+    { value: 'flash', label: '头像闪烁' },
     { value: 'off', label: '不提醒' },
 ];
 
@@ -135,9 +135,9 @@ export function ChatAccountControls({ target, connectionLabel, onReconnect, cont
                         </SettingsRow>
                         {preference.tray && (
                         <SettingsRow label="托盘提醒">
-                            <span className="native-chat-tray-live" aria-hidden>
+                            <span className="native-chat-tray-live" data-flash={preference.trayNotification === 'flash'} aria-hidden>
                                 <ChatAvatar contact={avatar} small />
-                                {preference.trayNotification !== 'off' && <span className="native-chat-tray-dot" data-pulse={preference.trayNotification === 'flash'} />}
+                                {preference.trayNotification !== 'off' && <span className="native-chat-tray-dot" />}
                             </span>
                             <TrayModeSegment value={preference.trayNotification} disabled={busy || !enabled} onChange={trayNotification => void update({ trayNotification })} />
                         </SettingsRow>

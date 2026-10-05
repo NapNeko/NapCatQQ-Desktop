@@ -126,6 +126,22 @@ impl Inbox {
             a.archive.conversations.iter().fold(0u32, |total, c| total.saturating_add(c.unread)), a.connection.clone(),
         )).unwrap_or((state.summaries.get(key).map_or(0, |s| s.total), DebugReceiverState::Stopped { reason: "未接收".into() }))
     }
+    pub async fn tray_conversations(&self, key: &Identity) -> Result<Vec<ChatArchiveConversation>, String> {
+        let conversations = self.state().accounts.get(key).map(|a| a.archive.conversations.clone());
+        let conversations = match conversations {
+            Some(rows) => rows,
+            None => {
+                let store = self.store.clone();
+                let identity = key.clone();
+                tokio::task::spawn_blocking(move || store.load_summary(&identity.0, &identity.1))
+                    .await.map_err(|e| e.to_string())??
+            }
+        };
+        let state = self.state();
+        let fallback = NotificationPolicy::default();
+        let policy = state.policies.get(key).unwrap_or(&fallback);
+        Ok(tray_conversations(conversations, policy))
+    }
     pub fn configure_notifications(&self, key: Identity, preference: &ChatAccountPreference, can_query: bool) {
         self.state().policies.entry(key).or_default().configure(preference, can_query);
     }
@@ -218,6 +234,12 @@ impl Inbox {
         Ok(())
     }
     pub fn keys(&self) -> Vec<Identity> { self.state().accounts.keys().cloned().collect() }
+}
+
+fn tray_conversations(mut rows: Vec<ChatArchiveConversation>, policy: &NotificationPolicy) -> Vec<ChatArchiveConversation> {
+    rows.retain(|c| c.unread > 0 && (c.kind == ChatArchiveConversationKind::Private || policy.allows(&c.id)));
+    rows.sort_by(|a, b| b.last_at.cmp(&a.last_at).then_with(|| a.key.cmp(&b.key)));
+    rows
 }
 
 pub(super) struct InboxSink {
@@ -474,5 +496,28 @@ mod tests {
         assert_eq!(inbox.notification_summary(&key).0, 1);
         inbox.notification_result(&key, "7".into(), Some(true));
         assert_eq!(inbox.notification_summary(&key).0, 0);
+    }
+    #[tokio::test]
+    async fn tray_preview_filters_muted_groups_orders_recent_first_and_never_marks_read() {
+        let root = tempfile::tempdir().unwrap();
+        let inbox = Inbox::new(ChatArchiveStore::new(root.path()));
+        let key = ("bot".into(), "99".into());
+        let mut archive = empty();
+        ingest(&mut archive, &message(1), None);
+        for group in [2, 3, 4] {
+            ingest(&mut archive, &json!({"post_type":"message","message_type":"group","group_id":group,"user_id":22,"message_id":group,"time":group + 200,"message":"群消息"}), None);
+        }
+        let preference = ChatAccountPreference { ignored_groups: vec!["3".into()], notify_unknown_groups: true, ..Default::default() };
+        inbox.configure_notifications(key.clone(), &preference, true);
+        inbox.notification_result(&key, "4".into(), Some(true));
+        inbox.merge(&key, archive).await.unwrap();
+        let rows = inbox.tray_conversations(&key).await.unwrap();
+        assert_eq!(rows.iter().map(|c| c.key.as_str()).collect::<Vec<_>>(), ["group:2", "private:22"]);
+        assert_eq!(inbox.summary(&key).0, 4);
+        inbox.release(&key).await.unwrap();
+        let paused = inbox.tray_conversations(&key).await.unwrap();
+        assert_eq!(paused, rows);
+        assert!(inbox.keys().is_empty());
+        assert_eq!(inbox.summary(&key).0, 4);
     }
 }

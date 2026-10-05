@@ -7,6 +7,7 @@ import type { Contact } from '../../core/domain/chat/model';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
 import { ChatPage } from './ChatPage';
 import { setChatPreferences } from './chatPreferences';
+import { chatDesktopService } from '../../core/services/chat-desktop.service';
 
 let store: ChatAccountStore;
 const target: DebugTarget = { bot_id: 'page-test', name: '测试', qq_id: 99, backend: 'napcat', host: { kind: 'local' }, running: false, online: false };
@@ -75,6 +76,16 @@ describe('hidden conversations', () => {
 });
 
 describe('chat conversation shortcuts', () => {
+    it('opens a tray conversation after archive hydration without replacing other drafts', async () => {
+        store.getSnapshot().hydrated = true;
+        store.draft(group.key, { text: '群草稿', reply: null, attachments: [] });
+        vi.spyOn(chatDesktopService, 'takeTrayNavigation').mockResolvedValueOnce({ v: 1, botId: target.bot_id, selfId: '99', conversation: { ...group, unread: 2, pinned: false, lastAt: 1, preview: '新消息', boxed: false } });
+        render(<ChatPage onNavigate={vi.fn()} />);
+        await waitFor(() => expect(store.getSnapshot().account.active).toBe(group.key));
+        expect(store.getSnapshot().account.drafts[friend.key].text).toBe('正在编辑');
+        expect(store.getSnapshot().account.drafts[group.key].text).toBe('群草稿');
+        expect(screen.getByRole('textbox', { name: '消息输入框' }).closest('.native-chat-workspace')).toHaveAttribute('data-conversation', 'true');
+    });
     it('reveals the handed-off group and its draft immediately in a narrow window', async () => {
         store.open(group); store.draft(group.key, { text: '交接群草稿', reply: null, attachments: [] });
         render(<ChatPage onNavigate={vi.fn()} />);

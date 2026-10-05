@@ -6,6 +6,7 @@ import { TrayPanel } from './modules/tray/TrayPanel';
 import { isTauri } from './core/ipc/transport';
 import { DEBUG_WINDOW_LABEL } from './core/services/debug-window.service';
 import { CHAT_WINDOW_LABEL, isChatPopoutWindow, markChatPopoutWindow } from './core/services/chat-desktop.service';
+import { CHAT_TRAY_PANEL_LABEL, isChatTrayPreview } from './core/services/chat-tray.service';
 
 // 屏蔽 WebView/浏览器默认右键菜单（后退/刷新/审查），输入框除外（保留系统复制粘贴）
 document.addEventListener('contextmenu', (e) => {
@@ -40,7 +41,7 @@ function render(tree: React.ReactElement) {
     }
 }
 
-async function renderTrayPanel(): Promise<void> {
+async function renderTrayPanel(chat = false): Promise<void> {
     // 托盘面板是独立小窗:跳过主应用的 Splash/启动闸门,但仍要走 provider + 磁盘偏好水合
     // 才能拿到主题 data-theme / 圆角 token。
     const { hydrateAppUiPreferencesFromDisk } = await import(
@@ -53,6 +54,11 @@ async function renderTrayPanel(): Promise<void> {
     await hydrateAppUiPreferencesFromDisk().finally(() => {
         syncRootChromeBackground();
     });
+    if (chat) {
+        const { ChatTrayPanel } = await import('./modules/tray/ChatTrayPanel');
+        render(<AppProvidersNext><ChatTrayPanel /></AppProvidersNext>);
+        return;
+    }
     render(
         <AppProvidersNext>
             <TrayPanel />
@@ -96,10 +102,13 @@ async function renderChatPopout(): Promise<void> {
 
 void (async () => {
     const label = await currentWindowLabel();
+    if (label === CHAT_TRAY_PANEL_LABEL || isChatTrayPreview()) {
+        await renderTrayPanel(true); return;
+    }
     if (label === CHAT_WINDOW_LABEL || isChatPopoutWindow()) {
         await renderChatPopout(); return;
     }
-    if (label === 'tray-panel') {
+    if (label === 'tray-panel' || (!isTauri && new URLSearchParams(location.search).has('trayPanel'))) {
         await renderTrayPanel();
         return;
     }

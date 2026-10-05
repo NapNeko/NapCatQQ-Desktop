@@ -17,6 +17,7 @@ const WINDOW_EVENT = {
     chatWindowRequest: 'chat-window-request',
     chatAccountSelected: 'chat-account-selected',
     chatEmbedRequested: 'chat-embed-requested',
+    chatTrayPanelChanged: 'chat-tray-panel-changed',
 } as const;
 
 const WINDOW_SIGNAL: WindowSignal = { v: 1 };

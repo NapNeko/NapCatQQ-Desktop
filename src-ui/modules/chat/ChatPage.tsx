@@ -13,6 +13,7 @@ import { accountKey, type Contact } from '../../core/domain/chat/model';
 import { conversationRows, groupBoxSummary } from '../../core/domain/chat/groupBox';
 import type { AppRoute } from '../../shared/components/next/Sidebar';
 import type { DebugTarget } from '../../core/ipc/generated/debug/DebugTarget';
+import type { ChatTrayNavigation } from '../../core/ipc/generated/chat/ChatTrayNavigation';
 import { cn } from '../../shared/utils/cn';
 import { ChatComposer } from './ChatComposer';
 import { NativeTimeline } from './ChatTimeline';
@@ -35,10 +36,29 @@ let lastBot = '';
 export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void }) {
     const [selected, select] = useState(lastBot);
     const [restored, setRestored] = useState(false);
+    const [navigation, setNavigation] = useState<ChatTrayNavigation | null>(null);
     useEffect(() => {
         let alive = true;
-        void loadChatView().then(view => { if (!alive) return; restoreChatView(view); if (view.selectedBot) { lastBot = view.selectedBot; selectChatBot(view.selectedBot); select(view.selectedBot); } }).catch(() => {}).finally(() => { if (alive) setRestored(true); });
-        const listening = chatDesktopService.onAccountSelected(() => { void chatDesktopService.loadView().then(view => { if (alive && view.selectedBot) { lastBot = view.selectedBot; selectChatBot(view.selectedBot); select(view.selectedBot); } }); });
+        let ready = false;
+        let queue = Promise.resolve();
+        const synchronize = () => {
+            queue = queue.catch(() => {}).then(async () => {
+                if (!alive || !ready) return;
+                const [view, next] = await Promise.all([chatDesktopService.loadView(), chatDesktopService.takeTrayNavigation()]);
+                if (!alive) return;
+                if (next) setNavigation(next);
+                const bot = next?.botId ?? view.selectedBot;
+                if (bot) { lastBot = bot; selectChatBot(bot); select(bot); }
+            });
+            return queue;
+        };
+        const listening = chatDesktopService.onAccountSelected(() => { void synchronize().catch(error => console.warn('chat tray navigation', error)); });
+        void loadChatView().then(async view => {
+            if (!alive) return;
+            restoreChatView(view); await listening; ready = true;
+            if (view.selectedBot) { lastBot = view.selectedBot; selectChatBot(view.selectedBot); select(view.selectedBot); }
+            await synchronize();
+        }).catch(() => {}).finally(() => { if (alive) setRestored(true); });
         return () => { alive = false; void listening.then(unlisten => unlisten()); };
     }, []);
     const targets = useQuery({ queryKey: ['chat', 'targets'], queryFn: chatService.targets, refetchInterval: 15_000 });
@@ -48,11 +68,11 @@ export function ChatPage({ onNavigate }: { onNavigate: (route: AppRoute) => void
     const picker = (connected: boolean, label: string) => <BotPicker compact ariaLabel="聊天账号" statusIndicator={<span role="img" aria-label={label} title={label} className={cn('h-[7px] w-[7px] shrink-0 rounded-full', connected ? 'bg-success' : 'bg-danger')} />} targets={targets.data ?? []} selected={target ?? null} loading={targets.isLoading} onSelect={botId => { lastBot = botId; selectChatBot(botId); select(botId); }} onManageBots={() => onNavigate('bots')} />;
     if (!restored) return <section className="native-chat"><div className="native-chat-welcome">正在恢复聊天…</div></section>;
     return <section className="native-chat">
-        {target ? <ChatWorkspace key={accountKey(target.bot_id, String(target.qq_id))} target={target} picker={picker} onNavigate={onNavigate} /> : <div className="native-chat-welcome"><MessagesSquare size={36} strokeWidth={1.3} /><h2>{targets.isLoading ? '正在读取账号' : targets.isError ? '账号读取失败' : '从一个机器人开始聊天'}</h2><button className="native-chat-text-button" onClick={() => targets.isError ? void targets.refetch() : onNavigate('bots')}>{targets.isError ? '重试' : '前往机器人'}</button></div>}
+        {target ? <ChatWorkspace key={accountKey(target.bot_id, String(target.qq_id))} target={target} picker={picker} onNavigate={onNavigate} navigation={navigation} onTrayHandled={() => setNavigation(null)} /> : <div className="native-chat-welcome"><MessagesSquare size={36} strokeWidth={1.3} /><h2>{targets.isLoading ? '正在读取账号' : targets.isError ? '账号读取失败' : '从一个机器人开始聊天'}</h2><button className="native-chat-text-button" onClick={() => targets.isError ? void targets.refetch() : onNavigate('bots')}>{targets.isError ? '重试' : '前往机器人'}</button></div>}
     </section>;
 }
 
-function ChatWorkspace({ target, picker, onNavigate }: { target: DebugTarget; picker: (connected: boolean, label: string) => ReactNode; onNavigate: (route: AppRoute) => void }) {
+function ChatWorkspace({ target, picker, onNavigate, navigation, onTrayHandled }: { target: DebugTarget; picker: (connected: boolean, label: string) => ReactNode; onNavigate: (route: AppRoute) => void; navigation: ChatTrayNavigation | null; onTrayHandled: () => void }) {
     const store = chatAccount(target); const snapshot = useChatSnapshot(store); const { account } = snapshot;
     const preferences = useChatPreferences();
     const motion = useMotion();
@@ -99,6 +119,15 @@ function ChatWorkspace({ target, picker, onNavigate }: { target: DebugTarget; pi
     const open = (contact: Contact) => { if (contact.type === 'group' && hidden.has(contact.key)) void notifications.mute(contact.id, false, true); setConversationHidden(identity, contact.key, false); store.open(contact); setTimelineEntry(value => value + 1); setInGroupBox(contact.type === 'group'); setTab('messages'); setNarrowFocus(true); };
     const hide = (contact: Contact) => { if (contact.type === 'group') void notifications.mute(contact.id, true, true); setConversationHidden(identity, contact.key, true); store.close(contact.key); setNarrowFocus(false); };
     const focusComposer = () => requestAnimationFrame(() => { const input = composerInput.current; if (input?.isConnected) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); } });
+    const handledNavigation = useRef<ChatTrayNavigation | null>(null);
+    useEffect(() => {
+        if (!snapshot.hydrated || !navigation || handledNavigation.current === navigation
+            || navigation.botId !== target.bot_id || navigation.selfId !== String(target.qq_id)) return;
+        handledNavigation.current = navigation;
+        const conversation = navigation.conversation;
+        open({ ...conversation, key: `${conversation.type}:${conversation.id}` });
+        focusComposer(); onTrayHandled();
+    }, [navigation, snapshot.hydrated, target.bot_id, target.qq_id]);
     const listNavigation = useConversationNavigation(rows, contact => { open(contact); focusComposer(); });
     const closeSearch = () => { setSearchOpen(false); searchTrigger.current?.focus(); };
     const openSearch = () => { setSearchOpen(true); setNarrowFocus(true); searchInput.current?.focus(); };

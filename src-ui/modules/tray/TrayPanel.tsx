@@ -31,45 +31,8 @@ import type { BotConfig } from '../../core/ipc/generated/domain/BotConfig';
 import type { Flavor } from '../../core/domain/bot/flavor';
 import { cn } from '../../shared/utils/cn';
 import logoMark from '../../assets/logo.png';
+import { TrayPanelAction as PanelAction, TrayPanelHeader, TrayPanelSeparator, TrayPanelSurface } from './trayPanelParts';
 const PAGE_SIZE = 2;
-
-interface PanelActionProps {
-    icon: React.ReactNode;
-    title: string;
-    danger?: boolean;
-    onClick: () => void | Promise<void>;
-}
-
-function PanelAction({ icon, title, danger, onClick }: PanelActionProps) {
-    return (
-        <button
-            type="button"
-            onClick={() => void onClick()}
-            className={[
-                'group flex w-full items-center gap-2.5 rounded-md px-2.5 py-[6px] text-left cursor-pointer',
-                'transition-colors duration-100',
-                danger ? 'hover:bg-danger-soft' : 'hover:bg-brand-soft',
-            ].join(' ')}
-        >
-            <span
-                className={[
-                    'flex shrink-0 items-center justify-center transition-colors',
-                    danger ? 'text-danger' : 'text-text-secondary group-hover:text-brand',
-                ].join(' ')}
-            >
-                {icon}
-            </span>
-            <span
-                className={[
-                    'min-w-0 flex-1 truncate text-[12.5px] leading-none',
-                    danger ? 'text-danger' : 'text-text group-hover:text-brand',
-                ].join(' ')}
-            >
-                {title}
-            </span>
-        </button>
-    );
-}
 
 interface TrayBotItemProps {
     snapshot: BotActorSnapshot;
@@ -383,15 +346,13 @@ export const TrayPanel: React.FC = () => {
     const handleQuit = tray.quit;
 
     return (
-        <div className="flex min-h-full w-full flex-col overflow-hidden bg-elevated select-none">
-            <div
+            <TrayPanelSurface
                 ref={cardRef}
                 role="menu"
                 aria-label="NapCatQQ Desktop 托盘菜单"
-                className="flex w-full flex-col"
             >
                 {/* 头部:logo + 产品名,状态点带运行摘要（无右侧停止按钮） */}
-                <div className="flex items-center gap-2.5 px-3 pb-1 pt-2.5">
+                <TrayPanelHeader title="NapCatQQ-Desktop" icon={
                     <img
                         src={logoMark}
                         alt="NapCatQQ-Desktop logo"
@@ -400,25 +361,10 @@ export const TrayPanel: React.FC = () => {
                         className="h-6 w-6 shrink-0 rounded-md object-cover ring-1 ring-border-subtle/60 [image-rendering:-webkit-optimize-contrast]"
                         draggable={false}
                     />
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="truncate whitespace-nowrap text-[12.5px] font-semibold leading-none text-text">
-                            NapCatQQ-Desktop
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                            <span
-                                className={[
-                                    'h-1.5 w-1.5 shrink-0 rounded-full',
-                                    runningCount > 0
-                                        ? 'bg-success'
-                                        : 'bg-text-disabled',
-                                ].join(' ')}
-                            />
-                            <span className="truncate text-[11px] leading-none text-text-tertiary">
-                                {statusText}
-                            </span>
-                        </span>
-                    </div>
-                </div>
+                }>
+                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', runningCount > 0 ? 'bg-success' : 'bg-text-disabled')} />
+                    <span className="truncate">{statusText}</span>
+                </TrayPanelHeader>
 
                 {actionError ? (
                     <div
@@ -482,7 +428,7 @@ export const TrayPanel: React.FC = () => {
                     </>
                 )}
 
-                <div className="mx-2 my-0.5 border-t border-border-subtle" />
+                <TrayPanelSeparator />
 
                 {/* 全局操作:显示主窗口与释放内存 */}
                 <div className="flex flex-col px-1 py-0.5">
@@ -498,7 +444,7 @@ export const TrayPanel: React.FC = () => {
                     />
                 </div>
 
-                <div className="mx-2 my-0.5 border-t border-border-subtle" />
+                <TrayPanelSeparator />
 
                 {/* 退出 */}
                 <div className="flex flex-col px-1 pb-1 pt-0.5">
@@ -508,8 +454,7 @@ export const TrayPanel: React.FC = () => {
                         onClick={handleQuit}
                     />
                 </div>
-            </div>
-        </div>
+            </TrayPanelSurface>
     );
 };
 

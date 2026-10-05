@@ -83,6 +83,26 @@ impl ChatManager {
         let _gate = self.desktop.preference_gate.lock().await;
         self.save_preference(preference).await
     }
+    pub async fn tray_snapshot(&self, bot_id: &str, self_id: &str) -> Result<ChatTraySnapshot, String> {
+        let account = self.desktop_status().await.accounts.into_iter()
+            .find(|row| row.target.bot_id == bot_id && row.preference.self_id == self_id
+                && row.preference.enabled && row.preference.tray)
+            .ok_or("此账号托盘已关闭")?;
+        let mut conversations = self.desktop.inbox.tray_conversations(&(bot_id.into(), self_id.into())).await?;
+        let conversation_count = conversations.len();
+        conversations.truncate(8);
+        Ok(ChatTraySnapshot { v: 1, account, conversations, conversation_count })
+    }
+    pub async fn update_tray_preference(&self, bot_id: &str, self_id: &str, background: Option<bool>, tray: Option<bool>) -> Result<(), String> {
+        let _gate = self.desktop.preference_gate.lock().await;
+        let mut preference = self.desktop.preferences.read().await.accounts.iter()
+            .find(|p| p.bot_id == bot_id && p.self_id == self_id && p.enabled && p.tray)
+            .cloned().ok_or("此账号托盘已关闭")?;
+        // 只修改本次操作的字段，保留其他窗口刚保存的免打扰设置。
+        if let Some(background) = background { preference.background = background; }
+        if let Some(tray) = tray { preference.tray = tray; }
+        self.save_preference(preference).await
+    }
     pub async fn set_group_ignored(&self, bot_id: String, self_id: String, group_id: String, ignored: bool, hidden: bool) -> Result<(), String> {
         let _gate = self.desktop.preference_gate.lock().await;
         let mut preference = self.desktop.preferences.read().await.accounts.iter().find(|p| p.bot_id == bot_id && p.self_id == self_id).cloned()

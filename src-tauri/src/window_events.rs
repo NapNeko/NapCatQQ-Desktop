@@ -15,6 +15,7 @@ pub const DEBUG_POPOUT_CLOSED: &str = "debug-popout-closed";
 pub const CHAT_WINDOW_REQUEST: &str = "chat-window-request";
 pub const CHAT_ACCOUNT_SELECTED: &str = "chat-account-selected";
 pub const CHAT_EMBED_REQUESTED: &str = "chat-embed-requested";
+pub const CHAT_TRAY_PANEL_CHANGED: &str = "chat-tray-panel-changed";
 
 /// 这几条窗口通知的信封版本；前端自己发 desktop-request-close 时也填这个值
 pub const WINDOW_EVENT_VERSION: u32 = 1;
@@ -77,6 +78,7 @@ mod tests {
             CHAT_WINDOW_REQUEST,
             CHAT_ACCOUNT_SELECTED,
             CHAT_EMBED_REQUESTED,
+            CHAT_TRAY_PANEL_CHANGED,
         ] {
             assert!(
                 FRONTEND_WINDOW_EVENTS_TS.contains(&format!("'{name}'")),

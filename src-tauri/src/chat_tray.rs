@@ -2,20 +2,20 @@
 use std::{collections::{HashMap, HashSet}, io::Cursor, sync::{Arc, Mutex}, time::Duration};
 use ncd_domain::chat_desktop::{ChatAccountStatus, ChatTrayNotification};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager, image::Image, menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem}, tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState}};
+use tauri::{AppHandle, Manager, image::Image, tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState}};
 
-const PULSE_LEVELS: [f64; 12] = [1.0, 0.96, 0.88, 0.77, 0.65, 0.55, 0.50, 0.55, 0.65, 0.77, 0.88, 0.96];
+const PULSE_LEVELS: [f64; 2] = [1.0, 0.22];
 struct Avatar { window: Image<'static>, online: Image<'static>, offline: Image<'static>, badge: Image<'static>, offline_badge: Image<'static>, pulse: Vec<Image<'static>>, offline_pulse: Vec<Image<'static>> }
 impl Avatar {
     fn new(window: Image<'static>) -> Self {
         let buffer = image::RgbaImage::from_raw(window.width(), window.height(), window.rgba().to_vec());
         let online = buffer.map(|pixels| {
             let small = image::imageops::resize(&pixels, 32, 32, image::imageops::FilterType::Lanczos3);
-            Image::new_owned(small.into_raw(), 32, 32)
+            rounded_avatar(Image::new_owned(small.into_raw(), 32, 32))
         }).unwrap_or_else(|| Image::new_owned(vec![0; 32 * 32 * 4], 32, 32));
         let offline = decorated(&online, false, true);
-        let pulse = PULSE_LEVELS.iter().map(|level| notification_frame(&online, true, false, *level)).collect();
-        let offline_pulse = PULSE_LEVELS.iter().map(|level| notification_frame(&offline, true, false, *level)).collect();
+        let pulse = PULSE_LEVELS.iter().map(|level| flash_frame(&online, *level)).collect();
+        let offline_pulse = PULSE_LEVELS.iter().map(|level| flash_frame(&offline, *level)).collect();
         Self { offline, badge: decorated(&online, true, false), offline_badge: decorated(&online, true, true), pulse, offline_pulse, online, window }
     }
     fn tray(&self, offline: bool, badge: bool) -> Image<'static> {
@@ -107,6 +107,25 @@ fn current_avatar(app: &AppHandle, qq: &str) -> (Arc<Avatar>, bool) {
 fn decorated(icon: &Image<'_>, unread: bool, offline: bool) -> Image<'static> {
     notification_frame(icon, unread, offline, 1.0)
 }
+fn rounded_avatar(icon: Image<'static>) -> Image<'static> {
+    let mut pixels = icon.rgba().to_vec();
+    let size = f64::from(icon.width());
+    let radius = size * 0.20;
+    for y in 0..icon.height() { for x in 0..icon.width() {
+        let dx = (f64::from(x) + 0.5 - size / 2.0).abs() - (size / 2.0 - radius);
+        let dy = (f64::from(y) + 0.5 - size / 2.0).abs() - (size / 2.0 - radius);
+        let coverage = (radius + 0.5 - dx.max(0.0).hypot(dy.max(0.0))).clamp(0.0, 1.0);
+        let alpha = ((y * icon.width() + x) * 4 + 3) as usize;
+        pixels[alpha] = (f64::from(pixels[alpha]) * coverage).round() as u8;
+    }}
+    Image::new_owned(pixels, icon.width(), icon.height())
+}
+fn flash_frame(icon: &Image<'_>, strength: f64) -> Image<'static> {
+    if strength >= 1.0 { return decorated(icon, true, false); }
+    let mut pixels = icon.rgba().to_vec();
+    for pixel in pixels.chunks_exact_mut(4) { pixel[3] = (f64::from(pixel[3]) * strength).round() as u8; }
+    Image::new_owned(pixels, icon.width(), icon.height())
+}
 fn notification_frame(icon: &Image<'_>, unread: bool, offline: bool, strength: f64) -> Image<'static> {
     let mut pixels = icon.rgba().to_vec(); let width = icon.width(); let height = icon.height();
     for y in 0..height { for x in 0..width {
@@ -116,7 +135,7 @@ fn notification_frame(icon: &Image<'_>, unread: bool, offline: bool, strength: f
         let distance = dx.hypot(dy);
         let coverage = (width as f64 * 0.18 + 0.5 - distance).clamp(0.0, 1.0);
         if unread && coverage > 0.0 {
-            let color = if distance <= width as f64 * 0.135 { [47.0, 137.0, 250.0] } else { [255.0; 3] };
+            let color = if distance <= width as f64 * 0.135 { [242.0, 76.0, 94.0] } else { [255.0; 3] };
             let overlay = coverage * strength;
             let base = f64::from(pixels[offset + 3]) / 255.0 * (1.0 - overlay);
             let alpha = overlay + base;
@@ -127,40 +146,29 @@ fn notification_frame(icon: &Image<'_>, unread: bool, offline: bool, strength: f
     Image::new_owned(pixels, width, height)
 }
 
-fn menu(app: &AppHandle, id: &str, row: &ChatAccountStatus) -> Result<Menu<tauri::Wry>, String> {
-    let open = MenuItem::with_id(app, format!("{id}:open"), "打开聊天", true, None::<&str>).map_err(|e| e.to_string())?;
-    let pause = CheckMenuItem::with_id(app, format!("{id}:pause"), "后台接收消息", true, row.preference.background, None::<&str>).map_err(|e| e.to_string())?;
-    let hide = MenuItem::with_id(app, format!("{id}:hide"), "隐藏此账号托盘", true, None::<&str>).map_err(|e| e.to_string())?;
-    let console = MenuItem::with_id(app, format!("{id}:console"), "打开控制台", true, None::<&str>).map_err(|e| e.to_string())?;
-    let separator = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
-    Menu::with_items(app, &[&open, &console, &separator, &pause, &hide]).map_err(|e| e.to_string())
-}
 async fn create(app: &AppHandle, id: &str, row: &ChatAccountStatus, icon: Image<'static>) -> Result<(), String> {
-    let menu = menu(app, id, row)?;
-    let bot = row.target.bot_id.clone(); let menu_bot = bot.clone(); let menu_id = id.to_owned();
-    TrayIconBuilder::with_id(id).icon(icon).menu(&menu).show_menu_on_left_click(false)
+    let bot = row.target.bot_id.clone();
+    let qq = row.preference.self_id.clone();
+    TrayIconBuilder::with_id(id).icon(icon).show_menu_on_left_click(false)
         .on_tray_icon_event(move |tray, event| {
-            if matches!(event, TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. }) {
-                let app = tray.app_handle().clone(); let bot_id = bot.clone();
-                tauri::async_runtime::spawn(async move { if let Err(e) = crate::chat_window::open_chat_window(app, Some(bot_id), false).await { tracing::warn!("open chat tray: {e}"); } });
-            }
-        })
-        .on_menu_event(move |app, event| {
-            let Some(action) = event.id.as_ref().strip_prefix(&format!("{menu_id}:")) else { return; };
-            let app = app.clone(); let bot_id = menu_bot.clone(); let action = action.to_owned();
-            tauri::async_runtime::spawn(async move {
-                if action == "open" { let _ = crate::chat_window::open_chat_window(app, Some(bot_id), false).await; }
-                else if action == "console" { let _ = crate::commands::tray::window_show(app).await; }
-                else {
-                    let state = app.state::<crate::AppState>();
-                    if let Some(row) = state.chat.desktop_status().await.accounts.into_iter().find(|r| r.target.bot_id == bot_id) {
-                        let mut preference = row.preference;
-                        if action == "pause" { preference.background = !preference.background; }
-                        if action == "hide" { preference.tray = false; }
-                        if let Err(e) = state.chat.set_preference(preference).await { tracing::warn!("chat tray preference: {e}"); }
-                    }
+            let app = tray.app_handle().clone();
+            match event {
+                TrayIconEvent::Enter { position, .. } => crate::chat_tray_panel::enter(app, bot.clone(), qq.clone(), position),
+                TrayIconEvent::Leave { .. } => crate::chat_tray_panel::cancel_hover(&app),
+                TrayIconEvent::Click { button, button_state: MouseButtonState::Up, position, .. } => {
+                    crate::chat_tray_panel::cancel_hover(&app);
+                    let bot = bot.clone(); let qq = qq.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let result = match button {
+                            MouseButton::Right => crate::chat_tray_panel::show(&app, bot, qq, position, true).await,
+                            MouseButton::Left => crate::chat_window::open_from_tray(app, bot, qq, None).await,
+                            _ => Ok(()),
+                        };
+                        if let Err(e) = result { tracing::warn!("chat tray action: {e}"); }
+                    });
                 }
-            });
+                _ => {}
+            }
         }).build(app).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -213,7 +221,6 @@ async fn refresh(app: &AppHandle) -> Result<(), String> {
         let icon = if appearance.unread && appearance.mode == ChatTrayNotification::Flash { avatar.pulse_frame(offline, *lock(&registry.phase)) } else { avatar.tray(offline, appearance.unread && appearance.mode == ChatTrayNotification::Badge) };
         if app.tray_by_id(&id).is_none() { create(app, &id, row, icon.clone()).await?; lock(&registry.ids).insert(id.clone()); }
         if let Some(tray) = app.tray_by_id(&id) {
-            if lock(&registry.displayed).get(&id).is_some_and(|old| old.background != row.preference.background) { tray.set_menu(Some(menu(app, &id, row)?)).map_err(|e| e.to_string())?; }
             tray.set_icon(Some(icon)).map_err(|e| e.to_string())?; tray.set_tooltip(Some(tooltip)).map_err(|e| e.to_string())?;
         }
         lock(&registry.displayed).insert(id, appearance);
@@ -237,14 +244,19 @@ fn pulse(app: &AppHandle) {
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let state = app.state::<crate::AppState>();
+        let period = Duration::from_millis(600);
+        // 消息刷新不能重新开始计时，忙碌会话也需要持续闪烁。
+        let mut pulse_timer = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+        pulse_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             if let Err(e) = refresh(&app).await { tracing::warn!("chat tray: {e}"); }
+            crate::chat_tray_panel::refresh(&app).await;
             loop {
                 tokio::select! {
                     _ = state.chat.changed() => {
                         tokio::time::sleep(Duration::from_millis(200)).await; break;
                     }
-                    _ = tokio::time::sleep(Duration::from_millis(150)), if has_flashing(&app) => pulse(&app),
+                    _ = pulse_timer.tick(), if has_flashing(&app) => pulse(&app),
                 }
             }
         }
@@ -255,11 +267,11 @@ pub fn spawn(app: AppHandle) {
 mod tests {
     use super::*;
     #[test]
-    fn unread_marker_is_blue_in_the_lower_right_and_offline_stays_gray() {
+    fn unread_marker_is_red_in_the_lower_right_and_offline_stays_gray() {
         let original = Image::new_owned([120, 70, 20, 255].repeat(32 * 32), 32, 32);
         let badge = decorated(&original, true, true);
         let pixel = |x: usize, y: usize| &badge.rgba()[(y * 32 + x) * 4..(y * 32 + x) * 4 + 4];
-        assert_eq!(pixel(25, 25), &[47, 137, 250, 255]);
+        assert_eq!(pixel(25, 25), &[242, 76, 94, 255]);
         assert_eq!(pixel(25, 5), &[70, 70, 70, 255]);
         assert_eq!(original.rgba()[0..4], [120, 70, 20, 255]);
     }
@@ -270,18 +282,19 @@ mod tests {
         for icon in [&avatar.online, &avatar.offline, &avatar.badge, &avatar.offline_badge] { assert_eq!((icon.width(), icon.height()), (32, 32)); }
     }
     #[test]
-    fn pulse_keeps_the_avatar_stable_and_only_changes_the_lower_right_marker() {
+    fn flash_changes_avatar_opacity_without_losing_its_identity() {
         let avatar = Avatar::new(Image::new_owned([120, 70, 20, 255].repeat(128 * 128), 128, 128));
-        let bright = avatar.pulse_frame(false, 0); let dim = avatar.pulse_frame(false, 6);
+        let bright = avatar.pulse_frame(false, 0); let dim = avatar.pulse_frame(false, 1);
         assert_ne!(bright.rgba(), dim.rgba());
         for (index, original) in avatar.online.rgba().chunks_exact(4).enumerate() {
             let x = index % 32; let y = index / 32;
             if x < 20 || y < 20 {
                 assert_eq!(&bright.rgba()[index * 4..index * 4 + 4], original);
-                assert_eq!(&dim.rgba()[index * 4..index * 4 + 4], original);
+                assert_eq!(&dim.rgba()[index * 4..index * 4 + 3], &original[..3]);
+                assert_eq!(dim.rgba()[index * 4 + 3], (f64::from(original[3]) * 0.22).round() as u8);
             }
         }
-        assert!(dim.rgba().chunks_exact(4).all(|pixel| pixel[3] == 255));
-        assert_eq!(avatar.pulse_frame(true, 6).rgba()[..3], [70, 70, 70]);
+        assert_eq!(avatar.online.rgba()[3], 0);
+        assert_eq!(avatar.pulse_frame(true, 1).rgba()[..3], [70, 70, 70]);
     }
 }

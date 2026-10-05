@@ -27,17 +27,17 @@ async function setup() {
 describe('chat settings organization', () => {
     it('shows account, notification and window sections on one page and preserves group preferences when changing tray mode', async () => {
         const { user, save } = await setup();
-        expect(screen.getByRole('radio', { name: '蓝点' })).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('radio', { name: '红点' })).toHaveAttribute('aria-checked', 'true');
         expect(screen.getByRole('button', { name: '重新连接' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /嵌回主窗口|在独立窗口打开/ })).toBeInTheDocument();
-        await user.click(screen.getByRole('radio', { name: '呼吸蓝点' }));
+        await user.click(screen.getByRole('radio', { name: '头像闪烁' }));
         await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ trayNotification: 'flash', hiddenGroups: ['456'], ignoredGroups: ['123'] })));
     });
     it('hides tray mode choices when the tray icon is turned off', async () => {
         const { user, save } = await setup();
         await user.click(screen.getByRole('switch', { name: '托盘图标' }));
         await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ tray: false })));
-        await waitFor(() => expect(screen.queryByRole('radio', { name: '蓝点' })).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByRole('radio', { name: '红点' })).not.toBeInTheDocument());
     });
     it('restores reminders through the group list without unhiding other groups', async () => {
         const { user, unmute } = await setup();

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, Webview, WebviewWindowBuilder};
 use tokio::sync::{Mutex, oneshot};
 use ts_rs::TS;
+use ncd_domain::chat_desktop::ChatTrayNavigation;
 
 pub const CHAT_WINDOW_LABEL: &str = "chat-panel";
 #[derive(Default)]
@@ -13,6 +14,7 @@ pub struct ChatWindowCoordinator {
     embed_requested: AtomicBool,
     release_main: AtomicBool,
     ready: AtomicBool,
+    navigation: Mutex<Option<ChatTrayNavigation>>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +24,22 @@ pub struct ChatWindowRequest { pub v: u32, pub request_id: String, pub action: S
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../src-ui/core/ipc/generated/chat/")]
 pub struct ChatWindowState { pub v: u32, pub detached: bool, pub embed_requested: bool }
+
+#[tauri::command]
+pub async fn chat_take_tray_navigation(app: AppHandle, webview: Webview) -> Result<Option<ChatTrayNavigation>, String> {
+    if webview.label() != CHAT_WINDOW_LABEL { return Err("聊天窗口来源无效".into()); }
+    Ok(app.state::<ChatWindowCoordinator>().navigation.lock().await.take())
+}
+
+pub async fn open_from_tray(app: AppHandle, bot_id: String, self_id: String, session: Option<String>) -> Result<(), String> {
+    let snapshot = app.state::<crate::AppState>().chat.tray_snapshot(&bot_id, &self_id).await?;
+    let conversation = match session {
+        Some(key) => Some(snapshot.conversations.into_iter().find(|c| c.key == key).ok_or("会话已更新，请重新打开消息列表")?),
+        None => snapshot.conversations.into_iter().next(),
+    };
+    let navigation = conversation.map(|conversation| ChatTrayNavigation { v: 1, bot_id: bot_id.clone(), self_id, conversation });
+    open_chat_window_with_navigation(app, Some(bot_id), false, navigation).await
+}
 
 async fn prepare(app: &AppHandle, owner: &str, action: &str) -> Result<(), String> {
     if app.get_webview_window(owner).is_none() { return Ok(()); }
@@ -57,6 +75,10 @@ pub async fn chat_window_handoff_ready(app: AppHandle, webview: Webview, request
 
 #[tauri::command]
 pub async fn open_chat_window(app: AppHandle, bot_id: Option<String>, release_main: bool) -> Result<(), String> {
+    open_chat_window_with_navigation(app, bot_id, release_main, None).await
+}
+
+async fn open_chat_window_with_navigation(app: AppHandle, bot_id: Option<String>, release_main: bool, navigation: Option<ChatTrayNavigation>) -> Result<(), String> {
     let coordinator = app.state::<ChatWindowCoordinator>();
     let _gate = coordinator.gate.lock().await;
     let state = app.state::<crate::AppState>();
@@ -64,6 +86,7 @@ pub async fn open_chat_window(app: AppHandle, bot_id: Option<String>, release_ma
         if !state.chat.targets().await.iter().any(|t| &t.bot_id == bot_id) { return Err("聊天账号不存在".into()); }
     }
     if let Some(window) = app.get_webview_window(CHAT_WINDOW_LABEL) {
+        *coordinator.navigation.lock().await = navigation;
         if let Some(bot_id) = bot_id { state.chat.select_view_bot(bot_id); }
         let _ = app.emit_to(CHAT_WINDOW_LABEL, crate::window_events::CHAT_ACCOUNT_SELECTED, crate::window_events::WindowSignal::V1);
         if !coordinator.ready.load(Ordering::SeqCst) { return Ok(()); }
@@ -72,6 +95,7 @@ pub async fn open_chat_window(app: AppHandle, bot_id: Option<String>, release_ma
         return Ok(());
     }
     prepare(&app, "main", "popout").await?;
+    *coordinator.navigation.lock().await = navigation;
     if let Some(bot_id) = bot_id { state.chat.select_view_bot(bot_id); }
     let result = create_chat_window(&app);
     match result {

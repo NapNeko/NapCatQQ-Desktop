@@ -27,6 +27,7 @@ pub mod legacy_install_cleanup;
 pub mod lightweight;
 pub mod chat_window;
 pub mod chat_tray;
+mod chat_tray_panel;
 pub mod lightweight_scheduler;
 pub mod onebot_endpoint_resolver;
 pub mod product_registry;
@@ -473,6 +474,7 @@ pub fn run() {
         .manage(chat_window::ChatWindowCoordinator::default())
         .manage(chat_tray::ChatTrayState::default())
         .manage(webview_scheduler::WebviewScheduler::default())
+        .manage(chat_tray_panel::ChatTrayPanelState::default())
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started
                 && let Some(state) = webview.try_state::<AppState>()
@@ -739,6 +741,7 @@ pub fn run() {
             // 焦点进出决定 WebView 休眠；拿焦点时也兜底放出漏了恢复的 WebView
             webview_scheduler::handle_window_event(window, event);
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == chat_tray_panel::LABEL { return; }
                 if window.label() == chat_window::CHAT_WINDOW_LABEL {
                     api.prevent_close();
                     let app = window.app_handle().clone();
@@ -1088,6 +1091,11 @@ pub fn run() {
             chat_window::close_chat_window,
             chat_window::chat_window_state,
             chat_window::chat_window_handoff_ready,
+            chat_window::chat_take_tray_navigation,
+            chat_tray_panel::chat_tray_panel_data,
+            chat_tray_panel::chat_tray_panel_ready,
+            chat_tray_panel::chat_tray_panel_hide,
+            chat_tray_panel::chat_tray_panel_action,
             commands::onebot_debug::onebot_debug_channels,
             commands::onebot_debug::onebot_debug_test_channel,
             commands::onebot_debug::onebot_debug_catalog,
