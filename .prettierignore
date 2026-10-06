@@ -1,0 +1,10 @@
+# ts-rs 从 Rust 派生，改它等于改生成器输出；格式由 ts-rs 决定
+src-ui/core/ipc/generated/
+
+# 上游 schema 快照，非本项目代码
+src-ui/core/ipc/mock/*.json
+
+# 构建产物与本机临时目录
+dist/
+src-tauri/target/
+tmp/
