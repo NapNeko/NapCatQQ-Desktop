@@ -994,10 +994,11 @@ fn export_replaces_an_existing_archive_instead_of_failing() {
     assert_eq!(fs::read(&dest).unwrap(), b"new");
     assert!(!staged.exists());
     assert!(
-        temp.path()
-            .read_dir()
+        temp.path().read_dir().unwrap().all(|entry| !entry
             .unwrap()
-            .all(|entry| !entry.unwrap().file_name().to_string_lossy().contains("ncd-replaced")),
+            .file_name()
+            .to_string_lossy()
+            .contains("ncd-replaced")),
         "替换完成的旧档临时名必须清走"
     );
 }

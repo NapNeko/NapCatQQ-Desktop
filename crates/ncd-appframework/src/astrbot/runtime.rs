@@ -618,7 +618,15 @@ mod tests {
             .await;
 
         let sessions = Arc::new(DashboardSessions::default());
-        let status = probe_status(&sessions, "rt-gate", port, "astrbot", Some("Abcdefg1"), None).await;
+        let status = probe_status(
+            &sessions,
+            "rt-gate",
+            port,
+            "astrbot",
+            Some("Abcdefg1"),
+            None,
+        )
+        .await;
         assert_eq!(status.gate, AstrBotDashboardGate::Auth);
         assert!(!status.authenticated);
     }

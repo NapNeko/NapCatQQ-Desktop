@@ -1,7 +1,7 @@
 //! 聊天历史档案的持久化契约，不包含草稿、凭据或本地附件路径。
 
-use std::collections::{BTreeMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashSet};
 use ts_rs::TS;
 
 pub const CHAT_ARCHIVE_VERSION: u32 = 1;
@@ -165,13 +165,19 @@ impl ChatArchive {
                 || message.sender_id.len() > 128
                 || message.sender_name.len() > 4096
                 || !valid_timestamp(message.at)
-                || [&message.id, &message.file_id, &message.request_id, &message.sequence]
-                    .iter()
-                    .any(|v| v.as_ref().is_some_and(|s| s.len() > 1024))
+                || [
+                    &message.id,
+                    &message.file_id,
+                    &message.request_id,
+                    &message.sequence,
+                ]
+                .iter()
+                .any(|v| v.as_ref().is_some_and(|s| s.len() > 1024))
                 || message.error.as_ref().is_some_and(|s| s.len() > 8192)
                 || message.segments.len() > 256
                 || message.segments.iter().any(|s| {
-                    s.kind.is_empty() || s.kind.len() > 64
+                    s.kind.is_empty()
+                        || s.kind.len() > 64
                         || s.data.values().any(|v| !valid_json_depth(v, 0))
                 })
             {
@@ -202,7 +208,9 @@ fn valid_json_depth(value: &serde_json::Value, depth: usize) -> bool {
     }
     match value {
         serde_json::Value::Array(values) => values.iter().all(|v| valid_json_depth(v, depth + 1)),
-        serde_json::Value::Object(values) => values.values().all(|v| valid_json_depth(v, depth + 1)),
+        serde_json::Value::Object(values) => {
+            values.values().all(|v| valid_json_depth(v, depth + 1))
+        }
         _ => true,
     }
 }
@@ -213,7 +221,12 @@ mod tests {
     use serde_json::json;
 
     fn archive() -> ChatArchive {
-        ChatArchive { v: 1, self_id: "10001".into(), conversations: vec![], messages: vec![] }
+        ChatArchive {
+            v: 1,
+            self_id: "10001".into(),
+            conversations: vec![],
+            messages: vec![],
+        }
     }
 
     #[test]

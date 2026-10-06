@@ -176,8 +176,7 @@ pub fn pick_app_pid(lines: &str, kind: AppProcessKind) -> Option<(u32, String)> 
             // 免得把「用户在实例目录里跑的其它命令」也算进来
             AppProcessKind::NeoBot => {
                 let slashed = lower.replace('\\', "/");
-                slashed.contains(".venv/bin/neobot")
-                    || slashed.contains(".venv/scripts/neobot")
+                slashed.contains(".venv/bin/neobot") || slashed.contains(".venv/scripts/neobot")
             }
         };
         if !hit {
@@ -311,7 +310,10 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
 2202 /home/u/apps/a1/.venv/bin/astrbot run\n";
         let (pid, prog) = pick_app_pid(lines, AppProcessKind::AstrBot).unwrap();
         assert_eq!(pid, 2202);
-        assert_eq!(prog, "astrbot", "console script 入口按 argv0 记，不再是兜底 python");
+        assert_eq!(
+            prog, "astrbot",
+            "console script 入口按 argv0 记，不再是兜底 python"
+        );
     }
 
     #[test]
@@ -323,7 +325,10 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
 ";
         let (pid, prog) = pick_app_pid(lines, AppProcessKind::Koishi).unwrap();
         assert_eq!(pid, 4400, "装插件的 yarn 不算，最外层的 yarn start 先起");
-        assert_eq!(prog, "node.exe", "argv0 是 node.exe，保留 .exe 才与本机进程名对齐");
+        assert_eq!(
+            prog, "node.exe",
+            "argv0 是 node.exe，保留 .exe 才与本机进程名对齐"
+        );
         assert!(matches!(
             AppProcessKind::from_framework("koishi"),
             AppProcessKind::Koishi
@@ -415,12 +420,18 @@ xiuxian-cg-http|/root/game-qqbot/bot-xiuxian|/root/game-qqbot/bot-xiuxian/.venv/
 
         // 认不出来的一律不误伤：运行目录里跟 NeoBot 无关的进程
         assert!(
-            pick_app_pid("6000 /usr/bin/python other_script.py\n", AppProcessKind::NeoBot)
-                .is_none()
+            pick_app_pid(
+                "6000 /usr/bin/python other_script.py\n",
+                AppProcessKind::NeoBot
+            )
+            .is_none()
         );
         assert!(
-            pick_app_pid("6001 C:\\Windows\\System32\\notepad.exe\n", AppProcessKind::NeoBot)
-                .is_none()
+            pick_app_pid(
+                "6001 C:\\Windows\\System32\\notepad.exe\n",
+                AppProcessKind::NeoBot
+            )
+            .is_none()
         );
     }
 

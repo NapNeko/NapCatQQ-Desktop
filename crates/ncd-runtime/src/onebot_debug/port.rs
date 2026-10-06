@@ -51,7 +51,9 @@ pub trait DebugBotPort: Send + Sync {
     async fn napcat_webui(&self, bot_id: &BotId) -> Option<(u16, String)>;
     /// SnowLuma WebUI（本机 daemon / 远端隧道 / Docker 隧道）端口 + 密码
     async fn snowluma_webui(&self, bot_id: &BotId) -> Result<(u16, String), String>;
-    async fn recover_webui(&self, _bot_id: &BotId) -> Result<(), String> { Ok(()) }
+    async fn recover_webui(&self, _bot_id: &BotId) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /// 事件批次的出口。返回 false 表示对面已经走了（窗口关了），调用方据此摘掉它

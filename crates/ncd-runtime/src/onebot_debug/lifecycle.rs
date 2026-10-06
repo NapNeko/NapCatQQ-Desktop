@@ -74,7 +74,8 @@ impl DebugManager {
             }
             DomainEvent::HostConnectionRecovered { server_id, .. } => {
                 for view in self.bots.list_bots().await {
-                    if matches!(&view.config.bot.runtime_target, ncd_domain::RuntimeTarget::Server(id) if id == server_id) {
+                    if matches!(&view.config.bot.runtime_target, ncd_domain::RuntimeTarget::Server(id) if id == server_id)
+                    {
                         self.hurry_internal_receiver(&view.bot_id());
                     }
                 }

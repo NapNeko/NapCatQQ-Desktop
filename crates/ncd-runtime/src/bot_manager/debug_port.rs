@@ -110,14 +110,28 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> DebugBotPort for BotM
     }
 
     async fn recover_webui(&self, bot_id: &BotId) -> Result<(), String> {
-        let config = self.get_required_bot_config(bot_id).await.map_err(|e| e.to_string())?;
-        let ncd_domain::RuntimeTarget::Server(server_id) = &config.bot.runtime_target else { return Ok(()); };
+        let config = self
+            .get_required_bot_config(bot_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        let ncd_domain::RuntimeTarget::Server(server_id) = &config.bot.runtime_target else {
+            return Ok(());
+        };
         let snapshot = self.get_snapshot(bot_id).await.map_err(|e| e.to_string())?;
-        if snapshot.state != ncd_domain::bot_actor::BotActorState::Running { return Err("Bot 没有在运行".into()); }
+        if snapshot.state != ncd_domain::bot_actor::BotActorState::Running {
+            return Err("Bot 没有在运行".into());
+        }
         // Chat 与调试台可同时发现同一主机断线，只接管一轮，失败交回现有 SSH 冷却策略。
-        let Ok(mut recent) = Arc::clone(&self.debug_recovery).try_lock_owned() else { return Ok(()); };
+        let Ok(mut recent) = Arc::clone(&self.debug_recovery).try_lock_owned() else {
+            return Ok(());
+        };
         let now = tokio::time::Instant::now();
-        if recent.get(server_id).is_some_and(|at| now.duration_since(*at) < std::time::Duration::from_secs(5)) { return Ok(()); }
+        if recent
+            .get(server_id)
+            .is_some_and(|at| now.duration_since(*at) < std::time::Duration::from_secs(5))
+        {
+            return Ok(());
+        }
         recent.retain(|_, at| now.duration_since(*at) < std::time::Duration::from_secs(60));
         recent.insert(server_id.clone(), now);
         let manager = self.clone();
@@ -128,10 +142,18 @@ impl<R: BotConfigRepo + 'static, S: ConfigStore + 'static> DebugBotPort for BotM
             if let Some(servers) = &manager.server_manager {
                 servers.get_live_host(&server_id).await?;
             } else if let Some(resolver) = &manager.host_resolver {
-                resolver.resolve(&config.bot.runtime_target).await.map_err(|e| e.to_string())?;
+                resolver
+                    .resolve(&config.bot.runtime_target)
+                    .await
+                    .map_err(|e| e.to_string())?;
             }
-            manager.reconcile_remote_runtimes_for_server(&server_id).await.map_err(|e| e.to_string())?;
+            manager
+                .reconcile_remote_runtimes_for_server(&server_id)
+                .await
+                .map_err(|e| e.to_string())?;
             Ok(())
-        }).await.map_err(|e| e.to_string())?
+        })
+        .await
+        .map_err(|e| e.to_string())?
     }
 }

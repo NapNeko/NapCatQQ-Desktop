@@ -12,8 +12,8 @@ mod gate;
 mod http;
 mod rpc;
 mod server;
-mod tools;
 #[cfg(test)]
 mod tests_support;
+mod tools;
 
 pub use server::{McpApplyOutcome, McpServer};

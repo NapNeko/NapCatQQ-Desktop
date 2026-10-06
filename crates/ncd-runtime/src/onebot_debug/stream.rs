@@ -82,7 +82,11 @@ enum Route<'a> {
 
 fn stream_route(req: &DebugStreamCallRequest) -> Result<Route<'_>, DebugError> {
     let is_download = DOWNLOAD_ACTIONS.contains(&req.action.as_str());
-    match (UPLOAD_ACTION == req.action.as_str(), is_download, req.local_files.len()) {
+    match (
+        UPLOAD_ACTION == req.action.as_str(),
+        is_download,
+        req.local_files.len(),
+    ) {
         (true, false, 1) => Ok(Route::StandaloneUpload(&req.local_files[0])),
         // 不带本机文件的 upload_file_stream 不拦：手填分块参数走普通单帧调用（落到下面的 Plain）
         (true, false, n) if n > 1 => Err(invalid("upload_file_stream 只能带一个本机文件")),
@@ -157,7 +161,9 @@ impl Progress<'_> {
     }
 
     fn remaining(&self) -> Duration {
-        self.scope.deadline.saturating_duration_since(Instant::now())
+        self.scope
+            .deadline
+            .saturating_duration_since(Instant::now())
     }
 }
 
@@ -304,21 +310,20 @@ impl DebugManager {
             return Ok(local.path.clone());
         }
         match self.ensure_internal(view, &scope.epoch).await {
-            Ok(InternalClient::SnowLuma(client)) => match self
-                .snowluma_push(&client, local, sink, scope)
-                .await
-            {
-                Ok(path) => {
-                    self.note_internal(view, None, &scope.epoch).await;
-                    Ok(path)
+            Ok(InternalClient::SnowLuma(client)) => {
+                match self.snowluma_push(&client, local, sink, scope).await {
+                    Ok(path) => {
+                        self.note_internal(view, None, &scope.epoch).await;
+                        Ok(path)
+                    }
+                    Err(failure) => {
+                        self.note_internal(view, Some(&failure), &scope.epoch).await;
+                        Err(DebugCallResult::Err {
+                            error: failure.error,
+                        })
+                    }
                 }
-                Err(failure) => {
-                    self.note_internal(view, Some(&failure), &scope.epoch).await;
-                    Err(DebugCallResult::Err {
-                        error: failure.error,
-                    })
-                }
-            },
+            }
             Ok(InternalClient::NapCat(_)) => {
                 let base = json!({ "file_retention": PUSH_RETENTION_MS });
                 match self
@@ -406,7 +411,13 @@ impl DebugManager {
         let started = Instant::now();
         if let Some(error) = self.require_internal(view, &plain.channel).await {
             let result = DebugCallResult::Err { error };
-            self.record_call(view, plain, &DebugChannelId::Internal, &result, &scope.epoch);
+            self.record_call(
+                view,
+                plain,
+                &DebugChannelId::Internal,
+                &result,
+                &scope.epoch,
+            );
             return result;
         }
         match self
@@ -422,11 +433,23 @@ impl DebugManager {
                 let text = raw.to_string();
                 let outcome = outcome_from(&text, raw, started.elapsed(), DebugChannelId::Internal);
                 let result = DebugCallResult::Ok { outcome };
-                self.record_call(view, plain, &DebugChannelId::Internal, &result, &scope.epoch);
+                self.record_call(
+                    view,
+                    plain,
+                    &DebugChannelId::Internal,
+                    &result,
+                    &scope.epoch,
+                );
                 result
             }
             UploadOutcome::Failed(result) => {
-                self.record_call(view, plain, &DebugChannelId::Internal, &result, &scope.epoch);
+                self.record_call(
+                    view,
+                    plain,
+                    &DebugChannelId::Internal,
+                    &result,
+                    &scope.epoch,
+                );
                 result
             }
         }
@@ -474,7 +497,7 @@ impl DebugManager {
             Err(e) => {
                 return UploadOutcome::Failed(DebugCallResult::Err {
                     error: invalid(&format!("打不开本机文件：{e}")),
-                })
+                });
             }
         };
         let mut sent_bytes = 0_u64;
@@ -616,7 +639,13 @@ impl DebugManager {
         let started = Instant::now();
         if let Some(error) = self.require_internal(view, &plain.channel).await {
             let result = DebugCallResult::Err { error };
-            self.record_call(view, plain, &DebugChannelId::Internal, &result, &scope.epoch);
+            self.record_call(
+                view,
+                plain,
+                &DebugChannelId::Internal,
+                &result,
+                &scope.epoch,
+            );
             return result;
         }
         let mut collector = match Collector::new(
@@ -647,13 +676,11 @@ impl DebugManager {
             Ok(mut final_envelope) => {
                 self.note_internal(view, None, &scope.epoch).await;
                 if let Some(path) = collector.keep() {
-                    let data = final_envelope
-                        .as_object_mut()
-                        .and_then(|env| {
-                            env.entry("data".to_owned())
-                                .or_insert_with(|| Value::Object(JsonMap::new()))
-                                .as_object_mut()
-                        });
+                    let data = final_envelope.as_object_mut().and_then(|env| {
+                        env.entry("data".to_owned())
+                            .or_insert_with(|| Value::Object(JsonMap::new()))
+                            .as_object_mut()
+                    });
                     if let Some(data) = data {
                         data.insert(
                             "local_path".to_owned(),
@@ -670,13 +697,25 @@ impl DebugManager {
                         DebugChannelId::Internal,
                     ),
                 };
-                self.record_call(view, plain, &DebugChannelId::Internal, &result, &scope.epoch);
+                self.record_call(
+                    view,
+                    plain,
+                    &DebugChannelId::Internal,
+                    &result,
+                    &scope.epoch,
+                );
                 result
             }
             Err(error) => {
                 collector.abandon().await;
                 let result = DebugCallResult::Err { error };
-                self.record_call(view, plain, &DebugChannelId::Internal, &result, &scope.epoch);
+                self.record_call(
+                    view,
+                    plain,
+                    &DebugChannelId::Internal,
+                    &result,
+                    &scope.epoch,
+                );
                 result
             }
         }
@@ -707,7 +746,10 @@ impl DebugManager {
             .map_err(|e| from_client(e, scope.timeout).error)?;
         loop {
             let next = self
-                .guarded(scope, stream.next(scope.deadline.saturating_duration_since(Instant::now())))
+                .guarded(
+                    scope,
+                    stream.next(scope.deadline.saturating_duration_since(Instant::now())),
+                )
                 .await;
             let frame = match next {
                 Ok(Ok(raw)) => raw.value,
@@ -808,7 +850,14 @@ impl DebugManager {
             scope,
         };
         progress
-            .send(DebugStreamStage::Reading, &name, 0, Some(meta.len()), 0, None)
+            .send(
+                DebugStreamStage::Reading,
+                &name,
+                0,
+                Some(meta.len()),
+                0,
+                None,
+            )
             .map_err(Failure::new)?;
         let mut file = tokio::fs::File::open(&local.path)
             .await
@@ -987,7 +1036,11 @@ impl Collector {
                 self.emit(sink)?;
             }
             Some("file_chunk") => {
-                let b64 = reply.data.get("data").and_then(Value::as_str).unwrap_or_default();
+                let b64 = reply
+                    .data
+                    .get("data")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
                 let bytes = B64.decode(b64).map_err(|e| DebugError::Transport {
                     message: format!("下载分块不是合法 base64：{e}"),
                 })?;
@@ -1010,8 +1063,13 @@ impl Collector {
             });
         }
         if self.out.is_none() {
-            let name = self.file_name.clone().unwrap_or_else(|| self.fallback_name.clone());
-            let path = self.dir.join(format!("{}__{}", safe_name(&self.request_id), name));
+            let name = self
+                .file_name
+                .clone()
+                .unwrap_or_else(|| self.fallback_name.clone());
+            let path = self
+                .dir
+                .join(format!("{}__{}", safe_name(&self.request_id), name));
             let file = tokio::fs::File::create(&path)
                 .await
                 .map_err(|e| DebugError::Transport {
@@ -1092,7 +1150,8 @@ fn substitute_in(value: &mut Value, token: &str, remote: &str, hits: &mut usize)
 fn file_body(
     file: tokio::fs::File,
     report: impl FnMut(u64) + Send + Sync + 'static,
-) -> impl futures_util::Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send + Sync + 'static {
+) -> impl futures_util::Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send + Sync + 'static
+{
     stream::unfold((file, report), |(mut file, mut report)| async move {
         let mut buf = vec![0_u8; CHUNK_BYTES];
         match file.read(&mut buf).await {
@@ -1185,7 +1244,10 @@ mod tests {
             Route::Plain
         ));
         for (action, files) in [
-            ("upload_file_stream", vec![local_file("C:/a.bin"), local_file("C:/b.bin")]),
+            (
+                "upload_file_stream",
+                vec![local_file("C:/a.bin"), local_file("C:/b.bin")],
+            ),
             ("download_file_stream", vec![local_file("C:/a.bin")]),
         ] {
             assert!(matches!(
@@ -1208,7 +1270,10 @@ mod tests {
         let hits = substitute_token(&mut params, "ncd-local-file://C:/a.png", "/tmp/bot/a.png");
         assert_eq!(hits, 2);
         assert_eq!(params["file"], json!("/tmp/bot/a.png"));
-        assert_eq!(params["message"][0]["data"]["file"], json!("/tmp/bot/a.png"));
+        assert_eq!(
+            params["message"][0]["data"]["file"],
+            json!("/tmp/bot/a.png")
+        );
         assert_eq!(params["message"][1]["data"]["text"], json!("看"));
         assert_eq!(params["untouched"], json!("ncd-local-file://C:/b.png"));
     }

@@ -199,7 +199,10 @@ impl DashboardClient {
             .send()
             .await
             .map_err(map_transport)?;
-        if matches!(resp.status(), StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED) {
+        if matches!(
+            resp.status(),
+            StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
+        ) {
             return Ok(false);
         }
         let env: Envelope<LoginData> = parse_envelope(resp).await?;
@@ -740,7 +743,10 @@ mod tests {
         cache.store("stale-1", "astrbot", "jwt-stale");
         let client = DashboardClient::connect(&cache, "stale-1", "127.0.0.1", port).unwrap();
         client.login("astrbot", "Abcdefg1", None).await.unwrap();
-        let err = client.verify("astrbot", "Abcdefg1", None).await.unwrap_err();
+        let err = client
+            .verify("astrbot", "Abcdefg1", None)
+            .await
+            .unwrap_err();
         assert!(matches!(err, AppFrameworkError::DashboardAuth(_)));
         // 401 之后缓存里那份过期的 token 也要作废，下次才会真去登录
         assert_eq!(cache.cached("stale-1", "astrbot"), None);
@@ -816,7 +822,9 @@ mod tests {
         // 新核心契约：请求体就是明文
         Mock::given(method("POST"))
             .and(path("/api/auth/login"))
-            .and(body_json(json!({ "username": "astrbot", "password": "Abcdefg1" })))
+            .and(body_json(
+                json!({ "username": "astrbot", "password": "Abcdefg1" }),
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "status": "ok",
                 "data": { "token": "jwt-plain" }
@@ -839,7 +847,9 @@ mod tests {
         // 旧核心（≤ v4.25）拿请求体直接和落盘的 md5 比：明文先来必然被拒，再试 md5
         Mock::given(method("POST"))
             .and(path("/api/auth/login"))
-            .and(body_json(json!({ "username": "astrbot", "password": "Abcdefg1" })))
+            .and(body_json(
+                json!({ "username": "astrbot", "password": "Abcdefg1" }),
+            ))
             .respond_with(ResponseTemplate::new(401))
             .mount(&server)
             .await;

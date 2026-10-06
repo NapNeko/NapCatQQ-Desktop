@@ -80,7 +80,14 @@ impl Pep440Version {
         // dev 直接比：没有 dev 记 MAX，于是「有 dev」低于同形态的「无 dev」，
         // dev 序号本身也自然升序；取负会把两个方向都排反
         let dev = self.dev.map(|n| n as i64).unwrap_or(i64::MAX);
-        (self.epoch, self.release.clone(), pre_rank, pre_num, post, dev)
+        (
+            self.epoch,
+            self.release.clone(),
+            pre_rank,
+            pre_num,
+            post,
+            dev,
+        )
     }
 }
 
@@ -281,7 +288,9 @@ pub fn parse_versions(name: &str, body: &str) -> Result<PackageVersions, String>
 
 /// 拉某发行包的版本清单。`base` 便于测试注入（默认 pypi.org）。
 pub async fn fetch_versions(name: &str, base: Option<&str>) -> Result<PackageVersions, String> {
-    let base = base.unwrap_or("https://pypi.org/pypi").trim_end_matches('/');
+    let base = base
+        .unwrap_or("https://pypi.org/pypi")
+        .trim_end_matches('/');
     let url = format!("{base}/{name}/json");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -325,8 +334,14 @@ mod tests {
     fn lists_versions_newest_first_and_skips_yanked() {
         let v = parse_versions("neobot-app", SAMPLE).unwrap();
         assert_eq!(v.name, "neobot-app");
-        assert!(!v.versions.contains(&"0.9.0".to_string()), "整条 yank 的不能列");
-        assert!(!v.versions.contains(&"1.0.1".to_string()), "没有文件的残留不能列");
+        assert!(
+            !v.versions.contains(&"0.9.0".to_string()),
+            "整条 yank 的不能列"
+        );
+        assert!(
+            !v.versions.contains(&"1.0.1".to_string()),
+            "没有文件的残留不能列"
+        );
         assert_eq!(
             v.versions,
             vec!["1.2.1a1", "1.2.0", "1.1.0", "1.0.0", "1.0.0a7"],
@@ -375,20 +390,28 @@ mod tests {
     /// PEP 440 排序：预发布 < 正式 < post；dev 最低；rc 高于 b 高于 a
     #[test]
     fn pep440_ordering_rules() {
-        let order = |a: &str, b: &str| {
-            parse_pep440(a)
-                .unwrap()
-                .cmp(&parse_pep440(b).unwrap())
-        };
+        let order = |a: &str, b: &str| parse_pep440(a).unwrap().cmp(&parse_pep440(b).unwrap());
         assert_eq!(order("1.0.0a1", "1.0.0"), Ordering::Less);
         assert_eq!(order("1.0.0b1", "1.0.0a2"), Ordering::Greater);
         assert_eq!(order("1.0.0rc1", "1.0.0b9"), Ordering::Greater);
-        assert_eq!(order("1.0.0rc1", "1.0.0"), Ordering::Less, "rc 仍低于正式版");
+        assert_eq!(
+            order("1.0.0rc1", "1.0.0"),
+            Ordering::Less,
+            "rc 仍低于正式版"
+        );
         assert_eq!(order("1.0.0.post1", "1.0.0"), Ordering::Greater);
         assert_eq!(order("1.0.0.dev1", "1.0.0a1"), Ordering::Less, "dev 最低");
         assert_eq!(order("1.2", "1.2.0"), Ordering::Equal, "短的补 0");
-        assert_eq!(order("1.10.0", "1.9.0"), Ordering::Greater, "按数字比不是按字符串");
-        assert_eq!(order("1.2.1a1", "1.2.0"), Ordering::Greater, "1.2.1a1 高于 1.2.0");
+        assert_eq!(
+            order("1.10.0", "1.9.0"),
+            Ordering::Greater,
+            "按数字比不是按字符串"
+        );
+        assert_eq!(
+            order("1.2.1a1", "1.2.0"),
+            Ordering::Greater,
+            "1.2.1a1 高于 1.2.0"
+        );
         assert_eq!(order("1!1.0.0", "2.0.0"), Ordering::Greater, "epoch 优先");
     }
 
@@ -396,11 +419,7 @@ mod tests {
     /// dev 序号之间按数字升序。之前 sort key 取负把两个方向都排反了
     #[test]
     fn pep440_dev_orders_below_and_ascending() {
-        let order = |a: &str, b: &str| {
-            parse_pep440(a)
-                .unwrap()
-                .cmp(&parse_pep440(b).unwrap())
-        };
+        let order = |a: &str, b: &str| parse_pep440(a).unwrap().cmp(&parse_pep440(b).unwrap());
         assert_eq!(order("1.0.0a1.dev1", "1.0.0a1"), Ordering::Less);
         assert_eq!(order("1.0.0.dev1", "1.0.0.dev2"), Ordering::Less);
         assert_eq!(order("1.0.0.dev2", "1.0.0.dev10"), Ordering::Less);
@@ -411,17 +430,22 @@ mod tests {
     fn pep440_pre_separator_keeps_the_number() {
         let v = parse_pep440("1.0.0-alpha.23").unwrap();
         assert_eq!(v.pre, Some((PreKind::A, 23)));
-        let order = |a: &str, b: &str| {
-            parse_pep440(a)
-                .unwrap()
-                .cmp(&parse_pep440(b).unwrap())
-        };
+        let order = |a: &str, b: &str| parse_pep440(a).unwrap().cmp(&parse_pep440(b).unwrap());
         assert_eq!(order("1.0.0-alpha.2", "1.0.0-alpha.10"), Ordering::Less);
     }
 
     #[test]
     fn pep440_accepts_upstream_spellings() {
-        for raw in ["1.2.0", "1.2.1a1", "1.0.0a7", "2.0.0rc1", "1.0.0.post1", "1.0.0.dev1", "1.0.0-alpha.23", "1.2"] {
+        for raw in [
+            "1.2.0",
+            "1.2.1a1",
+            "1.0.0a7",
+            "2.0.0rc1",
+            "1.0.0.post1",
+            "1.0.0.dev1",
+            "1.0.0-alpha.23",
+            "1.2",
+        ] {
             assert!(parse_pep440(raw).is_some(), "{raw} 应该能解析");
         }
         assert!(parse_pep440("").is_none());
@@ -452,6 +476,10 @@ mod tests {
     fn non_pep440_spelling_still_listed_but_last() {
         let body = r#"{ "info": {}, "releases": { "1.0.0": [{}], "weird-version": [{}] } }"#;
         let v = parse_versions("x", body).unwrap();
-        assert_eq!(v.versions, vec!["1.0.0", "weird-version"], "畸形的排最后但仍可选");
+        assert_eq!(
+            v.versions,
+            vec!["1.0.0", "weird-version"],
+            "畸形的排最后但仍可选"
+        );
     }
 }

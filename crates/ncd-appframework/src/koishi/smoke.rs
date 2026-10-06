@@ -8,8 +8,8 @@ use ncd_domain::{AppFrameworkId, AppInstanceId, AppPlacement};
 
 fn bot(qq: u64) -> ncd_domain::BotConfig {
     use ncd_domain::{
-        AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig,
-        ConnectConfig, DeploymentType, RuntimeTarget,
+        AdvancedConfig, AutoRestartSchedule, BackendType, BotBasicConfig, BotConfig, ConnectConfig,
+        DeploymentType, RuntimeTarget,
     };
     BotConfig {
         bot: BotBasicConfig {

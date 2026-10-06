@@ -385,7 +385,11 @@ impl WsClient {
     ///
     /// 消费方不及时取帧时读任务会被背压顶住（一帧都不能丢），所以别在收事件的共用
     /// 连接上用它 —— 单独连一条
-    pub async fn call_stream(&self, action: &str, params: &Value) -> Result<WsStreamCall, ClientError> {
+    pub async fn call_stream(
+        &self,
+        action: &str,
+        params: &Value,
+    ) -> Result<WsStreamCall, ClientError> {
         if self.is_closed() {
             return Err(ClientError::NotSent);
         }
@@ -628,16 +632,26 @@ mod tests {
                 )
             };
             let stream_echo = stream_echo.unwrap();
-            ws.send(frame(&stream_echo, json!({"type": "stream", "index": 0}))).await.unwrap();
+            ws.send(frame(&stream_echo, json!({"type": "stream", "index": 0})))
+                .await
+                .unwrap();
             // 普通调用的回包夹在流式帧中间
             let once_echo = once_echo.unwrap();
             ws.send(Message::Text(
-                json!({"status": "ok", "retcode": 0, "data": {"online": true}, "echo": once_echo}).to_string(),
+                json!({"status": "ok", "retcode": 0, "data": {"online": true}, "echo": once_echo})
+                    .to_string(),
             ))
             .await
             .unwrap();
-            ws.send(frame(&stream_echo, json!({"type": "stream", "index": 1}))).await.unwrap();
-            ws.send(frame(&stream_echo, json!({"type": "response", "total_chunks": 2}))).await.unwrap();
+            ws.send(frame(&stream_echo, json!({"type": "stream", "index": 1})))
+                .await
+                .unwrap();
+            ws.send(frame(
+                &stream_echo,
+                json!({"type": "response", "total_chunks": 2}),
+            ))
+            .await
+            .unwrap();
             while ws.next().await.is_some() {}
         });
 
@@ -682,7 +696,12 @@ mod tests {
             .unwrap();
         server.await.unwrap();
         client.closed().await;
-        let result = client.call_stream("download_file_stream", &serde_json::json!({})).await;
-        assert!(matches!(result, Err(ClientError::NotSent)), "已关闭的连接上发起应失败");
+        let result = client
+            .call_stream("download_file_stream", &serde_json::json!({}))
+            .await;
+        assert!(
+            matches!(result, Err(ClientError::NotSent)),
+            "已关闭的连接上发起应失败"
+        );
     }
 }

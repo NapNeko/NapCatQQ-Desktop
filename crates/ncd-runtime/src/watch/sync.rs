@@ -638,7 +638,10 @@ mod tests {
             &extras_with_webui("9", 0, "tok"),
         );
         assert!(next.bots[0].webui_port_guessed);
-        assert_eq!(next.bots[0].webui_port, Some(napcat_docker_webui_host_port(9)));
+        assert_eq!(
+            next.bots[0].webui_port,
+            Some(napcat_docker_webui_host_port(9))
+        );
         assert_eq!(next.bots[0].webui_token.as_deref(), Some("tok"));
 
         merge_notify_preserve_webui(&mut next, &prev);
@@ -655,12 +658,19 @@ mod tests {
             &extras_with_webui("9", 0, "tok"),
         );
         merge_notify_preserve_webui(&mut next, &prev);
-        assert_eq!(next.bots[0].webui_port, Some(napcat_docker_webui_host_port(9)));
+        assert_eq!(
+            next.bots[0].webui_port,
+            Some(napcat_docker_webui_host_port(9))
+        );
     }
 
     #[test]
     fn guessed_flag_is_not_written_to_notify_json() {
-        let n = build_notify_config("s1", &[sample_remote("s1", 9)], &OfflineWebhookSettings::default());
+        let n = build_notify_config(
+            "s1",
+            &[sample_remote("s1", 9)],
+            &OfflineWebhookSettings::default(),
+        );
         assert!(n.bots[0].webui_port_guessed);
         let raw = serde_json::to_string(&n).unwrap();
         assert!(!raw.contains("guessed"), "{raw}");
@@ -789,7 +799,8 @@ mod tests {
         let cfg = with_http_host(sample_remote("s1", 10002), "127.0.0.1", 3100);
         let mut native = cfg.clone();
         native.bot.deployment_type = DeploymentType::Native;
-        let raw = serde_json::to_string(&watch_onebot_messenger_from_bot(&native).unwrap()).unwrap();
+        let raw =
+            serde_json::to_string(&watch_onebot_messenger_from_bot(&native).unwrap()).unwrap();
         assert!(!raw.contains("container"), "{raw}");
         // 旧 notify.json 里没有这两个字段也要能读
         let old: WatchOneBotMessenger =

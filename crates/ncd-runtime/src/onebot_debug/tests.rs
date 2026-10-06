@@ -14,11 +14,17 @@ async fn chat_transport_survives_debug_disable_without_writing_history() {
     mount_napcat_call(&webui, "get_login_info", ob11_ok(json!({"user_id": 10001}))).await;
     let chat = DebugManager::new_ephemeral(
         Arc::clone(&h.bots) as Arc<dyn DebugBotPort>,
-        Arc::new(LocalOnlyHostResolver::new(Arc::clone(&h.host) as Arc<dyn Host>)),
+        Arc::new(LocalOnlyHostResolver::new(
+            Arc::clone(&h.host) as Arc<dyn Host>
+        )),
         h.data.path().to_path_buf(),
     );
     h.manager.set_enabled(false).await;
-    let result = call_ok(&chat, request("chat", &bot, DebugChannelId::Internal, "get_login_info")).await;
+    let result = call_ok(
+        &chat,
+        request("chat", &bot, DebugChannelId::Internal, "get_login_info"),
+    )
+    .await;
     assert!(result.ok);
     assert!(!h.data.path().join("onebot-debug").exists());
 }
@@ -145,7 +151,12 @@ impl DebugBotPort for FakeBots {
     }
     async fn recover_webui(&self, bot_id: &BotId) -> Result<(), String> {
         self.recovery_calls.fetch_add(1, Ordering::SeqCst);
-        if let Some(endpoint) = self.recovered_snowluma.lock().unwrap().remove(bot_id) { self.snowluma.lock().unwrap().insert(bot_id.clone(), endpoint); }
+        if let Some(endpoint) = self.recovered_snowluma.lock().unwrap().remove(bot_id) {
+            self.snowluma
+                .lock()
+                .unwrap()
+                .insert(bot_id.clone(), endpoint);
+        }
         Ok(())
     }
 }
@@ -156,10 +167,20 @@ async fn missing_remote_webui_recovers_without_an_account_page_or_new_bot_start(
     let mut config = remote_bot(20005, DeploymentType::Native);
     config.bot.backend_type = BackendType::SnowLuma;
     let bot = h.bots.add(config, true);
-    h.bots.recovered_snowluma.lock().unwrap().insert(bot.clone(), (4567, "pw".into()));
+    h.bots
+        .recovered_snowluma
+        .lock()
+        .unwrap()
+        .insert(bot.clone(), (4567, "pw".into()));
     let view = h.bots.bot(&bot).await.unwrap();
-    assert_eq!(h.manager.internal_endpoint(&view).await.unwrap(), (4567, "pw".into()));
-    assert_eq!(h.manager.internal_endpoint(&view).await.unwrap(), (4567, "pw".into()));
+    assert_eq!(
+        h.manager.internal_endpoint(&view).await.unwrap(),
+        (4567, "pw".into())
+    );
+    assert_eq!(
+        h.manager.internal_endpoint(&view).await.unwrap(),
+        (4567, "pw".into())
+    );
     assert_eq!(h.bots.recovery_calls.load(Ordering::SeqCst), 1);
     assert!(h.bots.bot(&bot).await.unwrap().running());
 }
@@ -175,16 +196,37 @@ async fn a_missing_local_webui_does_not_trigger_remote_reconciliation() {
 
 #[tokio::test]
 async fn concurrent_chat_ignore_and_hide_updates_preserve_both_persisted_settings() {
-    let h = harness(); let bot = h.bots.add(local_bot(20007, BackendType::SnowLuma), false);
-    let chat = crate::chat::ChatManager::new(Arc::clone(&h.bots) as Arc<dyn DebugBotPort>, Arc::new(LocalOnlyHostResolver::new(Arc::clone(&h.host) as Arc<dyn Host>)), h.data.path().to_path_buf());
-    let (ignored, hidden) = tokio::join!(chat.set_group_ignored(bot.to_string(), "20007".into(), "123".into(), true, false), chat.set_group_ignored(bot.to_string(), "20007".into(), "456".into(), true, true));
-    ignored.unwrap(); hidden.unwrap();
+    let h = harness();
+    let bot = h.bots.add(local_bot(20007, BackendType::SnowLuma), false);
+    let chat = crate::chat::ChatManager::new(
+        Arc::clone(&h.bots) as Arc<dyn DebugBotPort>,
+        Arc::new(LocalOnlyHostResolver::new(
+            Arc::clone(&h.host) as Arc<dyn Host>
+        )),
+        h.data.path().to_path_buf(),
+    );
+    let (ignored, hidden) = tokio::join!(
+        chat.set_group_ignored(bot.to_string(), "20007".into(), "123".into(), true, false),
+        chat.set_group_ignored(bot.to_string(), "20007".into(), "456".into(), true, true)
+    );
+    ignored.unwrap();
+    hidden.unwrap();
     let status = chat.desktop_status().await;
     assert_eq!(status.accounts[0].preference.ignored_groups, vec!["123"]);
     assert_eq!(status.accounts[0].preference.hidden_groups, vec!["456"]);
-    chat.set_group_ignored(bot.to_string(), "20007".into(), "456".into(), false, true).await.unwrap();
-    assert_eq!(chat.desktop_status().await.accounts[0].preference.ignored_groups, vec!["123"]);
-    let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(h.data.path().join("config/chat-desktop.json")).unwrap()).unwrap();
+    chat.set_group_ignored(bot.to_string(), "20007".into(), "456".into(), false, true)
+        .await
+        .unwrap();
+    assert_eq!(
+        chat.desktop_status().await.accounts[0]
+            .preference
+            .ignored_groups,
+        vec!["123"]
+    );
+    let saved: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(h.data.path().join("config/chat-desktop.json")).unwrap(),
+    )
+    .unwrap();
     assert_eq!(saved["accounts"][0]["ignoredGroups"], json!(["123"]));
     assert_eq!(saved["accounts"][0]["hiddenGroups"], json!([]));
 }
@@ -992,11 +1034,20 @@ async fn full_system_face_catalog_reaches_the_picker_without_truncation() {
     let onebot = MockServer::start().await;
     let faces: Vec<_> = (0..700).map(|id| json!({"q_sid": id.to_string(), "q_des": "表情", "url": format!("https://qq.test/{}/{}.png", "x".repeat(500), id)})).collect();
     let data = json!({"packs": [{"pack_name": "系统表情", "emojis": faces}]});
-    mount_onebot(&onebot, "fetch_sys_faces", ResponseTemplate::new(200).set_body_json(ob11_ok(data.clone()))).await;
+    mount_onebot(
+        &onebot,
+        "fetch_sys_faces",
+        ResponseTemplate::new(200).set_body_json(ob11_ok(data.clone())),
+    )
+    .await;
     let mut config = local_bot(10_001, BackendType::NapCat);
     config.connect.http_servers = vec![http_server("main", "0.0.0.0", port_of(&onebot), "")];
     let bot = h.bots.add(config, true);
-    let outcome = call_ok(&h.manager, request("faces", &bot, http_id("main"), "fetch_sys_faces")).await;
+    let outcome = call_ok(
+        &h.manager,
+        request("faces", &bot, http_id("main"), "fetch_sys_faces"),
+    )
+    .await;
     assert!(outcome.ok);
     assert!(!outcome.truncated);
     assert_eq!(outcome.data, data);

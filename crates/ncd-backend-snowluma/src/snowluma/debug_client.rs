@@ -227,7 +227,10 @@ impl SnowLumaDebugClient {
             .unwrap_or_else(|| HOST_CANDIDATES[0].to_owned());
         let resp = self
             .http
-            .post(format!("{}/api/debug/upload", Self::base_url(&host, self.port)))
+            .post(format!(
+                "{}/api/debug/upload",
+                Self::base_url(&host, self.port)
+            ))
             .bearer_auth(&token)
             .query(&[("filename", file_name)])
             .body(body)
@@ -1117,7 +1120,9 @@ mod tests {
         mount_login(&server, "t1").await;
         Mock::given(method("POST"))
             .and(path("/api/debug/invoke-stream"))
-            .respond_with(ResponseTemplate::new(404).set_body_string("Cannot POST /api/debug/invoke-stream"))
+            .respond_with(
+                ResponseTemplate::new(404).set_body_string("Cannot POST /api/debug/invoke-stream"),
+            )
             .mount(&server)
             .await;
         let err = client_for(&server)
@@ -1131,7 +1136,8 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/api/debug/invoke-stream"))
             .respond_with(
-                ResponseTemplate::new(404).set_body_json(json!({ "status": "failed", "message": "账号不在线" })),
+                ResponseTemplate::new(404)
+                    .set_body_json(json!({ "status": "failed", "message": "账号不在线" })),
             )
             .mount(&server)
             .await;
@@ -1161,7 +1167,10 @@ mod tests {
             .await;
 
         let upload = client_for(&server)
-            .upload_file("a.png", reqwest::Body::from("hello world".as_bytes().to_vec()))
+            .upload_file(
+                "a.png",
+                reqwest::Body::from("hello world".as_bytes().to_vec()),
+            )
             .await
             .expect("upload");
         assert_eq!(
@@ -1193,7 +1202,8 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/api/debug/upload"))
             .respond_with(
-                ResponseTemplate::new(400).set_body_json(json!({ "status": "failed", "message": "上传超出大小上限" })),
+                ResponseTemplate::new(400)
+                    .set_body_json(json!({ "status": "failed", "message": "上传超出大小上限" })),
             )
             .mount(&server)
             .await;

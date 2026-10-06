@@ -504,9 +504,11 @@ mod tests {
         };
         let build = |id: ComponentId| {
             if id == ComponentId::VcRedist {
-                Ok(Arc::new(ncd_component::VcRedistComponent::new(
-                    HostPath::from_posix("/x"),
-                )) as Arc<dyn Component>)
+                Ok(
+                    Arc::new(ncd_component::VcRedistComponent::new(HostPath::from_posix(
+                        "/x",
+                    ))) as Arc<dyn Component>,
+                )
             } else {
                 Err(format!("no fake for {id:?}"))
             }

@@ -97,9 +97,9 @@ pub use bot_runtime_metrics::{
 };
 pub use bot_status::{BotStatus, ProcessHandle};
 pub use chat_archive::{
-    ChatArchive, ChatArchiveConversation, ChatArchiveConversationKind, ChatArchiveMessage,
-    ChatArchiveSendStatus, CHAT_ARCHIVE_MAX_CONVERSATIONS, CHAT_ARCHIVE_MAX_MESSAGES,
-    CHAT_ARCHIVE_VERSION,
+    CHAT_ARCHIVE_MAX_CONVERSATIONS, CHAT_ARCHIVE_MAX_MESSAGES, CHAT_ARCHIVE_VERSION, ChatArchive,
+    ChatArchiveConversation, ChatArchiveConversationKind, ChatArchiveMessage,
+    ChatArchiveSendStatus,
 };
 pub use component::{
     ComponentId, DependencyNode, DependencyPlan, DependencyTarget, HostPackageGroup, LocalQqSource,

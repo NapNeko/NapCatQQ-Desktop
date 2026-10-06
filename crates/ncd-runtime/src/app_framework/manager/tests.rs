@@ -1793,11 +1793,7 @@ mod write_config {
             .processes()
             .iter()
             .filter(|(_, p)| {
-                let is_root = p
-                    .name()
-                    .to_string_lossy()
-                    .to_lowercase()
-                    .starts_with(root);
+                let is_root = p.name().to_string_lossy().to_lowercase().starts_with(root);
                 let cwd = p
                     .cwd()
                     .map(|c| norm(&c.to_string_lossy()))
@@ -2303,7 +2299,10 @@ mod write_config {
         let deadline = Instant::now() + Duration::from_secs(300);
         let mut polls = 0u32;
         while Instant::now() < deadline {
-            if tokio::net::TcpStream::connect(("127.0.0.1", PORT)).await.is_ok() {
+            if tokio::net::TcpStream::connect(("127.0.0.1", PORT))
+                .await
+                .is_ok()
+            {
                 port_up = true;
                 break;
             }
@@ -2350,7 +2349,9 @@ mod write_config {
                 .split_once(&format!(":{PORT}"))
                 .map(|(_, p)| p.to_string())
                 .unwrap_or_default();
-            let mut sock = tokio::net::TcpStream::connect(("127.0.0.1", PORT)).await.unwrap();
+            let mut sock = tokio::net::TcpStream::connect(("127.0.0.1", PORT))
+                .await
+                .unwrap();
             let auth = if client.base.token.is_empty() {
                 String::new()
             } else {
@@ -2415,7 +2416,9 @@ mod write_config {
             })
             .collect();
         let after = smoke_procs(&dir_str, "node");
-        let port_after = tokio::net::TcpStream::connect(("127.0.0.1", PORT)).await.is_ok();
+        let port_after = tokio::net::TcpStream::connect(("127.0.0.1", PORT))
+            .await
+            .is_ok();
         eprintln!(
             "{} 停后残留: {leftovers:?}，重扫: {after:?}，口仍通: {port_after}",
             stamp(t0)

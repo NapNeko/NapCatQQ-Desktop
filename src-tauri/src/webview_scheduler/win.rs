@@ -12,16 +12,19 @@ use tauri::{AppHandle, Manager, WebviewWindow};
 use tokio::sync::oneshot;
 use webview2_com::GetProcessExtendedInfosCompletedHandler;
 use webview2_com::Microsoft::Web::WebView2::Win32::{
-    COREWEBVIEW2_PROCESS_KIND, COREWEBVIEW2_PROCESS_KIND_BROWSER, COREWEBVIEW2_PROCESS_KIND_GPU,
     COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
-    COREWEBVIEW2_PROCESS_KIND_RENDERER, COREWEBVIEW2_PROCESS_KIND_UTILITY, ICoreWebView2_19, ICoreWebView2_20,
-    ICoreWebView2Environment13, ICoreWebView2FrameInfo2, ICoreWebView2ProcessExtendedInfoCollection,
+    COREWEBVIEW2_PROCESS_KIND, COREWEBVIEW2_PROCESS_KIND_BROWSER, COREWEBVIEW2_PROCESS_KIND_GPU,
+    COREWEBVIEW2_PROCESS_KIND_RENDERER, COREWEBVIEW2_PROCESS_KIND_UTILITY, ICoreWebView2_19,
+    ICoreWebView2_20, ICoreWebView2Environment13, ICoreWebView2FrameInfo2,
+    ICoreWebView2ProcessExtendedInfoCollection,
 };
 use windows::Win32::Foundation::{CloseHandle, E_POINTER, HANDLE};
 use windows::Win32::System::ProcessStatus::{
     GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
 };
-use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+use windows::Win32::System::Threading::{
+    GetCurrentProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+};
 use windows::core::{BOOL, Interface};
 
 use super::{RawProcess, WebviewMemoryReport, WebviewProcessKind, assemble};
@@ -33,11 +36,17 @@ pub(super) async fn memory_report(app: &AppHandle) -> Result<WebviewMemoryReport
     let windows: Vec<(String, WebviewWindow)> = app.webview_windows().into_iter().collect();
     let mut frames = HashMap::new();
     for (label, window) in &windows {
-        match on_webview(window, |pw| read_main_frame_id(&pw).map_err(|e| e.to_string())).await {
+        match on_webview(window, |pw| {
+            read_main_frame_id(&pw).map_err(|e| e.to_string())
+        })
+        .await
+        {
             Ok(id) => {
                 frames.insert(id, label.clone());
             }
-            Err(err) => tracing::debug!(target: "ncd_tauri::webview_scheduler", %label, "读主帧 id 失败: {err}"),
+            Err(err) => {
+                tracing::debug!(target: "ncd_tauri::webview_scheduler", %label, "读主帧 id 失败: {err}")
+            }
         }
     }
 
@@ -140,11 +149,15 @@ async fn process_infos(window: &WebviewWindow) -> Result<Vec<RawProcess>, String
     window
         .with_webview(move |pw| {
             let in_callback = Arc::clone(&tx);
-            let handler = GetProcessExtendedInfosCompletedHandler::create(Box::new(move |code, collection| {
-                let result = code.and_then(|()| read_processes(collection)).map_err(|e| e.to_string());
-                reply(&in_callback, result);
-                Ok(())
-            }));
+            let handler = GetProcessExtendedInfosCompletedHandler::create(Box::new(
+                move |code, collection| {
+                    let result = code
+                        .and_then(|()| read_processes(collection))
+                        .map_err(|e| e.to_string());
+                    reply(&in_callback, result);
+                    Ok(())
+                },
+            ));
             // SAFETY: UI 线程上调用；handler 是 COM 对象，WebView2 持有到回调结束
             let started = unsafe {
                 pw.environment()

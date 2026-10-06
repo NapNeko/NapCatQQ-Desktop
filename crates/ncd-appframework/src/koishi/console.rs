@@ -151,12 +151,7 @@ impl KoishiConsole {
             instance_id,
             port,
             "sandbox/send-message",
-            vec![
-                json!(platform),
-                json!(user),
-                json!(channel),
-                json!(content),
-            ],
+            vec![json!(platform), json!(user), json!(channel), json!(content)],
         )
         .await
         .map(|_| ())
@@ -358,8 +353,8 @@ struct ReaderCtx {
 impl ReaderCtx {
     fn dispatch(&self, text: &str) {
         // 大推送（市场）不是要的就别整份解析；沙盒消息和入口数据更新个头小，直接放行
-        let passthrough = text.starts_with(r#"{"type":"sandbox/"#)
-            || text.starts_with(r#"{"type":"entry-data""#);
+        let passthrough =
+            text.starts_with(r#"{"type":"sandbox/"#) || text.starts_with(r#"{"type":"entry-data""#);
         if !passthrough
             && !text.starts_with(r#"{"type":"response""#)
             && !KEPT_KEYS
@@ -434,7 +429,10 @@ impl ReaderCtx {
                 if let Some(Value::Object(entry)) = store.get_mut("entry")
                     && let Some(Value::Object(one)) = entry.get_mut(id)
                 {
-                    one.insert("data".to_string(), body.get("data").cloned().unwrap_or(Value::Null));
+                    one.insert(
+                        "data".to_string(),
+                        body.get("data").cloned().unwrap_or(Value::Null),
+                    );
                 }
             }
             Some("sandbox/message") => {
@@ -461,7 +459,8 @@ impl ReaderCtx {
                 let nonce = body.get("nonce").cloned().unwrap_or(Value::Null);
                 let result = self.sandbox_answer(method, &data);
                 let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-                let payload = json!({ "type": "sandbox/response", "args": [nonce, result], "id": id });
+                let payload =
+                    json!({ "type": "sandbox/response", "args": [nonce, result], "id": id });
                 let _ = self.out.send(Message::Text(payload.to_string()));
             }
             _ => {}
@@ -513,8 +512,13 @@ impl ReaderCtx {
                     let Some(ch) = m.get("channel").and_then(Value::as_str) else {
                         continue;
                     };
-                    let Some(user) = ch.strip_prefix('@') else { continue };
-                    if users.iter().any(|u| u.get("userId").and_then(Value::as_str) == Some(user)) {
+                    let Some(user) = ch.strip_prefix('@') else {
+                        continue;
+                    };
+                    if users
+                        .iter()
+                        .any(|u| u.get("userId").and_then(Value::as_str) == Some(user))
+                    {
                         continue;
                     }
                     users.push(json!({ "userId": user, "username": user }));
@@ -583,8 +587,7 @@ mod tests {
         ctx.dispatch(
             r#"{"type":"sandbox/request","body":{"method":"getMessage","data":{"channelId":"@u","messageId":"m1"},"nonce":"n1"}}"#,
         );
-        let answered: Value =
-            serde_json::from_str(&rx.try_recv().unwrap().to_string()).unwrap();
+        let answered: Value = serde_json::from_str(&rx.try_recv().unwrap().to_string()).unwrap();
         assert_eq!(answered["type"], json!("sandbox/response"));
         assert_eq!(answered["args"][0], json!("n1"));
         assert_eq!(answered["args"][1]["content"], json!("hi"));
@@ -593,8 +596,7 @@ mod tests {
         ctx.dispatch(
             r#"{"type":"sandbox/request","body":{"method":"deleteMessage","data":{"channelId":"@u","messageId":"m1"},"nonce":"n2"}}"#,
         );
-        let answered: Value =
-            serde_json::from_str(&rx.try_recv().unwrap().to_string()).unwrap();
+        let answered: Value = serde_json::from_str(&rx.try_recv().unwrap().to_string()).unwrap();
         assert_eq!(answered["args"][1], Value::Null);
         assert_eq!(ctx.sandbox.lock().unwrap().len(), 1);
 

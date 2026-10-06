@@ -83,12 +83,19 @@ pub(crate) struct RawProcess {
 }
 
 /// 把进程记录和「主帧 id → 窗口 label」拼成报表：本体排最前，其次浏览器、GPU、渲染进程。
-pub(crate) fn assemble(mut raw: Vec<RawProcess>, frames: &HashMap<u32, String>) -> WebviewMemoryReport {
+pub(crate) fn assemble(
+    mut raw: Vec<RawProcess>,
+    frames: &HashMap<u32, String>,
+) -> WebviewMemoryReport {
     raw.sort_by_key(|p| (p.kind, p.pid));
     let processes: Vec<WebviewProcessUsage> = raw
         .into_iter()
         .map(|p| {
-            let mut windows: Vec<String> = p.frame_ids.iter().filter_map(|id| frames.get(id).cloned()).collect();
+            let mut windows: Vec<String> = p
+                .frame_ids
+                .iter()
+                .filter_map(|id| frames.get(id).cloned())
+                .collect();
             windows.sort();
             windows.dedup();
             WebviewProcessUsage {
@@ -101,7 +108,12 @@ pub(crate) fn assemble(mut raw: Vec<RawProcess>, frames: &HashMap<u32, String>) 
         })
         .collect();
     let total_private_bytes = processes.iter().map(|p| p.private_bytes).sum();
-    WebviewMemoryReport { v: 1, processes, total_private_bytes, levels: Vec::new() }
+    WebviewMemoryReport {
+        v: 1,
+        processes,
+        total_private_bytes,
+        levels: Vec::new(),
+    }
 }
 
 pub async fn memory_report(app: &AppHandle) -> Result<WebviewMemoryReport, String> {
@@ -136,7 +148,11 @@ impl WebviewScheduler {
         };
         let mut levels: Vec<WebviewWindowLevel> = entries
             .iter()
-            .map(|(label, e)| WebviewWindowLevel { label: label.clone(), hidden: e.is_hidden(), dormant: e.is_dormant() })
+            .map(|(label, e)| WebviewWindowLevel {
+                label: label.clone(),
+                hidden: e.is_hidden(),
+                dormant: e.is_dormant(),
+            })
             .collect();
         levels.sort_by(|a, b| a.label.cmp(&b.label));
         levels
@@ -192,7 +208,11 @@ fn apply(window: &WebviewWindow, action: Action) {
     match action {
         Action::SetVisible(visible) => {
             let webview: &tauri::Webview = window.as_ref();
-            let result = if visible { webview.show() } else { webview.hide() };
+            let result = if visible {
+                webview.show()
+            } else {
+                webview.hide()
+            };
             if let Err(err) = result {
                 tracing::warn!(target: "ncd_tauri::webview_scheduler", label = window.label(), visible, "切换 WebView 可见性失败: {err}");
             }
@@ -208,7 +228,11 @@ fn apply(window: &WebviewWindow, action: Action) {
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(after).await;
                 // 等的这段时间里窗口可能已经销毁，别给它重新登记
-                if window.app_handle().get_webview_window(window.label()).is_some() {
+                if window
+                    .app_handle()
+                    .get_webview_window(window.label())
+                    .is_some()
+                {
                     notify(&window, Event::Tick(generation));
                 }
             });
@@ -220,8 +244,19 @@ fn apply(window: &WebviewWindow, action: Action) {
 mod tests {
     use super::*;
 
-    fn raw(pid: u32, kind: WebviewProcessKind, frame_ids: &[u32], private_bytes: u64) -> RawProcess {
-        RawProcess { pid, kind, frame_ids: frame_ids.to_vec(), private_bytes, working_set_bytes: private_bytes * 2 }
+    fn raw(
+        pid: u32,
+        kind: WebviewProcessKind,
+        frame_ids: &[u32],
+        private_bytes: u64,
+    ) -> RawProcess {
+        RawProcess {
+            pid,
+            kind,
+            frame_ids: frame_ids.to_vec(),
+            private_bytes,
+            working_set_bytes: private_bytes * 2,
+        }
     }
 
     #[test]
@@ -249,7 +284,10 @@ mod tests {
 
     #[test]
     fn serializes_camel_case_with_snake_case_kind() {
-        let report = assemble(vec![raw(1, WebviewProcessKind::Host, &[], 3)], &HashMap::new());
+        let report = assemble(
+            vec![raw(1, WebviewProcessKind::Host, &[], 3)],
+            &HashMap::new(),
+        );
         let json = serde_json::to_value(&report).unwrap();
         assert_eq!(json["totalPrivateBytes"], 3);
         assert_eq!(json["processes"][0]["kind"], "host");

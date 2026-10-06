@@ -271,7 +271,8 @@ fn replace_export_archive(temporary: &Path, dest: &Path) -> Result<(), String> {
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
     let swapped = dest.with_file_name(format!(".{name}.ncd-replaced-{}.tmp", uuid::Uuid::new_v4()));
-    fs::rename(dest, &swapped).map_err(|error| format!("替换导出 ZIP 失败，原文件已保留: {error}"))?;
+    fs::rename(dest, &swapped)
+        .map_err(|error| format!("替换导出 ZIP 失败，原文件已保留: {error}"))?;
     match fs::rename(temporary, dest) {
         Ok(()) => {
             let _ = fs::remove_file(&swapped);

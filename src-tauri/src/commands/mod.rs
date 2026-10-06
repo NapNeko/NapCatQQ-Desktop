@@ -2,6 +2,7 @@ pub mod app_framework;
 pub mod app_settings;
 pub mod bot;
 pub mod bot_metrics;
+pub mod chat;
 pub mod components;
 pub mod config_transfer;
 pub mod data_root_migrate;
@@ -17,7 +18,6 @@ pub mod koishi;
 pub mod mcp;
 pub mod ncd_watch;
 pub mod onebot_debug;
-pub mod chat;
 pub mod release;
 pub mod servers;
 pub mod snowluma;
@@ -405,13 +405,12 @@ mod tests {
             root,
             Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
         );
-        let mcp = Arc::new(ncd_mcp::McpServer::new(
-            Arc::clone(&onebot_debug),
-            secrets,
-        ));
+        let mcp = Arc::new(ncd_mcp::McpServer::new(Arc::clone(&onebot_debug), secrets));
         let chat = Arc::new(ncd_runtime::chat::ChatManager::new(
             Arc::clone(&bot_manager) as Arc<dyn ncd_runtime::DebugBotPort>,
-            Arc::new(ncd_runtime::LocalOnlyHostResolver::new(Arc::new(ncd_host::local::LocalWindowsHost::new()))),
+            Arc::new(ncd_runtime::LocalOnlyHostResolver::new(Arc::new(
+                ncd_host::local::LocalWindowsHost::new(),
+            ))),
             root.to_path_buf(),
         ));
         let state = AppState {

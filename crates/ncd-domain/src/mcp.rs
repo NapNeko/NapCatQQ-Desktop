@@ -61,6 +61,9 @@ mod tests {
         };
         let json = serde_json::to_string(&on).unwrap();
         assert!(json.contains(r#""allowDangerous":true"#));
-        assert_eq!(serde_json::from_str::<McpServerSettings>(&json).unwrap(), on);
+        assert_eq!(
+            serde_json::from_str::<McpServerSettings>(&json).unwrap(),
+            on
+        );
     }
 }

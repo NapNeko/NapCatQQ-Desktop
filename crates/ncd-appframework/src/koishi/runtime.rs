@@ -280,7 +280,13 @@ pub fn dataview_serialize(value: &Value) -> String {
         Value::Object(map) => {
             let inner: Vec<String> = map
                 .iter()
-                .map(|(k, v)| format!("{}:{}", serde_json::to_string(k).unwrap_or_default(), dataview_serialize(v)))
+                .map(|(k, v)| {
+                    format!(
+                        "{}:{}",
+                        serde_json::to_string(k).unwrap_or_default(),
+                        dataview_serialize(v)
+                    )
+                })
                 .collect();
             format!("{{{}}}", inner.join(","))
         }
@@ -305,7 +311,11 @@ fn dataview_unwrap(v: Value) -> Value {
             }
         }
         Value::Array(arr) => Value::Array(arr.into_iter().map(dataview_unwrap).collect()),
-        Value::Object(map) => Value::Object(map.into_iter().map(|(k, v)| (k, dataview_unwrap(v))).collect()),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(k, v)| (k, dataview_unwrap(v)))
+                .collect(),
+        ),
         other => other,
     }
 }

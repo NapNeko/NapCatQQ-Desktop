@@ -8,8 +8,8 @@ use ncd_domain::onebot_debug::{
     DebugEventBatch, DebugHistoryQuery, DebugWorkspace,
 };
 use ncd_domain::{BackendType, McpServerStatus};
-use ncd_runtime::onebot_debug::{DebugManager, error_text};
 use ncd_runtime::DebugEventSink;
+use ncd_runtime::onebot_debug::{DebugManager, error_text};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -168,7 +168,11 @@ pub(crate) async fn dispatch(ctx: &ToolsCtx, name: &str, args: Value) -> Result<
             let a: ReadEventsArgs = parse(&args)?;
             value(
                 &ctx.debug
-                    .read_events(&a.bot_id, a.since_seq, a.limit.unwrap_or(200).min(EVENTS_LIMIT_CAP))
+                    .read_events(
+                        &a.bot_id,
+                        a.since_seq,
+                        a.limit.unwrap_or(200).min(EVENTS_LIMIT_CAP),
+                    )
                     .await,
             )
         }
@@ -233,8 +237,7 @@ fn value<T: serde::Serialize>(v: &T) -> Result<Value, ToolError> {
 }
 
 fn parse<T: serde::de::DeserializeOwned>(args: &Value) -> Result<T, ToolError> {
-    serde_json::from_value(args.clone())
-        .map_err(|e| ToolError::plain(format!("参数不对：{e}")))
+    serde_json::from_value(args.clone()).map_err(|e| ToolError::plain(format!("参数不对：{e}")))
 }
 
 fn empty_object() -> Value {
@@ -349,7 +352,8 @@ struct EnabledArgs {
     enabled: bool,
 }
 
-const CONFIRM_HINT: &str = "（有副作用：首次不带 confirm_token 调用只发确认令牌，带牌重放同一调用才执行）";
+const CONFIRM_HINT: &str =
+    "（有副作用：首次不带 confirm_token 调用只发确认令牌，带牌重放同一调用才执行）";
 
 fn channel_schema() -> Value {
     json!({
@@ -371,13 +375,10 @@ fn object_schema(properties: Value, required: &[&str]) -> Value {
 }
 
 fn build_defs() -> Vec<ToolDef> {
-    let bot = || json!({"bot_id": {"type": "string", "description": "`list_targets` 返回的 bot_id"}});
-    let confirm = || {
-        json!({"confirm_token": {"type": "string", "description": "确认令牌：有副作用的调用首次会拿到一张，带它重放同一调用才执行"}})
-    };
-    let backend_prop = || {
-        json!({"backend": {"type": "string", "enum": ["napcat", "snowluma"], "description": "后端目录。Bot 在跑时用它的；不给 bot_id 则查随包快照"}})
-    };
+    let bot =
+        || json!({"bot_id": {"type": "string", "description": "`list_targets` 返回的 bot_id"}});
+    let confirm = || json!({"confirm_token": {"type": "string", "description": "确认令牌：有副作用的调用首次会拿到一张，带它重放同一调用才执行"}});
+    let backend_prop = || json!({"backend": {"type": "string", "enum": ["napcat", "snowluma"], "description": "后端目录。Bot 在跑时用它的；不给 bot_id 则查随包快照"}});
     vec![
         ToolDef {
             name: "list_targets",
@@ -638,9 +639,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(
-            value["request_id"]
-                .as_str()
-                .map(|s| s.starts_with("mcp-")),
+            value["request_id"].as_str().map(|s| s.starts_with("mcp-")),
             Some(true)
         );
         assert_eq!(value["result"]["kind"], "err");
@@ -651,7 +650,12 @@ mod tests {
     async fn action_safety_unknown_bot_or_action_defaults_to_side_effect() {
         let root = tempfile::tempdir().unwrap();
         let ctx = test_ctx(root.path());
-        let safety = effective_safety(&ctx, "call_action", &json!({"bot_id": "404", "action": "get_status"})).await;
+        let safety = effective_safety(
+            &ctx,
+            "call_action",
+            &json!({"bot_id": "404", "action": "get_status"}),
+        )
+        .await;
         assert_eq!(safety, ToolSafety::SideEffect);
         // 静态表与动态分级互不干扰
         let safety = effective_safety(&ctx, "clear_history", &json!({})).await;

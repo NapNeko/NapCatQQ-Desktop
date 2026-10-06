@@ -223,7 +223,9 @@ impl AppManager {
         id: &AppInstanceId,
     ) -> Result<Vec<KoishiCommandRow>, AppFrameworkError> {
         let (instance, adapter, port) = self.koishi_console_ctx(id).await?;
-        koishi_api(adapter.as_ref())?.commands(&instance, port).await
+        koishi_api(adapter.as_ref())?
+            .commands(&instance, port)
+            .await
     }
 
     pub async fn koishi_command_update(

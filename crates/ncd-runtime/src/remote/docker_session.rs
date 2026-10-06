@@ -54,7 +54,10 @@ impl<'h> ContainerPorts<'h> {
 
     async fn host_port(&self, spec: &DockerDeploySpec, container_port: u16) -> u16 {
         if let Some(cli) = &self.cli {
-            match cli.published_host_port(self.container, container_port).await {
+            match cli
+                .published_host_port(self.container, container_port)
+                .await
+            {
                 Ok(Some(port)) => return port,
                 Ok(None) => {}
                 Err(error) => warn!(

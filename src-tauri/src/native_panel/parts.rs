@@ -37,7 +37,14 @@ pub fn text(s: &str, style: TextStyle, max_w: f32, x: f32, y: f32) -> Option<Tex
 
 /// 在 rect 里水平垂直居中排一行字。
 pub fn centered(s: &str, style: TextStyle, rect: Rect) -> Option<Text> {
-    text(s, style, rect.w, 0.0, rect.y + (rect.h - style.line_height) / 2.0).map(|mut t| {
+    text(
+        s,
+        style,
+        rect.w,
+        0.0,
+        rect.y + (rect.h - style.line_height) / 2.0,
+    )
+    .map(|mut t| {
         t.x = rect.x + (rect.w - t.tb.width) / 2.0;
         t
     })
@@ -110,7 +117,11 @@ impl ActionRow {
     /// trailing_w：右侧角标 / 勾的宽度，文字给它让出 trailing_w + 10。
     pub fn new(width: f32, y: f32, icon: Icon, label: &str, trailing_w: f32) -> Self {
         let rect = Rect::new(4.0, y, width - 8.0, ACTION_H);
-        let reserve = if trailing_w > 0.0 { trailing_w + 10.0 } else { 0.0 };
+        let reserve = if trailing_w > 0.0 {
+            trailing_w + 10.0
+        } else {
+            0.0
+        };
         Self {
             rect,
             icon,
@@ -165,7 +176,9 @@ impl Badge {
             count.to_string()
         };
         let label = text(&s, TextStyle::sans(10.0, 500, 10.0), 40.0, 0.0, cy - 5.0);
-        let w = label.as_ref().map_or(14.0, |t| (t.tb.width + 8.0).max(14.0));
+        let w = label
+            .as_ref()
+            .map_or(14.0, |t| (t.tb.width + 8.0).max(14.0));
         let rect = Rect::new(right - w, cy - 7.0, w, 14.0);
         let label = label.map(|mut t| {
             t.x = rect.x + (rect.w - t.tb.width) / 2.0;

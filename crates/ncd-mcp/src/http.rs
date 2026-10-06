@@ -16,10 +16,16 @@ use crate::rpc;
 use crate::server::ServerCtx;
 
 pub(crate) fn router(ctx: Arc<ServerCtx>) -> Router {
-    Router::new().route("/mcp", post(handle_post)).with_state(ctx)
+    Router::new()
+        .route("/mcp", post(handle_post))
+        .with_state(ctx)
 }
 
-async fn handle_post(State(ctx): State<Arc<ServerCtx>>, headers: HeaderMap, body: Bytes) -> Response {
+async fn handle_post(
+    State(ctx): State<Arc<ServerCtx>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
     if !origin_allowed(&headers) {
         return (StatusCode::FORBIDDEN, "Origin 不在本机域内").into_response();
     }
@@ -39,7 +45,11 @@ async fn handle_post(State(ctx): State<Arc<ServerCtx>>, headers: HeaderMap, body
             .into_response();
     }
     let Ok(value) = serde_json::from_slice::<Value>(&body) else {
-        return (StatusCode::BAD_REQUEST, axum::Json(rpc::parse_error_frame())).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            axum::Json(rpc::parse_error_frame()),
+        )
+            .into_response();
     };
     match rpc::handle_body(&ctx, &value).await {
         Some(answer) => axum::Json(answer).into_response(),
@@ -122,14 +132,22 @@ mod tests {
 
         let no_token = app
             .clone()
-            .oneshot(post("/mcp", None, r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#))
+            .oneshot(post(
+                "/mcp",
+                None,
+                r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#,
+            ))
             .await
             .unwrap();
         assert_eq!(no_token.status(), StatusCode::UNAUTHORIZED);
 
         let wrong_token = app
             .clone()
-            .oneshot(post("/mcp", Some("nope"), r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#))
+            .oneshot(post(
+                "/mcp",
+                Some("nope"),
+                r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#,
+            ))
             .await
             .unwrap();
         assert_eq!(wrong_token.status(), StatusCode::UNAUTHORIZED);

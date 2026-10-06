@@ -580,7 +580,12 @@ pub fn parse_published_host_port(
     };
     Ok(bindings
         .iter()
-        .filter(|b| matches!(b.host_ip.as_str(), "" | "0.0.0.0" | "::" | "127.0.0.1" | "::1"))
+        .filter(|b| {
+            matches!(
+                b.host_ip.as_str(),
+                "" | "0.0.0.0" | "::" | "127.0.0.1" | "::1"
+            )
+        })
         .find_map(|b| b.host_port.parse::<u16>().ok().filter(|p| *p > 0)))
 }
 
@@ -598,7 +603,10 @@ mod tests {
 
     #[test]
     fn published_port_host_network_uses_container_port() {
-        assert_eq!(parse_published_host_port("host {}\n", 6099).unwrap(), Some(6099));
+        assert_eq!(
+            parse_published_host_port("host {}\n", 6099).unwrap(),
+            Some(6099)
+        );
     }
 
     #[test]

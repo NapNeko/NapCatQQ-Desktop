@@ -11,10 +11,15 @@ fn main() {
     tauri_build::build();
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         // tauri-build 的资源只链接正式 bin；原生 example 也需要 Common Controls v6。
-        let manifest = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default()).join("examples/chat-window-smoke.manifest");
+        let manifest =
+            std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default())
+                .join("examples/chat-window-smoke.manifest");
         println!("cargo:rerun-if-changed=examples/chat-window-smoke.manifest");
         println!("cargo:rustc-link-arg-examples=/MANIFEST:EMBED");
-        println!("cargo:rustc-link-arg-examples=/MANIFESTINPUT:{}", manifest.display());
+        println!(
+            "cargo:rustc-link-arg-examples=/MANIFESTINPUT:{}",
+            manifest.display()
+        );
     }
     if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
         // 事件循环、setup 和同步命令都跑在主线程，Windows 默认只给 1 MB 栈。

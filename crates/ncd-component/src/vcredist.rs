@@ -313,9 +313,7 @@ mod tests {
 
     use bytes::Bytes;
     use ncd_host::shell::PowerShellShell;
-    use ncd_host::{
-        ArchiveKind, CommandOutput, DirEntry, HostProcess, HostShell,
-    };
+    use ncd_host::{ArchiveKind, CommandOutput, DirEntry, HostProcess, HostShell};
 
     #[test]
     fn supported_targets_windows_local_only() {
@@ -523,7 +521,11 @@ mod tests {
     #[tokio::test]
     async fn detect_none_when_registry_key_missing() {
         // reg.exe 在键不存在时退出码非 0
-        let host = ScriptedHost::keyed(vec![(reg_key("Installed"), 1, "ERROR: The system was unable to find the specified registry key or value.")]);
+        let host = ScriptedHost::keyed(vec![(
+            reg_key("Installed"),
+            1,
+            "ERROR: The system was unable to find the specified registry key or value.",
+        )]);
         assert_eq!(comp().detect(&host).await.unwrap(), None);
     }
 

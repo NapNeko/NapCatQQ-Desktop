@@ -1,13 +1,13 @@
 pub mod app_framework;
 pub mod bot_actor;
 pub mod bot_manager;
+pub mod chat;
+mod chat_archive;
 pub mod events;
 pub mod napcat;
 pub mod native_deployment_adapter;
 pub mod notify;
 pub mod onebot_debug;
-pub mod chat;
-mod chat_archive;
 pub mod release;
 mod snowluma_local_endpoint;
 
@@ -229,28 +229,25 @@ pub use native_deployment_adapter::{
 pub use ncd_appframework::{
     AppConfigWriteResult, AppFrameworkRegistry, AppInstanceConfig, AppInstanceConfigEnvelope,
     AppPanelOutcomeKind, AppPanelResult, AppStoreInstalled, AppStoreMarketEntry, AstrBotAbconfInfo,
-    AstrBotDashboardStatus,
-    AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona, AstrBotSessionRule,
-    KarinPluginInstalled, KarinPluginMarketEntry, KoishiBotState, KoishiBotStatus,
-    KoishiCommandRow, KoishiDatabaseTable, KoishiFileContent, KoishiFileEntry,
+    AstrBotDashboardStatus, AstrBotKbCreate, AstrBotKnowledgeBase, AstrBotPersona,
+    AstrBotSessionRule, KarinPluginInstalled, KarinPluginMarketEntry, KoishiBotState,
+    KoishiBotStatus, KoishiCommandRow, KoishiDatabaseTable, KoishiFileContent, KoishiFileEntry,
     KoishiInstanceConfig, KoishiPackageInfo, KoishiPluginNode, KoishiPluginSchema,
     KoishiRuntimeGate, KoishiRuntimeStatus, KoishiSandboxMessage, MaiBotAPIProvider,
-    PackageVersions,
-    MaiBotBehaviorDetail,
-    MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery, MaiBotChatSession,
-    MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview, MaiBotEmojiPage,
-    MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone, MaiBotExpressionAction,
-    MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery, MaiBotJargonAction,
-    MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery, MaiBotLocalImage,
-    MaiBotLocalTextFile, MaiBotMCPServerItemConfig, MaiBotMcpStatus, MaiBotMcpTest,
-    MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult, MaiBotMemoryGraph,
-    MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup, MaiBotMemoryNodeDetail,
-    MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind, MaiBotMemoryRecordPage,
-    MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask, MaiBotMemoryTaskAction,
-    MaiBotMemoryTaskDetail, MaiBotPersonAction, MaiBotPersonOverview, MaiBotPersonPage,
-    MaiBotPersonQuery, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
+    MaiBotBehaviorDetail, MaiBotBehaviorOverview, MaiBotBehaviorPage, MaiBotBehaviorQuery,
+    MaiBotChatSession, MaiBotChatTicket, MaiBotEmojiAction, MaiBotEmojiImage, MaiBotEmojiOverview,
+    MaiBotEmojiPage, MaiBotEmojiQuery, MaiBotEmojiUpload, MaiBotEmojiUploadDone,
+    MaiBotExpressionAction, MaiBotExpressionOverview, MaiBotExpressionPage, MaiBotExpressionQuery,
+    MaiBotJargonAction, MaiBotJargonOverview, MaiBotJargonPage, MaiBotJargonQuery,
+    MaiBotLocalImage, MaiBotLocalTextFile, MaiBotMCPServerItemConfig, MaiBotMcpStatus,
+    MaiBotMcpTest, MaiBotMemoryDeleteAction, MaiBotMemoryDeleteOp, MaiBotMemoryDeleteResult,
+    MaiBotMemoryGraph, MaiBotMemoryGraphHit, MaiBotMemoryImport, MaiBotMemoryImportSetup,
+    MaiBotMemoryNodeDetail, MaiBotMemoryQuery, MaiBotMemoryRecordDetail, MaiBotMemoryRecordKind,
+    MaiBotMemoryRecordPage, MaiBotMemorySource, MaiBotMemoryStatus, MaiBotMemoryTask,
+    MaiBotMemoryTaskAction, MaiBotMemoryTaskDetail, MaiBotPersonAction, MaiBotPersonOverview,
+    MaiBotPersonPage, MaiBotPersonQuery, MaiBotPromptAction, MaiBotPromptCatalog, MaiBotPromptFile,
     MaiBotProviderCheck, MaiBotProviderModel, MaiBotResourceDone, MaiBotRuntimeStatus,
-    MaiBotStatsSummary,
+    MaiBotStatsSummary, PackageVersions,
 };
 pub use ncd_server::DiscoveredSshHost;
 pub use notify::{

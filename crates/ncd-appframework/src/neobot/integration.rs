@@ -89,7 +89,10 @@ impl AppIntegration for NeoBotIntegration {
             reconnect_interval: RECONNECT_INTERVAL_MS,
             role: WsRole::Universal,
         };
-        let summary = format!("{NEOBOT_CONFIG_TOML} [adapter] reverse_ws_port={} / reverse_ws_access_token=<token>", instance.port);
+        let summary = format!(
+            "{NEOBOT_CONFIG_TOML} [adapter] reverse_ws_port={} / reverse_ws_access_token=<token>",
+            instance.port
+        );
         Ok(OneBotLinkPlan {
             mode: OneBotLinkMode::ReverseWs,
             instance_id: instance.id.clone(),
@@ -170,7 +173,11 @@ mod tests {
         assert_eq!(c.base.token, "tok-abc");
         assert_eq!(plan.app_side_writes.len(), 1);
         assert_eq!(plan.app_side_writes[0].path, "app/data/config.toml");
-        assert!(plan.app_side_writes[0].summary.contains("reverse_ws_port=8080"));
+        assert!(
+            plan.app_side_writes[0]
+                .summary
+                .contains("reverse_ws_port=8080")
+        );
         assert!(
             plan.app_side_writes[0]
                 .summary

@@ -83,19 +83,41 @@ mod media_budget_tests {
     #[test]
     fn larger_explicit_budget_preserves_media_reply() {
         let value = json!({"status":"ok", "retcode":0, "data":{"base64":"A".repeat(300 * 1024)}});
-        let raw = RawCall { text: value.to_string(), value };
-        let out = outcome_from_with_limit(&raw.text, raw.value, Duration::ZERO, DebugChannelId::Internal, 512 * 1024);
+        let raw = RawCall {
+            text: value.to_string(),
+            value,
+        };
+        let out = outcome_from_with_limit(
+            &raw.text,
+            raw.value,
+            Duration::ZERO,
+            DebugChannelId::Internal,
+            512 * 1024,
+        );
         assert!(!out.truncated);
         assert_eq!(out.data["base64"].as_str().unwrap().len(), 300 * 1024);
-        assert_eq!(out.raw["data"]["base64"].as_str().unwrap().len(), 300 * 1024);
+        assert_eq!(
+            out.raw["data"]["base64"].as_str().unwrap().len(),
+            300 * 1024
+        );
     }
 
     #[test]
     fn default_and_over_budget_responses_stay_truncated() {
         for budget in [256 * 1024, 280 * 1024] {
-            let value = json!({"status":"ok", "retcode":0, "data":{"base64":"A".repeat(300 * 1024)}});
-            let raw = RawCall { text: value.to_string(), value };
-            let out = outcome_from_with_limit(&raw.text, raw.value, Duration::ZERO, DebugChannelId::Internal, budget);
+            let value =
+                json!({"status":"ok", "retcode":0, "data":{"base64":"A".repeat(300 * 1024)}});
+            let raw = RawCall {
+                text: value.to_string(),
+                value,
+            };
+            let out = outcome_from_with_limit(
+                &raw.text,
+                raw.value,
+                Duration::ZERO,
+                DebugChannelId::Internal,
+                budget,
+            );
             assert!(out.truncated);
             assert!(out.data.is_null());
         }
@@ -205,7 +227,10 @@ impl DebugManager {
         }
     }
 
-    pub(super) async fn bot_for_call(&self, req: &DebugCallRequest) -> Result<DebugBotView, DebugError> {
+    pub(super) async fn bot_for_call(
+        &self,
+        req: &DebugCallRequest,
+    ) -> Result<DebugBotView, DebugError> {
         if !self.is_enabled() {
             return Err(DebugError::FeatureDisabled);
         }

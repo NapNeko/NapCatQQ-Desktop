@@ -831,7 +831,10 @@ impl KoishiRuntimeApi for KoishiAdapter {
             .console
             .sandbox_messages(instance.id.as_str(), port)
             .await?;
-        Ok(raw.iter().filter_map(KoishiSandboxMessage::from_value).collect())
+        Ok(raw
+            .iter()
+            .filter_map(KoishiSandboxMessage::from_value)
+            .collect())
     }
 
     async fn explorer_tree(
@@ -840,7 +843,12 @@ impl KoishiRuntimeApi for KoishiAdapter {
         port: u16,
     ) -> Result<Vec<KoishiFileEntry>, AppFrameworkError> {
         let v = self
-            .snapshot_required(instance, port, "explorer", "explorer 插件（文件管理）被停用了")
+            .snapshot_required(
+                instance,
+                port,
+                "explorer",
+                "explorer 插件（文件管理）被停用了",
+            )
             .await?;
         serde_json::from_value(v)
             .map_err(|e| AppFrameworkError::Runtime(format!("文件树解析失败：{e}")))
@@ -862,9 +870,16 @@ impl KoishiRuntimeApi for KoishiAdapter {
             )
             .await?;
         Ok(KoishiFileContent {
-            base64: v.get("base64").and_then(Value::as_str).unwrap_or_default().into(),
+            base64: v
+                .get("base64")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .into(),
             mime: v.get("mime").and_then(Value::as_str).map(str::to_string),
-            encoding: v.get("encoding").and_then(Value::as_str).map(str::to_string),
+            encoding: v
+                .get("encoding")
+                .and_then(Value::as_str)
+                .map(str::to_string),
         })
     }
 
@@ -894,7 +909,12 @@ impl KoishiRuntimeApi for KoishiAdapter {
         path: &str,
     ) -> Result<(), AppFrameworkError> {
         self.console
-            .request(instance.id.as_str(), port, "explorer/mkdir", vec![json!(path)])
+            .request(
+                instance.id.as_str(),
+                port,
+                "explorer/mkdir",
+                vec![json!(path)],
+            )
             .await?;
         Ok(())
     }
@@ -906,7 +926,12 @@ impl KoishiRuntimeApi for KoishiAdapter {
         path: &str,
     ) -> Result<(), AppFrameworkError> {
         self.console
-            .request(instance.id.as_str(), port, "explorer/remove", vec![json!(path)])
+            .request(
+                instance.id.as_str(),
+                port,
+                "explorer/remove",
+                vec![json!(path)],
+            )
             .await?;
         Ok(())
     }
@@ -935,7 +960,12 @@ impl KoishiRuntimeApi for KoishiAdapter {
         port: u16,
     ) -> Result<Vec<KoishiDatabaseTable>, AppFrameworkError> {
         let v = self
-            .snapshot_required(instance, port, "database", "dataview 插件（数据库页）被停用了")
+            .snapshot_required(
+                instance,
+                port,
+                "database",
+                "dataview 插件（数据库页）被停用了",
+            )
             .await?;
         let mut out = Vec::new();
         if let Some(tables) = v.get("tables").and_then(Value::as_object) {
@@ -945,7 +975,12 @@ impl KoishiRuntimeApi for KoishiAdapter {
                     primary: t
                         .get("primary")
                         .and_then(Value::as_array)
-                        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_string)
+                                .collect()
+                        })
                         .unwrap_or_default(),
                     fields: t.get("fields").cloned().unwrap_or(Value::Null),
                     count: t.get("count").and_then(Value::as_u64),
@@ -974,7 +1009,9 @@ impl KoishiRuntimeApi for KoishiAdapter {
                 vec![
                     json!(runtime::dataview_serialize(&json!(table))),
                     json!(runtime::dataview_serialize(&json!({}))),
-                    json!(runtime::dataview_serialize(&json!({ "limit": limit, "offset": offset }))),
+                    json!(runtime::dataview_serialize(
+                        &json!({ "limit": limit, "offset": offset })
+                    )),
                 ],
             )
             .await?;
@@ -1087,7 +1124,10 @@ fn command_row(name: &str, c: &Value) -> KoishiCommandRow {
     let initial = pick("initial");
     let over = pick("override");
     let mut config = initial.get("config").cloned().unwrap_or(json!({}));
-    if let (Some(base), Some(over)) = (config.as_object_mut(), over.get("config").and_then(Value::as_object)) {
+    if let (Some(base), Some(over)) = (
+        config.as_object_mut(),
+        over.get("config").and_then(Value::as_object),
+    ) {
         for (k, v) in over {
             base.insert(k.clone(), v.clone());
         }
@@ -1102,13 +1142,23 @@ fn command_row(name: &str, c: &Value) -> KoishiCommandRow {
         children: c
             .get("children")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
             .unwrap_or_default(),
         created: c.get("create").and_then(Value::as_bool).unwrap_or(false),
         paths: c
             .get("paths")
             .and_then(Value::as_array)
-            .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
             .unwrap_or_default(),
         aliases,
         config,

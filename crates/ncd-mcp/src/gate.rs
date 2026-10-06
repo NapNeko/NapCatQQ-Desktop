@@ -219,7 +219,10 @@ mod tests {
     #[test]
     fn fingerprint_ignores_key_order_and_confirm_token() {
         let a = fingerprint("tool", &json!({"x": 1, "y": {"a": [1, 2], "b": 2}}));
-        let b = fingerprint("tool", &json!({"y": {"b": 2, "a": [1, 2]}, "x": 1, "confirm_token": "z"}));
+        let b = fingerprint(
+            "tool",
+            &json!({"y": {"b": 2, "a": [1, 2]}, "x": 1, "confirm_token": "z"}),
+        );
         assert_eq!(a, b);
         let other_tool = fingerprint("other", &json!({"x": 1, "y": {"a": [1, 2], "b": 2}}));
         assert_ne!(a, other_tool);

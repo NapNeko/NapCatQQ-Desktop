@@ -75,7 +75,13 @@ pub async fn koishi_sandbox_send(
 ) -> Result<(), AppConfigError> {
     state
         .app_manager
-        .koishi_sandbox_send(&AppInstanceId::new(instance_id), &platform, &user, &channel, &content)
+        .koishi_sandbox_send(
+            &AppInstanceId::new(instance_id),
+            &platform,
+            &user,
+            &channel,
+            &content,
+        )
         .await
         .map_err(AppFrameworkError::into_config_error)
 }

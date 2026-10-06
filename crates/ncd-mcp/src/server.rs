@@ -95,8 +95,10 @@ impl McpServer {
         {
             Ok(listener) => listener,
             Err(err) => {
-                *lock_std(&self.last_error) =
-                    Some(format!("MCP 服务绑定 127.0.0.1:{} 失败：{err}", settings.port));
+                *lock_std(&self.last_error) = Some(format!(
+                    "MCP 服务绑定 127.0.0.1:{} 失败：{err}",
+                    settings.port
+                ));
                 return McpApplyOutcome { bound_port: None };
             }
         };
@@ -186,10 +188,7 @@ impl McpServer {
         McpServerStatus {
             enabled,
             listening,
-            port: run
-                .as_ref()
-                .filter(|_| listening)
-                .map(|r| r.bound_port),
+            port: run.as_ref().filter(|_| listening).map(|r| r.bound_port),
             // 从没起成功过、或用户关着：错误不报（那不是失败，是没开过）
             last_error: if self.ever_started.load(Ordering::SeqCst) || enabled {
                 lock_std(&self.last_error).clone()
@@ -318,7 +317,10 @@ mod tests {
         assert!(status.enabled);
         assert!(!status.listening);
         assert!(
-            status.last_error.as_deref().is_some_and(|e| e.contains("绑定")),
+            status
+                .last_error
+                .as_deref()
+                .is_some_and(|e| e.contains("绑定")),
             "{:?}",
             status.last_error
         );

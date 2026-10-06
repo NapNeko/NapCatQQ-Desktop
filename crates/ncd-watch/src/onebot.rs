@@ -24,7 +24,12 @@ pub struct DockerPortResolver;
 impl PortResolver for DockerPortResolver {
     fn published_port(&self, container: &str, container_port: u16) -> Option<u16> {
         let out = std::process::Command::new("docker")
-            .args(["inspect", "--format", DOCKER_INSPECT_PORTS_FORMAT, container])
+            .args([
+                "inspect",
+                "--format",
+                DOCKER_INSPECT_PORTS_FORMAT,
+                container,
+            ])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -63,7 +68,11 @@ pub fn candidate_messengers<'a>(
 
 /// 这个 messenger 这次该连的 OneBot HTTP 根地址;两条路都没有就返回 None
 pub fn resolve_base_url(m: &WatchOneBotMessenger, resolver: &dyn PortResolver) -> Option<String> {
-    let container = m.container_name.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let container = m
+        .container_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
     let port = m.container_port.filter(|p| *p > 0);
     if let (Some(container), Some(port)) = (container, port) {
         if let Some(host_port) = resolver.published_port(container, port) {
@@ -80,8 +89,14 @@ pub async fn send_watch_onebot(
     online_bot_ids: Option<&HashSet<String>>,
     alert: &OfflineAlert,
 ) -> Result<(), String> {
-    send_watch_onebot_with(settings, offline_bot_id, online_bot_ids, alert, &DockerPortResolver)
-        .await
+    send_watch_onebot_with(
+        settings,
+        offline_bot_id,
+        online_bot_ids,
+        alert,
+        &DockerPortResolver,
+    )
+    .await
 }
 
 pub async fn send_watch_onebot_with(
@@ -278,7 +293,10 @@ mod tests {
         // 规则也推不出、容器里也没映射:没有可连的地址
         let unpublished = docker_m("10002", "", 3010);
         assert_eq!(resolve_base_url(&unpublished, &FakeResolver(None)), None);
-        assert_eq!(resolve_base_url(&m("10002", "  "), &FakeResolver(Some(1))), None);
+        assert_eq!(
+            resolve_base_url(&m("10002", "  "), &FakeResolver(Some(1))),
+            None
+        );
     }
 
     #[tokio::test]
@@ -303,7 +321,10 @@ mod tests {
 
     #[tokio::test]
     async fn reports_every_messenger_when_all_fail() {
-        let s = settings(vec![docker_m("10002", "", 3010), m("10003", "http://127.0.0.1:1")]);
+        let s = settings(vec![
+            docker_m("10002", "", 3010),
+            m("10003", "http://127.0.0.1:1"),
+        ]);
         let err = send_watch_onebot_with(&s, "10001", None, &alert(), &FakeResolver(None))
             .await
             .unwrap_err();
