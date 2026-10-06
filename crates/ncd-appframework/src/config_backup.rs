@@ -131,9 +131,13 @@ pub fn backup_file_format(framework: &str, path: &str) -> Result<Option<AppConfi
                     && (parts[1] == "config" || parts.len() == 3 || parts[2] == "config"))
         }
         "nonebot2" => path == "pyproject.toml",
+        // 数据目录是 app/data（见 neobot::manifest）；data/ 和根目录 plugins_data/ 是旧版
+        // 桌面端误写的壳，NeoBot 不读，不进备份
         "neobot" => {
-            path == "data/config.toml"
-                || (parts.len() == 3 && parts[0] == "plugins_data" && parts[2] == "config.toml")
+            path == "app/data/config.toml"
+                || (parts.len() == 5
+                    && parts[..3] == ["app", "data", "plugins_data"]
+                    && parts[4] == "config.toml")
         }
         // 多配置 abconf_*.json 和插件 *_config.json 都在 data/config，映射保存在 shared_preferences。
         "astrbot" => {
@@ -227,8 +231,8 @@ fn descend(framework: &str, rel: &str) -> bool {
         }
         "astrbot" => matches!(rel, "data" | "data/config"),
         "neobot" => {
-            matches!(rel, "data" | "plugins_data")
-                || (parts[0] == "plugins_data" && parts.len() == 2)
+            matches!(rel, "app" | "app/data" | "app/data/plugins_data")
+                || (parts.len() == 4 && parts[..3] == ["app", "data", "plugins_data"])
         }
         "maibot" => {
             matches!(rel, "config" | "data" | "plugins")

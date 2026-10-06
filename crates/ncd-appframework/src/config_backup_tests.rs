@@ -217,17 +217,27 @@ async fn captures_all_builtin_framework_configs_without_programs_or_databases() 
             "neobot",
             &[
                 (
-                    "data/config.toml",
+                    "app/data/config.toml",
                     "# keep\r\n[adapter]\nreverse_ws_port = 8080\n",
                 ),
-                ("plugins_data/dashboard/config.toml", "port = 9981\n"),
-                ("plugins_data/my-plugin/config.toml", "enabled = true\n"),
+                (
+                    "app/data/plugins_data/dashboard/config.toml",
+                    "port = 9981\n",
+                ),
+                (
+                    "app/data/plugins_data/my-plugin/config.toml",
+                    "enabled = true\n",
+                ),
             ],
             &[
-                "plugins_data/dashboard/auth.json",
-                "plugins_data/my-plugin/history.json",
-                "data/chat.db",
+                "app/data/plugins_data/dashboard/auth.json",
+                "app/data/plugins_data/my-plugin/history.json",
+                "app/data/chat.db",
+                "app/.env",
                 "plugins/my-plugin/main.py",
+                // 旧版桌面端误写的壳：NeoBot 不读，不进备份
+                "data/config.toml",
+                "plugins_data/dashboard/config.toml",
             ],
         ),
         (
